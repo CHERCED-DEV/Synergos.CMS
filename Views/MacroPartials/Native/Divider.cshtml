@@ -1,0 +1,8 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@{
+    var variant = Model.MacroParameters.ContainsKey("variant") ? Model.MacroParameters["variant"]?.ToString() : "default";
+}
+
+<div class="sg-macro sg-macro--divider">
+    <hr class="sg-divider sg-divider--@variant" />
+</div>

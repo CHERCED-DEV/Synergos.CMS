@@ -1,0 +1,28 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@{
+    var p = Model.MacroParameters;
+    string? Get(string key) => p.ContainsKey(key) ? p[key]?.ToString() : null;
+    int?    GetInt(string key) => p.ContainsKey(key) && int.TryParse(p[key]?.ToString(), out var i) ? i : null;
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var translations = Dict.GetAll();
+    // items: pass as JSON array string via "itemsJson" parameter
+    var itemsRaw = Get("itemsJson");
+    var items = itemsRaw is not null
+        ? JsonSerializer.Deserialize<List<FeatureGridItemCdnConfig>>(itemsRaw, opt)
+        : null;
+    var cfg = JsonSerializer.Serialize(new FeatureGridCdnConfig(
+        HeadingText: Get("headingText"),
+        Variant:     Get("variant"),
+        Theme:       Get("theme"),
+        Columns:     GetInt("columns"),
+        Items:       items,
+        Translations: translations
+    ), opt);
+}
+<script src="@ElementUrl.ResolveBundle("feature-grid")" type="module" defer></script>
+<synergos-feature-grid config='@cfg' class="sg-cdn sg-cdn--feature-grid"></synergos-feature-grid>

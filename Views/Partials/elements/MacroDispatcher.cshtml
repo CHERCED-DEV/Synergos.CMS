@@ -1,0 +1,20 @@
+@model Synergos.CMS.Application.Output.SectionView
+@*
+    Dispatcher central de elementos. Responsabilidades:
+      1. Renderizar el wrapper HTML con los atributos DOM del editor.
+      2. Delegar el contenido al partial de la sección usando ViewName.
+      3. Pasar la sección de dominio (Model.Section) al partial.
+
+    Punto de entrada único para TODOS los bloques: Block List y Block Grid.
+    No hay switch de tipos ni lógica de negocio.
+    Agregar un elemento nuevo no requiere modificar este archivo.
+*@
+
+@{
+    var classes = new string?[] { "sg-block", Model.Section.BlockClass, Model.CssClasses };
+}
+
+<div id="@Model.ElementId"
+     class="@await Html.PartialAsync("Partials/elements/shared/_Classes", classes)">
+    @await Html.PartialAsync(Model.Section.ViewName, Model.Section)
+</div>

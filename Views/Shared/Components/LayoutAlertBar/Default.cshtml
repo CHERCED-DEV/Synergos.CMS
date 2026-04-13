@@ -1,0 +1,8 @@
+@{
+    var cfg       = ViewData["AlertBarConfig"]    as string ?? "{}";
+    var bundleUrl = ViewData["AlertBarBundleUrl"] as string ?? "";
+}
+<script src="@bundleUrl" type="module" defer></script>
+<synergos-alert-bar config='@cfg'
+                    class="sg-cdn sg-cdn--alert-bar layout-alert-bar">
+</synergos-alert-bar>

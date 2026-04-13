@@ -1,0 +1,5 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+<script src="@ElementUrl.ResolveBundle("spacer")" type="module" defer></script>
+<synergos-spacer class="sg-cdn sg-cdn--spacer"></synergos-spacer>

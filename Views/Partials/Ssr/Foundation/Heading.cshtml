@@ -1,0 +1,21 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model Synergos.CMS.Application.Elements.HeadingViewModel
+@{
+    var level = string.IsNullOrEmpty(Model.Heading?.HeadingLevel) ? "h2" : Model.Heading!.HeadingLevel!;
+    // Only allow known heading/block tags — prevents free-text aria-label
+    // or any other content from being injected as an HTML tag name.
+    string[] ValidTags = ["h1","h2","h3","h4","h5","h6","p","div","span"];
+    var rawOverride = Model.Heading?.HeadingTagOverride;
+    var tag = (!string.IsNullOrEmpty(rawOverride) && ValidTags.Contains(rawOverride, StringComparer.OrdinalIgnoreCase))
+        ? rawOverride! : level;
+    var cls   = string.Join(" ", new[] { Model.BlockClass, $"sg-heading--{level}", Model.DomClass?.ClassList }
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    var tb = new TagBuilder(tag);
+    tb.AddCssClass(cls);
+    tb.Attributes["data-sg-element"] = "text-heading";
+    if (Model.DomAttributes?.ElementId is { } id)   tb.Attributes["id"]         = id;
+    if (Model.DomAttributes?.AriaLabel is { } aria)  tb.Attributes["aria-label"] = aria;
+    tb.InnerHtml.Append(Model.Heading?.HeadingText ?? "");
+}
+@tb

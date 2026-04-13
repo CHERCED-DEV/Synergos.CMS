@@ -1,0 +1,11 @@
+@model Synergos.CMS.Application.Elements.CodeBlockViewModel
+@{
+    var lang = string.IsNullOrWhiteSpace(Model.Language) ? "plaintext" : Model.Language!.ToLowerInvariant().Trim();
+    var cls  = string.Join(" ", new[] { Model.BlockClass, Model.DomClass?.ClassList }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+@if (!string.IsNullOrWhiteSpace(Model.Content))
+{
+    <div class="@cls" data-sg-element="text-code-block">
+        <pre class="sg-code sg-code--@lang"><code class="language-@lang">@Model.Content</code></pre>
+    </div>
+}

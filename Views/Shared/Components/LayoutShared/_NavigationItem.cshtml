@@ -1,0 +1,28 @@
+@model Synergos.CMS.Presentation.ViewModels.Layout.LayoutNavigationItemViewModel
+@{
+    var hasChildren = Model.Children.Count > 0;
+    var itemClass = string.Join(" ", new[]
+    {
+        "layout-nav__item",
+        Model.IsActive ? "is-active" : null,
+        hasChildren ? "layout-nav__item--has-children" : null
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var ariaCurrent = Model.IsActive ? "page" : null;
+}
+
+<li class="@itemClass">
+    <a class="layout-nav__link"
+       href="@Model.Url"
+       aria-current="@ariaCurrent"
+       aria-haspopup="@(hasChildren ? "menu" : null)"
+       aria-expanded="@(hasChildren ? "false" : null)">@Model.Title</a>
+    @if (hasChildren)
+    {
+        <ul class="layout-nav__sublist">
+            @foreach (var child in Model.Children)
+            {
+                @await Html.PartialAsync("~/Views/Shared/Components/LayoutShared/_NavigationItem.cshtml", child)
+            }
+        </ul>
+    }
+</li>

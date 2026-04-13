@@ -1,0 +1,23 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@{
+    var p = Model.MacroParameters;
+    string? Get(string key) => p.ContainsKey(key) ? p[key]?.ToString() : null;
+    int?    GetInt(string key) => p.ContainsKey(key) && int.TryParse(p[key]?.ToString(), out var n) ? n : null;
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var translations = Dict.GetAll();
+    var cfg = JsonSerializer.Serialize(new QuantitySelectorCdnConfig(
+        Min:          GetInt("min"),
+        Max:          GetInt("max"),
+        Step:         GetInt("step"),
+        Theme:        Get("theme"),
+        Variant:      Get("variant"),
+        Translations: translations
+    ), opt);
+}
+<script src="@ElementUrl.ResolveBundle("quantity-selector")" type="module" defer></script>
+<synergos-quantity-selector config='@cfg' class="sg-cdn sg-cdn--quantity-selector"></synergos-quantity-selector>

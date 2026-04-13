@@ -1,0 +1,22 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@{
+    var p = Model.MacroParameters;
+    string? Get(string key) => p.ContainsKey(key) ? p[key]?.ToString() : null;
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var translations = Dict.GetAll();
+    var cfg = JsonSerializer.Serialize(new AvatarCdnConfig(
+        Src:     Get("src"),
+        Alt:     Get("alt"),
+        Name:    Get("name"),
+        Size:    Get("size"),
+        Variant: Get("variant"),
+        Translations: translations
+    ), opt);
+}
+<script src="@ElementUrl.ResolveBundle("avatar")" type="module" defer></script>
+<synergos-avatar config='@cfg' class="sg-cdn sg-cdn--avatar"></synergos-avatar>

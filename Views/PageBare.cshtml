@@ -1,0 +1,43 @@
+@using System.Globalization
+@model Synergos.CMS.Application.Output.ContentPageView
+@{
+    Layout = null;
+    var seoTitle  = Model.Seo.Title ?? Model.Title;
+    var fullTitle = string.IsNullOrWhiteSpace(Model.Seo.TitleSuffix) ? seoTitle : $"{seoTitle}{Model.Seo.TitleSuffix}";
+    var htmlLang  = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+}
+<!doctype html>
+<html lang="@htmlLang">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@fullTitle</title>
+    @if (!string.IsNullOrEmpty(Model.Seo.Description))
+    {
+        <meta name="description" content="@Model.Seo.Description" />
+    }
+    @if (Model.Seo.NoIndex)
+    {
+        <meta name="robots" content="noindex, nofollow" />
+    }
+    @if (!string.IsNullOrEmpty(Model.Seo.CanonicalUrl))
+    {
+        <link rel="canonical" href="@Model.Seo.CanonicalUrl" />
+    }
+    <meta property="og:title" content="@fullTitle" />
+    @if (!string.IsNullOrEmpty(Model.Seo.Description))
+    {
+        <meta property="og:description" content="@Model.Seo.Description" />
+    }
+    @if (Model.Seo.Image is not null)
+    {
+        <meta property="og:image" content="@Model.Seo.Image.Src" />
+    }
+</head>
+<body class="sg-page sg-page--bare @Model.PageCssClass"
+      @(Model.PageCssId is not null ? $"id=\"{Model.PageCssId}\"" : "")>
+
+    @await Html.PartialAsync("PageSections", Model.SectionTree)
+
+</body>
+</html>

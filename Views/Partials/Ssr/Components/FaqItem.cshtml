@@ -1,0 +1,16 @@
+@model Synergos.CMS.Application.Elements.FaqItemViewModel
+@{
+    var cls = string.Join(" ", new[] { Model.BlockClass, Model.DomClass?.ClassList }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@cls" data-sg-element="info-faq-item" itemscope itemtype="https://schema.org/Question">
+    @if (!string.IsNullOrWhiteSpace(Model.Text?.Title))
+    {
+        <h4 class="sg-faq__question" itemprop="name">@Model.Text.Title</h4>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.Text?.Body))
+    {
+        <div class="sg-faq__answer" itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+            <div itemprop="text">@Html.Raw(Model.Text.Body)</div>
+        </div>
+    }
+</div>

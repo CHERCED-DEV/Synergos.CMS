@@ -1,0 +1,18 @@
+@model Synergos.CMS.Application.Elements.ButtonContainerViewModel
+@{
+    var cls = string.Join(" ", new[] { Model.BlockClass, Model.DomClass?.ClassList }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var href = Model.Href;
+    var target = Model.Target;
+}
+@if (!string.IsNullOrWhiteSpace(href))
+{
+    <a class="@cls sg-btn"
+       href="@href"
+       @Html.Raw(target is not null ? $"target=\"{target}\"" : "")
+       @Html.Raw(target == "_blank" ? "rel=\"noopener noreferrer\"" : "")
+       data-sg-element="action-button-container">@Model.Label</a>
+}
+else if (!string.IsNullOrWhiteSpace(Model.Label))
+{
+    <button class="@cls sg-btn" type="button" data-sg-element="action-button-container">@Model.Label</button>
+}

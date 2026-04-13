@@ -1,0 +1,21 @@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.Blocks.BlockListModel>
+@inject Synergos.CMS.Application.Mapping.SectionMapperDispatcher SectionDispatcher
+@{
+    if (Model?.Any() != true) { return; }
+}
+<div class="umb-block-list">
+    @foreach (var block in Model)
+    {
+        if (block?.ContentUdi == null) { continue; }
+
+        var sectionView = SectionDispatcher.Dispatch(block);
+        if (sectionView is not null)
+        {
+            @await Html.PartialAsync("Partials/elements/MacroDispatcher", sectionView)
+        }
+        else
+        {
+            @await Html.PartialAsync("blocklist/Components/" + block.Content.ContentType.Alias, block)
+        }
+    }
+</div>

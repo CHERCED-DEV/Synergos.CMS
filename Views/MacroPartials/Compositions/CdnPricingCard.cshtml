@@ -1,0 +1,29 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@{
+    var p = Model.MacroParameters;
+    string? Get(string key) => p.ContainsKey(key) ? p[key]?.ToString() : null;
+    bool? GetBool(string key) => p.ContainsKey(key) && bool.TryParse(p[key]?.ToString(), out var v) ? v : null;
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var translations = Dict.GetAll();
+    var cfg = JsonSerializer.Serialize(new PricingCardCdnConfig(
+        Title:       Get("title"),
+        Price:       Get("price"),
+        Period:      Get("period"),
+        Description: Get("description"),
+        CtaLabel:    Get("ctaLabel"),
+        CtaUrl:      Get("ctaUrl"),
+        BadgeText:   Get("badgeText"),
+        BadgeTone:   Get("badgeTone"),
+        Variant:     Get("variant"),
+        Theme:       Get("theme"),
+        Featured:    GetBool("featured"),
+        Translations: translations
+    ), opt);
+}
+<script src="@ElementUrl.ResolveBundle("pricing-card")" type="module" defer></script>
+<synergos-pricing-card config='@cfg' class="sg-cdn sg-cdn--pricing-card"></synergos-pricing-card>

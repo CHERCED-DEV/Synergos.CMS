@@ -1,0 +1,12 @@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@{
+    ViewData[LayoutViewData.BodyClass] = "sg-page sg-page--site-root";
+}
+@section HeadMeta {
+    <title>@(Model?.Name ?? "Site")</title>
+}
+
+<section class="sg-site-root">
+    <h1>@(Model?.Name ?? "Site")</h1>
+    <p>No hay páginas hijas visibles para esta aplicación.</p>
+</section>

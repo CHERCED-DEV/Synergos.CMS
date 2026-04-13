@@ -1,0 +1,23 @@
+@model Synergos.CMS.Application.Output.BlogPostSummary
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@{
+    var showImage   = ViewData["showImage"]   as bool? ?? true;
+    var showExcerpt = ViewData["showExcerpt"] as bool? ?? true;
+    var ctaLabel    = Umbraco.GetDictionaryValue("Blog.ReadMore") ?? "Leer más";
+
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var cfg = JsonSerializer.Serialize(new CardCdnConfig(
+        Title:     Model.Title,
+        Body:      showExcerpt ? Model.Excerpt : null,
+        ImageSrc:  showImage   ? Model.FeaturedImageUrl : null,
+        CtaLabel:  ctaLabel,
+        CtaUrl:    Model.Url,
+        BadgeText: Model.CategoryName
+    ), opt);
+}
+<script src="@ElementUrl.ResolveBundle("card")" type="module" defer></script>
+<synergos-card config='@cfg' class="sg-cdn sg-cdn--card sg-post-card"></synergos-card>

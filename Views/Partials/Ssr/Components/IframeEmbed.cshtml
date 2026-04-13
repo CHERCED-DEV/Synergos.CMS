@@ -1,0 +1,17 @@
+@model Synergos.CMS.Application.Elements.IframeEmbedViewModel
+@{
+    var cls   = string.Join(" ", new[] { Model.BlockClass, Model.DomVariant?.Variant }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var src   = Model.Embed?.EmbedUrl;
+    var title = Model.Embed?.EmbedTitle ?? "Embedded content";
+}
+@if (src is not null)
+{
+    <div class="@cls" data-sg-element="int-iframe-embed">
+        <iframe src="@src"
+                title="@title"
+                loading="lazy"
+                frameborder="0"
+                allowfullscreen>
+        </iframe>
+    </div>
+}

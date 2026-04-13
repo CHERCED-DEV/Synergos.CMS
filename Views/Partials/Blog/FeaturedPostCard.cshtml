@@ -1,0 +1,27 @@
+@model Synergos.CMS.Application.Output.BlogPostSummary
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@{
+    var ctaLabel = Umbraco.GetDictionaryValue("Blog.ReadArticle") ?? "Leer artículo";
+
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var cfg = JsonSerializer.Serialize(new MediaTextCdnConfig(
+        HeadingText:   Model.Title,
+        Body:          Model.Excerpt,
+        ImageSrc:      Model.FeaturedImageUrl,
+        CtaLabel:      ctaLabel,
+        CtaUrl:        Model.Url,
+        MediaPosition: "right"
+    ), opt);
+}
+<div class="sg-blog-featured__card">
+    @if (!string.IsNullOrWhiteSpace(Model.CategoryName))
+    {
+        <span class="sg-blog-featured__badge">@Model.CategoryName</span>
+    }
+    <script src="@ElementUrl.ResolveBundle("media-text")" type="module" defer></script>
+    <synergos-media-text config='@cfg' class="sg-cdn sg-cdn--media-text"></synergos-media-text>
+</div>

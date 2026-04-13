@@ -1,0 +1,23 @@
+@model Synergos.CMS.Application.Elements.SocialShareViewModel
+@* Social share — label from Collection; share links progressive-enhanced by CDN bundle at runtime. *@
+@{
+    var blockCls    = Model.DomClass?.CssClass is { } c ? " " + c : "";
+    var variantAttr = Model.DomVariant?.VariantName is { } v
+        ? Html.Raw($"data-sg-variant=\"{v}\"")
+        : Html.Raw("");
+    var pageUrl     = $"{Context.Request.Scheme}://{Context.Request.Host}{Context.Request.Path}";
+}
+<div class="sg-social-share @(Model.BlockClass)@blockCls" data-sg-element="corp-social-share"
+     data-sg-share-url="@pageUrl" @variantAttr>
+    @if (Model.Collection?.CollectionTitle is not null)
+    {
+        <span class="sg-social-share__label">@Model.Collection.CollectionTitle</span>
+    }
+    @if (Model.Collection?.CollectionDescription is not null)
+    {
+        <p class="sg-social-share__description">@Model.Collection.CollectionDescription</p>
+    }
+    <ul class="sg-social-share__list" aria-label="@(Model.Collection?.CollectionTitle ?? "Compartir")">
+        @* Share links injected by CDN bundle; data-sg-share-url carries the target URL *@
+    </ul>
+</div>

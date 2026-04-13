@@ -1,0 +1,57 @@
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var pageTitle     = Model.Value<string>("pageTitle") ?? string.Empty;
+    var pageSubtitle  = Model.Value<string>("pageSubtitle");
+    var categoryAlias = Model.Value<string>("defaultCategory");
+    var columns       = Model.Value<int?>("columns");
+    var showFilters   = Model.Value<bool?>("showFilters");
+    var pageSections  = Model.Value<Umbraco.Cms.Core.Models.Blocks.BlockGridModel>("pageSections");
+
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var translations = Dict.GetAll();
+
+    var gridCfg = JsonSerializer.Serialize(new ProductGridCdnConfig(
+        HeadingText:  pageTitle,
+        CategoryAlias: categoryAlias,
+        Columns:      columns,
+        ShowFilters:  showFilters,
+        Translations: translations
+    ), opt);
+
+    var shopRoot  = Model.AncestorsOrSelf().FirstOrDefault(x => x.ContentType.Alias == "shopRoot");
+    var cartCfg   = JsonSerializer.Serialize(new CartSummaryCdnConfig(
+        CheckoutUrl:  shopRoot?.Value<string>("checkoutUrl"),
+        Translations: translations
+    ), opt);
+}
+<div class="sg-shop-catalog">
+    @if (!string.IsNullOrWhiteSpace(pageTitle))
+    {
+        <header class="sg-shop-catalog__header">
+            <h1 class="sg-shop-catalog__title">@pageTitle</h1>
+            @if (!string.IsNullOrWhiteSpace(pageSubtitle))
+            {
+                <p class="sg-shop-catalog__subtitle">@pageSubtitle</p>
+            }
+        </header>
+    }
+
+    @if (pageSections is not null && pageSections.Count > 0)
+    {
+        <div class="sg-shop-catalog__sections sg-shop-catalog__sections--above">
+            @await Html.GetBlockGridHtmlAsync(pageSections)
+        </div>
+    }
+
+    <script src="@ElementUrl.ResolveBundle("product-grid")" type="module" defer></script>
+    <synergos-product-grid config='@gridCfg' class="sg-cdn sg-cdn--product-grid"></synergos-product-grid>
+
+    <script src="@ElementUrl.ResolveBundle("cart-summary")" type="module" defer></script>
+    <synergos-cart-summary config='@cartCfg' class="sg-cdn sg-cdn--cart-summary"></synergos-cart-summary>
+</div>

@@ -1,0 +1,12 @@
+@model Synergos.CMS.Application.Elements.RatingWidgetViewModel
+@{
+    var cls = string.Join(" ", new[] { Model.BlockClass, Model.DomClass?.ClassList }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+@* SSR fallback — Experience element served via CDN macro (synergos-rating-widget). *@
+<div class="@cls" data-sg-element="exp-rating-widget">
+    @if (!string.IsNullOrWhiteSpace(Model.Text?.Title))
+    {
+        <h2>@Model.Text.Title</h2>
+    }
+    <noscript>JavaScript es necesario para este componente.</noscript>
+</div>

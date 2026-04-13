@@ -1,0 +1,11 @@
+@model Synergos.CMS.Application.Elements.ExternalWidgetViewModel
+@{
+    var cls      = string.Join(" ", new[] { Model.BlockClass, Model.DomClass?.ClassList, Model.DomVariant?.Variant }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var src      = Model.Embed?.EmbedUrl;
+    var endpoint = Model.Async?.ApiEndpoint;
+}
+<div class="@cls"
+     data-sg-element="int-external-widget"
+     @Html.Raw(src is not null ? $"data-widget-src=\"{src}\"" : "")
+     @Html.Raw(endpoint is not null ? $"data-endpoint=\"{endpoint}\"" : "")>
+</div>

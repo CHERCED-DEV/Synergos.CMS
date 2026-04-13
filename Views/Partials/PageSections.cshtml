@@ -1,0 +1,19 @@
+@using Synergos.CMS.Application.Output
+@model IReadOnlyList<Synergos.CMS.Application.Output.SectionNode>
+@* ─────────────────────────────────────────────────────────────────────────
+   Renderiza el árbol de secciones de una página.
+
+   v4.0.0 — Usa SectionNode (árbol) para soportar Block Grid con Areas.
+   Delega el rendering de cada nodo al partial SectionNodeRenderer,
+   que maneja la recursión para bloques estructurales con hijos.
+   ───────────────────────────────────────────────────────────────────────── *@
+
+@if (Model.Count > 0)
+{
+    <main class="sg-page-sections">
+        @foreach (var node in Model)
+        {
+            @await Html.PartialAsync("SectionNodeRenderer", node)
+        }
+    </main>
+}

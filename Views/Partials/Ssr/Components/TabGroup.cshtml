@@ -1,0 +1,11 @@
+@model Synergos.CMS.Application.Elements.TabGroupViewModel
+@* Tabbed content group — tabs are items from the Collection composition. *@
+<div class="sg-tab-group" data-sg-element="corp-tab-group">
+    @if (Model.Text?.Title is not null)
+    {
+        <h3 class="sg-tab-group__heading">@Model.Text.Title</h3>
+    }
+    <div class="sg-tab-group__tabs" role="tablist">
+        @* Tab headers and panels rendered by frontend JS or Web Component *@
+    </div>
+</div>

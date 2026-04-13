@@ -1,0 +1,35 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@{
+    var title    = Model.MacroParameters.ContainsKey("title")    ? Model.MacroParameters["title"]?.ToString()    : "";
+    var summary  = Model.MacroParameters.ContainsKey("summary")  ? Model.MacroParameters["summary"]?.ToString()  : "";
+    var imageUrl = Model.MacroParameters.ContainsKey("imageUrl") ? Model.MacroParameters["imageUrl"]?.ToString() : null;
+    var linkUrl  = Model.MacroParameters.ContainsKey("linkUrl")  ? Model.MacroParameters["linkUrl"]?.ToString()  : null;
+}
+
+<div class="sg-macro sg-macro--card-preview">
+    <div class="sg-card-preview">
+        @if (imageUrl is not null)
+        {
+            <img class="sg-card-preview__image" src="@imageUrl" alt="@title" loading="lazy" />
+        }
+        <div class="sg-card-preview__body">
+            @if (!string.IsNullOrEmpty(title))
+            {
+                <h4 class="sg-card-preview__title">
+                    @if (linkUrl is not null)
+                    {
+                        <a href="@linkUrl">@title</a>
+                    }
+                    else
+                    {
+                        @title
+                    }
+                </h4>
+            }
+            @if (!string.IsNullOrEmpty(summary))
+            {
+                <p class="sg-card-preview__summary">@summary</p>
+            }
+        </div>
+    </div>
+</div>

@@ -1,0 +1,25 @@
+@model Synergos.CMS.Application.Elements.AccordionViewModel
+@{
+    var title = Model.Text?.Title;
+    var description = Model.Collection?.CollectionDescription;
+}
+
+<div class="sg-accordion @Model.DomClass?.ClassList">
+    @if (title is not null)
+    {
+        <h3 class="sg-accordion__title">@title</h3>
+    }
+    @if (description is not null)
+    {
+        <p class="sg-accordion__description">@description</p>
+    }
+    @if (Model.Items.Count > 0)
+    {
+        <div class="sg-accordion__items" data-sg-behavior="accordion">
+            @foreach (var item in Model.Items)
+            {
+                @await Html.PartialAsync("Partials/Ssr/Components/AccordionItem", item)
+            }
+        </div>
+    }
+</div>

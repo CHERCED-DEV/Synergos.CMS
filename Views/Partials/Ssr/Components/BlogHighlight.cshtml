@@ -1,0 +1,33 @@
+@model Synergos.CMS.Application.Elements.BlogHighlightViewModel
+@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+
+<section class="sg-blog-highlight sg-blog-highlight--@(Model.ListLayout ?? "grid")">
+    @if (Model.Heading is not null && !string.IsNullOrEmpty(Model.Heading.Title))
+    {
+        <header class="sg-blog-highlight__header">
+            <h2 class="sg-blog-highlight__title">@Model.Heading.Title</h2>
+            @if (!string.IsNullOrEmpty(Model.Heading.Subtitle))
+            {
+                <p class="sg-blog-highlight__subtitle">@Model.Heading.Subtitle</p>
+            }
+        </header>
+    }
+
+    @if (Model.Posts.Count > 0)
+    {
+        <div class="sg-blog-highlight__grid">
+            @foreach (var post in Model.Posts)
+            {
+                @await Html.PartialAsync("Blog/PostCard", post, new ViewDataDictionary(ViewData)
+                {
+                    { "showImage",   Model.ShowImage },
+                    { "showExcerpt", Model.ShowExcerpt }
+                })
+            }
+        </div>
+    }
+    else
+    {
+        <p class="sg-blog-highlight__empty">@(Umbraco.GetDictionaryValue("Blog.NoPosts") ?? "No hay publicaciones disponibles.")</p>
+    }
+</section>

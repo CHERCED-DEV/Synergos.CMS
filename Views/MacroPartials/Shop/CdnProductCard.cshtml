@@ -1,0 +1,27 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@{
+    var p = Model.MacroParameters;
+    string? Get(string key) => p.ContainsKey(key) ? p[key]?.ToString() : null;
+    bool?   GetBool(string key) => p.ContainsKey(key) && bool.TryParse(p[key]?.ToString(), out var b) ? b : null;
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var translations = Dict.GetAll();
+    var cfg = JsonSerializer.Serialize(new ProductCardCdnConfig(
+        ProductSku:   Get("productSku"),
+        Name:         Get("name"),
+        ImageSrc:     Get("imageSrc"),
+        ImageAlt:     Get("imageAlt"),
+        ShowPrice:    GetBool("showPrice"),
+        ShowBadge:    GetBool("showBadge"),
+        Layout:       Get("layout"),
+        Theme:        Get("theme"),
+        Variant:      Get("variant"),
+        Translations: translations
+    ), opt);
+}
+<script src="@ElementUrl.ResolveBundle("product-card")" type="module" defer></script>
+<synergos-product-card config='@cfg' class="sg-cdn sg-cdn--product-card"></synergos-product-card>

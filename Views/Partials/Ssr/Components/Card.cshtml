@@ -1,0 +1,40 @@
+@model Synergos.CMS.Application.Elements.CardElementViewModel
+@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@{
+    var variant = Model.DomVariant?.Variant;
+    var cls     = string.Join(" ", new[] { "sg-card", !string.IsNullOrEmpty(variant) ? $"sg-card--{variant}" : null, Model.DomClass?.ClassList }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var src     = Model.Media?.Media?.Src;
+    var href    = Model.Cta?.CtaLink?.Url;
+    var readMore = Model.Cta?.CtaLabel;
+    if (string.IsNullOrWhiteSpace(readMore)) readMore = Umbraco.GetDictionaryValue("Common.Actions.SeeMore") ?? "Ver más";
+}
+<article class="@cls" data-sg-element="comp-card">
+    @if (src is not null)
+    {
+        <div class="sg-card__media">
+            <img src="@src" alt="@(Model.Media?.AltText ?? "")" loading="lazy" />
+        </div>
+    }
+    <div class="sg-card__body">
+        @if (!string.IsNullOrWhiteSpace(Model.Badge?.BadgeText))
+        {
+            <span class="sg-card__badge sg-badge--@(Model.Badge.BadgeType ?? "info")">@Model.Badge.BadgeText</span>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.Text?.Title))
+        {
+            <h3 class="sg-card__title">@Model.Text.Title</h3>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.Text?.Subtitle))
+        {
+            <p class="sg-card__subtitle">@Model.Text.Subtitle</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.Text?.Body))
+        {
+            <div class="sg-card__text">@Html.Raw(Model.Text.Body)</div>
+        }
+        @if (href is not null)
+        {
+            <a class="sg-card__cta sg-btn--link" href="@href">@readMore</a>
+        }
+    </div>
+</article>

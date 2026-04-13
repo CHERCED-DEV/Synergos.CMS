@@ -1,0 +1,13 @@
+@using Umbraco.Cms.Core.Models.Blocks
+@using Umbraco.Extensions
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<BlockGridItem>
+@{
+    var classList = Model.Content.HasProperty("classList") ? Model.Content.Value<string>("classList") : (Model.Content.HasProperty("cssClass") ? Model.Content.Value<string>("cssClass") : null);
+    var theme     = Model.Content.HasProperty("theme")     ? Model.Content.Value<string>("theme")     : null;
+    var variant   = Model.Content.HasProperty("variant")   ? Model.Content.Value<string>("variant")   : null;
+}
+<hr class="sg-struct sg-struct--divider @variant @classList"
+    data-sg-element="struct-divider"
+    @Html.Raw(theme is not null ? $"data-theme=\"{theme}\"" : "")
+    @Html.Raw(variant is not null ? $"data-variant=\"{variant}\"" : "")
+    aria-hidden="true" />

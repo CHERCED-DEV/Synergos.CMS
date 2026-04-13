@@ -1,0 +1,18 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@{
+    var value = Model.MacroParameters.ContainsKey("value") ? Model.MacroParameters["value"]?.ToString() : "";
+    var label = Model.MacroParameters.ContainsKey("label") ? Model.MacroParameters["label"]?.ToString() : "";
+}
+
+<div class="sg-macro sg-macro--stat">
+    <div class="sg-stat">
+        @if (!string.IsNullOrEmpty(value))
+        {
+            <span class="sg-stat__value">@value</span>
+        }
+        @if (!string.IsNullOrEmpty(label))
+        {
+            <span class="sg-stat__label">@label</span>
+        }
+    </div>
+</div>

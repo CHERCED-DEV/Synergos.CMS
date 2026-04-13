@@ -1,0 +1,27 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@{
+    var p = Model.MacroParameters;
+    string? Get(string key) => p.ContainsKey(key) ? p[key]?.ToString() : null;
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var translations = Dict.GetAll();
+    var cfg = JsonSerializer.Serialize(new MediaTextCdnConfig(
+        ImageSrc:      Get("imageSrc"),
+        ImageAlt:      Get("imageAlt"),
+        HeadingText:   Get("headingText"),
+        Body:          Get("body"),
+        CtaLabel:      Get("ctaLabel"),
+        CtaUrl:        Get("ctaUrl"),
+        CtaTarget:     Get("ctaTarget"),
+        MediaPosition: Get("mediaPosition"),
+        Variant:       Get("variant"),
+        Theme:         Get("theme"),
+        Translations: translations
+    ), opt);
+}
+<script src="@ElementUrl.ResolveBundle("media-text")" type="module" defer></script>
+<synergos-media-text config='@cfg' class="sg-cdn sg-cdn--media-text"></synergos-media-text>

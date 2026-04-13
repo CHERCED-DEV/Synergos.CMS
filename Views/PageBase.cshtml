@@ -1,0 +1,44 @@
+@using Umbraco.Extensions
+@using Synergos.CMS.Application.Output
+@model ContentPageView
+@inject Synergos.CMS.Domain.Services.IThemeService ThemeService
+@{
+    @* ── Derive CSS modifier from document type alias ─────────────────────
+         "homePage" → "home", "pageBase" → "base", "aboutPage" → "about"
+         This makes the view universal: one template for ALL composable pages. ── *@
+    var alias = Model.Content.ContentType.Alias;
+    var modifier = alias switch
+    {
+        "pageBase" => "base",
+        _ when alias.EndsWith("Page", StringComparison.Ordinal)
+            => alias[..^4].ToLowerInvariant(),
+        _ => alias.ToLowerInvariant()
+    };
+
+    @* ── Per-page layout profile (CompDomLayoutProfile composition) ───────────
+         Resolves MainWrapperStyle (extra CSS on <main>) from the LayoutProfile picker.
+         Header/footer/alertBar visibility is handled by each ViewComponent directly. ── *@
+    var pageCfg = ThemeService.GetPageLayoutConfig(Model.Content);
+    if (!string.IsNullOrWhiteSpace(pageCfg.MainWrapperStyle))
+        ViewData[LayoutViewData.MainWrapperStyle] = pageCfg.MainWrapperStyle;
+
+    var seoTitle = Model.Seo.Title ?? Model.Title;
+    ViewData[LayoutViewData.BodyId] = Model.PageCssId;
+    ViewData[LayoutViewData.BodyClass] = string.IsNullOrWhiteSpace(Model.PageCssClass)
+        ? $"sg-page sg-page--{modifier}"
+        : $"sg-page sg-page--{modifier} {Model.PageCssClass}";
+}
+@section HeadMeta {
+    @await Html.PartialAsync("SeoMeta", Model.Seo, new ViewDataDictionary(ViewData) { { LayoutViewData.SeoTitle, seoTitle } })
+}
+
+@if (Model.BlockGrid is not null)
+{
+    @* ── Native Umbraco 10+ Block Grid rendering ── *@
+    @await Html.GetBlockGridHtmlAsync(Model.BlockGrid)
+}
+else
+{
+    @* ── Fallback: custom SectionTree rendering (Block List compat) ── *@
+    @await Html.PartialAsync("PageSections", Model.SectionTree)
+}

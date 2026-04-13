@@ -1,0 +1,46 @@
+@model Synergos.CMS.Application.Elements.BannerSliderViewModel
+@{
+    var cls = string.Join(" ", new[] { "sg-banner-slider", Model.BlockClass, Model.DomClass?.ClassList, Model.DomVariant?.Variant }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@cls" data-sg-element="corp-banner-slider">
+    @if (!string.IsNullOrWhiteSpace(Model.Text?.Title))
+    {
+        <h2 class="sg-banner-slider__heading">@Model.Text.Title</h2>
+    }
+    @if (Model.Slides.Count > 0)
+    {
+        <div class="sg-banner-slider__track">
+            @foreach (var slide in Model.Slides)
+            {
+                var bgSrc = slide.Media?.Media?.Src;
+                <div class="sg-banner-slider__slide"
+                     @Html.Raw(bgSrc is not null ? $"style=\"--slide-bg: url('{bgSrc}')\"" : "")>
+                    @if (bgSrc is not null)
+                    {
+                        <img class="sg-banner-slider__image" src="@bgSrc"
+                             alt="@(slide.Media?.AltText ?? slide.Media?.Media?.Alt ?? "")"
+                             loading="lazy" />
+                    }
+                    <div class="sg-banner-slider__content">
+                        @if (!string.IsNullOrWhiteSpace(slide.Text?.Title))
+                        {
+                            <h3 class="sg-banner-slider__title">@slide.Text.Title</h3>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(slide.Text?.Body))
+                        {
+                            <p class="sg-banner-slider__body">@Html.Raw(slide.Text.Body)</p>
+                        }
+                        @if (slide.Cta?.CtaLink?.Url is not null)
+                        {
+                            <a class="sg-banner-slider__cta sg-btn--primary"
+                               href="@slide.Cta.CtaLink.Url"
+                               @Html.Raw(slide.Cta.CtaTarget is not null ? $"target=\"{slide.Cta.CtaTarget}\"" : "")>
+                                @(slide.Cta.CtaLabel ?? slide.Cta.CtaLink.Name)
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

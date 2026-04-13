@@ -1,0 +1,17 @@
+@* ⚠ TRUSTED CONTENT ONLY
+   ScriptEmbed renders scripts via Html.Raw() intentionally.
+   Content MUST come from trusted editorial sources (backoffice editors).
+   Do NOT expose this element type to untrusted user input. *@
+@model Synergos.CMS.Application.Elements.ScriptEmbedViewModel
+@if (Model.Script?.ScriptContent is not null && Model.DomVisibility?.HideOnDesktop != true)
+{
+    @switch (Model.Script.ScriptType)
+    {
+        case "inline":
+            @Html.Raw($"<script data-sg-element=\"int-script-embed\">{Model.Script.ScriptContent}</script>")
+            break;
+        default:
+            @Html.Raw($"<script src=\"{Model.Script.ScriptContent}\" defer data-sg-element=\"int-script-embed\"></script>")
+            break;
+    }
+}

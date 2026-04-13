@@ -1,0 +1,16 @@
+@model Synergos.CMS.Application.Output.SectionView
+@* ─────────────────────────────────────────────────────────────────────────
+   Dispatcher de secciones. Responsabilidades:
+     1. Renderizar el wrapper HTML externo con los atributos DOM del editor.
+     2. Delegar el contenido interno al partial de la sección usando ViewName.
+     3. Pasar la sección de dominio (Model.Section) al partial, no el SectionView.
+        Los partials de sección reciben modelos de dominio tipados, no wrappers.
+
+   No hay switch de tipos, no hay 'object', no hay lógica de negocio.
+   Agregar una sección nueva no requiere modificar este archivo.
+   ───────────────────────────────────────────────────────────────────────── *@
+
+<div id="@Model.ElementId"
+     class="sg-block @Model.Section.BlockClass @Model.CssClasses">
+    @await Html.PartialAsync(Model.Section.ViewName, Model.Section)
+</div>

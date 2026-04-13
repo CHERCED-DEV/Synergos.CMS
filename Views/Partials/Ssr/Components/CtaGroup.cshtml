@@ -1,0 +1,23 @@
+@model Synergos.CMS.Application.Elements.CtaGroupViewModel
+@{
+    var cls = string.Join(" ", new[] { Model.BlockClass, Model.DomClass?.ClassList }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@cls" data-sg-element="action-cta-group" role="group"
+     @Html.Raw(Model.Collection?.CollectionTitle is not null ? $"aria-label=\"{Model.Collection.CollectionTitle}\"" : "")>
+    @if (Model.PrimaryCta?.CtaLink?.Url is not null)
+    {
+        <a class="sg-btn--primary"
+           href="@Model.PrimaryCta.CtaLink.Url"
+           @Html.Raw(Model.PrimaryCta.CtaTarget is not null ? $"target=\"{Model.PrimaryCta.CtaTarget}\"" : "")>
+            @(Model.PrimaryCta.CtaLabel ?? Model.PrimaryCta.CtaLink.Name)
+        </a>
+    }
+    @if (Model.SecondaryCta?.CtaLink?.Url is not null)
+    {
+        <a class="sg-btn--secondary"
+           href="@Model.SecondaryCta.CtaLink.Url"
+           @Html.Raw(Model.SecondaryCta.CtaTarget is not null ? $"target=\"{Model.SecondaryCta.CtaTarget}\"" : "")>
+            @(Model.SecondaryCta.CtaLabel ?? Model.SecondaryCta.CtaLink.Name)
+        </a>
+    }
+</div>

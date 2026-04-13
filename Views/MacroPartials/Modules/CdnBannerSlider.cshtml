@@ -1,0 +1,30 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@{
+    var p = Model.MacroParameters;
+    string? Get(string key) => p.ContainsKey(key) ? p[key]?.ToString() : null;
+    bool?   GetBool(string key) => p.ContainsKey(key) && bool.TryParse(p[key]?.ToString(), out var b) ? b : null;
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var translations = Dict.GetAll();
+    // slides: pass as JSON array string via "slidesJson" parameter
+    var slidesRaw = Get("slidesJson");
+    var slides = slidesRaw is not null
+        ? JsonSerializer.Deserialize<List<BannerSliderSlideCdnConfig>>(slidesRaw, opt)
+        : null;
+    var cfg = JsonSerializer.Serialize(new BannerSliderCdnConfig(
+        HeadingText: Get("headingText"),
+        Body:        Get("body"),
+        Variant:     Get("variant"),
+        Theme:       Get("theme"),
+        Autoplay:    GetBool("autoplay"),
+        Loop:        GetBool("loop"),
+        Slides:      slides,
+        Translations: translations
+    ), opt);
+}
+<script src="@ElementUrl.ResolveBundle("banner-slider")" type="module" defer></script>
+<synergos-banner-slider config='@cfg' class="sg-cdn sg-cdn--banner-slider"></synergos-banner-slider>

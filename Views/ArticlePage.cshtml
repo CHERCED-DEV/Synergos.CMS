@@ -1,0 +1,58 @@
+@using Umbraco.Extensions
+@model Synergos.CMS.Application.Output.ArticlePageView
+@inject Synergos.CMS.Domain.Services.IThemeService ThemeService
+@{
+    var pageCfg = ThemeService.GetPageLayoutConfig(Model.Content);
+    if (!string.IsNullOrWhiteSpace(pageCfg.MainWrapperStyle))
+        ViewData[LayoutViewData.MainWrapperStyle] = pageCfg.MainWrapperStyle;
+
+    var seoTitle = Model.Seo.Title ?? Model.Title;
+    ViewData[LayoutViewData.BodyId] = Model.PageCssId;
+    ViewData[LayoutViewData.BodyClass] = string.IsNullOrWhiteSpace(Model.PageCssClass)
+        ? "sg-page sg-page--article"
+        : $"sg-page sg-page--article {Model.PageCssClass}";
+}
+@section HeadMeta {
+    @await Html.PartialAsync("SeoMeta", Model.Seo, new ViewDataDictionary(ViewData) { { LayoutViewData.SeoTitle, seoTitle } })
+    <meta property="og:type" content="article" />
+    <meta name="author" content="@Model.Author" />
+    <meta property="article:published_time" content="@Model.PublishDate.ToString("yyyy-MM-ddTHH:mm:ssK")" />
+}
+
+<article class="sg-article">
+    <header class="sg-article__header">
+        <h1>@Model.Title</h1>
+        @if (Model.Subtitle is not null)
+        {
+            <p class="sg-article__subtitle">@Model.Subtitle</p>
+        }
+        <div class="sg-article__meta">
+            <span>@Model.Author</span>
+            <time datetime="@Model.PublishDate.ToString("yyyy-MM-dd")">
+                @Model.PublishDate.ToString("dd MMMM yyyy")
+            </time>
+        </div>
+        @if (Model.Tags.Count > 0)
+        {
+            <ul class="sg-article__tags">
+                @foreach (var tag in Model.Tags)
+                {
+                    <li>@tag</li>
+                }
+            </ul>
+        }
+    </header>
+
+    <div class="sg-article__body">
+        @Html.Raw(Model.Body)
+    </div>
+</article>
+
+@if (Model.BlockGrid is not null)
+{
+    @await Html.GetBlockGridHtmlAsync(Model.BlockGrid)
+}
+else if (Model.SectionTree.Count > 0)
+{
+    @await Html.PartialAsync("PageSections", Model.SectionTree)
+}

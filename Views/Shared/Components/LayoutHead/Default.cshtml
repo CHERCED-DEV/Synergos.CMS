@@ -1,0 +1,26 @@
+@model Synergos.CMS.Presentation.ViewModels.Layout.LayoutHeadViewModel
+
+@if (!string.IsNullOrWhiteSpace(Model.ThemeColor))
+{
+    <meta name="theme-color" content="@Model.ThemeColor" />
+}
+
+@* ── ES Module Import Map — must be FIRST script in <head> ── *@
+@if (!string.IsNullOrWhiteSpace(Model.ImportMapJson))
+{
+    <script type="importmap">@Html.Raw(Model.ImportMapJson)</script>
+}
+
+@* ── UI Kit base stylesheet ── *@
+<link rel="stylesheet" href="/css/synergos-uikit.css" />
+
+@* ── CDN element stylesheets (loaded from ArtifactResolver registry) ── *@
+@foreach (var url in Model.CdnStyleUrls)
+{
+    <link rel="stylesheet" href="@url" />
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.TrackingHeadScriptsHtml))
+{
+    @Html.Raw(Model.TrackingHeadScriptsHtml)
+}

@@ -1,0 +1,21 @@
+@model Synergos.CMS.Application.Elements.ContactInfoViewModel
+@* Contact info block: email, phone, address via ContentText + CTA link. *@
+<div class="sg-contact-info" data-sg-element="corp-contact-info">
+    @if (Model.Text?.Title is not null)
+    {
+        <h3 class="sg-contact-info__title">@Model.Text.Title</h3>
+    }
+    @if (Model.Text?.Body is not null)
+    {
+        <div class="sg-contact-info__details">@Html.Raw(Model.Text.Body)</div>
+    }
+    @if (Model.Cta?.CtaLink is not null)
+    {
+        <a href="@Model.Cta.CtaLink.Url"
+           class="sg-contact-info__action"
+           @Html.Raw(Model.Cta.CtaTarget is not null ? $"target=\"{Model.Cta.CtaTarget}\"" : "")
+           @Html.Raw(Model.Cta.CtaAriaLabel is not null ? $"aria-label=\"{Model.Cta.CtaAriaLabel}\"" : "")>
+            @(Model.Cta.CtaLabel ?? "Contact us")
+        </a>
+    }
+</div>

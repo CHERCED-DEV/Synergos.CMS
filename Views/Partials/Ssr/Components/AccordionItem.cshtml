@@ -1,0 +1,18 @@
+@model Synergos.CMS.Application.Elements.AccordionItemViewModel
+@{
+    var cls = string.Join(" ", new[] { Model.BlockClass, Model.DomClass?.ClassList }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@cls" data-sg-element="comp-accordion-item">
+    @if (!string.IsNullOrWhiteSpace(Model.Text?.Title))
+    {
+        <button class="sg-accordion__header" type="button" aria-expanded="false">
+            @Model.Text.Title
+        </button>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.Text?.Body))
+    {
+        <div class="sg-accordion__panel" hidden>
+            @Html.Raw(Model.Text.Body)
+        </div>
+    }
+</div>

@@ -1,0 +1,29 @@
+@model Synergos.CMS.Application.Elements.MissionBlockViewModel
+@* Mission/about block: statement text + optional media (logo, founder photo, etc.). *@
+@{
+    var hasMedia = Model.Media?.Media is not null;
+    var rootClass = hasMedia ? "sg-mission-block sg-mission-block--with-media" : "sg-mission-block";
+}
+<div class="@rootClass" data-sg-element="corp-mission-block">
+    @if (hasMedia)
+    {
+        <div class="sg-mission-block__media">
+            <img src="@Model.Media.Media.Src" alt="@(Model.Media.AltText ?? Model.Media.Media.Alt ?? "")"
+                 class="sg-mission-block__image" loading="lazy" />
+        </div>
+    }
+    <div class="sg-mission-block__content">
+        @if (Model.Text?.Title is not null)
+        {
+            <h2 class="sg-mission-block__title">@Model.Text.Title</h2>
+        }
+        @if (Model.Text?.Subtitle is not null)
+        {
+            <p class="sg-mission-block__subtitle">@Model.Text.Subtitle</p>
+        }
+        @if (Model.Text?.Body is not null)
+        {
+            <div class="sg-mission-block__body">@Html.Raw(Model.Text.Body)</div>
+        }
+    </div>
+</div>

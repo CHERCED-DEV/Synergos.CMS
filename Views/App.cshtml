@@ -1,0 +1,11 @@
+﻿@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@* ─────────────────────────────────────────────────────────────────────────
+   Legacy "App" document type — superseded by SiteRoot.
+   Any content node still using this type will land here.
+   Redirect to the site root so visitors are not left on a broken page.
+   Action required: migrate remaining "App" nodes to the SiteRoot document type
+   in the backoffice, then this view can be deleted.
+   ───────────────────────────────────────────────────────────────────────── *@
+@{
+    Response.Redirect("/", permanent: false);
+}

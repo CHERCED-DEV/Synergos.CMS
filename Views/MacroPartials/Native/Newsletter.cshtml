@@ -1,0 +1,24 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@{
+    var title       = Model.MacroParameters.ContainsKey("title")       ? Model.MacroParameters["title"]?.ToString()       : "Suscríbete";
+    var buttonLabel = Model.MacroParameters.ContainsKey("buttonLabel") ? Model.MacroParameters["buttonLabel"]?.ToString() : "Enviar";
+    var apiEndpoint = Model.MacroParameters.ContainsKey("apiEndpoint") ? Model.MacroParameters["apiEndpoint"]?.ToString() : "";
+}
+
+<div class="sg-macro sg-macro--newsletter">
+    <div class="sg-newsletter">
+        <h4 class="sg-newsletter__title">@title</h4>
+        <form class="sg-newsletter__form"
+              action="@apiEndpoint"
+              method="post"
+              data-sg-behavior="newsletter">
+            <input class="sg-newsletter__input"
+                   type="email"
+                   name="email"
+                   placeholder="tu@email.com"
+                   required
+                   aria-label="Email" />
+            <button class="sg-newsletter__button" type="submit">@buttonLabel</button>
+        </form>
+    </div>
+</div>

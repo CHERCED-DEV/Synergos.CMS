@@ -1,0 +1,11 @@
+namespace Synergos.CMS.Schema.Constants;
+
+/// <summary>
+/// Idempotency key stored in Umbraco's key-value store.
+/// Increment the version string to force a re-run of schema initialization.
+/// </summary>
+public static class SchemaVersion
+{
+    public const string Key   = "Synergos.Schema.Version";
+    public const string Value = "10.0.1"; // Initial clean migration from epicfail
+}

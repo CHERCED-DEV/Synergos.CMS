@@ -1,0 +1,25 @@
+@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@{
+    var p = Model.MacroParameters;
+    string? Get(string key) => p.ContainsKey(key) ? p[key]?.ToString() : null;
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var translations = Dict.GetAll();
+    var itemsRaw = Get("itemsJson");
+    var items = itemsRaw is not null
+        ? JsonSerializer.Deserialize<List<ButtonGroupItemCdnConfig>>(itemsRaw, opt)
+        : null;
+    var cfg = JsonSerializer.Serialize(new ButtonGroupCdnConfig(
+        Alignment: Get("alignment"),
+        Direction: Get("direction"),
+        Gap:       Get("gap"),
+        Items:     items,
+        Translations: translations
+    ), opt);
+}
+<script src="@ElementUrl.ResolveBundle("button-group")" type="module" defer></script>
+<synergos-button-group config='@cfg' class="sg-cdn sg-cdn--button-group"></synergos-button-group>

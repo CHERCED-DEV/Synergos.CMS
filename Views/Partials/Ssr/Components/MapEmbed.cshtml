@@ -1,0 +1,12 @@
+@model Synergos.CMS.Application.Elements.MapEmbedViewModel
+@* Embedded map (Google Maps, OpenStreetMap, etc.) via ContentEmbed composition. *@
+@if (Model.Embed?.EmbedUrl is not null)
+{
+    <div class="sg-map-embed" data-sg-element="corp-map-embed">
+        <iframe src="@Model.Embed.EmbedUrl"
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+                class="sg-map-embed__iframe"
+                title="@(Model.Embed.EmbedTitle ?? "Map")"></iframe>
+    </div>
+}

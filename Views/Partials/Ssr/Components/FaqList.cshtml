@@ -1,0 +1,19 @@
+@model Synergos.CMS.Application.Elements.FaqListViewModel
+@{
+    var cls = string.Join(" ", new[] { Model.BlockClass, Model.DomClass?.ClassList, Model.DomVariant?.Variant }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@cls" data-sg-element="comp-faq-list" itemscope itemtype="https://schema.org/FAQPage">
+    @if (!string.IsNullOrWhiteSpace(Model.Collection?.CollectionTitle))
+    {
+        <h2 class="sg-faq-list__title">@Model.Collection.CollectionTitle</h2>
+    }
+    @if (Model.Items.Count > 0)
+    {
+        <div class="sg-faq-list__items">
+            @foreach (var item in Model.Items)
+            {
+                @await Html.PartialAsync("Partials/Ssr/Components/FaqItem", item)
+            }
+        </div>
+    }
+</section>

@@ -1,0 +1,80 @@
+@using Synergos.CMS.Domain.Services
+@model ThemeConfig
+@* ─────────────────────────────────────────────────────────────────────────
+   Emits CSS custom properties from ThemeSettings.
+   Only properties with values are emitted — design system defaults apply otherwise.
+   ───────────────────────────────────────────────────────────────────────── *@
+
+@if (Model.HeadingFontUrl is not null)
+{
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="@Model.HeadingFontUrl" />
+}
+@if (Model.BodyFontUrl is not null && Model.BodyFontUrl != Model.HeadingFontUrl)
+{
+    <link rel="stylesheet" href="@Model.BodyFontUrl" />
+}
+@if (Model.FaviconUrl is not null)
+{
+    <link rel="icon" href="@Model.FaviconUrl" />
+}
+
+<style>
+:root {
+    @{ EmitVar("--sg-color-primary",      Model.ColorPrimary); }
+    @{ EmitVar("--sg-color-secondary",    Model.ColorSecondary); }
+    @{ EmitVar("--sg-color-accent",       Model.ColorAccent); }
+    @{ EmitVar("--sg-color-background",   Model.ColorBackground); }
+    @{ EmitVar("--sg-color-surface",      Model.ColorSurface); }
+    @{ EmitVar("--sg-color-text",         Model.ColorText); }
+    @{ EmitVar("--sg-color-text-inverse", Model.ColorTextInverse); }
+    @{ EmitVar("--sg-color-border",       Model.ColorBorder); }
+    @{ EmitVar("--sg-color-success",      Model.ColorSuccess); }
+    @{ EmitVar("--sg-color-warning",      Model.ColorWarning); }
+    @{ EmitVar("--sg-color-error",        Model.ColorError); }
+    @{ EmitVar("--sg-font-heading",       Model.FontFamilyHeading); }
+    @{ EmitVar("--sg-font-body",          Model.FontFamilyBody); }
+    @{ EmitVar("--sg-font-mono",          Model.FontFamilyMono); }
+    @{ EmitVar("--sg-font-size-base",     Model.FontBaseSize); }
+    @{ EmitVar("--sg-font-scale",         Model.FontScaleRatio); }
+    @{ EmitVar("--sg-spacing-unit",       Model.SpacingUnit); }
+    @{ EmitVar("--sg-container-max",      Model.ContainerMaxWidth); }
+    @{ EmitVar("--sg-radius",             Model.BorderRadius); }
+    @{ EmitVar("--sg-section-padding-y",  Model.SectionPaddingY); }
+    @* ── Brand identity tokens (populated from IdentityRegistry preset + CMS overrides) ── *@
+    @{ EmitVar("--sg-color-surface-elevated",      Model.ColorSurfaceElevated); }
+    @{ EmitVar("--sg-color-text-secondary",        Model.ColorTextSecondary); }
+    @{ EmitVar("--sg-color-border-subtle",         Model.ColorBorderSubtle); }
+    @{ EmitVar("--sg-color-action-primary",        Model.ColorActionPrimary); }
+    @{ EmitVar("--sg-color-action-primary-hover",  Model.ColorActionPrimaryHover); }
+    @{ EmitVar("--sg-color-action-primary-text",   Model.ColorActionPrimaryText); }
+    @{ EmitVar("--sg-color-info",                  Model.ColorInfo); }
+    @{ EmitVar("--sg-brand-gradient-hero",         Model.BrandGradientHero); }
+    @{ EmitVar("--sg-brand-glow-color",            Model.BrandGlowColor); }
+    @{ EmitVar("--sg-brand-surface-glass-bg",      Model.BrandSurfaceGlassBg); }
+    @{ EmitVar("--sg-brand-surface-backdrop-blur", Model.BrandSurfaceBackdropBlur); }
+    @{ EmitVar("--sg-brand-particle-enabled",      Model.BrandParticleEnabled); }
+    @{ EmitVar("--sg-brand-logo-filter",           Model.BrandLogoFilter); }
+    @{ EmitVar("--sg-brand-hero-overlay",          Model.BrandHeroOverlay); }
+    @{ EmitVar("--sg-brand-heading-weight",        Model.BrandHeadingWeight); }
+    @{ EmitVar("--sg-brand-heading-letter-spacing",Model.BrandHeadingLetterSpacing); }
+    @{ EmitVar("--sg-brand-divider-gradient",      Model.BrandDividerGradient); }
+    @{ EmitVar("--sg-brand-cta-glow",              Model.BrandCtaGlow); }
+}
+</style>
+
+@if (!string.IsNullOrWhiteSpace(Model.CustomCssSnippet))
+{
+    <style>@Html.Raw(Model.CustomCssSnippet)</style>
+}
+
+@functions {
+    void EmitVar(string varName, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            @:    @varName: @value;
+        }
+    }
+}

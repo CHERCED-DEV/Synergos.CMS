@@ -1,0 +1,34 @@
+@model Synergos.CMS.Application.Output.BlogAuthorInfo
+@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+
+<aside class="sg-author-bio">
+    @if (!string.IsNullOrEmpty(Model.PhotoUrl))
+    {
+        <img class="sg-author-bio__photo" src="@Model.PhotoUrl" alt="@Model.Name" loading="lazy" />
+    }
+    <div class="sg-author-bio__info">
+        <strong class="sg-author-bio__name">@Model.Name</strong>
+        @if (!string.IsNullOrEmpty(Model.Role))
+        {
+            <span class="sg-author-bio__role">@Model.Role</span>
+        }
+        @if (!string.IsNullOrEmpty(Model.Bio))
+        {
+            <p class="sg-author-bio__text">@Model.Bio</p>
+        }
+        <nav class="sg-author-bio__social" aria-label="@(Umbraco.GetDictionaryValue("Blog.AuthorSocial") ?? "Redes sociales del autor")">
+            @if (!string.IsNullOrEmpty(Model.LinkedInUrl))
+            {
+                <a href="@Model.LinkedInUrl" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn de @Model.Name">LinkedIn</a>
+            }
+            @if (!string.IsNullOrEmpty(Model.TwitterUrl))
+            {
+                <a href="@Model.TwitterUrl" target="_blank" rel="noopener noreferrer" aria-label="Twitter de @Model.Name">Twitter</a>
+            }
+            @if (!string.IsNullOrEmpty(Model.Email))
+            {
+                <a href="mailto:@Model.Email" aria-label="Email de @Model.Name">Email</a>
+            }
+        </nav>
+    </div>
+</aside>

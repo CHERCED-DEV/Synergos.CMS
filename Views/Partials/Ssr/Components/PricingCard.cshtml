@@ -1,0 +1,40 @@
+@model Synergos.CMS.Application.Elements.PricingCardViewModel
+@{
+    var title = Model.Text?.Title;
+    var subtitle = Model.Text?.Subtitle;
+    var body = Model.Text?.Body;
+    var price = Model.Text?.Summary;
+    var badge = Model.Badge;
+    var cta = Model.Cta;
+}
+
+<div class="sg-pricing-card @Model.DomClass?.ClassList @Model.DomVariant?.Variant">
+    @if (badge?.BadgeText is not null)
+    {
+        <span class="sg-pricing-card__badge sg-pricing-card__badge--@badge.BadgeType">@badge.BadgeText</span>
+    }
+    @if (title is not null)
+    {
+        <h3 class="sg-pricing-card__title">@title</h3>
+    }
+    @if (subtitle is not null)
+    {
+        <p class="sg-pricing-card__subtitle">@subtitle</p>
+    }
+    @if (price is not null)
+    {
+        <div class="sg-pricing-card__price">@price</div>
+    }
+    @if (body is not null)
+    {
+        <div class="sg-pricing-card__body">@Html.Raw(body)</div>
+    }
+    @if (cta?.CtaLabel is not null)
+    {
+        <a class="sg-pricing-card__cta" href="@cta.CtaLink?.Url"
+           target="@(cta.CtaTarget ?? cta.CtaLink?.Target ?? "_self")"
+           @Html.Raw(cta.CtaAriaLabel is not null ? $"aria-label=\"{cta.CtaAriaLabel}\"" : "")>
+            @cta.CtaLabel
+        </a>
+    }
+</div>

@@ -1,0 +1,65 @@
+@using System.Globalization
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dictionary
+@{
+    var bodyId           = ViewData[LayoutViewData.BodyId]           as string ?? string.Empty;
+    var bodyClass        = ViewData[LayoutViewData.BodyClass]        as string ?? "sg-page";
+    var mainWrapperStyle = ViewData[LayoutViewData.MainWrapperStyle] as string;
+    var htmlLang         = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+    var skipLinkLabel    = Dictionary.Get("Nav.SkipToContent", fallback: "Skip to content");
+}
+<!doctype html>
+<html lang="@htmlLang">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="format-detection" content="telephone=no" />
+    @* ── Google Fonts — preconnect + non-blocking preload ── *@
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" as="style"
+          href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap"
+          onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" />
+    </noscript>
+    <link rel="stylesheet" href="/umbraco/lib/umbraco-blockgridlayout-css/umbraco-blockgridlayout.css" />
+    @await Component.InvokeAsync("Theme")
+    @await Component.InvokeAsync("LayoutHead")
+    @if (!IsSectionDefined("HeadMeta"))
+    {
+        <title>Synergos</title>
+    }
+    @RenderSection("HeadMeta", required: false)
+    @RenderSection("HeadScripts", required: false)
+</head>
+<body id="@bodyId" class="@bodyClass">
+
+    @* Skip to main content — keyboard accessibility *@
+    <a class="sg-skip-link" href="#main-content">@skipLinkLabel</a>
+
+    @* Alert bar — above everything, controlled via SiteSettings → Banners & Campaigns *@
+    @await Component.InvokeAsync("LayoutAlertBar")
+
+    @* Mobile nav overlay (backdrop) *@
+    <div class="mobile-nav-overlay" id="mobile-nav-overlay" aria-hidden="true"></div>
+
+    @* Mobile navigation drawer (populated by LayoutHeader) *@
+    @await Component.InvokeAsync("LayoutHeader")
+
+    @* Global promotional banner — below header, date-gated via SiteSettings *@
+    @await Component.InvokeAsync("LayoutBanner")
+
+    @await Component.InvokeAsync("Breadcrumbs")
+
+    <main id="main-content" class="site-main@(mainWrapperStyle is not null ? $" {mainWrapperStyle}" : string.Empty)" tabindex="-1">
+        @RenderBody()
+    </main>
+
+    @await Component.InvokeAsync("LayoutFooter")
+
+    @RenderSection("BodyScripts", required: false)
+
+    @* UI runtime: mobile menu · scroll shadow · animations *@
+    <script src="/js/synergos-ui.js" defer></script>
+</body>
+</html>
