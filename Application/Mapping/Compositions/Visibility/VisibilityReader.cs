@@ -1,13 +1,14 @@
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Synergos.CMS.Domain.Compositions.Visibility;
+using static Synergos.CMS.Application.Mapping.Compositions.PropertyAliases.Visibility;
 
 namespace Synergos.CMS.Application.Mapping.Compositions.Visibility;
 
 public sealed class VisibilityReader : ICompositionReader<VisibilityModel>
 {
     public VisibilityModel Read(IPublishedElement element) => new(
-        IsHidden:            element.Value<bool>("isHidden"),
-        VisibilityStart:     element.Value<DateTime?>("visibilityStart"),
-        VisibilityEnd:       element.Value<DateTime?>("visibilityEnd"),
-        VisibilityCondition: element.Value<string>("visibilityCondition"));
+        IsHidden:            element.Value<bool>(IsHidden),
+        VisibilityStart:     element.Value<DateTime?>(VisibilityStart),
+        VisibilityEnd:       element.Value<DateTime?>(VisibilityEnd),
+        VisibilityCondition: element.Value<string>(VisibilityCondition));
 }

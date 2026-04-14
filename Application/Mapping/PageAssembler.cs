@@ -3,6 +3,7 @@ using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Extensions;
 using Synergos.CMS.Domain.Shared;
+using Synergos.CMS.Application.Mapping.Compositions;
 using Synergos.CMS.Application.Output;
 using Synergos.CMS.Application.Rendering;
 using Synergos.CMS.Schema.Constants;
@@ -147,8 +148,8 @@ public sealed class PageAssembler
     /// </summary>
     private static SeoMetadata ReadSeo(IPublishedContent page, IPublishedContent? siteSettings)
         => new(
-            Title:        page.Value<string>("seoTitle"),
-            Description:  page.Value<string>("seoDescription")
+            Title:        page.Value<string>(PropertyAliases.Seo.SeoTitle),
+            Description:  page.Value<string>(PropertyAliases.Seo.SeoDescription)
                           ?? siteSettings?.Value<string>("seoDefaultDescription"),
             Image:        ReadImage(page, "seoImage")
                           ?? (siteSettings is not null ? ReadImage(siteSettings, "seoDefaultOgImage") : null),

@@ -196,4 +196,28 @@ public static class PropertyAliases
         public const string ParamKey       = "paramKey";
         public const string ParamValue     = "paramValue";
     }
+
+    // ── compVisibility (scheduling + conditional show/hide) ───────────────
+    public static class Visibility
+    {
+        public const string IsHidden            = "isHidden";
+        public const string VisibilityStart     = "visibilityStart";
+        public const string VisibilityEnd       = "visibilityEnd";
+        public const string VisibilityCondition = "visibilityCondition";
+    }
+
+    // ── compSeo ───────────────────────────────────────────────────────────
+    public static class Seo
+    {
+        public const string SeoTitle       = "seoTitle";
+        public const string SeoDescription = "seoDescription";
+        public const string OgTitle        = "ogTitle";
+        public const string OgDescription  = "ogDescription";
+        public const string OgImage        = "ogImage";
+        public const string Canonical      = "canonical";
+        public const string Robots         = "robots";
+
+        // Used on referenced media items (Image media type).
+        public const string AltText        = "altText";
+    }
 }
