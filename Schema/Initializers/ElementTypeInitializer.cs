@@ -116,7 +116,9 @@ internal sealed class ElementTypeInitializer : SchemaInitializerBase
         EnsureType(ContentTypeKeys.ElementInfoTestimonialItem, "Testimonial", "elementInfoTestimonialItem", "icon-quote", info,
             ContentTypeKeys.CompContentText, ContentTypeKeys.CompContentMedia, ContentTypeKeys.CompContentBadge, ContentTypeKeys.CompDomClass);
         EnsureType(ContentTypeKeys.ElementInfoPricingCard, "Pricing Card", "elementInfoPricingCard", "icon-currency", info,
-            ContentTypeKeys.CompContentText, ContentTypeKeys.CompContentCta, ContentTypeKeys.CompContentBadge, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
+            ContentTypeKeys.CompContentText, ContentTypeKeys.CompContentCta, ContentTypeKeys.CompContentBadge,
+            ContentTypeKeys.CompContentPricing,
+            ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
 
         var components = EnsureChildFolder(elementsRoot, "Components");
         EnsureType(ContentTypeKeys.ElementCompCard, "Card", "elementCompCard", "icon-item-arrangement", components,
@@ -191,9 +193,13 @@ internal sealed class ElementTypeInitializer : SchemaInitializerBase
         EnsureType(ContentTypeKeys.ElementCorpDataTable, "Data Table", "elementCorpDataTable", "icon-grid", corporate,
             ContentTypeKeys.CompContentText, ContentTypeKeys.CompContentCollection, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
         EnsureType(ContentTypeKeys.ElementCorpContactInfo, "Contact Info", "elementCorpContactInfo", "icon-message", corporate,
-            ContentTypeKeys.CompContentText, ContentTypeKeys.CompContentCta, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
+            ContentTypeKeys.CompContentText, ContentTypeKeys.CompContentCta,
+            ContentTypeKeys.CompContentLocation,
+            ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
         EnsureType(ContentTypeKeys.ElementCorpMapEmbed, "Map Embed", "elementCorpMapEmbed", "icon-globe", corporate,
-            ContentTypeKeys.CompContentEmbed, ContentTypeKeys.CompDomSpacing, ContentTypeKeys.CompDomClass);
+            ContentTypeKeys.CompContentEmbed,
+            ContentTypeKeys.CompContentLocation,
+            ContentTypeKeys.CompDomSpacing, ContentTypeKeys.CompDomClass);
         EnsureType(ContentTypeKeys.ElementCorpMissionBlock, "Mission Block", "elementCorpMissionBlock", "icon-certificate", corporate,
             ContentTypeKeys.CompContentText, ContentTypeKeys.CompContentMedia, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
 
