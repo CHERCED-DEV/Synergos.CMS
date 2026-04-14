@@ -14,6 +14,17 @@ namespace Synergos.CMS.Schema.Initializers;
 /// </summary>
 internal sealed class SiteSettingsInitializer : SchemaInitializerBase
 {
+    // Tab aliases — reused across SiteSettings / GlobalSettings property groups.
+    private const string TabIdentity = "identity";
+    private const string TabHeader   = "header";
+    private const string TabFooter   = "footer";
+    private const string TabAlertBar = "alertBar";
+
+    // Repeated property descriptions and labels.
+    private const string PickNavigationGroup = "Pick a NavigationGroup";
+    private const string LabelCtaLabel       = "CTA Label";
+    private const string LabelCtaUrl         = "CTA URL";
+
     private readonly int _settingsFolderId;
 
     public SiteSettingsInitializer(
@@ -90,10 +101,10 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
 
             if (!existing.PropertyTypes.Any(p => p.Alias == "identityPreset"))
             {
-                var identityTab = existing.PropertyGroups.FirstOrDefault(g => g.Alias == "identity");
+                var identityTab = existing.PropertyGroups.FirstOrDefault(g => g.Alias == TabIdentity);
                 if (identityTab is null)
                 {
-                    identityTab = Tab("Identity", "identity", -1);
+                    identityTab = Tab("Identity", TabIdentity, -1);
                     existing.PropertyGroups.Add(identityTab);
                 }
                 identityTab.PropertyTypes!.Add(Prop("identityPreset", "Identity Preset",
@@ -115,7 +126,7 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
             Icon  = "icon-palette"
         };
 
-        var tabIdentity = Tab("Identity", "identity", -1);
+        var tabIdentity = Tab("Identity", TabIdentity, -1);
         tabIdentity.PropertyTypes!.Add(Prop("identityPreset", "Identity Preset",
             DataTypeKeys.SelectIdentityPreset, 0,
             description: "Built-in brand token set. 'custom' uses the individual Color & Typography fields exclusively."));
@@ -193,7 +204,7 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
             if (hfTab is not null)
             {
                 hfTab.Name      = "Header";
-                hfTab.Alias     = "header";
+                hfTab.Alias     = TabHeader;
                 hfTab.SortOrder = 5;
                 dirty = true;
             }
@@ -221,7 +232,7 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
             Icon        = "icon-settings"
         };
 
-        var tabId = Tab("Identity", "identity", 0);
+        var tabId = Tab("Identity", TabIdentity, 0);
         tabId.PropertyTypes!.Add(Prop("siteDisplayName",  "Display Name",   DataTypeKeys.TextTitle,      0,  description: "Site name shown in header, footer and browser tab."));
         tabId.PropertyTypes!.Add(Prop("siteTaglineExt",   "Tagline",        DataTypeKeys.TextSubtitle,  10));
         tabId.PropertyTypes!.Add(Prop("siteLanguage",     "Language",       DataTypeKeys.TextIdentifier, 20));
@@ -258,25 +269,25 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
         tabScripts.PropertyTypes!.Add(Prop("siteBodyEndScripts", "Body End Scripts",   DataTypeKeys.TextScriptContent, 20));
         ct.PropertyGroups.Add(tabScripts);
 
-        var tabHeader = Tab("Header", "header", 5);
-        tabHeader.PropertyTypes!.Add(Prop("headerNavigation", "Header Nav",      DataTypeKeys.ContentPicker, 0,  description: "Pick a NavigationGroup"));
+        var tabHeader = Tab("Header", TabHeader, 5);
+        tabHeader.PropertyTypes!.Add(Prop("headerNavigation", "Header Nav",      DataTypeKeys.ContentPicker, 0,  description: PickNavigationGroup));
         tabHeader.PropertyTypes!.Add(Prop("showHeaderCta",    "Show Header CTA", DataTypeKeys.ToggleBoolean, 10));
-        tabHeader.PropertyTypes!.Add(Prop("headerCtaLabel",   "CTA Label",       DataTypeKeys.TextTitle,     20));
-        tabHeader.PropertyTypes!.Add(Prop("headerCtaUrl",     "CTA URL",         DataTypeKeys.LinkUrl,       30));
+        tabHeader.PropertyTypes!.Add(Prop("headerCtaLabel",   LabelCtaLabel,       DataTypeKeys.TextTitle,     20));
+        tabHeader.PropertyTypes!.Add(Prop("headerCtaUrl",     LabelCtaUrl,         DataTypeKeys.LinkUrl,       30));
         ct.PropertyGroups.Add(tabHeader);
 
-        var tabFooter = Tab("Footer", "footer", 6);
-        tabFooter.PropertyTypes!.Add(Prop("footerNavigation",    "Footer Nav",     DataTypeKeys.ContentPicker, 0, description: "Pick a NavigationGroup"));
+        var tabFooter = Tab("Footer", TabFooter, 6);
+        tabFooter.PropertyTypes!.Add(Prop("footerNavigation",    "Footer Nav",     DataTypeKeys.ContentPicker, 0, description: PickNavigationGroup));
         tabFooter.PropertyTypes!.Add(Prop("footerCopy",          "Footer Copy",    DataTypeKeys.TextTitle,     5, description: "Copyright or legal text shown at the bottom of the footer (e.g. \"© 2025 Synergos\")."));
         tabFooter.PropertyTypes!.Add(Prop("newsletterActionUrl", "Newsletter URL", DataTypeKeys.TextUrl,      10, description: "Endpoint URL where the newsletter form POSTs (e.g. /api/newsletter/subscribe)"));
         ct.PropertyGroups.Add(tabFooter);
 
-        var tabAlert = Tab("Alert Bar", "alertBar", 7);
+        var tabAlert = Tab("Alert Bar", TabAlertBar, 7);
         tabAlert.PropertyTypes!.Add(Prop("alertEnabled",     "Enabled",      DataTypeKeys.ToggleBoolean,      0,  description: "Show the alert bar above the header."));
         tabAlert.PropertyTypes!.Add(Prop("alertTitle",       "Title",        DataTypeKeys.TextTitle,          10, description: "Bold prefix text in the alert bar."));
         tabAlert.PropertyTypes!.Add(Prop("alertDescription", "Description",  DataTypeKeys.TextAreaNotes,      20, description: "Main message shown in the alert bar."));
-        tabAlert.PropertyTypes!.Add(Prop("alertCtaLabel",    "CTA Label",    DataTypeKeys.TextTitle,          30, description: "Text for the optional action link."));
-        tabAlert.PropertyTypes!.Add(Prop("alertCtaUrl",      "CTA URL",      DataTypeKeys.TextUrl,            40, description: "URL for the optional action link."));
+        tabAlert.PropertyTypes!.Add(Prop("alertCtaLabel",    LabelCtaLabel,    DataTypeKeys.TextTitle,          30, description: "Text for the optional action link."));
+        tabAlert.PropertyTypes!.Add(Prop("alertCtaUrl",      LabelCtaUrl,      DataTypeKeys.TextUrl,            40, description: "URL for the optional action link."));
         tabAlert.PropertyTypes!.Add(Prop("alertVariant",     "Variant",      DataTypeKeys.SelectAlertVariant, 50, description: "Visual style: info, warning, success or error."));
         tabAlert.PropertyTypes!.Add(Prop("alertDismissible", "Dismissible",  DataTypeKeys.ToggleBoolean,      60, description: "Allow the user to dismiss the alert bar."));
         ct.PropertyGroups.Add(tabAlert);
@@ -312,29 +323,29 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
             if (tab is null)
             {
                 tab = Tab(propAlias == "alertEnabled" ? "Alert Bar" : tabAlias,
-                          tabAlias, tabAlias == "alertBar" ? 7 : 99);
+                          tabAlias, tabAlias == TabAlertBar ? 7 : 99);
                 ct.PropertyGroups.Add(tab);
             }
             tab.PropertyTypes!.Add(Prop(propAlias, propName, dataTypeKey, sortOrder, description: description));
             dirty = true;
         }
 
-        EnsureInTab("header",   "headerNavigation",   "Header Nav",       DataTypeKeys.ContentPicker,      0,  "Pick a NavigationGroup");
-        EnsureInTab("header",   "showHeaderCta",       "Show Header CTA",  DataTypeKeys.ToggleBoolean,     10);
-        EnsureInTab("header",   "headerCtaLabel",      "CTA Label",        DataTypeKeys.TextTitle,         20);
-        EnsureInTab("header",   "headerCtaUrl",        "CTA URL",          DataTypeKeys.LinkUrl,           30);
-        EnsureInTab("footer",   "footerNavigation",    "Footer Nav",       DataTypeKeys.ContentPicker,      0,  "Pick a NavigationGroup");
-        EnsureInTab("footer",   "footerCopy",          "Footer Copy",      DataTypeKeys.TextTitle,          5,  "Copyright or legal text shown at the bottom of the footer.");
-        EnsureInTab("footer",   "newsletterActionUrl", "Newsletter URL",   DataTypeKeys.TextUrl,           10,  "Endpoint URL where the newsletter form POSTs");
-        EnsureInTab("alertBar", "alertEnabled",        "Enabled",          DataTypeKeys.ToggleBoolean,      0,  "Show the alert bar above the header.");
-        EnsureInTab("alertBar", "alertTitle",          "Title",            DataTypeKeys.TextTitle,         10,  "Bold prefix text in the alert bar.");
-        EnsureInTab("alertBar", "alertDescription",    "Description",      DataTypeKeys.TextAreaNotes,     20,  "Main message shown in the alert bar.");
-        EnsureInTab("alertBar", "alertCtaLabel",       "CTA Label",        DataTypeKeys.TextTitle,         30,  "Text for the optional action link.");
-        EnsureInTab("alertBar", "alertCtaUrl",         "CTA URL",          DataTypeKeys.TextUrl,           40,  "URL for the optional action link.");
-        EnsureInTab("alertBar", "alertVariant",        "Variant",          DataTypeKeys.SelectAlertVariant, 50, "Visual style: info, warning, success or error.");
-        EnsureInTab("alertBar", "alertDismissible",    "Dismissible",      DataTypeKeys.ToggleBoolean,     60,  "Allow the user to dismiss the alert bar.");
-        EnsureInTab("identity", "siteLogoOverride",    "Logo",             DataTypeKeys.MediaImage,         5,  "Logo shown in header and footer. Overrides ThemeSettings logo.");
-        EnsureInTab("identity", "siteLogoAltText",     "Logo Alt Text",    DataTypeKeys.TextTitle,          6,  "Accessible alt text for the logo image.");
+        EnsureInTab(TabHeader,   "headerNavigation",   "Header Nav",       DataTypeKeys.ContentPicker,      0,  PickNavigationGroup);
+        EnsureInTab(TabHeader,   "showHeaderCta",       "Show Header CTA",  DataTypeKeys.ToggleBoolean,     10);
+        EnsureInTab(TabHeader,   "headerCtaLabel",      LabelCtaLabel,        DataTypeKeys.TextTitle,         20);
+        EnsureInTab(TabHeader,   "headerCtaUrl",        LabelCtaUrl,          DataTypeKeys.LinkUrl,           30);
+        EnsureInTab(TabFooter,   "footerNavigation",    "Footer Nav",       DataTypeKeys.ContentPicker,      0,  PickNavigationGroup);
+        EnsureInTab(TabFooter,   "footerCopy",          "Footer Copy",      DataTypeKeys.TextTitle,          5,  "Copyright or legal text shown at the bottom of the footer.");
+        EnsureInTab(TabFooter,   "newsletterActionUrl", "Newsletter URL",   DataTypeKeys.TextUrl,           10,  "Endpoint URL where the newsletter form POSTs");
+        EnsureInTab(TabAlertBar, "alertEnabled",        "Enabled",          DataTypeKeys.ToggleBoolean,      0,  "Show the alert bar above the header.");
+        EnsureInTab(TabAlertBar, "alertTitle",          "Title",            DataTypeKeys.TextTitle,         10,  "Bold prefix text in the alert bar.");
+        EnsureInTab(TabAlertBar, "alertDescription",    "Description",      DataTypeKeys.TextAreaNotes,     20,  "Main message shown in the alert bar.");
+        EnsureInTab(TabAlertBar, "alertCtaLabel",       LabelCtaLabel,        DataTypeKeys.TextTitle,         30,  "Text for the optional action link.");
+        EnsureInTab(TabAlertBar, "alertCtaUrl",         LabelCtaUrl,          DataTypeKeys.TextUrl,           40,  "URL for the optional action link.");
+        EnsureInTab(TabAlertBar, "alertVariant",        "Variant",          DataTypeKeys.SelectAlertVariant, 50, "Visual style: info, warning, success or error.");
+        EnsureInTab(TabAlertBar, "alertDismissible",    "Dismissible",      DataTypeKeys.ToggleBoolean,     60,  "Allow the user to dismiss the alert bar.");
+        EnsureInTab(TabIdentity, "siteLogoOverride",    "Logo",             DataTypeKeys.MediaImage,         5,  "Logo shown in header and footer. Overrides ThemeSettings logo.");
+        EnsureInTab(TabIdentity, "siteLogoAltText",     "Logo Alt Text",    DataTypeKeys.TextTitle,          6,  "Accessible alt text for the logo image.");
 
         return dirty;
     }

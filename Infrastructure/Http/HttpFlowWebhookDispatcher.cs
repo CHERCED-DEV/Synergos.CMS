@@ -46,26 +46,27 @@ public sealed class HttpFlowWebhookDispatcher : IFlowWebhookDispatcher
     // ─── Publish ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Serializes <paramref name="config"/> and POSTs it to <paramref name="config.WebhookTargetUrl"/>.
-    /// Returns a result indicating success or failure with the engine HTTP status.
-    /// Does not throw — all exceptions are caught and reported in the result.
+    /// Serializes <paramref name="flow"/> and POSTs it to its configured
+    /// <c>WebhookTargetUrl</c>. Returns a result indicating success or failure
+    /// with the engine HTTP status. Does not throw — all exceptions are caught
+    /// and reported in the result.
     /// </summary>
     public async Task<FlowPublicationResult> PublishAsync(
-        FlowConfig        config,
+        FlowConfig        flow,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(config.WebhookTargetUrl))
+        if (string.IsNullOrWhiteSpace(flow.WebhookTargetUrl))
         {
             _logger.LogWarning(
                 "HttpFlowWebhookDispatcher: flow '{Alias}' has no webhookTargetUrl configured — skipping.",
-                config.FlowAlias);
-            return new FlowPublicationResult(false, config.FlowAlias,
+                flow.FlowAlias);
+            return new FlowPublicationResult(false, flow.FlowAlias,
                 Error: "webhookTargetUrl is not configured on this FlowDefinition.");
         }
 
         try
         {
-            var payload = JsonSerializer.Serialize(config, _serializerOptions);
+            var payload = JsonSerializer.Serialize(flow, _serializerOptions);
             var secret  = _settings.Value.WebhookSecret;
             var signature = ComputeHmac(payload, secret);
 
@@ -74,12 +75,12 @@ public sealed class HttpFlowWebhookDispatcher : IFlowWebhookDispatcher
             var client = _httpClientFactory.CreateClient("FlowEngine");
             client.Timeout = TimeSpan.FromMilliseconds(_settings.Value.WebhookTimeoutMs);
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, config.WebhookTargetUrl)
+            using var request = new HttpRequestMessage(HttpMethod.Post, flow.WebhookTargetUrl)
             {
                 Content = content
             };
             request.Headers.Add("X-Synergos-Signature",  $"sha256={signature}");
-            request.Headers.Add("X-Synergos-FlowAlias",  config.FlowAlias);
+            request.Headers.Add("X-Synergos-FlowAlias",  flow.FlowAlias);
             request.Headers.Add("X-Synergos-PublishedAt", DateTime.UtcNow.ToString("O"));
 
             using var response = await client.SendAsync(request, ct);
@@ -89,41 +90,41 @@ public sealed class HttpFlowWebhookDispatcher : IFlowWebhookDispatcher
             {
                 _logger.LogInformation(
                     "HttpFlowWebhookDispatcher: flow '{Alias}' published → {Status}.",
-                    config.FlowAlias, statusCode);
-                return new FlowPublicationResult(true, config.FlowAlias, EngineStatusCode: statusCode);
+                    flow.FlowAlias, statusCode);
+                return new FlowPublicationResult(true, flow.FlowAlias, EngineStatusCode: statusCode);
             }
 
             var body = await response.Content.ReadAsStringAsync(ct);
             _logger.LogWarning(
                 "HttpFlowWebhookDispatcher: engine returned {Status} for flow '{Alias}'. Body: {Body}",
-                statusCode, config.FlowAlias, body);
+                statusCode, flow.FlowAlias, body);
 
-            return new FlowPublicationResult(false, config.FlowAlias,
+            return new FlowPublicationResult(false, flow.FlowAlias,
                 Error:            $"Engine returned HTTP {statusCode}: {TruncateError(body)}",
                 EngineStatusCode: statusCode);
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException ex)
         {
-            _logger.LogWarning(
+            _logger.LogWarning(ex,
                 "HttpFlowWebhookDispatcher: timeout publishing flow '{Alias}' to {Url}.",
-                config.FlowAlias, config.WebhookTargetUrl);
-            return new FlowPublicationResult(false, config.FlowAlias,
+                flow.FlowAlias, flow.WebhookTargetUrl);
+            return new FlowPublicationResult(false, flow.FlowAlias,
                 Error: $"Request timed out after {_settings.Value.WebhookTimeoutMs} ms.");
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex,
                 "HttpFlowWebhookDispatcher: HTTP error publishing flow '{Alias}' to {Url}.",
-                config.FlowAlias, config.WebhookTargetUrl);
-            return new FlowPublicationResult(false, config.FlowAlias,
+                flow.FlowAlias, flow.WebhookTargetUrl);
+            return new FlowPublicationResult(false, flow.FlowAlias,
                 Error: $"HTTP request failed: {ex.Message}. Is Synergos.API running?");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 "HttpFlowWebhookDispatcher: unexpected error publishing flow '{Alias}'.",
-                config.FlowAlias);
-            return new FlowPublicationResult(false, config.FlowAlias,
+                flow.FlowAlias);
+            return new FlowPublicationResult(false, flow.FlowAlias,
                 Error: $"Unexpected error: {ex.Message}");
         }
     }
@@ -136,25 +137,25 @@ public sealed class HttpFlowWebhookDispatcher : IFlowWebhookDispatcher
     /// "/register" with "/{alias}/execute", or by using the executeUrl directly.
     /// </summary>
     public async Task<(bool Success, string? Body, int? StatusCode)> TriggerAsync(
-        FlowConfig                         config,
+        FlowConfig                         flow,
         string                             caseId,
         Dictionary<string, object?>        input,
         CancellationToken                  ct = default)
     {
         // Derive execute URL from register URL:
         // http://localhost:5002/api/engine/flows/register → http://localhost:5002/api/engine/flows/{alias}/execute
-        var registerUrl = config.WebhookTargetUrl.TrimEnd('/');
+        var registerUrl = flow.WebhookTargetUrl.TrimEnd('/');
         string executeUrl;
 
         if (registerUrl.EndsWith("/register", StringComparison.OrdinalIgnoreCase))
         {
             var baseUrl = registerUrl[..^"/register".Length];
-            executeUrl = $"{baseUrl}/{config.FlowAlias}/execute";
+            executeUrl = $"{baseUrl}/{flow.FlowAlias}/execute";
         }
         else
         {
             // Fallback: append /{alias}/execute to the configured base
-            executeUrl = $"{registerUrl}/{config.FlowAlias}/execute";
+            executeUrl = $"{registerUrl}/{flow.FlowAlias}/execute";
         }
 
         try
@@ -176,7 +177,7 @@ public sealed class HttpFlowWebhookDispatcher : IFlowWebhookDispatcher
         {
             _logger.LogError(ex,
                 "HttpFlowWebhookDispatcher: error triggering flow '{Alias}' execution.",
-                config.FlowAlias);
+                flow.FlowAlias);
             return (false, ex.Message, null);
         }
     }
