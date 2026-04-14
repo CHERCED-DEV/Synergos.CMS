@@ -1,0 +1,33 @@
+{
+  "$schema": "appsettings-schema.json",
+
+  // Copia este archivo como appsettings.Local.json y ajusta según tu entorno.
+  // Este archivo está en .gitignore — nunca se commitea.
+
+  "Synergos": {
+    "Runtime": {
+      "WebHost": "localhost",
+      "HttpPort": 5000,
+      "HttpsPort": 5001
+    },
+    "StaticAssets": {
+      "RegistryLocalPath": "C:\\TU_RUTA\\LOCAL_CDN"
+    },
+    "FlowEngine": {
+      "WebhookSecret": "tu-secret-local"
+    }
+  },
+
+  // Opcional: usar SQL Server en lugar de SQLite
+  // "ConnectionStrings": {
+  //   "umbracoDbDSN": "Server=.;Database=Synergos;Integrated Security=True;",
+  //   "umbracoDbDSN_ProviderName": "Microsoft.Data.SqlClient"
+  // },
+
+  // Opcional: reducir verbosidad de uSync en logs locales
+  // "uSync": {
+  //   "Settings": {
+  //     "ReportDebug": true
+  //   }
+  // }
+}

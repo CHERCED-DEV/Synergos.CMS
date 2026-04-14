@@ -1,0 +1,56 @@
+// ─────────────────────────────────────────────────────────
+// BASE — ANIMATIONS & KEYFRAMES
+//   Add .sg-anim to any element. JS (synergos-ui.js)
+//   adds .is-visible via IntersectionObserver.
+//   Modifiers: .sg-anim--slide-up  .sg-anim--fade
+//              .sg-anim--delay-1   .sg-anim--delay-2
+// ─────────────────────────────────────────────────────────
+
+@keyframes sg-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes sg-slide-up {
+  from { opacity: 0; transform: translateY(1.5rem); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sg-slide-right {
+  from { opacity: 0; transform: translateX(-1.5rem); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes sg-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+// ── Base animated element ─────────────────────────────────
+.sg-anim {
+  opacity: 0;
+  transition:
+    opacity var(--sg-transition-slow),
+    transform var(--sg-transition-slow);
+
+  &.is-visible { opacity: 1; transform: none; }
+
+  // Variants
+  &--slide-up   { transform: translateY(1.5rem); }
+  &--slide-right { transform: translateX(-1.5rem); }
+  &--scale      { transform: scale(0.96); }
+  &--fade       { /* opacity only, no transform */ }
+
+  // Delay utilities
+  &--delay-1 { transition-delay: 100ms; }
+  &--delay-2 { transition-delay: 200ms; }
+  &--delay-3 { transition-delay: 300ms; }
+  &--delay-4 { transition-delay: 400ms; }
+
+  // Respect reduced-motion preference
+  @media (prefers-reduced-motion: reduce) {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}

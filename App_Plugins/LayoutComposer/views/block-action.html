@@ -1,0 +1,24 @@
+<div class="lc-block lc-block--action">
+    <div class="lc-block__header">
+        <span class="lc-block__icon">Go</span>
+        <span class="lc-block__type">Accion</span>
+        <span class="lc-block__header-spacer"></span>
+        <span ng-if="block.label" class="lc-block__badge lc-block__badge--variant">{{block.label}}</span>
+    </div>
+
+    <div class="lc-block__body" ng-if="block.data.ctaLabel || block.data.title || block.data.label || block.data.ctaLink || block.data.link || block.data.url">
+        <span class="lc-block__eyebrow">{{block.label || 'CTA'}}</span>
+        <span class="lc-block__preview-btn">Go {{(block.data.ctaLabel || block.data.title || block.data.label) | sgPreviewText:'Accion':42}}</span>
+        <div class="lc-chip-row" ng-if="block.data.ctaLink || block.data.link || block.data.url">
+            <span class="lc-chip lc-chip--muted">{{(block.data.ctaLink || block.data.link || block.data.url) | sgPreviewHost:'Destino configurado'}}</span>
+        </div>
+    </div>
+
+    <div class="lc-block__body" ng-if="!block.data.ctaLabel && !block.data.title && !block.data.label && !block.data.ctaLink && !block.data.link && !block.data.url">
+        <span class="lc-block__eyebrow">{{block.label || 'CTA'}}</span>
+        <span class="lc-block__hint">Configura un label y un destino para que el editor entienda la accion principal.</span>
+        <div class="lc-block__preview-empty">
+            <div class="lc-skel lc-skel--sm"></div>
+        </div>
+    </div>
+</div>

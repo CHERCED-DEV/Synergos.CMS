@@ -1,0 +1,12 @@
+{
+    "name": "Synergos Layout Composer",
+    "version": "1.0.0",
+    "allowPackageTelemetry": false,
+    "bundleOptions": "None",
+    "javascript": [
+        "~/App_Plugins/LayoutComposer/scripts/layout-composer.preview.js"
+    ],
+    "css": [
+        "~/App_Plugins/LayoutComposer/styles/layout-composer.css"
+    ]
+}

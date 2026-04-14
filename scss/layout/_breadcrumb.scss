@@ -1,0 +1,93 @@
+// ─────────────────────────────────────────────────────────
+// LAYOUT — BREADCRUMB
+//   Rendered by Breadcrumbs ViewComponent (_Layout.cshtml).
+//   View: Views/Shared/Components/Breadcrumbs/Default.cshtml
+//
+//   Classes used in the view:
+//     .sg-breadcrumbs           — <nav> wrapper
+//     .sg-breadcrumbs__list     — <ol>
+//     .sg-breadcrumbs__item     — <li>
+//     .sg-breadcrumbs__link     — <a>
+//     .sg-breadcrumbs__current  — <span aria-current="page">
+// ─────────────────────────────────────────────────────────
+
+.sg-breadcrumbs {
+  padding-block: var(--sg-space-3);
+  border-bottom: 1px solid var(--sg-color-border);
+  background: var(--sg-color-surface);
+
+  // Constrain to container width so it aligns with page content
+  &__list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sg-space-1);
+    list-style: none;
+    padding: 0;
+    margin: 0 auto;
+    max-width: var(--sg-container-max);
+    padding-inline: var(--sg-space-6);
+    font-size: var(--sg-text-sm);
+  }
+
+  // Separator — inserted via CSS ::after so no HTML markup needed
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: var(--sg-space-1);
+
+    &:not(:last-child)::after {
+      content: '/';
+      color: var(--sg-color-text-subtle);
+      font-size: var(--sg-text-xs);
+      margin-left: var(--sg-space-1);
+    }
+  }
+
+  &__link {
+    color: var(--sg-color-text-muted);
+    text-decoration: none;
+    font-weight: 500;
+    border-radius: var(--sg-radius-sm);
+    padding: 0.125rem 0.25rem;
+    transition: color var(--sg-transition-fast), background var(--sg-transition-fast);
+
+    &:hover {
+      color: var(--sg-color-primary);
+      background: var(--sg-color-primary-light);
+      text-decoration: none;
+    }
+  }
+
+  // Current page — not a link, visually distinct
+  &__current {
+    color: var(--sg-color-text);
+    font-weight: 600;
+    padding: 0.125rem 0.25rem;
+
+    // Truncate long page names on mobile
+    @media (max-width: 47.9375rem) {
+      max-width: 12rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  // ── Responsive ──────────────────────────────────────────
+  @media (max-width: 47.9375rem) {
+    &__list {
+      padding-inline: var(--sg-space-4);
+      font-size: var(--sg-text-xs);
+
+      // On very small screens, hide all but last two items
+      // via JS — the CSS ensures they are readable if shown
+    }
+  }
+
+  @media (min-width: 62rem) {
+    &__list {
+      padding-inline: var(--sg-space-8);
+    }
+  }
+}

@@ -1,0 +1,126 @@
+// ─────────────────────────────────────────────────────────
+// BASE — CSS RESET + DOCUMENT DEFAULTS
+// ─────────────────────────────────────────────────────────
+
+// ── Google Fonts — Manrope (default body + heading) ───────
+// Only loaded if ThemeSettings hasn't provided a custom font URL.
+// The Theme component injects its own <link> before this stylesheet.
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
+
+// ── Box model ─────────────────────────────────────────────
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+// ── Root defaults ─────────────────────────────────────────
+:root {
+  // Offset anchor-targets below sticky header
+  scroll-padding-top: calc(var(--sg-header-height) + var(--sg-space-4));
+}
+
+html {
+  font-size: var(--sg-text-base);
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--sg-font-sans);
+  font-size: var(--sg-text-base);
+  font-weight: 400;
+  line-height: var(--syn-leading-relaxed);
+  color: var(--sg-color-text);
+  background-color: var(--sg-color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+
+  // Prevent scroll when mobile nav is open
+  &.nav-is-open { overflow: hidden; }
+}
+
+// ── Main content area — stretches to fill remaining height ─
+main.site-main {
+  flex: 1;
+  display: block;
+}
+
+// ── Media ─────────────────────────────────────────────────
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+img { height: auto; }
+
+// ── Form controls inherit font ────────────────────────────
+input, button, textarea, select { font: inherit; }
+
+// ── Text overflow ─────────────────────────────────────────
+p, h1, h2, h3, h4, h5, h6 { overflow-wrap: break-word; }
+
+// ── Headings ──────────────────────────────────────────────
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--sg-font-heading);
+  font-weight: 700;
+  line-height: var(--syn-leading-tight);
+  letter-spacing: var(--syn-tracking-tight);
+  color: var(--sg-color-text);
+}
+
+h1 { font-size: clamp(var(--sg-text-3xl), 5vw, var(--sg-text-5xl)); }
+h2 { font-size: clamp(var(--sg-text-2xl), 3.5vw, var(--sg-text-4xl)); }
+h3 { font-size: clamp(var(--sg-text-xl),  2.5vw, var(--sg-text-3xl)); }
+h4 { font-size: var(--sg-text-xl); }
+h5 { font-size: var(--sg-text-lg); }
+h6 { font-size: var(--sg-text-base); }
+
+// ── Links ─────────────────────────────────────────────────
+a {
+  color: var(--sg-color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color var(--sg-transition-fast);
+
+  &:hover { color: var(--sg-color-primary-hover); text-decoration: none; }
+}
+
+// ── Lists ─────────────────────────────────────────────────
+ul, ol { list-style: none; }
+
+// ── Interactive ───────────────────────────────────────────
+button { cursor: pointer; }
+
+// ── Table ─────────────────────────────────────────────────
+table { border-collapse: collapse; width: 100%; }
+
+// ── Text selection ────────────────────────────────────────
+::selection {
+  background: var(--sg-color-primary-light);
+  color: var(--sg-color-primary-dark);
+}
+
+// ── Focus ring — global accessible default ────────────────
+:focus-visible {
+  outline: 2px solid var(--sg-color-primary);
+  outline-offset: 3px;
+}
+
+// ── Custom scrollbar (Chromium) ───────────────────────────
+::-webkit-scrollbar        { width: 8px; height: 8px; }
+::-webkit-scrollbar-track  { background: var(--sg-color-surface); }
+::-webkit-scrollbar-thumb  {
+  background: var(--sg-color-border-strong);
+  border-radius: var(--sg-radius-pill);
+  border: 2px solid var(--sg-color-surface);
+
+  &:hover { background: var(--sg-color-text-muted); }
+}

@@ -1,0 +1,23 @@
+<div class="lc-block lc-block--text">
+    <div class="lc-block__header">
+        <span class="lc-block__icon">Aa</span>
+        <span class="lc-block__type">Texto</span>
+        <span class="lc-block__header-spacer"></span>
+        <span ng-if="block.label" class="lc-block__badge lc-block__badge--variant">{{block.label}}</span>
+    </div>
+
+    <div class="lc-block__body" ng-if="block.data.headingText || block.data.title || block.data.subtitle || block.data.body">
+        <span class="lc-block__eyebrow">{{block.label || 'Bloque textual'}}</span>
+        <span class="lc-block__preview-title">{{(block.data.headingText || block.data.title || block.data.subtitle || block.data.body) | sgPreviewText:'Texto':72}}</span>
+        <span class="lc-block__preview-sub" ng-if="block.data.body || block.data.subtitle">{{(block.data.body || block.data.subtitle) | sgPreviewText:null:140}}</span>
+    </div>
+
+    <div class="lc-block__body" ng-if="!block.data.headingText && !block.data.title && !block.data.subtitle && !block.data.body">
+        <span class="lc-block__eyebrow">{{block.label || 'Bloque textual'}}</span>
+        <span class="lc-block__hint">Agrega un titulo, parrafo o rich text para que este bloque muestre contexto.</span>
+        <div class="lc-block__preview-empty">
+            <div class="lc-skel lc-skel--lg"></div>
+            <div class="lc-skel lc-skel--md"></div>
+        </div>
+    </div>
+</div>

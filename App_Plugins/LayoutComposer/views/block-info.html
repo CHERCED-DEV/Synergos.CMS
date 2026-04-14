@@ -1,0 +1,27 @@
+<div class="lc-block lc-block--info">
+    <div class="lc-block__header">
+        <span class="lc-block__icon">i</span>
+        <span class="lc-block__type">Info</span>
+        <span class="lc-block__header-spacer"></span>
+        <span ng-if="block.label" class="lc-block__badge lc-block__badge--variant">{{block.label}}</span>
+    </div>
+
+    <div class="lc-block__body" ng-if="block.data.title || block.data.subtitle || block.data.body || block.data.badgeText">
+        <span class="lc-block__eyebrow">{{block.label || 'Informacion'}}</span>
+        <div class="lc-stat" ng-if="block.data.title && !block.data.body">
+            <span class="lc-stat__value">{{block.data.title}}</span>
+            <span class="lc-stat__label">{{block.data.subtitle | sgPreviewText:'Dato'}}</span>
+        </div>
+        <span class="lc-block__preview-title" ng-if="block.data.body || !block.data.title">{{(block.data.title || block.data.subtitle || block.data.badgeText) | sgPreviewText:'Informacion':72}}</span>
+        <span class="lc-block__preview-sub" ng-if="block.data.body">{{block.data.body | sgPreviewText:null:140}}</span>
+    </div>
+
+    <div class="lc-block__body" ng-if="!block.data.title && !block.data.subtitle && !block.data.body && !block.data.badgeText">
+        <span class="lc-block__eyebrow">{{block.label || 'Informacion'}}</span>
+        <span class="lc-block__hint">Este bloque funciona mejor cuando tiene un titulo, dato, badge o cuerpo de respuesta.</span>
+        <div class="lc-block__preview-empty">
+            <div class="lc-skel lc-skel--md"></div>
+            <div class="lc-skel lc-skel--lg"></div>
+        </div>
+    </div>
+</div>

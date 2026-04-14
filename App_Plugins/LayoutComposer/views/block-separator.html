@@ -1,0 +1,14 @@
+<div class="lc-block lc-block--separator">
+    <div class="lc-block__header">
+        <span class="lc-block__icon">—</span>
+        <span class="lc-block__type">{{block.label || 'Separador'}}</span>
+        <span class="lc-block__header-spacer"></span>
+    </div>
+    <div class="lc-separator-preview">
+        <div ng-if="block.contentTypeAlias === 'elementStructDivider'" class="lc-separator-preview__rule"></div>
+        <div ng-if="block.contentTypeAlias !== 'elementStructDivider'" class="lc-separator-preview__space"></div>
+        <span class="lc-block__hint">
+            {{block.contentTypeAlias === 'elementStructDivider' ? 'Linea divisoria horizontal.' : 'Espacio en blanco entre bloques.'}}
+        </span>
+    </div>
+</div>

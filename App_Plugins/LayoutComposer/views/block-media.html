@@ -1,0 +1,38 @@
+<div class="lc-block lc-block--media">
+    <div class="lc-block__header">
+        <span class="lc-block__icon">Md</span>
+        <span class="lc-block__type">Media</span>
+        <span class="lc-block__header-spacer"></span>
+        <span ng-if="block.label" class="lc-block__badge lc-block__badge--variant">{{block.label}}</span>
+    </div>
+
+    <div class="lc-block__body" ng-if="block.data.mediaTitle || block.data.altText || block.data.caption || block.data.embedUrl || block.data.media">
+        <span class="lc-block__eyebrow">{{block.label || 'Media'}}</span>
+        <div class="lc-media-thumb">
+            <span class="lc-media-thumb__icon">Md</span>
+            <div class="lc-media-thumb__copy">
+                <span class="lc-block__preview-title">{{(block.data.mediaTitle || block.data.altText || block.data.caption || block.data.embedUrl || block.data.media) | sgPreviewText:'Media':72}}</span>
+                <span class="lc-block__preview-sub" ng-if="block.data.caption && (block.data.mediaTitle || block.data.altText)">{{block.data.caption | sgPreviewText:null:110}}</span>
+            </div>
+        </div>
+        <div class="lc-chip-row">
+            <span class="lc-chip" ng-if="block.data.embedUrl">Video</span>
+            <span class="lc-chip" ng-if="!block.data.embedUrl && (block.data.media || block.data.mediaTitle || block.data.altText)">Imagen</span>
+            <span class="lc-chip lc-chip--muted" ng-if="block.data.embedUrl">{{block.data.embedUrl | sgPreviewHost:'Video embebido'}}</span>
+        </div>
+    </div>
+
+    <div class="lc-block__body" ng-if="!block.data.mediaTitle && !block.data.altText && !block.data.caption && !block.data.embedUrl && !block.data.media">
+        <span class="lc-block__eyebrow">{{block.label || 'Media'}}</span>
+        <span class="lc-block__hint">Agrega una imagen, un video o una referencia multimedia para que el preview tenga contexto.</span>
+        <div class="lc-media-thumb">
+            <span class="lc-media-thumb__icon">Md</span>
+            <div class="lc-media-thumb__copy">
+                <div class="lc-block__preview-empty">
+                    <div class="lc-skel lc-skel--lg"></div>
+                    <div class="lc-skel lc-skel--sm"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

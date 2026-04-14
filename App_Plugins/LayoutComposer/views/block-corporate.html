@@ -1,0 +1,27 @@
+<div class="lc-block lc-block--corporate">
+    <div class="lc-block__header">
+        <span class="lc-block__icon">Cr</span>
+        <span class="lc-block__type">Corporativo</span>
+        <span class="lc-block__header-spacer"></span>
+        <span ng-if="block.data.items" class="lc-block__badge">{{block.data.items | sgPreviewCount:'item':'items'}}</span>
+        <span ng-if="!block.data.items && block.label" class="lc-block__badge lc-block__badge--variant">{{block.label}}</span>
+    </div>
+
+    <div class="lc-block__body" ng-if="block.data.title || block.data.headingText || block.data.subtitle || block.data.body || block.data.items">
+        <span class="lc-block__eyebrow">{{block.label || 'Bloque corporativo'}}</span>
+        <span class="lc-block__preview-title">{{(block.data.title || block.data.headingText || block.label) | sgPreviewText:'Corporativo':72}}</span>
+        <span class="lc-block__preview-sub" ng-if="block.data.subtitle || block.data.body">{{(block.data.subtitle || block.data.body) | sgPreviewText:null:140}}</span>
+        <div class="lc-chip-row" ng-if="block.data.items">
+            <span class="lc-chip">{{block.data.items | sgPreviewCount:'item':'items'}}</span>
+        </div>
+    </div>
+
+    <div class="lc-block__body" ng-if="!block.data.title && !block.data.headingText && !block.data.subtitle && !block.data.body && !block.data.items">
+        <span class="lc-block__eyebrow">{{block.label || 'Bloque corporativo'}}</span>
+        <span class="lc-block__hint">Agrega contenido editorial o una lista de items para que este modulo se lea mejor dentro del grid.</span>
+        <div class="lc-block__preview-empty">
+            <div class="lc-skel lc-skel--md"></div>
+            <div class="lc-skel lc-skel--lg"></div>
+        </div>
+    </div>
+</div>

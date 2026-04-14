@@ -1,0 +1,34 @@
+<div class="lc-block lc-block--blog">
+    <div class="lc-block__header">
+        <span class="lc-block__icon">Bl</span>
+        <span class="lc-block__type">Blog</span>
+        <span class="lc-block__header-spacer"></span>
+        <span ng-if="block.label" class="lc-block__badge lc-block__badge--variant">{{block.label}}</span>
+    </div>
+
+    <div class="lc-block__body"
+         ng-if="block.data.headingText || block.data.title || block.data.collectionTitle">
+        <span class="lc-block__eyebrow">{{block.label || 'Contenido editorial'}}</span>
+        <span class="lc-block__preview-title">
+            {{(block.data.headingText || block.data.title || block.data.collectionTitle) | sgPreviewText:'Blog':72}}
+        </span>
+        <span class="lc-block__preview-sub" ng-if="block.data.subtitle || block.data.collectionDescription">
+            {{(block.data.subtitle || block.data.collectionDescription) | sgPreviewText:null:120}}
+        </span>
+        <div class="lc-chip-row">
+            <span class="lc-chip">Editorial</span>
+            <span ng-if="block.data.listLayout" class="lc-chip lc-chip--muted">{{block.data.listLayout}}</span>
+        </div>
+    </div>
+
+    <div class="lc-block__body"
+         ng-if="!block.data.headingText && !block.data.title && !block.data.collectionTitle">
+        <span class="lc-block__eyebrow">{{block.label || 'Contenido editorial'}}</span>
+        <span class="lc-block__hint">Agrega un titulo para que el editor identifique este bloque de contenido.</span>
+        <div class="lc-block__preview-empty">
+            <div class="lc-skel lc-skel--md"></div>
+            <div class="lc-skel lc-skel--lg"></div>
+            <div class="lc-skel lc-skel--md"></div>
+        </div>
+    </div>
+</div>

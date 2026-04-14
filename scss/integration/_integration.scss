@@ -1,0 +1,22 @@
+// ─────────────────────────────────────────────────────────
+// INTEGRATION WRAPPERS  (data-sg-element="int-*")
+//   Minimal containers for embedded third-party content.
+//   The CMS just sets dimensions; the embedded script or
+//   iframe handles its own internal rendering.
+// ─────────────────────────────────────────────────────────
+
+[data-sg-element="int-script-embed"],
+[data-sg-element="int-iframe-embed"],
+[data-sg-element="int-external-widget"],
+[data-sg-element="int-angular-host"],
+[data-sg-element="int-mf-host"] {
+  display: block;
+  width: 100%;
+}
+
+[data-sg-element="int-iframe-embed"] iframe,
+[data-sg-element="int-mf-host"] iframe {
+  width: 100%;
+  border: none;
+  display: block;
+}
