@@ -7,5 +7,5 @@ namespace Synergos.CMS.Schema.Constants;
 public static class SchemaVersion
 {
     public const string Key   = "Synergos.Schema.Version";
-    public const string Value = "10.2.0"; // 10.2.0 — CompPricing + CompLocation wired into elements; BlogPost.postType enum-typed dropdown
+    public const string Value = "10.3.0"; // 10.3.0 — FlowDefinition refinements (ownerTeam, documentationUrl, healthCheckUrl) with idempotent patch path
 }

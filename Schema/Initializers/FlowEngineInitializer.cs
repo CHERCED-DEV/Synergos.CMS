@@ -54,9 +54,15 @@ internal sealed class FlowEngineInitializer : SchemaInitializerBase
 
     private void EnsureFlowDefinition(int folderId)
     {
-        if (Cts.Get(ContentTypeKeys.FlowDefinition) is not null) return;
-        if (Cts.Get("flowDefinition") is not null) return;
-        // Guard against orphaned umbracoNode rows from partial prior runs
+        var existing = Cts.Get(ContentTypeKeys.FlowDefinition)
+                       ?? Cts.Get("flowDefinition");
+
+        if (existing is not null)
+        {
+            // Patch path — non-destructive additions for flows created before the refinements.
+            PatchFlowDefinitionProperties(existing);
+            return;
+        }
 
         var ct = new ContentType(Ssh, folderId)
         {
@@ -80,6 +86,12 @@ internal sealed class FlowEngineInitializer : SchemaInitializerBase
         generalTab.PropertyTypes!.Add(Prop("flowDescription", "Description",
             DataTypeKeys.TextAreaNotes, 20,
             description: "Optional description of what this flow does and when it is triggered."));
+        generalTab.PropertyTypes!.Add(Prop("ownerTeam", "Owner / Team",
+            DataTypeKeys.TextTitle, 25,
+            description: "Team or person responsible for this flow. Used for paging / on-call routing — free text."));
+        generalTab.PropertyTypes!.Add(Prop("documentationUrl", "Documentation URL",
+            DataTypeKeys.TextUrl, 27,
+            description: "External documentation link (Notion, Confluence, README). Shown in the backoffice as a reference and in execution traces."));
         generalTab.PropertyTypes!.Add(Prop("isActive", "Active",
             DataTypeKeys.ToggleBoolean, 30,
             description: "When disabled, the engine will reject executions of this flow with 423 Locked."));
@@ -106,6 +118,9 @@ internal sealed class FlowEngineInitializer : SchemaInitializerBase
         webhookTab.PropertyTypes!.Add(Prop("webhookTargetUrl", "Engine URL",
             DataTypeKeys.TextUrl, 0, mandatory: true,
             description: "Full URL of Synergos.API endpoint that receives published configurations. Example: http://localhost:5002/api/engine/flows/register"));
+        webhookTab.PropertyTypes!.Add(Prop("healthCheckUrl", "Health Check URL",
+            DataTypeKeys.TextUrl, 10,
+            description: "Optional HEAD/GET endpoint the CMS can ping to verify the engine is alive for this flow (e.g. /api/engine/flows/approval-flow/health). Empty = no health check."));
         ct.PropertyGroups.Add(webhookTab);
 
         // ── Tab: Tracks & Outcomes ────────────────────────────────────────
@@ -119,6 +134,58 @@ internal sealed class FlowEngineInitializer : SchemaInitializerBase
         ct.PropertyGroups.Add(tracksTab);
 
         TrySave(ct);
+    }
+
+    /// <summary>
+    /// Idempotent property patch for FlowDefinition.
+    /// Adds new properties non-destructively to existing tabs; never removes or
+    /// renames existing properties. Editor-authored values are preserved.
+    /// </summary>
+    private void PatchFlowDefinitionProperties(IContentType ct)
+    {
+        var dirty = false;
+
+        dirty |= AddPropertyIfMissing(ct, "general",
+            "ownerTeam", "Owner / Team", DataTypeKeys.TextTitle, 25,
+            "Team or person responsible for this flow. Used for paging / on-call routing — free text.");
+
+        dirty |= AddPropertyIfMissing(ct, "general",
+            "documentationUrl", "Documentation URL", DataTypeKeys.TextUrl, 27,
+            "External documentation link (Notion, Confluence, README). Shown in the backoffice as a reference and in execution traces.");
+
+        dirty |= AddPropertyIfMissing(ct, "webhook",
+            "healthCheckUrl", "Health Check URL", DataTypeKeys.TextUrl, 10,
+            "Optional HEAD/GET endpoint the CMS can ping to verify the engine is alive for this flow. Empty = no health check.");
+
+        if (dirty) TrySave(ct);
+    }
+
+    /// <summary>
+    /// Adds a new property to an existing tab on the ContentType when it doesn't
+    /// already exist. Returns true when the ContentType was modified. Skips (and
+    /// logs a warning) when the target tab is missing — patches never create tabs
+    /// because a missing tab signals a corrupt ContentType that deserves operator
+    /// review, not silent recovery.
+    /// </summary>
+    private bool AddPropertyIfMissing(
+        IContentType ct, string tabAlias,
+        string propAlias, string propName, Guid dataTypeKey, int sortOrder,
+        string description)
+    {
+        if (ct.PropertyTypes.Any(p => p.Alias == propAlias)) return false;
+
+        var tab = ct.PropertyGroups.FirstOrDefault(g => g.Alias == tabAlias);
+        if (tab is null)
+        {
+            _logger.LogWarning(
+                "FlowEngineInitializer: tab '{Tab}' missing on FlowDefinition — skipping patch of '{Prop}'. " +
+                "Manual backoffice review recommended.",
+                tabAlias, propAlias);
+            return false;
+        }
+
+        tab.PropertyTypes!.Add(Prop(propAlias, propName, dataTypeKey, sortOrder, description: description));
+        return true;
     }
 
     private void EnsureFlowSettingsRoot(int folderId)
