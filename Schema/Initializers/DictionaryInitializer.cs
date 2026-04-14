@@ -133,6 +133,7 @@ internal sealed class DictionaryInitializer : ISchemaInitializer
         Item(gCommon, "Common.Aria.SkipToContent",       en, "Skip to main content",    es, "Ir al contenido principal");
         Item(gCommon, "Common.Aria.Loading",             en, "Loading, please wait",    es, "Cargando, por favor espera");
         Item(gCommon, "Common.Aria.Image",               en, "Decorative image",        es, "Imagen decorativa");
+        Item(gCommon, "Common.Aria.EmbeddedContent",     en, "Embedded content",        es, "Contenido embebido");
 
         // ── 3. Nav ───────────────────────────────────────────────────────────
         var gNav = EnsureGroup("Nav");
@@ -210,6 +211,8 @@ internal sealed class DictionaryInitializer : ISchemaInitializer
         Item(gForm, "Form.Messages.Sending",             en, "Sending…",                es, "Enviando…");
         Item(gForm, "Form.Messages.NetworkError",        en, "Connection error. Please try again.",
                                                          es, "Error de conexión. Inténtalo de nuevo.");
+        Item(gForm, "Form.Messages.NotFound",            en, "Form \"{0}\" not found.",
+                                                         es, "Formulario \"{0}\" no encontrado.");
 
         //   Labels and actions
         Item(gForm, "Form.Labels.RequiredFields",        en, "* Required fields",       es, "* Campos obligatorios");

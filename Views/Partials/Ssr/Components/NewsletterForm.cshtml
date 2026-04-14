@@ -1,5 +1,12 @@
 @model Synergos.CMS.Application.Elements.NewsletterFormViewModel
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @* Newsletter subscription form — endpoint configured via BehaviorAsync. *@
+@{
+    var culture     = System.Globalization.CultureInfo.CurrentUICulture.Name;
+    var placeholder = Dict.Get("Newsletter.Placeholder", culture, "Your email address");
+    var submitLabel = Model.Cta?.CtaLabel
+                      ?? Dict.Get("Form.Actions.Subscribe", culture, "Subscribe");
+}
 <form class="sg-newsletter-form" data-sg-element="corp-newsletter-form"
       @Html.Raw(Model.Async?.ApiEndpoint is not null ? $"action=\"{Model.Async.ApiEndpoint}\"" : "")
       method="post">
@@ -12,9 +19,7 @@
         <p class="sg-newsletter-form__description">@Html.Raw(Model.Text.Body)</p>
     }
     <div class="sg-newsletter-form__field">
-        <input type="email" name="email" placeholder="Email" required class="sg-newsletter-form__input" />
-        <button type="submit" class="sg-newsletter-form__submit">
-            @(Model.Cta?.CtaLabel ?? "Subscribe")
-        </button>
+        <input type="email" name="email" placeholder="@placeholder" required class="sg-newsletter-form__input" />
+        <button type="submit" class="sg-newsletter-form__submit">@submitLabel</button>
     </div>
 </form>

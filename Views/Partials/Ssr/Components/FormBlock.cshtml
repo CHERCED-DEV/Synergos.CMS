@@ -1,12 +1,13 @@
 @model Synergos.CMS.Application.Elements.FormBlockViewModel
 @inject Synergos.CMS.Application.Services.FormRenderService FormService
-@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
     var formAlias = Model.FormAlias;
     var formDef   = !string.IsNullOrWhiteSpace(formAlias)
         ? FormService.ResolveByAlias(formAlias)
         : null;
     var formId    = $"sg-form-{formAlias}";
+    var culture   = System.Globalization.CultureInfo.CurrentUICulture.Name;
 }
 
 @if (formDef is null)
@@ -14,14 +15,17 @@
     @* Silently skip if no form definition — allows editors to configure alias *@
     if (!string.IsNullOrWhiteSpace(formAlias))
     {
-        <p class="sg-form-block__placeholder"><em>Formulario "@formAlias" no encontrado.</em></p>
+        var notFoundMsg = string.Format(
+            Dict.Get("Form.Messages.NotFound", culture, "Form \"{0}\" not found."),
+            formAlias);
+        <p class="sg-form-block__placeholder"><em>@notFoundMsg</em></p>
     }
     return;
 }
 
 @{
-    var networkErrorMsg = Umbraco.GetDictionaryValue("Form.Messages.NetworkError") ?? "Connection error. Please try again.";
-    var generalErrorMsg = Umbraco.GetDictionaryValue("Form.Messages.Error") ?? "An error occurred. Please try again.";
+    var networkErrorMsg = Dict.Get("Form.Messages.NetworkError", culture, "Connection error. Please try again.");
+    var generalErrorMsg = Dict.Get("Form.Messages.Error",        culture, "An error occurred. Please try again.");
 }
 <div class="sg-form-block @Model.BlockClass"
      data-sg-element="comp-form-block"
@@ -35,14 +39,12 @@
     @{
         var successMsg = formDef.ThankYouMessage
             ?? Model.SuccessMessage
-            ?? Umbraco.GetDictionaryValue("Form.Messages.Success")
-            ?? "Thank you! Your message has been sent.";
-        var sendingMsg = Umbraco.GetDictionaryValue("Form.Messages.Sending") ?? "Sending…";
-        var selectDefault = Umbraco.GetDictionaryValue("Form.Placeholders.SelectOption") ?? "Select an option";
-        var submitLabel = Model.SubmitLabel
+            ?? Dict.Get("Form.Messages.Success",        culture, "Thank you! Your message has been sent.");
+        var sendingMsg    = Dict.Get("Form.Messages.Sending",     culture, "Sending…");
+        var selectDefault = Dict.Get("Form.Placeholders.SelectOption", culture, "Select an option");
+        var submitLabel   = Model.SubmitLabel
             ?? formDef.SubmitLabel
-            ?? Umbraco.GetDictionaryValue("Form.Actions.Send")
-            ?? "Send message";
+            ?? Dict.Get("Form.Actions.Send", culture, "Send message");
     }
     <div class="sg-form-block__success" id="@(formId)-success" hidden>
         <p>@successMsg</p>
