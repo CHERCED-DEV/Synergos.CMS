@@ -24,9 +24,19 @@ namespace Synergos.CMS.Infrastructure.USync;
 /// </summary>
 public sealed class USyncFileCleanerService
 {
+    // Folder names under uSync/v9/ that this cleaner inspects.
+    private const string ContentFolder = "Content";
+    private const string MediaFolder   = "Media";
+
+    // Regex timeout — bound the parser when we scan suspect XML to avoid catastrophic backtracking.
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
+
+    // Only the root XML element of each .config file matters; bail out after a small header window.
+    private const int MaxHeaderLinesScanned = 10;
+
     private static readonly Regex RootKeyRegex =
         new(@"<(?:Content|Media)\s[^>]*Key=""([^""]+)""",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(2));
+            RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexTimeout);
 
     private readonly UmbracoHosting _hosting;
     private readonly ILogger<USyncFileCleanerService> _logger;
@@ -52,7 +62,7 @@ public sealed class USyncFileCleanerService
     {
         var removed = 0;
 
-        foreach (var folder in new[] { "Content", "Media" })
+        foreach (var folder in new[] { ContentFolder, MediaFolder })
         {
             var dir = Path.Combine(USyncRoot, folder);
             if (!Directory.Exists(dir)) continue;
@@ -62,7 +72,7 @@ public sealed class USyncFileCleanerService
             foreach (var path in Directory.EnumerateFiles(dir, "*.config", SearchOption.AllDirectories))
             {
                 var key = ReadRootKey(path);
-                if (key is null || key == "00000000-0000-0000-0000-000000000000") continue;
+                if (key is null || key == Guid.Empty.ToString()) continue;
 
                 if (!byKey.TryGetValue(key, out var list))
                     byKey[key] = list = [];
@@ -114,7 +124,7 @@ public sealed class USyncFileCleanerService
     public void DeleteOrphanedFile(Guid key, bool isMedia)
     {
         var keyStr = key.ToString();
-        var folder = isMedia ? "Media" : "Content";
+        var folder = isMedia ? MediaFolder : ContentFolder;
         var dir    = Path.Combine(USyncRoot, folder);
 
         if (!Directory.Exists(dir)) return;
@@ -149,7 +159,7 @@ public sealed class USyncFileCleanerService
             var linesRead = 0;
             string? line;
 
-            while ((line = reader.ReadLine()) != null && linesRead < 10)
+            while ((line = reader.ReadLine()) != null && linesRead < MaxHeaderLinesScanned)
             {
                 linesRead++;
                 var match = RootKeyRegex.Match(line);

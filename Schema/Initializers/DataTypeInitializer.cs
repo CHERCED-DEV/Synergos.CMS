@@ -2,6 +2,7 @@ using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.PropertyEditors;
 using Umbraco.Cms.Core.Serialization;
 using Umbraco.Cms.Core.Services;
+using Synergos.CMS.Domain.Orchestration;
 using Synergos.CMS.Schema.Constants;
 
 namespace Synergos.CMS.Schema.Initializers;
@@ -162,8 +163,13 @@ internal sealed class DataTypeInitializer : ISchemaInitializer
             ["info", "warning", "success", "error"]);
 
         // ── Flow Engine ───────────────────────────────────────────────────────
+        // Source of truth for the dropdown values is FlowExecutionModeExtensions.ToAlias.
         EnsureDropdown(DataTypeKeys.SelectFlowExecutionMode, "DT.Select.FlowExecutionMode",
-            ["sequential", "parallel", "firstMatch"]);
+        [
+            FlowExecutionMode.Sequential.ToAlias(),
+            FlowExecutionMode.Parallel.ToAlias(),
+            FlowExecutionMode.FirstMatch.ToAlias()
+        ]);
         EnsureTextArea(DataTypeKeys.TextAreaJson, "DT.TextArea.Json", 10_000);
 
         // ── Macro Host ─────────────────────────────────────────────────────

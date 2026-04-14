@@ -111,13 +111,9 @@ public sealed class FlowConfigurationService
                 return null;
             }
 
-            var execModeRaw = node.Value<string>("executionMode") ?? "sequential";
-            var execMode = execModeRaw.ToLowerInvariant() switch
-            {
-                "parallel"   => FlowExecutionMode.Parallel,
-                "firstmatch" => FlowExecutionMode.FirstMatch,
-                _            => FlowExecutionMode.Sequential
-            };
+            // Aliases mirror Schema/Initializers/DataTypeInitializer.cs SelectExecutionMode.
+            // FromAlias accepts unknown / null and falls back to Sequential.
+            var execMode = FlowExecutionModeExtensions.FromAlias(node.Value<string>("executionMode"));
 
             var tracksJson   = node.Value<string>("tracksJson") ?? "[]";
             var outcomesJson = node.Value<string>("outcomesJson") ?? "[]";

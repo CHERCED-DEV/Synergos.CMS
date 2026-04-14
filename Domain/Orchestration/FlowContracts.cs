@@ -9,6 +9,43 @@ public enum FlowExecutionMode
     FirstMatch    // First track whose condition evaluates true is executed
 }
 
+/// <summary>
+/// Conversion between <see cref="FlowExecutionMode"/> and the Umbraco
+/// dropdown string aliases stored against the <c>executionMode</c> property.
+///
+/// Centralising the mapping here ensures that adding a mode requires updating
+/// exactly one place — every reader, seeder, and writer flows through these
+/// extensions.
+/// </summary>
+public static class FlowExecutionModeExtensions
+{
+    /// <summary>
+    /// CMS dropdown alias for the mode (camelCase to match the Umbraco
+    /// DataType configuration).
+    /// </summary>
+    public static string ToAlias(this FlowExecutionMode mode) => mode switch
+    {
+        FlowExecutionMode.Sequential => "sequential",
+        FlowExecutionMode.Parallel   => "parallel",
+        FlowExecutionMode.FirstMatch => "firstMatch",
+        _                            => "sequential"
+    };
+
+    /// <summary>
+    /// Parses a stored alias back to the typed enum. Falls back to
+    /// <see cref="FlowExecutionMode.Sequential"/> when the alias is
+    /// unknown or null — sequential is the safe default that preserves
+    /// step ordering.
+    /// </summary>
+    public static FlowExecutionMode FromAlias(string? alias) => alias switch
+    {
+        "sequential" => FlowExecutionMode.Sequential,
+        "parallel"   => FlowExecutionMode.Parallel,
+        "firstMatch" => FlowExecutionMode.FirstMatch,
+        _            => FlowExecutionMode.Sequential
+    };
+}
+
 public enum FlowStepType
 {
     Validate,

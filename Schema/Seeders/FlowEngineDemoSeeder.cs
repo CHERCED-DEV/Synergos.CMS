@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
+using Synergos.CMS.Domain.Orchestration;
 using Synergos.CMS.Schema.Constants;
 
 namespace Synergos.CMS.Schema.Seeders;
@@ -79,8 +80,8 @@ internal sealed class FlowEngineDemoSeeder
         SeedNotificationPipeline(flowRoot.Id);
 
         // 4. Repair executionMode if previously seeded with plain string instead of JSON array
-        RepairExecutionModeIfNeeded(flowRoot.Id, "approval-flow",        "sequential");
-        RepairExecutionModeIfNeeded(flowRoot.Id, "notification-pipeline", "parallel");
+        RepairExecutionModeIfNeeded(flowRoot.Id, "approval-flow",        FlowExecutionMode.Sequential.ToAlias());
+        RepairExecutionModeIfNeeded(flowRoot.Id, "notification-pipeline", FlowExecutionMode.Parallel.ToAlias());
     }
 
     // ─── FlowSettingsRoot ─────────────────────────────────────────────────────
@@ -204,7 +205,7 @@ internal sealed class FlowEngineDemoSeeder
         node.SetValue("flowAlias",        alias);
         node.SetValue("flowName",         "Flujo de Aprobación");
         node.SetValue("flowDescription",  "Demo flow: validates amount, enriches data, notifies approver. Change executionMode in backoffice to see behavior change.");
-        node.SetValue(ExecutionModeKey,    Dropdown("sequential"));
+        node.SetValue(ExecutionModeKey,    Dropdown(FlowExecutionMode.Sequential.ToAlias()));
         node.SetValue("timeoutMs",        8000);
         node.SetValue("maxRetries",       2);
         node.SetValue("isActive",         true);
@@ -281,7 +282,7 @@ internal sealed class FlowEngineDemoSeeder
         node.SetValue("flowAlias",        alias);
         node.SetValue("flowName",         "Pipeline de Notificaciones");
         node.SetValue("flowDescription",  "Demo flow: runs email, SMS and webhook notifications in parallel. Change executionMode to sequential to compare.");
-        node.SetValue(ExecutionModeKey,    Dropdown("parallel"));
+        node.SetValue(ExecutionModeKey,    Dropdown(FlowExecutionMode.Parallel.ToAlias()));
         node.SetValue("timeoutMs",        5000);
         node.SetValue("maxRetries",       1);
         node.SetValue("isActive",         true);
