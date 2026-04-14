@@ -197,6 +197,30 @@ public static class PropertyAliases
         public const string ParamValue     = "paramValue";
     }
 
+    // ── compContentPricing (editor-authored pricing fields) ───────────────
+    public static class Pricing
+    {
+        public const string PriceAmount      = "priceAmount";
+        public const string PriceCurrency    = "priceCurrency";
+        public const string PriceOriginal    = "priceOriginal";
+        public const string PricePeriod      = "pricePeriod";
+        public const string PriceSuffix      = "priceSuffix";
+        public const string PriceTaxIncluded = "priceTaxIncluded";
+    }
+
+    // ── compContentLocation (postal address + geo coordinates) ────────────
+    public static class Location
+    {
+        public const string AddressLine   = "addressLine";
+        public const string City          = "city";
+        public const string Region        = "region";
+        public const string PostalCode    = "postalCode";
+        public const string Country       = "country";
+        public const string Latitude      = "latitude";
+        public const string Longitude     = "longitude";
+        public const string GoogleMapsUrl = "googleMapsUrl";
+    }
+
     // ── compVisibility (scheduling + conditional show/hide) ───────────────
     public static class Visibility
     {

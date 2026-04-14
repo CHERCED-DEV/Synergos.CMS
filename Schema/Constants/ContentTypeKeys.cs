@@ -26,6 +26,20 @@ public static class ContentTypeKeys
     public static readonly Guid CompContentDate       = new("b2000008-0000-0000-0000-000000000000");
     public static readonly Guid CompContentMetadata   = new("b2000009-0000-0000-0000-000000000000");
     public static readonly Guid CompContentEmbed      = new("b2000010-0000-0000-0000-000000000000");
+    /// <summary>
+    /// Editorial-agnostic pricing fields (priceAmount, currency, period, original
+    /// price, suffix, tax flag). All strings / toggles — the editor decides format
+    /// ("$99/mes", "Gratis", "Desde 19€ +IVA"). Useful on pricing cards, feature
+    /// plans, service offerings, and e-commerce detail pages.
+    /// </summary>
+    public static readonly Guid CompContentPricing    = new("b2000011-0000-0000-0000-000000000000");
+    /// <summary>
+    /// Editorial location / contact address fields (address, city, region,
+    /// postalCode, country, latitude, longitude, googleMapsUrl). All editable
+    /// strings. Useful on contact pages, store locators, event info, and
+    /// footer business blocks.
+    /// </summary>
+    public static readonly Guid CompContentLocation   = new("b2000012-0000-0000-0000-000000000000");
 
     // ─── DOM Compositions (b3*) ────────────────────────────────────────────
     public static readonly Guid CompDomClass         = new("b3000001-0000-0000-0000-000000000000");

@@ -188,6 +188,7 @@ internal sealed class SynergosSchemaInitializer
             ContentTypeKeys.CompContentBadge, ContentTypeKeys.CompContentCollection,
             ContentTypeKeys.CompContentAuthor, ContentTypeKeys.CompContentDate,
             ContentTypeKeys.CompContentMetadata, ContentTypeKeys.CompContentEmbed,
+            ContentTypeKeys.CompContentPricing, ContentTypeKeys.CompContentLocation,
             // Taxonomy
             ContentTypeKeys.CompTagging,
             // DOM

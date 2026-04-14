@@ -71,6 +71,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ContentDateReader>();
         services.AddSingleton<ContentMetadataReader>();
         services.AddSingleton<ContentEmbedReader>();
+        services.AddSingleton<ContentPricingReader>();
+        services.AddSingleton<ContentLocationReader>();
 
         // Dom
         services.AddSingleton<DomClassReader>();

@@ -36,6 +36,8 @@ internal sealed class ContentCompositionInitializer : CompositionInitializerBase
         EnsureContentDate(contentFolderId);
         EnsureContentMetadata(contentFolderId);
         EnsureContentEmbed(contentFolderId);
+        EnsureContentPricing(contentFolderId);
+        EnsureContentLocation(contentFolderId);
     }
 
     // ── Comp.ContentHeading ───────────────────────────────────────────────
@@ -390,4 +392,108 @@ internal sealed class ContentCompositionInitializer : CompositionInitializerBase
         Cts.Save(ct);
     }
 
+    // ── Comp.ContentPricing ───────────────────────────────────────────────
+    // Agnostic pricing fields. Every value is an editor-authored string or
+    // toggle — no hardcoded currency list, no period enum, no "just numbers".
+    // The editor decides format: "$99/mes", "Gratis", "Desde 19€ +IVA",
+    // "Contactar", "1.500.000 COP" — the view renders what it receives.
+    private void EnsureContentPricing(int folderId)
+    {
+        const string typeDescription = "Campos de precio editable para pricing cards, planes, ofertas o product detail. Todo string — el editor controla formato y moneda.";
+        const string priceAmountDescription      = "Importe principal a mostrar. Libre: '$99', '99€', '1.500.000 COP', 'Gratis', 'Desde 19'. Se renderiza tal cual lo escribes.";
+        const string priceCurrencyDescription    = "Código / símbolo de moneda (COP, USD, EUR, $, €). Opcional — útil cuando priceAmount es solo el número.";
+        const string priceOriginalDescription    = "Precio tachado (antes del descuento). Si está vacío no se muestra strikethrough.";
+        const string pricePeriodDescription      = "Período de facturación ('mes', 'año', 'único pago', 'por usuario'). Se renderiza como sufijo tras el amount.";
+        const string priceSuffixDescription      = "Sufijo adicional al precio ('+IVA', '/mes', 'desde', 'hasta 5 usuarios').";
+        const string priceTaxIncludedDescription = "Marca si el importe ya incluye impuestos. Útil para compliance y UI de e-commerce.";
+
+        var existing = Cts.Get(ContentTypeKeys.CompContentPricing);
+        if (existing is not null)
+        {
+            var dirty = PatchTypeDescription(existing, typeDescription);
+            dirty |= PatchPropertyDescription(existing, "priceAmount",      priceAmountDescription);
+            dirty |= PatchPropertyDescription(existing, "priceCurrency",    priceCurrencyDescription);
+            dirty |= PatchPropertyDescription(existing, "priceOriginal",    priceOriginalDescription);
+            dirty |= PatchPropertyDescription(existing, "pricePeriod",      pricePeriodDescription);
+            dirty |= PatchPropertyDescription(existing, "priceSuffix",      priceSuffixDescription);
+            dirty |= PatchPropertyDescription(existing, "priceTaxIncluded", priceTaxIncludedDescription);
+            if (dirty) Cts.Save(existing);
+            return;
+        }
+
+        var ct  = CreateComposition("Comp.ContentPricing", "compContentPricing", ContentTypeKeys.CompContentPricing, folderId, typeDescription);
+        var tab = Tab("Pricing", "pricing", 0);
+
+        tab.PropertyTypes!.Add(Prop(
+            alias: "priceAmount",      name: "Price",              dataTypeKey: DataTypeKeys.TextTitle,      sortOrder: 0,  description: priceAmountDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "priceCurrency",    name: "Currency",           dataTypeKey: DataTypeKeys.TextIdentifier, sortOrder: 10, description: priceCurrencyDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "priceOriginal",    name: "Original Price",     dataTypeKey: DataTypeKeys.TextTitle,      sortOrder: 20, description: priceOriginalDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "pricePeriod",      name: "Billing Period",     dataTypeKey: DataTypeKeys.TextIdentifier, sortOrder: 30, description: pricePeriodDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "priceSuffix",      name: "Price Suffix",       dataTypeKey: DataTypeKeys.TextTitle,      sortOrder: 40, description: priceSuffixDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "priceTaxIncluded", name: "Tax Included",       dataTypeKey: DataTypeKeys.ToggleBoolean,  sortOrder: 50, description: priceTaxIncludedDescription));
+
+        ct.PropertyGroups.Add(tab);
+        Cts.Save(ct);
+    }
+
+    // ── Comp.ContentLocation ──────────────────────────────────────────────
+    // Agnostic location / postal address fields. Anything that needs a physical
+    // address (contact page, store locator, event venue, footer business card)
+    // composes this. All strings — the editor decides format per locale.
+    private void EnsureContentLocation(int folderId)
+    {
+        const string typeDescription = "Dirección física y coordenadas geográficas para páginas de contacto, eventos, locales o footer corporativo.";
+        const string addressLineDescription  = "Línea de dirección principal (calle, número, piso). Libre — el editor escribe según el formato local.";
+        const string cityDescription         = "Ciudad o municipio.";
+        const string regionDescription       = "Estado, provincia o departamento.";
+        const string postalCodeDescription   = "Código postal.";
+        const string countryDescription      = "País — libre (texto) o código ISO corto (ej. CO, US, ES).";
+        const string latitudeDescription     = "Latitud en grados decimales (ej. 4.7110). Opcional — úsalo solo cuando vayas a renderizar un mapa embebido.";
+        const string longitudeDescription    = "Longitud en grados decimales (ej. -74.0721). Opcional — requerido si latitude está presente.";
+        const string googleMapsUrlDescription = "URL de Google Maps / Apple Maps / OpenStreetMap a la ubicación. Se usa como enlace 'Cómo llegar'.";
+
+        var existing = Cts.Get(ContentTypeKeys.CompContentLocation);
+        if (existing is not null)
+        {
+            var dirty = PatchTypeDescription(existing, typeDescription);
+            dirty |= PatchPropertyDescription(existing, "addressLine",    addressLineDescription);
+            dirty |= PatchPropertyDescription(existing, "city",           cityDescription);
+            dirty |= PatchPropertyDescription(existing, "region",         regionDescription);
+            dirty |= PatchPropertyDescription(existing, "postalCode",     postalCodeDescription);
+            dirty |= PatchPropertyDescription(existing, "country",        countryDescription);
+            dirty |= PatchPropertyDescription(existing, "latitude",       latitudeDescription);
+            dirty |= PatchPropertyDescription(existing, "longitude",      longitudeDescription);
+            dirty |= PatchPropertyDescription(existing, "googleMapsUrl",  googleMapsUrlDescription);
+            if (dirty) Cts.Save(existing);
+            return;
+        }
+
+        var ct  = CreateComposition("Comp.ContentLocation", "compContentLocation", ContentTypeKeys.CompContentLocation, folderId, typeDescription);
+        var tab = Tab("Location", "location", 0);
+
+        tab.PropertyTypes!.Add(Prop(
+            alias: "addressLine",   name: "Address",         dataTypeKey: DataTypeKeys.TextTitle,      sortOrder: 0,  description: addressLineDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "city",          name: "City",            dataTypeKey: DataTypeKeys.TextTitle,      sortOrder: 10, description: cityDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "region",        name: "Region / State",  dataTypeKey: DataTypeKeys.TextTitle,      sortOrder: 20, description: regionDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "postalCode",    name: "Postal Code",     dataTypeKey: DataTypeKeys.TextIdentifier, sortOrder: 30, description: postalCodeDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "country",       name: "Country",         dataTypeKey: DataTypeKeys.TextIdentifier, sortOrder: 40, description: countryDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "latitude",      name: "Latitude",        dataTypeKey: DataTypeKeys.TextIdentifier, sortOrder: 50, description: latitudeDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "longitude",     name: "Longitude",       dataTypeKey: DataTypeKeys.TextIdentifier, sortOrder: 60, description: longitudeDescription));
+        tab.PropertyTypes!.Add(Prop(
+            alias: "googleMapsUrl", name: "Maps URL",        dataTypeKey: DataTypeKeys.TextUrl,        sortOrder: 70, description: googleMapsUrlDescription));
+
+        ct.PropertyGroups.Add(tab);
+        Cts.Save(ct);
+    }
 }
