@@ -1,12 +1,61 @@
 @model Synergos.CMS.Application.Elements.MapEmbedViewModel
-@* Embedded map (Google Maps, OpenStreetMap, etc.) via ContentEmbed composition. *@
-@if (Model.Embed?.EmbedUrl is not null)
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@*
+   Embedded map block. Two rendering modes:
+
+   1. When the editor supplies an Embed URL (compContentEmbed.embedUrl) we
+      treat it as a fully-formed iframe src (Google Maps, OpenStreetMap, etc.)
+      and render the iframe directly. Most flexible.
+
+   2. Otherwise, if compContentLocation has coordinates or a Google Maps URL,
+      we render a compact address block + "Cómo llegar" link — no iframe,
+      no third-party request, but still actionable. Good fallback for pages
+      that don't need a full map but do want to publish location.
+
+   If neither is set, the block renders nothing (editor in-progress).
+*@
+@{
+    var culture        = System.Globalization.CultureInfo.CurrentUICulture.Name;
+    var embed          = Model.Embed;
+    var loc            = Model.Location;
+    var mapsLinkLabel  = Dict.Get("Common.Actions.GetDirections", culture, "How to get there");
+    var mapFallback    = Dict.Get("Common.Aria.EmbeddedContent", culture, "Map");
+    var hasIframe      = !string.IsNullOrWhiteSpace(embed?.EmbedUrl);
+    var hasLocation    = loc is not null && (
+        !string.IsNullOrWhiteSpace(loc.AddressLine) ||
+        !string.IsNullOrWhiteSpace(loc.GoogleMapsUrl));
+}
+@if (hasIframe)
 {
     <div class="sg-map-embed" data-sg-element="corp-map-embed">
-        <iframe src="@Model.Embed.EmbedUrl"
+        <iframe src="@embed!.EmbedUrl"
                 loading="lazy"
                 referrerpolicy="no-referrer-when-downgrade"
                 class="sg-map-embed__iframe"
-                title="@(Model.Embed.EmbedTitle ?? "Map")"></iframe>
+                title="@(embed.EmbedTitle ?? mapFallback)"></iframe>
+    </div>
+}
+else if (hasLocation)
+{
+    <div class="sg-map-embed sg-map-embed--link-only" data-sg-element="corp-map-embed">
+        <address class="sg-map-embed__address" itemscope itemtype="https://schema.org/PostalAddress">
+            @if (!string.IsNullOrWhiteSpace(loc!.AddressLine))
+            {
+                <span itemprop="streetAddress">@loc.AddressLine</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(loc.City))
+            {
+                <span itemprop="addressLocality">@loc.City</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(loc.Country))
+            {
+                <span itemprop="addressCountry">@loc.Country</span>
+            }
+        </address>
+        @if (!string.IsNullOrWhiteSpace(loc.GoogleMapsUrl))
+        {
+            <a href="@loc.GoogleMapsUrl" target="_blank" rel="noopener noreferrer"
+               class="sg-map-embed__maps-link">@mapsLinkLabel</a>
+        }
     </div>
 }

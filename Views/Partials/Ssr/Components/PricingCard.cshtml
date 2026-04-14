@@ -1,11 +1,22 @@
 @model Synergos.CMS.Application.Elements.PricingCardViewModel
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
-    var title = Model.Text?.Title;
+    var culture  = System.Globalization.CultureInfo.CurrentUICulture.Name;
+    var title    = Model.Text?.Title;
     var subtitle = Model.Text?.Subtitle;
-    var body = Model.Text?.Body;
-    var price = Model.Text?.Summary;
-    var badge = Model.Badge;
-    var cta = Model.Cta;
+    var body     = Model.Text?.Body;
+    var badge    = Model.Badge;
+    var cta      = Model.Cta;
+    var pricing  = Model.Pricing;
+
+    // Prefer compContentPricing.priceAmount; fall back to the legacy Text.Summary
+    // channel that pre-10.1.0 pricing cards used. Editors upgrading a card by
+    // filling the new Pricing tab should see it win automatically.
+    var priceAmount = string.IsNullOrWhiteSpace(pricing?.PriceAmount)
+        ? Model.Text?.Summary
+        : pricing!.PriceAmount;
+
+    var taxIncludedLabel = Dict.Get("Pricing.TaxIncluded", culture, "IVA incluido");
 }
 
 <div class="sg-pricing-card @Model.DomClass?.ClassList @Model.DomVariant?.Variant">
@@ -21,9 +32,31 @@
     {
         <p class="sg-pricing-card__subtitle">@subtitle</p>
     }
-    @if (price is not null)
+    @if (!string.IsNullOrWhiteSpace(priceAmount))
     {
-        <div class="sg-pricing-card__price">@price</div>
+        <div class="sg-pricing-card__price">
+            @if (!string.IsNullOrWhiteSpace(pricing?.PriceOriginal))
+            {
+                <span class="sg-pricing-card__price-original"><s>@pricing.PriceOriginal</s></span>
+            }
+            <span class="sg-pricing-card__price-amount">@priceAmount</span>
+            @if (!string.IsNullOrWhiteSpace(pricing?.PriceCurrency))
+            {
+                <span class="sg-pricing-card__price-currency">@pricing.PriceCurrency</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(pricing?.PricePeriod))
+            {
+                <span class="sg-pricing-card__price-period">/ @pricing.PricePeriod</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(pricing?.PriceSuffix))
+            {
+                <span class="sg-pricing-card__price-suffix">@pricing.PriceSuffix</span>
+            }
+        </div>
+        @if (pricing?.PriceTaxIncluded == true)
+        {
+            <span class="sg-pricing-card__tax-flag">@taxIncludedLabel</span>
+        }
     }
     @if (body is not null)
     {

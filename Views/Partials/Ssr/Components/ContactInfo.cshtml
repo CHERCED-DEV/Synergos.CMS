@@ -1,5 +1,27 @@
 @model Synergos.CMS.Application.Elements.ContactInfoViewModel
-@* Contact info block: email, phone, address via ContentText + CTA link. *@
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@*
+   Contact info block. Renders (in order):
+     - Title / details from compContentText.
+     - Postal address + geo / maps URL from compContentLocation (optional —
+       only printed when the editor filled in the Location tab).
+     - CTA link from compContentCta.
+
+   Address is emitted with schema.org/PostalAddress microdata so search
+   engines can pick it up without extra plumbing.
+*@
+@{
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+    var loc     = Model.Location;
+    var hasAddress = loc is not null && (
+        !string.IsNullOrWhiteSpace(loc.AddressLine) ||
+        !string.IsNullOrWhiteSpace(loc.City)        ||
+        !string.IsNullOrWhiteSpace(loc.Region)      ||
+        !string.IsNullOrWhiteSpace(loc.PostalCode)  ||
+        !string.IsNullOrWhiteSpace(loc.Country));
+    var mapsLinkLabel = Dict.Get("Common.Actions.GetDirections", culture, "How to get there");
+    var contactFallback = Dict.Get("Common.Actions.ContactUs", culture, "Contact us");
+}
 <div class="sg-contact-info" data-sg-element="corp-contact-info">
     @if (Model.Text?.Title is not null)
     {
@@ -9,13 +31,43 @@
     {
         <div class="sg-contact-info__details">@Html.Raw(Model.Text.Body)</div>
     }
+    @if (hasAddress)
+    {
+        <address class="sg-contact-info__address" itemscope itemtype="https://schema.org/PostalAddress">
+            @if (!string.IsNullOrWhiteSpace(loc!.AddressLine))
+            {
+                <span class="sg-contact-info__address-line" itemprop="streetAddress">@loc.AddressLine</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(loc.City))
+            {
+                <span class="sg-contact-info__city" itemprop="addressLocality">@loc.City</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(loc.Region))
+            {
+                <span class="sg-contact-info__region" itemprop="addressRegion">@loc.Region</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(loc.PostalCode))
+            {
+                <span class="sg-contact-info__postal" itemprop="postalCode">@loc.PostalCode</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(loc.Country))
+            {
+                <span class="sg-contact-info__country" itemprop="addressCountry">@loc.Country</span>
+            }
+        </address>
+        @if (!string.IsNullOrWhiteSpace(loc.GoogleMapsUrl))
+        {
+            <a href="@loc.GoogleMapsUrl" target="_blank" rel="noopener noreferrer"
+               class="sg-contact-info__maps-link">@mapsLinkLabel</a>
+        }
+    }
     @if (Model.Cta?.CtaLink is not null)
     {
         <a href="@Model.Cta.CtaLink.Url"
            class="sg-contact-info__action"
            @Html.Raw(Model.Cta.CtaTarget is not null ? $"target=\"{Model.Cta.CtaTarget}\"" : "")
            @Html.Raw(Model.Cta.CtaAriaLabel is not null ? $"aria-label=\"{Model.Cta.CtaAriaLabel}\"" : "")>
-            @(Model.Cta.CtaLabel ?? "Contact us")
+            @(Model.Cta.CtaLabel ?? contactFallback)
         </a>
     }
 </div>

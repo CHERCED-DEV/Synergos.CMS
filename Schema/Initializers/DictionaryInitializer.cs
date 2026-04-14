@@ -88,6 +88,8 @@ internal sealed class DictionaryInitializer : ISchemaInitializer
         Item(gCommon, "Common.Actions.Previous",         en, "Previous",               es, "Anterior");
         Item(gCommon, "Common.Actions.Close",            en, "Close",                  es, "Cerrar");
         Item(gCommon, "Common.Actions.Open",             en, "Open",                   es, "Abrir");
+        Item(gCommon, "Common.Actions.ContactUs",        en, "Contact us",              es, "Contáctanos");
+        Item(gCommon, "Common.Actions.GetDirections",    en, "How to get there",        es, "Cómo llegar");
         Item(gCommon, "Common.Actions.Expand",           en, "Expand",                 es, "Expandir");
         Item(gCommon, "Common.Actions.Collapse",         en, "Collapse",               es, "Colapsar");
         Item(gCommon, "Common.Actions.ContactUs",        en, "Contact us",             es, "Contáctanos");
@@ -389,6 +391,7 @@ internal sealed class DictionaryInitializer : ISchemaInitializer
                                                          es, "Los precios incluyen impuestos aplicables.");
         Item(gPricing, "Pricing.BilledAnnually",         en, "Billed annually",         es, "Facturado anualmente");
         Item(gPricing, "Pricing.Free",                   en, "Free",                    es, "Gratis");
+        Item(gPricing, "Pricing.TaxIncluded",            en, "Tax included",            es, "IVA incluido");
 
         // ── 22. Alert / Notifications ────────────────────────────────────────
         var gAlert = EnsureGroup("Alert");
