@@ -198,19 +198,20 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
     private static readonly Guid AreaContainerContent = new("fa000004-0000-0000-0000-000000000000");
     private static readonly Guid AreaStackContent    = new("fa000005-0000-0000-0000-000000000000");
 
-    // Layout Preset areas (fa01*)
-    private static readonly Guid AreaPreset1ColMain     = new("fa010001-0000-0000-0000-000000000000");
-    private static readonly Guid AreaPreset2ColLeft     = new("fa010002-0000-0000-0000-000000000000");
-    private static readonly Guid AreaPreset2ColRight    = new("fa010003-0000-0000-0000-000000000000");
-    private static readonly Guid AreaPreset3Col1        = new("fa010004-0000-0000-0000-000000000000");
-    private static readonly Guid AreaPreset3Col2        = new("fa010005-0000-0000-0000-000000000000");
-    private static readonly Guid AreaPreset3Col3        = new("fa010006-0000-0000-0000-000000000000");
-    private static readonly Guid AreaPreset4Col1        = new("fa010007-0000-0000-0000-000000000000");
-    private static readonly Guid AreaPreset4Col2        = new("fa010008-0000-0000-0000-000000000000");
-    private static readonly Guid AreaPreset4Col3        = new("fa010009-0000-0000-0000-000000000000");
-    private static readonly Guid AreaPreset4Col4        = new("fa010010-0000-0000-0000-000000000000");
-    private static readonly Guid AreaPresetMainContent  = new("fa010011-0000-0000-0000-000000000000");
-    private static readonly Guid AreaPresetSidebar      = new("fa010012-0000-0000-0000-000000000000");
+    // Layout Preset areas centralised in Schema/Constants/BlockGridAreaKeys.cs.
+    // Keep aliases here for readability of the block configuration block below.
+    private static readonly Guid AreaPreset1ColMain     = BlockGridAreaKeys.Preset1ColMain;
+    private static readonly Guid AreaPreset2ColLeft     = BlockGridAreaKeys.Preset2ColLeft;
+    private static readonly Guid AreaPreset2ColRight    = BlockGridAreaKeys.Preset2ColRight;
+    private static readonly Guid AreaPreset3Col1        = BlockGridAreaKeys.Preset3Col1;
+    private static readonly Guid AreaPreset3Col2        = BlockGridAreaKeys.Preset3Col2;
+    private static readonly Guid AreaPreset3Col3        = BlockGridAreaKeys.Preset3Col3;
+    private static readonly Guid AreaPreset4Col1        = BlockGridAreaKeys.Preset4Col1;
+    private static readonly Guid AreaPreset4Col2        = BlockGridAreaKeys.Preset4Col2;
+    private static readonly Guid AreaPreset4Col3        = BlockGridAreaKeys.Preset4Col3;
+    private static readonly Guid AreaPreset4Col4        = BlockGridAreaKeys.Preset4Col4;
+    private static readonly Guid AreaPresetMainContent  = BlockGridAreaKeys.PresetMainContent;
+    private static readonly Guid AreaPresetSidebar      = BlockGridAreaKeys.PresetSidebar;
 
     private void EnsureBlockGridPageSections()
     {

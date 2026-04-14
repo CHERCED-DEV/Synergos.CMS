@@ -1,60 +1,37 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
 using Synergos.CMS.Schema.Constants;
+using Synergos.CMS.Schema.Constants.BlockGrid;
+using Synergos.CMS.Schema.Seeders.BlockGrid;
 using UmbConstants = Umbraco.Cms.Core.Constants;
 
 namespace Synergos.CMS.Schema.Seeders;
 
 /// <summary>
-/// Seeds Block Grid content (pageSections) for the four main pages.
-/// Idempotent: skips pages that already have block grid content.
+/// Seeds the <c>pageSections</c> Block Grid for the four Synergos demo pages
+/// on a fresh install. Idempotent — skips any page whose pageSections is
+/// already populated (editor data is never overwritten).
 ///
-/// Content strategy:
-///   Home     — Hero → Stats → Features → CtaBanner
-///   Nosotros — Heading → Paragraph → Mission/Vision → Values → Stats → CtaBanner
-///   Servicios— Heading → Paragraph → Cards → Process → MediaText → CtaBanner
-///   Contacto — Heading → Paragraph → ContactInfo → FAQ
+/// Composition strategy per page:
+///   Home      — Hero → Stats → Features → CtaBanner
+///   Nosotros  — Heading → Paragraph → Mission/Vision → Values → Stats → CtaBanner
+///   Servicios — Heading → Paragraph → Cards → Process → MediaText → CtaBanner
+///   Contacto  — Heading → Paragraph → ContactInfo → FAQ
+///
+/// All hardcoded GUIDs were removed in favour of <see cref="ContentTypeKeys"/>,
+/// <see cref="BlockGridAreaKeys"/>, and per-block <see cref="Guid.NewGuid"/>.
+/// Magic strings ("h1", "dark", …) are typed via <see cref="HeadingLevel"/>
+/// and <see cref="BlockVariant"/> enums.
 /// </summary>
 internal sealed class PageBlockGridSeeder
 {
+    private const string PageSectionsKey = "pageSections";
+    private const string SeedCulture     = "es-CO";
+
     private readonly IContentService _contentService;
     private readonly ILogger         _logger;
-
-    private const string BgEditorAlias   = "Umbraco.BlockGrid";
-    private const string PageSectionsKey = "pageSections";
-    private const string SeedCulture     = "es-CO"; // pageSections is culture-variant
-
-    // ── Layout Preset area GUIDs (D-format keys from DocumentTypeInitializer) ──
-    private static readonly Guid A1Main  = new("fa010001-0000-0000-0000-000000000000");
-    private static readonly Guid A2Left  = new("fa010002-0000-0000-0000-000000000000");
-    private static readonly Guid A2Right = new("fa010003-0000-0000-0000-000000000000");
-    private static readonly Guid A3Col1  = new("fa010004-0000-0000-0000-000000000000");
-    private static readonly Guid A3Col2  = new("fa010005-0000-0000-0000-000000000000");
-    private static readonly Guid A3Col3  = new("fa010006-0000-0000-0000-000000000000");
-    private static readonly Guid A4Col1  = new("fa010007-0000-0000-0000-000000000000");
-    private static readonly Guid A4Col2  = new("fa010008-0000-0000-0000-000000000000");
-    private static readonly Guid A4Col3  = new("fa010009-0000-0000-0000-000000000000");
-    private static readonly Guid A4Col4  = new("fa010010-0000-0000-0000-000000000000");
-
-    // ── Content Type Keys (D-format) ─────────────────────────────────────────
-    private const string T1Col      = "c3000010-0000-0000-0000-000000000000"; // LayoutPreset1Col
-    private const string T2Col      = "c3000011-0000-0000-0000-000000000000"; // LayoutPreset2ColEqual
-    private const string T3Col      = "c3000012-0000-0000-0000-000000000000"; // LayoutPreset3ColEqual
-    private const string T4Col      = "c3000013-0000-0000-0000-000000000000"; // LayoutPreset4ColEqual
-    private const string THeading   = "c4000001-0000-0000-0000-000000000000"; // ElementTextHeading
-    private const string TParagraph = "c4000002-0000-0000-0000-000000000000"; // ElementTextParagraph
-    private const string TStat      = "c7000002-0000-0000-0000-000000000000"; // ElementInfoStat
-    private const string TFeature   = "c7000003-0000-0000-0000-000000000000"; // ElementInfoFeature
-    private const string TKeyValue  = "c7000004-0000-0000-0000-000000000000"; // ElementInfoKeyValue
-    private const string TCard      = "c8000001-0000-0000-0000-000000000000"; // ElementCompCard
-    private const string THero      = "c8000002-0000-0000-0000-000000000000"; // ElementCompHero
-    private const string TCtaBanner = "c8000004-0000-0000-0000-000000000000"; // ElementCompCtaBanner
-    private const string TMediaText = "c8000008-0000-0000-0000-000000000000"; // ElementCompMediaTextSplit
-    private const string TContact   = "ca000007-0000-0000-0000-000000000000"; // ElementCorpContactInfo
-    private const string TMission   = "ca000009-0000-0000-0000-000000000000"; // ElementCorpMissionBlock
 
     public PageBlockGridSeeder(IContentService contentService, ILogger logger)
     {
@@ -79,7 +56,7 @@ internal sealed class PageBlockGridSeeder
         SeedPage(pages, "Contacto",  BuildContactoGrid);
     }
 
-    // ── Infrastructure ────────────────────────────────────────────────────────
+    // ── Infrastructure ──────────────────────────────────────────────────────
 
     private IContent? FindSiteRoot()
     {
@@ -132,97 +109,12 @@ internal sealed class PageBlockGridSeeder
         }
     }
 
-    // ── JSON helpers ──────────────────────────────────────────────────────────
+    // ── Content factories — pure data, return prop dictionaries ─────────────
 
-    // UDI format: umb://element/{guid:N}  (no hyphens in path)
-    private static string Udi(Guid g) => $"umb://element/{g:N}";
-
-    // Area key format: {guid:D} (with hyphens, lowercase)
-    private static string AreaKey(Guid g) => g.ToString("D");
-
-    // Create a layout-level row (top-level block with areas)
-    private static JsonObject Row(Guid presetGuid, int colSpan, params (Guid areaKey, Guid[] items)[] areas)
-    {
-        var areaArray = new JsonArray();
-        foreach (var (aKey, items) in areas)
-        {
-            var itemArray = new JsonArray();
-            foreach (var item in items)
-            {
-                itemArray.Add(new JsonObject
-                {
-                    ["contentUdi"] = Udi(item),
-                    ["columnSpan"] = 12,
-                    ["rowSpan"]    = 1,
-                    ["areas"]      = new JsonArray()
-                });
-            }
-            areaArray.Add(new JsonObject
-            {
-                ["key"]   = AreaKey(aKey),
-                ["items"] = itemArray
-            });
-        }
-
-        return new JsonObject
-        {
-            ["contentUdi"] = Udi(presetGuid),
-            ["columnSpan"] = colSpan,
-            ["rowSpan"]    = 1,
-            ["areas"]      = areaArray
-        };
-    }
-
-    // Build a content data entry from a dictionary of property values
-    private static JsonObject ContentEntry(string contentTypeKey, Guid contentGuid, Dictionary<string, object?> props)
-    {
-        var entry = new JsonObject
-        {
-            ["contentTypeKey"] = contentTypeKey,
-            ["udi"]            = Udi(contentGuid)
-        };
-
-        foreach (var (alias, value) in props)
-        {
-            entry[alias] = value switch
-            {
-                null           => null,
-                JsonNode n     => n.DeepClone(),
-                string s       => JsonValue.Create(s),
-                int i          => JsonValue.Create(i),
-                bool b         => JsonValue.Create(b),
-                _              => JsonValue.Create(value.ToString())
-            };
-        }
-
-        return entry;
-    }
-
-    // Layout preset entries (no user-editable props, just contentTypeKey + udi)
-    private static JsonObject PresetEntry(string typeKey, Guid guid)
-        => ContentEntry(typeKey, guid, new Dictionary<string, object?>());
-
-    // Serialize the complete grid root
-    private static string SerializeGrid(JsonArray layoutItems, JsonArray contentData)
-    {
-        var root = new JsonObject
-        {
-            ["layout"]      = new JsonObject { [BgEditorAlias] = layoutItems },
-            ["contentData"] = contentData,
-            ["settingsData"] = new JsonArray()
-        };
-        return root.ToJsonString();
-    }
-
-    // ── Content factories ─────────────────────────────────────────────────────
-
-    // Helper: DropDown.Flexible raw value = JSON-serialized string e.g. `["h2"]`
-    private static string Dropdown(string value) => JsonSerializer.Serialize(new[] { value });
-
-    private static Dictionary<string, object?> Heading(string text, string level = "h2") => new()
+    private static Dictionary<string, object?> Heading(string text, HeadingLevel level = HeadingLevel.H2) => new()
     {
         ["headingText"]  = text,
-        ["headingLevel"] = Dropdown(level)
+        ["headingLevel"] = BlockGridJsonBuilder.DropdownValue(level.ToAlias())
     };
 
     private static Dictionary<string, object?> Paragraph(string title, string body) => new()
@@ -234,13 +126,13 @@ internal sealed class PageBlockGridSeeder
     private static Dictionary<string, object?> Hero(
         string headingText, string body,
         string ctaLabel, string ctaUrl,
-        string variant = "dark") => new()
+        BlockVariant variant = BlockVariant.Dark) => new()
     {
-        ["headingText"]  = headingText,
-        ["body"]         = body,
-        ["ctaLabel"]     = ctaLabel,
-        ["ctaLink"]      = Link(ctaUrl, ctaLabel),
-        ["variant"]      = Dropdown(variant)
+        ["headingText"] = headingText,
+        ["body"]        = body,
+        ["ctaLabel"]    = ctaLabel,
+        ["ctaLink"]     = BlockGridJsonBuilder.SingleLink(ctaUrl, ctaLabel),
+        ["variant"]     = BlockGridJsonBuilder.DropdownValue(variant.ToAlias())
     };
 
     private static Dictionary<string, object?> Stat(string value, string label) => new()
@@ -261,19 +153,19 @@ internal sealed class PageBlockGridSeeder
         ["title"]    = title,
         ["summary"]  = summary,
         ["ctaLabel"] = ctaLabel,
-        ["ctaLink"]  = Link(ctaUrl, ctaLabel)
+        ["ctaLink"]  = BlockGridJsonBuilder.SingleLink(ctaUrl, ctaLabel)
     };
 
     private static Dictionary<string, object?> CtaBanner(
         string title, string body,
         string ctaLabel, string ctaUrl,
-        string variant = "dark") => new()
+        BlockVariant variant = BlockVariant.Dark) => new()
     {
         ["title"]    = title,
         ["body"]     = body,
         ["ctaLabel"] = ctaLabel,
-        ["ctaLink"]  = Link(ctaUrl, ctaLabel),
-        ["variant"]  = Dropdown(variant)
+        ["ctaLink"]  = BlockGridJsonBuilder.SingleLink(ctaUrl, ctaLabel),
+        ["variant"]  = BlockGridJsonBuilder.DropdownValue(variant.ToAlias())
     };
 
     private static Dictionary<string, object?> Mission(string title, string body) => new()
@@ -287,7 +179,7 @@ internal sealed class PageBlockGridSeeder
         ["title"]    = title,
         ["body"]     = body,
         ["ctaLabel"] = ctaLabel,
-        ["ctaLink"]  = Link(ctaUrl, ctaLabel)
+        ["ctaLink"]  = BlockGridJsonBuilder.SingleLink(ctaUrl, ctaLabel)
     };
 
     private static Dictionary<string, object?> KeyValue(string title, string body) => new()
@@ -303,329 +195,273 @@ internal sealed class PageBlockGridSeeder
         ["title"]    = title,
         ["body"]     = body,
         ["ctaLabel"] = ctaLabel,
-        ["ctaLink"]  = Link(ctaUrl, ctaLabel)
+        ["ctaLink"]  = BlockGridJsonBuilder.SingleLink(ctaUrl, ctaLabel)
     };
 
-    // Umbraco multi-URL-picker stored value (JSON array with one link object)
-    private static JsonNode Link(string url, string name, string target = "_self")
-        => JsonNode.Parse(
-            $"[{{\"url\":\"{url}\",\"name\":\"{name}\",\"target\":\"{target}\",\"udi\":null}}]")!;
-
-    // ── Page grid builders ────────────────────────────────────────────────────
+    // ── Page grid builders ──────────────────────────────────────────────────
+    // Each builder is a pure declaration of "what blocks live on this page".
+    // Per-block UDIs are auto-generated; no GUID literals here.
 
     private static string BuildHomeGrid()
     {
-        var layout      = new JsonArray();
-        var contentData = new JsonArray();
+        var b = new BlockGridJsonBuilder();
 
-        // ── Row 1: Hero full-width ────────────────────────────────────────────
-        Guid r1 = new("fe000001-0000-0000-0000-000000000000"),
-             g1 = new("fe000002-0000-0000-0000-000000000000");
-        layout.Add(Row(r1, 12, (A1Main, [g1])));
-        contentData.Add(PresetEntry(T1Col, r1));
-        contentData.Add(ContentEntry(THero, g1, Hero(
+        // Row 1: Hero full-width
+        Guid heroPreset = Guid.NewGuid(), heroBlock = Guid.NewGuid();
+        b.AddRow(heroPreset, 12, (BlockGridAreaKeys.Preset1ColMain, new[] { heroBlock }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset1Col, heroPreset);
+        b.AddContent(ContentTypeKeys.ElementCompHero, heroBlock, Hero(
             "Transformación digital para tu empresa",
             "<p>Synergos es la plataforma composable que conecta tu contenido, integraciones y equipo en un solo lugar.</p>",
-            "Descubrir nuestros servicios", "/servicios")));
+            "Descubrir nuestros servicios", "/servicios"));
 
-        // ── Row 2: Section heading ────────────────────────────────────────────
-        Guid r2 = new("fe000010-0000-0000-0000-000000000000"),
-             g2 = new("fe000011-0000-0000-0000-000000000000");
-        layout.Add(Row(r2, 12, (A1Main, [g2])));
-        contentData.Add(PresetEntry(T1Col, r2));
-        contentData.Add(ContentEntry(THeading, g2, Heading("Synergos en números")));
+        // Row 2: Stats heading
+        AddSingleHeading(b, "Synergos en números");
 
-        // ── Row 3: 4 Stats ────────────────────────────────────────────────────
-        Guid r3  = new("fe000020-0000-0000-0000-000000000000"),
-             s1  = new("fe000021-0000-0000-0000-000000000000"),
-             s2  = new("fe000022-0000-0000-0000-000000000000"),
-             s3  = new("fe000023-0000-0000-0000-000000000000"),
-             s4  = new("fe000024-0000-0000-0000-000000000000");
-        layout.Add(Row(r3, 12, (A4Col1, [s1]), (A4Col2, [s2]), (A4Col3, [s3]), (A4Col4, [s4])));
-        contentData.Add(PresetEntry(T4Col, r3));
-        contentData.Add(ContentEntry(TStat, s1, Stat("150+",  "Clientes satisfechos")));
-        contentData.Add(ContentEntry(TStat, s2, Stat("98%",   "Tasa de satisfacción")));
-        contentData.Add(ContentEntry(TStat, s3, Stat("50+",   "Integraciones disponibles")));
-        contentData.Add(ContentEntry(TStat, s4, Stat("24/7",  "Soporte técnico")));
+        // Row 3: 4 Stats
+        AddFourStats(b,
+            ("150+",  "Clientes satisfechos"),
+            ("98%",   "Tasa de satisfacción"),
+            ("50+",   "Integraciones disponibles"),
+            ("24/7",  "Soporte técnico"));
 
-        // ── Row 4: Why heading ────────────────────────────────────────────────
-        Guid r4 = new("fe000030-0000-0000-0000-000000000000"),
-             g4 = new("fe000031-0000-0000-0000-000000000000");
-        layout.Add(Row(r4, 12, (A1Main, [g4])));
-        contentData.Add(PresetEntry(T1Col, r4));
-        contentData.Add(ContentEntry(THeading, g4, Heading("¿Por qué Synergos?")));
+        // Row 4: Why heading
+        AddSingleHeading(b, "¿Por qué Synergos?");
 
-        // ── Row 5: 3 Features ─────────────────────────────────────────────────
-        Guid r5 = new("fe000040-0000-0000-0000-000000000000"),
-             f1 = new("fe000041-0000-0000-0000-000000000000"),
-             f2 = new("fe000042-0000-0000-0000-000000000000"),
-             f3 = new("fe000043-0000-0000-0000-000000000000");
-        layout.Add(Row(r5, 12, (A3Col1, [f1]), (A3Col2, [f2]), (A3Col3, [f3])));
-        contentData.Add(PresetEntry(T3Col, r5));
-        contentData.Add(ContentEntry(TFeature, f1, Feature(
-            "Composable",
-            "Construye a tu medida",
-            "Elige los bloques que necesitas y combínalos sin restricciones. Sin dependencias rígidas ni bloqueos de proveedor.")));
-        contentData.Add(ContentEntry(TFeature, f2, Feature(
-            "Integrado",
-            "Conecta con tu ecosistema",
-            "APIs abiertas, webhooks y conectores nativos para tus herramientas favoritas. Todo en un solo flujo.")));
-        contentData.Add(ContentEntry(TFeature, f3, Feature(
-            "Escalable",
-            "Crece sin límites técnicos",
-            "Arquitectura cloud-native diseñada para escalar desde 10 hasta 10 millones de usuarios sin cambiar de plataforma.")));
+        // Row 5: 3 Features
+        AddThreeFeatures(b,
+            ("Composable", "Construye a tu medida",
+             "Elige los bloques que necesitas y combínalos sin restricciones. Sin dependencias rígidas ni bloqueos de proveedor."),
+            ("Integrado",  "Conecta con tu ecosistema",
+             "APIs abiertas, webhooks y conectores nativos para tus herramientas favoritas. Todo en un solo flujo."),
+            ("Escalable",  "Crece sin límites técnicos",
+             "Arquitectura cloud-native diseñada para escalar desde 10 hasta 10 millones de usuarios sin cambiar de plataforma."));
 
-        // ── Row 6: CTA Banner ─────────────────────────────────────────────────
-        Guid r6 = new("fe000050-0000-0000-0000-000000000000"),
-             g6 = new("fe000051-0000-0000-0000-000000000000");
-        layout.Add(Row(r6, 12, (A1Main, [g6])));
-        contentData.Add(PresetEntry(T1Col, r6));
-        contentData.Add(ContentEntry(TCtaBanner, g6, CtaBanner(
+        // Row 6: CTA Banner
+        AddCtaBanner(b,
             "¿Listo para transformar tu empresa?",
             "<p>Habla con nuestro equipo y descubre cómo Synergos se adapta a tu negocio desde el primer día.</p>",
-            "Solicitar una demo", "/contacto")));
+            "Solicitar una demo", "/contacto");
 
-        return SerializeGrid(layout, contentData);
+        return b.ToJson();
     }
 
     private static string BuildNosotrosGrid()
     {
-        var layout      = new JsonArray();
-        var contentData = new JsonArray();
+        var b = new BlockGridJsonBuilder();
 
-        // ── Row 1: Main heading ───────────────────────────────────────────────
-        Guid r1 = new("fe000101-0000-0000-0000-000000000000"),
-             g1 = new("fe000102-0000-0000-0000-000000000000");
-        layout.Add(Row(r1, 12, (A1Main, [g1])));
-        contentData.Add(PresetEntry(T1Col, r1));
-        contentData.Add(ContentEntry(THeading, g1, Heading("Nuestra Historia", "h1")));
+        AddSingleHeading(b, "Nuestra Historia", HeadingLevel.H1);
 
-        // ── Row 2: Intro paragraph ────────────────────────────────────────────
-        Guid r2 = new("fe000110-0000-0000-0000-000000000000"),
-             g2 = new("fe000111-0000-0000-0000-000000000000");
-        layout.Add(Row(r2, 12, (A1Main, [g2])));
-        contentData.Add(PresetEntry(T1Col, r2));
-        contentData.Add(ContentEntry(TParagraph, g2, Paragraph(
-            "Quiénes somos",
+        AddSingleParagraph(b, "Quiénes somos",
             "<p>Synergos nació de la convicción de que la tecnología empresarial puede ser a la vez poderosa y accesible. " +
-            "Desde 2018 ayudamos a organizaciones a modernizar su presencia digital con una plataforma que crece junto a ellas.</p>")));
+            "Desde 2018 ayudamos a organizaciones a modernizar su presencia digital con una plataforma que crece junto a ellas.</p>");
 
-        // ── Row 3: Mission + Vision ───────────────────────────────────────────
-        Guid r3 = new("fe000120-0000-0000-0000-000000000000"),
-             m1 = new("fe000121-0000-0000-0000-000000000000"),
-             m2 = new("fe000122-0000-0000-0000-000000000000");
-        layout.Add(Row(r3, 12, (A2Left, [m1]), (A2Right, [m2])));
-        contentData.Add(PresetEntry(T2Col, r3));
-        contentData.Add(ContentEntry(TMission, m1, Mission(
+        // Mission + Vision side by side
+        Guid mvPreset = Guid.NewGuid(), missionBlock = Guid.NewGuid(), visionBlock = Guid.NewGuid();
+        b.AddRow(mvPreset, 12,
+            (BlockGridAreaKeys.Preset2ColLeft,  new[] { missionBlock }),
+            (BlockGridAreaKeys.Preset2ColRight, new[] { visionBlock  }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset2ColEqual, mvPreset);
+        b.AddContent(ContentTypeKeys.ElementCorpMissionBlock, missionBlock, Mission(
             "Misión",
             "<p>Democratizar el acceso a tecnología CMS de clase empresarial, permitiendo que cualquier organización " +
-            "pueda construir, publicar y optimizar experiencias digitales sin depender de equipos técnicos especializados.</p>")));
-        contentData.Add(ContentEntry(TMission, m2, Mission(
+            "pueda construir, publicar y optimizar experiencias digitales sin depender de equipos técnicos especializados.</p>"));
+        b.AddContent(ContentTypeKeys.ElementCorpMissionBlock, visionBlock, Mission(
             "Visión",
             "<p>Ser la plataforma composable de referencia en Latinoamérica, reconocida por transformar la manera en que " +
-            "las empresas crean y gestionan su contenido digital con agilidad, autonomía y excelencia.</p>")));
+            "las empresas crean y gestionan su contenido digital con agilidad, autonomía y excelencia.</p>"));
 
-        // ── Row 4: Values heading ─────────────────────────────────────────────
-        Guid r4 = new("fe000130-0000-0000-0000-000000000000"),
-             g4 = new("fe000131-0000-0000-0000-000000000000");
-        layout.Add(Row(r4, 12, (A1Main, [g4])));
-        contentData.Add(PresetEntry(T1Col, r4));
-        contentData.Add(ContentEntry(THeading, g4, Heading("Nuestros Valores")));
+        AddSingleHeading(b, "Nuestros Valores");
 
-        // ── Row 5: 3 Value Features ───────────────────────────────────────────
-        Guid r5 = new("fe000140-0000-0000-0000-000000000000"),
-             v1 = new("fe000141-0000-0000-0000-000000000000"),
-             v2 = new("fe000142-0000-0000-0000-000000000000"),
-             v3 = new("fe000143-0000-0000-0000-000000000000");
-        layout.Add(Row(r5, 12, (A3Col1, [v1]), (A3Col2, [v2]), (A3Col3, [v3])));
-        contentData.Add(PresetEntry(T3Col, r5));
-        contentData.Add(ContentEntry(TFeature, v1, Feature(
-            "Innovación",
-            "Siempre un paso adelante",
-            "Invertimos continuamente en investigación y desarrollo para ofrecer capacidades que anticipan las necesidades del mercado.")));
-        contentData.Add(ContentEntry(TFeature, v2, Feature(
-            "Confianza",
-            "Relaciones a largo plazo",
-            "Construimos relaciones duraderas basadas en transparencia, cumplimiento y resultados medibles que hablan por sí solos.")));
-        contentData.Add(ContentEntry(TFeature, v3, Feature(
-            "Excelencia",
-            "Calidad sin concesiones",
-            "Cada línea de código, cada interfaz y cada integración se diseña con el estándar más alto de calidad y usabilidad.")));
+        AddThreeFeatures(b,
+            ("Innovación", "Siempre un paso adelante",
+             "Invertimos continuamente en investigación y desarrollo para ofrecer capacidades que anticipan las necesidades del mercado."),
+            ("Confianza",  "Relaciones a largo plazo",
+             "Construimos relaciones duraderas basadas en transparencia, cumplimiento y resultados medibles que hablan por sí solos."),
+            ("Excelencia", "Calidad sin concesiones",
+             "Cada línea de código, cada interfaz y cada integración se diseña con el estándar más alto de calidad y usabilidad."));
 
-        // ── Row 6: Team stats ─────────────────────────────────────────────────
-        Guid r6 = new("fe000150-0000-0000-0000-000000000000"),
-             t1 = new("fe000151-0000-0000-0000-000000000000"),
-             t2 = new("fe000152-0000-0000-0000-000000000000"),
-             t3 = new("fe000153-0000-0000-0000-000000000000"),
-             t4 = new("fe000154-0000-0000-0000-000000000000");
-        layout.Add(Row(r6, 12, (A4Col1, [t1]), (A4Col2, [t2]), (A4Col3, [t3]), (A4Col4, [t4])));
-        contentData.Add(PresetEntry(T4Col, r6));
-        contentData.Add(ContentEntry(TStat, t1, Stat("8+",  "Años de experiencia")));
-        contentData.Add(ContentEntry(TStat, t2, Stat("45",  "Profesionales en equipo")));
-        contentData.Add(ContentEntry(TStat, t3, Stat("200+","Proyectos entregados")));
-        contentData.Add(ContentEntry(TStat, t4, Stat("12",  "Países con presencia")));
+        AddFourStats(b,
+            ("8+",   "Años de experiencia"),
+            ("45",   "Profesionales en equipo"),
+            ("200+", "Proyectos entregados"),
+            ("12",   "Países con presencia"));
 
-        // ── Row 7: CTA ────────────────────────────────────────────────────────
-        Guid r7 = new("fe000160-0000-0000-0000-000000000000"),
-             g7 = new("fe000161-0000-0000-0000-000000000000");
-        layout.Add(Row(r7, 12, (A1Main, [g7])));
-        contentData.Add(PresetEntry(T1Col, r7));
-        contentData.Add(ContentEntry(TCtaBanner, g7, CtaBanner(
+        AddCtaBanner(b,
             "Únete a nuestra historia",
             "<p>¿Quieres ser parte de la transformación digital de la región? Hablemos sobre cómo podemos colaborar.</p>",
-            "Contáctanos", "/contacto")));
+            "Contáctanos", "/contacto");
 
-        return SerializeGrid(layout, contentData);
+        return b.ToJson();
     }
 
     private static string BuildServiciosGrid()
     {
-        var layout      = new JsonArray();
-        var contentData = new JsonArray();
+        var b = new BlockGridJsonBuilder();
 
-        // ── Row 1: Main heading ───────────────────────────────────────────────
-        Guid r1 = new("fe000201-0000-0000-0000-000000000000"),
-             g1 = new("fe000202-0000-0000-0000-000000000000");
-        layout.Add(Row(r1, 12, (A1Main, [g1])));
-        contentData.Add(PresetEntry(T1Col, r1));
-        contentData.Add(ContentEntry(THeading, g1, Heading("Nuestros Servicios", "h1")));
+        AddSingleHeading(b, "Nuestros Servicios", HeadingLevel.H1);
 
-        // ── Row 2: Intro ──────────────────────────────────────────────────────
-        Guid r2 = new("fe000210-0000-0000-0000-000000000000"),
-             g2 = new("fe000211-0000-0000-0000-000000000000");
-        layout.Add(Row(r2, 12, (A1Main, [g2])));
-        contentData.Add(PresetEntry(T1Col, r2));
-        contentData.Add(ContentEntry(TParagraph, g2, Paragraph(
-            "Soluciones a la medida de tu empresa",
+        AddSingleParagraph(b, "Soluciones a la medida de tu empresa",
             "<p>Ofrecemos un ecosistema completo de servicios digitales que se adaptan a las necesidades y el ritmo de cada organización, " +
-            "desde startups hasta grandes corporaciones con requisitos enterprise.</p>")));
+            "desde startups hasta grandes corporaciones con requisitos enterprise.</p>");
 
-        // ── Row 3: 3 Service cards ────────────────────────────────────────────
-        Guid r3 = new("fe000220-0000-0000-0000-000000000000"),
-             c1 = new("fe000221-0000-0000-0000-000000000000"),
-             c2 = new("fe000222-0000-0000-0000-000000000000"),
-             c3 = new("fe000223-0000-0000-0000-000000000000");
-        layout.Add(Row(r3, 12, (A3Col1, [c1]), (A3Col2, [c2]), (A3Col3, [c3])));
-        contentData.Add(PresetEntry(T3Col, r3));
-        contentData.Add(ContentEntry(TCard, c1, Card(
+        // 3 Service cards
+        Guid cardsPreset = Guid.NewGuid(),
+             card1 = Guid.NewGuid(), card2 = Guid.NewGuid(), card3 = Guid.NewGuid();
+        b.AddRow(cardsPreset, 12,
+            (BlockGridAreaKeys.Preset3Col1, new[] { card1 }),
+            (BlockGridAreaKeys.Preset3Col2, new[] { card2 }),
+            (BlockGridAreaKeys.Preset3Col3, new[] { card3 }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset3ColEqual, cardsPreset);
+        b.AddContent(ContentTypeKeys.ElementCompCard, card1, Card(
             "Consultoría Digital",
             "Diagnóstico, estrategia y hoja de ruta para tu transformación digital. Acompañamos a tu equipo desde la visión hasta la ejecución.",
-            "Saber más", "/contacto")));
-        contentData.Add(ContentEntry(TCard, c2, Card(
+            "Saber más", "/contacto"));
+        b.AddContent(ContentTypeKeys.ElementCompCard, card2, Card(
             "CMS Empresarial",
             "Implementación y personalización de Synergos CMS adaptado a los flujos editoriales y de gobierno de tu organización.",
-            "Saber más", "/contacto")));
-        contentData.Add(ContentEntry(TCard, c3, Card(
+            "Saber más", "/contacto"));
+        b.AddContent(ContentTypeKeys.ElementCompCard, card3, Card(
             "Integraciones",
             "Conectamos tu CMS con ERP, CRM, plataformas de marketing, analytics y cualquier API de tu ecosistema tecnológico.",
-            "Saber más", "/contacto")));
+            "Saber más", "/contacto"));
 
-        // ── Row 4: Process heading ────────────────────────────────────────────
-        Guid r4 = new("fe000230-0000-0000-0000-000000000000"),
-             g4 = new("fe000231-0000-0000-0000-000000000000");
-        layout.Add(Row(r4, 12, (A1Main, [g4])));
-        contentData.Add(PresetEntry(T1Col, r4));
-        contentData.Add(ContentEntry(THeading, g4, Heading("Nuestro Proceso")));
+        AddSingleHeading(b, "Nuestro Proceso");
 
-        // ── Row 5: 4 Process steps ────────────────────────────────────────────
-        Guid r5 = new("fe000240-0000-0000-0000-000000000000"),
-             p1 = new("fe000241-0000-0000-0000-000000000000"),
-             p2 = new("fe000242-0000-0000-0000-000000000000"),
-             p3 = new("fe000243-0000-0000-0000-000000000000"),
-             p4 = new("fe000244-0000-0000-0000-000000000000");
-        layout.Add(Row(r5, 12, (A4Col1, [p1]), (A4Col2, [p2]), (A4Col3, [p3]), (A4Col4, [p4])));
-        contentData.Add(PresetEntry(T4Col, r5));
-        contentData.Add(ContentEntry(TStat, p1, Stat("01", "Diagnóstico y estrategia")));
-        contentData.Add(ContentEntry(TStat, p2, Stat("02", "Diseño y arquitectura")));
-        contentData.Add(ContentEntry(TStat, p3, Stat("03", "Desarrollo e integración")));
-        contentData.Add(ContentEntry(TStat, p4, Stat("04", "Lanzamiento y soporte")));
+        AddFourStats(b,
+            ("01", "Diagnóstico y estrategia"),
+            ("02", "Diseño y arquitectura"),
+            ("03", "Desarrollo e integración"),
+            ("04", "Lanzamiento y soporte"));
 
-        // ── Row 6: Media + Text split ─────────────────────────────────────────
-        Guid r6 = new("fe000250-0000-0000-0000-000000000000"),
-             g6 = new("fe000251-0000-0000-0000-000000000000");
-        layout.Add(Row(r6, 12, (A1Main, [g6])));
-        contentData.Add(PresetEntry(T1Col, r6));
-        contentData.Add(ContentEntry(TMediaText, g6, MediaText(
+        // Media + Text split
+        Guid mtPreset = Guid.NewGuid(), mtBlock = Guid.NewGuid();
+        b.AddRow(mtPreset, 12, (BlockGridAreaKeys.Preset1ColMain, new[] { mtBlock }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset1Col, mtPreset);
+        b.AddContent(ContentTypeKeys.ElementCompMediaTextSplit, mtBlock, MediaText(
             "Tecnología que trabaja para ti",
             "<p>Nuestro equipo de especialistas combina expertise técnico con comprensión del negocio para entregar " +
             "soluciones que realmente funcionan en el mundo real — con plazos cumplidos y resultados medibles.</p>",
-            "Hablar con un especialista", "/contacto")));
+            "Hablar con un especialista", "/contacto"));
 
-        // ── Row 7: CTA ────────────────────────────────────────────────────────
-        Guid r7 = new("fe000260-0000-0000-0000-000000000000"),
-             g7 = new("fe000261-0000-0000-0000-000000000000");
-        layout.Add(Row(r7, 12, (A1Main, [g7])));
-        contentData.Add(PresetEntry(T1Col, r7));
-        contentData.Add(ContentEntry(TCtaBanner, g7, CtaBanner(
+        AddCtaBanner(b,
             "¿Tienes un proyecto en mente?",
             "<p>Cuéntanos qué necesitas y te mostraremos cómo Synergos puede ayudarte a lograrlo más rápido y con menos riesgo.</p>",
-            "Solicitar propuesta", "/contacto")));
+            "Solicitar propuesta", "/contacto");
 
-        return SerializeGrid(layout, contentData);
+        return b.ToJson();
     }
 
     private static string BuildContactoGrid()
     {
-        var layout      = new JsonArray();
-        var contentData = new JsonArray();
+        var b = new BlockGridJsonBuilder();
 
-        // ── Row 1: Main heading ───────────────────────────────────────────────
-        Guid r1 = new("fe000301-0000-0000-0000-000000000000"),
-             g1 = new("fe000302-0000-0000-0000-000000000000");
-        layout.Add(Row(r1, 12, (A1Main, [g1])));
-        contentData.Add(PresetEntry(T1Col, r1));
-        contentData.Add(ContentEntry(THeading, g1, Heading("Ponte en Contacto", "h1")));
+        AddSingleHeading(b, "Ponte en Contacto", HeadingLevel.H1);
 
-        // ── Row 2: Intro ──────────────────────────────────────────────────────
-        Guid r2 = new("fe000310-0000-0000-0000-000000000000"),
-             g2 = new("fe000311-0000-0000-0000-000000000000");
-        layout.Add(Row(r2, 12, (A1Main, [g2])));
-        contentData.Add(PresetEntry(T1Col, r2));
-        contentData.Add(ContentEntry(TParagraph, g2, Paragraph(
-            "Estamos aquí para ayudarte",
-            "<p>¿Tienes preguntas, quieres una demo o estás listo para iniciar tu proyecto? Nuestro equipo responde en menos de 24 horas.</p>")));
+        AddSingleParagraph(b, "Estamos aquí para ayudarte",
+            "<p>¿Tienes preguntas, quieres una demo o estás listo para iniciar tu proyecto? Nuestro equipo responde en menos de 24 horas.</p>");
 
-        // ── Row 3: 2 Contact blocks ───────────────────────────────────────────
-        Guid r3 = new("fe000320-0000-0000-0000-000000000000"),
-             ci1 = new("fe000321-0000-0000-0000-000000000000"),
-             ci2 = new("fe000322-0000-0000-0000-000000000000");
-        layout.Add(Row(r3, 12, (A2Left, [ci1]), (A2Right, [ci2])));
-        contentData.Add(PresetEntry(T2Col, r3));
-        contentData.Add(ContentEntry(TContact, ci1, ContactInfo(
+        // 2 Contact blocks side by side
+        Guid contactPreset = Guid.NewGuid(), contact1 = Guid.NewGuid(), contact2 = Guid.NewGuid();
+        b.AddRow(contactPreset, 12,
+            (BlockGridAreaKeys.Preset2ColLeft,  new[] { contact1 }),
+            (BlockGridAreaKeys.Preset2ColRight, new[] { contact2 }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset2ColEqual, contactPreset);
+        b.AddContent(ContentTypeKeys.ElementCorpContactInfo, contact1, ContactInfo(
             "Escríbenos",
             "<p>Envíanos un correo y te respondemos en menos de un día hábil.</p>" +
             "<p><strong>Email:</strong> hola@synergos.com<br/><strong>Soporte:</strong> soporte@synergos.com</p>",
-            "Enviar correo", "mailto:hola@synergos.com")));
-        contentData.Add(ContentEntry(TContact, ci2, ContactInfo(
+            "Enviar correo", "mailto:hola@synergos.com"));
+        b.AddContent(ContentTypeKeys.ElementCorpContactInfo, contact2, ContactInfo(
             "Nuestra Oficina",
             "<p>Visítanos o llámanos directamente.</p>" +
             "<p><strong>Dirección:</strong> Calle 72 # 10-07, Bogotá<br/><strong>Teléfono:</strong> +57 1 234 5678</p>",
-            "Ver en mapa", "https://maps.google.com")));
+            "Ver en mapa", "https://maps.google.com"));
 
-        // ── Row 4: FAQ heading ────────────────────────────────────────────────
-        Guid r4 = new("fe000330-0000-0000-0000-000000000000"),
-             g4 = new("fe000331-0000-0000-0000-000000000000");
-        layout.Add(Row(r4, 12, (A1Main, [g4])));
-        contentData.Add(PresetEntry(T1Col, r4));
-        contentData.Add(ContentEntry(THeading, g4, Heading("Preguntas Frecuentes")));
+        AddSingleHeading(b, "Preguntas Frecuentes");
 
-        // ── Row 5: 3 FAQ items ────────────────────────────────────────────────
-        Guid r5 = new("fe000340-0000-0000-0000-000000000000"),
-             q1 = new("fe000341-0000-0000-0000-000000000000"),
-             q2 = new("fe000342-0000-0000-0000-000000000000"),
-             q3 = new("fe000343-0000-0000-0000-000000000000");
-        layout.Add(Row(r5, 12, (A3Col1, [q1]), (A3Col2, [q2]), (A3Col3, [q3])));
-        contentData.Add(PresetEntry(T3Col, r5));
-        contentData.Add(ContentEntry(TKeyValue, q1, KeyValue(
+        // 3 FAQ items
+        Guid faqPreset = Guid.NewGuid(), q1 = Guid.NewGuid(), q2 = Guid.NewGuid(), q3 = Guid.NewGuid();
+        b.AddRow(faqPreset, 12,
+            (BlockGridAreaKeys.Preset3Col1, new[] { q1 }),
+            (BlockGridAreaKeys.Preset3Col2, new[] { q2 }),
+            (BlockGridAreaKeys.Preset3Col3, new[] { q3 }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset3ColEqual, faqPreset);
+        b.AddContent(ContentTypeKeys.ElementInfoKeyValue, q1, KeyValue(
             "¿Cuánto tiempo toma implementar Synergos?",
-            "<p>Un sitio estándar tarda entre 4 y 8 semanas. Proyectos con integraciones complejas pueden requerir 3 meses. Siempre iniciamos con una fase de diagnóstico.</p>")));
-        contentData.Add(ContentEntry(TKeyValue, q2, KeyValue(
+            "<p>Un sitio estándar tarda entre 4 y 8 semanas. Proyectos con integraciones complejas pueden requerir 3 meses. Siempre iniciamos con una fase de diagnóstico.</p>"));
+        b.AddContent(ContentTypeKeys.ElementInfoKeyValue, q2, KeyValue(
             "¿Ofrecen soporte después del lanzamiento?",
-            "<p>Sí. Todos nuestros proyectos incluyen 3 meses de soporte post-lanzamiento y planes de mantenimiento continuo según las necesidades de cada cliente.</p>")));
-        contentData.Add(ContentEntry(TKeyValue, q3, KeyValue(
+            "<p>Sí. Todos nuestros proyectos incluyen 3 meses de soporte post-lanzamiento y planes de mantenimiento continuo según las necesidades de cada cliente.</p>"));
+        b.AddContent(ContentTypeKeys.ElementInfoKeyValue, q3, KeyValue(
             "¿Puedo migrar mi contenido existente?",
-            "<p>Absolutamente. Contamos con herramientas de migración para los CMS más populares (WordPress, Drupal, Contentful) y desarrollamos migraciones personalizadas cuando es necesario.</p>")));
+            "<p>Absolutamente. Contamos con herramientas de migración para los CMS más populares (WordPress, Drupal, Contentful) y desarrollamos migraciones personalizadas cuando es necesario.</p>"));
 
-        return SerializeGrid(layout, contentData);
+        return b.ToJson();
+    }
+
+    // ── Layout shorthands — encapsulate repeated row patterns ───────────────
+
+    private static void AddSingleHeading(
+        BlockGridJsonBuilder b, string text, HeadingLevel level = HeadingLevel.H2)
+    {
+        Guid preset = Guid.NewGuid(), heading = Guid.NewGuid();
+        b.AddRow(preset, 12, (BlockGridAreaKeys.Preset1ColMain, new[] { heading }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset1Col, preset);
+        b.AddContent(ContentTypeKeys.ElementTextHeading, heading, Heading(text, level));
+    }
+
+    private static void AddSingleParagraph(BlockGridJsonBuilder b, string title, string body)
+    {
+        Guid preset = Guid.NewGuid(), paragraph = Guid.NewGuid();
+        b.AddRow(preset, 12, (BlockGridAreaKeys.Preset1ColMain, new[] { paragraph }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset1Col, preset);
+        b.AddContent(ContentTypeKeys.ElementTextParagraph, paragraph, Paragraph(title, body));
+    }
+
+    private static void AddCtaBanner(
+        BlockGridJsonBuilder b, string title, string body, string ctaLabel, string ctaUrl)
+    {
+        Guid preset = Guid.NewGuid(), banner = Guid.NewGuid();
+        b.AddRow(preset, 12, (BlockGridAreaKeys.Preset1ColMain, new[] { banner }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset1Col, preset);
+        b.AddContent(ContentTypeKeys.ElementCompCtaBanner, banner, CtaBanner(title, body, ctaLabel, ctaUrl));
+    }
+
+    private static void AddFourStats(BlockGridJsonBuilder b,
+        (string Value, string Label) s1,
+        (string Value, string Label) s2,
+        (string Value, string Label) s3,
+        (string Value, string Label) s4)
+    {
+        Guid preset = Guid.NewGuid();
+        Guid b1 = Guid.NewGuid(), b2 = Guid.NewGuid(), b3 = Guid.NewGuid(), b4 = Guid.NewGuid();
+        b.AddRow(preset, 12,
+            (BlockGridAreaKeys.Preset4Col1, new[] { b1 }),
+            (BlockGridAreaKeys.Preset4Col2, new[] { b2 }),
+            (BlockGridAreaKeys.Preset4Col3, new[] { b3 }),
+            (BlockGridAreaKeys.Preset4Col4, new[] { b4 }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset4ColEqual, preset);
+        b.AddContent(ContentTypeKeys.ElementInfoStat, b1, Stat(s1.Value, s1.Label));
+        b.AddContent(ContentTypeKeys.ElementInfoStat, b2, Stat(s2.Value, s2.Label));
+        b.AddContent(ContentTypeKeys.ElementInfoStat, b3, Stat(s3.Value, s3.Label));
+        b.AddContent(ContentTypeKeys.ElementInfoStat, b4, Stat(s4.Value, s4.Label));
+    }
+
+    private static void AddThreeFeatures(BlockGridJsonBuilder b,
+        (string Title, string Subtitle, string Summary) f1,
+        (string Title, string Subtitle, string Summary) f2,
+        (string Title, string Subtitle, string Summary) f3)
+    {
+        Guid preset = Guid.NewGuid();
+        Guid b1 = Guid.NewGuid(), b2 = Guid.NewGuid(), b3 = Guid.NewGuid();
+        b.AddRow(preset, 12,
+            (BlockGridAreaKeys.Preset3Col1, new[] { b1 }),
+            (BlockGridAreaKeys.Preset3Col2, new[] { b2 }),
+            (BlockGridAreaKeys.Preset3Col3, new[] { b3 }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset3ColEqual, preset);
+        b.AddContent(ContentTypeKeys.ElementInfoFeature, b1, Feature(f1.Title, f1.Subtitle, f1.Summary));
+        b.AddContent(ContentTypeKeys.ElementInfoFeature, b2, Feature(f2.Title, f2.Subtitle, f2.Summary));
+        b.AddContent(ContentTypeKeys.ElementInfoFeature, b3, Feature(f3.Title, f3.Subtitle, f3.Summary));
     }
 }
