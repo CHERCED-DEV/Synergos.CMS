@@ -5,9 +5,29 @@ using Umbraco.Cms.Core.Strings;
 namespace Synergos.CMS.Schema.Initializers;
 
 /// <summary>
-/// Creates Umbraco Macros for inline composition within Rich Text Editors.
-/// Each macro reuses the same rendering infrastructure as Block Grid elements.
-/// Idempotent: creates macros that don't exist; patches MacroSource on stale entries.
+/// Creates Umbraco Macros for inline composition within Rich Text Editors and for
+/// the Block Grid MacroDispatcher. Each macro reuses the same rendering infrastructure
+/// as Block Grid elements.
+///
+/// Idempotent: <see cref="EnsureMacro"/> creates macros that don't exist and patches
+/// <c>MacroSource</c> on stale entries (e.g. when a partial view moves to a subfolder).
+///
+/// Organized by family — one private method per family, called sequentially from
+/// <see cref="Initialize"/>:
+///
+///   - Native      — SSR-only Razor partials for Rich Text editor inserts.
+///   - CDN Modules — large compound web components (hero, banner, faq-section…).
+///   - CDN Compositions — medium reusable groupings (card, media-text, alert-bar…).
+///   - CDN Primitives  — atomic building blocks (badge, button, divider…).
+///   - CDN Experiences — interactive experiences (carousel, quiz, filter-board…).
+///   - CDN Shop        — e-commerce (product-card, cart-summary…).
+///
+/// Adding a macro:
+///   1. Add a call to the appropriate <c>EnsureXxxMacros</c> method.
+///   2. Create the partial under <c>Views/MacroPartials/&lt;Family&gt;/&lt;Name&gt;.cshtml</c>.
+///   3. Bump <c>SchemaVersion.Value</c>.
+///
+/// Removing a macro: append its alias to <see cref="CleanupLegacyMacros"/>.
 /// </summary>
 internal sealed class MacroInitializer : ISchemaInitializer
 {
@@ -26,8 +46,19 @@ internal sealed class MacroInitializer : ISchemaInitializer
 
     public void Initialize()
     {
-        // ── Native macros (Rich Text Editor helpers) ──────────────────────────
+        EnsureNativeMacros();
+        EnsureCdnModuleMacros();
+        EnsureCdnCompositionMacros();
+        EnsureCdnPrimitiveMacros();
+        EnsureCdnExperienceMacros();
+        EnsureCdnShopMacros();
+        CleanupLegacyMacros();
+    }
 
+    // ── Native macros (Rich Text Editor helpers) ─────────────────────────────
+
+    private void EnsureNativeMacros()
+    {
         EnsureMacro("macroCtaButton", "Macro.CtaButton", "Native/CtaButton",
             ("label",   "Label",   TextBox),
             ("url",     "URL",     TextBox),
@@ -79,20 +110,23 @@ internal sealed class MacroInitializer : ISchemaInitializer
             ("summary",  "Summary",   TextBox),
             ("imageUrl", "Image URL", TextBox),
             ("linkUrl",  "Link URL",  TextBox));
+    }
 
-        // ── CDN Angular elements — Modules ────────────────────────────────────
+    // ── CDN Angular elements — Modules (large compound components) ───────────
 
+    private void EnsureCdnModuleMacros()
+    {
         EnsureMacro("cdnHero", "Cdn.Hero", "Modules/CdnHero",
-            ("headingText",  "Heading",      TextBox),
-            ("headingLevel", "Heading Level",TextBox),
-            ("body",         "Body",         TextArea),
-            ("imageSrc",     "Image URL",    TextBox),
-            ("imageAlt",     "Image Alt",    TextBox),
-            ("ctaLabel",     "CTA Label",    TextBox),
-            ("ctaUrl",       "CTA URL",      TextBox),
-            ("ctaTarget",    "CTA Target",   TextBox),
-            ("variant",      "Variant",      TextBox),
-            ("theme",        "Theme",        TextBox));
+            ("headingText",  "Heading",       TextBox),
+            ("headingLevel", "Heading Level", TextBox),
+            ("body",         "Body",          TextArea),
+            ("imageSrc",     "Image URL",     TextBox),
+            ("imageAlt",     "Image Alt",     TextBox),
+            ("ctaLabel",     "CTA Label",     TextBox),
+            ("ctaUrl",       "CTA URL",       TextBox),
+            ("ctaTarget",    "CTA Target",    TextBox),
+            ("variant",      "Variant",       TextBox),
+            ("theme",        "Theme",         TextBox));
 
         EnsureMacro("cdnBanner", "Cdn.Banner", "Modules/CdnBanner",
             ("title",     "Title",      TextBox),
@@ -145,9 +179,12 @@ internal sealed class MacroInitializer : ISchemaInitializer
         EnsureMacro("cdnScriptEmbed", "Cdn.ScriptEmbed", "Modules/CdnScriptEmbed",
             ("scriptType", "Script Type", TextBox),
             ("content",    "Script Code", TextArea));
+    }
 
-        // ── CDN Angular elements — Compositions ───────────────────────────────
+    // ── CDN Angular elements — Compositions (medium reusable groupings) ──────
 
+    private void EnsureCdnCompositionMacros()
+    {
         EnsureMacro("cdnCard", "Cdn.Card", "Compositions/CdnCard",
             ("title",     "Title",      TextBox),
             ("subtitle",  "Subtitle",   TextBox),
@@ -188,15 +225,15 @@ internal sealed class MacroInitializer : ISchemaInitializer
             ("gap",       "Gap",       TextBox));
 
         EnsureMacro("cdnCtaGroup", "Cdn.CtaGroup", "Compositions/CdnCtaGroup",
-            ("primaryLabel",    "Primary Label",    TextBox),
-            ("primaryUrl",      "Primary URL",      TextBox),
-            ("primaryTarget",   "Primary Target",   TextBox),
-            ("primaryVariant",  "Primary Variant",  TextBox),
-            ("secondaryLabel",  "Secondary Label",  TextBox),
-            ("secondaryUrl",    "Secondary URL",    TextBox),
-            ("secondaryTarget", "Secondary Target", TextBox),
-            ("secondaryVariant","Secondary Variant",TextBox),
-            ("alignment",       "Alignment",        TextBox));
+            ("primaryLabel",     "Primary Label",     TextBox),
+            ("primaryUrl",       "Primary URL",       TextBox),
+            ("primaryTarget",    "Primary Target",    TextBox),
+            ("primaryVariant",   "Primary Variant",   TextBox),
+            ("secondaryLabel",   "Secondary Label",   TextBox),
+            ("secondaryUrl",     "Secondary URL",     TextBox),
+            ("secondaryTarget",  "Secondary Target",  TextBox),
+            ("secondaryVariant", "Secondary Variant", TextBox),
+            ("alignment",        "Alignment",         TextBox));
 
         EnsureMacro("cdnFaqItem", "Cdn.FaqItem", "Compositions/CdnFaqItem",
             ("question", "Question", TextBox),
@@ -216,10 +253,10 @@ internal sealed class MacroInitializer : ISchemaInitializer
             ("caption", "Caption",   TextBox));
 
         EnsureMacro("cdnIframeEmbed", "Cdn.IframeEmbed", "Compositions/CdnIframeEmbed",
-            ("src",             "Source URL",      TextBox),
-            ("title",           "Title",           TextBox),
-            ("height",          "Height",          TextBox),
-            ("allowFullscreen", "Allow Fullscreen",TrueFalse));
+            ("src",             "Source URL",       TextBox),
+            ("title",           "Title",            TextBox),
+            ("height",          "Height",           TextBox),
+            ("allowFullscreen", "Allow Fullscreen", TrueFalse));
 
         EnsureMacro("cdnInfoBlock", "Cdn.InfoBlock", "Compositions/CdnInfoBlock",
             ("title",    "Title",     TextBox),
@@ -243,16 +280,16 @@ internal sealed class MacroInitializer : ISchemaInitializer
             ("target", "Target",    TextBox));
 
         EnsureMacro("cdnNewsletterForm", "Cdn.NewsletterForm", "Compositions/CdnNewsletterForm",
-            ("title",          "Title",          TextBox),
-            ("intro",          "Intro",          TextArea),
-            ("placeholder",    "Placeholder",    TextBox),
-            ("submitLabel",    "Submit Label",   TextBox),
-            ("consentText",    "Consent Text",   TextBox),
-            ("successMessage", "Success Message",TextBox),
-            ("errorMessage",   "Error Message",  TextBox),
-            ("actionUrl",      "Action URL",     TextBox),
-            ("method",         "Method",         TextBox),
-            ("theme",          "Theme",          TextBox));
+            ("title",          "Title",           TextBox),
+            ("intro",          "Intro",           TextArea),
+            ("placeholder",    "Placeholder",     TextBox),
+            ("submitLabel",    "Submit Label",    TextBox),
+            ("consentText",    "Consent Text",    TextBox),
+            ("successMessage", "Success Message", TextBox),
+            ("errorMessage",   "Error Message",   TextBox),
+            ("actionUrl",      "Action URL",      TextBox),
+            ("method",         "Method",          TextBox),
+            ("theme",          "Theme",           TextBox));
 
         EnsureMacro("cdnSocialShare", "Cdn.SocialShare", "Compositions/CdnSocialShare",
             ("title",     "Title",      TextBox),
@@ -276,13 +313,37 @@ internal sealed class MacroInitializer : ISchemaInitializer
             ("theme",       "Theme",   TextBox));
 
         EnsureMacro("cdnExternalWidget", "Cdn.ExternalWidget", "Compositions/CdnExternalWidget",
-            ("src",      "Source URL",  TextBox),
-            ("type",     "Embed Type",  TextBox),
-            ("title",    "Title",       TextBox),
-            ("endpoint", "API Endpoint",TextBox));
+            ("src",      "Source URL",   TextBox),
+            ("type",     "Embed Type",   TextBox),
+            ("title",    "Title",        TextBox),
+            ("endpoint", "API Endpoint", TextBox));
 
-        // ── CDN Angular elements — Primitives ─────────────────────────────────
+        EnsureMacro("cdnStat", "Cdn.Stat", "Compositions/CdnStat",
+            ("value",   "Value",   TextBox),
+            ("label",   "Label",   TextBox),
+            ("prefix",  "Prefix",  TextBox),
+            ("suffix",  "Suffix",  TextBox),
+            ("variant", "Variant", TextBox),
+            ("theme",   "Theme",   TextBox));
 
+        EnsureMacro("cdnPricingCard", "Cdn.PricingCard", "Compositions/CdnPricingCard",
+            ("title",       "Title",       TextBox),
+            ("price",       "Price",       TextBox),
+            ("period",      "Period",      TextBox),
+            ("description", "Description", TextArea),
+            ("ctaLabel",    "CTA Label",   TextBox),
+            ("ctaUrl",      "CTA URL",     TextBox),
+            ("badgeText",   "Badge Text",  TextBox),
+            ("badgeTone",   "Badge Tone",  TextBox),
+            ("variant",     "Variant",     TextBox),
+            ("theme",       "Theme",       TextBox),
+            ("featured",    "Featured",    TrueFalse));
+    }
+
+    // ── CDN Angular elements — Primitives (atomic building blocks) ───────────
+
+    private void EnsureCdnPrimitiveMacros()
+    {
         EnsureMacro("cdnBadge", "Cdn.Badge", "Primitives/CdnBadge",
             ("text",      "Text",       TextBox),
             ("tone",      "Tone",       TextBox),
@@ -340,8 +401,18 @@ internal sealed class MacroInitializer : ISchemaInitializer
             ("src",   "Video URL", TextBox),
             ("title", "Title",     TextBox));
 
-        // ── CDN Angular elements — Experiences ────────────────────────────────
+        EnsureMacro("cdnAvatar", "Cdn.Avatar", "Primitives/CdnAvatar",
+            ("src",     "Image URL", TextBox),
+            ("alt",     "Alt Text",  TextBox),
+            ("name",    "Name",      TextBox),
+            ("size",    "Size",      TextBox),
+            ("variant", "Variant",   TextBox));
+    }
 
+    // ── CDN Angular elements — Experiences (highly interactive) ──────────────
+
+    private void EnsureCdnExperienceMacros()
+    {
         EnsureMacro("cdnFeatureJourney", "Cdn.FeatureJourney", "Experiences/CdnFeatureJourney",
             ("title",     "Title",      TextBox),
             ("theme",     "Theme",      TextBox),
@@ -404,81 +475,56 @@ internal sealed class MacroInitializer : ISchemaInitializer
             ("variant",   "Variant",    TextBox),
             ("elementId", "Element ID", TextBox),
             ("maxItems",  "Max Items",  TextBox));
+    }
 
-        EnsureMacro("cdnStat", "Cdn.Stat", "Compositions/CdnStat",
-            ("value",   "Value",   TextBox),
-            ("label",   "Label",   TextBox),
-            ("prefix",  "Prefix",  TextBox),
-            ("suffix",  "Suffix",  TextBox),
-            ("variant", "Variant", TextBox),
-            ("theme",   "Theme",   TextBox));
+    // ── CDN Angular elements — Shop (e-commerce) ─────────────────────────────
 
-        EnsureMacro("cdnPricingCard", "Cdn.PricingCard", "Compositions/CdnPricingCard",
-            ("title",       "Title",       TextBox),
-            ("price",       "Price",       TextBox),
-            ("period",      "Period",      TextBox),
-            ("description", "Description", TextArea),
-            ("ctaLabel",    "CTA Label",   TextBox),
-            ("ctaUrl",      "CTA URL",     TextBox),
-            ("badgeText",   "Badge Text",  TextBox),
-            ("badgeTone",   "Badge Tone",  TextBox),
-            ("variant",     "Variant",     TextBox),
-            ("theme",       "Theme",       TextBox),
-            ("featured",    "Featured",    TrueFalse));
-
-        EnsureMacro("cdnAvatar", "Cdn.Avatar", "Primitives/CdnAvatar",
-            ("src",     "Image URL", TextBox),
-            ("alt",     "Alt Text",  TextBox),
-            ("name",    "Name",      TextBox),
-            ("size",    "Size",      TextBox),
-            ("variant", "Variant",   TextBox));
-
-        // ── CDN Angular elements — Shop (e-commerce) ─────────────────────────────
-
+    private void EnsureCdnShopMacros()
+    {
         EnsureMacro("cdnProductCard", "Cdn.ProductCard", "Shop/CdnProductCard",
-            ("productSku", "Product SKU", TextBox),
-            ("name",       "Name (editorial fallback)", TextBox),
+            ("productSku", "Product SKU",                    TextBox),
+            ("name",       "Name (editorial fallback)",      TextBox),
             ("imageSrc",   "Image URL (editorial fallback)", TextBox),
-            ("imageAlt",   "Image Alt",   TextBox),
-            ("showPrice",  "Show Price",  TrueFalse),
-            ("showBadge",  "Show Badge",  TrueFalse),
-            ("layout",     "Layout",      TextBox),
-            ("theme",      "Theme",       TextBox),
-            ("variant",    "Variant",     TextBox));
+            ("imageAlt",   "Image Alt",                      TextBox),
+            ("showPrice",  "Show Price",                     TrueFalse),
+            ("showBadge",  "Show Badge",                     TrueFalse),
+            ("layout",     "Layout",                         TextBox),
+            ("theme",      "Theme",                          TextBox),
+            ("variant",    "Variant",                        TextBox));
 
         EnsureMacro("cdnProductGrid", "Cdn.ProductGrid", "Shop/CdnProductGrid",
-            ("headingText",   "Heading",         TextBox),
-            ("categoryAlias", "Category Alias",  TextBox),
-            ("maxItems",      "Max Items",        TextBox),
-            ("columns",       "Columns (2-4)",    TextBox),
-            ("showFilters",   "Show Filters",     TrueFalse),
-            ("sortOrder",     "Default Sort",     TextBox),
-            ("theme",         "Theme",            TextBox),
-            ("variant",       "Variant",          TextBox));
+            ("headingText",   "Heading",        TextBox),
+            ("categoryAlias", "Category Alias", TextBox),
+            ("maxItems",      "Max Items",      TextBox),
+            ("columns",       "Columns (2-4)",  TextBox),
+            ("showFilters",   "Show Filters",   TrueFalse),
+            ("sortOrder",     "Default Sort",   TextBox),
+            ("theme",         "Theme",          TextBox),
+            ("variant",       "Variant",        TextBox));
 
         EnsureMacro("cdnProductDetail", "Cdn.ProductDetail", "Shop/CdnProductDetail",
-            ("productSku",             "Product SKU",            TextBox),
-            ("showVariantPicker",      "Show Variant Picker",    TrueFalse),
-            ("showQuantitySelector",   "Show Quantity Selector", TrueFalse),
-            ("showRating",             "Show Rating",            TrueFalse),
-            ("layout",                 "Layout",                 TextBox),
-            ("theme",                  "Theme",                  TextBox),
-            ("variant",                "Variant",                TextBox));
+            ("productSku",           "Product SKU",            TextBox),
+            ("showVariantPicker",    "Show Variant Picker",    TrueFalse),
+            ("showQuantitySelector", "Show Quantity Selector", TrueFalse),
+            ("showRating",           "Show Rating",            TrueFalse),
+            ("layout",               "Layout",                 TextBox),
+            ("theme",                "Theme",                  TextBox),
+            ("variant",              "Variant",                TextBox));
 
         EnsureMacro("cdnCartSummary", "Cdn.CartSummary", "Shop/CdnCartSummary",
-            ("showCoupon",             "Show Coupon Field",     TrueFalse),
-            ("checkoutUrl",            "Checkout URL",          TextBox),
-            ("continueShoppingUrl",    "Continue Shopping URL", TextBox),
-            ("theme",                  "Theme",                 TextBox),
-            ("variant",                "Variant",               TextBox));
+            ("showCoupon",          "Show Coupon Field",     TrueFalse),
+            ("checkoutUrl",         "Checkout URL",          TextBox),
+            ("continueShoppingUrl", "Continue Shopping URL", TextBox),
+            ("theme",               "Theme",                 TextBox),
+            ("variant",             "Variant",               TextBox));
 
         EnsureMacro("cdnPriceDisplay", "Cdn.PriceDisplay", "Shop/CdnPriceDisplay",
-            ("showOriginalPrice", "Show Original Price", TrueFalse),
-            ("showDiscount",      "Show Discount",       TrueFalse),
-            ("priceSize",         "Price Size (sm/md/lg)", TextBox),
-            ("currency",          "Currency",            TextBox),
-            ("theme",             "Theme",               TextBox),
-            ("variant",           "Variant",             TextBox));
+            ("showOriginalPrice", "Show Original Price",     TrueFalse),
+            ("showDiscount",      "Show Discount",           TrueFalse),
+            ("priceSize",         "Price Size (sm/md/lg)",   TextBox),
+            ("currency",          "Currency",                TextBox),
+            ("theme",             "Theme",                   TextBox),
+            ("variant",           "Variant",                 TextBox));
 
         EnsureMacro("cdnQuantitySelector", "Cdn.QuantitySelector", "Shop/CdnQuantitySelector",
             ("min",     "Min",     TextBox),
@@ -492,9 +538,9 @@ internal sealed class MacroInitializer : ISchemaInitializer
             ("displayAs",   "Display As (buttons/swatches/dropdown)",   TextBox),
             ("theme",       "Theme",   TextBox),
             ("variant",     "Variant", TextBox));
-
-        CleanupLegacyMacros();
     }
+
+    // ── Cleanup of legacy aliases ────────────────────────────────────────────
 
     /// <summary>
     /// Removes legacy macros that are no longer part of the active schema:
@@ -537,6 +583,12 @@ internal sealed class MacroInitializer : ISchemaInitializer
         }
     }
 
+    // ── Macro factory helper ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Idempotent macro create-or-patch. Existing macros only have their
+    /// <c>MacroSource</c> updated when the partial path has changed.
+    /// </summary>
     private void EnsureMacro(string alias, string name, string partialName,
         params (string alias, string label, string editorAlias)[] parameters)
     {
