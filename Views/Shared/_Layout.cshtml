@@ -1,11 +1,19 @@
 @using System.Globalization
 @inject Synergos.CMS.Domain.Services.IDictionaryCache Dictionary
+@inject Synergos.CMS.Domain.Services.ISiteResolver   SiteResolver
 @{
     var bodyId           = ViewData[LayoutViewData.BodyId]           as string ?? string.Empty;
     var bodyClass        = ViewData[LayoutViewData.BodyClass]        as string ?? "sg-page";
     var mainWrapperStyle = ViewData[LayoutViewData.MainWrapperStyle] as string;
+    var culture          = CultureInfo.CurrentUICulture.Name;
     var htmlLang         = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-    var skipLinkLabel    = Dictionary.Get("Nav.SkipToContent", fallback: "Skip to content");
+    var skipLinkLabel    = Dictionary.Get("Nav.SkipToContent", culture, "Skip to content");
+    // Site name sourced from ISiteResolver — used as the fallback <title> when no
+    // HeadMeta section is defined (e.g. error pages) and for brand-default labels.
+    var siteCtx          = SiteResolver.Resolve();
+    var siteBrandName    = string.IsNullOrWhiteSpace(siteCtx.SiteName)
+                           ? Dictionary.Get("Common.Brand.Default", culture, "Synergos")
+                           : siteCtx.SiteName;
 }
 <!doctype html>
 <html lang="@htmlLang">
@@ -13,21 +21,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="format-detection" content="telephone=no" />
-    @* ── Google Fonts — preconnect + non-blocking preload ── *@
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preload" as="style"
-          href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap"
-          onload="this.onload=null;this.rel='stylesheet'" />
-    <noscript>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" />
-    </noscript>
     <link rel="stylesheet" href="/umbraco/lib/umbraco-blockgridlayout-css/umbraco-blockgridlayout.css" />
+    @* ── Theme: CSS custom properties + font URLs sourced from ThemeSettings.
+         All brand/font hardcoding stays out of this layout — per-site branding
+         flows through the ThemeConfig record populated by IThemeService.        ── *@
     @await Component.InvokeAsync("Theme")
     @await Component.InvokeAsync("LayoutHead")
     @if (!IsSectionDefined("HeadMeta"))
     {
-        <title>Synergos</title>
+        <title>@siteBrandName</title>
     }
     @RenderSection("HeadMeta", required: false)
     @RenderSection("HeadScripts", required: false)

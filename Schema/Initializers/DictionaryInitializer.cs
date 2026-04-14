@@ -135,6 +135,9 @@ internal sealed class DictionaryInitializer : ISchemaInitializer
         Item(gCommon, "Common.Aria.Image",               en, "Decorative image",        es, "Imagen decorativa");
         Item(gCommon, "Common.Aria.EmbeddedContent",     en, "Embedded content",        es, "Contenido embebido");
 
+        //   Common.Brand — last-resort brand fallback (should rarely surface)
+        Item(gCommon, "Common.Brand.Default",            en, "Synergos",                es, "Synergos");
+
         // ── 3. Nav ───────────────────────────────────────────────────────────
         var gNav = EnsureGroup("Nav");
         Item(gNav, "Nav.SkipToContent",                  en, "Skip to content",         es, "Saltar al contenido");
