@@ -135,30 +135,34 @@ public sealed class DataTableMapper(
 }
 
 public sealed class ContactInfoMapper(
-    ContentTextReader text,
-    ContentCtaReader  cta,
-    DomClassReader    cls,
-    DomVariantReader  variant) : ISectionMapper
+    ContentTextReader     text,
+    ContentCtaReader      cta,
+    ContentLocationReader location,
+    DomClassReader        cls,
+    DomVariantReader      variant) : ISectionMapper
 {
     public string SupportedAlias => "elementCorpContactInfo";
     public ISection? Map(IPublishedElement e) => new ComponentSection(new ContactInfoViewModel
     {
         Text       = text.Read(e),
         Cta        = cta.Read(e),
+        Location   = location.Read(e),
         DomClass   = cls.Read(e),
         DomVariant = variant.Read(e)
     });
 }
 
 public sealed class MapEmbedMapper(
-    ContentEmbedReader embed,
-    DomSpacingReader   spacing,
-    DomClassReader     cls) : ISectionMapper
+    ContentEmbedReader    embed,
+    ContentLocationReader location,
+    DomSpacingReader      spacing,
+    DomClassReader        cls) : ISectionMapper
 {
     public string SupportedAlias => "elementCorpMapEmbed";
     public ISection? Map(IPublishedElement e) => new ComponentSection(new MapEmbedViewModel
     {
         Embed      = embed.Read(e),
+        Location   = location.Read(e),
         DomSpacing = spacing.Read(e),
         DomClass   = cls.Read(e)
     });

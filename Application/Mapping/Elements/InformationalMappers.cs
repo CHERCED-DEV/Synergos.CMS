@@ -113,11 +113,12 @@ public sealed class TestimonialItemMapper(
 }
 
 internal sealed class PricingCardMapper(
-    ContentTextReader text,
-    ContentCtaReader cta,
-    ContentBadgeReader badge,
-    DomClassReader cls,
-    DomVariantReader variant) : ISectionMapper
+    ContentTextReader    text,
+    ContentCtaReader     cta,
+    ContentBadgeReader   badge,
+    ContentPricingReader pricing,
+    DomClassReader       cls,
+    DomVariantReader     variant) : ISectionMapper
 {
     public string SupportedAlias => "elementInfoPricingCard";
     public ISection? Map(IPublishedElement e) => new ComponentSection(new PricingCardViewModel
@@ -125,6 +126,7 @@ internal sealed class PricingCardMapper(
         Text       = text.Read(e),
         Cta        = cta.Read(e),
         Badge      = badge.Read(e),
+        Pricing    = pricing.Read(e),
         DomClass   = cls.Read(e),
         DomVariant = variant.Read(e)
     });

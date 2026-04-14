@@ -90,8 +90,9 @@ public sealed class ContactInfoViewModel : BaseComponentViewModel
     public override string BlockClass => "sg-element--corp-contact-info";
     public override string Alias      => "elementCorpContactInfo";
 
-    public ContentTextModel? Text { get; init; }
-    public ContentCtaModel?  Cta  { get; init; }
+    public ContentTextModel?     Text     { get; init; }
+    public ContentCtaModel?      Cta      { get; init; }
+    public ContentLocationModel? Location { get; init; }
 }
 
 public sealed class MapEmbedViewModel : BaseComponentViewModel
@@ -100,7 +101,8 @@ public sealed class MapEmbedViewModel : BaseComponentViewModel
     public override string BlockClass => "sg-element--corp-map-embed";
     public override string Alias      => "elementCorpMapEmbed";
 
-    public ContentEmbedModel? Embed { get; init; }
+    public ContentEmbedModel?    Embed    { get; init; }
+    public ContentLocationModel? Location { get; init; }
 }
 
 public sealed class MissionBlockViewModel : BaseComponentViewModel

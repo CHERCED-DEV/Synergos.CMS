@@ -82,7 +82,8 @@ public sealed class PricingCardViewModel : BaseComponentViewModel, IHasText, IHa
     public override string BlockClass => "sg-element--info-pricing-card";
     public override string Alias      => "elementInfoPricingCard";
 
-    public ContentTextModel?  Text  { get; init; }
-    public ContentCtaModel?   Cta   { get; init; }
-    public ContentBadgeModel? Badge { get; init; }
+    public ContentTextModel?    Text    { get; init; }
+    public ContentCtaModel?     Cta     { get; init; }
+    public ContentBadgeModel?   Badge   { get; init; }
+    public ContentPricingModel? Pricing { get; init; }
 }
