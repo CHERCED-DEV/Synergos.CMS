@@ -178,25 +178,27 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
     //
     // Stable GUIDs for Groups (bg*) — never change after first deployment.
     //
-    private static readonly Guid GroupLayoutKey      = new("b9000001-0000-0000-0000-000000000000");
-    private static readonly Guid GroupTextKey        = new("b9000002-0000-0000-0000-000000000000");
-    private static readonly Guid GroupActionKey      = new("b9000003-0000-0000-0000-000000000000");
-    private static readonly Guid GroupMediaKey       = new("b9000004-0000-0000-0000-000000000000");
-    private static readonly Guid GroupInfoKey        = new("b9000005-0000-0000-0000-000000000000");
-    private static readonly Guid GroupComponentsKey  = new("b9000006-0000-0000-0000-000000000000");
-    private static readonly Guid GroupIntegrationKey  = new("b9000007-0000-0000-0000-000000000000");
-    private static readonly Guid GroupCorporateKey    = new("b9000008-0000-0000-0000-000000000000");
-    private static readonly Guid GroupBlogKey         = new("b9000009-0000-0000-0000-000000000000");
-    private static readonly Guid GroupExperiencesKey  = new("b900000a-0000-0000-0000-000000000000");
+    // Block Grid groups centralised in Schema/Constants/BlockGridGroupKeys.cs.
+    private static readonly Guid GroupLayoutKey       = BlockGridGroupKeys.Layout;
+    private static readonly Guid GroupTextKey         = BlockGridGroupKeys.Text;
+    private static readonly Guid GroupActionKey       = BlockGridGroupKeys.Action;
+    private static readonly Guid GroupMediaKey        = BlockGridGroupKeys.Media;
+    private static readonly Guid GroupInfoKey         = BlockGridGroupKeys.Info;
+    private static readonly Guid GroupComponentsKey   = BlockGridGroupKeys.Components;
+    private static readonly Guid GroupIntegrationKey  = BlockGridGroupKeys.Integration;
+    private static readonly Guid GroupCorporateKey    = BlockGridGroupKeys.Corporate;
+    private static readonly Guid GroupBlogKey         = BlockGridGroupKeys.Blog;
+    private static readonly Guid GroupExperiencesKey  = BlockGridGroupKeys.Experiences;
 
     //
     // Stable GUIDs for Areas (fa*) — internal to Block Grid configuration.
     //
-    private static readonly Guid AreaSectionContent  = new("fa000001-0000-0000-0000-000000000000");
-    private static readonly Guid AreaGridColumns     = new("fa000002-0000-0000-0000-000000000000");
-    private static readonly Guid AreaColumnContent   = new("fa000003-0000-0000-0000-000000000000");
-    private static readonly Guid AreaContainerContent = new("fa000004-0000-0000-0000-000000000000");
-    private static readonly Guid AreaStackContent    = new("fa000005-0000-0000-0000-000000000000");
+    // Structural element areas centralised in Schema/Constants/BlockGridAreaKeys.cs.
+    private static readonly Guid AreaSectionContent   = BlockGridAreaKeys.SectionContent;
+    private static readonly Guid AreaGridColumns      = BlockGridAreaKeys.GridColumns;
+    private static readonly Guid AreaColumnContent    = BlockGridAreaKeys.ColumnContent;
+    private static readonly Guid AreaContainerContent = BlockGridAreaKeys.ContainerContent;
+    private static readonly Guid AreaStackContent     = BlockGridAreaKeys.StackContent;
 
     // Layout Preset areas centralised in Schema/Constants/BlockGridAreaKeys.cs.
     // Keep aliases here for readability of the block configuration block below.

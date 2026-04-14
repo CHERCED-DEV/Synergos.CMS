@@ -52,4 +52,23 @@ public static class BlockGridAreaKeys
 
     /// <summary>Main + sidebar layout — sidebar area.</summary>
     public static readonly Guid PresetSidebar      = new("fa010012-0000-0000-0000-000000000000");
+
+    // ── Structural element areas (fa00****) ─────────────────────────────────
+    // Each structural element type (Section, Container, Grid, Column, Stack)
+    // exposes an area where editors drop child blocks.
+
+    /// <summary>Section element — content area.</summary>
+    public static readonly Guid SectionContent     = new("fa000001-0000-0000-0000-000000000000");
+
+    /// <summary>Grid element — columns area (children must be Column elements).</summary>
+    public static readonly Guid GridColumns        = new("fa000002-0000-0000-0000-000000000000");
+
+    /// <summary>Column element — content area.</summary>
+    public static readonly Guid ColumnContent      = new("fa000003-0000-0000-0000-000000000000");
+
+    /// <summary>Container element — content area.</summary>
+    public static readonly Guid ContainerContent   = new("fa000004-0000-0000-0000-000000000000");
+
+    /// <summary>Stack element — content area.</summary>
+    public static readonly Guid StackContent       = new("fa000005-0000-0000-0000-000000000000");
 }
