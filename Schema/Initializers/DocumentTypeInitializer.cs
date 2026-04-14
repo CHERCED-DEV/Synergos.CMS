@@ -57,6 +57,7 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
         // 2. Document Types (only universal types — business page types retired)
         EnsureSiteRoot(pagesFolderId);
         EnsurePageBase(pagesFolderId);
+        EnsurePageBare(pagesFolderId);
 
         // Blog types are owned exclusively by BlogInitializer (Phase 8c).
 
@@ -731,12 +732,109 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
         Cts.Save(ct);
     }
 
+    // ── Page.Bare ─────────────────────────────────────────────────────────────
+    // Sister doc type to PageBase without the master layout shell: no header,
+    // footer, alert bar, banner, breadcrumbs — nothing but the Block Grid inside
+    // its own &lt;html&gt; root. Used for landing campaigns, iframe content, print
+    // layouts, modals, or any page that owns its shell.
+    //
+    // Compositions are intentionally a subset of PageBase:
+    //   CompCoreBase + CompSeo + CompVisibility + CompTagging
+    // No DomLayout / DomLayoutProfile because the template ignores them.
+    //
+    // Template: PageBare.cshtml (already ensured by EnsurePageBase). Both page
+    // types share the same PageBare template so editors can switch doc type
+    // without reassigning the template.
+    private void EnsurePageBare(int folderId)
+    {
+        var pageBareTemplate = EnsureTemplate("Page Bare", "PageBare");
+
+        var existing = Cts.Get(ContentTypeKeys.PageBare);
+        if (existing is not null)
+        {
+            var dirty = false;
+            if (!string.Equals(existing.Name, "Page Bare", StringComparison.Ordinal))
+            { existing.Name = "Page Bare"; dirty = true; }
+            dirty |= PatchTypeDescription(existing,
+                "Página sin layout global. Renderiza directamente el Block Grid bajo su propio <html> — sin header, footer, banner ni alert bar. Ideal para landings, iframes, modales y exports de impresión.");
+            if (existing.ParentId != folderId)
+            { existing.ParentId = folderId; dirty = true; }
+            if (existing.AllowedTemplates?.Any() != true)
+            { existing.AllowedTemplates = new[] { pageBareTemplate }; existing.SetDefaultTemplate(pageBareTemplate); dirty = true; }
+            dirty |= SyncCompositions(existing,
+                ContentTypeKeys.CompCoreBase,
+                ContentTypeKeys.CompSeo,
+                ContentTypeKeys.CompVisibility,
+                ContentTypeKeys.CompTagging);
+            dirty |= PatchCultureVariation(existing, "pageTitle", "pageSections");
+
+            // Guard: recreate pageSections if a cascading DataType delete destroyed it.
+            if (!existing.PropertyTypes.Any(p => p.Alias == "pageSections"))
+            {
+                var contentGroup = existing.PropertyGroups.FirstOrDefault(g => g.Alias == "content");
+                if (contentGroup is null)
+                {
+                    contentGroup = Tab("Content", "content", 0);
+                    existing.PropertyGroups.Add(contentGroup);
+                }
+                var restored = Prop("pageSections", "Page Sections", DataTypeKeys.BlockGridPageSections, 10,
+                    description: "Construye la página arrastrando bloques atómicos. El Block Grid se renderiza sin el layout maestro.");
+                restored.Variations = ContentVariation.Culture;
+                contentGroup.PropertyTypes!.Add(restored);
+                dirty = true;
+            }
+
+            if (dirty) Cts.Save(existing);
+            return;
+        }
+
+        var ct = new ContentType(Ssh, folderId)
+        {
+            Key         = ContentTypeKeys.PageBare,
+            Name        = "Page Bare",
+            Alias       = ContentTypeKeys.Aliases.PageBare,
+            Description = "Página sin layout global. Renderiza directamente el Block Grid bajo su propio <html> — sin header, footer, banner ni alert bar. Ideal para landings, iframes, modales y exports de impresión.",
+            Icon        = "icon-document-dashed-line",
+            Variations  = ContentVariation.Culture
+        };
+
+        ct.ContentTypeComposition = new[]
+        {
+            ContentTypeKeys.CompCoreBase,
+            ContentTypeKeys.CompSeo,
+            ContentTypeKeys.CompVisibility,
+            ContentTypeKeys.CompTagging
+        }
+        .Select(k => Cts.Get(k))
+        .Where(c => c is not null)
+        .Cast<IContentTypeComposition>()
+        .ToList();
+
+        var tab = Tab("Content", "content", 0);
+
+        var pageTitleProp = Prop("pageTitle", "Page Title", DataTypeKeys.TextTitle, 0,
+            description: "Título de la página. Aparece en el árbol de Umbraco y en la etiqueta <title> del template Bare.");
+        pageTitleProp.Variations = ContentVariation.Culture;
+        tab.PropertyTypes!.Add(pageTitleProp);
+
+        var pageSectionsProp = Prop("pageSections", "Page Sections", DataTypeKeys.BlockGridPageSections, 10,
+            description: "Construye la página arrastrando bloques atómicos. El Block Grid se renderiza sin el layout maestro.");
+        pageSectionsProp.Variations = ContentVariation.Culture;
+        tab.PropertyTypes!.Add(pageSectionsProp);
+
+        ct.PropertyGroups.Add(tab);
+        ct.AllowedTemplates = new[] { pageBareTemplate };
+        ct.SetDefaultTemplate(pageBareTemplate);
+        Cts.Save(ct);
+    }
+
     // ── Allowed children ──────────────────────────────────────────────────────
 
     private void PatchAllowedChildren()
     {
-        SetAllowedChildren(ContentTypeKeys.SiteRoot, ContentTypeKeys.PageBase, ContentTypeKeys.ShopRoot);
-        SetAllowedChildren(ContentTypeKeys.PageBase, ContentTypeKeys.PageBase);
+        SetAllowedChildren(ContentTypeKeys.SiteRoot, ContentTypeKeys.PageBase, ContentTypeKeys.PageBare, ContentTypeKeys.ShopRoot);
+        SetAllowedChildren(ContentTypeKeys.PageBase, ContentTypeKeys.PageBase, ContentTypeKeys.PageBare);
+        SetAllowedChildren(ContentTypeKeys.PageBare, ContentTypeKeys.PageBare);
         SetAllowedChildren(ContentTypeKeys.ShopRoot, ContentTypeKeys.ShopCatalogPage, ContentTypeKeys.ShopCartPage);
         SetAllowedChildren(ContentTypeKeys.ShopCatalogPage, ContentTypeKeys.ShopCategoryPage, ContentTypeKeys.ShopProductPage);
         SetAllowedChildren(ContentTypeKeys.ShopCategoryPage, ContentTypeKeys.ShopProductPage);

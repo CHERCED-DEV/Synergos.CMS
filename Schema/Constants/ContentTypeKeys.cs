@@ -171,6 +171,13 @@ public static class ContentTypeKeys
     // ─── Document Types — Core (d2*) ──────────────────────────────────────
     public static readonly Guid SiteRoot = new("d2000001-0000-0000-0000-000000000000");
     public static readonly Guid PageBase = new("d2000002-0000-0000-0000-000000000000");
+    /// <summary>
+    /// Brand-agnostic page with no chrome (no header, footer, banner, alert bar).
+    /// Renders directly via the PageBare template. Useful for landing campaigns,
+    /// modal/iframe content, print layouts, or any page that must control its
+    /// own shell without the master _Layout wrapper.
+    /// </summary>
+    public static readonly Guid PageBare = new("d2000007-0000-0000-0000-000000000000");
 
     // Retired — kept for DB cleanup reference only.
     public static readonly Guid HomePage     = new("d2000003-0000-0000-0000-000000000000");
@@ -227,6 +234,7 @@ public static class ContentTypeKeys
     {
         public const string SiteRoot            = "siteRoot";
         public const string PageBase            = "pageBase";
+        public const string PageBare            = "pageBare";
         public const string ArticlePage         = "articlePage";
         public const string PlatformRoot        = "platformRoot";
         public const string GlobalSettings      = "globalSettings";

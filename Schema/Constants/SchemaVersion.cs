@@ -7,5 +7,5 @@ namespace Synergos.CMS.Schema.Constants;
 public static class SchemaVersion
 {
     public const string Key   = "Synergos.Schema.Version";
-    public const string Value = "10.0.1"; // Initial clean migration from epicfail
+    public const string Value = "10.1.0"; // 10.1.0 — PageBare doc type + BlockGrid centralization + Dictionary sweep + SEO bug fix
 }
