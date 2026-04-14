@@ -96,11 +96,36 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// ISectionMapper implementations — one per element type, resolved by alias via dispatcher.
+    /// ISectionMapper implementations — one per element type, resolved by alias via
+    /// SectionMapperDispatcher. Split per family so adding a new element only touches
+    /// its family's registration method (open/closed: add a new mapper class + a
+    /// single line in the matching method).
     /// </summary>
     public static IServiceCollection AddSynergosMappers(this IServiceCollection services)
     {
-        // Structural (c3*)
+        AddStructuralMappers(services);
+        AddTextualMappers(services);
+        AddActionMappers(services);
+        AddMediaMappers(services);
+        AddInformationalMappers(services);
+        AddCompositionMappers(services);
+        AddIntegrationMappers(services);
+        AddCorporateMappers(services);
+        AddFormMappers(services);
+        AddBlogMappers(services);
+        AddExperienceMappers(services);
+
+        // Generic fallback mapper — handles element types with no specific ISectionMapper.
+        // Registered separately (not as ISectionMapper) so SectionMapperDispatcher can
+        // inject it directly as a typed fallback rather than mixing it into the IEnumerable.
+        services.AddSingleton<GenericElementMapper>();
+
+        return services;
+    }
+
+    // ── Structural (c3*) — Section, Container, Grid, Column, Stack, Divider, Spacer, layout presets
+    private static void AddStructuralMappers(IServiceCollection services)
+    {
         services.AddSingleton<ISectionMapper, SectionStructMapper>();
         services.AddSingleton<ISectionMapper, ContainerStructMapper>();
         services.AddSingleton<ISectionMapper, GridStructMapper>();
@@ -113,7 +138,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISectionMapper, LayoutPreset3ColEqualMapper>();
         services.AddSingleton<ISectionMapper, LayoutPreset4ColEqualMapper>();
         services.AddSingleton<ISectionMapper, LayoutPresetMainSidebarMapper>();
-        // Textual (c4*)
+    }
+
+    // ── Textual (c4*) — Heading, Paragraph, RichText, Eyebrow, Quote, Label, TextBlock, CodeBlock, AttributedQuote
+    private static void AddTextualMappers(IServiceCollection services)
+    {
         services.AddSingleton<ISectionMapper, HeadingMapper>();
         services.AddSingleton<ISectionMapper, ParagraphMapper>();
         services.AddSingleton<ISectionMapper, RichTextElementMapper>();
@@ -123,20 +152,32 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISectionMapper, TextBlockMapper>();
         services.AddSingleton<ISectionMapper, CodeBlockMapper>();
         services.AddSingleton<ISectionMapper, AttributedQuoteMapper>();
-        // Action (c5*)
+    }
+
+    // ── Action (c5*) — Button, Link, CtaGroup, ButtonGroup, ButtonContainer
+    private static void AddActionMappers(IServiceCollection services)
+    {
         services.AddSingleton<ISectionMapper, ButtonMapper>();
         services.AddSingleton<ISectionMapper, LinkMapper>();
         services.AddSingleton<ISectionMapper, CtaGroupMapper>();
         services.AddSingleton<ISectionMapper, ButtonGroupMapper>();
         services.AddSingleton<ISectionMapper, ButtonContainerMapper>();
-        // Media (c6*)
+    }
+
+    // ── Media (c6*) — Image, Video, Icon, GalleryItem, LogoItem, Avatar
+    private static void AddMediaMappers(IServiceCollection services)
+    {
         services.AddSingleton<ISectionMapper, ImageMapper>();
         services.AddSingleton<ISectionMapper, VideoElementMapper>();
         services.AddSingleton<ISectionMapper, IconMapper>();
         services.AddSingleton<ISectionMapper, GalleryItemMapper>();
         services.AddSingleton<ISectionMapper, LogoItemMapper>();
         services.AddSingleton<ISectionMapper, AvatarMapper>();
-        // Informational (c7*)
+    }
+
+    // ── Informational (c7*) — Badge, Stat, FeatureItem, KeyValue, TimelineItem, FaqItem, TestimonialItem, PricingCard
+    private static void AddInformationalMappers(IServiceCollection services)
+    {
         services.AddSingleton<ISectionMapper, BadgeMapper>();
         services.AddSingleton<ISectionMapper, StatMapper>();
         services.AddSingleton<ISectionMapper, FeatureItemMapper>();
@@ -145,7 +186,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISectionMapper, FaqItemMapper>();
         services.AddSingleton<ISectionMapper, TestimonialItemMapper>();
         services.AddSingleton<ISectionMapper, PricingCardMapper>();
-        // Composition (c8*)
+    }
+
+    // ── Composition (c8*) — Card, Hero, FeatureGrid, CtaBanner, FaqList, TestimonialList, LogoCloud, InfoBlock, Banner, MediaTextSplit, Accordion
+    private static void AddCompositionMappers(IServiceCollection services)
+    {
         services.AddSingleton<ISectionMapper, CardElementMapper>();
         services.AddSingleton<ISectionMapper, HeroElementMapper>();
         services.AddSingleton<ISectionMapper, FeatureGridMapper>();
@@ -157,12 +202,20 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISectionMapper, BannerMapper>();
         services.AddSingleton<ISectionMapper, MediaTextSplitMapper>();
         services.AddSingleton<ISectionMapper, AccordionMapper>();
-        // Integration (c9*)
+    }
+
+    // ── Integration (c9*) — ScriptEmbed, IframeEmbed, ExternalWidget, MacroHost
+    private static void AddIntegrationMappers(IServiceCollection services)
+    {
         services.AddSingleton<ISectionMapper, ScriptEmbedMapper>();
         services.AddSingleton<ISectionMapper, IframeEmbedMapper>();
         services.AddSingleton<ISectionMapper, ExternalWidgetMapper>();
         services.AddSingleton<ISectionMapper, MacroHostMapper>();
-        // Corporate (ca*)
+    }
+
+    // ── Corporate (ca*) — TabGroup, AlertBar, AlertBox, BannerSlider, Newsletter, SocialShare, DataTable, ContactInfo, MapEmbed, MissionBlock
+    private static void AddCorporateMappers(IServiceCollection services)
+    {
         services.AddSingleton<ISectionMapper, TabGroupMapper>();
         services.AddSingleton<ISectionMapper, AlertBarMapper>();
         services.AddSingleton<ISectionMapper, AlertBoxMapper>();
@@ -173,13 +226,25 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISectionMapper, ContactInfoMapper>();
         services.AddSingleton<ISectionMapper, MapEmbedMapper>();
         services.AddSingleton<ISectionMapper, MissionBlockMapper>();
-        // Forms (cc*)
+    }
+
+    // ── Forms (cc*) — FormEmbed, FormBlock
+    private static void AddFormMappers(IServiceCollection services)
+    {
         services.AddSingleton<ISectionMapper, FormEmbedMapper>();
         services.AddSingleton<ISectionMapper, FormBlockMapper>();
-        // Blog blocks (c8* extensions)
+    }
+
+    // ── Blog (extensions to c8*) — BlogHighlight, ArticleList
+    private static void AddBlogMappers(IServiceCollection services)
+    {
         services.AddSingleton<ISectionMapper, BlogHighlightMapper>();
         services.AddSingleton<ISectionMapper, ArticleListMapper>();
-        // Experiences (ce*)
+    }
+
+    // ── Experiences (ce*) — FeatureJourney, InsightExplorer, MediaExplorer, ContentCarousel, QuizFlow, FilterBoard, RatingWidget, CountdownClock, NotificationStack
+    private static void AddExperienceMappers(IServiceCollection services)
+    {
         services.AddSingleton<ISectionMapper, FeatureJourneyMapper>();
         services.AddSingleton<ISectionMapper, InsightExplorerMapper>();
         services.AddSingleton<ISectionMapper, MediaExplorerMapper>();
@@ -189,13 +254,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISectionMapper, RatingWidgetMapper>();
         services.AddSingleton<ISectionMapper, CountdownClockMapper>();
         services.AddSingleton<ISectionMapper, NotificationStackMapper>();
-
-        // Generic fallback mapper — handles element types with no specific ISectionMapper.
-        // Registered separately (not as ISectionMapper) so SectionMapperDispatcher can
-        // inject it directly as a typed fallback rather than mixing it into the IEnumerable.
-        services.AddSingleton<GenericElementMapper>();
-
-        return services;
     }
 
     /// <summary>
