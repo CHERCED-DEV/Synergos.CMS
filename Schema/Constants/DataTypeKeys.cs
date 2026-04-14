@@ -115,4 +115,13 @@ public static class DataTypeKeys
     // ─── Flow Engine ───────────────────────────────────────────────────────
     public static readonly Guid SelectFlowExecutionMode = new("fe000073-0000-0000-0000-000000000000");
     public static readonly Guid TextAreaJson            = new("fe000074-0000-0000-0000-000000000000");
+
+    // ─── Blog ──────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Dropdown of editorial post types — article, news, tutorial, caseStudy,
+    /// interview, opinion, release. Values are authored by
+    /// <see cref="Domain.Shared.BlogPostTypeExtensions.ToAlias"/> so adding a
+    /// type requires updating the enum + extensions only.
+    /// </summary>
+    public static readonly Guid SelectBlogPostType      = new("a1000076-0000-0000-0000-000000000000");
 }

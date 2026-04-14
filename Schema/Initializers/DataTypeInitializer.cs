@@ -3,6 +3,7 @@ using Umbraco.Cms.Core.PropertyEditors;
 using Umbraco.Cms.Core.Serialization;
 using Umbraco.Cms.Core.Services;
 using Synergos.CMS.Domain.Orchestration;
+using Synergos.CMS.Domain.Shared;
 using Synergos.CMS.Schema.Constants;
 
 namespace Synergos.CMS.Schema.Initializers;
@@ -169,6 +170,19 @@ internal sealed class DataTypeInitializer : ISchemaInitializer
             FlowExecutionMode.Sequential.ToAlias(),
             FlowExecutionMode.Parallel.ToAlias(),
             FlowExecutionMode.FirstMatch.ToAlias()
+        ]);
+
+        // ── Blog ──────────────────────────────────────────────────────────────
+        // Source of truth for the dropdown values is BlogPostTypeExtensions.ToAlias.
+        EnsureDropdown(DataTypeKeys.SelectBlogPostType, "DT.Select.BlogPostType",
+        [
+            BlogPostType.Article.ToAlias(),
+            BlogPostType.News.ToAlias(),
+            BlogPostType.Tutorial.ToAlias(),
+            BlogPostType.CaseStudy.ToAlias(),
+            BlogPostType.Interview.ToAlias(),
+            BlogPostType.Opinion.ToAlias(),
+            BlogPostType.Release.ToAlias()
         ]);
         EnsureTextArea(DataTypeKeys.TextAreaJson, "DT.TextArea.Json", 10_000);
 

@@ -230,9 +230,24 @@ internal sealed class BlogInitializer : SchemaInitializerBase
                 dirty |= PatchPropertyDescription(existing, "featuredImage", "Imagen principal del artículo. Se usa en cabecera, listados y compartidos.");
                 dirty |= PatchPropertyDescription(existing, "postAuthor", "Autor responsable del artículo.");
                 dirty |= PatchPropertyDescription(existing, "readingTime", "Tiempo estimado de lectura en minutos.");
+                dirty |= PatchPropertyDescription(existing, "postType", "Clasificación editorial del artículo (article / news / tutorial / caseStudy / interview / opinion / release). Drives list filtering y variaciones de template.");
                 dirty |= PatchPropertyDescription(existing, "postTags", "Etiquetas libres escritas manualmente. Úselas para filtrado flexible; para taxonomía controlada use 'Page Tags'.");
                 dirty |= PatchPropertyDescription(existing, "relatedPosts", "Entradas relacionadas para recomendar lecturas adicionales al final del artículo.");
                 dirty |= PatchPropertyDescription(existing, "pageSections", "Bloques opcionales para contenido adicional debajo del cuerpo principal.");
+
+                // Non-destructive addition: patch postType on legacy blog posts that predate this property.
+                if (!existing.PropertyTypes.Any(p => p.Alias == "postType"))
+                {
+                    var articleGroup = existing.PropertyGroups.FirstOrDefault(g => g.Alias == "article");
+                    if (articleGroup is null)
+                    {
+                        articleGroup = Tab("Article", "article", 0);
+                        existing.PropertyGroups.Add(articleGroup);
+                    }
+                    articleGroup.PropertyTypes!.Add(Prop("postType", "Post Type", DataTypeKeys.SelectBlogPostType, 5,
+                        description: "Clasificación editorial del artículo (article / news / tutorial / caseStudy / interview / opinion / release). Drives list filtering y variaciones de template."));
+                    dirty = true;
+                }
 
                 // Enable culture variation for es-ES + en-US bilingual support.
                 dirty |= PatchCultureVariation(existing,
@@ -293,6 +308,9 @@ internal sealed class BlogInitializer : SchemaInitializerBase
 
         AddVariant(tabArticle, Prop("postTitle",     "Title",          DataTypeKeys.TextTitle,     0, mandatory: true, description: "Título principal del artículo. Se usa en la página, listados y metadatos."));
         AddVariant(tabArticle, Prop("postSubtitle",  "Subtitle",       DataTypeKeys.TextSubtitle,  10, description: "Subtítulo o bajada breve para complementar el enfoque del artículo."));
+        // Post type is invariant — a news post is a news post in every language.
+        tabArticle.PropertyTypes!.Add(Prop("postType", "Post Type", DataTypeKeys.SelectBlogPostType, 5,
+            description: "Clasificación editorial del artículo (article / news / tutorial / caseStudy / interview / opinion / release). Drives list filtering y variaciones de template."));
         AddVariant(tabArticle, Prop("postBody",      "Body",           DataTypeKeys.RichTextBody,  20, description: "Cuerpo principal del artículo en formato enriquecido."));
         AddVariant(tabArticle, Prop("postExcerpt",   "Excerpt",        DataTypeKeys.TextSummary,   30, description: "Resumen corto del artículo para tarjetas, listados y vistas previas."));
         AddVariant(tabArticle, Prop("featuredImage", "Featured Image", DataTypeKeys.MediaImage,    40, description: "Imagen principal del artículo. Se usa en cabecera, listados y compartidos."));
