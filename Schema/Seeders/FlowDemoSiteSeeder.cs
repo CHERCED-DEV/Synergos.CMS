@@ -4,15 +4,16 @@ using Microsoft.Extensions.Logging;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
 using Synergos.CMS.Schema.Constants;
+using Synergos.CMS.Schema.Constants.BlockGrid;
+using Synergos.CMS.Schema.Seeders.BlockGrid;
 using UmbConstants = Umbraco.Cms.Core.Constants;
 
 namespace Synergos.CMS.Schema.Seeders;
 
 /// <summary>
-/// Creates a dedicated demo site root for the Synergos Flow Engine walkthrough.
-///
-/// Idempotent: checks for existing nodes before creating.
-/// Runs on every startup (not just schema changes).
+/// Creates the Synergos Flow Engine demo site under PlatformRoot. Idempotent —
+/// every node is checked for existence before creation; pageSections are seeded
+/// only when the published value is empty (so editor changes are never overwritten).
 ///
 /// Target tree:
 ///   PlatformRoot
@@ -25,36 +26,26 @@ namespace Synergos.CMS.Schema.Seeders;
 ///       ├── Paso 3: Ejecutar un Flujo    (pageBase — run a flow)
 ///       ├── Paso 4: Cambiar el Modo      (pageBase — change executionMode in backoffice)
 ///       └── Paso 5: Ver Resultados       (pageBase — execution history)
+///       └── Config/Flow Engine Demo Nav  (navigationGroup — wired into SiteSettings)
+///
+/// Block Grid content is built via <see cref="BlockGridJsonBuilder"/>; layout area
+/// keys come from <see cref="BlockGridAreaKeys"/>; content type GUIDs come from
+/// <see cref="ContentTypeKeys"/>; magic strings are typed via <see cref="HeadingLevel"/>
+/// and <see cref="BlockVariant"/> enums. No Block UDI literals — all are
+/// <see cref="Guid.NewGuid"/> at build time.
 /// </summary>
 internal sealed class FlowDemoSiteSeeder
 {
+    private const string PageSectionsKey = "pageSections";
+    private const string SeedCulture     = "es-CO";
+    private const string DemoSiteName    = "Flow Engine Demo";
+    private const string DemoNavName     = "Flow Engine Demo Nav";
+    private const string DemoNavAlias    = "flow-engine-demo";
+
     private readonly IContentService     _content;
     private readonly IContentTypeService _contentTypes;
     private readonly IFileService        _files;
     private readonly ILogger             _logger;
-
-    private const string BgEditorAlias   = "Umbraco.BlockGrid";
-    private const string PageSectionsKey = "pageSections";
-    private const string SeedCulture     = "es-CO";
-
-    // ── Layout Preset area GUIDs (must match DTBlockGridPageSections DataType config) ──
-    private static readonly Guid A1Main  = new("fa010001-0000-0000-0000-000000000000");
-    private static readonly Guid A2Left  = new("fa010002-0000-0000-0000-000000000000");
-    private static readonly Guid A2Right = new("fa010003-0000-0000-0000-000000000000");
-    private static readonly Guid A3Col1  = new("fa010004-0000-0000-0000-000000000000");
-    private static readonly Guid A3Col2  = new("fa010005-0000-0000-0000-000000000000");
-    private static readonly Guid A3Col3  = new("fa010006-0000-0000-0000-000000000000");
-
-    // ── Content Type Keys (D-format) ─────────────────────────────────────────
-    private const string T1Col      = "c3000010-0000-0000-0000-000000000000"; // LayoutPreset1Col
-    private const string T2Col      = "c3000011-0000-0000-0000-000000000000"; // LayoutPreset2ColEqual
-    private const string T3Col      = "c3000012-0000-0000-0000-000000000000"; // LayoutPreset3ColEqual
-    private const string THeading   = "c4000001-0000-0000-0000-000000000000"; // ElementTextHeading
-    private const string TParagraph = "c4000002-0000-0000-0000-000000000000"; // ElementTextParagraph
-    private const string TFeature   = "c7000003-0000-0000-0000-000000000000"; // ElementInfoFeature
-    private const string TKeyValue  = "c7000004-0000-0000-0000-000000000000"; // ElementInfoKeyValue
-    private const string THero      = "c8000002-0000-0000-0000-000000000000"; // ElementCompHero
-    private const string TCtaBanner = "c8000004-0000-0000-0000-000000000000"; // ElementCompCtaBanner
 
     public FlowDemoSiteSeeder(
         IContentService     content,
@@ -75,8 +66,7 @@ internal sealed class FlowDemoSiteSeeder
 
         if (platformRoot is null)
         {
-            _logger.LogWarning(
-                "FlowDemoSiteSeeder: 'platformRoot' not found — skipping demo site creation.");
+            _logger.LogWarning("FlowDemoSiteSeeder: 'platformRoot' not found — skipping demo site creation.");
             return;
         }
 
@@ -90,14 +80,14 @@ internal sealed class FlowDemoSiteSeeder
         _logger.LogInformation("FlowDemoSiteSeeder: demo site seeded (Id={Id}).", demoSite.Id);
     }
 
-    // ─── Site root ────────────────────────────────────────────────────────────
+    // ─── Site root ──────────────────────────────────────────────────────────
 
     private IContent? GetOrCreateDemoSiteRoot(int platformId)
     {
         var children = _content.GetPagedChildren(platformId, 0, 100, out _);
         var existing = children.FirstOrDefault(c =>
             c.ContentType.Alias == ContentTypeKeys.Aliases.SiteRoot &&
-            (c.GetValue<string>("siteName") ?? c.Name) == "Flow Engine Demo");
+            (c.GetValue<string>("siteName") ?? c.Name) == DemoSiteName);
 
         if (existing is not null)
         {
@@ -112,8 +102,8 @@ internal sealed class FlowDemoSiteSeeder
             return null;
         }
 
-        var node = _content.Create("Flow Engine Demo", platformId, ContentTypeKeys.Aliases.SiteRoot);
-        node.SetValue("siteName",    "Flow Engine Demo");
+        var node = _content.Create(DemoSiteName, platformId, ContentTypeKeys.Aliases.SiteRoot);
+        node.SetValue("siteName",    DemoSiteName);
         node.SetValue("siteTagline", "Demostración paso a paso del Synergos Flow Engine");
 
         var template = _files.GetTemplate("SiteRoot");
@@ -122,8 +112,7 @@ internal sealed class FlowDemoSiteSeeder
         var result = _content.SaveAndPublish(node, userId: UmbConstants.Security.SuperUserId);
         if (!result.Success)
         {
-            _logger.LogWarning(
-                "FlowDemoSiteSeeder: failed to publish demo site root — {Status}.", result.Result);
+            _logger.LogWarning("FlowDemoSiteSeeder: failed to publish demo site root — {Status}.", result.Result);
             return null;
         }
 
@@ -131,7 +120,7 @@ internal sealed class FlowDemoSiteSeeder
         return node;
     }
 
-    // ─── Settings nodes ───────────────────────────────────────────────────────
+    // ─── Settings nodes ─────────────────────────────────────────────────────
 
     private void EnsureSettings(int siteId)
     {
@@ -142,84 +131,65 @@ internal sealed class FlowDemoSiteSeeder
             "ThemeSettings", null);
     }
 
-    // ─── Demo pages ───────────────────────────────────────────────────────────
+    // ─── Demo pages ─────────────────────────────────────────────────────────
 
     private void EnsureDemoPages(int siteId)
     {
-        var intro = EnsureChild(siteId, ContentTypeKeys.Aliases.PageBase,
-            "Intro al Flow Engine", "PageBase",
-            node =>
-            {
-                node.SetValue("pageTitle",      "Intro al Flow Engine",                               culture: SeedCulture);
-                node.SetValue("pageSubtitle",   "Qué es el Synergos Flow Engine y cómo funciona",    culture: SeedCulture);
-                node.SetValue("seoTitle",       "Flow Engine Demo — Intro");
-                node.SetValue("seoDescription", "El Flow Engine es la capa de orquestación de Synergos. Umbraco define los flujos; Synergos.API los ejecuta.");
-                node.SortOrder = 0;
-            });
-        SeedGridIfEmpty(intro, BuildIntroGrid);
+        EnsureDemoPage(siteId, "Intro al Flow Engine",       0,
+            "Qué es el Synergos Flow Engine y cómo funciona",
+            "Flow Engine Demo — Intro",
+            "El Flow Engine es la capa de orquestación de Synergos. Umbraco define los flujos; Synergos.API los ejecuta.",
+            BuildIntroGrid);
 
-        var paso1 = EnsureChild(siteId, ContentTypeKeys.Aliases.PageBase,
-            "Paso 1: Flujos en Umbraco", "PageBase",
-            node =>
-            {
-                node.SetValue("pageTitle",      "Paso 1: Flujos en Umbraco",                         culture: SeedCulture);
-                node.SetValue("pageSubtitle",   "Revisa los FlowDefinition nodes en el backoffice",  culture: SeedCulture);
-                node.SetValue("seoTitle",     "Flow Engine Demo — Paso 1");
-                node.SetValue("seoDescription", "Navega a Content → Flow Settings Root. Verás approval-flow y notification-pipeline ya configurados.");
-                node.SortOrder = 10;
-            });
-        SeedGridIfEmpty(paso1, BuildPaso1Grid);
+        EnsureDemoPage(siteId, "Paso 1: Flujos en Umbraco",  10,
+            "Revisa los FlowDefinition nodes en el backoffice",
+            "Flow Engine Demo — Paso 1",
+            "Navega a Content → Flow Settings Root. Verás approval-flow y notification-pipeline ya configurados.",
+            BuildPaso1Grid);
 
-        var paso2 = EnsureChild(siteId, ContentTypeKeys.Aliases.PageBase,
-            "Paso 2: Registrar en Engine", "PageBase",
-            node =>
-            {
-                node.SetValue("pageTitle",      "Paso 2: Registrar en Engine",                       culture: SeedCulture);
-                node.SetValue("pageSubtitle",   "Publica un flujo desde CMS hacia Synergos.API",    culture: SeedCulture);
-                node.SetValue("seoTitle",     "Flow Engine Demo — Paso 2");
-                node.SetValue("seoDescription", "POST /api/synergos/v1/orchestration/flows/approval-flow/publish firma el payload con HMAC-SHA256 y lo envía al engine.");
-                node.SortOrder = 20;
-            });
-        SeedGridIfEmpty(paso2, BuildPaso2Grid);
+        EnsureDemoPage(siteId, "Paso 2: Registrar en Engine", 20,
+            "Publica un flujo desde CMS hacia Synergos.API",
+            "Flow Engine Demo — Paso 2",
+            "POST /api/synergos/v1/orchestration/flows/approval-flow/publish firma el payload con HMAC-SHA256 y lo envía al engine.",
+            BuildPaso2Grid);
 
-        var paso3 = EnsureChild(siteId, ContentTypeKeys.Aliases.PageBase,
-            "Paso 3: Ejecutar un Flujo", "PageBase",
-            node =>
-            {
-                node.SetValue("pageTitle",      "Paso 3: Ejecutar un Flujo",                         culture: SeedCulture);
-                node.SetValue("pageSubtitle",   "Llama al engine con un payload de prueba",          culture: SeedCulture);
-                node.SetValue("seoTitle",     "Flow Engine Demo — Paso 3");
-                node.SetValue("seoDescription", "POST /api/engine/flows/approval-flow/execute con caseId y input. El engine corre los tracks y devuelve el outcome.");
-                node.SortOrder = 30;
-            });
-        SeedGridIfEmpty(paso3, BuildPaso3Grid);
+        EnsureDemoPage(siteId, "Paso 3: Ejecutar un Flujo",  30,
+            "Llama al engine con un payload de prueba",
+            "Flow Engine Demo — Paso 3",
+            "POST /api/engine/flows/approval-flow/execute con caseId y input. El engine corre los tracks y devuelve el outcome.",
+            BuildPaso3Grid);
 
-        var paso4 = EnsureChild(siteId, ContentTypeKeys.Aliases.PageBase,
-            "Paso 4: Cambiar el Modo", "PageBase",
-            node =>
-            {
-                node.SetValue("pageTitle",      "Paso 4: Cambiar el Modo",                           culture: SeedCulture);
-                node.SetValue("pageSubtitle",   "El momento demo: cambia executionMode en el backoffice", culture: SeedCulture);
-                node.SetValue("seoTitle",     "Flow Engine Demo — Paso 4");
-                node.SetValue("seoDescription", "Cambia approval-flow de sequential a parallel en el backoffice. Republica. El mismo execute ahora corre los tracks en simultáneo.");
-                node.SortOrder = 40;
-            });
-        SeedGridIfEmpty(paso4, BuildPaso4Grid);
+        EnsureDemoPage(siteId, "Paso 4: Cambiar el Modo",     40,
+            "El momento demo: cambia executionMode en el backoffice",
+            "Flow Engine Demo — Paso 4",
+            "Cambia approval-flow de sequential a parallel en el backoffice. Republica. El mismo execute ahora corre los tracks en simultáneo.",
+            BuildPaso4Grid);
 
-        var paso5 = EnsureChild(siteId, ContentTypeKeys.Aliases.PageBase,
-            "Paso 5: Ver Resultados", "PageBase",
-            node =>
-            {
-                node.SetValue("pageTitle",      "Paso 5: Ver Resultados",                            culture: SeedCulture);
-                node.SetValue("pageSubtitle",   "Consulta el historial de ejecuciones",              culture: SeedCulture);
-                node.SetValue("seoTitle",     "Flow Engine Demo — Paso 5");
-                node.SetValue("seoDescription", "GET /api/engine/executions muestra las últimas ejecuciones. GET /api/engine/health confirma el estado del engine.");
-                node.SortOrder = 50;
-            });
-        SeedGridIfEmpty(paso5, BuildPaso5Grid);
+        EnsureDemoPage(siteId, "Paso 5: Ver Resultados",     50,
+            "Consulta el historial de ejecuciones",
+            "Flow Engine Demo — Paso 5",
+            "GET /api/engine/executions muestra las últimas ejecuciones. GET /api/engine/health confirma el estado del engine.",
+            BuildPaso5Grid);
     }
 
-    // ─── Block Grid seeders ───────────────────────────────────────────────────
+    private void EnsureDemoPage(
+        int siteId, string name, int sortOrder,
+        string subtitle, string seoTitle, string seoDescription,
+        Func<string> buildGrid)
+    {
+        var page = EnsureChild(siteId, ContentTypeKeys.Aliases.PageBase, name, "PageBase",
+            node =>
+            {
+                node.SetValue("pageTitle",      name,            culture: SeedCulture);
+                node.SetValue("pageSubtitle",   subtitle,        culture: SeedCulture);
+                node.SetValue("seoTitle",       seoTitle);
+                node.SetValue("seoDescription", seoDescription);
+                node.SortOrder = sortOrder;
+            });
+        SeedGridIfEmpty(page, buildGrid);
+    }
+
+    // ─── Block Grid seeders ─────────────────────────────────────────────────
 
     private void SeedGridIfEmpty(IContent? page, Func<string> buildGrid)
     {
@@ -227,7 +197,7 @@ internal sealed class FlowDemoSiteSeeder
 
         // Skip ONLY if the PUBLISHED version already has block content.
         // Use published:true to read the published property value, not the draft.
-        // This correctly handles the case where Save succeeded but Publish failed:
+        // This handles the case where Save succeeded but Publish failed:
         //   draft has pageSections, published is empty → seed again.
         // After a successful SaveAndPublish both are identical, so the guard is safe.
         if (page.Published)
@@ -251,488 +221,294 @@ internal sealed class FlowDemoSiteSeeder
         }
     }
 
-    // ─── Page grid builders ───────────────────────────────────────────────────
-    // GUID prefix: fd* (Flow Demo pages — distinct from fe* used by PageBlockGridSeeder)
-    // Ranges: fd000100-199 Intro, fd000200-299 Paso1, fd000300-399 Paso2,
-    //         fd000400-499 Paso3, fd000500-599 Paso4, fd000600-699 Paso5
+    // ─── Page grid builders ─────────────────────────────────────────────────
+    // Each builder is a sequence of declarative AddXxx calls. Per-block UDIs are
+    // auto-generated; no GUID literals here.
 
     private static string BuildIntroGrid()
     {
-        var layout      = new JsonArray();
-        var contentData = new JsonArray();
+        var b = new BlockGridJsonBuilder();
 
-        // ── Row 1: Main heading (h1) ──────────────────────────────────────────
-        // NOTE: ElementCompHero requires a mandatory media image — cannot seed
-        // without a valid media UDI. Use Heading + Paragraph instead.
-        Guid r1 = new("fd000100-0000-0000-0000-000000000000"),
-             g1 = new("fd000101-0000-0000-0000-000000000000");
-        layout.Add(Row(r1, 12, (A1Main, [g1])));
-        contentData.Add(PresetEntry(T1Col, r1));
-        contentData.Add(ContentEntry(THeading, g1, Heading("Synergos Flow Engine", "h1")));
+        // Hero would require a mandatory media image we don't seed → use Heading+Paragraph instead.
+        AddSingleHeading(b, "Synergos Flow Engine", HeadingLevel.H1);
 
-        // ── Row 2: Intro paragraph ────────────────────────────────────────────
-        Guid r2 = new("fd000110-0000-0000-0000-000000000000"),
-             g2 = new("fd000111-0000-0000-0000-000000000000");
-        layout.Add(Row(r2, 12, (A1Main, [g2])));
-        contentData.Add(PresetEntry(T1Col, r2));
-        contentData.Add(ContentEntry(TParagraph, g2, Paragraph(
+        AddSingleParagraph(b,
             "Define flujos en Umbraco. Ejecútalos desde cualquier sistema.",
-            "<p>Configura tracks, pasos y reglas en el backoffice sin YAML, sin código. " +
-            "Cambia el comportamiento del engine sin hacer ningún deploy.</p>")));
+            "<p>El Flow Engine es la capa de orquestación de Synergos. " +
+            "Tú defines los flujos en el backoffice — tracks, pasos, reglas — y el engine los ejecuta. " +
+            "Cualquier sistema (.NET, Node, Python, lo que sea) puede invocar un flujo enviando un POST al engine.</p>");
 
-        // ── Row 3: h2 section heading ─────────────────────────────────────────
-        Guid r3h = new("fd000112-0000-0000-0000-000000000000"),
-             g3h = new("fd000113-0000-0000-0000-000000000000");
-        layout.Add(Row(r3h, 12, (A1Main, [g3h])));
-        contentData.Add(PresetEntry(T1Col, r3h));
-        contentData.Add(ContentEntry(THeading, g3h, Heading("¿Cómo funciona?")));
+        AddSingleHeading(b,
+            "Configura tracks, pasos y reglas en el backoffice sin YAML, sin código. " +
+            "Cambia el comportamiento del engine sin hacer ningún deploy.");
 
-        // ── Row 4: 3 KeyValue steps ───────────────────────────────────────────
-        Guid r4k = new("fd000120-0000-0000-0000-000000000000"),
-             f1  = new("fd000121-0000-0000-0000-000000000000"),
-             f2  = new("fd000122-0000-0000-0000-000000000000"),
-             f3  = new("fd000123-0000-0000-0000-000000000000");
-        layout.Add(Row(r4k, 12, (A3Col1, [f1]), (A3Col2, [f2]), (A3Col3, [f3])));
-        contentData.Add(PresetEntry(T3Col, r4k));
-        contentData.Add(ContentEntry(TKeyValue, f1, KeyValue(
-            "1. Configurar en backoffice",
-            "<p>Define tracks, pasos y reglas desde la interfaz del CMS. Sin YAML, sin JSON a mano, sin deployar.</p>")));
-        contentData.Add(ContentEntry(TKeyValue, f2, KeyValue(
-            "2. Publicar al engine",
-            "<p>Un POST firma el flujo con HMAC-SHA256 y lo registra en Synergos.API listo para ejecutar desde cualquier sistema.</p>")));
-        contentData.Add(ContentEntry(TKeyValue, f3, KeyValue(
-            "3. Cambiar sin deployar",
-            "<p>Cambia el modo de ejecución de sequential a parallel en el backoffice. El engine lo toma en el siguiente publish.</p>")));
+        AddSingleHeading(b, "¿Cómo funciona?");
 
-        // ── Row 5: CTA ────────────────────────────────────────────────────────
-        Guid r5 = new("fd000130-0000-0000-0000-000000000000"),
-             g5 = new("fd000131-0000-0000-0000-000000000000");
-        layout.Add(Row(r5, 12, (A1Main, [g5])));
-        contentData.Add(PresetEntry(T1Col, r5));
-        contentData.Add(ContentEntry(TCtaBanner, g5, CtaBanner(
+        AddThreeKeyValues(b,
+            ("1. Configurar en backoffice",
+             "<p>Define tracks, pasos y reglas desde la interfaz del CMS. Sin YAML, sin JSON a mano, sin deployar.</p>"),
+            ("2. Publicar al engine",
+             "<p>Un POST firma el flujo con HMAC-SHA256 y lo registra en Synergos.API listo para ejecutar desde cualquier sistema.</p>"),
+            ("3. Cambiar sin deployar",
+             "<p>Cambia el modo de ejecución de sequential a parallel en el backoffice. El engine lo toma en el siguiente publish.</p>"));
+
+        AddCtaBanner(b,
             "Listo para verlo en acción",
             "<p>El demo completo toma menos de 10 minutos. Sigue los 5 pasos y verás cómo el backoffice controla el engine sin tocar código.</p>",
-            "Paso 1: Ver los flujos →", "/flow-engine-demo/paso-1-flujos-en-umbraco")));
+            "Paso 1: Ver los flujos →", "/flow-engine-demo/paso-1-flujos-en-umbraco");
 
-        return SerializeGrid(layout, contentData);
+        return b.ToJson();
     }
 
     private static string BuildPaso1Grid()
     {
-        var layout      = new JsonArray();
-        var contentData = new JsonArray();
+        var b = new BlockGridJsonBuilder();
 
-        // ── Row 1: Heading ────────────────────────────────────────────────────
-        Guid r1 = new("fd000200-0000-0000-0000-000000000000"),
-             g1 = new("fd000201-0000-0000-0000-000000000000");
-        layout.Add(Row(r1, 12, (A1Main, [g1])));
-        contentData.Add(PresetEntry(T1Col, r1));
-        contentData.Add(ContentEntry(THeading, g1, Heading("Paso 1: Flujos en Umbraco", "h1")));
+        AddSingleHeading(b, "Paso 1: Flujos en Umbraco", HeadingLevel.H1);
 
-        // ── Row 2: Intro paragraph ────────────────────────────────────────────
-        Guid r2 = new("fd000210-0000-0000-0000-000000000000"),
-             g2 = new("fd000211-0000-0000-0000-000000000000");
-        layout.Add(Row(r2, 12, (A1Main, [g2])));
-        contentData.Add(PresetEntry(T1Col, r2));
-        contentData.Add(ContentEntry(TParagraph, g2, Paragraph(
+        AddSingleParagraph(b,
             "Dónde viven los flujos",
             "<p>Los <strong>FlowDefinition</strong> nodes viven en <code>Content → Flow Settings Root</code>. " +
             "Cada nodo define un flujo completo: nombre, alias, modo de ejecución y tracks. " +
-            "Este proyecto ya tiene dos flujos sembrados para el demo.</p>")));
+            "Este proyecto ya tiene dos flujos sembrados para el demo.</p>");
 
-        // ── Row 3: 2 flujos disponibles ───────────────────────────────────────
-        Guid r3 = new("fd000220-0000-0000-0000-000000000000"),
-             k1 = new("fd000221-0000-0000-0000-000000000000"),
-             k2 = new("fd000222-0000-0000-0000-000000000000");
-        layout.Add(Row(r3, 12, (A2Left, [k1]), (A2Right, [k2])));
-        contentData.Add(PresetEntry(T2Col, r3));
-        contentData.Add(ContentEntry(TKeyValue, k1, KeyValue(
-            "approval-flow",
-            "<p>Flujo de aprobación con dos tracks: <code>validate-budget</code> y <code>notify-approver</code>. " +
-            "Modo <strong>sequential</strong> — los tracks corren uno tras otro.</p>")));
-        contentData.Add(ContentEntry(TKeyValue, k2, KeyValue(
-            "notification-pipeline",
-            "<p>Flujo de notificaciones multicanal con tres tracks: <code>email</code>, <code>sms</code>, <code>push</code>. " +
-            "Modo <strong>parallel</strong> — los tracks corren en simultáneo.</p>")));
+        AddTwoKeyValues(b,
+            ("approval-flow",
+             "<p>Flujo de aprobación con dos tracks: <code>validate-budget</code> y <code>notify-approver</code>. " +
+             "Modo <strong>sequential</strong> — los tracks corren uno tras otro.</p>"),
+            ("notification-pipeline",
+             "<p>Flujo de notificaciones multicanal con tres tracks: <code>email</code>, <code>sms</code>, <code>push</code>. " +
+             "Modo <strong>parallel</strong> — los tracks corren en simultáneo.</p>"));
 
-        // ── Row 4: API endpoint ───────────────────────────────────────────────
-        Guid r4 = new("fd000230-0000-0000-0000-000000000000"),
-             g4 = new("fd000231-0000-0000-0000-000000000000");
-        layout.Add(Row(r4, 12, (A1Main, [g4])));
-        contentData.Add(PresetEntry(T1Col, r4));
-        contentData.Add(ContentEntry(TKeyValue, g4, KeyValue(
-            "Verificar desde la API",
+        AddSingleKeyValue(b, "Verificar desde la API",
             "<p><code>GET /api/synergos/v1/orchestration/flows</code> — lista todos los flujos publicados con su configuración actual. " +
-            "Devuelve alias, executionMode y tracks de cada flujo registrado.</p>")));
+            "Devuelve alias, executionMode y tracks de cada flujo registrado.</p>");
 
-        // ── Row 5: CTA ────────────────────────────────────────────────────────
-        Guid r5 = new("fd000240-0000-0000-0000-000000000000"),
-             g5 = new("fd000241-0000-0000-0000-000000000000");
-        layout.Add(Row(r5, 12, (A1Main, [g5])));
-        contentData.Add(PresetEntry(T1Col, r5));
-        contentData.Add(ContentEntry(TCtaBanner, g5, CtaBanner(
+        AddCtaBanner(b,
             "¿Ves los flujos en el backoffice?",
             "<p>Ve a <strong>Content → Flow Settings Root</strong> y comprueba que <code>approval-flow</code> y <code>notification-pipeline</code> están ahí. Cuando estés listo, sigue al Paso 2.</p>",
             "Paso 2: Publicar al engine →", "/flow-engine-demo/paso-2-registrar-en-engine",
-            "primary")));
+            BlockVariant.Primary);
 
-        return SerializeGrid(layout, contentData);
+        return b.ToJson();
     }
 
     private static string BuildPaso2Grid()
     {
-        var layout      = new JsonArray();
-        var contentData = new JsonArray();
+        var b = new BlockGridJsonBuilder();
 
-        // ── Row 1: Heading ────────────────────────────────────────────────────
-        Guid r1 = new("fd000300-0000-0000-0000-000000000000"),
-             g1 = new("fd000301-0000-0000-0000-000000000000");
-        layout.Add(Row(r1, 12, (A1Main, [g1])));
-        contentData.Add(PresetEntry(T1Col, r1));
-        contentData.Add(ContentEntry(THeading, g1, Heading("Paso 2: Registrar en Engine", "h1")));
+        AddSingleHeading(b, "Paso 2: Registrar en Engine", HeadingLevel.H1);
 
-        // ── Row 2: Intro ──────────────────────────────────────────────────────
-        Guid r2 = new("fd000310-0000-0000-0000-000000000000"),
-             g2 = new("fd000311-0000-0000-0000-000000000000");
-        layout.Add(Row(r2, 12, (A1Main, [g2])));
-        contentData.Add(PresetEntry(T1Col, r2));
-        contentData.Add(ContentEntry(TParagraph, g2, Paragraph(
+        AddSingleParagraph(b,
             "Qué significa publicar",
             "<p>Publicar un flujo significa enviarlo <strong>firmado</strong> desde Umbraco hacia Synergos.API, " +
-            "donde queda disponible para ejecutar. El CMS es la fuente de verdad; el engine solo acepta flujos autenticados.</p>")));
+            "donde queda disponible para ejecutar. El CMS es la fuente de verdad; el engine solo acepta flujos autenticados.</p>");
 
-        // ── Row 3: 3 steps ───────────────────────────────────────────────────
-        Guid r3 = new("fd000320-0000-0000-0000-000000000000"),
-             k1 = new("fd000321-0000-0000-0000-000000000000"),
-             k2 = new("fd000322-0000-0000-0000-000000000000"),
-             k3 = new("fd000323-0000-0000-0000-000000000000");
-        layout.Add(Row(r3, 12, (A3Col1, [k1]), (A3Col2, [k2]), (A3Col3, [k3])));
-        contentData.Add(PresetEntry(T3Col, r3));
-        contentData.Add(ContentEntry(TKeyValue, k1, KeyValue(
-            "Endpoint de publicación",
-            "<p><code>POST /api/synergos/v1/orchestration/flows/{alias}/publish</code></p>" +
-            "<p>Ejemplo: <code>/flows/approval-flow/publish</code></p>")));
-        contentData.Add(ContentEntry(TKeyValue, k2, KeyValue(
-            "Seguridad HMAC",
-            "<p>El CMS firma el payload con <strong>HMAC-SHA256</strong> usando el <code>WebhookSecret</code> configurado. " +
-            "El engine verifica la firma antes de registrar — rechaza cualquier request sin firma válida.</p>")));
-        contentData.Add(ContentEntry(TKeyValue, k3, KeyValue(
-            "Verificar registro",
-            "<p><code>GET /api/engine/flows</code> devuelve el listado de flujos registrados con su versión y estado actual. " +
-            "Confirma que <code>approval-flow</code> aparece después del publish.</p>")));
+        AddThreeKeyValues(b,
+            ("Endpoint de publicación",
+             "<p><code>POST /api/synergos/v1/orchestration/flows/{alias}/publish</code></p>" +
+             "<p>Ejemplo: <code>/flows/approval-flow/publish</code></p>"),
+            ("Seguridad HMAC",
+             "<p>El CMS firma el payload con <strong>HMAC-SHA256</strong> usando el <code>WebhookSecret</code> configurado. " +
+             "El engine verifica la firma antes de registrar — rechaza cualquier request sin firma válida.</p>"),
+            ("Verificar registro",
+             "<p><code>GET /api/engine/flows</code> devuelve el listado de flujos registrados con su versión y estado actual. " +
+             "Confirma que <code>approval-flow</code> aparece después del publish.</p>"));
 
-        // ── Row 4: CTA ────────────────────────────────────────────────────────
-        Guid r4 = new("fd000330-0000-0000-0000-000000000000"),
-             g4 = new("fd000331-0000-0000-0000-000000000000");
-        layout.Add(Row(r4, 12, (A1Main, [g4])));
-        contentData.Add(PresetEntry(T1Col, r4));
-        contentData.Add(ContentEntry(TCtaBanner, g4, CtaBanner(
+        AddCtaBanner(b,
             "Flujo registrado en el engine",
             "<p>Llama al endpoint de publish y verifica con <code>GET /api/engine/flows</code>. " +
             "Cuando veas <code>approval-flow</code> en el listado, el engine está listo para ejecutarlo.</p>",
             "Paso 3: Ejecutar →", "/flow-engine-demo/paso-3-ejecutar-un-flujo",
-            "primary")));
+            BlockVariant.Primary);
 
-        return SerializeGrid(layout, contentData);
+        return b.ToJson();
     }
 
     private static string BuildPaso3Grid()
     {
-        var layout      = new JsonArray();
-        var contentData = new JsonArray();
+        var b = new BlockGridJsonBuilder();
 
-        // ── Row 1: Heading ────────────────────────────────────────────────────
-        Guid r1 = new("fd000400-0000-0000-0000-000000000000"),
-             g1 = new("fd000401-0000-0000-0000-000000000000");
-        layout.Add(Row(r1, 12, (A1Main, [g1])));
-        contentData.Add(PresetEntry(T1Col, r1));
-        contentData.Add(ContentEntry(THeading, g1, Heading("Paso 3: Ejecutar un Flujo", "h1")));
+        AddSingleHeading(b, "Paso 3: Ejecutar un Flujo", HeadingLevel.H1);
 
-        // ── Row 2: Intro ──────────────────────────────────────────────────────
-        Guid r2 = new("fd000410-0000-0000-0000-000000000000"),
-             g2 = new("fd000411-0000-0000-0000-000000000000");
-        layout.Add(Row(r2, 12, (A1Main, [g2])));
-        contentData.Add(PresetEntry(T1Col, r2));
-        contentData.Add(ContentEntry(TParagraph, g2, Paragraph(
+        AddSingleParagraph(b,
             "Ejecutar desde cualquier sistema",
             "<p>Con el flujo registrado, cualquier sistema puede ejecutarlo enviando un <code>POST</code> al engine. " +
-            "No necesita saber cómo funciona el flujo internamente — solo el alias y el payload de negocio.</p>")));
+            "No necesita saber cómo funciona el flujo internamente — solo el alias y el payload de negocio.</p>");
 
-        // ── Row 3: Endpoint + Body ────────────────────────────────────────────
-        Guid r3 = new("fd000420-0000-0000-0000-000000000000"),
-             k1 = new("fd000421-0000-0000-0000-000000000000"),
-             k2 = new("fd000422-0000-0000-0000-000000000000");
-        layout.Add(Row(r3, 12, (A2Left, [k1]), (A2Right, [k2])));
-        contentData.Add(PresetEntry(T2Col, r3));
-        contentData.Add(ContentEntry(TKeyValue, k1, KeyValue(
-            "Endpoint de ejecución",
-            "<p><code>POST /api/engine/flows/approval-flow/execute</code></p>" +
-            "<p>Body de ejemplo:</p>" +
-            "<pre>{\n  \"caseId\": \"CASE-001\",\n  \"input\": {\n    \"amount\": 5000,\n    \"priority\": \"high\"\n  }\n}</pre>")));
-        contentData.Add(ContentEntry(TKeyValue, k2, KeyValue(
-            "Respuesta del engine",
-            "<p>El engine devuelve:</p>" +
-            "<ul><li><code>outcome</code> — resultado final del flujo</li>" +
-            "<li><code>trackResults</code> — resultado de cada track</li>" +
-            "<li><code>executionTimeMs</code> — tiempo total en ms</li></ul>" +
-            "<p>En modo <strong>sequential</strong> los tracks corren uno tras otro. En el Paso 4 cambiaremos eso.</p>")));
+        AddTwoKeyValues(b,
+            ("Endpoint de ejecución",
+             "<p><code>POST /api/engine/flows/approval-flow/execute</code></p>" +
+             "<p>Body de ejemplo:</p>" +
+             "<pre>{\n  \"caseId\": \"CASE-001\",\n  \"input\": {\n    \"amount\": 5000,\n    \"priority\": \"high\"\n  }\n}</pre>"),
+            ("Respuesta del engine",
+             "<p>El engine devuelve:</p>" +
+             "<ul><li><code>outcome</code> — resultado final del flujo</li>" +
+             "<li><code>trackResults</code> — resultado de cada track</li>" +
+             "<li><code>executionTimeMs</code> — tiempo total en ms</li></ul>" +
+             "<p>En modo <strong>sequential</strong> los tracks corren uno tras otro. En el Paso 4 cambiaremos eso.</p>"));
 
-        // ── Row 4: CTA ────────────────────────────────────────────────────────
-        Guid r4 = new("fd000430-0000-0000-0000-000000000000"),
-             g4 = new("fd000431-0000-0000-0000-000000000000");
-        layout.Add(Row(r4, 12, (A1Main, [g4])));
-        contentData.Add(PresetEntry(T1Col, r4));
-        contentData.Add(ContentEntry(TCtaBanner, g4, CtaBanner(
+        AddCtaBanner(b,
             "¿Obtuviste el outcome?",
             "<p>Guarda el <code>executionTimeMs</code> de este primer run en modo sequential. " +
             "En el Paso 4 lo vas a comparar con el modo parallel.</p>",
             "Paso 4: Cambiar el modo →", "/flow-engine-demo/paso-4-cambiar-el-modo",
-            "primary")));
+            BlockVariant.Primary);
 
-        return SerializeGrid(layout, contentData);
+        return b.ToJson();
     }
 
     private static string BuildPaso4Grid()
     {
-        var layout      = new JsonArray();
-        var contentData = new JsonArray();
+        var b = new BlockGridJsonBuilder();
 
-        // ── Row 1: Heading ────────────────────────────────────────────────────
-        Guid r1 = new("fd000500-0000-0000-0000-000000000000"),
-             g1 = new("fd000501-0000-0000-0000-000000000000");
-        layout.Add(Row(r1, 12, (A1Main, [g1])));
-        contentData.Add(PresetEntry(T1Col, r1));
-        contentData.Add(ContentEntry(THeading, g1, Heading("Paso 4: Cambiar el Modo", "h1")));
+        AddSingleHeading(b, "Paso 4: Cambiar el Modo", HeadingLevel.H1);
 
-        // ── Row 2: Intro ──────────────────────────────────────────────────────
-        Guid r2 = new("fd000510-0000-0000-0000-000000000000"),
-             g2 = new("fd000511-0000-0000-0000-000000000000");
-        layout.Add(Row(r2, 12, (A1Main, [g2])));
-        contentData.Add(PresetEntry(T1Col, r2));
-        contentData.Add(ContentEntry(TParagraph, g2, Paragraph(
+        AddSingleParagraph(b,
             "El momento del demo",
             "<p>Aquí es donde el Flow Engine demuestra su valor. Vas a cambiar el comportamiento del flujo " +
-            "desde el backoffice sin tocar ningún archivo, sin hacer deploy y sin reiniciar nada.</p>")));
+            "desde el backoffice sin tocar ningún archivo, sin hacer deploy y sin reiniciar nada.</p>");
 
-        // ── Row 3: 3 pasos ────────────────────────────────────────────────────
-        Guid r3 = new("fd000520-0000-0000-0000-000000000000"),
-             f1 = new("fd000521-0000-0000-0000-000000000000"),
-             f2 = new("fd000522-0000-0000-0000-000000000000"),
-             f3 = new("fd000523-0000-0000-0000-000000000000");
-        layout.Add(Row(r3, 12, (A3Col1, [f1]), (A3Col2, [f2]), (A3Col3, [f3])));
-        contentData.Add(PresetEntry(T3Col, r3));
-        contentData.Add(ContentEntry(TKeyValue, f1, KeyValue(
-            "1. Abrir el backoffice",
-            "<p>Ve a <strong>Content → Flow Settings Root → approval-flow</strong>. Abre la pestaña Execution.</p>")));
-        contentData.Add(ContentEntry(TKeyValue, f2, KeyValue(
-            "2. Cambiar a parallel",
-            "<p>Cambia el campo <em>Execution Mode</em> de <code>sequential</code> a <code>parallel</code>. Guarda y publica el nodo.</p>")));
-        contentData.Add(ContentEntry(TKeyValue, f3, KeyValue(
-            "3. Re-publicar y ejecutar",
-            "<p>Llama al <code>/publish</code> endpoint. Luego ejecuta el mismo CASE-001. Los tracks ahora corren en simultáneo — el <code>executionTimeMs</code> baja.</p>")));
+        AddThreeKeyValues(b,
+            ("1. Abrir el backoffice",
+             "<p>Ve a <strong>Content → Flow Settings Root → approval-flow</strong>. Abre la pestaña Execution.</p>"),
+            ("2. Cambiar a parallel",
+             "<p>Cambia el campo <em>Execution Mode</em> de <code>sequential</code> a <code>parallel</code>. Guarda y publica el nodo.</p>"),
+            ("3. Re-publicar y ejecutar",
+             "<p>Llama al <code>/publish</code> endpoint. Luego ejecuta el mismo CASE-001. Los tracks ahora corren en simultáneo — el <code>executionTimeMs</code> baja.</p>"));
 
-        // ── Row 4: CTA ────────────────────────────────────────────────────────
-        Guid r4 = new("fd000530-0000-0000-0000-000000000000"),
-             g4 = new("fd000531-0000-0000-0000-000000000000");
-        layout.Add(Row(r4, 12, (A1Main, [g4])));
-        contentData.Add(PresetEntry(T1Col, r4));
-        contentData.Add(ContentEntry(TCtaBanner, g4, CtaBanner(
+        AddCtaBanner(b,
             "¿Notaste la diferencia?",
             "<p>Sequential vs Parallel — mismo flujo, mismo código, comportamiento diferente. " +
             "Solo cambiaste un campo en el backoffice. Eso es el Flow Engine.</p>",
             "Paso 5: Ver los resultados →", "/flow-engine-demo/paso-5-ver-resultados",
-            "primary")));
+            BlockVariant.Primary);
 
-        return SerializeGrid(layout, contentData);
+        return b.ToJson();
     }
 
     private static string BuildPaso5Grid()
     {
-        var layout      = new JsonArray();
-        var contentData = new JsonArray();
+        var b = new BlockGridJsonBuilder();
 
-        // ── Row 1: Heading ────────────────────────────────────────────────────
-        Guid r1 = new("fd000600-0000-0000-0000-000000000000"),
-             g1 = new("fd000601-0000-0000-0000-000000000000");
-        layout.Add(Row(r1, 12, (A1Main, [g1])));
-        contentData.Add(PresetEntry(T1Col, r1));
-        contentData.Add(ContentEntry(THeading, g1, Heading("Paso 5: Ver Resultados", "h1")));
+        AddSingleHeading(b, "Paso 5: Ver Resultados", HeadingLevel.H1);
 
-        // ── Row 2: Intro ──────────────────────────────────────────────────────
-        Guid r2 = new("fd000610-0000-0000-0000-000000000000"),
-             g2 = new("fd000611-0000-0000-0000-000000000000");
-        layout.Add(Row(r2, 12, (A1Main, [g2])));
-        contentData.Add(PresetEntry(T1Col, r2));
-        contentData.Add(ContentEntry(TParagraph, g2, Paragraph(
+        AddSingleParagraph(b,
             "Historial de ejecuciones",
             "<p>El engine guarda el resultado de cada ejecución. Puedes consultar el historial completo, " +
-            "el detalle de un caso específico, o el estado general del sistema.</p>")));
+            "el detalle de un caso específico, o el estado general del sistema.</p>");
 
-        // ── Row 3: 3 endpoints ────────────────────────────────────────────────
-        Guid r3 = new("fd000620-0000-0000-0000-000000000000"),
-             k1 = new("fd000621-0000-0000-0000-000000000000"),
-             k2 = new("fd000622-0000-0000-0000-000000000000"),
-             k3 = new("fd000623-0000-0000-0000-000000000000");
-        layout.Add(Row(r3, 12, (A3Col1, [k1]), (A3Col2, [k2]), (A3Col3, [k3])));
-        contentData.Add(PresetEntry(T3Col, r3));
-        contentData.Add(ContentEntry(TKeyValue, k1, KeyValue(
-            "Últimas ejecuciones",
-            "<p><code>GET /api/engine/executions?limit=10</code></p>" +
-            "<p>Lista las ejecuciones más recientes con alias, caseId, outcome y tiempo.</p>")));
-        contentData.Add(ContentEntry(TKeyValue, k2, KeyValue(
-            "Detalle de un caso",
-            "<p><code>GET /api/engine/executions/CASE-001</code></p>" +
-            "<p>Muestra el resultado completo: trackResults, input recibido y executionTimeMs de cada track.</p>")));
-        contentData.Add(ContentEntry(TKeyValue, k3, KeyValue(
-            "Estado del engine",
-            "<p><code>GET /api/engine/health</code></p>" +
-            "<p>Confirma el estado del engine, la cantidad de flujos registrados y el estado de cada worker activo.</p>")));
+        AddThreeKeyValues(b,
+            ("Últimas ejecuciones",
+             "<p><code>GET /api/engine/executions?limit=10</code></p>" +
+             "<p>Lista las ejecuciones más recientes con alias, caseId, outcome y tiempo.</p>"),
+            ("Detalle de un caso",
+             "<p><code>GET /api/engine/executions/CASE-001</code></p>" +
+             "<p>Muestra el resultado completo: trackResults, input recibido y executionTimeMs de cada track.</p>"),
+            ("Estado del engine",
+             "<p><code>GET /api/engine/health</code></p>" +
+             "<p>Confirma el estado del engine, la cantidad de flujos registrados y el estado de cada worker activo.</p>"));
 
-        // ── Row 4: CTA ────────────────────────────────────────────────────────
-        Guid r4 = new("fd000630-0000-0000-0000-000000000000"),
-             g4 = new("fd000631-0000-0000-0000-000000000000");
-        layout.Add(Row(r4, 12, (A1Main, [g4])));
-        contentData.Add(PresetEntry(T1Col, r4));
-        contentData.Add(ContentEntry(TCtaBanner, g4, CtaBanner(
+        AddCtaBanner(b,
             "Demo completado",
             "<p>En menos de 10 minutos viste cómo Synergos Flow Engine conecta el backoffice con la ejecución de negocio. " +
             "Configuración en Umbraco. Ejecución en la API. Sin tocar código.</p>",
-            "← Volver al inicio", "/flow-engine-demo/intro-al-flow-engine",
-            "dark")));
+            "← Volver al inicio", "/flow-engine-demo/intro-al-flow-engine");
 
-        return SerializeGrid(layout, contentData);
+        return b.ToJson();
     }
 
-    // ─── JSON helpers (same pattern as PageBlockGridSeeder) ───────────────────
+    // ─── Layout shorthands — encapsulate repeated row patterns ──────────────
 
-    private static string Udi(Guid g) => $"umb://element/{g:N}";
-    private static string AreaKey(Guid g) => g.ToString("D");
-
-    private static JsonObject Row(Guid presetGuid, int colSpan, params (Guid areaKey, Guid[] items)[] areas)
+    private static void AddSingleHeading(
+        BlockGridJsonBuilder b, string text, HeadingLevel level = HeadingLevel.H2)
     {
-        var areaArray = new JsonArray();
-        foreach (var (aKey, items) in areas)
+        Guid preset = Guid.NewGuid(), heading = Guid.NewGuid();
+        b.AddRow(preset, 12, (BlockGridAreaKeys.Preset1ColMain, new[] { heading }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset1Col, preset);
+        b.AddContent(ContentTypeKeys.ElementTextHeading, heading, new Dictionary<string, object?>
         {
-            var itemArray = new JsonArray();
-            foreach (var item in items)
-            {
-                itemArray.Add(new JsonObject
-                {
-                    ["contentUdi"] = Udi(item),
-                    ["columnSpan"] = 12,
-                    ["rowSpan"]    = 1,
-                    ["areas"]      = new JsonArray()
-                });
-            }
-            areaArray.Add(new JsonObject { ["key"] = AreaKey(aKey), ["items"] = itemArray });
-        }
-        return new JsonObject
-        {
-            ["contentUdi"] = Udi(presetGuid),
-            ["columnSpan"] = colSpan,
-            ["rowSpan"]    = 1,
-            ["areas"]      = areaArray
-        };
+            ["headingText"]  = text,
+            ["headingLevel"] = BlockGridJsonBuilder.DropdownValue(level.ToAlias())
+        });
     }
 
-    private static JsonObject ContentEntry(string contentTypeKey, Guid contentGuid, Dictionary<string, object?> props)
+    private static void AddSingleParagraph(BlockGridJsonBuilder b, string title, string body)
     {
-        var entry = new JsonObject
+        Guid preset = Guid.NewGuid(), paragraph = Guid.NewGuid();
+        b.AddRow(preset, 12, (BlockGridAreaKeys.Preset1ColMain, new[] { paragraph }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset1Col, preset);
+        b.AddContent(ContentTypeKeys.ElementTextParagraph, paragraph, new Dictionary<string, object?>
         {
-            ["contentTypeKey"] = contentTypeKey,
-            ["udi"]            = Udi(contentGuid)
-        };
-        foreach (var (alias, value) in props)
-        {
-            entry[alias] = value switch
-            {
-                null       => null,
-                JsonNode n => n.DeepClone(),
-                string s   => JsonValue.Create(s),
-                int i      => JsonValue.Create(i),
-                bool b     => JsonValue.Create(b),
-                _          => JsonValue.Create(value.ToString())
-            };
-        }
-        return entry;
+            ["title"] = title,
+            ["body"]  = body
+        });
     }
 
-    private static JsonObject PresetEntry(string typeKey, Guid guid)
-        => ContentEntry(typeKey, guid, new Dictionary<string, object?>());
-
-    private static string SerializeGrid(JsonArray layoutItems, JsonArray contentData)
+    private static void AddSingleKeyValue(BlockGridJsonBuilder b, string title, string body)
     {
-        var root = new JsonObject
-        {
-            ["layout"]       = new JsonObject { [BgEditorAlias] = layoutItems },
-            ["contentData"]  = contentData,
-            ["settingsData"] = new JsonArray()
-        };
-        return root.ToJsonString();
+        Guid preset = Guid.NewGuid(), kv = Guid.NewGuid();
+        b.AddRow(preset, 12, (BlockGridAreaKeys.Preset1ColMain, new[] { kv }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset1Col, preset);
+        b.AddContent(ContentTypeKeys.ElementInfoKeyValue, kv, KeyValueProps(title, body));
     }
 
-    // ─── Content factories ────────────────────────────────────────────────────
-
-    private static string Dropdown(string value) => JsonSerializer.Serialize(new[] { value });
-
-    private static Dictionary<string, object?> Heading(string text, string level = "h2") => new()
+    private static void AddTwoKeyValues(BlockGridJsonBuilder b,
+        (string Title, string Body) k1,
+        (string Title, string Body) k2)
     {
-        ["headingText"]  = text,
-        ["headingLevel"] = Dropdown(level)
-    };
+        Guid preset = Guid.NewGuid(), b1 = Guid.NewGuid(), b2 = Guid.NewGuid();
+        b.AddRow(preset, 12,
+            (BlockGridAreaKeys.Preset2ColLeft,  new[] { b1 }),
+            (BlockGridAreaKeys.Preset2ColRight, new[] { b2 }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset2ColEqual, preset);
+        b.AddContent(ContentTypeKeys.ElementInfoKeyValue, b1, KeyValueProps(k1.Title, k1.Body));
+        b.AddContent(ContentTypeKeys.ElementInfoKeyValue, b2, KeyValueProps(k2.Title, k2.Body));
+    }
 
-    private static Dictionary<string, object?> Paragraph(string title, string body) => new()
+    private static void AddThreeKeyValues(BlockGridJsonBuilder b,
+        (string Title, string Body) k1,
+        (string Title, string Body) k2,
+        (string Title, string Body) k3)
+    {
+        Guid preset = Guid.NewGuid(), b1 = Guid.NewGuid(), b2 = Guid.NewGuid(), b3 = Guid.NewGuid();
+        b.AddRow(preset, 12,
+            (BlockGridAreaKeys.Preset3Col1, new[] { b1 }),
+            (BlockGridAreaKeys.Preset3Col2, new[] { b2 }),
+            (BlockGridAreaKeys.Preset3Col3, new[] { b3 }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset3ColEqual, preset);
+        b.AddContent(ContentTypeKeys.ElementInfoKeyValue, b1, KeyValueProps(k1.Title, k1.Body));
+        b.AddContent(ContentTypeKeys.ElementInfoKeyValue, b2, KeyValueProps(k2.Title, k2.Body));
+        b.AddContent(ContentTypeKeys.ElementInfoKeyValue, b3, KeyValueProps(k3.Title, k3.Body));
+    }
+
+    private static void AddCtaBanner(
+        BlockGridJsonBuilder b, string title, string body, string ctaLabel, string ctaUrl,
+        BlockVariant variant = BlockVariant.Dark)
+    {
+        Guid preset = Guid.NewGuid(), banner = Guid.NewGuid();
+        b.AddRow(preset, 12, (BlockGridAreaKeys.Preset1ColMain, new[] { banner }));
+        b.AddLayoutPreset(ContentTypeKeys.LayoutPreset1Col, preset);
+        b.AddContent(ContentTypeKeys.ElementCompCtaBanner, banner, new Dictionary<string, object?>
+        {
+            ["title"]    = title,
+            ["body"]     = body,
+            ["ctaLabel"] = ctaLabel,
+            ["ctaLink"]  = BlockGridJsonBuilder.SingleLink(ctaUrl, ctaLabel),
+            ["variant"]  = BlockGridJsonBuilder.DropdownValue(variant.ToAlias())
+        });
+    }
+
+    private static Dictionary<string, object?> KeyValueProps(string title, string body) => new()
     {
         ["title"] = title,
         ["body"]  = body
     };
 
-    private static Dictionary<string, object?> Hero(
-        string headingText, string body,
-        string ctaLabel, string ctaUrl,
-        string variant = "dark") => new()
-    {
-        ["headingText"] = headingText,
-        ["body"]        = body,
-        ["ctaLabel"]    = ctaLabel,
-        ["ctaLink"]     = Link(ctaUrl, ctaLabel),
-        ["variant"]     = Dropdown(variant)
-    };
-
-    private static Dictionary<string, object?> Feature(string title, string subtitle, string summary) => new()
-    {
-        ["title"]    = title,
-        ["subtitle"] = subtitle,
-        ["summary"]  = summary
-    };
-
-    private static Dictionary<string, object?> KeyValue(string title, string body) => new()
-    {
-        ["title"] = title,
-        ["body"]  = body
-    };
-
-    private static Dictionary<string, object?> CtaBanner(
-        string title, string body,
-        string ctaLabel, string ctaUrl,
-        string variant = "dark") => new()
-    {
-        ["title"]    = title,
-        ["body"]     = body,
-        ["ctaLabel"] = ctaLabel,
-        ["ctaLink"]  = Link(ctaUrl, ctaLabel),
-        ["variant"]  = Dropdown(variant)
-    };
-
-    private static JsonNode Link(string url, string name, string target = "_self")
-        => JsonNode.Parse(
-            $"[{{\"url\":\"{url}\",\"name\":\"{name}\",\"target\":\"{target}\",\"udi\":null}}]")!;
-
-    // ─── Navigation + SiteSettings wiring ────────────────────────────────────
+    // ─── Navigation + SiteSettings wiring ───────────────────────────────────
 
     private void EnsureNavigation(int siteId)
     {
-        // 1. Config folder under demo site
         var config = EnsureChild(siteId, ContentTypeKeys.Aliases.SharedContentFolder, "Config", "", null);
         if (config is null)
         {
@@ -740,19 +516,17 @@ internal sealed class FlowDemoSiteSeeder
             return;
         }
 
-        // 2. Look up demo pages before building the nav (needed for navLink UDIs)
         var demoPages = _content.GetPagedChildren(siteId, 0, 20, out _)
             .Where(c => c.ContentType.Alias == ContentTypeKeys.Aliases.PageBase)
             .OrderBy(c => c.SortOrder)
             .ToList();
 
-        // 3. Find or create navigationGroup.
-        //    NOTE: groupName is mandatory → we must set it BEFORE the first SaveAndPublish.
-        //    EnsureChild publishes with no properties, so we inline the find-or-create here.
+        // Find or create the navigation group inline (groupName is mandatory and must
+        // be set BEFORE the first SaveAndPublish, so we don't reuse EnsureChild here).
         var navGroup = _content.GetPagedChildren(config.Id, 0, 20, out _)
             .FirstOrDefault(c =>
                 c.ContentType.Alias == ContentTypeKeys.Aliases.NavigationGroup &&
-                string.Equals(c.Name, "Flow Engine Demo Nav", StringComparison.OrdinalIgnoreCase));
+                string.Equals(c.Name, DemoNavName, StringComparison.OrdinalIgnoreCase));
 
         if (navGroup is null)
         {
@@ -762,12 +536,12 @@ internal sealed class FlowDemoSiteSeeder
                 _logger.LogWarning("FlowDemoSiteSeeder: contentType 'navigationGroup' not found — navigation skipped.");
                 return;
             }
-            navGroup = _content.Create("Flow Engine Demo Nav", config.Id, ContentTypeKeys.Aliases.NavigationGroup);
+            navGroup = _content.Create(DemoNavName, config.Id, ContentTypeKeys.Aliases.NavigationGroup);
         }
 
         // Always rebuild navItems so content-node UDIs are current
-        navGroup.SetValue("groupName",  "Flow Engine Demo Nav");
-        navGroup.SetValue("groupAlias", "flow-engine-demo");
+        navGroup.SetValue("groupName",  DemoNavName);
+        navGroup.SetValue("groupAlias", DemoNavAlias);
         navGroup.SetValue("navItems",   BuildNavItems(demoPages));
 
         var navResult = _content.SaveAndPublish(navGroup, userId: UmbConstants.Security.SuperUserId);
@@ -778,7 +552,7 @@ internal sealed class FlowDemoSiteSeeder
         }
         _logger.LogInformation("FlowDemoSiteSeeder: navigationGroup published (Id={Id}).", navGroup.Id);
 
-        // 4. Patch SiteSettings: nav pickers + SEO defaults
+        // Wire the nav into SiteSettings + seed defaults
         var siteSettings = _content.GetPagedChildren(siteId, 0, 20, out _)
             .FirstOrDefault(c => c.ContentType.Alias == ContentTypeKeys.Aliases.SiteSettingsAlias);
 
@@ -808,37 +582,26 @@ internal sealed class FlowDemoSiteSeeder
     }
 
     /// <summary>
-    /// Builds a Block List JSON string for the navigationGroup.navItems property.
-    /// Uses stable element GUIDs in the fd000701-706 range (block-element UDIs,
-    /// not rows in umbracoNode — safe to use without GUID registry).
+    /// Builds a Block List JSON for navigationGroup.navItems. Each item is an
+    /// <see cref="ContentTypeKeys.ElementNavItem"/> that links to one of the demo pages.
+    /// Per-item UDIs are <see cref="Guid.NewGuid"/> — block-element UDIs only need to
+    /// be unique within this JSON document.
     /// </summary>
     private static string BuildNavItems(IReadOnlyList<IContent> pages)
     {
-        const string NavItemTypeKey = "cb000001-0000-0000-0000-000000000000";
-        var navElemGuids = new[]
-        {
-            new Guid("fd000701-0000-0000-0000-000000000000"),
-            new Guid("fd000702-0000-0000-0000-000000000000"),
-            new Guid("fd000703-0000-0000-0000-000000000000"),
-            new Guid("fd000704-0000-0000-0000-000000000000"),
-            new Guid("fd000705-0000-0000-0000-000000000000"),
-            new Guid("fd000706-0000-0000-0000-000000000000"),
-        };
+        var navItemTypeKey = ContentTypeKeys.ElementNavItem.ToString("D");
+        var layoutItems    = new JsonArray();
+        var contentData    = new JsonArray();
 
-        var layoutItems = new JsonArray();
-        var contentData = new JsonArray();
-
-        for (int i = 0; i < pages.Count && i < navElemGuids.Length; i++)
+        foreach (var page in pages)
         {
-            var page     = pages[i];
-            var elemGuid = navElemGuids[i];
-            var elemUdi  = $"umb://element/{elemGuid:N}";
-            var docUdi   = $"umb://document/{page.Key:N}";
+            var elemUdi = $"umb://element/{Guid.NewGuid():N}";
+            var docUdi  = $"umb://document/{page.Key:N}";
 
             layoutItems.Add(new JsonObject { ["contentUdi"] = elemUdi });
             contentData.Add(new JsonObject
             {
-                ["contentTypeKey"] = NavItemTypeKey,
+                ["contentTypeKey"] = navItemTypeKey,
                 ["udi"]            = elemUdi,
                 ["navLabel"]       = page.Name ?? "",
                 ["navLink"]        = JsonSerializer.Serialize(new[]
@@ -872,7 +635,7 @@ internal sealed class FlowDemoSiteSeeder
         return true;
     }
 
-    // ─── Helper ───────────────────────────────────────────────────────────────
+    // ─── Helper ─────────────────────────────────────────────────────────────
 
     private IContent? EnsureChild(
         int parentId,
@@ -899,7 +662,7 @@ internal sealed class FlowDemoSiteSeeder
         var node = _content.Create(name, parentId, docTypeAlias);
         configure?.Invoke(node);
 
-        // Culture-variant content types require an explicit culture name before SaveAndPublish
+        // Culture-variant content types require an explicit culture name before SaveAndPublish.
         if (docType.Variations.HasFlag(ContentVariation.Culture))
             node.SetCultureName(name, SeedCulture);
 
