@@ -296,16 +296,27 @@ public sealed class BlogAssembler
         return siteRoot?.FirstChild(ContentTypeKeys.Aliases.SiteSettingsAlias);
     }
 
+    /// <summary>
+    /// Reads page-level SEO values with site-level defaults as fallback.
+    /// All page aliases come from compSeo (see <see cref="PropertyAliases.Seo"/>).
+    /// </summary>
     private static SeoMetadata ReadSeo(IPublishedContent page, IPublishedContent? siteSettings = null)
         => new(
             Title:        page.Value<string>(PropertyAliases.Seo.SeoTitle),
             Description:  page.Value<string>(PropertyAliases.Seo.SeoDescription)
                           ?? siteSettings?.Value<string>("seoDefaultDescription"),
-            Image:        ReadImage(page, "seoImage")
+            Image:        ReadImage(page, PropertyAliases.Seo.OgImage)
                           ?? (siteSettings is not null ? ReadImage(siteSettings, "seoDefaultOgImage") : null),
-            NoIndex:      page.Value<bool>("noIndex"),
-            CanonicalUrl: page.Value<Umbraco.Cms.Core.Models.Link>("canonicalUrl")?.Url,
+            NoIndex:      IsNoIndex(page.Value<string>(PropertyAliases.Seo.Robots)),
+            CanonicalUrl: page.Value<string>(PropertyAliases.Seo.Canonical),
             TitleSuffix:  siteSettings?.Value<string>("seoTitleSuffix"));
+
+    /// <summary>
+    /// True when the robots dropdown directive includes "noindex".
+    /// </summary>
+    private static bool IsNoIndex(string? robots)
+        => !string.IsNullOrWhiteSpace(robots)
+           && robots.Contains("noindex", StringComparison.OrdinalIgnoreCase);
 
     private static Image? ReadImage(IPublishedContent page, string alias)
     {

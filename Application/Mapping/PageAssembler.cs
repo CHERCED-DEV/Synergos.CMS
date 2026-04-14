@@ -142,20 +142,34 @@ public sealed class PageAssembler
 
     /// <summary>
     /// Reads page-level SEO values with site-level defaults as fallback.
-    /// - Title:       page.seoTitle (no suffix applied here — handled by view)
-    /// - Description: page.seoDescription ?? siteSettings.seoDefaultDescription
-    /// - Image:       page.seoImage ?? siteSettings.seoDefaultOgImage
+    /// All page aliases come from compSeo (see <see cref="PropertyAliases.Seo"/>).
+    /// Site-level defaults live on SiteSettings (compSiteSettings — the seo* aliases there).
+    ///
+    /// Field mapping (compSeo → SeoMetadata):
+    ///   seoTitle       → Title
+    ///   seoDescription → Description (fallback: siteSettings.seoDefaultDescription)
+    ///   ogImage        → Image       (fallback: siteSettings.seoDefaultOgImage)
+    ///   robots         → NoIndex     (true when value contains "noindex")
+    ///   canonical      → CanonicalUrl
     /// </summary>
     private static SeoMetadata ReadSeo(IPublishedContent page, IPublishedContent? siteSettings)
         => new(
             Title:        page.Value<string>(PropertyAliases.Seo.SeoTitle),
             Description:  page.Value<string>(PropertyAliases.Seo.SeoDescription)
                           ?? siteSettings?.Value<string>("seoDefaultDescription"),
-            Image:        ReadImage(page, "seoImage")
+            Image:        ReadImage(page, PropertyAliases.Seo.OgImage)
                           ?? (siteSettings is not null ? ReadImage(siteSettings, "seoDefaultOgImage") : null),
-            NoIndex:      page.Value<bool>("noIndex"),
-            CanonicalUrl: page.Value<Umbraco.Cms.Core.Models.Link>("canonicalUrl")?.Url,
+            NoIndex:      IsNoIndex(page.Value<string>(PropertyAliases.Seo.Robots)),
+            CanonicalUrl: page.Value<string>(PropertyAliases.Seo.Canonical),
             TitleSuffix:  siteSettings?.Value<string>("seoTitleSuffix"));
+
+    /// <summary>
+    /// True when the robots dropdown directive includes "noindex".
+    /// Accepts variants like "noindex", "noindex, nofollow", or null/empty.
+    /// </summary>
+    private static bool IsNoIndex(string? robots)
+        => !string.IsNullOrWhiteSpace(robots)
+           && robots.Contains("noindex", StringComparison.OrdinalIgnoreCase);
 
     private static Image? ReadImage(IPublishedContent page, string alias)
     {
