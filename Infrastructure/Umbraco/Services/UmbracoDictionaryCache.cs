@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
 using Synergos.CMS.Configuration;
@@ -9,18 +10,21 @@ using Synergos.CMS.Domain.Services;
 namespace Synergos.CMS.Infrastructure.Umbraco.Services;
 
 /// <summary>
-/// Implementación de IDictionaryCache respaldada por IMemoryCache.
+/// IMemoryCache-backed implementation of <see cref="IDictionaryCache"/>.
 ///
-/// Los dictionary items de Umbraco son casi estáticos — solo cambian cuando un editor
-/// los modifica en el backoffice. Cacheamos cada valor individualmente con clave
-/// "{dictionaryKey}::{culture}" según el TTL configurado en Synergos:Cache.
+/// Umbraco dictionary items are near-static — they only change when an editor saves
+/// or deletes one in the backoffice. Each value is cached individually keyed by
+/// "sg_dict::{key}[::{culture}]" with the TTL configured in <c>Synergos:Cache</c>.
 ///
-/// Invalidación: llamar a Invalidate() desde una notificación DictionaryItemSaved /
-/// ContentCacheRefresherNotification si se desea coherencia inmediata. Sin invalidación
-/// explícita, los cambios se propagan al expirar el TTL.
+/// Invalidation strategy: every cache entry is linked to a shared
+/// <see cref="CancellationTokenSource"/>. <see cref="Invalidate"/> cancels the token,
+/// which atomically expires all entries created by this instance. The token source is
+/// then replaced so subsequent reads repopulate.
 ///
-/// Patrón de referencia: NS.Booking.CMS — CacheDictionaryService.
-/// Adaptación: usa IMemoryCache inyectado en vez del MemoryCache.Default estático.
+/// The notification handler in <c>Infrastructure/Umbraco/Notifications/DictionaryCacheInvalidator</c>
+/// calls <see cref="Invalidate"/> on <c>DictionaryItemSavedNotification</c> +
+/// <c>DictionaryItemDeletedNotification</c> so editor changes propagate immediately
+/// without waiting for the TTL.
 /// </summary>
 public sealed class UmbracoDictionaryCache : IDictionaryCache
 {
@@ -30,6 +34,11 @@ public sealed class UmbracoDictionaryCache : IDictionaryCache
     private readonly IMemoryCache _cache;
     private readonly ILogger<UmbracoDictionaryCache> _logger;
     private readonly CacheSettings _cacheSettings;
+    private readonly object _resetLock = new();
+
+    // Shared cancellation source linked to every cache entry; cancelling expires them all.
+    // Volatile so reads see writes from Invalidate() across threads.
+    private volatile CancellationTokenSource _entriesToken = new();
 
     public UmbracoDictionaryCache(
         ILocalizationService localization,
@@ -55,12 +64,12 @@ public sealed class UmbracoDictionaryCache : IDictionaryCache
         var value = Resolve(key, culture);
         if (value is not null)
         {
-            _cache.Set(cacheKey, value, TimeSpan.FromMinutes(_cacheSettings.DictionaryMinutes));
+            CacheValue(cacheKey, value, _cacheSettings.DictionaryMinutes);
             return value;
         }
 
-        // No existe en Umbraco — cachear el fallback brevemente para no martillar ILocalizationService
-        _cache.Set(cacheKey, fallback, TimeSpan.FromMinutes(_cacheSettings.DictionaryMissMinutes));
+        // Not found in Umbraco — cache the fallback briefly to avoid hammering ILocalizationService.
+        CacheValue(cacheKey, fallback, _cacheSettings.DictionaryMissMinutes);
         _logger.LogDebug("DictionaryCache: key '{Key}' not found for culture '{Culture}'. Using fallback.", key, culture);
         return fallback;
     }
@@ -90,7 +99,7 @@ public sealed class UmbracoDictionaryCache : IDictionaryCache
         }
 
         var snapshot = (IReadOnlyDictionary<string, string>)result;
-        _cache.Set(cacheKey, snapshot, TimeSpan.FromMinutes(_cacheSettings.DictionaryMinutes));
+        CacheValue(cacheKey, snapshot, _cacheSettings.DictionaryMinutes);
         return snapshot;
     }
 
@@ -108,14 +117,34 @@ public sealed class UmbracoDictionaryCache : IDictionaryCache
 
     public void Invalidate()
     {
-        // IMemoryCache no expone un "clear all" directo — usamos un token de cancelación
-        // vinculado a todas las entradas creadas por este servicio.
-        // Si se necesita invalidación inmediata en producción, usar IMemoryCache con CancellationTokenSource
-        // compartido y cancelarlo aquí. Por ahora la expiración por TTL es suficiente.
-        _logger.LogDebug("DictionaryCache: invalidation requested — entries expire within {Minutes} min.", _cacheSettings.DictionaryMinutes);
+        // Atomically swap the shared CTS, cancel the old one (which expires every linked
+        // cache entry), and dispose it. Subsequent reads will repopulate against the new token.
+        CancellationTokenSource old;
+        lock (_resetLock)
+        {
+            old = _entriesToken;
+            _entriesToken = new CancellationTokenSource();
+        }
+        old.Cancel();
+        old.Dispose();
+        _logger.LogInformation("DictionaryCache: all entries invalidated.");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Stores a value with an absolute TTL and links it to the shared cancellation
+    /// token so <see cref="Invalidate"/> can expire it instantly.
+    /// </summary>
+    private void CacheValue(string cacheKey, object value, int ttlMinutes)
+    {
+        var entryOptions = new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(ttlMinutes)
+        };
+        entryOptions.AddExpirationToken(new CancellationChangeToken(_entriesToken.Token));
+        _cache.Set(cacheKey, value, entryOptions);
+    }
 
     private string? Resolve(string key, string? culture)
     {
