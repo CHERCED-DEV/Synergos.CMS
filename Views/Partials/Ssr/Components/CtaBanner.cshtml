@@ -1,11 +1,12 @@
 @model Synergos.CMS.Application.Elements.CtaBannerViewModel
-@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
     var variant  = string.IsNullOrEmpty(Model.DomVariant?.Variant) ? "primary" : Model.DomVariant!.Variant!;
     var cls      = string.Join(" ", new[] { "sg-cta-banner", $"sg-cta-banner--{variant}", Model.DomClass?.ClassList }.Where(s => !string.IsNullOrWhiteSpace(s)));
     var href     = Model.Cta?.CtaLink?.Url;
     var ctaLabel = Model.Cta?.CtaLabel;
-    if (string.IsNullOrWhiteSpace(ctaLabel)) ctaLabel = Umbraco.GetDictionaryValue("Common.Actions.GetStarted") ?? "Empezar";
+    if (string.IsNullOrWhiteSpace(ctaLabel)) ctaLabel = Dict.Get("Common.Actions.GetStarted", culture, "Empezar");
 }
 <div class="@cls" data-sg-element="comp-cta-banner">
     <div class="sg-cta-banner__content">

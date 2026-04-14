@@ -1,12 +1,13 @@
 @model Synergos.CMS.Application.Elements.CardElementViewModel
-@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
     var variant = Model.DomVariant?.Variant;
     var cls     = string.Join(" ", new[] { "sg-card", !string.IsNullOrEmpty(variant) ? $"sg-card--{variant}" : null, Model.DomClass?.ClassList }.Where(s => !string.IsNullOrWhiteSpace(s)));
     var src     = Model.Media?.Media?.Src;
     var href    = Model.Cta?.CtaLink?.Url;
     var readMore = Model.Cta?.CtaLabel;
-    if (string.IsNullOrWhiteSpace(readMore)) readMore = Umbraco.GetDictionaryValue("Common.Actions.SeeMore") ?? "Ver más";
+    if (string.IsNullOrWhiteSpace(readMore)) readMore = Dict.Get("Common.Actions.SeeMore", culture, "Ver más");
 }
 <article class="@cls" data-sg-element="comp-card">
     @if (src is not null)

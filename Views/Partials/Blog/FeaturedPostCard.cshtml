@@ -3,9 +3,10 @@
 @using System.Text.Json.Serialization
 @using Synergos.CMS.Application.Cdn.Configs
 @inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
-@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
-    var ctaLabel = Umbraco.GetDictionaryValue("Blog.ReadArticle") ?? "Leer artículo";
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+    var ctaLabel = Dict.Get("Blog.ReadArticle", culture, "Leer artículo");
 
     var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     var cfg = JsonSerializer.Serialize(new MediaTextCdnConfig(

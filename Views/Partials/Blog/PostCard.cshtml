@@ -3,11 +3,12 @@
 @using System.Text.Json.Serialization
 @using Synergos.CMS.Application.Cdn.Configs
 @inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
-@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
     var showImage   = ViewData["showImage"]   as bool? ?? true;
     var showExcerpt = ViewData["showExcerpt"] as bool? ?? true;
-    var ctaLabel    = Umbraco.GetDictionaryValue("Blog.ReadMore") ?? "Leer más";
+    var ctaLabel    = Dict.Get("Blog.ReadMore", culture, "Leer más");
 
     var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     var cfg = JsonSerializer.Serialize(new CardCdnConfig(

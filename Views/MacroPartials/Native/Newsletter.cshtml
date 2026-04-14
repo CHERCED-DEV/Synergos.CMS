@@ -1,8 +1,20 @@
 @inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
-    var title       = Model.MacroParameters.ContainsKey("title")       ? Model.MacroParameters["title"]?.ToString()       : "Suscríbete";
-    var buttonLabel = Model.MacroParameters.ContainsKey("buttonLabel") ? Model.MacroParameters["buttonLabel"]?.ToString() : "Enviar";
-    var apiEndpoint = Model.MacroParameters.ContainsKey("apiEndpoint") ? Model.MacroParameters["apiEndpoint"]?.ToString() : "";
+    var culture     = System.Globalization.CultureInfo.CurrentUICulture.Name;
+
+    // Editor-provided values override the dictionary defaults.
+    var title       = Model.MacroParameters.ContainsKey("title")
+                       ? Model.MacroParameters["title"]?.ToString()
+                       : Dict.Get("Footer.NewsletterTitle", culture, "Suscríbete");
+    var buttonLabel = Model.MacroParameters.ContainsKey("buttonLabel")
+                       ? Model.MacroParameters["buttonLabel"]?.ToString()
+                       : Dict.Get("Form.Actions.Send", culture, "Enviar");
+    var apiEndpoint = Model.MacroParameters.ContainsKey("apiEndpoint")
+                       ? Model.MacroParameters["apiEndpoint"]?.ToString() : "";
+
+    var emailPlaceholder = Dict.Get("Form.Placeholders.Email", culture, "tu@email.com");
+    var emailAria        = Dict.Get("Blog.AuthorEmail",        culture, "Email");
 }
 
 <div class="sg-macro sg-macro--newsletter">
@@ -15,9 +27,9 @@
             <input class="sg-newsletter__input"
                    type="email"
                    name="email"
-                   placeholder="tu@email.com"
+                   placeholder="@emailPlaceholder"
                    required
-                   aria-label="Email" />
+                   aria-label="@emailAria" />
             <button class="sg-newsletter__button" type="submit">@buttonLabel</button>
         </form>
     </div>

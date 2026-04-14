@@ -1,13 +1,14 @@
 @model Synergos.CMS.Application.Elements.MediaTextSplitViewModel
-@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
     var direction = Model.DomLayout?.Direction ?? "row";
     var variant   = Model.DomVariant?.Variant;
     var cls       = string.Join(" ", new[] { Model.BlockClass, $"sg-split--{direction}", variant }.Where(s => !string.IsNullOrWhiteSpace(s)));
     var src       = Model.Media?.Media?.Src;
     var href      = Model.Cta?.CtaLink?.Url;
     var readMore  = Model.Cta?.CtaLabel;
-    if (string.IsNullOrWhiteSpace(readMore)) readMore = Umbraco.GetDictionaryValue("Common.Actions.SeeMore") ?? "Ver más";
+    if (string.IsNullOrWhiteSpace(readMore)) readMore = Dict.Get("Common.Actions.SeeMore", culture, "Ver más");
 }
 <div class="@cls" data-sg-element="comp-media-text-split">
     @if (src is not null)

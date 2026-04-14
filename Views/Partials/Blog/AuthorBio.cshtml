@@ -1,5 +1,12 @@
 @model Synergos.CMS.Application.Output.BlogAuthorInfo
-@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@{
+    var culture       = System.Globalization.CultureInfo.CurrentUICulture.Name;
+    var socialAria    = Dict.Get("Blog.AuthorSocial", culture, "Author social links");
+    var linkedInAria  = Dict.Get("Blog.AuthorLinkedIn", culture, "LinkedIn");
+    var twitterAria   = Dict.Get("Blog.AuthorTwitter",  culture, "Twitter");
+    var emailAria     = Dict.Get("Blog.AuthorEmail",    culture, "Email");
+}
 
 <aside class="sg-author-bio">
     @if (!string.IsNullOrEmpty(Model.PhotoUrl))
@@ -16,18 +23,18 @@
         {
             <p class="sg-author-bio__text">@Model.Bio</p>
         }
-        <nav class="sg-author-bio__social" aria-label="@(Umbraco.GetDictionaryValue("Blog.AuthorSocial") ?? "Redes sociales del autor")">
+        <nav class="sg-author-bio__social" aria-label="@socialAria">
             @if (!string.IsNullOrEmpty(Model.LinkedInUrl))
             {
-                <a href="@Model.LinkedInUrl" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn de @Model.Name">LinkedIn</a>
+                <a href="@Model.LinkedInUrl" target="_blank" rel="noopener noreferrer" aria-label="@linkedInAria — @Model.Name">@linkedInAria</a>
             }
             @if (!string.IsNullOrEmpty(Model.TwitterUrl))
             {
-                <a href="@Model.TwitterUrl" target="_blank" rel="noopener noreferrer" aria-label="Twitter de @Model.Name">Twitter</a>
+                <a href="@Model.TwitterUrl" target="_blank" rel="noopener noreferrer" aria-label="@twitterAria — @Model.Name">@twitterAria</a>
             }
             @if (!string.IsNullOrEmpty(Model.Email))
             {
-                <a href="mailto:@Model.Email" aria-label="Email de @Model.Name">Email</a>
+                <a href="mailto:@Model.Email" aria-label="@emailAria — @Model.Name">@emailAria</a>
             }
         </nav>
     </div>

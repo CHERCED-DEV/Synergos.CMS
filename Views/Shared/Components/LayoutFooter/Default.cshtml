@@ -4,8 +4,9 @@
 @using Synergos.CMS.Domain.Services
 @model Synergos.CMS.Presentation.ViewModels.Layout.LayoutFooterViewModel
 @inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
-@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
     var footerStyle = string.IsNullOrWhiteSpace(Model.Theme.FooterBackground)
         ? null
         : $"background:{Model.Theme.FooterBackground};";
@@ -21,10 +22,8 @@
 
     @* ── Main grid: brand | newsletter | nav ── *@
     @{
-        var nlTitleRaw = Umbraco.GetDictionaryValue("Footer.NewsletterTitle");
-        var nlTitle = string.IsNullOrWhiteSpace(nlTitleRaw) ? "Mantente informado" : nlTitleRaw;
-        var nlDescRaw = Umbraco.GetDictionaryValue("Footer.NewsletterDesc");
-        var nlDesc = string.IsNullOrWhiteSpace(nlDescRaw) ? "Insights sobre arquitectura digital y plataformas composables. Sin spam." : nlDescRaw;
+        var nlTitle = Dict.Get("Footer.NewsletterTitle", culture, "Mantente informado");
+        var nlDesc  = Dict.Get("Footer.NewsletterDesc",  culture, "Insights sobre arquitectura digital y plataformas composables. Sin spam.");
         var nlCfg   = JsonSerializer.Serialize(new NewsletterFormCdnConfig(
             Title:     nlTitle,
             ActionUrl: string.IsNullOrWhiteSpace(Model.NewsletterActionUrl) ? null : Model.NewsletterActionUrl,
@@ -88,7 +87,7 @@
             @* ── Social links ── *@
             @if (Model.SocialLinks.Count > 0)
             {
-                var followLabel = string.IsNullOrWhiteSpace(Umbraco.GetDictionaryValue("Footer.FollowUs")) ? "Síguenos" : Umbraco.GetDictionaryValue("Footer.FollowUs");
+                var followLabel = Dict.Get("Footer.FollowUs", culture, "Síguenos");
                 <nav class="layout-footer__social" aria-label="@followLabel">
                     @foreach (var social in Model.SocialLinks)
                     {
@@ -119,10 +118,8 @@
         @* ── Navigation column ── *@
         @if (Model.NavigationItems.Count > 0)
         {
-            var navHeadingRaw = Umbraco.GetDictionaryValue("Footer.NavigationTitle");
-            var navHeading = string.IsNullOrWhiteSpace(navHeadingRaw) ? "Navegación" : navHeadingRaw;
-            var followLabelRaw2 = Umbraco.GetDictionaryValue("Footer.FollowUs");
-            <nav class="layout-footer__nav" aria-label="@(Umbraco.GetDictionaryValue("Footer.NavigationTitle") ?? "Navigation")">
+            var navHeading = Dict.Get("Footer.NavigationTitle", culture, "Navegación");
+            <nav class="layout-footer__nav" aria-label="@navHeading">
                 <p class="layout-footer__nav-heading" aria-hidden="true">@navHeading</p>
                 <ul class="layout-nav layout-nav--footer">
                     @foreach (var item in Model.NavigationItems)
@@ -144,7 +141,7 @@
             }
             else
             {
-                var allRights = Umbraco.GetDictionaryValue("Footer.AllRightsReserved") ?? "Todos los derechos reservados.";
+                var allRights = Dict.Get("Footer.AllRightsReserved", culture, "Todos los derechos reservados.");
                 <text>&copy; @year @(Model.Brand.SiteName ?? "Synergos"). @allRights</text>
             }
         </p>

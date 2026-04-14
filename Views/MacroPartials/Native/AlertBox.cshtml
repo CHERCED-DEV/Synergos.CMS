@@ -1,8 +1,11 @@
 @inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
+    var culture     = System.Globalization.CultureInfo.CurrentUICulture.Name;
     var text        = Model.MacroParameters.ContainsKey("text")        ? Model.MacroParameters["text"]?.ToString()        : "";
     var alertType   = Model.MacroParameters.ContainsKey("alertType")   ? Model.MacroParameters["alertType"]?.ToString()   : "info";
     var dismissible = Model.MacroParameters.ContainsKey("dismissible") ? Model.MacroParameters["dismissible"]?.ToString() : "false";
+    var closeAria   = Dict.Get("Common.Actions.Close", culture, "Close");
 }
 
 <div class="sg-macro sg-macro--alert-box sg-alert sg-alert--@alertType"
@@ -11,6 +14,6 @@
     <p class="sg-alert__text">@text</p>
     @if (dismissible == "True")
     {
-        <button class="sg-alert__close" aria-label="Cerrar">&times;</button>
+        <button class="sg-alert__close" aria-label="@closeAria">&times;</button>
     }
 </div>

@@ -245,6 +245,9 @@ internal sealed class DictionaryInitializer : ISchemaInitializer
         Item(gBlog, "Blog.ArticleCount",                 en, "articles",                es, "artículos");
         Item(gBlog, "Blog.OtherTopics",                  en, "Other topics",            es, "Otros temas");
         Item(gBlog, "Blog.AuthorSocial",                 en, "Author social profiles",  es, "Redes sociales del autor");
+        Item(gBlog, "Blog.AuthorLinkedIn",               en, "LinkedIn",                es, "LinkedIn");
+        Item(gBlog, "Blog.AuthorTwitter",                en, "Twitter",                 es, "Twitter");
+        Item(gBlog, "Blog.AuthorEmail",                  en, "Email",                   es, "Email");
         Item(gBlog, "Blog.ReadMore",                     en, "Read more",               es, "Leer más");
         Item(gBlog, "Blog.ReadArticle",                  en, "Read article",            es, "Leer artículo");
 
@@ -258,6 +261,7 @@ internal sealed class DictionaryInitializer : ISchemaInitializer
         Item(gPagination, "Pagination.Of",               en, "of",                      es, "de");
         Item(gPagination, "Pagination.ItemsPerPage",     en, "Items per page",          es, "Elementos por página");
         Item(gPagination, "Pagination.GoToPage",         en, "Go to page",              es, "Ir a la página");
+        Item(gPagination, "Pagination.AriaCategory",     en, "Category pagination",      es, "Paginación de categoría");
 
         // ── 9. Search ────────────────────────────────────────────────────────
         var gSearch = EnsureGroup("Search");

@@ -1,5 +1,5 @@
 @model Synergos.CMS.Application.Elements.BlogHighlightViewModel
-@inject Umbraco.Cms.Web.Common.UmbracoHelper Umbraco
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 
 <section class="sg-blog-highlight sg-blog-highlight--@(Model.ListLayout ?? "grid")">
     @if (Model.Heading is not null && !string.IsNullOrEmpty(Model.Heading.Title))
@@ -28,6 +28,6 @@
     }
     else
     {
-        <p class="sg-blog-highlight__empty">@(Umbraco.GetDictionaryValue("Blog.NoPosts") ?? "No hay publicaciones disponibles.")</p>
+        <p class="sg-blog-highlight__empty">@(Dict.Get("Blog.NoPosts", culture, "No hay publicaciones disponibles."))</p>
     }
 </section>
