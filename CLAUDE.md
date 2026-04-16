@@ -243,6 +243,45 @@ When assigning a new GUID:
 
 See `synergos-guid-registry.md` at the root for historical allocations.
 
+### 3.5 File granularity — one class per file
+
+Element ViewModels and Mappers live in per-class files under a per-family
+folder. Each element's ViewModel + Mapper form a colocated triad easy to
+discover by IDE navigation and safe to diff in isolation.
+
+```
+Application/Elements/
+├── Action/          # ButtonViewModel.cs, LinkViewModel.cs, CtaGroupViewModel.cs …
+├── Blog/            # BlogHighlightViewModel.cs, ArticleListViewModel.cs
+├── Composition/     # CardElementViewModel.cs, HeroElementViewModel.cs,
+│                    # TestimonialCarouselViewModel.cs, AccordionGroupViewModel.cs …
+├── Corporate/       # TabGroupViewModel.cs, AlertBarViewModel.cs, BannerSliderViewModel.cs …
+├── Experience/      # FeatureJourneyViewModel.cs … (9 CDN widgets)
+├── Form/            # FormEmbedViewModel.cs, FormBlockViewModel.cs
+├── Informational/   # BadgeViewModel.cs, StatViewModel.cs, PricingCardViewModel.cs …
+├── Integration/     # ScriptEmbedViewModel.cs, MacroHostViewModel.cs …
+├── Media/           # ImageElementViewModel.cs, LogoItemViewModel.cs …
+├── Structural/      # SectionViewModel.cs, ColumnViewModel.cs, LayoutPreset*ViewModel.cs …
+└── Text/            # HeadingViewModel.cs, RichTextElementViewModel.cs …
+
+Application/Mapping/Elements/          # mirrors the structure above:
+├── Action/          # ButtonMapper.cs, LinkMapper.cs, CtaGroupMapper.cs …
+├── Blog/            # BlogHighlightMapper.cs, ArticleListMapper.cs
+├── Composition/     # CardElementMapper.cs, HeroElementMapper.cs, TestimonialCarouselMapper.cs …
+├── …
+└── Text/            # HeadingMapper.cs, RichTextElementMapper.cs …
+```
+
+**Conventions:**
+
+- **One public class per file.** File name matches the class name exactly (`CardElementViewModel.cs` contains `CardElementViewModel`).
+- **Namespace stays flat** (`Synergos.CMS.Application.Elements`, `Synergos.CMS.Application.Mapping.Elements`). Folders organize files, they don't partition namespaces — consumers keep their one-line `using`.
+- **Shared sub-items allowed in the primary VM's file.** When a small sub-model belongs intrinsically to a container (e.g. `BannerSlideViewModel` inside `BannerSliderViewModel.cs`), co-locate them. Avoid this for sub-items used across multiple elements — those go to `Domain/Compositions/`.
+- **Mirror mapper↔VM names.** `CardElementViewModel` pairs with `CardElementMapper`. `TestimonialCarouselViewModel` pairs with `TestimonialCarouselMapper`. This lets `Go to Definition` jump between them predictably.
+- **No `XxxViewModels.cs` or `XxxMappers.cs` monolithic files.** Pre-refactor aggregations (one file holding 7–12 classes) are forbidden — they couple unrelated elements in PR diffs and fight the `grep class CardElement` workflow.
+
+Why: editors opening Card work only in `Application/Elements/Composition/CardElementViewModel.cs` + `Application/Mapping/Elements/Composition/CardElementMapper.cs`. A refactor of Hero doesn't churn Card's file. The mental model is "this element = these N files in this folder" — not "this element is line 47 of CompositionViewModels.cs".
+
 ---
 
 ## 4. Schema pipeline
@@ -323,7 +362,7 @@ diagnostically (see `ElementTypeInitializer.TrySave` for the canonical pattern).
 2. Add `EnsureElement<Name>()` to `ElementTypeInitializer`.
 3. Pick compositions (usually `CompCoreBase`, `CompDomClass`, `CompDomSpacing`, etc.).
 4. Add the element to the Block Grid blocks list in `DocumentTypeInitializer.EnsureBlockGridPageSections()` — assign a LayoutComposer custom view (`~/App_Plugins/LayoutComposer/views/block-<family>.html`).
-5. Create an `ISectionMapper` for the element in `Application/Mapping/Elements/<Family>Mappers.cs`. Register it in `ServiceCollectionExtensions.AddSynergosMappers()`.
+5. Create an `ISectionMapper` for the element in `Application/Mapping/Elements/<Family>/<ElementName>Mapper.cs` (one file per class — see §3.5). Register it in `ServiceCollectionExtensions.AddSynergosMappers()`.
 6. Create a Razor view or macro for it. SSR Razor lives in `Views/Partials/elements/…`; CDN macros live in `Views/MacroPartials/<Family>/Cdn<Name>.cshtml` (see §5).
 7. If the element has a CDN config DTO, add the record to `Application/Cdn/Configs/<Family>CdnConfigs.cs`.
 8. Bump `SchemaVersion.Value`.
@@ -682,11 +721,24 @@ No. Either do it or file a tracked issue in the plan-maestro docs. TODOs rot.
 These items are consciously deferred. If you're asked to work on them, reference
 this file so the user confirms scope.
 
-- **Test coverage** — only 38 tests for Domain + Application exist. Refactored pieces have no new tests yet.
-- **Feature toggle middleware** — `enableBlog`, `enableForms`, etc. were removed because no middleware consumed them. Re-adding them requires a new `IFeatureGate` service + middleware + schema bump.
+- **Umbraco 13 LTS pin** — project is **locked to Umbraco 13.x** (currently 13.13.1, latest of the branch). Upgrading to 14+/17 requires .NET 9/10 migration and is **out of scope**. Do not propose major upgrades. NU1902 (moderate severity) has no patch within 13.x and is an accepted known issue.
+- **uSync auto-export hook** — considered and deferred. uSync's export API is reflection-sensitive and version-brittle; manual export from backoffice is acceptable.
 - **`LayoutContentResolver` as static** — reviewed and accepted. It takes its dependencies as parameters and has no state; injectable version would add ceremony without benefit.
-- **Umbraco advisory NU1902** — 13.13.1 has a moderate advisory. Upgrade to latest 13.x when schedule permits.
 - **PowerShell scripts / CI** — not set up. All builds are manual via `dotnet build`.
+
+### 13.1 Current test coverage (v11.1.0)
+
+- **164 tests passing** — baseline was 38.
+- Mappers: 38 smoke tests (Part1 + Part2) covering representative mappers from every family.
+- Composition readers: 26 smoke tests — every Content/Dom/Behavior/Seo/Visibility reader.
+- Middleware: 13 tests on `FeatureGateMiddleware` (bypass list, case-insensitivity, flag on/off, empty gates).
+- Multi-app: 3 tests on `LayoutContentResolver.ResolveLayoutProfile` null-safety and fallback.
+- Schema: guid-uniqueness, schema-version format, cdn-registry, element-registry, orchestration, flow-config-parsing.
+
+### 13.2 Health checks
+
+- `/healthz` → liveness, filters by `"live"` tag (only the self-check).
+- `/readyz` → readiness, runs all checks including `schema-version` and `usync-folder`. Degraded when schema mismatches or uSync folder absent; never blocks traffic unless all are unhealthy.
 
 ---
 
