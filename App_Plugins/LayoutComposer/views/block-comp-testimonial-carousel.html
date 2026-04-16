@@ -1,0 +1,18 @@
+<div class="lc-block lc-block--testimonial-carousel">
+    <div class="lc-block__header">
+        <span class="lc-block__icon">Tc</span>
+        <span class="lc-block__type">Testimonial Carousel</span>
+        <span class="lc-block__header-spacer"></span>
+        <span ng-if="block.data.variant[0]" class="lc-block__badge lc-block__badge--variant">{{block.data.variant[0]}}</span>
+    </div>
+
+    <div class="lc-block__body">
+        <span class="lc-block__eyebrow">{{block.data.title || 'Carrusel de testimonios'}}</span>
+        <span class="lc-block__preview-sub" ng-if="block.data.subtitle">{{block.data.subtitle | sgPreviewText:null:140}}</span>
+        <span class="lc-block__hint" ng-if="!block.data.testimonialItems || !block.data.testimonialItems.length">Carrusel interactivo. Un solo web component anima todos los slides. Agrega Testimonial Items en la pestaña Container.</span>
+        <div class="lc-chip-row" ng-if="block.data.testimonialItems && block.data.testimonialItems.length">
+            <span class="lc-chip lc-chip--muted">{{block.data.testimonialItems.length}} items</span>
+            <span ng-if="block.data.gridGap" class="lc-chip lc-chip--muted">gap: {{block.data.gridGap}}</span>
+        </div>
+    </div>
+</div>

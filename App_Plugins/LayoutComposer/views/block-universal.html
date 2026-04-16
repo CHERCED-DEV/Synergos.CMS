@@ -1,0 +1,79 @@
+<div class="lc-block lc-block--universal"
+     ng-attr-data-variant="{{block.data.variant[0]}}"
+     ng-attr-data-theme="{{block.data.theme[0]}}">
+
+    <div class="lc-block__header">
+        <span class="lc-block__icon">{{(block.label || 'Bk').substring(0,2).toUpperCase()}}</span>
+        <span class="lc-block__type">{{block.label || block.content.contentTypeAlias}}</span>
+        <span class="lc-block__header-spacer"></span>
+        <span ng-if="block.data.badgeText"
+              class="lc-block__badge lc-block__badge--{{block.data.badgeType[0] || 'info'}}">{{block.data.badgeText}}</span>
+        <span ng-if="block.data.variant[0]"
+              class="lc-block__badge lc-block__badge--variant">{{block.data.variant[0]}}</span>
+    </div>
+
+    <div class="lc-universal-preview">
+        <div ng-if="block.data.imageSrc || block.data.posterSrc || block.data.featuredImage"
+             class="lc-universal-preview__thumb">
+            <img ng-src="{{block.data.imageSrc || block.data.posterSrc || block.data.featuredImage}}"
+                 alt="" loading="lazy" />
+        </div>
+
+        <div class="lc-universal-preview__content">
+            <span ng-if="block.data.eyebrow || block.data.collectionTitle || block.data.postType[0]"
+                  class="lc-block__eyebrow">
+                {{block.data.eyebrow || block.data.collectionTitle || block.data.postType[0]}}
+            </span>
+
+            <span class="lc-block__preview-title"
+                  ng-if="block.data.headingText || block.data.title || block.data.postTitle || block.data.pageTitle || block.data.categoryName">
+                {{block.data.headingText || block.data.title || block.data.postTitle || block.data.pageTitle || block.data.categoryName | sgPreviewText:null:80}}
+            </span>
+
+            <span class="lc-block__preview-sub"
+                  ng-if="block.data.subtitle || block.data.postSubtitle || block.data.pageSubtitle || block.data.categoryDescription">
+                {{block.data.subtitle || block.data.postSubtitle || block.data.pageSubtitle || block.data.categoryDescription | sgPreviewText:null:120}}
+            </span>
+
+            <span class="lc-block__preview-sub"
+                  ng-if="block.data.body || block.data.postBody || block.data.postExcerpt || block.data.collectionDescription">
+                {{block.data.body || block.data.postBody || block.data.postExcerpt || block.data.collectionDescription | sgPreviewText:null:180}}
+            </span>
+
+            <div ng-if="block.data.priceAmount" class="lc-universal-preview__price">
+                <span class="lc-universal-preview__currency">{{block.data.priceCurrency || '$'}}</span>
+                <span class="lc-universal-preview__amount">{{block.data.priceAmount}}</span>
+                <span ng-if="block.data.pricePeriod" class="lc-universal-preview__period">/ {{block.data.pricePeriod}}</span>
+            </div>
+
+            <span ng-if="block.data.caption" class="lc-block__preview-sub lc-block__preview-sub--author">— {{block.data.caption}}</span>
+
+            <div class="lc-chip-row"
+                 ng-if="block.data.ctaLabel || block.data.ctaLink || block.data.ctaUrl ||
+                        (block.data.items && block.data.items.length) || block.data.gridColumns || block.data.layoutColumns ||
+                        block.data.interactionAction">
+                <span ng-if="block.data.ctaLabel || block.data.ctaLink || block.data.ctaUrl"
+                      class="lc-chip lc-chip--cta">&rarr; {{block.data.ctaLabel || 'CTA'}}</span>
+                <span ng-if="block.data.items && block.data.items.length"
+                      class="lc-chip lc-chip--muted">{{block.data.items.length}} items</span>
+                <span ng-if="block.data.gridColumns || block.data.layoutColumns"
+                      class="lc-chip lc-chip--muted">{{block.data.gridColumns || block.data.layoutColumns}} cols</span>
+                <span ng-if="block.data.gridGap"
+                      class="lc-chip lc-chip--muted">gap: {{block.data.gridGap}}</span>
+                <span ng-if="block.data.interactionAction"
+                      class="lc-chip lc-chip--muted">&uarr; {{block.data.interactionAction}}</span>
+                <span ng-if="block.data.classList"
+                      class="lc-chip lc-chip--muted">.{{block.data.classList.split(' ')[0]}}</span>
+            </div>
+
+            <div ng-if="!block.data.title && !block.data.headingText && !block.data.body &&
+                        !block.data.imageSrc && !block.data.ctaLabel && !block.data.priceAmount &&
+                        !block.data.badgeText && !(block.data.items && block.data.items.length)"
+                 class="lc-block__preview-empty">
+                <span class="lc-block__hint">Configura los campos del elemento para ver el preview.</span>
+                <div class="lc-skel lc-skel--lg"></div>
+                <div class="lc-skel lc-skel--md"></div>
+            </div>
+        </div>
+    </div>
+</div>

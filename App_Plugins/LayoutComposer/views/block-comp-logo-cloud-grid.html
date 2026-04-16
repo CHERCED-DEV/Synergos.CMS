@@ -1,0 +1,24 @@
+<div class="lc-block lc-block--logo-cloud-grid"
+     ng-attr-data-columns="{{block.data.gridColumns}}"
+     ng-attr-data-gap="{{block.data.gridGap}}">
+    <div class="lc-block__header">
+        <span class="lc-block__icon">Lc</span>
+        <span class="lc-block__type">Logo Cloud</span>
+        <span class="lc-block__header-spacer"></span>
+        <span ng-if="block.data.variant[0]" class="lc-block__badge lc-block__badge--variant">{{block.data.variant[0]}}</span>
+    </div>
+
+    <div class="lc-layout__intro">
+        <span class="lc-block__eyebrow">{{block.data.title || 'Nube de logos'}}</span>
+        <span class="lc-block__hint" ng-if="!block.data.title">Contenedor de logos de clientes, socios o marcas. Arrastra Logo Items dentro del área.</span>
+        <span class="lc-block__preview-sub" ng-if="block.data.subtitle">{{block.data.subtitle | sgPreviewText:null:140}}</span>
+        <div class="lc-chip-row" ng-if="block.data.gridColumns || block.data.gridGap">
+            <span ng-if="block.data.gridColumns" class="lc-chip lc-chip--muted">cols: {{block.data.gridColumns}}</span>
+            <span ng-if="block.data.gridGap"     class="lc-chip lc-chip--muted">gap: {{block.data.gridGap}}</span>
+        </div>
+    </div>
+
+    <div class="lc-block__areas">
+        <umb-block-grid-render-area-slots></umb-block-grid-render-area-slots>
+    </div>
+</div>

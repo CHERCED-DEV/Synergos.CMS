@@ -1,0 +1,43 @@
+@model Synergos.CMS.Application.Elements.TestimonialCarouselViewModel
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Synergos.CMS.Application.Cdn.Configs
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IEmittedBundleTracker Bundles
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@*
+   Testimonial Carousel container — emite UN solo <script type="module"> para
+   el web component `synergos-testimonial-carousel` que anima todos los slides.
+*@
+@{
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+    var variant = Model.DomVariant?.Variant;
+
+    // TestimonialItem: Body = quote, Caption = author attribution (role via Subtitle).
+    var items = Model.Items.Select(item => new TestimonialCarouselItemCdnConfig(
+        Quote:     item.Text?.Body,
+        Author:    item.Text?.Caption,
+        Role:      item.Text?.Subtitle,
+        AvatarSrc: item.Media?.Media?.Src,
+        AvatarAlt: item.Media?.AltText,
+        BadgeText: item.Badge?.BadgeText
+    )).ToList();
+
+    var opt = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var cfg = JsonSerializer.Serialize(new TestimonialCarouselCdnConfig(
+        Title:        Model.Text?.Title,
+        Subtitle:     Model.Text?.Subtitle,
+        Columns:      Model.Columns,
+        Gap:          Model.Gap,
+        Variant:      variant,
+        Items:        items,
+        Translations: Dict.GetAll()
+    ), opt);
+
+    var cls = string.Join(" ", new[] { "sg-cdn", "sg-cdn--testimonial-carousel",
+        !string.IsNullOrEmpty(variant) ? $"sg-testimonial-carousel--{variant}" : null,
+        Model.DomClass?.ClassList
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+@if (Bundles.TryClaim("testimonial-carousel")) { <script src="@ElementUrl.ResolveBundle("testimonial-carousel")" type="module" defer></script> }
+<synergos-testimonial-carousel config='@cfg' class="@cls" data-sg-element="comp-testimonial-carousel"></synergos-testimonial-carousel>
