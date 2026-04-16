@@ -3,6 +3,7 @@
 @using System.Text.Json.Serialization
 @using Synergos.CMS.Application.Cdn.Configs
 @inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IEmittedBundleTracker Bundles
 @inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
     var p = Model.MacroParameters;
@@ -23,5 +24,5 @@
         Translations:  translations
     ), opt);
 }
-<script src="@ElementUrl.ResolveBundle("product-grid")" type="module" defer></script>
+@if (Bundles.TryClaim("product-grid")) { <script src="@ElementUrl.ResolveBundle("product-grid")" type="module" defer></script> }
 <synergos-product-grid config='@cfg' class="sg-cdn sg-cdn--product-grid"></synergos-product-grid>

@@ -33,6 +33,7 @@ public sealed class FormSubmissionController : ControllerBase
     private readonly IFormEmailService                     _emailService;
     private readonly IHttpClientFactory                   _httpClientFactory;
     private readonly IDictionaryCache                     _dictionary;
+    private readonly IFeatureFlags                         _flags;
     private readonly ILogger<FormSubmissionController>    _logger;
 
     public FormSubmissionController(
@@ -40,18 +41,26 @@ public sealed class FormSubmissionController : ControllerBase
         IFormEmailService                   emailService,
         IHttpClientFactory                 httpClientFactory,
         IDictionaryCache                   dictionary,
+        IFeatureFlags                      flags,
         ILogger<FormSubmissionController>  logger)
     {
         _formService        = formService;
         _emailService       = emailService;
         _httpClientFactory  = httpClientFactory;
         _dictionary         = dictionary;
+        _flags              = flags;
         _logger             = logger;
     }
 
     [HttpPost("submit")]
     public async Task<IActionResult> Submit([FromForm] FormSubmissionRequest request, CancellationToken ct)
     {
+        if (!_flags.IsEnabled("EnableForms", defaultIfMissing: true))
+        {
+            _logger.LogWarning("FormSubmission: rejected — EnableForms flag is off.");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new FormSubmissionResult(false, null, null, "Form submissions are temporarily disabled."));
+        }
         if (string.IsNullOrWhiteSpace(request.FormAlias))
             return BadRequest(new FormSubmissionResult(false, null, null, "Form alias is required."));
 

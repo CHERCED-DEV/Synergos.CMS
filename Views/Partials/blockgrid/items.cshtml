@@ -26,9 +26,10 @@
              data-row-span="@rowSpan"
              style="--umb-block-grid--item-column-span: @colSpan; --umb-block-grid--item-row-span: @rowSpan;">
 
-            @if (alias.StartsWith("elementStruct") || alias.StartsWith("layoutPreset"))
+            @if (item.Areas.Any())
             {
-                @* ── Structural blocks: dedicated component partial + native area recursion ── *@
+                @* ── Area-based blocks (structural + typed containers):
+                     dedicated component partial + native area recursion. ── *@
                 try
                 {
                     @await Html.PartialAsync($"blockgrid/Components/{alias}", item)
@@ -39,7 +40,7 @@
                     {
                         <div style="border:2px dashed orange;padding:4px;font-size:11px;color:orange"
                              data-sg-missing-partial="blockgrid/Components/@alias">
-                            [dev] Missing structural partial: <strong>blockgrid/Components/@alias</strong>
+                            [dev] Missing area-based partial: <strong>blockgrid/Components/@alias</strong>
                         </div>
                     }
                 }

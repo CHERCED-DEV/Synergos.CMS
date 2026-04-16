@@ -60,6 +60,7 @@ internal sealed class BlogInitializer : SchemaInitializerBase
                 if (!string.Equals(existing.Name, "Blog Home", StringComparison.Ordinal))
                 { existing.Name = "Blog Home"; dirty = true; }
                 dirty |= PatchTypeDescription(existing, "Listado principal del blog. Controla el contenido introductorio y la configuración general del listado.");
+                dirty |= PatchIcon(existing, "icon-article");
                 if (existing.ParentId != folderId)
                 { existing.ParentId = folderId; dirty = true; }
                 if (existing.AllowedTemplates?.Any(t => t.Id == blogHomeTemplate.Id) != true)
@@ -210,6 +211,7 @@ internal sealed class BlogInitializer : SchemaInitializerBase
                 if (!string.Equals(existing.Name, "Blog Post", StringComparison.Ordinal))
                 { existing.Name = "Blog Post"; dirty = true; }
                 dirty |= PatchTypeDescription(existing, "Artículo individual del blog. Reúne contenido editorial, autoría, taxonomía y secciones complementarias.");
+                dirty |= PatchIcon(existing, "icon-edit");
                 if (existing.ParentId != folderId)
                 { existing.ParentId = folderId; dirty = true; }
                 if (existing.AllowedTemplates?.Any(t => t.Id == blogPostTemplate.Id) != true)

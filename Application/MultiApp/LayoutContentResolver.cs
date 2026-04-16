@@ -27,6 +27,47 @@ public static class LayoutContentResolver
         return new LayoutRootContext(requestContent, applicationRoot, navigationRoot, footerRoot);
     }
 
+    /// <summary>
+    /// Resolves the active Layout Profile for the current request.
+    ///
+    /// Fallback chain:
+    ///   1. CurrentPage.layoutProfile picker (CompDomLayoutProfile per-page override)
+    ///   2. SiteSettings.defaultProfile picker (site-wide default)
+    ///   3. null (services must fall back to legacy SiteSettings reads)
+    ///
+    /// <paramref name="rootNodeId"/> is the SiteRoot. <paramref name="currentPage"/> is optional;
+    /// when null the method reads <see cref="IContentContextAccessor.GetCurrentPage"/>.
+    /// </summary>
+    public static IPublishedContent? ResolveLayoutProfile(
+        IContentContextAccessor accessor,
+        int                     rootNodeId,
+        IPublishedContent?      currentPage = null)
+    {
+        // 1. Per-page override via CompDomLayoutProfile picker.
+        var page = currentPage ?? accessor.GetCurrentPage();
+        if (page is not null)
+        {
+            var pageProfile = ReadPickerContent(page, "layoutProfile");
+            if (pageProfile is not null &&
+                pageProfile.ContentType.Alias == ContentTypeKeys.Aliases.LayoutProfileAlias)
+                return pageProfile;
+        }
+
+        // 2. Site-level default from SiteSettings.defaultProfile.
+        var siteRoot     = accessor.GetById(rootNodeId);
+        var siteSettings = siteRoot?.FirstChild(ContentTypeKeys.Aliases.SiteSettingsAlias);
+        if (siteSettings is not null)
+        {
+            var siteDefault = ReadPickerContent(siteSettings, "defaultProfile");
+            if (siteDefault is not null &&
+                siteDefault.ContentType.Alias == ContentTypeKeys.Aliases.LayoutProfileAlias)
+                return siteDefault;
+        }
+
+        // 3. No profile configured yet — caller falls back to legacy SiteSettings tabs.
+        return null;
+    }
+
     public static IReadOnlyList<IPublishedContent> BuildVisibleChildren(IPublishedContent? root)
     {
         if (root is null)

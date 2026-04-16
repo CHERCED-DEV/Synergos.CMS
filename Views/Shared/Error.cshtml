@@ -1,0 +1,31 @@
+@model Synergos.CMS.Presentation.Api.ErrorViewModel
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+    var (titleKey, messageKey, defaultTitle, defaultMessage) = Model.StatusCode switch
+    {
+        404 => ("Error.404.Title", "Error.404.Message", "Page not found", "The page you were looking for doesn't exist or was moved."),
+        403 => ("Error.403.Title", "Error.403.Message", "Forbidden",       "You don't have permission to view this page."),
+        401 => ("Error.401.Title", "Error.401.Message", "Sign in required", "Please sign in to continue."),
+        500 => ("Error.500.Title", "Error.500.Message", "Something went wrong", "We logged the error and are looking into it."),
+        _   => ("Error.Default.Title", "Error.Default.Message", "Unexpected error", "Please try again in a moment.")
+    };
+    var title     = Dict.Get(titleKey,   culture, defaultTitle);
+    var message   = Dict.Get(messageKey, culture, defaultMessage);
+    var homeLabel = Dict.Get("Error.BackHome", culture, "Back to home");
+
+    ViewData[LayoutViewData.SeoTitle]  = $"{Model.StatusCode} — {title}";
+    ViewData[LayoutViewData.BodyClass] = $"sg-page sg-page--error sg-page--error-{Model.StatusCode}";
+}
+
+<article class="sg-error">
+    <header class="sg-error__header">
+        <span class="sg-error__code" aria-hidden="true">@Model.StatusCode</span>
+        <h1 class="sg-error__title">@title</h1>
+        <p class="sg-error__message">@message</p>
+    </header>
+    <nav class="sg-error__actions">
+        <a class="sg-error__home" href="/">@homeLabel</a>
+    </nav>
+</article>

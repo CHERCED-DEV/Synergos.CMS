@@ -4,6 +4,12 @@ using static Synergos.CMS.Application.Mapping.Compositions.PropertyAliases.Featu
 
 namespace Synergos.CMS.Application.Mapping.Compositions.Behavior;
 
+/// <summary>
+/// Reads the <c>compBehaviorFeatureFlag</c> composition properties —
+/// feature key + enabled toggle — into a <see cref="BehaviorFeatureFlagModel"/>.
+/// Elements can carry their own flag so editors can gate rendering without
+/// changing app configuration.
+/// </summary>
 public sealed class BehaviorFeatureFlagReader : ICompositionReader<BehaviorFeatureFlagModel>
 {
     public BehaviorFeatureFlagModel Read(IPublishedElement element) => new(

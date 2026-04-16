@@ -22,6 +22,13 @@ public sealed class BlogPostPageView(IPublishedContent content) : ContentPageVie
     public string?         Excerpt      { get; init; }
     public Image?          FeaturedImage { get; init; }
     public int             ReadingTime   { get; init; }
+    /// <summary>
+    /// Editorial classification of the post — drives badge rendering and
+    /// list filtering. Resolved from the <c>postType</c> dropdown via
+    /// <see cref="BlogPostTypeExtensions.FromAlias"/> so unknown legacy
+    /// values safely collapse to <see cref="BlogPostType.Article"/>.
+    /// </summary>
+    public BlogPostType    PostType      { get; init; } = BlogPostType.Article;
 
     // ── Author profile ───────────────────────────────────────────────────
     public BlogAuthorInfo? Author { get; init; }
@@ -66,11 +73,12 @@ public sealed record BlogCategoryInfo(
 
 /// <summary>Lightweight summary of a blog post for listings and related posts.</summary>
 public sealed record BlogPostSummary(
-    string   Title,
-    string?  Excerpt,
-    string?  FeaturedImageUrl,
-    string   Url,
-    DateTime PublishDate,
-    string?  AuthorName,
-    int      ReadingTime,
-    string?  CategoryName);
+    string       Title,
+    string?      Excerpt,
+    string?      FeaturedImageUrl,
+    string       Url,
+    DateTime     PublishDate,
+    string?      AuthorName,
+    int          ReadingTime,
+    string?      CategoryName,
+    BlogPostType PostType = BlogPostType.Article);

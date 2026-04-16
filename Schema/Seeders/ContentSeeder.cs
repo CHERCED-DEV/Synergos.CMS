@@ -31,6 +31,7 @@ internal sealed class ContentSeeder
     private readonly IContentTypeService         _contentTypeService;
     private readonly IFileService                _fileService;
     private readonly ILogger<ContentSeeder>      _logger;
+    private readonly ILoggerFactory              _loggerFactory;
     private readonly SeedConfig                  _config;
 
     // Culture used for culture-variant properties during seeding.
@@ -42,12 +43,14 @@ internal sealed class ContentSeeder
         IContentTypeService    contentTypeService,
         IFileService           fileService,
         ILogger<ContentSeeder> logger,
+        ILoggerFactory         loggerFactory,
         SeedConfig?            config = null)
     {
         _contentService     = contentService;
         _contentTypeService = contentTypeService;
         _fileService        = fileService;
         _logger             = logger;
+        _loggerFactory      = loggerFactory;
         _config             = config ?? new SeedConfig();
     }
 
@@ -96,7 +99,98 @@ internal sealed class ContentSeeder
         // Phase 7 — Patch settings nodes with default values
         PatchSettings(platform.Id, siteRoot.Id);
 
+        // Phase 8 — Layout Config tree (v11.0.0)
+        new LayoutConfigSeeder(_contentService, _contentTypeService, _loggerFactory.CreateLogger<LayoutConfigSeeder>())
+            .Seed(platform.Id, siteRoot.Id);
+
+        // Phase 9 — v11.0.1 invariants: clear template on non-routable containers
+        // and retry publish on PageBase drafts that failed on earlier boots.
+        ClearTemplatesOnContainers();
+        PublishDraftPages();
+
         _logger.LogInformation("ContentSeeder: seed complete.");
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Phase 9 — v11.0.1 content-instance invariants
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Walks every content instance of a non-routable container type and clears
+    /// its <c>TemplateId</c>. Needed because Umbraco caches the default template
+    /// on the content node at creation — so a ContentType patch that removes its
+    /// default template does NOT propagate to already-created nodes.
+    ///
+    /// Target aliases: <c>sharedContentFolder</c> plus the 11 Layout Config doctypes.
+    /// Idempotent: only modifies nodes whose TemplateId is currently non-null.
+    /// </summary>
+    private void ClearTemplatesOnContainers()
+    {
+        var aliases = new[]
+        {
+            ContentTypeKeys.Aliases.SharedContentFolder,
+            ContentTypeKeys.Aliases.LayoutFolder,
+            ContentTypeKeys.Aliases.HeaderConfigFolder,
+            ContentTypeKeys.Aliases.FooterConfigFolder,
+            ContentTypeKeys.Aliases.AlertBarConfigFolder,
+            ContentTypeKeys.Aliases.BannerConfigFolder,
+            ContentTypeKeys.Aliases.LayoutProfileFolder,
+            ContentTypeKeys.Aliases.NavigationFolder,
+            ContentTypeKeys.Aliases.HeaderConfig,
+            ContentTypeKeys.Aliases.FooterConfig,
+            ContentTypeKeys.Aliases.AlertBarConfig,
+            ContentTypeKeys.Aliases.BannerConfig
+        };
+
+        foreach (var alias in aliases)
+        {
+            var ct = _contentTypeService.Get(alias);
+            if (ct is null) continue;
+
+            var nodes = _contentService.GetPagedOfType(ct.Id, 0, 500, out _, null!);
+            foreach (var node in nodes)
+            {
+                if (node.Trashed) continue;
+                if (node.TemplateId is null or 0) continue;
+
+                node.TemplateId = null;
+                _contentService.SaveAndPublish(node, userId: UmbConstants.Security.SuperUserId);
+                _logger.LogInformation(
+                    "ContentSeeder: cleared TemplateId on '{Name}' ({Alias}, id={Id}) — non-routable container.",
+                    node.Name, alias, node.Id);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Finds <c>pageBase</c> nodes that have no published culture and retries the
+    /// publish with the default culture explicitly. Fixes drafts that failed on
+    /// earlier boots when <c>SaveAndPublish</c> was called without a culture
+    /// argument on a culture-variant doctype.
+    /// </summary>
+    private void PublishDraftPages()
+    {
+        var pageBase = _contentTypeService.Get(ContentTypeKeys.Aliases.PageBase);
+        if (pageBase is null) return;
+
+        var pages = _contentService.GetPagedOfType(pageBase.Id, 0, 500, out _, null!);
+        foreach (var page in pages)
+        {
+            if (page.Trashed) continue;
+            if (page.Published && page.PublishedCultures.Any(c => c.Equals(SeedCulture, StringComparison.OrdinalIgnoreCase))) continue;
+
+            // Ensure the default-culture name exists before publishing.
+            if (string.IsNullOrWhiteSpace(page.GetCultureName(SeedCulture)))
+                page.SetCultureName(page.Name ?? "Página", SeedCulture);
+
+            var result = _contentService.SaveAndPublish(page, culture: SeedCulture, userId: UmbConstants.Security.SuperUserId);
+            if (result.Success)
+                _logger.LogInformation("ContentSeeder: re-published draft '{Name}' (id={Id}) for culture {Culture}.",
+                    page.Name, page.Id, SeedCulture);
+            else
+                _logger.LogWarning("ContentSeeder: could not re-publish draft '{Name}' (id={Id}) — {Status}.",
+                    page.Name, page.Id, result.Result);
+        }
     }
 
     // ── Phase 1: PlatformRoot ────────────────────────────────────────────
@@ -343,7 +437,9 @@ internal sealed class ContentSeeder
         var template = _fileService.GetTemplate(templateAlias);
         if (template is not null) page.TemplateId = template.Id;
 
-        var result = _contentService.SaveAndPublish(page, userId: UmbConstants.Security.SuperUserId);
+        // Publish ONLY the default culture (es-CO). PageBase is culture-variant;
+        // publishing all cultures would fail for en-US which has no name/title set.
+        var result = _contentService.SaveAndPublish(page, culture: SeedCulture, userId: UmbConstants.Security.SuperUserId);
         if (result.Success)
             _logger.LogInformation("ContentSeeder: '{Name}' published (id={Id}).", name, page.Id);
         else

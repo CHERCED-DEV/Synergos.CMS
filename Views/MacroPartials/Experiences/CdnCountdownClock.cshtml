@@ -3,6 +3,7 @@
 @using System.Text.Json.Serialization
 @using Synergos.CMS.Application.Cdn.Configs
 @inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IEmittedBundleTracker Bundles
 @inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
     var p = Model.MacroParameters;
@@ -19,5 +20,5 @@
         Translations: translations
     ), opt);
 }
-<script src="@ElementUrl.ResolveBundle("countdown-clock")" type="module" defer></script>
+@if (Bundles.TryClaim("countdown-clock")) { <script src="@ElementUrl.ResolveBundle("countdown-clock")" type="module" defer></script> }
 <synergos-countdown-clock config='@cfg' class="sg-cdn sg-cdn--countdown-clock"></synergos-countdown-clock>

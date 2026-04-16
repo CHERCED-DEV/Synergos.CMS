@@ -3,6 +3,7 @@
 @using System.Text.Json.Serialization
 @using Synergos.CMS.Application.Cdn.Configs
 @inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IEmittedBundleTracker Bundles
 @inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
     var p = Model.MacroParameters;
@@ -17,5 +18,5 @@
         Translations: translations
     ), opt);
 }
-<script src="@ElementUrl.ResolveBundle("link-block")" type="module" defer></script>
+@if (Bundles.TryClaim("link-block")) { <script src="@ElementUrl.ResolveBundle("link-block")" type="module" defer></script> }
 <synergos-link-block config='@cfg' class="sg-cdn sg-cdn--link-block"></synergos-link-block>

@@ -4,6 +4,7 @@
 @using Synergos.CMS.Application.Cdn.Configs
 @inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
 @inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
+@inject Synergos.CMS.Domain.Services.IEmittedBundleTracker Bundles
 @{
     var p = Model.MacroParameters;
     string? Get(string key) => p.ContainsKey(key) ? p[key]?.ToString() : null;
@@ -24,5 +25,8 @@
         Translations: translations
     ), opt);
 }
-<script src="@ElementUrl.ResolveBundle("card")" type="module" defer></script>
+@if (Bundles.TryClaim("card"))
+{
+    <script src="@ElementUrl.ResolveBundle("card")" type="module" defer></script>
+}
 <synergos-card config='@cfg' class="sg-cdn sg-cdn--card"></synergos-card>

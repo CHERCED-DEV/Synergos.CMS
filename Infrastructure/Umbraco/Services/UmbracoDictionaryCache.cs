@@ -88,7 +88,7 @@ public sealed class UmbracoDictionaryCache : IDictionaryCache
             foreach (var item in _localization.GetDictionaryItemDescendants(null))
             {
                 if (item.ItemKey is null) continue;
-                var value = ResolveTranslation(item.Translations, culture);
+                var value = ResolveTranslation(item.Translations, culture, _cacheSettings.DefaultCulture);
                 if (value is not null)
                     result[item.ItemKey] = value;
             }
@@ -151,7 +151,7 @@ public sealed class UmbracoDictionaryCache : IDictionaryCache
         try
         {
             var item = _localization.GetDictionaryItemByKey(key);
-            return item is null ? null : ResolveTranslation(item.Translations, culture);
+            return item is null ? null : ResolveTranslation(item.Translations, culture, _cacheSettings.DefaultCulture);
         }
         catch (Exception ex)
         {
@@ -160,19 +160,37 @@ public sealed class UmbracoDictionaryCache : IDictionaryCache
         }
     }
 
+    /// <summary>
+    /// Three-tier fallback chain (deterministic):
+    ///   1. Requested culture (e.g. "fr-FR").
+    ///   2. Configured default culture from <see cref="CacheSettings.DefaultCulture"/>.
+    ///   3. First non-empty translation in any culture (legacy safety net).
+    /// </summary>
     private static string? ResolveTranslation(
         IEnumerable<IDictionaryTranslation> translations,
-        string? culture)
+        string? culture,
+        string  defaultCulture)
     {
-        if (culture is not null)
+        var list = translations as IList<IDictionaryTranslation> ?? translations.ToList();
+
+        if (!string.IsNullOrEmpty(culture))
         {
-            var match = translations.FirstOrDefault(t =>
+            var requested = list.FirstOrDefault(t =>
                 string.Equals(t.LanguageIsoCode, culture, StringComparison.OrdinalIgnoreCase));
-            if (match is not null && !string.IsNullOrEmpty(match.Value))
-                return match.Value;
+            if (requested is not null && !string.IsNullOrEmpty(requested.Value))
+                return requested.Value;
         }
 
-        return translations.FirstOrDefault(t => !string.IsNullOrEmpty(t.Value))?.Value;
+        if (!string.IsNullOrEmpty(defaultCulture)
+            && !string.Equals(defaultCulture, culture, StringComparison.OrdinalIgnoreCase))
+        {
+            var fallback = list.FirstOrDefault(t =>
+                string.Equals(t.LanguageIsoCode, defaultCulture, StringComparison.OrdinalIgnoreCase));
+            if (fallback is not null && !string.IsNullOrEmpty(fallback.Value))
+                return fallback.Value;
+        }
+
+        return list.FirstOrDefault(t => !string.IsNullOrEmpty(t.Value))?.Value;
     }
 
     private static string BuildCacheKey(string key, string? culture)

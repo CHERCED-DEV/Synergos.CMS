@@ -99,8 +99,7 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
         // Composition (c8*)
         ContentTypeKeys.ElementCompCard,        ContentTypeKeys.ElementCompHero,
         ContentTypeKeys.ElementCompFeatureGrid, ContentTypeKeys.ElementCompCtaBanner,
-        ContentTypeKeys.ElementCompFaqList,     ContentTypeKeys.ElementCompTestimonialList,
-        ContentTypeKeys.ElementCompLogoCloud,   ContentTypeKeys.ElementCompMediaTextSplit,
+        ContentTypeKeys.ElementCompMediaTextSplit,
         // Integration (c9*)
         ContentTypeKeys.ElementIntScriptEmbed,  ContentTypeKeys.ElementIntIframeEmbed,
         ContentTypeKeys.ElementIntExternalWidget, ContentTypeKeys.ElementIntAngularHost,
@@ -114,7 +113,6 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
         // Additions — UI-only elements that need CMS backing
         ContentTypeKeys.ElementMediaAvatar,
         ContentTypeKeys.ElementInfoPricingCard,
-        ContentTypeKeys.ElementCompAccordion,
         // Phase 3 — Forms
         ContentTypeKeys.ElementCompFormBlock,
         ContentTypeKeys.ElementFormEmbed,
@@ -394,10 +392,24 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
         blocks.Add(ContentBlock(ContentTypeKeys.ElementCompHero,            GroupComponentsKey, spanFull));
         blocks.Add(ContentBlock(ContentTypeKeys.ElementCompFeatureGrid,     GroupComponentsKey, spanFull));
         blocks.Add(ContentBlock(ContentTypeKeys.ElementCompCtaBanner,       GroupComponentsKey, spanFull));
-        blocks.Add(ContentBlock(ContentTypeKeys.ElementCompFaqList,         GroupComponentsKey, spanFull));
-        blocks.Add(ContentBlock(ContentTypeKeys.ElementCompTestimonialList, GroupComponentsKey, spanFull));
-        blocks.Add(ContentBlock(ContentTypeKeys.ElementCompLogoCloud,       GroupComponentsKey, spanFull));
+        // FaqList / TestimonialList / LogoCloud / Accordion retirados —
+        // usar AccordionGroup / TestimonialCarousel / LogoCloudGrid.
         blocks.Add(ContentBlock(ContentTypeKeys.ElementCompMediaTextSplit,  GroupComponentsKey, spanFull));
+        // Area-based containers — typed area, SSR children, zero scripts.
+        blocks.Add(AreaContainerBlock(ContentTypeKeys.ElementCompCardGrid,
+            areaKey: BlockGridAreaKeys.CardGridCards,     areaAlias: "cards",
+            allowedChildKey: ContentTypeKeys.ElementCompCard,
+            view: "~/App_Plugins/LayoutComposer/views/block-comp-card-grid.html"));
+        blocks.Add(AreaContainerBlock(ContentTypeKeys.ElementCompLogoCloudGrid,
+            areaKey: BlockGridAreaKeys.LogoCloudGridLogos, areaAlias: "logos",
+            allowedChildKey: ContentTypeKeys.ElementMediaLogoItem,
+            view: "~/App_Plugins/LayoutComposer/views/block-comp-logo-cloud-grid.html"));
+
+        // BlockList-based containers — keep as content blocks (mapper path).
+        blocks.Add(ContentBlock(ContentTypeKeys.ElementCompTestimonialCarousel, GroupComponentsKey, spanFull,
+            view: "~/App_Plugins/LayoutComposer/views/block-comp-testimonial-carousel.html"));
+        blocks.Add(ContentBlock(ContentTypeKeys.ElementCompAccordionGroup,      GroupComponentsKey, spanFull,
+            view: "~/App_Plugins/LayoutComposer/views/block-comp-accordion-group.html"));
 
         // ── Integration (c9*) ──────────────────────────────────────────────
         blocks.Add(ContentBlock(ContentTypeKeys.ElementIntScriptEmbed,    GroupIntegrationKey, spanFull));
@@ -420,17 +432,14 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
         blocks.Add(ContentBlock(ContentTypeKeys.ElementCorpMissionBlock, GroupCorporateKey, spanFull));
 
         // ── Forms (cc*) ───────────────────────────────────────────────────────
-        blocks.Add(ContentBlock(ContentTypeKeys.ElementFormEmbed,      GroupCorporateKey,   spanContent,
-            view: "~/App_Plugins/LayoutComposer/views/block-form.html"));
+        blocks.Add(ContentBlock(ContentTypeKeys.ElementFormEmbed,      GroupCorporateKey,   spanContent));
 
         // ── Blog blocks (c8* extensions) ──────────────────────────────────
 
         // ── Additions (UI-backed) ──────────────────────────────────────────
         blocks.Add(ContentBlock(ContentTypeKeys.ElementMediaAvatar,     GroupMediaKey,      spanContent));
         blocks.Add(ContentBlock(ContentTypeKeys.ElementInfoPricingCard, GroupInfoKey,        spanContent));
-        blocks.Add(ContentBlock(ContentTypeKeys.ElementCompAccordion,   GroupComponentsKey,  spanFull));
-        blocks.Add(ContentBlock(ContentTypeKeys.ElementCompFormBlock,   GroupComponentsKey,  spanContent,
-            view: "~/App_Plugins/LayoutComposer/views/block-form.html"));
+        blocks.Add(ContentBlock(ContentTypeKeys.ElementCompFormBlock,   GroupComponentsKey,  spanContent));
 
         // ── Blog (b9000009) ────────────────────────────────────────────────
         blocks.Add(ContentBlock(ContentTypeKeys.ElementCompBlogHighlight, GroupBlogKey, spanFull));
@@ -498,7 +507,37 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
             Stylesheet            = LayoutComposerStylesheet
         };
 
-    /// <summary>Creates a content block (leaf, no areas). View is derived from group unless overridden.</summary>
+    /// <summary>
+    /// Creates an area-based container block under the Components group.
+    /// Exposes a single typed Area that only accepts <paramref name="allowedChildKey"/>.
+    /// Children render SSR via the Block Grid pipeline — zero scripts added.
+    /// </summary>
+    private static BlockGridConfiguration.BlockGridBlockConfiguration AreaContainerBlock(
+        Guid elementKey, Guid areaKey, string areaAlias, Guid allowedChildKey, string? view = null)
+        => new()
+        {
+            ContentElementTypeKey = elementKey,
+            GroupKey              = GroupComponentsKey.ToString(),
+            AllowAtRoot           = true,
+            AllowInAreas          = true,
+            ColumnSpanOptions     = [ColSpan(12)],
+            AreaGridColumns       = 12,
+            Areas =
+            [
+                Area(areaKey, areaAlias, columnSpan: 12,
+                    specifiedAllowance:
+                    [
+                        new BlockGridConfiguration.BlockGridAreaConfigurationSpecifiedAllowance
+                        {
+                            ElementTypeKey = allowedChildKey
+                        }
+                    ])
+            ],
+            View       = view,
+            Stylesheet = LayoutComposerStylesheet
+        };
+
+    /// <summary>Creates a content block (leaf, no areas). View priority: explicit override → per-element preview → group fallback.</summary>
     private static BlockGridConfiguration.BlockGridBlockConfiguration ContentBlock(
         Guid elementKey, Guid groupKey,
         BlockGridConfiguration.BlockGridColumnSpanOption[] columnSpans,
@@ -510,23 +549,21 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
             AllowAtRoot           = true,
             AllowInAreas          = true,
             ColumnSpanOptions     = columnSpans,
-            View                  = view ?? GroupView(groupKey),
+            View                  = view ?? UniversalPreview,
             Stylesheet            = LayoutComposerStylesheet
         };
 
-    private static string? GroupView(Guid groupKey)
-    {
-        if (groupKey == GroupTextKey)        return "~/App_Plugins/LayoutComposer/views/block-text.html";
-        if (groupKey == GroupActionKey)      return "~/App_Plugins/LayoutComposer/views/block-action.html";
-        if (groupKey == GroupMediaKey)       return "~/App_Plugins/LayoutComposer/views/block-media.html";
-        if (groupKey == GroupInfoKey)        return "~/App_Plugins/LayoutComposer/views/block-info.html";
-        if (groupKey == GroupComponentsKey)  return "~/App_Plugins/LayoutComposer/views/block-composition.html";
-        if (groupKey == GroupIntegrationKey) return "~/App_Plugins/LayoutComposer/views/block-integration.html";
-        if (groupKey == GroupCorporateKey)   return "~/App_Plugins/LayoutComposer/views/block-corporate.html";
-        if (groupKey == GroupBlogKey)         return "~/App_Plugins/LayoutComposer/views/block-blog.html";
-        if (groupKey == GroupExperiencesKey)  return "~/App_Plugins/LayoutComposer/views/block-experience.html";
-        return null; // Layout group — Divider/Spacer use per-block view overrides
-    }
+    /// <summary>
+    /// Resolves the LayoutComposer preview for a block. The strategy is
+    /// radically simple: one universal preview (<c>block-universal.html</c>)
+    /// reads whatever <c>block.data.*</c> fields the element exposes and
+    /// renders them resiliently. Works for SSR elements, CDN macros, and
+    /// anything added in the future — zero per-alias maintenance.
+    /// Containers with Areas (CardGrid, LogoCloudGrid, Section, Column…)
+    /// override via the explicit <c>view:</c> parameter on their registration.
+    /// </summary>
+    private static string UniversalPreview =>
+        "~/App_Plugins/LayoutComposer/views/block-universal.html";
 
     /// <summary>Creates an Area configuration.</summary>
     private static BlockGridConfiguration.BlockGridAreaConfiguration Area(
@@ -567,6 +604,7 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
             { existing.ParentId = folderId; dirty = true; }
             if (!string.Equals(existing.Alias, ContentTypeKeys.Aliases.SiteRoot, StringComparison.Ordinal))
             { existing.Alias = ContentTypeKeys.Aliases.SiteRoot; dirty = true; }
+            dirty |= PatchIcon(existing, "icon-home");
             if (existing.AllowedTemplates?.Any() != true)
             { existing.AllowedTemplates = new[] { siteRootTemplate }; existing.SetDefaultTemplate(siteRootTemplate); dirty = true; }
 
@@ -646,6 +684,7 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
             if (!string.Equals(existing.Name, "Page Base", StringComparison.Ordinal))
             { existing.Name = "Page Base"; dirty = true; }
             dirty |= PatchTypeDescription(existing, "Página estándar del sitio. Construye el contenido arrastrando bloques en la sección 'Page Sections'.");
+            dirty |= PatchIcon(existing, "icon-document-line");
             if (existing.ParentId != folderId)
             { existing.ParentId = folderId; dirty = true; }
             if (existing.AllowedTemplates?.Any() != true)
@@ -757,6 +796,7 @@ internal sealed class DocumentTypeInitializer : SchemaInitializerBase
             { existing.Name = "Page Bare"; dirty = true; }
             dirty |= PatchTypeDescription(existing,
                 "Página sin layout global. Renderiza directamente el Block Grid bajo su propio <html> — sin header, footer, banner ni alert bar. Ideal para landings, iframes, modales y exports de impresión.");
+            dirty |= PatchIcon(existing, "icon-document-dashed-line");
             if (existing.ParentId != folderId)
             { existing.ParentId = folderId; dirty = true; }
             if (existing.AllowedTemplates?.Any() != true)

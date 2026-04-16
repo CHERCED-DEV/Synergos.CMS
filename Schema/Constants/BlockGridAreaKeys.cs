@@ -71,4 +71,10 @@ public static class BlockGridAreaKeys
 
     /// <summary>Stack element — content area.</summary>
     public static readonly Guid StackContent       = new("fa000005-0000-0000-0000-000000000000");
+
+    /// <summary>CardGrid element — typed area (only elementCompCard children).</summary>
+    public static readonly Guid CardGridCards      = new("fa000006-0000-0000-0000-000000000000");
+
+    /// <summary>LogoCloudGrid element — typed area (only elementMediaLogoItem children).</summary>
+    public static readonly Guid LogoCloudGridLogos = new("fa000007-0000-0000-0000-000000000000");
 }

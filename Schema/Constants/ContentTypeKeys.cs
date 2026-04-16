@@ -123,14 +123,27 @@ public static class ContentTypeKeys
     public static readonly Guid ElementCompHero             = new("c8000002-0000-0000-0000-000000000000");
     public static readonly Guid ElementCompFeatureGrid      = new("c8000003-0000-0000-0000-000000000000");
     public static readonly Guid ElementCompCtaBanner        = new("c8000004-0000-0000-0000-000000000000");
-    public static readonly Guid ElementCompFaqList          = new("c8000005-0000-0000-0000-000000000000");
-    public static readonly Guid ElementCompTestimonialList  = new("c8000006-0000-0000-0000-000000000000");
-    public static readonly Guid ElementCompLogoCloud        = new("c8000007-0000-0000-0000-000000000000");
+    // c8000005 / c8000006 / c8000007 / c8000009 retirados — los legacy
+    // FaqList/TestimonialList/LogoCloud/Accordion (CompContentCollection
+    // genérico) fueron reemplazados por AccordionGroup/TestimonialCarousel/
+    // LogoCloudGrid con BlockList tipado o Block Grid Area.
     public static readonly Guid ElementCompMediaTextSplit   = new("c8000008-0000-0000-0000-000000000000");
-    public static readonly Guid ElementCompAccordion        = new("c8000009-0000-0000-0000-000000000000");
     public static readonly Guid ElementCompBlogHighlight    = new("c8000010-0000-0000-0000-000000000000");
     public static readonly Guid ElementCompArticleList      = new("c8000011-0000-0000-0000-000000000000");
     public static readonly Guid ElementCompFormBlock        = new("c8000012-0000-0000-0000-000000000000");
+    /// <summary>
+    /// Contenedor de tarjetas. Acepta N <c>elementCompCard</c> como hijos
+    /// (via BlockListCardItems) y los mapea a un único web component
+    /// <c>&lt;synergos-card-grid&gt;</c> con un solo script — sustituye a
+    /// repetir <c>&lt;synergos-card&gt;</c> N veces.
+    /// </summary>
+    public static readonly Guid ElementCompCardGrid         = new("c8000013-0000-0000-0000-000000000000");
+    /// <summary>Contenedor de logos con un solo script. Acepta N elementMediaLogoItem.</summary>
+    public static readonly Guid ElementCompLogoCloudGrid    = new("c8000014-0000-0000-0000-000000000000");
+    /// <summary>Contenedor de testimonios con un solo script. Acepta N elementInfoTestimonialItem.</summary>
+    public static readonly Guid ElementCompTestimonialCarousel = new("c8000015-0000-0000-0000-000000000000");
+    /// <summary>Contenedor de FAQ/Acordeón con un solo script. Acepta N elementInfoFaqItem.</summary>
+    public static readonly Guid ElementCompAccordionGroup   = new("c8000016-0000-0000-0000-000000000000");
 
     // ─── Element Types — Integration (c9*) ────────────────────────────────
     public static readonly Guid ElementIntScriptEmbed    = new("c9000001-0000-0000-0000-000000000000");
@@ -193,12 +206,6 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid PageBare = new("d2000007-0000-0000-0000-000000000000");
 
-    // Retired — kept for DB cleanup reference only.
-    public static readonly Guid HomePage     = new("d2000003-0000-0000-0000-000000000000");
-    public static readonly Guid AboutPage    = new("d2000004-0000-0000-0000-000000000000");
-    public static readonly Guid ServicesPage = new("d2000005-0000-0000-0000-000000000000");
-    public static readonly Guid ContactPage  = new("d2000006-0000-0000-0000-000000000000");
-    public static readonly Guid LandingPage  = new("d2000007-0000-0000-0000-000000000000");
 
     // ─── Document Types — Platform (d3*) ──────────────────────────────────
     public static readonly Guid PlatformRoot        = new("d3000001-0000-0000-0000-000000000000");
@@ -209,6 +216,31 @@ public static class ContentTypeKeys
     public static readonly Guid ReusableBlock       = new("d3000006-0000-0000-0000-000000000000");
     public static readonly Guid NavigationGroup     = new("d3000007-0000-0000-0000-000000000000");
     public static readonly Guid LayoutProfile       = new("d3000008-0000-0000-0000-000000000000");
+
+    // ─── Layout Config (d3000009-d3000013) — folders + typed config leaves ────
+    /// <summary>Folder under each site's Config/ holding Layout subfolders (Header, Footer, Alerts, Banners, Profiles).</summary>
+    public static readonly Guid LayoutFolder           = new("d3000009-0000-0000-0000-000000000000");
+    /// <summary>Folder holding HeaderConfig instances. Lives under LayoutFolder or SharedContent/Layout.</summary>
+    public static readonly Guid HeaderConfigFolder     = new("d300000a-0000-0000-0000-000000000000");
+    /// <summary>Folder holding FooterConfig instances.</summary>
+    public static readonly Guid FooterConfigFolder     = new("d300000b-0000-0000-0000-000000000000");
+    /// <summary>Folder holding AlertBarConfig instances (schedulable, stackable).</summary>
+    public static readonly Guid AlertBarConfigFolder   = new("d300000c-0000-0000-0000-000000000000");
+    /// <summary>Folder holding BannerConfig instances (pick ReusableBlock + schedule).</summary>
+    public static readonly Guid BannerConfigFolder     = new("d300000d-0000-0000-0000-000000000000");
+    /// <summary>Folder holding LayoutProfile instances (the composers).</summary>
+    public static readonly Guid LayoutProfileFolder    = new("d300000e-0000-0000-0000-000000000000");
+    /// <summary>Folder holding NavigationGroup instances (main nav, footer nav, platform nav).</summary>
+    public static readonly Guid NavigationFolder       = new("d300000f-0000-0000-0000-000000000000");
+
+    /// <summary>Header configuration leaf — nav picker, CTA, branding override, style.</summary>
+    public static readonly Guid HeaderConfig           = new("d3000010-0000-0000-0000-000000000000");
+    /// <summary>Footer configuration leaf — nav picker, copyright, newsletter, social toggle.</summary>
+    public static readonly Guid FooterConfig           = new("d3000011-0000-0000-0000-000000000000");
+    /// <summary>Alert bar configuration leaf — content + schedule + variant.</summary>
+    public static readonly Guid AlertBarConfig         = new("d3000012-0000-0000-0000-000000000000");
+    /// <summary>Banner configuration leaf — picks a ReusableBlock + schedule.</summary>
+    public static readonly Guid BannerConfig           = new("d3000013-0000-0000-0000-000000000000");
 
     // ─── Document Types — Blog (d4*) ──────────────────────────────────────
     public static readonly Guid BlogHome = new("d4000001-0000-0000-0000-000000000000");
@@ -258,6 +290,19 @@ public static class ContentTypeKeys
         public const string ReusableBlock       = "reusableBlock";
         public const string NavigationGroup     = "navigationGroup";
         public const string LayoutProfileAlias  = "layoutProfile";
+
+        // Layout Config (v11.0.0)
+        public const string LayoutFolder          = "layoutFolder";
+        public const string HeaderConfigFolder    = "headerConfigFolder";
+        public const string FooterConfigFolder    = "footerConfigFolder";
+        public const string AlertBarConfigFolder  = "alertBarConfigFolder";
+        public const string BannerConfigFolder    = "bannerConfigFolder";
+        public const string LayoutProfileFolder   = "layoutProfileFolder";
+        public const string NavigationFolder      = "navigationFolder";
+        public const string HeaderConfig          = "headerConfig";
+        public const string FooterConfig          = "footerConfig";
+        public const string AlertBarConfig        = "alertBarConfig";
+        public const string BannerConfig          = "bannerConfig";
         public const string BlogHome            = "blogHome";
         public const string BlogPost            = "blogPost";
         public const string Author              = "author";

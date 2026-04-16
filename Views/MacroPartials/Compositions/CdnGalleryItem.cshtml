@@ -3,6 +3,7 @@
 @using System.Text.Json.Serialization
 @using Synergos.CMS.Application.Cdn.Configs
 @inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IEmittedBundleTracker Bundles
 @inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
     var p = Model.MacroParameters;
@@ -16,5 +17,5 @@
         Translations: translations
     ), opt);
 }
-<script src="@ElementUrl.ResolveBundle("gallery-item")" type="module" defer></script>
+@if (Bundles.TryClaim("gallery-item")) { <script src="@ElementUrl.ResolveBundle("gallery-item")" type="module" defer></script> }
 <synergos-gallery-item config='@cfg' class="sg-cdn sg-cdn--gallery-item"></synergos-gallery-item>

@@ -38,6 +38,7 @@ internal sealed class TaxonomyInitializer : SchemaInitializerBase
             if (existing.ParentId != folderId)
             { existing.ParentId = folderId; dirty = true; }
             dirty |= PatchTypeDescription(existing, description);
+            dirty |= PatchIcon(existing, "icon-folder");
             if (dirty) Cts.Save(existing);
             return;
         }
@@ -66,6 +67,7 @@ internal sealed class TaxonomyInitializer : SchemaInitializerBase
             if (existing.ParentId != folderId)
             { existing.ParentId = folderId; dirty = true; }
             dirty |= PatchTypeDescription(existing, description);
+            dirty |= PatchIcon(existing, "icon-tag");
             dirty |= PatchPropertyDescription(existing, "tagName", "Nombre visible de la etiqueta. Uselo como termino editorial corto y consistente.");
             dirty |= PatchPropertyDescription(existing, "tagSlug", "Slug opcional para filtros, URLs o integraciones. Si se deja vacio puede derivarse del nombre.");
             dirty |= PatchPropertyDescription(existing, "tagDescription", "Descripcion breve para documentar cuando usar esta etiqueta.");

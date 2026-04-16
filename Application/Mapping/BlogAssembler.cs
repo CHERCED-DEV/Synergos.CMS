@@ -198,6 +198,7 @@ public sealed class BlogAssembler
             Excerpt       = page.Value<string>("postExcerpt"),
             FeaturedImage = ReadImage(page, "featuredImage"),
             ReadingTime   = page.Value<int>("readingTime"),
+            PostType      = BlogPostTypeExtensions.FromAlias(page.Value<string>("postType")),
             Author        = ResolveAuthor(page),
             PublishDate   = page.Value<DateTime>("contentDate"),
             Categories        = ResolveCategoryFromParent(page),
@@ -209,6 +210,54 @@ public sealed class BlogAssembler
             AllBlogCategories = ResolveAllCategoriesFromBlogHome(page)
         };
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Author profile page
+    // ══════════════════════════════════════════════════════════════════════════
+
+    public AuthorPageView AssembleAuthor(IPublishedContent author)
+    {
+        var profile = ReadAuthorProfile(author);
+
+        // Find every post that picked this author. We walk all sibling/cousin
+        // BlogHomes under the same site root — authors live in shared content
+        // and may be referenced from multiple blog trees.
+        var siteRoot = author.AncestorsOrSelf()
+            .FirstOrDefault(n => n.ContentType.Alias == ContentTypeKeys.Aliases.SiteRoot);
+
+        var posts = siteRoot?
+            .DescendantsOrSelf()
+            .Where(n => n.ContentType.Alias == ContentTypeKeys.Aliases.BlogPost && n.IsVisible())
+            .Where(p => p.Value<IPublishedContent>("postAuthor")?.Key == author.Key)
+            .OrderByDescending(p => p.Value<DateTime>("contentDate"))
+            .ThenByDescending(p => p.CreateDate)
+            .Select(ToPostSummary)
+            .ToList() ?? [];
+
+        return new AuthorPageView(author)
+        {
+            Title        = profile.Name,
+            Subtitle     = profile.Role,
+            Seo          = ReadSeo(author, ResolveSiteSettings(author)),
+            PageCssId    = author.Value<string>("cssId"),
+            PageCssClass = author.Value<string>("cssClass"),
+            BlockGrid    = null,
+            Sections     = [],
+            SectionTree  = [],
+            PageTags     = PageAssembler.ReadPageTags(author),
+            Profile      = profile,
+            Posts        = posts
+        };
+    }
+
+    private static BlogAuthorInfo ReadAuthorProfile(IPublishedContent author) => new(
+        Name:       author.Value<string>("authorName") ?? author.Name,
+        Role:       author.Value<string>("authorRole"),
+        Bio:        author.Value<string>("authorBio"),
+        PhotoUrl:   author.Value<IPublishedContent>("authorPhoto")?.Url(),
+        Email:      author.Value<string>("authorEmail"),
+        LinkedInUrl: author.Value<string>("authorLinkedin"),
+        TwitterUrl:  author.Value<string>("authorTwitter"));
 
     // ══════════════════════════════════════════════════════════════════════════
     // Resolvers
@@ -282,7 +331,8 @@ public sealed class BlogAssembler
             PublishDate:      post.Value<DateTime>("contentDate"),
             AuthorName:       author?.Value<string>("authorName") ?? author?.Name,
             ReadingTime:      post.Value<int>("readingTime"),
-            CategoryName:     category);
+            CategoryName:     category,
+            PostType:         BlogPostTypeExtensions.FromAlias(post.Value<string>("postType")));
     }
 
     // ══════════════════════════════════════════════════════════════════════════

@@ -26,6 +26,7 @@ All GUIDs and aliases live in `Schema/Constants/`:
 | `platformRoot` | Platform Root | `PlatformRoot.cshtml` | Top-level container, allows SiteRoots + settings | `PlatformInitializer` |
 | `siteRoot` | Site Root | `SiteRoot.cshtml` | One per "world" — owns its SiteSettings, Theme, pages | `DocumentTypeInitializer` |
 | `pageBase` | Page Base | `PageBase.cshtml` | Generic page with Block Grid | `DocumentTypeInitializer` |
+| `pageBare` | Page Bare | `PageBare.cshtml` | Page base **without layout** — agnostic shell for full-bleed / iframe-embedded pages | `DocumentTypeInitializer` |
 | `articlePage` | Article Page | `ArticlePage.cshtml` | Editorial long-form | `DocumentTypeInitializer` (legacy alias kept) |
 | `globalSettings` | Global Settings | — | Platform-wide SEO + Scripts fallbacks | `SiteSettingsInitializer` |
 | `siteSettings` | Site Settings | — | Per-site identity, contact, social, SEO, scripts, header, footer, alert bar, banners, forms | `SiteSettingsInitializer` |
@@ -52,40 +53,49 @@ All GUIDs and aliases live in `Schema/Constants/`:
 
 ## Element Types (Block Grid blocks)
 
-58+ element types across 10 families. Prefix convention: `element<Family>*`.
+60+ element types across 10 families. Prefix convention: `element<Family>*`.
 
-### Structural (`elementStruct*`) — 7
+### Structural (`elementStruct*`) — 7 (+ 5 Layout Presets)
 `Section`, `Container`, `Grid`, `Column`, `Stack`, `Spacer`, `Divider`.
-Purpose: layout scaffolding. Contain areas for child blocks.
+Plus layout presets: `LayoutPreset1Col`, `LayoutPreset2ColEqual`, `LayoutPreset3ColEqual`, `LayoutPreset4ColEqual`, `LayoutPresetMainSidebar`.
+All contain **Block Grid Areas** for child blocks.
 
-### Textual (`elementText*`) — 5
-`Heading`, `Paragraph`, `RichText`, `Quote`, `CodeBlock`.
+### Textual (`elementText*`) — 6
+`Heading`, `Paragraph`, `RichText`, `Eyebrow`, `Quote`, `Label`.
 
 ### Action (`elementAction*`) — 3
-`CtaButton`, `CtaGroup`, `LinkBlock`.
+`Button`, `Link`, `CtaGroup`.
 
-### Media (`elementMedia*`) — 4
-`Image`, `Video`, `Gallery`, `MediaText`.
+### Media (`elementMedia*`) — 6
+`Image`, `Video`, `Icon`, `GalleryItem`, `LogoItem`, `Avatar`.
 
-### Informational (`elementInfo*`) — 6
-`AlertBox`, `Stat`, `Badge`, `KeyValue`, `Timeline`, `FeatureJourney`.
+### Info (`elementInfo*`) — 8
+`Badge`, `Stat`, `Feature`, `KeyValue`, `TimelineItem`, `FaqItem`, `TestimonialItem`, `PricingCard`.
+Note: `Feature` (single) is reused via `FeatureGrid` composition; `FaqItem`/`TestimonialItem` are the atomic items consumed by Accordion/Testimonial containers.
 
-### Composition (`elementComp*`) — ~10
-`Card`, `Hero`, `Banner`, `FeatureItem`, `FeatureGrid`, `LogoItem`, `LogoCloud`, `FaqItem`, `FaqSection`, `TestimonialItem`, `TestimonialSection`, `SocialShare`, `InfoBlock`.
+### Composition (`elementComp*`) — 10
+- **Presentation:** `Card`, `Hero`, `CtaBanner`, `MediaTextSplit`, `FeatureGrid`
+- **Area-based containers (SSR, zero scripts):** `CardGrid`, `LogoCloudGrid`
+- **Typed BlockList containers (web component + single script for N items):** `TestimonialCarousel`, `AccordionGroup`
+- **Domain-specific:** `FormBlock`, `BlogHighlight`, `ArticleList`
 
-### Integration (`elementIntegration*`) — 4
-`IframeEmbed`, `ScriptEmbed`, `ExternalWidget`, `AngularMount`, `MfMount`.
+**Retired (10.9.0):** `FaqList`, `TestimonialList`, `LogoCloud`, `Accordion` (legacy `CompContentCollection` variants) — superseded by the typed/area containers above.
+**Retired (10.10.0):** `Banner`, `InfoBlock` (dead chains with no Element Type registration).
 
-### Corporate (`elementCorporate*`) — subset for corporate marketing.
+### Integration (`elementInt*`) — 6
+`ScriptEmbed`, `IframeEmbed`, `ExternalWidget`, `AngularHost`, `MfHost`, `MacroHost`.
 
-### Experience (`elementExperience*`) — 8 interactive CDN modules
-`InsightExplorer`, `MediaExplorer`, `ContentCarousel`, `QuizFlow`, `FilterBoard`, `RatingWidget`, `CountdownClock`, `NotificationStack`.
+### Corporate (`elementCorp*`) — 9
+`TabGroup`, `AlertBar`, `BannerSlider`, `NewsletterForm`, `SocialShare`, `DataTable`, `ContactInfo`, `MapEmbed`, `MissionBlock`.
 
-### Blog (`elementBlog*`) — 2
-`BlogHighlight` (featured post card block), `ArticleList` (list of posts with filters).
+### Experience (`experience*`) — 9 interactive CDN modules
+`FeatureJourney`, `InsightExplorer`, `MediaExplorer`, `ContentCarousel`, `QuizFlow`, `FilterBoard`, `RatingWidget`, `CountdownClock`, `NotificationStack`.
 
-### Mount params
-`ElementMountParam` — single key/value row used inside `BlockListMountParams` for declarative dynamic props.
+### Shop (`elementShop*`) — 8
+`ProductCard`, `ProductGrid`, `ProductDetail`, `CartSummary`, `CartItem`, `PriceDisplay`, `QuantitySelector`, `VariantPicker`.
+
+### Forms + Mount
+`elementFormField`, `elementFormEmbed`, `elementNavItem`, `mountParam` — atomic items used inside BlockList editors.
 
 Exact GUIDs and properties per element: see `ElementTypeInitializer.cs`.
 
@@ -97,10 +107,11 @@ Applied to both Document Types and Element Types via `ContentTypeComposition`.
 `CompCoreBase`, `CompCoreLifecycle`, `CompCoreOwnership`, `CompCoreTenant`,
 `CompCoreAccess`, `CompCoreVersioning`, `CompCoreAudit`.
 
-### Content (10)
+### Content (12)
 `CompContentHeading`, `CompContentText`, `CompContentMedia`, `CompContentCta`,
 `CompContentBadge`, `CompContentCollection`, `CompContentAuthor`,
-`CompContentDate`, `CompContentMetadata`, `CompContentEmbed`.
+`CompContentDate`, `CompContentMetadata`, `CompContentEmbed`,
+`CompContentPricing`, `CompContentLocation`.
 
 ### DOM (8)
 `CompDomClass`, `CompDomAttributes`, `CompDomLayout`, `CompDomSpacing`,
@@ -130,7 +141,9 @@ Centralized in `DataTypeInitializer.cs`. Families:
 - **Media:** `MediaImage`, `MediaFile`, `MediaVideo`, `MediaMulti`
 - **Dropdown (SelectXxx):** `SelectRobots`, `SelectPageLayout`, `SelectButtonStyle`, `SelectCardStyle`, `SelectHeaderStyle`, `SelectAlertVariant`, `SelectIdentityPreset`, `SelectTrack`, …
 - **Tags:** `TagsContent`
-- **BlockList:** `BlockListNavItems`, `BlockListFormFields`, `BlockListMountParams`
+- **Dropdown (editorial):** `SelectBlogPostType` (article, news, tutorial, caseStudy, interview, opinion, release)
+- **BlockList (generic):** `BlockListNavItems`, `BlockListFormFields`, `BlockListMountParams`, `BlockListCollection`
+- **BlockList (typed — one-script containers):** `BlockListTestimonialItems` (accepts only `elementInfoTestimonialItem`), `BlockListFaqItems` (accepts only `elementInfoFaqItem`)
 - **BlockGrid:** `BlockGridPageSections`, `BlockGridReusable`
 
 ## Media Types
@@ -174,7 +187,7 @@ cart-summary, cart-item, price-display, quantity-selector, variant-picker).
 Seeded by `DictionaryInitializer.cs`. Key naming convention:
 
 - `Nav.*` — navigation labels (`Nav.Home`, `Nav.Blog`, `Nav.MobileNavLabel`, `Nav.LanguageSelector`, `Nav.FooterNavLabel`)
-- `Blog.*` — blog UI (`Blog.Featured`, `Blog.RecentPosts`, `Blog.ReadMore`, `Blog.BackToBlog`, `Blog.ArticleCount`, `Blog.AuthorSocial`, …)
+- `Blog.*` — blog UI (`Blog.Featured`, `Blog.RecentPosts`, `Blog.ReadMore`, `Blog.BackToBlog`, `Blog.ArticleCount`, `Blog.AuthorSocial`, `Blog.ReadingTime`, `Blog.Published`, `Blog.Tags`, `Blog.Categories`, `Blog.AboutAuthor`, `Blog.NoPosts`, `Blog.PostType.<alias>`, …)
 - `Form.*` — form UI (`Form.Submit`, `Form.ThankYou`, `Form.Validation.Required`, …)
 - `Aria.*` — accessibility labels (`Aria.AlertBar`, `Aria.Breadcrumbs`, `Aria.MainNav`, …)
 - `Page.*`, `Shop.*`, `Auth.*`, `Error.*` — feature-specific.

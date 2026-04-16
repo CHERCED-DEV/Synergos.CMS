@@ -67,12 +67,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ContentCtaReader>();
         services.AddSingleton<ContentBadgeReader>();
         services.AddSingleton<ContentCollectionReader>();
-        services.AddSingleton<ContentAuthorReader>();
         services.AddSingleton<ContentDateReader>();
         services.AddSingleton<ContentMetadataReader>();
         services.AddSingleton<ContentEmbedReader>();
         services.AddSingleton<ContentPricingReader>();
         services.AddSingleton<ContentLocationReader>();
+        services.AddSingleton<ContentAuthorReader>();
 
         // Dom
         services.AddSingleton<DomClassReader>();
@@ -86,9 +86,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<BehaviorTrackingReader>();
         services.AddSingleton<BehaviorInteractionReader>();
         services.AddSingleton<BehaviorNavigationReader>();
-        services.AddSingleton<BehaviorFeatureFlagReader>();
         services.AddSingleton<BehaviorAsyncReader>();
         services.AddSingleton<BehaviorScriptReader>();
+        services.AddSingleton<BehaviorFeatureFlagReader>();
 
         // Cross-cutting
         services.AddSingleton<SeoReader>();
@@ -185,8 +185,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISectionMapper, FeatureItemMapper>();
         services.AddSingleton<ISectionMapper, KeyValueMapper>();
         services.AddSingleton<ISectionMapper, TimelineItemMapper>();
-        services.AddSingleton<ISectionMapper, FaqItemMapper>();
-        services.AddSingleton<ISectionMapper, TestimonialItemMapper>();
+        services.AddSingleton<FaqItemMapper>();
+        services.AddSingleton<ISectionMapper>(sp => sp.GetRequiredService<FaqItemMapper>());
+        services.AddSingleton<TestimonialItemMapper>();
+        services.AddSingleton<ISectionMapper>(sp => sp.GetRequiredService<TestimonialItemMapper>());
         services.AddSingleton<ISectionMapper, PricingCardMapper>();
     }
 
@@ -194,16 +196,13 @@ public static class ServiceCollectionExtensions
     private static void AddCompositionMappers(IServiceCollection services)
     {
         services.AddSingleton<ISectionMapper, CardElementMapper>();
+        // Typed-container mappers (BlockList-based, interactive web components).
+        services.AddSingleton<ISectionMapper, TestimonialCarouselMapper>();
+        services.AddSingleton<ISectionMapper, AccordionGroupMapper>();
         services.AddSingleton<ISectionMapper, HeroElementMapper>();
         services.AddSingleton<ISectionMapper, FeatureGridMapper>();
         services.AddSingleton<ISectionMapper, CtaBannerMapper>();
-        services.AddSingleton<ISectionMapper, FaqListMapper>();
-        services.AddSingleton<ISectionMapper, TestimonialListMapper>();
-        services.AddSingleton<ISectionMapper, LogoCloudMapper>();
-        services.AddSingleton<ISectionMapper, InfoBlockElementMapper>();
-        services.AddSingleton<ISectionMapper, BannerMapper>();
         services.AddSingleton<ISectionMapper, MediaTextSplitMapper>();
-        services.AddSingleton<ISectionMapper, AccordionMapper>();
     }
 
     // ── Integration (c9*) — ScriptEmbed, IframeEmbed, ExternalWidget, MacroHost

@@ -20,6 +20,39 @@ public sealed record CardCdnConfig(
     string? Theme     = null,
     IReadOnlyDictionary<string, string>? Translations = null);
 
+// CardGrid + LogoCloudGrid son area-based — sin CDN config (render SSR puro).
+
+// ── Testimonial Carousel (typed container) ───────────────────────────────────
+public sealed record TestimonialCarouselItemCdnConfig(
+    string? Quote     = null,
+    string? Author    = null,
+    string? Role      = null,
+    string? AvatarSrc = null,
+    string? AvatarAlt = null,
+    string? BadgeText = null);
+
+public sealed record TestimonialCarouselCdnConfig(
+    string?  Title    = null,
+    string?  Subtitle = null,
+    int?     Columns  = null,
+    string?  Gap      = null,
+    string?  Variant  = null,
+    IReadOnlyList<TestimonialCarouselItemCdnConfig>? Items = null,
+    IReadOnlyDictionary<string, string>?             Translations = null);
+
+// ── Accordion Group (typed container) ────────────────────────────────────────
+public sealed record AccordionGroupItemCdnConfig(
+    string? Question = null,
+    string? Answer   = null,
+    bool?   OpenByDefault = null);
+
+public sealed record AccordionGroupCdnConfig(
+    string?  Title    = null,
+    string?  Subtitle = null,
+    string?  Variant  = null,
+    IReadOnlyList<AccordionGroupItemCdnConfig>? Items = null,
+    IReadOnlyDictionary<string, string>?        Translations = null);
+
 /// <summary>Mirror of MediaTextElementConfig.</summary>
 public sealed record MediaTextCdnConfig(
     string? ImageSrc      = null,

@@ -129,22 +129,45 @@ internal sealed class ElementTypeInitializer : SchemaInitializerBase
             ContentTypeKeys.CompContentCollection, ContentTypeKeys.CompDomLayout, ContentTypeKeys.CompDomSpacing, ContentTypeKeys.CompDomClass);
         EnsureType(ContentTypeKeys.ElementCompCtaBanner, "CTA Banner", "elementCompCtaBanner", "icon-megaphone", components,
             ContentTypeKeys.CompContentText, ContentTypeKeys.CompContentCta, ContentTypeKeys.CompDomVariant, ContentTypeKeys.CompDomSpacing);
-        EnsureType(ContentTypeKeys.ElementCompFaqList, "FAQ List", "elementCompFaqList", "icon-ordered-list", components,
-            ContentTypeKeys.CompContentCollection, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
-        EnsureType(ContentTypeKeys.ElementCompTestimonialList, "Testimonial List", "elementCompTestimonialList", "icon-users", components,
-            ContentTypeKeys.CompContentCollection, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
-        EnsureType(ContentTypeKeys.ElementCompLogoCloud, "Logo Cloud", "elementCompLogoCloud", "icon-thumbnails", components,
-            ContentTypeKeys.CompContentCollection, ContentTypeKeys.CompContentText, ContentTypeKeys.CompDomSpacing, ContentTypeKeys.CompDomClass);
         EnsureType(ContentTypeKeys.ElementCompMediaTextSplit, "Media + Text", "elementCompMediaTextSplit", "icon-split-alt", components,
             ContentTypeKeys.CompContentText, ContentTypeKeys.CompContentMedia, ContentTypeKeys.CompContentCta, ContentTypeKeys.CompDomLayout, ContentTypeKeys.CompDomVariant);
-        EnsureType(ContentTypeKeys.ElementCompAccordion, "Accordion", "elementCompAccordion", "icon-list", components,
-            ContentTypeKeys.CompContentCollection, ContentTypeKeys.CompContentText, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompBehaviorInteraction);
+        // FaqList / TestimonialList / LogoCloud / Accordion legacy retirados —
+        // reemplazados por AccordionGroup / TestimonialCarousel / LogoCloudGrid
+        // (BlockList tipado o Block Grid Area, según sea interactivo o SSR puro).
         EnsureType(ContentTypeKeys.ElementCompFormBlock, "Form Block", "elementCompFormBlock", "icon-checkbox", components,
             ContentTypeKeys.CompContentText, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
+        // BlogHighlight + ArticleList: the mappers read picker-based properties
+        // (blogSource, articles, maxPosts, showExcerpt…) — they don't consume
+        // CompContentCollection.items. Create with picker compositions + patch
+        // inline props immediately so the single authoritative definition lives
+        // here (was previously duplicated in PlatformInitializer → silent skip).
         EnsureType(ContentTypeKeys.ElementCompBlogHighlight, "Blog Highlight", "elementCompBlogHighlight", "icon-article", components,
-            ContentTypeKeys.CompContentCollection, ContentTypeKeys.CompContentText, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
+            ContentTypeKeys.CompContentHeading, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
+        PatchBlogHighlightProps();
+
         EnsureType(ContentTypeKeys.ElementCompArticleList, "Article List", "elementCompArticleList", "icon-list", components,
-            ContentTypeKeys.CompContentCollection, ContentTypeKeys.CompContentText, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
+            ContentTypeKeys.CompContentHeading, ContentTypeKeys.CompDomClass, ContentTypeKeys.CompDomVariant);
+        PatchArticleListProps();
+        // ── Area-based containers (SSR puro, cero scripts) ────────────────
+        // Los hijos viven en Block Grid Areas, se renderizan SSR uno por uno.
+        // Idiomático Umbraco 13; cero DataTypes BlockList extra.
+        EnsureAreaContainer(components,
+            ContentTypeKeys.ElementCompCardGrid, "Card Grid", "elementCompCardGrid", "icon-thumbnails");
+        EnsureAreaContainer(components,
+            ContentTypeKeys.ElementCompLogoCloudGrid, "Logo Cloud Grid", "elementCompLogoCloudGrid", "icon-thumbnails");
+
+        // ── BlockList-based containers (web component interactivo con JSON) ─
+        // Carousel y Accordion necesitan JS compartido (swipe, toggle) —
+        // el "un solo script" es el propósito del patrón.
+        EnsureTypedContainer(components,
+            ContentTypeKeys.ElementCompTestimonialCarousel, "Testimonial Carousel", "elementCompTestimonialCarousel", "icon-slideshow",
+            DataTypeKeys.BlockListTestimonialItems, "testimonialItems", "Testimonials",
+            "Testimonios del carrusel. Cada item es un elementInfoTestimonialItem; un solo web component anima todos los slides.");
+
+        EnsureTypedContainer(components,
+            ContentTypeKeys.ElementCompAccordionGroup, "Accordion Group", "elementCompAccordionGroup", "icon-list",
+            DataTypeKeys.BlockListFaqItems, "faqItems", "FAQs",
+            "Preguntas frecuentes agrupadas. Cada item es un elementInfoFaqItem; un solo web component gestiona el toggle de todos los paneles.");
 
         var integration = EnsureChildFolder(elementsRoot, "Integration");
         EnsureType(ContentTypeKeys.ElementIntScriptEmbed, "Script Embed", "elementIntScriptEmbed", "icon-code", integration,
@@ -341,6 +364,237 @@ internal sealed class ElementTypeInitializer : SchemaInitializerBase
         TrySave(ct);
     }
 
+    /// <summary>
+    /// Patches ElementCompBlogHighlight with picker-based inline properties
+    /// (blogSource, maxPosts, showExcerpt, showImage, listLayout). Idempotent —
+    /// adds missing props only, never modifies existing ones.
+    /// </summary>
+    private void PatchBlogHighlightProps()
+    {
+        var ct = Cts.Get(ContentTypeKeys.ElementCompBlogHighlight);
+        if (ct is null) return;
+
+        var pickerDt = Dts.GetDataType(DataTypeKeys.ContentPicker);
+        var intDt    = Dts.GetDataType(DataTypeKeys.NumberInteger);
+        var boolDt   = Dts.GetDataType(DataTypeKeys.ToggleBoolean);
+        var layoutDt = Dts.GetDataType(DataTypeKeys.SelectListLayout);
+        if (pickerDt is null || intDt is null || boolDt is null || layoutDt is null) return;
+
+        var group = ct.PropertyGroups.FirstOrDefault(g => g.Alias == "blogHighlight");
+        if (group is null)
+        {
+            group = new PropertyGroup(isPublishing: true)
+            {
+                Name          = "Blog Highlight",
+                Alias         = "blogHighlight",
+                SortOrder     = 20,
+                PropertyTypes = new PropertyTypeCollection(true)
+            };
+            ct.PropertyGroups.Add(group);
+        }
+
+        var dirty = false;
+        dirty |= AddMissing(ct, group, pickerDt, "blogSource",  "Blog Source",  0,  "Pick a BlogHome node to pull posts from");
+        dirty |= AddMissing(ct, group, intDt,    "maxPosts",    "Max Posts",    10, "Number of posts to display (default: 3)");
+        dirty |= AddMissing(ct, group, boolDt,   "showExcerpt", "Show Excerpt", 20, "Render the post excerpt in each card");
+        dirty |= AddMissing(ct, group, boolDt,   "showImage",   "Show Image",   30, "Render the featured image in each card");
+        dirty |= AddMissing(ct, group, layoutDt, "listLayout",  "Layout",       40, "Presentation layout for the listing");
+
+        if (dirty) TrySave(ct);
+    }
+
+    /// <summary>
+    /// Patches ElementCompArticleList with picker-based inline properties
+    /// (articles, showExcerpt, showImage, listLayout).
+    /// </summary>
+    private void PatchArticleListProps()
+    {
+        var ct = Cts.Get(ContentTypeKeys.ElementCompArticleList);
+        if (ct is null) return;
+
+        var multiPickerDt = Dts.GetDataType(DataTypeKeys.MultiContentPicker);
+        var boolDt        = Dts.GetDataType(DataTypeKeys.ToggleBoolean);
+        var layoutDt      = Dts.GetDataType(DataTypeKeys.SelectListLayout);
+        if (multiPickerDt is null || boolDt is null || layoutDt is null) return;
+
+        var group = ct.PropertyGroups.FirstOrDefault(g => g.Alias == "articleList");
+        if (group is null)
+        {
+            group = new PropertyGroup(isPublishing: true)
+            {
+                Name          = "Article List",
+                Alias         = "articleList",
+                SortOrder     = 20,
+                PropertyTypes = new PropertyTypeCollection(true)
+            };
+            ct.PropertyGroups.Add(group);
+        }
+
+        var dirty = false;
+        dirty |= AddMissing(ct, group, multiPickerDt, "articles",    "Articles",     0,  "Pick pages or blog posts to display");
+        dirty |= AddMissing(ct, group, boolDt,        "showExcerpt", "Show Excerpt", 10, "Render each item's excerpt");
+        dirty |= AddMissing(ct, group, boolDt,        "showImage",   "Show Image",   20, "Render each item's featured image");
+        dirty |= AddMissing(ct, group, layoutDt,      "listLayout",  "Layout",       30, "Presentation layout for the listing");
+
+        if (dirty) TrySave(ct);
+    }
+
+    private bool AddMissing(IContentType ct, PropertyGroup group, IDataType dt,
+                            string alias, string name, int sortOrder, string description)
+    {
+        if (ct.PropertyTypes.Any(p => p.Alias == alias)) return false;
+        group.PropertyTypes!.Add(new PropertyType(Ssh, dt)
+        {
+            Alias = alias, Name = name, SortOrder = sortOrder, Description = description
+        });
+        return true;
+    }
+
+    /// <summary>
+    /// Contenedor area-based (SSR idiomático Umbraco 13). El element type
+    /// solo expone configuración del grid (título, columnas, gap); los
+    /// hijos viven en un Block Grid Area con allowance tipado — cada hijo
+    /// se renderiza SSR independientemente (cero scripts añadidos).
+    /// Patrón usado por CardGrid y LogoCloudGrid.
+    /// </summary>
+    private void EnsureAreaContainer(int folderId, Guid key, string name, string alias, string icon)
+    {
+        EnsureType(key, name, alias, icon, folderId,
+            ContentTypeKeys.CompContentText,
+            ContentTypeKeys.CompDomClass,
+            ContentTypeKeys.CompDomSpacing,
+            ContentTypeKeys.CompDomVariant);
+
+        var ct = Cts.Get(key);
+        if (ct is null) return;
+
+        var intDt  = Dts.GetDataType(DataTypeKeys.NumberInteger);
+        var textDt = Dts.GetDataType(DataTypeKeys.TextIdentifier);
+        if (intDt is null || textDt is null) return;
+
+        var dirty = false;
+
+        var group = ct.PropertyGroups.FirstOrDefault(g => g.Alias == "container");
+        if (group is null)
+        {
+            group = new PropertyGroup(isPublishing: true)
+            {
+                Name          = "Container",
+                Alias         = "container",
+                SortOrder     = 50,
+                PropertyTypes = new PropertyTypeCollection(true)
+            };
+            ct.PropertyGroups.Add(group);
+            dirty = true;
+        }
+
+        if (ct.PropertyTypes.All(p => p.Alias != "gridColumns"))
+        {
+            group.PropertyTypes!.Add(new PropertyType(Ssh, intDt)
+            {
+                Alias       = "gridColumns",
+                Name        = "Columns",
+                Description = "Número de columnas en desktop. Vacío = layout automático fluido.",
+                SortOrder   = 0
+            });
+            dirty = true;
+        }
+
+        if (ct.PropertyTypes.All(p => p.Alias != "gridGap"))
+        {
+            group.PropertyTypes!.Add(new PropertyType(Ssh, textDt)
+            {
+                Alias       = "gridGap",
+                Name        = "Gap",
+                Description = "Separación entre items. Token CSS (ej. 'sm', 'md', 'lg') o valor con unidad (ej. '1.5rem').",
+                SortOrder   = 10
+            });
+            dirty = true;
+        }
+
+        if (dirty) TrySave(ct);
+    }
+
+    /// <summary>
+    /// Contenedor tipado de N items (patrón "un solo script para N"). Crea
+    /// el element con compositions estándar (Text, DomClass/Variant/Spacing)
+    /// y añade un grupo "Container" con: items (BlockList tipado), gridColumns,
+    /// gridGap. El mapper del contenedor lee los items como datos y emite
+    /// un único <c>&lt;script&gt;</c> en el view — evita N scripts duplicados.
+    /// Usado solo para componentes interactivos (carousel, accordion) donde
+    /// el JS compartido justifica el patrón. Para grids puramente visuales
+    /// usar <see cref="EnsureAreaContainer"/> (Block Grid Areas + SSR).
+    /// </summary>
+    private void EnsureTypedContainer(
+        int folderId, Guid key, string name, string alias, string icon,
+        Guid itemsDtKey, string itemsAlias, string itemsName, string itemsDescription)
+    {
+        EnsureType(key, name, alias, icon, folderId,
+            ContentTypeKeys.CompContentText,
+            ContentTypeKeys.CompDomClass,
+            ContentTypeKeys.CompDomSpacing,
+            ContentTypeKeys.CompDomVariant);
+
+        var ct = Cts.Get(key);
+        if (ct is null) return;
+
+        var blockListDt = Dts.GetDataType(itemsDtKey);
+        var intDt       = Dts.GetDataType(DataTypeKeys.NumberInteger);
+        var textDt      = Dts.GetDataType(DataTypeKeys.TextIdentifier);
+        if (blockListDt is null || intDt is null || textDt is null) return;
+
+        var dirty = false;
+
+        var group = ct.PropertyGroups.FirstOrDefault(g => g.Alias == "container");
+        if (group is null)
+        {
+            group = new PropertyGroup(isPublishing: true)
+            {
+                Name          = "Container",
+                Alias         = "container",
+                SortOrder     = 50,
+                PropertyTypes = new PropertyTypeCollection(true)
+            };
+            ct.PropertyGroups.Add(group);
+            dirty = true;
+        }
+
+        if (ct.PropertyTypes.All(p => p.Alias != itemsAlias))
+        {
+            group.PropertyTypes!.Add(new PropertyType(Ssh, blockListDt)
+            {
+                Alias = itemsAlias, Name = itemsName, Description = itemsDescription, SortOrder = 0
+            });
+            dirty = true;
+        }
+
+        if (ct.PropertyTypes.All(p => p.Alias != "gridColumns"))
+        {
+            group.PropertyTypes!.Add(new PropertyType(Ssh, intDt)
+            {
+                Alias       = "gridColumns",
+                Name        = "Columns",
+                Description = "Número de columnas en desktop. Vacío = layout automático fluido.",
+                SortOrder   = 10
+            });
+            dirty = true;
+        }
+
+        if (ct.PropertyTypes.All(p => p.Alias != "gridGap"))
+        {
+            group.PropertyTypes!.Add(new PropertyType(Ssh, textDt)
+            {
+                Alias       = "gridGap",
+                Name        = "Gap",
+                Description = "Separación entre items. Token CSS (ej. 'sm', 'md', 'lg') o valor con unidad (ej. '1.5rem').",
+                SortOrder   = 20
+            });
+            dirty = true;
+        }
+
+        if (dirty) TrySave(ct);
+    }
+
     private void CleanupOrphanedFolders()
     {
         string[] oldRootFolders = ["Structural", "Textual", "Action", "Media", "Informational", "Composition", "Composed", "Integration", "Corporate"];
@@ -412,14 +666,14 @@ internal sealed class ElementTypeInitializer : SchemaInitializerBase
         var k when k == ContentTypeKeys.ElementCompHero => "Bloque de cabecera visual con título, descripción, imagen y llamada a la acción.",
         var k when k == ContentTypeKeys.ElementCompFeatureGrid => "Conjunto de features organizado en formato de rejilla.",
         var k when k == ContentTypeKeys.ElementCompCtaBanner => "Banner destacado para una llamada a la acción principal.",
-        var k when k == ContentTypeKeys.ElementCompFaqList => "Listado de preguntas frecuentes compuesto por varios FAQ items.",
-        var k when k == ContentTypeKeys.ElementCompTestimonialList => "Listado de testimonios para prueba social o reputación.",
-        var k when k == ContentTypeKeys.ElementCompLogoCloud => "Nube de logos para mostrar clientes, aliados o certificaciones.",
         var k when k == ContentTypeKeys.ElementCompMediaTextSplit => "Componente dividido entre contenido visual y texto.",
-        var k when k == ContentTypeKeys.ElementCompAccordion => "Bloque expandible para organizar contenido en paneles colapsables.",
         var k when k == ContentTypeKeys.ElementCompFormBlock => "Bloque de formulario con encabezado y referencia a una definición de formulario.",
         var k when k == ContentTypeKeys.ElementCompBlogHighlight => "Resumen del blog para destacar entradas recientes o un contenido principal.",
         var k when k == ContentTypeKeys.ElementCompArticleList => "Listado curado de páginas o artículos seleccionados manualmente.",
+        var k when k == ContentTypeKeys.ElementCompCardGrid => "Grid de tarjetas. Acepta N Cards y los renderiza con un solo web component — un único script en vez de N.",
+        var k when k == ContentTypeKeys.ElementCompLogoCloudGrid => "Logo Cloud. Contenedor de logos con un solo web component — un único script para toda la nube.",
+        var k when k == ContentTypeKeys.ElementCompTestimonialCarousel => "Carrusel de testimonios. Un solo web component anima todos los slides — un único script para el carrusel completo.",
+        var k when k == ContentTypeKeys.ElementCompAccordionGroup => "Acordeón de FAQs. Un solo web component gestiona el toggle — un único script para todo el acordeón.",
         var k when k == ContentTypeKeys.ElementIntScriptEmbed => "Inserta un script externo o interno cuando una integración lo requiere.",
         var k when k == ContentTypeKeys.ElementIntIframeEmbed => "Muestra contenido externo dentro de un iframe.",
         var k when k == ContentTypeKeys.ElementIntExternalWidget => "Contenedor para widgets de terceros embebidos en la página.",

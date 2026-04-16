@@ -56,8 +56,9 @@ the dependency graph.
 | 6b | `IntegrationCompositionInitializer` | Integration, AngularMount, MfMount | 1a, 1b |
 | 6c | `VisibilityCompositionInitializer` | Visibility | 1a, 1b |
 | 6d | `PatchCompositionsIsElement` | Sets `IsElement = true` on all compositions | 1b–6c |
-| 7 | `ElementTypeInitializer` | 58+ element types across 10 families | 1–6 |
+| 7 | `ElementTypeInitializer` | 60+ element types across 10 families (Structural, Text, Action, Media, Info, Composition, Integration, Corporate, Experience, Shop) | 1–6 |
 | 7.5 | `PatchMountParamsBlockList` | Wires `ElementMountParam` into `BlockListMountParams` | 7 |
+| 7.6 | `PatchTypedItemBlockLists` | Wires typed item BlockLists — `BlockListTestimonialItems` → `ElementInfoTestimonialItem`, `BlockListFaqItems` → `ElementInfoFaqItem`. Enables the "one script for N items" pattern in interactive containers (TestimonialCarousel, AccordionGroup) | 7 |
 | 8 | `MediaTypeInitializer` | Media types (Image, File, Folder, Video) | — |
 | 9a | `DocumentTypeInitializer` + `ShopInitializer` | SiteRoot, PageBase + 5 Shop types | 1–8 |
 | 9b | `PlatformInitializer` + `SiteSettingsInitializer` | Platform infrastructure (PlatformRoot, GlobalSettings, ThemeSettings, SiteSettings, LayoutProfile, SharedContentFolder, NavigationGroup, ReusableBlock, Author, Category, FormDefinition, NavigationItem element, FormField element, FormEmbed element, BlogHighlight element, ArticleList element) | 1–9a |
@@ -177,7 +178,7 @@ previous runs could leave orphaned rows with matching keys.
 public static class SchemaVersion
 {
     public const string Key   = "Synergos.Schema.Version";
-    public const string Value = "10.0.1";
+    public const string Value = "10.13.0"; // as of 2026-04-14
 }
 ```
 
@@ -252,6 +253,58 @@ record in `SynergosSchemaComposer.cs`) and reach the initializer via its base
 class constructor. If you wrote an initializer that directly injects
 `IContentTypeService`, refactor to extend `SchemaInitializerBase` and receive
 it through `SchemaServices`.
+
+## Container patterns (10.6.0+)
+
+Containers that aggregate N children (card grid, logo cloud, testimonial
+carousel, FAQ accordion) follow two distinct patterns — picked per use case:
+
+### Pattern A — Block Grid Areas (SSR layout-only)
+
+For presentation-only grids where children render independently and no
+shared JS is needed: **`EnsureAreaContainer()` helper + `AreaContainerBlock()` block config + typed Area with `ElementTypeKey` allowance**.
+
+Used by: `ElementCompCardGrid`, `ElementCompLogoCloudGrid`.
+
+- Editor sees drag-and-drop area in backoffice (native Umbraco 13 UX).
+- Each child card/logo renders SSR via its own partial — **zero scripts** emitted.
+- The parent view (`Views/Partials/blockgrid/Components/<alias>.cshtml`) wraps
+  the area output with the grid CSS (cols/gap).
+- No section mapper for the parent — `items.cshtml` detects `item.Areas.Any()`
+  and routes to the structural branch.
+
+### Pattern B — Typed BlockList (interactive web component)
+
+For interactive carousels/accordions where a shared JS bundle orchestrates
+all items: **dedicated `BlockListXxxItems` DataType constrained via Phase 7.6
+to one child element type + element with its own `items` property + mapper
+that aggregates children into a single CDN config**.
+
+Used by: `ElementCompTestimonialCarousel`, `ElementCompAccordionGroup`.
+
+- One `<script type="module">` per container (not per item).
+- Children serialized as `items: [...]` inside the container's JSON config.
+- Web component iterates items internally (no hydration of N instances).
+
+### When to pick which
+
+| Use case | Pattern |
+|---|---|
+| Layout grid, cards/logos render independently | A — Areas + SSR |
+| Interactive UX (swipe carousel, toggle accordion) | B — Typed BlockList + web component |
+
+## CDN script deduplication (10.10.0+)
+
+`IEmittedBundleTracker` (Domain, request-scoped Infrastructure impl) dedupes
+`<script type="module">` tags when the same CDN element appears N times on
+a page. All CDN macros and Blog partials wrap their script in
+`@if (Bundles.TryClaim("bundle-name")) { ... }`.
+
+Companion `BundlePrescanner` (`Application/Rendering/`) walks the BlockGrid
+(plus nested Areas and MacroHost's `macroAlias`) **before** rendering to
+emit `<link rel="modulepreload">` hints in `<head>`. Enabled on PageBase,
+BlogPost, BlogHome, BlogCategory. See `CdnBundleRegistry` for the
+alias → bundle mapping (small by design — only interactive typed containers).
 
 ## See also
 

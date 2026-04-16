@@ -57,7 +57,7 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
         // email to an external SMTP config; features require middleware/gates to mean
         // anything and should be added here only when a consumer exists.
         const string description = "Fallbacks SEO y scripts de tracking compartidos por toda la plataforma.";
-        if (TryPatchExistingContentType(ContentTypeKeys.GlobalSettings, "Global Settings", folderId, description)) return;
+        if (TryPatchExistingContentType(ContentTypeKeys.GlobalSettings, "Global Settings", folderId, description, "icon-wrench")) return;
 
         var ct = new ContentType(Ssh, folderId)
         {
@@ -98,6 +98,7 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
             { existing.ParentId = folderId; dirty = true; }
             if (!string.Equals(existing.Description, description, StringComparison.Ordinal))
             { existing.Description = description; dirty = true; }
+            dirty |= PatchIcon(existing, "icon-palette");
 
             if (!existing.PropertyTypes.Any(p => p.Alias == "identityPreset"))
             {
@@ -198,6 +199,7 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
             { existing.ParentId = folderId; dirty = true; }
             if (!string.Equals(existing.Description, description, StringComparison.Ordinal))
             { existing.Description = description; dirty = true; }
+            dirty |= PatchIcon(existing, "icon-settings");
 
             // Non-destructive rename: "Header & Footer" (headerFooter) → "Header" (header).
             var hfTab = existing.PropertyGroups.FirstOrDefault(g => g.Alias == "headerFooter");
@@ -217,6 +219,13 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
                 existing.PropertyGroups.Remove(blogTab);
                 dirty = true;
             }
+
+            // v11.0.0 — mark legacy layout tabs as deprecated. Properties remain so
+            // LayoutConfigSeeder can migrate values on startup; cleanup in v11.1.0.
+            dirty |= MarkLegacyTabAsDeprecated(existing, TabHeader,   "Header (Deprecated — use Config/Layout/Header)",   90);
+            dirty |= MarkLegacyTabAsDeprecated(existing, TabFooter,   "Footer (Deprecated — use Config/Layout/Footer)",   91);
+            dirty |= MarkLegacyTabAsDeprecated(existing, TabAlertBar, "Alert Bar (Deprecated — use Config/Layout/Alerts)", 92);
+            dirty |= MarkLegacyTabAsDeprecated(existing, "banners",   "Banners (Deprecated — use Config/Layout/Banners)",  93);
 
             dirty |= EnsureSiteSettingsMissingProps(existing);
             if (dirty) Cts.Save(existing);
@@ -304,7 +313,31 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
         tabBanners.PropertyTypes!.Add(Prop("campaignEndDate",     "Campaign End",   DataTypeKeys.DateTimePicker, 30));
         ct.PropertyGroups.Add(tabBanners);
 
+        var tabLayout = Tab("Layout", "layout", 10);
+        tabLayout.PropertyTypes!.Add(Prop("defaultProfile", "Default Layout Profile", DataTypeKeys.ContentPicker, 0,
+            description: "Layout Profile usado por defecto en todas las páginas del sitio sin override. Apunta a un nodo bajo <site>/Config/Layout/Profiles/."));
+        ct.PropertyGroups.Add(tabLayout);
+
         Cts.Save(ct);
+    }
+
+    /// <summary>
+    /// v11.0.0 — marks a legacy layout tab (Header, Footer, Alert Bar, Banners &amp;
+    /// Campaigns) as deprecated without removing its properties. Properties remain
+    /// readable for <c>LayoutConfigSeeder</c> to migrate values into the new
+    /// Config/Layout nodes. Scheduled for removal in v11.1.0.
+    /// </summary>
+    private static bool MarkLegacyTabAsDeprecated(IContentType ct, string tabAlias, string newName, int newSort)
+    {
+        var tab = ct.PropertyGroups.FirstOrDefault(g => g.Alias == tabAlias);
+        if (tab is null) return false;
+
+        var dirty = false;
+        if (!string.Equals(tab.Name, newName, StringComparison.Ordinal))
+        { tab.Name = newName; dirty = true; }
+        if (tab.SortOrder != newSort)
+        { tab.SortOrder = newSort; dirty = true; }
+        return dirty;
     }
 
     /// <summary>
@@ -347,6 +380,20 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
         EnsureInTab(TabIdentity, "siteLogoOverride",    "Logo",             DataTypeKeys.MediaImage,         5,  "Logo shown in header and footer. Overrides ThemeSettings logo.");
         EnsureInTab(TabIdentity, "siteLogoAltText",     "Logo Alt Text",    DataTypeKeys.TextTitle,          6,  "Accessible alt text for the logo image.");
 
+        // v11.0.0 — Layout tab with default profile picker.
+        if (!ct.PropertyTypes.Any(p => p.Alias == "defaultProfile"))
+        {
+            var layoutTab = ct.PropertyGroups.FirstOrDefault(g => g.Alias == "layout");
+            if (layoutTab is null)
+            {
+                layoutTab = Tab("Layout", "layout", 10);
+                ct.PropertyGroups.Add(layoutTab);
+            }
+            layoutTab.PropertyTypes!.Add(Prop("defaultProfile", "Default Layout Profile", DataTypeKeys.ContentPicker, 0,
+                description: "Layout Profile usado por defecto en todas las páginas del sitio sin override."));
+            dirty = true;
+        }
+
         return dirty;
     }
 
@@ -354,7 +401,7 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
 
     private void EnsureLayoutProfile(int folderId)
     {
-        const string description = "Perfil de layout reutilizable. Configura navegación, header/footer y estilos para páginas que no usan el layout por defecto del sitio.";
+        const string description = "Perfil de layout reutilizable. Compone Header, Footer, Alert Bars y Banner referenciando config nodes bajo Config/Layout.";
 
         var existing = Cts.Get(ContentTypeKeys.LayoutProfile);
         if (existing is not null)
@@ -364,6 +411,10 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
             { existing.Description = description; dirty = true; }
             if (existing.ParentId != folderId)
             { existing.ParentId = folderId; dirty = true; }
+            dirty |= PatchIcon(existing, "icon-layers");
+
+            dirty |= EnsureLayoutProfileMissingProps(existing);
+
             if (dirty) Cts.Save(existing);
             return;
         }
@@ -374,24 +425,67 @@ internal sealed class SiteSettingsInitializer : SchemaInitializerBase
             Name        = "Layout Profile",
             Alias       = ContentTypeKeys.Aliases.LayoutProfileAlias,
             Description = description,
-            Icon        = "icon-layout"
+            Icon        = "icon-layers"
         };
 
-        var tab = Tab("Layout", "layout", 0);
-        tab.PropertyTypes!.Add(Prop("layoutName",       "Profile Name",       DataTypeKeys.TextTitle,     0, mandatory: true,
-            description: "Nombre descriptivo del perfil (ej. 'Landing sin footer', 'Blog dark'). Aparece en el picker de Layout Profile."));
-        tab.PropertyTypes!.Add(Prop("headerNavigation", "Header Navigation",  DataTypeKeys.ContentPicker, 10,
-            description: "NavigationGroup que se usa en el header cuando este perfil está activo."));
-        tab.PropertyTypes!.Add(Prop("footerNavigation", "Footer Navigation",  DataTypeKeys.ContentPicker, 20,
-            description: "NavigationGroup que se usa en el footer cuando este perfil está activo."));
-        tab.PropertyTypes!.Add(Prop("showAlertBar",     "Show Alert Bar",     DataTypeKeys.ToggleBoolean, 30,
-            description: "Muestra la barra de alerta en páginas que usen este perfil."));
-        tab.PropertyTypes!.Add(Prop("showBanner",       "Show Banner",        DataTypeKeys.ToggleBoolean, 40,
-            description: "Muestra el banner global en páginas que usen este perfil."));
-        tab.PropertyTypes!.Add(Prop("mainWrapperStyle", "Wrapper Style",      DataTypeKeys.TextTitle,     50,
-            description: "Clase CSS adicional aplicada al wrapper principal de la página (ej. 'has-dark-hero', 'is-fullwidth')."));
+        var tabLayout = Tab("Layout", "layout", 0);
+        tabLayout.PropertyTypes!.Add(Prop("layoutName", "Profile Name", DataTypeKeys.TextTitle, 0, mandatory: true,
+            description: "Nombre descriptivo del perfil (ej. 'Default', 'Landing sin footer'). Aparece en el picker."));
+        tabLayout.PropertyTypes!.Add(Prop("isDefault",  "Is Default",   DataTypeKeys.ToggleBoolean, 10,
+            description: "Si está activo, este profile se usa para todas las páginas del sitio que no tengan override. Debe haber uno por sitio."));
+        ct.PropertyGroups.Add(tabLayout);
 
-        ct.PropertyGroups.Add(tab);
+        var tabComposition = Tab("Composition", "composition", 1);
+        tabComposition.PropertyTypes!.Add(Prop("headerConfig",         "Header",           DataTypeKeys.ContentPicker,      0,
+            description: "HeaderConfig a renderizar cuando este profile está activo."));
+        tabComposition.PropertyTypes!.Add(Prop("footerConfig",         "Footer",           DataTypeKeys.ContentPicker,     10,
+            description: "FooterConfig a renderizar."));
+        tabComposition.PropertyTypes!.Add(Prop("alertBars",            "Alert Bars",       DataTypeKeys.MultiContentPicker, 20,
+            description: "AlertBarConfigs a apilar. Orden = orden visual (primera arriba)."));
+        tabComposition.PropertyTypes!.Add(Prop("banner",               "Banner",           DataTypeKeys.ContentPicker,     30,
+            description: "BannerConfig a renderizar (opcional)."));
+        tabComposition.PropertyTypes!.Add(Prop("platformStripEnabled", "Platform Strip",   DataTypeKeys.ToggleBoolean,     40,
+            description: "Muestra la barra cross-world arriba del header (Synergos · Flow Demo · Shop · Blog)."));
+        ct.PropertyGroups.Add(tabComposition);
+
+        var tabStyle = Tab("Style", "style", 2);
+        tabStyle.PropertyTypes!.Add(Prop("mainWrapperStyle", "Wrapper Style", DataTypeKeys.TextTitle, 0,
+            description: "Clase CSS adicional aplicada al wrapper principal (ej. 'has-dark-hero', 'is-fullwidth')."));
+        ct.PropertyGroups.Add(tabStyle);
+
         Cts.Save(ct);
+    }
+
+    /// <summary>
+    /// v11.0.0 — ensures the LayoutProfile CT has the new composition pickers
+    /// when upgrading from a prior schema (which had headerNavigation /
+    /// footerNavigation / showAlertBar / showBanner instead).
+    /// </summary>
+    private bool EnsureLayoutProfileMissingProps(IContentType ct)
+    {
+        var dirty = false;
+
+        void EnsureInTab(string tabAlias, string tabName, int tabSort,
+            string propAlias, string propName, Guid dataTypeKey, int sortOrder, string description = "")
+        {
+            if (ct.PropertyTypes.Any(p => p.Alias == propAlias)) return;
+            var tab = ct.PropertyGroups.FirstOrDefault(g => g.Alias == tabAlias);
+            if (tab is null)
+            {
+                tab = Tab(tabName, tabAlias, tabSort);
+                ct.PropertyGroups.Add(tab);
+            }
+            tab.PropertyTypes!.Add(Prop(propAlias, propName, dataTypeKey, sortOrder, description: description));
+            dirty = true;
+        }
+
+        EnsureInTab("layout",      "Layout",      0, "isDefault",            "Is Default",     DataTypeKeys.ToggleBoolean,     10, "Si está activo, este profile se usa para todas las páginas del sitio sin override.");
+        EnsureInTab("composition", "Composition", 1, "headerConfig",         "Header",         DataTypeKeys.ContentPicker,      0, "HeaderConfig a renderizar cuando este profile está activo.");
+        EnsureInTab("composition", "Composition", 1, "footerConfig",         "Footer",         DataTypeKeys.ContentPicker,     10, "FooterConfig a renderizar.");
+        EnsureInTab("composition", "Composition", 1, "alertBars",            "Alert Bars",     DataTypeKeys.MultiContentPicker, 20, "AlertBarConfigs a apilar.");
+        EnsureInTab("composition", "Composition", 1, "banner",               "Banner",         DataTypeKeys.ContentPicker,     30, "BannerConfig a renderizar (opcional).");
+        EnsureInTab("composition", "Composition", 1, "platformStripEnabled", "Platform Strip", DataTypeKeys.ToggleBoolean,     40, "Muestra la barra cross-world arriba del header.");
+
+        return dirty;
     }
 }

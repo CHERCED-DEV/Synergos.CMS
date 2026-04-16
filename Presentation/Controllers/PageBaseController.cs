@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewEngines;
+using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.Extensions.Logging;
 using Umbraco.Cms.Core.Web;
 using Umbraco.Cms.Web.Common.Controllers;
@@ -25,6 +26,7 @@ public sealed class PageBaseController : RenderController
         _assembler = assembler;
     }
 
+    [OutputCache(PolicyName = "PageContent")]
     public override IActionResult Index()
     {
         if (CurrentPage is null) return NotFound();

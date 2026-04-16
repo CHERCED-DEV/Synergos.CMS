@@ -124,4 +124,14 @@ public static class DataTypeKeys
     /// type requires updating the enum + extensions only.
     /// </summary>
     public static readonly Guid SelectBlogPostType      = new("a1000076-0000-0000-0000-000000000000");
+
+    // Reservados pero no registrados — CardGrid y LogoCloudGrid migraron a
+    // Block Grid Areas (patrón area-based idiomático Umbraco 13).
+    // public static readonly Guid BlockListCardItems = new("a1000077-…");
+    // public static readonly Guid BlockListLogoItems = new("a1000078-…");
+
+    /// <summary>BlockList tipado para TestimonialCarousel — solo elementInfoTestimonialItem.</summary>
+    public static readonly Guid BlockListTestimonialItems = new("a1000079-0000-0000-0000-000000000000");
+    /// <summary>BlockList tipado para AccordionGroup — solo elementInfoFaqItem.</summary>
+    public static readonly Guid BlockListFaqItems        = new("a1000080-0000-0000-0000-000000000000");
 }

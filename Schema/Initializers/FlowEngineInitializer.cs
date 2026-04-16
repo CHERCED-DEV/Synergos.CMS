@@ -143,7 +143,7 @@ internal sealed class FlowEngineInitializer : SchemaInitializerBase
     /// </summary>
     private void PatchFlowDefinitionProperties(IContentType ct)
     {
-        var dirty = false;
+        var dirty = PatchIcon(ct, "icon-shuffle");
 
         dirty |= AddPropertyIfMissing(ct, "general",
             "ownerTeam", "Owner / Team", DataTypeKeys.TextTitle, 25,

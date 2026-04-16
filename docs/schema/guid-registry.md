@@ -26,31 +26,94 @@ GUID collisions have happened. Protocol exists to prevent them.
 ## Reserved ranges (high nibbles)
 
 Synergos uses prefix-based range allocation. First 8 hex chars encode the family.
+Tabla sincronizada con el estado real del codebase a **2026-04-14**.
 
-| Prefix | Family | Notes |
+### Data Types (`a*`)
+
+| Prefix | Rango en uso | Familia | Notas |
+|---|---|---|---|
+| `a1000001–a1000080` | 68 GUIDs | Data types (TextBox, Dropdowns, Pickers, BlockList, BlockGrid, etc.) | Próximo slot libre: `a1000081`. Watch: `a1000073` ya colisionó (ver incidente). |
+| `a2*` | 5 GUIDs | Data types estructurales (BlockGridPageSections, BlockListNavItems, BlockListMountParams…) | |
+
+### Compositions (`b1–b8`)
+
+| Prefix | Count | Familia |
 |---|---|---|
-| `a1*` | Core platform types: PlatformRoot, SiteRoot, PageBase, GlobalSettings, SiteSettings, ThemeSettings | Watch for `a1000073` — previously collided |
-| `a2*` | Compositions — Core (Lifecycle, Base, Ownership, …) | |
-| `a3*` | Compositions — Content (Heading, Text, Media, …) | |
-| `a4*` | Compositions — DOM (Class, Attributes, Layout, …) | |
-| `a5*` | Compositions — Behavior (Tracking, Interaction, …) | |
-| `a6*` | Compositions — Seo, Integration, Visibility | |
-| `b1*` | Element types — Structural | |
-| `b2*` | Element types — Textual | |
-| `b3*` | Element types — Action | |
-| `b4*` | Blog domain (BlogHome, BlogPost, Category) + Element types — Blog | |
-| `b5*` | Element types — Media | |
-| `b6*` | Element types — Informational | |
-| `b7*` | Element types — Composition (Card, Hero, Banner, …) | |
-| `b8*` | Element types — Integration (Mount, Embed) | |
-| `b9*` | Element types — Corporate / Experience | |
-| `c1*–c9*` | Data types by editor family | |
-| `d1*–d9*` | Document types per domain (blog, forms, corporate, shop) | |
-| `e1*–e9*` | Media types + media compositions | |
-| `f1*` | Flow Engine types (FlowSettingsRoot, FlowDefinition, tracks) | Watch — previously collided |
-| `fe*` | Block/Element instance UDIs inside Block Grid / Block List JSON | Watch — collided with f1 prefix in 2026-04-08 |
+| `b1*` | 7 | Core (`CompCoreBase`, `CompCoreLifecycle`, `CompCoreOwnership`, `CompCoreTenant`, `CompCoreAccess`, `CompCoreVersioning`, `CompCoreAudit`) |
+| `b2*` | 12 | Content (`CompContentText`, `CompContentMedia`, `CompContentCta`, `CompContentHeading`, `CompContentBadge`, `CompContentCollection`, `CompContentAuthor`, `CompContentDate`, `CompContentMetadata`, `CompContentEmbed`, `CompContentPricing`, `CompContentLocation`) |
+| `b3*` | 8 | DOM (`CompDomClass`, `CompDomAttributes`, `CompDomLayout`, `CompDomSpacing`, `CompDomVisibility`, `CompDomVariant`, `CompDomLayoutPreset`, `CompDomLayoutProfile`) |
+| `b4*` | 6 | Behavior (`CompBehaviorTracking`, `CompBehaviorInteraction`, `CompBehaviorNavigation`, `CompBehaviorFeatureFlag`, `CompBehaviorAsync`, `CompBehaviorScript`) |
+| `b5*` | 1 | SEO (`CompSeo`) |
+| `b6*` | 3 | Integration (`CompIntegration`, `CompAngularMount`, `CompMfMount`) |
+| `b7*` | 1 | Visibility (`CompVisibility`) |
+| `b8*` | 1 | Tagging (`CompTagging`) |
+| `b9*` | 10 | Block Grid groups (`GroupLayout`, `GroupText`, `GroupAction`, `GroupMedia`, `GroupInfo`, `GroupComponents`, `GroupIntegration`, `GroupCorporate`, `GroupBlog`, `GroupExperiences`) |
+
+### Element Types (`c3–cf`)
+
+| Prefix | Count | Familia | Alias prefix |
+|---|---|---|---|
+| `c3*` | 12 | Structural + Layout Presets | `elementStruct*`, `layoutPreset*` |
+| `c4*` | 6 | Text | `elementText*` |
+| `c5*` | 3 | Action | `elementAction*` |
+| `c6*` | 6 | Media | `elementMedia*` |
+| `c7*` | 8 | Info | `elementInfo*` |
+| `c8*` | 12 | Composition | `elementComp*` (Card, Hero, CtaBanner, MediaTextSplit, BlogHighlight, ArticleList, FormBlock, CardGrid, LogoCloudGrid, TestimonialCarousel, AccordionGroup) |
+| `c9*` | 6 | Integration | `elementInt*` (ScriptEmbed, IframeEmbed, ExternalWidget, AngularHost, MfHost, MacroHost) |
+| `ca*` | 9 | Corporate | `elementCorp*` (TabGroup, AlertBar, BannerSlider, NewsletterForm, SocialShare, DataTable, ContactInfo, MapEmbed, MissionBlock) |
+| `cb*` | 1 | Navigation | `elementNavItem` |
+| `cc*` | 2 | Forms | `elementFormField`, `elementFormEmbed` |
+| `cd*` | 1 | Mount | `mountParam` |
+| `ce*` | 9 | Experience | `experience*` (FeatureJourney, InsightExplorer, MediaExplorer, ContentCarousel, QuizFlow, FilterBoard, RatingWidget, CountdownClock, NotificationStack) |
+| `cf*` | 8 | Shop | `elementShop*` (ProductCard, ProductGrid, ProductDetail, CartSummary, CartItem, PriceDisplay, QuantitySelector, VariantPicker) |
+
+### Document Types (`d2–d8`)
+
+| Prefix | Count | Familia |
+|---|---|---|
+| `d2*` | 8 | Site types (SiteRoot, PageBase, PageBare, ArticlePage, ReusableBlock, NavigationGroup, SharedContentFolder, Author) |
+| `d3*` | 8 | Platform (PlatformRoot, GlobalSettings, SiteSettings, ThemeSettings, LayoutProfile, FlowSettingsRoot, FlowDefinition + 1) |
+| `d4*` | 4 | Blog (BlogHome, BlogPost, Category + 1) |
+| `d5*` | 1 | Forms (FormDefinition) |
+| `d6*` | 2 | Tagging (PageTag, PageTagsFolder) |
+| `d8*` | 5 | Shop (ShopRoot, ShopCatalogPage, ShopCategoryPage, ShopProductPage, ShopCartPage) |
+
+### Media + BlockGrid areas + Flow Engine
+
+| Prefix | Count | Familia |
+|---|---|---|
+| `e1*` | 5 | Media Types (MediaImageAsset, MediaVideoAsset, MediaFolder, etc.) |
+| `fa*` | 19 | BlockGridAreaKeys (SectionContent, GridColumns, ColumnContent, StackContent, ContainerContent, Preset1–4ColMain/Left/Right, PresetMain/Sidebar, **CardGridCards**, **LogoCloudGridLogos**) |
+| `fe*` | 4 | Flow Engine (FlowSettingsRoot, FlowDefinition, FlowExecutionModeKeys, `fe000001`/`fe000002` — watch, previously collided con Block UDIs) |
 
 **Exact allocations per range live in the Keys files.** Read them before assigning.
+
+## Changelog — Últimas adiciones
+
+Trackea GUIDs nuevos desde el último sync del registry. Cuando añadas un GUID,
+agrega una línea aquí.
+
+**2026-04-14** — Containers tipados y area-based:
+- `a1000076` — `SelectBlogPostType` (DataType dropdown)
+- `a1000077` — `BlockListCardItems` — *retirado*, CardGrid migró a area-based
+- `a1000078` — `BlockListLogoItems` — *retirado*, LogoCloudGrid migró a area-based
+- `a1000079` — `BlockListTestimonialItems` (BlockList tipado, Testimonial Carousel)
+- `a1000080` — `BlockListFaqItems` (BlockList tipado, Accordion Group)
+- `c8000013` — `ElementCompCardGrid` (area-based container)
+- `c8000014` — `ElementCompLogoCloudGrid` (area-based container)
+- `c8000015` — `ElementCompTestimonialCarousel` (BlockList container, web component)
+- `c8000016` — `ElementCompAccordionGroup` (BlockList container, web component)
+- `fa000006` — `BlockGridAreaKeys.CardGridCards` (typed area, solo `elementCompCard`)
+- `fa000007` — `BlockGridAreaKeys.LogoCloudGridLogos` (typed area, solo `elementMediaLogoItem`)
+- `b2000011` — `CompContentPricing`
+- `b2000012` — `CompContentLocation`
+- `d2000007` — `PageBare` (page base sin layout)
+
+**Retirados (c8000005–c8000009)** — legacy containers con `CompContentCollection` genérico; reemplazados por los nuevos typed/area containers. GUIDs **no reutilizar** para evitar conflicto con contenido histórico:
+- `c8000005` — `ElementCompFaqList`
+- `c8000006` — `ElementCompTestimonialList`
+- `c8000007` — `ElementCompLogoCloud`
+- `c8000009` — `ElementCompAccordion`
 
 ## The four-source collision check
 

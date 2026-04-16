@@ -1,5 +1,133 @@
-﻿@using Umbraco.Cms.Web.Common.PublishedModels;
-@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@using Umbraco.Extensions
+@model Synergos.CMS.Application.Output.BlogHomePageView
+@inject Synergos.CMS.Domain.Services.IThemeService ThemeService
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
-	Layout = null;
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+
+    var pageCfg = ThemeService.GetPageLayoutConfig(Model.Content);
+    if (!string.IsNullOrWhiteSpace(pageCfg.MainWrapperStyle))
+        ViewData[LayoutViewData.MainWrapperStyle] = pageCfg.MainWrapperStyle;
+
+    var seoTitle = Model.Seo.Title ?? Model.Title;
+    ViewData[LayoutViewData.BodyId]    = Model.PageCssId;
+    ViewData[LayoutViewData.BodyClass] = string.IsNullOrWhiteSpace(Model.PageCssClass)
+        ? "sg-page sg-page--blog-home"
+        : $"sg-page sg-page--blog-home {Model.PageCssClass}";
+
+    var featuredLabel   = Dict.Get("Blog.Featured",      culture, "Featured");
+    var recentLabel     = Dict.Get("Blog.RecentPosts",   culture, "Recent posts");
+    var categoriesLabel = Dict.Get("Blog.Categories",    culture, "Categories");
+    var prevLabel       = Dict.Get("Pagination.Previous", culture, "Previous");
+    var nextLabel       = Dict.Get("Pagination.Next",     culture, "Next");
+    var pageOfFmt       = Dict.Get("Pagination.Page",     culture, "Page {n}");
+    var articleCount    = Dict.Get("Blog.ArticleCount",  culture, "articles");
+
+    var listLayout = string.IsNullOrWhiteSpace(Model.ListLayout) ? "grid" : Model.ListLayout;
 }
+
+@{
+    // Every listing page uses the "card" bundle (PostCard); if a featured post
+    // is shown on page 1 it also uses "media-text". Plus whatever the hero
+    // BlockGrid contains.
+    var preloadBundles = Synergos.CMS.Application.Rendering.BundlePrescanner.Scan(Model.BlockGrid).ToList();
+    if (Model.Posts.Count > 0 && !preloadBundles.Contains("card"))
+        preloadBundles.Add("card");
+    if (Model.FeaturedPost is not null && Model.CurrentPage == 1 && !preloadBundles.Contains("media-text"))
+        preloadBundles.Add("media-text");
+}
+@section HeadMeta {
+    @await Html.PartialAsync("SeoMeta", Model.Seo, new ViewDataDictionary(ViewData) { { LayoutViewData.SeoTitle, seoTitle } })
+    @await Html.PartialAsync("Shared/Partials/PreloadHints", (IReadOnlyList<string>)preloadBundles)
+}
+
+<div class="sg-blog-home">
+    <header class="sg-blog-home__header">
+        <h1 class="sg-blog-home__title">@Model.Title</h1>
+        @if (!string.IsNullOrWhiteSpace(Model.Subtitle))
+        {
+            <p class="sg-blog-home__subtitle">@Model.Subtitle</p>
+        }
+        <span class="sg-blog-home__count">@Model.TotalPosts @articleCount</span>
+    </header>
+
+    @if (Model.BlockGrid is not null)
+    {
+        @* Editorial hero / intro blocks from pageSections *@
+        <section class="sg-blog-home__hero">
+            @await Html.GetBlockGridHtmlAsync(Model.BlockGrid)
+        </section>
+    }
+
+    @if (Model.FeaturedPost is not null && Model.CurrentPage == 1)
+    {
+        <section class="sg-blog-home__featured" aria-label="@featuredLabel">
+            <h2 class="sg-blog-home__section-heading">@featuredLabel</h2>
+            @await Html.PartialAsync("Blog/FeaturedPostCard", Model.FeaturedPost)
+        </section>
+    }
+
+    <div class="sg-blog-home__main-grid">
+        <section class="sg-blog-home__posts sg-blog-home__posts--@listLayout" aria-label="@recentLabel">
+            <h2 class="sg-blog-home__section-heading">@recentLabel</h2>
+            @if (Model.Posts.Count == 0)
+            {
+                <p class="sg-blog-home__empty">@Dict.Get("Blog.NoPosts", culture, "No posts yet.")</p>
+            }
+            else
+            {
+                <div class="sg-blog-home__posts-grid">
+                    @foreach (var post in Model.Posts)
+                    {
+                        @await Html.PartialAsync("Blog/PostCard", post)
+                    }
+                </div>
+
+                @if (Model.TotalPages > 1)
+                {
+                    <nav class="sg-blog-home__pagination" aria-label="@string.Format(pageOfFmt, Model.CurrentPage)">
+                        @if (Model.CurrentPage > 1)
+                        {
+                            <a class="sg-blog-home__page sg-blog-home__page--prev" rel="prev"
+                               href="?page=@(Model.CurrentPage - 1)">@prevLabel</a>
+                        }
+                        <span class="sg-blog-home__page-indicator">@string.Format(pageOfFmt, Model.CurrentPage) / @Model.TotalPages</span>
+                        @if (Model.CurrentPage < Model.TotalPages)
+                        {
+                            <a class="sg-blog-home__page sg-blog-home__page--next" rel="next"
+                               href="?page=@(Model.CurrentPage + 1)">@nextLabel</a>
+                        }
+                    </nav>
+                }
+            }
+        </section>
+
+        @if (Model.ShowCategories && Model.Categories.Count > 0)
+        {
+            <aside class="sg-blog-home__sidebar" aria-label="@categoriesLabel">
+                <h2 class="sg-blog-home__section-heading">@categoriesLabel</h2>
+                <ul class="sg-blog-home__categories">
+                    @foreach (var cat in Model.Categories)
+                    {
+                        <li class="sg-blog-home__category">
+                            <a href="@cat.Url">
+                                @if (!string.IsNullOrEmpty(cat.IconUrl))
+                                {
+                                    <img class="sg-blog-home__category-icon" src="@cat.IconUrl" alt="" loading="lazy" />
+                                }
+                                <span>@cat.Name</span>
+                            </a>
+                        </li>
+                    }
+                </ul>
+            </aside>
+        }
+    </div>
+
+    @if (Model.BlogCtaBlockGrid is not null)
+    {
+        <section class="sg-blog-home__cta">
+            @await Html.GetBlockGridHtmlAsync(Model.BlogCtaBlockGrid)
+        </section>
+    }
+</div>

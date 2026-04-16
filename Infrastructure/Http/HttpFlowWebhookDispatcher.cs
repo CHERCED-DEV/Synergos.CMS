@@ -66,22 +66,19 @@ public sealed class HttpFlowWebhookDispatcher : IFlowWebhookDispatcher
 
         try
         {
-            var payload = JsonSerializer.Serialize(flow, _serializerOptions);
-            var secret  = _settings.Value.WebhookSecret;
-            var signature = ComputeHmac(payload, secret);
+            var payload   = JsonSerializer.Serialize(flow, _serializerOptions);
+            var signature = ComputeHmac(payload, _settings.Value.WebhookSecret);
 
-            var content = new StringContent(payload, Encoding.UTF8, "application/json");
+            using var request = HttpRequestBuilder
+                .Post(flow.WebhookTargetUrl)
+                .WithJson(payload)
+                .WithHeader("X-Synergos-Signature",   $"sha256={signature}")
+                .WithHeader("X-Synergos-FlowAlias",   flow.FlowAlias)
+                .WithHeader("X-Synergos-PublishedAt", DateTime.UtcNow.ToString("O"))
+                .Build();
 
             var client = _httpClientFactory.CreateClient("FlowEngine");
             client.Timeout = TimeSpan.FromMilliseconds(_settings.Value.WebhookTimeoutMs);
-
-            using var request = new HttpRequestMessage(HttpMethod.Post, flow.WebhookTargetUrl)
-            {
-                Content = content
-            };
-            request.Headers.Add("X-Synergos-Signature",  $"sha256={signature}");
-            request.Headers.Add("X-Synergos-FlowAlias",  flow.FlowAlias);
-            request.Headers.Add("X-Synergos-PublishedAt", DateTime.UtcNow.ToString("O"));
 
             using var response = await client.SendAsync(request, ct);
             var statusCode = (int)response.StatusCode;

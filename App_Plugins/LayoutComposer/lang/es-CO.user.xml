@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Backoffice strings for Synergos LayoutComposer.
+  Consumed by Angular previews via {{'alias_key' | localize}}.
+
+  Area alias prefix: synergosLayoutComposer.
+  Add new keys here and replicate into en-US.user.xml with the same alias.
+-->
+<language intName="Espa&#241;ol (Colombia)" localName="espa&#241;ol" lcid="9226" culture="es-CO">
+    <area alias="synergosLayoutComposer">
+        <!-- Universal preview -->
+        <key alias="previewEmptyHint">Configura los campos del elemento para ver el preview.</key>
+        <key alias="previewAuthorPrefix">—</key>
+        <key alias="previewWithoutCta">sin CTA</key>
+        <key alias="previewWithoutImage">Sin imagen</key>
+        <key alias="previewWithoutTitle">Sin t&#237;tulo</key>
+        <key alias="previewWithoutPrice">Sin precio configurado</key>
+        <key alias="previewWithoutBody">Sin respuesta</key>
+        <key alias="previewWithoutDate">Sin fecha</key>
+
+        <!-- Container previews -->
+        <key alias="containerCardGrid">Grid de tarjetas</key>
+        <key alias="containerLogoCloud">Nube de logos</key>
+        <key alias="containerTestimonialCarousel">Carrusel de testimonios</key>
+        <key alias="containerAccordionGroup">Acorde&#243;n de FAQs</key>
+        <key alias="containerCardGridHint">Contenedor que organiza N Cards en una cuadr&#237;cula responsive. Arrastra Cards dentro del &#225;rea.</key>
+        <key alias="containerLogoCloudHint">Contenedor de logos de clientes, socios o marcas. Arrastra Logo Items dentro del &#225;rea.</key>
+        <key alias="containerTestimonialHint">Carrusel interactivo. Un solo web component anima todos los slides. Agrega Testimonial Items en la pesta&#241;a Container.</key>
+        <key alias="containerAccordionHint">Preguntas frecuentes colapsables. Un solo web component gestiona el toggle. Agrega FAQ Items en la pesta&#241;a Container.</key>
+        <key alias="containerItemCount">items</key>
+        <key alias="containerColumns">cols</key>
+        <key alias="containerGap">gap</key>
+
+        <!-- Layout primitives — hints (prose) -->
+        <key alias="layoutSectionHint">Envuelve una secci&#243;n visual completa y define el tono general de los bloques internos.</key>
+        <key alias="layoutContainerHint">Sirve para encapsular contenido, controlar ancho y dar una lectura m&#225;s ordenada al editor.</key>
+        <key alias="layoutColumnHint">Reserva el ancho disponible dentro del grid y aloja el contenido de esa zona.</key>
+        <key alias="layoutStackHint">Ordena bloques en secuencia vertical u horizontal con espaciado consistente.</key>
+        <key alias="layoutGridHint">Organiza columnas, stacks y presets dentro de una misma rejilla editorial.</key>
+        <key alias="preset1ColHint">Ideal para hero, rich text largo, formularios o m&#243;dulos que necesitan todo el ancho.</key>
+        <key alias="preset2ColHint">Divide el espacio en dos zonas equilibradas para comparar, combinar o contrastar contenido.</key>
+        <key alias="preset3ColHint">Funciona bien para features, cards resumidas o bloques informativos de lectura r&#225;pida.</key>
+        <key alias="preset4ColHint">Pensado para mosaicos densos, iconograf&#237;a, KPIs o listados cortos en paralelo.</key>
+        <key alias="presetMainSidebarHint">Separa un &#225;rea principal de lectura y un rail secundario para apoyo, CTA o navegaci&#243;n.</key>
+        <key alias="macroHostHint">Selecciona el macro CDN a inyectar desde el desplegable.</key>
+
+        <!-- Layout primitives — eyebrows (small intro labels) -->
+        <key alias="layoutSectionEyebrow">Franja de p&#225;gina</key>
+        <key alias="layoutContainerEyebrow">Agrupador</key>
+        <key alias="layoutColumnEyebrow">Ancho editorial</key>
+        <key alias="layoutStackEyebrow">Apilado</key>
+        <key alias="layoutGridEyebrow">Base de layout</key>
+        <key alias="presetEyebrow">Preset</key>
+
+        <!-- Type labels (block headers) -->
+        <key alias="typeSection">Franja de p&#225;gina</key>
+        <key alias="typeContainer">Container</key>
+        <key alias="typeColumn">Column</key>
+        <key alias="typeStack">Stack</key>
+        <key alias="typeGrid">Grid</key>
+        <key alias="typeMainSidebar">Main + Sidebar</key>
+        <key alias="typeMacroHost">Macro Host</key>
+        <key alias="typeCard">Tarjeta</key>
+        <key alias="typeHero">Hero</key>
+        <key alias="typePricingCard">Plan</key>
+        <key alias="typeBadge">Etiqueta</key>
+        <key alias="typeQuote">Cita destacada</key>
+
+        <!-- Separator labels -->
+        <key alias="typeSeparator">Separador</key>
+        <key alias="separatorDividerHint">L&#237;nea divisoria horizontal.</key>
+        <key alias="separatorSpacerHint">Espacio en blanco entre bloques.</key>
+
+        <!-- Column slot labels (presets) -->
+        <key alias="slotLeft">Izquierda</key>
+        <key alias="slotRight">Derecha</key>
+        <key alias="slotMain">Contenido principal</key>
+        <key alias="slotSidebar">Sidebar</key>
+        <key alias="slotColumnShort">Col</key>
+    </area>
+</language>

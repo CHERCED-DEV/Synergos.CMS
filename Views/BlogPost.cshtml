@@ -1,5 +1,150 @@
-﻿@using Umbraco.Cms.Web.Common.PublishedModels;
-@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@using Umbraco.Extensions
+@using Synergos.CMS.Domain.Shared
+@model Synergos.CMS.Application.Output.BlogPostPageView
+@inject Synergos.CMS.Domain.Services.IThemeService ThemeService
+@inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
-	Layout = null;
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+
+    var pageCfg = ThemeService.GetPageLayoutConfig(Model.Content);
+    if (!string.IsNullOrWhiteSpace(pageCfg.MainWrapperStyle))
+        ViewData[LayoutViewData.MainWrapperStyle] = pageCfg.MainWrapperStyle;
+
+    var seoTitle = Model.Seo.Title ?? Model.Title;
+    ViewData[LayoutViewData.BodyId]    = Model.PageCssId;
+    ViewData[LayoutViewData.BodyClass] = string.IsNullOrWhiteSpace(Model.PageCssClass)
+        ? "sg-page sg-page--blog-post"
+        : $"sg-page sg-page--blog-post {Model.PageCssClass}";
+
+    var postTypeAlias = Model.PostType.ToAlias();
+    var postTypeLabel = Dict.Get($"Blog.PostType.{postTypeAlias}", culture, postTypeAlias);
+
+    var readingTimeFmt = Dict.Get("Blog.ReadingTime", culture, "{0} min read");
+    var publishedLabel = Dict.Get("Blog.Published",    culture, "Published");
+    var tagsLabel      = Dict.Get("Blog.Tags",          culture, "Tags");
+    var categoriesLbl  = Dict.Get("Blog.Categories",    culture, "Categories");
+    var relatedLabel   = Dict.Get("Blog.RelatedPosts",  culture, "Related posts");
+    var aboutAuthor    = Dict.Get("Blog.AboutAuthor",   culture, "About the author");
+    var backToBlog     = Dict.Get("Blog.BackToBlog",    culture, "Back to blog");
+}
+
+@{
+    // Prescan BlockGrid + always include "card" (used by PostCard for related posts)
+    // and "media-text" (used by FeaturedPostCard — not relevant here but harmless).
+    var preloadBundles = Synergos.CMS.Application.Rendering.BundlePrescanner.Scan(Model.BlockGrid).ToList();
+    if (Model.ShowRelatedPosts && Model.RelatedPosts.Count > 0 && !preloadBundles.Contains("card"))
+        preloadBundles.Add("card");
+}
+@section HeadMeta {
+    @await Html.PartialAsync("SeoMeta", Model.Seo, new ViewDataDictionary(ViewData) { { LayoutViewData.SeoTitle, seoTitle } })
+    @await Html.PartialAsync("Shared/Partials/PreloadHints", (IReadOnlyList<string>)preloadBundles)
+    <meta property="og:type" content="article" />
+    @if (Model.Author is not null)
+    {
+        <meta name="author" content="@Model.Author.Name" />
+    }
+    <meta property="article:published_time" content="@Model.PublishDate.ToString("yyyy-MM-ddTHH:mm:ssK")" />
+    @foreach (var tag in Model.Tags)
+    {
+        <meta property="article:tag" content="@tag" />
+    }
+}
+
+<article class="sg-blog-post sg-blog-post--@postTypeAlias" data-post-type="@postTypeAlias">
+    <header class="sg-blog-post__header">
+        @if (Model.Categories.Count > 0)
+        {
+            <nav class="sg-blog-post__breadcrumbs" aria-label="@categoriesLbl">
+                @foreach (var cat in Model.Categories)
+                {
+                    <a class="sg-blog-post__breadcrumb" href="@cat.Url">@cat.Name</a>
+                }
+            </nav>
+        }
+
+        <span class="sg-blog-post__type sg-blog-post__type--@postTypeAlias">@postTypeLabel</span>
+
+        <h1 class="sg-blog-post__title">@Model.PostTitle</h1>
+
+        @if (!string.IsNullOrWhiteSpace(Model.PostSubtitle))
+        {
+            <p class="sg-blog-post__subtitle">@Model.PostSubtitle</p>
+        }
+
+        <div class="sg-blog-post__meta">
+            @if (Model.Author is not null)
+            {
+                <span class="sg-blog-post__author">
+                    @if (!string.IsNullOrEmpty(Model.Author.PhotoUrl))
+                    {
+                        <img class="sg-blog-post__author-photo" src="@Model.Author.PhotoUrl" alt="@Model.Author.Name" loading="lazy" />
+                    }
+                    <span class="sg-blog-post__author-name">@Model.Author.Name</span>
+                </span>
+            }
+            <time class="sg-blog-post__date" datetime="@Model.PublishDate.ToString("yyyy-MM-dd")">
+                @publishedLabel @Model.PublishDate.ToString("dd MMM yyyy")
+            </time>
+            @if (Model.ReadingTime > 0)
+            {
+                <span class="sg-blog-post__reading-time">@string.Format(readingTimeFmt, Model.ReadingTime)</span>
+            }
+        </div>
+
+        @if (Model.FeaturedImage is not null)
+        {
+            <figure class="sg-blog-post__featured">
+                <img src="@Model.FeaturedImage.Src"
+                     alt="@Model.FeaturedImage.Alt"
+                     @Html.Raw(Model.FeaturedImage.Width is not null ? $"width=\"{Model.FeaturedImage.Width}\"" : "")
+                     @Html.Raw(Model.FeaturedImage.Height is not null ? $"height=\"{Model.FeaturedImage.Height}\"" : "")
+                     loading="eager" />
+            </figure>
+        }
+    </header>
+
+    <div class="sg-blog-post__body">
+        @Html.Raw(Model.Body)
+    </div>
+
+    @if (Model.BlockGrid is not null)
+    {
+        <section class="sg-blog-post__blocks">
+            @await Html.GetBlockGridHtmlAsync(Model.BlockGrid)
+        </section>
+    }
+
+    @if (Model.Tags.Count > 0)
+    {
+        <footer class="sg-blog-post__tags" aria-label="@tagsLabel">
+            <span class="sg-blog-post__tags-label">@tagsLabel:</span>
+            <ul class="sg-blog-post__tags-list">
+                @foreach (var tag in Model.Tags)
+                {
+                    <li class="sg-blog-post__tag">#@tag</li>
+                }
+            </ul>
+        </footer>
+    }
+</article>
+
+@if (Model.ShowAuthorBio && Model.Author is not null)
+{
+    <section class="sg-blog-post__author-bio" aria-label="@aboutAuthor">
+        <h2 class="sg-blog-post__section-heading">@aboutAuthor</h2>
+        @await Html.PartialAsync("Blog/AuthorBio", Model.Author)
+    </section>
+}
+
+@if (Model.ShowRelatedPosts && Model.RelatedPosts.Count > 0)
+{
+    <section class="sg-blog-post__related" aria-label="@relatedLabel">
+        <h2 class="sg-blog-post__section-heading">@relatedLabel</h2>
+        <div class="sg-blog-post__related-grid">
+            @foreach (var related in Model.RelatedPosts)
+            {
+                @await Html.PartialAsync("Blog/PostCard", related)
+            }
+        </div>
+    </section>
 }

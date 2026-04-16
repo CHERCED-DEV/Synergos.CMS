@@ -255,6 +255,25 @@ internal sealed class DictionaryInitializer : ISchemaInitializer
         Item(gBlog, "Blog.AuthorEmail",                  en, "Email",                   es, "Email");
         Item(gBlog, "Blog.ReadMore",                     en, "Read more",               es, "Leer más");
         Item(gBlog, "Blog.ReadArticle",                  en, "Read article",            es, "Leer artículo");
+        // Single-post view labels (Views/BlogPost.cshtml)
+        Item(gBlog, "Blog.ReadingTime",                  en, "{0} min read",            es, "{0} min de lectura");
+        Item(gBlog, "Blog.Published",                    en, "Published",               es, "Publicado");
+        Item(gBlog, "Blog.Tags",                         en, "Tags",                    es, "Etiquetas");
+        Item(gBlog, "Blog.Categories",                   en, "Categories",              es, "Categorías");
+        Item(gBlog, "Blog.AboutAuthor",                  en, "About the author",        es, "Sobre el autor");
+        Item(gBlog, "Blog.NoPosts",                      en, "No posts yet.",           es, "Aún no hay artículos.");
+        // Author profile page (Views/author.cshtml)
+        Item(gBlog, "Blog.AuthorPosts",                  en, "Posts by this author",    es, "Artículos de este autor");
+        Item(gBlog, "Blog.NoAuthorPosts",                en, "This author hasn't published yet.", es, "Este autor aún no ha publicado.");
+
+        // Post types — badge labels (aliases come from BlogPostType enum)
+        Item(gBlog, "Blog.PostType.article",             en, "Article",                 es, "Artículo");
+        Item(gBlog, "Blog.PostType.news",                en, "News",                    es, "Noticia");
+        Item(gBlog, "Blog.PostType.tutorial",            en, "Tutorial",                 es, "Tutorial");
+        Item(gBlog, "Blog.PostType.caseStudy",           en, "Case study",              es, "Caso de estudio");
+        Item(gBlog, "Blog.PostType.interview",           en, "Interview",               es, "Entrevista");
+        Item(gBlog, "Blog.PostType.opinion",             en, "Opinion",                 es, "Opinión");
+        Item(gBlog, "Blog.PostType.release",             en, "Release",                 es, "Lanzamiento");
 
         // ── 8. Pagination ────────────────────────────────────────────────────
         var gPagination = EnsureGroup("Pagination");
@@ -304,6 +323,23 @@ internal sealed class DictionaryInitializer : ISchemaInitializer
         Item(gError, "Error.Forbidden.Title",            en, "Access denied",           es, "Acceso denegado");
         Item(gError, "Error.Forbidden.Description",      en, "You don't have permission to view this page.",
                                                          es, "No tienes permiso para ver esta página.");
+        // Keys consumed by /error view (numeric status codes)
+        Item(gError, "Error.404.Title",                  en, "Page not found",          es, "Página no encontrada");
+        Item(gError, "Error.404.Message",                en, "The page you were looking for doesn't exist or was moved.",
+                                                         es, "La página que buscas no existe o fue movida.");
+        Item(gError, "Error.403.Title",                  en, "Forbidden",                es, "Acceso denegado");
+        Item(gError, "Error.403.Message",                en, "You don't have permission to view this page.",
+                                                         es, "No tienes permiso para ver esta página.");
+        Item(gError, "Error.401.Title",                  en, "Sign in required",         es, "Inicia sesión");
+        Item(gError, "Error.401.Message",                en, "Please sign in to continue.",
+                                                         es, "Por favor inicia sesión para continuar.");
+        Item(gError, "Error.500.Title",                  en, "Something went wrong",     es, "Algo salió mal");
+        Item(gError, "Error.500.Message",                en, "We logged the error and are looking into it.",
+                                                         es, "Registramos el error y lo estamos revisando.");
+        Item(gError, "Error.Default.Title",              en, "Unexpected error",         es, "Error inesperado");
+        Item(gError, "Error.Default.Message",            en, "Please try again in a moment.",
+                                                         es, "Por favor inténtalo de nuevo en un momento.");
+        Item(gError, "Error.BackHome",                   en, "Back to home",             es, "Volver al inicio");
 
         // ── 12. Accordion ────────────────────────────────────────────────────
         var gAccordion = EnsureGroup("Accordion");

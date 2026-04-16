@@ -52,12 +52,12 @@ internal sealed class PlatformInitializer : SchemaInitializerBase
         var sharedFolderId = EnsureChildFolder(platformFolderId, "Shared");
         var formsFolderId = EnsureRootFolder("Forms");
 
-        // 1. Element Types (NavigationItem, FormField, FormEmbed, Blog blocks)
+        // 1. Element Types (NavigationItem, FormField, FormEmbed)
+        //    BlogHighlight + ArticleList are owned by ElementTypeInitializer
+        //    (was silently skipping here because Phase 7 created them first).
         EnsureNavigationItemElement();
         EnsureFormFieldElement();
         EnsureFormEmbedElement();
-        EnsureBlogHighlightElement();
-        EnsureArticleListElement();
 
         // 3. Block Lists that reference the element types
         EnsureBlockListNavItems();
@@ -73,6 +73,8 @@ internal sealed class PlatformInitializer : SchemaInitializerBase
         EnsureCategory(sharedFolderId);
         // Settings types extracted to SiteSettingsInitializer — see SiteSettingsInitializer.cs
         new SiteSettingsInitializer(Cts, Dts, Ssh, settingsFolderId).Initialize();
+        // Layout config tree (HeaderConfig, FooterConfig, AlertBarConfig, BannerConfig + 7 folder types)
+        new LayoutConfigInitializer(Cts, Dts, Ssh, settingsFolderId).Initialize();
         EnsurePlatformRoot(platformFolderId);
 
         // 5. Allowed children
@@ -192,84 +194,10 @@ internal sealed class PlatformInitializer : SchemaInitializerBase
     }
 
     /// <summary>
-    /// Element.Comp.BlogHighlight — displays a featured blog post or recent posts teaser.
-    /// Uses ContentPicker to reference a BlogHome, and shows N posts.
-    /// </summary>
-    private void EnsureBlogHighlightElement()
-    {
-        if (Cts.Get(ContentTypeKeys.ElementCompBlogHighlight) is not null) return;
-
-        var ct = new ContentType(Ssh, -1)
-        {
-            Key       = ContentTypeKeys.ElementCompBlogHighlight,
-            Name      = "Blog Highlight",
-            Alias     = "elementCompBlogHighlight",
-            Icon      = "icon-article",
-            IsElement = true
-        };
-
-        ct.ContentTypeComposition = new[]
-        {
-            ContentTypeKeys.CompContentHeading,
-            ContentTypeKeys.CompDomClass,
-            ContentTypeKeys.CompDomVariant
-        }
-        .Select(k => Cts.Get(k))
-        .Where(c => c is not null)
-        .Cast<IContentTypeComposition>()
-        .ToList();
-
-        var tab = Tab("Blog Highlight", "blogHighlight", 0);
-        tab.PropertyTypes!.Add(Prop("blogSource",    "Blog Source",   DataTypeKeys.ContentPicker, 0,
-            description: "Pick a BlogHome node to pull posts from"));
-        tab.PropertyTypes!.Add(Prop("maxPosts",      "Max Posts",     DataTypeKeys.NumberInteger, 10,
-            description: "Number of posts to display (default: 3)"));
-        tab.PropertyTypes!.Add(Prop("showExcerpt",   "Show Excerpt",  DataTypeKeys.ToggleBoolean, 20));
-        tab.PropertyTypes!.Add(Prop("showImage",     "Show Image",    DataTypeKeys.ToggleBoolean, 30));
-        tab.PropertyTypes!.Add(Prop("listLayout",    "Layout",        DataTypeKeys.SelectListLayout, 40));
-        ct.PropertyGroups.Add(tab);
-
-        Cts.Save(ct);
-    }
-
-    /// <summary>
-    /// Element.Comp.ArticleList — displays a curated list of content pages.
-    /// Uses MultiContentPicker to reference specific pages or blog posts.
-    /// </summary>
-    private void EnsureArticleListElement()
-    {
-        if (Cts.Get(ContentTypeKeys.ElementCompArticleList) is not null) return;
-
-        var ct = new ContentType(Ssh, -1)
-        {
-            Key       = ContentTypeKeys.ElementCompArticleList,
-            Name      = "Article List",
-            Alias     = "elementCompArticleList",
-            Icon      = "icon-bulleted-list",
-            IsElement = true
-        };
-
-        ct.ContentTypeComposition = new[]
-        {
-            ContentTypeKeys.CompContentHeading,
-            ContentTypeKeys.CompDomClass,
-            ContentTypeKeys.CompDomVariant
-        }
-        .Select(k => Cts.Get(k))
-        .Where(c => c is not null)
-        .Cast<IContentTypeComposition>()
-        .ToList();
-
-        var tab = Tab("Article List", "articleList", 0);
-        tab.PropertyTypes!.Add(Prop("articles",      "Articles",      DataTypeKeys.MultiContentPicker, 0,
-            description: "Pick pages or blog posts to display"));
-        tab.PropertyTypes!.Add(Prop("showExcerpt",   "Show Excerpt",  DataTypeKeys.ToggleBoolean, 10));
-        tab.PropertyTypes!.Add(Prop("showImage",     "Show Image",    DataTypeKeys.ToggleBoolean, 20));
-        tab.PropertyTypes!.Add(Prop("listLayout",    "Layout",        DataTypeKeys.SelectListLayout, 30));
-        ct.PropertyGroups.Add(tab);
-
-        Cts.Save(ct);
-    }
+    // BlogHighlight + ArticleList element creation moved to ElementTypeInitializer
+    // (Phase 7, with PatchBlogHighlightProps + PatchArticleListProps). The
+    // duplicate creators here used to silently skip because Phase 7 created
+    // the types first — with wrong compositions and without the picker properties.
 
     // ══════════════════════════════════════════════════════════════════════════
     // Block Lists referencing new element types
@@ -346,7 +274,7 @@ internal sealed class PlatformInitializer : SchemaInitializerBase
     private void EnsureFormDefinition(int folderId)
     {
         const string description = "Definición de formulario. Configura campos, mensajes y opciones de integración.";
-        if (TryPatchExistingContentType(ContentTypeKeys.FormDefinition, "Form Definition", folderId, description)) return;
+        if (TryPatchExistingContentType(ContentTypeKeys.FormDefinition, "Form Definition", folderId, description, "icon-checkbox")) return;
 
         var ct = new ContentType(Ssh, folderId)
         {
@@ -382,7 +310,7 @@ internal sealed class PlatformInitializer : SchemaInitializerBase
     private void EnsureNavigationGroup(int folderId)
     {
         const string description = "Conjunto reutilizable de enlaces para cabeceras, pies o menús secundarios.";
-        if (TryPatchExistingContentType(ContentTypeKeys.NavigationGroup, "Navigation Group", folderId, description)) return;
+        if (TryPatchExistingContentType(ContentTypeKeys.NavigationGroup, "Navigation Group", folderId, description, "icon-bulleted-list")) return;
 
         var ct = new ContentType(Ssh, folderId)
         {
@@ -405,7 +333,7 @@ internal sealed class PlatformInitializer : SchemaInitializerBase
     private void EnsureReusableBlock(int folderId)
     {
         const string description = "Bloque reutilizable que puede insertarse desde distintas áreas del sitio.";
-        if (TryPatchExistingContentType(ContentTypeKeys.ReusableBlock, "Reusable Block", folderId, description)) return;
+        if (TryPatchExistingContentType(ContentTypeKeys.ReusableBlock, "Reusable Block", folderId, description, "icon-layers-alt")) return;
 
         var ct = new ContentType(Ssh, folderId)
         {
@@ -428,8 +356,31 @@ internal sealed class PlatformInitializer : SchemaInitializerBase
 
     private void EnsureSharedContentFolder(int folderId)
     {
-        const string description = "Contenedor para contenido compartido como bloques, navegación, autores y categorías.";
-        if (TryPatchExistingContentType(ContentTypeKeys.SharedContentFolder, "Shared Content Folder", folderId, description)) return;
+        const string description = "Carpeta contenedora para contenido compartido del sitio: bloques reutilizables, grupos de navegación, autores y configuración de layout. No es navegable desde la web — solo organiza contenido editorial.";
+
+        var existing = Cts.Get(ContentTypeKeys.SharedContentFolder);
+        if (existing is not null)
+        {
+            var dirty = false;
+            if (!string.Equals(existing.Name, "Shared Content Folder", StringComparison.Ordinal))
+            { existing.Name = "Shared Content Folder"; dirty = true; }
+            if (existing.ParentId != folderId)
+            { existing.ParentId = folderId; dirty = true; }
+            if (!string.Equals(existing.Description, description, StringComparison.Ordinal))
+            { existing.Description = description; dirty = true; }
+
+            // v11.0.1 — ensure no template is assigned. Prior migrations left a
+            // TemplateId pointing at a missing .cshtml file, causing Umbraco to
+            // route /<site>/config/ to a broken render instead of treating the
+            // folder as a non-routable container.
+            if (existing.AllowedTemplates?.Any() == true)
+            { existing.AllowedTemplates = []; dirty = true; }
+            if (existing.DefaultTemplate is not null)
+            { existing.SetDefaultTemplate(null); dirty = true; }
+
+            if (dirty) Cts.Save(existing);
+            return;
+        }
 
         var ct = new ContentType(Ssh, folderId)
         {
@@ -446,7 +397,7 @@ internal sealed class PlatformInitializer : SchemaInitializerBase
     private void EnsureAuthor(int folderId)
     {
         const string description = "Perfil reutilizable de autor para artículos y contenido editorial.";
-        if (TryPatchExistingContentType(ContentTypeKeys.Author, "Author", folderId, description)) return;
+        if (TryPatchExistingContentType(ContentTypeKeys.Author, "Author", folderId, description, "icon-user")) return;
 
         var ct = new ContentType(Ssh, folderId)
         {
@@ -481,6 +432,7 @@ internal sealed class PlatformInitializer : SchemaInitializerBase
             if (!string.Equals(existing.Name, "Category", StringComparison.Ordinal)) { existing.Name = "Category"; dirty = true; }
             if (existing.ParentId != folderId) { existing.ParentId = folderId; dirty = true; }
             if (!string.Equals(existing.Description, description, StringComparison.Ordinal)) { existing.Description = description; dirty = true; }
+            dirty |= PatchIcon(existing, "icon-categories");
 
             // Enable culture variation for translatable category fields.
             dirty |= PatchCultureVariation(existing, "categoryName", "categoryDescription");
@@ -535,6 +487,7 @@ internal sealed class PlatformInitializer : SchemaInitializerBase
             { existing.Description = description; dirty = true; }
             if (existing.ParentId != folderId)
             { existing.ParentId = folderId; dirty = true; }
+            dirty |= PatchIcon(existing, "icon-globe");
             if (existing.AllowedTemplates?.Any(t => t.Id == template.Id) != true)
             { existing.AllowedTemplates = new[] { template }; existing.SetDefaultTemplate(template); dirty = true; }
             if (dirty) Cts.Save(existing);
@@ -582,21 +535,24 @@ internal sealed class PlatformInitializer : SchemaInitializerBase
             ContentTypeKeys.GlobalSettings,
             ContentTypeKeys.SharedContentFolder);
 
-        // SiteRoot → PageBase, SiteSettings, ThemeSettings, BlogHome, LayoutProfile
+        // SiteRoot → PageBase, SiteSettings, ThemeSettings, BlogHome, LayoutProfile, SharedContentFolder (Config folder)
         SetAllowedChildren(ContentTypeKeys.SiteRoot,
             ContentTypeKeys.PageBase,
             ContentTypeKeys.SiteSettings,
             ContentTypeKeys.ThemeSettings,
             ContentTypeKeys.BlogHome,
-            ContentTypeKeys.LayoutProfile);
+            ContentTypeKeys.LayoutProfile,
+            ContentTypeKeys.SharedContentFolder);
 
-        // SharedContentFolder → ReusableBlock, NavigationGroup, Author, FormDefinition
-        // Note: Category moved to BlogHome children (BlogInitializer manages Category→BlogPost hierarchy)
+        // SharedContentFolder (also reused as per-site Config/) → legacy children + Layout/Navigation containers
+        // Note: Category moved to BlogHome children (BlogInitializer manages Category→BlogPost hierarchy).
         SetAllowedChildren(ContentTypeKeys.SharedContentFolder,
             ContentTypeKeys.ReusableBlock,
             ContentTypeKeys.NavigationGroup,
             ContentTypeKeys.Author,
-            ContentTypeKeys.FormDefinition);
+            ContentTypeKeys.FormDefinition,
+            ContentTypeKeys.LayoutFolder,
+            ContentTypeKeys.NavigationFolder);
     }
 
     private void SetAllowedChildren(Guid parentKey, params Guid[] childKeys)

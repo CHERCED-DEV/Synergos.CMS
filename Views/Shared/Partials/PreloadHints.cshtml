@@ -1,0 +1,19 @@
+@model IReadOnlyList<string>
+@inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@*
+   Emits <link rel="modulepreload"> for each CDN bundle that a prescanner
+   has determined will be used on this page. Placed in <head> so the browser
+   fetches modules in parallel with HTML parsing, ahead of the <script>
+   tags discovered mid-body. Typical TTI win: 150-300 ms when the page
+   uses more than one interactive CDN element.
+
+   crossorigin is required for ES modules served cross-origin (synergos.local
+   ↔ static.synergos.local). The resolver always returns absolute URLs to the
+   static host, so this is mandatory for the preload to be honored.
+*@
+@if (Model is null || Model.Count == 0) { return; }
+
+@foreach (var bundle in Model)
+{
+    <link rel="modulepreload" href="@ElementUrl.ResolveBundle(bundle)" crossorigin="anonymous" />
+}

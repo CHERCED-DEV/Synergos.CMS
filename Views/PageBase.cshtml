@@ -30,6 +30,7 @@
 }
 @section HeadMeta {
     @await Html.PartialAsync("SeoMeta", Model.Seo, new ViewDataDictionary(ViewData) { { LayoutViewData.SeoTitle, seoTitle } })
+    @await Html.PartialAsync("Shared/Partials/PreloadHints", Synergos.CMS.Application.Rendering.BundlePrescanner.Scan(Model.BlockGrid))
 }
 
 @if (Model.BlockGrid is not null)

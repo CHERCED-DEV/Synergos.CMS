@@ -34,4 +34,35 @@ public sealed class RuntimeSettings
     /// in development. Empty array = CORS disabled (requests blocked by browser).
     /// </summary>
     public string[] AllowedOrigins { get; init; } = [];
+
+    /// <summary>
+    /// Hard cap (seconds) for how long a single request may run before the
+    /// <see cref="Presentation.Middlewares.TimeoutMiddleware"/> aborts it
+    /// and returns 408. 0 disables the middleware.
+    /// </summary>
+    public int RequestTimeoutSeconds { get; init; } = 90;
+
+    /// <summary>
+    /// Path prefixes excluded from the request timeout. Editor and plugin
+    /// routes need to handle long-running operations (publish, uSync export,
+    /// indexing) without being killed.
+    /// </summary>
+    public string[] TimeoutExcludedPaths { get; init; } =
+    [
+        "/umbraco/", "/App_Plugins/", "/media/", "/Media/", "/scripts/", "/css/"
+    ];
+
+    /// <summary>
+    /// Verbatim <c>robots.txt</c> body. Empty (default) lets
+    /// <see cref="Presentation.Api.RobotsController"/> generate an
+    /// environment-appropriate default. Set this for one-off overrides.
+    /// </summary>
+    public string? RobotsTxtOverride { get; init; }
+
+    /// <summary>
+    /// Extra directives appended verbatim to the Content-Security-Policy
+    /// header. Use this to whitelist additional CDN hosts, inline-script
+    /// hashes, or report-uri. Example: <c>"script-src 'self' https://cdn.partner.com; "</c>.
+    /// </summary>
+    public string? CspAdditionalDirectives { get; init; }
 }

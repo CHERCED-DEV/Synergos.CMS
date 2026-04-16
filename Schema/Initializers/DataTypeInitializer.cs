@@ -73,6 +73,9 @@ internal sealed class DataTypeInitializer : ISchemaInitializer
         EnsureMultiUrlPicker(DataTypeKeys.LinkUrl, "DT.Link.Url");
         EnsureTags(DataTypeKeys.TagsContent, "DT.Tags.Content");
         EnsureBlockListEmpty(DataTypeKeys.BlockListCollection, "DT.BlockList.Collection");
+        // CardGrid + LogoCloudGrid son area-based (no requieren BlockList tipado).
+        EnsureBlockListEmpty(DataTypeKeys.BlockListTestimonialItems,  "DT.BlockList.TestimonialItems");
+        EnsureBlockListEmpty(DataTypeKeys.BlockListFaqItems,          "DT.BlockList.FaqItems");
 
         // ── DOM Dropdowns ──────────────────────────────────────────────────
         EnsureDropdown(DataTypeKeys.SelectContainerType, "DT.Select.ContainerType",

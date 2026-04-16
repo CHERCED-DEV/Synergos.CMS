@@ -3,6 +3,7 @@
 @using System.Text.Json.Serialization
 @using Synergos.CMS.Application.Cdn.Configs
 @inject Synergos.CMS.Application.Rendering.IElementUrlResolver ElementUrl
+@inject Synergos.CMS.Domain.Services.IEmittedBundleTracker Bundles
 @inject Synergos.CMS.Domain.Services.IDictionaryCache Dict
 @{
     var p = Model.MacroParameters;
@@ -17,5 +18,5 @@
         Translations: translations
     ), opt);
 }
-<script src="@ElementUrl.ResolveBundle("external-widget")" type="module" defer></script>
+@if (Bundles.TryClaim("external-widget")) { <script src="@ElementUrl.ResolveBundle("external-widget")" type="module" defer></script> }
 <synergos-external-widget config='@cfg' class="sg-cdn sg-cdn--external-widget"></synergos-external-widget>

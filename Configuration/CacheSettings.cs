@@ -21,4 +21,12 @@ public sealed class CacheSettings
     /// stale "key not found" states during deployments.
     /// </summary>
     public int DictionaryMissMinutes { get; init; } = 1;
+
+    /// <summary>
+    /// Default culture used as deterministic fallback when a dictionary key
+    /// has no translation for the requested culture. Inspired by NS.Booking.CMS:
+    /// instead of "first available translation" (non-deterministic), fall back
+    /// to a configured default. Empty = legacy behavior (first-available).
+    /// </summary>
+    public string DefaultCulture { get; init; } = "es-CO";
 }

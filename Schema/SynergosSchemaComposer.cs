@@ -127,6 +127,8 @@ internal sealed class SynergosSchemaInitializer
             new ElementTypeInitializer(_schema.ContentTypes, _schema.DataTypes, _schema.ShortString).Initialize();
             // Phase 7.5 — patch BlockListMountParams to include ElementMountParam
             PatchMountParamsBlockList();
+            // Phase 7.6 — patch typed BlockLists (CardItems, LogoItems, TestimonialItems, FaqItems)
+            PatchTypedItemBlockLists();
             // Phase 8 — media types
             new MediaTypeInitializer(_schema.MediaTypes, _schema.DataTypes, _schema.ShortString).Initialize();
             // Phase 9a — core document types (SiteRoot, PageBase) + shop types
@@ -243,6 +245,35 @@ internal sealed class SynergosSchemaInitializer
     }
 
     /// <summary>
+    /// Phase 7.6 — configura los BlockLists tipados para contenedores
+    /// interactivos (Testimonial Carousel, Accordion Group). CardGrid y
+    /// LogoCloudGrid son area-based (Block Grid Areas, no BlockList).
+    /// </summary>
+    private void PatchTypedItemBlockLists()
+    {
+        PatchTypedBlockList(DataTypeKeys.BlockListTestimonialItems, ContentTypeKeys.ElementInfoTestimonialItem, "{{title}}");
+        PatchTypedBlockList(DataTypeKeys.BlockListFaqItems,         ContentTypeKeys.ElementInfoFaqItem,         "{{title}}");
+    }
+
+    private void PatchTypedBlockList(Guid blockListKey, Guid elementKey, string label)
+    {
+        var blockListDt = _schema.DataTypes.GetDataType(blockListKey);
+        if (blockListDt?.Configuration is not BlockListConfiguration cfg) return;
+
+        if (cfg.Blocks.Any(b => b.ContentElementTypeKey == elementKey)) return;
+
+        cfg.Blocks =
+        [
+            new BlockListConfiguration.BlockConfiguration
+            {
+                ContentElementTypeKey = elementKey,
+                Label                 = label
+            }
+        ];
+        _schema.DataTypes.Save(blockListDt);
+    }
+
+    /// <summary>
     /// Unconditional guard: ensures culture-variant content types have
     /// ContentVariation.Culture set on every startup.
     /// Protects against uSync imports or partial schema runs resetting Variations.
@@ -302,6 +333,7 @@ internal sealed class SynergosSchemaInitializer
                 _seed.ContentTypes,
                 _seed.Files,
                 _seed.LoggerFactory.CreateLogger<ContentSeeder>(),
+                _seed.LoggerFactory,
                 _seed.SeedConfigOptions.Value).Seed();
         }
         catch (Exception ex)

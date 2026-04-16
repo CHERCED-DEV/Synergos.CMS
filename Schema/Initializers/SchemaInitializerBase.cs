@@ -117,6 +117,20 @@ internal abstract class SchemaInitializerBase : ISchemaInitializer
         return true;
     }
 
+    /// <summary>
+    /// Updates the ContentType icon when it drifted from the expected value.
+    /// Returns true when a change was applied. Umbraco caches the icon on each
+    /// content instance at creation; the initializer icon only takes effect for
+    /// newly created nodes, so patching the ContentType is enough for tree display.
+    /// </summary>
+    protected static bool PatchIcon(IContentType ct, string icon)
+    {
+        if (string.IsNullOrWhiteSpace(icon)) return false;
+        if (string.Equals(ct.Icon, icon, StringComparison.Ordinal)) return false;
+        ct.Icon = icon;
+        return true;
+    }
+
     protected static bool PatchPropertyDescription(IContentType ct, string alias, string description)
     {
         var prop = ct.PropertyTypes.FirstOrDefault(p => p.Alias == alias);
@@ -150,11 +164,17 @@ internal abstract class SchemaInitializerBase : ISchemaInitializer
     }
 
     /// <summary>
-    /// If the ContentType already exists: patches name, folderId, and description if needed
-    /// and returns true (caller should return immediately).
+    /// If the ContentType already exists: patches name, folderId, description and
+    /// (optionally) icon if needed, then returns true. Callers should return
+    /// immediately on true.
+    ///
     /// Returns false when the type does not exist yet (caller should create it).
+    ///
+    /// <paramref name="icon"/> is optional so legacy callers stay compatible;
+    /// passing it ensures the icon stays in sync when an editor or earlier
+    /// schema left a different icon on the ContentType.
     /// </summary>
-    protected bool TryPatchExistingContentType(Guid key, string name, int folderId, string description)
+    protected bool TryPatchExistingContentType(Guid key, string name, int folderId, string description, string? icon = null)
     {
         var existing = Cts.Get(key);
         if (existing is null) return false;
@@ -166,6 +186,8 @@ internal abstract class SchemaInitializerBase : ISchemaInitializer
         { existing.ParentId = folderId; dirty = true; }
         if (!string.Equals(existing.Description, description, StringComparison.Ordinal))
         { existing.Description = description; dirty = true; }
+        if (!string.IsNullOrWhiteSpace(icon) && !string.Equals(existing.Icon, icon, StringComparison.Ordinal))
+        { existing.Icon = icon; dirty = true; }
         if (dirty) Cts.Save(existing);
         return true;
     }
