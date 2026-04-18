@@ -1,0 +1,31 @@
+@*
+    Template for the `pageBasic` Document Type (ADR 0014).
+    Minimal, intentional: title from composed `seoTitle`, body from
+    `body` richtext. No layout chrome, no navigation — Ola 7 smoke
+    only. When a SiteRoot / HomePage appears (a later ola), this
+    template will likely reference a shared _Layout.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBasicResponse>
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@Model.SeoTitle</title>
+</head>
+<body>
+    <article>
+        @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
+        {
+            <h1>@Model.SeoTitle</h1>
+        }
+        @* `body` is sanitised by Umbraco's TinyMCE pipeline
+           (SanitizeTinyMce=true in appsettings); Html.Raw is safe
+           within that contract. *@
+        @Html.Raw(Model.BodyHtml)
+    </article>
+</body>
+</html>

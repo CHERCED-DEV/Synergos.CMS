@@ -21,6 +21,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0011](0011-feature-flags-typed-config.md) | Feature flags via typed config | Accepted |
 | [0012](0012-cdn-contract-consumed.md) | CDN contract is consumed, not owned | Accepted |
 | [0013](0013-no-automatic-seeders.md) | No automatic seeders; dev tooling behind flag | Accepted |
+| [0014](0014-document-type-page-basic.md) | Document Type `PageBasic` (first product case, static pages) | Accepted |
 
 ## Rules
 

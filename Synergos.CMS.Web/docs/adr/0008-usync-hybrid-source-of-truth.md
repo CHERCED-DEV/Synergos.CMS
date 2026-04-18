@@ -30,9 +30,15 @@ por PR, y recovery = `git revert`.
    versionados en git bajo `Synergos.CMS.Web/uSync/v9/`.
 2. **uSync es la fuente de verdad** del schema; el backoffice y el código
    son consumidores.
-3. **`uSync:Settings:ImportOnStartup = false`** en `appsettings.*.json`.
-   Imports se disparan manualmente o por un proceso CI/CD gobernado por ADR
-   separado.
+3. **Los imports automáticos al arranque permanecen desactivados.** En
+   uSync 13.x la propiedad real es
+   `uSync:Settings:ImportAtStartup` y su valor es un **string enum**
+   (`"None"` | `"All"` | nombre de handler group), no un booleano. El
+   default del paquete es `"None"`, que es exactamente el
+   comportamiento deseado: confiar en el default y **no escribir la
+   clave en `appsettings`** mantiene la superficie mínima. Los
+   imports se disparan manualmente o por un proceso CI/CD gobernado
+   por ADR separado.
 4. El código C# puede tocar schema **sólo** para:
    - Health checks (`ISchemaHealthProbe`) que validen consistencia uSync/DB.
    - Resolvers que consultan tipos por GUID o alias.
@@ -72,8 +78,25 @@ por PR, y recovery = `git revert`.
 
 ## Guardrails operativos
 
-- `appsettings.*.json`: `uSync:Settings:ImportOnStartup = false`.
+- `appsettings.*.json`: **no se escribe** `uSync:Settings:ImportAtStartup`.
+  El default del paquete `"None"` ya cumple la decisión; escribirlo
+  amplía superficie sin valor (ver `feedback_compose_over_appsettings`
+  en memory). Si en el futuro se requiere importar un handler group
+  específico al boot, llega con ADR sucesor + override en composer
+  (`services.Configure<uSyncSettings>(opts => opts.ImportAtStartup = "Settings")`),
+  nunca via edición ciega de appsettings.
 - `/_health` incluye `usync_folder_readable` y `schema_version_match`
   como probes obligatorias.
 - Pre-commit (futuro): validar que un cambio que tocó C# de schema trae
   también el XML uSync correspondiente.
+
+## Corrections
+
+- **2026-04-18** (editorial, no-decisional): se corrigió la referencia
+  a `ImportOnStartup = false` (nombre y tipo de valor incorrectos) por
+  `ImportAtStartup = "None"` (string-enum), tras verificar la API real
+  de uSync 13.3.2 contra la documentación oficial de Jumoo. La
+  **decisión** (imports automáticos desactivados; uSync como SoT)
+  permanece inalterada. Esta nota preserva la inmutabilidad del ADR
+  registrando explícitamente la diferencia entre error terminológico
+  y cambio de decisión.
