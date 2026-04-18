@@ -6,3 +6,10 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage(
     "Naming", "CA1707:Identifiers should not contain underscores",
     Justification = "xUnit test method naming convention.")]
+
+// Inline array literals (`new[] { "a", "b" }`) are idiomatic in xUnit
+// arrange-act-assert blocks; the micro-allocation cost the rule warns
+// about is irrelevant for tests.
+[assembly: SuppressMessage(
+    "Performance", "CA1861:Avoid constant arrays as arguments",
+    Justification = "Inline array literals are idiomatic in xUnit tests.")]
