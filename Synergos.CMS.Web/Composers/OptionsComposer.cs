@@ -1,0 +1,36 @@
+using Synergos.CMS.Application.Configuration;
+using Umbraco.Cms.Core.Composing;
+
+namespace Synergos.CMS.Web.Composers;
+
+/// <summary>
+/// Binds typed POCOs from <c>appsettings.*.json</c> into the DI
+/// container so that Application services can consume them via
+/// <c>IOptions&lt;T&gt;</c> / <c>IOptionsMonitor&lt;T&gt;</c> at the Web
+/// composition boundary.
+/// </summary>
+/// <remarks>
+/// Per ADR 0005 all composers live in
+/// <c>Synergos.CMS.Web/Composers/</c>. Per ADR 0002 the Application
+/// project does not reference <c>Microsoft.Extensions.Options</c>;
+/// bindings are resolved here, and Web-level wiring (done in a future
+/// composer — see Ola 3) extracts <c>.Value</c> and injects the POCO
+/// into defaults such as <c>DefaultBrandingProvider</c>.
+///
+/// Option sections:
+/// <list type="bullet">
+///   <item><c>Synergos:Branding</c> → <see cref="BrandingSettings"/> (ADR 0010)</item>
+///   <item><c>Synergos:FeatureFlags</c> → <see cref="FeatureFlagsSettings"/> (ADR 0011)</item>
+/// </list>
+/// </remarks>
+public sealed class OptionsComposer : IComposer
+{
+    public void Compose(IUmbracoBuilder builder)
+    {
+        builder.Services.Configure<BrandingSettings>(
+            builder.Config.GetSection("Synergos:Branding"));
+
+        builder.Services.Configure<FeatureFlagsSettings>(
+            builder.Config.GetSection("Synergos:FeatureFlags"));
+    }
+}
