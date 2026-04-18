@@ -1,0 +1,47 @@
+<Project>
+
+  <!--
+    Central Package Management (CPM) — single source of truth for NuGet versions.
+    Governance:
+      - Every PackageReference across all .csproj resolves versions here.
+      - Adding a new package requires: (1) entry here, (2) PackageReference (no Version attr) in .csproj, (3) CHANGELOG.md note.
+      - Version bumps must be intentional — no floating versions (no "13.*").
+    ADR: docs/adr/0004-central-package-management.md
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!-- Umbraco CMS (LTS — pinned, see ADR 0001) -->
+  <ItemGroup>
+    <PackageVersion Include="Umbraco.Cms" Version="13.13.1" />
+  </ItemGroup>
+
+  <!-- Globalization (ICU app-local, required by Umbraco for cross-platform) -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.ICU.ICU4C.Runtime" Version="72.1.0.3" />
+  </ItemGroup>
+
+  <!--
+    uSync — schema source-of-truth (ADR 0008).
+    Package defaults already aligned with ADR 0008:
+      RootFolder=uSync/v9/, ImportAtStartup=None, ExportAtStartup=None,
+      ExportOnSave=All (auto-writes XML on backoffice save — desired for SSoT hygiene).
+    No composer override needed; uSync self-registers via .AddComposers().
+    Latest stable 13.x verified on nuget.org (13.3.2).
+  -->
+  <ItemGroup>
+    <PackageVersion Include="uSync" Version="13.3.2" />
+  </ItemGroup>
+
+  <!-- Testing -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageVersion Include="xunit" Version="2.9.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.2" />
+  </ItemGroup>
+
+</Project>
