@@ -1,0 +1,22 @@
+@*
+    elementInfoFaqItem renderer (Ola 15). Q+A accordion-ready.
+    Uses native <details>/<summary> for a11y + no-JS fallback.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var question = Model.Value<string>("headingTitle");
+    if (string.IsNullOrWhiteSpace(question)) { return; }
+    var answer = Model.Value<string>("textBody");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-faq-item",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-faq-item--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<details class="@classes">
+    <summary class="syn-faq-item__question">@question</summary>
+    <div class="syn-faq-item__answer">@Html.Raw(answer)</div>
+</details>

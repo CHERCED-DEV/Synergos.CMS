@@ -421,4 +421,27 @@ public static class ContentTypeKeys
 
     public static readonly Guid ElementMediaGalleryItem =
         Guid.Parse("7f3434ae-503a-4594-b993-29eefe84a305");
+
+    // ── Info elements (Ola 15) ─────────────────────────────────────
+
+    public static readonly Guid ElementInfoBadge =
+        Guid.Parse("f882450b-2c04-4dce-a584-1e0d8bccfef8");
+
+    public static readonly Guid ElementInfoFaqItem =
+        Guid.Parse("7152def0-2ea8-4cfc-bca3-792bd3ace8b2");
+
+    public static readonly Guid ElementInfoFeature =
+        Guid.Parse("a50d36ba-030f-4036-959d-b82361e6dbee");
+
+    public static readonly Guid ElementInfoKeyValue =
+        Guid.Parse("974cb4b8-0e13-4d26-9d57-0af23d827daa");
+
+    public static readonly Guid ElementInfoStat =
+        Guid.Parse("b1157cc1-762d-4c6f-a8f1-dc42d5bb891a");
+
+    public static readonly Guid ElementInfoTestimonialItem =
+        Guid.Parse("632796f2-a36c-4d3c-9ff4-bdd132725e24");
+
+    public static readonly Guid ElementInfoTimelineItem =
+        Guid.Parse("f845c403-0300-45e6-aa4f-1f1aa00cbdb4");
 }

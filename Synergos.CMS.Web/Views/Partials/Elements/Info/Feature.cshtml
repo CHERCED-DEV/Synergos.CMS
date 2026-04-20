@@ -1,0 +1,35 @@
+@*
+    elementInfoFeature renderer (Ola 15). Icon + title + description.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("headingTitle");
+    if (string.IsNullOrWhiteSpace(title)) { return; }
+    var subtitle = Model.Value<string>("headingSubtitle");
+    var body = Model.Value<string>("textBody");
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    var mediaAlt = Model.Value<string>("mediaAlt");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-feature",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-feature--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<article class="@classes">
+    @if (mediaRef != null)
+    {
+        <img class="syn-feature__icon" src="@mediaRef.Url()" alt="@(mediaAlt ?? "")" aria-hidden="@(string.IsNullOrWhiteSpace(mediaAlt) ? "true" : "false")" loading="lazy" />
+    }
+    <h3 class="syn-feature__title">@title</h3>
+    @if (!string.IsNullOrWhiteSpace(subtitle))
+    {
+        <p class="syn-feature__subtitle">@subtitle</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(body))
+    {
+        <div class="syn-feature__body">@Html.Raw(body)</div>
+    }
+</article>
