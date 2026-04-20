@@ -283,4 +283,60 @@ public static class ContentTypeKeys
     /// </remarks>
     public static readonly Guid CompContentEmbed =
         Guid.Parse("85a37cab-3e4d-482a-b300-f4434c6eefbb");
+
+    // ── DOM layer (capa 3) ─────────────────────────────────────────
+    // Shareable universales para presentación. Todos Variations=Nothing
+    // (styling = técnico, no traduce) salvo compDomAttributes.ariaLabel
+    // que sí es Culture.
+
+    /// <summary>
+    /// <c>compDomClass</c> — CSS class + data attributes shareable
+    /// universal (62 uses en legacy). Capa 3 DOM.
+    /// </summary>
+    public static readonly Guid CompDomClass =
+        Guid.Parse("46367d43-269b-418d-b54d-075fcf6d658b");
+
+    /// <summary>
+    /// <c>compDomVariant</c> — design-system variant key (primary/
+    /// secondary/ghost/outlined). 53 uses en legacy.
+    /// </summary>
+    public static readonly Guid CompDomVariant =
+        Guid.Parse("e11a9feb-fa1c-4740-9481-3dce56748473");
+
+    /// <summary>
+    /// <c>compDomSpacing</c> — top/bottom/inline spacing scale keys.
+    /// Opt-in para contenedores. 19 uses en legacy.
+    /// </summary>
+    public static readonly Guid CompDomSpacing =
+        Guid.Parse("0a2edb7e-8555-4044-bebc-bf0fe37662f2");
+
+    /// <summary>
+    /// <c>compDomLayout</c> — layoutAlign + layoutDirection para
+    /// contenedores flex/grid. 16 uses.
+    /// </summary>
+    public static readonly Guid CompDomLayout =
+        Guid.Parse("06de133e-ab5f-4c56-970d-5aa8266e6334");
+
+    /// <summary>
+    /// <c>compDomAttributes</c> — ariaRole (Nothing) + ariaLabel
+    /// (Culture) para accesibilidad. 12 uses.
+    /// </summary>
+    public static readonly Guid CompDomAttributes =
+        Guid.Parse("1d5bafbb-59af-4002-8709-ebade1be0392");
+
+    /// <summary>
+    /// <c>compDomVisibility</c> — hide flags por breakpoint mobile/
+    /// tablet/desktop. Unifica compVisibility legacy (SRP).
+    /// </summary>
+    public static readonly Guid CompDomVisibility =
+        Guid.Parse("7a383458-6ea6-4784-a4d1-17f8d4b01073");
+
+    // ── Behavior layer (capa 6, minimal) ──────────────────────────
+
+    /// <summary>
+    /// <c>compBehaviorFeatureFlag</c> — editor-facing gate por
+    /// feature flag (ADR 0011). Renderer consulta IFeatureGate.
+    /// </summary>
+    public static readonly Guid CompBehaviorFeatureFlag =
+        Guid.Parse("ed531586-b8a0-4c8c-be13-a7311017270e");
 }
