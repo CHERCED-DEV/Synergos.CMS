@@ -244,4 +244,43 @@ public static class ContentTypeKeys
     /// </remarks>
     public static readonly Guid CompContentDate =
         Guid.Parse("986da42d-9203-4270-8234-3f8255abdbdf");
+
+    /// <summary>
+    /// <c>compContentBadge</c> — Short status/category tag
+    /// (<c>badgeLabel</c> Culture + <c>badgeVariant</c> Nothing).
+    /// Distinct from <c>elementSynBadge</c> (CDN-hosted block).
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compcontentbadge.config</c>.
+    /// Flow B — Ola 11. Folder <c>Compositions/Content/Info</c>.
+    /// </remarks>
+    public static readonly Guid CompContentBadge =
+        Guid.Parse("3e85c495-9fa5-430a-b982-b4bdeda74452");
+
+    /// <summary>
+    /// <c>compContentCollection</c> — Header metadata for item
+    /// collections (ArticleList, BlogHighlight, FeatureGrid, etc.).
+    /// Provides <c>collectionTitle</c> + <c>collectionPresentation</c>
+    /// (grid/list/carousel key). Items themselves come from the
+    /// composing Element Type's picker.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compcontentcollection.config</c>.
+    /// Flow B — Ola 11. Folder <c>Compositions/Content/Collection</c>.
+    /// </remarks>
+    public static readonly Guid CompContentCollection =
+        Guid.Parse("7f5ee960-dfc6-47f8-906e-c651444f45cf");
+
+    /// <summary>
+    /// <c>compContentEmbed</c> — Third-party embed reference
+    /// (<c>embedUrl</c> Culture + <c>embedType</c> Nothing +
+    /// <c>embedAspectRatio</c> Nothing). Distinct from
+    /// <c>elementIntIframeHost</c> (standalone Element Type).
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compcontentembed.config</c>.
+    /// Flow B — Ola 11. Folder <c>Compositions/Content/Media</c>.
+    /// </remarks>
+    public static readonly Guid CompContentEmbed =
+        Guid.Parse("85a37cab-3e4d-482a-b300-f4434c6eefbb");
 }
