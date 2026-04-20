@@ -1,0 +1,28 @@
+﻿@*
+    Template del Document Type `pageBase` (Ola 8). Página editorial
+    estándar bajo siteRoot. Por ADR 0014, Layout = null en esta ola;
+    en ola posterior se monta un _Layout compartido con header/footer/
+    nav. `body` sanitizado por TinyMCE pipeline (SanitizeTinyMce=true).
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBaseResponse>
+@{
+    Layout = null;
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+}
+<!DOCTYPE html>
+<html lang="@culture">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@Model.SeoTitle</title>
+</head>
+<body>
+    <article>
+        @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
+        {
+            <h1>@Model.SeoTitle</h1>
+        }
+        @Html.Raw(Model.BodyHtml)
+    </article>
+</body>
+</html>

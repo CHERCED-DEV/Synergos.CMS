@@ -41,4 +41,80 @@ public static class ContentTypeKeys
     /// </remarks>
     public static readonly Guid CompSeo =
         Guid.Parse("85e75635-b950-4583-b5ca-2a51c08892e3");
+
+    /// <summary>
+    /// <c>pageBasic</c> — Minimal Document Type (ADR 0014). Smoke test
+    /// for the RenderController → Response DTO → Razor Template
+    /// pipeline. Composes <see cref="CompSeo"/> for <c>seoTitle</c> and
+    /// adds a single richtext <c>body</c> property.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>Synergos.CMS.Web/uSync/v9/ContentTypes/page-basic.config</c>.
+    /// GUID generated fresh by the agent (Flow B — agent-authored XML,
+    /// see <c>feedback_no_preassigned_guids_usync</c>) with quadruple
+    /// verification pre-commit (MIGRATION_GUARDRAILS §6.2). Import into
+    /// the DB happens when the architect runs <c>uSync Import</c> in
+    /// the backoffice.
+    /// </remarks>
+    public static readonly Guid PageBasic =
+        Guid.Parse("95fef9ef-a6b2-454d-af54-b58d03b2a88e");
+
+    /// <summary>
+    /// <c>compCoreBase</c> — Base composition for technical metadata
+    /// (e.g. <c>internalNotes</c>). Composed into every core DocType.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compcorebase.config</c>.
+    /// Flow B (agent-authored) — Ola 8.
+    /// </remarks>
+    public static readonly Guid CompCoreBase =
+        Guid.Parse("5e2ec6b8-7f65-4c26-8c20-1b9a72bed2f8");
+
+    /// <summary>
+    /// <c>compCoreLifecycle</c> — Editorial lifecycle metadata
+    /// (<c>publishingNotes</c>). Composed into DocTypes that need
+    /// formal editorial traceability.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compcorelifecycle.config</c>.
+    /// Flow B — Ola 8.
+    /// </remarks>
+    public static readonly Guid CompCoreLifecycle =
+        Guid.Parse("77440708-6cce-4a20-8679-212aaadd92eb");
+
+    /// <summary>
+    /// <c>siteRoot</c> — Top-level site container. One per
+    /// brand/deployment (multi-brand handled in a later wave).
+    /// Hosts pageBase, pageBare and pageBasic as children.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/siteroot.config</c>.
+    /// Flow B — Ola 8.
+    /// </remarks>
+    public static readonly Guid SiteRoot =
+        Guid.Parse("03d85835-06e4-4d8b-bd18-6088a529cf57");
+
+    /// <summary>
+    /// <c>pageBase</c> — Canonical editorial page under siteRoot.
+    /// Composes compCoreBase + compCoreLifecycle + compSeo. Adds a
+    /// richtext <c>body</c>.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/page-base.config</c>.
+    /// Flow B — Ola 8.
+    /// </remarks>
+    public static readonly Guid PageBase =
+        Guid.Parse("b4df602f-1c16-4ad7-8b57-69aa64ff6ad1");
+
+    /// <summary>
+    /// <c>pageBare</c> — Chrome-less page variant. Composes
+    /// compCoreBase + compSeo. Template emits only the body without
+    /// shared layout chrome.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/page-bare.config</c>.
+    /// Flow B — Ola 8.
+    /// </remarks>
+    public static readonly Guid PageBare =
+        Guid.Parse("0bd9379d-07eb-49de-802a-e68483322582");
 }

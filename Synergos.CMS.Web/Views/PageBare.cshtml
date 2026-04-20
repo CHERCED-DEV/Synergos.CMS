@@ -1,0 +1,23 @@
+﻿@*
+    Template del Document Type `pageBare` (Ola 8). Sin chrome
+    compartido — el body del modelo se emite como la totalidad del
+    contenido. Útil para landings custom, iframes embebibles, flujos
+    con branding aislado. `body` sanitizado por TinyMCE pipeline
+    (SanitizeTinyMce=true).
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBareResponse>
+@{
+    Layout = null;
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+}
+<!DOCTYPE html>
+<html lang="@culture">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@Model.SeoTitle</title>
+</head>
+<body>
+@Html.Raw(Model.BodyHtml)
+</body>
+</html>

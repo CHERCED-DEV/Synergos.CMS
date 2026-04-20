@@ -1,0 +1,29 @@
+﻿@*
+    Template del Document Type `siteRoot` (Ola 8).
+    Renderiza la identidad del sitio. No es una página pública editorial
+    rica — es el nodo raíz: normalmente el usuario llega aquí si navega
+    al root del sitio sin un hijo. Layout = null por ADR 0014 (chrome
+    compartido llega en ola posterior).
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.SiteRootResponse>
+@{
+    Layout = null;
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+}
+<!DOCTYPE html>
+<html lang="@culture">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@Model.SeoTitle</title>
+    @if (!string.IsNullOrWhiteSpace(Model.CanonicalHostname))
+    {
+        <link rel="canonical" href="https://@Model.CanonicalHostname/" />
+    }
+</head>
+<body>
+    <main>
+        <h1>@Model.SiteDisplayName</h1>
+    </main>
+</body>
+</html>
