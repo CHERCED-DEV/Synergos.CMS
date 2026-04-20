@@ -1,0 +1,26 @@
+@*
+    elementTextQuote renderer (Ola 12 Wave 2). SSR-native.
+    Emits <blockquote> with richtext body from compContentText.textBody
+    and optional <cite> attribution.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var body = Model.Value<string>("textBody");
+    if (string.IsNullOrWhiteSpace(body)) { return; }
+    var attribution = Model.Value<string>("quoteAttribution");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-quote",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-quote--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<blockquote class="@classes">
+    <div class="syn-quote__body">@Html.Raw(body)</div>
+    @if (!string.IsNullOrWhiteSpace(attribution))
+    {
+        <cite class="syn-quote__attribution">@attribution</cite>
+    }
+</blockquote>

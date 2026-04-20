@@ -1,0 +1,22 @@
+@*
+    elementActionLink renderer (Ola 12 Wave 2). SSR-native.
+    Text link (not button) with optional aria-label for accessibility
+    when the visible text is generic ("Leer más", "Ver todo").
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var label = Model.Value<string>("ctaLabel");
+    var url = Model.Value<string>("ctaUrl");
+    if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(url)) { return; }
+    var openInNewTab = Model.Value<bool>("ctaOpenInNewTab");
+    var ariaLabel = Model.Value<string>("ariaLabel");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-link",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-link--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<a class="@classes" href="@url"@(string.IsNullOrWhiteSpace(ariaLabel) ? "" : $" aria-label=\"{ariaLabel}\"")@(openInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@label</a>

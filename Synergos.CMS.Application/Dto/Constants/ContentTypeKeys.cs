@@ -339,4 +339,66 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid CompBehaviorFeatureFlag =
         Guid.Parse("ed531586-b8a0-4c8c-be13-a7311017270e");
+
+    // ── Element Types (primera familia SSR: text + action) ────────
+    // Ola 13. Todos IsElement=true. Renderers bajo
+    // Views/Partials/Elements/<Family>/<Name>.cshtml con wrappers en
+    // Views/Partials/blockgrid/Components/ por convención Umbraco.
+
+    /// <summary>
+    /// <c>elementTextEyebrow</c> — Short caption text above a heading.
+    /// Own prop <c>eyebrowText</c> Culture mandatory.
+    /// </summary>
+    public static readonly Guid ElementTextEyebrow =
+        Guid.Parse("a8b1573f-427b-493f-89dd-b818ec95816a");
+
+    /// <summary>
+    /// <c>elementTextHeading</c> — Standalone heading block. All props
+    /// come from compositions (compContentHeading + compDomAttributes).
+    /// </summary>
+    public static readonly Guid ElementTextHeading =
+        Guid.Parse("6ad6f181-661a-48c9-8c36-22f8280f1a22");
+
+    /// <summary>
+    /// <c>elementTextLabel</c> — Categorical chip label.
+    /// Own prop <c>labelText</c> Culture mandatory.
+    /// </summary>
+    public static readonly Guid ElementTextLabel =
+        Guid.Parse("06590c83-bb73-4a5f-8421-ea37d884823b");
+
+    /// <summary>
+    /// <c>elementTextParagraph</c> — Plain text paragraph (TextArea).
+    /// Own prop <c>paragraphText</c>. For rich formatting use
+    /// <see cref="ElementTextRichtext"/> instead.
+    /// </summary>
+    public static readonly Guid ElementTextParagraph =
+        Guid.Parse("034b4d6c-44ff-4ba6-bdc4-ad9325cd191b");
+
+    /// <summary>
+    /// <c>elementTextQuote</c> — Blockquote with body from
+    /// compContentText and own <c>quoteAttribution</c> prop.
+    /// </summary>
+    public static readonly Guid ElementTextQuote =
+        Guid.Parse("957e3f6a-b71b-441f-ae75-08d9e5574bcc");
+
+    /// <summary>
+    /// <c>elementTextRichtext</c> — Rich text block (TinyMCE). All
+    /// props come from compositions.
+    /// </summary>
+    public static readonly Guid ElementTextRichtext =
+        Guid.Parse("aad6c221-eca9-4956-8515-1fee67324dbd");
+
+    /// <summary>
+    /// <c>elementActionButton</c> — Primary action button with label,
+    /// URL, target from compContentCta composition.
+    /// </summary>
+    public static readonly Guid ElementActionButton =
+        Guid.Parse("2d8d712e-66ec-4052-a627-0ad8a68d0d38");
+
+    /// <summary>
+    /// <c>elementActionLink</c> — Text link (styled as link, not
+    /// button). Adds compDomAttributes for ariaLabel.
+    /// </summary>
+    public static readonly Guid ElementActionLink =
+        Guid.Parse("17c626f8-b24b-483f-b3e5-75581d44a7c7");
 }

@@ -1,0 +1,21 @@
+@*
+    elementActionButton renderer (Ola 12 Wave 2). SSR-native.
+    Emits an <a> styled as button. ctaLabel / ctaUrl / ctaOpenInNewTab
+    come from composed compContentCta.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var label = Model.Value<string>("ctaLabel");
+    var url = Model.Value<string>("ctaUrl");
+    if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(url)) { return; }
+    var openInNewTab = Model.Value<bool>("ctaOpenInNewTab");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-button",
+        string.IsNullOrWhiteSpace(variant) ? "syn-button--primary" : $"syn-button--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<a class="@classes" href="@url"@(openInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@label</a>

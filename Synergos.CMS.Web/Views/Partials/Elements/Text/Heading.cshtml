@@ -1,0 +1,29 @@
+@*
+    elementTextHeading renderer (Ola 12 Wave 2). SSR-native.
+    Emits a heading from composed compContentHeading. The HTML level
+    (h1..h4) comes from ViewData["HeadingLevel"] set by the outer
+    layout/section controller, defaulting to h2 for standalone use.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("headingTitle");
+    if (string.IsNullOrWhiteSpace(title)) { return; }
+    var subtitle = Model.Value<string>("headingSubtitle");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var ariaLabel = Model.Value<string>("ariaLabel");
+    var headingLevel = (ViewData["HeadingLevel"] as string) ?? "h2";
+    var classes = string.Join(" ", new[]
+    {
+        "syn-heading",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-heading--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<header class="syn-heading-group">
+    <@headingLevel class="@classes"@(string.IsNullOrWhiteSpace(ariaLabel) ? "" : $" aria-label=\"{ariaLabel}\"")>@title</@headingLevel>
+    @if (!string.IsNullOrWhiteSpace(subtitle))
+    {
+        <p class="syn-heading__subtitle">@subtitle</p>
+    }
+</header>

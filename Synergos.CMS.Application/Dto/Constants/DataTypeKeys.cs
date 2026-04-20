@@ -36,4 +36,18 @@ public static class DataTypeKeys
     /// </remarks>
     public static readonly Guid BlockGridSynPilot =
         Guid.Parse("5772232e-e431-4918-bfda-c56eec963b33");
+
+    /// <summary>
+    /// <c>DT.BlockGrid.Basic</c> — Block Grid Data Type exposing the
+    /// 8 first-wave SSR Element Types (elementText* × 6 + elementAction*
+    /// × 2) under a "Basic Text &amp; Action" group.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/DataTypes/DTBlockGridBasic.config</c>.
+    /// Ola 13. The companion <c>DT.BlockGrid.SynPilot</c> (Ola 8.5)
+    /// exposes the CDN-hosted SynHost blocks; both DataTypes can be
+    /// used independently or side-by-side on different pages.
+    /// </remarks>
+    public static readonly Guid BlockGridBasic =
+        Guid.Parse("40e118ec-2e66-4939-9bbd-106b8d50c5a7");
 }
