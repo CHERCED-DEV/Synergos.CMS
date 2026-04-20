@@ -209,4 +209,39 @@ public static class ContentTypeKeys
     /// </remarks>
     public static readonly Guid CompContentCta =
         Guid.Parse("92cb0070-0f4d-43a0-84a7-102f60dc41b4");
+
+    /// <summary>
+    /// <c>compContentMedia</c> — Reusable media reference composition
+    /// (<c>mediaReference</c> + <c>mediaAlt</c> + <c>mediaCaption</c>).
+    /// Alt mandatory per WCAG 1.1.1. Variations=Culture on all three.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compcontentmedia.config</c>.
+    /// Flow B — Ola 10. Folder <c>Compositions/Content/Media</c>.
+    /// </remarks>
+    public static readonly Guid CompContentMedia =
+        Guid.Parse("e2a29901-8155-4d36-80ab-f42b2452a45b");
+
+    /// <summary>
+    /// <c>compContentMetadata</c> — Editorial (non-SEO) metadata:
+    /// <c>metaKeywords</c> + <c>metaSummary</c>. For SEO use compSeo.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compcontentmetadata.config</c>.
+    /// Flow B — Ola 10. Folder <c>Compositions/Content/Meta</c>.
+    /// </remarks>
+    public static readonly Guid CompContentMetadata =
+        Guid.Parse("84383010-4c98-4a2c-b67f-a347b00cde81");
+
+    /// <summary>
+    /// <c>compContentDate</c> — Editorial date (<c>contentDate</c>
+    /// Nothing + <c>contentDateLabel</c> Culture). Distinct from
+    /// Umbraco's native createDate/updateDate.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compcontentdate.config</c>.
+    /// Flow B — Ola 10.
+    /// </remarks>
+    public static readonly Guid CompContentDate =
+        Guid.Parse("986da42d-9203-4270-8234-3f8255abdbdf");
 }
