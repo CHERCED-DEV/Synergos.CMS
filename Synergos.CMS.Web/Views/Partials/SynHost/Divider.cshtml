@@ -1,0 +1,17 @@
+@*
+    SynHost pilot renderer (Ola 8.5) — divider. No own props; decorative
+    styling configurable via compIntegration.configOverride JSON.
+    Emits <synergos-divider>.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "divider",
+        Props: null,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@Html.Raw(result.ScriptHtml)
+@Html.Raw(result.ElementHtml)

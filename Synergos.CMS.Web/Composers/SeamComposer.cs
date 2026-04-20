@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Proxies.Impl;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Notifications;
@@ -39,6 +40,17 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IOptions<FeatureFlagsSettings>>().Value));
 
         services.AddSingleton<IDictionaryCache, DictionaryCache>();
+
+        // Ola 8.5 — SynHost stack (ADR 0015 draft).
+        // StubBundleRegistryClient is the dev-time default while the CDN
+        // team has not published the real registry contract (ADR 0012 +
+        // docs/umbraco/cdn-contract.md). It always resolves to null; the
+        // SynHost emitter handles that by emitting a placeholder HTML
+        // comment and still producing the custom element tag. When the
+        // real adapter arrives, this registration swaps to
+        // HttpBundleRegistryClient behind a Synergos:Cdn:Mode switch.
+        services.AddSingleton<IBundleRegistryClient, StubBundleRegistryClient>();
+        services.AddSingleton<ISynHostEmitter, DefaultSynHostEmitter>();
 
         // Ola 3 — Web-side adapters.
         services.AddSingleton<IContentContextAccessor, UmbracoContentContextAccessor>();

@@ -25,11 +25,13 @@ namespace Synergos.CMS.Application.Proxies.Impl;
 ///   pull <c>Microsoft.Extensions.Logging.Abstractions</c> into
 ///   <c>Synergos.CMS.Application</c>, which neither ADR 0002 nor the
 ///   current scope of Ola 6 authorise.</item>
-///   <item><b>Not registered in DI</b>. Registration (if ever) must
-///   be gated on <c>Synergos:CDN:Mode = "stub"</c> and confined to
-///   Development, per the guardrail in ADR 0012. The wiring lives in
-///   a composer and is added when the first real consumer arrives
-///   (Ola 7+). See <c>Synergos.CMS.Web/docs/umbraco/cdn-contract.md</c>.</item>
+///   <item><b>Registered in DI since Ola 8.5</b> as the default
+///   <see cref="IBundleRegistryClient"/> implementation in
+///   <c>SeamComposer</c>. Registration is currently unconditional
+///   (dev-time behaviour); a <c>Synergos:Cdn:Mode</c> switch that
+///   selects between stub and a future <c>HttpBundleRegistryClient</c>
+///   arrives with ADR 0016 in Ola 12.5. See
+///   <c>Synergos.CMS.Web/docs/umbraco/cdn-contract.md</c>.</item>
 /// </list>
 /// </remarks>
 public sealed class StubBundleRegistryClient : IBundleRegistryClient

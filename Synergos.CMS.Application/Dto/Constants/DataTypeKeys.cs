@@ -22,4 +22,18 @@ public static class DataTypeKeys
 {
     // Constants are added as uSync XMLs materialise Data Types.
     // Do not invent keys here — they must exist in uSync first.
+
+    /// <summary>
+    /// <c>DT.BlockGrid.SynPilot</c> — Block Grid Data Type exposing
+    /// the 3 SynHost pilot blocks (elementSynAvatar, elementSynBadge,
+    /// elementSynDivider) under the "SynHost Pilot" group.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/DataTypes/DTBlockGridSynPilot.config</c>.
+    /// Created in Ola 8.5 to smoke-test the SynHost contract end-to-end
+    /// in a Block Grid editor UI. Later olas will add larger Block
+    /// Grid configurations per page surface.
+    /// </remarks>
+    public static readonly Guid BlockGridSynPilot =
+        Guid.Parse("5772232e-e431-4918-bfda-c56eec963b33");
 }

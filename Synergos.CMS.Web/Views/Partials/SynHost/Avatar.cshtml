@@ -1,0 +1,23 @@
+@*
+    SynHost pilot renderer (Ola 8.5). Framework-agnostic Razor partial
+    that consumes ISynHostEmitter to emit the module script tags +
+    <synergos-avatar> custom element. Called from any composer
+    (Block Grid convention wrapper, LayoutComposer in Ola 14+).
+    Props projected from the composed elementSynAvatar ElementType.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["avatarSrc"] = Model.Value<string>("avatarSrc"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "avatar",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@Html.Raw(result.ScriptHtml)
+@Html.Raw(result.ElementHtml)

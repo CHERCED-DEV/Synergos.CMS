@@ -117,4 +117,58 @@ public static class ContentTypeKeys
     /// </remarks>
     public static readonly Guid PageBare =
         Guid.Parse("0bd9379d-07eb-49de-802a-e68483322582");
+
+    /// <summary>
+    /// <c>compIntegration</c> — Base composition for elements that
+    /// integrate an external artifact: SynHost blocks (CDN-backed),
+    /// iframe hosts, script hosts. Provides a <c>configOverride</c>
+    /// JSON field. Variations=Nothing.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compintegration.config</c>.
+    /// Flow B (agent-authored) — Ola 8.5.
+    /// </remarks>
+    public static readonly Guid CompIntegration =
+        Guid.Parse("84fe7a74-faa4-434f-acf1-b1ae1a50a90f");
+
+    /// <summary>
+    /// <c>elementIntIframeHost</c> — Element Type for embedding an
+    /// iframe from an external origin (YouTube, Vimeo, Typeform, etc.).
+    /// Not a CDN block; use <c>elementSyn*</c> for those.
+    /// Variations=Culture.
+    /// </summary>
+    public static readonly Guid ElementIntIframeHost =
+        Guid.Parse("5fe3cde6-a3b1-4afe-a5a4-a3730594ef29");
+
+    /// <summary>
+    /// <c>elementIntScriptHost</c> — Element Type for injecting a
+    /// <c>&lt;script&gt;</c> from an allowlisted origin
+    /// (<c>Synergos:Cdn:AllowedScriptOrigins</c> in appsettings).
+    /// Variations=Nothing.
+    /// </summary>
+    public static readonly Guid ElementIntScriptHost =
+        Guid.Parse("7c9b40d5-61f5-4b61-a4e3-79f14e9c7ef6");
+
+    /// <summary>
+    /// <c>elementSynAvatar</c> — SynHost pilot block. DOM:
+    /// <c>&lt;synergos-avatar&gt;</c>. Bundle resolved at runtime via
+    /// <see cref="Interfaces.IBundleRegistryClient"/>.
+    /// </summary>
+    public static readonly Guid ElementSynAvatar =
+        Guid.Parse("28d5b6b8-200c-43a4-872a-d8958a392d97");
+
+    /// <summary>
+    /// <c>elementSynBadge</c> — SynHost pilot block. DOM:
+    /// <c>&lt;synergos-badge&gt;</c>.
+    /// </summary>
+    public static readonly Guid ElementSynBadge =
+        Guid.Parse("26965c38-03f5-44b2-a3e8-8daa5288143c");
+
+    /// <summary>
+    /// <c>elementSynDivider</c> — SynHost pilot block. DOM:
+    /// <c>&lt;synergos-divider&gt;</c>. No own props; configurable
+    /// only via <c>configOverride</c>.
+    /// </summary>
+    public static readonly Guid ElementSynDivider =
+        Guid.Parse("e522308f-8591-4974-9a2f-b62dae8690fb");
 }
