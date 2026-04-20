@@ -171,4 +171,42 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid ElementSynDivider =
         Guid.Parse("e522308f-8591-4974-9a2f-b62dae8690fb");
+
+    /// <summary>
+    /// <c>compContentHeading</c> — Reusable heading composition
+    /// (<c>headingTitle</c> + <c>headingSubtitle</c>). Composed into
+    /// Element Types that need a typed header. Variations=Culture.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compcontentheading.config</c>.
+    /// Flow B — Ola 9. Folder <c>Compositions/Content</c>.
+    /// </remarks>
+    public static readonly Guid CompContentHeading =
+        Guid.Parse("eb4bd93f-f9d1-44dd-b85e-d64b2084a3ad");
+
+    /// <summary>
+    /// <c>compContentText</c> — Reusable richtext body composition
+    /// (<c>textBody</c>). Composed into Element Types that need their
+    /// own paragraph of copy. Variations=Culture.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compcontenttext.config</c>.
+    /// Flow B — Ola 9.
+    /// </remarks>
+    public static readonly Guid CompContentText =
+        Guid.Parse("71d74897-c807-452c-83c3-04c94fd1414b");
+
+    /// <summary>
+    /// <c>compContentCta</c> — Reusable Call-To-Action composition
+    /// (<c>ctaLabel</c>, <c>ctaUrl</c>, <c>ctaOpenInNewTab</c>).
+    /// Composed into Element Types that invite an action.
+    /// Variations=Culture (label + URL); <c>ctaOpenInNewTab</c>
+    /// invariant.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/compcontentcta.config</c>.
+    /// Flow B — Ola 9.
+    /// </remarks>
+    public static readonly Guid CompContentCta =
+        Guid.Parse("92cb0070-0f4d-43a0-84a7-102f60dc41b4");
 }
