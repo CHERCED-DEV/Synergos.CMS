@@ -1,0 +1,28 @@
+@*
+    elementMediaGalleryItem renderer (Ola 14). SSR-native. Entry for
+    a gallery container (lightbox-ready when wrapped by a gallery).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    if (mediaRef == null) { return; }
+    var alt = Model.Value<string>("mediaAlt") ?? "";
+    var caption = Model.Value<string>("mediaCaption");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-gallery-item",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-gallery-item--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<figure class="@classes">
+    <a href="@mediaRef.Url()" data-syn-gallery-lightbox>
+        <img src="@mediaRef.Url()" alt="@alt" loading="lazy" />
+    </a>
+    @if (!string.IsNullOrWhiteSpace(caption))
+    {
+        <figcaption class="syn-gallery-item__caption">@caption</figcaption>
+    }
+</figure>

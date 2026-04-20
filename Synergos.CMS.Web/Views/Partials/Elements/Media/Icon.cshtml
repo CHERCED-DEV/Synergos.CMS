@@ -1,0 +1,20 @@
+@*
+    elementMediaIcon renderer (Ola 14). SSR-native. Decorative or
+    semantic icon. aria-hidden when no alt (decorative).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    if (mediaRef == null) { return; }
+    var alt = Model.Value<string>("mediaAlt");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var isDecorative = string.IsNullOrWhiteSpace(alt);
+    var classes = string.Join(" ", new[]
+    {
+        "syn-icon",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-icon--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<img class="@classes" src="@mediaRef.Url()" alt="@alt"@(isDecorative ? " aria-hidden=\"true\"" : "") loading="lazy" />

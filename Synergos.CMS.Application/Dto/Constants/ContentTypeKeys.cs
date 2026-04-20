@@ -401,4 +401,24 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid ElementActionLink =
         Guid.Parse("17c626f8-b24b-483f-b3e5-75581d44a7c7");
+
+    // ── Media elements (Ola 14) ────────────────────────────────────
+
+    public static readonly Guid ElementMediaAvatar =
+        Guid.Parse("5b4f49ec-4609-4c06-89b8-5d5803cd17bb");
+
+    public static readonly Guid ElementMediaIcon =
+        Guid.Parse("0084598b-a3cb-4aa3-a15d-a7bcb594e11d");
+
+    public static readonly Guid ElementMediaImage =
+        Guid.Parse("82071ed1-299f-4eb8-83c1-b2769505ea09");
+
+    public static readonly Guid ElementMediaVideo =
+        Guid.Parse("530f72c5-7ee3-4a7b-b71a-16ac8da7e674");
+
+    public static readonly Guid ElementMediaLogoItem =
+        Guid.Parse("c954a483-d9e4-4143-9a2f-26cb08ee071a");
+
+    public static readonly Guid ElementMediaGalleryItem =
+        Guid.Parse("7f3434ae-503a-4594-b993-29eefe84a305");
 }

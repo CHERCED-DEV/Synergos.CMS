@@ -1,0 +1,31 @@
+@*
+    elementMediaLogoItem renderer (Ola 14). SSR-native. Brand logo
+    optionally wrapped in external link.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    if (mediaRef == null) { return; }
+    var alt = Model.Value<string>("mediaAlt") ?? mediaRef.Name;
+    var linkUrl = Model.Value<string>("logoLinkUrl");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-logo",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-logo--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+@if (!string.IsNullOrWhiteSpace(linkUrl))
+{
+    <a class="@classes" href="@linkUrl" target="_blank" rel="noopener noreferrer">
+        <img src="@mediaRef.Url()" alt="@alt" loading="lazy" />
+    </a>
+}
+else
+{
+    <span class="@classes">
+        <img src="@mediaRef.Url()" alt="@alt" loading="lazy" />
+    </span>
+}
