@@ -1,0 +1,35 @@
+@*
+    elementMediaLogoCloud renderer (Ola 19). SSR container.
+    Grid responsive de logos delegando a LogoItem.cshtml.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var items = Model.Value<BlockListModel>("logoItems");
+    if (items == null || !items.Any()) { return; }
+    var title = Model.Value<string>("cloudTitle");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var layoutAlign = Model.Value<string>("layoutAlign");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-logo-cloud",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-logo-cloud--{variant}",
+        string.IsNullOrWhiteSpace(layoutAlign) ? null : $"syn-logo-cloud--align-{layoutAlign}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-logo-cloud__title">@title</h2>
+    }
+    <ul class="syn-logo-cloud__grid">
+        @foreach (var item in items)
+        {
+            <li class="syn-logo-cloud__cell">
+                @await Html.PartialAsync("Elements/Media/LogoItem", item.Content)
+            </li>
+        }
+    </ul>
+</section>

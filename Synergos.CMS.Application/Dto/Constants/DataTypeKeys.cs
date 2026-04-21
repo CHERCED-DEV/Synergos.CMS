@@ -82,4 +82,21 @@ public static class DataTypeKeys
     /// </remarks>
     public static readonly Guid BlockListCtaItems =
         Guid.Parse("972ccc3d-ec95-4dd1-88f1-c9d8b8c1fc66");
+
+    // ── Ola 19 BlockList DataTypes (5 container backings) ──────────
+
+    public static readonly Guid BlockListFaqItems =
+        Guid.Parse("ba6b1246-e950-4928-97fc-005940585960");
+
+    public static readonly Guid BlockListLogoItems =
+        Guid.Parse("825c0f90-c2f3-4004-9f2e-000bdf6dd4be");
+
+    public static readonly Guid BlockListTestimonialItems =
+        Guid.Parse("cc4c7d79-8c79-4dfa-a7cc-7793d570b166");
+
+    public static readonly Guid BlockListGalleryItems =
+        Guid.Parse("d1decddc-cda8-4d1a-bdbb-0cd9b80edeb6");
+
+    public static readonly Guid BlockListTimelineItems =
+        Guid.Parse("78fec9c6-ff38-48c6-9a42-2078415d674c");
 }

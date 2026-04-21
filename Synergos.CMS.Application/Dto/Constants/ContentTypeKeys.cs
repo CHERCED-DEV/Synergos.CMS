@@ -461,4 +461,21 @@ public static class ContentTypeKeys
     /// </remarks>
     public static readonly Guid ElementActionCtaGroup =
         Guid.Parse("5b95cd80-a64d-4867-8fc4-42358a4c5f68");
+
+    // ── Info + Media containers (Ola 19) ───────────────────────────
+
+    public static readonly Guid ElementInfoFaqList =
+        Guid.Parse("b5f9e196-0c48-4ce4-8ef5-a7b6551b3ebc");
+
+    public static readonly Guid ElementMediaLogoCloud =
+        Guid.Parse("29e37dfc-a27d-4034-9e29-61e613f8f55c");
+
+    public static readonly Guid ElementInfoTestimonialCarousel =
+        Guid.Parse("f1146138-039e-4f03-82aa-acdac63a6032");
+
+    public static readonly Guid ElementMediaGallery =
+        Guid.Parse("2fa2ee67-27d2-46ab-927e-8b2bd99067e5");
+
+    public static readonly Guid ElementInfoTimelineList =
+        Guid.Parse("e3765317-f0b9-4ff3-9699-f17ccbb190d3");
 }

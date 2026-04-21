@@ -1,0 +1,34 @@
+@*
+    elementMediaGallery renderer (Ola 19). SSR container.
+    Grid con columnas configurables + data-syn-gallery-lightbox attr
+    en cada child vía GalleryItem.cshtml.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var items = Model.Value<BlockListModel>("galleryItems");
+    if (items == null || !items.Any()) { return; }
+    var gridColumns = Model.Value<string>("gridColumns");
+    if (string.IsNullOrWhiteSpace(gridColumns)) { gridColumns = "3"; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var layoutAlign = Model.Value<string>("layoutAlign");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-gallery",
+        $"syn-gallery--cols-{gridColumns}",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-gallery--{variant}",
+        string.IsNullOrWhiteSpace(layoutAlign) ? null : $"syn-gallery--align-{layoutAlign}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    <ul class="syn-gallery__grid" role="list">
+        @foreach (var item in items)
+        {
+            <li class="syn-gallery__cell">
+                @await Html.PartialAsync("Elements/Media/GalleryItem", item.Content)
+            </li>
+        }
+    </ul>
+</section>
