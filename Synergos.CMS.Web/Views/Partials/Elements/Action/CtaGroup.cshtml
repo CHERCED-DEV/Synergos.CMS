@@ -1,0 +1,41 @@
+@*
+    elementActionCtaGroup renderer (Ola 17). SSR-native container.
+    Iterates the ctaItems BlockList and delegates each child to its
+    own renderer partial (Button.cshtml or Link.cshtml) — composer-
+    agnostic pattern per ADR 0015. layoutAlign + layoutDirection
+    from compDomLayout control flex alignment of the group.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var ctaItems = Model.Value<BlockListModel>("ctaItems");
+    if (ctaItems == null || !ctaItems.Any()) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var layoutAlign = Model.Value<string>("layoutAlign");
+    var layoutDirection = Model.Value<string>("layoutDirection");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-cta-group",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-cta-group--{variant}",
+        string.IsNullOrWhiteSpace(layoutDirection) ? null : $"syn-cta-group--dir-{layoutDirection}",
+        string.IsNullOrWhiteSpace(layoutAlign) ? null : $"syn-cta-group--align-{layoutAlign}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">
+    @foreach (var item in ctaItems)
+    {
+        var alias = item.Content.ContentType.Alias;
+        var partialPath = alias switch
+        {
+            "elementActionButton" => "Elements/Action/Button",
+            "elementActionLink"   => "Elements/Action/Link",
+            _ => null
+        };
+        if (partialPath != null)
+        {
+            @await Html.PartialAsync(partialPath, item.Content)
+        }
+    }
+</div>

@@ -444,4 +444,21 @@ public static class ContentTypeKeys
 
     public static readonly Guid ElementInfoTimelineItem =
         Guid.Parse("f845c403-0300-45e6-aa4f-1f1aa00cbdb4");
+
+    // ── Action containers (Ola 17) ─────────────────────────────────
+
+    /// <summary>
+    /// <c>elementActionCtaGroup</c> — Container element grouping 1-4
+    /// CTAs (elementActionButton or elementActionLink) via BlockList.
+    /// First container pattern in the product; sets the precedent for
+    /// future Info containers (FaqList, TimelineList) and Media
+    /// containers (LogoCloud, Gallery).
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/ContentTypes/elementactionctagroup.config</c>.
+    /// Backed by <see cref="DataTypeKeys.BlockListCtaItems"/>.
+    /// Ola 17.
+    /// </remarks>
+    public static readonly Guid ElementActionCtaGroup =
+        Guid.Parse("5b95cd80-a64d-4867-8fc4-42358a4c5f68");
 }

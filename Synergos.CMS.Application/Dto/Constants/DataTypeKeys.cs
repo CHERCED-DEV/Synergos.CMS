@@ -68,4 +68,18 @@ public static class DataTypeKeys
     /// </remarks>
     public static readonly Guid BlockGridEditorial =
         Guid.Parse("f975c194-5696-4d7c-9829-ff018fb6995a");
+
+    /// <summary>
+    /// <c>DT.BlockList.CtaItems</c> — BlockList Data Type allowing
+    /// 1-4 elementActionButton or elementActionLink items. First
+    /// container mechanism in the product; used by
+    /// <c>elementActionCtaGroup.ctaItems</c> property.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/DataTypes/DTBlockListCtaItems.config</c>.
+    /// Ola 17. Sets the pattern for future BlockList DataTypes
+    /// (DT.BlockList.FaqItems, DT.BlockList.LogoItems, etc.).
+    /// </remarks>
+    public static readonly Guid BlockListCtaItems =
+        Guid.Parse("972ccc3d-ec95-4dd1-88f1-c9d8b8c1fc66");
 }
