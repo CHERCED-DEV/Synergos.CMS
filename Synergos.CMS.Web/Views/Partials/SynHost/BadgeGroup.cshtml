@@ -1,0 +1,13 @@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["badgesJson"] = Model.Value<string>("badgesJson"),
+        ["layout"] = Model.Value<string>("layout"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("badge-group", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@Html.Raw(result.ScriptHtml)
+@Html.Raw(result.ElementHtml)

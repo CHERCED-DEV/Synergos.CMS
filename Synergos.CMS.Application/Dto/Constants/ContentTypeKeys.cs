@@ -877,4 +877,78 @@ public static class ContentTypeKeys
 
     public static readonly Guid ElementSynFab =
         Guid.Parse("faee0eae-8c1b-48a3-a5ed-e3096006c35c");
+
+    // ── SynHost batch E FINAL (Ola 30, ADR 0015) ───────────────────
+    //
+    // 23 blocks para cerrar elementSyn* al 100% (71/71). Forms/inputs +
+    // overlays + data display + embeds + utility.
+
+    public static readonly Guid ElementSynAutocomplete =
+        Guid.Parse("4ac9c915-c376-4f73-8f5a-294f3f0e7480");
+
+    public static readonly Guid ElementSynSelectMulti =
+        Guid.Parse("8779fad5-d9f1-49f9-8507-b4aec9196d94");
+
+    public static readonly Guid ElementSynOtpInput =
+        Guid.Parse("0d6fe720-073c-4f16-a520-b3665915e05c");
+
+    public static readonly Guid ElementSynFormStepper =
+        Guid.Parse("805dafc6-0b8b-4ff2-8f02-f43ace8ff8fd");
+
+    public static readonly Guid ElementSynDropzone =
+        Guid.Parse("1b40cbc3-1bde-4909-9792-cede523ca704");
+
+    public static readonly Guid ElementSynAvatarUpload =
+        Guid.Parse("6907ec32-4034-41e5-969c-5cce8ea26fd6");
+
+    public static readonly Guid ElementSynDrawer =
+        Guid.Parse("6ef80673-ded5-42cd-a3f5-ce3be414bab6");
+
+    public static readonly Guid ElementSynPopover =
+        Guid.Parse("6ccdf2df-a092-4d8f-9528-b30fb5cb4bd8");
+
+    public static readonly Guid ElementSynSkeleton =
+        Guid.Parse("f4b83407-454e-40a6-a84b-f1cc8880300d");
+
+    public static readonly Guid ElementSynSplitter =
+        Guid.Parse("5cbe20b2-0a94-487c-8bf5-300347be2f8b");
+
+    public static readonly Guid ElementSynStepper =
+        Guid.Parse("ac0739d0-83a3-4024-ada8-b45af8c2e1ca");
+
+    public static readonly Guid ElementSynDataGrid =
+        Guid.Parse("aa558080-4f20-4a7d-8bb7-cef8c52439b4");
+
+    public static readonly Guid ElementSynTreeView =
+        Guid.Parse("a9b5ca26-b4ac-4ca5-8828-348a5d87ed82");
+
+    public static readonly Guid ElementSynTimelineHorizontal =
+        Guid.Parse("f56b46e4-75db-4ac2-8a92-4bbfe002471f");
+
+    public static readonly Guid ElementSynCalendar =
+        Guid.Parse("0c92d91b-9ffd-428f-a89a-9e78056c50b2");
+
+    public static readonly Guid ElementSynCountdownDigital =
+        Guid.Parse("5145e257-5eb1-4a2f-a0b0-b585c80975d1");
+
+    public static readonly Guid ElementSynQuoteAnimated =
+        Guid.Parse("39359212-0766-4199-9543-9184be528dc9");
+
+    public static readonly Guid ElementSynBadgeGroup =
+        Guid.Parse("899e2c0c-93e0-4663-9893-be6b283e4ae5");
+
+    public static readonly Guid ElementSynLivestream =
+        Guid.Parse("64ae0d5a-2de8-41a6-9dc1-bf4652538648");
+
+    public static readonly Guid ElementSynColorSwatches =
+        Guid.Parse("7ab7b363-b665-4418-847b-10d6b719588b");
+
+    public static readonly Guid ElementSynToastCenter =
+        Guid.Parse("80e25e27-804a-47ac-a5a5-b9b360a4a6fe");
+
+    public static readonly Guid ElementSynRichTooltip =
+        Guid.Parse("4c9855b4-c33b-4f40-8453-e12a3e35653b");
+
+    public static readonly Guid ElementSynQrCode =
+        Guid.Parse("fc36505d-ddef-4161-aadb-8098623982b6");
 }
