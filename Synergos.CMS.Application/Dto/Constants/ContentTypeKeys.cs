@@ -830,4 +830,51 @@ public static class ContentTypeKeys
 
     public static readonly Guid ElementSynScrollTop =
         Guid.Parse("43d984b3-6078-4cec-829b-a63d077ca9f0");
+
+    // ── SynHost batch D (Ola 29, ADR 0015) ─────────────────────────
+
+    public static readonly Guid ElementSynColorPicker =
+        Guid.Parse("794c62f6-1ab1-4cba-8011-d62b0850a824");
+
+    public static readonly Guid ElementSynSignaturePad =
+        Guid.Parse("0986d2a6-6d2b-4efd-8fed-14df36c2e35c");
+
+    public static readonly Guid ElementSynPoll =
+        Guid.Parse("db4d313c-d451-4055-b1a5-44ebfbd646e8");
+
+    public static readonly Guid ElementSynTourGuide =
+        Guid.Parse("fd7df0b0-f0c0-4c03-ba38-84b2e51c6a2b");
+
+    public static readonly Guid ElementSynRangeSlider =
+        Guid.Parse("27e83784-0055-4d44-ab51-f0d3ed6a679b");
+
+    public static readonly Guid ElementSynNotificationCenter =
+        Guid.Parse("8ecc2da5-ca2f-43f3-a3da-8ef40b354954");
+
+    public static readonly Guid ElementSynCommentsWidget =
+        Guid.Parse("eecdf82e-1fe0-4e48-b334-cc9a5c51c9a6");
+
+    public static readonly Guid ElementSynSocialProof =
+        Guid.Parse("ea816762-376c-436c-8be6-4700cdfb9db9");
+
+    public static readonly Guid ElementSynTestimonialCarousel =
+        Guid.Parse("8fc6922d-7e96-4a0f-8535-eb55fe1b53ed");
+
+    public static readonly Guid ElementSynPagination =
+        Guid.Parse("45462c77-7026-4191-b1a7-6b820a2fc679");
+
+    public static readonly Guid ElementSynAccordion =
+        Guid.Parse("3d5d7863-eb51-43d4-a887-c1341a787ceb");
+
+    public static readonly Guid ElementSynTabs =
+        Guid.Parse("de7d47c3-518e-4a28-b20b-8077ff7bf9e8");
+
+    public static readonly Guid ElementSynOEmbed =
+        Guid.Parse("d834fd85-0e8b-4a1e-9a4c-fa1c914eec9a");
+
+    public static readonly Guid ElementSynAvatarGroup =
+        Guid.Parse("af9cb2a6-56e8-4818-b7fb-fe723e642d6d");
+
+    public static readonly Guid ElementSynFab =
+        Guid.Parse("faee0eae-8c1b-48a3-a5ed-e3096006c35c");
 }
