@@ -119,4 +119,14 @@ public static class DataTypeKeys
     /// </summary>
     public static readonly Guid BlockListFeatureItems =
         Guid.Parse("be345841-2853-49f6-8301-e6fc7a281ab7");
+
+    // ── Ola 23 BlockList DataType (Form container backing) ─────────
+
+    /// <summary>
+    /// <c>DT.BlockList.FormFields</c> — BlockList Data Type allowing
+    /// 1+ elementFormField items as form rows for
+    /// <c>elementFormContainer.fields</c>. Inline editing enabled.
+    /// </summary>
+    public static readonly Guid BlockListFormFields =
+        Guid.Parse("9ca3dab9-57cf-405e-93a4-5aa3f0cd5a51");
 }

@@ -621,4 +621,43 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid ElementCompMediaTextSplit =
         Guid.Parse("3a6f8ea9-7593-4ced-885d-4c01cb97eaea");
+
+    // ── Form Element Types (Ola 23, ADR 0018 dual path) ───────────
+    //
+    // Custom path: elementFormContainer + elementFormField build a
+    // native SSR form that POSTs to an external endpoint
+    // (Formspree / Netlify Forms / Synergos.API).
+    //
+    // Bridge path: elementFormEmbed renders an iframe hosting an
+    // external form (Typeform / Jotform / Umbraco.Forms if adopted).
+    //
+    // elementFormField is NOT exposed at Editorial BG top-level —
+    // only instantiable inside elementFormContainer.fields via
+    // DT.BlockList.FormFields.
+
+    /// <summary>
+    /// <c>elementFormContainer</c> — Custom SSR form. Props:
+    /// formTitle (Culture), formEndpoint (Nothing mandatory URL),
+    /// submitLabel (Culture), fields (BlockList 1+ FormField).
+    /// </summary>
+    public static readonly Guid ElementFormContainer =
+        Guid.Parse("15a5e7b3-b97c-491b-91de-fa7c934e4bc6");
+
+    /// <summary>
+    /// <c>elementFormField</c> — Single form field. Props:
+    /// fieldLabel (Culture), fieldName (Nothing slug-validated),
+    /// fieldType (Nothing enum text/email/tel/number/textarea/date/url),
+    /// fieldRequired, fieldPlaceholder (Culture), fieldHelpText
+    /// (Culture).
+    /// </summary>
+    public static readonly Guid ElementFormField =
+        Guid.Parse("a651afde-3d2c-4ad4-ad49-7e4b8912f9ad");
+
+    /// <summary>
+    /// <c>elementFormEmbed</c> — iframe bridge to an external form
+    /// renderer. Props: embedUrl (Nothing URL), embedTitle (Culture,
+    /// a11y mandatory), embedHeight (Nothing numeric default 600).
+    /// </summary>
+    public static readonly Guid ElementFormEmbed =
+        Guid.Parse("9009d554-cafa-4d15-b177-13bc02650aaa");
 }

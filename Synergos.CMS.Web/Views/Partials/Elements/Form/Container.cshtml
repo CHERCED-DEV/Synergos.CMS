@@ -1,0 +1,38 @@
+@*
+    elementFormContainer renderer (Ola 23). SSR-native custom form.
+    Itera fields BlockList (elementFormField) + emite <form> POST
+    hacia formEndpoint externo. ADR 0018 Forms custom path.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var endpoint = Model.Value<string>("formEndpoint");
+    var fields = Model.Value<BlockListModel>("fields");
+    if (string.IsNullOrWhiteSpace(endpoint) || fields == null || !fields.Any()) { return; }
+    var title = Model.Value<string>("formTitle");
+    var submitLabel = Model.Value<string>("submitLabel");
+    if (string.IsNullOrWhiteSpace(submitLabel)) { submitLabel = "Enviar"; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-form",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-form--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-form__title">@title</h2>
+    }
+    <form class="syn-form__form" action="@endpoint" method="post" novalidate>
+        <div class="syn-form__fields">
+            @foreach (var field in fields)
+            {
+                @await Html.PartialAsync("Elements/Form/Field", field.Content)
+            }
+        </div>
+        <button type="submit" class="syn-form__submit">@submitLabel</button>
+    </form>
+</section>

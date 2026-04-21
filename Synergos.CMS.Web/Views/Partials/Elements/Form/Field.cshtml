@@ -1,0 +1,50 @@
+@*
+    elementFormField renderer (Ola 23). SSR-native atomic.
+    Emite <label> + <input|textarea> + <small> helpText. Se invoca
+    únicamente desde FormContainer.cshtml (no tiene wrapper BG).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var label = Model.Value<string>("fieldLabel");
+    var name = Model.Value<string>("fieldName");
+    if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(name)) { return; }
+    var type = Model.Value<string>("fieldType");
+    if (string.IsNullOrWhiteSpace(type)) { type = "text"; }
+    var required = Model.Value<bool>("fieldRequired");
+    var placeholder = Model.Value<string>("fieldPlaceholder");
+    var helpText = Model.Value<string>("fieldHelpText");
+    var inputId = $"syn-field-{Model.Key}-{name}";
+    var helpId = string.IsNullOrWhiteSpace(helpText) ? null : $"{inputId}-help";
+    var isTextarea = type == "textarea";
+}
+<div class="syn-form-field syn-form-field--@type">
+    <label class="syn-form-field__label" for="@inputId">
+        @label@if (required) { <span class="syn-form-field__required" aria-hidden="true">*</span> }
+    </label>
+    @if (isTextarea)
+    {
+        <textarea id="@inputId"
+                  class="syn-form-field__input"
+                  name="@name"
+                  rows="4"
+                  placeholder="@(placeholder ?? "")"
+                  @(required ? "required" : "")
+                  @(required ? "aria-required=\"true\"" : "")
+                  @(helpId != null ? $"aria-describedby=\"{helpId}\"" : "")></textarea>
+    }
+    else
+    {
+        <input id="@inputId"
+               class="syn-form-field__input"
+               type="@type"
+               name="@name"
+               placeholder="@(placeholder ?? "")"
+               @(required ? "required" : "")
+               @(required ? "aria-required=\"true\"" : "")
+               @(helpId != null ? $"aria-describedby=\"{helpId}\"" : "") />
+    }
+    @if (!string.IsNullOrWhiteSpace(helpText))
+    {
+        <small id="@helpId" class="syn-form-field__help">@helpText</small>
+    }
+</div>
