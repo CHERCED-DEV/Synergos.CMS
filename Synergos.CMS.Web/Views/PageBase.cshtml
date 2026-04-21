@@ -1,48 +1,35 @@
 @*
-    Template del Document Type `pageBase` (Ola 8 + bodyBlocks Ola 16).
-    Por ADR 0014, Layout = null en esta ola; en ola posterior se monta
-    un _Layout compartido con header/footer/nav.
+    Template del Document Type `pageBase` (Ola 8 + bodyBlocks Ola 16 +
+    shared layout Ola 18). Ahora hereda chrome de _Layout.cshtml
+    (header con brand/nav + main + footer). Solo emite el contenido
+    del <main>.
 
     Modelo:
-    - SeoTitle + BodyHtml proyectados por PageBaseResponse (DTO
-      framework-agnóstico, testable sin Umbraco).
-    - bodyBlocks (BlockGrid) se lee directo del IPublishedContent en
-      UmbracoContext.PublishedRequest — es un tipo complejo Umbraco-
-      native y romper DIP en el DTO no aporta valor. El renderer usa
-      @Html.GetBlockGridHtmlAsync que delega a los Razor partials por
-      convención en Views/Partials/blockgrid/Components/*.cshtml.
+    - SeoTitle + BodyHtml de PageBaseResponse DTO.
+    - bodyBlocks (BlockGrid Editorial) leído directo de
+      UmbracoContext.PublishedRequest (tipo complejo Umbraco-native;
+      no fluye por el DTO para no romper DIP).
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBaseResponse>
 @using Umbraco.Cms.Core.Models.Blocks
 @{
-    Layout = null;
-    var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+    Layout = "_Layout";
     var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
     var blocks = currentContent?.Value<BlockGridModel>("bodyBlocks");
 }
-<!DOCTYPE html>
-<html lang="@culture">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>@Model.SeoTitle</title>
-</head>
-<body>
-    <article>
-        @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
-        {
-            <h1>@Model.SeoTitle</h1>
-        }
-        @if (!string.IsNullOrWhiteSpace(Model.BodyHtml))
-        {
-            <div class="syn-page-base__intro">@Html.Raw(Model.BodyHtml)</div>
-        }
-        @if (blocks != null && blocks.Any())
-        {
-            <div class="syn-page-base__blocks">
-                @await Html.GetBlockGridHtmlAsync(blocks)
-            </div>
-        }
-    </article>
-</body>
-</html>
+<article class="syn-page-base">
+    @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
+    {
+        <h1 class="syn-page-base__title">@Model.SeoTitle</h1>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.BodyHtml))
+    {
+        <div class="syn-page-base__intro">@Html.Raw(Model.BodyHtml)</div>
+    }
+    @if (blocks != null && blocks.Any())
+    {
+        <div class="syn-page-base__blocks">
+            @await Html.GetBlockGridHtmlAsync(blocks)
+        </div>
+    }
+</article>
