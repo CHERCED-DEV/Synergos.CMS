@@ -99,4 +99,14 @@ public static class DataTypeKeys
 
     public static readonly Guid BlockListTimelineItems =
         Guid.Parse("78fec9c6-ff38-48c6-9a42-2078415d674c");
+
+    // ── Ola 21 BlockList DataType (Corp container backing) ─────────
+
+    /// <summary>
+    /// <c>DT.BlockList.BannerSlides</c> — BlockList Data Type
+    /// allowing 1+ elementMediaImage items as slides for
+    /// <c>elementCorpBannerSlider.slides</c>.
+    /// </summary>
+    public static readonly Guid BlockListBannerSlides =
+        Guid.Parse("0b74e032-48cc-4225-af6f-38358f204b98");
 }

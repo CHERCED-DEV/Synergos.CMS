@@ -1,0 +1,40 @@
+@*
+    elementCorpMissionBlock renderer (Ola 21). SSR-native composed.
+    Declaración de misión/visión/valores. Sin props propias — reusa
+    compContentHeading (title + subtitle) + compContentText (body richtext)
+    + compContentMedia (icono/imagen decorativa opcional).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("headingTitle");
+    if (string.IsNullOrWhiteSpace(title)) { return; }
+    var subtitle = Model.Value<string>("headingSubtitle");
+    var body = Model.Value<string>("textBody");
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    var mediaAlt = Model.Value<string>("mediaAlt");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-mission",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-mission--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @if (mediaRef != null)
+    {
+        <img class="syn-mission__media" src="@mediaRef.Url()" alt="@(mediaAlt ?? "")" aria-hidden="@(string.IsNullOrWhiteSpace(mediaAlt) ? "true" : "false")" loading="lazy" />
+    }
+    <header class="syn-mission__header">
+        <h2 class="syn-mission__title">@title</h2>
+        @if (!string.IsNullOrWhiteSpace(subtitle))
+        {
+            <p class="syn-mission__subtitle">@subtitle</p>
+        }
+    </header>
+    @if (!string.IsNullOrWhiteSpace(body))
+    {
+        <div class="syn-mission__body">@Html.Raw(body)</div>
+    }
+</section>

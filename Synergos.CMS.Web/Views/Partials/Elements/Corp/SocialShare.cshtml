@@ -1,0 +1,57 @@
+@*
+    elementCorpSocialShare renderer (Ola 21). SSR-native atomic.
+    Botonera de compartir en RRSS. Usa URL + title de la página actual
+    (via UmbracoContext). enabledPlatforms filtra qué plataformas mostrar.
+    Keys soportados: facebook, twitter, linkedin, whatsapp, email.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
+@{
+    var enabledRaw = Model.Value<string>("enabledPlatforms");
+    var enabled = (string.IsNullOrWhiteSpace(enabledRaw) ? "facebook,twitter,linkedin,email" : enabledRaw)
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(s => s.ToLowerInvariant())
+        .ToArray();
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-social-share",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-social-share--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    string pageUrl = "";
+    string pageTitle = "";
+    if (UmbracoContextAccessor.TryGetUmbracoContext(out var ctx) && ctx.PublishedRequest?.PublishedContent != null)
+    {
+        var current = ctx.PublishedRequest.PublishedContent;
+        pageUrl = current.Url(mode: UrlMode.Absolute);
+        pageTitle = current.Name ?? "";
+    }
+    var encUrl = Uri.EscapeDataString(pageUrl);
+    var encTitle = Uri.EscapeDataString(pageTitle);
+
+    string BuildShareUrl(string platform) => platform switch
+    {
+        "facebook" => $"https://www.facebook.com/sharer/sharer.php?u={encUrl}",
+        "twitter"  => $"https://twitter.com/intent/tweet?url={encUrl}&text={encTitle}",
+        "linkedin" => $"https://www.linkedin.com/sharing/share-offsite/?url={encUrl}",
+        "whatsapp" => $"https://wa.me/?text={encTitle}%20{encUrl}",
+        "email"    => $"mailto:?subject={encTitle}&body={encUrl}",
+        _ => null
+    };
+}
+<nav class="@classes" aria-label="Compartir en redes sociales">
+    @foreach (var platform in enabled)
+    {
+        var href = BuildShareUrl(platform);
+        if (href == null) { continue; }
+        var isMail = platform == "email";
+        <a class="syn-social-share__link syn-social-share__link--@platform"
+           href="@href"
+           aria-label="Compartir en @platform"
+           @(isMail ? "" : "target=\"_blank\"")
+           @(isMail ? "" : "rel=\"noopener noreferrer\"")>@platform</a>
+    }
+</nav>

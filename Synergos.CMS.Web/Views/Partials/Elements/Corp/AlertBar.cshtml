@@ -1,0 +1,39 @@
+@*
+    elementCorpAlertBar renderer (Ola 21). SSR-native.
+    Banner de alerta con mensaje + CTA opcional + botón cerrar si dismissible.
+    Soporta compDomVisibility (hideOnMobile/Tablet/Desktop) via clases utilitarias.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var message = Model.Value<string>("alertMessage");
+    if (string.IsNullOrWhiteSpace(message)) { return; }
+    var actionLabel = Model.Value<string>("alertActionLabel");
+    var actionUrl = Model.Value<string>("alertActionUrl");
+    var dismissible = Model.Value<bool>("dismissible");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var hideMobile = Model.Value<bool>("hideOnMobile");
+    var hideTablet = Model.Value<bool>("hideOnTablet");
+    var hideDesktop = Model.Value<bool>("hideOnDesktop");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-alert-bar",
+        string.IsNullOrWhiteSpace(variant) ? "syn-alert-bar--info" : $"syn-alert-bar--{variant}",
+        hideMobile ? "syn-hidden-mobile" : null,
+        hideTablet ? "syn-hidden-tablet" : null,
+        hideDesktop ? "syn-hidden-desktop" : null,
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var hasCta = !string.IsNullOrWhiteSpace(actionLabel) && !string.IsNullOrWhiteSpace(actionUrl);
+}
+<aside class="@classes" role="status" aria-live="polite">
+    <p class="syn-alert-bar__message">@message</p>
+    @if (hasCta)
+    {
+        <a class="syn-alert-bar__action" href="@actionUrl">@actionLabel</a>
+    }
+    @if (dismissible)
+    {
+        <button type="button" class="syn-alert-bar__close" aria-label="Cerrar alerta">&times;</button>
+    }
+</aside>

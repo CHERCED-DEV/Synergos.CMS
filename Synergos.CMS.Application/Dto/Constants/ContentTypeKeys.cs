@@ -530,4 +530,56 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid ElementStructSpacer =
         Guid.Parse("ea43b0d7-babc-42c3-984a-cf7ba60bc456");
+
+    // ── Corp Element Types (Ola 21) ────────────────────────────────
+
+    /// <summary>
+    /// <c>elementCorpAlertBar</c> — Site-wide announcement banner
+    /// (alertMessage + optional CTA + optional dismiss button).
+    /// Composes compDomClass + compDomVariant (info/warning/success/
+    /// error) + compDomVisibility. Variations=Culture.
+    /// </summary>
+    public static readonly Guid ElementCorpAlertBar =
+        Guid.Parse("989dcef3-b045-4ad7-8ac8-a3b848511c6e");
+
+    /// <summary>
+    /// <c>elementCorpContactInfo</c> — Corporate contact block
+    /// (email + phone + address). Atomic; each field optional.
+    /// </summary>
+    public static readonly Guid ElementCorpContactInfo =
+        Guid.Parse("2fe68566-cd4e-495a-9a31-abb7d0fb77fc");
+
+    /// <summary>
+    /// <c>elementCorpMissionBlock</c> — Mission/vision/values
+    /// declaration. Composed: compContentHeading + compContentText +
+    /// compContentMedia (optional). No own props.
+    /// </summary>
+    public static readonly Guid ElementCorpMissionBlock =
+        Guid.Parse("2717b9e7-debe-4354-8dfd-780f88f1842c");
+
+    /// <summary>
+    /// <c>elementCorpSocialShare</c> — Social share button group.
+    /// Uses current page URL + title (UmbracoContext). Own prop
+    /// enabledPlatforms (CSV). Variations=Nothing.
+    /// </summary>
+    public static readonly Guid ElementCorpSocialShare =
+        Guid.Parse("d2914c34-2485-4a49-b57d-14555a644653");
+
+    /// <summary>
+    /// <c>elementCorpNewsletterForm</c> — Newsletter subscription
+    /// form POSTing to an external endpoint (Mailchimp, SendGrid,
+    /// Synergos.API). Own props: formTitle, formSubtitle,
+    /// placeholderText, submitLabel (Culture) + formEndpoint (Nothing).
+    /// </summary>
+    public static readonly Guid ElementCorpNewsletterForm =
+        Guid.Parse("bf3e7cd0-3ba8-4188-83dc-c07565593af6");
+
+    /// <summary>
+    /// <c>elementCorpBannerSlider</c> — Carousel of banner slides.
+    /// Slides BlockList of elementMediaImage (mandatory 1+).
+    /// Autoplay flag (Nothing). JS hydration; SSR emits all slides
+    /// inline for no-JS fallback.
+    /// </summary>
+    public static readonly Guid ElementCorpBannerSlider =
+        Guid.Parse("2cb0b5b9-91e6-4567-b4dc-0d95e27b4c40");
 }
