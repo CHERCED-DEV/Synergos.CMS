@@ -50,4 +50,22 @@ public static class DataTypeKeys
     /// </remarks>
     public static readonly Guid BlockGridBasic =
         Guid.Parse("40e118ec-2e66-4939-9bbd-106b8d50c5a7");
+
+    /// <summary>
+    /// <c>DT.BlockGrid.Editorial</c> — Block Grid Data Type exposing
+    /// all 21 SSR Element Types (elementText* × 6 + elementAction* × 2
+    /// + elementMedia* × 6 + elementInfo* × 7) organised in 4 groups:
+    /// Text, Action, Media, Info.
+    /// </summary>
+    /// <remarks>
+    /// Source: <c>uSync/v9/DataTypes/DTBlockGridEditorial.config</c>.
+    /// Used as the <c>bodyBlocks</c> field on <c>pageBase</c> (Ola 16).
+    /// Companion of:
+    /// <list type="bullet">
+    ///   <item><c>DT.BlockGrid.Basic</c> (Ola 13, text+action subset)</item>
+    ///   <item><c>DT.BlockGrid.SynPilot</c> (Ola 8.5, CDN-hosted pilots)</item>
+    /// </list>
+    /// </remarks>
+    public static readonly Guid BlockGridEditorial =
+        Guid.Parse("f975c194-5696-4d7c-9829-ff018fb6995a");
 }

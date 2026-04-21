@@ -1,13 +1,24 @@
-﻿@*
-    Template del Document Type `pageBase` (Ola 8). Página editorial
-    estándar bajo siteRoot. Por ADR 0014, Layout = null en esta ola;
-    en ola posterior se monta un _Layout compartido con header/footer/
-    nav. `body` sanitizado por TinyMCE pipeline (SanitizeTinyMce=true).
+@*
+    Template del Document Type `pageBase` (Ola 8 + bodyBlocks Ola 16).
+    Por ADR 0014, Layout = null en esta ola; en ola posterior se monta
+    un _Layout compartido con header/footer/nav.
+
+    Modelo:
+    - SeoTitle + BodyHtml proyectados por PageBaseResponse (DTO
+      framework-agnóstico, testable sin Umbraco).
+    - bodyBlocks (BlockGrid) se lee directo del IPublishedContent en
+      UmbracoContext.PublishedRequest — es un tipo complejo Umbraco-
+      native y romper DIP en el DTO no aporta valor. El renderer usa
+      @Html.GetBlockGridHtmlAsync que delega a los Razor partials por
+      convención en Views/Partials/blockgrid/Components/*.cshtml.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBaseResponse>
+@using Umbraco.Cms.Core.Models.Blocks
 @{
     Layout = null;
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var blocks = currentContent?.Value<BlockGridModel>("bodyBlocks");
 }
 <!DOCTYPE html>
 <html lang="@culture">
@@ -22,7 +33,16 @@
         {
             <h1>@Model.SeoTitle</h1>
         }
-        @Html.Raw(Model.BodyHtml)
+        @if (!string.IsNullOrWhiteSpace(Model.BodyHtml))
+        {
+            <div class="syn-page-base__intro">@Html.Raw(Model.BodyHtml)</div>
+        }
+        @if (blocks != null && blocks.Any())
+        {
+            <div class="syn-page-base__blocks">
+                @await Html.GetBlockGridHtmlAsync(blocks)
+            </div>
+        }
     </article>
 </body>
 </html>
