@@ -951,4 +951,48 @@ public static class ContentTypeKeys
 
     public static readonly Guid ElementSynQrCode =
         Guid.Parse("fc36505d-ddef-4161-aadb-8098623982b6");
+
+    // ── Platform/Settings (Ola 31, ADR 0020) ───────────────────────
+    //
+    // Settings tree separado del content tree de siteRoot. Multi-brand
+    // soportado vía compBranding.brandKey; IBrandingProvider resuelve
+    // settings por brand request.
+
+    /// <summary>
+    /// <c>compBranding</c> — Composition for multi-brand identification.
+    /// Props: brandKey (Nothing slug mandatory), brandDisplayName
+    /// (Culture mandatory). Composed by all settings DocTypes.
+    /// </summary>
+    public static readonly Guid CompBranding =
+        Guid.Parse("5e3ba572-dcf1-4752-b256-d11a79426f6d");
+
+    /// <summary>
+    /// <c>settingsRoot</c> — Root container of the Settings tree.
+    /// AllowAtRoot=true. Structure allows themeSettings + siteConfigSettings
+    /// + featureFlagsSettings as children.
+    /// </summary>
+    public static readonly Guid SettingsRoot =
+        Guid.Parse("5af43879-6f53-4a72-b71e-9d77093b9921");
+
+    /// <summary>
+    /// <c>themeSettings</c> — Branding theme (colors, fonts, logos,
+    /// favicon) per brand. Composes compBranding.
+    /// </summary>
+    public static readonly Guid ThemeSettings =
+        Guid.Parse("04fa0739-c87d-4737-96af-44d37d45ffd3");
+
+    /// <summary>
+    /// <c>siteConfigSettings</c> — Site-wide config per brand: analytics,
+    /// GTM, SEO defaults, policy URLs. Composes compBranding.
+    /// </summary>
+    public static readonly Guid SiteConfigSettings =
+        Guid.Parse("ecbd95d0-4e00-451e-90ec-ebadc5fb0773");
+
+    /// <summary>
+    /// <c>featureFlagsSettings</c> — Feature flag overrides per brand
+    /// (flagsJson). Consumed by IFeatureGate priority over appsettings.
+    /// Composes compBranding.
+    /// </summary>
+    public static readonly Guid FeatureFlagsSettings =
+        Guid.Parse("729b8b9a-3667-4fcd-967a-a8535cc017a9");
 }
