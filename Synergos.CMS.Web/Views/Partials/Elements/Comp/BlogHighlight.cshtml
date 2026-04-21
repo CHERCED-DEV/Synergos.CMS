@@ -1,0 +1,28 @@
+@*
+    elementCompBlogHighlight renderer (Ola 32). SSR skeleton.
+    Query real (N posts más recientes ordenados por publishDate) se
+    cablea en Blog runtime ola posterior.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("highlightTitle");
+    var countRaw = Model.Value<string>("highlightCount");
+    var count = int.TryParse(countRaw, out var c) && c > 0 ? c : 3;
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-blog-highlight",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-blog-highlight--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes" data-count="@count">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-blog-highlight__title">@title</h2>
+    }
+    <div class="syn-blog-highlight__items" data-pending="post-query-wiring">
+        <!-- Blog runtime renderer cablea los N posts destacados aquí. -->
+    </div>
+</section>

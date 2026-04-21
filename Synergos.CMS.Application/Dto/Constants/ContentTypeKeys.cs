@@ -995,4 +995,21 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid FeatureFlagsSettings =
         Guid.Parse("729b8b9a-3667-4fcd-967a-a8535cc017a9");
+
+    // ── Blog skeleton (Ola 32) ─────────────────────────────────────
+
+    public static readonly Guid CompTagging =
+        Guid.Parse("d438906f-3698-4f7a-8371-3a9a856b845b");
+
+    public static readonly Guid PostPage =
+        Guid.Parse("ce854792-be23-4796-8851-c2a281fe08c8");
+
+    public static readonly Guid PostCategoryPage =
+        Guid.Parse("833d51b0-1029-473c-93b2-b1f455fff76d");
+
+    public static readonly Guid ElementCompArticleList =
+        Guid.Parse("a58bb4ad-d222-4e90-95b1-48408d516bf4");
+
+    public static readonly Guid ElementCompBlogHighlight =
+        Guid.Parse("84c34c2c-3faa-41a7-a409-dabf5d09c8db");
 }

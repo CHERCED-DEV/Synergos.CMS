@@ -1,0 +1,36 @@
+@*
+    elementCompArticleList renderer (Ola 32). SSR.
+    Skeleton: emite <section> con título + data attrs de filtros.
+    El query real a postPage descendants (filtrado por categoryFilter +
+    tagsFilter, ordenado por publishDate desc, limitado a maxItems) se
+    cablea en ola posterior (Blog runtime). Por ahora el CDN o un
+    custom renderer iterará el DOM data-* para hidratar la lista.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("listTitle");
+    var maxItemsRaw = Model.Value<string>("maxItems");
+    var maxItems = int.TryParse(maxItemsRaw, out var m) && m > 0 ? m : 6;
+    var categoryFilter = Model.Value<string>("categoryFilter");
+    var tagsFilter = Model.Value<string>("tagsFilter");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-article-list",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-article-list--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes"
+         data-max-items="@maxItems"
+         data-category-filter="@(categoryFilter ?? "")"
+         data-tags-filter="@(tagsFilter ?? "")">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-article-list__title">@title</h2>
+    }
+    <div class="syn-article-list__items" data-pending="post-query-wiring">
+        <!-- Blog runtime renderer cablea la lista real aquí (Ola 35+). -->
+    </div>
+</section>
