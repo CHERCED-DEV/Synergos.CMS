@@ -1,0 +1,39 @@
+@*
+    elementCompFeatureGrid renderer (Ola 22). SSR-native container composite.
+    Itera features BlockList (elementInfoFeature) + heading opcional.
+    Delega cada feature al partial Feature.cshtml existente.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var features = Model.Value<BlockListModel>("features");
+    if (features == null || !features.Any()) { return; }
+    var title = Model.Value<string>("headingTitle");
+    var subtitle = Model.Value<string>("headingSubtitle");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-feature-grid",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-feature-grid--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <header class="syn-feature-grid__header">
+            <h2 class="syn-feature-grid__title">@title</h2>
+            @if (!string.IsNullOrWhiteSpace(subtitle))
+            {
+                <p class="syn-feature-grid__subtitle">@subtitle</p>
+            }
+        </header>
+    }
+    <div class="syn-feature-grid__items">
+        @foreach (var item in features)
+        {
+            @await Html.PartialAsync("Elements/Info/Feature", item.Content)
+        }
+    </div>
+</section>

@@ -582,4 +582,43 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid ElementCorpBannerSlider =
         Guid.Parse("2cb0b5b9-91e6-4567-b4dc-0d95e27b4c40");
+
+    // ── Comp Element Types (Ola 22) ────────────────────────────────
+
+    /// <summary>
+    /// <c>elementCompCard</c> — Atomic composite card (heading + text
+    /// + media + cta, all from compositions). No own props.
+    /// </summary>
+    public static readonly Guid ElementCompCard =
+        Guid.Parse("c646696c-8819-4630-bc7a-121f0839bb16");
+
+    /// <summary>
+    /// <c>elementCompCtaBanner</c> — Compact heading + CTA banner.
+    /// No own props; uses compContentHeading + compContentCta.
+    /// </summary>
+    public static readonly Guid ElementCompCtaBanner =
+        Guid.Parse("5c21b68f-a4d6-4ef4-aba0-771517acb556");
+
+    /// <summary>
+    /// <c>elementCompFeatureGrid</c> — Container iterating
+    /// elementInfoFeature via BlockList (mandatory 1+). Backing
+    /// <see cref="DataTypeKeys.BlockListFeatureItems"/>.
+    /// </summary>
+    public static readonly Guid ElementCompFeatureGrid =
+        Guid.Parse("178778fd-9193-4a43-a48d-5518c4a3f720");
+
+    /// <summary>
+    /// <c>elementCompHero</c> — Full-width landing hero. Composes
+    /// content + dom compositions. Own prop ctaItems BlockList
+    /// (reuses DT.BlockList.CtaItems: Button | Link).
+    /// </summary>
+    public static readonly Guid ElementCompHero =
+        Guid.Parse("65a8b66a-be4f-4722-a5b2-42fc57a73ebb");
+
+    /// <summary>
+    /// <c>elementCompMediaTextSplit</c> — 50/50 media+text layout.
+    /// Own prop mediaOnRight (TrueFalse Nothing) toggles column order.
+    /// </summary>
+    public static readonly Guid ElementCompMediaTextSplit =
+        Guid.Parse("3a6f8ea9-7593-4ced-885d-4c01cb97eaea");
 }

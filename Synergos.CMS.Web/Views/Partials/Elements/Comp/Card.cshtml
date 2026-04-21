@@ -1,0 +1,51 @@
+@*
+    elementCompCard renderer (Ola 22). SSR-native composite atómico.
+    Tarjeta stand-alone con heading + media + body + cta. Props todas
+    de composiciones (compContent* + compDom*).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("headingTitle");
+    if (string.IsNullOrWhiteSpace(title)) { return; }
+    var subtitle = Model.Value<string>("headingSubtitle");
+    var body = Model.Value<string>("textBody");
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    var mediaAlt = Model.Value<string>("mediaAlt") ?? "";
+    var ctaLabel = Model.Value<string>("ctaLabel");
+    var ctaUrl = Model.Value<string>("ctaUrl");
+    var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-card",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-card--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var hasCta = !string.IsNullOrWhiteSpace(ctaLabel) && !string.IsNullOrWhiteSpace(ctaUrl);
+}
+<article class="@classes">
+    @if (mediaRef != null)
+    {
+        <figure class="syn-card__media">
+            <img src="@mediaRef.Url()" alt="@mediaAlt" loading="lazy" />
+        </figure>
+    }
+    <header class="syn-card__header">
+        <h3 class="syn-card__title">@title</h3>
+        @if (!string.IsNullOrWhiteSpace(subtitle))
+        {
+            <p class="syn-card__subtitle">@subtitle</p>
+        }
+    </header>
+    @if (!string.IsNullOrWhiteSpace(body))
+    {
+        <div class="syn-card__body">@Html.Raw(body)</div>
+    }
+    @if (hasCta)
+    {
+        <footer class="syn-card__footer">
+            <a class="syn-card__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+        </footer>
+    }
+</article>

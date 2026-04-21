@@ -109,4 +109,14 @@ public static class DataTypeKeys
     /// </summary>
     public static readonly Guid BlockListBannerSlides =
         Guid.Parse("0b74e032-48cc-4225-af6f-38358f204b98");
+
+    // ── Ola 22 BlockList DataType (Comp container backing) ─────────
+
+    /// <summary>
+    /// <c>DT.BlockList.FeatureItems</c> — BlockList Data Type
+    /// allowing 1+ elementInfoFeature items for
+    /// <c>elementCompFeatureGrid.features</c>.
+    /// </summary>
+    public static readonly Guid BlockListFeatureItems =
+        Guid.Parse("be345841-2853-49f6-8301-e6fc7a281ab7");
 }

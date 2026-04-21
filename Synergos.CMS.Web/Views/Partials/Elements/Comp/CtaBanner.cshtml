@@ -1,0 +1,31 @@
+@*
+    elementCompCtaBanner renderer (Ola 22). SSR-native composite compacto.
+    Heading + CTA prominente. Sin props propias.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("headingTitle");
+    var ctaLabel = Model.Value<string>("ctaLabel");
+    var ctaUrl = Model.Value<string>("ctaUrl");
+    if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(ctaLabel) || string.IsNullOrWhiteSpace(ctaUrl)) { return; }
+    var subtitle = Model.Value<string>("headingSubtitle");
+    var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-cta-banner",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-cta-banner--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<aside class="@classes">
+    <div class="syn-cta-banner__content">
+        <h2 class="syn-cta-banner__title">@title</h2>
+        @if (!string.IsNullOrWhiteSpace(subtitle))
+        {
+            <p class="syn-cta-banner__subtitle">@subtitle</p>
+        }
+    </div>
+    <a class="syn-cta-banner__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+</aside>
