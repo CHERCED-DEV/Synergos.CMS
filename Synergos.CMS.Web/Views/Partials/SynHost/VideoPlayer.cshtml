@@ -1,0 +1,22 @@
+@*
+    SynHost renderer — <synergos-video-player>. Custom video with chapters + analytics.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["videoUrl"] = Model.Value<string>("videoUrl"),
+        ["posterUrl"] = Model.Value<string>("posterUrl"),
+        ["chaptersJson"] = Model.Value<string>("chaptersJson"),
+        ["enableAnalytics"] = Model.Value<bool>("enableAnalytics"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "video-player",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@Html.Raw(result.ScriptHtml)
+@Html.Raw(result.ElementHtml)

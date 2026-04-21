@@ -759,4 +759,41 @@ public static class ContentTypeKeys
 
     public static readonly Guid ElementSynSearchBox =
         Guid.Parse("d2c5c575-33a4-4fbf-8fe6-65f9d41e50ef");
+
+    // ── SynHost batch B (Ola 27, ADR 0015) ─────────────────────────
+    //
+    // 10 additional elementSyn* composite/interactive media blocks.
+    // Only added to DT.BlockGrid.Editorial under "Syn (CDN)" group —
+    // SynPilot DataType preserved as pilot-scope only (3 pilot + 10
+    // batch A).
+
+    public static readonly Guid ElementSynHeroBanner =
+        Guid.Parse("637eccc8-2c40-4b65-b2f6-8b7694e10c0d");
+
+    public static readonly Guid ElementSynCarousel =
+        Guid.Parse("84f1d806-a14a-4e76-aa3f-1aa6112b5ea9");
+
+    public static readonly Guid ElementSynVideoPlayer =
+        Guid.Parse("58039b72-11a2-461c-be0b-cca664c1421e");
+
+    public static readonly Guid ElementSynAudioPlayer =
+        Guid.Parse("196adec6-504a-4d26-836a-0899e06c9664");
+
+    public static readonly Guid ElementSynLightboxGallery =
+        Guid.Parse("bc1dedcf-a91c-4db6-a65c-fa6bf48dec53");
+
+    public static readonly Guid ElementSynTimeline =
+        Guid.Parse("66976d3e-0d73-4634-8f69-4744efd30724");
+
+    public static readonly Guid ElementSynBreadcrumb =
+        Guid.Parse("ae8c4bff-30d0-448b-8e5d-741f22983760");
+
+    public static readonly Guid ElementSynCookieConsent =
+        Guid.Parse("23efc1d2-9f83-4ba4-a61e-e545b0852110");
+
+    public static readonly Guid ElementSynNotificationToast =
+        Guid.Parse("81d1f39e-1fc1-4edd-83aa-32191e64b125");
+
+    public static readonly Guid ElementSynModalTrigger =
+        Guid.Parse("102c71af-4d8a-4bb0-980c-b9f4cb0df404");
 }
