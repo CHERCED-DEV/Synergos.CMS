@@ -660,4 +660,63 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid ElementFormEmbed =
         Guid.Parse("9009d554-cafa-4d15-b177-13bc02650aaa");
+
+    // ── Nav Element Types (Ola 24, ADR 0019) ───────────────────────
+    //
+    // Navigation is modeled as a flat <nav><ul> group containing
+    // NavItem links. Deep menus should be composed of sibling
+    // elementNavGroup blocks (one per section) rather than recursive
+    // nesting — keeps SSR + a11y simple. See ADR 0019 Nav §3.
+    //
+    // elementNavItem is NOT exposed at Editorial BG top-level — only
+    // instantiable inside elementNavGroup.navItems via
+    // DT.BlockList.NavItems.
+
+    /// <summary>
+    /// <c>elementNavGroup</c> — nav section (&lt;nav&gt;). Props:
+    /// navHeading (Culture optional), navItems (BlockList 1+ NavItem).
+    /// </summary>
+    public static readonly Guid ElementNavGroup =
+        Guid.Parse("fe2123d5-f4df-406a-b064-48dd55bd59d5");
+
+    /// <summary>
+    /// <c>elementNavItem</c> — single link. Props: navLabel (Culture),
+    /// navUrl (Culture — localized paths allowed), navOpenInNewTab.
+    /// </summary>
+    public static readonly Guid ElementNavItem =
+        Guid.Parse("1beb4eae-34bd-4eba-95e0-a2183fbac8ba");
+
+    // ── Corp mega-batch (Ola 24) — TabGroup/TabPanel/DataTable/MapEmbed
+
+    /// <summary>
+    /// <c>elementCorpTabGroup</c> — Container of tab panels with
+    /// ARIA tablist semantics. Props: tabsTitle (Culture), tabs
+    /// (BlockList 1+ TabPanel via DT.BlockList.TabPanels).
+    /// </summary>
+    public static readonly Guid ElementCorpTabGroup =
+        Guid.Parse("945c17d6-8efa-41ba-9952-015caae6ff6b");
+
+    /// <summary>
+    /// <c>elementCorpTabPanel</c> — single panel (tabLabel + richtext
+    /// tabContent). Hidden from Editorial BG top-level.
+    /// </summary>
+    public static readonly Guid ElementCorpTabPanel =
+        Guid.Parse("0843bc73-3b11-48d2-bf99-c9a4a327a060");
+
+    /// <summary>
+    /// <c>elementCorpDataTable</c> — CSV-backed accessible table.
+    /// Props: tableCaption (Culture), tableData (Culture mandatory
+    /// TextArea CSV). Complex tables → elementIntIframeHost with
+    /// Datawrapper/Flourish.
+    /// </summary>
+    public static readonly Guid ElementCorpDataTable =
+        Guid.Parse("5d8de320-6f3c-49a2-9dee-c1a517d66a3e");
+
+    /// <summary>
+    /// <c>elementCorpMapEmbed</c> — Map iframe (Google Maps / OSM /
+    /// Mapbox). Props: mapUrl (Nothing https), mapTitle (Culture
+    /// mandatory WCAG), mapHeight (Nothing default 450).
+    /// </summary>
+    public static readonly Guid ElementCorpMapEmbed =
+        Guid.Parse("fb92f569-2a4e-4ac3-a114-6f62e460abfd");
 }

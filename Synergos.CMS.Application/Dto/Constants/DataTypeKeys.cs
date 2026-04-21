@@ -129,4 +129,21 @@ public static class DataTypeKeys
     /// </summary>
     public static readonly Guid BlockListFormFields =
         Guid.Parse("9ca3dab9-57cf-405e-93a4-5aa3f0cd5a51");
+
+    // ── Ola 24 BlockList DataTypes (Nav + Tabs container backings) ─
+
+    /// <summary>
+    /// <c>DT.BlockList.NavItems</c> — BlockList Data Type allowing
+    /// 1+ elementNavItem rows for <c>elementNavGroup.navItems</c>.
+    /// Inline editing enabled.
+    /// </summary>
+    public static readonly Guid BlockListNavItems =
+        Guid.Parse("5e4e9abf-2bbd-4331-a92b-11765a653c9c");
+
+    /// <summary>
+    /// <c>DT.BlockList.TabPanels</c> — BlockList Data Type allowing
+    /// 1+ elementCorpTabPanel for <c>elementCorpTabGroup.tabs</c>.
+    /// </summary>
+    public static readonly Guid BlockListTabPanels =
+        Guid.Parse("bdd760c5-1a59-4788-95ac-41554384578a");
 }

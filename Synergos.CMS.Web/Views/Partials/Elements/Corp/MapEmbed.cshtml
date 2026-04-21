@@ -1,0 +1,31 @@
+@*
+    elementCorpMapEmbed renderer (Ola 24). SSR-native.
+    iframe hacia Google Maps Embed / OpenStreetMap / Mapbox. Sandbox
+    restrictivo sin allow-forms (solo scripts + same-origin para
+    funcionalidad del mapa).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var url = Model.Value<string>("mapUrl");
+    var title = Model.Value<string>("mapTitle");
+    if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(title)) { return; }
+    var heightRaw = Model.Value<string>("mapHeight");
+    if (string.IsNullOrWhiteSpace(heightRaw) || !int.TryParse(heightRaw, out var height) || height < 1) { height = 450; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-map-embed",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-map-embed--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">
+    <iframe src="@url"
+            title="@title"
+            aria-label="@title"
+            height="@height"
+            loading="lazy"
+            sandbox="allow-scripts allow-same-origin allow-popups"
+            referrerpolicy="no-referrer-when-downgrade"></iframe>
+</div>
