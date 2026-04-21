@@ -719,4 +719,44 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid ElementCorpMapEmbed =
         Guid.Parse("fb92f569-2a4e-4ac3-a114-6f62e460abfd");
+
+    // ── SynHost batch A (Ola 26, ADR 0015) ─────────────────────────
+    //
+    // 10 additional elementSyn* blocks following the pilot pattern
+    // (compIntegration composition + <synergos-*> custom element +
+    // ISynHostEmitter + IBundleRegistryClient runtime resolution).
+    //
+    // Render until CDN registry provides real bundles relies on the
+    // StubBundleRegistryClient — the custom elements render empty
+    // until a bundle exists, which is by design.
+
+    public static readonly Guid ElementSynSpacer =
+        Guid.Parse("9b38e09f-1507-4da9-820f-6796f4bec759");
+
+    public static readonly Guid ElementSynSeparator =
+        Guid.Parse("e1fc35de-ced4-4337-9a0e-7d91188eec57");
+
+    public static readonly Guid ElementSynIconLabel =
+        Guid.Parse("76e01860-3664-4606-94ed-45c16229b9ef");
+
+    public static readonly Guid ElementSynProgressBar =
+        Guid.Parse("4def9a2d-5d0b-44f5-a85f-2d1713129c34");
+
+    public static readonly Guid ElementSynRatingStars =
+        Guid.Parse("1c1e7a41-ca10-4264-b52a-422e79ea4daf");
+
+    public static readonly Guid ElementSynStatTicker =
+        Guid.Parse("4051fd78-db88-43a8-98db-c96fa502d215");
+
+    public static readonly Guid ElementSynCountdownClock =
+        Guid.Parse("4a83b837-fea0-4e1d-8ac7-53ab7d82e2bd");
+
+    public static readonly Guid ElementSynTooltip =
+        Guid.Parse("6e762bad-84ce-4430-92cb-9716c0d0c7c1");
+
+    public static readonly Guid ElementSynTag =
+        Guid.Parse("1923996b-f282-49ac-89c5-25f31bcda9d9");
+
+    public static readonly Guid ElementSynSearchBox =
+        Guid.Parse("d2c5c575-33a4-4fbf-8fe6-65f9d41e50ef");
 }

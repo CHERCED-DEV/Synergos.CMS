@@ -1,0 +1,21 @@
+@*
+    SynHost renderer — <synergos-search-box>. Live search with autocomplete.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["searchPlaceholder"] = Model.Value<string>("searchPlaceholder"),
+        ["searchEndpoint"] = Model.Value<string>("searchEndpoint"),
+        ["searchParamName"] = Model.Value<string>("searchParamName"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "search-box",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@Html.Raw(result.ScriptHtml)
+@Html.Raw(result.ElementHtml)
