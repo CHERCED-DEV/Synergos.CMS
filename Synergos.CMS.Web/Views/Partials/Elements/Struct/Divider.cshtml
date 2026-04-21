@@ -1,0 +1,19 @@
+@*
+    elementStructDivider renderer (Ola 20). Semantic <hr> with style
+    variant (line/dashed/dotted/gradient/shadow).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var style = Model.Value<string>("dividerStyle");
+    if (string.IsNullOrWhiteSpace(style)) { style = "line"; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-divider",
+        $"syn-divider--{style}",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-divider--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<hr class="@classes" />

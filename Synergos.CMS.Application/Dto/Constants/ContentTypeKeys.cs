@@ -478,4 +478,56 @@ public static class ContentTypeKeys
 
     public static readonly Guid ElementInfoTimelineList =
         Guid.Parse("e3765317-f0b9-4ff3-9699-f17ccbb190d3");
+
+    // ── Structural Element Types (Ola 20) ──────────────────────────
+
+    /// <summary>
+    /// <c>elementStructSection</c> — Semantic section container with
+    /// BlockGrid children. Landmark for accessibility.
+    /// </summary>
+    public static readonly Guid ElementStructSection =
+        Guid.Parse("755df659-4c07-45d5-a394-092b858ca50f");
+
+    /// <summary>
+    /// <c>elementStructContainer</c> — Generic div wrapper with
+    /// width constraint.
+    /// </summary>
+    public static readonly Guid ElementStructContainer =
+        Guid.Parse("4a9392cc-9acb-40a0-8df8-225060478461");
+
+    /// <summary>
+    /// <c>elementStructGrid</c> — CSS grid with configurable columns
+    /// (2-6, default 3).
+    /// </summary>
+    public static readonly Guid ElementStructGrid =
+        Guid.Parse("20c6a4c9-c8ed-4349-bdad-2935a49e7442");
+
+    /// <summary>
+    /// <c>elementStructColumn</c> — Explicit column with columnSpan
+    /// (1-12).
+    /// </summary>
+    public static readonly Guid ElementStructColumn =
+        Guid.Parse("bee4e11a-a419-449f-8a76-d2fd691b1a0d");
+
+    /// <summary>
+    /// <c>elementStructStack</c> — Flex container with gap;
+    /// direction from compDomLayout.
+    /// </summary>
+    public static readonly Guid ElementStructStack =
+        Guid.Parse("2c21bf8b-540b-4e78-80f3-584d944f7bf5");
+
+    /// <summary>
+    /// <c>elementStructDivider</c> — Horizontal rule atomic. Own
+    /// prop dividerStyle (line/dashed/dotted/gradient/shadow).
+    /// Variations=Nothing (decorative).
+    /// </summary>
+    public static readonly Guid ElementStructDivider =
+        Guid.Parse("0b6e8259-6a03-4be2-ae28-af59f1987f16");
+
+    /// <summary>
+    /// <c>elementStructSpacer</c> — Invisible spacer atomic. Own
+    /// prop spacerSize (xs-2xl). Variations=Nothing.
+    /// </summary>
+    public static readonly Guid ElementStructSpacer =
+        Guid.Parse("ea43b0d7-babc-42c3-984a-cf7ba60bc456");
 }

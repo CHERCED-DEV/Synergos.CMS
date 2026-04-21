@@ -1,0 +1,21 @@
+@*
+    elementStructContainer renderer (Ola 20). Generic <div> wrapper
+    with width constraint from design system.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var children = Model.Value<BlockGridModel>("children");
+    if (children == null || !children.Any()) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-container",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-container--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">
+    @await Html.GetBlockGridHtmlAsync(children)
+</div>

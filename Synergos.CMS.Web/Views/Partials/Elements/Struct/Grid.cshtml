@@ -1,0 +1,26 @@
+@*
+    elementStructGrid renderer (Ola 20). CSS Grid with configurable
+    columns (2-6, default 3).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var children = Model.Value<BlockGridModel>("children");
+    if (children == null || !children.Any()) { return; }
+    var gridColumns = Model.Value<string>("gridColumns");
+    if (string.IsNullOrWhiteSpace(gridColumns)) { gridColumns = "3"; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var layoutAlign = Model.Value<string>("layoutAlign");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-grid",
+        $"syn-grid--cols-{gridColumns}",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-grid--{variant}",
+        string.IsNullOrWhiteSpace(layoutAlign) ? null : $"syn-grid--align-{layoutAlign}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">
+    @await Html.GetBlockGridHtmlAsync(children)
+</div>

@@ -1,0 +1,17 @@
+@*
+    elementStructSpacer renderer (Ola 20). Invisible spacer with
+    design-system size token.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var size = Model.Value<string>("spacerSize");
+    if (string.IsNullOrWhiteSpace(size)) { size = "md"; }
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-spacer",
+        $"syn-spacer--{size}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes" aria-hidden="true"></div>

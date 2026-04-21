@@ -1,0 +1,25 @@
+@*
+    elementStructStack renderer (Ola 20). 1D flex container with gap.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var children = Model.Value<BlockGridModel>("children");
+    if (children == null || !children.Any()) { return; }
+    var direction = Model.Value<string>("layoutDirection");
+    if (string.IsNullOrWhiteSpace(direction)) { direction = "column"; }
+    var align = Model.Value<string>("layoutAlign");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-stack",
+        $"syn-stack--dir-{direction}",
+        string.IsNullOrWhiteSpace(align) ? null : $"syn-stack--align-{align}",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-stack--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">
+    @await Html.GetBlockGridHtmlAsync(children)
+</div>

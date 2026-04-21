@@ -1,0 +1,23 @@
+@*
+    elementStructSection renderer (Ola 20). Semantic <section> with
+    children BlockGrid.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var children = Model.Value<BlockGridModel>("children");
+    if (children == null || !children.Any()) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var ariaLabel = Model.Value<string>("ariaLabel");
+    var ariaRole = Model.Value<string>("ariaRole");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-section",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-section--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes"@(string.IsNullOrWhiteSpace(ariaLabel) ? "" : $" aria-label=\"{ariaLabel}\"")@(string.IsNullOrWhiteSpace(ariaRole) ? "" : $" role=\"{ariaRole}\"")>
+    @await Html.GetBlockGridHtmlAsync(children)
+</section>
