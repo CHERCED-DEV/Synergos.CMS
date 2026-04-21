@@ -1,0 +1,22 @@
+@*
+    SynHost renderer — <synergos-date-picker>. Custom date picker.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["label"] = Model.Value<string>("label"),
+        ["initialDate"] = Model.Value<string>("initialDate"),
+        ["minDate"] = Model.Value<string>("minDate"),
+        ["maxDate"] = Model.Value<string>("maxDate"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "date-picker",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@Html.Raw(result.ScriptHtml)
+@Html.Raw(result.ElementHtml)

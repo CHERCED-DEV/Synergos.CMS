@@ -796,4 +796,38 @@ public static class ContentTypeKeys
 
     public static readonly Guid ElementSynModalTrigger =
         Guid.Parse("102c71af-4d8a-4bb0-980c-b9f4cb0df404");
+
+    // ── SynHost batch C (Ola 28, ADR 0015) ─────────────────────────
+    //
+    // 10 interactive widgets + data viz + utility blocks.
+
+    public static readonly Guid ElementSynDropdown =
+        Guid.Parse("1d22d520-7f56-4e20-b3bc-502381bfa161");
+
+    public static readonly Guid ElementSynDatePicker =
+        Guid.Parse("5367d42f-1fd0-4e40-b7ab-a68ce226f2a8");
+
+    public static readonly Guid ElementSynFileUploader =
+        Guid.Parse("bf0601d7-277d-4671-b393-fa86fcf4700e");
+
+    public static readonly Guid ElementSynChartBar =
+        Guid.Parse("d94ca296-8867-4cab-8f08-75ef1cb4455a");
+
+    public static readonly Guid ElementSynKpiCard =
+        Guid.Parse("51b3896b-0b23-4a83-8993-0efee9cd5fe8");
+
+    public static readonly Guid ElementSynCodeBlock =
+        Guid.Parse("baee0724-4cd4-4a2e-bf96-c9bf570b5e78");
+
+    public static readonly Guid ElementSynCopyButton =
+        Guid.Parse("1b45b734-faa2-41af-8337-6023a805c608");
+
+    public static readonly Guid ElementSynShareBar =
+        Guid.Parse("b4d98500-e6b0-463f-adde-8adc8174a23f");
+
+    public static readonly Guid ElementSynMapPin =
+        Guid.Parse("f0b04253-d9cb-49b8-83d8-01801597daed");
+
+    public static readonly Guid ElementSynScrollTop =
+        Guid.Parse("43d984b3-6078-4cec-829b-a63d077ca9f0");
 }
