@@ -1,8 +1,0 @@
-@*
-    Helper para construir class strings de forma limpia.
-    Uso: @await Html.PartialAsync("Partials/elements/shared/_Classes", classList)
-    Donde classList es IEnumerable<string?> — los nulls se filtran automáticamente.
-*@
-@model IEnumerable<string?>
-
-@(string.Join(" ", Model.Where(c => !string.IsNullOrWhiteSpace(c))))

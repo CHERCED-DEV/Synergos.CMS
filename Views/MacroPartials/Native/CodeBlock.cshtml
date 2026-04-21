@@ -1,9 +1,0 @@
-@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
-@{
-    var language = Model.MacroParameters.ContainsKey("language") ? Model.MacroParameters["language"]?.ToString() : "";
-    var content  = Model.MacroParameters.ContainsKey("content")  ? Model.MacroParameters["content"]?.ToString()  : "";
-}
-
-<div class="sg-macro sg-macro--code-block">
-    <pre class="sg-code"><code class="sg-code__content language-@language">@content</code></pre>
-</div>

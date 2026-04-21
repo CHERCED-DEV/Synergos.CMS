@@ -1,7 +1,0 @@
-@model Synergos.CMS.Application.Elements.EyebrowViewModel
-@{
-    var cls = string.Join(" ", new[] { Model.BlockClass, Model.DomClass?.ClassList, Model.DomVariant?.Variant }.Where(s => !string.IsNullOrWhiteSpace(s)));
-}
-<span class="@cls" data-sg-element="text-eyebrow" aria-hidden="true">
-    @Model.Text?.Caption
-</span>

@@ -1,7 +1,0 @@
-@inherits Umbraco.Cms.Web.Common.Macros.PartialViewMacroPage
-@{
-    var text      = Model.MacroParameters.ContainsKey("text")      ? Model.MacroParameters["text"]?.ToString()      : "";
-    var badgeType = Model.MacroParameters.ContainsKey("badgeType") ? Model.MacroParameters["badgeType"]?.ToString() : "info";
-}
-
-<span class="sg-macro sg-macro--badge sg-badge sg-badge--@badgeType">@text</span>
