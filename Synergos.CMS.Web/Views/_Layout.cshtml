@@ -1,0 +1,90 @@
+@*
+    Master layout compartido por pageBase, pageBasic y siteRoot
+    (Ola 18). Cierra la deuda temporal de ADR 0014 "Layout=null".
+    pageBare se mantiene sin chrome a propósito (landings custom).
+
+    Estructura:
+    - <header class="syn-site-header"> con brand (siteRoot.siteDisplayName
+      linkeado al home) + nav horizontal con los hijos visibles del
+      siteRoot.
+    - <main id="main-content"> con @RenderBody() — lo que cada template
+      de página escriba.
+    - <footer class="syn-site-footer"> mínimo con branding + año.
+
+    No hay CSS todavía — solo clases syn-* preparadas para que el
+    design system las estile en ola futura.
+
+    Accesibilidad:
+    - skip-link al <main> al comienzo
+    - <nav aria-label="Main navigation">
+    - hreflang en <html lang>
+    - canonical URL cuando el siteRoot tiene canonicalHostname
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@using Umbraco.Extensions
+@{
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+    var currentPage = UmbracoContext.PublishedRequest?.PublishedContent;
+    var siteRoot = currentPage?.Root();
+    var siteName = siteRoot?.Value<string>("siteDisplayName");
+    if (string.IsNullOrWhiteSpace(siteName)) { siteName = "Synergos"; }
+    var canonicalHost = siteRoot?.Value<string>("canonicalHostname");
+    var pageTitle = currentPage?.Value<string>("seoTitle");
+    if (string.IsNullOrWhiteSpace(pageTitle)) { pageTitle = currentPage?.Name ?? siteName; }
+    var yearNow = DateTime.UtcNow.Year;
+    var navItems = siteRoot?.Children
+        .Where(c => c.IsVisible())
+        .ToList()
+        ?? new List<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>();
+}
+<!DOCTYPE html>
+<html lang="@culture">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@pageTitle</title>
+    @if (!string.IsNullOrWhiteSpace(canonicalHost) && currentPage != null)
+    {
+        <link rel="canonical" href="https://@canonicalHost@currentPage.Url()" />
+    }
+</head>
+<body>
+    <a class="syn-skip-link" href="#main-content">Skip to main content</a>
+    <header class="syn-site-header">
+        <div class="syn-site-header__inner">
+            @if (siteRoot != null)
+            {
+                <a class="syn-site-header__brand" href="@siteRoot.Url()">@siteName</a>
+            }
+            else
+            {
+                <span class="syn-site-header__brand">@siteName</span>
+            }
+            @if (navItems.Any())
+            {
+                <nav class="syn-site-nav" aria-label="Main navigation">
+                    <ul class="syn-site-nav__list">
+                        @foreach (var item in navItems)
+                        {
+                            var isCurrent = currentPage != null && item.Id == currentPage.Id;
+                            <li class="syn-site-nav__item">
+                                <a class="syn-site-nav__link@(isCurrent ? " syn-site-nav__link--current" : "")"
+                                   href="@item.Url()"
+                                   @(isCurrent ? Html.Raw("aria-current=\"page\"") : null)>@item.Name</a>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+            }
+        </div>
+    </header>
+    <main id="main-content" class="syn-site-main">
+        @RenderBody()
+    </main>
+    <footer class="syn-site-footer">
+        <div class="syn-site-footer__inner">
+            <p class="syn-site-footer__copyright">&copy; @yearNow @siteName</p>
+        </div>
+    </footer>
+</body>
+</html>
