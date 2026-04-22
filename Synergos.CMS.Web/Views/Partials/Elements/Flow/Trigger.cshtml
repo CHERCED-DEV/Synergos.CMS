@@ -1,0 +1,26 @@
+@*
+    elementFlowTrigger renderer (Ola 36). SSR skeleton.
+    Flow runtime C# resuelve flowDefinition por flowKey y entrega URL del first step.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var flowKey = Model.Value<string>("flowKey");
+    var label = Model.Value<string>("triggerLabel");
+    if (string.IsNullOrWhiteSpace(flowKey) || string.IsNullOrWhiteSpace(label)) { return; }
+    var returnUrl = Model.Value<string>("returnUrl");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-flow-trigger",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-flow-trigger--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var startHref = $"/flow/{flowKey}/start" + (!string.IsNullOrWhiteSpace(returnUrl) ? $"?returnUrl={Uri.EscapeDataString(returnUrl)}" : "");
+}
+<a class="@classes"
+   href="@startHref"
+   data-flow-key="@flowKey"
+   data-pending="flow-runtime-wiring">
+    @label
+</a>

@@ -1,0 +1,28 @@
+@*
+    elementFlowProgress renderer (Ola 36). SSR skeleton.
+    Flow runtime C# calcula step actual/total del flowKey en session.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var flowKey = Model.Value<string>("flowKey");
+    if (string.IsNullOrWhiteSpace(flowKey)) { return; }
+    var showPercent = Model.Value<bool>("showPercent");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-flow-progress",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-flow-progress--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes"
+     data-flow-key="@flowKey"
+     data-show-percent="@showPercent"
+     data-pending="flow-progress-wiring"
+     role="progressbar"
+     aria-valuenow="0"
+     aria-valuemin="0"
+     aria-valuemax="100">
+    <!-- Flow runtime inyecta contenido "Paso X de N" + opcional percent. -->
+</div>

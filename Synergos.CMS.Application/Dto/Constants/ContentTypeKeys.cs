@@ -1102,4 +1102,64 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid ElementMemberGate =
         Guid.Parse("877db10c-7953-4902-8c85-e8b4ea55246d");
+
+    // ── Schema completion (Ola 36) ─────────────────────────────────
+    // Blog author · Multi-tenancy · Shop completion · Flow module
+
+    /// <summary>
+    /// <c>compContentAuthor</c> — Composition de autoría editorial
+    /// (authorName, authorRole, authorAvatar). Culture.
+    /// </summary>
+    public static readonly Guid CompContentAuthor =
+        Guid.Parse("91e03cae-9044-45e0-a328-62e9d369db64");
+
+    /// <summary>
+    /// <c>authorPage</c> — Página pública de autor con bio richtext
+    /// + socialLinksJson. Composes compContentAuthor.
+    /// </summary>
+    public static readonly Guid AuthorPage =
+        Guid.Parse("acb0cccc-08c9-4608-8bac-6b9a7aacc901");
+
+    /// <summary>
+    /// <c>compTenant</c> — Composition multi-tenancy. Props: tenantKey
+    /// (Nothing slug mandatory) + tenantDisplayName (Culture).
+    /// </summary>
+    public static readonly Guid CompTenant =
+        Guid.Parse("6fac54b2-6604-4863-8929-cd6b1a09c5f2");
+
+    /// <summary>
+    /// <c>tenantRoot</c> — Root multi-tenancy. AllowAtRoot. Composes
+    /// compTenant. Structure allows siteRoot + settingsRoot +
+    /// sharedContentFolder. Middleware runtime pendiente.
+    /// </summary>
+    public static readonly Guid TenantRoot =
+        Guid.Parse("7f4937bc-d6dd-4d5d-b09a-6ae1fcde4a87");
+
+    public static readonly Guid ElementShopProductDetail =
+        Guid.Parse("6e556758-8b43-40e2-b8de-2b9b47f6f9b7");
+
+    public static readonly Guid ElementShopProductGrid =
+        Guid.Parse("2077b90e-0bee-4c30-934a-5fd4ea089441");
+
+    /// <summary>
+    /// <c>flowDefinition</c> — Flujo editorial (survey, wizard,
+    /// onboarding). Composes compCoreBase. IsListView. Structure
+    /// allows flowStep. Props: flowKey (slug), flowTitle, flowDescription,
+    /// maxSteps.
+    /// </summary>
+    public static readonly Guid FlowDefinition =
+        Guid.Parse("4a23719f-d73b-49b3-8509-da108a7c5a92");
+
+    /// <summary>
+    /// <c>flowStep</c> — Step individual dentro de flowDefinition.
+    /// Props: stepKey, stepLabel, stepContent (TinyMCE), isTerminal.
+    /// </summary>
+    public static readonly Guid FlowStep =
+        Guid.Parse("3fb9c047-fb4c-4729-97f1-f39d03fd4f97");
+
+    public static readonly Guid ElementFlowTrigger =
+        Guid.Parse("40de7d88-3a34-4c50-b446-6ff98bd17e04");
+
+    public static readonly Guid ElementFlowProgress =
+        Guid.Parse("57c35e5a-983e-499a-8154-38aebca79c97");
 }

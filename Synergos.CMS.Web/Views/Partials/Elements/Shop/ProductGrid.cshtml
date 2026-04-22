@@ -1,0 +1,28 @@
+@*
+    elementShopProductGrid renderer (Ola 36). SSR skeleton.
+    Query real a productPage descendants pendiente (Shop runtime).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var categoryFilter = Model.Value<string>("categoryFilter");
+    var maxItems = Model.Value<string>("maxItems") ?? "12";
+    var sortBy = Model.Value<string>("sortBy") ?? "name";
+    var layout = Model.Value<string>("layout") ?? "grid";
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-product-grid",
+        $"syn-product-grid--{layout}",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-product-grid--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes"
+         data-category-filter="@(categoryFilter ?? "")"
+         data-max-items="@maxItems"
+         data-sort-by="@sortBy"
+         data-layout="@layout"
+         data-pending="shop-product-query-wiring">
+    <!-- Shop runtime itera productPage descendants (filter + sort + limit) y renderiza cards. -->
+</section>
