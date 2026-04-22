@@ -51,6 +51,9 @@ public sealed class LayoutPresetDefaults
         Guid.Parse("911a64ba-ccc4-4b21-a3f2-f9273c38c6b6"), // 2ColMainSidebar
         Guid.Parse("1fc59d8b-7278-4a0a-9b4c-d596ae230372"), // 3Col
         Guid.Parse("39e1538b-0ce7-40a3-9853-849354bb1c75"), // 4Col
+        Guid.Parse("c9356982-82a2-420f-a40d-84e509c0fa28"), // HolyGrail (Ola 42.7)
+        Guid.Parse("e88e7c8b-0e74-447b-9cb7-51d8d642b9ec"), // SidebarMain (Ola 42.7)
+        Guid.Parse("fef510f5-59c8-4ae8-b499-2188017df5c1"), // Hero (Ola 42.7)
     };
 
     private static readonly (string Alias, string Default)[] Defaults =

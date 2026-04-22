@@ -1,0 +1,27 @@
+@*
+    elementLayoutHolyGrail renderer (Ola 42.7). 3 areas nav + main + aside
+    (2+8+2). Mobile colapsa a apilado según design system.
+    Backoffice preview: App_Plugins/LayoutComposer/views/block-layout-holy-grail.html
+*@
+@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
+@using Synergos.CMS.Web.Services
+@{
+    var element = Model.Content;
+    var variant = element.Value<string>("variantKey");
+    var cssClass = element.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-layout",
+        "syn-layout--holy-grail",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-layout--v-{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Concat(LayoutCssBuilder.Build(element)).Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">
+    @foreach (var area in Model.Areas)
+    {
+        <div class="syn-layout__area syn-layout__area--@area.Alias">
+            @await Html.GetBlockGridItemsHtmlAsync(area)
+        </div>
+    }
+</div>
