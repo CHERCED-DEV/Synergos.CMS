@@ -1,6 +1,8 @@
 @*
-    elementFlowTrigger renderer (Ola 36). SSR skeleton.
-    Flow runtime C# resuelve flowDefinition por flowKey y entrega URL del first step.
+    elementFlowTrigger renderer (Ola 36 schema + Ola 41 runtime).
+    Emite <a href="/flow/{flowKey}/start?returnUrl=..."> que dispara
+    FlowController.Start — resuelve flowDefinition, inicializa cookie
+    syn-flow-{flowKey} en 0, y redirige a step[0].
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
