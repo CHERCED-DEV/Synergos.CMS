@@ -89,6 +89,13 @@ public static class LayoutCssBuilder
         if (model.Value<bool>("noPaddingBottom")) yield return "syn-preset--no-pad-bottom";
         if (model.Value<bool>("noMarginTop")) yield return "syn-preset--no-mar-top";
         if (model.Value<bool>("noMarginBottom")) yield return "syn-preset--no-mar-bottom";
+        var mobileCollapse = Val(model, "mobileCollapseMode");
+        if (mobileCollapse is not null && mobileCollapse != "auto")
+        {
+            // "auto" is the implicit default — no class emitted so the
+            // design system CSS handles it with baseline media queries.
+            yield return $"syn-preset--mobile-{mobileCollapse}";
+        }
     }
 
     private static string? Val(IPublishedElement model, string alias)
