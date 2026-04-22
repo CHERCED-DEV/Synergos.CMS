@@ -1,14 +1,24 @@
 @*
-    Template del Document Type `siteRoot` (Ola 8 + shared layout Ola 18).
-    El siteRoot es el home del sitio — muestra el nombre del sitio +
-    nav a hijos (la nav ya vive en el _Layout header, así que acá
-    mostramos solo un heading minimal + subtitle opcional via SEO).
+    Template del Document Type `siteRoot` (Ola 8 + shared layout Ola 18
+    + page layout composer Ola 42). El siteRoot es el home del sitio —
+    muestra el nombre del sitio + subtitle opcional via SEO. La nav
+    vive en _Layout header.
+
+    Ola 42 — la <article> raíz lee compDomDisplay/Flex/Grid/Spacing via
+    LayoutCssBuilder para que el home pueda ser grid/flex a gusto
+    editorial.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.SiteRootResponse>
+@using Synergos.CMS.Web.Services
 @{
     Layout = "_Layout";
+    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var layoutClasses = currentContent is null
+        ? Array.Empty<string>()
+        : LayoutCssBuilder.Build(currentContent).ToArray();
+    var classes = string.Join(" ", new[] { "syn-site-root" }.Concat(layoutClasses));
 }
-<article class="syn-site-root">
+<article class="@classes">
     <h1 class="syn-site-root__title">@Model.SiteDisplayName</h1>
     @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
     {

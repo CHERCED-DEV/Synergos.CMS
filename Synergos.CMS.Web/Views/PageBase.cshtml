@@ -1,8 +1,12 @@
 @*
     Template del Document Type `pageBase` (Ola 8 + bodyBlocks Ola 16 +
-    shared layout Ola 18). Ahora hereda chrome de _Layout.cshtml
-    (header con brand/nav + main + footer). Solo emite el contenido
-    del <main>.
+    shared layout Ola 18 + page layout composer Ola 42). Hereda chrome
+    de _Layout.cshtml (header con brand/nav + main + footer). Solo
+    emite el contenido del <main>.
+
+    Ola 42 — la <article> raíz consume compDomDisplay + compDomFlex +
+    compDomGrid + compDomSpacing via LayoutCssBuilder, permitiendo al
+    editor cuadrar la topología de la página entera con dropdowns.
 
     Modelo:
     - SeoTitle + BodyHtml de PageBaseResponse DTO.
@@ -12,12 +16,17 @@
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBaseResponse>
 @using Umbraco.Cms.Core.Models.Blocks
+@using Synergos.CMS.Web.Services
 @{
     Layout = "_Layout";
     var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
     var blocks = currentContent?.Value<BlockGridModel>("bodyBlocks");
+    var layoutClasses = currentContent is null
+        ? Array.Empty<string>()
+        : LayoutCssBuilder.Build(currentContent).ToArray();
+    var classes = string.Join(" ", new[] { "syn-page-base" }.Concat(layoutClasses));
 }
-<article class="syn-page-base">
+<article class="@classes">
     @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
     {
         <h1 class="syn-page-base__title">@Model.SeoTitle</h1>

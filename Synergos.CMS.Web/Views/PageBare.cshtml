@@ -1,14 +1,24 @@
-﻿@*
-    Template del Document Type `pageBare` (Ola 8). Sin chrome
-    compartido — el body del modelo se emite como la totalidad del
-    contenido. Útil para landings custom, iframes embebibles, flujos
-    con branding aislado. `body` sanitizado por TinyMCE pipeline
-    (SanitizeTinyMce=true).
+@*
+    Template del Document Type `pageBare` (Ola 8 + page layout composer
+    Ola 42). Sin chrome compartido — el body del modelo se emite como
+    la totalidad del contenido. Útil para landings custom, iframes
+    embebibles, flujos con branding aislado. `body` sanitizado por
+    TinyMCE pipeline (SanitizeTinyMce=true).
+
+    Ola 42 — el <main> que envuelve el body consume compDomDisplay/Flex/
+    Grid/Spacing via LayoutCssBuilder. En bare este control es
+    especialmente útil porque no hay chrome que imponga topología.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBareResponse>
+@using Synergos.CMS.Web.Services
 @{
     Layout = null;
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var layoutClasses = currentContent is null
+        ? Array.Empty<string>()
+        : LayoutCssBuilder.Build(currentContent).ToArray();
+    var classes = string.Join(" ", new[] { "syn-page-bare" }.Concat(layoutClasses));
 }
 <!DOCTYPE html>
 <html lang="@culture">
@@ -18,6 +28,8 @@
     <title>@Model.SeoTitle</title>
 </head>
 <body>
-@Html.Raw(Model.BodyHtml)
+<main class="@classes">
+    @Html.Raw(Model.BodyHtml)
+</main>
 </body>
 </html>
