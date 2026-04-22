@@ -1,23 +1,13 @@
 @*
-    Template del Document Type `pageBasic` (Ola 7 + shared layout Ola 18
-    + page layout composer Ola 42). Mínimo: SeoTitle + body richtext,
-    dentro de _Layout compartido. `body` sanitizado por TinyMCE pipeline
-    (SanitizeTinyMce=true).
-
-    Ola 42 — la <article> raíz lee compDomDisplay/Flex/Grid/Spacing via
-    LayoutCssBuilder desde el IPublishedContent actual.
+    Template del Document Type `pageBasic` (Ola 7 + shared layout Ola 18).
+    Mínimo: SeoTitle + body richtext, dentro de _Layout compartido.
+    `body` sanitizado por TinyMCE pipeline (SanitizeTinyMce=true).
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBasicResponse>
-@using Synergos.CMS.Web.Services
 @{
     Layout = "_Layout";
-    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
-    var layoutClasses = currentContent is null
-        ? Array.Empty<string>()
-        : LayoutCssBuilder.Build(currentContent).ToArray();
-    var classes = string.Join(" ", new[] { "syn-page-basic" }.Concat(layoutClasses));
 }
-<article class="@classes">
+<article class="syn-page-basic">
     @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
     {
         <h1 class="syn-page-basic__title">@Model.SeoTitle</h1>
