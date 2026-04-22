@@ -22,6 +22,8 @@
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
 @using Umbraco.Extensions
+@inject Synergos.CMS.Interfaces.IBrandingProvider Branding
+@inject Synergos.CMS.Interfaces.IBrandThemeProvider ThemeProvider
 @{
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
     var currentPage = UmbracoContext.PublishedRequest?.PublishedContent;
@@ -36,6 +38,30 @@
         .Where(c => c.IsVisible())
         .ToList()
         ?? new List<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>();
+
+    // Ola 37 — resolve brand theme for CSS custom properties on :root.
+    // ADR 0020 + ADR 0010: no if/else per brand in template; the
+    // provider encapsulates brand resolution, template only emits vars.
+    var brand = Branding.GetCurrent();
+    var theme = ThemeProvider.GetThemeForBrand(brand.Key);
+    var themeVars = new List<string>();
+    if (theme is not null)
+    {
+        void Add(string name, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                themeVars.Add($"--{name}: {value};");
+            }
+        }
+        Add("syn-color-primary", theme.PrimaryColor);
+        Add("syn-color-secondary", theme.SecondaryColor);
+        Add("syn-color-accent", theme.AccentColor);
+        Add("syn-color-background", theme.BackgroundColor);
+        Add("syn-color-text", theme.TextColor);
+        Add("syn-font-heading", theme.HeadingFontFamily);
+        Add("syn-font-body", theme.BodyFontFamily);
+    }
 }
 <!DOCTYPE html>
 <html lang="@culture">
@@ -46,6 +72,14 @@
     @if (!string.IsNullOrWhiteSpace(canonicalHost) && currentPage != null)
     {
         <link rel="canonical" href="https://@canonicalHost@currentPage.Url()" />
+    }
+    @if (!string.IsNullOrWhiteSpace(theme?.FaviconUrl))
+    {
+        <link rel="icon" href="@theme.FaviconUrl" />
+    }
+    @if (themeVars.Count > 0)
+    {
+        <style>:root { @Html.Raw(string.Join(" ", themeVars)) }</style>
     }
 </head>
 <body>

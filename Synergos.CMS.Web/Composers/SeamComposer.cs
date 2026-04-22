@@ -55,6 +55,12 @@ public sealed class SeamComposer : IComposer
         // Ola 3 — Web-side adapters.
         services.AddSingleton<IContentContextAccessor, UmbracoContentContextAccessor>();
 
+        // Ola 37 — Brand theme provider reads themeSettings nodes from
+        // the Umbraco content tree (ADR 0020). Transient because it
+        // depends on the per-request IUmbracoContextAccessor; the cost
+        // is negligible (single projection).
+        services.AddTransient<IBrandThemeProvider, DefaultBrandThemeProvider>();
+
         // Health probes. Each registers as an ISchemaHealthProbe; the
         // HealthController resolves them as IEnumerable<ISchemaHealthProbe>.
         services.AddSingleton<ISchemaHealthProbe>(_ => new SchemaVersionProbe());
