@@ -1,23 +1,25 @@
 @*
-    elementMediaLogoCloud renderer (Ola 19). SSR container.
-    Grid responsive de logos delegando a LogoItem.cshtml.
+    elementMediaLogoCloud renderer (Ola 19 schema + Ola 42 layout).
+    Flex/grid responsive de logos delegando a LogoItem.cshtml.
+    Display/flex modifiers resueltos por LayoutCssBuilder a partir
+    de compDomDisplay + compDomFlex (Ola 42); fallback al legacy
+    compDomLayout cuando las props nuevas están vacías.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @using Umbraco.Cms.Core.Models.Blocks
+@using Synergos.CMS.Web.Services
 @{
     var items = Model.Value<BlockListModel>("logoItems");
     if (items == null || !items.Any()) { return; }
     var title = Model.Value<string>("cloudTitle");
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
-    var layoutAlign = Model.Value<string>("layoutAlign");
     var classes = string.Join(" ", new[]
     {
         "syn-logo-cloud",
         string.IsNullOrWhiteSpace(variant) ? null : $"syn-logo-cloud--{variant}",
-        string.IsNullOrWhiteSpace(layoutAlign) ? null : $"syn-logo-cloud--align-{layoutAlign}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
-    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    }.Concat(LayoutCssBuilder.Build(Model)).Where(s => !string.IsNullOrWhiteSpace(s)));
 }
 <section class="@classes">
     @if (!string.IsNullOrWhiteSpace(title))

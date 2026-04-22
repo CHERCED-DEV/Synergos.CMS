@@ -1,9 +1,12 @@
 @*
-    elementStructContainer renderer (Ola 20). Generic <div> wrapper
-    with width constraint from design system.
+    elementStructContainer renderer (Ola 20 schema + Ola 42 layout).
+    Wrapper <div> con width constraint del design system. Display/
+    flex/grid modifiers resueltos por LayoutCssBuilder a partir de
+    compDomDisplay + compDomFlex + compDomGrid (Ola 42).
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @using Umbraco.Cms.Core.Models.Blocks
+@using Synergos.CMS.Web.Services
 @{
     var children = Model.Value<BlockGridModel>("children");
     if (children == null || !children.Any()) { return; }
@@ -14,7 +17,7 @@
         "syn-container",
         string.IsNullOrWhiteSpace(variant) ? null : $"syn-container--{variant}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
-    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    }.Concat(LayoutCssBuilder.Build(Model)).Where(s => !string.IsNullOrWhiteSpace(s)));
 }
 <div class="@classes">
     @await Html.GetBlockGridHtmlAsync(children)

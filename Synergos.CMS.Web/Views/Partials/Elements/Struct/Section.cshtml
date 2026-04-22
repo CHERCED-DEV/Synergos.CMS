@@ -1,9 +1,13 @@
 @*
-    elementStructSection renderer (Ola 20). Semantic <section> with
-    children BlockGrid.
+    elementStructSection renderer (Ola 20 schema + Ola 42 layout).
+    Semantic <section> con children BlockGrid. Display/flex/grid
+    modifiers resueltos por LayoutCssBuilder a partir de compDomDisplay
+    + compDomFlex + compDomGrid (Ola 42). Sin composiciones activas,
+    se renderea como flujo normal del navegador (block).
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @using Umbraco.Cms.Core.Models.Blocks
+@using Synergos.CMS.Web.Services
 @{
     var children = Model.Value<BlockGridModel>("children");
     if (children == null || !children.Any()) { return; }
@@ -16,7 +20,7 @@
         "syn-section",
         string.IsNullOrWhiteSpace(variant) ? null : $"syn-section--{variant}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
-    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    }.Concat(LayoutCssBuilder.Build(Model)).Where(s => !string.IsNullOrWhiteSpace(s)));
 }
 <section class="@classes"@(string.IsNullOrWhiteSpace(ariaLabel) ? "" : $" aria-label=\"{ariaLabel}\"")@(string.IsNullOrWhiteSpace(ariaRole) ? "" : $" role=\"{ariaRole}\"")>
     @await Html.GetBlockGridHtmlAsync(children)

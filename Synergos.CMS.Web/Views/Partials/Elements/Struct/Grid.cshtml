@@ -1,25 +1,29 @@
 @*
-    elementStructGrid renderer (Ola 20). CSS Grid with configurable
-    columns (2-6, default 3).
+    elementStructGrid renderer (Ola 20 schema + Ola 42 layout).
+    2D CSS Grid. Template/rows/gap/justify/align resueltos por
+    LayoutCssBuilder a partir de compDomGrid (Ola 42). La prop propia
+    gridColumns sobrevive como fallback rápido cuando el editor no
+    elige un gridTemplate.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @using Umbraco.Cms.Core.Models.Blocks
+@using Synergos.CMS.Web.Services
 @{
     var children = Model.Value<BlockGridModel>("children");
     if (children == null || !children.Any()) { return; }
     var gridColumns = Model.Value<string>("gridColumns");
     if (string.IsNullOrWhiteSpace(gridColumns)) { gridColumns = "3"; }
+    var gridTemplate = Model.Value<string>("gridTemplate");
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
-    var layoutAlign = Model.Value<string>("layoutAlign");
     var classes = string.Join(" ", new[]
     {
         "syn-grid",
-        $"syn-grid--cols-{gridColumns}",
+        // gridColumns sólo si no hay gridTemplate (compDomGrid wins).
+        string.IsNullOrWhiteSpace(gridTemplate) ? $"syn-grid--cols-{gridColumns}" : null,
         string.IsNullOrWhiteSpace(variant) ? null : $"syn-grid--{variant}",
-        string.IsNullOrWhiteSpace(layoutAlign) ? null : $"syn-grid--align-{layoutAlign}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
-    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    }.Concat(LayoutCssBuilder.Build(Model)).Where(s => !string.IsNullOrWhiteSpace(s)));
 }
 <div class="@classes">
     @await Html.GetBlockGridHtmlAsync(children)
