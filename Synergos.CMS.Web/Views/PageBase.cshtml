@@ -1,14 +1,13 @@
 @*
     Template del Document Type `pageBase` (Ola 8 + bodyBlocks Ola 16 +
-    shared layout Ola 18). Ahora hereda chrome de _Layout.cshtml
-    (header con brand/nav + main + footer). Solo emite el contenido
-    del <main>.
+    shared layout Ola 18 + Layout Composer Ola 42.5). Hereda chrome
+    de _Layout.cshtml (header con brand/nav + main + footer). Solo
+    emite el contenido del <main>.
 
-    Modelo:
-    - SeoTitle + BodyHtml de PageBaseResponse DTO.
-    - bodyBlocks (BlockGrid Editorial) leído directo de
-      UmbracoContext.PublishedRequest (tipo complejo Umbraco-native;
-      no fluye por el DTO para no romper DIP).
+    Tres bloques editoriales posibles, todos opcionales:
+      - BodyHtml         richtext corto (intro)
+      - bodyBlocks       Block Grid Editorial flat (legacy/simple)
+      - sections         Block Grid Sections (Layout Composer presets)
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBaseResponse>
 @using Umbraco.Cms.Core.Models.Blocks
@@ -16,6 +15,7 @@
     Layout = "_Layout";
     var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
     var blocks = currentContent?.Value<BlockGridModel>("bodyBlocks");
+    var sections = currentContent?.Value<BlockGridModel>("sections");
 }
 <article class="syn-page-base">
     @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
@@ -25,6 +25,12 @@
     @if (!string.IsNullOrWhiteSpace(Model.BodyHtml))
     {
         <div class="syn-page-base__intro">@Html.Raw(Model.BodyHtml)</div>
+    }
+    @if (sections != null && sections.Any())
+    {
+        <div class="syn-page-base__sections">
+            @await Html.GetBlockGridHtmlAsync(sections)
+        </div>
     }
     @if (blocks != null && blocks.Any())
     {

@@ -1,0 +1,27 @@
+@*
+    elementLayoutStack renderer (Ola 42.5). Flex 1D (direction default
+    column) con 1 area "stackContent" (12 cols).
+    Backoffice preview: App_Plugins/LayoutComposer/views/block-stack.html
+*@
+@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
+@using Synergos.CMS.Web.Services
+@{
+    var element = Model.Content;
+    var variant = element.Value<string>("variantKey");
+    var cssClass = element.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-layout",
+        "syn-layout--stack",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-layout--v-{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Concat(LayoutCssBuilder.Build(element)).Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">
+    @foreach (var area in Model.Areas)
+    {
+        <div class="syn-layout__area syn-layout__area--@area.Alias">
+            @await Html.GetBlockGridItemsHtmlAsync(area)
+        </div>
+    }
+</div>

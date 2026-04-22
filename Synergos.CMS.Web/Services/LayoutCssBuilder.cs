@@ -79,6 +79,16 @@ public static class LayoutCssBuilder
         if (spacingTop is not null) yield return $"syn-space--top-{spacingTop}";
         if (spacingBottom is not null) yield return $"syn-space--bottom-{spacingBottom}";
         if (spacingInline is not null) yield return $"syn-space--inline-{spacingInline}";
+
+        // compDomPresetChrome (Ola 42.5) — exclusive to elementLayout* presets.
+        var containerType = Val(model, "containerType");
+        if (containerType is not null) yield return $"syn-preset--container-{containerType}";
+        var theme = Val(model, "theme");
+        if (theme is not null) yield return $"syn-preset--theme-{theme}";
+        if (model.Value<bool>("noPaddingTop")) yield return "syn-preset--no-pad-top";
+        if (model.Value<bool>("noPaddingBottom")) yield return "syn-preset--no-pad-bottom";
+        if (model.Value<bool>("noMarginTop")) yield return "syn-preset--no-mar-top";
+        if (model.Value<bool>("noMarginBottom")) yield return "syn-preset--no-mar-bottom";
     }
 
     private static string? Val(IPublishedElement model, string alias)

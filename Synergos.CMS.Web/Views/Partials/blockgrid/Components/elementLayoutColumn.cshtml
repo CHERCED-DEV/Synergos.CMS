@@ -1,0 +1,30 @@
+@*
+    elementLayoutColumn renderer (Ola 42.5). Hijo de elementLayoutGrid
+    con columnSpan editable (1-12). El span viene del Model.ColumnSpan
+    del BlockGridItem — el editor lo ajusta en el backoffice.
+    Backoffice preview: App_Plugins/LayoutComposer/views/block-column.html
+*@
+@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
+@using Synergos.CMS.Web.Services
+@{
+    var element = Model.Content;
+    var variant = element.Value<string>("variantKey");
+    var cssClass = element.Value<string>("cssClass");
+    var span = Model.ColumnSpan ?? 12;
+    var classes = string.Join(" ", new[]
+    {
+        "syn-layout",
+        "syn-layout--column",
+        $"syn-layout--span-{span}",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-layout--v-{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Concat(LayoutCssBuilder.Build(element)).Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes" style="--syn-col-span: @span;">
+    @foreach (var area in Model.Areas)
+    {
+        <div class="syn-layout__area syn-layout__area--@area.Alias">
+            @await Html.GetBlockGridItemsHtmlAsync(area)
+        </div>
+    }
+</div>
