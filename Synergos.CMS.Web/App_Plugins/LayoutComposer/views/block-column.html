@@ -1,0 +1,41 @@
+<div class="lc-block lc-block--column"
+     ng-attr-data-container-type="{{block.data.containerType[0]}}"
+     ng-attr-data-padding="{{block.data.padding[0]}}"
+     ng-attr-data-margin="{{block.data.margin[0]}}"
+     ng-attr-data-gap="{{block.data.gap[0]}}"
+     ng-attr-data-alignment="{{block.data.alignment[0]}}"
+     ng-attr-data-direction="{{block.data.direction[0]}}"
+     ng-class="{
+         'lc-block--no-padding-top': block.data.noPaddingTop,
+         'lc-block--no-padding-bottom': block.data.noPaddingBottom,
+         'lc-block--no-margin-top': block.data.noMarginTop,
+         'lc-block--no-margin-bottom': block.data.noMarginBottom
+     }">
+    <div class="lc-block__header">
+        <span class="lc-block__icon">Cl</span>
+        <span class="lc-block__type">Column</span>
+        <span class="lc-block__header-spacer"></span>
+        <span ng-if="block.layout.columnSpan" class="lc-block__badge">{{block.layout.columnSpan}}/12</span>
+    </div>
+
+    <div class="lc-layout__intro">
+        <span class="lc-block__eyebrow">Ancho editorial</span>
+        <span class="lc-block__preview-title">Columna {{block.layout.columnSpan || 12}} / 12</span>
+        <span class="lc-block__hint">Reserva el ancho disponible dentro del grid y aloja el contenido de esa zona.</span>
+        <div class="lc-chip-row" ng-if="block.data.noPaddingTop || block.data.noPaddingBottom || block.data.noMarginTop || block.data.noMarginBottom || block.data.padding[0] || block.data.margin[0] || block.data.gap[0] || block.data.alignment[0] || block.data.direction[0]">
+            <span ng-if="block.data.noPaddingTop"    class="lc-chip lc-chip--toggle">↑ sin pad</span>
+            <span ng-if="block.data.noPaddingBottom" class="lc-chip lc-chip--toggle">↓ sin pad</span>
+            <span ng-if="block.data.noMarginTop"     class="lc-chip lc-chip--toggle">↑ sin mar</span>
+            <span ng-if="block.data.noMarginBottom"  class="lc-chip lc-chip--toggle">↓ sin mar</span>
+            <span ng-if="block.data.padding[0]"      class="lc-chip lc-chip--muted">pad: {{block.data.padding[0]}}</span>
+            <span ng-if="block.data.margin[0]"       class="lc-chip lc-chip--muted">mar: {{block.data.margin[0]}}</span>
+            <span ng-if="block.data.gap[0]"          class="lc-chip lc-chip--muted">gap: {{block.data.gap[0]}}</span>
+            <span ng-if="block.data.alignment[0]"    class="lc-chip lc-chip--muted">{{block.data.alignment[0]}}</span>
+            <span ng-if="block.data.direction[0]"    class="lc-chip lc-chip--muted">{{block.data.direction[0]}}</span>
+        </div>
+    </div>
+
+    <div class="lc-block__areas">
+        <umb-block-grid-render-area-slots></umb-block-grid-render-area-slots>
+    </div>
+</div>
