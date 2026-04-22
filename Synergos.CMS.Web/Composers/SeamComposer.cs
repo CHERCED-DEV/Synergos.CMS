@@ -93,5 +93,13 @@ public sealed class SeamComposer : IComposer
         builder.AddNotificationHandler<
             DictionaryItemDeletedNotification,
             DictionaryCacheInvalidator>();
+
+        // Ola 42.5 — pre-fill Layout Preset blocks with sensible
+        // defaults on first save so the editor doesn't face empty
+        // dropdowns every time they drop a preset. See
+        // LayoutPresetDefaults for the all-empty heuristic.
+        builder.AddNotificationHandler<
+            ContentSavingNotification,
+            LayoutPresetDefaults>();
     }
 }
