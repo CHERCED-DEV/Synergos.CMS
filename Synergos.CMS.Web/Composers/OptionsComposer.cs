@@ -32,5 +32,8 @@ public sealed class OptionsComposer : IComposer
 
         builder.Services.Configure<FeatureFlagsSettings>(
             builder.Config.GetSection("Synergos:FeatureFlags"));
+
+        builder.Services.Configure<LayoutComposerSettings>(
+            builder.Config.GetSection("Synergos:LayoutComposer"));
     }
 }

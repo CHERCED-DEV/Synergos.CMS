@@ -101,5 +101,12 @@ public sealed class SeamComposer : IComposer
         builder.AddNotificationHandler<
             ContentSavingNotification,
             LayoutPresetDefaults>();
+
+        // Ola 42.7 — starter scaffold: opt-in via
+        // Synergos:LayoutComposer:EnableStarterScaffold. Seeds a
+        // minimal Hero + 2ColEven on first save of a blank pageBase.
+        builder.AddNotificationHandler<
+            ContentSavingNotification,
+            LayoutComposerStarterScaffold>();
     }
 }
