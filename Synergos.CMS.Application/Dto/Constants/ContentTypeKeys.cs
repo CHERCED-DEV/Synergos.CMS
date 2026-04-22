@@ -1066,4 +1066,40 @@ public static class ContentTypeKeys
     /// </summary>
     public static readonly Guid ReusableBlock =
         Guid.Parse("907840c2-4bd1-4ef8-8181-c4abea0e8a9a");
+
+    // ── Members module (Ola 35) ────────────────────────────────────
+    //
+    // Schema-only — middleware C# Members auth (IMemberManager, route
+    // gating) pendiente para ola runtime posterior.
+
+    /// <summary>
+    /// <c>compMemberGating</c> — Composition para marcar DocTypes como
+    /// member-gated. Props: requiresAuth (flag) + allowedRolesCsv.
+    /// </summary>
+    public static readonly Guid CompMemberGating =
+        Guid.Parse("0398491c-ac46-4c7b-b61f-4e0949c4fa85");
+
+    /// <summary>
+    /// <c>memberProfilePage</c> — Profile page pública. Composes
+    /// compCoreBase + compSeo + compMemberGating. Props: displayName,
+    /// bio (richtext), avatarUrl (MediaPicker3).
+    /// </summary>
+    public static readonly Guid MemberProfilePage =
+        Guid.Parse("c167bb4b-d3ad-414e-8a2e-fef3bf06f97f");
+
+    public static readonly Guid ElementMemberLogin =
+        Guid.Parse("1cbfc5c4-9fac-492a-8f87-aeda29e4397b");
+
+    public static readonly Guid ElementMemberLogout =
+        Guid.Parse("48c8b4b1-15d9-4d94-bfcc-52eb6d9ec595");
+
+    public static readonly Guid ElementMemberProfile =
+        Guid.Parse("e4a1f1d5-9fd9-4f92-9f85-c324291ad3af");
+
+    /// <summary>
+    /// <c>elementMemberGate</c> — BlockGrid wrapper con auth check.
+    /// gatedBlocks (BlockGrid Editorial) + loginPromptMessage.
+    /// </summary>
+    public static readonly Guid ElementMemberGate =
+        Guid.Parse("877db10c-7953-4902-8c85-e8b4ea55246d");
 }

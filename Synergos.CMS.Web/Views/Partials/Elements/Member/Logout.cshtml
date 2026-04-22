@@ -1,0 +1,20 @@
+@*
+    elementMemberLogout renderer (Ola 35). SSR skeleton.
+    Mostrar solo si member context autenticado (middleware C# pendiente).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var endpoint = Model.Value<string>("logoutEndpoint");
+    if (string.IsNullOrWhiteSpace(endpoint)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-member-logout",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-member-logout--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<form class="@classes" action="@endpoint" method="post" data-auth-required="true">
+    <button type="submit">Cerrar sesión</button>
+</form>

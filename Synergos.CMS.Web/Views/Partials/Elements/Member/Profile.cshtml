@@ -1,0 +1,24 @@
+@*
+    elementMemberProfile renderer (Ola 35). SSR skeleton.
+    Runtime IMemberManager wiring pendiente. Por ahora emite contenedor
+    con data-attrs para hidratación JS/future SSR.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var showName = Model.Value<bool>("showDisplayName");
+    var showBio = Model.Value<bool>("showBio");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-member-profile",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-member-profile--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes"
+     data-show-name="@showName"
+     data-show-bio="@showBio"
+     data-pending="member-context-wiring">
+    <!-- Middleware C# resuelve IMemberManager y renderiza displayName/bio. -->
+</div>

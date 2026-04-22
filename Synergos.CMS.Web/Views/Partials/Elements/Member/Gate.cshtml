@@ -1,0 +1,32 @@
+@*
+    elementMemberGate renderer (Ola 35). SSR skeleton.
+    Por ahora renderea SIEMPRE el loginPrompt y marca gated con data-attr.
+    Middleware C# Members auth decidirá render real (prompt vs gatedBlocks).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var gatedBlocks = Model.Value<BlockGridModel>("gatedBlocks");
+    var prompt = Model.Value<string>("loginPromptMessage");
+    if (string.IsNullOrWhiteSpace(prompt)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-member-gate",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-member-gate--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes" data-pending="member-auth-check">
+    <div class="syn-member-gate__prompt">@prompt</div>
+    @if (gatedBlocks != null)
+    {
+        <div class="syn-member-gate__content" hidden>
+            @foreach (var block in gatedBlocks)
+            {
+                <partial name="BlockGrid/Default" model="block" />
+            }
+        </div>
+    }
+</div>
