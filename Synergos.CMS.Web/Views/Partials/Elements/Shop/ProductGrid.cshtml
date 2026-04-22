@@ -1,11 +1,16 @@
 @*
-    elementShopProductGrid renderer (Ola 36). SSR skeleton.
-    Query real a productPage descendants pendiente (Shop runtime).
+    elementShopProductGrid renderer (Ola 33 schema + Ola 39 runtime).
+    Query real a productPage descendants con filter + sort + limit.
+    Delega cada card al partial Shop/ProductCard (composer-agnóstico).
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.PublishedContent
+@using Umbraco.Extensions
+@inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
 @{
     var categoryFilter = Model.Value<string>("categoryFilter");
-    var maxItems = Model.Value<string>("maxItems") ?? "12";
+    var maxItemsRaw = Model.Value<string>("maxItems");
+    var maxItems = int.TryParse(maxItemsRaw, out var m) && m > 0 ? m : 12;
     var sortBy = Model.Value<string>("sortBy") ?? "name";
     var layout = Model.Value<string>("layout") ?? "grid";
     var variant = Model.Value<string>("variantKey");
@@ -17,12 +22,79 @@
         string.IsNullOrWhiteSpace(variant) ? null : $"syn-product-grid--{variant}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    IReadOnlyList<IPublishedContent> products = Array.Empty<IPublishedContent>();
+    if (UmbracoContextAccessor.TryGetUmbracoContext(out var ctx) && ctx.Content != null)
+    {
+        IEnumerable<IPublishedContent> query = ctx.Content
+            .GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelfOfType("productPage"));
+
+        if (!string.IsNullOrWhiteSpace(categoryFilter))
+        {
+            var catKey = categoryFilter.Trim();
+            query = query.Where(p =>
+                p.Parent != null &&
+                string.Equals(p.Parent.ContentType.Alias, "productCategoryPage", StringComparison.Ordinal) &&
+                (string.Equals(p.Parent.UrlSegment, catKey, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(p.Parent.Name, catKey, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        decimal? ParsePrice(IPublishedContent p) =>
+            decimal.TryParse(p.Value<string>("productPriceBase"),
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var v) ? v : null;
+
+        query = sortBy switch
+        {
+            "price-asc" => query.OrderBy(p => ParsePrice(p) ?? decimal.MaxValue),
+            "price-desc" => query.OrderByDescending(p => ParsePrice(p) ?? decimal.MinValue),
+            "date-desc" => query.OrderByDescending(p => p.CreateDate),
+            _ => query.OrderBy(p => p.Value<string>("productName") ?? p.Name, StringComparer.OrdinalIgnoreCase),
+        };
+
+        products = query.Take(maxItems).ToList();
+    }
 }
 <section class="@classes"
          data-category-filter="@(categoryFilter ?? "")"
          data-max-items="@maxItems"
          data-sort-by="@sortBy"
-         data-layout="@layout"
-         data-pending="shop-product-query-wiring">
-    <!-- Shop runtime itera productPage descendants (filter + sort + limit) y renderiza cards. -->
+         data-layout="@layout">
+    @if (!products.Any())
+    {
+        <p class="syn-product-grid__empty">—</p>
+    }
+    else
+    {
+        <div class="syn-product-grid__items">
+            @foreach (var product in products)
+            {
+                var sku = product.Value<string>("productSku");
+                var name = product.Value<string>("productName") ?? product.Name;
+                var priceBase = product.Value<string>("productPriceBase");
+                var images = product.Value<IEnumerable<IPublishedContent>>("productImages");
+                var firstImage = images?.FirstOrDefault();
+                var inStock = product.Value<bool>("productInStock");
+                <article class="syn-product-grid__item" data-sku="@sku">
+                    <a class="syn-product-grid__link" href="@product.Url()">
+                        @if (firstImage != null)
+                        {
+                            <img class="syn-product-grid__image" src="@firstImage.Url()" alt="@name" loading="lazy" />
+                        }
+                        <h3 class="syn-product-grid__name">@name</h3>
+                        @if (!string.IsNullOrWhiteSpace(priceBase))
+                        {
+                            <span class="syn-product-grid__price">@priceBase</span>
+                        }
+                        @if (!inStock)
+                        {
+                            <span class="syn-product-grid__out-of-stock">Sin stock</span>
+                        }
+                    </a>
+                </article>
+            }
+        </div>
+    }
 </section>

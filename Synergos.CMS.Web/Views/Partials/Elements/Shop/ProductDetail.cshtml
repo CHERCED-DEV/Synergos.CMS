@@ -1,8 +1,14 @@
 @*
-    elementShopProductDetail renderer (Ola 36). SSR skeleton.
-    Query real a productPage por SKU pendiente (Shop runtime).
+    elementShopProductDetail renderer (Ola 33 schema + Ola 39 runtime).
+    Query por SKU a productPage. Render detail: gallery + name + price +
+    description + variants (si showVariantPicker). Reviews/related son
+    placeholders para hidratación JS (no hay entidades review/related en
+    el schema por ahora).
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.PublishedContent
+@using Umbraco.Extensions
+@inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
 @{
     var sku = Model.Value<string>("productSku");
     if (string.IsNullOrWhiteSpace(sku)) { return; }
@@ -17,12 +23,90 @@
         string.IsNullOrWhiteSpace(variant) ? null : $"syn-product-detail--{variant}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    IPublishedContent? product = null;
+    if (UmbracoContextAccessor.TryGetUmbracoContext(out var ctx) && ctx.Content != null)
+    {
+        product = ctx.Content
+            .GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelfOfType("productPage"))
+            .FirstOrDefault(p => string.Equals(p.Value<string>("productSku"), sku, StringComparison.OrdinalIgnoreCase));
+    }
 }
 <article class="@classes"
          data-sku="@sku"
          data-show-variant-picker="@showVariantPicker"
          data-show-reviews="@showReviews"
-         data-show-related="@showRelated"
-         data-pending="shop-product-detail-lookup">
-    <!-- Shop runtime consulta productPage por SKU y renderiza detail completo. -->
+         data-show-related="@showRelated">
+    @if (product == null)
+    {
+        <p class="syn-product-detail__empty">Producto no encontrado: <code>@sku</code></p>
+    }
+    else
+    {
+        var productName = product.Value<string>("productName") ?? product.Name;
+        var productDescription = product.Value<string>("productDescription");
+        var productPriceBase = product.Value<string>("productPriceBase");
+        var productImages = product.Value<IEnumerable<IPublishedContent>>("productImages")?.ToList() ?? new List<IPublishedContent>();
+        var inStock = product.Value<bool>("productInStock");
+        var variantsJson = product.Value<string>("productVariantsJson");
+        <div class="syn-product-detail__gallery">
+            @{ var isFirst = true; }
+            @foreach (var img in productImages)
+            {
+                <img class="syn-product-detail__image@(isFirst ? " syn-product-detail__image--primary" : "")"
+                     src="@img.Url()"
+                     alt="@productName"
+                     loading="@(isFirst ? "eager" : "lazy")" />
+                isFirst = false;
+            }
+        </div>
+        <div class="syn-product-detail__info">
+            <h1 class="syn-product-detail__name">@productName</h1>
+            @if (!string.IsNullOrWhiteSpace(productPriceBase))
+            {
+                <div class="syn-product-detail__price">@productPriceBase</div>
+            }
+            @if (!inStock)
+            {
+                <p class="syn-product-detail__out-of-stock">Sin stock</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(productDescription))
+            {
+                <div class="syn-product-detail__description">@Html.Raw(productDescription)</div>
+            }
+            @if (showVariantPicker && !string.IsNullOrWhiteSpace(variantsJson))
+            {
+                <div class="syn-product-detail__variants"
+                     data-variants-json="@variantsJson"
+                     data-pending="variant-picker-hydration">
+                    <!-- JS del design-system hidrata el variant picker desde el JSON. -->
+                </div>
+            }
+            @if (inStock)
+            {
+                <button type="button"
+                        class="syn-product-detail__add-to-cart"
+                        data-action="add-to-cart"
+                        data-sku="@sku"
+                        data-price="@productPriceBase">Añadir al carrito</button>
+            }
+        </div>
+        @if (showReviews)
+        {
+            <section class="syn-product-detail__reviews"
+                     data-pending="reviews-integration"
+                     data-sku="@sku">
+                <!-- Reviews se cargan via endpoint externo (provider TBD) — hidratación JS. -->
+            </section>
+        }
+        @if (showRelated)
+        {
+            <section class="syn-product-detail__related"
+                     data-pending="related-query"
+                     data-sku="@sku">
+                <!-- Related products resueltos por categoría/tags comunes — hidratación JS. -->
+            </section>
+        }
+    }
 </article>

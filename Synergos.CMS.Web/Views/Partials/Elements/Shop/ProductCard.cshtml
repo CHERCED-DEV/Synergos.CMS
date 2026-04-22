@@ -1,14 +1,41 @@
 @*
-    elementShopProductCard renderer (Ola 33). SSR skeleton.
-    Muestra un product card por SKU. Query real a productPage via
-    IPublishedContentQuery se cablea en Shop runtime posterior.
+    elementShopProductCard renderer (Ola 33 schema + Ola 39 runtime).
+    Query real a productPage descendants por SKU match. Render nativo
+    con imagen + nombre + precio base + CTA. addToCart solo emite
+    data-attrs para hidratación JS del design-system.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.PublishedContent
+@using Umbraco.Extensions
+@inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
 @{
     var sku = Model.Value<string>("productSku");
+    if (string.IsNullOrWhiteSpace(sku)) { return; }
     var showPrice = Model.Value<bool>("showPrice");
     var showAddToCart = Model.Value<bool>("showAddToCart");
     var layout = Model.Value<string>("cardLayout") ?? "standard";
+    var productUrlTemplate = Model.Value<string>("productUrlTemplate");
+    if (string.IsNullOrWhiteSpace(productUrlTemplate))
+    {
+        var configOverrideJson = Model.Value<string>("configOverride");
+        if (!string.IsNullOrWhiteSpace(configOverrideJson))
+        {
+            try
+            {
+                using var configOverride = System.Text.Json.JsonDocument.Parse(configOverrideJson);
+                if (configOverride.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                    configOverride.RootElement.TryGetProperty("productUrlTemplate", out var productUrlTemplateElement) &&
+                    productUrlTemplateElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    productUrlTemplate = productUrlTemplateElement.GetString();
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Invalid override JSON should not break SSR placeholder rendering.
+            }
+        }
+    }
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
     var classes = string.Join(" ", new[]
@@ -18,11 +45,63 @@
         string.IsNullOrWhiteSpace(variant) ? null : $"syn-product-card--{variant}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    IPublishedContent? product = null;
+    if (UmbracoContextAccessor.TryGetUmbracoContext(out var ctx) && ctx.Content != null)
+    {
+        product = ctx.Content
+            .GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelfOfType("productPage"))
+            .FirstOrDefault(p => string.Equals(p.Value<string>("productSku"), sku, StringComparison.OrdinalIgnoreCase));
+    }
+
+    var productUrl = product?.Url();
+    if (!string.IsNullOrWhiteSpace(productUrlTemplate) && !string.IsNullOrWhiteSpace(sku))
+    {
+        productUrl = productUrlTemplate.Replace("{sku}", Uri.EscapeDataString(sku));
+    }
 }
 <article class="@classes"
          data-sku="@sku"
          data-show-price="@showPrice"
          data-show-add-to-cart="@showAddToCart"
-         data-pending="shop-product-lookup">
-    <!-- Shop runtime consulta productPage por SKU y renderiza la card. -->
+         @if (!string.IsNullOrWhiteSpace(productUrlTemplate))
+         {
+             @:data-product-url-template="@productUrlTemplate"
+         }>
+    @if (product == null)
+    {
+        <p class="syn-product-card__empty">Producto no encontrado: <code>@sku</code></p>
+    }
+    else
+    {
+        var productName = product.Value<string>("productName") ?? product.Name;
+        var productPriceBase = product.Value<string>("productPriceBase");
+        var productImages = product.Value<IEnumerable<IPublishedContent>>("productImages");
+        var firstImage = productImages?.FirstOrDefault();
+        var inStock = product.Value<bool>("productInStock");
+        <a class="syn-product-card__link" href="@productUrl">
+            @if (firstImage != null)
+            {
+                <img class="syn-product-card__image" src="@firstImage.Url()" alt="@productName" loading="lazy" />
+            }
+            <h3 class="syn-product-card__name">@productName</h3>
+            @if (showPrice && !string.IsNullOrWhiteSpace(productPriceBase))
+            {
+                <span class="syn-product-card__price">@productPriceBase</span>
+            }
+            @if (!inStock)
+            {
+                <span class="syn-product-card__out-of-stock">Sin stock</span>
+            }
+        </a>
+        @if (showAddToCart && inStock)
+        {
+            <button type="button"
+                    class="syn-product-card__add-to-cart"
+                    data-action="add-to-cart"
+                    data-sku="@sku"
+                    data-price="@productPriceBase">Añadir al carrito</button>
+        }
+    }
 </article>
