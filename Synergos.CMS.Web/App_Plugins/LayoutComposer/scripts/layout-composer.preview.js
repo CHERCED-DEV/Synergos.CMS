@@ -265,5 +265,57 @@
             return function (value, fallback) {
                 return toPreviewHost(value) || fallback || "";
             };
+        })
+        /**
+         * @directive lcInitDefaults
+         * @api LayoutComposer v1.1 (Ola 42.6)
+         * Atributo declarativo en el root <div> de un block preview view.
+         * En el pre-link phase (antes de que las bindings ng-attr-* evalúen),
+         * rellena las chrome props vacías de block.data con los defaults del
+         * Layout Composer — containerType=normal, theme=light, spacingTop=lg,
+         * spacingBottom=lg, spacingInline=md.
+         *
+         * Complementa el handler server-side LayoutPresetDefaults.cs: éste
+         * hace el fill en el DOM-bound data ANTES de que el editor vea la
+         * overlay; el handler C# lo garantiza en persistencia. Per-prop fill
+         * (no all-empty) — cualquier valor explícito del editor se respeta.
+         *
+         * Dropdown.Flexible almacena como array de length 1 (["normal"]),
+         * de ahí el wrap en array al asignar.
+         *
+         * Uso:
+         *   <div class="lc-block ..." lc-init-defaults ...>
+         */
+        .directive("lcInitDefaults", function () {
+            var defaults = {
+                containerType: "normal",
+                theme: "light",
+                spacingTop: "lg",
+                spacingBottom: "lg",
+                spacingInline: "md"
+            };
+            function ensure(data, alias, value) {
+                var current = data[alias];
+                if (!current || (Array.isArray(current) && !current[0])) {
+                    data[alias] = [value];
+                }
+            }
+            return {
+                restrict: "A",
+                priority: 500,
+                compile: function () {
+                    return {
+                        pre: function (scope) {
+                            if (!scope.block || !scope.block.data) {
+                                return;
+                            }
+                            var data = scope.block.data;
+                            Object.keys(defaults).forEach(function (alias) {
+                                ensure(data, alias, defaults[alias]);
+                            });
+                        }
+                    };
+                }
+            };
         });
 })();
