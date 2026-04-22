@@ -1,9 +1,12 @@
 @*
-    elementCompBlogHighlight renderer (Ola 32). SSR skeleton.
-    Query real (N posts más recientes ordenados por publishDate) se
-    cablea en Blog runtime ola posterior.
+    elementCompBlogHighlight renderer (Ola 32 schema + Ola 38 runtime).
+    Query real: los N posts más recientes (por publishDate desc, fallback
+    createDate) en todo el siteRoot/tenantRoot. Sin filtro category ni tags.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.PublishedContent
+@using Umbraco.Extensions
+@inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
 @{
     var title = Model.Value<string>("highlightTitle");
     var countRaw = Model.Value<string>("highlightCount");
@@ -16,13 +19,74 @@
         string.IsNullOrWhiteSpace(variant) ? null : $"syn-blog-highlight--{variant}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    IReadOnlyList<IPublishedContent> posts = Array.Empty<IPublishedContent>();
+    if (UmbracoContextAccessor.TryGetUmbracoContext(out var ctx) && ctx.Content != null)
+    {
+        DateTime ParsePublishDate(IPublishedContent p)
+        {
+            var raw = p.Value<string>("publishDate");
+            return !string.IsNullOrWhiteSpace(raw) && DateTime.TryParse(raw, out var dt) ? dt : p.CreateDate;
+        }
+
+        posts = ctx.Content
+            .GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelfOfType("postPage"))
+            .OrderByDescending(ParsePublishDate)
+            .Take(count)
+            .ToList();
+    }
 }
 <section class="@classes" data-count="@count">
     @if (!string.IsNullOrWhiteSpace(title))
     {
         <h2 class="syn-blog-highlight__title">@title</h2>
     }
-    <div class="syn-blog-highlight__items" data-pending="post-query-wiring">
-        <!-- Blog runtime renderer cablea los N posts destacados aquí. -->
-    </div>
+    @if (!posts.Any())
+    {
+        <p class="syn-blog-highlight__empty">—</p>
+    }
+    else
+    {
+        <div class="syn-blog-highlight__items">
+            @{ var isFirst = true; }
+            @foreach (var post in posts)
+            {
+                var hero = post.Value<IPublishedContent>("heroImage");
+                var excerpt = post.Value<string>("excerpt");
+                var rawDate = post.Value<string>("publishDate");
+                var authorName = post.Value<string>("authorName");
+                var itemClass = isFirst
+                    ? "syn-blog-highlight__item syn-blog-highlight__item--primary"
+                    : "syn-blog-highlight__item";
+                <article class="@itemClass">
+                    <a class="syn-blog-highlight__link" href="@post.Url()">
+                        @if (hero != null)
+                        {
+                            <img class="syn-blog-highlight__image"
+                                 src="@hero.Url()"
+                                 alt=""
+                                 loading="@(isFirst ? "eager" : "lazy")" />
+                        }
+                        <h3 class="syn-blog-highlight__item-title">@post.Name</h3>
+                        @if (!string.IsNullOrWhiteSpace(excerpt))
+                        {
+                            <p class="syn-blog-highlight__excerpt">@excerpt</p>
+                        }
+                        <div class="syn-blog-highlight__meta">
+                            @if (!string.IsNullOrWhiteSpace(rawDate))
+                            {
+                                <time class="syn-blog-highlight__date" datetime="@rawDate">@rawDate</time>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(authorName))
+                            {
+                                <span class="syn-blog-highlight__author">@authorName</span>
+                            }
+                        </div>
+                    </a>
+                </article>
+                isFirst = false;
+            }
+        </div>
+    }
 </section>

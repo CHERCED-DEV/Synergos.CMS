@@ -1,14 +1,16 @@
 @*
-    elementCompArticleList renderer (Ola 32). SSR.
-    Skeleton: emite <section> con título + data attrs de filtros.
-    El query real a postPage descendants (filtrado por categoryFilter +
-    tagsFilter, ordenado por publishDate desc, limitado a maxItems) se
-    cablea en ola posterior (Blog runtime). Por ahora el CDN o un
-    custom renderer iterará el DOM data-* para hidratar la lista.
+    elementCompArticleList renderer (Ola 32 schema + Ola 38 runtime).
+    Query real a postPage descendants bajo siteRoot (o tenantRoot),
+    filtrado por categoryFilter (alias/name de postCategoryPage padre)
+    y tagsFilter (CSV — match OR contra compTagging.tagsCsv del post).
+    Ordenado por publishDate desc (fallback a createDate).
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.PublishedContent
+@using Umbraco.Extensions
+@inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
 @{
-    var title = Model.Value<string>("listTitle");
+    var listTitle = Model.Value<string>("listTitle");
     var maxItemsRaw = Model.Value<string>("maxItems");
     var maxItems = int.TryParse(maxItemsRaw, out var m) && m > 0 ? m : 6;
     var categoryFilter = Model.Value<string>("categoryFilter");
@@ -21,16 +23,102 @@
         string.IsNullOrWhiteSpace(variant) ? null : $"syn-article-list--{variant}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    IEnumerable<IPublishedContent> posts = Enumerable.Empty<IPublishedContent>();
+    if (UmbracoContextAccessor.TryGetUmbracoContext(out var ctx) && ctx.Content != null)
+    {
+        IEnumerable<IPublishedContent> query = ctx.Content
+            .GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelfOfType("postPage"));
+
+        if (!string.IsNullOrWhiteSpace(categoryFilter))
+        {
+            var catKey = categoryFilter.Trim();
+            query = query.Where(p =>
+                p.Parent != null &&
+                string.Equals(p.Parent.ContentType.Alias, "postCategoryPage", StringComparison.Ordinal) &&
+                (string.Equals(p.Parent.UrlSegment, catKey, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(p.Parent.Name, catKey, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(tagsFilter))
+        {
+            var wantedTags = tagsFilter
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(t => t.ToLowerInvariant())
+                .ToHashSet();
+            query = query.Where(p =>
+            {
+                var tagsCsv = p.Value<string>("tagsCsv");
+                if (string.IsNullOrWhiteSpace(tagsCsv)) return false;
+                return tagsCsv
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Any(t => wantedTags.Contains(t.ToLowerInvariant()));
+            });
+        }
+
+        DateTime ParsePublishDate(IPublishedContent p)
+        {
+            var raw = p.Value<string>("publishDate");
+            return !string.IsNullOrWhiteSpace(raw) && DateTime.TryParse(raw, out var dt) ? dt : p.CreateDate;
+        }
+
+        posts = query
+            .OrderByDescending(ParsePublishDate)
+            .Take(maxItems)
+            .ToList();
+    }
 }
 <section class="@classes"
          data-max-items="@maxItems"
          data-category-filter="@(categoryFilter ?? "")"
          data-tags-filter="@(tagsFilter ?? "")">
-    @if (!string.IsNullOrWhiteSpace(title))
+    @if (!string.IsNullOrWhiteSpace(listTitle))
     {
-        <h2 class="syn-article-list__title">@title</h2>
+        <h2 class="syn-article-list__title">@listTitle</h2>
     }
-    <div class="syn-article-list__items" data-pending="post-query-wiring">
-        <!-- Blog runtime renderer cablea la lista real aquí (Ola 35+). -->
-    </div>
+    @if (!posts.Any())
+    {
+        <p class="syn-article-list__empty">—</p>
+    }
+    else
+    {
+        <ul class="syn-article-list__items">
+            @foreach (var post in posts)
+            {
+                var hero = post.Value<IPublishedContent>("heroImage");
+                var excerpt = post.Value<string>("excerpt");
+                var rawDate = post.Value<string>("publishDate");
+                var authorName = post.Value<string>("authorName");
+                var readTime = post.Value<string>("readTimeMinutes");
+                <li class="syn-article-list__item">
+                    <a class="syn-article-list__link" href="@post.Url()">
+                        @if (hero != null)
+                        {
+                            <img class="syn-article-list__image" src="@hero.Url()" alt="" loading="lazy" />
+                        }
+                        <h3 class="syn-article-list__item-title">@post.Name</h3>
+                        @if (!string.IsNullOrWhiteSpace(excerpt))
+                        {
+                            <p class="syn-article-list__excerpt">@excerpt</p>
+                        }
+                        <div class="syn-article-list__meta">
+                            @if (!string.IsNullOrWhiteSpace(rawDate))
+                            {
+                                <time class="syn-article-list__date" datetime="@rawDate">@rawDate</time>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(authorName))
+                            {
+                                <span class="syn-article-list__author">@authorName</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(readTime))
+                            {
+                                <span class="syn-article-list__read-time">@readTime min</span>
+                            }
+                        </div>
+                    </a>
+                </li>
+            }
+        </ul>
+    }
 </section>
