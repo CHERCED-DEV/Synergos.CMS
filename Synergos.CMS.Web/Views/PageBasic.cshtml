@@ -1,16 +1,31 @@
 @*
-    Template del Document Type `pageBasic` (Ola 7 + shared layout Ola 18).
-    Mínimo: SeoTitle + body richtext, dentro de _Layout compartido.
-    `body` sanitizado por TinyMCE pipeline (SanitizeTinyMce=true).
+    Template del Document Type `pageBasic` (Ola 7 + shared layout Ola 18
+    + Layout Composer Ola 42.5). Hereda chrome de _Layout.cshtml.
+
+    Dos bloques editoriales, ambos opcionales:
+      - BodyHtml  richtext corto via TinyMCE
+      - sections  Block Grid Sections (Layout Composer presets)
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBasicResponse>
+@using Umbraco.Cms.Core.Models.Blocks
 @{
     Layout = "_Layout";
+    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var sections = currentContent?.Value<BlockGridModel>("sections");
 }
 <article class="syn-page-basic">
     @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
     {
         <h1 class="syn-page-basic__title">@Model.SeoTitle</h1>
     }
-    @Html.Raw(Model.BodyHtml)
+    @if (!string.IsNullOrWhiteSpace(Model.BodyHtml))
+    {
+        <div class="syn-page-basic__body">@Html.Raw(Model.BodyHtml)</div>
+    }
+    @if (sections != null && sections.Any())
+    {
+        <div class="syn-page-basic__sections">
+            @await Html.GetBlockGridHtmlAsync(sections)
+        </div>
+    }
 </article>
