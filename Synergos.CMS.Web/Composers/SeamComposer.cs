@@ -61,6 +61,15 @@ public sealed class SeamComposer : IComposer
         // is negligible (single projection).
         services.AddTransient<IBrandThemeProvider, DefaultBrandThemeProvider>();
 
+        // Ola 41 — Flow engine runtime. FlowResolver queries the content
+        // tree (Transient for the same per-request reason as theme). The
+        // FlowController is picked up by AddControllers() above;
+        // IHttpContextAccessor is registered by ASP.NET Core and is
+        // consumed by the elementFlowProgress renderer to read the
+        // syn-flow-{flowKey} cookie.
+        services.AddTransient<FlowResolver>();
+        services.AddHttpContextAccessor();
+
         // Health probes. Each registers as an ISchemaHealthProbe; the
         // HealthController resolves them as IEnumerable<ISchemaHealthProbe>.
         services.AddSingleton<ISchemaHealthProbe>(_ => new SchemaVersionProbe());
