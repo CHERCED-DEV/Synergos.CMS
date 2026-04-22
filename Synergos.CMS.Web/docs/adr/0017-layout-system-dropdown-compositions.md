@@ -6,7 +6,8 @@
 - **Source:** redactado directamente como Ratified (no draft previo); el
   slot 0017 estaba vacío en `refactor-docs/adr-drafts/`.
 - **Authorises:** Ola 42 del plan de migración (Layout system
-  rediseñado).
+  rediseñado) + Ola 42.5 (Layout Composer con presets + areas + preview
+  en backoffice) — ver §Addendum Ola 42.5 al final.
 
 ## Context
 
@@ -244,3 +245,182 @@ layout:
   2**. Rechazado según memoria
   `history_layout_config_vision_epicfail2`: LayoutComposer del
   legado se **rediseña, no se copia**.
+
+---
+
+## Addendum Ola 42.5 — Layout Composer con presets + areas + preview
+
+### Por qué un addendum en vez de un ADR nuevo
+
+Ola 42 resolvió el layout **per-block** con dropdowns granulares. Eso
+está bien — y sigue vigente — pero le faltaba la capa estructural
+con la que el editor arma una página mixta (hero + main-sidebar +
+3col) sin escribir markup. Ola 42.5 añade esa capa **encima** de las
+composiciones existentes sin desplazarlas: sigue siendo el mismo
+modelo BEM, mismo `LayoutCssBuilder`, mismos dropdowns en el tab DOM.
+
+### Decisión
+
+Se introduce el **Layout Composer** como Block Grid dedicado con
+preview visual de presets en el backoffice. Componentes:
+
+1. **10 `elementLayout*` ElementTypes** (carpeta `Elements/Layout`) —
+   shell sin propiedades propias, opta por:
+   - `compDomClass` (cssClass)
+   - `compDomVariant` (variantKey)
+   - `compDomSpacing` (top/bottom/inline — Ola 42 dropdowns)
+   - `compDomPresetChrome` (NEW — containerType, theme, 4 flags noPad/noMargin)
+
+   Matriz:
+
+   | Alias | Areas | Uso |
+   |---|---|---|
+   | `elementLayoutSection` | 1 × 12 (sectionContent) | wrapper raíz, `<section>` |
+   | `elementLayoutContainer` | 1 × 12 (containerContent) | wrapper neutro |
+   | `elementLayoutStack` | 1 × 12 (stackContent) | flex 1D |
+   | `elementLayoutGrid` | 1 × 12 (gridColumns, restricted a Column) | grid custom |
+   | `elementLayoutColumn` | 1 × 12 (columnContent) | hijo de Grid, columnSpan 1-12 |
+   | `elementLayout1Col` | 1 × 12 (main) | full width |
+   | `elementLayout2ColEven` | 2 × 6+6 (left/right) | equilibrado |
+   | `elementLayout2ColMainSidebar` | 2 × 8+4 (main/sidebar) | lectura + rail |
+   | `elementLayout3Col` | 3 × 4+4+4 (col1..col3) | tríada |
+   | `elementLayout4Col` | 4 × 3+3+3+3 (col1..col4) | densidad |
+
+2. **`DT.BlockGrid.Sections`** — Block Grid DataType dedicado. Un
+   solo BlockGroup "Layout" con los 10 presets. Cada block declara:
+   - `contentElementTypeKey` → elementLayout* correspondiente
+   - `areas` array con 1-4 areas (alias + columnSpan + key fresco + specifiedAllowance)
+   - `columnSpanOptions` 12 en todos excepto Column (1-12)
+   - `stylesheet` → `/App_Plugins/LayoutComposer/styles/layout-composer.css`
+   - `view` → `~/App_Plugins/LayoutComposer/views/block-*.html`
+
+3. **Plugin `App_Plugins/LayoutComposer/`** — recuperado del Epic
+   Fail 2 archive, sin rediseñar (el plugin era un activo sólido;
+   el problema de Epic Fail 2 era el acoplamiento code-first, no
+   las views AngularJS):
+   - `package.manifest` registra JS + CSS
+   - `styles/layout-composer.css` — chrome backoffice (lc-block,
+     lc-col-vis, lc-chip, lc-area-labels, etc.)
+   - `scripts/layout-composer.preview.js` — filtros AngularJS
+     sgPreviewText/Count/Host + autoload del CSS
+   - `views/` — 10 HTML con column visualization + chips de config
+     + `<umb-block-grid-render-area-slots>` para los drop zones
+
+4. **`compDomPresetChrome`** (composición nueva, exclusiva de
+   presets) — 6 props:
+   - `containerType` (DT.Select.ContainerType): full-bleed | normal | narrow | ultra-narrow
+   - `theme` (DT.Select.Theme): light | dark | brand | accent
+   - `noPaddingTop`, `noPaddingBottom`, `noMarginTop`, `noMarginBottom` (TrueFalse)
+
+5. **`DTSelectContainerType` + `DTSelectTheme`** — DataTypes dropdown.
+
+6. **10 Razor SSR renderers** en `Views/Partials/blockgrid/Components/
+   elementLayout*.cshtml` — iteran `Model.Areas` y llaman
+   `Html.GetBlockGridItemsHtmlAsync(area)` por cada drop zone.
+   Clases base: `syn-layout syn-layout--{alias}` + modifiers de
+   `LayoutCssBuilder.Build(element)` (que ahora también emite los
+   `syn-preset--*` del chrome).
+
+7. **`sections` property** en `pageBase` (SortOrder=20, Culture,
+   DT.BlockGrid.Sections). Tres campos editoriales escalables:
+   - `body` (TinyMCE corto, para intros)
+   - `bodyBlocks` (DT.BlockGrid.Editorial flat, legacy/simple)
+   - `sections` (DT.BlockGrid.Sections con presets, **recomendado**)
+
+### Regla editorial — cuándo usar cada campo
+
+- **`sections`** es el default para páginas nuevas con layout
+  estructurado (about, services, landings con hero + 2col + 3col).
+- **`bodyBlocks`** para páginas simples flat (FAQ, términos, contact
+  minimal) — el editor no necesita decidir topología.
+- **`body`** sólo para intros cortos o páginas legacy.
+
+Los tres conviven en pageBase; `PageBase.cshtml` los renderiza en
+orden: SeoTitle → BodyHtml → sections → bodyBlocks.
+
+### Scope de código autorizado por el addendum
+
+1. `uSync/v9/DataTypes/DTSelectContainerType.config`,
+   `DTSelectTheme.config`, `DTBlockGridSections.config`.
+2. `uSync/v9/ContentTypes/compdompresetchrome.config` +
+   `elementlayout*.config` (10 archivos en Elements/Layout).
+3. `App_Plugins/LayoutComposer/package.manifest` + styles + scripts
+   + 10 views HTML.
+4. Property `sections` añadida a `page-base.config`.
+5. Extensión de `Synergos.CMS.Web/Services/LayoutCssBuilder.cs`
+   para emitir los `syn-preset--*` modifiers.
+6. 10 Razor partials `Views/Partials/blockgrid/Components/
+   elementLayout*.cshtml`.
+7. Actualización de `Views/PageBase.cshtml` para renderizar
+   `sections`.
+
+### Lo que el addendum NO autoriza
+
+- Añadir `sections` property a siteRoot/pageBasic/pageBare — queda
+  pendiente; esos DocTypes tienen semánticas distintas (siteRoot es
+  home con identity, pageBasic es smoke mínimo, pageBare es landing
+  sin chrome). Si alguno los necesita, se decide caso a caso.
+- Eliminar `bodyBlocks` de pageBase. Los tres campos coexisten;
+  `bodyBlocks` es la ruta simple para páginas sin topología.
+- Añadir presets adicionales (holy-grail, 2col asimétricos 8-4/4-8,
+  separator, universal fallback) — el set de 10 cubre los casos
+  reales reportados; se añaden más cuando surja el caso.
+- CSS del design system que implementa `syn-layout--*`,
+  `syn-preset--*`, `syn-layout__area--*` — es responsabilidad del
+  producto consumidor.
+
+### Consequences del addendum
+
+**Positive**
+
+- El editor ve el layout mientras lo arma: cada preset es preview
+  visual con divisiones de columnas + chips de configuración
+  activa + drop zones explícitas.
+- Topología mixta por página natural: hero 1col → main-sidebar →
+  3col → 1col cierre, todo en el mismo `sections` Block Grid.
+- Preview del backoffice + SSR emiten la misma taxonomía BEM
+  (`syn-layout--main-sidebar`, etc.): el design system implementa
+  una vez, ambos entornos responden igual.
+- Plugin es AngularJS (Umbraco 13 backoffice nativo) — sin build
+  step adicional, sin dependencias externas.
+- Presets son ElementTypes (no DocTypes) — el inventario Epic Fail
+  2 sugería DocTypes, rechazado en §Decision original; presets como
+  elements es más liviano en el árbol de contenido y encaja con el
+  modelo Block Grid.
+
+**Negative**
+
+- Duplicación conceptual entre `elementStructSection/Container/
+  Stack/Grid/Column` (Ola 20) y `elementLayoutSection/Container/
+  Stack/Grid/Column` (Ola 42.5). Los primeros sirven dentro de
+  `bodyBlocks` (editorial flat), los segundos dentro de `sections`
+  (con areas). Coexisten; si converge en el tiempo, se deprecia
+  una familia. Nota para olas futuras.
+- Block Grid JSON con areas es ruidoso — `DTBlockGridSections.config`
+  pesa ~190 líneas para 10 blocks. Trade-off aceptado: el JSON es
+  declarativo y cada pieza es self-contained.
+- Plugin `App_Plugins/LayoutComposer/` es AngularJS — si Umbraco
+  migra el backoffice a un framework distinto en una versión
+  futura, el plugin hay que reescribir. Mitigación: memoria
+  `feedback_umbraco_version_pin.md` fija Umbraco 13.x.
+- El editor con 10 presets puede elegir mal topológicamente. El
+  design system debe proveer CSS `syn-layout--*` que sea visualmente
+  razonable incluso con configuración vacía (defaults sensatos).
+
+### Alternatives considered para Ola 42.5
+
+- **No hacer presets, sólo dropdowns Ola 42**. Rechazado porque
+  obliga al editor a entender flex/grid CSS para armar una página
+  mixta — no escala a editores no técnicos.
+- **Custom property editor (plugin) en vez de Block Grid con
+  areas**. Rechazado porque Block Grid nativo de Umbraco 13 ya
+  resuelve areas + drag-drop + preview; reescribir sería NIH.
+- **Layout Preset DocTypes (como el inventario sugería)**.
+  Rechazado: los DocTypes son nodos en el árbol de contenido —
+  añaden ruido. ElementTypes dentro de un Block Grid son
+  invisibles en el tree.
+- **Reescribir el plugin en Lit o TypeScript moderno**. Rechazado
+  porque Umbraco 13 backoffice sigue siendo AngularJS nativamente;
+  un plugin moderno requeriría bridge + build step sin ganancia
+  real vs copiar el archive.
+
