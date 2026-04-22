@@ -22,6 +22,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0012](0012-cdn-contract-consumed.md) | CDN contract is consumed, not owned | Accepted |
 | [0013](0013-no-automatic-seeders.md) | No automatic seeders; dev tooling behind flag | Accepted |
 | [0014](0014-document-type-page-basic.md) | Document Type `PageBasic` (first product case, static pages) | Accepted |
+| [0017](0017-layout-system-dropdown-compositions.md) | Layout system per-block compositions con dropdowns | Accepted |
 
 ## Rules
 
