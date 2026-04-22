@@ -1049,4 +1049,21 @@ public static class ContentTypeKeys
 
     public static readonly Guid ElementShopCartSummary =
         Guid.Parse("913a7ede-b119-4bcd-8454-77ce4e1e20ca");
+
+    // ── Shared Content / Reusable Block (Ola 34) ──────────────────
+
+    /// <summary>
+    /// <c>sharedContentFolder</c> — Container para reusableBlock.
+    /// AllowAtRoot; tree separado paralelo a siteRoot + settingsRoot.
+    /// </summary>
+    public static readonly Guid SharedContentFolder =
+        Guid.Parse("9a1134b1-c973-4527-b988-f29f1457ad5c");
+
+    /// <summary>
+    /// <c>reusableBlock</c> — Bloque de contenido reutilizable con
+    /// bodyBlocks (DT.BlockGrid.Editorial). Consumido desde pages
+    /// via picker/embed. Props: blockTitle, blockNotes, bodyBlocks.
+    /// </summary>
+    public static readonly Guid ReusableBlock =
+        Guid.Parse("907840c2-4bd1-4ef8-8181-c4abea0e8a9a");
 }
