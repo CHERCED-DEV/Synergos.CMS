@@ -7,27 +7,29 @@ namespace Synergos.CMS.Web.Notifications;
 
 /// <summary>
 /// Pre-fills Layout Preset blocks (Ola 42.5) with sensible defaults on
-/// first save, so the editor sees a configured preset after dropping
-/// it — not empty dropdowns that have to be filled every time.
+/// save, so the editor sees configured presets without having to fill
+/// every dropdown manually.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Hook: <see cref="ContentSavingNotification"/>. For each saved
 /// content we inspect every Block Grid value (raw JSON on the property)
-/// and walk its <c>contentData</c> array. When a block's
+/// and walk its <c>contentData</c> array. For entries whose
 /// <c>contentTypeKey</c> matches one of the 10 Layout Preset
-/// <c>elementLayout*</c> GUIDs AND none of the five chrome props
-/// (<c>containerType</c>, <c>theme</c>, <c>spacingTop</c>,
-/// <c>spacingBottom</c>, <c>spacingInline</c>) carry any value yet,
-/// we assume the block was freshly dropped and fill the defaults.
+/// <c>elementLayout*</c> GUIDs we apply per-property defaults: any
+/// chrome prop that is currently <em>empty</em> gets the default; any
+/// prop the editor already set is preserved untouched.
 /// </para>
 /// <para>
-/// The all-empty heuristic avoids clobbering deliberate editor choices:
-/// once any chrome prop has been set (including explicitly cleared via
-/// a later edit that sets another prop), the handler no longer rewrites.
-/// Edge case: an editor who clears <em>every</em> chrome prop at once
-/// will re-trigger the defaults on next save — acceptable trade-off for
-/// a pure server-side solution (no flag in Umbraco for "just created").
+/// Per-prop fill (vs the earlier "all-empty" heuristic) means the
+/// defaults stick even across partial edits: the editor can change
+/// <c>containerType</c> to "narrow" and the other four props still
+/// get defaults on save. The trade-off: if the editor deliberately
+/// clears a default to empty, the next save rewrites it — by design,
+/// "empty" is treated as "missing", and a preset never ships without
+/// a containerType/theme/spacing baseline. If a truly empty slot is
+/// needed, the editor picks a specific value (e.g. "none" in
+/// spacing).
 /// </para>
 /// </remarks>
 public sealed class LayoutPresetDefaults
@@ -130,34 +132,26 @@ public sealed class LayoutPresetDefaults
                 continue;
             }
 
-            if (!AllChromePropsEmpty(entry))
-            {
-                continue; // editor has already touched this block.
-            }
-
+            // Per-prop fill: any empty chrome prop gets its default.
+            // Props the editor already set keep their value.
             foreach (var (alias, value) in Defaults)
             {
-                entry[alias] = value;
+                if (IsEmpty(entry[alias]))
+                {
+                    entry[alias] = value;
+                    changed = true;
+                }
             }
-            changed = true;
         }
 
         return changed ? root.ToJsonString() : raw;
     }
 
-    private static bool AllChromePropsEmpty(JsonObject entry)
+    private static bool IsEmpty(JsonNode? node)
     {
-        foreach (var (alias, _) in Defaults)
-        {
-            var node = entry[alias];
-            if (node is null) continue;
-            var str = node.GetValue<string?>();
-            if (!string.IsNullOrWhiteSpace(str))
-            {
-                return false;
-            }
-        }
-        return true;
+        if (node is null) return true;
+        var str = node.GetValue<string?>();
+        return string.IsNullOrWhiteSpace(str);
     }
 
     private static bool TryReadGuid(JsonNode? node, out Guid value)
