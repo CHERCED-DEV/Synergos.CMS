@@ -1,0 +1,28 @@
+@*
+    elementShopProductCard renderer (Ola 33). SSR skeleton.
+    Muestra un product card por SKU. Query real a productPage via
+    IPublishedContentQuery se cablea en Shop runtime posterior.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var sku = Model.Value<string>("productSku");
+    var showPrice = Model.Value<bool>("showPrice");
+    var showAddToCart = Model.Value<bool>("showAddToCart");
+    var layout = Model.Value<string>("cardLayout") ?? "standard";
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-product-card",
+        $"syn-product-card--{layout}",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-product-card--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<article class="@classes"
+         data-sku="@sku"
+         data-show-price="@showPrice"
+         data-show-add-to-cart="@showAddToCart"
+         data-pending="shop-product-lookup">
+    <!-- Shop runtime consulta productPage por SKU y renderiza la card. -->
+</article>

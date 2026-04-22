@@ -1,0 +1,29 @@
+@*
+    elementShopCartItem renderer (Ola 33). SSR. Frontend JS cablea update/remove.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var sku = Model.Value<string>("productSku");
+    var qty = Model.Value<string>("quantity") ?? "1";
+    var unitPrice = Model.Value<string>("unitPrice");
+    var updateEndpoint = Model.Value<string>("updateEndpoint");
+    if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(unitPrice) || string.IsNullOrWhiteSpace(updateEndpoint)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-cart-item",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-cart-item--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<article class="@classes"
+         data-sku="@sku"
+         data-qty="@qty"
+         data-unit-price="@unitPrice"
+         data-update-endpoint="@updateEndpoint">
+    <span class="syn-cart-item__sku">@sku</span>
+    <span class="syn-cart-item__qty">×@qty</span>
+    <span class="syn-cart-item__price">@unitPrice</span>
+    <button type="button" class="syn-cart-item__remove" aria-label="Remover">×</button>
+</article>

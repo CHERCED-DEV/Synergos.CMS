@@ -1012,4 +1012,41 @@ public static class ContentTypeKeys
 
     public static readonly Guid ElementCompBlogHighlight =
         Guid.Parse("84c34c2c-3faa-41a7-a409-dabf5d09c8db");
+
+    // ── Shop skeleton (Ola 33) ─────────────────────────────────────
+
+    /// <summary>
+    /// <c>productPage</c> — Product DocType. Composes compCoreBase +
+    /// compSeo + compTagging. Props: productSku (Nothing), productName
+    /// (Culture), productDescription (Culture richtext), productPriceBase
+    /// (Nothing decimal), productImages (Culture MediaPicker3 multi),
+    /// productInStock (Nothing flag), productVariantsJson (Culture).
+    /// </summary>
+    public static readonly Guid ProductPage =
+        Guid.Parse("7183ebd0-08be-415d-a1f7-e4a6efceeb9d");
+
+    /// <summary>
+    /// <c>productCategoryPage</c> — Product category container.
+    /// IsListView=true. Structure allows productPage children.
+    /// </summary>
+    public static readonly Guid ProductCategoryPage =
+        Guid.Parse("91593852-654e-46e0-9eae-e1507cde0e9c");
+
+    public static readonly Guid ElementShopProductCard =
+        Guid.Parse("59470582-1df8-4a0c-b3c4-80fadccbb7ed");
+
+    public static readonly Guid ElementShopPriceDisplay =
+        Guid.Parse("9b38832b-2ec9-44bd-b80d-f4c1f84b9828");
+
+    public static readonly Guid ElementShopQuantitySelector =
+        Guid.Parse("6ea62ca6-1bcc-4194-ad07-ae5a8dc8996d");
+
+    public static readonly Guid ElementShopVariantPicker =
+        Guid.Parse("0bc4e33a-8e3a-45b1-98df-cd8e006e9898");
+
+    public static readonly Guid ElementShopCartItem =
+        Guid.Parse("45ba06ed-e07a-4113-b2bb-fdc15171472b");
+
+    public static readonly Guid ElementShopCartSummary =
+        Guid.Parse("913a7ede-b119-4bcd-8454-77ce4e1e20ca");
 }

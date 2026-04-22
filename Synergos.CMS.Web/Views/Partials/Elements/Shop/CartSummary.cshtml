@@ -1,0 +1,38 @@
+@*
+    elementShopCartSummary renderer (Ola 33). SSR skeleton.
+    Runtime JS calcula totales desde cart items DOM.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("summaryTitle");
+    var showShipping = Model.Value<bool>("showShipping");
+    var showTax = Model.Value<bool>("showTax");
+    var checkoutEndpoint = Model.Value<string>("checkoutEndpoint");
+    if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(checkoutEndpoint)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-cart-summary",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-cart-summary--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<aside class="@classes" data-checkout-endpoint="@checkoutEndpoint">
+    <h3 class="syn-cart-summary__title">@title</h3>
+    <dl class="syn-cart-summary__lines">
+        <dt>Subtotal</dt><dd data-line="subtotal">—</dd>
+        @if (showShipping)
+        {
+            <dt>Envío</dt><dd data-line="shipping">—</dd>
+        }
+        @if (showTax)
+        {
+            <dt>Impuestos</dt><dd data-line="tax">—</dd>
+        }
+        <dt class="syn-cart-summary__total-label">Total</dt><dd data-line="total" class="syn-cart-summary__total-value">—</dd>
+    </dl>
+    <form action="@checkoutEndpoint" method="post">
+        <button type="submit" class="syn-cart-summary__checkout">Proceder al pago</button>
+    </form>
+</aside>
