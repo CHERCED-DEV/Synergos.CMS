@@ -35,5 +35,8 @@ public sealed class OptionsComposer : IComposer
 
         builder.Services.Configure<LayoutComposerSettings>(
             builder.Config.GetSection("Synergos:LayoutComposer"));
+
+        builder.Services.Configure<CdnSettings>(
+            builder.Config.GetSection("Synergos:Cdn"));
     }
 }
