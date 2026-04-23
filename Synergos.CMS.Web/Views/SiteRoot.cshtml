@@ -1,17 +1,31 @@
 @*
-    Template del Document Type `siteRoot` (Ola 8 + shared layout Ola 18).
-    El siteRoot es el home del sitio — muestra el nombre del sitio +
-    nav a hijos (la nav ya vive en el _Layout header, así que acá
-    mostramos solo un heading minimal + subtitle opcional via SEO).
+    Template del Document Type `siteRoot` (Ola 8 + shared layout Ola 18
+    + Layout Composer Ola 42.7). El siteRoot es el home del sitio. El
+    heading minimal (siteDisplayName) queda como fallback cuando el
+    editor no arma sections. Cuando sections tiene contenido, el home
+    se comporta como landing armada.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.SiteRootResponse>
+@using Umbraco.Cms.Core.Models.Blocks
 @{
     Layout = "_Layout";
+    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var sections = currentContent?.Value<BlockGridModel>("sections");
+    var hasSections = sections != null && sections.Any();
 }
 <article class="syn-site-root">
-    <h1 class="syn-site-root__title">@Model.SiteDisplayName</h1>
-    @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
+    @if (!hasSections)
     {
-        <p class="syn-site-root__subtitle">@Model.SeoTitle</p>
+        <h1 class="syn-site-root__title">@Model.SiteDisplayName</h1>
+        @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
+        {
+            <p class="syn-site-root__subtitle">@Model.SeoTitle</p>
+        }
+    }
+    else
+    {
+        <div class="syn-site-root__sections">
+            @await Html.GetBlockGridHtmlAsync(sections)
+        </div>
     }
 </article>
