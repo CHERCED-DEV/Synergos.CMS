@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120">
+  <rect x="8" y="8" width="184" height="104" fill="#eef5ec" stroke="#6ba275" stroke-width="2" stroke-dasharray="6 3" rx="6"/>
+  <path d="M 40 50 L 40 70 L 55 70 L 55 85 L 90 85 L 90 50 Z M 60 50 L 60 65 L 85 65 L 85 50 Z" fill="#b5d4b9" opacity="0.6"/>
+  <rect x="105" y="50" width="55" height="12" fill="#6ba275" rx="2"/>
+  <rect x="105" y="68" width="70" height="8" fill="#b5d4b9" rx="2"/>
+  <rect x="105" y="80" width="40" height="8" fill="#b5d4b9" rx="2"/>
+  <text x="100" y="28" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#4a7a52" text-anchor="middle">SNIPPET</text>
+</svg>

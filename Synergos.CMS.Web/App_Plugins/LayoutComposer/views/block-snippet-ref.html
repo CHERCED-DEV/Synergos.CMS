@@ -1,0 +1,19 @@
+<div class="lc-block lc-block--snippet"
+     ng-attr-data-variant="{{block.data.variantKey}}"
+     ng-class="{ 'lc-block--no-snippet': !block.data.snippet || !block.data.snippet.length }">
+    <div class="lc-block__header lc-block__header--snippet">
+        <span class="lc-block__icon lc-block__icon--snippet">SN</span>
+        <span class="lc-block__type">Snippet</span>
+        <span class="lc-block__header-spacer"></span>
+        <span ng-if="block.data.variantKey" class="lc-block__badge lc-block__badge--variant">{{block.data.variantKey}}</span>
+    </div>
+    <div class="lc-layout__intro">
+        <span class="lc-block__eyebrow">Reusable block</span>
+        <span class="lc-block__hint" ng-if="!block.data.snippet || !block.data.snippet.length">
+            ⚠ Selecciona un reusableBlock desde Shared Content Folder — sin referencia el bloque no renderiza nada.
+        </span>
+        <span class="lc-block__hint" ng-if="block.data.snippet && block.data.snippet.length">
+            Referencia embebida a un reusableBlock. El contenido se edita una vez en Shared y se refleja en cada página que lo referencia.
+        </span>
+    </div>
+</div>
