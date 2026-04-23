@@ -1,10 +1,12 @@
+@using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+    var actionLink = Model.Value<Link>("actionLink");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["iconKey"] = Model.Value<string>("iconKey"),
-        ["actionUrl"] = Model.Value<string>("actionUrl"),
+        ["actionUrl"] = actionLink?.Url,
         ["ariaLabel"] = Model.Value<string>("ariaLabel"),
         ["position"] = Model.Value<string>("position"),
     };

@@ -4,9 +4,10 @@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+    var audioFile = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("audioFile");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["audioUrl"] = Model.Value<string>("audioUrl"),
+        ["audioUrl"] = audioFile?.Url(mode: Umbraco.Cms.Core.Models.UrlMode.Absolute),
         ["trackTitle"] = Model.Value<string>("trackTitle"),
         ["artistName"] = Model.Value<string>("artistName"),
     };

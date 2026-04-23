@@ -8,9 +8,10 @@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+    var avatarImage = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("avatarImage");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["avatarSrc"] = Model.Value<string>("avatarSrc"),
+        ["avatarSrc"] = avatarImage?.Url(mode: Umbraco.Cms.Core.Models.UrlMode.Absolute),
     };
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "avatar",

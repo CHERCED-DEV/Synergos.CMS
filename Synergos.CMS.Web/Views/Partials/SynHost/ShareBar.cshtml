@@ -1,13 +1,16 @@
 @*
     SynHost renderer — <synergos-share-bar>. Social share with Web Share API + analytics.
 *@
+@using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+    var platforms = Model.Value<IEnumerable<string>>("platforms");
+    var shareLink = Model.Value<Link>("shareLink");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["platformsCsv"] = Model.Value<string>("platformsCsv"),
-        ["shareUrl"] = Model.Value<string>("shareUrl"),
+        ["platformsCsv"] = platforms is null ? null : string.Join(',', platforms),
+        ["shareUrl"] = shareLink?.Url,
         ["shareTitle"] = Model.Value<string>("shareTitle"),
     };
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(

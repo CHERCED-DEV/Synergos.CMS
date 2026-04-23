@@ -4,10 +4,12 @@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+    var videoFile = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("videoFile");
+    var posterImage = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("posterImage");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["videoUrl"] = Model.Value<string>("videoUrl"),
-        ["posterUrl"] = Model.Value<string>("posterUrl"),
+        ["videoUrl"] = videoFile?.Url(mode: Umbraco.Cms.Core.Models.UrlMode.Absolute),
+        ["posterUrl"] = posterImage?.Url(mode: Umbraco.Cms.Core.Models.UrlMode.Absolute),
         ["chaptersJson"] = Model.Value<string>("chaptersJson"),
         ["enableAnalytics"] = Model.Value<bool>("enableAnalytics"),
     };
