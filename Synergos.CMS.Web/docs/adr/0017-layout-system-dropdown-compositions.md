@@ -5,9 +5,12 @@
 - **Deciders:** Project owner
 - **Source:** redactado directamente como Ratified (no draft previo); el
   slot 0017 estaba vacío en `refactor-docs/adr-drafts/`.
-- **Authorises:** Ola 42 del plan de migración (Layout system
-  rediseñado) + Ola 42.5 (Layout Composer con presets + areas + preview
-  en backoffice) — ver §Addendum Ola 42.5 al final.
+- **Authorises:** Ola 42 (Layout system rediseñado) + Ola 42.5
+  (Layout Composer con presets + areas + preview en backoffice) +
+  Ola 42.6 (UX al drop: thumbnails + client-side defaults +
+  BlockGroups reorder) + Ola 42.7 (taxonomía universal + 3 presets
+  adicionales + mobile collapse + starter scaffold opt-in + siteRoot/
+  pageBare opt-in + semantic HTML) — ver Addenda al final.
 
 ## Context
 
@@ -423,4 +426,144 @@ orden: SeoTitle → BodyHtml → sections → bodyBlocks.
   porque Umbraco 13 backoffice sigue siendo AngularJS nativamente;
   un plugin moderno requeriría bridge + build step sin ganancia
   real vs copiar el archive.
+
+---
+
+## Addendum Ola 42.6 — UX al drop
+
+Tres refinamientos visibles en el backoffice al dropear un preset.
+
+### Decisión
+
+**1. SVG thumbnails per-preset.** En vez del icon-* stock
+compartido, cada preset trae su thumbnail propio en
+`App_Plugins/LayoutComposer/thumbnails/layout-*.svg` (200×120,
+paleta gris-azulada `#d4dbe6` / `#6b7c9b`). Cada block en
+`DTBlockGridSections` declara su `"thumbnail": "~/App_Plugins/
+LayoutComposer/thumbnails/layout-*.svg"`. Editor distingue 2col de
+main-sidebar a simple vista.
+
+**2. Defaults client-side antes del save.** Nuevo directive
+AngularJS `lcInitDefaults` añadido a
+`App_Plugins/LayoutComposer/scripts/layout-composer.preview.js`.
+Corre en el pre-link phase del block preview view y rellena
+`scope.block.data` con `containerType=normal`, `theme=light`,
+`spacingTop=lg`, `spacingBottom=lg`, `spacingInline=md` cuando las
+props están vacías. El atributo `lc-init-defaults` se añade al
+root `<div>` de los 10 (luego 13) views HTML.
+
+Complementa al handler server-side `LayoutPresetDefaults.cs`
+(Ola 42.5) — dos capas defensivas: cliente rellena antes de que
+el editor vea la overlay; servidor lo garantiza en persistencia.
+
+**3. BlockGroups reordenados.** El array en
+`DTBlockGridSections.config` se reordena para priorizar editorial
+progression: Layout primero (siempre), Syn (CDN) segundo (memoria
+`feedback_cdn_integration_is_core`), Comp tercero (bloques
+compuestos), después Text/Action/Media/Info/Corp, después
+Structural legacy, al final Form/Nav/Shop/Member/Flow. Coma suelto
+del concat manual arreglado.
+
+### Scope adicional Ola 42.6
+
+- 10 SVG en `App_Plugins/LayoutComposer/thumbnails/`.
+- Actualización de 10 `"thumbnail"` en `DTBlockGridSections.config`.
+- Directive `lcInitDefaults` en `layout-composer.preview.js`.
+- Atributo `lc-init-defaults` en los 10 views HTML existentes.
+- Reorder del array `BlockGroups` en `DTBlockGridSections.config`.
+
+---
+
+## Addendum Ola 42.7 — taxonomía universal + 3 presets + mobile +
+scaffold + 2 pages + semantic landmarks
+
+Cinco refinamientos estructurales que completan el Layout Composer.
+
+### Decisión
+
+**1. Taxonomía universal de tabs.** Los 6 compositions DOM que
+seguían en tab `"dom"` se mueven a tabs semánticas en el backoffice:
+
+  | Composition | Tab |
+  |---|---|
+  | `compDomDisplay` | "Layout" (`layout`) |
+  | `compDomFlex` | "Layout" |
+  | `compDomGrid` | "Layout" |
+  | `compDomLayout` (legacy) | "Layout" |
+  | `compDomAttributes` | "Atributos" (`attributes`) |
+  | `compDomVisibility` | "Visibilidad" (`visibility`) |
+
+  Combinado con Ola 42.5 ("Estilo"/"Espaciado"), cualquier element
+  que compone estos seams ve ahora un taxonomy consistente:
+  Content → Estilo → Layout → Espaciado → Atributos → Visibilidad
+  → SEO.
+
+**2. 3 presets adicionales (13 totales).** El catálogo se completa:
+
+  | Alias | Areas | Caso de uso |
+  |---|---|---|
+  | `elementLayoutHolyGrail` | nav (2) + main (8) + aside (2) | docs, portales admin, dashboards |
+  | `elementLayoutSidebarMain` | sidebar (4) + main (8) | inverso de main-sidebar — ToC izquierda |
+  | `elementLayoutHero` | content (12) full-bleed | franja hero de landing con `<section aria-label="Hero">` |
+
+  Cada uno con: ElementType XML + entry en `DTBlockGridSections` +
+  custom view HTML + SVG thumbnail + Razor renderer SSR + GUID en
+  `LayoutPresetDefaults.PresetContentTypeKeys`.
+
+**3. Mobile collapse override.** Nueva prop
+`mobileCollapseMode` en `compDomPresetChrome` (tab "Layout", nueva
+dentro de la composición), dropdown `DT.Select.MobileCollapse`
+con 5 opciones: `auto` (default, sin class emitida), `stack`,
+`reverse-stack`, `hide-sidebar`, `keep-multi`. `LayoutCssBuilder`
+extiende con `syn-preset--mobile-{value}` cuando ≠ auto. Editor
+override comportamiento responsive sin escribir CSS.
+
+**4. Starter scaffold (opt-in).** Nueva clase
+`Synergos.CMS.Application.Configuration.LayoutComposerSettings`
+con flag `EnableStarterScaffold` (default `false`). Nuevo handler
+`LayoutComposerStarterScaffold` hooked a
+`ContentSavingNotification` que, cuando el flag está `true` Y la
+content es `pageBase` Y sections está vacía, pre-puebla con Hero
++ 2ColEven. Registrado junto a `LayoutPresetDefaults` en
+`SeamComposer`.
+
+**5. siteRoot + pageBare opt-in a sections.** Cierra el set de
+4 page types con Layout Composer — pageBase y pageBasic ya lo
+tenían. siteRoot gana tab "Content" nueva; pageBare gana prop
+sections a su tab existente. Ambos templates Razor emiten
+sections si hay contenido, fallback a su render previo si no.
+
+**6. Semantic HTML landmarks** en 3 renderers:
+`elementLayoutHolyGrail` (`nav`/`main`/`aside` por alias de area),
+`elementLayout2ColMainSidebar` y `elementLayoutSidebarMain`
+(`main`/`aside`). Mejora a11y (screen readers) + SEO (Googlebot
+parsing semántico de regiones).
+
+### Scope adicional Olas 42.6 + 42.7
+
+- Ola 42.6: 10 SVGs + directive `lcInitDefaults` + `lc-init-defaults`
+  attr en 10 views + BlockGroups reorder.
+- Ola 42.7:
+  - 6 comp*.config retaggeadas (compDomDisplay/Flex/Grid/Layout/Attributes/Visibility).
+  - 3 nuevos ElementType XMLs (HolyGrail/SidebarMain/Hero).
+  - 3 nuevos custom views HTML.
+  - 3 nuevos SVG thumbnails.
+  - 3 nuevos Razor renderers SSR.
+  - 3 nuevos block entries en `DTBlockGridSections.config`.
+  - 3 GUIDs añadidos a `LayoutPresetDefaults.PresetContentTypeKeys`.
+  - 1 nueva DataType `DTSelectMobileCollapse` + 1 nueva prop en
+    `compDomPresetChrome` + extensión de `LayoutCssBuilder`.
+  - 1 nueva settings class `LayoutComposerSettings` + binding en
+    `OptionsComposer` + nuevo handler `LayoutComposerStarterScaffold`.
+  - 2 page DocTypes opt-in (siteroot + page-bare) + 2 templates
+    Razor actualizados.
+  - 3 renderers con semantic HTML landmarks.
+
+### Updated status
+
+El Layout Composer pasa de "schema completo" (Ola 42.5) a
+"producto refinado" con catálogo completo de 13 presets, UX sin
+estado vacío en ningún momento, control responsive explícito,
+semantic HTML correcto, y consistencia de taxonomy tabs en el
+100% del sistema de compositions DOM.
 
