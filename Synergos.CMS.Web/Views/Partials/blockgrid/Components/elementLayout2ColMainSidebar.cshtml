@@ -1,6 +1,7 @@
 @*
-    elementLayout2ColMainSidebar renderer (Ola 42.5). 2 areas main +
-    sidebar (8+4). Mobile colapsa a main-over-sidebar.
+    elementLayout2ColMainSidebar renderer (Ola 42.5 + semantic HTML
+    en Ola 42.7). 2 areas main (8) + sidebar (4). Sidebar emite
+    <aside> para landmark semántico; main emite <main>.
     Backoffice preview: App_Plugins/LayoutComposer/views/block-layout-main-sidebar.html
 *@
 @model Umbraco.Cms.Core.Models.Blocks.BlockGridItem<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
@@ -20,8 +21,24 @@
 <div class="@classes">
     @foreach (var area in Model.Areas)
     {
-        <div class="syn-layout__area syn-layout__area--@area.Alias">
-            @await Html.GetBlockGridItemsHtmlAsync(area)
-        </div>
+        var areaClasses = $"syn-layout__area syn-layout__area--{area.Alias}";
+        if (area.Alias == "main")
+        {
+            <main class="@areaClasses">
+                @await Html.GetBlockGridItemsHtmlAsync(area)
+            </main>
+        }
+        else if (area.Alias == "sidebar")
+        {
+            <aside class="@areaClasses">
+                @await Html.GetBlockGridItemsHtmlAsync(area)
+            </aside>
+        }
+        else
+        {
+            <div class="@areaClasses">
+                @await Html.GetBlockGridItemsHtmlAsync(area)
+            </div>
+        }
     }
 </div>
