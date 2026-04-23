@@ -3,12 +3,14 @@
     Banner de alerta con mensaje + CTA opcional + botón cerrar si dismissible.
     Soporta compDomVisibility (hideOnMobile/Tablet/Desktop) via clases utilitarias.
 *@
+@using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
     var message = Model.Value<string>("alertMessage");
     if (string.IsNullOrWhiteSpace(message)) { return; }
     var actionLabel = Model.Value<string>("alertActionLabel");
-    var actionUrl = Model.Value<string>("alertActionUrl");
+    var actionLink = Model.Value<Link>("alertActionLink");
+    var actionUrl = actionLink?.Url;
     var dismissible = Model.Value<bool>("dismissible");
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");

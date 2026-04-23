@@ -2,12 +2,17 @@
     elementMediaLogoItem renderer (Ola 14). SSR-native. Brand logo
     optionally wrapped in external link.
 *@
+@using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
     var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
     if (mediaRef == null) { return; }
     var alt = Model.Value<string>("mediaAlt") ?? mediaRef.Name;
-    var linkUrl = Model.Value<string>("logoLinkUrl");
+    var logoLink = Model.Value<Link>("logoLink");
+    var linkUrl = logoLink?.Url;
+    var linkTarget = logoLink?.Target;
+    var externalAttrs = string.Equals(linkTarget, "_blank", StringComparison.OrdinalIgnoreCase)
+        ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "";
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
     var classes = string.Join(" ", new[]
@@ -19,7 +24,7 @@
 }
 @if (!string.IsNullOrWhiteSpace(linkUrl))
 {
-    <a class="@classes" href="@linkUrl" target="_blank" rel="noopener noreferrer">
+    <a class="@classes" href="@linkUrl"@Html.Raw(externalAttrs)>
         <img src="@mediaRef.Url()" alt="@alt" loading="lazy" />
     </a>
 }

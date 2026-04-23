@@ -2,11 +2,13 @@
     elementMemberLogin renderer (Ola 35). SSR skeleton.
     Middleware C# Members auth wiring pendiente.
 *@
+@using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
     var endpoint = Model.Value<string>("loginEndpoint");
     if (string.IsNullOrWhiteSpace(endpoint)) { return; }
-    var redirect = Model.Value<string>("redirectUrl");
+    var redirectLink = Model.Value<Link>("redirectLink");
+    var redirect = redirectLink?.Url;
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
     var classes = string.Join(" ", new[]
