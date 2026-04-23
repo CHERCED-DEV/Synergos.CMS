@@ -1,16 +1,19 @@
 @*
     SynHost renderer — <synergos-hero-banner>. Rich hero with media + CTA.
 *@
+@using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+    var media = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("media");
+    var ctaLink = Model.Value<Link>("ctaLink");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["title"] = Model.Value<string>("title"),
         ["subtitle"] = Model.Value<string>("subtitle"),
-        ["mediaUrl"] = Model.Value<string>("mediaUrl"),
+        ["mediaUrl"] = media?.Url(mode: UrlMode.Absolute),
         ["ctaLabel"] = Model.Value<string>("ctaLabel"),
-        ["ctaUrl"] = Model.Value<string>("ctaUrl"),
+        ["ctaUrl"] = ctaLink?.Url,
     };
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "hero-banner",
