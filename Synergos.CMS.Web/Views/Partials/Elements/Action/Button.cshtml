@@ -3,12 +3,14 @@
     Emits an <a> styled as button. ctaLabel / ctaUrl / ctaOpenInNewTab
     come from composed compContentCta.
 *@
+@using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
     var label = Model.Value<string>("ctaLabel");
-    var url = Model.Value<string>("ctaUrl");
+    var link = Model.Value<Link>("ctaLink");
+    var url = link?.Url;
     if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(url)) { return; }
-    var openInNewTab = Model.Value<bool>("ctaOpenInNewTab");
+    var openInNewTab = Model.Value<bool>("ctaOpenInNewTab") || string.Equals(link?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
     var classes = string.Join(" ", new[]

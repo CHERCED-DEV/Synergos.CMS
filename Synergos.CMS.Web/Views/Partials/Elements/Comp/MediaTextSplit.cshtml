@@ -3,6 +3,7 @@
     Media a la izquierda (default) o a la derecha (mediaOnRight=true).
     Column order controlado via clase CSS --media-right.
 *@
+@using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
     var title = Model.Value<string>("headingTitle");
@@ -13,8 +14,9 @@
     var mediaAlt = Model.Value<string>("mediaAlt") ?? "";
     var mediaCaption = Model.Value<string>("mediaCaption");
     var ctaLabel = Model.Value<string>("ctaLabel");
-    var ctaUrl = Model.Value<string>("ctaUrl");
-    var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab");
+    var ctaLink = Model.Value<Link>("ctaLink");
+    var ctaUrl = ctaLink?.Url;
+    var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab") || string.Equals(ctaLink?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
     var mediaOnRight = Model.Value<bool>("mediaOnRight");
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");

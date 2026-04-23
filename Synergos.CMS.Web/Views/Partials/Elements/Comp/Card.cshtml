@@ -3,6 +3,7 @@
     Tarjeta stand-alone con heading + media + body + cta. Props todas
     de composiciones (compContent* + compDom*).
 *@
+@using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
     var title = Model.Value<string>("headingTitle");
@@ -12,8 +13,9 @@
     var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
     var mediaAlt = Model.Value<string>("mediaAlt") ?? "";
     var ctaLabel = Model.Value<string>("ctaLabel");
-    var ctaUrl = Model.Value<string>("ctaUrl");
-    var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab");
+    var ctaLink = Model.Value<Link>("ctaLink");
+    var ctaUrl = ctaLink?.Url;
+    var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab") || string.Equals(ctaLink?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
     var classes = string.Join(" ", new[]

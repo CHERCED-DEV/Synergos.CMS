@@ -2,14 +2,16 @@
     elementCompCtaBanner renderer (Ola 22). SSR-native composite compacto.
     Heading + CTA prominente. Sin props propias.
 *@
+@using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
     var title = Model.Value<string>("headingTitle");
     var ctaLabel = Model.Value<string>("ctaLabel");
-    var ctaUrl = Model.Value<string>("ctaUrl");
+    var ctaLink = Model.Value<Link>("ctaLink");
+    var ctaUrl = ctaLink?.Url;
     if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(ctaLabel) || string.IsNullOrWhiteSpace(ctaUrl)) { return; }
     var subtitle = Model.Value<string>("headingSubtitle");
-    var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab");
+    var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab") || string.Equals(ctaLink?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
     var classes = string.Join(" ", new[]
