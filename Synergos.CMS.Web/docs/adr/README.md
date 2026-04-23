@@ -22,7 +22,11 @@ choose between options that a future reader would otherwise second-guess.
 | [0012](0012-cdn-contract-consumed.md) | CDN contract is consumed, not owned | Accepted |
 | [0013](0013-no-automatic-seeders.md) | No automatic seeders; dev tooling behind flag | Accepted |
 | [0014](0014-document-type-page-basic.md) | Document Type `PageBasic` (first product case, static pages) | Accepted |
+| [0015](0015-synhost-framework-agnostic-integration.md) | SynHost framework-agnostic integration (CDN↔CMS) | Accepted |
 | [0017](0017-layout-system-dropdown-compositions.md) | Layout system per-block compositions con dropdowns | Accepted |
+| [0018](0018-forms-dual-path.md) | Forms dual-path (custom SSR + iframe bridge) | Accepted |
+| [0019](0019-navigation-flat-groups.md) | Navigation flat groups, no recursion (SSR + a11y first) | Accepted |
+| [0020](0020-platform-settings-split.md) | Platform/Settings tree separado + multi-brand via compBranding | Accepted |
 
 ## Rules
 
