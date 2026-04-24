@@ -2,7 +2,7 @@
     elementCompArticleList renderer (Ola 32 schema + Ola 38 runtime).
     Query real a postPage descendants bajo siteRoot (o platformRoot),
     filtrado por categoryFilter (alias/name de postCategoryPage padre)
-    y tagsFilter (CSV — match OR contra compTagging.tagsCsv del post).
+    y tagsFilter (CSV — match OR contra compTagging.tags del post).
     Ordenado por publishDate desc (fallback a createDate).
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
@@ -49,11 +49,9 @@
                 .ToHashSet();
             query = query.Where(p =>
             {
-                var tagsCsv = p.Value<string>("tagsCsv");
-                if (string.IsNullOrWhiteSpace(tagsCsv)) return false;
-                return tagsCsv
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Any(t => wantedTags.Contains(t.ToLowerInvariant()));
+                var tags = p.Value<IEnumerable<string>>("tags");
+                if (tags is null) return false;
+                return tags.Any(t => wantedTags.Contains(t.ToLowerInvariant()));
             });
         }
 
