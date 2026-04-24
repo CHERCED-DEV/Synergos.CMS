@@ -54,11 +54,11 @@ Synergos.CMS/
 │   ├── Services/                Umbraco-dependent services (LayoutCssBuilder, FlowResolver, etc.)
 │   ├── Views/                   Razor templates + partials + blockgrid components
 │   ├── docs/
-│   │   ├── adr/                 19 ADRs ratificados — SOURCE OF TRUTH
+│   │   ├── adr/                 20 ADRs ratificados — SOURCE OF TRUTH
 │   │   └── umbraco/             cdn-contract.md (externalmente bloqueado)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
 │       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (~200 archivos)
-│       ├── DataTypes/           Dropdown/BlockGrid/ContentPicker/etc.
+│       ├── DataTypes/           37 DTSelect* + UrlPicker/MediaPicker/Tags/ContentPicker
 │       ├── Dictionary/          i18n es-CO + en-US (369 keys)
 │       ├── Languages/           es-CO (default) + en-US
 │       ├── MediaTypes/          synImage + synDocument + synIcon
@@ -126,6 +126,12 @@ Las memorias relevantes antes de proponer cualquier ola:
   `<synergos-*>` DOM tag.
 - `feedback_variations_culture_default` — Culture por default, Nothing
   solo para datos compartidos.
+- `feedback_picker_semantics` — URLs → MultiUrlPicker, media →
+  MediaPicker3, enums → Dropdown, booleans → TrueFalse (ADR 0021).
+- `feedback_editor_description_style` — descripciones schema ≤120
+  chars editor-facing, sin ADR-jargon.
+- `feedback_powershell_utf8_bulk_edits` — usar `[IO.File]::ReadAllText`/
+  `WriteAllBytes` con BOM explícito. Set-Content causa mojibake doble.
 - `feedback_umbraco_icon_library` — verificar iconos contra stock.
 - `feedback_guid_block_element_collision` — procedimiento cuádruple.
 - `feedback_no_preassigned_guids_usync` — agente-autor escribe XML con
@@ -169,7 +175,7 @@ dotnet build Synergos.CMS/Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no
 
 ## 8. Layout Composer — el feature más maduro
 
-Después de las Olas 42 → 42.10 el Layout Composer es end-to-end:
+Después de las Olas 42 → 44 el Layout Composer es end-to-end:
 
 - **14 Layout Preset ElementTypes** en `uSync/v9/ContentTypes/
   elementlayout*.config`: Section, Container, Stack, Grid, Column,
@@ -189,8 +195,17 @@ Después de las Olas 42 → 42.10 el Layout Composer es end-to-end:
   `Synergos:LayoutComposer:EnableStarterScaffold`.
 - **Reusable snippets** (Ola 42.10) via `elementLayoutSnippetRef` que
   referencia un `reusableBlock` de Ola 34.
+- **compDom* universal** (Ola 43.15/43.16): los 156 element types
+  tienen compDomClass + compDomVariant + compDomVisibility +
+  compDomAttributes. El wrapper `SynHost/_Wrapper.cshtml` (Ola 44.1)
+  aplica estos props al HTML emitido por los SynHost partials.
+- **SEO <head>** (Ola 44.2): `Views/Shared/_SeoHead.cshtml` consume
+  compSeo (seoTitle/Description/canonicalLink/ogImage/ogType/
+  metaRobots) con fallback cascade a siteConfigSettings del brand
+  activo (default* + socialOgImage).
 
 Ver ADR 0017 (con 2 addenda: Ola 42.6 + Ola 42.7) para el modelo.
+Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 
 ## 9. Tareas bloqueadas externamente
 
