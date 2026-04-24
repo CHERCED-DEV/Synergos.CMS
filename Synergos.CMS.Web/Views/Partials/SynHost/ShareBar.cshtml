@@ -1,4 +1,4 @@
-@*
+﻿@*
     SynHost renderer — <synergos-share-bar>. Social share with Web Share API + analytics.
 *@
 @using Umbraco.Cms.Core.Models
@@ -20,5 +20,4 @@
         Culture: System.Globalization.CultureInfo.CurrentUICulture);
     var result = await Emitter.EmitAsync(request);
 }
-@Html.Raw(result.ScriptHtml)
-@Html.Raw(result.ElementHtml)
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

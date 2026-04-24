@@ -1,4 +1,4 @@
-@*
+﻿@*
     SynHost renderer — <synergos-hero-banner>. Rich hero with media + CTA.
 *@
 @using Umbraco.Cms.Core.Models
@@ -22,5 +22,4 @@
         Culture: System.Globalization.CultureInfo.CurrentUICulture);
     var result = await Emitter.EmitAsync(request);
 }
-@Html.Raw(result.ScriptHtml)
-@Html.Raw(result.ElementHtml)
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

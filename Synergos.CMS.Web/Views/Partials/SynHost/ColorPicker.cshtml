@@ -1,4 +1,4 @@
-@*
+﻿@*
     SynHost renderer — <synergos-color-picker>. Color picker with palette.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
@@ -17,5 +17,4 @@
         Culture: System.Globalization.CultureInfo.CurrentUICulture);
     var result = await Emitter.EmitAsync(request);
 }
-@Html.Raw(result.ScriptHtml)
-@Html.Raw(result.ElementHtml)
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

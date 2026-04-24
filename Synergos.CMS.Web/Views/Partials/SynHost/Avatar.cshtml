@@ -1,4 +1,4 @@
-@*
+﻿@*
     SynHost pilot renderer (Ola 8.5). Framework-agnostic Razor partial
     that consumes ISynHostEmitter to emit the module script tags +
     <synergos-avatar> custom element. Called from any composer
@@ -20,5 +20,4 @@
         Culture: System.Globalization.CultureInfo.CurrentUICulture);
     var result = await Emitter.EmitAsync(request);
 }
-@Html.Raw(result.ScriptHtml)
-@Html.Raw(result.ElementHtml)
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

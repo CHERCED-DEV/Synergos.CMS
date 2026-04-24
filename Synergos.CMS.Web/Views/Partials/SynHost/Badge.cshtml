@@ -1,4 +1,4 @@
-@*
+﻿@*
     SynHost pilot renderer (Ola 8.5) — badge. Emits <synergos-badge>
     with label projected from the composed elementSynBadge ElementType.
 *@
@@ -16,5 +16,4 @@
         Culture: System.Globalization.CultureInfo.CurrentUICulture);
     var result = await Emitter.EmitAsync(request);
 }
-@Html.Raw(result.ScriptHtml)
-@Html.Raw(result.ElementHtml)
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
