@@ -38,5 +38,8 @@ public sealed class OptionsComposer : IComposer
 
         builder.Services.Configure<CdnSettings>(
             builder.Config.GetSection("Synergos:Cdn"));
+
+        builder.Services.Configure<DevSeedSettings>(
+            builder.Config.GetSection("Synergos:DevSeed"));
     }
 }

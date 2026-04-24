@@ -70,6 +70,12 @@ public sealed class SeamComposer : IComposer
         services.AddTransient<FlowResolver>();
         services.AddHttpContextAccessor();
 
+        // Ola 47 — Dev tooling: content seeder para smoke-test. Gated
+        // por Synergos:DevSeed:Enabled=true en appsettings. El controller
+        // /dev/seed-test-site invoca el seeder. Scope: solo crea/borra
+        // el siteRoot "Test Site", nunca otros árboles.
+        services.AddTransient<DevTestContentSeeder>();
+
         // Health probes. Each registers as an ISchemaHealthProbe; the
         // HealthController resolves them as IEnumerable<ISchemaHealthProbe>.
         services.AddSingleton<ISchemaHealthProbe>(_ => new SchemaVersionProbe());
