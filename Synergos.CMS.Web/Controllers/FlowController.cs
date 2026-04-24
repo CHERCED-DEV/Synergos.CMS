@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Web.Services;
-using Umbraco.Extensions;
 
 namespace Synergos.CMS.Web.Controllers;
 

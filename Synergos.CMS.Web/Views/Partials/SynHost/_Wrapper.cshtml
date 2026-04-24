@@ -1,8 +1,8 @@
 @*
-    Shared wrapper partial that SynHost block partials invoke to apply
-    the compDom* editorial props to the emitted DOM. Takes a tuple of
-    (IPublishedElement model, string elementHtml, string scriptHtml)
-    and emits the script tags + the wrapped custom element.
+    Shared wrapper partial que SynHost partials invocan para aplicar
+    los props compDom* al DOM emitido. Si el editor no setea ninguno
+    de esos props, el wrapper se omite y el custom element se emite
+    directo — evita DOM pollution con <div> vacío.
 *@
 @using Synergos.CMS.Web.Services
 @model (Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement Element, string ScriptHtml, string ElementHtml)
@@ -10,4 +10,11 @@
     var wrap = SynHostWrapperBuilder.Build(Model.Element);
 }
 @Html.Raw(Model.ScriptHtml)
-<div class="@wrap.Classes"@Html.Raw(wrap.Attributes)>@Html.Raw(Model.ElementHtml)</div>
+@if (wrap.IsNoOp)
+{
+    @Html.Raw(Model.ElementHtml)
+}
+else
+{
+    <div class="@wrap.Classes"@Html.Raw(wrap.Attributes)>@Html.Raw(Model.ElementHtml)</div>
+}

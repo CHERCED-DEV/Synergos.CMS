@@ -28,17 +28,17 @@ public static class SynHostWrapperBuilder
 {
     public static SynHostWrapper Build(IPublishedElement model)
     {
-        var classes = new List<string> { "syn-host" };
+        var modifiers = new List<string>();
 
         var variant = Val(model, "variantKey");
-        if (variant is not null) classes.Add($"syn-host--{variant}");
+        if (variant is not null) modifiers.Add($"syn-host--{variant}");
 
-        if (model.Value<bool>("hideOnMobile")) classes.Add("syn-hidden-mobile");
-        if (model.Value<bool>("hideOnTablet")) classes.Add("syn-hidden-tablet");
-        if (model.Value<bool>("hideOnDesktop")) classes.Add("syn-hidden-desktop");
+        if (model.Value<bool>("hideOnMobile")) modifiers.Add("syn-hidden-mobile");
+        if (model.Value<bool>("hideOnTablet")) modifiers.Add("syn-hidden-tablet");
+        if (model.Value<bool>("hideOnDesktop")) modifiers.Add("syn-hidden-desktop");
 
         var cssClass = Val(model, "cssClass");
-        if (cssClass is not null) classes.Add(cssClass);
+        if (cssClass is not null) modifiers.Add(cssClass);
 
         var attrs = new StringBuilder();
         var role = Val(model, "ariaRole");
@@ -60,7 +60,14 @@ public static class SynHostWrapperBuilder
             }
         }
 
-        return new SynHostWrapper(string.Join(' ', classes), attrs.ToString());
+        // When the editor hasn't set any compDom* prop, skip the
+        // wrapper entirely — the custom element carries its own
+        // semantics and we avoid DOM pollution.
+        var needsWrapper = modifiers.Count > 0 || attrs.Length > 0;
+        if (!needsWrapper) return new SynHostWrapper(string.Empty, string.Empty, IsNoOp:true);
+
+        modifiers.Insert(0, "syn-host");
+        return new SynHostWrapper(string.Join(' ', modifiers), attrs.ToString(), IsNoOp:false);
     }
 
     private static string? Val(IPublishedElement model, string alias)
@@ -73,4 +80,4 @@ public static class SynHostWrapperBuilder
         value.Replace("&", "&amp;").Replace("\"", "&quot;").Replace("<", "&lt;").Replace(">", "&gt;");
 }
 
-public sealed record SynHostWrapper(string Classes, string Attributes);
+public sealed record SynHostWrapper(string Classes, string Attributes, bool IsNoOp = false);

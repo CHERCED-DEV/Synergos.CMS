@@ -70,7 +70,7 @@ Synergos.CMS/
 
 | Pregunta                        | Dónde mirar                                                |
 |---------------------------------|------------------------------------------------------------|
-| "¿Por qué se tomó esta decisión?" | `Synergos.CMS.Web/docs/adr/NNNN-*.md` (19 ADRs)           |
+| "¿Por qué se tomó esta decisión?" | `Synergos.CMS.Web/docs/adr/NNNN-*.md` (20 ADRs)           |
 | "¿Qué DocTypes existen?"         | `uSync/v9/ContentTypes/`                                   |
 | "¿Qué Dictionary keys hay?"      | `uSync/v9/Dictionary/` (369 archivos .config)              |
 | "¿Qué compositions y para qué?"  | `uSync/v9/ContentTypes/compdom*.config` + `compcontent*.config` |
