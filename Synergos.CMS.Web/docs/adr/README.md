@@ -27,6 +27,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0018](0018-forms-dual-path.md) | Forms dual-path (custom SSR + iframe bridge) | Accepted |
 | [0019](0019-navigation-flat-groups.md) | Navigation flat groups, no recursion (SSR + a11y first) | Accepted |
 | [0020](0020-platform-settings-split.md) | Platform/Settings tree separado + multi-brand via compBranding | Accepted |
+| [0021](0021-datatype-semantics-by-intent.md) | DataType semantics: one type per editorial intent | Accepted |
 
 ## Rules
 
