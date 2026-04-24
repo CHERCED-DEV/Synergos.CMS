@@ -30,9 +30,6 @@
     var siteRoot = currentPage?.Root();
     var siteName = siteRoot?.Value<string>("siteDisplayName");
     if (string.IsNullOrWhiteSpace(siteName)) { siteName = "Synergos"; }
-    var canonicalHost = siteRoot?.Value<string>("canonicalHostname");
-    var pageTitle = currentPage?.Value<string>("seoTitle");
-    if (string.IsNullOrWhiteSpace(pageTitle)) { pageTitle = currentPage?.Name ?? siteName; }
     var yearNow = DateTime.UtcNow.Year;
     var navItems = siteRoot?.Children
         .Where(c => c.IsVisible())
@@ -68,11 +65,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>@pageTitle</title>
-    @if (!string.IsNullOrWhiteSpace(canonicalHost) && currentPage != null)
-    {
-        <link rel="canonical" href="https://@canonicalHost@currentPage.Url()" />
-    }
+    @await Html.PartialAsync("_SeoHead", currentPage)
     @if (!string.IsNullOrWhiteSpace(theme?.FaviconUrl))
     {
         <link rel="icon" href="@theme.FaviconUrl" />

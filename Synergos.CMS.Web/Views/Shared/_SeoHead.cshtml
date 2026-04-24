@@ -1,0 +1,96 @@
+@*
+    Shared SEO <head> partial invocado desde _Layout.cshtml. Consume
+    compSeo enriquecida (seoTitle/Description/canonicalLink/ogImage/
+    ogType/metaRobots) con fallback a siteConfigSettings del brand
+    activo (defaultSeoTitle/Description/socialOgImage).
+
+    Resolución:
+    1. Si compSeo.seoTitle está seteado, úsalo. Fallback
+       siteConfigSettings.defaultSeoTitle. Fallback page.Name. Fallback
+       siteRoot.siteDisplayName.
+    2. Si compSeo.seoDescription está seteado, úsalo. Fallback
+       siteConfigSettings.defaultSeoDescription.
+    3. canonicalLink (UrlPicker) override la URL canónica auto-computed.
+    4. ogImage (MediaPicker) fallback a siteConfigSettings.socialOgImage.
+    5. ogType default "website".
+    6. metaRobots default "index,follow".
+*@
+@using Umbraco.Cms.Core.Models
+@using Umbraco.Cms.Core.Models.PublishedContent
+@using Umbraco.Extensions
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent?>
+@inject Synergos.CMS.Interfaces.IBrandingProvider Branding
+@{
+    var page = Model;
+    var siteRoot = page?.Root();
+    var siteName = siteRoot?.Value<string>("siteDisplayName") ?? "Synergos";
+    var canonicalHost = siteRoot?.Value<string>("canonicalHostname");
+
+    // Find siteConfigSettings for current brand via Platform/Settings tree.
+    var brand = Branding.GetCurrent();
+    IPublishedContent? siteConfig = null;
+    if (UmbracoContext.Content is not null)
+    {
+        foreach (var root in UmbracoContext.Content.GetAtRoot())
+        {
+            if (root.ContentType.Alias != "platformRoot") continue;
+            var settingsRoot = root.Children.FirstOrDefault(c => c.ContentType.Alias == "settingsRoot");
+            if (settingsRoot is null) continue;
+            siteConfig = settingsRoot.Descendants()
+                .FirstOrDefault(c => c.ContentType.Alias == "siteConfigSettings"
+                    && string.Equals(c.Value<string>("brandKey"), brand.Key, StringComparison.OrdinalIgnoreCase));
+            if (siteConfig is not null) break;
+        }
+    }
+
+    string? PageString(string alias) => page?.Value<string>(alias);
+    string? ConfigString(string alias) => siteConfig?.Value<string>(alias);
+
+    var seoTitle = PageString("seoTitle");
+    if (string.IsNullOrWhiteSpace(seoTitle)) seoTitle = ConfigString("defaultSeoTitle");
+    if (string.IsNullOrWhiteSpace(seoTitle)) seoTitle = page?.Name ?? siteName;
+
+    var seoDesc = PageString("seoDescription");
+    if (string.IsNullOrWhiteSpace(seoDesc)) seoDesc = ConfigString("defaultSeoDescription");
+
+    var canonicalLink = page?.Value<Link>("canonicalLink");
+    var canonicalUrl = canonicalLink?.Url;
+    if (string.IsNullOrWhiteSpace(canonicalUrl) && !string.IsNullOrWhiteSpace(canonicalHost) && page is not null)
+    {
+        canonicalUrl = $"https://{canonicalHost}{page.Url()}";
+    }
+
+    var ogImage = page?.Value<IPublishedContent>("ogImage") ?? siteConfig?.Value<IPublishedContent>("socialOgImage");
+    var ogImageUrl = ogImage?.Url(mode: UrlMode.Absolute);
+
+    var ogType = PageString("ogType");
+    if (string.IsNullOrWhiteSpace(ogType)) ogType = "website";
+
+    var metaRobots = PageString("metaRobots");
+    if (string.IsNullOrWhiteSpace(metaRobots)) metaRobots = "index,follow";
+}
+<title>@seoTitle</title>
+@if (!string.IsNullOrWhiteSpace(seoDesc))
+{
+    <meta name="description" content="@seoDesc" />
+}
+<meta name="robots" content="@metaRobots" />
+@if (!string.IsNullOrWhiteSpace(canonicalUrl))
+{
+    <link rel="canonical" href="@canonicalUrl" />
+}
+<meta property="og:type" content="@ogType" />
+<meta property="og:title" content="@seoTitle" />
+@if (!string.IsNullOrWhiteSpace(seoDesc))
+{
+    <meta property="og:description" content="@seoDesc" />
+}
+@if (!string.IsNullOrWhiteSpace(canonicalUrl))
+{
+    <meta property="og:url" content="@canonicalUrl" />
+}
+<meta property="og:site_name" content="@siteName" />
+@if (!string.IsNullOrWhiteSpace(ogImageUrl))
+{
+    <meta property="og:image" content="@ogImageUrl" />
+}
