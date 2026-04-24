@@ -8,19 +8,10 @@ namespace Synergos.CMS.Web.Services;
 /// <c>compDomGrid</c>) on an <see cref="IPublishedElement"/>.
 /// </summary>
 /// <remarks>
-/// <para>
 /// Each composition contributes a distinct <c>syn-display--</c>,
 /// <c>syn-flex--</c>, or <c>syn-grid--</c> namespace. The element
 /// renderer joins the result with its own base class (e.g.
 /// <c>syn-section</c>) to produce the final <c>class</c> attribute.
-/// </para>
-/// <para>
-/// Backward compatibility: when the Ola 42 properties are empty but
-/// the element carries the legacy <c>compDomLayout</c>
-/// (<c>layoutDirection</c> / <c>layoutAlign</c>), the helper emits
-/// equivalent flex modifiers so the visual output is preserved until
-/// editors move on to the dropdown-driven composition set.
-/// </para>
 /// </remarks>
 public static class LayoutCssBuilder
 {
@@ -58,20 +49,6 @@ public static class LayoutCssBuilder
         if (gridGap is not null) yield return $"syn-grid--gap-{gridGap}";
         if (gridColumnGap is not null) yield return $"syn-grid--col-gap-{gridColumnGap}";
         if (gridRowGap is not null) yield return $"syn-grid--row-gap-{gridRowGap}";
-
-        // Legacy compDomLayout fallback: only emit when the Ola 42
-        // equivalents are absent, so editors that already moved on to
-        // the new composition set aren't overridden.
-        var legacyDir = Val(model, "layoutDirection");
-        if (flexDirection is null && legacyDir is not null)
-        {
-            yield return $"syn-flex--dir-{legacyDir}";
-        }
-        var legacyAlign = Val(model, "layoutAlign");
-        if (flexAlignItems is null && gridAlignItems is null && legacyAlign is not null)
-        {
-            yield return $"syn-flex--align-items-{legacyAlign}";
-        }
 
         var spacingTop = Val(model, "spacingTop");
         var spacingBottom = Val(model, "spacingBottom");

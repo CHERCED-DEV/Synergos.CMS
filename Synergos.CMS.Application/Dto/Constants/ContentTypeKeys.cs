@@ -311,13 +311,6 @@ public static class ContentTypeKeys
         Guid.Parse("0a2edb7e-8555-4044-bebc-bf0fe37662f2");
 
     /// <summary>
-    /// <c>compDomLayout</c> — layoutAlign + layoutDirection para
-    /// contenedores flex/grid. 16 uses.
-    /// </summary>
-    public static readonly Guid CompDomLayout =
-        Guid.Parse("06de133e-ab5f-4c56-970d-5aa8266e6334");
-
-    /// <summary>
     /// <c>compDomAttributes</c> — ariaRole (Nothing) + ariaLabel
     /// (Culture) para accesibilidad. 12 uses.
     /// </summary>
@@ -511,7 +504,7 @@ public static class ContentTypeKeys
 
     /// <summary>
     /// <c>elementStructStack</c> — Flex container with gap;
-    /// direction from compDomLayout.
+    /// direction from compDomFlex.
     /// </summary>
     public static readonly Guid ElementStructStack =
         Guid.Parse("2c21bf8b-540b-4e78-80f3-584d944f7bf5");
