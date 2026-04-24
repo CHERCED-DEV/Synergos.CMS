@@ -24,6 +24,7 @@
 @using Umbraco.Extensions
 @inject Synergos.CMS.Interfaces.IBrandingProvider Branding
 @inject Synergos.CMS.Interfaces.IBrandThemeProvider ThemeProvider
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @{
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
     var currentPage = UmbracoContext.PublishedRequest?.PublishedContent;
@@ -73,6 +74,13 @@
     @if (themeVars.Count > 0)
     {
         <style>:root { @Html.Raw(string.Join(" ", themeVars)) }</style>
+    }
+    @{
+        var devStubEnabled = Configuration.GetValue<bool>("Synergos:DevCss:Enabled");
+    }
+    @if (devStubEnabled)
+    {
+        <link rel="stylesheet" href="~/css/syn-dev-stub.css" />
     }
 </head>
 <body>
