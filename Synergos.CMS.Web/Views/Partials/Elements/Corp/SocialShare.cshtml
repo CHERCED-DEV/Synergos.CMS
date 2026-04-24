@@ -41,7 +41,7 @@
         _ => null
     };
 }
-<nav class="@classes" aria-label="Compartir en redes sociales">
+<nav class="@classes" aria-label="@Umbraco.GetDictionaryValue("common.actions.share", "Compartir")">
     @foreach (var platform in enabled)
     {
         var href = BuildShareUrl(platform);
@@ -49,7 +49,7 @@
         var isMail = platform == "email";
         <a class="syn-social-share__link syn-social-share__link--@platform"
            href="@href"
-           aria-label="Compartir en @platform"
+           aria-label="@Umbraco.GetDictionaryValue("common.actions.share", "Compartir") @platform"
            @(isMail ? "" : "target=\"_blank\"")
            @(isMail ? "" : "rel=\"noopener noreferrer\"")>@platform</a>
     }
