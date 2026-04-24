@@ -7,11 +7,10 @@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
 @{
-    var enabledRaw = Model.Value<string>("enabledPlatforms");
-    var enabled = (string.IsNullOrWhiteSpace(enabledRaw) ? "facebook,twitter,linkedin,email" : enabledRaw)
-        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .Select(s => s.ToLowerInvariant())
-        .ToArray();
+    var platforms = Model.Value<IEnumerable<string>>("platforms");
+    var enabled = (platforms is null || !platforms.Any()
+            ? new[] { "facebook", "twitter", "linkedin", "email" }
+            : platforms.Select(s => s.ToLowerInvariant()).ToArray());
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
     var classes = string.Join(" ", new[]
