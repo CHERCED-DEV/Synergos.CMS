@@ -198,7 +198,7 @@ public static class ContentTypeKeys
 
     /// <summary>
     /// <c>compContentCta</c> — Reusable Call-To-Action composition
-    /// (<c>ctaLabel</c>, <c>ctaUrl</c>, <c>ctaOpenInNewTab</c>).
+    /// (<c>ctaLabel</c>, <c>ctaLink</c>, <c>ctaOpenInNewTab</c>).
     /// Composed into Element Types that invite an action.
     /// Variations=Culture (label + URL); <c>ctaOpenInNewTab</c>
     /// invariant.
@@ -560,7 +560,7 @@ public static class ContentTypeKeys
     /// <summary>
     /// <c>elementCorpSocialShare</c> — Social share button group.
     /// Uses current page URL + title (UmbracoContext). Own prop
-    /// enabledPlatforms (CSV). Variations=Nothing.
+    /// platforms (multi-dropdown of DTSelectSharePlatform). Variations=Nothing.
     /// </summary>
     public static readonly Guid ElementCorpSocialShare =
         Guid.Parse("d2914c34-2485-4a49-b57d-14555a644653");
@@ -681,7 +681,7 @@ public static class ContentTypeKeys
 
     /// <summary>
     /// <c>elementNavItem</c> — single link. Props: navLabel (Culture),
-    /// navUrl (Culture — localized paths allowed), navOpenInNewTab.
+    /// navLink (MultiUrlPicker — localized paths allowed), navOpenInNewTab.
     /// </summary>
     public static readonly Guid ElementNavItem =
         Guid.Parse("1beb4eae-34bd-4eba-95e0-a2183fbac8ba");
