@@ -30,6 +30,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0021](0021-datatype-semantics-by-intent.md) | DataType semantics: one type per editorial intent | Accepted |
 | [0022](0022-page-composition-standard.md) | Page Composition Standard (Standard/Canvas/Bare/Landing + orchestration cascade) | Accepted |
 | [0023](0023-componentization-layered-architecture.md) | Componentization Layered Architecture (5 capas + global components pattern) | Accepted |
+| [0024](0024-page-minimal-and-editor-facing-descriptions.md) | Pages mínimas + descripciones editor-facing (refinamiento Ola 51) | Accepted |
 
 ## Rules
 
