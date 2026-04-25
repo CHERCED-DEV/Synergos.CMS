@@ -28,6 +28,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0019](0019-navigation-flat-groups.md) | Navigation flat groups, no recursion (SSR + a11y first) | Accepted |
 | [0020](0020-platform-settings-split.md) | Platform/Settings tree separado + multi-brand via compBranding | Accepted |
 | [0021](0021-datatype-semantics-by-intent.md) | DataType semantics: one type per editorial intent | Accepted |
+| [0022](0022-page-composition-standard.md) | Page Composition Standard (Standard/Canvas/Bare/Landing + orchestration cascade) | Accepted |
 
 ## Rules
 
