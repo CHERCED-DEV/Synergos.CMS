@@ -1,27 +1,33 @@
 @*
     Template del Document Type `pageBare`. Sin chrome compartido —
-    landings custom. El contenido editorial se compone via Layout
-    Composer (sections — Ola 48). Sin shell html, _Layout=null.
+    landings custom, modales, embeds. Contenido vía Layout Composer
+    (sections). Layout=null por diseño.
+
+    Ola 49: aplica clases data-theme/surface/profile usando
+    IPageRenderContextResolver para que los blocks puedan reaccionar al
+    tema sin requerir chrome del sitio.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBareResponse>
+@inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
 @using Umbraco.Cms.Core.Models.Blocks
 @{
     Layout = null;
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
     var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
     var sections = currentContent?.Value<BlockGridModel>("sections");
+    var renderCtx = PageRenderContextResolver.Resolve();
 }
 <!DOCTYPE html>
-<html lang="@culture">
+<html lang="@culture" data-theme="@renderCtx.ThemeVariant" data-surface="@renderCtx.PageSurface" data-profile="@renderCtx.VisualProfile">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>@Model.SeoTitle</title>
 </head>
-<body>
-@if (sections != null && sections.Any())
-{
-    @await Html.GetBlockGridHtmlAsync(sections)
-}
+<body class="syn-page syn-page--bare">
+    @if (sections != null && sections.Any())
+    {
+        @await Html.GetBlockGridHtmlAsync(sections)
+    }
 </body>
 </html>

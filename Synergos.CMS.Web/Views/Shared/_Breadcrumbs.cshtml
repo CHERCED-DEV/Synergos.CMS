@@ -1,0 +1,36 @@
+@*
+    Breadcrumbs derivados del árbol Umbraco. Excluye nodos con
+    compNavigation.hideFromBreadcrumbs = true. _Layout/page templates
+    deciden vía PageRenderContext si invocan este partial.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent
+@using Umbraco.Extensions
+@{
+    if (Model is null) { return; }
+    var trail = Model.AncestorsOrSelf()
+        .Reverse()
+        .Where(n => !n.Value<bool>("hideFromBreadcrumbs"))
+        .ToList();
+    if (trail.Count <= 1) { return; }
+}
+<nav class="syn-breadcrumbs" aria-label="@Umbraco.GetDictionaryValue("breadcrumbs.aria.label", "Breadcrumb")">
+    <ol class="syn-breadcrumbs__list">
+        @for (var i = 0; i < trail.Count; i++)
+        {
+            var node = trail[i];
+            var isLast = i == trail.Count - 1;
+            var navTitle = node.Value<string>("navigationTitle");
+            var label = string.IsNullOrWhiteSpace(navTitle) ? node.Name : navTitle;
+            <li class="syn-breadcrumbs__item">
+                @if (isLast)
+                {
+                    <span aria-current="page">@label</span>
+                }
+                else
+                {
+                    <a href="@node.Url()">@label</a>
+                }
+            </li>
+        }
+    </ol>
+</nav>

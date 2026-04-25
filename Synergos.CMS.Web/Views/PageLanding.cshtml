@@ -1,24 +1,32 @@
 @*
-    Template stub del Document Type `pageLanding`. La orquestación
-    completa (intro, hero, sections, sectionsAfterBody) se cablea en
-    Ola 49.6 cuando aterricen los partials _PageIntro/_PageChrome/etc.
-    Por ahora renderiza heading + sections via Layout Composer.
+    Template del Document Type `pageLanding` (Ola 49). Página de
+    conversión: heading + summary + featuredImage opcionales encima
+    del Layout Composer. Sin sectionsAfterBody (Landing es lineal:
+    abre fuerte y cierra con CTA directo).
+
+    El chrome lo aplica _Layout vía IPageRenderContextResolver. Los
+    landings típicamente sobreescriben chromeMode=minimal y
+    showBreadcrumbs=false.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
 @using Umbraco.Cms.Core.Models.Blocks
 @{
     Layout = "_Layout";
     var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
-    var heading = currentContent?.Value<string>("heading");
     var sections = currentContent?.Value<BlockGridModel>("sections");
+    var renderCtx = PageRenderContextResolver.Resolve();
+    var showIntroBlock = renderCtx.ShowTitle || renderCtx.ShowIntro;
 }
-<article class="syn-page-landing">
-    @if (!string.IsNullOrWhiteSpace(heading))
+<article class="syn-page syn-page-landing">
+    @if (showIntroBlock && currentContent != null)
     {
-        <h1 class="syn-page-landing__title">@heading</h1>
+        @await Html.PartialAsync("_PageIntro", currentContent)
     }
     @if (sections != null && sections.Any())
     {
-        @await Html.GetBlockGridHtmlAsync(sections)
+        <div class="syn-page__body">
+            @await Html.GetBlockGridHtmlAsync(sections)
+        </div>
     }
 </article>

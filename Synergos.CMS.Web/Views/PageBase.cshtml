@@ -1,22 +1,39 @@
 @*
-    Template del Document Type `pageBase`. Hereda chrome de
-    _Layout.cshtml (header + main + footer). El contenido editorial
-    se compone 100% via Layout Composer (sections — Ola 48).
+    Template del Document Type `pageBase` (perfil Standard tras Ola 49).
+    Renderiza intro automático (heading + subheading + summary +
+    featuredImage) si compPageOrchestration.showTitle/showIntro lo
+    permiten, luego sections (Layout Composer principal), luego
+    sectionsAfterBody (CTA de cierre, related, share, comments).
+
+    El chrome (header/footer/Alex/breadcrumbs) lo aplica _Layout vía
+    IPageRenderContextResolver.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBaseResponse>
+@inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
 @using Umbraco.Cms.Core.Models.Blocks
 @{
     Layout = "_Layout";
     var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
     var sections = currentContent?.Value<BlockGridModel>("sections");
+    var sectionsAfter = currentContent?.Value<BlockGridModel>("sectionsAfterBody");
+    var renderCtx = PageRenderContextResolver.Resolve();
+    var showIntroBlock = renderCtx.ShowTitle || renderCtx.ShowIntro;
 }
-<article class="syn-page-base">
-    @if (!string.IsNullOrWhiteSpace(Model.SeoTitle))
+<article class="syn-page syn-page-standard">
+    @if (showIntroBlock && currentContent != null)
     {
-        <h1 class="syn-page-base__title">@Model.SeoTitle</h1>
+        @await Html.PartialAsync("_PageIntro", currentContent)
     }
     @if (sections != null && sections.Any())
     {
-        @await Html.GetBlockGridHtmlAsync(sections)
+        <div class="syn-page__body">
+            @await Html.GetBlockGridHtmlAsync(sections)
+        </div>
+    }
+    @if (sectionsAfter != null && sectionsAfter.Any())
+    {
+        <div class="syn-page__after-body">
+            @await Html.GetBlockGridHtmlAsync(sectionsAfter)
+        </div>
     }
 </article>

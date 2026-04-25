@@ -1,30 +1,22 @@
 @*
-    Master layout compartido por pageBase, pageBasic y siteRoot
-    (Ola 18). Cierra la deuda temporal de ADR 0014 "Layout=null".
-    pageBare se mantiene sin chrome a propósito (landings custom).
+    Master layout compartido por pageBase/pageBasic/pageLanding/siteRoot.
+    pageBare se mantiene Layout=null a propósito (chrome-less).
 
-    Estructura:
-    - <header class="syn-site-header"> con brand (siteRoot.siteDisplayName
-      linkeado al home) + nav horizontal con los hijos visibles del
-      siteRoot.
-    - <main id="main-content"> con @RenderBody() — lo que cada template
-      de página escriba.
-    - <footer class="syn-site-footer"> mínimo con branding + año.
-
-    No hay CSS todavía — solo clases syn-* preparadas para que el
-    design system las estile en ola futura.
+    Ola 49: la decisión de mostrar header/footer/Alex y aplicar clases
+    de tema viene del IPageRenderContextResolver (cascada page →
+    siteRoot → defaults). Las plantillas no repiten string-matching.
 
     Accesibilidad:
     - skip-link al <main> al comienzo
     - <nav aria-label="Main navigation">
-    - hreflang en <html lang>
-    - canonical URL cuando el siteRoot tiene canonicalHostname
+    - <html lang> con la cultura activa
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<dynamic>
 @using Umbraco.Extensions
 @using Microsoft.Extensions.Configuration
 @inject Synergos.CMS.Interfaces.IBrandingProvider Branding
 @inject Synergos.CMS.Interfaces.IBrandThemeProvider ThemeProvider
+@inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
 @inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @{
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
@@ -34,15 +26,14 @@
     if (string.IsNullOrWhiteSpace(siteName)) { siteName = "Synergos"; }
     var yearNow = DateTime.UtcNow.Year;
     var navItems = siteRoot?.Children
-        .Where(c => c.IsVisible())
+        .Where(c => c.IsVisible() && !c.Value<bool>("hideFromMainMenu"))
         .ToList()
         ?? new List<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>();
 
-    // Ola 37 — resolve brand theme for CSS custom properties on :root.
-    // ADR 0020 + ADR 0010: no if/else per brand in template; the
-    // provider encapsulates brand resolution, template only emits vars.
     var brand = Branding.GetCurrent();
     var theme = ThemeProvider.GetThemeForBrand(brand.Key);
+    var renderCtx = PageRenderContextResolver.Resolve();
+
     var themeVars = new List<string>();
     if (theme is not null)
     {
@@ -61,9 +52,11 @@
         Add("syn-font-heading", theme.HeadingFontFamily);
         Add("syn-font-body", theme.BodyFontFamily);
     }
+
+    var devStubEnabled = Configuration.GetValue<bool>("Synergos:DevCss:Enabled");
 }
 <!DOCTYPE html>
-<html lang="@culture">
+<html lang="@culture" data-theme="@renderCtx.ThemeVariant" data-surface="@renderCtx.PageSurface" data-profile="@renderCtx.VisualProfile">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -76,51 +69,82 @@
     {
         <style>:root { @Html.Raw(string.Join(" ", themeVars)) }</style>
     }
-    @{
-        var devStubEnabled = Configuration.GetValue<bool>("Synergos:DevCss:Enabled");
-    }
     @if (devStubEnabled)
     {
         <link rel="stylesheet" href="~/css/syn-dev-stub.css" />
     }
 </head>
-<body>
+<body class="syn-page syn-page--chrome-@renderCtx.ChromeMode syn-page--header-@renderCtx.HeaderMode syn-page--footer-@renderCtx.FooterMode">
     <a class="syn-skip-link" href="#main-content">@Umbraco.GetDictionaryValue("common.aria.skiptocontent", "Skip to main content")</a>
-    <header class="syn-site-header">
-        <div class="syn-site-header__inner">
-            @if (siteRoot != null)
-            {
-                <a class="syn-site-header__brand" href="@siteRoot.Url()">@siteName</a>
-            }
-            else
-            {
-                <span class="syn-site-header__brand">@siteName</span>
-            }
-            @if (navItems.Any())
-            {
-                <nav class="syn-site-nav" aria-label="Main navigation">
-                    <ul class="syn-site-nav__list">
-                        @foreach (var item in navItems)
-                        {
-                            var isCurrent = currentPage != null && item.Id == currentPage.Id;
-                            <li class="syn-site-nav__item">
-                                <a class="syn-site-nav__link@(isCurrent ? " syn-site-nav__link--current" : "")"
-                                   href="@item.Url()"
-                                   @(isCurrent ? Html.Raw("aria-current=\"page\"") : null)>@item.Name</a>
-                            </li>
-                        }
-                    </ul>
-                </nav>
-            }
-        </div>
-    </header>
-    <main id="main-content" class="syn-site-main">
+    @if (renderCtx.ShowAlex)
+    {
+        @await Html.PartialAsync("_PageAlex", currentPage)
+    }
+    @if (renderCtx.ShowHeader)
+    {
+        <header class="syn-site-header syn-site-header--@renderCtx.HeaderMode">
+            <div class="syn-site-header__inner">
+                @if (siteRoot != null)
+                {
+                    <a class="syn-site-header__brand" href="@siteRoot.Url()">@siteName</a>
+                }
+                else
+                {
+                    <span class="syn-site-header__brand">@siteName</span>
+                }
+                @if (navItems.Any())
+                {
+                    <nav class="syn-site-nav" aria-label="Main navigation">
+                        <ul class="syn-site-nav__list">
+                            @foreach (var item in navItems)
+                            {
+                                var isCurrent = currentPage != null && item.Id == currentPage.Id;
+                                var navTitle = item.Value<string>("navigationTitle");
+                                var label = string.IsNullOrWhiteSpace(navTitle) ? item.Name : navTitle;
+                                <li class="syn-site-nav__item">
+                                    <a class="syn-site-nav__link@(isCurrent ? " syn-site-nav__link--current" : "")"
+                                       href="@item.Url()"
+                                       @(isCurrent ? Html.Raw("aria-current=\"page\"") : null)>@label</a>
+                                </li>
+                            }
+                        </ul>
+                    </nav>
+                }
+            </div>
+        </header>
+    }
+    <main id="main-content" class="syn-site-main syn-site-main--@renderCtx.ContainerType syn-site-main--spacing-@renderCtx.SpacingScale">
+        @if (renderCtx.ShowBreadcrumbs && currentPage != null)
+        {
+            @await Html.PartialAsync("_Breadcrumbs", currentPage)
+        }
         @RenderBody()
     </main>
-    <footer class="syn-site-footer">
-        <div class="syn-site-footer__inner">
-            <p class="syn-site-footer__copyright">&copy; @yearNow @siteName</p>
-        </div>
-    </footer>
+    @if (renderCtx.ShowFooter)
+    {
+        <footer class="syn-site-footer syn-site-footer--@renderCtx.FooterMode">
+            <div class="syn-site-footer__inner">
+                @{
+                    var footerNav = siteRoot?.Children
+                        .Where(c => c.IsVisible() && !c.Value<bool>("hideFromFooter"))
+                        .ToList();
+                }
+                @if (footerNav is { Count: > 0 } && !string.Equals(renderCtx.FooterMode, "minimal", StringComparison.OrdinalIgnoreCase))
+                {
+                    <nav class="syn-site-footer__nav" aria-label="Footer navigation">
+                        <ul class="syn-site-footer__nav-list">
+                            @foreach (var item in footerNav)
+                            {
+                                var navTitle = item.Value<string>("navigationTitle");
+                                var label = string.IsNullOrWhiteSpace(navTitle) ? item.Name : navTitle;
+                                <li><a href="@item.Url()">@label</a></li>
+                            }
+                        </ul>
+                    </nav>
+                }
+                <p class="syn-site-footer__copyright">&copy; @yearNow @siteName</p>
+            </div>
+        </footer>
+    }
 </body>
 </html>
