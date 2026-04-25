@@ -61,6 +61,11 @@ public sealed class SeamComposer : IComposer
         // is negligible (single projection).
         services.AddTransient<IBrandThemeProvider, DefaultBrandThemeProvider>();
 
+        // Ola 49 — Page render context resolver. Cascada page →
+        // siteRoot → defaults inline para chrome/theme/Alex (ADR 0022).
+        // Transient por la misma razón que el theme provider.
+        services.AddTransient<IPageRenderContextResolver, DefaultPageRenderContextResolver>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;
