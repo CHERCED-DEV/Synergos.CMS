@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Proxies.Impl;
@@ -7,6 +8,7 @@ using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.Notifications;
+using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -30,9 +32,15 @@ public sealed class SeamComposer : IComposer
     {
         var services = builder.Services;
 
-        // Ola 1 defaults — POCOs snapshotted at service-activation time.
+        // Ola 54.1 — IBrandingProvider resuelve el brand activo según el
+        // hostname del request, matchéandolo contra los siteConfigSettings
+        // publicados (cada uno con su brandKey via compBranding). Si no
+        // hay match, fallback al brand de BrandingSettings (config
+        // estática). Singleton — depende de accessors per-request.
         services.AddSingleton<IBrandingProvider>(sp =>
-            new DefaultBrandingProvider(
+            new HostBasedBrandingProvider(
+                sp.GetRequiredService<IHttpContextAccessor>(),
+                sp.GetRequiredService<IUmbracoContextAccessor>(),
                 sp.GetRequiredService<IOptions<BrandingSettings>>().Value));
 
         services.AddSingleton<IFeatureGate>(sp =>
