@@ -1,0 +1,24 @@
+@*
+    Template stub del Document Type `pageLanding`. La orquestación
+    completa (intro, hero, sections, sectionsAfterBody) se cablea en
+    Ola 49.6 cuando aterricen los partials _PageIntro/_PageChrome/etc.
+    Por ahora renderiza heading + sections via Layout Composer.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    Layout = "_Layout";
+    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var heading = currentContent?.Value<string>("heading");
+    var sections = currentContent?.Value<BlockGridModel>("sections");
+}
+<article class="syn-page-landing">
+    @if (!string.IsNullOrWhiteSpace(heading))
+    {
+        <h1 class="syn-page-landing__title">@heading</h1>
+    }
+    @if (sections != null && sections.Any())
+    {
+        @await Html.GetBlockGridHtmlAsync(sections)
+    }
+</article>
