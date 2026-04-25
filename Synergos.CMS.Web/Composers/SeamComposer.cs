@@ -62,9 +62,16 @@ public sealed class SeamComposer : IComposer
         services.AddTransient<IBrandThemeProvider, DefaultBrandThemeProvider>();
 
         // Ola 49 — Page render context resolver. Cascada page →
-        // siteRoot → defaults inline para chrome/theme/Alex (ADR 0022).
+        // siteRoot → defaults inline para chrome/theme (ADR 0022).
         // Transient por la misma razón que el theme provider.
         services.AddTransient<IPageRenderContextResolver, DefaultPageRenderContextResolver>();
+
+        // Ola 50 — Global component resolver. Lee siteConfigSettings.
+        // globalComponents (BlockList) y devuelve la pieza activa
+        // aplicable (alertas y, en próximas olas, modales/banners). El
+        // pattern es transversal: cada cfg* nuevo añade un método
+        // hermano en el resolver, sin tocar la lógica existente.
+        services.AddTransient<IGlobalComponentResolver, DefaultGlobalComponentResolver>();
 
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The

@@ -17,6 +17,7 @@
 @inject Synergos.CMS.Interfaces.IBrandingProvider Branding
 @inject Synergos.CMS.Interfaces.IBrandThemeProvider ThemeProvider
 @inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
+@inject Synergos.CMS.Interfaces.IGlobalComponentResolver GlobalComponentResolver
 @inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @{
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
@@ -33,6 +34,7 @@
     var brand = Branding.GetCurrent();
     var theme = ThemeProvider.GetThemeForBrand(brand.Key);
     var renderCtx = PageRenderContextResolver.Resolve();
+    var globalAlert = GlobalComponentResolver.GetActiveAlert();
 
     var themeVars = new List<string>();
     if (theme is not null)
@@ -76,6 +78,10 @@
 </head>
 <body class="syn-page syn-page--chrome-@renderCtx.ChromeMode syn-page--header-@renderCtx.HeaderMode syn-page--footer-@renderCtx.FooterMode">
     <a class="syn-skip-link" href="#main-content">@Umbraco.GetDictionaryValue("common.aria.skiptocontent", "Skip to main content")</a>
+    @if (globalAlert is not null)
+    {
+        @await Html.PartialAsync("_GlobalAlert", globalAlert)
+    }
     @if (renderCtx.ShowHeader)
     {
         <header class="syn-site-header syn-site-header--@renderCtx.HeaderMode">
