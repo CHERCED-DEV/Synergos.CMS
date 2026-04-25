@@ -35,6 +35,9 @@
     var theme = ThemeProvider.GetThemeForBrand(brand.Key);
     var renderCtx = PageRenderContextResolver.Resolve();
     var globalAlert = GlobalComponentResolver.GetActiveAlert();
+    var globalBanner = GlobalComponentResolver.GetActiveBanner();
+    var globalFooterNote = GlobalComponentResolver.GetActiveFooterNote();
+    var globalModal = GlobalComponentResolver.GetActiveModal();
 
     var themeVars = new List<string>();
     if (theme is not null)
@@ -82,6 +85,10 @@
     {
         @await Html.PartialAsync("_GlobalAlert", globalAlert)
     }
+    @if (globalBanner is not null && string.Equals(globalBanner.Placement, "top", StringComparison.OrdinalIgnoreCase))
+    {
+        @await Html.PartialAsync("_GlobalBanner", globalBanner)
+    }
     @if (renderCtx.ShowHeader)
     {
         <header class="syn-site-header syn-site-header--@renderCtx.HeaderMode">
@@ -122,6 +129,10 @@
         }
         @RenderBody()
     </main>
+    @if (globalBanner is not null && string.Equals(globalBanner.Placement, "bottom", StringComparison.OrdinalIgnoreCase))
+    {
+        @await Html.PartialAsync("_GlobalBanner", globalBanner)
+    }
     @if (renderCtx.ShowFooter)
     {
         <footer class="syn-site-footer syn-site-footer--@renderCtx.FooterMode">
@@ -145,8 +156,16 @@
                     </nav>
                 }
                 <p class="syn-site-footer__copyright">&copy; @yearNow @siteName</p>
+                @if (globalFooterNote is not null)
+                {
+                    @await Html.PartialAsync("_GlobalFooterNote", globalFooterNote)
+                }
             </div>
         </footer>
+    }
+    @if (globalModal is not null)
+    {
+        @await Html.PartialAsync("_GlobalModal", globalModal)
     }
 </body>
 </html>
