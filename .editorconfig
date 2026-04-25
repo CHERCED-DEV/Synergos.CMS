@@ -37,8 +37,19 @@ csharp_style_var_elsewhere = false:suggestion
 
 # Modern C# conventions
 csharp_style_namespace_declarations = file_scoped:warning
-csharp_prefer_braces = true:warning
+csharp_prefer_braces = false:silent
 csharp_new_line_before_open_brace = all
 
-# Unused usings
-dotnet_diagnostic.IDE0005.severity = warning
+# Style/perf code analysis severities — silenciados para evitar log noise
+# en cada build. Errores de compilación reales (CS*) siguen visibles.
+# Si en el futuro queremos enforce, subir estos a "warning" o "suggestion".
+dotnet_diagnostic.IDE0005.severity = warning   # unused using directive (sí útil)
+dotnet_diagnostic.IDE0011.severity = none      # add braces to if/foreach
+dotnet_diagnostic.CA1305.severity  = none      # IFormatProvider ausente
+dotnet_diagnostic.CA1848.severity  = none      # LoggerMessage delegates (perf)
+dotnet_diagnostic.CA1859.severity  = none      # devolver concrete type
+dotnet_diagnostic.CA1861.severity  = none      # static readonly array args
+dotnet_diagnostic.CA1873.severity  = none      # lazy logger arg evaluation
+dotnet_diagnostic.CA1805.severity  = none      # explicit default initialization
+dotnet_diagnostic.CS1574.severity  = none      # XML cref not resolved
+dotnet_diagnostic.NU1902.severity  = none      # Umbraco 13.13.1 NU1902 known (ADR 0001)

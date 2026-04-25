@@ -15,7 +15,14 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);1591</NoWarn>
+    <!--
+      NoWarn:
+        1591   missing XML doc comment (acepta sin docs en types públicos)
+        NU1902 Umbraco.Cms 13.13.1 vulnerabilidad moderate conocida, aceptada en
+               ADR 0001 (memoria project_umbraco_version_pin). Sin patch en
+               branch 13.x; upgrade a 14+ requiere ADR nuevo.
+    -->
+    <NoWarn>$(NoWarn);1591;NU1902</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup>
