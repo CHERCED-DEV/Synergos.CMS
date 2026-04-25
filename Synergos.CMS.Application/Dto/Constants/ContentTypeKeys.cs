@@ -755,9 +755,9 @@ public static class ContentTypeKeys
     // ── SynHost batch B (Ola 27, ADR 0015) ─────────────────────────
     //
     // 10 additional elementSyn* composite/interactive media blocks.
-    // Only added to DT.BlockGrid.Editorial under "Syn (CDN)" group —
-    // SynPilot DataType preserved as pilot-scope only (3 pilot + 10
-    // batch A).
+    // Disponibles dentro de DTBlockGridSections (Layout Composer) —
+    // los DataTypes Basic/Editorial/SynPilot fueron retirados en
+    // Ola 50.1.2.
 
     public static readonly Guid ElementSynHeroBanner =
         Guid.Parse("637eccc8-2c40-4b65-b2f6-8b7694e10c0d");
@@ -1053,8 +1053,9 @@ public static class ContentTypeKeys
 
     /// <summary>
     /// <c>reusableBlock</c> — Bloque de contenido reutilizable con
-    /// bodyBlocks (DT.BlockGrid.Editorial). Consumido desde pages
-    /// via picker/embed. Props: blockTitle, blockNotes, bodyBlocks.
+    /// sections (Layout Composer). Consumido desde pages via
+    /// elementLayoutSnippetRef (ContentPicker). Props: blockTitle,
+    /// blockNotes, sections.
     /// </summary>
     public static readonly Guid ReusableBlock =
         Guid.Parse("907840c2-4bd1-4ef8-8181-c4abea0e8a9a");

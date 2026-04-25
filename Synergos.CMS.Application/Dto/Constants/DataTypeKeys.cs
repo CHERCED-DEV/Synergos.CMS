@@ -24,50 +24,21 @@ public static class DataTypeKeys
     // Do not invent keys here — they must exist in uSync first.
 
     /// <summary>
-    /// <c>DT.BlockGrid.SynPilot</c> — Block Grid Data Type exposing
-    /// the 3 SynHost pilot blocks (elementSynAvatar, elementSynBadge,
-    /// elementSynDivider) under the "SynHost Pilot" group.
+    /// <c>DTBlockGridSections</c> — Block Grid canónico (Layout
+    /// Composer, Ola 42.5). Único Block Grid del producto; expone los
+    /// 14 Layout Presets como bloques root + cualquier Element Type
+    /// dentro de las áreas. Reemplazó a los pilots Basic/Editorial/
+    /// SynPilot (eliminados en Ola 50.1.2).
     /// </summary>
     /// <remarks>
-    /// Source: <c>uSync/v9/DataTypes/DTBlockGridSynPilot.config</c>.
-    /// Created in Ola 8.5 to smoke-test the SynHost contract end-to-end
-    /// in a Block Grid editor UI. Later olas will add larger Block
-    /// Grid configurations per page surface.
+    /// Source: <c>uSync/v9/DataTypes/DTBlockGridSections.config</c>.
+    /// Consumido por <c>siteRoot.sections</c>, <c>pageBase.sections</c>,
+    /// <c>pageBase.sectionsAfterBody</c>, <c>pageBasic.sections</c>,
+    /// <c>pageBare.sections</c>, <c>pageLanding.sections</c>,
+    /// <c>reusableBlock.sections</c> y <c>elementMemberGate.gatedBlocks</c>.
     /// </remarks>
-    public static readonly Guid BlockGridSynPilot =
-        Guid.Parse("5772232e-e431-4918-bfda-c56eec963b33");
-
-    /// <summary>
-    /// <c>DT.BlockGrid.Basic</c> — Block Grid Data Type exposing the
-    /// 8 first-wave SSR Element Types (elementText* × 6 + elementAction*
-    /// × 2) under a "Basic Text &amp; Action" group.
-    /// </summary>
-    /// <remarks>
-    /// Source: <c>uSync/v9/DataTypes/DTBlockGridBasic.config</c>.
-    /// Ola 13. The companion <c>DT.BlockGrid.SynPilot</c> (Ola 8.5)
-    /// exposes the CDN-hosted SynHost blocks; both DataTypes can be
-    /// used independently or side-by-side on different pages.
-    /// </remarks>
-    public static readonly Guid BlockGridBasic =
-        Guid.Parse("40e118ec-2e66-4939-9bbd-106b8d50c5a7");
-
-    /// <summary>
-    /// <c>DT.BlockGrid.Editorial</c> — Block Grid Data Type exposing
-    /// all 21 SSR Element Types (elementText* × 6 + elementAction* × 2
-    /// + elementMedia* × 6 + elementInfo* × 7) organised in 4 groups:
-    /// Text, Action, Media, Info.
-    /// </summary>
-    /// <remarks>
-    /// Source: <c>uSync/v9/DataTypes/DTBlockGridEditorial.config</c>.
-    /// Used as the <c>bodyBlocks</c> field on <c>pageBase</c> (Ola 16).
-    /// Companion of:
-    /// <list type="bullet">
-    ///   <item><c>DT.BlockGrid.Basic</c> (Ola 13, text+action subset)</item>
-    ///   <item><c>DT.BlockGrid.SynPilot</c> (Ola 8.5, CDN-hosted pilots)</item>
-    /// </list>
-    /// </remarks>
-    public static readonly Guid BlockGridEditorial =
-        Guid.Parse("f975c194-5696-4d7c-9829-ff018fb6995a");
+    public static readonly Guid BlockGridSections =
+        Guid.Parse("bdef3027-193b-4334-b3ee-738eded72215");
 
     /// <summary>
     /// <c>DT.BlockList.CtaItems</c> — BlockList Data Type allowing
