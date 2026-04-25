@@ -68,10 +68,16 @@ public sealed class SeamComposer : IComposer
 
         // Ola 50 — Global component resolver. Lee siteConfigSettings.
         // globalComponents (BlockList) y devuelve la pieza activa
-        // aplicable (alertas y, en próximas olas, modales/banners). El
-        // pattern es transversal: cada cfg* nuevo añade un método
-        // hermano en el resolver, sin tocar la lógica existente.
+        // aplicable. Ola 52.A extendió a 4 cfg* (Alert/Banner/
+        // FooterNote/Modal). Cada cfg* nuevo añade un método hermano
+        // en el resolver sin tocar la lógica existente.
         services.AddTransient<IGlobalComponentResolver, DefaultGlobalComponentResolver>();
+
+        // Ola 52.C — Member access gate + handler que aplica
+        // compMemberGating.requiresAuth + allowedRolesCsv en el
+        // routing del request. Singleton porque el gate solo lee
+        // del HttpContext via accessor.
+        services.AddSingleton<IMemberAccessGate, DefaultMemberAccessGate>();
 
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
@@ -126,5 +132,13 @@ public sealed class SeamComposer : IComposer
         builder.AddNotificationHandler<
             ContentSavingNotification,
             LayoutComposerStarterScaffold>();
+
+        // Ola 52.C — Member gating: cuando el routing resuelve a un
+        // PublishedContent que compone compMemberGating con
+        // requiresAuth=true, el handler verifica IMemberAccessGate y
+        // redirige a /login con returnUrl si el miembro no califica.
+        builder.AddNotificationHandler<
+            RoutingRequestNotification,
+            MemberGatingHandler>();
     }
 }
