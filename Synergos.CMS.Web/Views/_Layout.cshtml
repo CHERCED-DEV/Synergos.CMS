@@ -76,10 +76,6 @@
 </head>
 <body class="syn-page syn-page--chrome-@renderCtx.ChromeMode syn-page--header-@renderCtx.HeaderMode syn-page--footer-@renderCtx.FooterMode">
     <a class="syn-skip-link" href="#main-content">@Umbraco.GetDictionaryValue("common.aria.skiptocontent", "Skip to main content")</a>
-    @if (renderCtx.ShowAlex)
-    {
-        @await Html.PartialAsync("_PageAlex", currentPage)
-    }
     @if (renderCtx.ShowHeader)
     {
         <header class="syn-site-header syn-site-header--@renderCtx.HeaderMode">

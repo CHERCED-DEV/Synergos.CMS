@@ -6,10 +6,10 @@ namespace Synergos.CMS.Web.Services;
 
 /// <summary>
 /// Default <see cref="IPageRenderContextResolver"/> que aplica la
-/// cascada page → siteRoot → defaults inline (Ola 49 — ADR 0022) leyendo
-/// las propiedades de las composiciones <c>compPageOrchestration</c>,
-/// <c>compPageTheme</c> y <c>compAlex</c> sobre la página resuelta y su
-/// siteRoot ancestral.
+/// cascada page → siteRoot → defaults inline (ADR 0022) leyendo las
+/// propiedades de las composiciones <c>compPageOrchestration</c> y
+/// <c>compPageTheme</c> sobre la página resuelta y su siteRoot
+/// ancestral.
 /// </summary>
 /// <remarks>
 /// Vive en <c>Synergos.CMS.Web</c> porque depende de
@@ -17,6 +17,9 @@ namespace Synergos.CMS.Web.Services;
 /// editor en flags booleanas para que las plantillas Razor no repitan la
 /// misma lógica de string-matching en cada vista. Nunca lanza: si no hay
 /// request o página, devuelve <see cref="PageRenderContext.Defaults"/>.
+/// Componentes globales (alertas/modales/banners) se resuelven aparte
+/// vía <c>IGlobalComponentResolver</c> — no son responsabilidad de este
+/// resolver.
 /// </remarks>
 public sealed class DefaultPageRenderContextResolver : IPageRenderContextResolver
 {
@@ -55,9 +58,6 @@ public sealed class DefaultPageRenderContextResolver : IPageRenderContextResolve
         var showIntro = ResolveBool(page, siteRoot, "showIntro", defaults.ShowIntro) && ChromeAllowsContent(chromeMode);
         var showBreadcrumbs = ResolveBool(page, siteRoot, "showBreadcrumbs", defaults.ShowBreadcrumbs) && ChromeAllowsChrome(chromeMode);
 
-        var alexEnabled = page.Value("alexEnabled", defaultValue: false);
-        var showAlex = alexEnabled && ChromeAllowsChrome(chromeMode);
-
         return new PageRenderContext(
             ChromeMode: chromeMode,
             HeaderMode: headerMode,
@@ -67,7 +67,6 @@ public sealed class DefaultPageRenderContextResolver : IPageRenderContextResolve
             ShowTitle: showTitle,
             ShowIntro: showIntro,
             ShowBreadcrumbs: showBreadcrumbs,
-            ShowAlex: showAlex,
             ThemeVariant: ResolveString(page, siteRoot, "pageThemeVariant", defaults.ThemeVariant),
             PageSurface: ResolveString(page, siteRoot, "pageSurface", defaults.PageSurface),
             VisualProfile: ResolveString(page, siteRoot, "visualProfile", defaults.VisualProfile),

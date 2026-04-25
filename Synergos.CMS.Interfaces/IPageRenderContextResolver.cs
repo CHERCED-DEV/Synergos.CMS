@@ -3,7 +3,7 @@ namespace Synergos.CMS.Interfaces;
 /// <summary>
 /// Resuelve el <see cref="PageRenderContext"/> de la página actualmente
 /// en request. Aplica la cascada page → siteRoot → defaults inline para
-/// chrome, theme, alex y orquestación visual (Ola 49 — ADR 0022).
+/// chrome, theme y orquestación visual de la página (ADR 0022).
 /// </summary>
 /// <remarks>
 /// La implementación por defecto <c>DefaultPageRenderContextResolver</c>
@@ -11,7 +11,8 @@ namespace Synergos.CMS.Interfaces;
 /// <c>IUmbracoContextAccessor</c>. La interfaz no toma parámetros: se
 /// asume invocada dentro de un request Razor con la página resuelta. Si
 /// no hay request o página, el resolver devuelve
-/// <see cref="PageRenderContext.Defaults"/>.
+/// <see cref="PageRenderContext.Defaults"/>. Los componentes globales
+/// (alertas, modales, banners) se resuelven en <c>IGlobalComponentResolver</c>.
 /// </remarks>
 public interface IPageRenderContextResolver
 {
@@ -44,7 +45,6 @@ public sealed record PageRenderContext(
     bool ShowTitle,
     bool ShowIntro,
     bool ShowBreadcrumbs,
-    bool ShowAlex,
     string ThemeVariant,
     string PageSurface,
     string VisualProfile,
@@ -64,7 +64,6 @@ public sealed record PageRenderContext(
         ShowTitle: true,
         ShowIntro: true,
         ShowBreadcrumbs: false,
-        ShowAlex: false,
         ThemeVariant: "light",
         PageSurface: "default",
         VisualProfile: "institutional",
