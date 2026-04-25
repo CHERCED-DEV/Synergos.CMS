@@ -1,0 +1,77 @@
+@*
+    Emite las CSS custom properties del brand activo + override por
+    variante de tema page-level (compPageTheme.pageThemeVariant). Vive
+    como partial para que _Layout.cshtml y PageBare.cshtml lo invoquen
+    sin duplicar la lógica.
+
+    Estrategia de cascading:
+    1. Brand-level (themeSettings del brand activo) — emite todas las
+       CSS vars base (color-primary, color-text, font-heading, etc.).
+    2. Page-level variant (renderCtx.ThemeVariant) — emite vars override
+       envueltas en el selector [data-theme=X] que ya viene en <html>.
+       Variantes: light (no override), dark (invierte fondos/texto),
+       silverGold (paleta neutra), brand (refuerza primary).
+
+    Output: <style>:root { ... } [data-theme=dark] { ... }</style>
+*@
+@using Synergos.CMS.Interfaces
+@using Synergos.CMS.Application.Dto.Responses
+@model BrandThemeStyleModel
+@{
+    if (Model is null) { return; }
+    var theme = Model.Theme;
+    var variant = Model.PageThemeVariant ?? "light";
+
+    var rootVars = new List<string>();
+    void Add(string name, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            rootVars.Add($"--{name}: {value};");
+        }
+    }
+    if (theme is not null)
+    {
+        Add("syn-color-primary", theme.PrimaryColor);
+        Add("syn-color-secondary", theme.SecondaryColor);
+        Add("syn-color-accent", theme.AccentColor);
+        Add("syn-color-background", theme.BackgroundColor);
+        Add("syn-color-text", theme.TextColor);
+        Add("syn-font-heading", theme.HeadingFontFamily);
+        Add("syn-font-body", theme.BodyFontFamily);
+    }
+}
+@if (rootVars.Count > 0)
+{
+    <style>
+:root { @Html.Raw(string.Join(" ", rootVars)) }
+[data-theme="dark"] {
+    --syn-color-background: #0f172a;
+    --syn-color-text: #f1f5f9;
+    --syn-color-secondary: #94a3b8;
+}
+[data-theme="silverGold"] {
+    --syn-color-primary: #c9a96e;
+    --syn-color-secondary: #94a3b8;
+    --syn-color-background: #fafaf9;
+    --syn-color-text: #1e293b;
+}
+[data-theme="brand"] {
+    --syn-color-background: var(--syn-color-primary);
+    --syn-color-text: var(--syn-color-background, #ffffff);
+}
+[data-surface="muted"] {
+    --syn-color-background: color-mix(in srgb, var(--syn-color-background) 92%, var(--syn-color-text) 8%);
+}
+[data-surface="contrast"] {
+    --syn-color-background: var(--syn-color-text);
+    --syn-color-text: var(--syn-color-background);
+}
+[data-surface="brand"] {
+    --syn-color-background: var(--syn-color-primary);
+}
+[data-surface="transparent"] {
+    --syn-color-background: transparent;
+}
+    </style>
+}

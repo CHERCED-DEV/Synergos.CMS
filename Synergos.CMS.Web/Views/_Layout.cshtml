@@ -39,25 +39,7 @@
     var globalFooterNote = GlobalComponentResolver.GetActiveFooterNote();
     var globalModal = GlobalComponentResolver.GetActiveModal();
 
-    var themeVars = new List<string>();
-    if (theme is not null)
-    {
-        void Add(string name, string? value)
-        {
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                themeVars.Add($"--{name}: {value};");
-            }
-        }
-        Add("syn-color-primary", theme.PrimaryColor);
-        Add("syn-color-secondary", theme.SecondaryColor);
-        Add("syn-color-accent", theme.AccentColor);
-        Add("syn-color-background", theme.BackgroundColor);
-        Add("syn-color-text", theme.TextColor);
-        Add("syn-font-heading", theme.HeadingFontFamily);
-        Add("syn-font-body", theme.BodyFontFamily);
-    }
-
+    var brandThemeModel = new Synergos.CMS.Application.Dto.Responses.BrandThemeStyleModel(theme, renderCtx.ThemeVariant);
     var devStubEnabled = Configuration.GetValue<bool>("Synergos:DevCss:Enabled");
 }
 <!DOCTYPE html>
@@ -70,10 +52,7 @@
     {
         <link rel="icon" href="@theme.FaviconUrl" />
     }
-    @if (themeVars.Count > 0)
-    {
-        <style>:root { @Html.Raw(string.Join(" ", themeVars)) }</style>
-    }
+    @await Html.PartialAsync("_BrandThemeStyle", brandThemeModel)
     @if (devStubEnabled)
     {
         <link rel="stylesheet" href="~/css/syn-dev-stub.css" />
