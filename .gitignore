@@ -38,10 +38,12 @@ Synergos.CMS.Web/wwwroot/media/
 Synergos.CMS.Web/uSync/uSync.History/
 Synergos.CMS.Web/uSync/uSync.Logs/
 
-# uSync auto-exports content from DB; el agente NO es dueño de Content
-# (memoria feedback_schema_ownership_agent). Test content del seeder
-# tampoco se commitea — se regenera con DevTestContentSeeder.
+# uSync auto-exports content + media from DB; el agente NO es dueño
+# de Content/Media (memoria feedback_schema_ownership_agent). Test
+# content del seeder tampoco se commitea — se regenera con
+# DevTestContentSeeder. MediaTypes (schema) sí está en uSync/v9/MediaTypes/.
 Synergos.CMS.Web/uSync/v9/Content/
+Synergos.CMS.Web/uSync/v9/Media/
 
 # Umbraco-generated appsettings schema references (regenerated on build)
 Synergos.CMS.Web/appsettings-schema.json
