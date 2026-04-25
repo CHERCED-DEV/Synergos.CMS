@@ -55,7 +55,6 @@ public sealed class DefaultPageRenderContextResolver : IPageRenderContextResolve
         var showFooter = ChromeAllowsChrome(chromeMode) && !string.Equals(footerMode, "hidden", StringComparison.OrdinalIgnoreCase);
 
         var showTitle = ResolveBool(page, siteRoot, "showTitle", defaults.ShowTitle) && ChromeAllowsContent(chromeMode);
-        var showIntro = ResolveBool(page, siteRoot, "showIntro", defaults.ShowIntro) && ChromeAllowsContent(chromeMode);
         var showBreadcrumbs = ResolveBool(page, siteRoot, "showBreadcrumbs", defaults.ShowBreadcrumbs) && ChromeAllowsChrome(chromeMode);
 
         return new PageRenderContext(
@@ -65,7 +64,6 @@ public sealed class DefaultPageRenderContextResolver : IPageRenderContextResolve
             ShowHeader: showHeader,
             ShowFooter: showFooter,
             ShowTitle: showTitle,
-            ShowIntro: showIntro,
             ShowBreadcrumbs: showBreadcrumbs,
             ThemeVariant: ResolveString(page, siteRoot, "pageThemeVariant", defaults.ThemeVariant),
             PageSurface: ResolveString(page, siteRoot, "pageSurface", defaults.PageSurface),

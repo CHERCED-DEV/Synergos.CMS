@@ -1,12 +1,15 @@
-﻿@*
-    Template del Document Type `pageBase` (perfil Standard tras Ola 49).
-    Renderiza intro automático (heading + subheading + summary +
-    featuredImage) si compPageOrchestration.showTitle/showIntro lo
-    permiten, luego sections (Layout Composer principal), luego
-    sectionsAfterBody (CTA de cierre, related, share, comments).
+@*
+    Template del Document Type `pageBase` (perfil Standard).
+    Renderiza:
+    - <h1> con el heading editorial (o el nombre del nodo) si
+      showTitle está activo
+    - sections (Layout Composer principal)
+    - sectionsAfterBody (cierre opcional)
 
-    El chrome (header/footer/Alex/breadcrumbs) lo aplica _Layout vía
-    IPageRenderContextResolver.
+    El chrome (header/footer/breadcrumbs/alerta global) lo aplica
+    _Layout vía IPageRenderContextResolver + IGlobalComponentResolver.
+    El hero/intro/featured image se arman como bloques arrastrables
+    dentro de sections, no son props del page.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBaseResponse>
 @inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
@@ -17,12 +20,15 @@
     var sections = currentContent?.Value<BlockGridModel>("sections");
     var sectionsAfter = currentContent?.Value<BlockGridModel>("sectionsAfterBody");
     var renderCtx = PageRenderContextResolver.Resolve();
-    var showIntroBlock = renderCtx.ShowTitle || renderCtx.ShowIntro;
+    var heading = currentContent?.Value<string>("heading");
+    if (string.IsNullOrWhiteSpace(heading)) { heading = currentContent?.Name; }
 }
 <article class="syn-page syn-page-standard">
-    @if (showIntroBlock && currentContent != null)
+    @if (renderCtx.ShowTitle && !string.IsNullOrWhiteSpace(heading))
     {
-        @await Html.PartialAsync("_PageIntro", currentContent)
+        <header class="syn-page__header">
+            <h1 class="syn-page__title">@heading</h1>
+        </header>
     }
     @if (sections != null && sections.Any())
     {

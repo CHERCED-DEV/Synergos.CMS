@@ -1,12 +1,12 @@
-﻿@*
-    Template del Document Type `pageLanding` (Ola 49). Página de
-    conversión: heading + summary + featuredImage opcionales encima
-    del Layout Composer. Sin sectionsAfterBody (Landing es lineal:
-    abre fuerte y cierra con CTA directo).
+@*
+    Template del Document Type `pageLanding`. Página de conversión.
+    Renderiza:
+    - <h1> con el heading (o el nombre del nodo) si showTitle activo
+    - sections (Layout Composer)
 
-    El chrome lo aplica _Layout vía IPageRenderContextResolver. Los
-    landings típicamente sobreescriben chromeMode=minimal y
-    showBreadcrumbs=false.
+    Sin sectionsAfterBody (Landing es lineal: abre fuerte y cierra
+    con CTA dentro del mismo cuerpo). El hero, copy y media se arman
+    como bloques arrastrables.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
 @inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
@@ -16,12 +16,15 @@
     var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
     var sections = currentContent?.Value<BlockGridModel>("sections");
     var renderCtx = PageRenderContextResolver.Resolve();
-    var showIntroBlock = renderCtx.ShowTitle || renderCtx.ShowIntro;
+    var heading = currentContent?.Value<string>("heading");
+    if (string.IsNullOrWhiteSpace(heading)) { heading = currentContent?.Name; }
 }
 <article class="syn-page syn-page-landing">
-    @if (showIntroBlock && currentContent != null)
+    @if (renderCtx.ShowTitle && !string.IsNullOrWhiteSpace(heading))
     {
-        @await Html.PartialAsync("_PageIntro", currentContent)
+        <header class="syn-page__header">
+            <h1 class="syn-page__title">@heading</h1>
+        </header>
     }
     @if (sections != null && sections.Any())
     {
