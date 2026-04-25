@@ -5,33 +5,33 @@ namespace Synergos.CMS.Tests.Dto;
 public class PageBaseResponseTests
 {
     [Fact]
-    public void Project_MapsSeoTitleAndBody_FromAccessor()
+    public void Project_MapsSeoTitle_FromAccessor()
     {
         var values = new Dictionary<string, string?>
         {
             ["seoTitle"] = "About",
-            ["body"] = "<p>Hola.</p>",
         };
 
         var response = PageBaseResponse.Project(
             alias => values.GetValueOrDefault(alias));
 
         Assert.Equal("About", response.SeoTitle);
-        Assert.Equal("<p>Hola.</p>", response.BodyHtml);
     }
 
     [Fact]
-    public void Project_ReturnsNullFields_WhenAccessorAlwaysReturnsNull()
+    public void Project_ReturnsNullSeoTitle_WhenAccessorAlwaysReturnsNull()
     {
         var response = PageBaseResponse.Project(_ => null);
 
         Assert.Null(response.SeoTitle);
-        Assert.Null(response.BodyHtml);
     }
 
     [Fact]
-    public void Project_QueriesExactlyTheExpectedAliases()
+    public void Project_QueriesOnlySeoTitle()
     {
+        // Post-Ola 48: el contenido editorial vive en sections (Layout
+        // Composer) leído por la view directo del IPublishedContent.
+        // El DTO solo transporta seoTitle.
         var queried = new List<string>();
 
         PageBaseResponse.Project(alias =>
@@ -40,9 +40,8 @@ public class PageBaseResponseTests
             return null;
         });
 
-        Assert.Equal(2, queried.Count);
+        Assert.Single(queried);
         Assert.Contains("seoTitle", queried);
-        Assert.Contains("body", queried);
     }
 
     [Fact]
@@ -58,5 +57,7 @@ public class PageBaseResponseTests
 
         Assert.DoesNotContain("internalNotes", queried);
         Assert.DoesNotContain("publishingNotes", queried);
+        Assert.DoesNotContain("body", queried);
+        Assert.DoesNotContain("bodyBlocks", queried);
     }
 }

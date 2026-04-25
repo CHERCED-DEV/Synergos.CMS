@@ -5,33 +5,31 @@ namespace Synergos.CMS.Tests.Dto;
 public class PageBasicResponseTests
 {
     [Fact]
-    public void Project_MapsSeoTitleAndBody_FromAccessor()
+    public void Project_MapsSeoTitle_FromAccessor()
     {
         var values = new Dictionary<string, string?>
         {
             ["seoTitle"] = "About us",
-            ["body"] = "<p>Hello.</p>",
         };
 
         var response = PageBasicResponse.Project(
             alias => values.GetValueOrDefault(alias));
 
         Assert.Equal("About us", response.SeoTitle);
-        Assert.Equal("<p>Hello.</p>", response.BodyHtml);
     }
 
     [Fact]
-    public void Project_ReturnsNullFields_WhenAccessorAlwaysReturnsNull()
+    public void Project_ReturnsNullSeoTitle_WhenAccessorAlwaysReturnsNull()
     {
         var response = PageBasicResponse.Project(_ => null);
 
         Assert.Null(response.SeoTitle);
-        Assert.Null(response.BodyHtml);
     }
 
     [Fact]
-    public void Project_QueriesExactlyTheExpectedAliases()
+    public void Project_QueriesOnlySeoTitle()
     {
+        // Post-Ola 48: contenido editorial vive en sections.
         var queried = new List<string>();
 
         PageBasicResponse.Project(alias =>
@@ -40,9 +38,8 @@ public class PageBasicResponseTests
             return null;
         });
 
-        Assert.Equal(2, queried.Count);
+        Assert.Single(queried);
         Assert.Contains("seoTitle", queried);
-        Assert.Contains("body", queried);
     }
 
     [Fact]
@@ -56,8 +53,7 @@ public class PageBasicResponseTests
             return null;
         });
 
-        // Guardrail: if a future refactor starts reading more aliases,
-        // this test forces the author to update the ADR scope.
+        Assert.DoesNotContain("body", queried);
         Assert.DoesNotContain("title", queried);
         Assert.DoesNotContain("description", queried);
         Assert.DoesNotContain("name", queried);

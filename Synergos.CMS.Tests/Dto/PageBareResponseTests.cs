@@ -5,33 +5,31 @@ namespace Synergos.CMS.Tests.Dto;
 public class PageBareResponseTests
 {
     [Fact]
-    public void Project_MapsSeoTitleAndBody_FromAccessor()
+    public void Project_MapsSeoTitle_FromAccessor()
     {
         var values = new Dictionary<string, string?>
         {
             ["seoTitle"] = "Landing X",
-            ["body"] = "<main>Raw.</main>",
         };
 
         var response = PageBareResponse.Project(
             alias => values.GetValueOrDefault(alias));
 
         Assert.Equal("Landing X", response.SeoTitle);
-        Assert.Equal("<main>Raw.</main>", response.BodyHtml);
     }
 
     [Fact]
-    public void Project_ReturnsNullFields_WhenAccessorAlwaysReturnsNull()
+    public void Project_ReturnsNullSeoTitle_WhenAccessorAlwaysReturnsNull()
     {
         var response = PageBareResponse.Project(_ => null);
 
         Assert.Null(response.SeoTitle);
-        Assert.Null(response.BodyHtml);
     }
 
     [Fact]
-    public void Project_QueriesExactlyTheExpectedAliases()
+    public void Project_QueriesOnlySeoTitle()
     {
+        // Post-Ola 48: contenido editorial vive en sections.
         var queried = new List<string>();
 
         PageBareResponse.Project(alias =>
@@ -40,9 +38,8 @@ public class PageBareResponseTests
             return null;
         });
 
-        Assert.Equal(2, queried.Count);
+        Assert.Single(queried);
         Assert.Contains("seoTitle", queried);
-        Assert.Contains("body", queried);
     }
 
     [Fact]
@@ -56,8 +53,7 @@ public class PageBareResponseTests
             return null;
         });
 
-        // pageBare does not compose compCoreLifecycle, but enforces the same
-        // contract: admin fields never leak into public DTOs.
+        Assert.DoesNotContain("body", queried);
         Assert.DoesNotContain("internalNotes", queried);
         Assert.DoesNotContain("publishingNotes", queried);
     }
