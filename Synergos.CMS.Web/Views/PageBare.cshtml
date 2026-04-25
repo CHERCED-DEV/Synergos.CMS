@@ -1,12 +1,7 @@
 @*
-    Template del Document Type `pageBare` (Ola 8 + Layout Composer
-    Ola 42.7). Sin chrome compartido — el body del modelo se emite
-    como la totalidad del contenido. Útil para landings custom.
-
-    Precedencia:
-      - Si sections (BlockGrid Layout Composer) tiene bloques,
-        ellos son la página.
-      - Si no, el body richtext (TinyMCE) es la página (fallback).
+    Template del Document Type `pageBare`. Sin chrome compartido —
+    landings custom. El contenido editorial se compone via Layout
+    Composer (sections — Ola 48). Sin shell html, _Layout=null.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBareResponse>
 @using Umbraco.Cms.Core.Models.Blocks
@@ -15,7 +10,6 @@
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
     var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
     var sections = currentContent?.Value<BlockGridModel>("sections");
-    var hasSections = sections != null && sections.Any();
 }
 <!DOCTYPE html>
 <html lang="@culture">
@@ -25,13 +19,9 @@
     <title>@Model.SeoTitle</title>
 </head>
 <body>
-@if (hasSections)
+@if (sections != null && sections.Any())
 {
     @await Html.GetBlockGridHtmlAsync(sections)
-}
-else
-{
-    @Html.Raw(Model.BodyHtml)
 }
 </body>
 </html>

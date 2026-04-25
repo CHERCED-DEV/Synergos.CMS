@@ -76,10 +76,9 @@ public sealed class DevTestContentSeeder
         {
             var p = _contentService.Create(page.Name, site.Id, "pageBase");
             p.SetCultureName(page.Name, "es-CO");
-            if (!string.IsNullOrWhiteSpace(page.Body))
-            {
-                p.SetValue("body", page.Body, "es-CO");
-            }
+            // Pages post-Ola 48 son 100% Layout Composer. Las creamos
+            // con sections vacío — render de chrome + main vacío valida
+            // que el template no rompa con sections null/empty.
             var saveP = _contentService.SaveAndPublish(p, new[] { "es-CO" });
             if (saveP.Success)
             {
@@ -122,16 +121,13 @@ public sealed class DevTestContentSeeder
 
     private static IEnumerable<TestPage> GetTestPages() => new[]
     {
-        new TestPage("Home Test",
-            "<p>Página home del Test Site. Renderiza chrome + body richtext + dev-stub CSS.</p><h2>Heading H2 de prueba</h2><p>Párrafo con <a href=\"#\">enlace</a>, <strong>bold</strong> e <em>itálica</em>.</p>"),
-        new TestPage("Typography Test",
-            "<h1>Heading H1</h1><h2>Heading H2</h2><h3>Heading H3</h3><h4>Heading H4</h4><p>Párrafo body. Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p><ul><li>Item 1</li><li>Item 2</li><li>Item 3</li></ul>"),
-        new TestPage("Empty Blocks Test",
-            "<p>Esta página tiene body simple. El Layout Composer Sections está vacío — debería renderizar solo el body sin errores.</p>"),
+        new TestPage("Home Test"),
+        new TestPage("Typography Test"),
+        new TestPage("Empty Blocks Test"),
     };
 
     public sealed record SeedResult(bool Success, int SiteRootId, int ChildCount, string Detail);
     public sealed record ClearResult(bool Success, int NodesDeleted, string Detail);
 
-    private sealed record TestPage(string Name, string Body);
+    private sealed record TestPage(string Name);
 }
