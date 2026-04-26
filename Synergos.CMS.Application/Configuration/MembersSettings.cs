@@ -21,4 +21,14 @@ public sealed class MembersSettings
     /// El path se concatena con <c>?returnUrl=...</c> automáticamente.
     /// </summary>
     public string LoginPath { get; init; } = "/login";
+
+    /// <summary>
+    /// Si true (Ola 83), el AccountController.Register NO firma sesión
+    /// inmediata; envía email de confirmación con token y redirige a
+    /// <c>/account/registered</c> ("revisa tu email"). El miembro debe
+    /// hacer click en el link del email para activar la cuenta.
+    /// Default false — opt-in. Para sites que necesitan friction baja
+    /// (registro casual), dejar en false.
+    /// </summary>
+    public bool RequireEmailConfirmation { get; init; } = false;
 }

@@ -216,6 +216,78 @@ public sealed class DefaultMemberAuthService : IMemberAuthService
             first?.Description ?? "No se pudo cambiar la contraseña.");
     }
 
+    public async Task<EmailConfirmationRequestResult> RequestEmailConfirmationAsync(
+        string email,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return new EmailConfirmationRequestResult(false, false, null, null);
+        }
+
+        var user = await _memberManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            return new EmailConfirmationRequestResult(false, false, null, null);
+        }
+
+        if (user.EmailConfirmed)
+        {
+            return new EmailConfirmationRequestResult(true, true, null, user.Name ?? email);
+        }
+
+        var token = await _memberManager.GenerateEmailConfirmationTokenAsync(user);
+        return new EmailConfirmationRequestResult(
+            MemberExists: true,
+            AlreadyConfirmed: false,
+            Token: token,
+            DisplayName: user.Name ?? user.UserName ?? email);
+    }
+
+    public async Task<MemberAuthResult> ConfirmEmailAsync(
+        string email,
+        string token,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(token))
+        {
+            return MemberAuthResult.Fail("invalid-input",
+                "Email y token son obligatorios.");
+        }
+
+        var user = await _memberManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            return MemberAuthResult.Fail("invalid-token",
+                "El link de confirmación no es válido o ya expiró.");
+        }
+
+        if (user.EmailConfirmed)
+        {
+            // Idempotente — ya confirmado previamente, OK.
+            return MemberAuthResult.Ok();
+        }
+
+        var result = await _memberManager.ConfirmEmailAsync(user, token);
+        if (result.Succeeded)
+        {
+            _logger.LogInformation(
+                "Email confirmed: email={Email}",
+                email);
+            return MemberAuthResult.Ok();
+        }
+
+        var first = result.Errors.FirstOrDefault();
+        var code = MapIdentityCode(first?.Code);
+        if (code == "unknown" &&
+            (first?.Code == "InvalidToken" || first?.Code == "InvalidUserToken"))
+        {
+            code = "invalid-token";
+        }
+        return MemberAuthResult.Fail(code,
+            first?.Description ?? "No se pudo confirmar el email.");
+    }
+
     private static string MapIdentityCode(string? identityCode) =>
         identityCode switch
         {

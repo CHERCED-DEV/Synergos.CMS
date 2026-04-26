@@ -1,0 +1,44 @@
+@*
+    AccountController.Registered (Ola 83). Vista mostrada tras registro
+    cuando MembersSettings.RequireEmailConfirmation=true. El visitante
+    NO está firmado todavía — debe activar la cuenta via email.
+*@
+@{
+    Layout = null;
+    var email = ViewData["Email"] as string;
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>@Umbraco.GetDictionaryValue("Account.Registered.Title", "Revisa tu email")</title>
+</head>
+<body class="syn-account">
+    <main class="syn-account__main">
+        <h1 class="syn-account__heading">
+            @Umbraco.GetDictionaryValue("Account.Registered.Title", "Revisa tu email")
+        </h1>
+        <p class="syn-account__intro">
+            @if (!string.IsNullOrWhiteSpace(email))
+            {
+                @string.Format(
+                    Umbraco.GetDictionaryValue("Account.Registered.IntroWithEmail",
+                        "Te enviamos un email a <strong>{0}</strong> con un link para activar tu cuenta. Revisa tu bandeja de entrada (y la carpeta de spam)."),
+                    email)
+            }
+            else
+            {
+                @Umbraco.GetDictionaryValue("Account.Registered.Intro",
+                    "Te enviamos un email con un link para activar tu cuenta. Revisa tu bandeja de entrada (y la carpeta de spam).")
+            }
+        </p>
+        <p class="syn-account__alt">
+            <a href="/account/login">
+                @Umbraco.GetDictionaryValue("Account.BackToLogin", "Volver al login")
+            </a>
+        </p>
+    </main>
+</body>
+</html>

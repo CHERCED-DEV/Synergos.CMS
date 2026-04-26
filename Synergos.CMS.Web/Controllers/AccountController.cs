@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -20,6 +22,7 @@ public sealed class AccountController : Controller
     private readonly IAnalyticsTracker _analytics;
     private readonly IEmailService _emailService;
     private readonly IEmailTemplateRenderer _emailRenderer;
+    private readonly IOptions<MembersSettings> _membersSettings;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
@@ -28,6 +31,7 @@ public sealed class AccountController : Controller
         IAnalyticsTracker analytics,
         IEmailService emailService,
         IEmailTemplateRenderer emailRenderer,
+        IOptions<MembersSettings> membersSettings,
         ILogger<AccountController> logger)
     {
         _authService = authService;
@@ -35,6 +39,7 @@ public sealed class AccountController : Controller
         _analytics = analytics;
         _emailService = emailService;
         _emailRenderer = emailRenderer;
+        _membersSettings = membersSettings;
         _logger = logger;
     }
 
@@ -93,12 +98,16 @@ public sealed class AccountController : Controller
         string displayName,
         CancellationToken cancellationToken)
     {
+        var requireConfirmation = _membersSettings.Value.RequireEmailConfirmation;
+
         var result = await _authService.RegisterAsync(
             new MemberRegisterRequest(
                 Email: email,
                 Password: password,
                 DisplayName: displayName,
-                SignInImmediately: true),
+                // Si requiere confirmación, NO sign in inmediato — visitante
+                // verifica via email primero y eso firma sesión.
+                SignInImmediately: !requireConfirmation),
             cancellationToken);
 
         if (!result.Success)
@@ -111,6 +120,13 @@ public sealed class AccountController : Controller
         }
 
         _analytics.Track("account.registered");
+
+        if (requireConfirmation)
+        {
+            await SendEmailConfirmationLinkAsync(email, cancellationToken);
+            return RedirectToAction(nameof(Registered), new { email });
+        }
+
         return RedirectToAction(nameof(Profile));
     }
 
@@ -271,5 +287,83 @@ public sealed class AccountController : Controller
             return raw;
         }
         return "/";
+    }
+
+    private static string ResolveSiteName() => "Synergos";
+
+    [HttpGet("registered")]
+    [AllowAnonymous]
+    public IActionResult Registered([FromQuery] string? email = null)
+    {
+        ViewData["Email"] = email;
+        return View();
+    }
+
+    [HttpGet("confirm-email")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ConfirmEmail(
+        [FromQuery] string? email,
+        [FromQuery] string? token,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(token))
+        {
+            ViewData["ErrorCode"] = "invalid-link";
+            return View();
+        }
+
+        var result = await _authService.ConfirmEmailAsync(email, token, cancellationToken);
+        if (!result.Success)
+        {
+            _analytics.Track("account.email-confirm-failed", new Dictionary<string, object?>
+            {
+                ["errorCode"] = result.ErrorCode,
+            });
+            ViewData["ErrorCode"] = result.ErrorCode;
+            return View();
+        }
+
+        _analytics.Track("account.email-confirmed");
+        return RedirectToAction(nameof(Login),
+            new { msg = "email-confirmed" });
+    }
+
+    private async Task SendEmailConfirmationLinkAsync(
+        string email,
+        CancellationToken cancellationToken)
+    {
+        var request = await _authService.RequestEmailConfirmationAsync(email, cancellationToken);
+        if (!request.MemberExists || request.AlreadyConfirmed ||
+            string.IsNullOrWhiteSpace(request.Token))
+        {
+            return;
+        }
+
+        var confirmUrl = $"{Request.Scheme}://{Request.Host}/account/confirm-email" +
+            $"?email={Uri.EscapeDataString(email)}" +
+            $"&token={Uri.EscapeDataString(request.Token)}";
+
+        try
+        {
+            var bodyHtml = await _emailRenderer.RenderAsync(
+                viewName: "EmailConfirmation",
+                model: new Synergos.CMS.Web.Services.EmailConfirmationEmailModel(
+                    DisplayName: request.DisplayName ?? email,
+                    ConfirmUrl: confirmUrl,
+                    SiteName: ResolveSiteName()),
+                cancellationToken);
+
+            await _emailService.SendAsync(new EmailMessage(
+                To: email,
+                Subject: "Confirma tu email",
+                BodyHtml: bodyHtml),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Email confirmation send failed: email={Email}",
+                email);
+        }
     }
 }

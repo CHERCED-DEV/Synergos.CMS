@@ -68,7 +68,33 @@ public interface IMemberAuthService
         string token,
         string newPassword,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Genera un token de confirmación de email para el miembro recién
+    /// registrado. Caller compone link absoluto + envía email.
+    /// </summary>
+    Task<EmailConfirmationRequestResult> RequestEmailConfirmationAsync(
+        string email,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Valida el token + marca el email del miembro como confirmado.
+    /// </summary>
+    Task<MemberAuthResult> ConfirmEmailAsync(
+        string email,
+        string token,
+        CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Resultado del request de confirmación de email. Si el miembro no
+/// existe o ya está confirmado, <see cref="Token"/> es null.
+/// </summary>
+public sealed record EmailConfirmationRequestResult(
+    bool MemberExists,
+    bool AlreadyConfirmed,
+    string? Token,
+    string? DisplayName);
 
 /// <summary>
 /// Resultado de un request de reset. Cuando <see cref="EmailExists"/>
