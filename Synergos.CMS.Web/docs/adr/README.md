@@ -41,6 +41,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0032](0032-search-page-ux.md) | Search UX (searchPage DocType + SearchPage.cshtml + 5 dictionary keys + siteRoot Structure fix) | Accepted |
 | [0033](0033-seo-infrastructure-sitemap-robots-rss.md) | SEO infrastructure (sitemap.xml + robots.txt + blog/rss.xml dynamic controllers) | Accepted |
 | [0034](0034-member-self-service-runtime.md) | Member self-service runtime (IMemberAuthService + DefaultMemberAuthService + AccountController + Login/Register/Profile views) | Accepted |
+| [0035](0035-email-transactional-runtime.md) | Email transactional runtime (IEmailService seam + DefaultEmailService adapter sobre Umbraco IEmailSender) | Accepted |
 
 ## Rules
 
