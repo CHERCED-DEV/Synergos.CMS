@@ -34,6 +34,38 @@ public interface ICommentRepository
     /// comentario persistido con sus metadata.
     /// </summary>
     Task<Comment> AddAsync(NewComment comment, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Devuelve los comentarios pendientes de moderación
+    /// (Approved=false) para el nodo, ordenados por
+    /// <see cref="Comment.CreatedAtUtc"/> descendente (más nuevo
+    /// primero — orden natural de cola moderation).
+    /// </summary>
+    IReadOnlyList<Comment> GetPendingForNode(int nodeId);
+
+    /// <summary>
+    /// Devuelve los comentarios pendientes de moderación a través de
+    /// todos los nodos persistidos, ordenados por
+    /// <see cref="Comment.CreatedAtUtc"/> descendente. Cap por
+    /// <paramref name="limit"/> para evitar payloads enormes en
+    /// cola muy abultada.
+    /// </summary>
+    IReadOnlyList<Comment> GetAllPending(int limit);
+
+    /// <summary>
+    /// Aprueba un comentario existente identificado por
+    /// <paramref name="nodeId"/> + <paramref name="commentId"/> —
+    /// flippea <see cref="Comment.Approved"/> a true. Devuelve true
+    /// si se encontró y se actualizó; false si no existe.
+    /// </summary>
+    Task<bool> ApproveAsync(int nodeId, string commentId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Elimina un comentario existente del store. Devuelve true si se
+    /// eliminó, false si no existía. Usado para spam confirmado o
+    /// rechazo definitivo desde el moderation queue.
+    /// </summary>
+    Task<bool> RejectAsync(int nodeId, string commentId, CancellationToken cancellationToken);
 }
 
 /// <summary>

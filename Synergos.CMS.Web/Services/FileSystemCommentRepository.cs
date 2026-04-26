@@ -53,6 +53,91 @@ public sealed class FileSystemCommentRepository : ICommentRepository
         return all.Where(c => c.Approved).ToList();
     }
 
+    public IReadOnlyList<Comment> GetPendingForNode(int nodeId)
+    {
+        var all = LoadAll(nodeId);
+        return all
+            .Where(c => !c.Approved)
+            .OrderByDescending(c => c.CreatedAtUtc)
+            .ToList();
+    }
+
+    public IReadOnlyList<Comment> GetAllPending(int limit)
+    {
+        var settings = _options.Value;
+        var root = Path.Combine(_environment.ContentRootPath, settings.StorageRoot);
+        if (!Directory.Exists(root))
+        {
+            return Array.Empty<Comment>();
+        }
+
+        var clamped = Math.Clamp(limit, 1, 500);
+        var pending = new List<Comment>();
+        foreach (var path in Directory.EnumerateFiles(root, "*.json"))
+        {
+            var fileName = Path.GetFileNameWithoutExtension(path);
+            if (!int.TryParse(fileName, out var nodeId))
+            {
+                continue;
+            }
+            pending.AddRange(LoadAll(nodeId).Where(c => !c.Approved));
+        }
+
+        return pending
+            .OrderByDescending(c => c.CreatedAtUtc)
+            .Take(clamped)
+            .ToList();
+    }
+
+    public async Task<bool> ApproveAsync(int nodeId, string commentId, CancellationToken cancellationToken)
+    {
+        var existing = LoadAll(nodeId);
+        var index = existing.FindIndex(c => string.Equals(c.Id, commentId, StringComparison.Ordinal));
+        if (index < 0)
+        {
+            return false;
+        }
+        if (existing[index].Approved)
+        {
+            return true;
+        }
+
+        existing[index] = existing[index] with { Approved = true };
+        await PersistAsync(nodeId, existing, cancellationToken);
+
+        _logger.LogInformation(
+            "Comment approved: nodeId={NodeId} commentId={CommentId}",
+            nodeId, commentId);
+
+        return true;
+    }
+
+    public async Task<bool> RejectAsync(int nodeId, string commentId, CancellationToken cancellationToken)
+    {
+        var existing = LoadAll(nodeId);
+        var removed = existing.RemoveAll(c => string.Equals(c.Id, commentId, StringComparison.Ordinal));
+        if (removed == 0)
+        {
+            return false;
+        }
+
+        await PersistAsync(nodeId, existing, cancellationToken);
+
+        _logger.LogInformation(
+            "Comment rejected/deleted: nodeId={NodeId} commentId={CommentId}",
+            nodeId, commentId);
+
+        return true;
+    }
+
+    private async Task PersistAsync(int nodeId, List<Comment> comments, CancellationToken cancellationToken)
+    {
+        var path = ResolvePath(nodeId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var json = JsonSerializer.SerializeToUtf8Bytes(comments, SerializerOptions);
+        await File.WriteAllBytesAsync(path, json, cancellationToken);
+    }
+
     public async Task<Comment> AddAsync(NewComment comment, CancellationToken cancellationToken)
     {
         var settings = _options.Value;
