@@ -7,24 +7,23 @@
     se consumen en _SeoHead, breadcrumbs y otras partials sin que este
     template tenga que tocarlos.
 *@
-@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
-@using Umbraco.Cms.Core.Models.Blocks
-@using Umbraco.Cms.Core.Models.PublishedContent
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.PostPage>
+@using Synergos.CMS.Web.PublishedModels
+@using Umbraco.Extensions
 @{
     Layout = "_Layout";
-    var post = UmbracoContext.PublishedRequest?.PublishedContent;
-    if (post is null) { return; }
+    if (Model is null) { return; }
 
-    var title = post.Name;
-    var excerpt = post.Value<string>("excerpt");
-    var heroImage = post.Value<IPublishedContent>("heroImage");
-    var publishDate = post.Value<DateTime?>("publishDate");
-    var readTimeMinutes = post.Value<int?>("readTimeMinutes");
-    var sections = post.Value<BlockGridModel>("sections");
-    var category = post.Parent;
-    var categoryName = category is { } c && string.Equals(c.ContentType.Alias, "postCategoryPage", StringComparison.Ordinal)
-        ? (c.Value<string>("categoryName") ?? c.Name)
-        : null;
+    var title = Model.Name;
+    var excerpt = Model.Excerpt;
+    var heroImage = Model.HeroImage;
+    DateTime? publishDate = DateTime.TryParse(Model.PublishDate, out var pd) ? pd : null;
+    int? readTimeMinutes = int.TryParse(Model.ReadTimeMinutes, out var rt) ? rt : null;
+    var sections = Model.Sections;
+    var category = Model.Parent as PostCategoryPage;
+    var categoryName = !string.IsNullOrWhiteSpace(category?.CategoryName)
+        ? category.CategoryName
+        : category?.Name;
     var categoryUrl = category?.Url();
 }
 <article class="syn-post">
