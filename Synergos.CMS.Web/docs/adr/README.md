@@ -33,6 +33,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0024](0024-page-minimal-and-editor-facing-descriptions.md) | Pages mínimas + descripciones editor-facing (refinamiento Ola 51) | Accepted |
 | [0025](0025-global-components-extension-and-members-runtime.md) | Global components extension (cfgBanner/FooterNote/Modal) + Members runtime (Ola 52) | Accepted |
 | [0026](0026-brand-runtime-completion-and-head-enrichment.md) | Brand runtime completion (HostBasedBrandingProvider) + `<head>` enrichment (Twitter Card + JSON-LD + hreflang) | Accepted |
+| [0027](0027-blog-runtime-and-members-settings.md) | Blog runtime (IBlogQuery + PostPage/PostCategoryPage templates) + Members settings (LoginPath configurable) | Accepted |
 
 ## Rules
 
