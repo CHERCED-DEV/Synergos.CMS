@@ -25,11 +25,16 @@ public sealed class SearchController : ControllerBase
 {
     private readonly ISearchQuery _searchQuery;
     private readonly IAnalyticsTracker _analytics;
+    private readonly ISearchAnalyticsStore _analyticsStore;
 
-    public SearchController(ISearchQuery searchQuery, IAnalyticsTracker analytics)
+    public SearchController(
+        ISearchQuery searchQuery,
+        IAnalyticsTracker analytics,
+        ISearchAnalyticsStore analyticsStore)
     {
         _searchQuery = searchQuery;
         _analytics = analytics;
+        _analyticsStore = analyticsStore;
     }
 
     /// <summary>
@@ -69,6 +74,47 @@ public sealed class SearchController : ControllerBase
             });
         }
 
+        // Ola 86 — record en store para queries posteriores
+        // (top queries, no-result queries) via /api/search/analytics
+        if (!string.IsNullOrWhiteSpace(request.Query))
+        {
+            _analyticsStore.Record(request.Query, response.TotalEstimated, response.ElapsedMilliseconds);
+        }
+
         return Ok(response);
     }
+
+    /// <summary>
+    /// GET /api/search/analytics?from=2026-04-01&amp;to=2026-04-30&amp;limit=20
+    /// — top queries + no-result queries en la ventana indicada.
+    /// </summary>
+    [HttpGet("analytics")]
+    [AllowAnonymous]
+    public ActionResult<SearchAnalyticsResponse> Analytics(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] int limit = 20)
+    {
+        var fromUtc = (from ?? DateTime.UtcNow.AddDays(-30)).ToUniversalTime();
+        var toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
+        var clampedLimit = Math.Clamp(limit, 1, 100);
+
+        var topQueries = _analyticsStore.GetTopQueries(fromUtc, toUtc, clampedLimit);
+        var topNoResults = _analyticsStore.GetTopNoResultQueries(fromUtc, toUtc, clampedLimit);
+
+        return Ok(new SearchAnalyticsResponse(
+            FromUtc: fromUtc,
+            ToUtc: toUtc,
+            TopQueries: topQueries,
+            TopNoResultQueries: topNoResults));
+    }
 }
+
+/// <summary>
+/// Respuesta del endpoint <c>/api/search/analytics</c>.
+/// </summary>
+public sealed record SearchAnalyticsResponse(
+    DateTime FromUtc,
+    DateTime ToUtc,
+    IReadOnlyList<SearchQueryStat> TopQueries,
+    IReadOnlyList<SearchQueryStat> TopNoResultQueries);

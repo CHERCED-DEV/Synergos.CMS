@@ -138,6 +138,11 @@ public sealed class SeamComposer : IComposer
         // depende de IUmbracoContextAccessor per-request.
         services.AddTransient<ISearchQuery, ExamineSearchProvider>();
 
+        // Ola 86 — Search analytics store (ADR 0045). InMemory persiste
+        // top queries + no-result queries en ConcurrentDictionary.
+        // Singleton para compartir state entre requests del mismo proceso.
+        services.AddSingleton<ISearchAnalyticsStore, InMemorySearchAnalyticsStore>();
+
         // Ola 64 — Member self-service (ADR 0034). DefaultMemberAuthService
         // wraps IMemberManager + IMemberSignInManager para Register/Login/
         // Logout/ChangePassword. AccountController + Razor templates
