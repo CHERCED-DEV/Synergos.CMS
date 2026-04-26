@@ -1,8 +1,9 @@
 @*
-    elementFlowTrigger renderer (Ola 36 schema + Ola 41 runtime).
+    elementFlowTrigger renderer (Ola 36 schema + Ola 41 runtime + Ola 58 templates).
     Emite <a href="/flow/{flowKey}/start?returnUrl=..."> que dispara
     FlowController.Start — resuelve flowDefinition, inicializa cookie
-    syn-flow-{flowKey} en 0, y redirige a step[0].
+    syn-flow-{flowKey} en 0, y redirige a step[0] (renderizado por
+    Views/FlowStep.cshtml).
 *@
 @using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
@@ -24,7 +25,6 @@
 }
 <a class="@classes"
    href="@startHref"
-   data-flow-key="@flowKey"
-   data-pending="flow-runtime-wiring">
+   data-flow-key="@flowKey">
     @label
 </a>
