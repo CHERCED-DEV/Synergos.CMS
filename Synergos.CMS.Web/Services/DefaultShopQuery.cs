@@ -4,7 +4,6 @@ using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Web;
-using Umbraco.Extensions;
 
 namespace Synergos.CMS.Web.Services;
 

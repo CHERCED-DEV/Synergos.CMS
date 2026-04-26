@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Services;

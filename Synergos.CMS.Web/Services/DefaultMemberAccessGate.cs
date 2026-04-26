@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using Microsoft.AspNetCore.Http;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Services;

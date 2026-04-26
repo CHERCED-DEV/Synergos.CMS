@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Logging;
 using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Web.Common.Security;

@@ -1,6 +1,4 @@
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
