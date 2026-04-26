@@ -101,6 +101,11 @@ public sealed class SeamComposer : IComposer
         // depende de IHttpContextAccessor + IUmbracoContextAccessor.
         services.AddTransient<ICartService, DefaultCartService>();
 
+        // Ola 57.2 — Shop query service. Recorre productPage descendientes,
+        // aplica filtros de categoría/sort y proyecta a ProductSummary.
+        // Consumido por ProductGrid block + ProductCategoryPage.cshtml.
+        services.AddTransient<IShopQuery, DefaultShopQuery>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;

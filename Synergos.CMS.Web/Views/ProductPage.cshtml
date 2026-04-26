@@ -1,0 +1,90 @@
+@*
+    Template del Document Type `productPage`. Renderiza un producto
+    individual: imágenes + nombre + precio + stock + variantes JSON +
+    botón Add to Cart (cliente JS hace POST a /api/shop/cart/add) +
+    body opcional via Layout Composer (sections).
+
+    El chrome lo aplica _Layout.cshtml. compSeo + compTagging se
+    consumen en _SeoHead, etc.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@using System.Globalization
+@using Umbraco.Cms.Core.Models.Blocks
+@using Umbraco.Cms.Core.Models.PublishedContent
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CartSettings> CartSettingsOpt
+@{
+    Layout = "_Layout";
+    var product = UmbracoContext.PublishedRequest?.PublishedContent;
+    if (product is null) { return; }
+
+    var sku = product.Value<string>("productSku") ?? string.Empty;
+    var name = product.Value<string>("productName") ?? product.Name ?? sku;
+    var priceRaw = product.Value<string>("productPriceBase");
+    var price = decimal.TryParse(priceRaw, NumberStyles.Number, CultureInfo.InvariantCulture, out var p) ? p : 0m;
+    var inStock = product.Value<bool>("productInStock");
+    var images = product.Value<IEnumerable<IPublishedContent>>("productImages")?.ToArray() ?? Array.Empty<IPublishedContent>();
+    var variantsJson = product.Value<string>("productVariantsJson");
+    var sections = product.Value<BlockGridModel>("sections");
+
+    var currency = CartSettingsOpt.Value.Currency;
+    var category = product.Parent;
+    var categoryName = category is { } c && string.Equals(c.ContentType.Alias, "productCategoryPage", StringComparison.Ordinal)
+        ? (c.Value<string>("categoryName") ?? c.Name)
+        : null;
+}
+<article class="syn-product" data-sku="@sku" data-currency="@currency">
+    <header class="syn-product__header">
+        @if (!string.IsNullOrWhiteSpace(categoryName))
+        {
+            <a class="syn-product__category" href="@category!.Url()">@categoryName</a>
+        }
+        <h1 class="syn-product__name">@name</h1>
+        <p class="syn-product__sku">SKU: @sku</p>
+    </header>
+
+    @if (images.Length > 0)
+    {
+        <figure class="syn-product__gallery">
+            @foreach (var img in images)
+            {
+                <img class="syn-product__image" src="@img.Url()" alt="@name" loading="lazy" />
+            }
+        </figure>
+    }
+
+    <section class="syn-product__pricing">
+        <p class="syn-product__price" data-price="@price.ToString(CultureInfo.InvariantCulture)">
+            @price.ToString("N0", CultureInfo.GetCultureInfo("es-CO")) @currency
+        </p>
+        @if (inStock)
+        {
+            <p class="syn-product__stock syn-product__stock--in">@Umbraco.GetDictionaryValue("shop.inStock", "Disponible")</p>
+        }
+        else
+        {
+            <p class="syn-product__stock syn-product__stock--out">@Umbraco.GetDictionaryValue("shop.outOfStock", "Agotado")</p>
+        }
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(variantsJson))
+    {
+        <section class="syn-product__variants" data-variants="@variantsJson"
+                 aria-label="@Umbraco.GetDictionaryValue("shop.variants", "Variantes")">
+            @* El design system frontend hidrata el selector según data-variants. *@
+        </section>
+    }
+
+    @if (inStock)
+    {
+        <button type="button" class="syn-product__add-to-cart" data-action="add-to-cart" data-sku="@sku">
+            @Umbraco.GetDictionaryValue("shop.addToCart", "Agregar al carrito")
+        </button>
+    }
+
+    @if (sections is not null && sections.Any())
+    {
+        <div class="syn-product__body">
+            @await Html.GetBlockGridHtmlAsync(sections)
+        </div>
+    }
+</article>
