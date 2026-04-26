@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -17,15 +18,21 @@ public sealed class AccountController : Controller
     private readonly IMemberAuthService _authService;
     private readonly IMemberAccessGate _gate;
     private readonly IAnalyticsTracker _analytics;
+    private readonly IEmailService _emailService;
+    private readonly ILogger<AccountController> _logger;
 
     public AccountController(
         IMemberAuthService authService,
         IMemberAccessGate gate,
-        IAnalyticsTracker analytics)
+        IAnalyticsTracker analytics,
+        IEmailService emailService,
+        ILogger<AccountController> logger)
     {
         _authService = authService;
         _gate = gate;
         _analytics = analytics;
+        _emailService = emailService;
+        _logger = logger;
     }
 
     [HttpGet("login")]
@@ -146,6 +153,107 @@ public sealed class AccountController : Controller
 
         return RedirectToAction(nameof(Profile),
             new { msg = result.Success ? "password-changed" : result.ErrorCode });
+    }
+
+    [HttpGet("forgot-password")]
+    [AllowAnonymous]
+    public IActionResult ForgotPassword([FromQuery(Name = "msg")] string? messageCode = null)
+    {
+        ViewData["MessageCode"] = messageCode;
+        return View();
+    }
+
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ForgotPasswordPost(
+        string email,
+        CancellationToken cancellationToken)
+    {
+        // Anti-enumeration: respondemos OK siempre, aunque el email
+        // no exista. Solo enviamos si EmailExists=true.
+        var resetRequest = await _authService.RequestPasswordResetAsync(email, cancellationToken);
+
+        if (resetRequest.EmailExists && !string.IsNullOrWhiteSpace(resetRequest.Token))
+        {
+            var resetUrl = $"{Request.Scheme}://{Request.Host}/account/reset-password" +
+                $"?email={Uri.EscapeDataString(email)}" +
+                $"&token={Uri.EscapeDataString(resetRequest.Token)}";
+
+            var bodyHtml =
+                $"<p>Hola {System.Net.WebUtility.HtmlEncode(resetRequest.DisplayName ?? email)},</p>" +
+                $"<p>Recibimos una solicitud para restablecer tu contraseña. Para continuar, haz clic en el siguiente enlace:</p>" +
+                $"<p><a href=\"{resetUrl}\">Restablecer contraseña</a></p>" +
+                $"<p>Si tú no solicitaste esto, puedes ignorar este email — tu contraseña no cambiará.</p>" +
+                $"<p>El enlace expira en 1 hora.</p>";
+
+            await _emailService.SendAsync(new EmailMessage(
+                To: email,
+                Subject: "Restablece tu contraseña",
+                BodyHtml: bodyHtml),
+                cancellationToken);
+
+            _analytics.Track("account.password-reset-requested", new Dictionary<string, object?>
+            {
+                ["email"] = email,
+            });
+        }
+        else
+        {
+            // Log para auditoría pero no leak al UI.
+            _logger.LogInformation(
+                "Password reset requested for unknown email={Email} — no email sent (anti-enumeration)",
+                email);
+        }
+
+        return RedirectToAction(nameof(ForgotPassword), new { msg = "sent" });
+    }
+
+    [HttpGet("reset-password")]
+    [AllowAnonymous]
+    public IActionResult ResetPassword(
+        [FromQuery] string? email,
+        [FromQuery] string? token,
+        [FromQuery(Name = "error")] string? errorCode = null)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(token))
+        {
+            return RedirectToAction(nameof(ForgotPassword),
+                new { msg = "invalid-link" });
+        }
+
+        ViewData["Email"] = email;
+        ViewData["Token"] = token;
+        ViewData["ErrorCode"] = errorCode;
+        return View();
+    }
+
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPasswordPost(
+        string email,
+        string token,
+        string newPassword,
+        CancellationToken cancellationToken)
+    {
+        var result = await _authService.ConfirmPasswordResetAsync(
+            email, token, newPassword, cancellationToken);
+
+        if (!result.Success)
+        {
+            _analytics.Track("account.password-reset-failed", new Dictionary<string, object?>
+            {
+                ["errorCode"] = result.ErrorCode,
+            });
+            return RedirectToAction(nameof(ResetPassword), new
+            {
+                email,
+                token,
+                error = result.ErrorCode,
+            });
+        }
+
+        _analytics.Track("account.password-reset-completed");
+        return RedirectToAction(nameof(Login), new { msg = "password-reset-completed" });
     }
 
     private static string SafeReturnUrl(string? raw)
