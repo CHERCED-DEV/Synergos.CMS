@@ -7,13 +7,12 @@
 
     Sin auto-submit JS — formulario nativo HTML, accesible sin JS.
 *@
-@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.SearchPage>
 @inject Synergos.CMS.Interfaces.ISearchQuery SearchQuery
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
 @{
     Layout = "_Layout";
-    var page = UmbracoContext.PublishedRequest?.PublishedContent;
-    if (page is null) { return; }
+    if (Model is null) { return; }
 
     var query = HttpContextAccessor.HttpContext?.Request.Query;
     var q = query?["q"].ToString() ?? string.Empty;
@@ -21,13 +20,13 @@
     var pageRaw = query?["page"].ToString();
     var pageNumber = int.TryParse(pageRaw, out var pn) && pn > 0 ? pn : 1;
 
-    var itemsPerPageRaw = page.Value<string>("itemsPerPage");
-    var itemsPerPage = int.TryParse(itemsPerPageRaw, out var ipp) && ipp > 0 ? ipp : 20;
+    var itemsPerPage = int.TryParse(Model.ItemsPerPage, out var ipp) && ipp > 0 ? ipp : 20;
     var skip = (pageNumber - 1) * itemsPerPage;
 
-    var heading = page.Value<string>("pageHeading")
-        ?? Umbraco.GetDictionaryValue("Search.Heading", "Buscar");
-    var intro = page.Value<string>("pageIntro");
+    var heading = !string.IsNullOrWhiteSpace(Model.PageHeading)
+        ? Model.PageHeading
+        : Umbraco.GetDictionaryValue("Search.Heading", "Buscar");
+    var intro = Model.PageIntro;
 
     Synergos.CMS.Interfaces.SearchResponse? response = null;
     if (!string.IsNullOrWhiteSpace(q))
@@ -42,7 +41,7 @@
     var totalPages = response is not null && response.TotalEstimated > 0
         ? (int)Math.Ceiling((double)response.TotalEstimated / itemsPerPage)
         : 0;
-    var basePath = page.Url();
+    var basePath = Model.Url();
 
     string PaginationHref(int targetPage) =>
         $"{basePath}?q={Uri.EscapeDataString(q)}&page={targetPage}" +
