@@ -40,6 +40,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0031](0031-search-infrastructure-examine.md) | Search infrastructure on Examine ExternalIndex (ISearchQuery + ExamineSearchProvider + SearchController) | Accepted |
 | [0032](0032-search-page-ux.md) | Search UX (searchPage DocType + SearchPage.cshtml + 5 dictionary keys + siteRoot Structure fix) | Accepted |
 | [0033](0033-seo-infrastructure-sitemap-robots-rss.md) | SEO infrastructure (sitemap.xml + robots.txt + blog/rss.xml dynamic controllers) | Accepted |
+| [0034](0034-member-self-service-runtime.md) | Member self-service runtime (IMemberAuthService + DefaultMemberAuthService + AccountController + Login/Register/Profile views) | Accepted |
 
 ## Rules
 
