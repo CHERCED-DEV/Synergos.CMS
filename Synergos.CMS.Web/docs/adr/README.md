@@ -48,6 +48,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0039](0039-site-chrome-editable-and-per-site-config.md) | Site Chrome editable + PlatformRoot landing + per-site Configuration folder (compSiteChrome 2 BlockGrid slots + PlatformRoot template + siteConfigFolder UX) | Accepted |
 | [0040](0040-architectural-consolidation-theme-chrome-config-transversals-brand.md) | Gran Consolidación Arquitectónica: theme inheritance pura (siteRoot only) + chrome triádico (header/footer/aside) + siteConfiguration unificado + compTransversalSelectors drop-down + brand inheritance pura + ModelsBuilder SourceCodeAuto setup | Accepted |
 | [0041](0041-lego-canonical-map-and-coupling-audit.md) | Mapa Lego canónico + auditoría de acoplamientos (30 compositions verified, DTSelect overlaps non-duplicate, pageBasic vs pageBare clarified, bug crítico compBranding fix, "regla del Lego ensamblable" 5 puntos) | Accepted |
+| [0042](0042-error-pages-typed-views-dropdown-consts-misc-cleanup.md) | Error pages transversales (transversalErrorPage + ErrorController + UseStatusCodePagesWithReExecute) + DropdownOptions const class (13 DTSelect mirrors) + Typed views first batch (PlatformRoot/SearchPage) + SSR audit verbal + ICompositionReader audit | Accepted |
 
 ## Rules
 
