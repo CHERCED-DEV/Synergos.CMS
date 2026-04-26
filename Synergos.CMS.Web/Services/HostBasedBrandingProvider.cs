@@ -71,19 +71,16 @@ public sealed class HostBasedBrandingProvider : IBrandingProvider
             return _fallback.GetCurrent();
         }
 
-        var siteConfigs = umbracoContext.Content?
+        // Ola 71.11 — compBranding ahora vive directo en siteRoot. Iterar
+        // siteRoots es más simple y rápido que iterar siteConfigSettings
+        // y luego AncestorOrSelf — un solo nivel de lookup.
+        var siteRoots = umbracoContext.Content?
             .GetAtRoot()
-            .SelectMany(root => root.DescendantsOrSelfOfType(SiteConfigSettingsAlias))
+            .SelectMany(root => root.DescendantsOrSelfOfType(SiteRootAlias))
             .ToArray() ?? Array.Empty<IPublishedContent>();
 
-        foreach (var siteConfig in siteConfigs)
+        foreach (var siteRoot in siteRoots)
         {
-            var siteRoot = siteConfig.AncestorOrSelf(SiteRootAlias);
-            if (siteRoot is null)
-            {
-                continue;
-            }
-
             var canonicalHost = siteRoot.Value<string>(CanonicalHostnameAlias);
             if (string.IsNullOrWhiteSpace(canonicalHost))
             {
@@ -102,13 +99,13 @@ public sealed class HostBasedBrandingProvider : IBrandingProvider
                 continue;
             }
 
-            var brandKey = siteConfig.Value<string>(BrandKeyAlias);
+            var brandKey = siteRoot.Value<string>(BrandKeyAlias);
             if (string.IsNullOrWhiteSpace(brandKey))
             {
                 continue;
             }
 
-            var displayName = siteConfig.Value<string>(BrandDisplayNameAlias);
+            var displayName = siteRoot.Value<string>(BrandDisplayNameAlias);
             if (string.IsNullOrWhiteSpace(displayName))
             {
                 displayName = brandKey;
