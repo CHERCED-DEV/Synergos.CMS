@@ -193,6 +193,15 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<ICommentModerationNotifierChannel, WebhookCommentModerationNotifier>();
         services.AddSingleton<ICommentModerationNotifier, CompositeCommentModerationNotifier>();
 
+        // Ola 91 — Form submission notifier composite (paralelo del de
+        // comments). Reemplaza la lógica inline de email del controller
+        // con un seam swappable; cada canal es no-op si su settings
+        // están vacíos.
+        services.AddSingleton<IFormSubmissionNotifierChannel, EmailFormSubmissionNotifier>();
+        services.AddHttpClient(WebhookFormSubmissionNotifier.FactoryName);
+        services.AddSingleton<IFormSubmissionNotifierChannel, WebhookFormSubmissionNotifier>();
+        services.AddSingleton<IFormSubmissionNotifier, CompositeFormSubmissionNotifier>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;

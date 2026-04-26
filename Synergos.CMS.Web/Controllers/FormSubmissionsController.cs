@@ -35,9 +35,7 @@ public sealed class FormSubmissionsController : ControllerBase
     private readonly IOptions<FormsSettings> _options;
     private readonly ILogger<FormSubmissionsController> _logger;
     private readonly IAnalyticsTracker _analytics;
-    private readonly IEmailService _emailService;
-    private readonly IEmailTemplateRenderer _emailRenderer;
-    private readonly IBrandingProvider _branding;
+    private readonly IFormSubmissionNotifier _notifier;
 
     public FormSubmissionsController(
         IFormSubmissionHandler handler,
@@ -45,18 +43,14 @@ public sealed class FormSubmissionsController : ControllerBase
         IOptions<FormsSettings> options,
         ILogger<FormSubmissionsController> logger,
         IAnalyticsTracker analytics,
-        IEmailService emailService,
-        IEmailTemplateRenderer emailRenderer,
-        IBrandingProvider branding)
+        IFormSubmissionNotifier notifier)
     {
         _handler = handler;
         _rateLimiter = rateLimiter;
         _options = options;
         _logger = logger;
         _analytics = analytics;
-        _emailService = emailService;
-        _emailRenderer = emailRenderer;
-        _branding = branding;
+        _notifier = notifier;
     }
 
     [HttpPost("{formKey}/submit")]
@@ -139,60 +133,13 @@ public sealed class FormSubmissionsController : ControllerBase
             ["fieldCount"] = fields.Count,
         });
 
-        // Ola 80.3 — notificación al operador via IEmailService cuando
-        // FormsSettings.NotifyEmailAddress está poblada. Fire-and-forget;
-        // si falla, el log de IEmailService loguea Warning pero no
-        // afecta la persistencia que ya ocurrió.
-        if (!string.IsNullOrWhiteSpace(settings.NotifyEmailAddress))
-        {
-            await SendNotificationAsync(formKey, fields, clientIp, referrer,
-                settings.NotifyEmailAddress, cancellationToken);
-        }
+        // Olas 80.3 + 91 — notificación via IFormSubmissionNotifier
+        // composite. Cada canal (email/webhook) decide si actúa según
+        // sus propios settings. Try-catch interno por canal — fallos
+        // NO rompen la persistencia que ya ocurrió.
+        await _notifier.NotifySubmittedAsync(request, result, cancellationToken);
 
         return RedirectWithQuery(referrer, settings.SuccessQueryParam, "1");
-    }
-
-    private async Task SendNotificationAsync(
-        string formKey,
-        IReadOnlyDictionary<string, string> fields,
-        string clientIp,
-        string referrer,
-        string toAddress,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            // Ola 82 — Razor template con branding consistente reemplaza
-            // string concat inline. Los HtmlEncode los aplica Razor
-            // automáticamente al @value.
-            var brand = _branding.GetCurrent();
-            var siteName = string.IsNullOrWhiteSpace(brand.DisplayName) ? "Synergos" : brand.DisplayName;
-
-            var bodyHtml = await _emailRenderer.RenderAsync(
-                viewName: "FormNotification",
-                model: new Services.FormNotificationEmailModel(
-                    FormKey: formKey,
-                    Fields: fields,
-                    ClientIp: clientIp,
-                    Referrer: referrer,
-                    ReceivedAtUtc: DateTime.UtcNow,
-                    SiteName: siteName),
-                cancellationToken);
-
-            await _emailService.SendAsync(new EmailMessage(
-                To: toAddress,
-                Subject: $"{siteName} · Nueva submission del form: {formKey}",
-                BodyHtml: bodyHtml),
-                cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            // Defense-in-depth: el envío del email NO debe romper el
-            // pipeline si el SMTP falla o el template no compila. Log + continue.
-            _logger.LogWarning(ex,
-                "Form notification email failed: formKey={FormKey} to={To}",
-                formKey, toAddress);
-        }
     }
 
     private Dictionary<string, string> ExtractFields(FormsSettings settings)

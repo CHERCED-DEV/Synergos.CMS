@@ -66,4 +66,21 @@ public sealed class FormsSettings
     /// Default vacío — opt-in.
     /// </summary>
     public string NotifyEmailAddress { get; init; } = string.Empty;
+
+    /// <summary>
+    /// URL HTTP(S) a la que el <c>WebhookFormSubmissionNotifier</c>
+    /// hace POST con el payload JSON de cada submission. Compatible
+    /// con Slack incoming webhooks, Discord, Microsoft Teams, n8n,
+    /// Zapier o cualquier endpoint custom. Default null/empty =
+    /// canal no-op.
+    /// </summary>
+    public string? WebhookUrl { get; init; }
+
+    /// <summary>
+    /// Bearer token opcional. Si está poblado, el webhook adjunta
+    /// header <c>Authorization: Bearer {token}</c> al POST. Para
+    /// Slack/Discord/Teams típicamente vacío (la URL contiene el
+    /// secreto); para endpoints custom protegidos, requerido.
+    /// </summary>
+    public string? WebhookBearerToken { get; init; }
 }
