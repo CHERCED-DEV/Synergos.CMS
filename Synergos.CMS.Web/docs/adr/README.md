@@ -43,6 +43,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0034](0034-member-self-service-runtime.md) | Member self-service runtime (IMemberAuthService + DefaultMemberAuthService + AccountController + Login/Register/Profile views) | Accepted |
 | [0035](0035-email-transactional-runtime.md) | Email transactional runtime (IEmailService seam + DefaultEmailService adapter sobre Umbraco IEmailSender) | Accepted |
 | [0036](0036-output-caching-sitemap-rss.md) | Output caching via IMemoryCache para Sitemap + Blog RSS (OutputCacheSettings POCO + multi-brand keys + bypass flag) | Accepted |
+| [0037](0037-analytics-tracker-instrumentation.md) | Analytics tracker + instrumentación de 4 módulos (IAnalyticsTracker + LoggerAnalyticsTracker + 11 evento slugs en Search/Forms/Shop/Account) | Accepted |
 
 ## Rules
 
