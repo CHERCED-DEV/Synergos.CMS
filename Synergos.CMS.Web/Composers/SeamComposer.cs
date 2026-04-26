@@ -87,6 +87,14 @@ public sealed class SeamComposer : IComposer
         // del HttpContext via accessor.
         services.AddSingleton<IMemberAccessGate, DefaultMemberAccessGate>();
 
+        // Ola 56.2 — Blog query service. Recorre el published cache
+        // buscando postPage descendientes del siteRoot, aplica filtros
+        // de categoría/tags y proyecta a PostSummary records.
+        // Consumido por renderers ArticleList, BlogHighlight y
+        // PostCategoryPage.cshtml. Transient — depende del
+        // IUmbracoContextAccessor per-request.
+        services.AddTransient<IBlogQuery, DefaultBlogQuery>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;

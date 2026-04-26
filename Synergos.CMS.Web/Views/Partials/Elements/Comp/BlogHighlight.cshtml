@@ -1,12 +1,11 @@
 @*
-    elementCompBlogHighlight renderer (Ola 32 schema + Ola 38 runtime).
-    Query real: los N posts más recientes (por publishDate desc, fallback
-    createDate) en todo el siteRoot/platformRoot. Sin filtro category ni tags.
+    elementCompBlogHighlight renderer. Consume IBlogQuery (Ola 56.2)
+    para mostrar los N posts más recientes en formato hero-style. El
+    primer post se renderiza con clase "primary" + image eager.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
-@using Umbraco.Cms.Core.Models.PublishedContent
-@using Umbraco.Extensions
-@inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
+@using Synergos.CMS.Interfaces
+@inject IBlogQuery BlogQuery
 @{
     var title = Model.Value<string>("highlightTitle");
     var countRaw = Model.Value<string>("highlightCount");
@@ -20,31 +19,16 @@
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
-    IReadOnlyList<IPublishedContent> posts = Array.Empty<IPublishedContent>();
-    if (UmbracoContextAccessor.TryGetUmbracoContext(out var ctx) && ctx.Content != null)
-    {
-        DateTime ParsePublishDate(IPublishedContent p)
-        {
-            var raw = p.Value<string>("publishDate");
-            return !string.IsNullOrWhiteSpace(raw) && DateTime.TryParse(raw, out var dt) ? dt : p.CreateDate;
-        }
-
-        posts = ctx.Content
-            .GetAtRoot()
-            .SelectMany(r => r.DescendantsOrSelfOfType("postPage"))
-            .OrderByDescending(ParsePublishDate)
-            .Take(count)
-            .ToList();
-    }
+    var posts = BlogQuery.GetPosts(new BlogQueryRequest(MaxItems: count));
 }
 <section class="@classes" data-count="@count">
     @if (!string.IsNullOrWhiteSpace(title))
     {
         <h2 class="syn-blog-highlight__title">@title</h2>
     }
-    @if (!posts.Any())
+    @if (posts.Count == 0)
     {
-        <p class="syn-blog-highlight__empty">—</p>
+        <p class="syn-blog-highlight__empty">@Umbraco.GetDictionaryValue("blog.empty", "Aún no hay artículos.")</p>
     }
     else
     {
@@ -52,35 +36,33 @@
             @{ var isFirst = true; }
             @foreach (var post in posts)
             {
-                var hero = post.Value<IPublishedContent>("heroImage");
-                var excerpt = post.Value<string>("excerpt");
-                var rawDate = post.Value<string>("publishDate");
-                var authorName = post.Value<string>("authorName");
                 var itemClass = isFirst
                     ? "syn-blog-highlight__item syn-blog-highlight__item--primary"
                     : "syn-blog-highlight__item";
                 <article class="@itemClass">
-                    <a class="syn-blog-highlight__link" href="@post.Url()">
-                        @if (hero != null)
+                    <a class="syn-blog-highlight__link" href="@post.Url">
+                        @if (!string.IsNullOrWhiteSpace(post.HeroImageUrl))
                         {
                             <img class="syn-blog-highlight__image"
-                                 src="@hero.Url()"
+                                 src="@post.HeroImageUrl"
                                  alt=""
                                  loading="@(isFirst ? "eager" : "lazy")" />
                         }
-                        <h3 class="syn-blog-highlight__item-title">@post.Name</h3>
-                        @if (!string.IsNullOrWhiteSpace(excerpt))
+                        <h3 class="syn-blog-highlight__item-title">@post.Title</h3>
+                        @if (!string.IsNullOrWhiteSpace(post.Excerpt))
                         {
-                            <p class="syn-blog-highlight__excerpt">@excerpt</p>
+                            <p class="syn-blog-highlight__excerpt">@post.Excerpt</p>
                         }
                         <div class="syn-blog-highlight__meta">
-                            @if (!string.IsNullOrWhiteSpace(rawDate))
+                            @if (post.PublishDate.HasValue)
                             {
-                                <time class="syn-blog-highlight__date" datetime="@rawDate">@rawDate</time>
+                                <time class="syn-blog-highlight__date" datetime="@post.PublishDate.Value.ToString("yyyy-MM-dd")">
+                                    @post.PublishDate.Value.ToString("dd MMM yyyy")
+                                </time>
                             }
-                            @if (!string.IsNullOrWhiteSpace(authorName))
+                            @if (!string.IsNullOrWhiteSpace(post.CategoryName))
                             {
-                                <span class="syn-blog-highlight__author">@authorName</span>
+                                <span class="syn-blog-highlight__category">@post.CategoryName</span>
                             }
                         </div>
                     </a>

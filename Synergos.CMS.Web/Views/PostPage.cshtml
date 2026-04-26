@@ -1,0 +1,66 @@
+@*
+    Template del Document Type `postPage`. Renderiza un artículo
+    editorial individual: hero opcional + título + meta (fecha, lectura)
+    + cuerpo (Layout Composer).
+
+    El chrome lo aplica _Layout.cshtml. compSeo + compTagging + compCoreBase
+    se consumen en _SeoHead, breadcrumbs y otras partials sin que este
+    template tenga que tocarlos.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@using Umbraco.Cms.Core.Models.Blocks
+@using Umbraco.Cms.Core.Models.PublishedContent
+@{
+    Layout = "_Layout";
+    var post = UmbracoContext.PublishedRequest?.PublishedContent;
+    if (post is null) { return; }
+
+    var title = post.Name;
+    var excerpt = post.Value<string>("excerpt");
+    var heroImage = post.Value<IPublishedContent>("heroImage");
+    var publishDate = post.Value<DateTime?>("publishDate");
+    var readTimeMinutes = post.Value<int?>("readTimeMinutes");
+    var sections = post.Value<BlockGridModel>("sections");
+    var category = post.Parent;
+    var categoryName = category is { } c && string.Equals(c.ContentType.Alias, "postCategoryPage", StringComparison.Ordinal)
+        ? (c.Value<string>("categoryName") ?? c.Name)
+        : null;
+    var categoryUrl = category?.Url();
+}
+<article class="syn-post">
+    <header class="syn-post__header">
+        @if (!string.IsNullOrWhiteSpace(categoryName) && !string.IsNullOrWhiteSpace(categoryUrl))
+        {
+            <a class="syn-post__category" href="@categoryUrl">@categoryName</a>
+        }
+        <h1 class="syn-post__title">@title</h1>
+        @if (!string.IsNullOrWhiteSpace(excerpt))
+        {
+            <p class="syn-post__excerpt">@excerpt</p>
+        }
+        <div class="syn-post__meta">
+            @if (publishDate.HasValue)
+            {
+                <time class="syn-post__date" datetime="@publishDate.Value.ToString("yyyy-MM-dd")">
+                    @publishDate.Value.ToString("dd MMM yyyy")
+                </time>
+            }
+            @if (readTimeMinutes.HasValue)
+            {
+                <span class="syn-post__read-time">@readTimeMinutes min</span>
+            }
+        </div>
+    </header>
+    @if (heroImage is not null)
+    {
+        <figure class="syn-post__hero">
+            <img src="@heroImage.Url()" alt="@title" loading="eager" />
+        </figure>
+    }
+    @if (sections is not null && sections.Any())
+    {
+        <div class="syn-post__body">
+            @await Html.GetBlockGridHtmlAsync(sections)
+        </div>
+    }
+</article>
