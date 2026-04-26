@@ -150,6 +150,12 @@ public sealed class SeamComposer : IComposer
         // explicito por si Umbraco no lo cableo. Idempotente.
         services.AddMemoryCache();
 
+        // Ola 67 — Analytics tracker (ADR 0037). LoggerAnalyticsTracker
+        // emite eventos como log estructurado — el operador agrega via
+        // su sink standard (Serilog/AI/Elastic). Singleton porque solo
+        // depende de ILogger (singleton).
+        services.AddSingleton<IAnalyticsTracker, LoggerAnalyticsTracker>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;
