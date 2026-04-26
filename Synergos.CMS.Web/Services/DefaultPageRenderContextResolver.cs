@@ -5,11 +5,16 @@ using Umbraco.Cms.Core.Web;
 namespace Synergos.CMS.Web.Services;
 
 /// <summary>
-/// Default <see cref="IPageRenderContextResolver"/> que aplica la
-/// cascada page → siteRoot → defaults inline (ADR 0022) leyendo las
-/// propiedades de las composiciones <c>compPageOrchestration</c> y
-/// <c>compPageTheme</c> sobre la página resuelta y su siteRoot
-/// ancestral.
+/// Default <see cref="IPageRenderContextResolver"/>. Resuelve el contexto
+/// de render combinando:
+/// - <strong>Orquestación per-página</strong> (compPageOrchestration):
+///   chromeMode/headerMode/footerMode/showTitle/showBreadcrumbs/
+///   container/spacing — cascada page → siteRoot → defaults.
+/// - <strong>Tema visual del siteRoot</strong> (compPageTheme — solo en
+///   siteRoot tras Ola 71): pageThemeVariant/pageSurface/visualProfile —
+///   resolución directa desde el siteRoot ancestor sin posibilidad de
+///   override per-page (decisión arquitectónica: tema gestionado única y
+///   exclusivamente desde el siteRoot).
 /// </summary>
 /// <remarks>
 /// Vive en <c>Synergos.CMS.Web</c> porque depende de
@@ -65,11 +70,30 @@ public sealed class DefaultPageRenderContextResolver : IPageRenderContextResolve
             ShowFooter: showFooter,
             ShowTitle: showTitle,
             ShowBreadcrumbs: showBreadcrumbs,
-            ThemeVariant: ResolveString(page, siteRoot, "pageThemeVariant", defaults.ThemeVariant),
-            PageSurface: ResolveString(page, siteRoot, "pageSurface", defaults.PageSurface),
-            VisualProfile: ResolveString(page, siteRoot, "visualProfile", defaults.VisualProfile),
+            // Theme triplet — Ola 71: siteRoot ONLY, sin posibilidad de
+            // override per-page (compPageTheme removido de las page types).
+            ThemeVariant: ResolveFromSiteRoot(siteRoot, "pageThemeVariant", defaults.ThemeVariant),
+            PageSurface: ResolveFromSiteRoot(siteRoot, "pageSurface", defaults.PageSurface),
+            VisualProfile: ResolveFromSiteRoot(siteRoot, "visualProfile", defaults.VisualProfile),
+            // Container/spacing — cascade page → siteRoot porque sí pueden
+            // overridearse per-page legítimamente (landing densa, etc.).
             ContainerType: ResolveString(page, siteRoot, "pageContainerType", defaults.ContainerType),
             SpacingScale: ResolveString(page, siteRoot, "pageSpacingScale", defaults.SpacingScale));
+    }
+
+    /// <summary>
+    /// Lee una propiedad string solo del siteRoot. Útil para props que
+    /// post-Ola 71 son siteRoot-only (theme triplet). Devuelve fallback
+    /// si vacío o "inherit".
+    /// </summary>
+    private static string ResolveFromSiteRoot(IPublishedContent? siteRoot, string alias, string fallback)
+    {
+        var value = siteRoot?.Value<string>(alias);
+        if (string.IsNullOrWhiteSpace(value) || string.Equals(value, InheritValue, StringComparison.OrdinalIgnoreCase))
+        {
+            return fallback;
+        }
+        return value;
     }
 
     private static string ResolveString(IPublishedContent page, IPublishedContent? siteRoot, string alias, string fallback)

@@ -1,16 +1,20 @@
 @*
-    Emite las CSS custom properties del brand activo + override por
-    variante de tema page-level (compPageTheme.pageThemeVariant). Vive
-    como partial para que _Layout.cshtml y PageBare.cshtml lo invoquen
-    sin duplicar la lógica.
+    Emite las CSS custom properties del brand activo + variante de tema
+    del siteRoot (Ola 71: theme inheritance pure — el siteRoot es la
+    única fuente de pageThemeVariant; las pages YA NO componen
+    compPageTheme y heredan el valor del siteRoot ancestor).
 
-    Estrategia de cascading:
-    1. Brand-level (themeSettings del brand activo) — emite todas las
-       CSS vars base (color-primary, color-text, font-heading, etc.).
-    2. Page-level variant (renderCtx.ThemeVariant) — emite vars override
-       envueltas en el selector [data-theme=X] que ya viene en <html>.
+    Estrategia (post-Ola 71):
+    1. Brand-level (themeSettings o futuro siteConfiguration) — emite
+       todas las CSS vars base (color-primary, color-text, font-heading,
+       etc.) calculadas desde el brand activo.
+    2. siteRoot variant (renderCtx.ThemeVariant) — emite vars override
+       envueltas en [data-theme=X] que viene en <html>.
        Variantes: light (no override), dark (invierte fondos/texto),
        silverGold (paleta neutra), brand (refuerza primary).
+
+    Las pages NO pueden override la variante (decision arquitectonica
+    Ola 71: tema gestionado unica y exclusivamente desde el siteRoot).
 
     Output: <style>:root { ... } [data-theme=dark] { ... }</style>
 *@
