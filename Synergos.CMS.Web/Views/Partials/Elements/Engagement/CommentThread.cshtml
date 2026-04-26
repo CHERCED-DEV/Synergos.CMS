@@ -1,0 +1,107 @@
+@*
+    elementCommentThread renderer (Ola 68).
+
+    Renderiza los comentarios aprobados del nodo padre actual +
+    form POST para crear uno nuevo. Consume ICommentRepository +
+    IMemberAccessGate + IOptions<CommentsSettings>.
+
+    Si CommentsSettings.RequireAuthentication=true (default) y el
+    visitante no esta autenticado, el form se reemplaza por un link a
+    /account/login con returnUrl.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ICommentRepository CommentsRepo
+@inject Synergos.CMS.Interfaces.IMemberAccessGate MemberGate
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CommentsSettings> CommentsOptions
+@inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
+@{
+    var settings = CommentsOptions.Value;
+    var heading = Model.Value<string>("heading")
+        ?? Umbraco.GetDictionaryValue("Comments.Heading", "Comentarios");
+    var placeholder = Model.Value<string>("placeholder")
+        ?? Umbraco.GetDictionaryValue("Comments.Placeholder", "Comparte tu opinión…");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-comment-thread",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-comment-thread--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    int? nodeId = null;
+    if (UmbracoContextAccessor.TryGetUmbracoContext(out var ctx) &&
+        ctx.PublishedRequest?.PublishedContent is { } current)
+    {
+        nodeId = current.Id;
+    }
+    if (!nodeId.HasValue) { return; }
+
+    var comments = CommentsRepo.GetApprovedForNode(nodeId.Value);
+    var canPost = !settings.RequireAuthentication || MemberGate.IsAuthenticated;
+    var coCulture = System.Globalization.CultureInfo.GetCultureInfo("es-CO");
+}
+<section class="@classes" data-node-id="@nodeId">
+    <h2 class="syn-comment-thread__heading">@heading</h2>
+
+    @if (comments.Count == 0)
+    {
+        <p class="syn-comment-thread__empty">
+            @Umbraco.GetDictionaryValue("Comments.Empty", "Aún no hay comentarios. Sé el primero.")
+        </p>
+    }
+    else
+    {
+        <ol class="syn-comment-thread__list">
+            @foreach (var comment in comments)
+            {
+                <li class="syn-comment-thread__item" id="comment-@comment.Id">
+                    <header class="syn-comment-thread__meta">
+                        <span class="syn-comment-thread__author">@comment.AuthorName</span>
+                        <time class="syn-comment-thread__date" datetime="@comment.CreatedAtUtc.ToString("O")">
+                            @comment.CreatedAtUtc.ToString("dd MMM yyyy HH:mm", coCulture)
+                        </time>
+                    </header>
+                    <p class="syn-comment-thread__body">@comment.Body</p>
+                </li>
+            }
+        </ol>
+    }
+
+    @if (canPost)
+    {
+        <form class="syn-comment-thread__form"
+              action="/api/comments/@nodeId"
+              method="post"
+              novalidate>
+            @if (!settings.RequireAuthentication)
+            {
+                <div class="syn-comment-thread__field">
+                    <label for="syn-comment-name">@Umbraco.GetDictionaryValue("Comments.NameLabel", "Tu nombre")</label>
+                    <input id="syn-comment-name" type="text" name="authorName" autocomplete="name" required />
+                </div>
+            }
+            <div class="syn-comment-thread__field">
+                <label for="syn-comment-body">@Umbraco.GetDictionaryValue("Comments.BodyLabel", "Tu comentario")</label>
+                <textarea id="syn-comment-body"
+                          name="body"
+                          rows="4"
+                          maxlength="@settings.MaxBodyLengthChars"
+                          placeholder="@placeholder"
+                          required
+                          aria-required="true"></textarea>
+            </div>
+            <button type="submit" class="syn-comment-thread__submit">
+                @Umbraco.GetDictionaryValue("Comments.Submit", "Publicar")
+            </button>
+        </form>
+    }
+    else
+    {
+        <p class="syn-comment-thread__login-prompt">
+            <a href="/account/login?returnUrl=@(Context.Request.Path)">
+                @Umbraco.GetDictionaryValue("Comments.LoginToComment", "Inicia sesión para comentar")
+            </a>
+        </p>
+    }
+</section>
