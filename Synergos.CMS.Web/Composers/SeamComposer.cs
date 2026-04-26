@@ -95,6 +95,12 @@ public sealed class SeamComposer : IComposer
         // IUmbracoContextAccessor per-request.
         services.AddTransient<IBlogQuery, DefaultBlogQuery>();
 
+        // Ola 57.1 — Cart service. Persiste cart en cookie HMAC-firmada
+        // del visitante (sin DB, sin login required). Hidrata items
+        // cruzando SKUs con productPage publicados. Transient porque
+        // depende de IHttpContextAccessor + IUmbracoContextAccessor.
+        services.AddTransient<ICartService, DefaultCartService>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;

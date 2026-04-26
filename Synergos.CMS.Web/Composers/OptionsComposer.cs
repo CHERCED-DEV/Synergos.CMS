@@ -44,5 +44,8 @@ public sealed class OptionsComposer : IComposer
 
         builder.Services.Configure<MembersSettings>(
             builder.Config.GetSection("Synergos:Members"));
+
+        builder.Services.Configure<CartSettings>(
+            builder.Config.GetSection("Synergos:Cart"));
     }
 }
