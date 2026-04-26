@@ -8,33 +8,33 @@
     (default 1). Page size hardcoded 12 — puede ir a IOptions en
     futura ola si el sitio crece.
 *@
-@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.PostCategoryPage>
 @inject Synergos.CMS.Interfaces.IBlogQuery BlogQuery
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@using Umbraco.Extensions
 @{
     Layout = "_Layout";
-    var category = UmbracoContext.PublishedRequest?.PublishedContent;
-    if (category is null) { return; }
+    if (Model is null) { return; }
 
     const int PageSize = 12;
     var pageRaw = HttpContextAccessor.HttpContext?.Request?.Query["page"].ToString();
     var pageNumber = int.TryParse(pageRaw, out var p) && p > 0 ? p : 1;
     var skip = (pageNumber - 1) * PageSize;
 
-    var categoryName = category.Value<string>("categoryName") ?? category.Name;
-    var description = category.Value<string>("description");
+    var categoryName = !string.IsNullOrWhiteSpace(Model.CategoryName) ? Model.CategoryName : Model.Name;
+    var description = Model.Description;
 
     // Fetch one extra to detect if there's a next page
     var posts = BlogQuery.GetPosts(new Synergos.CMS.Interfaces.BlogQueryRequest(
         MaxItems: PageSize + 1,
         Skip: skip,
-        CategoryAliasOrName: category.Name));
+        CategoryAliasOrName: Model.Name));
 
     var hasNext = posts.Count > PageSize;
     var visible = hasNext ? posts.Take(PageSize).ToArray() : posts;
     var hasPrev = pageNumber > 1;
 
-    var baseUrl = category.Url();
+    var baseUrl = Model.Url();
 }
 <section class="syn-post-category">
     <header class="syn-post-category__header">

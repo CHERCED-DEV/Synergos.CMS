@@ -7,14 +7,14 @@
     querystring `?sort=price-asc|price-desc|newest|name`.
     Paginación via querystring `?page=N`.
 *@
-@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.ProductCategoryPage>
 @using System.Globalization
+@using Umbraco.Extensions
 @inject Synergos.CMS.Interfaces.IShopQuery ShopQuery
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
 @{
     Layout = "_Layout";
-    var category = UmbracoContext.PublishedRequest?.PublishedContent;
-    if (category is null) { return; }
+    if (Model is null) { return; }
 
     const int PageSize = 12;
     var pageRaw = HttpContextAccessor.HttpContext?.Request?.Query["page"].ToString();
@@ -24,19 +24,19 @@
     var sortRaw = HttpContextAccessor.HttpContext?.Request?.Query["sort"].ToString();
     var sortBy = string.IsNullOrWhiteSpace(sortRaw) ? "name" : sortRaw;
 
-    var categoryName = category.Value<string>("categoryName") ?? category.Name;
-    var description = category.Value<string>("description");
+    var categoryName = !string.IsNullOrWhiteSpace(Model.CategoryName) ? Model.CategoryName : Model.Name;
+    var description = Model.Description;
 
     var products = ShopQuery.GetProducts(new Synergos.CMS.Interfaces.ShopQueryRequest(
         MaxItems: PageSize + 1,
         Skip: skip,
-        CategoryAliasOrName: category.Name,
+        CategoryAliasOrName: Model.Name,
         SortBy: sortBy));
 
     var hasNext = products.Count > PageSize;
     var visible = hasNext ? products.Take(PageSize).ToArray() : products;
     var hasPrev = pageNumber > 1;
-    var baseUrl = category.Url();
+    var baseUrl = Model.Url();
     var coCulture = CultureInfo.GetCultureInfo("es-CO");
 }
 <section class="syn-product-category">
