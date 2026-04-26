@@ -58,4 +58,12 @@ public sealed class FormsSettings
     /// <c>"form-error"</c>.
     /// </summary>
     public string ErrorQueryParam { get; init; } = "form-error";
+
+    /// <summary>
+    /// Email del operador donde se envía notificación por cada
+    /// submission persistida (ADR 0043 — Ola 80). Si vacío, no se
+    /// envían notificaciones (el storage queda como única evidencia).
+    /// Default vacío — opt-in.
+    /// </summary>
+    public string NotifyEmailAddress { get; init; } = string.Empty;
 }

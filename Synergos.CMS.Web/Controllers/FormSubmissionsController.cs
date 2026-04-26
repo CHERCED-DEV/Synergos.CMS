@@ -35,19 +35,22 @@ public sealed class FormSubmissionsController : ControllerBase
     private readonly IOptions<FormsSettings> _options;
     private readonly ILogger<FormSubmissionsController> _logger;
     private readonly IAnalyticsTracker _analytics;
+    private readonly IEmailService _emailService;
 
     public FormSubmissionsController(
         IFormSubmissionHandler handler,
         InMemoryFormRateLimiter rateLimiter,
         IOptions<FormsSettings> options,
         ILogger<FormSubmissionsController> logger,
-        IAnalyticsTracker analytics)
+        IAnalyticsTracker analytics,
+        IEmailService emailService)
     {
         _handler = handler;
         _rateLimiter = rateLimiter;
         _options = options;
         _logger = logger;
         _analytics = analytics;
+        _emailService = emailService;
     }
 
     [HttpPost("{formKey}/submit")]
@@ -130,7 +133,58 @@ public sealed class FormSubmissionsController : ControllerBase
             ["fieldCount"] = fields.Count,
         });
 
+        // Ola 80.3 — notificación al operador via IEmailService cuando
+        // FormsSettings.NotifyEmailAddress está poblada. Fire-and-forget;
+        // si falla, el log de IEmailService loguea Warning pero no
+        // afecta la persistencia que ya ocurrió.
+        if (!string.IsNullOrWhiteSpace(settings.NotifyEmailAddress))
+        {
+            await SendNotificationAsync(formKey, fields, clientIp, referrer,
+                settings.NotifyEmailAddress, cancellationToken);
+        }
+
         return RedirectWithQuery(referrer, settings.SuccessQueryParam, "1");
+    }
+
+    private async Task SendNotificationAsync(
+        string formKey,
+        IReadOnlyDictionary<string, string> fields,
+        string clientIp,
+        string referrer,
+        string toAddress,
+        CancellationToken cancellationToken)
+    {
+        var bodyBuilder = new System.Text.StringBuilder();
+        bodyBuilder.AppendLine($"<p><strong>Form key:</strong> {System.Net.WebUtility.HtmlEncode(formKey)}</p>");
+        bodyBuilder.AppendLine($"<p><strong>Origen:</strong> {System.Net.WebUtility.HtmlEncode(referrer)}</p>");
+        bodyBuilder.AppendLine($"<p><strong>IP:</strong> {System.Net.WebUtility.HtmlEncode(clientIp)}</p>");
+        bodyBuilder.AppendLine($"<p><strong>Recibido:</strong> {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</p>");
+        bodyBuilder.AppendLine("<hr/>");
+        bodyBuilder.AppendLine("<table style=\"width:100%;border-collapse:collapse\"><tbody>");
+        foreach (var (key, value) in fields)
+        {
+            bodyBuilder.AppendLine(
+                $"<tr><th style=\"text-align:left;padding:6px;border-bottom:1px solid #eee\">{System.Net.WebUtility.HtmlEncode(key)}</th>" +
+                $"<td style=\"padding:6px;border-bottom:1px solid #eee\">{System.Net.WebUtility.HtmlEncode(value)}</td></tr>");
+        }
+        bodyBuilder.AppendLine("</tbody></table>");
+
+        try
+        {
+            await _emailService.SendAsync(new EmailMessage(
+                To: toAddress,
+                Subject: $"[Form] Nueva submission: {formKey}",
+                BodyHtml: bodyBuilder.ToString()),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Defense-in-depth: el envío del email NO debe romper el
+            // pipeline si el SMTP falla. Log + continue.
+            _logger.LogWarning(ex,
+                "Form notification email failed: formKey={FormKey} to={To}",
+                formKey, toAddress);
+        }
     }
 
     private Dictionary<string, string> ExtractFields(FormsSettings settings)
