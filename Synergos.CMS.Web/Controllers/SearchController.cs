@@ -24,9 +24,13 @@ namespace Synergos.CMS.Web.Controllers;
 public sealed class SearchController : ControllerBase
 {
     private readonly ISearchQuery _searchQuery;
+    private readonly IAnalyticsTracker _analytics;
 
-    public SearchController(ISearchQuery searchQuery) =>
+    public SearchController(ISearchQuery searchQuery, IAnalyticsTracker analytics)
+    {
         _searchQuery = searchQuery;
+        _analytics = analytics;
+    }
 
     /// <summary>
     /// GET /api/search?q=foo&amp;maxItems=20&amp;skip=0&amp;docType=postPage
@@ -48,6 +52,23 @@ public sealed class SearchController : ControllerBase
                 : docTypeFilter);
 
         var response = _searchQuery.Search(request);
+
+        _analytics.Track("search.executed", new Dictionary<string, object?>
+        {
+            ["query"] = request.Query,
+            ["resultCount"] = response.TotalEstimated,
+            ["docTypeFilter"] = request.DocTypeAliasFilter,
+            ["elapsedMs"] = response.ElapsedMilliseconds,
+        });
+
+        if (response.TotalEstimated == 0 && !string.IsNullOrWhiteSpace(request.Query))
+        {
+            _analytics.Track("search.no-results", new Dictionary<string, object?>
+            {
+                ["query"] = request.Query,
+            });
+        }
+
         return Ok(response);
     }
 }

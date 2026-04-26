@@ -34,17 +34,20 @@ public sealed class FormSubmissionsController : ControllerBase
     private readonly InMemoryFormRateLimiter _rateLimiter;
     private readonly IOptions<FormsSettings> _options;
     private readonly ILogger<FormSubmissionsController> _logger;
+    private readonly IAnalyticsTracker _analytics;
 
     public FormSubmissionsController(
         IFormSubmissionHandler handler,
         InMemoryFormRateLimiter rateLimiter,
         IOptions<FormsSettings> options,
-        ILogger<FormSubmissionsController> logger)
+        ILogger<FormSubmissionsController> logger,
+        IAnalyticsTracker analytics)
     {
         _handler = handler;
         _rateLimiter = rateLimiter;
         _options = options;
         _logger = logger;
+        _analytics = analytics;
     }
 
     [HttpPost("{formKey}/submit")]
@@ -73,12 +76,20 @@ public sealed class FormSubmissionsController : ControllerBase
                 "Form honeypot triggered: formKey={FormKey} ip={Ip}",
                 formKey,
                 HttpContext.Connection.RemoteIpAddress?.ToString());
+            _analytics.Track("form.honeypot-triggered", new Dictionary<string, object?>
+            {
+                ["formKey"] = formKey,
+            });
             return RedirectWithQuery(referrer, settings.SuccessQueryParam, "1");
         }
 
         var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         if (!_rateLimiter.TryRegister(clientIp, formKey))
         {
+            _analytics.Track("form.rate-limited", new Dictionary<string, object?>
+            {
+                ["formKey"] = formKey,
+            });
             return StatusCode(StatusCodes.Status429TooManyRequests,
                 new { error = "rate-limit-exceeded" });
         }
@@ -104,9 +115,20 @@ public sealed class FormSubmissionsController : ControllerBase
         var result = await _handler.SubmitAsync(request, cancellationToken);
         if (!result.Success)
         {
+            _analytics.Track("form.submit-failed", new Dictionary<string, object?>
+            {
+                ["formKey"] = formKey,
+                ["errorCode"] = result.ErrorCode,
+            });
             return RedirectWithQuery(referrer, settings.ErrorQueryParam,
                 result.ErrorCode ?? "unknown");
         }
+
+        _analytics.Track("form.submitted", new Dictionary<string, object?>
+        {
+            ["formKey"] = formKey,
+            ["fieldCount"] = fields.Count,
+        });
 
         return RedirectWithQuery(referrer, settings.SuccessQueryParam, "1");
     }

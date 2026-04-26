@@ -16,13 +16,16 @@ public sealed class AccountController : Controller
 {
     private readonly IMemberAuthService _authService;
     private readonly IMemberAccessGate _gate;
+    private readonly IAnalyticsTracker _analytics;
 
     public AccountController(
         IMemberAuthService authService,
-        IMemberAccessGate gate)
+        IMemberAccessGate gate,
+        IAnalyticsTracker analytics)
     {
         _authService = authService;
         _gate = gate;
+        _analytics = analytics;
     }
 
     [HttpGet("login")]
@@ -49,6 +52,10 @@ public sealed class AccountController : Controller
 
         if (!result.Success)
         {
+            _analytics.Track("account.login-failed", new Dictionary<string, object?>
+            {
+                ["errorCode"] = result.ErrorCode,
+            });
             return RedirectToAction(nameof(Login), new
             {
                 returnUrl,
@@ -56,6 +63,7 @@ public sealed class AccountController : Controller
             });
         }
 
+        _analytics.Track("account.login");
         return Redirect(SafeReturnUrl(returnUrl));
     }
 
@@ -85,9 +93,14 @@ public sealed class AccountController : Controller
 
         if (!result.Success)
         {
+            _analytics.Track("account.register-failed", new Dictionary<string, object?>
+            {
+                ["errorCode"] = result.ErrorCode,
+            });
             return RedirectToAction(nameof(Register), new { error = result.ErrorCode });
         }
 
+        _analytics.Track("account.registered");
         return RedirectToAction(nameof(Profile));
     }
 
@@ -97,6 +110,7 @@ public sealed class AccountController : Controller
         CancellationToken cancellationToken)
     {
         await _authService.LogoutAsync(cancellationToken);
+        _analytics.Track("account.logout");
         return Redirect(SafeReturnUrl(returnUrl));
     }
 

@@ -24,8 +24,13 @@ namespace Synergos.CMS.Web.Controllers;
 public sealed class ShopController : ControllerBase
 {
     private readonly ICartService _cartService;
+    private readonly IAnalyticsTracker _analytics;
 
-    public ShopController(ICartService cartService) => _cartService = cartService;
+    public ShopController(ICartService cartService, IAnalyticsTracker analytics)
+    {
+        _cartService = cartService;
+        _analytics = analytics;
+    }
 
     /// <summary>GET /api/shop/cart — devuelve el cart actual hidratado.</summary>
     [HttpGet]
@@ -39,7 +44,15 @@ public sealed class ShopController : ControllerBase
         {
             return BadRequest(new { error = "sku and quantity > 0 required" });
         }
-        return _cartService.AddItem(dto.Sku, dto.Quantity, dto.VariantSku);
+        var cart = _cartService.AddItem(dto.Sku, dto.Quantity, dto.VariantSku);
+        _analytics.Track("cart.item-added", new Dictionary<string, object?>
+        {
+            ["sku"] = dto.Sku,
+            ["variantSku"] = dto.VariantSku,
+            ["quantity"] = dto.Quantity,
+            ["cartItemCount"] = cart.ItemCount,
+        });
+        return cart;
     }
 
     /// <summary>POST /api/shop/cart/update — fija la cantidad de un item.</summary>
@@ -50,7 +63,14 @@ public sealed class ShopController : ControllerBase
         {
             return BadRequest(new { error = "sku required" });
         }
-        return _cartService.UpdateQuantity(dto.Sku, dto.Quantity, dto.VariantSku);
+        var cart = _cartService.UpdateQuantity(dto.Sku, dto.Quantity, dto.VariantSku);
+        _analytics.Track("cart.quantity-updated", new Dictionary<string, object?>
+        {
+            ["sku"] = dto.Sku,
+            ["variantSku"] = dto.VariantSku,
+            ["quantity"] = dto.Quantity,
+        });
+        return cart;
     }
 
     /// <summary>POST /api/shop/cart/remove — remueve un item del cart.</summary>
@@ -61,12 +81,23 @@ public sealed class ShopController : ControllerBase
         {
             return BadRequest(new { error = "sku required" });
         }
-        return _cartService.RemoveItem(dto.Sku, dto.VariantSku);
+        var cart = _cartService.RemoveItem(dto.Sku, dto.VariantSku);
+        _analytics.Track("cart.item-removed", new Dictionary<string, object?>
+        {
+            ["sku"] = dto.Sku,
+            ["variantSku"] = dto.VariantSku,
+        });
+        return cart;
     }
 
     /// <summary>POST /api/shop/cart/clear — vacía el cart completo.</summary>
     [HttpPost("clear")]
-    public ActionResult<Cart> Clear() => _cartService.Clear();
+    public ActionResult<Cart> Clear()
+    {
+        var cart = _cartService.Clear();
+        _analytics.Track("cart.cleared");
+        return cart;
+    }
 }
 
 /// <summary>POST body para <c>/cart/add</c>.</summary>
