@@ -37,11 +37,13 @@ public sealed class DefaultCartService : ICartService
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
     private readonly CartSettings _settings;
     private readonly byte[] _secretKey;
+    private readonly ICartAbandonmentTracker _abandonmentTracker;
 
     public DefaultCartService(
         IHttpContextAccessor httpContextAccessor,
         IUmbracoContextAccessor umbracoContextAccessor,
-        IOptions<CartSettings> settings)
+        IOptions<CartSettings> settings,
+        ICartAbandonmentTracker abandonmentTracker)
     {
         _httpContextAccessor = httpContextAccessor;
         _umbracoContextAccessor = umbracoContextAccessor;
@@ -49,6 +51,7 @@ public sealed class DefaultCartService : ICartService
         _secretKey = Encoding.UTF8.GetBytes(string.IsNullOrWhiteSpace(_settings.SecretKey)
             ? "synergos-dev-secret-change-me"
             : _settings.SecretKey);
+        _abandonmentTracker = abandonmentTracker;
     }
 
     public Cart GetCart() => Hydrate(ReadCookie());
@@ -75,7 +78,9 @@ public sealed class DefaultCartService : ICartService
             raw.Add(new RawCartLine(sku, variantSku, quantity, key));
         }
         WriteCookie(raw);
-        return Hydrate(raw);
+        var hydrated = Hydrate(raw);
+        TrackActivity(hydrated);
+        return hydrated;
     }
 
     public Cart UpdateQuantity(string sku, int quantity, string? variantSku = null)
@@ -96,7 +101,9 @@ public sealed class DefaultCartService : ICartService
             raw[idx] = raw[idx] with { Quantity = quantity };
             WriteCookie(raw);
         }
-        return Hydrate(raw);
+        var hydrated = Hydrate(raw);
+        TrackActivity(hydrated);
+        return hydrated;
     }
 
     public Cart RemoveItem(string sku, string? variantSku = null)
@@ -112,13 +119,55 @@ public sealed class DefaultCartService : ICartService
         {
             WriteCookie(raw);
         }
-        return Hydrate(raw);
+        var hydrated = Hydrate(raw);
+        TrackActivity(hydrated);
+        return hydrated;
     }
 
     public Cart Clear()
     {
+        var cartId = ResolveCartId();
         WriteCookie(new List<RawCartLine>());
+        // Clear puede significar checkout completado (POST /cart/clear
+        // suele ser llamado por el checkout flow). Marcar completed
+        // para que NO se reporte como abandoned.
+        _abandonmentTracker.MarkCompleted(cartId);
         return new Cart(Array.Empty<CartLine>(), 0m, _settings.Currency, 0);
+    }
+
+    /// <summary>
+    /// Cart ID = primer N chars del HMAC base64 de la cookie firmada
+    /// (ya contiene el secret + payload). Si no hay cookie aún, usa
+    /// "anonymous" — el tracker solo marca actividad cuando hay cookie
+    /// real, así que vacío significa cero items.
+    /// </summary>
+    private string ResolveCartId()
+    {
+        var ctx = _httpContextAccessor.HttpContext;
+        if (ctx is null) return "anonymous";
+        if (!ctx.Request.Cookies.TryGetValue(_settings.CookieName, out var cookieValue) ||
+            string.IsNullOrWhiteSpace(cookieValue))
+        {
+            return "anonymous";
+        }
+        var parts = cookieValue.Split('.', 2);
+        return parts.Length == 2 ? parts[1][..Math.Min(16, parts[1].Length)] : "anonymous";
+    }
+
+    /// <summary>
+    /// Notifica al tracker la actividad reciente del cart con su
+    /// snapshot actual (item count + subtotal + currency).
+    /// Llamado tras cada mutación.
+    /// </summary>
+    private void TrackActivity(Cart hydrated)
+    {
+        var cartId = ResolveCartId();
+        if (cartId == "anonymous") return;
+        _abandonmentTracker.MarkActivity(
+            cartId,
+            hydrated.ItemCount,
+            hydrated.Subtotal,
+            hydrated.Currency);
     }
 
     // ── Internals ────────────────────────────────────────────────────────────

@@ -101,6 +101,14 @@ public sealed class SeamComposer : IComposer
         // depende de IHttpContextAccessor + IUmbracoContextAccessor.
         services.AddTransient<ICartService, DefaultCartService>();
 
+        // Ola 81 — Cart abandonment tracker (ADR 0044). Singleton por
+        // diseño — el state in-memory persiste entre requests del
+        // mismo proceso. Background scanner emite "cart.abandoned"
+        // events via IAnalyticsTracker cada N minutos para los carts
+        // que excedan el threshold.
+        services.AddSingleton<ICartAbandonmentTracker, InMemoryCartAbandonmentTracker>();
+        services.AddHostedService<CartAbandonmentScannerHostedService>();
+
         // Ola 57.2 — Shop query service. Recorre productPage descendientes,
         // aplica filtros de categoría/sort y proyecta a ProductSummary.
         // Consumido por ProductGrid block + ProductCategoryPage.cshtml.
