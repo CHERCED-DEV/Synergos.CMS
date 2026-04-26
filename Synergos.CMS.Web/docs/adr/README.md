@@ -52,6 +52,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0043](0043-email-consumers-error-blocks-cart-abandonment-typed-views.md) | Email consumers wired (password reset + form notifications) + Error pages BlockGrid + Cart abandonment tracker + Typed views progress (PostPage) | Accepted |
 | [0044](0044-email-templates-confirmation-typed-views-progress.md) | IEmailTemplateRenderer Razor-compiled + Email confirmation post-registro flow + Typed views progress (PostCategoryPage/ProductCategoryPage/FlowDefinition/FlowStep) | Accepted |
 | [0045](0045-resend-confirmation-brand-emails-search-analytics-comments-moderation.md) | Resend email confirmation endpoint + brand-aware email SiteName via IBrandingProvider + Search analytics store + endpoint + Comments moderation (ICommentRepository extends approve/reject + CommentsModerationController role-gated) | Accepted |
+| [0046](0046-search-analytics-gate-brand-email-subjects-comment-moderation-notifier.md) | Search analytics role gate (SearchSettings.AnalyticsAdminRolesCsv) + brand-aware email subjects (3 call sites) + ICommentModerationNotifier seam con email default + hook fire-and-forget en CommentsController | Accepted |
 
 ## Rules
 
