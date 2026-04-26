@@ -1,13 +1,14 @@
 @*
-    elementShopProductCard renderer (Ola 33 schema + Ola 39 runtime).
-    Query real a productPage descendants por SKU match. Render nativo
-    con imagen + nombre + precio base + CTA. addToCart solo emite
-    data-attrs para hidratación JS del design-system.
+    elementShopProductCard renderer.
+
+    Ola 59 — usa IShopQuery.GetProductBySku como seam (sin query inline
+    al árbol Umbraco). El productUrlTemplate (configOverride o prop
+    directa) sigue overrideando la URL canónica del productPage cuando
+    está presente, conservando compatibilidad con catálogos hosted en
+    rutas externas.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
-@using Umbraco.Cms.Core.Models.PublishedContent
-@using Umbraco.Extensions
-@inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
+@inject Synergos.CMS.Interfaces.IShopQuery ShopQuery
 @{
     var sku = Model.Value<string>("productSku");
     if (string.IsNullOrWhiteSpace(sku)) { return; }
@@ -32,7 +33,6 @@
             }
             catch (System.Text.Json.JsonException)
             {
-                // Invalid override JSON should not break SSR placeholder rendering.
             }
         }
     }
@@ -46,20 +46,13 @@
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
-    IPublishedContent? product = null;
-    if (UmbracoContextAccessor.TryGetUmbracoContext(out var ctx) && ctx.Content != null)
-    {
-        product = ctx.Content
-            .GetAtRoot()
-            .SelectMany(r => r.DescendantsOrSelfOfType("productPage"))
-            .FirstOrDefault(p => string.Equals(p.Value<string>("productSku"), sku, StringComparison.OrdinalIgnoreCase));
-    }
-
-    var productUrl = product?.Url();
-    if (!string.IsNullOrWhiteSpace(productUrlTemplate) && !string.IsNullOrWhiteSpace(sku))
+    var product = ShopQuery.GetProductBySku(sku);
+    var productUrl = product?.Url;
+    if (!string.IsNullOrWhiteSpace(productUrlTemplate))
     {
         productUrl = productUrlTemplate.Replace("{sku}", Uri.EscapeDataString(sku));
     }
+    var coCulture = System.Globalization.CultureInfo.GetCultureInfo("es-CO");
 }
 <article class="@classes"
          data-sku="@sku"
@@ -69,39 +62,38 @@
          {
              @:data-product-url-template="@productUrlTemplate"
          }>
-    @if (product == null)
+    @if (product is null)
     {
         <p class="syn-product-card__empty">Producto no encontrado: <code>@sku</code></p>
     }
     else
     {
-        var productName = product.Value<string>("productName") ?? product.Name;
-        var productPriceBase = product.Value<string>("productPriceBase");
-        var productImages = product.Value<IEnumerable<IPublishedContent>>("productImages");
-        var firstImage = productImages?.FirstOrDefault();
-        var inStock = product.Value<bool>("productInStock");
         <a class="syn-product-card__link" href="@productUrl">
-            @if (firstImage != null)
+            @if (!string.IsNullOrWhiteSpace(product.ImageUrl))
             {
-                <img class="syn-product-card__image" src="@firstImage.Url()" alt="@productName" loading="lazy" />
+                <img class="syn-product-card__image" src="@product.ImageUrl" alt="@product.Name" loading="lazy" />
             }
-            <h3 class="syn-product-card__name">@productName</h3>
-            @if (showPrice && !string.IsNullOrWhiteSpace(productPriceBase))
+            <h3 class="syn-product-card__name">@product.Name</h3>
+            @if (showPrice)
             {
-                <span class="syn-product-card__price">@productPriceBase</span>
+                <span class="syn-product-card__price">
+                    @product.Price.ToString("N0", coCulture) @product.Currency
+                </span>
             }
-            @if (!inStock)
+            @if (!product.InStock)
             {
                 <span class="syn-product-card__out-of-stock">Sin stock</span>
             }
         </a>
-        @if (showAddToCart && inStock)
+        @if (showAddToCart && product.InStock)
         {
             <button type="button"
                     class="syn-product-card__add-to-cart"
                     data-action="add-to-cart"
                     data-sku="@sku"
-                    data-price="@productPriceBase">Añadir al carrito</button>
+                    data-price="@product.Price.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+                Añadir al carrito
+            </button>
         }
     }
 </article>

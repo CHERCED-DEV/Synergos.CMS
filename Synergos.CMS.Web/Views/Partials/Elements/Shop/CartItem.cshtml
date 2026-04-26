@@ -1,5 +1,15 @@
 @*
-    elementShopCartItem renderer (Ola 33). SSR. Frontend JS cablea update/remove.
+    elementShopCartItem renderer.
+
+    Block "static cart line preview" — emite una línea con datos
+    inline (SKU + cantidad + precio) que el editor configura
+    manualmente en el composer. NO consume ICartService — para vista
+    real del cart usar elementShopCartSummary, que renderiza todas
+    las líneas vivas desde el cookie firmado del visitante.
+
+    Caso de uso: previews de cart en mockups/landings, demos
+    estáticos. Si no aparece en composer real, es candidato a
+    deprecación en futura ola.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
