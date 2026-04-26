@@ -36,6 +36,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0027](0027-blog-runtime-and-members-settings.md) | Blog runtime (IBlogQuery + PostPage/PostCategoryPage templates) + Members settings (LoginPath configurable) | Accepted |
 | [0028](0028-shop-runtime-cart-and-query.md) | Shop runtime (ICartService cookie HMAC + IShopQuery + ProductPage/ProductCategoryPage templates + ShopController) | Accepted |
 | [0029](0029-flow-templates-closure.md) | Flow templates closure (FlowDefinition + FlowStep templates + DefaultTemplate asignado) | Accepted |
+| [0030](0030-forms-internal-submission-runtime.md) | Forms internal submission runtime (IFormSubmissionHandler + FileSystem default + FormSubmissionsController + honeypot + rate limit) | Accepted |
 
 ## Rules
 
