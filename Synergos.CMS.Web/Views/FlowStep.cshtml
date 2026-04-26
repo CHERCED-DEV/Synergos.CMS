@@ -7,23 +7,20 @@
     rastrea el índice; cuando el step actual es `isTerminal` o es el último,
     Next limpia cookies y redirige al returnUrl.
 *@
-@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.FlowStep>
+@using Synergos.CMS.Web.PublishedModels
 @inject Synergos.CMS.Web.Services.FlowResolver FlowResolver
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
 @{
     Layout = "_Layout";
-    var step = UmbracoContext.PublishedRequest?.PublishedContent;
-    if (step is null) { return; }
+    if (Model is null) { return; }
 
-    var parent = step.Parent;
-    var flowKey = parent is { } p &&
-                  string.Equals(p.ContentType.Alias, "flowDefinition", StringComparison.Ordinal)
-        ? p.Value<string>("flowKey")
-        : null;
+    var parent = Model.Parent as FlowDefinition;
+    var flowKey = parent?.FlowKey;
 
-    var stepLabel = step.Value<string>("stepLabel") ?? step.Name;
-    var stepContent = step.Value<Microsoft.AspNetCore.Html.IHtmlContent>("stepContent");
-    var isTerminal = step.Value<bool>("isTerminal");
+    var stepLabel = !string.IsNullOrWhiteSpace(Model.StepLabel) ? Model.StepLabel : Model.Name;
+    var stepContent = Model.Value<Microsoft.AspNetCore.Html.IHtmlContent>("stepContent");
+    var isTerminal = Model.IsTerminal;
 
     var descriptor = !string.IsNullOrWhiteSpace(flowKey)
         ? FlowResolver.Resolve(flowKey)
@@ -35,7 +32,7 @@
     {
         for (var i = 0; i < descriptor.Steps.Count; i++)
         {
-            if (descriptor.Steps[i].Id == step.Id)
+            if (descriptor.Steps[i].Id == Model.Id)
             {
                 currentIndex = i;
                 break;

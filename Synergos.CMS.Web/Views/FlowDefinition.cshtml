@@ -6,16 +6,15 @@
     Si el flow no tiene steps publicados, el botón se omite y se muestra
     un mensaje editor-facing.
 *@
-@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.FlowDefinition>
 @inject Synergos.CMS.Web.Services.FlowResolver FlowResolver
 @{
     Layout = "_Layout";
-    var definition = UmbracoContext.PublishedRequest?.PublishedContent;
-    if (definition is null) { return; }
+    if (Model is null) { return; }
 
-    var flowKey = definition.Value<string>("flowKey");
-    var title = definition.Value<string>("flowTitle") ?? definition.Name;
-    var description = definition.Value<string>("flowDescription");
+    var flowKey = Model.FlowKey;
+    var title = !string.IsNullOrWhiteSpace(Model.FlowTitle) ? Model.FlowTitle : Model.Name;
+    var description = Model.FlowDescription;
 
     var descriptor = !string.IsNullOrWhiteSpace(flowKey)
         ? FlowResolver.Resolve(flowKey)
