@@ -38,6 +38,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0029](0029-flow-templates-closure.md) | Flow templates closure (FlowDefinition + FlowStep templates + DefaultTemplate asignado) | Accepted |
 | [0030](0030-forms-internal-submission-runtime.md) | Forms internal submission runtime (IFormSubmissionHandler + FileSystem default + FormSubmissionsController + honeypot + rate limit) | Accepted |
 | [0031](0031-search-infrastructure-examine.md) | Search infrastructure on Examine ExternalIndex (ISearchQuery + ExamineSearchProvider + SearchController) | Accepted |
+| [0032](0032-search-page-ux.md) | Search UX (searchPage DocType + SearchPage.cshtml + 5 dictionary keys + siteRoot Structure fix) | Accepted |
 
 ## Rules
 
