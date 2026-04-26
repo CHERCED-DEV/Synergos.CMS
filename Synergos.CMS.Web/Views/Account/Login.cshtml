@@ -1,0 +1,76 @@
+@*
+    Vista del AccountController.Login (Ola 64). Form POST nativo a
+    /account/login. Sin Layout para evitar dependencia de
+    PublishedRequest (controller MVC, no template Umbraco).
+*@
+@{
+    Layout = null;
+    var returnUrl = ViewData["ReturnUrl"] as string ?? "/";
+    var errorCode = ViewData["ErrorCode"] as string;
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>@Umbraco.GetDictionaryValue("Account.Login.Title", "Iniciar sesión")</title>
+</head>
+<body class="syn-account">
+    <main class="syn-account__main">
+        <h1 class="syn-account__heading">@Umbraco.GetDictionaryValue("Account.Login.Title", "Iniciar sesión")</h1>
+
+        @if (!string.IsNullOrWhiteSpace(errorCode))
+        {
+            var msg = errorCode switch
+            {
+                "invalid-credentials" => Umbraco.GetDictionaryValue("Account.Login.Error.InvalidCredentials", "Email o contraseña incorrectos."),
+                "locked-out" => Umbraco.GetDictionaryValue("Account.Login.Error.LockedOut", "Cuenta bloqueada temporalmente."),
+                _ => Umbraco.GetDictionaryValue("Account.Login.Error.Unknown", "Ocurrió un error. Inténtalo de nuevo."),
+            };
+            <p class="syn-account__error" role="alert" aria-live="polite">@msg</p>
+        }
+
+        <form class="syn-account__form" action="/account/login" method="post" novalidate>
+            <input type="hidden" name="returnUrl" value="@returnUrl" />
+
+            <div class="syn-account__field">
+                <label for="syn-login-email">@Umbraco.GetDictionaryValue("Account.Login.EmailLabel", "Email")</label>
+                <input id="syn-login-email"
+                       type="email"
+                       name="emailOrUsername"
+                       autocomplete="email"
+                       required
+                       aria-required="true" />
+            </div>
+
+            <div class="syn-account__field">
+                <label for="syn-login-password">@Umbraco.GetDictionaryValue("Account.Login.PasswordLabel", "Contraseña")</label>
+                <input id="syn-login-password"
+                       type="password"
+                       name="password"
+                       autocomplete="current-password"
+                       required
+                       aria-required="true" />
+            </div>
+
+            <div class="syn-account__field syn-account__field--checkbox">
+                <label>
+                    <input type="checkbox" name="rememberMe" value="true" />
+                    @Umbraco.GetDictionaryValue("Account.Login.RememberMe", "Recordar mi sesión")
+                </label>
+            </div>
+
+            <button type="submit" class="syn-account__submit">
+                @Umbraco.GetDictionaryValue("Account.Login.Submit", "Iniciar sesión")
+            </button>
+        </form>
+
+        <p class="syn-account__alt">
+            <a href="/account/register">
+                @Umbraco.GetDictionaryValue("Account.Login.NeedAccount", "¿No tienes cuenta? Registrarse")
+            </a>
+        </p>
+    </main>
+</body>
+</html>
