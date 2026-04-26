@@ -112,6 +112,17 @@ public sealed class SeamComposer : IComposer
         // antes de exponer al público (ver ADR 0028 — TODO cerrado).
         services.AddHostedService<CartSecretKeyValidationHostedService>();
 
+        // Ola 60 — Forms internal submission path (ADR 0030).
+        // FileSystemFormSubmissionHandler escribe JSON por submission a
+        // App_Data/syn-form-submissions/{formKey}/. Para producción de
+        // volumen, swap por adapter sobre queue/email — la seam
+        // IFormSubmissionHandler aisla al controller del storage.
+        // InMemoryFormRateLimiter mantiene sliding window por (IP, formKey)
+        // — singleton para que el estado persista entre requests del
+        // mismo proceso.
+        services.AddSingleton<IFormSubmissionHandler, FileSystemFormSubmissionHandler>();
+        services.AddSingleton<InMemoryFormRateLimiter>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;
