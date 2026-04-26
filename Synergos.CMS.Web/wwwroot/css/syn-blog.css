@@ -1,0 +1,172 @@
+/* ============================================================
+   Synergos CMS — Blog blocks
+   ============================================================
+   ArticleList renderer + BlogHighlight + Tag list.
+   Cargado siempre via _Layout. Page templates (post/category)
+   están en syn-pages.css; este archivo cubre los BLOCKS que un
+   editor inserta dentro de cualquier page.
+   ------------------------------------------------------------ */
+
+/* ── Tag list / Tag pill ─────────────────────────────────────── */
+
+.syn-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--syn-space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.syn-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+  padding: var(--syn-space-1) var(--syn-space-3);
+  background: var(--syn-color-surface-tertiary);
+  color: var(--syn-color-text-secondary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-full);
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-medium);
+  text-decoration: none;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-tag:hover {
+  background: var(--syn-color-state-brand-surface);
+  color: var(--syn-color-state-brand-text);
+  border-color: var(--syn-color-state-brand-border);
+  text-decoration: none;
+}
+
+.syn-tag::before {
+  content: '#';
+  color: var(--syn-color-text-muted);
+}
+
+/* ── Author byline (compContentAuthor) ───────────────────────── */
+
+.syn-author {
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-md);
+  padding: var(--syn-space-md);
+  background: var(--syn-color-surface-secondary);
+  border-radius: var(--syn-radius-md);
+}
+
+.syn-author__avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--syn-color-state-brand-surface);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.syn-author__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.syn-author__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-1);
+}
+
+.syn-author__name {
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-primary);
+  margin: 0;
+}
+
+.syn-author__role {
+  color: var(--syn-color-text-muted);
+  font-size: var(--syn-font-size-sm);
+}
+
+.syn-author__bio {
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-relaxed);
+  margin-top: var(--syn-space-2);
+}
+
+/* ── Reading time / metadata badges ──────────────────────────── */
+
+.syn-reading-time {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+}
+
+.syn-reading-time::before {
+  content: '⏱';
+}
+
+/* ── Code block (elementCompositionsCodeBlock) ───────────────── */
+
+.syn-code-block {
+  position: relative;
+  padding: var(--syn-space-md);
+  background: var(--syn-color-neutral-900);
+  color: var(--syn-color-neutral-100);
+  border-radius: var(--syn-radius-md);
+  overflow-x: auto;
+  font-family: var(--syn-font-family-mono);
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-normal);
+  margin: var(--syn-space-md) 0;
+}
+
+.syn-code-block__lang {
+  position: absolute;
+  top: var(--syn-space-2);
+  right: var(--syn-space-3);
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-neutral-400);
+  text-transform: uppercase;
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+}
+
+.syn-code-block code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* ── Pull quote ──────────────────────────────────────────────── */
+
+.syn-pull-quote {
+  margin: var(--syn-space-2xl) 0;
+  padding: var(--syn-space-xl);
+  background: var(--syn-color-surface-accent-soft);
+  border-left: 4px solid var(--syn-color-action-primary);
+  border-radius: var(--syn-radius-md);
+  font-size: var(--syn-font-size-xl);
+  font-style: italic;
+  line-height: var(--syn-line-height-relaxed);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-pull-quote__cite {
+  display: block;
+  margin-top: var(--syn-space-md);
+  font-style: normal;
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-muted);
+}
+
+.syn-pull-quote__cite::before {
+  content: '— ';
+}
