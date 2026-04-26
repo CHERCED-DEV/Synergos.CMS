@@ -291,6 +291,33 @@ public sealed class AccountController : Controller
 
     private static string ResolveSiteName() => "Synergos";
 
+    [HttpGet("resend-confirmation")]
+    [AllowAnonymous]
+    public IActionResult ResendConfirmation([FromQuery(Name = "msg")] string? messageCode = null)
+    {
+        ViewData["MessageCode"] = messageCode;
+        return View();
+    }
+
+    [HttpPost("resend-confirmation")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResendConfirmationPost(
+        string email,
+        CancellationToken cancellationToken)
+    {
+        // Anti-enumeration + idempotente: respondemos OK siempre, aunque
+        // el email no exista o ya esté confirmado. Solo enviamos email
+        // si MemberExists && !AlreadyConfirmed.
+        await SendEmailConfirmationLinkAsync(email, cancellationToken);
+
+        _analytics.Track("account.resend-confirmation-requested", new Dictionary<string, object?>
+        {
+            ["email"] = email,
+        });
+
+        return RedirectToAction(nameof(ResendConfirmation), new { msg = "sent" });
+    }
+
     [HttpGet("registered")]
     [AllowAnonymous]
     public IActionResult Registered([FromQuery] string? email = null)
