@@ -1,3 +1,4 @@
+using Synergos.CMS.Application.Constants;
 using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Web;
@@ -29,7 +30,7 @@ namespace Synergos.CMS.Web.Services;
 public sealed class DefaultPageRenderContextResolver : IPageRenderContextResolver
 {
     private const string SiteRootAlias = "siteRoot";
-    private const string InheritValue = "inherit";
+    private const string InheritValue = DropdownOptions.ChromeMode.Inherit;
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
 
@@ -56,8 +57,8 @@ public sealed class DefaultPageRenderContextResolver : IPageRenderContextResolve
         var headerMode = ResolveString(page, siteRoot, "headerMode", defaults.HeaderMode);
         var footerMode = ResolveString(page, siteRoot, "footerMode", defaults.FooterMode);
 
-        var showHeader = ChromeAllowsChrome(chromeMode) && !string.Equals(headerMode, "hidden", StringComparison.OrdinalIgnoreCase);
-        var showFooter = ChromeAllowsChrome(chromeMode) && !string.Equals(footerMode, "hidden", StringComparison.OrdinalIgnoreCase);
+        var showHeader = ChromeAllowsChrome(chromeMode) && !string.Equals(headerMode, DropdownOptions.HeaderMode.Hidden, StringComparison.OrdinalIgnoreCase);
+        var showFooter = ChromeAllowsChrome(chromeMode) && !string.Equals(footerMode, DropdownOptions.FooterMode.Hidden, StringComparison.OrdinalIgnoreCase);
 
         var showTitle = ResolveBool(page, siteRoot, "showTitle", defaults.ShowTitle) && ChromeAllowsContent(chromeMode);
         var showBreadcrumbs = ResolveBool(page, siteRoot, "showBreadcrumbs", defaults.ShowBreadcrumbs) && ChromeAllowsChrome(chromeMode);
@@ -129,10 +130,10 @@ public sealed class DefaultPageRenderContextResolver : IPageRenderContextResolve
     }
 
     private static bool ChromeAllowsChrome(string chromeMode) =>
-        !string.Equals(chromeMode, "none", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(chromeMode, "bare", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(chromeMode, "embedded", StringComparison.OrdinalIgnoreCase);
+        !string.Equals(chromeMode, DropdownOptions.ChromeMode.None, StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(chromeMode, DropdownOptions.ChromeMode.Bare, StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(chromeMode, DropdownOptions.ChromeMode.Embedded, StringComparison.OrdinalIgnoreCase);
 
     private static bool ChromeAllowsContent(string chromeMode) =>
-        !string.Equals(chromeMode, "none", StringComparison.OrdinalIgnoreCase);
+        !string.Equals(chromeMode, DropdownOptions.ChromeMode.None, StringComparison.OrdinalIgnoreCase);
 }
