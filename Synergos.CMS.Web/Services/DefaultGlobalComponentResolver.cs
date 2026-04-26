@@ -9,21 +9,30 @@ namespace Synergos.CMS.Web.Services;
 /// <summary>
 /// Default <see cref="IGlobalComponentResolver"/>. Resuelve la primera
 /// pieza activa de cada tipo (alerta, banner, aviso footer, modal)
-/// que aplique al request actual, buscando en dos fuentes en orden
+/// que aplique al request actual, buscando en TRES fuentes en orden
 /// de prioridad:
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>Prioridad 1 — Transversales repository (Ola 70):</strong>
-/// busca <c>transversalAlert</c>/<c>transversalModal</c>/<c>transversalBanner</c>/
-/// <c>transversalFooterNote</c> publicados (Document types que componen
-/// los <c>cfg*</c>, así heredan los mismos aliases de propiedades).
-/// El primer nodo activo + dentro de su ventana programada gana.
+/// <strong>Prioridad 1 — Selector explícito en siteRoot (Ola 71):</strong>
+/// el editor elige via ContentPicker (compTransversalSelectors:
+/// activeAlertNode/activeBannerNode/activeFooterNoteNode/activeModalNode)
+/// cuál nodo del repositorio está activo. Si el ContentPicker apunta
+/// a un nodo válido + activo + en ventana programada, gana sin
+/// consultar las otras fuentes.
 /// </para>
 /// <para>
-/// <strong>Prioridad 2 — Legacy BlockList (Olas 50 + 52):</strong>
+/// <strong>Prioridad 2 — Repository scan (Ola 70):</strong>
+/// si el selector explícito no aplica, busca el primer
+/// <c>transversalAlert</c>/<c>transversalModal</c>/<c>transversalBanner</c>/
+/// <c>transversalFooterNote</c> publicado activo + en ventana. Permite
+/// auto-rotación de campañas sin tocar el siteRoot.
+/// </para>
+/// <para>
+/// <strong>Prioridad 3 — Legacy BlockList (Olas 50 + 52):</strong>
 /// fallback al <c>globalComponents</c> BlockList del primer
-/// <c>siteConfigSettings</c> publicado.
+/// <c>siteConfigSettings</c> publicado. Backward compat con sites que
+/// no migraron al repositorio.
 /// </para>
 /// <para>
 /// Vive en <c>Synergos.CMS.Web</c> porque depende de
@@ -52,6 +61,12 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
     private const string SuppressFooterNoteAlias = "suppressGlobalFooterNote";
     private const string SuppressModalAlias = "suppressGlobalModal";
 
+    private const string SiteRootAlias = "siteRoot";
+    private const string ActiveAlertNodeAlias = "activeAlertNode";
+    private const string ActiveBannerNodeAlias = "activeBannerNode";
+    private const string ActiveFooterNoteNodeAlias = "activeFooterNoteNode";
+    private const string ActiveModalNodeAlias = "activeModalNode";
+
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
 
     public DefaultGlobalComponentResolver(IUmbracoContextAccessor umbracoContextAccessor) =>
@@ -64,7 +79,11 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             return null;
         }
 
-        var element = FindActiveTransversal(TransversalAlertAlias, "alertActive", "alertScheduleStart", "alertScheduleEnd");
+        // Prioridad 1: selector explícito en siteRoot (Ola 71.9).
+        var element = ResolveExplicitSelector(ActiveAlertNodeAlias, "alertActive", "alertScheduleStart", "alertScheduleEnd");
+        // Prioridad 2: repository scan (Ola 70).
+        element ??= FindActiveTransversal(TransversalAlertAlias, "alertActive", "alertScheduleStart", "alertScheduleEnd");
+        // Prioridad 3: BlockList legacy (Olas 50 + 52).
         if (element is null && TryGetGlobalComponentsBlockList(out var blocks))
         {
             element = FindActiveInBlockList(blocks, CfgAlertAlias, "alertActive", "alertScheduleStart", "alertScheduleEnd");
@@ -99,7 +118,8 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             return null;
         }
 
-        var element = FindActiveTransversal(TransversalBannerAlias, "bannerActive", "bannerScheduleStart", "bannerScheduleEnd");
+        var element = ResolveExplicitSelector(ActiveBannerNodeAlias, "bannerActive", "bannerScheduleStart", "bannerScheduleEnd");
+        element ??= FindActiveTransversal(TransversalBannerAlias, "bannerActive", "bannerScheduleStart", "bannerScheduleEnd");
         if (element is null && TryGetGlobalComponentsBlockList(out var blocks))
         {
             element = FindActiveInBlockList(blocks, CfgBannerAlias, "bannerActive", "bannerScheduleStart", "bannerScheduleEnd");
@@ -134,7 +154,8 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             return null;
         }
 
-        var element = FindActiveTransversal(TransversalFooterNoteAlias, "footerNoteActive", "footerNoteScheduleStart", "footerNoteScheduleEnd");
+        var element = ResolveExplicitSelector(ActiveFooterNoteNodeAlias, "footerNoteActive", "footerNoteScheduleStart", "footerNoteScheduleEnd");
+        element ??= FindActiveTransversal(TransversalFooterNoteAlias, "footerNoteActive", "footerNoteScheduleStart", "footerNoteScheduleEnd");
         if (element is null && TryGetGlobalComponentsBlockList(out var blocks))
         {
             element = FindActiveInBlockList(blocks, CfgFooterNoteAlias, "footerNoteActive", "footerNoteScheduleStart", "footerNoteScheduleEnd");
@@ -165,7 +186,8 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             return null;
         }
 
-        var element = FindActiveTransversal(TransversalModalAlias, "modalActive", "modalScheduleStart", "modalScheduleEnd");
+        var element = ResolveExplicitSelector(ActiveModalNodeAlias, "modalActive", "modalScheduleStart", "modalScheduleEnd");
+        element ??= FindActiveTransversal(TransversalModalAlias, "modalActive", "modalScheduleStart", "modalScheduleEnd");
         if (element is null && TryGetGlobalComponentsBlockList(out var blocks))
         {
             element = FindActiveInBlockList(blocks, CfgModalAlias, "modalActive", "modalScheduleStart", "modalScheduleEnd");
@@ -212,7 +234,67 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
     }
 
     /// <summary>
-    /// Prioridad 1: busca el primer nodo Document publicado del tipo
+    /// Prioridad 1: si el siteRoot tiene un ContentPicker apuntando a un
+    /// nodo del repositorio (compTransversalSelectors), valida que el
+    /// nodo esté activo + en ventana y lo devuelve. Si el picker está
+    /// vacío, devuelve null para que el caller intente las otras
+    /// fuentes.
+    /// </summary>
+    private IPublishedElement? ResolveExplicitSelector(
+        string selectorAlias,
+        string activeAlias,
+        string scheduleStartAlias,
+        string scheduleEndAlias)
+    {
+        if (!_umbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext) || umbracoContext.Content is null)
+        {
+            return null;
+        }
+
+        var page = umbracoContext.PublishedRequest?.PublishedContent;
+        var siteRoot = page?.AncestorOrSelf(SiteRootAlias);
+        if (siteRoot is null)
+        {
+            // Sin siteRoot ancestro (ej. PlatformRoot landing) — buscar el
+            // primer siteRoot publicado para que el platform root también
+            // pueda heredar selectores explícitos.
+            siteRoot = umbracoContext.Content.GetAtRoot()
+                .SelectMany(r => r.DescendantsOrSelfOfType(SiteRootAlias))
+                .FirstOrDefault();
+            if (siteRoot is null)
+            {
+                return null;
+            }
+        }
+
+        var picked = siteRoot.Value<IPublishedContent>(selectorAlias);
+        if (picked is null)
+        {
+            return null;
+        }
+
+        if (!picked.Value<bool>(activeAlias))
+        {
+            return null;
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        var start = picked.Value<DateTime?>(scheduleStartAlias);
+        if (start.HasValue && nowUtc < start.Value.ToUniversalTime())
+        {
+            return null;
+        }
+        var end = picked.Value<DateTime?>(scheduleEndAlias);
+        if (end.HasValue && nowUtc > end.Value.ToUniversalTime())
+        {
+            return null;
+        }
+
+        return picked;
+    }
+
+    /// <summary>
+    /// Prioridad 2: busca el primer nodo Document publicado del tipo
     /// transversal indicado que esté activo + dentro de su ventana
     /// programada. Funciona porque los transversal* componen los cfg*
     /// y heredan los mismos alias de propiedades.
