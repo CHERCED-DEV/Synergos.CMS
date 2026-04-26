@@ -41,5 +41,8 @@ public sealed class OptionsComposer : IComposer
 
         builder.Services.Configure<DevSeedSettings>(
             builder.Config.GetSection("Synergos:DevSeed"));
+
+        builder.Services.Configure<MembersSettings>(
+            builder.Config.GetSection("Synergos:Members"));
     }
 }

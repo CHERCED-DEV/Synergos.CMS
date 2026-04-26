@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Notifications;
@@ -19,9 +21,9 @@ namespace Synergos.CMS.Web.Notifications;
 /// punto correcto para corto-circuitar el render: no se ejecuta la
 /// view ni controllers; se devuelve redirect 302 al login.
 ///
-/// Decisión de diseño: el path de login se hardcodea a <c>/login</c>.
-/// Cuando aterrice configuración fina de members (Ola 53+), se
-/// reemplaza por <c>IOptions&lt;MembersSettings&gt;</c>.
+/// El path de login se lee de
+/// <see cref="MembersSettings.LoginPath"/> (default <c>/login</c>;
+/// configurable vía <c>Synergos:Members:LoginPath</c>).
 ///
 /// Fail-open por seguridad: si la página no compone
 /// <c>compMemberGating</c> o <c>requiresAuth=false</c>, este handler
@@ -29,22 +31,25 @@ namespace Synergos.CMS.Web.Notifications;
 /// </remarks>
 public sealed class MemberGatingHandler : INotificationHandler<RoutingRequestNotification>
 {
-    private const string LoginPath = "/login";
     private const string RequiresAuthAlias = "requiresAuth";
     private const string AllowedRolesCsvAlias = "allowedRolesCsv";
 
     private readonly IMemberAccessGate _memberAccessGate;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<MemberGatingHandler> _logger;
+    private readonly string _loginPath;
 
     public MemberGatingHandler(
         IMemberAccessGate memberAccessGate,
         IHttpContextAccessor httpContextAccessor,
+        IOptions<MembersSettings> membersSettings,
         ILogger<MemberGatingHandler> logger)
     {
         _memberAccessGate = memberAccessGate;
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
+        var settings = membersSettings.Value;
+        _loginPath = string.IsNullOrWhiteSpace(settings.LoginPath) ? "/login" : settings.LoginPath;
     }
 
     public void Handle(RoutingRequestNotification notification)
@@ -71,12 +76,12 @@ public sealed class MemberGatingHandler : INotificationHandler<RoutingRequestNot
         }
 
         var currentUrl = _httpContextAccessor.HttpContext?.Request?.Path.Value ?? content.Url();
-        var redirectTarget = $"{LoginPath}?returnUrl={Uri.EscapeDataString(currentUrl)}";
+        var redirectTarget = $"{_loginPath}?returnUrl={Uri.EscapeDataString(currentUrl)}";
 
         _logger.LogInformation(
             "Member gating: redirecting unauthenticated request from {ContentUrl} to {LoginPath}",
             currentUrl,
-            LoginPath);
+            _loginPath);
 
         requestBuilder.SetRedirect(redirectTarget);
     }
