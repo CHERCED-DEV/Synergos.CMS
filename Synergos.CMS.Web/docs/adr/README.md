@@ -50,6 +50,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0041](0041-lego-canonical-map-and-coupling-audit.md) | Mapa Lego canónico + auditoría de acoplamientos (30 compositions verified, DTSelect overlaps non-duplicate, pageBasic vs pageBare clarified, bug crítico compBranding fix, "regla del Lego ensamblable" 5 puntos) | Accepted |
 | [0042](0042-error-pages-typed-views-dropdown-consts-misc-cleanup.md) | Error pages transversales (transversalErrorPage + ErrorController + UseStatusCodePagesWithReExecute) + DropdownOptions const class (13 DTSelect mirrors) + Typed views first batch (PlatformRoot/SearchPage) + SSR audit verbal + ICompositionReader audit | Accepted |
 | [0043](0043-email-consumers-error-blocks-cart-abandonment-typed-views.md) | Email consumers wired (password reset + form notifications) + Error pages BlockGrid + Cart abandonment tracker + Typed views progress (PostPage) | Accepted |
+| [0044](0044-email-templates-confirmation-typed-views-progress.md) | IEmailTemplateRenderer Razor-compiled + Email confirmation post-registro flow + Typed views progress (PostCategoryPage/ProductCategoryPage/FlowDefinition/FlowStep) | Accepted |
 
 ## Rules
 
