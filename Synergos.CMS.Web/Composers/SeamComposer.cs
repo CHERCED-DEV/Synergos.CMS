@@ -106,6 +106,12 @@ public sealed class SeamComposer : IComposer
         // Consumido por ProductGrid block + ProductCategoryPage.cshtml.
         services.AddTransient<IShopQuery, DefaultShopQuery>();
 
+        // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
+        // sigue en su valor default bajo env != "Development". No detiene
+        // el app; solo señala en el log para que el operador rote la clave
+        // antes de exponer al público (ver ADR 0028 — TODO cerrado).
+        services.AddHostedService<CartSecretKeyValidationHostedService>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;
