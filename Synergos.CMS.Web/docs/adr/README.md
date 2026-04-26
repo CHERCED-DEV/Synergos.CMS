@@ -54,6 +54,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0045](0045-resend-confirmation-brand-emails-search-analytics-comments-moderation.md) | Resend email confirmation endpoint + brand-aware email SiteName via IBrandingProvider + Search analytics store + endpoint + Comments moderation (ICommentRepository extends approve/reject + CommentsModerationController role-gated) | Accepted |
 | [0046](0046-search-analytics-gate-brand-email-subjects-comment-moderation-notifier.md) | Search analytics role gate (SearchSettings.AnalyticsAdminRolesCsv) + brand-aware email subjects (3 call sites) + ICommentModerationNotifier seam con email default + hook fire-and-forget en CommentsController | Accepted |
 | [0047](0047-composite-notifier-pattern-comments-and-forms.md) | Composite + Channel notifier pattern para Comments y Forms (ICommentModerationNotifierChannel + WebhookCommentModerationNotifier + IFormSubmissionNotifier seam + IFormSubmissionNotifierChannel + Email/Webhook channels + composites + slim FormSubmissionsController) | Accepted |
+| [0048](0048-css-design-system-aligned-with-synergos-ui.md) | CSS design system aligned with Synergos.UI — 13 archivos modulares (tokens/base/utilities/layout/chrome/primitives + per-area pages/shop/search/comments/globals/flow/member/blog/account/error) ~4400 líneas vanilla, 3 themes light/dark/silverGold, aliases legacy preserved, _AccountHead partial para 8 views Layout=null | Accepted |
 
 ## Rules
 
