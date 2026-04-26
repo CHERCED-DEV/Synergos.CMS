@@ -12,6 +12,7 @@
     - <html lang> con la cultura activa
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<dynamic>
+@using Umbraco.Cms.Core.Models.Blocks
 @using Umbraco.Extensions
 @using Microsoft.Extensions.Configuration
 @inject Synergos.CMS.Interfaces.IBrandingProvider Branding
@@ -41,6 +42,15 @@
 
     var brandThemeModel = new Synergos.CMS.Application.Dto.Responses.BrandThemeStyleModel(theme, renderCtx.ThemeVariant);
     var devStubEnabled = Configuration.GetValue<bool>("Synergos:DevCss:Enabled");
+
+    // Ola 69.4 — compSiteChrome: si el siteRoot tiene bloques en
+    // siteHeaderBlocks o siteFooterBlocks, los renderizamos en lugar
+    // del chrome default. Vacíos = comportamiento previo idéntico
+    // (backward compat).
+    var customHeaderBlocks = siteRoot?.Value<BlockGridModel>("siteHeaderBlocks");
+    var customFooterBlocks = siteRoot?.Value<BlockGridModel>("siteFooterBlocks");
+    var hasCustomHeader = customHeaderBlocks is not null && customHeaderBlocks.Any();
+    var hasCustomFooter = customFooterBlocks is not null && customFooterBlocks.Any();
 }
 <!DOCTYPE html>
 <html lang="@culture" data-theme="@renderCtx.ThemeVariant" data-surface="@renderCtx.PageSurface" data-profile="@renderCtx.VisualProfile">
@@ -70,36 +80,45 @@
     }
     @if (renderCtx.ShowHeader)
     {
-        <header class="syn-site-header syn-site-header--@renderCtx.HeaderMode">
-            <div class="syn-site-header__inner">
-                @if (siteRoot != null)
-                {
-                    <a class="syn-site-header__brand" href="@siteRoot.Url()">@siteName</a>
-                }
-                else
-                {
-                    <span class="syn-site-header__brand">@siteName</span>
-                }
-                @if (navItems.Any())
-                {
-                    <nav class="syn-site-nav" aria-label="Main navigation">
-                        <ul class="syn-site-nav__list">
-                            @foreach (var item in navItems)
-                            {
-                                var isCurrent = currentPage != null && item.Id == currentPage.Id;
-                                var navTitle = item.Value<string>("navigationTitle");
-                                var label = string.IsNullOrWhiteSpace(navTitle) ? item.Name : navTitle;
-                                <li class="syn-site-nav__item">
-                                    <a class="syn-site-nav__link@(isCurrent ? " syn-site-nav__link--current" : "")"
-                                       href="@item.Url()"
-                                       @(isCurrent ? Html.Raw("aria-current=\"page\"") : null)>@label</a>
-                                </li>
-                            }
-                        </ul>
-                    </nav>
-                }
-            </div>
-        </header>
+        if (hasCustomHeader)
+        {
+            <header class="syn-site-header syn-site-header--custom syn-site-header--@renderCtx.HeaderMode">
+                @await Html.GetBlockGridHtmlAsync(customHeaderBlocks!)
+            </header>
+        }
+        else
+        {
+            <header class="syn-site-header syn-site-header--@renderCtx.HeaderMode">
+                <div class="syn-site-header__inner">
+                    @if (siteRoot != null)
+                    {
+                        <a class="syn-site-header__brand" href="@siteRoot.Url()">@siteName</a>
+                    }
+                    else
+                    {
+                        <span class="syn-site-header__brand">@siteName</span>
+                    }
+                    @if (navItems.Any())
+                    {
+                        <nav class="syn-site-nav" aria-label="Main navigation">
+                            <ul class="syn-site-nav__list">
+                                @foreach (var item in navItems)
+                                {
+                                    var isCurrent = currentPage != null && item.Id == currentPage.Id;
+                                    var navTitle = item.Value<string>("navigationTitle");
+                                    var label = string.IsNullOrWhiteSpace(navTitle) ? item.Name : navTitle;
+                                    <li class="syn-site-nav__item">
+                                        <a class="syn-site-nav__link@(isCurrent ? " syn-site-nav__link--current" : "")"
+                                           href="@item.Url()"
+                                           @(isCurrent ? Html.Raw("aria-current=\"page\"") : null)>@label</a>
+                                    </li>
+                                }
+                            </ul>
+                        </nav>
+                    }
+                </div>
+            </header>
+        }
     }
     <main id="main-content" class="syn-site-main syn-site-main--@renderCtx.ContainerType syn-site-main--spacing-@renderCtx.SpacingScale">
         @if (renderCtx.ShowBreadcrumbs && currentPage != null)
@@ -114,33 +133,46 @@
     }
     @if (renderCtx.ShowFooter)
     {
-        <footer class="syn-site-footer syn-site-footer--@renderCtx.FooterMode">
-            <div class="syn-site-footer__inner">
-                @{
-                    var footerNav = siteRoot?.Children
-                        .Where(c => c.IsVisible() && !c.Value<bool>("hideFromFooter"))
-                        .ToList();
-                }
-                @if (footerNav is { Count: > 0 } && !string.Equals(renderCtx.FooterMode, "minimal", StringComparison.OrdinalIgnoreCase))
-                {
-                    <nav class="syn-site-footer__nav" aria-label="Footer navigation">
-                        <ul class="syn-site-footer__nav-list">
-                            @foreach (var item in footerNav)
-                            {
-                                var navTitle = item.Value<string>("navigationTitle");
-                                var label = string.IsNullOrWhiteSpace(navTitle) ? item.Name : navTitle;
-                                <li><a href="@item.Url()">@label</a></li>
-                            }
-                        </ul>
-                    </nav>
-                }
-                <p class="syn-site-footer__copyright">&copy; @yearNow @siteName</p>
+        if (hasCustomFooter)
+        {
+            <footer class="syn-site-footer syn-site-footer--custom syn-site-footer--@renderCtx.FooterMode">
+                @await Html.GetBlockGridHtmlAsync(customFooterBlocks!)
                 @if (globalFooterNote is not null)
                 {
                     @await Html.PartialAsync("_GlobalFooterNote", globalFooterNote)
                 }
-            </div>
-        </footer>
+            </footer>
+        }
+        else
+        {
+            <footer class="syn-site-footer syn-site-footer--@renderCtx.FooterMode">
+                <div class="syn-site-footer__inner">
+                    @{
+                        var footerNav = siteRoot?.Children
+                            .Where(c => c.IsVisible() && !c.Value<bool>("hideFromFooter"))
+                            .ToList();
+                    }
+                    @if (footerNav is { Count: > 0 } && !string.Equals(renderCtx.FooterMode, "minimal", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <nav class="syn-site-footer__nav" aria-label="Footer navigation">
+                            <ul class="syn-site-footer__nav-list">
+                                @foreach (var item in footerNav)
+                                {
+                                    var navTitle = item.Value<string>("navigationTitle");
+                                    var label = string.IsNullOrWhiteSpace(navTitle) ? item.Name : navTitle;
+                                    <li><a href="@item.Url()">@label</a></li>
+                                }
+                            </ul>
+                        </nav>
+                    }
+                    <p class="syn-site-footer__copyright">&copy; @yearNow @siteName</p>
+                    @if (globalFooterNote is not null)
+                    {
+                        @await Html.PartialAsync("_GlobalFooterNote", globalFooterNote)
+                    }
+                </div>
+            </footer>
+        }
     }
     @if (globalModal is not null)
     {
