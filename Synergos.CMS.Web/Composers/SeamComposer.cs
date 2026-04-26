@@ -153,6 +153,13 @@ public sealed class SeamComposer : IComposer
         // form notifications cuando se cableen los consumidores.
         services.AddSingleton<IEmailService, DefaultEmailService>();
 
+        // Ola 82 — Email template rendering (ADR 0044). RazorEmailTemplateRenderer
+        // permite a consumers (AccountController, FormSubmissionsController)
+        // componer emails con branding consistente sin string concat.
+        // Singleton — depende de IRazorViewEngine + ITempDataProvider +
+        // IServiceProvider (todos singleton).
+        services.AddSingleton<IEmailTemplateRenderer, RazorEmailTemplateRenderer>();
+
         // Ola 66 — Output cache para endpoints operacionales sitemap/RSS
         // (ADR 0036). IMemoryCache es estandar ASP.NET Core — registra
         // explicito por si Umbraco no lo cableo. Idempotente.

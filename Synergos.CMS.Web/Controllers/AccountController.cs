@@ -19,6 +19,7 @@ public sealed class AccountController : Controller
     private readonly IMemberAccessGate _gate;
     private readonly IAnalyticsTracker _analytics;
     private readonly IEmailService _emailService;
+    private readonly IEmailTemplateRenderer _emailRenderer;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
@@ -26,12 +27,14 @@ public sealed class AccountController : Controller
         IMemberAccessGate gate,
         IAnalyticsTracker analytics,
         IEmailService emailService,
+        IEmailTemplateRenderer emailRenderer,
         ILogger<AccountController> logger)
     {
         _authService = authService;
         _gate = gate;
         _analytics = analytics;
         _emailService = emailService;
+        _emailRenderer = emailRenderer;
         _logger = logger;
     }
 
@@ -179,12 +182,13 @@ public sealed class AccountController : Controller
                 $"?email={Uri.EscapeDataString(email)}" +
                 $"&token={Uri.EscapeDataString(resetRequest.Token)}";
 
-            var bodyHtml =
-                $"<p>Hola {System.Net.WebUtility.HtmlEncode(resetRequest.DisplayName ?? email)},</p>" +
-                $"<p>Recibimos una solicitud para restablecer tu contraseña. Para continuar, haz clic en el siguiente enlace:</p>" +
-                $"<p><a href=\"{resetUrl}\">Restablecer contraseña</a></p>" +
-                $"<p>Si tú no solicitaste esto, puedes ignorar este email — tu contraseña no cambiará.</p>" +
-                $"<p>El enlace expira en 1 hora.</p>";
+            var bodyHtml = await _emailRenderer.RenderAsync(
+                viewName: "PasswordReset",
+                model: new Synergos.CMS.Web.Services.PasswordResetEmailModel(
+                    DisplayName: resetRequest.DisplayName ?? email,
+                    ResetUrl: resetUrl,
+                    SiteName: "Synergos"),
+                cancellationToken);
 
             await _emailService.SendAsync(new EmailMessage(
                 To: email,

@@ -36,6 +36,7 @@ public sealed class FormSubmissionsController : ControllerBase
     private readonly ILogger<FormSubmissionsController> _logger;
     private readonly IAnalyticsTracker _analytics;
     private readonly IEmailService _emailService;
+    private readonly IEmailTemplateRenderer _emailRenderer;
 
     public FormSubmissionsController(
         IFormSubmissionHandler handler,
@@ -43,7 +44,8 @@ public sealed class FormSubmissionsController : ControllerBase
         IOptions<FormsSettings> options,
         ILogger<FormSubmissionsController> logger,
         IAnalyticsTracker analytics,
-        IEmailService emailService)
+        IEmailService emailService,
+        IEmailTemplateRenderer emailRenderer)
     {
         _handler = handler;
         _rateLimiter = rateLimiter;
@@ -51,6 +53,7 @@ public sealed class FormSubmissionsController : ControllerBase
         _logger = logger;
         _analytics = analytics;
         _emailService = emailService;
+        _emailRenderer = emailRenderer;
     }
 
     [HttpPost("{formKey}/submit")]
@@ -154,33 +157,32 @@ public sealed class FormSubmissionsController : ControllerBase
         string toAddress,
         CancellationToken cancellationToken)
     {
-        var bodyBuilder = new System.Text.StringBuilder();
-        bodyBuilder.AppendLine($"<p><strong>Form key:</strong> {System.Net.WebUtility.HtmlEncode(formKey)}</p>");
-        bodyBuilder.AppendLine($"<p><strong>Origen:</strong> {System.Net.WebUtility.HtmlEncode(referrer)}</p>");
-        bodyBuilder.AppendLine($"<p><strong>IP:</strong> {System.Net.WebUtility.HtmlEncode(clientIp)}</p>");
-        bodyBuilder.AppendLine($"<p><strong>Recibido:</strong> {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</p>");
-        bodyBuilder.AppendLine("<hr/>");
-        bodyBuilder.AppendLine("<table style=\"width:100%;border-collapse:collapse\"><tbody>");
-        foreach (var (key, value) in fields)
-        {
-            bodyBuilder.AppendLine(
-                $"<tr><th style=\"text-align:left;padding:6px;border-bottom:1px solid #eee\">{System.Net.WebUtility.HtmlEncode(key)}</th>" +
-                $"<td style=\"padding:6px;border-bottom:1px solid #eee\">{System.Net.WebUtility.HtmlEncode(value)}</td></tr>");
-        }
-        bodyBuilder.AppendLine("</tbody></table>");
-
         try
         {
+            // Ola 82 — Razor template con branding consistente reemplaza
+            // string concat inline. Los HtmlEncode los aplica Razor
+            // automáticamente al @value.
+            var bodyHtml = await _emailRenderer.RenderAsync(
+                viewName: "FormNotification",
+                model: new Services.FormNotificationEmailModel(
+                    FormKey: formKey,
+                    Fields: fields,
+                    ClientIp: clientIp,
+                    Referrer: referrer,
+                    ReceivedAtUtc: DateTime.UtcNow,
+                    SiteName: "Synergos"),
+                cancellationToken);
+
             await _emailService.SendAsync(new EmailMessage(
                 To: toAddress,
                 Subject: $"[Form] Nueva submission: {formKey}",
-                BodyHtml: bodyBuilder.ToString()),
+                BodyHtml: bodyHtml),
                 cancellationToken);
         }
         catch (Exception ex)
         {
             // Defense-in-depth: el envío del email NO debe romper el
-            // pipeline si el SMTP falla. Log + continue.
+            // pipeline si el SMTP falla o el template no compila. Log + continue.
             _logger.LogWarning(ex,
                 "Form notification email failed: formKey={FormKey} to={To}",
                 formKey, toAddress);
