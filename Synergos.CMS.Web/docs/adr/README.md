@@ -46,6 +46,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0037](0037-analytics-tracker-instrumentation.md) | Analytics tracker + instrumentación de 4 módulos (IAnalyticsTracker + LoggerAnalyticsTracker + 11 evento slugs en Search/Forms/Shop/Account) | Accepted |
 | [0038](0038-comments-runtime-end-to-end.md) | Comments runtime end-to-end (ICommentRepository + FileSystemCommentRepository + CommentsController + elementCommentThread schema + renderer + reuso rate-limit) | Accepted |
 | [0039](0039-site-chrome-editable-and-per-site-config.md) | Site Chrome editable + PlatformRoot landing + per-site Configuration folder (compSiteChrome 2 BlockGrid slots + PlatformRoot template + siteConfigFolder UX) | Accepted |
+| [0040](0040-architectural-consolidation-theme-chrome-config-transversals-brand.md) | Gran Consolidación Arquitectónica: theme inheritance pura (siteRoot only) + chrome triádico (header/footer/aside) + siteConfiguration unificado + compTransversalSelectors drop-down + brand inheritance pura + ModelsBuilder SourceCodeAuto setup | Accepted |
 
 ## Rules
 
