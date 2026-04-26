@@ -59,5 +59,8 @@ public sealed class OptionsComposer : IComposer
 
         builder.Services.Configure<OutputCacheSettings>(
             builder.Config.GetSection("Synergos:OutputCache"));
+
+        builder.Services.Configure<CommentsSettings>(
+            builder.Config.GetSection("Synergos:Comments"));
     }
 }

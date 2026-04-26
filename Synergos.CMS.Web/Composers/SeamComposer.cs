@@ -156,6 +156,13 @@ public sealed class SeamComposer : IComposer
         // depende de ILogger (singleton).
         services.AddSingleton<IAnalyticsTracker, LoggerAnalyticsTracker>();
 
+        // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
+        // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).
+        // Singleton — solo depende de IOptions + IHostEnvironment + ILogger.
+        // Para concurrent-heavy o > 1000 comments por nodo, swap por adapter
+        // sobre DB.
+        services.AddSingleton<ICommentRepository, FileSystemCommentRepository>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;
