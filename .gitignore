@@ -34,6 +34,15 @@ Synergos.CMS.Web/umbraco/mediacache/
 Synergos.CMS.Web/App_Data/
 Synergos.CMS.Web/wwwroot/media/
 
+# ───────────────────────── ModelsBuilder generated code ──────────────
+# SourceCodeAuto regenera estos archivos cada vez que cambia el schema.
+# Son OUTPUT del schema XML uSync, no SOURCE — el agente nunca los
+# edita a mano. Versionarlos crearia conflictos cuando dos devs tienen
+# schemas diferentes. Local-only.
+Synergos.CMS.Web/umbraco/models/*.generated.cs
+Synergos.CMS.Web/umbraco/models/all.generated.cs
+Synergos.CMS.Web/umbraco/models/models.generated.hash
+
 # uSync state/history (transient — the v9/ authoritative XMLs are kept)
 Synergos.CMS.Web/uSync/uSync.History/
 Synergos.CMS.Web/uSync/uSync.Logs/
