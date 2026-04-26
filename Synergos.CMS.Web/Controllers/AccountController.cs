@@ -201,17 +201,18 @@ public sealed class AccountController : Controller
                 $"?email={Uri.EscapeDataString(email)}" +
                 $"&token={Uri.EscapeDataString(resetRequest.Token)}";
 
+            var siteName = ResolveSiteName();
             var bodyHtml = await _emailRenderer.RenderAsync(
                 viewName: "PasswordReset",
                 model: new Synergos.CMS.Web.Services.PasswordResetEmailModel(
                     DisplayName: resetRequest.DisplayName ?? email,
                     ResetUrl: resetUrl,
-                    SiteName: ResolveSiteName()),
+                    SiteName: siteName),
                 cancellationToken);
 
             await _emailService.SendAsync(new EmailMessage(
                 To: email,
-                Subject: "Restablece tu contraseña",
+                Subject: $"{siteName} · Restablece tu contraseña",
                 BodyHtml: bodyHtml),
                 cancellationToken);
 
@@ -385,17 +386,18 @@ public sealed class AccountController : Controller
 
         try
         {
+            var siteName = ResolveSiteName();
             var bodyHtml = await _emailRenderer.RenderAsync(
                 viewName: "EmailConfirmation",
                 model: new Synergos.CMS.Web.Services.EmailConfirmationEmailModel(
                     DisplayName: request.DisplayName ?? email,
                     ConfirmUrl: confirmUrl,
-                    SiteName: ResolveSiteName()),
+                    SiteName: siteName),
                 cancellationToken);
 
             await _emailService.SendAsync(new EmailMessage(
                 To: email,
-                Subject: "Confirma tu email",
+                Subject: $"{siteName} · Confirma tu email",
                 BodyHtml: bodyHtml),
                 cancellationToken);
         }

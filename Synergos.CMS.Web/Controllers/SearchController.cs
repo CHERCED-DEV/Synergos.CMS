@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -26,15 +28,21 @@ public sealed class SearchController : ControllerBase
     private readonly ISearchQuery _searchQuery;
     private readonly IAnalyticsTracker _analytics;
     private readonly ISearchAnalyticsStore _analyticsStore;
+    private readonly IMemberAccessGate _gate;
+    private readonly IOptions<SearchSettings> _options;
 
     public SearchController(
         ISearchQuery searchQuery,
         IAnalyticsTracker analytics,
-        ISearchAnalyticsStore analyticsStore)
+        ISearchAnalyticsStore analyticsStore,
+        IMemberAccessGate gate,
+        IOptions<SearchSettings> options)
     {
         _searchQuery = searchQuery;
         _analytics = analytics;
         _analyticsStore = analyticsStore;
+        _gate = gate;
+        _options = options;
     }
 
     /// <summary>
@@ -95,6 +103,14 @@ public sealed class SearchController : ControllerBase
         [FromQuery] DateTime? to,
         [FromQuery] int limit = 20)
     {
+        // Ola 88 — Gate por roles configurados en SearchSettings.
+        // Vacío/null = endpoint abierto (mantener para dev/staging).
+        var rolesCsv = _options.Value.AnalyticsAdminRolesCsv;
+        if (!string.IsNullOrWhiteSpace(rolesCsv) && !_gate.HasAnyRole(rolesCsv))
+        {
+            return Forbid();
+        }
+
         var fromUtc = (from ?? DateTime.UtcNow.AddDays(-30)).ToUniversalTime();
         var toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
         var clampedLimit = Math.Clamp(limit, 1, 100);

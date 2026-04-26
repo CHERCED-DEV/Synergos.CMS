@@ -181,7 +181,7 @@ public sealed class FormSubmissionsController : ControllerBase
 
             await _emailService.SendAsync(new EmailMessage(
                 To: toAddress,
-                Subject: $"[Form] Nueva submission: {formKey}",
+                Subject: $"{siteName} · Nueva submission del form: {formKey}",
                 BodyHtml: bodyHtml),
                 cancellationToken);
         }

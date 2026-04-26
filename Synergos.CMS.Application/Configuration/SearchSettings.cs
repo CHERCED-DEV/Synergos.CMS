@@ -50,4 +50,13 @@ public sealed class SearchSettings
     /// pesan más en la respuesta sin agregar utilidad.
     /// </summary>
     public int ExcerptMaxLength { get; init; } = 200;
+
+    /// <summary>
+    /// Roles (CSV, case-insensitive) que pueden consumir el endpoint
+    /// <c>/api/search/analytics</c>. Default <c>"admin,editor"</c>.
+    /// Vacío o null = endpoint queda completamente abierto (no
+    /// recomendado en producción — los datos son agregados pero
+    /// pueden revelar patrones de búsqueda interna).
+    /// </summary>
+    public string? AnalyticsAdminRolesCsv { get; init; } = "admin,editor";
 }
