@@ -137,6 +137,14 @@ public sealed class SeamComposer : IComposer
         // son scoped (per-request).
         services.AddTransient<IMemberAuthService, DefaultMemberAuthService>();
 
+        // Ola 65 — Email transaccional (ADR 0035). DefaultEmailService
+        // wraps Umbraco.Cms.Core.Mail.IEmailSender — Umbraco gestiona
+        // SMTP transport via Umbraco:CMS:Global:Smtp + pickup directory.
+        // Singleton OK — solo depende de IEmailSender (singleton) +
+        // IOptions + ILogger. Habilita password reset, email confirmation,
+        // form notifications cuando se cableen los consumidores.
+        services.AddSingleton<IEmailService, DefaultEmailService>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;
