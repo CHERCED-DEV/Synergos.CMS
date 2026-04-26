@@ -7,20 +7,30 @@ using Umbraco.Cms.Core.Web;
 namespace Synergos.CMS.Web.Services;
 
 /// <summary>
-/// Default <see cref="IGlobalComponentResolver"/>. Lee el BlockList
-/// <c>globalComponents</c> de <c>siteConfigSettings</c> y devuelve la
-/// primera pieza activa de cada tipo (alerta, banner, aviso footer,
-/// modal) que aplique al request actual.
+/// Default <see cref="IGlobalComponentResolver"/>. Resuelve la primera
+/// pieza activa de cada tipo (alerta, banner, aviso footer, modal)
+/// que aplique al request actual, buscando en dos fuentes en orden
+/// de prioridad:
 /// </summary>
 /// <remarks>
+/// <para>
+/// <strong>Prioridad 1 — Transversales repository (Ola 70):</strong>
+/// busca <c>transversalAlert</c>/<c>transversalModal</c>/<c>transversalBanner</c>/
+/// <c>transversalFooterNote</c> publicados (Document types que componen
+/// los <c>cfg*</c>, así heredan los mismos aliases de propiedades).
+/// El primer nodo activo + dentro de su ventana programada gana.
+/// </para>
+/// <para>
+/// <strong>Prioridad 2 — Legacy BlockList (Olas 50 + 52):</strong>
+/// fallback al <c>globalComponents</c> BlockList del primer
+/// <c>siteConfigSettings</c> publicado.
+/// </para>
+/// <para>
 /// Vive en <c>Synergos.CMS.Web</c> porque depende de
 /// <see cref="IUmbracoContextAccessor"/>. Nunca lanza: si no hay
-/// request, no hay siteConfigSettings, ninguna pieza está activa o la
-/// página suprime el componente, devuelve <c>null</c>.
-///
-/// Cada método busca su propio cfg* en el mismo BlockList; el resolver
-/// no comparte estado entre métodos. Esto permite que cada cfg* tenga
-/// su propia regla (ej. modal con frequency/trigger en cliente).
+/// request, no hay matches o la página suprime el componente,
+/// devuelve <c>null</c>.
+/// </para>
 /// </remarks>
 public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
 {
@@ -31,6 +41,11 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
     private const string CfgBannerAlias = "cfgBanner";
     private const string CfgFooterNoteAlias = "cfgFooterNote";
     private const string CfgModalAlias = "cfgModal";
+
+    private const string TransversalAlertAlias = "transversalAlert";
+    private const string TransversalBannerAlias = "transversalBanner";
+    private const string TransversalFooterNoteAlias = "transversalFooterNote";
+    private const string TransversalModalAlias = "transversalModal";
 
     private const string SuppressAlertsAlias = "suppressGlobalAlerts";
     private const string SuppressBannerAlias = "suppressGlobalBanner";
@@ -44,12 +59,16 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
 
     public CfgAlert? GetActiveAlert()
     {
-        if (!TryResolve(SuppressAlertsAlias, out var blocks))
+        if (IsSuppressed(SuppressAlertsAlias))
         {
             return null;
         }
 
-        var element = FindActiveScheduled(blocks!, CfgAlertAlias, "alertActive", "alertScheduleStart", "alertScheduleEnd");
+        var element = FindActiveTransversal(TransversalAlertAlias, "alertActive", "alertScheduleStart", "alertScheduleEnd");
+        if (element is null && TryGetGlobalComponentsBlockList(out var blocks))
+        {
+            element = FindActiveInBlockList(blocks, CfgAlertAlias, "alertActive", "alertScheduleStart", "alertScheduleEnd");
+        }
         if (element is null)
         {
             return null;
@@ -75,12 +94,16 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
 
     public CfgBanner? GetActiveBanner()
     {
-        if (!TryResolve(SuppressBannerAlias, out var blocks))
+        if (IsSuppressed(SuppressBannerAlias))
         {
             return null;
         }
 
-        var element = FindActiveScheduled(blocks!, CfgBannerAlias, "bannerActive", "bannerScheduleStart", "bannerScheduleEnd");
+        var element = FindActiveTransversal(TransversalBannerAlias, "bannerActive", "bannerScheduleStart", "bannerScheduleEnd");
+        if (element is null && TryGetGlobalComponentsBlockList(out var blocks))
+        {
+            element = FindActiveInBlockList(blocks, CfgBannerAlias, "bannerActive", "bannerScheduleStart", "bannerScheduleEnd");
+        }
         if (element is null)
         {
             return null;
@@ -106,12 +129,16 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
 
     public CfgFooterNote? GetActiveFooterNote()
     {
-        if (!TryResolve(SuppressFooterNoteAlias, out var blocks))
+        if (IsSuppressed(SuppressFooterNoteAlias))
         {
             return null;
         }
 
-        var element = FindActiveScheduled(blocks!, CfgFooterNoteAlias, "footerNoteActive", "footerNoteScheduleStart", "footerNoteScheduleEnd");
+        var element = FindActiveTransversal(TransversalFooterNoteAlias, "footerNoteActive", "footerNoteScheduleStart", "footerNoteScheduleEnd");
+        if (element is null && TryGetGlobalComponentsBlockList(out var blocks))
+        {
+            element = FindActiveInBlockList(blocks, CfgFooterNoteAlias, "footerNoteActive", "footerNoteScheduleStart", "footerNoteScheduleEnd");
+        }
         if (element is null)
         {
             return null;
@@ -133,12 +160,16 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
 
     public CfgModal? GetActiveModal()
     {
-        if (!TryResolve(SuppressModalAlias, out var blocks))
+        if (IsSuppressed(SuppressModalAlias))
         {
             return null;
         }
 
-        var element = FindActiveScheduled(blocks!, CfgModalAlias, "modalActive", "modalScheduleStart", "modalScheduleEnd");
+        var element = FindActiveTransversal(TransversalModalAlias, "modalActive", "modalScheduleStart", "modalScheduleEnd");
+        if (element is null && TryGetGlobalComponentsBlockList(out var blocks))
+        {
+            element = FindActiveInBlockList(blocks, CfgModalAlias, "modalActive", "modalScheduleStart", "modalScheduleEnd");
+        }
         if (element is null)
         {
             return null;
@@ -166,21 +197,74 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
     }
 
     /// <summary>
-    /// Resuelve los blocks del BlockList globalComponents respetando la
-    /// flag de suppress por página correspondiente. Devuelve false si
-    /// no hay request, no hay siteConfigSettings, está suprimida o el
-    /// BlockList está vacío.
+    /// Devuelve true si la página actual suprime el componente vía la
+    /// flag de compPageOrchestration correspondiente. true también si
+    /// no hay request (no hay nada que renderizar).
     /// </summary>
-    private bool TryResolve(string suppressAlias, out BlockListModel? blocks)
+    private bool IsSuppressed(string suppressAlias)
     {
-        blocks = null;
         if (!_umbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext))
         {
-            return false;
+            return true;
+        }
+        var page = umbracoContext.PublishedRequest?.PublishedContent;
+        return page is not null && page.Value<bool>(suppressAlias);
+    }
+
+    /// <summary>
+    /// Prioridad 1: busca el primer nodo Document publicado del tipo
+    /// transversal indicado que esté activo + dentro de su ventana
+    /// programada. Funciona porque los transversal* componen los cfg*
+    /// y heredan los mismos alias de propiedades.
+    /// </summary>
+    private IPublishedElement? FindActiveTransversal(
+        string contentTypeAlias,
+        string activeAlias,
+        string scheduleStartAlias,
+        string scheduleEndAlias)
+    {
+        if (!_umbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext) || umbracoContext.Content is null)
+        {
+            return null;
         }
 
-        var page = umbracoContext.PublishedRequest?.PublishedContent;
-        if (page is not null && page.Value<bool>(suppressAlias))
+        var nowUtc = DateTime.UtcNow;
+        foreach (var root in umbracoContext.Content.GetAtRoot())
+        {
+            foreach (var node in root.DescendantsOrSelfOfType(contentTypeAlias))
+            {
+                if (!node.Value<bool>(activeAlias))
+                {
+                    continue;
+                }
+
+                var start = node.Value<DateTime?>(scheduleStartAlias);
+                if (start.HasValue && nowUtc < start.Value.ToUniversalTime())
+                {
+                    continue;
+                }
+
+                var end = node.Value<DateTime?>(scheduleEndAlias);
+                if (end.HasValue && nowUtc > end.Value.ToUniversalTime())
+                {
+                    continue;
+                }
+
+                return node;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Prioridad 2 (legacy): obtiene el BlockList globalComponents del
+    /// primer siteConfigSettings publicado. Devuelve false si no hay
+    /// siteConfigSettings o si el BlockList está vacío.
+    /// </summary>
+    private bool TryGetGlobalComponentsBlockList(out BlockListModel blocks)
+    {
+        blocks = null!;
+        if (!_umbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext))
         {
             return false;
         }
@@ -194,16 +278,21 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             return false;
         }
 
-        blocks = siteConfig.Value<BlockListModel>(GlobalComponentsAlias);
-        return blocks is { Count: > 0 };
+        var resolved = siteConfig.Value<BlockListModel>(GlobalComponentsAlias);
+        if (resolved is null || resolved.Count == 0)
+        {
+            return false;
+        }
+
+        blocks = resolved;
+        return true;
     }
 
     /// <summary>
-    /// Busca el primer IPublishedElement del tipo indicado que esté
-    /// activo y dentro de su ventana de fechas (si tiene). Devuelve
-    /// null si ninguno aplica.
+    /// Prioridad 2 helper: busca el primer Element del tipo cfg* en el
+    /// BlockList que esté activo + dentro de su ventana programada.
     /// </summary>
-    private static IPublishedElement? FindActiveScheduled(
+    private static IPublishedElement? FindActiveInBlockList(
         BlockListModel blocks,
         string contentTypeAlias,
         string activeAlias,
@@ -238,7 +327,6 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
 
             return element;
         }
-
         return null;
     }
 }
