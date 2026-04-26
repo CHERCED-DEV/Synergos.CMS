@@ -1,0 +1,211 @@
+/* ============================================================
+   Synergos CMS — Comments thread
+   ============================================================
+   elementCommentThread render + form + estados moderation/login.
+   Cargado siempre via _Layout.
+   ------------------------------------------------------------ */
+
+.syn-comment-thread {
+  display: block;
+  padding: var(--syn-space-xl) 0;
+  border-top: 1px solid var(--syn-color-border-subtle);
+  margin-top: var(--syn-space-2xl);
+}
+
+.syn-comment-thread__heading {
+  font-size: var(--syn-font-size-2xl);
+  font-weight: var(--syn-font-weight-bold);
+  color: var(--syn-color-text-primary);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  margin: 0 0 var(--syn-space-lg);
+}
+
+/* ── Empty state ─────────────────────────────────────────────── */
+
+.syn-comment-thread__empty {
+  margin: 0 0 var(--syn-space-lg);
+  padding: var(--syn-space-lg);
+  background: var(--syn-color-surface-secondary);
+  border: 2px dashed var(--syn-color-border-default);
+  border-radius: var(--syn-radius-md);
+  color: var(--syn-color-text-muted);
+  text-align: center;
+  font-style: italic;
+}
+
+/* ── Comment list ────────────────────────────────────────────── */
+
+.syn-comment-thread__list {
+  list-style: none;
+  margin: 0 0 var(--syn-space-xl);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+}
+
+.syn-comment-thread__item {
+  padding: var(--syn-space-lg);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-md);
+  scroll-margin-top: var(--syn-space-xl);
+}
+
+.syn-comment-thread__item:target {
+  border-color: var(--syn-color-action-primary);
+  box-shadow: 0 0 0 3px var(--syn-color-state-brand-surface);
+}
+
+/* Pending moderation state — visually distinct */
+.syn-comment-thread__item--pending {
+  background: var(--syn-color-state-warning-surface);
+  border-color: var(--syn-color-state-warning-border);
+}
+
+.syn-comment-thread__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--syn-space-sm);
+  margin-bottom: var(--syn-space-sm);
+  font-size: var(--syn-font-size-sm);
+}
+
+.syn-comment-thread__author {
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-comment-thread__date {
+  color: var(--syn-color-text-muted);
+  font-size: var(--syn-font-size-xs);
+  font-family: var(--syn-font-family-mono);
+}
+
+.syn-comment-thread__body {
+  margin: 0;
+  color: var(--syn-color-text-secondary);
+  line-height: var(--syn-line-height-relaxed);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* ── Form ────────────────────────────────────────────────────── */
+
+.syn-comment-thread__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+  padding: var(--syn-space-lg);
+  background: var(--syn-color-surface-secondary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  margin-top: var(--syn-space-xl);
+}
+
+.syn-comment-thread__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+}
+
+.syn-comment-thread__field label {
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-comment-thread__field input[type="text"],
+.syn-comment-thread__field input[type="email"] {
+  min-height: 44px;
+  padding: var(--syn-space-2) var(--syn-space-4);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
+  color: var(--syn-color-text-primary);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-comment-thread__field textarea {
+  min-height: 120px;
+  padding: var(--syn-space-3) var(--syn-space-4);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
+  color: var(--syn-color-text-primary);
+  line-height: var(--syn-line-height-normal);
+  resize: vertical;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-comment-thread__field input:focus,
+.syn-comment-thread__field input:focus-visible,
+.syn-comment-thread__field textarea:focus,
+.syn-comment-thread__field textarea:focus-visible {
+  outline: none;
+  border-color: var(--syn-color-action-primary);
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+}
+
+.syn-comment-thread__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--syn-space-2);
+  align-self: flex-end;
+  min-height: 44px;
+  padding: var(--syn-space-2) var(--syn-space-6);
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  border: 1px solid transparent;
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  cursor: pointer;
+  box-shadow: var(--syn-shadow-action);
+  transition: var(--syn-transition-colors), transform var(--syn-duration-fast) var(--syn-easing-out);
+}
+
+.syn-comment-thread__submit:hover {
+  background: var(--syn-color-action-primary-hover);
+  box-shadow: var(--syn-shadow-action-hover);
+  transform: translateY(-1px);
+}
+
+/* ── Login prompt (gated mode) ───────────────────────────────── */
+
+.syn-comment-thread__login-prompt {
+  margin: var(--syn-space-xl) 0 0;
+  padding: var(--syn-space-lg);
+  background: var(--syn-color-state-info-surface);
+  color: var(--syn-color-state-info-text);
+  border: 1px solid var(--syn-color-state-info-border);
+  border-radius: var(--syn-radius-md);
+  text-align: center;
+  font-size: var(--syn-font-size-sm);
+}
+
+.syn-comment-thread__login-prompt a {
+  color: inherit;
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: underline;
+}
+
+/* ── Error/Success markers via #anchor in URL ────────────────── */
+
+.syn-comment-thread:target,
+.syn-comment-thread__error-marker {
+  display: block;
+  padding: var(--syn-space-md);
+  background: var(--syn-color-state-danger-surface);
+  color: var(--syn-color-state-danger-text);
+  border: 1px solid var(--syn-color-state-danger-border);
+  border-radius: var(--syn-radius-md);
+  margin-bottom: var(--syn-space-md);
+}
