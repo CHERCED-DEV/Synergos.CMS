@@ -138,6 +138,84 @@ public sealed class DefaultMemberAuthService : IMemberAuthService
             first?.Description ?? "No se pudo cambiar la contraseña.");
     }
 
+    public async Task<PasswordResetRequestResult> RequestPasswordResetAsync(
+        string email,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return new PasswordResetRequestResult(EmailExists: false, Token: null, DisplayName: null);
+        }
+
+        var user = await _memberManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            // No leak — devolver OK aunque el email no exista para
+            // evitar enumeration attacks. El caller envia email solo
+            // si EmailExists=true.
+            _logger.LogInformation(
+                "Password reset requested for non-existent email={Email}",
+                email);
+            return new PasswordResetRequestResult(EmailExists: false, Token: null, DisplayName: null);
+        }
+
+        var token = await _memberManager.GeneratePasswordResetTokenAsync(user);
+        return new PasswordResetRequestResult(
+            EmailExists: true,
+            Token: token,
+            DisplayName: user.Name ?? user.UserName ?? email);
+    }
+
+    public async Task<MemberAuthResult> ConfirmPasswordResetAsync(
+        string email,
+        string token,
+        string newPassword,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(email) ||
+            string.IsNullOrWhiteSpace(token) ||
+            string.IsNullOrWhiteSpace(newPassword))
+        {
+            return MemberAuthResult.Fail("invalid-input",
+                "Email, token y nueva contraseña son obligatorios.");
+        }
+
+        var user = await _memberManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            // Mismo razonamiento de no-leak — pero aquí sí devolvemos
+            // fail porque sin user no hay reset posible. Mensaje
+            // genérico para no distinguir "email no existe" de
+            // "token inválido".
+            return MemberAuthResult.Fail("invalid-token",
+                "El link de reset no es válido o ya expiró.");
+        }
+
+        var result = await _memberManager.ResetPasswordAsync(user, token, newPassword);
+        if (result.Succeeded)
+        {
+            _logger.LogInformation(
+                "Password reset succeeded: email={Email}",
+                email);
+            return MemberAuthResult.Ok();
+        }
+
+        var first = result.Errors.FirstOrDefault();
+        var code = MapIdentityCode(first?.Code);
+        if (code == "unknown" &&
+            (first?.Code == "InvalidToken" || first?.Code == "InvalidUserToken"))
+        {
+            code = "invalid-token";
+        }
+        _logger.LogWarning(
+            "Password reset failed: email={Email} code={Code} description={Description}",
+            email,
+            first?.Code,
+            first?.Description);
+        return MemberAuthResult.Fail(code,
+            first?.Description ?? "No se pudo cambiar la contraseña.");
+    }
+
     private static string MapIdentityCode(string? identityCode) =>
         identityCode switch
         {
@@ -146,6 +224,7 @@ public sealed class DefaultMemberAuthService : IMemberAuthService
                 "PasswordRequiresLower" or "PasswordRequiresUpper" or
                 "PasswordRequiresNonAlphanumeric" => "weak-password",
             "PasswordMismatch" => "current-password-wrong",
+            "InvalidToken" or "InvalidUserToken" => "invalid-token",
             _ => "unknown",
         };
 }

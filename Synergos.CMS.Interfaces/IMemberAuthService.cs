@@ -12,9 +12,8 @@ namespace Synergos.CMS.Interfaces;
 /// como auth provider externo, swap del binding sin tocar
 /// AccountController ni templates Razor.
 ///
-/// Sin password reset por email — requiere infra SMTP que aún no está
-/// en el CMS. Diferido a futura ola con <c>IPasswordResetEmailSender</c>
-/// seam.
+/// Password reset por email habilitado en Ola 80 vía
+/// <see cref="IEmailService"/> + <c>IMemberManager.GeneratePasswordResetTokenAsync</c>.
 /// </remarks>
 public interface IMemberAuthService
 {
@@ -47,7 +46,42 @@ public interface IMemberAuthService
         string currentPassword,
         string newPassword,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Genera un token de reset de contraseña para el email indicado y
+    /// lo devuelve para que el caller construya el link de email.
+    /// Si el email no existe, devuelve OK igual (no leak — defensa
+    /// contra enumeration attacks). El email envío lo hace el caller
+    /// vía <see cref="IEmailService"/>.
+    /// </summary>
+    Task<PasswordResetRequestResult> RequestPasswordResetAsync(
+        string email,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Valida el token + cambia la contraseña del miembro identificado
+    /// por <paramref name="email"/>. Token expira según política de
+    /// Umbraco (default 1h).
+    /// </summary>
+    Task<MemberAuthResult> ConfirmPasswordResetAsync(
+        string email,
+        string token,
+        string newPassword,
+        CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Resultado de un request de reset. Cuando <see cref="EmailExists"/>
+/// false, <see cref="Token"/> es null — el caller debe responder OK
+/// igualmente (no leak).
+/// </summary>
+/// <param name="EmailExists">true si el email corresponde a un member.</param>
+/// <param name="Token">Token a embeber en el link de email. Null si email no existe.</param>
+/// <param name="DisplayName">Nombre del member (para personalizar email). Null si no existe.</param>
+public sealed record PasswordResetRequestResult(
+    bool EmailExists,
+    string? Token,
+    string? DisplayName);
 
 /// <summary>
 /// Datos del nuevo miembro a registrar.
