@@ -37,6 +37,7 @@ public sealed class FormSubmissionsController : ControllerBase
     private readonly IAnalyticsTracker _analytics;
     private readonly IEmailService _emailService;
     private readonly IEmailTemplateRenderer _emailRenderer;
+    private readonly IBrandingProvider _branding;
 
     public FormSubmissionsController(
         IFormSubmissionHandler handler,
@@ -45,7 +46,8 @@ public sealed class FormSubmissionsController : ControllerBase
         ILogger<FormSubmissionsController> logger,
         IAnalyticsTracker analytics,
         IEmailService emailService,
-        IEmailTemplateRenderer emailRenderer)
+        IEmailTemplateRenderer emailRenderer,
+        IBrandingProvider branding)
     {
         _handler = handler;
         _rateLimiter = rateLimiter;
@@ -54,6 +56,7 @@ public sealed class FormSubmissionsController : ControllerBase
         _analytics = analytics;
         _emailService = emailService;
         _emailRenderer = emailRenderer;
+        _branding = branding;
     }
 
     [HttpPost("{formKey}/submit")]
@@ -162,6 +165,9 @@ public sealed class FormSubmissionsController : ControllerBase
             // Ola 82 — Razor template con branding consistente reemplaza
             // string concat inline. Los HtmlEncode los aplica Razor
             // automáticamente al @value.
+            var brand = _branding.GetCurrent();
+            var siteName = string.IsNullOrWhiteSpace(brand.DisplayName) ? "Synergos" : brand.DisplayName;
+
             var bodyHtml = await _emailRenderer.RenderAsync(
                 viewName: "FormNotification",
                 model: new Services.FormNotificationEmailModel(
@@ -170,7 +176,7 @@ public sealed class FormSubmissionsController : ControllerBase
                     ClientIp: clientIp,
                     Referrer: referrer,
                     ReceivedAtUtc: DateTime.UtcNow,
-                    SiteName: "Synergos"),
+                    SiteName: siteName),
                 cancellationToken);
 
             await _emailService.SendAsync(new EmailMessage(

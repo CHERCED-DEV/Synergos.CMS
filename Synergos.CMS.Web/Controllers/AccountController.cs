@@ -23,6 +23,7 @@ public sealed class AccountController : Controller
     private readonly IEmailService _emailService;
     private readonly IEmailTemplateRenderer _emailRenderer;
     private readonly IOptions<MembersSettings> _membersSettings;
+    private readonly IBrandingProvider _branding;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
@@ -32,6 +33,7 @@ public sealed class AccountController : Controller
         IEmailService emailService,
         IEmailTemplateRenderer emailRenderer,
         IOptions<MembersSettings> membersSettings,
+        IBrandingProvider branding,
         ILogger<AccountController> logger)
     {
         _authService = authService;
@@ -40,6 +42,7 @@ public sealed class AccountController : Controller
         _emailService = emailService;
         _emailRenderer = emailRenderer;
         _membersSettings = membersSettings;
+        _branding = branding;
         _logger = logger;
     }
 
@@ -203,7 +206,7 @@ public sealed class AccountController : Controller
                 model: new Synergos.CMS.Web.Services.PasswordResetEmailModel(
                     DisplayName: resetRequest.DisplayName ?? email,
                     ResetUrl: resetUrl,
-                    SiteName: "Synergos"),
+                    SiteName: ResolveSiteName()),
                 cancellationToken);
 
             await _emailService.SendAsync(new EmailMessage(
@@ -289,7 +292,17 @@ public sealed class AccountController : Controller
         return "/";
     }
 
-    private static string ResolveSiteName() => "Synergos";
+    /// <summary>
+    /// Resuelve el nombre del sitio para el header del email.
+    /// Ola 85: usa IBrandingProvider.GetCurrent() para que en deploys
+    /// multi-brand cada email salga con el branding del request actual.
+    /// Fallback "Synergos" si no hay brand activo.
+    /// </summary>
+    private string ResolveSiteName()
+    {
+        var brand = _branding.GetCurrent();
+        return string.IsNullOrWhiteSpace(brand.DisplayName) ? "Synergos" : brand.DisplayName;
+    }
 
     [HttpGet("resend-confirmation")]
     [AllowAnonymous]
