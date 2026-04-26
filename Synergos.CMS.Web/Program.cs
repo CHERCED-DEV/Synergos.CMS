@@ -18,6 +18,13 @@ await app.BootUmbracoAsync();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<TimeoutMiddleware>();
 
+// Ola 76 — re-execute /error/{statusCode} cuando ASP.NET responde con
+// un error code (404, 500, 503...). El ErrorController busca un
+// transversalErrorPage publicado matching y lo renderiza; si no
+// encuentra, fallback inline. Preserva el status code original via
+// Response.StatusCode = statusCode dentro del controller.
+app.UseStatusCodePagesWithReExecute("/error/{0}");
+
 app.UseUmbraco()
     .WithMiddleware(u =>
     {

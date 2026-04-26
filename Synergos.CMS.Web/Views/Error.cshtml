@@ -1,0 +1,60 @@
+@*
+    View del ErrorController (Ola 76). Renderiza pagina de error custom
+    o fallback. Layout=null por diseno — error pages NO heredan chrome
+    del siteRoot para evitar cascadas que tambien fallen.
+
+    El visitante ve titulo + mensaje + (opcional) buscador + (opcional)
+    botón al home. meta robots noindex automatico.
+*@
+@model Synergos.CMS.Web.Controllers.ErrorPageViewModel
+@{
+    Layout = null;
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+}
+<!DOCTYPE html>
+<html lang="@culture">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>@Model.StatusCode — @Model.Title</title>
+</head>
+<body class="syn-error syn-error--@Model.StatusCode">
+    <main class="syn-error__main">
+        <p class="syn-error__code">@Model.StatusCode</p>
+        <h1 class="syn-error__title">@Model.Title</h1>
+
+        @if (Model.BodyHtml is not null)
+        {
+            <div class="syn-error__body">
+                @Model.BodyHtml
+            </div>
+        }
+
+        @if (Model.ShowSearchBox)
+        {
+            <form class="syn-error__search" action="/search" method="get" role="search">
+                <label for="syn-error-search-input" class="syn-error__search-label">
+                    @Umbraco.GetDictionaryValue("Error.SearchLabel", "¿Buscabas algo?")
+                </label>
+                <input id="syn-error-search-input"
+                       class="syn-error__search-input"
+                       type="search"
+                       name="q"
+                       placeholder="@Umbraco.GetDictionaryValue("Search.Placeholder", "Buscar…")"
+                       autocomplete="off" />
+                <button type="submit" class="syn-error__search-submit">
+                    @Umbraco.GetDictionaryValue("Search.Button", "Buscar")
+                </button>
+            </form>
+        }
+
+        @if (Model.ShowHomeLink)
+        {
+            <a class="syn-error__home" href="@Model.HomeUrl">
+                @Umbraco.GetDictionaryValue("Error.BackToHome", "Volver al inicio")
+            </a>
+        }
+    </main>
+</body>
+</html>
