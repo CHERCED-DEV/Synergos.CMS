@@ -145,6 +145,11 @@ public sealed class SeamComposer : IComposer
         // form notifications cuando se cableen los consumidores.
         services.AddSingleton<IEmailService, DefaultEmailService>();
 
+        // Ola 66 — Output cache para endpoints operacionales sitemap/RSS
+        // (ADR 0036). IMemoryCache es estandar ASP.NET Core — registra
+        // explicito por si Umbraco no lo cableo. Idempotente.
+        services.AddMemoryCache();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;

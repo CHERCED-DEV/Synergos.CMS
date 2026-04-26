@@ -2,6 +2,7 @@ using System.Text;
 using System.Xml;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Umbraco.Cms.Core.Models.PublishedContent;
@@ -19,7 +20,11 @@ namespace Synergos.CMS.Web.Controllers;
 /// nodo público.
 /// </summary>
 /// <remarks>
-/// Sin caché — el sitemap es one-shot por request, generado en memoria.
+/// Output cache via <see cref="IMemoryCache"/> con key per-host
+/// (multi-brand). TTL configurable via
+/// <see cref="OutputCacheSettings.SitemapMinutes"/>. Bypass total via
+/// <c>Disabled=true</c>.
+///
 /// Para sitios con &gt; 50k URLs (límite del protocolo en un solo
 /// archivo) se debería paginar a sitemap_index.xml + N children — diferido.
 /// </remarks>
@@ -27,31 +32,69 @@ namespace Synergos.CMS.Web.Controllers;
 [Route("sitemap.xml")]
 public sealed class SitemapController : ControllerBase
 {
+    private const string CacheKeyPrefix = "syn:sitemap:";
+
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
     private readonly IOptions<SearchSettings> _searchOptions;
+    private readonly IOptions<OutputCacheSettings> _cacheOptions;
+    private readonly IMemoryCache _cache;
 
     public SitemapController(
         IUmbracoContextAccessor umbracoContextAccessor,
-        IOptions<SearchSettings> searchOptions)
+        IOptions<SearchSettings> searchOptions,
+        IOptions<OutputCacheSettings> cacheOptions,
+        IMemoryCache cache)
     {
         _umbracoContextAccessor = umbracoContextAccessor;
         _searchOptions = searchOptions;
+        _cacheOptions = cacheOptions;
+        _cache = cache;
     }
 
     [HttpGet]
     [AllowAnonymous]
     public IActionResult GetSitemap()
     {
-        if (!_umbracoContextAccessor.TryGetUmbracoContext(out var ctx) || ctx.Content is null)
+        var hostBase = $"{Request.Scheme}://{Request.Host}";
+        var cacheSettings = _cacheOptions.Value;
+        var cacheKey = CacheKeyPrefix + hostBase;
+
+        byte[]? bytes;
+        if (cacheSettings.Disabled)
+        {
+            bytes = Build(hostBase);
+        }
+        else
+        {
+            bytes = _cache.Get<byte[]>(cacheKey);
+            if (bytes is null)
+            {
+                bytes = Build(hostBase);
+                if (bytes is not null)
+                {
+                    _cache.Set(cacheKey, bytes,
+                        TimeSpan.FromMinutes(Math.Max(1, cacheSettings.SitemapMinutes)));
+                }
+            }
+        }
+
+        if (bytes is null)
         {
             return NotFound();
+        }
+        return File(bytes, "application/xml; charset=utf-8");
+    }
+
+    private byte[]? Build(string hostBase)
+    {
+        if (!_umbracoContextAccessor.TryGetUmbracoContext(out var ctx) || ctx.Content is null)
+        {
+            return null;
         }
 
         var excluded = new HashSet<string>(
             _searchOptions.Value.ExcludedDocTypeAliases,
             StringComparer.OrdinalIgnoreCase);
-
-        var hostBase = $"{Request.Scheme}://{Request.Host}";
 
         var settings = new XmlWriterSettings
         {
@@ -79,7 +122,7 @@ public sealed class SitemapController : ControllerBase
             writer.WriteEndDocument();
         }
 
-        return File(stream.ToArray(), "application/xml; charset=utf-8");
+        return stream.ToArray();
     }
 
     private static void EmitNode(

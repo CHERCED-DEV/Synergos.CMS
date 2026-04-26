@@ -56,5 +56,8 @@ public sealed class OptionsComposer : IComposer
 
         builder.Services.Configure<EmailSettings>(
             builder.Config.GetSection("Synergos:Email"));
+
+        builder.Services.Configure<OutputCacheSettings>(
+            builder.Config.GetSection("Synergos:OutputCache"));
     }
 }
