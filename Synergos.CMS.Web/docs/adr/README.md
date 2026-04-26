@@ -44,6 +44,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0035](0035-email-transactional-runtime.md) | Email transactional runtime (IEmailService seam + DefaultEmailService adapter sobre Umbraco IEmailSender) | Accepted |
 | [0036](0036-output-caching-sitemap-rss.md) | Output caching via IMemoryCache para Sitemap + Blog RSS (OutputCacheSettings POCO + multi-brand keys + bypass flag) | Accepted |
 | [0037](0037-analytics-tracker-instrumentation.md) | Analytics tracker + instrumentación de 4 módulos (IAnalyticsTracker + LoggerAnalyticsTracker + 11 evento slugs en Search/Forms/Shop/Account) | Accepted |
+| [0038](0038-comments-runtime-end-to-end.md) | Comments runtime end-to-end (ICommentRepository + FileSystemCommentRepository + CommentsController + elementCommentThread schema + renderer + reuso rate-limit) | Accepted |
 
 ## Rules
 
