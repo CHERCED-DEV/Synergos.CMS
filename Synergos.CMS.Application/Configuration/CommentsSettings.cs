@@ -42,4 +42,13 @@ public sealed class CommentsSettings
     /// poder comentar. Default true — más seguro y trazable.
     /// </summary>
     public bool RequireAuthentication { get; init; } = true;
+
+    /// <summary>
+    /// Dirección de email a la que se notifica cuando un comentario
+    /// queda pendiente de moderación (consumido por la impl default
+    /// de <see cref="Synergos.CMS.Interfaces.ICommentModerationNotifier"/>).
+    /// Default null/empty = notifier es no-op (no envía email). Solo
+    /// efectivo si <see cref="RequireModeration"/> es true.
+    /// </summary>
+    public string? NotifyEmailAddress { get; init; }
 }

@@ -35,19 +35,22 @@ public sealed class CommentsController : ControllerBase
     private readonly InMemoryFormRateLimiter _rateLimiter;
     private readonly IOptions<CommentsSettings> _options;
     private readonly IAnalyticsTracker _analytics;
+    private readonly ICommentModerationNotifier _moderationNotifier;
 
     public CommentsController(
         ICommentRepository repository,
         IMemberAccessGate gate,
         InMemoryFormRateLimiter rateLimiter,
         IOptions<CommentsSettings> options,
-        IAnalyticsTracker analytics)
+        IAnalyticsTracker analytics,
+        ICommentModerationNotifier moderationNotifier)
     {
         _repository = repository;
         _gate = gate;
         _rateLimiter = rateLimiter;
         _options = options;
         _analytics = analytics;
+        _moderationNotifier = moderationNotifier;
     }
 
     [HttpPost("{nodeId:int}")]
@@ -107,6 +110,14 @@ public sealed class CommentsController : ControllerBase
             ["approved"] = comment.Approved,
             ["bodyLength"] = comment.Body.Length,
         });
+
+        // Ola 89 — fire-and-forget notificación al moderador si el
+        // comentario quedó pendiente. El notifier es no-op cuando
+        // CommentsSettings.NotifyEmailAddress está vacío.
+        if (!comment.Approved)
+        {
+            await _moderationNotifier.NotifyPendingAsync(comment, cancellationToken);
+        }
 
         var anchor = comment.Approved ? $"#comment-{comment.Id}" : "#comment-pending";
         return Redirect($"{referrer}{anchor}");

@@ -183,6 +183,12 @@ public sealed class SeamComposer : IComposer
         // sobre DB.
         services.AddSingleton<ICommentRepository, FileSystemCommentRepository>();
 
+        // Ola 89 — Comment moderation notifier. Default email-based
+        // sobre IEmailService + IEmailTemplateRenderer. Si
+        // CommentsSettings.NotifyEmailAddress está vacío, notifier
+        // es no-op. Singleton — solo dependencias singleton.
+        services.AddSingleton<ICommentModerationNotifier, EmailCommentModerationNotifier>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;

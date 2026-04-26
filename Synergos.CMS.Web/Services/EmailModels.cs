@@ -22,3 +22,12 @@ public sealed record EmailConfirmationEmailModel(
     string DisplayName,
     string ConfirmUrl,
     string SiteName);
+
+public sealed record CommentPendingModerationEmailModel(
+    int NodeId,
+    string CommentId,
+    string AuthorName,
+    string Body,
+    DateTime CreatedAtUtc,
+    string ModerationQueueUrl,
+    string SiteName);
