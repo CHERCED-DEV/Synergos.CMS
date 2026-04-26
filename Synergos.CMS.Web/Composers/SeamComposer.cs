@@ -123,6 +123,13 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IFormSubmissionHandler, FileSystemFormSubmissionHandler>();
         services.AddSingleton<InMemoryFormRateLimiter>();
 
+        // Ola 61 — Search infrastructure (ADR 0031). ExamineSearchProvider
+        // usa el ExternalIndex out-of-the-box de Umbraco (Examine 3.1.0)
+        // y reproyecta los hits cruzando con el published cache para
+        // resolver URL/cultura/siteRoot consistentes. Transient porque
+        // depende de IUmbracoContextAccessor per-request.
+        services.AddTransient<ISearchQuery, ExamineSearchProvider>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;

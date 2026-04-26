@@ -50,5 +50,8 @@ public sealed class OptionsComposer : IComposer
 
         builder.Services.Configure<FormsSettings>(
             builder.Config.GetSection("Synergos:Forms"));
+
+        builder.Services.Configure<SearchSettings>(
+            builder.Config.GetSection("Synergos:Search"));
     }
 }
