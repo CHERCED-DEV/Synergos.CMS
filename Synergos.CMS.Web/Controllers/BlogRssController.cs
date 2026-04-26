@@ -2,6 +2,9 @@ using System.Text;
 using System.Xml;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -13,19 +16,30 @@ namespace Synergos.CMS.Web.Controllers;
 /// PostCategoryPage).
 /// </summary>
 /// <remarks>
-/// Compatible con feed readers estándar (Feedly, Inoreader, etc.) y
-/// con tags de RSS auto-discovery (link rel="alternate"
-/// type="application/rss+xml") que se pueden agregar al &lt;head&gt;
-/// en una micro-ola futura.
+/// Output cache via <see cref="IMemoryCache"/> con key per-host +
+/// maxItems + category. TTL configurable via
+/// <see cref="OutputCacheSettings.BlogRssMinutes"/>. Bypass total
+/// via <c>Disabled=true</c>.
 /// </remarks>
 [ApiController]
 [Route("blog/rss.xml")]
 public sealed class BlogRssController : ControllerBase
 {
-    private readonly IBlogQuery _blogQuery;
+    private const string CacheKeyPrefix = "syn:blogrss:";
 
-    public BlogRssController(IBlogQuery blogQuery) =>
+    private readonly IBlogQuery _blogQuery;
+    private readonly IOptions<OutputCacheSettings> _cacheOptions;
+    private readonly IMemoryCache _cache;
+
+    public BlogRssController(
+        IBlogQuery blogQuery,
+        IOptions<OutputCacheSettings> cacheOptions,
+        IMemoryCache cache)
+    {
         _blogQuery = blogQuery;
+        _cacheOptions = cacheOptions;
+        _cache = cache;
+    }
 
     [HttpGet]
     [AllowAnonymous]
@@ -34,9 +48,44 @@ public sealed class BlogRssController : ControllerBase
         [FromQuery(Name = "category")] string? categoryFilter = null)
     {
         var hostBase = $"{Request.Scheme}://{Request.Host}";
+        var cacheSettings = _cacheOptions.Value;
+        var clampedMax = Math.Clamp(maxItems, 1, 100);
+        var normalizedCategory = string.IsNullOrWhiteSpace(categoryFilter)
+            ? string.Empty
+            : categoryFilter.Trim().ToLowerInvariant();
+        var cacheKey = $"{CacheKeyPrefix}{hostBase}|{clampedMax}|{normalizedCategory}";
 
+        byte[] bytes;
+        if (cacheSettings.Disabled)
+        {
+            bytes = Build(hostBase, clampedMax, categoryFilter);
+        }
+        else
+        {
+            bytes = _cache.Get<byte[]>(cacheKey)
+                ?? CacheAndReturn(cacheKey, hostBase, clampedMax, categoryFilter, cacheSettings);
+        }
+
+        return File(bytes, "application/rss+xml; charset=utf-8");
+    }
+
+    private byte[] CacheAndReturn(
+        string cacheKey,
+        string hostBase,
+        int maxItems,
+        string? categoryFilter,
+        OutputCacheSettings cacheSettings)
+    {
+        var bytes = Build(hostBase, maxItems, categoryFilter);
+        _cache.Set(cacheKey, bytes,
+            TimeSpan.FromMinutes(Math.Max(1, cacheSettings.BlogRssMinutes)));
+        return bytes;
+    }
+
+    private byte[] Build(string hostBase, int maxItems, string? categoryFilter)
+    {
         var posts = _blogQuery.GetPosts(new BlogQueryRequest(
-            MaxItems: Math.Clamp(maxItems, 1, 100),
+            MaxItems: maxItems,
             Skip: 0,
             CategoryAliasOrName: string.IsNullOrWhiteSpace(categoryFilter)
                 ? null
@@ -100,6 +149,6 @@ public sealed class BlogRssController : ControllerBase
             writer.WriteEndDocument();
         }
 
-        return File(stream.ToArray(), "application/rss+xml; charset=utf-8");
+        return stream.ToArray();
     }
 }
