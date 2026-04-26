@@ -26,3 +26,24 @@ public interface ICommentModerationNotifier
     /// </summary>
     Task NotifyPendingAsync(Comment comment, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Marker interface para los canales individuales (email, webhook,
+/// Slack, queue) que componen un <see cref="ICommentModerationNotifier"/>
+/// agregado. Un sitio puede registrar 0..N canales — el composite
+/// los itera.
+/// </summary>
+/// <remarks>
+/// El consumer (controller) inyecta <see cref="ICommentModerationNotifier"/>
+/// y NO sabe cuántos canales hay. El composite default
+/// (<c>CompositeCommentModerationNotifier</c>) acumula todos los
+/// canales registrados y forwardea a cada uno con try-catch
+/// individual — un canal roto no rompe los demás.
+///
+/// Para canales custom, implementar esta interfaz, registrar como
+/// <c>AddSingleton&lt;ICommentModerationNotifierChannel, MyChannel&gt;()</c>
+/// — el composite los recoge automáticamente vía IEnumerable.
+/// </remarks>
+public interface ICommentModerationNotifierChannel : ICommentModerationNotifier
+{
+}

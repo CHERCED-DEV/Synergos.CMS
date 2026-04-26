@@ -51,4 +51,21 @@ public sealed class CommentsSettings
     /// efectivo si <see cref="RequireModeration"/> es true.
     /// </summary>
     public string? NotifyEmailAddress { get; init; }
+
+    /// <summary>
+    /// URL HTTP(S) a la que el <c>WebhookCommentModerationNotifier</c>
+    /// hace POST con el payload JSON del comentario pendiente. Compatible
+    /// con Slack incoming webhooks, Discord webhooks, Microsoft Teams
+    /// connectors, n8n, Zapier o cualquier endpoint custom. Default
+    /// null/empty = canal no-op.
+    /// </summary>
+    public string? WebhookUrl { get; init; }
+
+    /// <summary>
+    /// Bearer token opcional. Si está poblado, el webhook adjunta
+    /// header <c>Authorization: Bearer {token}</c> al POST. Para
+    /// Slack/Discord/Teams típicamente vacío (la URL ya contiene el
+    /// secreto); para endpoints custom protegidos, requerido.
+    /// </summary>
+    public string? WebhookBearerToken { get; init; }
 }

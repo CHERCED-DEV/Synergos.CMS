@@ -19,7 +19,7 @@ namespace Synergos.CMS.Web.Services;
 /// Para sitios con multi-brand cada notificación lleva el SiteName
 /// del request actual (resuelto via <see cref="IBrandingProvider"/>).
 /// </remarks>
-public sealed class EmailCommentModerationNotifier : ICommentModerationNotifier
+public sealed class EmailCommentModerationNotifier : ICommentModerationNotifierChannel
 {
     private readonly IEmailService _emailService;
     private readonly IEmailTemplateRenderer _emailRenderer;
