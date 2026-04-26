@@ -130,6 +130,13 @@ public sealed class SeamComposer : IComposer
         // depende de IUmbracoContextAccessor per-request.
         services.AddTransient<ISearchQuery, ExamineSearchProvider>();
 
+        // Ola 64 — Member self-service (ADR 0034). DefaultMemberAuthService
+        // wraps IMemberManager + IMemberSignInManager para Register/Login/
+        // Logout/ChangePassword. AccountController + Razor templates
+        // consumen este seam. Transient porque IMemberManager/SignInManager
+        // son scoped (per-request).
+        services.AddTransient<IMemberAuthService, DefaultMemberAuthService>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;
