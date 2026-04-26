@@ -43,14 +43,18 @@
     var brandThemeModel = new Synergos.CMS.Application.Dto.Responses.BrandThemeStyleModel(theme, renderCtx.ThemeVariant);
     var devStubEnabled = Configuration.GetValue<bool>("Synergos:DevCss:Enabled");
 
-    // Ola 69.4 — compSiteChrome: si el siteRoot tiene bloques en
-    // siteHeaderBlocks o siteFooterBlocks, los renderizamos en lugar
-    // del chrome default. Vacíos = comportamiento previo idéntico
-    // (backward compat).
+    // Ola 69.4 + 71.6 — compSiteChrome triádico: si el siteRoot tiene
+    // bloques en siteHeaderBlocks/siteFooterBlocks/siteAsideBlocks, los
+    // renderizamos en lugar del chrome default. Vacíos = comportamiento
+    // previo idéntico (backward compat). El aside SOLO se renderiza si
+    // hay bloques Y la página no lo suprime.
     var customHeaderBlocks = siteRoot?.Value<BlockGridModel>("siteHeaderBlocks");
     var customFooterBlocks = siteRoot?.Value<BlockGridModel>("siteFooterBlocks");
+    var customAsideBlocks = siteRoot?.Value<BlockGridModel>("siteAsideBlocks");
     var hasCustomHeader = customHeaderBlocks is not null && customHeaderBlocks.Any();
     var hasCustomFooter = customFooterBlocks is not null && customFooterBlocks.Any();
+    var pageSuppressAside = currentPage?.Value<bool>("suppressAside") ?? false;
+    var showAside = !pageSuppressAside && customAsideBlocks is not null && customAsideBlocks.Any();
 }
 <!DOCTYPE html>
 <html lang="@culture" data-theme="@renderCtx.ThemeVariant" data-surface="@renderCtx.PageSurface" data-profile="@renderCtx.VisualProfile">
@@ -120,13 +124,21 @@
             </header>
         }
     }
-    <main id="main-content" class="syn-site-main syn-site-main--@renderCtx.ContainerType syn-site-main--spacing-@renderCtx.SpacingScale">
-        @if (renderCtx.ShowBreadcrumbs && currentPage != null)
+    <div class="syn-site-body@(showAside ? " syn-site-body--with-aside" : "")">
+        <main id="main-content" class="syn-site-main syn-site-main--@renderCtx.ContainerType syn-site-main--spacing-@renderCtx.SpacingScale">
+            @if (renderCtx.ShowBreadcrumbs && currentPage != null)
+            {
+                @await Html.PartialAsync("_Breadcrumbs", currentPage)
+            }
+            @RenderBody()
+        </main>
+        @if (showAside)
         {
-            @await Html.PartialAsync("_Breadcrumbs", currentPage)
+            <aside class="syn-site-aside" aria-label="@Umbraco.GetDictionaryValue("common.aria.sidebar", "Sidebar")">
+                @await Html.GetBlockGridHtmlAsync(customAsideBlocks!)
+            </aside>
         }
-        @RenderBody()
-    </main>
+    </div>
     @if (globalBanner is not null && string.Equals(globalBanner.Placement, "bottom", StringComparison.OrdinalIgnoreCase))
     {
         @await Html.PartialAsync("_GlobalBanner", globalBanner)
