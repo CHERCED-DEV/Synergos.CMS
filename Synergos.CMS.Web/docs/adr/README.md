@@ -47,6 +47,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0038](0038-comments-runtime-end-to-end.md) | Comments runtime end-to-end (ICommentRepository + FileSystemCommentRepository + CommentsController + elementCommentThread schema + renderer + reuso rate-limit) | Accepted |
 | [0039](0039-site-chrome-editable-and-per-site-config.md) | Site Chrome editable + PlatformRoot landing + per-site Configuration folder (compSiteChrome 2 BlockGrid slots + PlatformRoot template + siteConfigFolder UX) | Accepted |
 | [0040](0040-architectural-consolidation-theme-chrome-config-transversals-brand.md) | Gran Consolidación Arquitectónica: theme inheritance pura (siteRoot only) + chrome triádico (header/footer/aside) + siteConfiguration unificado + compTransversalSelectors drop-down + brand inheritance pura + ModelsBuilder SourceCodeAuto setup | Accepted |
+| [0041](0041-lego-canonical-map-and-coupling-audit.md) | Mapa Lego canónico + auditoría de acoplamientos (30 compositions verified, DTSelect overlaps non-duplicate, pageBasic vs pageBare clarified, bug crítico compBranding fix, "regla del Lego ensamblable" 5 puntos) | Accepted |
 
 ## Rules
 
