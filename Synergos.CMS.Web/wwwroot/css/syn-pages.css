@@ -1,0 +1,493 @@
+/* ============================================================
+   Synergos CMS — Page templates
+   ============================================================
+   Wrappers de los <article> que envuelven cada page template:
+   PlatformRoot, PageBasic, PageBare, PageLanding, PageStandard,
+   PostPage, PostCategoryPage, ProductCategoryPage,
+   MemberProfilePage, FlowDefinition, FlowStep, SearchPage.
+
+   Cargado siempre via _Layout (las pages SÍ usan _Layout).
+   ------------------------------------------------------------ */
+
+/* ── Generic .syn-page wrapper ───────────────────────────────── */
+
+.syn-page {
+  display: block;
+  width: 100%;
+}
+
+.syn-page__header {
+  margin-bottom: var(--syn-space-2xl);
+  text-align: start;
+}
+
+.syn-page__eyebrow {
+  display: block;
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  color: var(--syn-color-text-accent);
+  margin-bottom: var(--syn-space-sm);
+}
+
+.syn-page__title {
+  font-size: clamp(var(--syn-font-size-3xl), 4vw + 1rem, var(--syn-font-size-5xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-tight);
+  color: var(--syn-color-text-primary);
+  margin: 0 0 var(--syn-space-md);
+}
+
+.syn-page__subtitle {
+  font-size: var(--syn-font-size-lg);
+  color: var(--syn-color-text-secondary);
+  line-height: var(--syn-line-height-relaxed);
+  max-width: var(--syn-max-width-reading);
+  margin: 0;
+}
+
+.syn-page__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--syn-space-md);
+  margin-top: var(--syn-space-md);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+}
+
+.syn-page__body {
+  display: block;
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-page__body > * + * {
+  margin-top: var(--syn-space-md);
+}
+
+/* ── Page Standard variant (chrome on, sections) ─────────────── */
+
+.syn-page-standard {
+  /* Hereda generic syn-page */
+}
+
+/* ── Page Landing variant (lineal, hero abierto) ─────────────── */
+
+.syn-page-landing {
+  /* Hereda generic syn-page */
+}
+
+.syn-page-landing .syn-page__header {
+  text-align: center;
+  max-width: var(--syn-max-width-hero);
+  margin-inline: auto;
+  margin-bottom: var(--syn-space-3xl);
+}
+
+.syn-page-landing .syn-page__title {
+  font-size: clamp(var(--syn-font-size-4xl), 5vw + 1rem, var(--syn-font-size-5xl));
+}
+
+/* ── Page Canvas variant (no chrome, edge-to-edge) ───────────── */
+
+.syn-page-canvas {
+  width: 100%;
+}
+
+.syn-page-canvas .syn-page__body {
+  /* El propio LayoutComposer maneja containers; no constraint aquí */
+}
+
+/* ── Page Bare variant (mínimo, solo body) ───────────────────── */
+
+.syn-page-bare {
+  max-width: var(--syn-max-width-reading);
+  margin-inline: auto;
+}
+
+/* ── Platform Root (landing del platformRoot) ────────────────── */
+
+.syn-platform-root {
+  display: block;
+  text-align: center;
+  padding: var(--syn-space-3xl) 0;
+}
+
+.syn-platform-root__welcome {
+  font-size: clamp(var(--syn-font-size-3xl), 4vw + 1rem, var(--syn-font-size-5xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  background: linear-gradient(135deg,
+    var(--syn-color-action-primary) 0%,
+    var(--syn-color-action-emphasis, var(--syn-color-accent-500)) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: var(--syn-space-md);
+}
+
+.syn-platform-root__intro {
+  font-size: var(--syn-font-size-lg);
+  color: var(--syn-color-text-secondary);
+  line-height: var(--syn-line-height-relaxed);
+  max-width: var(--syn-max-width-reading);
+  margin-inline: auto;
+}
+
+.syn-platform-root__sites {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--syn-space-lg);
+  margin-top: var(--syn-space-3xl);
+}
+
+.syn-platform-root__site {
+  display: block;
+  padding: var(--syn-space-xl);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  text-decoration: none;
+  color: inherit;
+  text-align: start;
+  box-shadow: var(--syn-shadow-card);
+  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
+}
+
+.syn-platform-root__site:hover {
+  border-color: var(--syn-color-border-accent);
+  box-shadow: var(--syn-shadow-card-hover);
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+
+.syn-platform-root__site-title {
+  font-size: var(--syn-font-size-xl);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-primary);
+  margin: 0 0 var(--syn-space-2);
+}
+
+.syn-platform-root__site-host {
+  color: var(--syn-color-text-muted);
+  font-size: var(--syn-font-size-sm);
+  font-family: var(--syn-font-family-mono);
+}
+
+/* ── Post page (blog post) ───────────────────────────────────── */
+
+.syn-post {
+  max-width: var(--syn-max-width-article);
+  margin-inline: auto;
+}
+
+.syn-post__header {
+  text-align: start;
+  margin-bottom: var(--syn-space-2xl);
+}
+
+.syn-post__category {
+  display: inline-block;
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  color: var(--syn-color-text-accent);
+  text-decoration: none;
+  margin-bottom: var(--syn-space-sm);
+}
+
+.syn-post__category:hover {
+  text-decoration: underline;
+}
+
+.syn-post__title {
+  font-size: clamp(var(--syn-font-size-3xl), 4vw + 1rem, var(--syn-font-size-5xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-tight);
+  color: var(--syn-color-text-primary);
+  margin: 0 0 var(--syn-space-md);
+}
+
+.syn-post__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--syn-space-md);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  margin-bottom: var(--syn-space-md);
+}
+
+.syn-post__author {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-2);
+}
+
+.syn-post__author-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.syn-post__date,
+.syn-post__reading-time {
+  color: var(--syn-color-text-muted);
+}
+
+.syn-post__hero {
+  margin: var(--syn-space-xl) 0;
+  border-radius: var(--syn-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--syn-shadow-card);
+}
+
+.syn-post__hero img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.syn-post__excerpt {
+  font-size: var(--syn-font-size-xl);
+  color: var(--syn-color-text-secondary);
+  line-height: var(--syn-line-height-relaxed);
+  font-weight: var(--syn-font-weight-light);
+  font-style: italic;
+  border-left: 4px solid var(--syn-color-border-accent);
+  padding-left: var(--syn-space-md);
+  margin: var(--syn-space-xl) 0;
+}
+
+.syn-post__body {
+  font-size: var(--syn-font-size-lg);
+  line-height: var(--syn-line-height-relaxed);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-post__body > * + * {
+  margin-top: var(--syn-space-md);
+}
+
+.syn-post__body h2 {
+  margin-top: var(--syn-space-2xl);
+  font-size: var(--syn-font-size-3xl);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-post__body h3 {
+  margin-top: var(--syn-space-xl);
+  font-size: var(--syn-font-size-2xl);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-post__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--syn-space-2);
+  margin-top: var(--syn-space-2xl);
+  padding-top: var(--syn-space-md);
+  border-top: 1px solid var(--syn-color-border-subtle);
+}
+
+/* ── Post category (listado) ─────────────────────────────────── */
+
+.syn-post-category {
+  /* Hereda syn-page */
+}
+
+.syn-post-category__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--syn-space-lg);
+  margin-top: var(--syn-space-xl);
+  list-style: none;
+  padding: 0;
+}
+
+.syn-post-category__item {
+  display: flex;
+  flex-direction: column;
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--syn-shadow-card);
+  transition: transform var(--syn-duration-base) var(--syn-easing-default), var(--syn-transition-colors);
+}
+
+.syn-post-category__item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--syn-shadow-card-hover);
+  border-color: var(--syn-color-border-accent);
+}
+
+.syn-post-category__media {
+  aspect-ratio: 16 / 9;
+  background: var(--syn-color-surface-secondary);
+  overflow: hidden;
+}
+
+.syn-post-category__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.syn-post-category__content {
+  padding: var(--syn-space-md);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.syn-post-category__title {
+  font-size: var(--syn-font-size-xl);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-primary);
+  margin: 0 0 var(--syn-space-2);
+}
+
+.syn-post-category__title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.syn-post-category__title a:hover {
+  color: var(--syn-color-action-primary);
+}
+
+.syn-post-category__excerpt {
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+  flex: 1;
+  margin: 0 0 var(--syn-space-md);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.syn-post-category__meta {
+  display: flex;
+  gap: var(--syn-space-sm);
+  font-size: var(--syn-font-size-xs);
+  color: var(--syn-color-text-muted);
+}
+
+/* ── Post category — empty state ─────────────────────────────── */
+
+.syn-post-category__empty,
+.syn-page__empty {
+  text-align: center;
+  padding: var(--syn-space-3xl) var(--syn-space-md);
+  color: var(--syn-color-text-muted);
+  background: var(--syn-color-surface-secondary);
+  border-radius: var(--syn-radius-lg);
+  border: 2px dashed var(--syn-color-border-default);
+}
+
+/* ── Article list (block elementCompArticleList) ─────────────── */
+
+.syn-article-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-lg);
+}
+
+.syn-article-list__item {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: var(--syn-space-md);
+  align-items: start;
+  padding-bottom: var(--syn-space-lg);
+  border-bottom: 1px solid var(--syn-color-border-subtle);
+}
+
+@media (max-width: 480px) {
+  .syn-article-list__item {
+    grid-template-columns: 1fr;
+  }
+}
+
+.syn-article-list__item:last-child {
+  border-bottom: 0;
+}
+
+.syn-article-list__media {
+  aspect-ratio: 4 / 3;
+  border-radius: var(--syn-radius-md);
+  overflow: hidden;
+  background: var(--syn-color-surface-secondary);
+}
+
+.syn-article-list__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.syn-article-list__title {
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-primary);
+  margin: 0 0 var(--syn-space-2);
+}
+
+.syn-article-list__title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.syn-article-list__title a:hover {
+  color: var(--syn-color-action-primary);
+}
+
+.syn-article-list__excerpt {
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-relaxed);
+  margin: 0 0 var(--syn-space-2);
+}
+
+.syn-article-list__meta {
+  font-size: var(--syn-font-size-xs);
+  color: var(--syn-color-text-muted);
+}
+
+/* ── Blog highlight block ────────────────────────────────────── */
+
+.syn-blog-highlight {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+  padding: var(--syn-space-lg);
+  background: var(--syn-color-surface-secondary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+}
+
+.syn-blog-highlight__title {
+  font-size: var(--syn-font-size-2xl);
+  font-weight: var(--syn-font-weight-bold);
+  color: var(--syn-color-text-primary);
+  margin: 0;
+}
+
+.syn-blog-highlight__excerpt {
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-blog-highlight__cta {
+  align-self: start;
+}

@@ -1,0 +1,328 @@
+/* ============================================================
+   Synergos CMS — Account views
+   ============================================================
+   Login + Register + Profile + ForgotPassword + ResetPassword +
+   ResendConfirmation + Registered + ConfirmEmail.
+   Layout=null views — autocontenidas, NO heredan _Layout chrome.
+
+   Cada Account view debe cargar en su <head>:
+     <link rel="stylesheet" href="~/css/syn-tokens.css" />
+     <link rel="stylesheet" href="~/css/syn-base.css" />
+     <link rel="stylesheet" href="~/css/syn-account.css" />
+
+   Razón: Layout=null bypasses _Layout.cshtml, por lo que el
+   <link> de tokens NO se inyecta automáticamente. Cargar los 3
+   en orden garantiza estilo correcto sin FOUC y sin @import en
+   CSS (que bloquea render).
+   ------------------------------------------------------------ */
+
+/* ── Account shell ───────────────────────────────────────────── */
+
+.syn-account {
+  min-height: 100vh;
+  background: linear-gradient(135deg,
+    var(--syn-color-surface-canvas) 0%,
+    var(--syn-color-surface-secondary) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--syn-space-lg);
+  font-family: var(--syn-font-family-body);
+}
+
+.syn-account__main {
+  width: 100%;
+  max-width: 440px;
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-xl);
+  padding: var(--syn-space-2xl) var(--syn-space-xl);
+  box-shadow: var(--syn-shadow-floating);
+}
+
+@media (max-width: 480px) {
+  .syn-account__main {
+    border-radius: var(--syn-radius-lg);
+    padding: var(--syn-space-xl) var(--syn-space-lg);
+  }
+}
+
+.syn-account__heading {
+  font-size: var(--syn-font-size-3xl);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  color: var(--syn-color-text-primary);
+  margin-bottom: var(--syn-space-xl);
+  text-align: center;
+}
+
+.syn-account__intro {
+  text-align: center;
+  color: var(--syn-color-text-secondary);
+  margin-bottom: var(--syn-space-lg);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+/* ── Form ────────────────────────────────────────────────────── */
+
+.syn-account__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+  margin-bottom: var(--syn-space-lg);
+}
+
+.syn-account__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+}
+
+.syn-account__field label {
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-account__field input[type="email"],
+.syn-account__field input[type="password"],
+.syn-account__field input[type="text"],
+.syn-account__field input[type="tel"] {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--syn-space-3) var(--syn-space-4);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
+  color: var(--syn-color-text-primary);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-account__field input:hover {
+  border-color: var(--syn-color-border-strong);
+}
+
+.syn-account__field input:focus,
+.syn-account__field input:focus-visible {
+  outline: none;
+  border-color: var(--syn-color-action-primary);
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+}
+
+.syn-account__field input:disabled {
+  background: var(--syn-color-action-disabled-surface);
+  color: var(--syn-color-action-disabled-text);
+  cursor: not-allowed;
+}
+
+.syn-account__field input::placeholder {
+  color: var(--syn-color-text-disabled);
+}
+
+.syn-account__field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--syn-space-sm);
+}
+
+.syn-account__field--checkbox label {
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-2);
+  cursor: pointer;
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-account__field--checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--syn-color-action-primary);
+  cursor: pointer;
+}
+
+/* ── Submit button ───────────────────────────────────────────── */
+
+.syn-account__submit {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: var(--syn-space-3) var(--syn-space-6);
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  border: 1px solid transparent;
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-semibold);
+  cursor: pointer;
+  box-shadow: var(--syn-shadow-action);
+  transition: var(--syn-transition-colors), transform var(--syn-duration-fast) var(--syn-easing-out);
+  margin-top: var(--syn-space-2);
+}
+
+.syn-account__submit:hover {
+  background: var(--syn-color-action-primary-hover);
+  box-shadow: var(--syn-shadow-action-hover);
+  transform: translateY(-1px);
+}
+
+.syn-account__submit:active {
+  transform: translateY(0);
+}
+
+.syn-account__submit:disabled {
+  background: var(--syn-color-action-disabled-surface);
+  color: var(--syn-color-action-disabled-text);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* ── Messages: error / success ───────────────────────────────── */
+
+.syn-account__error {
+  background: var(--syn-color-state-danger-surface);
+  color: var(--syn-color-state-danger-text);
+  border: 1px solid var(--syn-color-state-danger-border);
+  border-radius: var(--syn-radius-md);
+  padding: var(--syn-space-sm) var(--syn-space-md);
+  margin-bottom: var(--syn-space-md);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+}
+
+.syn-account__success {
+  background: var(--syn-color-state-success-surface);
+  color: var(--syn-color-state-success-text);
+  border: 1px solid var(--syn-color-state-success-border);
+  border-radius: var(--syn-radius-md);
+  padding: var(--syn-space-sm) var(--syn-space-md);
+  margin-bottom: var(--syn-space-md);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+}
+
+.syn-account__info {
+  background: var(--syn-color-state-info-surface);
+  color: var(--syn-color-state-info-text);
+  border: 1px solid var(--syn-color-state-info-border);
+  border-radius: var(--syn-radius-md);
+  padding: var(--syn-space-sm) var(--syn-space-md);
+  margin-bottom: var(--syn-space-md);
+  font-size: var(--syn-font-size-sm);
+}
+
+/* ── Alt links (Register/Login switch) ───────────────────────── */
+
+.syn-account__alt {
+  text-align: center;
+  margin: var(--syn-space-md) 0 0;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+}
+
+.syn-account__alt a {
+  color: var(--syn-color-action-primary);
+  font-weight: var(--syn-font-weight-medium);
+  text-decoration: none;
+}
+
+.syn-account__alt a:hover {
+  color: var(--syn-color-action-primary-hover);
+  text-decoration: underline;
+}
+
+/* ── Forgot password link inline ─────────────────────────────── */
+
+.syn-account__forgot-link {
+  text-align: end;
+  font-size: var(--syn-font-size-sm);
+  margin-top: calc(var(--syn-space-3) * -1);
+}
+
+.syn-account__forgot-link a {
+  color: var(--syn-color-action-primary);
+  text-decoration: none;
+  font-weight: var(--syn-font-weight-medium);
+}
+
+.syn-account__forgot-link a:hover {
+  text-decoration: underline;
+}
+
+/* ── Profile (logged-in view) ────────────────────────────────── */
+
+.syn-account__profile-header {
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-md);
+  margin-bottom: var(--syn-space-lg);
+  padding-bottom: var(--syn-space-md);
+  border-bottom: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-account__profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--syn-color-state-brand-surface);
+  color: var(--syn-color-state-brand-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--syn-font-size-2xl);
+  font-weight: var(--syn-font-weight-bold);
+  flex-shrink: 0;
+}
+
+.syn-account__profile-name {
+  margin: 0;
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-account__profile-email {
+  margin: var(--syn-space-1) 0 0;
+  color: var(--syn-color-text-muted);
+  font-size: var(--syn-font-size-sm);
+}
+
+.syn-account__profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-sm);
+  margin-top: var(--syn-space-lg);
+}
+
+@media (min-width: 480px) {
+  .syn-account__profile-actions {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+}
+
+.syn-account__logout {
+  background: transparent;
+  color: var(--syn-color-action-danger);
+  border: 1px solid var(--syn-color-action-danger);
+  border-radius: var(--syn-radius-md);
+  padding: var(--syn-space-2) var(--syn-space-4);
+  font-weight: var(--syn-font-weight-semibold);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.syn-account__logout:hover {
+  background: var(--syn-color-action-danger);
+  color: var(--syn-color-action-danger-text);
+}

@@ -11,9 +11,7 @@
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex" />
+    @await Html.PartialAsync("_AccountHead")
     <title>@Umbraco.GetDictionaryValue("Account.Login.Title", "Iniciar sesión")</title>
 </head>
 <body class="syn-account">
