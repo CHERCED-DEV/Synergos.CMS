@@ -1,0 +1,173 @@
+/* ============================================================
+   Synergos CMS — Layout Composer presets
+   ============================================================
+   compDomPresetChrome: container widths, theme variants,
+   padding/margin removal helpers.
+   compDomLayout (legacy retired Ola 44.3) - mantenemos solo
+   los hooks vigentes.
+   ------------------------------------------------------------ */
+
+/* ── Container widths ────────────────────────────────────────── */
+
+.syn-preset--container-narrow {
+  max-width: 720px;
+  margin-inline: auto;
+  padding-inline: var(--syn-space-md);
+}
+
+.syn-preset--container-normal {
+  max-width: 1040px;
+  margin-inline: auto;
+  padding-inline: var(--syn-space-md);
+}
+
+.syn-preset--container-wide {
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  padding-inline: var(--syn-space-md);
+}
+
+.syn-preset--container-full {
+  max-width: none;
+}
+
+@media (min-width: 768px) {
+  .syn-preset--container-narrow,
+  .syn-preset--container-normal,
+  .syn-preset--container-wide {
+    padding-inline: var(--syn-space-lg);
+  }
+}
+
+/* ── Theme variants on a per-section basis ───────────────────── */
+
+.syn-preset--theme-light {
+  background: var(--syn-color-surface-primary);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-preset--theme-surface {
+  background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-preset--theme-dark {
+  background: var(--syn-color-neutral-900);
+  color: var(--syn-color-neutral-100);
+}
+
+.syn-preset--theme-dark a { color: var(--syn-color-brand-300); }
+.syn-preset--theme-dark a:hover { color: var(--syn-color-brand-200); }
+
+.syn-preset--theme-brand {
+  background: linear-gradient(135deg,
+    var(--syn-color-brand-500) 0%,
+    var(--syn-color-brand-600) 100%);
+  color: var(--syn-color-text-on-accent);
+}
+
+.syn-preset--theme-brand a {
+  color: var(--syn-color-text-on-accent);
+  text-decoration: underline;
+}
+
+.syn-preset--theme-accent {
+  background: linear-gradient(135deg,
+    var(--syn-color-accent-500) 0%,
+    var(--syn-color-accent-600) 100%);
+  color: var(--syn-color-text-on-accent);
+}
+
+/* ── Section spacing helpers ─────────────────────────────────── */
+
+.syn-preset--no-pad-top    { padding-top: 0 !important; }
+.syn-preset--no-pad-bottom { padding-bottom: 0 !important; }
+.syn-preset--no-mar-top    { margin-top: 0 !important; }
+.syn-preset--no-mar-bottom { margin-bottom: 0 !important; }
+
+.syn-preset--pad-section-sm {
+  padding-block: var(--syn-space-xl);
+}
+
+.syn-preset--pad-section-md {
+  padding-block: var(--syn-space-2xl);
+}
+
+.syn-preset--pad-section-lg {
+  padding-block: var(--syn-space-3xl);
+}
+
+/* ── SynHost wrapper — DEV scaffold, retire en prod ──────────── */
+
+.syn-host {
+  display: block;
+}
+
+.syn-host--primary {
+  outline: 1px dashed var(--syn-color-border-accent);
+  outline-offset: 4px;
+}
+
+.syn-host--secondary {
+  outline: 1px dashed var(--syn-color-accent-300);
+  outline-offset: 4px;
+}
+
+.syn-host--ghost {
+  opacity: 0.7;
+}
+
+/* ── Section + Stack + Grid + Spacer + Divider primitives ────── */
+
+.syn-section {
+  padding-block: var(--syn-space-2xl);
+}
+
+.syn-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+}
+
+.syn-stack--xs { gap: var(--syn-space-xs); }
+.syn-stack--sm { gap: var(--syn-space-sm); }
+.syn-stack--lg { gap: var(--syn-space-lg); }
+.syn-stack--xl { gap: var(--syn-space-xl); }
+.syn-stack--horizontal { flex-direction: row; align-items: center; }
+
+.syn-grid {
+  display: grid;
+  gap: var(--syn-space-md);
+}
+
+.syn-column {
+  min-width: 0;
+}
+
+.syn-divider {
+  border: 0;
+  border-top: 1px solid var(--syn-color-border-default);
+  margin: var(--syn-space-lg) 0;
+}
+
+.syn-divider--dashed { border-top-style: dashed; }
+.syn-divider--dotted { border-top-style: dotted; }
+.syn-divider--gradient {
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    var(--syn-color-border-accent),
+    transparent);
+  border: 0;
+}
+
+.syn-spacer {
+  display: block;
+}
+
+.syn-spacer--xs  { height: var(--syn-space-xs); }
+.syn-spacer--sm  { height: var(--syn-space-sm); }
+.syn-spacer--md  { height: var(--syn-space-md); }
+.syn-spacer--lg  { height: var(--syn-space-lg); }
+.syn-spacer--xl  { height: var(--syn-space-xl); }
+.syn-spacer--2xl { height: var(--syn-space-2xl); }

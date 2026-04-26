@@ -1,0 +1,496 @@
+/* ============================================================
+   Synergos CMS — Design Tokens
+   ============================================================
+   Espejo del design system Synergos.UI (vitals/core-assets/src/scss).
+   Todos los componentes Razor consumen estas custom properties
+   en lugar de hardcodear valores. Cuando el CDN team publique
+   los bundles reales (ADR 0012), seguirán siendo válidas — el
+   contrato visual está aquí, no en los componentes individuales.
+
+   Mantiene aliases legacy `--syn-c-*`, `--syn-sp-*`, `--syn-fs-*`
+   del dev-stub original para no romper renderers existentes
+   mientras migran al naming canónico `--syn-color-*`,
+   `--syn-space-*`, `--syn-font-size-*`.
+   ------------------------------------------------------------ */
+
+:root {
+
+  /* ── Color: Neutrals (gris puro 11 pasos) ─────────────────── */
+  --syn-color-neutral-0:   #ffffff;
+  --syn-color-neutral-50:  #f8fafc;
+  --syn-color-neutral-100: #f1f5f9;
+  --syn-color-neutral-200: #e2e8f0;
+  --syn-color-neutral-300: #cbd5e1;
+  --syn-color-neutral-400: #94a3b8;
+  --syn-color-neutral-500: #64748b;
+  --syn-color-neutral-600: #475569;
+  --syn-color-neutral-700: #334155;
+  --syn-color-neutral-800: #1e293b;
+  --syn-color-neutral-900: #0f172a;
+
+  /* ── Color: Brand (indigo-blue, 6 pasos) ──────────────────── */
+  --syn-color-brand-100: #eef1ff;
+  --syn-color-brand-200: #d4dcff;
+  --syn-color-brand-300: #a5b4fc;
+  --syn-color-brand-400: #7b93fa;
+  --syn-color-brand-500: #4f6ef7;
+  --syn-color-brand-600: #3854d8;
+
+  /* ── Color: Accent (violet premium) ───────────────────────── */
+  --syn-color-accent-100: #f3f0ff;
+  --syn-color-accent-200: #ede9fe;
+  --syn-color-accent-300: #c4b5fd;
+  --syn-color-accent-400: #a78bfa;
+  --syn-color-accent-500: #8b5cf6;
+  --syn-color-accent-600: #7c3aed;
+
+  /* ── Color: Danger ────────────────────────────────────────── */
+  --syn-color-danger-100: #fff1f2;
+  --syn-color-danger-200: #fecdd3;
+  --syn-color-danger-300: #fda4af;
+  --syn-color-danger-400: #fb7185;
+  --syn-color-danger-500: #ef4444;
+  --syn-color-danger-600: #dc2626;
+
+  /* ── Color: Success ───────────────────────────────────────── */
+  --syn-color-success-100: #f0fdf4;
+  --syn-color-success-200: #bbf7d0;
+  --syn-color-success-300: #86efac;
+  --syn-color-success-400: #4ade80;
+  --syn-color-success-500: #22c55e;
+  --syn-color-success-600: #16a34a;
+
+  /* ── Color: Warning ───────────────────────────────────────── */
+  --syn-color-warning-100: #fffbeb;
+  --syn-color-warning-200: #fef3c7;
+  --syn-color-warning-300: #fde68a;
+  --syn-color-warning-400: #fcd34d;
+  --syn-color-warning-500: #f59e0b;
+  --syn-color-warning-600: #d97706;
+
+  /* ── Spacing: 4px base scale ──────────────────────────────── */
+  --syn-space-0:  0;
+  --syn-space-1:  0.25rem;   /* 4px  */
+  --syn-space-2:  0.5rem;    /* 8px  */
+  --syn-space-3:  0.75rem;   /* 12px */
+  --syn-space-4:  1rem;      /* 16px */
+  --syn-space-5:  1.25rem;   /* 20px */
+  --syn-space-6:  1.5rem;    /* 24px */
+  --syn-space-8:  2rem;      /* 32px */
+  --syn-space-10: 2.5rem;    /* 40px */
+  --syn-space-12: 3rem;      /* 48px */
+  --syn-space-16: 4rem;      /* 64px */
+  --syn-space-20: 5rem;      /* 80px */
+  --syn-space-24: 6rem;      /* 96px */
+
+  /* Spacing semantic aliases */
+  --syn-space-xxs: var(--syn-space-1);
+  --syn-space-xs:  var(--syn-space-2);
+  --syn-space-sm:  var(--syn-space-3);
+  --syn-space-md:  var(--syn-space-4);
+  --syn-space-lg:  var(--syn-space-6);
+  --syn-space-xl:  var(--syn-space-8);
+  --syn-space-2xl: var(--syn-space-12);
+  --syn-space-3xl: var(--syn-space-16);
+
+  /* ── Layout widths ────────────────────────────────────────── */
+  --syn-max-width-content: 1200px;
+  --syn-max-width-reading: 800px;
+  --syn-max-width-article: 680px;
+  --syn-max-width-hero:    720px;
+
+  /* ── Typography ───────────────────────────────────────────── */
+  --syn-font-family-sans: 'Manrope', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --syn-font-family-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+  --syn-font-family-body: var(--syn-font-family-sans);
+  --syn-font-family-heading: var(--syn-font-family-sans);
+
+  --syn-font-size-xs:  0.75rem;    /* 12px */
+  --syn-font-size-sm:  0.875rem;   /* 14px */
+  --syn-font-size-base: 1rem;       /* 16px */
+  --syn-font-size-lg:  1.125rem;   /* 18px */
+  --syn-font-size-xl:  1.25rem;    /* 20px */
+  --syn-font-size-2xl: 1.5rem;     /* 24px */
+  --syn-font-size-3xl: 1.875rem;   /* 30px */
+  --syn-font-size-4xl: 2.25rem;    /* 36px */
+  --syn-font-size-5xl: 3rem;       /* 48px */
+
+  --syn-font-weight-light:    300;
+  --syn-font-weight-regular:  400;
+  --syn-font-weight-medium:   500;
+  --syn-font-weight-semibold: 600;
+  --syn-font-weight-bold:     700;
+
+  --syn-line-height-tight:   1.25;
+  --syn-line-height-normal:  1.5;
+  --syn-line-height-relaxed: 1.625;
+
+  --syn-letter-spacing-display: -0.02em;
+  --syn-letter-spacing-tight:   -0.025em;
+  --syn-letter-spacing-normal:  0;
+  --syn-letter-spacing-wide:    0.025em;
+  --syn-letter-spacing-eyebrow: 0.08em;
+
+  /* ── Border radius ────────────────────────────────────────── */
+  --syn-radius-none: 0;
+  --syn-radius-sm:   0.375rem;   /* 6px  */
+  --syn-radius-md:   0.625rem;   /* 10px */
+  --syn-radius-lg:   0.875rem;   /* 14px */
+  --syn-radius-xl:   1.25rem;    /* 20px */
+  --syn-radius-2xl:  1.5rem;     /* 24px */
+  --syn-radius-full: 9999px;
+
+  /* ── Shadows: neutral elevation ───────────────────────────── */
+  --syn-shadow-none: none;
+  --syn-shadow-xs:   0 1px 2px 0 rgb(15 23 42 / 0.08);
+  --syn-shadow-sm:   0 2px 4px 0 rgb(15 23 42 / 0.10);
+  --syn-shadow-md:   0 6px 12px -2px rgb(15 23 42 / 0.14);
+  --syn-shadow-lg:   0 12px 24px -4px rgb(15 23 42 / 0.16);
+  --syn-shadow-xl:   0 20px 40px -6px rgb(15 23 42 / 0.20);
+  --syn-shadow-2xl:  0 30px 64px -12px rgb(15 23 42 / 0.24);
+
+  /* ── Shadows: brand glow (indigo) ─────────────────────────── */
+  --syn-shadow-brand-sm: 0 1px 2px  0 rgb(79 110 247 / 0.20);
+  --syn-shadow-brand-md: 0 2px 8px  0 rgb(79 110 247 / 0.28);
+  --syn-shadow-brand-lg: 0 4px 16px 0 rgb(79 110 247 / 0.32);
+
+  /* ── Shadows: accent glow (violet) ────────────────────────── */
+  --syn-shadow-accent-sm: 0 1px 4px  0 rgb(139 92 246 / 0.20);
+  --syn-shadow-accent-md: 0 2px 10px 0 rgb(139 92 246 / 0.28);
+
+  /* ── Motion: durations + easings ──────────────────────────── */
+  --syn-duration-fast:    120ms;
+  --syn-duration-base:    200ms;
+  --syn-duration-slow:    280ms;
+  --syn-duration-loop:    750ms;
+  --syn-duration-shimmer: 1400ms;
+
+  --syn-easing-default: cubic-bezier(0.16, 1, 0.3, 1);
+  --syn-easing-smooth:  ease;
+  --syn-easing-in:      cubic-bezier(0.4, 0, 1, 1);
+  --syn-easing-out:     cubic-bezier(0, 0, 0.2, 1);
+
+  --syn-transition-colors:    background-color var(--syn-duration-fast) var(--syn-easing-smooth),
+                              border-color     var(--syn-duration-fast) var(--syn-easing-smooth),
+                              color            var(--syn-duration-fast) var(--syn-easing-smooth),
+                              box-shadow       var(--syn-duration-fast) var(--syn-easing-smooth),
+                              opacity          var(--syn-duration-fast) var(--syn-easing-smooth);
+  --syn-transition-transform: transform var(--syn-duration-base) var(--syn-easing-default);
+  --syn-transition-panel:     opacity   var(--syn-duration-base) var(--syn-easing-out),
+                              transform var(--syn-duration-base) var(--syn-easing-out);
+
+  /* ── Z-index scale ────────────────────────────────────────── */
+  --syn-z-base:     0;
+  --syn-z-raised:   10;
+  --syn-z-dropdown: 100;
+  --syn-z-sticky:   200;
+  --syn-z-overlay:  300;
+  --syn-z-modal:    400;
+  --syn-z-toast:    500;
+  --syn-z-tooltip:  600;
+  --syn-z-top:      9999;
+
+  /* ── Breakpoints (read-only references) ───────────────────── */
+  /* Used in @media queries; defined here for editor reference */
+  /* xs:0, sm:480, md:640, lg:768, xl:992, xxl:1248          */
+
+  /* ─────────────────────────────────────────────────────────── */
+  /* Light theme (default) — semantic surface/text/border       */
+  /* ─────────────────────────────────────────────────────────── */
+  color-scheme: light;
+
+  --syn-color-surface-canvas:    var(--syn-color-neutral-0);
+  --syn-color-surface-primary:   var(--syn-color-neutral-0);
+  --syn-color-surface-secondary: var(--syn-color-neutral-50);
+  --syn-color-surface-tertiary:  var(--syn-color-neutral-100);
+  --syn-color-surface-elevated:  var(--syn-color-neutral-50);
+  --syn-color-surface-inverse:   var(--syn-color-neutral-900);
+  --syn-color-surface-accent:        var(--syn-color-brand-100);
+  --syn-color-surface-accent-soft:   rgb(79 110 247 / 0.08);
+  --syn-color-surface-overlay:       rgb(255 255 255 / 0.88);
+  --syn-color-surface-strong:        var(--syn-color-neutral-800);
+
+  --syn-color-text-primary:    var(--syn-color-neutral-900);
+  --syn-color-text-secondary:  var(--syn-color-neutral-600);
+  --syn-color-text-muted:      var(--syn-color-neutral-500);
+  --syn-color-text-disabled:   var(--syn-color-neutral-400);
+  --syn-color-text-inverse:    var(--syn-color-neutral-0);
+  --syn-color-text-accent:     var(--syn-color-brand-600);
+  --syn-color-text-on-accent:  var(--syn-color-neutral-0);
+
+  --syn-color-border-subtle:  var(--syn-color-neutral-100);
+  --syn-color-border-default: var(--syn-color-neutral-200);
+  --syn-color-border-strong:  var(--syn-color-neutral-300);
+  --syn-color-border-accent:  var(--syn-color-brand-300);
+  --syn-color-border-inverse: rgb(255 255 255 / 0.18);
+
+  --syn-color-overlay-subtle: rgb(15 23 42 / 0.06);
+  --syn-color-overlay-medium: rgb(15 23 42 / 0.14);
+  --syn-color-overlay-strong: rgb(15 23 42 / 0.22);
+
+  --syn-color-action-primary:        var(--syn-color-brand-500);
+  --syn-color-action-primary-hover:  var(--syn-color-brand-600);
+  --syn-color-action-primary-active: var(--syn-color-brand-600);
+  --syn-color-action-primary-text:   var(--syn-color-neutral-0);
+  --syn-color-action-emphasis:       var(--syn-color-accent-500);
+
+  --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
+  --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
+  --syn-color-action-secondary-text:           var(--syn-color-text-primary);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-action-primary);
+  --syn-color-action-secondary-border:         var(--syn-color-border-default);
+  --syn-color-action-secondary-border-hover:   var(--syn-color-border-accent);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  --syn-color-action-danger:       var(--syn-color-danger-500);
+  --syn-color-action-danger-hover: var(--syn-color-danger-600);
+  --syn-color-action-danger-text:  var(--syn-color-neutral-0);
+
+  --syn-color-action-disabled-surface: var(--syn-color-neutral-100);
+  --syn-color-action-disabled-border:  var(--syn-color-neutral-200);
+  --syn-color-action-disabled-text:    var(--syn-color-neutral-400);
+
+  --syn-color-focus-ring:        var(--syn-color-brand-300);
+  --syn-color-focus-ring-danger: var(--syn-color-danger-300);
+
+  --syn-color-state-brand-surface: rgb(79 110 247 / 0.12);
+  --syn-color-state-brand-border:  rgb(79 110 247 / 0.28);
+  --syn-color-state-brand-text:    var(--syn-color-brand-600);
+
+  --syn-color-state-info-surface: rgb(15 108 189 / 0.10);
+  --syn-color-state-info-border:  rgb(15 108 189 / 0.22);
+  --syn-color-state-info-text:    #0b4f8a;
+
+  --syn-color-state-success-surface: rgb(22 163 74 / 0.10);
+  --syn-color-state-success-border:  rgb(22 163 74 / 0.22);
+  --syn-color-state-success-text:    #166534;
+
+  --syn-color-state-warning-surface: rgb(217 119 6 / 0.12);
+  --syn-color-state-warning-border:  rgb(217 119 6 / 0.24);
+  --syn-color-state-warning-text:    #9a5a04;
+
+  --syn-color-state-danger-surface: rgb(220 38 38 / 0.10);
+  --syn-color-state-danger-border:  rgb(220 38 38 / 0.22);
+  --syn-color-state-danger-text:    #b42318;
+
+  /* Composed shadow aliases per use-case */
+  --syn-shadow-card:        var(--syn-shadow-xs);
+  --syn-shadow-card-hover:  var(--syn-shadow-lg);
+  --syn-shadow-panel:       var(--syn-shadow-sm);
+  --syn-shadow-floating:    var(--syn-shadow-xl);
+  --syn-shadow-action:      var(--syn-shadow-brand-sm);
+  --syn-shadow-action-hover: var(--syn-shadow-brand-md);
+
+  /* ─────────────────────────────────────────────────────────── */
+  /* Legacy aliases — backwards compat con dev-stub previo       */
+  /* ─────────────────────────────────────────────────────────── */
+  --syn-c-primary:       var(--syn-color-brand-500);
+  --syn-c-primary-hover: var(--syn-color-brand-600);
+  --syn-c-accent:        var(--syn-color-accent-500);
+  --syn-c-success:       var(--syn-color-success-600);
+  --syn-c-warning:       var(--syn-color-warning-600);
+  --syn-c-error:         var(--syn-color-danger-600);
+  --syn-c-info:          #0284c7;
+  --syn-c-neutral-0:     var(--syn-color-neutral-0);
+  --syn-c-neutral-50:    var(--syn-color-neutral-50);
+  --syn-c-neutral-100:   var(--syn-color-neutral-100);
+  --syn-c-neutral-200:   var(--syn-color-neutral-200);
+  --syn-c-neutral-300:   var(--syn-color-neutral-300);
+  --syn-c-neutral-500:   var(--syn-color-neutral-500);
+  --syn-c-neutral-700:   var(--syn-color-neutral-700);
+  --syn-c-neutral-900:   var(--syn-color-neutral-900);
+  --syn-c-bg:            var(--syn-color-surface-canvas);
+  --syn-c-surface:       var(--syn-color-surface-secondary);
+  --syn-c-border:        var(--syn-color-border-default);
+  --syn-c-text:          var(--syn-color-text-primary);
+  --syn-c-text-muted:    var(--syn-color-text-muted);
+  --syn-c-link:          var(--syn-color-action-primary);
+
+  --syn-sp-xs:  var(--syn-space-2);
+  --syn-sp-sm:  var(--syn-space-3);
+  --syn-sp-md:  var(--syn-space-4);
+  --syn-sp-lg:  var(--syn-space-8);
+  --syn-sp-xl:  var(--syn-space-16);
+  --syn-sp-2xl: var(--syn-space-24);
+
+  --syn-r-sm:   var(--syn-radius-sm);
+  --syn-r-md:   var(--syn-radius-md);
+  --syn-r-lg:   var(--syn-radius-lg);
+  --syn-r-pill: var(--syn-radius-full);
+
+  --syn-font-body:    var(--syn-font-family-body);
+  --syn-font-heading: var(--syn-font-family-heading);
+  --syn-fs-xs:  var(--syn-font-size-xs);
+  --syn-fs-sm:  var(--syn-font-size-sm);
+  --syn-fs-md:  var(--syn-font-size-base);
+  --syn-fs-lg:  var(--syn-font-size-lg);
+  --syn-fs-xl:  var(--syn-font-size-2xl);
+  --syn-fs-2xl: var(--syn-font-size-4xl);
+  --syn-fs-3xl: var(--syn-font-size-5xl);
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* Dark theme — selector-based override                       */
+/* ─────────────────────────────────────────────────────────── */
+:root[data-theme="dark"],
+[data-theme="dark"],
+.theme-dark {
+  color-scheme: dark;
+
+  --syn-color-surface-canvas:    #020817;
+  --syn-color-surface-primary:   var(--syn-color-neutral-800);
+  --syn-color-surface-secondary: #132033;
+  --syn-color-surface-tertiary:  var(--syn-color-neutral-700);
+  --syn-color-surface-elevated:  #101a2a;
+  --syn-color-surface-inverse:   var(--syn-color-neutral-0);
+  --syn-color-surface-accent:        rgb(79 110 247 / 0.16);
+  --syn-color-surface-accent-soft:   rgb(79 110 247 / 0.12);
+  --syn-color-surface-overlay:       rgb(15 23 42 / 0.84);
+  --syn-color-surface-strong:        var(--syn-color-neutral-0);
+
+  --syn-color-text-primary:    var(--syn-color-neutral-0);
+  --syn-color-text-secondary:  var(--syn-color-neutral-300);
+  --syn-color-text-muted:      var(--syn-color-neutral-400);
+  --syn-color-text-disabled:   var(--syn-color-neutral-500);
+  --syn-color-text-inverse:    var(--syn-color-neutral-900);
+  --syn-color-text-accent:     var(--syn-color-brand-300);
+  --syn-color-text-on-accent:  var(--syn-color-neutral-900);
+
+  --syn-color-border-subtle:  rgb(148 163 184 / 0.12);
+  --syn-color-border-default: var(--syn-color-neutral-700);
+  --syn-color-border-strong:  var(--syn-color-neutral-600);
+  --syn-color-border-accent:  rgb(165 180 252 / 0.5);
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  --syn-color-overlay-subtle: rgb(248 250 252 / 0.08);
+  --syn-color-overlay-medium: rgb(248 250 252 / 0.14);
+  --syn-color-overlay-strong: rgb(248 250 252 / 0.22);
+
+  --syn-color-action-primary:        var(--syn-color-brand-400);
+  --syn-color-action-primary-hover:  var(--syn-color-brand-300);
+  --syn-color-action-primary-active: var(--syn-color-brand-500);
+  --syn-color-action-primary-text:   var(--syn-color-neutral-900);
+  --syn-color-action-emphasis:       var(--syn-color-accent-400);
+
+  --syn-color-action-secondary-surface:        rgb(248 250 252 / 0.04);
+  --syn-color-action-secondary-surface-hover:  rgb(248 250 252 / 0.08);
+  --syn-color-action-secondary-text:           var(--syn-color-neutral-0);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-brand-200);
+  --syn-color-action-secondary-border:         rgb(148 163 184 / 0.26);
+  --syn-color-action-secondary-border-hover:   rgb(165 180 252 / 0.5);
+
+  --syn-color-action-ghost-text:       var(--syn-color-neutral-300);
+  --syn-color-action-ghost-text-hover: var(--syn-color-neutral-0);
+
+  --syn-color-action-danger:       var(--syn-color-danger-400);
+  --syn-color-action-danger-hover: var(--syn-color-danger-300);
+  --syn-color-action-danger-text:  var(--syn-color-neutral-900);
+
+  --syn-color-action-disabled-surface: rgb(148 163 184 / 0.08);
+  --syn-color-action-disabled-border:  rgb(148 163 184 / 0.16);
+  --syn-color-action-disabled-text:    var(--syn-color-neutral-500);
+
+  --syn-color-focus-ring:        rgb(165 180 252 / 0.88);
+  --syn-color-focus-ring-danger: rgb(253 164 175 / 0.88);
+
+  --syn-color-state-brand-surface: rgb(79 110 247 / 0.18);
+  --syn-color-state-brand-border:  rgb(165 180 252 / 0.34);
+  --syn-color-state-brand-text:    var(--syn-color-brand-200);
+
+  --syn-color-state-info-surface: rgb(56 189 248 / 0.16);
+  --syn-color-state-info-border:  rgb(56 189 248 / 0.28);
+  --syn-color-state-info-text:    #bae6fd;
+
+  --syn-color-state-success-surface: rgb(34 197 94 / 0.16);
+  --syn-color-state-success-border:  rgb(74 222 128 / 0.28);
+  --syn-color-state-success-text:    #bbf7d0;
+
+  --syn-color-state-warning-surface: rgb(245 158 11 / 0.16);
+  --syn-color-state-warning-border:  rgb(252 211 77 / 0.30);
+  --syn-color-state-warning-text:    #fde68a;
+
+  --syn-color-state-danger-surface: rgb(239 68 68 / 0.16);
+  --syn-color-state-danger-border:  rgb(251 113 133 / 0.32);
+  --syn-color-state-danger-text:    #fecdd3;
+
+  --syn-shadow-card:         0 10px 28px -18px rgb(2 6 23 / 0.78);
+  --syn-shadow-card-hover:   0 24px 56px -28px rgb(2 6 23 / 0.86);
+  --syn-shadow-panel:        0 8px 24px -18px rgb(2 6 23 / 0.74);
+  --syn-shadow-floating:     0 28px 72px -36px rgb(2 6 23 / 0.92);
+  --syn-shadow-action:       0 10px 22px -16px rgb(79 110 247 / 0.44);
+  --syn-shadow-action-hover: 0 18px 34px -18px rgb(79 110 247 / 0.54);
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* Silver-Gold theme — warm premium palette                    */
+/* ─────────────────────────────────────────────────────────── */
+:root[data-theme="silver-gold"],
+:root[data-theme="silverGold"],
+[data-theme="silver-gold"],
+[data-theme="silverGold"],
+.theme-silver-gold,
+.theme-silverGold {
+  color-scheme: light;
+
+  --syn-color-surface-canvas:    #f5f1e8;
+  --syn-color-surface-primary:   #fffbf4;
+  --syn-color-surface-secondary: #f2ebdf;
+  --syn-color-surface-tertiary:  #e9dec9;
+  --syn-color-surface-elevated:  #fff8ec;
+  --syn-color-surface-inverse:   #1f2631;
+  --syn-color-surface-accent:        #f3ead8;
+  --syn-color-surface-accent-soft:   rgb(181 150 89 / 0.12);
+  --syn-color-surface-overlay:       rgb(255 251 244 / 0.86);
+  --syn-color-surface-strong:        #2a3240;
+
+  --syn-color-text-primary:    #202734;
+  --syn-color-text-secondary:  #4f5864;
+  --syn-color-text-muted:      #6b6a63;
+  --syn-color-text-disabled:   #9a9487;
+  --syn-color-text-inverse:    #fcf7ee;
+  --syn-color-text-accent:     #8f7035;
+  --syn-color-text-on-accent:  #fffaf2;
+
+  --syn-color-border-subtle:  #eee5d6;
+  --syn-color-border-default: #d9d0c0;
+  --syn-color-border-strong:  #c4b28a;
+  --syn-color-border-accent:  #b59659;
+
+  --syn-color-action-primary:        #2a3240;
+  --syn-color-action-primary-hover:  #1c2230;
+  --syn-color-action-primary-active: #3a4456;
+  --syn-color-action-primary-text:   #fffaf2;
+  --syn-color-action-emphasis:       #b59659;
+
+  --syn-color-focus-ring: rgb(181 150 89 / 0.76);
+
+  --syn-color-state-brand-surface: rgb(181 150 89 / 0.12);
+  --syn-color-state-brand-border:  rgb(181 150 89 / 0.28);
+  --syn-color-state-brand-text:    #8f7035;
+
+  --syn-shadow-card:         0 10px 28px -20px rgb(71 54 26 / 0.24);
+  --syn-shadow-card-hover:   0 24px 54px -32px rgb(71 54 26 / 0.28);
+  --syn-shadow-panel:        0 12px 30px -24px rgb(71 54 26 / 0.22);
+  --syn-shadow-floating:     0 28px 72px -38px rgb(50 40 22 / 0.32);
+  --syn-shadow-action:       0 12px 26px -18px rgb(181 150 89 / 0.34);
+  --syn-shadow-action-hover: 0 18px 36px -20px rgb(181 150 89 / 0.44);
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* prefers-color-scheme dark fallback (cuando no hay theme set) */
+/* ─────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --syn-color-surface-canvas:    #020817;
+    --syn-color-surface-primary:   var(--syn-color-neutral-800);
+    --syn-color-text-primary:      var(--syn-color-neutral-0);
+    --syn-color-text-secondary:    var(--syn-color-neutral-300);
+    --syn-color-text-muted:        var(--syn-color-neutral-400);
+    --syn-color-border-default:    var(--syn-color-neutral-700);
+  }
+}

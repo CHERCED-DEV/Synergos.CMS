@@ -1,0 +1,226 @@
+/* ============================================================
+   Synergos CMS — Site chrome
+   ============================================================
+   Header + Nav + Main + Aside + Footer del _Layout.cshtml.
+   Diseño moderno aligned con Synergos.UI: surface elevations,
+   hairline borders, soft shadows, smooth transitions.
+   ------------------------------------------------------------ */
+
+/* ── Site shell ──────────────────────────────────────────────── */
+
+.syn-site-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--syn-color-surface-canvas);
+}
+
+.syn-site-main {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  padding: var(--syn-space-xl) var(--syn-space-md);
+  min-height: 40vh;
+}
+
+@media (min-width: 768px) {
+  .syn-site-main { padding-inline: var(--syn-space-lg); }
+}
+
+/* ── Site header ─────────────────────────────────────────────── */
+
+.syn-site-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--syn-z-sticky);
+  background: var(--syn-color-surface-overlay);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--syn-color-border-subtle);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-site-header__inner {
+  width: 100%;
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  padding: var(--syn-space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-lg);
+}
+
+@media (min-width: 768px) {
+  .syn-site-header__inner { padding: var(--syn-space-md) var(--syn-space-lg); }
+}
+
+.syn-site-header__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-sm);
+  font-weight: var(--syn-font-weight-bold);
+  font-size: var(--syn-font-size-lg);
+  text-decoration: none;
+  color: var(--syn-color-text-primary);
+  letter-spacing: var(--syn-letter-spacing-tight);
+}
+
+.syn-site-header__brand:hover {
+  color: var(--syn-color-action-primary);
+  text-decoration: none;
+}
+
+.syn-site-header__brand-mark {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
+/* ── Site nav (top-level navigation) ─────────────────────────── */
+
+.syn-site-nav {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  gap: var(--syn-space-md);
+}
+
+.syn-site-nav__list {
+  display: flex;
+  gap: var(--syn-space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-wrap: wrap;
+}
+
+.syn-site-nav__item { display: inline-block; }
+
+.syn-site-nav__link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--syn-color-text-secondary);
+  padding: var(--syn-space-2) var(--syn-space-3);
+  border-radius: var(--syn-radius-md);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-site-nav__link:hover {
+  color: var(--syn-color-text-primary);
+  background: var(--syn-color-overlay-subtle);
+  text-decoration: none;
+}
+
+.syn-site-nav__link--current {
+  color: var(--syn-color-action-primary);
+  background: var(--syn-color-state-brand-surface);
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+.syn-site-nav__link--cta {
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  padding: var(--syn-space-2) var(--syn-space-4);
+  box-shadow: var(--syn-shadow-action);
+}
+
+.syn-site-nav__link--cta:hover {
+  background: var(--syn-color-action-primary-hover);
+  color: var(--syn-color-action-primary-text);
+  box-shadow: var(--syn-shadow-action-hover);
+  transform: translateY(-1px);
+}
+
+/* ── Site aside (Ola 71 — chrome triádico) ───────────────────── */
+
+.syn-site-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--syn-space-lg);
+  width: 100%;
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  padding-inline: var(--syn-space-md);
+}
+
+@media (min-width: 992px) {
+  .syn-site-shell--with-aside {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    padding-inline: var(--syn-space-lg);
+  }
+}
+
+.syn-site-aside {
+  background: var(--syn-color-surface-secondary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  padding: var(--syn-space-lg);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-site-aside h2,
+.syn-site-aside h3,
+.syn-site-aside h4 {
+  font-size: var(--syn-font-size-base);
+  text-transform: uppercase;
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  color: var(--syn-color-text-muted);
+  margin-bottom: var(--syn-space-sm);
+}
+
+/* ── Site footer ─────────────────────────────────────────────── */
+
+.syn-site-footer {
+  margin-top: var(--syn-space-3xl);
+  background: var(--syn-color-surface-tertiary);
+  border-top: 1px solid var(--syn-color-border-subtle);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-site-footer__inner {
+  width: 100%;
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  padding: var(--syn-space-2xl) var(--syn-space-md) var(--syn-space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-lg);
+  font-size: var(--syn-font-size-sm);
+}
+
+@media (min-width: 768px) {
+  .syn-site-footer__inner { padding-inline: var(--syn-space-lg); }
+}
+
+.syn-site-footer__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-site-footer__legal {
+  padding-top: var(--syn-space-lg);
+  border-top: 1px solid var(--syn-color-border-subtle);
+  font-size: var(--syn-font-size-xs);
+  color: var(--syn-color-text-muted);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--syn-space-md);
+}
+
+.syn-site-footer a {
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-site-footer a:hover {
+  color: var(--syn-color-action-primary);
+}

@@ -66,9 +66,19 @@
     {
         <link rel="icon" href="@theme.FaviconUrl" />
     }
+    @* Ola 92 — Modular CSS foundations alineados con Synergos.UI design system.
+       Orden de carga: tokens → base → utilities → layout → chrome → primitives
+       (los themes via _BrandThemeStyle se aplican después como overrides). *@
+    <link rel="stylesheet" href="~/css/syn-tokens.css" />
+    <link rel="stylesheet" href="~/css/syn-base.css" />
+    <link rel="stylesheet" href="~/css/syn-utilities.css" />
+    <link rel="stylesheet" href="~/css/syn-layout.css" />
+    <link rel="stylesheet" href="~/css/syn-chrome.css" />
+    <link rel="stylesheet" href="~/css/syn-primitives.css" />
     @await Html.PartialAsync("_BrandThemeStyle", brandThemeModel)
     @if (devStubEnabled)
     {
+        @* Dev marker — banda fija mostrando que el CDN bundle real (ADR 0012) aún no está. *@
         <link rel="stylesheet" href="~/css/syn-dev-stub.css" />
     }
 </head>

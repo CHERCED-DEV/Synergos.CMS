@@ -1,0 +1,170 @@
+/* ============================================================
+   Synergos CMS — Utility classes
+   ============================================================
+   Display + flex + grid + spacing + visibility utilities.
+   Consumido por compDomDisplay/Flex/Grid/Spacing/Visibility.
+   ------------------------------------------------------------ */
+
+/* ── Display ─────────────────────────────────────────────────── */
+
+.syn-display--block        { display: block; }
+.syn-display--inline-block { display: inline-block; }
+.syn-display--inline       { display: inline; }
+.syn-display--flex         { display: flex; }
+.syn-display--inline-flex  { display: inline-flex; }
+.syn-display--grid         { display: grid; }
+.syn-display--inline-grid  { display: inline-grid; }
+.syn-display--hidden       { display: none; }
+
+/* ── Flex direction + wrap ───────────────────────────────────── */
+
+.syn-flex--dir-row         { flex-direction: row; }
+.syn-flex--dir-row-reverse { flex-direction: row-reverse; }
+.syn-flex--dir-column      { flex-direction: column; }
+.syn-flex--dir-column-reverse { flex-direction: column-reverse; }
+.syn-flex--wrap-wrap       { flex-wrap: wrap; }
+.syn-flex--wrap-nowrap     { flex-wrap: nowrap; }
+.syn-flex--wrap-reverse    { flex-wrap: wrap-reverse; }
+
+/* ── Flex justify ────────────────────────────────────────────── */
+
+.syn-flex--justify-start    { justify-content: flex-start; }
+.syn-flex--justify-center   { justify-content: center; }
+.syn-flex--justify-end      { justify-content: flex-end; }
+.syn-flex--justify-between  { justify-content: space-between; }
+.syn-flex--justify-around   { justify-content: space-around; }
+.syn-flex--justify-evenly   { justify-content: space-evenly; }
+
+/* ── Flex align items ────────────────────────────────────────── */
+
+.syn-flex--align-items-start    { align-items: flex-start; }
+.syn-flex--align-items-center   { align-items: center; }
+.syn-flex--align-items-end      { align-items: flex-end; }
+.syn-flex--align-items-stretch  { align-items: stretch; }
+.syn-flex--align-items-baseline { align-items: baseline; }
+
+/* ── Flex gap ────────────────────────────────────────────────── */
+
+.syn-flex--gap-xs  { gap: var(--syn-space-xs); }
+.syn-flex--gap-sm  { gap: var(--syn-space-sm); }
+.syn-flex--gap-md  { gap: var(--syn-space-md); }
+.syn-flex--gap-lg  { gap: var(--syn-space-lg); }
+.syn-flex--gap-xl  { gap: var(--syn-space-xl); }
+.syn-flex--gap-2xl { gap: var(--syn-space-2xl); }
+
+/* ── Grid templates ──────────────────────────────────────────── */
+
+.syn-grid--tpl-2col         { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.syn-grid--tpl-3col         { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.syn-grid--tpl-4col         { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.syn-grid--tpl-12col        { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.syn-grid--tpl-holy-grail   { grid-template-columns: 240px 1fr 240px; }
+.syn-grid--tpl-sidebar-main { grid-template-columns: 280px 1fr; }
+.syn-grid--tpl-main-sidebar { grid-template-columns: 1fr 280px; }
+.syn-grid--tpl-auto-fit-md  { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.syn-grid--tpl-auto-fit-lg  { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+
+.syn-grid--gap-xs  { gap: var(--syn-space-xs); }
+.syn-grid--gap-sm  { gap: var(--syn-space-sm); }
+.syn-grid--gap-md  { gap: var(--syn-space-md); }
+.syn-grid--gap-lg  { gap: var(--syn-space-lg); }
+.syn-grid--gap-xl  { gap: var(--syn-space-xl); }
+
+@media (max-width: 768px) {
+  .syn-grid--tpl-2col,
+  .syn-grid--tpl-3col,
+  .syn-grid--tpl-4col,
+  .syn-grid--tpl-holy-grail,
+  .syn-grid--tpl-sidebar-main,
+  .syn-grid--tpl-main-sidebar {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Spacing utilities (compDomSpacing) ──────────────────────── */
+
+.syn-space--top-xs    { padding-top: var(--syn-space-xs); }
+.syn-space--top-sm    { padding-top: var(--syn-space-sm); }
+.syn-space--top-md    { padding-top: var(--syn-space-md); }
+.syn-space--top-lg    { padding-top: var(--syn-space-lg); }
+.syn-space--top-xl    { padding-top: var(--syn-space-xl); }
+.syn-space--top-2xl   { padding-top: var(--syn-space-2xl); }
+
+.syn-space--bottom-xs  { padding-bottom: var(--syn-space-xs); }
+.syn-space--bottom-sm  { padding-bottom: var(--syn-space-sm); }
+.syn-space--bottom-md  { padding-bottom: var(--syn-space-md); }
+.syn-space--bottom-lg  { padding-bottom: var(--syn-space-lg); }
+.syn-space--bottom-xl  { padding-bottom: var(--syn-space-xl); }
+.syn-space--bottom-2xl { padding-bottom: var(--syn-space-2xl); }
+
+.syn-space--inline-sm  { padding-inline: var(--syn-space-sm); }
+.syn-space--inline-md  { padding-inline: var(--syn-space-md); }
+.syn-space--inline-lg  { padding-inline: var(--syn-space-lg); }
+
+/* ── Visibility per breakpoint (compDomVisibility) ───────────── */
+
+@media (max-width: 640px) {
+  .syn-hidden-mobile { display: none !important; }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .syn-hidden-tablet { display: none !important; }
+}
+
+@media (min-width: 1025px) {
+  .syn-hidden-desktop { display: none !important; }
+}
+
+/* ── Text utilities ──────────────────────────────────────────── */
+
+.syn-text--center  { text-align: center; }
+.syn-text--start   { text-align: start; }
+.syn-text--end     { text-align: end; }
+.syn-text--justify { text-align: justify; }
+
+.syn-text--truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.syn-text--clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.syn-text--clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.syn-text--muted    { color: var(--syn-color-text-muted); }
+.syn-text--secondary { color: var(--syn-color-text-secondary); }
+.syn-text--accent   { color: var(--syn-color-text-accent); }
+.syn-text--inverse  { color: var(--syn-color-text-inverse); }
+
+/* ── Container helpers ───────────────────────────────────────── */
+
+.syn-container {
+  width: 100%;
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  padding-inline: var(--syn-space-md);
+}
+
+@media (min-width: 768px) {
+  .syn-container { padding-inline: var(--syn-space-lg); }
+}
+
+@media (min-width: 1248px) {
+  .syn-container { padding-inline: var(--syn-space-xl); }
+}
+
+.syn-container--reading { max-width: var(--syn-max-width-reading); }
+.syn-container--article { max-width: var(--syn-max-width-article); }
+.syn-container--hero    { max-width: var(--syn-max-width-hero); }
+.syn-container--full    { max-width: none; }
