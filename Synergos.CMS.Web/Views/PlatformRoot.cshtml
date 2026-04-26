@@ -1,0 +1,95 @@
+@*
+    Template del Document Type `platformRoot` (Ola 69.2).
+
+    Landing pública del wrapper que agrupa varios siteRoots bajo un
+    parent común. Casos de uso:
+    - Multi-brand deploy (1 Umbraco con 3 marcas + 3 hostnames)
+    - Demo / showcase del producto donde el visitante elige sitio
+
+    Si el editor llena `introBody` (Block Grid), se renderiza ese cuerpo
+    en lugar de la lista por defecto de sitios — flexibilidad sin
+    obligar a llenar nada.
+
+    Layout=null por diseño: el platform root no es un sitio en sí mismo,
+    no tiene chrome del siteRoot. Si el operador quiere chrome, lo
+    pone en cada siteRoot via compSiteChrome (Ola 69.3).
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@using Umbraco.Cms.Core.Models.Blocks
+@using Umbraco.Cms.Core.Models.PublishedContent
+@using Umbraco.Extensions
+@{
+    Layout = null;
+    var platform = UmbracoContext.PublishedRequest?.PublishedContent;
+    if (platform is null) { return; }
+
+    var welcomeMessage = platform.Value<string>("welcomeMessage")
+        ?? Umbraco.GetDictionaryValue("Platform.WelcomeFallback",
+            "Bienvenido. Selecciona un sitio para continuar.");
+
+    var introBody = platform.Value<BlockGridModel>("introBody");
+    var hasCustomBody = introBody is not null && introBody.Any();
+
+    var siteRoots = platform.Children
+        .Where(c => string.Equals(c.ContentType.Alias, "siteRoot", StringComparison.Ordinal)
+            && c.IsVisible())
+        .ToList();
+
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+}
+<!DOCTYPE html>
+<html lang="@culture">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="@(siteRoots.Count == 0 ? "noindex" : "index,follow")" />
+    <title>@platform.Name</title>
+</head>
+<body class="syn-platform-root">
+    <main class="syn-platform-root__main">
+        <header class="syn-platform-root__header">
+            <h1 class="syn-platform-root__title">@platform.Name</h1>
+            <p class="syn-platform-root__welcome">@welcomeMessage</p>
+        </header>
+
+        @if (hasCustomBody)
+        {
+            <section class="syn-platform-root__custom-body">
+                @await Html.GetBlockGridHtmlAsync(introBody!)
+            </section>
+        }
+        else if (siteRoots.Count == 0)
+        {
+            <p class="syn-platform-root__empty">
+                @Umbraco.GetDictionaryValue("Platform.NoSites",
+                    "Aún no hay sitios publicados. Crea un Site Root como hijo de este nodo desde el backoffice.")
+            </p>
+        }
+        else
+        {
+            <section class="syn-platform-root__sites">
+                <h2 class="syn-platform-root__sites-heading">
+                    @Umbraco.GetDictionaryValue("Platform.SitesHeading", "Sitios disponibles")
+                </h2>
+                <ul class="syn-platform-root__sites-list">
+                    @foreach (var site in siteRoots)
+                    {
+                        var displayName = site.Value<string>("siteDisplayName") ?? site.Name;
+                        var hostname = site.Value<string>("canonicalHostname");
+                        var url = site.Url();
+                        <li class="syn-platform-root__site">
+                            <a class="syn-platform-root__site-link" href="@url">
+                                <h3 class="syn-platform-root__site-name">@displayName</h3>
+                                @if (!string.IsNullOrWhiteSpace(hostname))
+                                {
+                                    <p class="syn-platform-root__site-host">@hostname</p>
+                                }
+                            </a>
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+    </main>
+</body>
+</html>
