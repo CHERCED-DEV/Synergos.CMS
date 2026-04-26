@@ -1,15 +1,17 @@
 @*
-    View del ErrorController (Ola 76). Renderiza pagina de error custom
-    o fallback. Layout=null por diseno — error pages NO heredan chrome
-    del siteRoot para evitar cascadas que tambien fallen.
+    View del ErrorController (Ola 76 + 79). Renderiza pagina de error
+    custom o fallback. Layout=null — error pages NO heredan chrome del
+    siteRoot para evitar cascadas que tambien fallen.
 
-    El visitante ve titulo + mensaje + (opcional) buscador + (opcional)
-    botón al home. meta robots noindex automatico.
+    Body precedence: BodyBlocks (Layout Composer, prioridad si tiene
+    contenido) > BodyHtml (TinyMCE) > nada.
 *@
+@using Umbraco.Extensions
 @model Synergos.CMS.Web.Controllers.ErrorPageViewModel
 @{
     Layout = null;
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+    var hasBlocks = Model.BodyBlocks is { Count: > 0 };
 }
 <!DOCTYPE html>
 <html lang="@culture">
@@ -24,9 +26,15 @@
         <p class="syn-error__code">@Model.StatusCode</p>
         <h1 class="syn-error__title">@Model.Title</h1>
 
-        @if (Model.BodyHtml is not null)
+        @if (hasBlocks)
         {
-            <div class="syn-error__body">
+            <div class="syn-error__body syn-error__body--blocks">
+                @await Html.GetBlockGridHtmlAsync(Model.BodyBlocks!)
+            </div>
+        }
+        else if (Model.BodyHtml is not null)
+        {
+            <div class="syn-error__body syn-error__body--text">
                 @Model.BodyHtml
             </div>
         }

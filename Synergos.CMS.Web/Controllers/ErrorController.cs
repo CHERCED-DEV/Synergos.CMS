@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Web;
 using Umbraco.Extensions;
@@ -52,6 +53,7 @@ public sealed class ErrorController : ControllerBase
             StatusCode: statusCode,
             Title: page?.Value<string>("errorTitle") ?? FallbackTitleFor(statusCode),
             BodyHtml: page?.Value<Microsoft.AspNetCore.Html.IHtmlContent>("errorBody"),
+            BodyBlocks: page?.Value<BlockGridModel>("errorBlocks"),
             ShowSearchBox: page?.Value<bool>("showSearchBox") ?? statusCode == 404,
             ShowHomeLink: page?.Value<bool>("showHomeLink") ?? true,
             HomeUrl: ResolveHomeUrl());
@@ -114,6 +116,7 @@ public sealed record ErrorPageViewModel(
     int StatusCode,
     string Title,
     Microsoft.AspNetCore.Html.IHtmlContent? BodyHtml,
+    BlockGridModel? BodyBlocks,
     bool ShowSearchBox,
     bool ShowHomeLink,
     string HomeUrl);
