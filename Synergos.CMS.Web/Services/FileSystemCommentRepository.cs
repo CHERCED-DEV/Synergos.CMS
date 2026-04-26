@@ -53,41 +53,41 @@ public sealed class FileSystemCommentRepository : ICommentRepository
         return all.Where(c => c.Approved).ToList();
     }
 
-    public async Task<Comment> AddAsync(NewComment newComment, CancellationToken cancellationToken)
+    public async Task<Comment> AddAsync(NewComment comment, CancellationToken cancellationToken)
     {
         var settings = _options.Value;
-        var path = ResolvePath(newComment.NodeId);
+        var path = ResolvePath(comment.NodeId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-        var existing = LoadAll(newComment.NodeId).ToList();
+        var existing = LoadAll(comment.NodeId).ToList();
 
-        var body = newComment.Body ?? string.Empty;
+        var body = comment.Body ?? string.Empty;
         if (body.Length > settings.MaxBodyLengthChars)
         {
             body = body[..settings.MaxBodyLengthChars];
         }
 
-        var comment = new Comment(
+        var persisted = new Comment(
             Id: Guid.NewGuid().ToString("N"),
-            NodeId: newComment.NodeId,
-            MemberKey: newComment.MemberKey,
-            AuthorName: newComment.AuthorName,
+            NodeId: comment.NodeId,
+            MemberKey: comment.MemberKey,
+            AuthorName: comment.AuthorName,
             Body: body.Trim(),
             CreatedAtUtc: DateTime.UtcNow,
             Approved: !settings.RequireModeration);
 
-        existing.Add(comment);
+        existing.Add(persisted);
 
         var json = JsonSerializer.SerializeToUtf8Bytes(existing, SerializerOptions);
         await File.WriteAllBytesAsync(path, json, cancellationToken);
 
         _logger.LogInformation(
             "Comment persisted: nodeId={NodeId} commentId={CommentId} approved={Approved}",
-            newComment.NodeId,
-            comment.Id,
-            comment.Approved);
+            persisted.NodeId,
+            persisted.Id,
+            persisted.Approved);
 
-        return comment;
+        return persisted;
     }
 
     private List<Comment> LoadAll(int nodeId)

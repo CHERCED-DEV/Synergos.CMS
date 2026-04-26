@@ -148,7 +148,7 @@ public sealed class AccountController : Controller
             new { msg = result.Success ? "password-changed" : result.ErrorCode });
     }
 
-    private string SafeReturnUrl(string? raw)
+    private static string SafeReturnUrl(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
         {

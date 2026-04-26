@@ -73,6 +73,11 @@ public sealed record CfgAlert(
 /// <summary>
 /// Snapshot inmutable de un banner promocional global resuelto.
 /// </summary>
+/// <param name="Message">Texto principal del banner.</param>
+/// <param name="ImageUrl">URL de imagen lateral opcional.</param>
+/// <param name="CtaLabel">Texto del botón de acción opcional.</param>
+/// <param name="CtaUrl">URL destino del botón de acción opcional.</param>
+/// <param name="CtaOpenInNewTab">Si true, el CTA abre en nueva pestaña.</param>
 /// <param name="Placement">"top" o "bottom" — dónde se inserta en
 ///   relación al cuerpo de la página.</param>
 public sealed record CfgBanner(
@@ -97,6 +102,12 @@ public sealed record CfgFooterNote(
 /// frecuencia y disparador se ejecuta en el cliente JS; el resolver
 /// solo determina si el modal aplica al request actual.
 /// </summary>
+/// <param name="Title">Título visible del modal.</param>
+/// <param name="Body">Cuerpo HTML/texto opcional.</param>
+/// <param name="ImageUrl">URL de imagen del modal opcional.</param>
+/// <param name="CtaLabel">Texto del botón de acción opcional.</param>
+/// <param name="CtaUrl">URL destino del botón de acción opcional.</param>
+/// <param name="CtaOpenInNewTab">Si true, el CTA abre en nueva pestaña.</param>
 /// <param name="Trigger">immediate / scroll / exit / manual.</param>
 /// <param name="Frequency">always / once / daily / session.</param>
 public sealed record CfgModal(
