@@ -122,6 +122,141 @@ def verify_synergos_webhook(secret: str, timestamp_header: str, signature_header
     return secrets.compare_digest(expected, received)
 ```
 
+### Go (crypto/hmac + crypto/sha256)
+
+```go
+package synergos
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
+	"strings"
+	"time"
+)
+
+// VerifySynergosWebhook returns true if the signature header matches and
+// the timestamp is within tolerance of now (default 5 min).
+func VerifySynergosWebhook(secret, timestampHeader, signatureHeader string,
+	body []byte, tolerance time.Duration) bool {
+	if timestampHeader == "" || signatureHeader == "" {
+		return false
+	}
+	if !strings.HasPrefix(signatureHeader, "sha256=") {
+		return false
+	}
+
+	ts, err := time.Parse(time.RFC3339, timestampHeader)
+	if err != nil {
+		return false
+	}
+	delta := time.Since(ts)
+	if delta < 0 {
+		delta = -delta
+	}
+	if delta > tolerance {
+		return false
+	}
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(timestampHeader + "."))
+	mac.Write(body)
+	expected := hex.EncodeToString(mac.Sum(nil))
+	received := signatureHeader[len("sha256="):]
+
+	return subtle.ConstantTimeCompare([]byte(expected), []byte(received)) == 1
+}
+```
+
+Uso típico en un `http.Handler`:
+
+```go
+body, _ := io.ReadAll(r.Body)
+ok := VerifySynergosWebhook(
+    os.Getenv("SYNERGOS_WEBHOOK_SECRET"),
+    r.Header.Get("X-Synergos-Timestamp"),
+    r.Header.Get("X-Synergos-Signature"),
+    body,
+    5*time.Minute)
+if !ok {
+    http.Error(w, "invalid signature", http.StatusUnauthorized)
+    return
+}
+```
+
+### Java (javax.crypto.Mac)
+
+```java
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.HexFormat;
+
+public final class SynergosWebhookVerifier {
+
+    public static boolean verify(String secret, String timestampHeader,
+                                 String signatureHeader, byte[] body,
+                                 Duration tolerance) {
+        if (timestampHeader == null || signatureHeader == null) return false;
+        if (!signatureHeader.startsWith("sha256=")) return false;
+
+        Instant ts;
+        try {
+            ts = OffsetDateTime.parse(timestampHeader).toInstant();
+        } catch (DateTimeParseException e) {
+            return false;
+        }
+        Duration delta = Duration.between(ts, Instant.now()).abs();
+        if (delta.compareTo(tolerance) > 0) return false;
+
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            mac.update((timestampHeader + ".").getBytes(StandardCharsets.UTF_8));
+            mac.update(body);
+            String expected = HexFormat.of().formatHex(mac.doFinal());
+            String received = signatureHeader.substring("sha256=".length());
+            return constantTimeEquals(expected, received);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static boolean constantTimeEquals(String a, String b) {
+        if (a.length() != b.length()) return false;
+        int diff = 0;
+        for (int i = 0; i < a.length(); i++) {
+            diff |= a.charAt(i) ^ b.charAt(i);
+        }
+        return diff == 0;
+    }
+}
+```
+
+Uso típico en un Spring controller:
+
+```java
+@PostMapping(value = "/synergos/comment-moderation", consumes = "application/json")
+public ResponseEntity<Void> receive(
+        @RequestHeader(value = "X-Synergos-Timestamp", required = false) String ts,
+        @RequestHeader(value = "X-Synergos-Signature", required = false) String sig,
+        @RequestBody byte[] body) {
+    boolean ok = SynergosWebhookVerifier.verify(
+        System.getenv("SYNERGOS_WEBHOOK_SECRET"),
+        ts, sig, body, Duration.ofMinutes(5));
+    if (!ok) {
+        return ResponseEntity.status(401).build();
+    }
+    // process payload …
+    return ResponseEntity.ok().build();
+}
+```
+
 ## Payloads por evento
 
 ### `comment.pending-moderation`
