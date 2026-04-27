@@ -80,15 +80,15 @@
                     <span class="syn-admin__filter-label">Por página</span>
                     <input type="number" name="pageSize" value="@pageData.PageSize" min="5" max="200" />
                 </label>
-                <button type="submit" class="syn-admin__filter-submit">Aplicar</button>
+                <button type="submit" class="syn-admin__filter-submit">@Umbraco.GetDictionaryValue("admin.action.applyfilters", "Aplicar filtros")</button>
                 @if (HasFilters)
                 {
-                    <a href="/admin/forms" class="syn-admin__filter-clear">Limpiar filtros</a>
+                    <a href="/admin/forms" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar")</a>
                 }
                 @{
                     var exportHref = AppendFilters("/admin/forms/export");
                 }
-                <a href="@exportHref" class="syn-admin__filter-export" download>⬇ Exportar CSV</a>
+                <a href="@exportHref" class="syn-admin__filter-export" download>⬇ @Umbraco.GetDictionaryValue("admin.action.export", "Exportar CSV")</a>
             </form>
 
             @if (pageData.Items.Count == 0)

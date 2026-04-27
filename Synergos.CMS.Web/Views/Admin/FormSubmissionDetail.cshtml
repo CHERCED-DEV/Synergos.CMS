@@ -137,8 +137,8 @@
                 Esta acción es <strong>irreversible</strong> — el archivo se borra del storage.
             </p>
             <div class="syn-admin__dialog-actions">
-                <button type="submit" value="cancel" class="syn-admin__action syn-admin__action--ghost">Cancelar</button>
-                <button type="submit" value="confirm" class="syn-admin__action syn-admin__action--reject">🗑 Eliminar</button>
+                <button type="submit" value="cancel" class="syn-admin__action syn-admin__action--ghost">@Umbraco.GetDictionaryValue("admin.action.cancel", "Cancelar")</button>
+                <button type="submit" value="confirm" class="syn-admin__action syn-admin__action--reject">🗑 @Umbraco.GetDictionaryValue("admin.action.delete", "Eliminar")</button>
             </div>
         </form>
     </dialog>

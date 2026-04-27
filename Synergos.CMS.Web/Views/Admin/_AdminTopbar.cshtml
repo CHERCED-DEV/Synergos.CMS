@@ -20,21 +20,22 @@
     <div class="syn-admin__topbar-inner">
         <a class="syn-admin__brand" href="/admin">
             <span class="syn-admin__brand-mark">⚙</span>
-            <span>Synergos · Operaciones</span>
+            <span>@Umbraco.GetDictionaryValue("admin.brand", "Synergos · Operaciones")</span>
         </a>
-        <nav class="syn-admin__nav" aria-label="Admin">
-            <a class="@CurrentClass("home")" href="/admin">Inicio</a>
+        <nav class="syn-admin__nav" aria-label="@Umbraco.GetDictionaryValue("admin.aria.nav", "Admin")">
+            <a class="@CurrentClass("home")" href="/admin">@Umbraco.GetDictionaryValue("admin.nav.home", "Inicio")</a>
             <a class="@CurrentClass("moderation")" href="/admin/moderation/comments">
-                Moderación
+                @Umbraco.GetDictionaryValue("admin.nav.moderation", "Moderación")
                 @if (pendingCount > 0)
                 {
-                    <span class="syn-admin__nav-badge" aria-label="@pendingCount pendientes">@pendingCount</span>
+                    var pendingAriaTpl = Umbraco.GetDictionaryValue("admin.nav.pendingaria", "{0} pendientes");
+                    <span class="syn-admin__nav-badge" aria-label="@string.Format(pendingAriaTpl, pendingCount)">@pendingCount</span>
                 }
             </a>
-            <a class="@CurrentClass("forms")" href="/admin/forms">Forms</a>
-            <a class="@CurrentClass("search")" href="/admin/analytics/search">Búsqueda</a>
-            <a class="@CurrentClass("webhooks")" href="/admin/webhooks/test">Webhooks</a>
-            <a class="@CurrentClass("health")" href="/admin/health">Health</a>
+            <a class="@CurrentClass("forms")" href="/admin/forms">@Umbraco.GetDictionaryValue("admin.nav.forms", "Forms")</a>
+            <a class="@CurrentClass("search")" href="/admin/analytics/search">@Umbraco.GetDictionaryValue("admin.nav.search", "Búsqueda")</a>
+            <a class="@CurrentClass("webhooks")" href="/admin/webhooks/test">@Umbraco.GetDictionaryValue("admin.nav.webhooks", "Webhooks")</a>
+            <a class="@CurrentClass("health")" href="/admin/health">@Umbraco.GetDictionaryValue("admin.nav.health", "Health")</a>
         </nav>
         <div class="syn-admin__user">
             <span class="syn-admin__user-avatar" aria-hidden="true">@avatarLetter</span>

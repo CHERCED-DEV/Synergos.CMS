@@ -22,11 +22,13 @@
 
     <main class="syn-admin__main">
         <div class="syn-admin__container">
+            @{
+                var welcomeTpl = Umbraco.GetDictionaryValue("admin.welcome", "Bienvenido, {0}");
+            }
             <header class="syn-admin__page-header">
-                <h1 class="syn-admin__page-title">Bienvenido, @moderatorName</h1>
+                <h1 class="syn-admin__page-title">@string.Format(welcomeTpl, moderatorName)</h1>
                 <p class="syn-admin__page-subtitle">
-                    Resumen rápido del estado operacional. Click en cada card
-                    para ir al detalle.
+                    @Umbraco.GetDictionaryValue("admin.subtitle", "Resumen rápido del estado operacional. Click en cada card para ir al detalle.")
                 </p>
             </header>
 
@@ -34,22 +36,22 @@
                 <a class="syn-admin__card" href="/admin/moderation/comments">
                     <span class="syn-admin__card-icon" aria-hidden="true">💬</span>
                     <span class="syn-admin__card-value">@pendingCount</span>
-                    <span class="syn-admin__card-label">Comentarios pendientes</span>
-                    <span class="syn-admin__card-hint">@(pendingCount == 0 ? "Cola limpia" : pendingCount == 1 ? "1 esperando aprobación" : $"{pendingCount} esperando aprobación")</span>
+                    <span class="syn-admin__card-label">@Umbraco.GetDictionaryValue("admin.cards.moderation.label", "Comentarios pendientes")</span>
+                    <span class="syn-admin__card-hint">@(pendingCount == 0 ? Umbraco.GetDictionaryValue("admin.cards.moderation.queueclean", "Cola limpia") : pendingCount == 1 ? "1 esperando aprobación" : $"{pendingCount} esperando aprobación")</span>
                 </a>
 
                 <a class="syn-admin__card" href="/admin/forms">
                     <span class="syn-admin__card-icon" aria-hidden="true">📩</span>
                     <span class="syn-admin__card-value">@formKeys.Count</span>
-                    <span class="syn-admin__card-label">Forms con submissions</span>
-                    <span class="syn-admin__card-hint">@(formKeys.Count == 0 ? "Sin submissions aún" : string.Join(" · ", formKeys.Take(3)) + (formKeys.Count > 3 ? "…" : ""))</span>
+                    <span class="syn-admin__card-label">@Umbraco.GetDictionaryValue("admin.cards.forms.label", "Forms con submissions")</span>
+                    <span class="syn-admin__card-hint">@(formKeys.Count == 0 ? Umbraco.GetDictionaryValue("admin.cards.forms.empty", "Sin submissions aún") : string.Join(" · ", formKeys.Take(3)) + (formKeys.Count > 3 ? "…" : ""))</span>
                 </a>
 
                 <a class="syn-admin__card" href="/admin/analytics/search">
                     <span class="syn-admin__card-icon" aria-hidden="true">🔎</span>
                     <span class="syn-admin__card-value">@topQueries.Count</span>
-                    <span class="syn-admin__card-label">Top queries últ. 7d</span>
-                    <span class="syn-admin__card-hint">@(topQueries.Count == 0 ? "Sin búsquedas registradas" : topQueries.First().Query)</span>
+                    <span class="syn-admin__card-label">@Umbraco.GetDictionaryValue("admin.cards.search.label", "Top queries últ. 7d")</span>
+                    <span class="syn-admin__card-hint">@(topQueries.Count == 0 ? Umbraco.GetDictionaryValue("admin.cards.search.empty", "Sin búsquedas registradas") : topQueries.First().Query)</span>
                 </a>
             </section>
 
@@ -57,7 +59,7 @@
             {
                 <section class="syn-admin__panel" style="margin-top: var(--syn-space-xl);">
                     <header class="syn-admin__panel-header">
-                        <h2 class="syn-admin__panel-title">Top queries últimos 7 días</h2>
+                        <h2 class="syn-admin__panel-title">@Umbraco.GetDictionaryValue("admin.topqueriespanel.title", "Top queries últimos 7 días")</h2>
                         <span class="syn-admin__panel-count">@topQueries.Count</span>
                     </header>
                     <table class="syn-admin__table">

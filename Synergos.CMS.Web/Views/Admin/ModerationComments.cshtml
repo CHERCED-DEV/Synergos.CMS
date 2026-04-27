@@ -62,7 +62,7 @@
                             <form method="post"
                                   action="/admin/moderation/comments/bulk-undo-reject/@undoToken"
                                   class="syn-admin__flash-action">
-                                <button type="submit" class="syn-admin__flash-button">↶ Deshacer</button>
+                                <button type="submit" class="syn-admin__flash-button">@Umbraco.GetDictionaryValue("admin.action.undo", "↶ Deshacer")</button>
                             </form>
                         }
                     }
@@ -93,7 +93,7 @@
                 <button type="submit" class="syn-admin__filter-submit">Aplicar</button>
                 @if (nodeIdFilter.HasValue)
                 {
-                    <a href="/admin/moderation/comments" class="syn-admin__filter-clear">Limpiar filtros</a>
+                    <a href="/admin/moderation/comments" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar")</a>
                 }
             </form>
 
@@ -126,12 +126,12 @@
                             <button type="button"
                                     data-bulk-action="approve"
                                     class="syn-admin__action syn-admin__action--approve">
-                                ✓ Aprobar seleccionados
+                                ✓ @Umbraco.GetDictionaryValue("admin.action.bulkapprove", "Aprobar seleccionados")
                             </button>
                             <button type="button"
                                     data-bulk-action="reject"
                                     class="syn-admin__action syn-admin__action--reject">
-                                ✗ Rechazar seleccionados
+                                ✗ @Umbraco.GetDictionaryValue("admin.action.bulkreject", "Rechazar seleccionados")
                             </button>
                         </div>
                     </div>
@@ -161,14 +161,14 @@
                                           action="/admin/moderation/comments/@comment.NodeId/@comment.Id/approve"
                                           class="syn-admin__item-form">
                                         <button type="submit" class="syn-admin__action syn-admin__action--approve">
-                                            ✓ Aprobar
+                                            ✓ @Umbraco.GetDictionaryValue("admin.action.approve", "Aprobar")
                                         </button>
                                     </form>
                                     <form method="post"
                                           action="/admin/moderation/comments/@comment.NodeId/@comment.Id/reject"
                                           class="syn-admin__item-form">
                                         <button type="submit" class="syn-admin__action syn-admin__action--reject">
-                                            ✗ Rechazar
+                                            ✗ @Umbraco.GetDictionaryValue("admin.action.reject", "Rechazar")
                                         </button>
                                     </form>
                                     <form method="post"
@@ -176,7 +176,7 @@
                                           class="syn-admin__item-form">
                                         <button type="submit" class="syn-admin__action syn-admin__action--spam"
                                                 title="Marcar como spam — elimina + entrena futuro filtro">
-                                            🚫 Spam
+                                            🚫 @Umbraco.GetDictionaryValue("admin.action.spam", "Spam")
                                         </button>
                                     </form>
                                 </footer>
