@@ -80,6 +80,7 @@
                             <th class="syn-admin__col-num">Último login</th>
                             <th class="syn-admin__col-num">Creado</th>
                             <th>Estado</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -119,6 +120,20 @@
                                     else
                                     {
                                         <span class="syn-admin__status syn-admin__status--ok">OK</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (m.IsLockedOut)
+                                    {
+                                        <form method="post" action="/admin/members/@m.Key/unlock" class="syn-admin__item-form">
+                                            <button type="submit" class="syn-admin__action syn-admin__action--approve">🔓 Desbloquear</button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <form method="post" action="/admin/members/@m.Key/lock" class="syn-admin__item-form">
+                                            <button type="submit" class="syn-admin__action syn-admin__action--reject">🔒 Bloquear</button>
+                                        </form>
                                     }
                                 </td>
                             </tr>

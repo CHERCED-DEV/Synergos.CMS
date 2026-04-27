@@ -43,6 +43,7 @@ public sealed class AdminController : Controller
     private readonly ISearchAnalyticsStore _searchAnalytics;
     private readonly IFormSubmissionReader _formReader;
     private readonly IMemberRosterReader _memberRoster;
+    private readonly IMemberRosterWriter _memberRosterWriter;
     private readonly IAuditTrailWriter _audit;
     private readonly IMemoryCache _cache;
     private readonly IOptionsMonitor<AdminSettings> _adminSettings;
@@ -54,6 +55,7 @@ public sealed class AdminController : Controller
         ISearchAnalyticsStore searchAnalytics,
         IFormSubmissionReader formReader,
         IMemberRosterReader memberRoster,
+        IMemberRosterWriter memberRosterWriter,
         IAuditTrailWriter audit,
         IMemoryCache cache,
         IOptionsMonitor<AdminSettings> adminSettings)
@@ -64,6 +66,7 @@ public sealed class AdminController : Controller
         _searchAnalytics = searchAnalytics;
         _formReader = formReader;
         _memberRoster = memberRoster;
+        _memberRosterWriter = memberRosterWriter;
         _audit = audit;
         _cache = cache;
         _adminSettings = adminSettings;
@@ -789,8 +792,9 @@ public sealed class AdminController : Controller
     }
 
     /// <summary>
-    /// GET /admin/members — listing read-only del Member roster con
-    /// paginación + filter por role. Olas 144-145.
+    /// GET /admin/members — listing del Member roster con paginación +
+    /// filter por role. Read del IMemberRosterReader; lock/unlock via
+    /// IMemberRosterWriter en POST actions hermanas. Olas 144-145 + 155-156.
     /// </summary>
     [HttpGet("members")]
     public IActionResult Members(
@@ -810,5 +814,47 @@ public sealed class AdminController : Controller
         ViewData["AllRoles"] = allRoles;
         ViewData["RoleFilter"] = roleFilter;
         return View();
+    }
+
+    /// <summary>
+    /// POST /admin/members/{key}/lock — bloquea Member. Idempotent. Olas 155-156.
+    /// </summary>
+    [HttpPost("members/{memberKey:guid}/lock")]
+    public async Task<IActionResult> LockMember(Guid memberKey, CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var ok = await _memberRosterWriter.LockAsync(memberKey, cancellationToken);
+        await EmitAuditAsync(
+            "member.lock",
+            $"memberKey={memberKey:N}",
+            ok ? "success" : "failure",
+            cancellationToken: cancellationToken);
+
+        return RedirectToAction(nameof(Members));
+    }
+
+    /// <summary>
+    /// POST /admin/members/{key}/unlock — desbloquea Member. Idempotent. Olas 155-156.
+    /// </summary>
+    [HttpPost("members/{memberKey:guid}/unlock")]
+    public async Task<IActionResult> UnlockMember(Guid memberKey, CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var ok = await _memberRosterWriter.UnlockAsync(memberKey, cancellationToken);
+        await EmitAuditAsync(
+            "member.unlock",
+            $"memberKey={memberKey:N}",
+            ok ? "success" : "failure",
+            cancellationToken: cancellationToken);
+
+        return RedirectToAction(nameof(Members));
     }
 }

@@ -172,6 +172,9 @@ public sealed class SeamComposer : IComposer
         // services Umbraco (IMemberService es scoped per-request).
         services.AddTransient<IMemberRosterReader, UmbracoMemberRosterReader>();
 
+        // Olas 155-156 — Member roster writer split (lock/unlock) — ISP-clean.
+        services.AddTransient<IMemberRosterWriter, UmbracoMemberRosterWriter>();
+
         // Olas 153-154 — Audit trail (ADR 0066). FileSystemAuditTrailWriter
         // persiste eventos admin en App_Data/syn-audit/{yyyy-MM-dd}.jsonl.
         // Singleton — solo depende de IHostEnvironment + ILogger; concurrency
