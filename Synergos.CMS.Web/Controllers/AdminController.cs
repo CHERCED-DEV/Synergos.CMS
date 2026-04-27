@@ -105,6 +105,84 @@ public sealed class AdminController : Controller
         return View();
     }
 
+    /// <summary>
+    /// GET /admin/forms/export?formKey=X&amp;limit=500 — descarga las
+    /// submissions más recientes como CSV. Default limit 500, hard cap
+    /// 5000 para evitar timeout/OOM en datasets grandes.
+    /// </summary>
+    [HttpGet("forms/export")]
+    public IActionResult ExportFormSubmissions(
+        [FromQuery(Name = "formKey")] string? formKeyFilter = null,
+        [FromQuery] int limit = 500)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var clamped = Math.Clamp(limit, 1, 5000);
+        var listingPage = _formReader.GetRecent(page: 1, pageSize: clamped, formKeyFilter);
+
+        // Recolectamos todos los keys de columna posibles a través de
+        // las submissions del scope. Cada submission puede tener fields
+        // distintos — el CSV los unifica con valores vacíos donde falte.
+        var unionKeys = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var details = new List<FormSubmissionDetail>(listingPage.Items.Count);
+        foreach (var item in listingPage.Items)
+        {
+            var detail = _formReader.GetSubmission(item.FormKey, item.StorageId);
+            if (detail is null) continue;
+            details.Add(detail);
+            foreach (var k in detail.Fields.Keys) unionKeys.Add(k);
+        }
+
+        var sb = new System.Text.StringBuilder();
+        // Header: meta cols + field cols sorted.
+        var metaCols = new[] { "formKey", "storageId", "receivedAtUtc", "clientIp", "userAgent", "referrer" };
+        sb.Append(string.Join(",", metaCols.Concat(unionKeys).Select(EscapeCsvField)));
+        sb.Append('\n');
+
+        foreach (var d in details)
+        {
+            var row = new List<string>(metaCols.Length + unionKeys.Count)
+            {
+                d.FormKey,
+                d.StorageId,
+                d.ReceivedAtUtc.ToString("O"),
+                d.ClientIp ?? string.Empty,
+                d.UserAgent ?? string.Empty,
+                d.Referrer ?? string.Empty,
+            };
+            foreach (var k in unionKeys)
+            {
+                row.Add(d.Fields.TryGetValue(k, out var v) ? v : string.Empty);
+            }
+            sb.Append(string.Join(",", row.Select(EscapeCsvField)));
+            sb.Append('\n');
+        }
+
+        var fileName = string.IsNullOrWhiteSpace(formKeyFilter)
+            ? $"submissions_{DateTime.UtcNow:yyyyMMdd_HHmm}.csv"
+            : $"submissions_{formKeyFilter}_{DateTime.UtcNow:yyyyMMdd_HHmm}.csv";
+
+        // BOM UTF-8 para que Excel no malinterprete encoding.
+        var utf8Bom = new byte[] { 0xEF, 0xBB, 0xBF };
+        var content = utf8Bom.Concat(System.Text.Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+        return File(content, "text/csv; charset=utf-8", fileName);
+    }
+
+    /// <summary>
+    /// CSV field escape: si contiene comma, comillas o newline, wrap
+    /// en comillas dobles y escape comillas internas duplicándolas.
+    /// </summary>
+    private static string EscapeCsvField(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        bool needsQuotes = value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0;
+        if (!needsQuotes) return value;
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
+    }
+
     [HttpGet("forms/{formKey}/{storageId}")]
     public IActionResult FormSubmissionDetail(string formKey, string storageId)
     {

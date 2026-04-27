@@ -65,6 +65,12 @@
                 {
                     <a href="/admin/forms" class="syn-admin__filter-clear">Limpiar filtros</a>
                 }
+                @{
+                    var exportHref = !string.IsNullOrWhiteSpace(formKeyFilter)
+                        ? $"/admin/forms/export?formKey={Uri.EscapeDataString(formKeyFilter)}"
+                        : "/admin/forms/export";
+                }
+                <a href="@exportHref" class="syn-admin__filter-export" download>⬇ Exportar CSV</a>
             </form>
 
             @if (pageData.Items.Count == 0)

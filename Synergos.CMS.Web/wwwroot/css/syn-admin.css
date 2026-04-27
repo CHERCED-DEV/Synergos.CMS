@@ -552,6 +552,30 @@
   text-decoration: underline;
 }
 
+.syn-admin__filter-export {
+  align-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+  padding: var(--syn-space-2) var(--syn-space-4);
+  background: var(--syn-color-action-secondary-surface);
+  color: var(--syn-color-action-secondary-text);
+  border: 1px solid var(--syn-color-action-secondary-border);
+  border-radius: var(--syn-radius-md);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: none;
+  margin-inline-start: auto;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-admin__filter-export:hover {
+  background: var(--syn-color-action-secondary-surface-hover);
+  color: var(--syn-color-action-primary);
+  border-color: var(--syn-color-action-secondary-border-hover);
+  text-decoration: none;
+}
+
 /* ── Flash message (after bulk action) ───────────────────────── */
 
 .syn-admin__flash {
