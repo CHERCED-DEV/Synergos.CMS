@@ -48,6 +48,14 @@ public sealed class AdminSettings
     /// (deferred Rule of Three).
     /// </summary>
     public WebhookResilienceSettings WebhookResilience { get; init; } = new();
+
+    /// <summary>
+    /// Retention de audit trail files (App_Data/syn-audit/{yyyy-MM-dd}.jsonl).
+    /// Default 90 días. <c>0</c> = retention infinito (operador gestiona
+    /// manualmente). Background service purga al boot + cada 24h.
+    /// (Ola 162)
+    /// </summary>
+    public int AuditRetentionDays { get; init; } = 90;
 }
 
 /// <summary>

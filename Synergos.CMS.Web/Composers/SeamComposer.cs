@@ -181,6 +181,17 @@ public sealed class SeamComposer : IComposer
         // gestionada via lock interno.
         services.AddSingleton<IAuditTrailWriter, FileSystemAuditTrailWriter>();
 
+        // Ola 162 — Audit retention background sweep (ADR 0070). Purga
+        // archivos JSONL más viejos que AdminSettings.AuditRetentionDays
+        // al boot + cada 24h. Si retention=0, no-op.
+        services.AddHostedService<AuditRetentionHostedService>();
+
+        // Ola 161 — Validator que warn al boot/reload si una key del
+        // PerChannel dict no matchea ningún FactoryName conocido.
+        services.AddSingleton<
+            Microsoft.Extensions.Options.IValidateOptions<WebhookResilienceSettings>,
+            WebhookResilienceSettingsValidator>();
+
         // Ola 65 — Email transaccional (ADR 0035). DefaultEmailService
         // wraps Umbraco.Cms.Core.Mail.IEmailSender — Umbraco gestiona
         // SMTP transport via Umbraco:CMS:Global:Smtp + pickup directory.
