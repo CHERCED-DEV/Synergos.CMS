@@ -1,0 +1,111 @@
+@*
+    Vista del AdminController.WebhookTestHarness (Ola 133). Botones
+    para disparar payload de test a cada dominio (comments / forms /
+    cart). Útil para validar URL/secret/HMAC antes de prod.
+*@
+@{
+    Layout = null;
+    var messageCode = ViewData["MessageCode"] as string;
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>Webhook test harness · Synergos</title>
+</head>
+<body class="syn-admin">
+    @await Html.PartialAsync("_AdminTopbar")
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">Webhook test harness</h1>
+                <p class="syn-admin__page-subtitle">
+                    Dispara un payload de prueba a TODOS los channels
+                    configurados en el dominio elegido (email + webhook + Slack
+                    + Discord + Teams). El payload está marcado como test —
+                    receivers idempotentes deben deduplicar por <code>commentId</code>
+                    / <code>cartId</code> / <code>storageReference</code>.
+                </p>
+            </header>
+
+            @if (!string.IsNullOrWhiteSpace(messageCode))
+            {
+                <p class="syn-admin__flash" role="status" aria-live="polite">
+                    @if (messageCode == "comment-fired")
+                    {
+                        <text>💬 Payload de test enviado a los channels de comments configurados. Verifica que llegó al receiver.</text>
+                    }
+                    else if (messageCode == "form-fired")
+                    {
+                        <text>📩 Payload de test enviado a los channels de forms configurados.</text>
+                    }
+                    else if (messageCode == "cart-fired")
+                    {
+                        <text>🛒 Payload de test enviado a los channels de cart abandonment configurados.</text>
+                    }
+                </p>
+            }
+
+            <div class="syn-admin__split">
+                <section class="syn-admin__panel">
+                    <header class="syn-admin__panel-header">
+                        <h2 class="syn-admin__panel-title">💬 Comments moderation</h2>
+                    </header>
+                    <p class="syn-admin__panel-hint">
+                        Dispara <code>comment.pending-moderation</code> con
+                        autor "[TEST] Synergos webhook test". Channels:
+                        email + webhook + Slack + Discord + Teams.
+                    </p>
+                    <form method="post" action="/admin/webhooks/test/comment">
+                        <button type="submit" class="syn-admin__action syn-admin__action--approve">
+                            🚀 Disparar test
+                        </button>
+                    </form>
+                </section>
+
+                <section class="syn-admin__panel">
+                    <header class="syn-admin__panel-header">
+                        <h2 class="syn-admin__panel-title">📩 Form submission</h2>
+                    </header>
+                    <p class="syn-admin__panel-hint">
+                        Dispara <code>form.submitted</code> con
+                        formKey="synergos-webhook-test" + 3 fields de prueba.
+                    </p>
+                    <form method="post" action="/admin/webhooks/test/form">
+                        <button type="submit" class="syn-admin__action syn-admin__action--approve">
+                            🚀 Disparar test
+                        </button>
+                    </form>
+                </section>
+
+                <section class="syn-admin__panel">
+                    <header class="syn-admin__panel-header">
+                        <h2 class="syn-admin__panel-title">🛒 Cart abandonment</h2>
+                    </header>
+                    <p class="syn-admin__panel-hint">
+                        Dispara <code>cart.abandoned</code> con cartId
+                        prefixed "test-" + subtotal 187.500 COP + 3 items.
+                    </p>
+                    <form method="post" action="/admin/webhooks/test/cart">
+                        <button type="submit" class="syn-admin__action syn-admin__action--approve">
+                            🚀 Disparar test
+                        </button>
+                    </form>
+                </section>
+            </div>
+
+            <section class="syn-admin__panel" style="margin-top: var(--syn-space-xl);">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">📖 Receiver SDK</h2>
+                </header>
+                <p class="syn-admin__panel-hint">
+                    Para verificar HMAC + replay protection en tu receiver, lee
+                    <code>docs/webhooks/receiver-sdk.md</code> — incluye
+                    snippets en C# / Node.js / Python.
+                </p>
+            </section>
+        </div>
+    </main>
+</body>
+</html>

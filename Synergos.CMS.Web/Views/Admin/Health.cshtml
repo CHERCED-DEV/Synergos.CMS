@@ -1,0 +1,99 @@
+@*
+    Vista del AdminController.Health (Ola 131). Reporte ops del
+    runtime: uptime, memory, settings activos, counts de seams.
+*@
+@{
+    Layout = null;
+    var report = (Synergos.CMS.Web.Controllers.AdminController.HealthReport)ViewData["Report"]!;
+    string FormatUptime(int seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        if (ts.TotalDays >= 1) return $"{(int)ts.TotalDays}d {ts.Hours}h {ts.Minutes}m";
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        return $"{ts.Minutes}m {ts.Seconds}s";
+    }
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>Health · Synergos</title>
+</head>
+<body class="syn-admin">
+    @await Html.PartialAsync("_AdminTopbar")
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">Health & runtime</h1>
+                <p class="syn-admin__page-subtitle">
+                    Estado del runtime + counts agregados de los seams. Útil
+                    para verificar que el dashboard está operacional y
+                    para troubleshooting rápido.
+                </p>
+            </header>
+
+            <section class="syn-admin__cards">
+                <div class="syn-admin__card">
+                    <span class="syn-admin__card-icon" aria-hidden="true">⏱</span>
+                    <span class="syn-admin__card-value">@FormatUptime(report.UptimeSeconds)</span>
+                    <span class="syn-admin__card-label">Uptime</span>
+                    <span class="syn-admin__card-hint">Desde el último restart del proceso.</span>
+                </div>
+                <div class="syn-admin__card">
+                    <span class="syn-admin__card-icon" aria-hidden="true">🧠</span>
+                    <span class="syn-admin__card-value">@report.ProcessMemoryMb MB</span>
+                    <span class="syn-admin__card-label">Memoria</span>
+                    <span class="syn-admin__card-hint">Working set del proceso CMS.</span>
+                </div>
+                <div class="syn-admin__card">
+                    <span class="syn-admin__card-icon" aria-hidden="true">🔷</span>
+                    <span class="syn-admin__card-value">.NET @report.DotnetVersion</span>
+                    <span class="syn-admin__card-label">Runtime</span>
+                    <span class="syn-admin__card-hint">@report.HostName</span>
+                </div>
+            </section>
+
+            <section class="syn-admin__panel" style="margin-top: var(--syn-space-xl);">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Seams + counts</h2>
+                </header>
+                <table class="syn-admin__table">
+                    <tbody>
+                        <tr>
+                            <th>Comentarios pendientes</th>
+                            <td class="syn-admin__col-num">@report.PendingComments</td>
+                        </tr>
+                        <tr>
+                            <th>Forms con submissions</th>
+                            <td class="syn-admin__col-num">@report.FormsWithSubmissions</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="syn-admin__panel" style="margin-top: var(--syn-space-lg);">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Settings activos</h2>
+                </header>
+                <table class="syn-admin__table">
+                    <tbody>
+                        <tr>
+                            <th>Pending count cache TTL</th>
+                            <td>@report.CacheTtlSeconds segundos</td>
+                        </tr>
+                        <tr>
+                            <th>Webhook max retries</th>
+                            <td class="syn-admin__col-num">@report.ResilienceMaxRetries</td>
+                        </tr>
+                        <tr>
+                            <th>Webhook total timeout</th>
+                            <td>@report.ResilienceTimeoutTotal segundos</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+        </div>
+    </main>
+</body>
+</html>

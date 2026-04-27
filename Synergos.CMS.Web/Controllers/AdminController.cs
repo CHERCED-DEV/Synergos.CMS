@@ -242,6 +242,152 @@ public sealed class AdminController : Controller
         return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
+    /// <summary>
+    /// GET /admin/webhooks/test — preview de los channels configurados
+    /// + botones para disparar payload de test marcado como test
+    /// (no-real data) a cada dominio.
+    /// </summary>
+    [HttpGet("webhooks/test")]
+    public IActionResult WebhookTestHarness([FromQuery(Name = "msg")] string? messageCode = null)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        SetTopbar("webhooks");
+        ViewData["MessageCode"] = messageCode;
+        return View();
+    }
+
+    [HttpPost("webhooks/test/comment")]
+    public async Task<IActionResult> TestCommentWebhook(
+        [FromServices] ICommentModerationNotifier notifier,
+        CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var fakeComment = new Comment(
+            Id: $"test-{Guid.NewGuid().ToString("N")[..8]}",
+            NodeId: 0,
+            MemberKey: null,
+            AuthorName: "[TEST] Synergos webhook test",
+            Body: "Este es un payload de prueba disparado desde /admin/webhooks/test. NO es un comentario real.",
+            CreatedAtUtc: DateTime.UtcNow,
+            Approved: false);
+
+        await notifier.NotifyPendingAsync(fakeComment, cancellationToken);
+
+        _analytics.Track("webhooks.test.comment", new Dictionary<string, object?>
+        {
+            ["moderator"] = _gate.CurrentMemberDisplayName,
+        });
+        return RedirectToAction(nameof(WebhookTestHarness), new { msg = "comment-fired" });
+    }
+
+    [HttpPost("webhooks/test/form")]
+    public async Task<IActionResult> TestFormWebhook(
+        [FromServices] IFormSubmissionNotifier notifier,
+        CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var fakeRequest = new FormSubmissionRequest(
+            FormKey: "synergos-webhook-test",
+            Fields: new Dictionary<string, string>
+            {
+                ["test"] = "true",
+                ["from"] = "/admin/webhooks/test",
+                ["note"] = "NO es una submission real",
+            },
+            ClientIp: HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            UserAgent: Request.Headers.UserAgent.ToString(),
+            Referrer: Request.Headers.Referer.ToString(),
+            ReceivedAtUtc: DateTime.UtcNow);
+        var fakeResult = FormSubmissionResult.Ok("test-storage-ref");
+
+        await notifier.NotifySubmittedAsync(fakeRequest, fakeResult, cancellationToken);
+
+        _analytics.Track("webhooks.test.form", new Dictionary<string, object?>
+        {
+            ["moderator"] = _gate.CurrentMemberDisplayName,
+        });
+        return RedirectToAction(nameof(WebhookTestHarness), new { msg = "form-fired" });
+    }
+
+    [HttpPost("webhooks/test/cart")]
+    public async Task<IActionResult> TestCartWebhook(
+        [FromServices] ICartAbandonmentNotifier notifier,
+        CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var fakeCart = new AbandonedCart(
+            CartId: $"test-{Guid.NewGuid().ToString("N")[..8]}",
+            ItemCount: 3,
+            Subtotal: 187_500m,
+            Currency: "COP",
+            LastActivityUtc: DateTime.UtcNow.AddMinutes(-90));
+
+        await notifier.NotifyAbandonedAsync(fakeCart, cancellationToken);
+
+        _analytics.Track("webhooks.test.cart", new Dictionary<string, object?>
+        {
+            ["moderator"] = _gate.CurrentMemberDisplayName,
+        });
+        return RedirectToAction(nameof(WebhookTestHarness), new { msg = "cart-fired" });
+    }
+
+    [HttpGet("health")]
+    public IActionResult Health()
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var process = System.Diagnostics.Process.GetCurrentProcess();
+        var pendingPage = _comments.GetPendingPage(1, 1);
+        var formKeys = _formReader.ListFormKeys();
+
+        // Lecturas baratas — filesystem enumeration que ya hicimos para
+        // las otras vistas del admin no se repite gracias al cache.
+        var report = new HealthReport(
+            UptimeSeconds: (int)(DateTime.UtcNow - process.StartTime.ToUniversalTime()).TotalSeconds,
+            ProcessMemoryMb: (int)(process.WorkingSet64 / (1024 * 1024)),
+            DotnetVersion: Environment.Version.ToString(),
+            HostName: Environment.MachineName,
+            PendingComments: pendingPage.TotalCount,
+            FormsWithSubmissions: formKeys.Count,
+            ResilienceMaxRetries: _adminSettings.CurrentValue.WebhookResilience.MaxRetryAttempts,
+            ResilienceTimeoutTotal: _adminSettings.CurrentValue.WebhookResilience.TotalRequestTimeoutSeconds,
+            CacheTtlSeconds: (int)_adminSettings.CurrentValue.PendingCountCacheTtl.TotalSeconds);
+
+        SetTopbar("health", pendingPage.TotalCount);
+        ViewData["Report"] = report;
+        return View();
+    }
+
+    public sealed record HealthReport(
+        int UptimeSeconds,
+        int ProcessMemoryMb,
+        string DotnetVersion,
+        string HostName,
+        int PendingComments,
+        int FormsWithSubmissions,
+        int ResilienceMaxRetries,
+        int ResilienceTimeoutTotal,
+        int CacheTtlSeconds);
+
     [HttpPost("forms/{formKey}/{storageId}/delete")]
     public async Task<IActionResult> DeleteFormSubmission(
         string formKey,
