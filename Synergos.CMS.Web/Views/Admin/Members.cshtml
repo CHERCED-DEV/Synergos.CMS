@@ -74,13 +74,13 @@
                 <table class="syn-admin__table">
                     <thead>
                         <tr>
-                            <th>Email</th>
-                            <th>Nombre</th>
-                            <th>Roles</th>
-                            <th class="syn-admin__col-num">Último login</th>
-                            <th class="syn-admin__col-num">Creado</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.email", "Email")</th>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.name", "Nombre")</th>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.roles", "Roles")</th>
+                            <th class="syn-admin__col-num">@Umbraco.GetDictionaryValue("admin.col.lastlogin", "Último login")</th>
+                            <th class="syn-admin__col-num">@Umbraco.GetDictionaryValue("admin.col.created", "Creado")</th>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.state", "Estado")</th>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.actions", "Acciones")</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -111,28 +111,28 @@
                                 <td>
                                     @if (m.IsLockedOut)
                                     {
-                                        <span class="syn-admin__status syn-admin__status--danger">Locked</span>
+                                        <span class="syn-admin__status syn-admin__status--danger">@Umbraco.GetDictionaryValue("admin.status.locked", "Bloqueado")</span>
                                     }
                                     else if (!m.IsApproved)
                                     {
-                                        <span class="syn-admin__status syn-admin__status--warn">Sin confirmar</span>
+                                        <span class="syn-admin__status syn-admin__status--warn">@Umbraco.GetDictionaryValue("admin.status.unconfirmed", "Sin confirmar")</span>
                                     }
                                     else
                                     {
-                                        <span class="syn-admin__status syn-admin__status--ok">OK</span>
+                                        <span class="syn-admin__status syn-admin__status--ok">@Umbraco.GetDictionaryValue("admin.status.ok", "OK")</span>
                                     }
                                 </td>
                                 <td>
                                     @if (m.IsLockedOut)
                                     {
                                         <form method="post" action="/admin/members/@m.Key/unlock" class="syn-admin__item-form">
-                                            <button type="submit" class="syn-admin__action syn-admin__action--approve">🔓 Desbloquear</button>
+                                            <button type="submit" class="syn-admin__action syn-admin__action--approve">🔓 @Umbraco.GetDictionaryValue("admin.action.unlock", "Desbloquear")</button>
                                         </form>
                                     }
                                     else
                                     {
                                         <form method="post" action="/admin/members/@m.Key/lock" class="syn-admin__item-form">
-                                            <button type="submit" class="syn-admin__action syn-admin__action--reject">🔒 Bloquear</button>
+                                            <button type="submit" class="syn-admin__action syn-admin__action--reject">🔒 @Umbraco.GetDictionaryValue("admin.action.lock", "Bloquear")</button>
                                         </form>
                                     }
                                 </td>
@@ -143,23 +143,25 @@
 
                 @if (roster.TotalPages > 1)
                 {
+                    var prevLabel = "← " + Umbraco.GetDictionaryValue("admin.page.previous", "Anterior");
+                    var nextLabel = Umbraco.GetDictionaryValue("admin.page.next", "Siguiente") + " →";
                     <nav class="syn-admin__pagination" aria-label="Paginación">
                         @if (roster.HasPrev)
                         {
-                            <a class="syn-admin__page-link" rel="prev" href="@PageHref(roster.Page - 1)">← Anterior</a>
+                            <a class="syn-admin__page-link" rel="prev" href="@PageHref(roster.Page - 1)">@prevLabel</a>
                         }
                         else
                         {
-                            <span class="syn-admin__page-link syn-admin__page-link--disabled">← Anterior</span>
+                            <span class="syn-admin__page-link syn-admin__page-link--disabled">@prevLabel</span>
                         }
                         <span class="syn-admin__page-current">@roster.Page / @roster.TotalPages</span>
                         @if (roster.HasNext)
                         {
-                            <a class="syn-admin__page-link" rel="next" href="@PageHref(roster.Page + 1)">Siguiente →</a>
+                            <a class="syn-admin__page-link" rel="next" href="@PageHref(roster.Page + 1)">@nextLabel</a>
                         }
                         else
                         {
-                            <span class="syn-admin__page-link syn-admin__page-link--disabled">Siguiente →</span>
+                            <span class="syn-admin__page-link syn-admin__page-link--disabled">@nextLabel</span>
                         }
                     </nav>
                 }

@@ -96,11 +96,11 @@
                 <table class="syn-admin__table">
                     <thead>
                         <tr>
-                            <th>Cuándo (UTC)</th>
-                            <th>Actor</th>
-                            <th>Action</th>
-                            <th>Resource</th>
-                            <th>Outcome</th>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.when", "Cuándo") (UTC)</th>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.actor", "Actor")</th>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.action", "Acción")</th>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.resource", "Recurso")</th>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.outcome", "Resultado")</th>
                             <th>Detail</th>
                         </tr>
                     </thead>
@@ -114,6 +114,13 @@
                                 "partial" => "syn-admin__status syn-admin__status--warn",
                                 _ => "syn-admin__status",
                             };
+                            var outcomeLabel = e.Outcome switch
+                            {
+                                "success" => Umbraco.GetDictionaryValue("admin.status.success", "OK"),
+                                "failure" => Umbraco.GetDictionaryValue("admin.status.failure", "Fallo"),
+                                "partial" => Umbraco.GetDictionaryValue("admin.status.partial", "Parcial"),
+                                _ => e.Outcome,
+                            };
                             <tr>
                                 <td><time datetime="@e.OccurredAtUtc.ToString("O")">@e.OccurredAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</time></td>
                                 <td>
@@ -125,7 +132,7 @@
                                 </td>
                                 <td><code>@e.Action</code></td>
                                 <td><code>@e.Resource</code></td>
-                                <td><span class="@outcomeClass">@e.Outcome</span></td>
+                                <td><span class="@outcomeClass">@outcomeLabel</span></td>
                                 <td>
                                     @if (!string.IsNullOrWhiteSpace(e.Detail))
                                     {
