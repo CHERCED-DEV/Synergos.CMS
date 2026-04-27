@@ -51,8 +51,9 @@ public sealed class AdminSettings
 }
 
 /// <summary>
-/// Configuración de resilience para los webhook channels. Aplicada
-/// uniformemente vía <c>AddResilienceHandler</c> custom.
+/// Configuración de resilience para los webhook channels. Top-level
+/// fields son los defaults aplicados a todos los 12 named HttpClients;
+/// <see cref="PerChannel"/> permite override per-canal (Olas 157-158).
 /// </summary>
 public sealed class WebhookResilienceSettings
 {
@@ -67,4 +68,27 @@ public sealed class WebhookResilienceSettings
 
     /// <summary>Base delay del exponential backoff. Default 2000ms.</summary>
     public int RetryBaseDelayMs { get; init; } = 2000;
+
+    /// <summary>
+    /// Overrides por canal indexados por <c>FactoryName</c>
+    /// (e.g. "comment-moderation-teams", "cart-abandonment-discord").
+    /// Solo los campos no-null en cada override reemplazan al default.
+    /// Vacío por default — todos los canales heredan los top-level
+    /// fields. (Olas 157-158)
+    /// </summary>
+    public Dictionary<string, WebhookResilienceChannelOverride> PerChannel { get; init; } = new();
+}
+
+/// <summary>
+/// Override per-canal de los settings de resilience. Cada campo es
+/// nullable — solo los no-null reemplazan al default top-level.
+/// Permite tuning quirúrgico (e.g. Teams es lento → bump
+/// AttemptTimeoutSeconds solo para teams) sin tocar los demás canales.
+/// </summary>
+public sealed class WebhookResilienceChannelOverride
+{
+    public int? MaxRetryAttempts { get; init; }
+    public int? AttemptTimeoutSeconds { get; init; }
+    public int? TotalRequestTimeoutSeconds { get; init; }
+    public int? RetryBaseDelayMs { get; init; }
 }

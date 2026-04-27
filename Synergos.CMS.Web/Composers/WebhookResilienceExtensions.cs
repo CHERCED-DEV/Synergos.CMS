@@ -23,15 +23,24 @@ internal static class WebhookResilienceExtensions
     public static IHttpClientBuilder AddWebhookResilience(this IHttpClientBuilder builder)
     {
         var pipeline = builder.AddStandardResilienceHandler();
+        var channelName = builder.Name;
         pipeline.Services
             .AddOptions<HttpStandardResilienceOptions>(pipeline.PipelineName)
             .Configure<IOptionsMonitor<WebhookResilienceSettings>>((opts, monitor) =>
             {
                 var s = monitor.CurrentValue;
-                opts.Retry.MaxRetryAttempts = s.MaxRetryAttempts;
-                opts.Retry.Delay = TimeSpan.FromMilliseconds(s.RetryBaseDelayMs);
-                opts.AttemptTimeout.Timeout = TimeSpan.FromSeconds(s.AttemptTimeoutSeconds);
-                opts.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(s.TotalRequestTimeoutSeconds);
+                // Olas 157-158 — per-channel override merges sobre los defaults
+                // top-level. Solo campos no-null en el override reemplazan.
+                s.PerChannel.TryGetValue(channelName, out var ovr);
+                var maxRetries = ovr?.MaxRetryAttempts ?? s.MaxRetryAttempts;
+                var retryDelayMs = ovr?.RetryBaseDelayMs ?? s.RetryBaseDelayMs;
+                var attemptTimeoutSec = ovr?.AttemptTimeoutSeconds ?? s.AttemptTimeoutSeconds;
+                var totalTimeoutSec = ovr?.TotalRequestTimeoutSeconds ?? s.TotalRequestTimeoutSeconds;
+
+                opts.Retry.MaxRetryAttempts = maxRetries;
+                opts.Retry.Delay = TimeSpan.FromMilliseconds(retryDelayMs);
+                opts.AttemptTimeout.Timeout = TimeSpan.FromSeconds(attemptTimeoutSec);
+                opts.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(totalTimeoutSec);
             });
         return builder;
     }
