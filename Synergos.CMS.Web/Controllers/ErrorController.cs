@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Web;
-using Umbraco.Extensions;
 
 namespace Synergos.CMS.Web.Controllers;
 

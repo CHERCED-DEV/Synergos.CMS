@@ -1,12 +1,8 @@
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Notifications;
-using Umbraco.Cms.Core.Routing;
-using Umbraco.Extensions;
 
 namespace Synergos.CMS.Web.Notifications;
 
