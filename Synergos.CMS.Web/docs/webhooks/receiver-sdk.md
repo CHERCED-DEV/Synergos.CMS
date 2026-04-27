@@ -257,6 +257,112 @@ public ResponseEntity<Void> receive(
 }
 ```
 
+### PHP (hash_hmac + hash_equals)
+
+```php
+<?php
+declare(strict_types=1);
+
+final class SynergosWebhookVerifier
+{
+    public static function verify(
+        string $secret,
+        ?string $timestampHeader,
+        ?string $signatureHeader,
+        string $body,
+        int $toleranceSeconds = 300
+    ): bool {
+        if ($timestampHeader === null || $signatureHeader === null) {
+            return false;
+        }
+        if (strpos($signatureHeader, 'sha256=') !== 0) {
+            return false;
+        }
+
+        $ts = strtotime($timestampHeader);
+        if ($ts === false) {
+            return false;
+        }
+        if (abs(time() - $ts) > $toleranceSeconds) {
+            return false;
+        }
+
+        $expected = hash_hmac('sha256', $timestampHeader . '.' . $body, $secret);
+        $received = substr($signatureHeader, strlen('sha256='));
+
+        return hash_equals($expected, $received);
+    }
+}
+```
+
+Uso típico en un endpoint Laravel/Slim/vanilla:
+
+```php
+$body = file_get_contents('php://input');
+$ok = SynergosWebhookVerifier::verify(
+    getenv('SYNERGOS_WEBHOOK_SECRET'),
+    $_SERVER['HTTP_X_SYNERGOS_TIMESTAMP'] ?? null,
+    $_SERVER['HTTP_X_SYNERGOS_SIGNATURE'] ?? null,
+    $body
+);
+if (!$ok) {
+    http_response_code(401);
+    exit('invalid signature');
+}
+```
+
+### Ruby (OpenSSL::HMAC + secure_compare)
+
+```ruby
+require 'openssl'
+require 'time'
+
+module SynergosWebhookVerifier
+  TOLERANCE = 300 # seconds
+
+  def self.verify(secret, timestamp_header, signature_header, body, tolerance: TOLERANCE)
+    return false if timestamp_header.nil? || signature_header.nil?
+    return false unless signature_header.start_with?('sha256=')
+
+    begin
+      ts = Time.iso8601(timestamp_header)
+    rescue ArgumentError
+      return false
+    end
+    return false if (Time.now.utc - ts).abs > tolerance
+
+    expected = OpenSSL::HMAC.hexdigest('sha256', secret, "#{timestamp_header}.#{body}")
+    received = signature_header.sub(/\Asha256=/, '')
+
+    OpenSSL.fixed_length_secure_compare(expected, received)
+  rescue ArgumentError
+    false
+  end
+end
+```
+
+Uso típico en un Rails controller:
+
+```ruby
+class SynergosWebhooksController < ApplicationController
+  skip_before_action :verify_authenticity_token
+
+  def comment_moderation
+    body = request.raw_post
+    ok = SynergosWebhookVerifier.verify(
+      ENV['SYNERGOS_WEBHOOK_SECRET'],
+      request.headers['X-Synergos-Timestamp'],
+      request.headers['X-Synergos-Signature'],
+      body
+    )
+    return head(:unauthorized) unless ok
+
+    # process payload (JSON.parse(body)) …
+    head(:ok)
+  end
+end
+```
+
 ## Payloads por evento
 
 ### `comment.pending-moderation`
