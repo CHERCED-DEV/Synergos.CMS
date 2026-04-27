@@ -32,20 +32,14 @@ public sealed class SeamComposer : IComposer
     {
         var services = builder.Services;
 
-        // Ola 129 — Resilience tuning compartido por los 12 webhook
-        // channels. Lee settings en composition time (Synergos:Admin:
-        // WebhookResilience). Cambios requieren restart — aceptable
-        // para tuning de retries/timeouts (no hot-reload scenario).
-        var resilienceSettings = builder.Config
-            .GetSection("Synergos:Admin:WebhookResilience")
-            .Get<WebhookResilienceSettings>() ?? new WebhookResilienceSettings();
-        void ConfigureWebhookResilience(HttpStandardResilienceOptions opts)
-        {
-            opts.Retry.MaxRetryAttempts = resilienceSettings.MaxRetryAttempts;
-            opts.Retry.Delay = TimeSpan.FromMilliseconds(resilienceSettings.RetryBaseDelayMs);
-            opts.AttemptTimeout.Timeout = TimeSpan.FromSeconds(resilienceSettings.AttemptTimeoutSeconds);
-            opts.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(resilienceSettings.TotalRequestTimeoutSeconds);
-        }
+        // Olas 146-147 — Resilience tuning hot-reloadable. WebhookResilienceSettings
+        // bind via AddOptions().Bind(...) registra el IConfigurationChangeTokenSource
+        // automático — cuando appsettings.json cambia, IOptionsMonitor<...> fire,
+        // y el siguiente handler rotation (HttpClientFactory default ~2min) re-
+        // ejecuta Configure<TDep> con los valores frescos. Sin rebuild manual de
+        // pipelines.
+        services.AddOptions<WebhookResilienceSettings>()
+            .Bind(builder.Config.GetSection("Synergos:Admin:WebhookResilience"));
 
         // Ola 54.1 — IBrandingProvider resuelve el brand activo según el
         // hostname del request, matchéandolo contra los siteConfigSettings
@@ -217,13 +211,13 @@ public sealed class SeamComposer : IComposer
         // registrados (email + webhook). Cada canal es no-op si su settings
         // están vacíos, por lo que registrar ambos es seguro by default.
         services.AddSingleton<ICommentModerationNotifierChannel, EmailCommentModerationNotifier>();
-        services.AddHttpClient(WebhookCommentModerationNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(WebhookCommentModerationNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<ICommentModerationNotifierChannel, WebhookCommentModerationNotifier>();
-        services.AddHttpClient(SlackCommentModerationNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(SlackCommentModerationNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<ICommentModerationNotifierChannel, SlackCommentModerationNotifier>();
-        services.AddHttpClient(DiscordCommentModerationNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(DiscordCommentModerationNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<ICommentModerationNotifierChannel, DiscordCommentModerationNotifier>();
-        services.AddHttpClient(TeamsCommentModerationNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(TeamsCommentModerationNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<ICommentModerationNotifierChannel, TeamsCommentModerationNotifier>();
         services.AddSingleton<ICommentModerationNotifier, CompositeCommentModerationNotifier>();
 
@@ -232,13 +226,13 @@ public sealed class SeamComposer : IComposer
         // con un seam swappable; cada canal es no-op si su settings
         // están vacíos.
         services.AddSingleton<IFormSubmissionNotifierChannel, EmailFormSubmissionNotifier>();
-        services.AddHttpClient(WebhookFormSubmissionNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(WebhookFormSubmissionNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<IFormSubmissionNotifierChannel, WebhookFormSubmissionNotifier>();
-        services.AddHttpClient(SlackFormSubmissionNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(SlackFormSubmissionNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<IFormSubmissionNotifierChannel, SlackFormSubmissionNotifier>();
-        services.AddHttpClient(DiscordFormSubmissionNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(DiscordFormSubmissionNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<IFormSubmissionNotifierChannel, DiscordFormSubmissionNotifier>();
-        services.AddHttpClient(TeamsFormSubmissionNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(TeamsFormSubmissionNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<IFormSubmissionNotifierChannel, TeamsFormSubmissionNotifier>();
         services.AddSingleton<IFormSubmissionNotifier, CompositeFormSubmissionNotifier>();
 
@@ -246,13 +240,13 @@ public sealed class SeamComposer : IComposer
         // comments + forms). Hook en CartAbandonmentScannerHostedService
         // por cart detectado. Email + webhook channels con HMAC opt-in.
         services.AddSingleton<ICartAbandonmentNotifierChannel, EmailCartAbandonmentNotifier>();
-        services.AddHttpClient(WebhookCartAbandonmentNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(WebhookCartAbandonmentNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<ICartAbandonmentNotifierChannel, WebhookCartAbandonmentNotifier>();
-        services.AddHttpClient(SlackCartAbandonmentNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(SlackCartAbandonmentNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<ICartAbandonmentNotifierChannel, SlackCartAbandonmentNotifier>();
-        services.AddHttpClient(DiscordCartAbandonmentNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(DiscordCartAbandonmentNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<ICartAbandonmentNotifierChannel, DiscordCartAbandonmentNotifier>();
-        services.AddHttpClient(TeamsCartAbandonmentNotifier.FactoryName).AddStandardResilienceHandler(ConfigureWebhookResilience);
+        services.AddHttpClient(TeamsCartAbandonmentNotifier.FactoryName).AddWebhookResilience();
         services.AddSingleton<ICartAbandonmentNotifierChannel, TeamsCartAbandonmentNotifier>();
         services.AddSingleton<ICartAbandonmentNotifier, CompositeCartAbandonmentNotifier>();
 
