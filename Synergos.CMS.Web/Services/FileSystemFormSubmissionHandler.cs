@@ -96,7 +96,12 @@ public sealed class FileSystemFormSubmissionHandler : IFormSubmissionHandler, IF
         }
     }
 
-    public FormSubmissionsPage GetRecent(int page, int pageSize, string? formKeyFilter = null)
+    public FormSubmissionsPage GetRecent(
+        int page,
+        int pageSize,
+        string? formKeyFilter = null,
+        DateTime? fromUtc = null,
+        DateTime? toUtc = null)
     {
         var clampedPage = page < 1 ? 1 : page;
         var clampedSize = Math.Clamp(pageSize, 1, 200);
@@ -118,7 +123,10 @@ public sealed class FileSystemFormSubmissionHandler : IFormSubmissionHandler, IF
             foreach (var path in Directory.EnumerateFiles(folder, "*.json"))
             {
                 var item = TryReadSummary(path, formKey);
-                if (item is not null) all.Add(item);
+                if (item is null) continue;
+                if (fromUtc.HasValue && item.ReceivedAtUtc < fromUtc.Value) continue;
+                if (toUtc.HasValue && item.ReceivedAtUtc > toUtc.Value) continue;
+                all.Add(item);
             }
         }
 

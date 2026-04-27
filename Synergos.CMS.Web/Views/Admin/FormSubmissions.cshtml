@@ -1,6 +1,6 @@
 @*
-    Vista del AdminController.FormSubmissions (Ola 115). Lista
-    submissions paginadas + filter por formKey.
+    Vista del AdminController.FormSubmissions (Olas 115 + 122).
+    Lista submissions paginadas + filter por formKey + date range.
 *@
 @using Synergos.CMS.Interfaces
 @{
@@ -8,12 +8,24 @@
     var pageData = ViewData["Page"] as FormSubmissionsPage
         ?? new FormSubmissionsPage(Array.Empty<FormSubmissionListItem>(), 1, 25, 0);
     var formKeyFilter = ViewData["FormKeyFilter"] as string;
+    var fromUtc = ViewData["FromUtc"] as DateTime?;
+    var toUtc = ViewData["ToUtc"] as DateTime?;
     var formKeys = ViewData["FormKeys"] as IReadOnlyList<string> ?? Array.Empty<string>();
-    var moderatorName = ViewData["ModeratorName"] as string ?? "—";
+    string AppendFilters(string baseHref)
+    {
+        var qs = new List<string>();
+        if (!string.IsNullOrWhiteSpace(formKeyFilter))
+            qs.Add($"formKey={Uri.EscapeDataString(formKeyFilter)}");
+        if (fromUtc.HasValue)
+            qs.Add($"from={fromUtc.Value:yyyy-MM-dd}");
+        if (toUtc.HasValue)
+            qs.Add($"to={toUtc.Value:yyyy-MM-dd}");
+        if (qs.Count == 0) return baseHref;
+        return baseHref + (baseHref.Contains('?') ? "&" : "?") + string.Join("&", qs);
+    }
     string PageHref(int p) =>
-        !string.IsNullOrWhiteSpace(formKeyFilter)
-            ? $"/admin/forms?page={p}&pageSize={pageData.PageSize}&formKey={Uri.EscapeDataString(formKeyFilter)}"
-            : $"/admin/forms?page={p}&pageSize={pageData.PageSize}";
+        AppendFilters($"/admin/forms?page={p}&pageSize={pageData.PageSize}");
+    bool HasFilters = !string.IsNullOrWhiteSpace(formKeyFilter) || fromUtc.HasValue || toUtc.HasValue;
 }
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
@@ -57,18 +69,24 @@
                     </select>
                 </label>
                 <label class="syn-admin__filter-field">
+                    <span class="syn-admin__filter-label">Desde</span>
+                    <input type="date" name="from" value="@(fromUtc?.ToString("yyyy-MM-dd"))" />
+                </label>
+                <label class="syn-admin__filter-field">
+                    <span class="syn-admin__filter-label">Hasta</span>
+                    <input type="date" name="to" value="@(toUtc?.ToString("yyyy-MM-dd"))" />
+                </label>
+                <label class="syn-admin__filter-field">
                     <span class="syn-admin__filter-label">Por página</span>
                     <input type="number" name="pageSize" value="@pageData.PageSize" min="5" max="200" />
                 </label>
                 <button type="submit" class="syn-admin__filter-submit">Aplicar</button>
-                @if (!string.IsNullOrWhiteSpace(formKeyFilter))
+                @if (HasFilters)
                 {
                     <a href="/admin/forms" class="syn-admin__filter-clear">Limpiar filtros</a>
                 }
                 @{
-                    var exportHref = !string.IsNullOrWhiteSpace(formKeyFilter)
-                        ? $"/admin/forms/export?formKey={Uri.EscapeDataString(formKeyFilter)}"
-                        : "/admin/forms/export";
+                    var exportHref = AppendFilters("/admin/forms/export");
                 }
                 <a href="@exportHref" class="syn-admin__filter-export" download>⬇ Exportar CSV</a>
             </form>

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -28,25 +29,30 @@ public sealed class AdminController : Controller
 {
     private const string ModeratorRolesCsv = "admin,moderator,editor";
     private const int DefaultPageSize = 25;
+    private const string PendingCountCacheKey = "admin.pending-comments-count";
+    private static readonly TimeSpan PendingCountCacheTtl = TimeSpan.FromSeconds(30);
 
     private readonly ICommentRepository _comments;
     private readonly IMemberAccessGate _gate;
     private readonly IAnalyticsTracker _analytics;
     private readonly ISearchAnalyticsStore _searchAnalytics;
     private readonly IFormSubmissionReader _formReader;
+    private readonly IMemoryCache _cache;
 
     public AdminController(
         ICommentRepository comments,
         IMemberAccessGate gate,
         IAnalyticsTracker analytics,
         ISearchAnalyticsStore searchAnalytics,
-        IFormSubmissionReader formReader)
+        IFormSubmissionReader formReader,
+        IMemoryCache cache)
     {
         _comments = comments;
         _gate = gate;
         _analytics = analytics;
         _searchAnalytics = searchAnalytics;
         _formReader = formReader;
+        _cache = cache;
     }
 
     [HttpGet("")]
@@ -72,47 +78,76 @@ public sealed class AdminController : Controller
     /// <summary>
     /// Helper que setea las 3 viewdata keys que el partial _AdminTopbar
     /// necesita: section slug, moderator display name, pending counter.
-    /// El pending counter se computa SOLO cuando ya tenemos el dato a
-    /// mano (Index lo tiene del page total); para el resto de actions
-    /// es una segunda lectura barata via GetPendingPage(1,1).
+    ///
+    /// El pending counter:
+    /// - Si caller pasa <paramref name="pendingCountOverride"/> con un
+    ///   valor recién leído (Moderation list, Index landing), se usa
+    ///   directo y se REFRESCA el cache.
+    /// - Si no, se sirve del IMemoryCache con TTL 30s para evitar que
+    ///   cada page hit en el admin haga un filesystem enumeration
+    ///   (Ola 122).
     /// </summary>
     private void SetTopbar(string sectionSlug, int? pendingCountOverride = null)
     {
         ViewData["AdminCurrentSection"] = sectionSlug;
         ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
-        ViewData["AdminPendingCount"] = pendingCountOverride
-            ?? _comments.GetPendingPage(1, 1).TotalCount;
+
+        int pendingCount;
+        if (pendingCountOverride.HasValue)
+        {
+            pendingCount = pendingCountOverride.Value;
+            _cache.Set(PendingCountCacheKey, pendingCount, PendingCountCacheTtl);
+        }
+        else
+        {
+            pendingCount = _cache.GetOrCreate(PendingCountCacheKey, entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = PendingCountCacheTtl;
+                return _comments.GetPendingPage(1, 1).TotalCount;
+            });
+        }
+        ViewData["AdminPendingCount"] = pendingCount;
     }
 
     [HttpGet("forms")]
     public IActionResult FormSubmissions(
         [FromQuery] int page = 1,
         [FromQuery(Name = "pageSize")] int pageSize = DefaultPageSize,
-        [FromQuery(Name = "formKey")] string? formKeyFilter = null)
+        [FromQuery(Name = "formKey")] string? formKeyFilter = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null)
     {
         if (!_gate.HasAnyRole(ModeratorRolesCsv))
         {
             return Forbid();
         }
 
-        var pageData = _formReader.GetRecent(page, pageSize, formKeyFilter);
+        var fromUtc = from?.ToUniversalTime();
+        var toUtc = to?.ToUniversalTime();
+        var pageData = _formReader.GetRecent(page, pageSize, formKeyFilter, fromUtc, toUtc);
         var formKeys = _formReader.ListFormKeys();
 
         SetTopbar("forms");
         ViewData["Page"] = pageData;
         ViewData["FormKeyFilter"] = formKeyFilter;
+        ViewData["FromUtc"] = fromUtc;
+        ViewData["ToUtc"] = toUtc;
         ViewData["FormKeys"] = formKeys;
         return View();
     }
 
     /// <summary>
-    /// GET /admin/forms/export?formKey=X&amp;limit=500 — descarga las
-    /// submissions más recientes como CSV. Default limit 500, hard cap
-    /// 5000 para evitar timeout/OOM en datasets grandes.
+    /// GET /admin/forms/export?formKey=X&amp;from=2026-04-01&amp;to=2026-04-30&amp;limit=500
+    /// — descarga las submissions del scope como CSV. Default limit 500,
+    /// hard cap 5000 para evitar timeout/OOM. <c>from</c>/<c>to</c>
+    /// opcionales filtran por <c>ReceivedAtUtc</c> en la ventana
+    /// indicada (ambos inclusive).
     /// </summary>
     [HttpGet("forms/export")]
     public IActionResult ExportFormSubmissions(
         [FromQuery(Name = "formKey")] string? formKeyFilter = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
         [FromQuery] int limit = 500)
     {
         if (!_gate.HasAnyRole(ModeratorRolesCsv))
@@ -121,7 +156,14 @@ public sealed class AdminController : Controller
         }
 
         var clamped = Math.Clamp(limit, 1, 5000);
-        var listingPage = _formReader.GetRecent(page: 1, pageSize: clamped, formKeyFilter);
+        var fromUtc = from?.ToUniversalTime();
+        var toUtc = to?.ToUniversalTime();
+        var listingPage = _formReader.GetRecent(
+            page: 1,
+            pageSize: clamped,
+            formKeyFilter,
+            fromUtc,
+            toUtc);
 
         // Recolectamos todos los keys de columna posibles a través de
         // las submissions del scope. Cada submission puede tener fields
@@ -245,6 +287,7 @@ public sealed class AdminController : Controller
             });
         }
 
+        _cache.Remove(PendingCountCacheKey);
         return RedirectToAction(nameof(ModerationComments));
     }
 

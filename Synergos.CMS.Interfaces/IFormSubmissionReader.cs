@@ -25,8 +25,16 @@ public interface IFormSubmissionReader
     /// <see cref="FormSubmissionListItem.ReceivedAtUtc"/> descendente
     /// (más reciente primero). <paramref name="formKeyFilter"/>
     /// opcional limita a un form específico.
+    /// <paramref name="fromUtc"/> y <paramref name="toUtc"/> opcionales
+    /// limitan por ventana temporal (ambos inclusive — útil para CSV
+    /// export con date range).
     /// </summary>
-    FormSubmissionsPage GetRecent(int page, int pageSize, string? formKeyFilter = null);
+    FormSubmissionsPage GetRecent(
+        int page,
+        int pageSize,
+        string? formKeyFilter = null,
+        DateTime? fromUtc = null,
+        DateTime? toUtc = null);
 
     /// <summary>
     /// Lista los form keys que tienen submissions persistidas. Útil
