@@ -87,4 +87,19 @@ public sealed class CommentsSettings
     /// tener ambos y los 2 disparan por cada evento.
     /// </summary>
     public string? SlackWebhookUrl { get; init; }
+
+    /// <summary>
+    /// URL de Discord incoming webhook. Si está poblada, el canal
+    /// <c>DiscordCommentModerationNotifier</c> POST con payload
+    /// formato Discord embeds (color brand + fields inline + timestamp).
+    /// </summary>
+    public string? DiscordWebhookUrl { get; init; }
+
+    /// <summary>
+    /// URL de Microsoft Teams incoming webhook (Office 365 connector).
+    /// Si está poblada, el canal <c>TeamsCommentModerationNotifier</c>
+    /// POST con payload formato MessageCard (sections + facts +
+    /// activityTitle).
+    /// </summary>
+    public string? TeamsWebhookUrl { get; init; }
 }

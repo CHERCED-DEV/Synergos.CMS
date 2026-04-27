@@ -97,4 +97,10 @@ public sealed class FormsSettings
     /// Slack Block Kit. Independiente de <see cref="WebhookUrl"/>.
     /// </summary>
     public string? SlackWebhookUrl { get; init; }
+
+    /// <summary>URL de Discord incoming webhook (formato embeds).</summary>
+    public string? DiscordWebhookUrl { get; init; }
+
+    /// <summary>URL de Microsoft Teams incoming webhook (MessageCard).</summary>
+    public string? TeamsWebhookUrl { get; init; }
 }

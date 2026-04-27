@@ -192,6 +192,8 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<ICommentModerationNotifierChannel, WebhookCommentModerationNotifier>();
         services.AddHttpClient(SlackCommentModerationNotifier.FactoryName);
         services.AddSingleton<ICommentModerationNotifierChannel, SlackCommentModerationNotifier>();
+        services.AddHttpClient(DiscordCommentModerationNotifier.FactoryName);
+        services.AddSingleton<ICommentModerationNotifierChannel, DiscordCommentModerationNotifier>();
         services.AddSingleton<ICommentModerationNotifier, CompositeCommentModerationNotifier>();
 
         // Ola 91 — Form submission notifier composite (paralelo del de
@@ -203,6 +205,8 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IFormSubmissionNotifierChannel, WebhookFormSubmissionNotifier>();
         services.AddHttpClient(SlackFormSubmissionNotifier.FactoryName);
         services.AddSingleton<IFormSubmissionNotifierChannel, SlackFormSubmissionNotifier>();
+        services.AddHttpClient(DiscordFormSubmissionNotifier.FactoryName);
+        services.AddSingleton<IFormSubmissionNotifierChannel, DiscordFormSubmissionNotifier>();
         services.AddSingleton<IFormSubmissionNotifier, CompositeFormSubmissionNotifier>();
 
         // Ola 102 — Cart abandonment notifier composite (paralelo de
@@ -213,6 +217,8 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<ICartAbandonmentNotifierChannel, WebhookCartAbandonmentNotifier>();
         services.AddHttpClient(SlackCartAbandonmentNotifier.FactoryName);
         services.AddSingleton<ICartAbandonmentNotifierChannel, SlackCartAbandonmentNotifier>();
+        services.AddHttpClient(DiscordCartAbandonmentNotifier.FactoryName);
+        services.AddSingleton<ICartAbandonmentNotifierChannel, DiscordCartAbandonmentNotifier>();
         services.AddSingleton<ICartAbandonmentNotifier, CompositeCartAbandonmentNotifier>();
 
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
