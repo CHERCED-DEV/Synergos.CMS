@@ -80,10 +80,11 @@ public sealed class WebhookCommentModerationNotifier : ICommentModerationNotifie
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.WebhookBearerToken);
         }
 
-        var signatureHeader = WebhookSigner.ComputeHeader(settings.WebhookHmacSecret, bodyBytes);
-        if (signatureHeader is not null)
+        var signed = WebhookSigner.ComputeSignedHeaders(settings.WebhookHmacSecret, bodyBytes);
+        if (signed is { } s)
         {
-            request.Headers.TryAddWithoutValidation(WebhookSigner.SignatureHeaderName, signatureHeader);
+            request.Headers.TryAddWithoutValidation(WebhookSigner.TimestampHeaderName, s.Timestamp);
+            request.Headers.TryAddWithoutValidation(WebhookSigner.SignatureHeaderName, s.Signature);
         }
 
         var httpClient = _httpClientFactory.CreateClient(HttpClientName);
