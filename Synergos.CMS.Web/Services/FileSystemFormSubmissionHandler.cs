@@ -155,6 +155,39 @@ public sealed class FileSystemFormSubmissionHandler : IFormSubmissionHandler, IF
             .ToList();
     }
 
+    public Task<bool> DeleteAsync(string formKey, string storageId, CancellationToken cancellationToken)
+    {
+        var safeKey = SanitizeForPath(formKey);
+        var safeId = SanitizeForPath(storageId);
+        if (string.IsNullOrWhiteSpace(safeKey) || string.IsNullOrWhiteSpace(safeId))
+        {
+            return Task.FromResult(false);
+        }
+
+        var settings = _options.Value;
+        var path = Path.Combine(_environment.ContentRootPath, settings.StorageRoot, safeKey, safeId + ".json");
+        if (!File.Exists(path))
+        {
+            return Task.FromResult(false);
+        }
+
+        try
+        {
+            File.Delete(path);
+            _logger.LogInformation(
+                "Form submission deleted: formKey={FormKey} id={StorageId}",
+                formKey, storageId);
+            return Task.FromResult(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogError(ex,
+                "Form submission delete failed: formKey={FormKey} id={StorageId}",
+                formKey, storageId);
+            return Task.FromResult(false);
+        }
+    }
+
     public FormSubmissionDetail? GetSubmission(string formKey, string storageId)
     {
         var safeKey = SanitizeForPath(formKey);

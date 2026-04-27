@@ -334,6 +334,35 @@
   transform: translateY(-1px);
 }
 
+.syn-admin__action--spam {
+  background: var(--syn-color-state-warning-surface);
+  color: var(--syn-color-state-warning-text);
+  border-color: var(--syn-color-state-warning-border);
+}
+
+.syn-admin__action--spam:hover {
+  background: var(--syn-color-warning-500);
+  color: var(--syn-color-neutral-0);
+  border-color: var(--syn-color-warning-500);
+  transform: translateY(-1px);
+}
+
+/* ── Danger panel variant (delete zone) ──────────────────────── */
+
+.syn-admin__panel--danger {
+  background: var(--syn-color-state-danger-surface);
+  border-color: var(--syn-color-state-danger-border);
+}
+
+.syn-admin__panel--danger .syn-admin__panel-title {
+  color: var(--syn-color-state-danger-text);
+}
+
+.syn-admin__panel--danger .syn-admin__panel-hint {
+  color: var(--syn-color-state-danger-text);
+  opacity: 0.85;
+}
+
 /* ── Filters bar (date range + limit) ────────────────────────── */
 
 .syn-admin__filters {

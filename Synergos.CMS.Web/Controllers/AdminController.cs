@@ -225,6 +225,32 @@ public sealed class AdminController : Controller
         return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
+    [HttpPost("forms/{formKey}/{storageId}/delete")]
+    public async Task<IActionResult> DeleteFormSubmission(
+        string formKey,
+        string storageId,
+        CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var ok = await _formReader.DeleteAsync(formKey, storageId, cancellationToken);
+        if (ok)
+        {
+            _analytics.Track("form.submission.deleted", new Dictionary<string, object?>
+            {
+                ["formKey"] = formKey,
+                ["storageId"] = storageId,
+                ["moderator"] = _gate.CurrentMemberDisplayName,
+                ["source"] = "admin-dashboard",
+            });
+        }
+
+        return RedirectToAction(nameof(FormSubmissions));
+    }
+
     [HttpGet("forms/{formKey}/{storageId}")]
     public IActionResult FormSubmissionDetail(string formKey, string storageId)
     {
@@ -316,6 +342,41 @@ public sealed class AdminController : Controller
 
         _cache.Remove(PendingCountCacheKey);
         return RedirectToAction(nameof(ModerationComments));
+    }
+
+    /// <summary>
+    /// Mark-as-spam — variant del reject pero emite analytics event
+    /// distinto (<c>comment.moderation.spam-reported</c>) para que un
+    /// futuro spam filter (Akismet, custom ML) entrene sobre estos.
+    /// El backend de delete es exactamente el mismo que reject — el
+    /// comentario se elimina del store. La diferencia es semántica:
+    /// reject = "no me gustó", spam = "esto es spam confirmado".
+    /// </summary>
+    [HttpPost("moderation/comments/{nodeId:int}/{commentId}/spam")]
+    public async Task<IActionResult> MarkCommentAsSpam(
+        int nodeId,
+        string commentId,
+        CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var ok = await _comments.RejectAsync(nodeId, commentId, cancellationToken);
+        if (ok)
+        {
+            _analytics.Track("comment.moderation.spam-reported", new Dictionary<string, object?>
+            {
+                ["nodeId"] = nodeId,
+                ["commentId"] = commentId,
+                ["moderator"] = _gate.CurrentMemberDisplayName,
+                ["source"] = "admin-dashboard",
+            });
+        }
+
+        _cache.Remove(PendingCountCacheKey);
+        return RedirectToAction(nameof(ModerationComments), new { msg = "spam-1" });
     }
 
     [HttpPost("moderation/comments/bulk-approve")]

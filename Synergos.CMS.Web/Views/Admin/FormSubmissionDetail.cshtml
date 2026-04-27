@@ -108,6 +108,24 @@
                     </table>
                 }
             </section>
+
+            <section class="syn-admin__panel syn-admin__panel--danger" style="margin-top: var(--syn-space-lg);">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Zona destructiva</h2>
+                </header>
+                <p class="syn-admin__panel-hint">
+                    Eliminar la submission borra el archivo del storage. La
+                    operación es irreversible — solo confirma si estás seguro
+                    de que no la necesitas para auditoría.
+                </p>
+                <form method="post"
+                      action="/admin/forms/@Uri.EscapeDataString(detail.FormKey)/@Uri.EscapeDataString(detail.StorageId)/delete"
+                      onsubmit="return confirm('¿Eliminar definitivamente esta submission? La acción es irreversible.');">
+                    <button type="submit" class="syn-admin__action syn-admin__action--reject">
+                        🗑 Eliminar submission
+                    </button>
+                </form>
+            </section>
         </div>
     </main>
 </body>

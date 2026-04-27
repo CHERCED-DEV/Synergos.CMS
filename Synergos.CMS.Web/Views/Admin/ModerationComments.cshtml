@@ -48,6 +48,10 @@
                     {
                         <text>✗ @count comentario(s) rechazado(s).</text>
                     }
+                    else if (verb == "spam")
+                    {
+                        <text>🚫 @count comentario(s) marcado(s) como spam.</text>
+                    }
                 </p>
             }
 
@@ -139,6 +143,14 @@
                                           class="syn-admin__item-form">
                                         <button type="submit" class="syn-admin__action syn-admin__action--reject">
                                             ✗ Rechazar
+                                        </button>
+                                    </form>
+                                    <form method="post"
+                                          action="/admin/moderation/comments/@comment.NodeId/@comment.Id/spam"
+                                          class="syn-admin__item-form">
+                                        <button type="submit" class="syn-admin__action syn-admin__action--spam"
+                                                title="Marcar como spam — elimina + entrena futuro filtro">
+                                            🚫 Spam
                                         </button>
                                     </form>
                                 </footer>

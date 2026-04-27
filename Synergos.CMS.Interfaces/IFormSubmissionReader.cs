@@ -50,6 +50,14 @@ public interface IFormSubmissionReader
     /// Devuelve null si no existe.
     /// </summary>
     FormSubmissionDetail? GetSubmission(string formKey, string storageId);
+
+    /// <summary>
+    /// Elimina una submission persistida (acción destructiva, idempotente).
+    /// Devuelve true si se eliminó algo, false si no existía.
+    /// Para adapters read-only sin capacidad de delete, retornar
+    /// false sin excepción.
+    /// </summary>
+    Task<bool> DeleteAsync(string formKey, string storageId, CancellationToken cancellationToken);
 }
 
 /// <summary>
