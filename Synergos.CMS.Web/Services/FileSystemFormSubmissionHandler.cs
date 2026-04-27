@@ -147,6 +147,63 @@ public sealed class FileSystemFormSubmissionHandler : IFormSubmissionHandler, IF
             .ToList();
     }
 
+    public FormSubmissionDetail? GetSubmission(string formKey, string storageId)
+    {
+        var safeKey = SanitizeForPath(formKey);
+        var safeId = SanitizeForPath(storageId);
+        if (string.IsNullOrWhiteSpace(safeKey) || string.IsNullOrWhiteSpace(safeId))
+        {
+            return null;
+        }
+
+        var settings = _options.Value;
+        var path = Path.Combine(_environment.ContentRootPath, settings.StorageRoot, safeKey, safeId + ".json");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var doc = JsonDocument.Parse(stream);
+            var root = doc.RootElement;
+
+            DateTime receivedAt = root.TryGetProperty("receivedAtUtc", out var ra)
+                && ra.TryGetDateTime(out var dt) ? dt : File.GetCreationTimeUtc(path);
+
+            string? clientIp = root.TryGetProperty("clientIp", out var ip) ? ip.GetString() : null;
+            string? userAgent = root.TryGetProperty("userAgent", out var ua) ? ua.GetString() : null;
+            string? referrer = root.TryGetProperty("referrer", out var rf) ? rf.GetString() : null;
+
+            var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (root.TryGetProperty("fields", out var fieldsEl) && fieldsEl.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in fieldsEl.EnumerateObject())
+                {
+                    fields[prop.Name] = prop.Value.ValueKind == JsonValueKind.String
+                        ? prop.Value.GetString() ?? string.Empty
+                        : prop.Value.ToString();
+                }
+            }
+
+            return new FormSubmissionDetail(
+                FormKey: formKey,
+                StorageId: storageId,
+                ReceivedAtUtc: receivedAt,
+                ClientIp: clientIp,
+                UserAgent: userAgent,
+                Referrer: referrer,
+                Fields: fields);
+        }
+        catch (Exception ex) when (ex is IOException or JsonException)
+        {
+            _logger.LogWarning(ex, "Form submission detail unreadable: formKey={FormKey} id={StorageId}",
+                formKey, storageId);
+            return null;
+        }
+    }
+
     private FormSubmissionListItem? TryReadSummary(string path, string formKey)
     {
         try
@@ -168,6 +225,7 @@ public sealed class FileSystemFormSubmissionHandler : IFormSubmissionHandler, IF
 
             return new FormSubmissionListItem(
                 FormKey: formKey,
+                StorageId: Path.GetFileNameWithoutExtension(path),
                 ReceivedAtUtc: receivedAt,
                 ClientIp: clientIp,
                 FieldCount: fieldCount,

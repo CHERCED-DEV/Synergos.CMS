@@ -111,6 +111,7 @@
                                 <th>Recibido (UTC)</th>
                                 <th>IP</th>
                                 <th class="syn-admin__col-num">Campos</th>
+                                <th class="syn-admin__col-num"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -121,6 +122,12 @@
                                     <td>@item.ReceivedAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
                                     <td>@(item.ClientIp ?? "—")</td>
                                     <td class="syn-admin__col-num">@item.FieldCount</td>
+                                    <td class="syn-admin__col-num">
+                                        <a class="syn-admin__row-action"
+                                           href="/admin/forms/@Uri.EscapeDataString(item.FormKey)/@Uri.EscapeDataString(item.StorageId)">
+                                            Ver detalle →
+                                        </a>
+                                    </td>
                                 </tr>
                             }
                         </tbody>

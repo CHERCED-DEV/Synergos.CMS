@@ -1,0 +1,131 @@
+@*
+    Vista del AdminController.FormSubmissionDetail (Ola 118).
+    Muestra fields completos de la submission + metadata.
+*@
+@using Synergos.CMS.Interfaces
+@{
+    Layout = null;
+    var detail = ViewData["Detail"] as FormSubmissionDetail!;
+    var moderatorName = ViewData["ModeratorName"] as string ?? "—";
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>Submission @detail.StorageId · Synergos</title>
+</head>
+<body class="syn-admin">
+    <header class="syn-admin__topbar">
+        <div class="syn-admin__topbar-inner">
+            <a class="syn-admin__brand" href="/admin">
+                <span class="syn-admin__brand-mark">⚙</span>
+                <span>Synergos · Operaciones</span>
+            </a>
+            <nav class="syn-admin__nav" aria-label="Admin">
+                <a class="syn-admin__nav-link" href="/admin">Inicio</a>
+                <a class="syn-admin__nav-link" href="/admin/moderation/comments">Moderación</a>
+                <a class="syn-admin__nav-link syn-admin__nav-link--current" href="/admin/forms">Forms</a>
+                <a class="syn-admin__nav-link" href="/admin/analytics/search">Búsqueda</a>
+            </nav>
+            <div class="syn-admin__user">
+                <span class="syn-admin__user-avatar" aria-hidden="true">@(moderatorName.Length > 0 ? moderatorName[0].ToString().ToUpper() : "?")</span>
+                <span class="syn-admin__user-name">@moderatorName</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <nav class="syn-admin__breadcrumbs" aria-label="Breadcrumb">
+                <a href="/admin/forms">Forms</a>
+                <span class="syn-admin__breadcrumbs-sep" aria-hidden="true">/</span>
+                <a href="/admin/forms?formKey=@Uri.EscapeDataString(detail.FormKey)"><code>@detail.FormKey</code></a>
+                <span class="syn-admin__breadcrumbs-sep" aria-hidden="true">/</span>
+                <span class="syn-admin__breadcrumbs-current">Submission</span>
+            </nav>
+
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">Submission @detail.StorageId</h1>
+                <p class="syn-admin__page-subtitle">
+                    Form <code>@detail.FormKey</code> · @detail.Fields.Count campo(s) ·
+                    Recibido @detail.ReceivedAtUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC
+                </p>
+            </header>
+
+            <section class="syn-admin__panel" style="margin-bottom: var(--syn-space-lg);">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Metadata</h2>
+                </header>
+                <table class="syn-admin__table">
+                    <tbody>
+                        <tr>
+                            <th>Form key</th>
+                            <td><code>@detail.FormKey</code></td>
+                        </tr>
+                        <tr>
+                            <th>ID</th>
+                            <td><code>@detail.StorageId</code></td>
+                        </tr>
+                        <tr>
+                            <th>Recibido</th>
+                            <td>@detail.ReceivedAtUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC</td>
+                        </tr>
+                        <tr>
+                            <th>IP cliente</th>
+                            <td>@(detail.ClientIp ?? "—")</td>
+                        </tr>
+                        <tr>
+                            <th>User agent</th>
+                            <td>@(detail.UserAgent ?? "—")</td>
+                        </tr>
+                        <tr>
+                            <th>Referrer</th>
+                            <td>
+                                @if (string.IsNullOrWhiteSpace(detail.Referrer))
+                                {
+                                    <text>—</text>
+                                }
+                                else
+                                {
+                                    <a href="@detail.Referrer" rel="noopener noreferrer" target="_blank">@detail.Referrer</a>
+                                }
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="syn-admin__panel">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Campos del form</h2>
+                    <span class="syn-admin__panel-count">@detail.Fields.Count</span>
+                </header>
+                @if (detail.Fields.Count == 0)
+                {
+                    <p class="syn-admin__panel-empty">El form no contiene campos.</p>
+                }
+                else
+                {
+                    <table class="syn-admin__table">
+                        <thead>
+                            <tr>
+                                <th>Campo</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (key, value) in detail.Fields)
+                            {
+                                <tr>
+                                    <th><code>@key</code></th>
+                                    <td><pre class="syn-admin__field-value">@value</pre></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
+        </div>
+    </main>
+</body>
+</html>

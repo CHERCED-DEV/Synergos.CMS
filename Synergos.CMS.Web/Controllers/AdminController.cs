@@ -90,6 +90,25 @@ public sealed class AdminController : Controller
         return View();
     }
 
+    [HttpGet("forms/{formKey}/{storageId}")]
+    public IActionResult FormSubmissionDetail(string formKey, string storageId)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var detail = _formReader.GetSubmission(formKey, storageId);
+        if (detail is null)
+        {
+            return NotFound();
+        }
+
+        ViewData["Detail"] = detail;
+        ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
+        return View();
+    }
+
     [HttpGet("moderation/comments")]
     public IActionResult ModerationComments(
         [FromQuery] int page = 1,

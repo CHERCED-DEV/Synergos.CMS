@@ -835,3 +835,63 @@ a.syn-admin__item-node:hover {
   color: var(--syn-color-text-primary);
   transform: none;
 }
+
+/* ── Breadcrumbs ─────────────────────────────────────────────── */
+
+.syn-admin__breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--syn-space-2);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  margin-bottom: var(--syn-space-md);
+}
+
+.syn-admin__breadcrumbs a {
+  color: var(--syn-color-text-secondary);
+  text-decoration: none;
+}
+
+.syn-admin__breadcrumbs a:hover {
+  color: var(--syn-color-action-primary);
+}
+
+.syn-admin__breadcrumbs-sep {
+  color: var(--syn-color-border-default);
+}
+
+.syn-admin__breadcrumbs-current {
+  color: var(--syn-color-text-primary);
+  font-weight: var(--syn-font-weight-medium);
+}
+
+/* ── Row action link (table cell) ────────────────────────────── */
+
+.syn-admin__row-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  color: var(--syn-color-action-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.syn-admin__row-action:hover {
+  text-decoration: underline;
+}
+
+/* ── Field value (preserve whitespace) ───────────────────────── */
+
+.syn-admin__field-value {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  background: transparent;
+  padding: 0;
+}

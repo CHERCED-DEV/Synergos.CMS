@@ -33,15 +33,42 @@ public interface IFormSubmissionReader
     /// para popular el dropdown de filter en el dashboard.
     /// </summary>
     IReadOnlyList<string> ListFormKeys();
+
+    /// <summary>
+    /// Devuelve el detalle completo de una submission identificada por
+    /// (<paramref name="formKey"/>, <paramref name="storageId"/>). El
+    /// <c>storageId</c> es opaco para el caller — el adapter lo
+    /// interpreta (el FileSystem usa el filename sin extensión).
+    /// Devuelve null si no existe.
+    /// </summary>
+    FormSubmissionDetail? GetSubmission(string formKey, string storageId);
 }
 
 /// <summary>
-/// Snapshot de una submission para listing — sin los fields
-/// completos (que se cargan on-demand al abrir un detalle). Mantiene
-/// la lista del dashboard ligera incluso con cientos de submissions.
+/// Submission completa con todos los fields, retornada por
+/// <see cref="IFormSubmissionReader.GetSubmission"/>.
 /// </summary>
+public sealed record FormSubmissionDetail(
+    string FormKey,
+    string StorageId,
+    DateTime ReceivedAtUtc,
+    string? ClientIp,
+    string? UserAgent,
+    string? Referrer,
+    IReadOnlyDictionary<string, string> Fields);
+
+/// <summary>
+/// Snapshot de una submission para listing — sin los fields
+/// completos (que se cargan on-demand al abrir un detalle).
+/// </summary>
+/// <param name="StorageId">Identificador URL-safe relativo al
+///   adapter (FileSystem usa filename sin extensión). Usado como
+///   key para <see cref="IFormSubmissionReader.GetSubmission"/>.</param>
+/// <param name="StorageReference">Path/ID absoluto interno del
+///   adapter — solo para logs/debugging, no exponer al UI.</param>
 public sealed record FormSubmissionListItem(
     string FormKey,
+    string StorageId,
     DateTime ReceivedAtUtc,
     string? ClientIp,
     int FieldCount,
