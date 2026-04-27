@@ -1,0 +1,104 @@
+@*
+    Vista del AdminController.Index (Ola 115). Landing del dashboard
+    con summary cards de las áreas operacionales: moderation pending,
+    forms ingresados, search top queries 7d.
+*@
+@using Synergos.CMS.Interfaces
+@{
+    Layout = null;
+    var pendingCount = (int)(ViewData["PendingCount"] ?? 0);
+    var formKeys = ViewData["FormKeys"] as IReadOnlyList<string> ?? Array.Empty<string>();
+    var topQueries = ViewData["TopQueries7d"] as IReadOnlyList<SearchQueryStat> ?? Array.Empty<SearchQueryStat>();
+    var moderatorName = ViewData["ModeratorName"] as string ?? "—";
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>Operaciones · Synergos</title>
+</head>
+<body class="syn-admin">
+    <header class="syn-admin__topbar">
+        <div class="syn-admin__topbar-inner">
+            <a class="syn-admin__brand" href="/admin">
+                <span class="syn-admin__brand-mark">⚙</span>
+                <span>Synergos · Operaciones</span>
+            </a>
+            <nav class="syn-admin__nav" aria-label="Admin">
+                <a class="syn-admin__nav-link syn-admin__nav-link--current" href="/admin">Inicio</a>
+                <a class="syn-admin__nav-link" href="/admin/moderation/comments">Moderación</a>
+                <a class="syn-admin__nav-link" href="/admin/forms">Forms</a>
+                <a class="syn-admin__nav-link" href="/admin/analytics/search">Búsqueda</a>
+            </nav>
+            <div class="syn-admin__user">
+                <span class="syn-admin__user-avatar" aria-hidden="true">@(moderatorName.Length > 0 ? moderatorName[0].ToString().ToUpper() : "?")</span>
+                <span class="syn-admin__user-name">@moderatorName</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">Bienvenido, @moderatorName</h1>
+                <p class="syn-admin__page-subtitle">
+                    Resumen rápido del estado operacional. Click en cada card
+                    para ir al detalle.
+                </p>
+            </header>
+
+            <section class="syn-admin__cards">
+                <a class="syn-admin__card" href="/admin/moderation/comments">
+                    <span class="syn-admin__card-icon" aria-hidden="true">💬</span>
+                    <span class="syn-admin__card-value">@pendingCount</span>
+                    <span class="syn-admin__card-label">Comentarios pendientes</span>
+                    <span class="syn-admin__card-hint">@(pendingCount == 0 ? "Cola limpia" : pendingCount == 1 ? "1 esperando aprobación" : $"{pendingCount} esperando aprobación")</span>
+                </a>
+
+                <a class="syn-admin__card" href="/admin/forms">
+                    <span class="syn-admin__card-icon" aria-hidden="true">📩</span>
+                    <span class="syn-admin__card-value">@formKeys.Count</span>
+                    <span class="syn-admin__card-label">Forms con submissions</span>
+                    <span class="syn-admin__card-hint">@(formKeys.Count == 0 ? "Sin submissions aún" : string.Join(" · ", formKeys.Take(3)) + (formKeys.Count > 3 ? "…" : ""))</span>
+                </a>
+
+                <a class="syn-admin__card" href="/admin/analytics/search">
+                    <span class="syn-admin__card-icon" aria-hidden="true">🔎</span>
+                    <span class="syn-admin__card-value">@topQueries.Count</span>
+                    <span class="syn-admin__card-label">Top queries últ. 7d</span>
+                    <span class="syn-admin__card-hint">@(topQueries.Count == 0 ? "Sin búsquedas registradas" : topQueries.First().Query)</span>
+                </a>
+            </section>
+
+            @if (topQueries.Count > 0)
+            {
+                <section class="syn-admin__panel" style="margin-top: var(--syn-space-xl);">
+                    <header class="syn-admin__panel-header">
+                        <h2 class="syn-admin__panel-title">Top queries últimos 7 días</h2>
+                        <span class="syn-admin__panel-count">@topQueries.Count</span>
+                    </header>
+                    <table class="syn-admin__table">
+                        <thead>
+                            <tr>
+                                <th>Query</th>
+                                <th class="syn-admin__col-num">Veces</th>
+                                <th class="syn-admin__col-num">Hits últimos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var stat in topQueries)
+                            {
+                                <tr>
+                                    <td><code>@stat.Query</code></td>
+                                    <td class="syn-admin__col-num">@stat.Count</td>
+                                    <td class="syn-admin__col-num">@stat.LastResultCount</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+        </div>
+    </main>
+</body>
+</html>

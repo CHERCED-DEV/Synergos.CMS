@@ -33,17 +33,61 @@ public sealed class AdminController : Controller
     private readonly IMemberAccessGate _gate;
     private readonly IAnalyticsTracker _analytics;
     private readonly ISearchAnalyticsStore _searchAnalytics;
+    private readonly IFormSubmissionReader _formReader;
 
     public AdminController(
         ICommentRepository comments,
         IMemberAccessGate gate,
         IAnalyticsTracker analytics,
-        ISearchAnalyticsStore searchAnalytics)
+        ISearchAnalyticsStore searchAnalytics,
+        IFormSubmissionReader formReader)
     {
         _comments = comments;
         _gate = gate;
         _analytics = analytics;
         _searchAnalytics = searchAnalytics;
+        _formReader = formReader;
+    }
+
+    [HttpGet("")]
+    public IActionResult Index()
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var pendingPage = _comments.GetPendingPage(page: 1, pageSize: 1);
+        var formKeys = _formReader.ListFormKeys();
+        var topQueries7d = _searchAnalytics.GetTopQueries(
+            DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, 5);
+
+        ViewData["PendingCount"] = pendingPage.TotalCount;
+        ViewData["FormKeys"] = formKeys;
+        ViewData["TopQueries7d"] = topQueries7d;
+        ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
+        return View();
+    }
+
+    [HttpGet("forms")]
+    public IActionResult FormSubmissions(
+        [FromQuery] int page = 1,
+        [FromQuery(Name = "pageSize")] int pageSize = DefaultPageSize,
+        [FromQuery(Name = "formKey")] string? formKeyFilter = null)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var pageData = _formReader.GetRecent(page, pageSize, formKeyFilter);
+        var formKeys = _formReader.ListFormKeys();
+
+        ViewData["Page"] = pageData;
+        ViewData["FormKeyFilter"] = formKeyFilter;
+        ViewData["FormKeys"] = formKeys;
+        ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
+        return View();
     }
 
     [HttpGet("moderation/comments")]

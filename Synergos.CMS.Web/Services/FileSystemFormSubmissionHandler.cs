@@ -24,7 +24,7 @@ namespace Synergos.CMS.Web.Services;
 /// controller.
 /// </para>
 /// </remarks>
-public sealed class FileSystemFormSubmissionHandler : IFormSubmissionHandler
+public sealed class FileSystemFormSubmissionHandler : IFormSubmissionHandler, IFormSubmissionReader
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -93,6 +93,90 @@ public sealed class FileSystemFormSubmissionHandler : IFormSubmissionHandler
                 "Form submission persistence failed: formKey={FormKey}",
                 request.FormKey);
             return FormSubmissionResult.Fail("storage-failed");
+        }
+    }
+
+    public FormSubmissionsPage GetRecent(int page, int pageSize, string? formKeyFilter = null)
+    {
+        var clampedPage = page < 1 ? 1 : page;
+        var clampedSize = Math.Clamp(pageSize, 1, 200);
+        var settings = _options.Value;
+        var root = Path.Combine(_environment.ContentRootPath, settings.StorageRoot);
+        if (!Directory.Exists(root))
+        {
+            return new FormSubmissionsPage(Array.Empty<FormSubmissionListItem>(), clampedPage, clampedSize, 0);
+        }
+
+        var formFolders = string.IsNullOrWhiteSpace(formKeyFilter)
+            ? Directory.EnumerateDirectories(root)
+            : new[] { Path.Combine(root, SanitizeForPath(formKeyFilter)) }.Where(Directory.Exists);
+
+        var all = new List<FormSubmissionListItem>();
+        foreach (var folder in formFolders)
+        {
+            var formKey = Path.GetFileName(folder);
+            foreach (var path in Directory.EnumerateFiles(folder, "*.json"))
+            {
+                var item = TryReadSummary(path, formKey);
+                if (item is not null) all.Add(item);
+            }
+        }
+
+        var total = all.Count;
+        var ordered = all
+            .OrderByDescending(i => i.ReceivedAtUtc)
+            .Skip((clampedPage - 1) * clampedSize)
+            .Take(clampedSize)
+            .ToList();
+
+        return new FormSubmissionsPage(ordered, clampedPage, clampedSize, total);
+    }
+
+    public IReadOnlyList<string> ListFormKeys()
+    {
+        var settings = _options.Value;
+        var root = Path.Combine(_environment.ContentRootPath, settings.StorageRoot);
+        if (!Directory.Exists(root))
+        {
+            return Array.Empty<string>();
+        }
+        return Directory.EnumerateDirectories(root)
+            .Select(d => Path.GetFileName(d))
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private FormSubmissionListItem? TryReadSummary(string path, string formKey)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var doc = JsonDocument.Parse(stream);
+            var root = doc.RootElement;
+
+            DateTime receivedAt = root.TryGetProperty("receivedAtUtc", out var ra)
+                && ra.TryGetDateTime(out var dt) ? dt : File.GetCreationTimeUtc(path);
+
+            string? clientIp = root.TryGetProperty("clientIp", out var ip) ? ip.GetString() : null;
+
+            int fieldCount = 0;
+            if (root.TryGetProperty("fields", out var fields) && fields.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var _ in fields.EnumerateObject()) fieldCount++;
+            }
+
+            return new FormSubmissionListItem(
+                FormKey: formKey,
+                ReceivedAtUtc: receivedAt,
+                ClientIp: clientIp,
+                FieldCount: fieldCount,
+                StorageReference: path);
+        }
+        catch (Exception ex) when (ex is IOException or JsonException)
+        {
+            _logger.LogWarning(ex, "Form submission file unreadable: {Path}", path);
+            return null;
         }
     }
 

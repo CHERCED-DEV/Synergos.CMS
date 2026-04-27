@@ -684,3 +684,93 @@ a.syn-admin__item-node:hover {
 .syn-admin__bulk {
   display: contents;
 }
+
+/* ── Summary cards (landing) ─────────────────────────────────── */
+
+.syn-admin__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--syn-space-lg);
+  margin-bottom: var(--syn-space-xl);
+}
+
+.syn-admin__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+  padding: var(--syn-space-lg);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  box-shadow: var(--syn-shadow-card);
+  text-decoration: none;
+  color: inherit;
+  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
+}
+
+.syn-admin__card:hover {
+  border-color: var(--syn-color-border-accent);
+  box-shadow: var(--syn-shadow-card-hover);
+  transform: translateY(-2px);
+  text-decoration: none;
+  color: inherit;
+}
+
+.syn-admin__card-icon {
+  font-size: var(--syn-font-size-3xl);
+  line-height: 1;
+}
+
+.syn-admin__card-value {
+  font-size: var(--syn-font-size-5xl);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-display);
+  line-height: 1;
+  background: linear-gradient(135deg,
+    var(--syn-color-action-primary) 0%,
+    var(--syn-color-action-emphasis, var(--syn-color-accent-500)) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+.syn-admin__card-label {
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+}
+
+.syn-admin__card-hint {
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Filter field with select ────────────────────────────────── */
+
+.syn-admin__filter-field select {
+  min-height: 40px;
+  padding: var(--syn-space-2) var(--syn-space-3);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-primary);
+  cursor: pointer;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-admin__filter-field select:focus,
+.syn-admin__filter-field select:focus-visible {
+  outline: none;
+  border-color: var(--syn-color-action-primary);
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+}

@@ -1,0 +1,156 @@
+@*
+    Vista del AdminController.FormSubmissions (Ola 115). Lista
+    submissions paginadas + filter por formKey.
+*@
+@using Synergos.CMS.Interfaces
+@{
+    Layout = null;
+    var pageData = ViewData["Page"] as FormSubmissionsPage
+        ?? new FormSubmissionsPage(Array.Empty<FormSubmissionListItem>(), 1, 25, 0);
+    var formKeyFilter = ViewData["FormKeyFilter"] as string;
+    var formKeys = ViewData["FormKeys"] as IReadOnlyList<string> ?? Array.Empty<string>();
+    var moderatorName = ViewData["ModeratorName"] as string ?? "—";
+    string PageHref(int p) =>
+        !string.IsNullOrWhiteSpace(formKeyFilter)
+            ? $"/admin/forms?page={p}&pageSize={pageData.PageSize}&formKey={Uri.EscapeDataString(formKeyFilter)}"
+            : $"/admin/forms?page={p}&pageSize={pageData.PageSize}";
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>Form submissions · Synergos</title>
+</head>
+<body class="syn-admin">
+    <header class="syn-admin__topbar">
+        <div class="syn-admin__topbar-inner">
+            <a class="syn-admin__brand" href="/admin">
+                <span class="syn-admin__brand-mark">⚙</span>
+                <span>Synergos · Operaciones</span>
+            </a>
+            <nav class="syn-admin__nav" aria-label="Admin">
+                <a class="syn-admin__nav-link" href="/admin">Inicio</a>
+                <a class="syn-admin__nav-link" href="/admin/moderation/comments">Moderación</a>
+                <a class="syn-admin__nav-link syn-admin__nav-link--current" href="/admin/forms">Forms</a>
+                <a class="syn-admin__nav-link" href="/admin/analytics/search">Búsqueda</a>
+            </nav>
+            <div class="syn-admin__user">
+                <span class="syn-admin__user-avatar" aria-hidden="true">@(moderatorName.Length > 0 ? moderatorName[0].ToString().ToUpper() : "?")</span>
+                <span class="syn-admin__user-name">@moderatorName</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">Form submissions</h1>
+                <p class="syn-admin__page-subtitle">
+                    @pageData.TotalCount submissions
+                    @if (!string.IsNullOrWhiteSpace(formKeyFilter))
+                    {
+                        <text>en <code>@formKeyFilter</code></text>
+                    }
+                    · Página @pageData.Page de @Math.Max(pageData.TotalPages, 1).
+                </p>
+            </header>
+
+            <form class="syn-admin__filters" method="get" action="/admin/forms">
+                <label class="syn-admin__filter-field">
+                    <span class="syn-admin__filter-label">Form</span>
+                    <select name="formKey">
+                        <option value="">Todos</option>
+                        @foreach (var key in formKeys)
+                        {
+                            if (string.Equals(key, formKeyFilter, StringComparison.Ordinal))
+                            {
+                                <option value="@key" selected>@key</option>
+                            }
+                            else
+                            {
+                                <option value="@key">@key</option>
+                            }
+                        }
+                    </select>
+                </label>
+                <label class="syn-admin__filter-field">
+                    <span class="syn-admin__filter-label">Por página</span>
+                    <input type="number" name="pageSize" value="@pageData.PageSize" min="5" max="200" />
+                </label>
+                <button type="submit" class="syn-admin__filter-submit">Aplicar</button>
+                @if (!string.IsNullOrWhiteSpace(formKeyFilter))
+                {
+                    <a href="/admin/forms" class="syn-admin__filter-clear">Limpiar filtros</a>
+                }
+            </form>
+
+            @if (pageData.Items.Count == 0)
+            {
+                <div class="syn-admin__empty">
+                    <p class="syn-admin__empty-emoji" aria-hidden="true">📭</p>
+                    <h2 class="syn-admin__empty-title">Sin submissions</h2>
+                    <p class="syn-admin__empty-body">
+                        @if (!string.IsNullOrWhiteSpace(formKeyFilter))
+                        {
+                            <text>No hay submissions persistidas para <code>@formKeyFilter</code>.</text>
+                        }
+                        else
+                        {
+                            <text>Cuando un visitante envíe un form con <code>formInternalKey</code> configurado, aparecerá aquí.</text>
+                        }
+                    </p>
+                </div>
+            }
+            else
+            {
+                <section class="syn-admin__panel">
+                    <table class="syn-admin__table">
+                        <thead>
+                            <tr>
+                                <th>Form</th>
+                                <th>Recibido (UTC)</th>
+                                <th>IP</th>
+                                <th class="syn-admin__col-num">Campos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in pageData.Items)
+                            {
+                                <tr>
+                                    <td><a href="/admin/forms?formKey=@Uri.EscapeDataString(item.FormKey)"><code>@item.FormKey</code></a></td>
+                                    <td>@item.ReceivedAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td>@(item.ClientIp ?? "—")</td>
+                                    <td class="syn-admin__col-num">@item.FieldCount</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+
+                @if (pageData.TotalPages > 1)
+                {
+                    <nav class="syn-admin__pagination" aria-label="Paginación">
+                        @if (pageData.HasPrev)
+                        {
+                            <a class="syn-admin__page-link" rel="prev" href="@PageHref(pageData.Page - 1)">← Anterior</a>
+                        }
+                        else
+                        {
+                            <span class="syn-admin__page-link syn-admin__page-link--disabled">← Anterior</span>
+                        }
+                        <span class="syn-admin__page-current">@pageData.Page / @pageData.TotalPages</span>
+                        @if (pageData.HasNext)
+                        {
+                            <a class="syn-admin__page-link" rel="next" href="@PageHref(pageData.Page + 1)">Siguiente →</a>
+                        }
+                        else
+                        {
+                            <span class="syn-admin__page-link syn-admin__page-link--disabled">Siguiente →</span>
+                        }
+                    </nav>
+                }
+            }
+        </div>
+    </main>
+</body>
+</html>

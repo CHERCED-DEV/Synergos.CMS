@@ -127,7 +127,14 @@ public sealed class SeamComposer : IComposer
         // InMemoryFormRateLimiter mantiene sliding window por (IP, formKey)
         // — singleton para que el estado persista entre requests del
         // mismo proceso.
-        services.AddSingleton<IFormSubmissionHandler, FileSystemFormSubmissionHandler>();
+        // Ola 115 — el FileSystem handler implementa AMBAS interfaces
+        // (write + read). Composer registra una sola instancia bajo los
+        // 2 contratos. Para adapters fire-and-forget (queue/webhook) el
+        // arquitecto registra otro IFormSubmissionHandler y deja el
+        // reader como NoOp o swap por DB-backed reader.
+        services.AddSingleton<FileSystemFormSubmissionHandler>();
+        services.AddSingleton<IFormSubmissionHandler>(sp => sp.GetRequiredService<FileSystemFormSubmissionHandler>());
+        services.AddSingleton<IFormSubmissionReader>(sp => sp.GetRequiredService<FileSystemFormSubmissionHandler>());
         services.AddSingleton<InMemoryFormRateLimiter>();
 
         // Ola 61 — Search infrastructure (ADR 0031). ExamineSearchProvider
