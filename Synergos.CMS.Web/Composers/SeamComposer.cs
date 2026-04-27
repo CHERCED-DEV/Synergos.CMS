@@ -172,6 +172,12 @@ public sealed class SeamComposer : IComposer
         // son scoped (per-request).
         services.AddTransient<IMemberAuthService, DefaultMemberAuthService>();
 
+        // Olas 144-145 — Member roster admin (ADR 0060). UmbracoMemberRosterReader
+        // wraps IMemberService + IMemberGroupService para listing/filter de
+        // Members en /admin/members. Transient porque depende de scoped
+        // services Umbraco (IMemberService es scoped per-request).
+        services.AddTransient<IMemberRosterReader, UmbracoMemberRosterReader>();
+
         // Ola 65 — Email transaccional (ADR 0035). DefaultEmailService
         // wraps Umbraco.Cms.Core.Mail.IEmailSender — Umbraco gestiona
         // SMTP transport via Umbraco:CMS:Global:Smtp + pickup directory.

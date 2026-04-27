@@ -1,0 +1,155 @@
+@*
+    Vista del AdminController.Members (Olas 144-145). Listing read-only
+    del Member roster con paginación + filter por role.
+*@
+@using Synergos.CMS.Interfaces
+@{
+    Layout = null;
+    var roster = (MemberRosterPage)ViewData["Roster"]!;
+    var allRoles = ViewData["AllRoles"] as IReadOnlyList<string> ?? Array.Empty<string>();
+    var roleFilter = ViewData["RoleFilter"] as string;
+
+    string PageHref(int p)
+    {
+        var q = $"?page={p}";
+        if (!string.IsNullOrWhiteSpace(roleFilter))
+        {
+            q += $"&role={Uri.EscapeDataString(roleFilter)}";
+        }
+        return "/admin/members" + q;
+    }
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>@Umbraco.GetDictionaryValue("admin.nav.members", "Miembros") · Synergos</title>
+</head>
+<body class="syn-admin">
+    @await Html.PartialAsync("_AdminTopbar")
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">
+                    @Umbraco.GetDictionaryValue("admin.nav.members", "Miembros")
+                    <small class="syn-admin__page-count">· @roster.TotalCount</small>
+                </h1>
+                <p class="syn-admin__page-subtitle">
+                    Listing read-only de Members registrados. Filtrable por role.
+                    Edición vía backoffice de Umbraco.
+                </p>
+            </header>
+
+            @if (allRoles.Count > 0)
+            {
+                <form method="get" action="/admin/members" class="syn-admin__filters">
+                    <label class="syn-admin__filter">
+                        <span class="syn-admin__filter-label">Role</span>
+                        <select name="role" class="syn-admin__filter-select">
+                            <option value="">— @Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar") —</option>
+                            @foreach (var role in allRoles)
+                            {
+                                var sel = string.Equals(role, roleFilter, StringComparison.OrdinalIgnoreCase);
+                                <option value="@role" selected="@sel">@role</option>
+                            }
+                        </select>
+                    </label>
+                    <button type="submit" class="syn-admin__filter-submit">@Umbraco.GetDictionaryValue("admin.action.applyfilters", "Aplicar filtros")</button>
+                    @if (!string.IsNullOrWhiteSpace(roleFilter))
+                    {
+                        <a href="/admin/members" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar")</a>
+                    }
+                </form>
+            }
+
+            @if (roster.Items.Count == 0)
+            {
+                <div class="syn-admin__empty">
+                    <p>No hay Members que coincidan con el filtro actual.</p>
+                </div>
+            }
+            else
+            {
+                <table class="syn-admin__table">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Nombre</th>
+                            <th>Roles</th>
+                            <th class="syn-admin__col-num">Último login</th>
+                            <th class="syn-admin__col-num">Creado</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var m in roster.Items)
+                        {
+                            <tr>
+                                <td><code>@m.Email</code></td>
+                                <td>@m.DisplayName</td>
+                                <td>
+                                    @if (m.Roles.Count == 0)
+                                    {
+                                        <span class="syn-admin__role-empty">—</span>
+                                    }
+                                    else
+                                    {
+                                        foreach (var r in m.Roles)
+                                        {
+                                            <span class="syn-admin__role">@r</span>
+                                        }
+                                    }
+                                </td>
+                                <td class="syn-admin__col-num">
+                                    @(m.LastLoginUtc.HasValue ? m.LastLoginUtc.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : "—")
+                                </td>
+                                <td class="syn-admin__col-num">
+                                    @m.CreatedUtc.ToString("yyyy-MM-dd")
+                                </td>
+                                <td>
+                                    @if (m.IsLockedOut)
+                                    {
+                                        <span class="syn-admin__status syn-admin__status--danger">Locked</span>
+                                    }
+                                    else if (!m.IsApproved)
+                                    {
+                                        <span class="syn-admin__status syn-admin__status--warn">Sin confirmar</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="syn-admin__status syn-admin__status--ok">OK</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                @if (roster.TotalPages > 1)
+                {
+                    <nav class="syn-admin__pagination" aria-label="Paginación">
+                        @if (roster.HasPrev)
+                        {
+                            <a class="syn-admin__page-link" rel="prev" href="@PageHref(roster.Page - 1)">← Anterior</a>
+                        }
+                        else
+                        {
+                            <span class="syn-admin__page-link syn-admin__page-link--disabled">← Anterior</span>
+                        }
+                        <span class="syn-admin__page-current">@roster.Page / @roster.TotalPages</span>
+                        @if (roster.HasNext)
+                        {
+                            <a class="syn-admin__page-link" rel="next" href="@PageHref(roster.Page + 1)">Siguiente →</a>
+                        }
+                        else
+                        {
+                            <span class="syn-admin__page-link syn-admin__page-link--disabled">Siguiente →</span>
+                        }
+                    </nav>
+                }
+            }
+        </div>
+    </main>
+</body>
+</html>

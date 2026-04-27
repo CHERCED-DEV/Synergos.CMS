@@ -42,6 +42,7 @@ public sealed class AdminController : Controller
     private readonly IAnalyticsTracker _analytics;
     private readonly ISearchAnalyticsStore _searchAnalytics;
     private readonly IFormSubmissionReader _formReader;
+    private readonly IMemberRosterReader _memberRoster;
     private readonly IMemoryCache _cache;
     private readonly IOptionsMonitor<AdminSettings> _adminSettings;
 
@@ -51,6 +52,7 @@ public sealed class AdminController : Controller
         IAnalyticsTracker analytics,
         ISearchAnalyticsStore searchAnalytics,
         IFormSubmissionReader formReader,
+        IMemberRosterReader memberRoster,
         IMemoryCache cache,
         IOptionsMonitor<AdminSettings> adminSettings)
     {
@@ -59,6 +61,7 @@ public sealed class AdminController : Controller
         _analytics = analytics;
         _searchAnalytics = searchAnalytics;
         _formReader = formReader;
+        _memberRoster = memberRoster;
         _cache = cache;
         _adminSettings = adminSettings;
     }
@@ -700,6 +703,30 @@ public sealed class AdminController : Controller
         ViewData["Limit"] = clampedLimit;
         ViewData["TopQueries"] = topQueries;
         ViewData["TopNoResults"] = topNoResults;
+        return View();
+    }
+
+    /// <summary>
+    /// GET /admin/members — listing read-only del Member roster con
+    /// paginación + filter por role. Olas 144-145.
+    /// </summary>
+    [HttpGet("members")]
+    public IActionResult Members(
+        [FromQuery] int page = 1,
+        [FromQuery(Name = "role")] string? roleFilter = null)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var roster = _memberRoster.GetRosterPage(page, DefaultPageSize, roleFilter);
+        var allRoles = _memberRoster.ListAllRoles();
+
+        SetTopbar("members");
+        ViewData["Roster"] = roster;
+        ViewData["AllRoles"] = allRoles;
+        ViewData["RoleFilter"] = roleFilter;
         return View();
     }
 }
