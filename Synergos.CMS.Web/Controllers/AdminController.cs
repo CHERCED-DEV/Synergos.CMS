@@ -382,7 +382,7 @@ public sealed class AdminController : Controller
     }
 
     [HttpGet("health")]
-    public IActionResult Health()
+    public IActionResult Health([FromServices] IWebhookTelemetryStore telemetryStore)
     {
         if (!_gate.HasAnyRole(ModeratorRolesCsv))
         {
@@ -408,6 +408,7 @@ public sealed class AdminController : Controller
 
         SetTopbar("health", pendingPage.TotalCount);
         ViewData["Report"] = report;
+        ViewData["WebhookTelemetry"] = telemetryStore.GetChannelStats();
         return View();
     }
 

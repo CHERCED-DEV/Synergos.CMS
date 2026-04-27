@@ -186,6 +186,11 @@ public sealed class SeamComposer : IComposer
         // al boot + cada 24h. Si retention=0, no-op.
         services.AddHostedService<AuditRetentionHostedService>();
 
+        // Olas 165-166 — Webhook telemetry store (ADR 0071). Ring buffer
+        // in-memory por canal con last 1000 outcomes. Singleton — thread-safe
+        // via per-channel lock. Reset on restart (no persistencia).
+        services.AddSingleton<IWebhookTelemetryStore, InMemoryWebhookTelemetryStore>();
+
         // Ola 161 — Validator que warn al boot/reload si una key del
         // PerChannel dict no matchea ningún FactoryName conocido.
         services.AddSingleton<

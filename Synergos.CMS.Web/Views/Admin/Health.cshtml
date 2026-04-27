@@ -93,6 +93,57 @@
                     </tbody>
                 </table>
             </section>
+
+            @{
+                var telemetry = ViewData["WebhookTelemetry"] as IReadOnlyList<Synergos.CMS.Interfaces.ChannelTelemetrySnapshot>
+                    ?? Array.Empty<Synergos.CMS.Interfaces.ChannelTelemetrySnapshot>();
+            }
+            <section class="syn-admin__panel" style="margin-top: var(--syn-space-lg);">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Webhook telemetry (last 1000 outcomes per canal)</h2>
+                    <span class="syn-admin__panel-count">@telemetry.Count</span>
+                </header>
+                @if (telemetry.Count == 0)
+                {
+                    <p class="syn-admin__empty">Sin outcomes registrados desde el último restart. Dispara un test desde /admin/webhooks/test para popular.</p>
+                }
+                else
+                {
+                    <table class="syn-admin__table">
+                        <thead>
+                            <tr>
+                                <th>Canal</th>
+                                <th class="syn-admin__col-num">Total</th>
+                                <th class="syn-admin__col-num">OK</th>
+                                <th class="syn-admin__col-num">Fail</th>
+                                <th class="syn-admin__col-num">P50 (ms)</th>
+                                <th class="syn-admin__col-num">P95 (ms)</th>
+                                <th class="syn-admin__col-num">P99 (ms)</th>
+                                <th>Última call</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in telemetry)
+                            {
+                                var failRate = t.TotalCalls > 0 ? (double)t.FailureCount / t.TotalCalls : 0;
+                                var rowClass = failRate >= 0.20 ? "syn-admin__status--danger"
+                                            : failRate >= 0.05 ? "syn-admin__status--warn"
+                                            : "";
+                                <tr>
+                                    <td><code>@t.ChannelName</code></td>
+                                    <td class="syn-admin__col-num">@t.TotalCalls</td>
+                                    <td class="syn-admin__col-num">@t.SuccessCount</td>
+                                    <td class="syn-admin__col-num"><span class="@rowClass">@t.FailureCount</span></td>
+                                    <td class="syn-admin__col-num">@t.P50LatencyMs.ToString("F0")</td>
+                                    <td class="syn-admin__col-num">@t.P95LatencyMs.ToString("F0")</td>
+                                    <td class="syn-admin__col-num">@t.P99LatencyMs.ToString("F0")</td>
+                                    <td>@(t.LastObservedUtc.HasValue ? t.LastObservedUtc.Value.ToString("yyyy-MM-dd HH:mm:ss") + " UTC" : "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
         </div>
     </main>
 </body>

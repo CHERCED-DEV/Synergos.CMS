@@ -2,6 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -22,8 +24,17 @@ internal static class WebhookResilienceExtensions
     /// </summary>
     public static IHttpClientBuilder AddWebhookResilience(this IHttpClientBuilder builder)
     {
-        var pipeline = builder.AddStandardResilienceHandler();
         var channelName = builder.Name;
+
+        // Olas 165-166 — telemetry handler closest to user code (added
+        // ANTES del resilience handler). Mide elapsed total incluyendo
+        // retries internas del resilience pipeline.
+        builder.AddHttpMessageHandler(sp =>
+            new WebhookTelemetryHandler(
+                channelName,
+                sp.GetRequiredService<IWebhookTelemetryStore>()));
+
+        var pipeline = builder.AddStandardResilienceHandler();
         pipeline.Services
             .AddOptions<HttpStandardResilienceOptions>(pipeline.PipelineName)
             .Configure<IOptionsMonitor<WebhookResilienceSettings>>((opts, monitor) =>
