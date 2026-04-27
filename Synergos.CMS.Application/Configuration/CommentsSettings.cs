@@ -78,4 +78,13 @@ public sealed class CommentsSettings
     /// con timestamp/nonce dentro del payload si se necesita).
     /// </summary>
     public string? WebhookHmacSecret { get; init; }
+
+    /// <summary>
+    /// URL de Slack incoming webhook. Si está poblada, el canal
+    /// <c>SlackCommentModerationNotifier</c> POST con payload formato
+    /// Slack Block Kit (header + section + fields + action button).
+    /// Independiente de <see cref="WebhookUrl"/> — un sitio puede
+    /// tener ambos y los 2 disparan por cada evento.
+    /// </summary>
+    public string? SlackWebhookUrl { get; init; }
 }

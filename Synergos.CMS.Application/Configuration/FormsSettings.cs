@@ -90,4 +90,11 @@ public sealed class FormsSettings
     /// <c>X-Synergos-Signature: sha256={hex}</c>. Default vacío — opt-in.
     /// </summary>
     public string? WebhookHmacSecret { get; init; }
+
+    /// <summary>
+    /// URL de Slack incoming webhook. Si está poblada, el canal
+    /// <c>SlackFormSubmissionNotifier</c> POST con payload formato
+    /// Slack Block Kit. Independiente de <see cref="WebhookUrl"/>.
+    /// </summary>
+    public string? SlackWebhookUrl { get; init; }
 }

@@ -64,4 +64,11 @@ public sealed class CartAbandonmentSettings
     /// <c>X-Synergos-Signature: sha256={hex}</c>.
     /// </summary>
     public string? WebhookHmacSecret { get; init; }
+
+    /// <summary>
+    /// URL de Slack incoming webhook. Si está poblada, el canal
+    /// <c>SlackCartAbandonmentNotifier</c> POST con payload formato
+    /// Slack Block Kit. Independiente de <see cref="WebhookUrl"/>.
+    /// </summary>
+    public string? SlackWebhookUrl { get; init; }
 }

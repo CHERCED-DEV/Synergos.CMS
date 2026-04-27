@@ -190,6 +190,8 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<ICommentModerationNotifierChannel, EmailCommentModerationNotifier>();
         services.AddHttpClient(WebhookCommentModerationNotifier.FactoryName);
         services.AddSingleton<ICommentModerationNotifierChannel, WebhookCommentModerationNotifier>();
+        services.AddHttpClient(SlackCommentModerationNotifier.FactoryName);
+        services.AddSingleton<ICommentModerationNotifierChannel, SlackCommentModerationNotifier>();
         services.AddSingleton<ICommentModerationNotifier, CompositeCommentModerationNotifier>();
 
         // Ola 91 — Form submission notifier composite (paralelo del de
@@ -199,6 +201,8 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IFormSubmissionNotifierChannel, EmailFormSubmissionNotifier>();
         services.AddHttpClient(WebhookFormSubmissionNotifier.FactoryName);
         services.AddSingleton<IFormSubmissionNotifierChannel, WebhookFormSubmissionNotifier>();
+        services.AddHttpClient(SlackFormSubmissionNotifier.FactoryName);
+        services.AddSingleton<IFormSubmissionNotifierChannel, SlackFormSubmissionNotifier>();
         services.AddSingleton<IFormSubmissionNotifier, CompositeFormSubmissionNotifier>();
 
         // Ola 102 — Cart abandonment notifier composite (paralelo de
@@ -207,6 +211,8 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<ICartAbandonmentNotifierChannel, EmailCartAbandonmentNotifier>();
         services.AddHttpClient(WebhookCartAbandonmentNotifier.FactoryName);
         services.AddSingleton<ICartAbandonmentNotifierChannel, WebhookCartAbandonmentNotifier>();
+        services.AddHttpClient(SlackCartAbandonmentNotifier.FactoryName);
+        services.AddSingleton<ICartAbandonmentNotifierChannel, SlackCartAbandonmentNotifier>();
         services.AddSingleton<ICartAbandonmentNotifier, CompositeCartAbandonmentNotifier>();
 
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
