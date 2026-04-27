@@ -99,8 +99,8 @@ public sealed class SlackCommentModerationNotifier : ICommentModerationNotifierC
             httpClient,
             settings.SlackWebhookUrl,
             payload,
-            cancellationToken,
             _logger,
-            $"comment.pending nodeId={comment.NodeId} commentId={comment.Id}");
+            $"comment.pending nodeId={comment.NodeId} commentId={comment.Id}",
+            cancellationToken);
     }
 }

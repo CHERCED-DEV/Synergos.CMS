@@ -7,8 +7,7 @@
     contenido) > BodyHtml (TinyMCE) > nada.
 *@
 @using Umbraco.Extensions
-@model Synergos.CMS.Web.Controllers.ErrorPageViewModel
-@inject Umbraco.Cms.Core.Web.IUmbracoHelper Umbraco
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.Controllers.ErrorPageViewModel>
 @{
     Layout = null;
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;

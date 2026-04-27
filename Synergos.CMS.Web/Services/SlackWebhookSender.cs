@@ -21,7 +21,7 @@ namespace Synergos.CMS.Web.Services;
 ///     text = "Fallback plain-text",
 ///     blocks = new[] { ... }   // Block Kit specs
 /// };
-/// await SlackWebhookSender.SendAsync(httpClient, slackUrl, payload, ct, logger, contextLog);
+/// await SlackWebhookSender.SendAsync(httpClient, slackUrl, payload, logger, contextLog, ct);
 /// </code>
 /// </remarks>
 public static class SlackWebhookSender
@@ -30,9 +30,9 @@ public static class SlackWebhookSender
         HttpClient httpClient,
         string webhookUrl,
         T payload,
-        CancellationToken cancellationToken,
         ILogger logger,
-        string contextLog)
+        string contextLog,
+        CancellationToken cancellationToken)
     {
         var bodyBytes = JsonSerializer.SerializeToUtf8Bytes(payload);
         using var content = new ByteArrayContent(bodyBytes);

@@ -1,3 +1,4 @@
+using System.Buffers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
@@ -32,6 +33,9 @@ public sealed class AdminController : Controller
     private const string ModeratorRolesCsv = "admin,moderator,editor";
     private const string PendingCountCacheKey = "admin.pending-comments-count";
     private const string BulkUndoCacheKeyPrefix = "admin.bulk-undo:";
+
+    private static readonly SearchValues<char> CsvSpecialChars =
+        SearchValues.Create(",\"\n\r");
 
     private readonly ICommentRepository _comments;
     private readonly IMemberAccessGate _gate;
@@ -237,7 +241,7 @@ public sealed class AdminController : Controller
     private static string EscapeCsvField(string value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
-        bool needsQuotes = value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0;
+        bool needsQuotes = value.AsSpan().IndexOfAny(CsvSpecialChars) >= 0;
         if (!needsQuotes) return value;
         return "\"" + value.Replace("\"", "\"\"") + "\"";
     }

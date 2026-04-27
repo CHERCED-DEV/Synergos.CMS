@@ -77,9 +77,17 @@ public sealed record FormSubmissionDetail(
 /// Snapshot de una submission para listing — sin los fields
 /// completos (que se cargan on-demand al abrir un detalle).
 /// </summary>
+/// <param name="FormKey">Key del form al que pertenece la submission
+///   (mismo valor que el form definido en backoffice).</param>
 /// <param name="StorageId">Identificador URL-safe relativo al
 ///   adapter (FileSystem usa filename sin extensión). Usado como
 ///   key para <see cref="IFormSubmissionReader.GetSubmission"/>.</param>
+/// <param name="ReceivedAtUtc">Timestamp UTC en que el adapter
+///   persistió la submission.</param>
+/// <param name="ClientIp">IP remota del visitante si fue capturada;
+///   null cuando el adapter no la persistió o el header faltó.</param>
+/// <param name="FieldCount">Cantidad de fields que tenía la
+///   submission — útil para mostrar en el listing sin cargar el body.</param>
 /// <param name="StorageReference">Path/ID absoluto interno del
 ///   adapter — solo para logs/debugging, no exponer al UI.</param>
 public sealed record FormSubmissionListItem(

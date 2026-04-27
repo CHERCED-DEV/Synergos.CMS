@@ -92,9 +92,9 @@ public sealed class SlackFormSubmissionNotifier : IFormSubmissionNotifierChannel
             httpClient,
             settings.SlackWebhookUrl,
             payload,
-            cancellationToken,
             _logger,
-            $"form.submitted formKey={request.FormKey}");
+            $"form.submitted formKey={request.FormKey}",
+            cancellationToken);
     }
 
     private static string Truncate(string value, int max)

@@ -81,8 +81,8 @@ public sealed class SlackCartAbandonmentNotifier : ICartAbandonmentNotifierChann
             httpClient,
             settings.SlackWebhookUrl,
             payload,
-            cancellationToken,
             _logger,
-            $"cart.abandoned cartId={cart.CartId}");
+            $"cart.abandoned cartId={cart.CartId}",
+            cancellationToken);
     }
 }
