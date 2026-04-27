@@ -172,6 +172,12 @@ public sealed class SeamComposer : IComposer
         // services Umbraco (IMemberService es scoped per-request).
         services.AddTransient<IMemberRosterReader, UmbracoMemberRosterReader>();
 
+        // Olas 153-154 — Audit trail (ADR 0066). FileSystemAuditTrailWriter
+        // persiste eventos admin en App_Data/syn-audit/{yyyy-MM-dd}.jsonl.
+        // Singleton — solo depende de IHostEnvironment + ILogger; concurrency
+        // gestionada via lock interno.
+        services.AddSingleton<IAuditTrailWriter, FileSystemAuditTrailWriter>();
+
         // Ola 65 — Email transaccional (ADR 0035). DefaultEmailService
         // wraps Umbraco.Cms.Core.Mail.IEmailSender — Umbraco gestiona
         // SMTP transport via Umbraco:CMS:Global:Smtp + pickup directory.

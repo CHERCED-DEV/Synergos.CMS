@@ -32,6 +32,9 @@ public sealed class DefaultMemberAccessGate : IMemberAccessGate
     public string? CurrentMemberDisplayName =>
         _httpContextAccessor.HttpContext?.User?.Identity?.Name;
 
+    public string? CurrentMemberEmail =>
+        _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Email)?.Value;
+
     public IReadOnlyCollection<string> CurrentMemberRoles
     {
         get

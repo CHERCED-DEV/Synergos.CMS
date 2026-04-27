@@ -30,6 +30,12 @@ public interface IMemberAccessGate
     string? CurrentMemberDisplayName { get; }
 
     /// <summary>
+    /// Email del miembro autenticado, o null si anónimo. Usado por
+    /// audit trail para identificar al actor de cada acción admin.
+    /// </summary>
+    string? CurrentMemberEmail { get; }
+
+    /// <summary>
     /// Roles del miembro autenticado. Vacío si anónimo.
     /// </summary>
     IReadOnlyCollection<string> CurrentMemberRoles { get; }

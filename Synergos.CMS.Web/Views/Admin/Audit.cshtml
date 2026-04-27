@@ -1,0 +1,121 @@
+@*
+    Vista del AdminController.Audit (Olas 153-154). Listing read-only
+    del audit trail file-based con filter por actor/action.
+*@
+@using Synergos.CMS.Interfaces
+@{
+    Layout = null;
+    var events = ViewData["Events"] as IReadOnlyList<AuditEvent> ?? Array.Empty<AuditEvent>();
+    var actorFilter = ViewData["ActorFilter"] as string;
+    var actionFilter = ViewData["ActionFilter"] as string;
+    var limit = (int)(ViewData["Limit"] ?? 100);
+    var hasFilters = !string.IsNullOrWhiteSpace(actorFilter) || !string.IsNullOrWhiteSpace(actionFilter);
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>@Umbraco.GetDictionaryValue("admin.nav.audit", "Auditoría") · Synergos</title>
+</head>
+<body class="syn-admin">
+    @await Html.PartialAsync("_AdminTopbar")
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">
+                    @Umbraco.GetDictionaryValue("admin.nav.audit", "Auditoría")
+                    <small class="syn-admin__page-count">· @events.Count</small>
+                </h1>
+                <p class="syn-admin__page-subtitle">
+                    Registro append-only de las acciones admin (approve/reject/delete/bulk).
+                    Backed por <code>App_Data/syn-audit/{yyyy-MM-dd}.jsonl</code>.
+                    Solo se cargan los últimos 7 archivos diarios.
+                </p>
+            </header>
+
+            <form method="get" action="/admin/audit" class="syn-admin__filters">
+                <label class="syn-admin__filter">
+                    <span class="syn-admin__filter-label">Actor (email)</span>
+                    <input type="email" name="actor" value="@actorFilter"
+                           placeholder="moderator@example.com"
+                           class="syn-admin__filter-input" />
+                </label>
+                <label class="syn-admin__filter">
+                    <span class="syn-admin__filter-label">Action contains</span>
+                    <input type="text" name="action" value="@actionFilter"
+                           placeholder="comment.approve"
+                           class="syn-admin__filter-input" />
+                </label>
+                <label class="syn-admin__filter">
+                    <span class="syn-admin__filter-label">Limit</span>
+                    <input type="number" name="limit" value="@limit" min="1" max="500"
+                           class="syn-admin__filter-input syn-admin__filter-input--num" />
+                </label>
+                <button type="submit" class="syn-admin__filter-submit">@Umbraco.GetDictionaryValue("admin.action.applyfilters", "Aplicar filtros")</button>
+                @if (hasFilters)
+                {
+                    <a href="/admin/audit" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar")</a>
+                }
+            </form>
+
+            @if (events.Count == 0)
+            {
+                <div class="syn-admin__empty">
+                    <p>Sin eventos en el rango. Acciones moderadoras + form delete + bulk operations dejan trazo aquí cuando ocurren.</p>
+                </div>
+            }
+            else
+            {
+                <table class="syn-admin__table">
+                    <thead>
+                        <tr>
+                            <th>Cuándo (UTC)</th>
+                            <th>Actor</th>
+                            <th>Action</th>
+                            <th>Resource</th>
+                            <th>Outcome</th>
+                            <th>Detail</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var e in events)
+                        {
+                            var outcomeClass = e.Outcome switch
+                            {
+                                "success" => "syn-admin__status syn-admin__status--ok",
+                                "failure" => "syn-admin__status syn-admin__status--danger",
+                                "partial" => "syn-admin__status syn-admin__status--warn",
+                                _ => "syn-admin__status",
+                            };
+                            <tr>
+                                <td><time datetime="@e.OccurredAtUtc.ToString("O")">@e.OccurredAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</time></td>
+                                <td>
+                                    <div>@e.ActorName</div>
+                                    @if (!string.IsNullOrWhiteSpace(e.ActorEmail))
+                                    {
+                                        <div><code>@e.ActorEmail</code></div>
+                                    }
+                                </td>
+                                <td><code>@e.Action</code></td>
+                                <td><code>@e.Resource</code></td>
+                                <td><span class="@outcomeClass">@e.Outcome</span></td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(e.Detail))
+                                    {
+                                        <code>@e.Detail</code>
+                                    }
+                                    else
+                                    {
+                                        <span class="syn-admin__role-empty">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </main>
+</body>
+</html>

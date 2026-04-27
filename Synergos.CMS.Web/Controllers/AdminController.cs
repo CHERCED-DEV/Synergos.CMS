@@ -43,6 +43,7 @@ public sealed class AdminController : Controller
     private readonly ISearchAnalyticsStore _searchAnalytics;
     private readonly IFormSubmissionReader _formReader;
     private readonly IMemberRosterReader _memberRoster;
+    private readonly IAuditTrailWriter _audit;
     private readonly IMemoryCache _cache;
     private readonly IOptionsMonitor<AdminSettings> _adminSettings;
 
@@ -53,6 +54,7 @@ public sealed class AdminController : Controller
         ISearchAnalyticsStore searchAnalytics,
         IFormSubmissionReader formReader,
         IMemberRosterReader memberRoster,
+        IAuditTrailWriter audit,
         IMemoryCache cache,
         IOptionsMonitor<AdminSettings> adminSettings)
     {
@@ -62,8 +64,30 @@ public sealed class AdminController : Controller
         _searchAnalytics = searchAnalytics;
         _formReader = formReader;
         _memberRoster = memberRoster;
+        _audit = audit;
         _cache = cache;
         _adminSettings = adminSettings;
+    }
+
+    private async Task EmitAuditAsync(
+        string action,
+        string resource,
+        string outcome,
+        string detail = "",
+        CancellationToken cancellationToken = default)
+    {
+        var actorEmail = _gate.CurrentMemberEmail ?? string.Empty;
+        var actorName = _gate.CurrentMemberDisplayName ?? actorEmail;
+        var evt = new AuditEvent(
+            Id: Guid.NewGuid().ToString("N"),
+            OccurredAtUtc: DateTime.UtcNow,
+            ActorEmail: actorEmail,
+            ActorName: actorName,
+            Action: action,
+            Resource: resource,
+            Outcome: outcome,
+            Detail: detail);
+        await _audit.WriteAsync(evt, cancellationToken);
     }
 
     private int DefaultPageSize => _adminSettings.CurrentValue.DefaultPageSize;
@@ -417,6 +441,11 @@ public sealed class AdminController : Controller
                 ["source"] = "admin-dashboard",
             });
         }
+        await EmitAuditAsync(
+            "form.delete",
+            $"formKey={formKey} storageId={storageId}",
+            ok ? "success" : "failure",
+            cancellationToken: cancellationToken);
 
         return RedirectToAction(nameof(FormSubmissions));
     }
@@ -483,6 +512,11 @@ public sealed class AdminController : Controller
                 ["source"] = "admin-dashboard",
             });
         }
+        await EmitAuditAsync(
+            "comment.approve",
+            $"node={nodeId} commentId={commentId}",
+            ok ? "success" : "failure",
+            cancellationToken: cancellationToken);
 
         _cache.Remove(PendingCountCacheKey);
         return RedirectToAction(nameof(ModerationComments));
@@ -510,6 +544,11 @@ public sealed class AdminController : Controller
                 ["source"] = "admin-dashboard",
             });
         }
+        await EmitAuditAsync(
+            "comment.reject",
+            $"node={nodeId} commentId={commentId}",
+            ok ? "success" : "failure",
+            cancellationToken: cancellationToken);
 
         _cache.Remove(PendingCountCacheKey);
         return RedirectToAction(nameof(ModerationComments));
@@ -545,6 +584,11 @@ public sealed class AdminController : Controller
                 ["source"] = "admin-dashboard",
             });
         }
+        await EmitAuditAsync(
+            "comment.spam",
+            $"node={nodeId} commentId={commentId}",
+            ok ? "success" : "failure",
+            cancellationToken: cancellationToken);
 
         _cache.Remove(PendingCountCacheKey);
         return RedirectToAction(nameof(ModerationComments), new { msg = "spam-1" });
@@ -573,6 +617,11 @@ public sealed class AdminController : Controller
                 ["source"] = "admin-dashboard",
             });
         }
+        await EmitAuditAsync(
+            "comment.bulk-approve",
+            $"refsRequested={refs.Count} changed={changed}",
+            changed > 0 ? "success" : "partial",
+            cancellationToken: cancellationToken);
 
         _cache.Remove(PendingCountCacheKey);
         return RedirectToAction(nameof(ModerationComments), new { msg = $"approved-{changed}" });
@@ -612,6 +661,12 @@ public sealed class AdminController : Controller
                 ["undoToken"] = undoToken,
             });
         }
+        await EmitAuditAsync(
+            "comment.bulk-reject",
+            $"refsRequested={refs.Count} changed={changed}",
+            changed > 0 ? "success" : "partial",
+            detail: undoToken is not null ? $"undoToken={undoToken}" : "",
+            cancellationToken: cancellationToken);
 
         _cache.Remove(PendingCountCacheKey);
 
@@ -703,6 +758,33 @@ public sealed class AdminController : Controller
         ViewData["Limit"] = clampedLimit;
         ViewData["TopQueries"] = topQueries;
         ViewData["TopNoResults"] = topNoResults;
+        return View();
+    }
+
+    /// <summary>
+    /// GET /admin/audit — listing read-only del audit trail (Olas 153-154).
+    /// Muestra los últimos N eventos con filter opcional por actorEmail
+    /// y action. Read-only — el audit trail es append-only.
+    /// </summary>
+    [HttpGet("audit")]
+    public IActionResult Audit(
+        [FromQuery(Name = "actor")] string? actorEmailFilter = null,
+        [FromQuery(Name = "action")] string? actionFilter = null,
+        [FromQuery] int limit = 100)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var clampedLimit = Math.Clamp(limit, 1, 500);
+        var events = _audit.GetRecent(clampedLimit, actorEmailFilter, actionFilter);
+
+        SetTopbar("audit");
+        ViewData["Events"] = events;
+        ViewData["ActorFilter"] = actorEmailFilter;
+        ViewData["ActionFilter"] = actionFilter;
+        ViewData["Limit"] = clampedLimit;
         return View();
     }
 
