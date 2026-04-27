@@ -66,6 +66,12 @@
     {
         <link rel="icon" href="@theme.FaviconUrl" />
     }
+    @* Ola 100 — Manrope font family canónica del design system (Synergos.UI).
+       Preconnect + display=swap para evitar FOUT bloqueante. Si el theme override
+       define otra Heading/Body Font Family, el _BrandThemeStyle gana. *@
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@@300;400;500;600;700&display=swap" />
     @* Ola 92 — Modular CSS foundations alineados con Synergos.UI design system.
        Orden de carga: tokens → base → utilities → layout → chrome → primitives
        (los themes via _BrandThemeStyle se aplican después como overrides). *@
