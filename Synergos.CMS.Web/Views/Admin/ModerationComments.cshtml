@@ -1,13 +1,20 @@
 @*
-    Vista del AdminController.ModerationComments (Ola 107). Lista los
-    primeros 50 comentarios pendientes a través de todos los nodos +
-    formularios POST inline para approve / reject.
+    Vista del AdminController.ModerationComments (Olas 107 + 110).
+    Pagination + filter por nodo + bulk-select approve/reject + per-item
+    approve/reject. Forms POST con redirect (PRG).
 *@
 @using Synergos.CMS.Interfaces
 @{
     Layout = null;
-    var pending = ViewData["Pending"] as IReadOnlyList<Comment> ?? Array.Empty<Comment>();
+    var pageData = ViewData["Page"] as PendingCommentsPage
+        ?? new PendingCommentsPage(Array.Empty<Comment>(), 1, 25, 0);
+    var nodeIdFilter = ViewData["NodeIdFilter"] as int?;
+    var messageCode = ViewData["MessageCode"] as string;
     var moderatorName = ViewData["ModeratorName"] as string ?? "—";
+    string PageHref(int p) =>
+        nodeIdFilter.HasValue
+            ? $"/admin/moderation/comments?page={p}&pageSize={pageData.PageSize}&nodeId={nodeIdFilter}"
+            : $"/admin/moderation/comments?page={p}&pageSize={pageData.PageSize}";
 }
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
@@ -38,59 +45,160 @@
             <header class="syn-admin__page-header">
                 <h1 class="syn-admin__page-title">Moderación de comentarios</h1>
                 <p class="syn-admin__page-subtitle">
-                    @pending.Count comentario(s) pendiente(s) de aprobación.
+                    @pageData.TotalCount pendiente(s) total. Página @pageData.Page de @Math.Max(pageData.TotalPages, 1).
                 </p>
             </header>
 
-            @if (pending.Count == 0)
+            @if (!string.IsNullOrWhiteSpace(messageCode))
+            {
+                var parts = messageCode.Split('-', 2);
+                var verb = parts[0];
+                var count = parts.Length > 1 ? parts[1] : "?";
+                <p class="syn-admin__flash" role="status" aria-live="polite">
+                    @if (verb == "approved")
+                    {
+                        <text>✓ @count comentario(s) aprobado(s).</text>
+                    }
+                    else if (verb == "rejected")
+                    {
+                        <text>✗ @count comentario(s) rechazado(s).</text>
+                    }
+                </p>
+            }
+
+            <form class="syn-admin__filters" method="get" action="/admin/moderation/comments">
+                <label class="syn-admin__filter-field">
+                    <span class="syn-admin__filter-label">Filtrar por nodo</span>
+                    <input type="number" name="nodeId" value="@nodeIdFilter" placeholder="Todos" min="1" />
+                </label>
+                <label class="syn-admin__filter-field">
+                    <span class="syn-admin__filter-label">Por página</span>
+                    <input type="number" name="pageSize" value="@pageData.PageSize" min="5" max="200" />
+                </label>
+                <button type="submit" class="syn-admin__filter-submit">Aplicar</button>
+                @if (nodeIdFilter.HasValue)
+                {
+                    <a href="/admin/moderation/comments" class="syn-admin__filter-clear">Limpiar filtros</a>
+                }
+            </form>
+
+            @if (pageData.Items.Count == 0)
             {
                 <div class="syn-admin__empty">
                     <p class="syn-admin__empty-emoji" aria-hidden="true">✨</p>
                     <h2 class="syn-admin__empty-title">Cola limpia</h2>
                     <p class="syn-admin__empty-body">
-                        No hay comentarios esperando moderación. Los nuevos
-                        aparecerán aquí cuando lleguen.
+                        @if (nodeIdFilter.HasValue)
+                        {
+                            <text>No hay pendientes para el nodo #@nodeIdFilter.</text>
+                        }
+                        else
+                        {
+                            <text>No hay comentarios esperando moderación. Los nuevos aparecerán aquí cuando lleguen.</text>
+                        }
                     </p>
                 </div>
             }
             else
             {
-                <ul class="syn-admin__queue">
-                    @foreach (var comment in pending)
-                    {
-                        <li class="syn-admin__item">
-                            <header class="syn-admin__item-meta">
-                                <span class="syn-admin__item-author">@comment.AuthorName</span>
-                                <time class="syn-admin__item-date" datetime="@comment.CreatedAtUtc.ToString("O")">
-                                    @comment.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC
-                                </time>
-                                <span class="syn-admin__item-node">Nodo #@comment.NodeId</span>
-                                <code class="syn-admin__item-id">@comment.Id</code>
-                            </header>
+                <form id="bulk-form" method="post" class="syn-admin__bulk">
+                    <div class="syn-admin__bulk-toolbar">
+                        <label class="syn-admin__bulk-selectall">
+                            <input type="checkbox" id="select-all" />
+                            <span>Seleccionar todos en esta página</span>
+                        </label>
+                        <div class="syn-admin__bulk-actions">
+                            <button type="submit"
+                                    formaction="/admin/moderation/comments/bulk-approve"
+                                    class="syn-admin__action syn-admin__action--approve">
+                                ✓ Aprobar seleccionados
+                            </button>
+                            <button type="submit"
+                                    formaction="/admin/moderation/comments/bulk-reject"
+                                    class="syn-admin__action syn-admin__action--reject">
+                                ✗ Rechazar seleccionados
+                            </button>
+                        </div>
+                    </div>
 
-                            <p class="syn-admin__item-body">@comment.Body</p>
+                    <ul class="syn-admin__queue">
+                        @foreach (var comment in pageData.Items)
+                        {
+                            <li class="syn-admin__item">
+                                <header class="syn-admin__item-meta">
+                                    <label class="syn-admin__item-checkbox">
+                                        <input type="checkbox" name="targets" value="@comment.NodeId|@comment.Id" form="bulk-form" />
+                                    </label>
+                                    <span class="syn-admin__item-author">@comment.AuthorName</span>
+                                    <time class="syn-admin__item-date" datetime="@comment.CreatedAtUtc.ToString("O")">
+                                        @comment.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC
+                                    </time>
+                                    <a class="syn-admin__item-node" href="/admin/moderation/comments?nodeId=@comment.NodeId">
+                                        Nodo #@comment.NodeId
+                                    </a>
+                                    <code class="syn-admin__item-id">@comment.Id</code>
+                                </header>
 
-                            <footer class="syn-admin__item-actions">
-                                <form method="post"
-                                      action="/admin/moderation/comments/@comment.NodeId/@comment.Id/approve"
-                                      class="syn-admin__item-form">
-                                    <button type="submit" class="syn-admin__action syn-admin__action--approve">
-                                        ✓ Aprobar
-                                    </button>
-                                </form>
-                                <form method="post"
-                                      action="/admin/moderation/comments/@comment.NodeId/@comment.Id/reject"
-                                      class="syn-admin__item-form">
-                                    <button type="submit" class="syn-admin__action syn-admin__action--reject">
-                                        ✗ Rechazar
-                                    </button>
-                                </form>
-                            </footer>
-                        </li>
-                    }
-                </ul>
+                                <p class="syn-admin__item-body">@comment.Body</p>
+
+                                <footer class="syn-admin__item-actions">
+                                    <form method="post"
+                                          action="/admin/moderation/comments/@comment.NodeId/@comment.Id/approve"
+                                          class="syn-admin__item-form">
+                                        <button type="submit" class="syn-admin__action syn-admin__action--approve">
+                                            ✓ Aprobar
+                                        </button>
+                                    </form>
+                                    <form method="post"
+                                          action="/admin/moderation/comments/@comment.NodeId/@comment.Id/reject"
+                                          class="syn-admin__item-form">
+                                        <button type="submit" class="syn-admin__action syn-admin__action--reject">
+                                            ✗ Rechazar
+                                        </button>
+                                    </form>
+                                </footer>
+                            </li>
+                        }
+                    </ul>
+                </form>
+
+                @if (pageData.TotalPages > 1)
+                {
+                    <nav class="syn-admin__pagination" aria-label="Paginación">
+                        @if (pageData.HasPrev)
+                        {
+                            <a class="syn-admin__page-link" rel="prev" href="@PageHref(pageData.Page - 1)">← Anterior</a>
+                        }
+                        else
+                        {
+                            <span class="syn-admin__page-link syn-admin__page-link--disabled">← Anterior</span>
+                        }
+                        <span class="syn-admin__page-current">@pageData.Page / @pageData.TotalPages</span>
+                        @if (pageData.HasNext)
+                        {
+                            <a class="syn-admin__page-link" rel="next" href="@PageHref(pageData.Page + 1)">Siguiente →</a>
+                        }
+                        else
+                        {
+                            <span class="syn-admin__page-link syn-admin__page-link--disabled">Siguiente →</span>
+                        }
+                    </nav>
+                }
             }
         </div>
     </main>
+
+    <script>
+        // Select-all checkbox: marca/desmarca todos los targets visibles.
+        (function () {
+            var sa = document.getElementById('select-all');
+            if (!sa) return;
+            sa.addEventListener('change', function () {
+                document.querySelectorAll('input[name="targets"]').forEach(function (cb) {
+                    cb.checked = sa.checked;
+                });
+            });
+        })();
+    </script>
 </body>
 </html>

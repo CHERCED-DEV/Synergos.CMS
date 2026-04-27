@@ -62,15 +62,104 @@ public sealed class FileSystemCommentRepository : ICommentRepository
 
     public IReadOnlyList<Comment> GetAllPending(int limit)
     {
+        var clamped = Math.Clamp(limit, 1, 500);
+        var pending = LoadAllPending(nodeIdFilter: null);
+        return pending
+            .OrderByDescending(c => c.CreatedAtUtc)
+            .Take(clamped)
+            .ToList();
+    }
+
+    public PendingCommentsPage GetPendingPage(int page, int pageSize, int? nodeIdFilter = null)
+    {
+        var clampedPage = page < 1 ? 1 : page;
+        var clampedSize = Math.Clamp(pageSize, 1, 200);
+        var pending = LoadAllPending(nodeIdFilter)
+            .OrderByDescending(c => c.CreatedAtUtc)
+            .ToList();
+        var total = pending.Count;
+        var skip = (clampedPage - 1) * clampedSize;
+        var items = pending.Skip(skip).Take(clampedSize).ToList();
+        return new PendingCommentsPage(items, clampedPage, clampedSize, total);
+    }
+
+    public async Task<int> BulkApproveAsync(
+        IReadOnlyList<CommentRef> refs,
+        CancellationToken cancellationToken)
+    {
+        if (refs.Count == 0) return 0;
+        var byNode = refs.GroupBy(r => r.NodeId);
+        var changed = 0;
+        foreach (var group in byNode)
+        {
+            var nodeId = group.Key;
+            var existing = LoadAll(nodeId);
+            var ids = group.Select(r => r.CommentId).ToHashSet(StringComparer.Ordinal);
+            var dirty = false;
+            for (var i = 0; i < existing.Count; i++)
+            {
+                if (ids.Contains(existing[i].Id) && !existing[i].Approved)
+                {
+                    existing[i] = existing[i] with { Approved = true };
+                    dirty = true;
+                    changed++;
+                }
+            }
+            if (dirty)
+            {
+                await PersistAsync(nodeId, existing, cancellationToken);
+            }
+        }
+        if (changed > 0)
+        {
+            _logger.LogInformation("Bulk approve: {Count} comments approved", changed);
+        }
+        return changed;
+    }
+
+    public async Task<int> BulkRejectAsync(
+        IReadOnlyList<CommentRef> refs,
+        CancellationToken cancellationToken)
+    {
+        if (refs.Count == 0) return 0;
+        var byNode = refs.GroupBy(r => r.NodeId);
+        var changed = 0;
+        foreach (var group in byNode)
+        {
+            var nodeId = group.Key;
+            var existing = LoadAll(nodeId);
+            var ids = group.Select(r => r.CommentId).ToHashSet(StringComparer.Ordinal);
+            var removed = existing.RemoveAll(c => ids.Contains(c.Id));
+            if (removed > 0)
+            {
+                await PersistAsync(nodeId, existing, cancellationToken);
+                changed += removed;
+            }
+        }
+        if (changed > 0)
+        {
+            _logger.LogInformation("Bulk reject: {Count} comments deleted", changed);
+        }
+        return changed;
+    }
+
+    private List<Comment> LoadAllPending(int? nodeIdFilter)
+    {
         var settings = _options.Value;
         var root = Path.Combine(_environment.ContentRootPath, settings.StorageRoot);
         if (!Directory.Exists(root))
         {
-            return Array.Empty<Comment>();
+            return new List<Comment>();
         }
 
-        var clamped = Math.Clamp(limit, 1, 500);
         var pending = new List<Comment>();
+
+        if (nodeIdFilter.HasValue)
+        {
+            pending.AddRange(LoadAll(nodeIdFilter.Value).Where(c => !c.Approved));
+            return pending;
+        }
+
         foreach (var path in Directory.EnumerateFiles(root, "*.json"))
         {
             var fileName = Path.GetFileNameWithoutExtension(path);
@@ -81,10 +170,7 @@ public sealed class FileSystemCommentRepository : ICommentRepository
             pending.AddRange(LoadAll(nodeId).Where(c => !c.Approved));
         }
 
-        return pending
-            .OrderByDescending(c => c.CreatedAtUtc)
-            .Take(clamped)
-            .ToList();
+        return pending;
     }
 
     public async Task<bool> ApproveAsync(int nodeId, string commentId, CancellationToken cancellationToken)

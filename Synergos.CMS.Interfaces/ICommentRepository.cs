@@ -66,6 +66,50 @@ public interface ICommentRepository
     /// rechazo definitivo desde el moderation queue.
     /// </summary>
     Task<bool> RejectAsync(int nodeId, string commentId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Devuelve una página de comentarios pendientes (paginated +
+    /// filtrable). Ordenados por <see cref="Comment.CreatedAtUtc"/>
+    /// descendente. <paramref name="page"/> es 1-based.
+    /// <paramref name="nodeIdFilter"/> opcional limita a un nodo
+    /// específico (null = todos).
+    /// </summary>
+    PendingCommentsPage GetPendingPage(int page, int pageSize, int? nodeIdFilter = null);
+
+    /// <summary>
+    /// Aprueba una lista de comentarios. Devuelve el número de
+    /// items realmente actualizados (excluye no-encontrados o ya
+    /// aprobados).
+    /// </summary>
+    Task<int> BulkApproveAsync(IReadOnlyList<CommentRef> refs, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Rechaza (elimina del store) una lista de comentarios. Devuelve
+    /// el número de items realmente eliminados.
+    /// </summary>
+    Task<int> BulkRejectAsync(IReadOnlyList<CommentRef> refs, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Referencia compuesta a un comentario (nodo + id). Necesario porque
+/// commentId solo es único dentro de un nodo.
+/// </summary>
+public sealed record CommentRef(int NodeId, string CommentId);
+
+/// <summary>
+/// Página paginada de comentarios pendientes — incluye los items, el
+/// nro de página actual, el page size y el total absoluto para
+/// calcular total pages.
+/// </summary>
+public sealed record PendingCommentsPage(
+    IReadOnlyList<Comment> Items,
+    int Page,
+    int PageSize,
+    int TotalCount)
+{
+    public int TotalPages => PageSize <= 0 ? 0 : (TotalCount + PageSize - 1) / PageSize;
+    public bool HasNext => Page < TotalPages;
+    public bool HasPrev => Page > 1;
 }
 
 /// <summary>

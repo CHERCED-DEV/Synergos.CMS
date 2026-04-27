@@ -27,7 +27,7 @@ namespace Synergos.CMS.Web.Controllers;
 public sealed class AdminController : Controller
 {
     private const string ModeratorRolesCsv = "admin,moderator,editor";
-    private const int PendingCommentsLimit = 50;
+    private const int DefaultPageSize = 25;
 
     private readonly ICommentRepository _comments;
     private readonly IMemberAccessGate _gate;
@@ -47,15 +47,21 @@ public sealed class AdminController : Controller
     }
 
     [HttpGet("moderation/comments")]
-    public IActionResult ModerationComments()
+    public IActionResult ModerationComments(
+        [FromQuery] int page = 1,
+        [FromQuery(Name = "pageSize")] int pageSize = DefaultPageSize,
+        [FromQuery(Name = "nodeId")] int? nodeIdFilter = null,
+        [FromQuery(Name = "msg")] string? messageCode = null)
     {
         if (!_gate.HasAnyRole(ModeratorRolesCsv))
         {
             return Forbid();
         }
 
-        var pending = _comments.GetAllPending(PendingCommentsLimit);
-        ViewData["Pending"] = pending;
+        var pageData = _comments.GetPendingPage(page, pageSize, nodeIdFilter);
+        ViewData["Page"] = pageData;
+        ViewData["NodeIdFilter"] = nodeIdFilter;
+        ViewData["MessageCode"] = messageCode;
         ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
         return View();
     }
@@ -110,6 +116,80 @@ public sealed class AdminController : Controller
         }
 
         return RedirectToAction(nameof(ModerationComments));
+    }
+
+    [HttpPost("moderation/comments/bulk-approve")]
+    [Consumes("application/x-www-form-urlencoded")]
+    public async Task<IActionResult> BulkApproveComments(
+        [FromForm] string[] targets,
+        CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var refs = ParseTargets(targets);
+        var changed = await _comments.BulkApproveAsync(refs, cancellationToken);
+
+        if (changed > 0)
+        {
+            _analytics.Track("comment.moderation.bulk-approved", new Dictionary<string, object?>
+            {
+                ["count"] = changed,
+                ["moderator"] = _gate.CurrentMemberDisplayName,
+                ["source"] = "admin-dashboard",
+            });
+        }
+
+        return RedirectToAction(nameof(ModerationComments), new { msg = $"approved-{changed}" });
+    }
+
+    [HttpPost("moderation/comments/bulk-reject")]
+    [Consumes("application/x-www-form-urlencoded")]
+    public async Task<IActionResult> BulkRejectComments(
+        [FromForm] string[] targets,
+        CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var refs = ParseTargets(targets);
+        var changed = await _comments.BulkRejectAsync(refs, cancellationToken);
+
+        if (changed > 0)
+        {
+            _analytics.Track("comment.moderation.bulk-rejected", new Dictionary<string, object?>
+            {
+                ["count"] = changed,
+                ["moderator"] = _gate.CurrentMemberDisplayName,
+                ["source"] = "admin-dashboard",
+            });
+        }
+
+        return RedirectToAction(nameof(ModerationComments), new { msg = $"rejected-{changed}" });
+    }
+
+    /// <summary>
+    /// Parse "targets" form values con shape "{nodeId}|{commentId}".
+    /// Filtra entradas mal formadas — defensivo contra forms corruptos.
+    /// </summary>
+    private static IReadOnlyList<CommentRef> ParseTargets(string[] targets)
+    {
+        if (targets.Length == 0) return Array.Empty<CommentRef>();
+        var refs = new List<CommentRef>(targets.Length);
+        foreach (var t in targets)
+        {
+            if (string.IsNullOrWhiteSpace(t)) continue;
+            var parts = t.Split('|', 2);
+            if (parts.Length != 2) continue;
+            if (!int.TryParse(parts[0], out var nodeId)) continue;
+            if (string.IsNullOrWhiteSpace(parts[1])) continue;
+            refs.Add(new CommentRef(nodeId, parts[1]));
+        }
+        return refs;
     }
 
     /// <summary>
