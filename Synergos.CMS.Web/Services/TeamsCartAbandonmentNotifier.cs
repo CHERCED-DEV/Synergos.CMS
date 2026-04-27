@@ -13,7 +13,6 @@ namespace Synergos.CMS.Web.Services;
 public sealed class TeamsCartAbandonmentNotifier : ICartAbandonmentNotifierChannel
 {
     private const string HttpClientName = "cart-abandonment-teams";
-    private const string WarningAmberHex = "d97706";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IOptionsMonitor<CartAbandonmentSettings> _settings;
@@ -46,27 +45,61 @@ public sealed class TeamsCartAbandonmentNotifier : ICartAbandonmentNotifierChann
         var siteName = string.IsNullOrWhiteSpace(brand.DisplayName) ? "Synergos" : brand.DisplayName;
         var minutesSinceActivity = (int)(DateTime.UtcNow - cart.LastActivityUtc).TotalMinutes;
 
-        var payload = new Dictionary<string, object?>
+        // Ola 128 — Adaptive Cards. Color implícito (warning) via host theme.
+        var adaptiveCard = new
         {
-            ["@type"] = "MessageCard",
-            ["@context"] = "https://schema.org/extensions",
-            ["summary"] = $"Carrito abandonado · {cart.Subtotal:N2} {cart.Currency}",
-            ["themeColor"] = WarningAmberHex,
-            ["title"] = $"🛒 Carrito abandonado · {siteName}",
-            ["sections"] = new object[]
+            type = "AdaptiveCard",
+            schema = "http://adaptivecards.io/schemas/adaptive-card.json",
+            version = "1.4",
+            body = new object[]
             {
                 new
                 {
-                    activityTitle = $"{cart.Subtotal:N2} {cart.Currency}",
-                    activitySubtitle = $"Inactivo hace {minutesSinceActivity} min · {cart.LastActivityUtc:yyyy-MM-dd HH:mm} UTC",
+                    type = "TextBlock",
+                    text = $"🛒 Carrito abandonado · {siteName}",
+                    weight = "Bolder",
+                    size = "Medium",
+                    color = "Warning",
+                    wrap = true,
+                },
+                new
+                {
+                    type = "TextBlock",
+                    text = $"{cart.Subtotal:N2} {cart.Currency} · Inactivo hace {minutesSinceActivity} min",
+                    isSubtle = true,
+                    spacing = "None",
+                    wrap = true,
+                },
+                new
+                {
+                    type = "TextBlock",
                     text = "Considera enviar un recovery email o retargeting para recuperar la conversión.",
+                    wrap = true,
+                    spacing = "Medium",
+                },
+                new
+                {
+                    type = "FactSet",
                     facts = new object[]
                     {
-                        new { name = "Subtotal", value = $"{cart.Subtotal:N2} {cart.Currency}" },
-                        new { name = "Items", value = cart.ItemCount.ToString() },
-                        new { name = "Inactivo (min)", value = minutesSinceActivity.ToString() },
-                        new { name = "Cart ID", value = cart.CartId },
+                        new { title = "Subtotal", value = $"{cart.Subtotal:N2} {cart.Currency}" },
+                        new { title = "Items", value = cart.ItemCount.ToString() },
+                        new { title = "Inactivo (min)", value = minutesSinceActivity.ToString() },
+                        new { title = "Cart ID", value = cart.CartId },
                     },
+                    spacing = "Medium",
+                },
+            },
+        };
+        var payload = new
+        {
+            type = "message",
+            attachments = new[]
+            {
+                new
+                {
+                    contentType = "application/vnd.microsoft.card.adaptive",
+                    content = adaptiveCard,
                 },
             },
         };

@@ -13,7 +13,6 @@ namespace Synergos.CMS.Web.Services;
 public sealed class TeamsFormSubmissionNotifier : IFormSubmissionNotifierChannel
 {
     private const string HttpClientName = "form-submission-teams";
-    private const string BrandIndigoHex = "4f6ef7";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IOptions<FormsSettings> _options;
@@ -52,30 +51,56 @@ public sealed class TeamsFormSubmissionNotifier : IFormSubmissionNotifierChannel
         var brand = _branding.GetCurrent();
         var siteName = string.IsNullOrWhiteSpace(brand.DisplayName) ? "Synergos" : brand.DisplayName;
 
-        // MessageCard facts: name + value pairs. Captureamos primeros 12.
+        // Ola 128 — Adaptive Cards. FactSet con primeros 12 fields.
         var facts = request.Fields
             .Take(12)
             .Select(kv => new
             {
-                name = kv.Key,
+                title = kv.Key,
                 value = kv.Value.Length > 240 ? kv.Value[..237] + "..." : kv.Value,
             })
             .ToArray<object>();
 
-        var payload = new Dictionary<string, object?>
+        var adaptiveCard = new
         {
-            ["@type"] = "MessageCard",
-            ["@context"] = "https://schema.org/extensions",
-            ["summary"] = $"Form submission: {request.FormKey}",
-            ["themeColor"] = BrandIndigoHex,
-            ["title"] = $"📩 Form: {request.FormKey} · {siteName}",
-            ["sections"] = new object[]
+            type = "AdaptiveCard",
+            schema = "http://adaptivecards.io/schemas/adaptive-card.json",
+            version = "1.4",
+            body = new object[]
             {
                 new
                 {
-                    activityTitle = $"IP: {request.ClientIp ?? "unknown"}",
-                    activitySubtitle = $"{request.Referrer ?? "/"} · {request.ReceivedAtUtc:yyyy-MM-dd HH:mm} UTC",
+                    type = "TextBlock",
+                    text = $"📩 Form: {request.FormKey} · {siteName}",
+                    weight = "Bolder",
+                    size = "Medium",
+                    wrap = true,
+                },
+                new
+                {
+                    type = "TextBlock",
+                    text = $"IP: {request.ClientIp ?? "unknown"} · {request.Referrer ?? "/"} · {request.ReceivedAtUtc:yyyy-MM-dd HH:mm} UTC",
+                    isSubtle = true,
+                    spacing = "None",
+                    wrap = true,
+                },
+                new
+                {
+                    type = "FactSet",
                     facts,
+                    spacing = "Medium",
+                },
+            },
+        };
+        var payload = new
+        {
+            type = "message",
+            attachments = new[]
+            {
+                new
+                {
+                    contentType = "application/vnd.microsoft.card.adaptive",
+                    content = adaptiveCard,
                 },
             },
         };

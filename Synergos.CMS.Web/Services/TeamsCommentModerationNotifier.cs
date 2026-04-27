@@ -21,7 +21,6 @@ namespace Synergos.CMS.Web.Services;
 public sealed class TeamsCommentModerationNotifier : ICommentModerationNotifierChannel
 {
     private const string HttpClientName = "comment-moderation-teams";
-    private const string BrandIndigoHex = "4f6ef7";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IOptions<CommentsSettings> _options;
@@ -54,25 +53,60 @@ public sealed class TeamsCommentModerationNotifier : ICommentModerationNotifierC
         var siteName = string.IsNullOrWhiteSpace(brand.DisplayName) ? "Synergos" : brand.DisplayName;
         var truncated = comment.Body.Length > 800 ? comment.Body[..797] + "..." : comment.Body;
 
-        var payload = new Dictionary<string, object?>
+        // Ola 128 — Adaptive Cards reemplaza MessageCard.
+        // Formato: { type:"message", attachments:[{ contentType:adaptive,
+        // content:{ AdaptiveCard schema 1.4 } }] }
+        var adaptiveCard = new
         {
-            ["@type"] = "MessageCard",
-            ["@context"] = "https://schema.org/extensions",
-            ["summary"] = $"Comentario pendiente · {siteName}",
-            ["themeColor"] = BrandIndigoHex,
-            ["title"] = $"💬 Comentario pendiente · {siteName}",
-            ["sections"] = new object[]
+            type = "AdaptiveCard",
+            schema = "http://adaptivecards.io/schemas/adaptive-card.json",
+            version = "1.4",
+            body = new object[]
             {
                 new
                 {
-                    activityTitle = comment.AuthorName,
-                    activitySubtitle = $"Nodo #{comment.NodeId} · {comment.CreatedAtUtc:yyyy-MM-dd HH:mm} UTC",
+                    type = "TextBlock",
+                    text = $"💬 Comentario pendiente · {siteName}",
+                    weight = "Bolder",
+                    size = "Medium",
+                    wrap = true,
+                },
+                new
+                {
+                    type = "TextBlock",
+                    text = $"De **{comment.AuthorName}** en nodo #{comment.NodeId}",
+                    isSubtle = true,
+                    spacing = "None",
+                    wrap = true,
+                },
+                new
+                {
+                    type = "TextBlock",
                     text = truncated,
+                    wrap = true,
+                    spacing = "Medium",
+                },
+                new
+                {
+                    type = "FactSet",
                     facts = new object[]
                     {
-                        new { name = "ID", value = comment.Id },
-                        new { name = "Recibido", value = comment.CreatedAtUtc.ToString("O") },
+                        new { title = "ID", value = comment.Id },
+                        new { title = "Recibido", value = comment.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm") + " UTC" },
                     },
+                    spacing = "Medium",
+                },
+            },
+        };
+        var payload = new
+        {
+            type = "message",
+            attachments = new[]
+            {
+                new
+                {
+                    contentType = "application/vnd.microsoft.card.adaptive",
+                    content = adaptiveCard,
                 },
             },
         };
