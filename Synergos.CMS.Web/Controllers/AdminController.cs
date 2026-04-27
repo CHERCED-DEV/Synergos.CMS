@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -28,9 +30,8 @@ namespace Synergos.CMS.Web.Controllers;
 public sealed class AdminController : Controller
 {
     private const string ModeratorRolesCsv = "admin,moderator,editor";
-    private const int DefaultPageSize = 25;
     private const string PendingCountCacheKey = "admin.pending-comments-count";
-    private static readonly TimeSpan PendingCountCacheTtl = TimeSpan.FromSeconds(30);
+    private const string BulkUndoCacheKeyPrefix = "admin.bulk-undo:";
 
     private readonly ICommentRepository _comments;
     private readonly IMemberAccessGate _gate;
@@ -38,6 +39,7 @@ public sealed class AdminController : Controller
     private readonly ISearchAnalyticsStore _searchAnalytics;
     private readonly IFormSubmissionReader _formReader;
     private readonly IMemoryCache _cache;
+    private readonly IOptionsMonitor<AdminSettings> _adminSettings;
 
     public AdminController(
         ICommentRepository comments,
@@ -45,7 +47,8 @@ public sealed class AdminController : Controller
         IAnalyticsTracker analytics,
         ISearchAnalyticsStore searchAnalytics,
         IFormSubmissionReader formReader,
-        IMemoryCache cache)
+        IMemoryCache cache,
+        IOptionsMonitor<AdminSettings> adminSettings)
     {
         _comments = comments;
         _gate = gate;
@@ -53,7 +56,13 @@ public sealed class AdminController : Controller
         _searchAnalytics = searchAnalytics;
         _formReader = formReader;
         _cache = cache;
+        _adminSettings = adminSettings;
     }
+
+    private int DefaultPageSize => _adminSettings.CurrentValue.DefaultPageSize;
+    private TimeSpan PendingCountCacheTtl => _adminSettings.CurrentValue.PendingCountCacheTtl;
+    private TimeSpan BulkUndoWindow => _adminSettings.CurrentValue.BulkUndoWindow;
+    private int CsvExportHardCap => _adminSettings.CurrentValue.CsvExportHardCap;
 
     [HttpGet("")]
     public IActionResult Index()
@@ -112,7 +121,7 @@ public sealed class AdminController : Controller
     [HttpGet("forms")]
     public IActionResult FormSubmissions(
         [FromQuery] int page = 1,
-        [FromQuery(Name = "pageSize")] int pageSize = DefaultPageSize,
+        [FromQuery(Name = "pageSize")] int pageSize = 0,
         [FromQuery(Name = "formKey")] string? formKeyFilter = null,
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null)
@@ -122,6 +131,7 @@ public sealed class AdminController : Controller
             return Forbid();
         }
 
+        if (pageSize <= 0) pageSize = DefaultPageSize;
         var fromUtc = from?.ToUniversalTime();
         var toUtc = to?.ToUniversalTime();
         var pageData = _formReader.GetRecent(page, pageSize, formKeyFilter, fromUtc, toUtc);
@@ -144,18 +154,19 @@ public sealed class AdminController : Controller
     /// indicada (ambos inclusive).
     /// </summary>
     [HttpGet("forms/export")]
-    public IActionResult ExportFormSubmissions(
+    public async Task<IActionResult> ExportFormSubmissions(
         [FromQuery(Name = "formKey")] string? formKeyFilter = null,
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
-        [FromQuery] int limit = 500)
+        [FromQuery] int limit = 500,
+        CancellationToken cancellationToken = default)
     {
         if (!_gate.HasAnyRole(ModeratorRolesCsv))
         {
             return Forbid();
         }
 
-        var clamped = Math.Clamp(limit, 1, 5000);
+        var clamped = Math.Clamp(limit, 1, CsvExportHardCap);
         var fromUtc = from?.ToUniversalTime();
         var toUtc = to?.ToUniversalTime();
         var listingPage = _formReader.GetRecent(
@@ -165,27 +176,39 @@ public sealed class AdminController : Controller
             fromUtc,
             toUtc);
 
-        // Recolectamos todos los keys de columna posibles a través de
-        // las submissions del scope. Cada submission puede tener fields
-        // distintos — el CSV los unifica con valores vacíos donde falte.
+        // Pre-pass: recolecta union de columnas para el header. No carga
+        // los Fields completos en memoria — solo los keys.
         var unionKeys = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        var details = new List<FormSubmissionDetail>(listingPage.Items.Count);
         foreach (var item in listingPage.Items)
         {
             var detail = _formReader.GetSubmission(item.FormKey, item.StorageId);
             if (detail is null) continue;
-            details.Add(detail);
             foreach (var k in detail.Fields.Keys) unionKeys.Add(k);
         }
 
-        var sb = new System.Text.StringBuilder();
-        // Header: meta cols + field cols sorted.
-        var metaCols = new[] { "formKey", "storageId", "receivedAtUtc", "clientIp", "userAgent", "referrer" };
-        sb.Append(string.Join(",", metaCols.Concat(unionKeys).Select(EscapeCsvField)));
-        sb.Append('\n');
+        var fileName = string.IsNullOrWhiteSpace(formKeyFilter)
+            ? $"submissions_{DateTime.UtcNow:yyyyMMdd_HHmm}.csv"
+            : $"submissions_{formKeyFilter}_{DateTime.UtcNow:yyyyMMdd_HHmm}.csv";
 
-        foreach (var d in details)
+        // Streaming response: BOM + header + 1 row at a time, flush
+        // tras cada batch para que el browser empiece a recibir bytes
+        // inmediatamente (memoria O(1) en lugar de O(N) del StringBuilder).
+        Response.Headers.ContentDisposition = $"attachment; filename=\"{fileName}\"";
+        Response.ContentType = "text/csv; charset=utf-8";
+
+        var bom = new byte[] { 0xEF, 0xBB, 0xBF };
+        await Response.Body.WriteAsync(bom, cancellationToken);
+
+        var metaCols = new[] { "formKey", "storageId", "receivedAtUtc", "clientIp", "userAgent", "referrer" };
+        var headerLine = string.Join(",", metaCols.Concat(unionKeys).Select(EscapeCsvField)) + "\n";
+        await Response.Body.WriteAsync(System.Text.Encoding.UTF8.GetBytes(headerLine), cancellationToken);
+
+        foreach (var item in listingPage.Items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            var d = _formReader.GetSubmission(item.FormKey, item.StorageId);
+            if (d is null) continue;
+
             var row = new List<string>(metaCols.Length + unionKeys.Count)
             {
                 d.FormKey,
@@ -199,18 +222,12 @@ public sealed class AdminController : Controller
             {
                 row.Add(d.Fields.TryGetValue(k, out var v) ? v : string.Empty);
             }
-            sb.Append(string.Join(",", row.Select(EscapeCsvField)));
-            sb.Append('\n');
+            var line = string.Join(",", row.Select(EscapeCsvField)) + "\n";
+            await Response.Body.WriteAsync(System.Text.Encoding.UTF8.GetBytes(line), cancellationToken);
         }
 
-        var fileName = string.IsNullOrWhiteSpace(formKeyFilter)
-            ? $"submissions_{DateTime.UtcNow:yyyyMMdd_HHmm}.csv"
-            : $"submissions_{formKeyFilter}_{DateTime.UtcNow:yyyyMMdd_HHmm}.csv";
-
-        // BOM UTF-8 para que Excel no malinterprete encoding.
-        var utf8Bom = new byte[] { 0xEF, 0xBB, 0xBF };
-        var content = utf8Bom.Concat(System.Text.Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
-        return File(content, "text/csv; charset=utf-8", fileName);
+        await Response.Body.FlushAsync(cancellationToken);
+        return new EmptyResult();
     }
 
     /// <summary>
@@ -273,7 +290,7 @@ public sealed class AdminController : Controller
     [HttpGet("moderation/comments")]
     public IActionResult ModerationComments(
         [FromQuery] int page = 1,
-        [FromQuery(Name = "pageSize")] int pageSize = DefaultPageSize,
+        [FromQuery(Name = "pageSize")] int pageSize = 0,
         [FromQuery(Name = "nodeId")] int? nodeIdFilter = null,
         [FromQuery(Name = "msg")] string? messageCode = null)
     {
@@ -282,6 +299,7 @@ public sealed class AdminController : Controller
             return Forbid();
         }
 
+        if (pageSize <= 0) pageSize = DefaultPageSize;
         var pageData = _comments.GetPendingPage(page, pageSize, nodeIdFilter);
         SetTopbar("moderation", pageData.TotalCount);
         ViewData["Page"] = pageData;
@@ -419,20 +437,69 @@ public sealed class AdminController : Controller
         }
 
         var refs = ParseTargets(targets);
+
+        // Ola 126 — snapshot ANTES del delete para soporte undo.
+        // El cache key contiene un token random; el flash message
+        // incluye el token para que el moderator pueda revertir
+        // dentro de BulkUndoWindow (default 30s).
+        var snapshot = _comments.ReadByRefs(refs);
         var changed = await _comments.BulkRejectAsync(refs, cancellationToken);
 
-        if (changed > 0)
+        string? undoToken = null;
+        if (changed > 0 && snapshot.Count > 0)
         {
+            undoToken = Guid.NewGuid().ToString("N")[..12];
+            _cache.Set(BulkUndoCacheKeyPrefix + undoToken, snapshot, BulkUndoWindow);
+
             _analytics.Track("comment.moderation.bulk-rejected", new Dictionary<string, object?>
             {
                 ["count"] = changed,
                 ["moderator"] = _gate.CurrentMemberDisplayName,
                 ["source"] = "admin-dashboard",
+                ["undoToken"] = undoToken,
             });
         }
 
         _cache.Remove(PendingCountCacheKey);
-        return RedirectToAction(nameof(ModerationComments), new { msg = $"rejected-{changed}" });
+
+        var msg = undoToken is not null
+            ? $"rejected-{changed}-undo:{undoToken}"
+            : $"rejected-{changed}";
+        return RedirectToAction(nameof(ModerationComments), new { msg });
+    }
+
+    [HttpPost("moderation/comments/bulk-undo-reject/{token}")]
+    public async Task<IActionResult> BulkUndoReject(
+        string token,
+        CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        if (!_cache.TryGetValue(BulkUndoCacheKeyPrefix + token, out IReadOnlyList<Comment>? snapshot)
+            || snapshot is null)
+        {
+            // Ventana expiró o token inválido — flash message friendly.
+            return RedirectToAction(nameof(ModerationComments), new { msg = "undo-expired" });
+        }
+
+        var restored = await _comments.RestoreAsync(snapshot, cancellationToken);
+        _cache.Remove(BulkUndoCacheKeyPrefix + token);
+        _cache.Remove(PendingCountCacheKey);
+
+        if (restored > 0)
+        {
+            _analytics.Track("comment.moderation.bulk-undo-rejected", new Dictionary<string, object?>
+            {
+                ["count"] = restored,
+                ["moderator"] = _gate.CurrentMemberDisplayName,
+                ["source"] = "admin-dashboard",
+            });
+        }
+
+        return RedirectToAction(nameof(ModerationComments), new { msg = $"undone-{restored}" });
     }
 
     /// <summary>

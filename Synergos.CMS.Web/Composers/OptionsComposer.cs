@@ -65,5 +65,8 @@ public sealed class OptionsComposer : IComposer
 
         builder.Services.Configure<CommentsSettings>(
             builder.Config.GetSection("Synergos:Comments"));
+
+        builder.Services.Configure<AdminSettings>(
+            builder.Config.GetSection("Synergos:Admin"));
     }
 }

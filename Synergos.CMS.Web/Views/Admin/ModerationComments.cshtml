@@ -36,7 +36,17 @@
 
             @if (!string.IsNullOrWhiteSpace(messageCode))
             {
-                var parts = messageCode.Split('-', 2);
+                @* Format: "{verb}-{count}" o "rejected-{count}-undo:{token}".
+                   El token se extrae con substring; el resto se splitea normal. *@
+                var verbCountPart = messageCode;
+                string? undoToken = null;
+                var undoIdx = messageCode.IndexOf("-undo:", StringComparison.Ordinal);
+                if (undoIdx > 0)
+                {
+                    verbCountPart = messageCode[..undoIdx];
+                    undoToken = messageCode[(undoIdx + "-undo:".Length)..];
+                }
+                var parts = verbCountPart.Split('-', 2);
                 var verb = parts[0];
                 var count = parts.Length > 1 ? parts[1] : "?";
                 <p class="syn-admin__flash" role="status" aria-live="polite">
@@ -47,10 +57,26 @@
                     else if (verb == "rejected")
                     {
                         <text>✗ @count comentario(s) rechazado(s).</text>
+                        @if (!string.IsNullOrWhiteSpace(undoToken))
+                        {
+                            <form method="post"
+                                  action="/admin/moderation/comments/bulk-undo-reject/@undoToken"
+                                  class="syn-admin__flash-action">
+                                <button type="submit" class="syn-admin__flash-button">↶ Deshacer</button>
+                            </form>
+                        }
                     }
                     else if (verb == "spam")
                     {
                         <text>🚫 @count comentario(s) marcado(s) como spam.</text>
+                    }
+                    else if (verb == "undone")
+                    {
+                        <text>↶ @count comentario(s) restaurado(s) a la cola.</text>
+                    }
+                    else if (verb == "undo")
+                    {
+                        <text>⏱ La ventana de undo expiró. Los comentarios siguen rechazados.</text>
                     }
                 </p>
             }

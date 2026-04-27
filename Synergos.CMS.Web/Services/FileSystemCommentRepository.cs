@@ -143,6 +143,47 @@ public sealed class FileSystemCommentRepository : ICommentRepository
         return changed;
     }
 
+    public IReadOnlyList<Comment> ReadByRefs(IReadOnlyList<CommentRef> refs)
+    {
+        if (refs.Count == 0) return Array.Empty<Comment>();
+        var byNode = refs.GroupBy(r => r.NodeId);
+        var result = new List<Comment>();
+        foreach (var group in byNode)
+        {
+            var nodeId = group.Key;
+            var existing = LoadAll(nodeId);
+            var ids = group.Select(r => r.CommentId).ToHashSet(StringComparer.Ordinal);
+            result.AddRange(existing.Where(c => ids.Contains(c.Id)));
+        }
+        return result;
+    }
+
+    public async Task<int> RestoreAsync(
+        IReadOnlyList<Comment> items,
+        CancellationToken cancellationToken)
+    {
+        if (items.Count == 0) return 0;
+        var byNode = items.GroupBy(c => c.NodeId);
+        var restored = 0;
+        foreach (var group in byNode)
+        {
+            var nodeId = group.Key;
+            var existing = LoadAll(nodeId);
+            var existingIds = existing.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
+            var toAdd = group.Where(c => !existingIds.Contains(c.Id)).ToList();
+            if (toAdd.Count == 0) continue;
+
+            existing.AddRange(toAdd);
+            await PersistAsync(nodeId, existing, cancellationToken);
+            restored += toAdd.Count;
+        }
+        if (restored > 0)
+        {
+            _logger.LogInformation("Restore: {Count} comments restored", restored);
+        }
+        return restored;
+    }
+
     private List<Comment> LoadAllPending(int? nodeIdFilter)
     {
         var settings = _options.Value;

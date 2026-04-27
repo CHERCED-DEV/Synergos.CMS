@@ -608,6 +608,10 @@
 /* ── Flash message (after bulk action) ───────────────────────── */
 
 .syn-admin__flash {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--syn-space-md);
   padding: var(--syn-space-md) var(--syn-space-lg);
   background: var(--syn-color-state-success-surface);
   color: var(--syn-color-state-success-text);
@@ -615,6 +619,28 @@
   border-radius: var(--syn-radius-md);
   margin-bottom: var(--syn-space-lg);
   font-weight: var(--syn-font-weight-medium);
+}
+
+.syn-admin__flash-action {
+  margin: 0;
+  margin-inline-start: auto;
+}
+
+.syn-admin__flash-button {
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  border: 1px solid transparent;
+  border-radius: var(--syn-radius-md);
+  padding: var(--syn-space-1) var(--syn-space-3);
+  font-family: inherit;
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  cursor: pointer;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-admin__flash-button:hover {
+  background: var(--syn-color-action-primary-hover);
 }
 
 /* ── Bulk toolbar ────────────────────────────────────────────── */

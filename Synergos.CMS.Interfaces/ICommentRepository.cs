@@ -88,6 +88,20 @@ public interface ICommentRepository
     /// el número de items realmente eliminados.
     /// </summary>
     Task<int> BulkRejectAsync(IReadOnlyList<CommentRef> refs, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Lee los snapshots completos de los comentarios indicados (incluye
+    /// approved=false). Usado por el dashboard para capturar el estado
+    /// antes de un bulk-reject + permitir undo.
+    /// </summary>
+    IReadOnlyList<Comment> ReadByRefs(IReadOnlyList<CommentRef> refs);
+
+    /// <summary>
+    /// Restaura una lista de comentarios al store. Idempotente — si ya
+    /// existe un item con el mismo Id en el mismo nodo, NO se duplica.
+    /// Usado para undo bulk-reject (Ola 124).
+    /// </summary>
+    Task<int> RestoreAsync(IReadOnlyList<Comment> items, CancellationToken cancellationToken);
 }
 
 /// <summary>
