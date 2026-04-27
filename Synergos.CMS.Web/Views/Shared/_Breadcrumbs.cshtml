@@ -2,8 +2,13 @@
     Breadcrumbs derivados del árbol Umbraco. Excluye nodos con
     compNavigation.hideFromBreadcrumbs = true. _Layout/page templates
     deciden vía PageRenderContext si invocan este partial.
+
+    Ola 137: emite además BreadcrumbList JSON-LD (schema.org) alineado
+    1:1 con la <ol> visual. El @id de cada item es la URL absoluta —
+    requiere canonicalHostname en siteRoot para resolverlo.
 *@
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>
+@using Umbraco.Cms.Core.Models.PublishedContent
 @using Umbraco.Extensions
 @{
     if (Model is null) { return; }
@@ -12,6 +17,11 @@
         .Where(n => !n.Value<bool>("hideFromBreadcrumbs"))
         .ToList();
     if (trail.Count <= 1) { return; }
+
+    var siteRoot = Model.Root();
+    var canonicalHost = siteRoot?.Value<string>("canonicalHostname");
+    var siteUrl = !string.IsNullOrWhiteSpace(canonicalHost) ? $"https://{canonicalHost}" : null;
+    string Json(object? value) => System.Text.Json.JsonSerializer.Serialize(value);
 }
 <nav class="syn-breadcrumbs" aria-label="@Umbraco.GetDictionaryValue("breadcrumbs.aria.label", "Breadcrumb")">
     <ol class="syn-breadcrumbs__list">
@@ -34,3 +44,23 @@
         }
     </ol>
 </nav>
+@{
+    var sb = new System.Text.StringBuilder();
+    sb.Append("{\"@context\":\"https://schema.org\",\"@type\":\"BreadcrumbList\",\"itemListElement\":[");
+    for (var i = 0; i < trail.Count; i++)
+    {
+        var node = trail[i];
+        var navTitle = node.Value<string>("navigationTitle");
+        var label = string.IsNullOrWhiteSpace(navTitle) ? node.Name : navTitle;
+        var rel = node.Url(mode: UrlMode.Relative);
+        var url = siteUrl is not null && !string.IsNullOrWhiteSpace(rel) ? $"{siteUrl}{rel}" : rel;
+        if (i > 0) sb.Append(',');
+        sb.Append("{\"@type\":\"ListItem\",\"position\":");
+        sb.Append((i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        sb.Append($",\"name\":{Json(label)}");
+        if (!string.IsNullOrWhiteSpace(url)) sb.Append($",\"item\":{Json(url)}");
+        sb.Append("}");
+    }
+    sb.Append("]}");
+}
+<script type="application/ld+json">@Html.Raw(sb.ToString())</script>

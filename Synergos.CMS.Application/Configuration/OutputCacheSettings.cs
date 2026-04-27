@@ -30,6 +30,21 @@ public sealed class OutputCacheSettings
     public int BlogRssMinutes { get; init; } = 30;
 
     /// <summary>
+    /// TTL del news-sitemap.xml. Default 15 minutos. Google News re-
+    /// crawlea más frecuente que sitemap regular y solo nos importan
+    /// los posts de las últimas 48h — TTL bajo asegura freshness.
+    /// </summary>
+    public int NewsSitemapMinutes { get; init; } = 15;
+
+    /// <summary>
+    /// Ventana en horas para incluir un postPage en news-sitemap.xml.
+    /// Default 48 conforme al Google News Sitemap Protocol — posts más
+    /// viejos no se listan (Google ignora entries con publication_date
+    /// más vieja que ~2 días en este endpoint).
+    /// </summary>
+    public int NewsSitemapWindowHours { get; init; } = 48;
+
+    /// <summary>
     /// Si true, cache deshabilitado completamente (cada request
     /// regenera). Default false. Útil para debugging o sitios con
     /// requirements de freshness inmediata.

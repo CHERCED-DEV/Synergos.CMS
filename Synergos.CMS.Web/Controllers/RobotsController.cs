@@ -34,6 +34,7 @@ public sealed class RobotsController : ControllerBase
               Disallow: /flow/
 
               Sitemap: {hostBase}/sitemap.xml
+              Sitemap: {hostBase}/news-sitemap.xml
               """
             : $"""
               # Non-production environment ({_environment.EnvironmentName}) — discourage indexing.
@@ -41,6 +42,7 @@ public sealed class RobotsController : ControllerBase
               Disallow: /
 
               Sitemap: {hostBase}/sitemap.xml
+              Sitemap: {hostBase}/news-sitemap.xml
               """;
 
         return Content(body, "text/plain; charset=utf-8");
