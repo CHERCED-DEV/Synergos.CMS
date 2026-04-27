@@ -1,0 +1,95 @@
+@*
+    Vista del AdminController.ModerationComments (Ola 107). Lista los
+    primeros 50 comentarios pendientes a través de todos los nodos +
+    formularios POST inline para approve / reject.
+*@
+@using Synergos.CMS.Interfaces
+@{
+    Layout = null;
+    var pending = ViewData["Pending"] as IReadOnlyList<Comment> ?? Array.Empty<Comment>();
+    var moderatorName = ViewData["ModeratorName"] as string ?? "—";
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>Moderación de comentarios · Synergos</title>
+</head>
+<body class="syn-admin">
+    <header class="syn-admin__topbar">
+        <div class="syn-admin__topbar-inner">
+            <a class="syn-admin__brand" href="/admin/moderation/comments">
+                <span class="syn-admin__brand-mark">⚙</span>
+                <span>Synergos · Operaciones</span>
+            </a>
+            <nav class="syn-admin__nav" aria-label="Admin">
+                <a class="syn-admin__nav-link syn-admin__nav-link--current" href="/admin/moderation/comments">Moderación</a>
+            </nav>
+            <div class="syn-admin__user">
+                <span class="syn-admin__user-avatar" aria-hidden="true">@(moderatorName.Length > 0 ? moderatorName[0].ToString().ToUpper() : "?")</span>
+                <span class="syn-admin__user-name">@moderatorName</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">Moderación de comentarios</h1>
+                <p class="syn-admin__page-subtitle">
+                    @pending.Count comentario(s) pendiente(s) de aprobación.
+                </p>
+            </header>
+
+            @if (pending.Count == 0)
+            {
+                <div class="syn-admin__empty">
+                    <p class="syn-admin__empty-emoji" aria-hidden="true">✨</p>
+                    <h2 class="syn-admin__empty-title">Cola limpia</h2>
+                    <p class="syn-admin__empty-body">
+                        No hay comentarios esperando moderación. Los nuevos
+                        aparecerán aquí cuando lleguen.
+                    </p>
+                </div>
+            }
+            else
+            {
+                <ul class="syn-admin__queue">
+                    @foreach (var comment in pending)
+                    {
+                        <li class="syn-admin__item">
+                            <header class="syn-admin__item-meta">
+                                <span class="syn-admin__item-author">@comment.AuthorName</span>
+                                <time class="syn-admin__item-date" datetime="@comment.CreatedAtUtc.ToString("O")">
+                                    @comment.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC
+                                </time>
+                                <span class="syn-admin__item-node">Nodo #@comment.NodeId</span>
+                                <code class="syn-admin__item-id">@comment.Id</code>
+                            </header>
+
+                            <p class="syn-admin__item-body">@comment.Body</p>
+
+                            <footer class="syn-admin__item-actions">
+                                <form method="post"
+                                      action="/admin/moderation/comments/@comment.NodeId/@comment.Id/approve"
+                                      class="syn-admin__item-form">
+                                    <button type="submit" class="syn-admin__action syn-admin__action--approve">
+                                        ✓ Aprobar
+                                    </button>
+                                </form>
+                                <form method="post"
+                                      action="/admin/moderation/comments/@comment.NodeId/@comment.Id/reject"
+                                      class="syn-admin__item-form">
+                                    <button type="submit" class="syn-admin__action syn-admin__action--reject">
+                                        ✗ Rechazar
+                                    </button>
+                                </form>
+                            </footer>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </main>
+</body>
+</html>
