@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
@@ -72,14 +73,24 @@ public sealed class WebhookFormSubmissionNotifier : IFormSubmissionNotifierChann
             storageReference = result.StorageReference,
         };
 
+        var bodyBytes = JsonSerializer.SerializeToUtf8Bytes(payload);
+        using var content = new ByteArrayContent(bodyBytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
+
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, settings.WebhookUrl)
         {
-            Content = JsonContent.Create(payload),
+            Content = content,
         };
 
         if (!string.IsNullOrWhiteSpace(settings.WebhookBearerToken))
         {
             requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.WebhookBearerToken);
+        }
+
+        var signatureHeader = WebhookSigner.ComputeHeader(settings.WebhookHmacSecret, bodyBytes);
+        if (signatureHeader is not null)
+        {
+            requestMessage.Headers.TryAddWithoutValidation(WebhookSigner.SignatureHeaderName, signatureHeader);
         }
 
         var httpClient = _httpClientFactory.CreateClient(HttpClientName);

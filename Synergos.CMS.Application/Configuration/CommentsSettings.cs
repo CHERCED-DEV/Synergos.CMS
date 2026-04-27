@@ -68,4 +68,14 @@ public sealed class CommentsSettings
     /// secreto); para endpoints custom protegidos, requerido.
     /// </summary>
     public string? WebhookBearerToken { get; init; }
+
+    /// <summary>
+    /// Secret compartido para firmar el body del webhook con HMAC-SHA256.
+    /// Si está poblado, el canal adjunta header
+    /// <c>X-Synergos-Signature: sha256={hex}</c>. El receptor recomputa
+    /// HMAC sobre el body recibido y compara para verificar autenticidad.
+    /// Default vacío — opt-in. Sin replay protection built-in (combinar
+    /// con timestamp/nonce dentro del payload si se necesita).
+    /// </summary>
+    public string? WebhookHmacSecret { get; init; }
 }

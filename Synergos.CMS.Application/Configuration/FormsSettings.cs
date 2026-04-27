@@ -83,4 +83,11 @@ public sealed class FormsSettings
     /// secreto); para endpoints custom protegidos, requerido.
     /// </summary>
     public string? WebhookBearerToken { get; init; }
+
+    /// <summary>
+    /// Secret compartido para firmar el body del webhook con HMAC-SHA256.
+    /// Si está poblado, el canal adjunta header
+    /// <c>X-Synergos-Signature: sha256={hex}</c>. Default vacío — opt-in.
+    /// </summary>
+    public string? WebhookHmacSecret { get; init; }
 }
