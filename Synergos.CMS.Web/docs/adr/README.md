@@ -55,6 +55,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0046](0046-search-analytics-gate-brand-email-subjects-comment-moderation-notifier.md) | Search analytics role gate (SearchSettings.AnalyticsAdminRolesCsv) + brand-aware email subjects (3 call sites) + ICommentModerationNotifier seam con email default + hook fire-and-forget en CommentsController | Accepted |
 | [0047](0047-composite-notifier-pattern-comments-and-forms.md) | Composite + Channel notifier pattern para Comments y Forms (ICommentModerationNotifierChannel + WebhookCommentModerationNotifier + IFormSubmissionNotifier seam + IFormSubmissionNotifierChannel + Email/Webhook channels + composites + slim FormSubmissionsController) | Accepted |
 | [0048](0048-css-design-system-aligned-with-synergos-ui.md) | CSS design system aligned with Synergos.UI — 13 archivos modulares (tokens/base/utilities/layout/chrome/primitives + per-area pages/shop/search/comments/globals/flow/member/blog/account/error) ~4400 líneas vanilla, 3 themes light/dark/silverGold, aliases legacy preserved, _AccountHead partial para 8 views Layout=null | Accepted |
+| [0049](0049-cleanup-manrope-webhook-hmac-cart-notifier.md) | IDE0005 cleanup (26 archivos) + Error.cshtml @inject UmbracoHelper + Manrope font wire (3 entry points) + WebhookSigner HMAC-SHA256 helper + HMAC en 2 webhook channels existentes + Cart abandonment notifier (composite + email + webhook channels + email template + scanner hook) | Accepted |
 
 ## Rules
 
