@@ -44,4 +44,17 @@
     <PackageVersion Include="coverlet.collector" Version="6.0.2" />
   </ItemGroup>
 
+  <!--
+    HTTP resilience (Ola 113) — Microsoft.Extensions.Http.Resilience.
+    Wraps los 15 named HttpClients (3 webhook + 3 Slack + 3 Discord +
+    3 Teams + 3 cart abandonment scanner) con retry policy estándar
+    (3 retries, exponential backoff, jitter). Cierra "Sin retry/backoff"
+    documentado como negativa en ADRs 0047/0049/0050.
+    Stable 8.x para .NET 8 verificado en nuget.org.
+    ADR 0052 documenta la justificación del package.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="8.10.0" />
+  </ItemGroup>
+
 </Project>
