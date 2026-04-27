@@ -23,17 +23,20 @@ public sealed class CartAbandonmentScannerHostedService : BackgroundService
 {
     private readonly ICartAbandonmentTracker _tracker;
     private readonly IAnalyticsTracker _analytics;
+    private readonly ICartAbandonmentNotifier _notifier;
     private readonly IOptionsMonitor<CartAbandonmentSettings> _settings;
     private readonly ILogger<CartAbandonmentScannerHostedService> _logger;
 
     public CartAbandonmentScannerHostedService(
         ICartAbandonmentTracker tracker,
         IAnalyticsTracker analytics,
+        ICartAbandonmentNotifier notifier,
         IOptionsMonitor<CartAbandonmentSettings> settings,
         ILogger<CartAbandonmentScannerHostedService> logger)
     {
         _tracker = tracker;
         _analytics = analytics;
+        _notifier = notifier;
         _settings = settings;
         _logger = logger;
     }
@@ -76,6 +79,12 @@ public sealed class CartAbandonmentScannerHostedService : BackgroundService
                             ["lastActivityUtc"] = cart.LastActivityUtc,
                             ["minutesSinceActivity"] = (int)(DateTime.UtcNow - cart.LastActivityUtc).TotalMinutes,
                         });
+
+                        // Ola 102 — fire-and-forget per cart al composite
+                        // notifier (email + webhook channels). Try-catch
+                        // por canal interno ya garantiza que un fallo
+                        // no rompe el scan.
+                        await _notifier.NotifyAbandonedAsync(cart, stoppingToken);
                     }
 
                     if (abandoned.Count > 0)

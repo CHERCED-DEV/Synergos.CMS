@@ -201,6 +201,14 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IFormSubmissionNotifierChannel, WebhookFormSubmissionNotifier>();
         services.AddSingleton<IFormSubmissionNotifier, CompositeFormSubmissionNotifier>();
 
+        // Ola 102 — Cart abandonment notifier composite (paralelo de
+        // comments + forms). Hook en CartAbandonmentScannerHostedService
+        // por cart detectado. Email + webhook channels con HMAC opt-in.
+        services.AddSingleton<ICartAbandonmentNotifierChannel, EmailCartAbandonmentNotifier>();
+        services.AddHttpClient(WebhookCartAbandonmentNotifier.FactoryName);
+        services.AddSingleton<ICartAbandonmentNotifierChannel, WebhookCartAbandonmentNotifier>();
+        services.AddSingleton<ICartAbandonmentNotifier, CompositeCartAbandonmentNotifier>();
+
         // Ola 41 — Flow engine runtime. FlowResolver queries the content
         // tree (Transient for the same per-request reason as theme). The
         // FlowController is picked up by AddControllers() above;

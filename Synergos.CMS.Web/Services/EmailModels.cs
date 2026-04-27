@@ -31,3 +31,12 @@ public sealed record CommentPendingModerationEmailModel(
     DateTime CreatedAtUtc,
     string ModerationQueueUrl,
     string SiteName);
+
+public sealed record CartAbandonmentEmailModel(
+    string CartId,
+    int ItemCount,
+    decimal Subtotal,
+    string Currency,
+    DateTime LastActivityUtc,
+    int MinutesSinceActivity,
+    string SiteName);

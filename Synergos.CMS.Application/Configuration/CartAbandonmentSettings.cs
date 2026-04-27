@@ -35,4 +35,33 @@ public sealed class CartAbandonmentSettings
     /// no agregó nada significativo).
     /// </summary>
     public decimal MinSubtotalToReport { get; init; } = 0m;
+
+    /// <summary>
+    /// Dirección de email del operador que recibe el reporte cuando
+    /// un cart queda abandonado (consumido por la impl default
+    /// <c>EmailCartAbandonmentNotifier</c>). Default vacío = canal
+    /// no-op (no envía).
+    /// </summary>
+    public string? NotifyEmailAddress { get; init; }
+
+    /// <summary>
+    /// URL HTTP(S) a la que el <c>WebhookCartAbandonmentNotifier</c>
+    /// hace POST con el payload JSON. Compatible con Slack incoming
+    /// webhooks, Discord, Teams, n8n, Zapier o cualquier endpoint
+    /// custom. Default null/empty = canal no-op.
+    /// </summary>
+    public string? WebhookUrl { get; init; }
+
+    /// <summary>
+    /// Bearer token opcional para el webhook. Si está poblado, el
+    /// canal adjunta header <c>Authorization: Bearer {token}</c>.
+    /// </summary>
+    public string? WebhookBearerToken { get; init; }
+
+    /// <summary>
+    /// Secret compartido para firmar el body del webhook con
+    /// HMAC-SHA256. Si está poblado, el canal adjunta header
+    /// <c>X-Synergos-Signature: sha256={hex}</c>.
+    /// </summary>
+    public string? WebhookHmacSecret { get; init; }
 }
