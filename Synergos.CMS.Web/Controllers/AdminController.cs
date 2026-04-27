@@ -32,15 +32,18 @@ public sealed class AdminController : Controller
     private readonly ICommentRepository _comments;
     private readonly IMemberAccessGate _gate;
     private readonly IAnalyticsTracker _analytics;
+    private readonly ISearchAnalyticsStore _searchAnalytics;
 
     public AdminController(
         ICommentRepository comments,
         IMemberAccessGate gate,
-        IAnalyticsTracker analytics)
+        IAnalyticsTracker analytics,
+        ISearchAnalyticsStore searchAnalytics)
     {
         _comments = comments;
         _gate = gate;
         _analytics = analytics;
+        _searchAnalytics = searchAnalytics;
     }
 
     [HttpGet("moderation/comments")]
@@ -107,5 +110,36 @@ public sealed class AdminController : Controller
         }
 
         return RedirectToAction(nameof(ModerationComments));
+    }
+
+    /// <summary>
+    /// GET /admin/analytics/search?from=2026-04-01&amp;to=2026-04-30&amp;limit=20
+    /// — top queries + no-result queries en la ventana indicada.
+    /// </summary>
+    [HttpGet("analytics/search")]
+    public IActionResult AnalyticsSearch(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] int limit = 20)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var fromUtc = (from ?? DateTime.UtcNow.AddDays(-30)).ToUniversalTime();
+        var toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
+        var clampedLimit = Math.Clamp(limit, 1, 100);
+
+        var topQueries = _searchAnalytics.GetTopQueries(fromUtc, toUtc, clampedLimit);
+        var topNoResults = _searchAnalytics.GetTopNoResultQueries(fromUtc, toUtc, clampedLimit);
+
+        ViewData["FromUtc"] = fromUtc;
+        ViewData["ToUtc"] = toUtc;
+        ViewData["Limit"] = clampedLimit;
+        ViewData["TopQueries"] = topQueries;
+        ViewData["TopNoResults"] = topNoResults;
+        ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
+        return View();
     }
 }
