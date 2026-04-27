@@ -314,6 +314,7 @@ public sealed class AdminController : Controller
             });
         }
 
+        _cache.Remove(PendingCountCacheKey);
         return RedirectToAction(nameof(ModerationComments));
     }
 
@@ -341,6 +342,7 @@ public sealed class AdminController : Controller
             });
         }
 
+        _cache.Remove(PendingCountCacheKey);
         return RedirectToAction(nameof(ModerationComments), new { msg = $"approved-{changed}" });
     }
 
@@ -368,6 +370,7 @@ public sealed class AdminController : Controller
             });
         }
 
+        _cache.Remove(PendingCountCacheKey);
         return RedirectToAction(nameof(ModerationComments), new { msg = $"rejected-{changed}" });
     }
 
