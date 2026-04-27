@@ -81,6 +81,7 @@
 .syn-admin__nav-link {
   display: inline-flex;
   align-items: center;
+  gap: var(--syn-space-2);
   padding: var(--syn-space-2) var(--syn-space-3);
   border-radius: var(--syn-radius-md);
   font-size: var(--syn-font-size-sm);
@@ -894,4 +895,27 @@ a.syn-admin__item-node:hover {
   overflow-wrap: break-word;
   background: transparent;
   padding: 0;
+}
+
+/* ── Nav badge (pending counter) ─────────────────────────────── */
+
+.syn-admin__nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--syn-space-1);
+  background: var(--syn-color-action-danger);
+  color: var(--syn-color-action-danger-text);
+  border-radius: var(--syn-radius-full);
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.syn-admin__nav-link--current .syn-admin__nav-badge {
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
 }

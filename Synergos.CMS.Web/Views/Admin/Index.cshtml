@@ -18,24 +18,7 @@
     <title>Operaciones · Synergos</title>
 </head>
 <body class="syn-admin">
-    <header class="syn-admin__topbar">
-        <div class="syn-admin__topbar-inner">
-            <a class="syn-admin__brand" href="/admin">
-                <span class="syn-admin__brand-mark">⚙</span>
-                <span>Synergos · Operaciones</span>
-            </a>
-            <nav class="syn-admin__nav" aria-label="Admin">
-                <a class="syn-admin__nav-link syn-admin__nav-link--current" href="/admin">Inicio</a>
-                <a class="syn-admin__nav-link" href="/admin/moderation/comments">Moderación</a>
-                <a class="syn-admin__nav-link" href="/admin/forms">Forms</a>
-                <a class="syn-admin__nav-link" href="/admin/analytics/search">Búsqueda</a>
-            </nav>
-            <div class="syn-admin__user">
-                <span class="syn-admin__user-avatar" aria-hidden="true">@(moderatorName.Length > 0 ? moderatorName[0].ToString().ToUpper() : "?")</span>
-                <span class="syn-admin__user-name">@moderatorName</span>
-            </div>
-        </div>
-    </header>
+    @await Html.PartialAsync("_AdminTopbar")
 
     <main class="syn-admin__main">
         <div class="syn-admin__container">

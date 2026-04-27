@@ -1,0 +1,42 @@
+@*
+    Topbar reusable del Admin dashboard (Ola 119). Cada view pasa:
+      - ViewData["AdminCurrentSection"] — slug del section activo
+        (one of: "home", "moderation", "forms", "search").
+      - ViewData["ModeratorName"] — display name del miembro logged-in.
+      - ViewData["AdminPendingCount"] — int con count de comentarios
+        pendientes para mostrar como badge en "Moderación".
+*@
+@{
+    var currentSection = ViewData["AdminCurrentSection"] as string ?? "";
+    var moderatorName = ViewData["ModeratorName"] as string ?? "—";
+    var pendingCount = ViewData["AdminPendingCount"] as int? ?? 0;
+    string CurrentClass(string s) =>
+        string.Equals(s, currentSection, StringComparison.Ordinal)
+            ? "syn-admin__nav-link syn-admin__nav-link--current"
+            : "syn-admin__nav-link";
+    var avatarLetter = moderatorName.Length > 0 ? moderatorName[0].ToString().ToUpper() : "?";
+}
+<header class="syn-admin__topbar">
+    <div class="syn-admin__topbar-inner">
+        <a class="syn-admin__brand" href="/admin">
+            <span class="syn-admin__brand-mark">⚙</span>
+            <span>Synergos · Operaciones</span>
+        </a>
+        <nav class="syn-admin__nav" aria-label="Admin">
+            <a class="@CurrentClass("home")" href="/admin">Inicio</a>
+            <a class="@CurrentClass("moderation")" href="/admin/moderation/comments">
+                Moderación
+                @if (pendingCount > 0)
+                {
+                    <span class="syn-admin__nav-badge" aria-label="@pendingCount pendientes">@pendingCount</span>
+                }
+            </a>
+            <a class="@CurrentClass("forms")" href="/admin/forms">Forms</a>
+            <a class="@CurrentClass("search")" href="/admin/analytics/search">Búsqueda</a>
+        </nav>
+        <div class="syn-admin__user">
+            <span class="syn-admin__user-avatar" aria-hidden="true">@avatarLetter</span>
+            <span class="syn-admin__user-name">@moderatorName</span>
+        </div>
+    </div>
+</header>

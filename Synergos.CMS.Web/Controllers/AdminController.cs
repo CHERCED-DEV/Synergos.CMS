@@ -62,11 +62,26 @@ public sealed class AdminController : Controller
         var topQueries7d = _searchAnalytics.GetTopQueries(
             DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, 5);
 
+        SetTopbar("home", pendingPage.TotalCount);
         ViewData["PendingCount"] = pendingPage.TotalCount;
         ViewData["FormKeys"] = formKeys;
         ViewData["TopQueries7d"] = topQueries7d;
-        ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
         return View();
+    }
+
+    /// <summary>
+    /// Helper que setea las 3 viewdata keys que el partial _AdminTopbar
+    /// necesita: section slug, moderator display name, pending counter.
+    /// El pending counter se computa SOLO cuando ya tenemos el dato a
+    /// mano (Index lo tiene del page total); para el resto de actions
+    /// es una segunda lectura barata via GetPendingPage(1,1).
+    /// </summary>
+    private void SetTopbar(string sectionSlug, int? pendingCountOverride = null)
+    {
+        ViewData["AdminCurrentSection"] = sectionSlug;
+        ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
+        ViewData["AdminPendingCount"] = pendingCountOverride
+            ?? _comments.GetPendingPage(1, 1).TotalCount;
     }
 
     [HttpGet("forms")]
@@ -83,10 +98,10 @@ public sealed class AdminController : Controller
         var pageData = _formReader.GetRecent(page, pageSize, formKeyFilter);
         var formKeys = _formReader.ListFormKeys();
 
+        SetTopbar("forms");
         ViewData["Page"] = pageData;
         ViewData["FormKeyFilter"] = formKeyFilter;
         ViewData["FormKeys"] = formKeys;
-        ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
         return View();
     }
 
@@ -104,8 +119,8 @@ public sealed class AdminController : Controller
             return NotFound();
         }
 
+        SetTopbar("forms");
         ViewData["Detail"] = detail;
-        ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
         return View();
     }
 
@@ -122,10 +137,10 @@ public sealed class AdminController : Controller
         }
 
         var pageData = _comments.GetPendingPage(page, pageSize, nodeIdFilter);
+        SetTopbar("moderation", pageData.TotalCount);
         ViewData["Page"] = pageData;
         ViewData["NodeIdFilter"] = nodeIdFilter;
         ViewData["MessageCode"] = messageCode;
-        ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
         return View();
     }
 
@@ -277,12 +292,12 @@ public sealed class AdminController : Controller
         var topQueries = _searchAnalytics.GetTopQueries(fromUtc, toUtc, clampedLimit);
         var topNoResults = _searchAnalytics.GetTopNoResultQueries(fromUtc, toUtc, clampedLimit);
 
+        SetTopbar("search");
         ViewData["FromUtc"] = fromUtc;
         ViewData["ToUtc"] = toUtc;
         ViewData["Limit"] = clampedLimit;
         ViewData["TopQueries"] = topQueries;
         ViewData["TopNoResults"] = topNoResults;
-        ViewData["ModeratorName"] = _gate.CurrentMemberDisplayName ?? "—";
         return View();
     }
 }
