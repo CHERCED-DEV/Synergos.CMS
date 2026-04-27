@@ -59,6 +59,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0050](0050-slack-channels-and-webhook-replay-protection.md) | Slack-shaped notifier channels (Comments/Forms/Cart con SlackWebhookSender helper + Block Kit payloads + 3 SlackWebhookUrl settings) + Webhook replay protection canónica (X-Synergos-Timestamp header + HMAC sobre "{ts}.{body}" tipo Stripe/GitHub) | Accepted |
 | [0051](0051-admin-moderation-dashboard-ssr.md) | Admin moderation dashboard SSR — AdminController member-gated (admin/moderator/editor) en /admin/moderation/comments con list + approve/reject inline forms PRG, alternativa simpler al backoffice section AngularJS deferido (Ola 78). Partial _AdminHead + syn-admin.css alineados con design system | Accepted |
 | [0052](0052-admin-extensions-discord-teams-polly.md) | Admin extensions (search analytics dashboard + moderation pagination/filter/bulk) + Discord notifier channels (embeds) + Teams notifier channels (MessageCard) + Polly retry via Microsoft.Extensions.Http.Resilience 8.10.0 en los 12 named HttpClients (3 webhook + 3 Slack + 3 Discord + 3 Teams) | Accepted |
+| [0053](0053-admin-landing-form-submissions-confirm-dialog.md) | Admin landing /admin con summary cards + Form submissions dashboard /admin/forms (IFormSubmissionReader seam read-only + FileSystem handler implementa ambas) + native HTML5 <dialog> confirm modal para bulk approve/reject + ghost button variant + topbar nav 4 entries con current state highlight | Accepted |
 
 ## Rules
 
