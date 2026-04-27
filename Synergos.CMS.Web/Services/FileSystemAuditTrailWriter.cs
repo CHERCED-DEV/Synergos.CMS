@@ -69,16 +69,56 @@ public sealed class FileSystemAuditTrailWriter : IAuditTrailWriter
         string? actionFilter = null)
     {
         if (maxItems <= 0) return Array.Empty<AuditEvent>();
+        var files = ListJsonlFiles().OrderByDescending(f => f).Take(7).ToList();
+        return ReadFiltered(files, maxItems, actorEmailFilter, actionFilter);
+    }
 
-        var dir = Path.Combine(_hostEnvironment.ContentRootPath, "App_Data", DirectoryName);
-        if (!Directory.Exists(dir)) return Array.Empty<AuditEvent>();
+    public IReadOnlyList<AuditEvent> GetByDateRange(
+        DateTime fromUtc,
+        DateTime toUtc,
+        int maxItems,
+        string? actorEmailFilter = null,
+        string? actionFilter = null)
+    {
+        if (maxItems <= 0) return Array.Empty<AuditEvent>();
+        var fromDate = fromUtc.Date;
+        var toDate = toUtc.Date;
 
-        var results = new List<AuditEvent>();
-        var files = Directory.EnumerateFiles(dir, "*.jsonl")
-            .OrderByDescending(f => f)
-            .Take(7)
+        var files = new List<string>();
+        foreach (var file in ListJsonlFiles())
+        {
+            var name = Path.GetFileNameWithoutExtension(file);
+            if (DateTime.TryParseExact(name, "yyyy-MM-dd", null,
+                System.Globalization.DateTimeStyles.None, out var fileDate)
+                && fileDate >= fromDate && fileDate <= toDate)
+            {
+                files.Add(file);
+            }
+        }
+        files.Sort((a, b) => string.Compare(b, a, StringComparison.Ordinal));
+
+        var raw = ReadFiltered(files, maxItems * 2, actorEmailFilter, actionFilter);
+        // Refinar al filtro fino dentro del día: only events with
+        // OccurredAtUtc dentro del rango.
+        return raw.Where(e => e.OccurredAtUtc >= fromUtc && e.OccurredAtUtc <= toUtc)
+            .Take(maxItems)
             .ToList();
+    }
 
+    private IEnumerable<string> ListJsonlFiles()
+    {
+        var dir = Path.Combine(_hostEnvironment.ContentRootPath, "App_Data", DirectoryName);
+        if (!Directory.Exists(dir)) return Array.Empty<string>();
+        return Directory.EnumerateFiles(dir, "*.jsonl");
+    }
+
+    private static List<AuditEvent> ReadFiltered(
+        List<string> files,
+        int maxItems,
+        string? actorEmailFilter,
+        string? actionFilter)
+    {
+        var results = new List<AuditEvent>();
         foreach (var file in files)
         {
             string[] lines;
@@ -120,7 +160,6 @@ public sealed class FileSystemAuditTrailWriter : IAuditTrailWriter
                 if (results.Count >= maxItems) return results;
             }
         }
-
         return results;
     }
 

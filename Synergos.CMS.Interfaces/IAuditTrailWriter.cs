@@ -38,6 +38,20 @@ public interface IAuditTrailWriter
         int maxItems,
         string? actorEmailFilter = null,
         string? actionFilter = null);
+
+    /// <summary>
+    /// Devuelve eventos en un rango fechas UTC (inclusive). Útil para
+    /// CSV export con date range arbitrario, no constraint a los 7
+    /// archivos diarios más recientes. Filters opcionales aplicados
+    /// in-memory. Ordenados por <see cref="AuditEvent.OccurredAtUtc"/>
+    /// desc. (Ola 163)
+    /// </summary>
+    IReadOnlyList<AuditEvent> GetByDateRange(
+        DateTime fromUtc,
+        DateTime toUtc,
+        int maxItems,
+        string? actorEmailFilter = null,
+        string? actionFilter = null);
 }
 
 /// <summary>

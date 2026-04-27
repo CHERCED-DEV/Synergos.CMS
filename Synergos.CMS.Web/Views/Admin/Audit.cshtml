@@ -9,7 +9,22 @@
     var actorFilter = ViewData["ActorFilter"] as string;
     var actionFilter = ViewData["ActionFilter"] as string;
     var limit = (int)(ViewData["Limit"] ?? 100);
-    var hasFilters = !string.IsNullOrWhiteSpace(actorFilter) || !string.IsNullOrWhiteSpace(actionFilter);
+    var fromUtc = ViewData["FromUtc"] as DateTime?;
+    var toUtc = ViewData["ToUtc"] as DateTime?;
+    var hasFilters = !string.IsNullOrWhiteSpace(actorFilter) ||
+                     !string.IsNullOrWhiteSpace(actionFilter) ||
+                     fromUtc.HasValue || toUtc.HasValue;
+    string FromInputValue() => fromUtc.HasValue ? fromUtc.Value.ToString("yyyy-MM-dd") : "";
+    string ToInputValue() => toUtc.HasValue ? toUtc.Value.ToString("yyyy-MM-dd") : "";
+    string ExportHref()
+    {
+        var qs = new List<string>();
+        if (!string.IsNullOrWhiteSpace(actorFilter)) qs.Add("actor=" + Uri.EscapeDataString(actorFilter));
+        if (!string.IsNullOrWhiteSpace(actionFilter)) qs.Add("action=" + Uri.EscapeDataString(actionFilter));
+        if (fromUtc.HasValue) qs.Add("from=" + fromUtc.Value.ToString("yyyy-MM-dd"));
+        if (toUtc.HasValue) qs.Add("to=" + toUtc.Value.ToString("yyyy-MM-dd"));
+        return "/admin/audit/export" + (qs.Count > 0 ? "?" + string.Join('&', qs) : "");
+    }
 }
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
@@ -48,6 +63,16 @@
                            class="syn-admin__filter-input" />
                 </label>
                 <label class="syn-admin__filter">
+                    <span class="syn-admin__filter-label">Desde (UTC)</span>
+                    <input type="date" name="from" value="@FromInputValue()"
+                           class="syn-admin__filter-input" />
+                </label>
+                <label class="syn-admin__filter">
+                    <span class="syn-admin__filter-label">Hasta (UTC)</span>
+                    <input type="date" name="to" value="@ToInputValue()"
+                           class="syn-admin__filter-input" />
+                </label>
+                <label class="syn-admin__filter">
                     <span class="syn-admin__filter-label">Limit</span>
                     <input type="number" name="limit" value="@limit" min="1" max="500"
                            class="syn-admin__filter-input syn-admin__filter-input--num" />
@@ -57,6 +82,7 @@
                 {
                     <a href="/admin/audit" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar")</a>
                 }
+                <a href="@ExportHref()" class="syn-admin__filter-export" download>⬇ @Umbraco.GetDictionaryValue("admin.action.export", "Exportar CSV")</a>
             </form>
 
             @if (events.Count == 0)

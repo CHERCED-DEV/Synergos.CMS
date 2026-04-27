@@ -768,11 +768,15 @@ public sealed class AdminController : Controller
     /// GET /admin/audit — listing read-only del audit trail (Olas 153-154).
     /// Muestra los últimos N eventos con filter opcional por actorEmail
     /// y action. Read-only — el audit trail es append-only.
+    /// Ola 163 agrega date range opcional que cae a GetByDateRange en
+    /// lugar de GetRecent cuando from o to están seteados.
     /// </summary>
     [HttpGet("audit")]
     public IActionResult Audit(
         [FromQuery(Name = "actor")] string? actorEmailFilter = null,
         [FromQuery(Name = "action")] string? actionFilter = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
         [FromQuery] int limit = 100)
     {
         if (!_gate.HasAnyRole(ModeratorRolesCsv))
@@ -781,7 +785,19 @@ public sealed class AdminController : Controller
         }
 
         var clampedLimit = Math.Clamp(limit, 1, 500);
-        var events = _audit.GetRecent(clampedLimit, actorEmailFilter, actionFilter);
+        IReadOnlyList<AuditEvent> events;
+        if (from.HasValue || to.HasValue)
+        {
+            var fromUtc = (from ?? DateTime.UtcNow.AddDays(-7)).ToUniversalTime();
+            var toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
+            events = _audit.GetByDateRange(fromUtc, toUtc, clampedLimit, actorEmailFilter, actionFilter);
+            ViewData["FromUtc"] = fromUtc;
+            ViewData["ToUtc"] = toUtc;
+        }
+        else
+        {
+            events = _audit.GetRecent(clampedLimit, actorEmailFilter, actionFilter);
+        }
 
         SetTopbar("audit");
         ViewData["Events"] = events;
@@ -789,6 +805,61 @@ public sealed class AdminController : Controller
         ViewData["ActionFilter"] = actionFilter;
         ViewData["Limit"] = clampedLimit;
         return View();
+    }
+
+    /// <summary>
+    /// GET /admin/audit/export — CSV streaming export con los mismos
+    /// filtros que el listing. Streamed via Response.Body.WriteAsync
+    /// para memoria O(1). Hard cap de CsvExportHardCap. (Ola 164)
+    /// </summary>
+    [HttpGet("audit/export")]
+    public async Task AuditExportCsv(
+        [FromQuery(Name = "actor")] string? actorEmailFilter,
+        [FromQuery(Name = "action")] string? actionFilter,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            Response.StatusCode = 403;
+            return;
+        }
+
+        var fromUtc = (from ?? DateTime.UtcNow.AddDays(-30)).ToUniversalTime();
+        var toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
+        var events = _audit.GetByDateRange(fromUtc, toUtc, CsvExportHardCap, actorEmailFilter, actionFilter);
+
+        Response.ContentType = "text/csv; charset=utf-8";
+        Response.Headers["Content-Disposition"] =
+            $"attachment; filename=\"synergos-audit-{fromUtc:yyyyMMdd}-{toUtc:yyyyMMdd}.csv\"";
+
+        var bom = new byte[] { 0xEF, 0xBB, 0xBF };
+        await Response.Body.WriteAsync(bom, cancellationToken);
+
+        var headerLine = "OccurredAtUtc,ActorEmail,ActorName,Action,Resource,Outcome,Detail,Id\n";
+        await Response.Body.WriteAsync(System.Text.Encoding.UTF8.GetBytes(headerLine), cancellationToken);
+
+        foreach (var e in events)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var line = string.Join(',',
+                e.OccurredAtUtc.ToString("O"),
+                EscapeCsvField(e.ActorEmail),
+                EscapeCsvField(e.ActorName),
+                EscapeCsvField(e.Action),
+                EscapeCsvField(e.Resource),
+                EscapeCsvField(e.Outcome),
+                EscapeCsvField(e.Detail),
+                EscapeCsvField(e.Id)) + "\n";
+            await Response.Body.WriteAsync(System.Text.Encoding.UTF8.GetBytes(line), cancellationToken);
+        }
+
+        await EmitAuditAsync(
+            "audit.export",
+            $"from={fromUtc:O} to={toUtc:O} count={events.Count}",
+            "success",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>
