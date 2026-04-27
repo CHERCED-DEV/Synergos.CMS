@@ -110,13 +110,13 @@
                             <span>Seleccionar todos en esta página</span>
                         </label>
                         <div class="syn-admin__bulk-actions">
-                            <button type="submit"
-                                    formaction="/admin/moderation/comments/bulk-approve"
+                            <button type="button"
+                                    data-bulk-action="approve"
                                     class="syn-admin__action syn-admin__action--approve">
                                 ✓ Aprobar seleccionados
                             </button>
-                            <button type="submit"
-                                    formaction="/admin/moderation/comments/bulk-reject"
+                            <button type="button"
+                                    data-bulk-action="reject"
                                     class="syn-admin__action syn-admin__action--reject">
                                 ✗ Rechazar seleccionados
                             </button>
@@ -190,14 +190,71 @@
         </div>
     </main>
 
+    @* Confirm dialog (Ola 116) — bulk approve/reject pasan por aquí
+       primero. Pide confirmación con el count de items seleccionados
+       antes de submit el form. Cancela = cierra modal sin acción. *@
+    <dialog id="bulk-confirm" class="syn-admin__dialog">
+        <form method="dialog" class="syn-admin__dialog-form">
+            <h2 class="syn-admin__dialog-title" id="bulk-confirm-title">Confirmar acción</h2>
+            <p class="syn-admin__dialog-body" id="bulk-confirm-body">…</p>
+            <div class="syn-admin__dialog-actions">
+                <button type="submit" value="cancel" class="syn-admin__action syn-admin__action--ghost">
+                    Cancelar
+                </button>
+                <button type="submit" value="confirm" id="bulk-confirm-go" class="syn-admin__action">
+                    Continuar
+                </button>
+            </div>
+        </form>
+    </dialog>
+
     <script>
-        // Select-all checkbox: marca/desmarca todos los targets visibles.
+        // Select-all checkbox + confirm dialog para bulk actions (Ola 116).
         (function () {
             var sa = document.getElementById('select-all');
-            if (!sa) return;
-            sa.addEventListener('change', function () {
-                document.querySelectorAll('input[name="targets"]').forEach(function (cb) {
-                    cb.checked = sa.checked;
+            if (sa) {
+                sa.addEventListener('change', function () {
+                    document.querySelectorAll('input[name="targets"]').forEach(function (cb) {
+                        cb.checked = sa.checked;
+                    });
+                });
+            }
+
+            var dialog = document.getElementById('bulk-confirm');
+            var dialogTitle = document.getElementById('bulk-confirm-title');
+            var dialogBody = document.getElementById('bulk-confirm-body');
+            var dialogGo = document.getElementById('bulk-confirm-go');
+            var bulkForm = document.getElementById('bulk-form');
+            if (!dialog || !bulkForm) return;
+
+            document.querySelectorAll('button[data-bulk-action]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var action = btn.getAttribute('data-bulk-action');
+                    var checked = bulkForm.querySelectorAll('input[name="targets"]:checked').length;
+                    if (checked === 0) {
+                        alert('Selecciona al menos un comentario primero.');
+                        return;
+                    }
+                    var label = action === 'approve' ? 'aprobar' : 'rechazar';
+                    var verb = action === 'approve' ? 'Aprobar' : 'Rechazar';
+                    dialogTitle.textContent = verb + ' ' + checked + ' comentario(s)';
+                    dialogBody.textContent = '¿Confirmas que querés ' + label + ' ' + checked +
+                        ' comentario(s) seleccionado(s)? ' +
+                        (action === 'reject' ? 'Esta acción es irreversible — los items se eliminan del store.' : 'Los items quedarán visibles públicamente al siguiente render.');
+                    dialogGo.className = 'syn-admin__action syn-admin__action--' + action;
+                    dialogGo.textContent = (action === 'approve' ? '✓ ' : '✗ ') + verb;
+                    dialog.returnValue = '';
+
+                    // Cuando el form submita "confirm", disparamos el bulk-form al endpoint correcto.
+                    var onClose = function () {
+                        dialog.removeEventListener('close', onClose);
+                        if (dialog.returnValue === 'confirm') {
+                            bulkForm.action = '/admin/moderation/comments/bulk-' + action;
+                            bulkForm.submit();
+                        }
+                    };
+                    dialog.addEventListener('close', onClose);
+                    dialog.showModal();
                 });
             });
         })();

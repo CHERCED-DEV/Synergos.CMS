@@ -774,3 +774,64 @@ a.syn-admin__item-node:hover {
   border-color: var(--syn-color-action-primary);
   box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
 }
+
+/* ── Confirm dialog (bulk actions) ───────────────────────────── */
+
+.syn-admin__dialog {
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--syn-radius-lg);
+  background: var(--syn-color-surface-primary);
+  color: var(--syn-color-text-primary);
+  max-width: 480px;
+  width: calc(100% - var(--syn-space-xl));
+  box-shadow: var(--syn-shadow-floating);
+  overflow: hidden;
+}
+
+.syn-admin__dialog::backdrop {
+  background: rgb(15 23 42 / 0.66);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.syn-admin__dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+  padding: var(--syn-space-xl);
+}
+
+.syn-admin__dialog-title {
+  margin: 0;
+  font-size: var(--syn-font-size-xl);
+  font-weight: var(--syn-font-weight-bold);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-admin__dialog-body {
+  margin: 0;
+  color: var(--syn-color-text-secondary);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-admin__dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--syn-space-2);
+  justify-content: flex-end;
+  margin-top: var(--syn-space-sm);
+}
+
+.syn-admin__action--ghost {
+  background: transparent;
+  color: var(--syn-color-text-secondary);
+  border: 1px solid var(--syn-color-border-default);
+}
+
+.syn-admin__action--ghost:hover {
+  background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-text-primary);
+  transform: none;
+}
