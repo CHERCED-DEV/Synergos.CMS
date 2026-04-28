@@ -512,10 +512,12 @@ public sealed class AccountController : Controller
     /// <summary>
     /// GET /account/2fa-setup — Member self-service enrollment de TOTP.
     /// Si ya está enabled, muestra status. Sino genera challenge fresco
-    /// y muestra secret + URI para scan/paste. Olas 197-198.
+    /// y muestra secret + URI para scan/paste + QR inline (Olas 197-198 + 223).
     /// </summary>
     [HttpGet("2fa-setup")]
-    public async Task<IActionResult> TwoFactorSetup(CancellationToken cancellationToken)
+    public async Task<IActionResult> TwoFactorSetup(
+        [FromServices] QrCodeRenderer qrRenderer,
+        CancellationToken cancellationToken)
     {
         var memberKey = _gate.CurrentMemberKey;
         if (memberKey is null) return RedirectToAction(nameof(Login));
@@ -528,6 +530,7 @@ public sealed class AccountController : Controller
             var challenge = await _twoFactor.StartEnrollmentAsync(memberKey.Value, cancellationToken);
             ViewData["SecretBase32"] = challenge.SecretBase32;
             ViewData["ProvisioningUri"] = challenge.ProvisioningUri;
+            ViewData["QrDataUri"] = qrRenderer.RenderSvgDataUri(challenge.ProvisioningUri);
         }
         return View();
     }

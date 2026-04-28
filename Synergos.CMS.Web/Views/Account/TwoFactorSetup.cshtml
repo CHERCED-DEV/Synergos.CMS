@@ -1,13 +1,15 @@
 @*
-    Vista del AccountController.TwoFactorSetup (Olas 197-198).
+    Vista del AccountController.TwoFactorSetup (Olas 197-198 + 223).
     Member self-service enrollment de 2FA TOTP. Si ya está enabled,
-    muestra status. Sino genera challenge y muestra secret + URI.
+    muestra status. Sino genera challenge y muestra secret + URI + QR
+    inline (data URI SVG).
 *@
 @{
     Layout = null;
     var isEnabled = ViewData["IsEnabled"] as bool? ?? false;
     var secret = ViewData["SecretBase32"] as string;
     var provisioningUri = ViewData["ProvisioningUri"] as string;
+    var qrDataUri = ViewData["QrDataUri"] as string;
     var errorCode = ViewData["ErrorCode"] as string;
 }
 <!DOCTYPE html>
@@ -44,24 +46,31 @@
             }
 
             <section class="syn-account__info">
-                <h2>Paso 1 — Escanea o pega el secreto en tu app</h2>
+                <h2>Paso 1 — Escanea el QR con tu app</h2>
                 <p>
                     Apps recomendadas: Google Authenticator, Authy, 1Password,
                     Microsoft Authenticator, Bitwarden.
                 </p>
-                <p>
-                    <strong>Secret (Base32):</strong>
-                    <code class="syn-account__totp-secret">@secret</code>
-                </p>
+                @if (!string.IsNullOrEmpty(qrDataUri))
+                {
+                    <p>
+                        <img src="@qrDataUri"
+                             alt="QR de provisioning para 2FA"
+                             width="240" height="240"
+                             class="syn-account__qr-image" />
+                    </p>
+                }
                 <details class="syn-account__details">
-                    <summary>URI provisioning (otpauth://) — para apps que
-                        soportan paste directo</summary>
+                    <summary>O ingresa el secret manualmente</summary>
+                    <p>
+                        <strong>Secret (Base32):</strong>
+                        <code class="syn-account__totp-secret">@secret</code>
+                    </p>
+                    <p class="syn-account__hint">
+                        URI provisioning crudo:
+                    </p>
                     <pre class="syn-account__code-block"><code>@provisioningUri</code></pre>
                 </details>
-                <p class="syn-account__hint">
-                    QR rendering deferred — copia el secret manualmente o
-                    parsea el URI con tu app.
-                </p>
             </section>
 
             <section class="syn-account__info" style="margin-top:var(--syn-space-xl);">

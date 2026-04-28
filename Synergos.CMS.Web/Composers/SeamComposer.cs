@@ -201,12 +201,14 @@ public sealed class SeamComposer : IComposer
         // services Umbraco.
         services.AddTransient<IHostBridgeContextBuilder, DefaultHostBridgeContextBuilder>();
 
-        // Olas 178-180 — Member 2FA TOTP (ADR 0074). FileSystemMemberTwoFactorStore
-        // persiste secrets en App_Data/syn-2fa/{memberKey}.json. Service
-        // wraps Otp.NET para TOTP generation/verification. Singleton store +
-        // transient service (depende de scoped IMemberService).
+        // Olas 178-180 + 221-224 — Member 2FA TOTP (ADRs 0074 + 0084).
+        // FileSystemMemberTwoFactorStore persiste secrets en App_Data/syn-2fa/
+        // {memberKey}.json encrypted via IDataProtectionProvider (Ola 221).
+        // Service wraps Otp.NET para TOTP generation/verification.
+        // QrCodeRenderer (singleton) renderiza el provisioning URI como SVG.
         services.AddSingleton<FileSystemMemberTwoFactorStore>();
         services.AddTransient<IMemberTwoFactorService, UmbracoMemberTwoFactorService>();
+        services.AddSingleton<QrCodeRenderer>();
 
         // Ola 161 — Validator que warn al boot/reload si una key del
         // PerChannel dict no matchea ningún FactoryName conocido.
