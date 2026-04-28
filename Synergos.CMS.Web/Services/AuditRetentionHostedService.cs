@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 

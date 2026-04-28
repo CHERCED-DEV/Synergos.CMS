@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Proxies.Impl;

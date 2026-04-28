@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Hosting;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Services;

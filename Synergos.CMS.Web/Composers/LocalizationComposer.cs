@@ -1,5 +1,4 @@
 using System.Globalization;
-using Microsoft.AspNetCore.Builder;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.Services;
 
