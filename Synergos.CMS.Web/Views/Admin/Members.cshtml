@@ -157,6 +157,12 @@
                                             aria-label="@($"Eliminar {m.Email}")">
                                         🗑 Eliminar
                                     </button>
+                                    <button type="button" class="syn-admin__action syn-admin__action--reject" style="margin-top:var(--syn-space-xs);"
+                                            data-member-gdpr="@m.Key" data-member-email="@m.Email"
+                                            title="GDPR Right to be Forgotten — borra Member + anonimiza comments/forms linkeadas"
+                                            aria-label="@($"GDPR erase {m.Email}")">
+                                        🛡 GDPR erase
+                                    </button>
                                 </td>
                             </tr>
                             @if (allRoles.Count > 0)
@@ -224,28 +230,59 @@
         </form>
     </dialog>
 
+    @* Native <dialog> confirm for GDPR RTBF (irreversible + cascading). Olas 233-235 + 241-242. *@
+    <dialog id="member-gdpr-confirm" class="syn-admin__dialog">
+        <form id="member-gdpr-form" method="post" class="syn-admin__dialog-form">
+            <h2 class="syn-admin__dialog-title">GDPR Right to be Forgotten <span class="syn-admin__danger">irreversible + cascading</span></h2>
+            <p class="syn-admin__dialog-body">
+                Vas a procesar una solicitud RTBF (GDPR Art. 17) para el Member
+                <code id="member-gdpr-email"></code>. La operación es <strong>más amplia</strong> que un delete normal:
+            </p>
+            <ul class="syn-admin__dialog-body" style="margin-top:0;">
+                <li>Hard-delete del Member record + cascada 2FA secret/recovery codes.</li>
+                <li><strong>Anonimiza</strong> comments del Member en <code>App_Data/syn-comments/</code> (AuthorName → "[deleted]").</li>
+                <li><strong>Anonimiza</strong> form submissions con email del Member en <code>App_Data/syn-form-submissions/</code> (email field → "[deleted]@gdpr.local").</li>
+                <li>Audit trail <code>gdpr.rtbf-processed</code> queda registrado por compliance (NO se borra — GDPR Art. 17(3)).</li>
+            </ul>
+            <p class="syn-admin__dialog-body">
+                Confirma solo si tienes una solicitud documentada del data subject.
+            </p>
+            <div class="syn-admin__dialog-actions">
+                <button type="button" data-dialog-cancel class="syn-admin__action syn-admin__action--ghost">@Umbraco.GetDictionaryValue("admin.action.cancel", "Cancelar")</button>
+                <button type="submit" class="syn-admin__action syn-admin__action--reject">🛡 Procesar RTBF</button>
+            </div>
+        </form>
+    </dialog>
+
     <script>
         (function () {
-            var dialog = document.getElementById('member-delete-confirm');
-            var form = document.getElementById('member-delete-form');
-            var emailSpan = document.getElementById('member-delete-email');
-            if (!dialog || !form) return;
+            function wireDialog(dialogId, formId, emailId, triggerAttr, urlSuffix) {
+                var dialog = document.getElementById(dialogId);
+                var form = document.getElementById(formId);
+                var emailSpan = document.getElementById(emailId);
+                if (!dialog || !form) return;
 
-            document.querySelectorAll('[data-member-delete]').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var memberKey = btn.getAttribute('data-member-delete');
-                    var memberEmail = btn.getAttribute('data-member-email') || '';
-                    form.action = '/admin/members/' + memberKey + '/delete';
-                    if (emailSpan) emailSpan.textContent = memberEmail;
-                    dialog.showModal();
+                document.querySelectorAll('[' + triggerAttr + ']').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var memberKey = btn.getAttribute(triggerAttr);
+                        var memberEmail = btn.getAttribute('data-member-email') || '';
+                        form.action = '/admin/members/' + memberKey + urlSuffix;
+                        if (emailSpan) emailSpan.textContent = memberEmail;
+                        dialog.showModal();
+                    });
                 });
-            });
 
-            dialog.querySelectorAll('[data-dialog-cancel]').forEach(function (cancel) {
-                cancel.addEventListener('click', function () {
-                    dialog.close();
+                dialog.querySelectorAll('[data-dialog-cancel]').forEach(function (cancel) {
+                    cancel.addEventListener('click', function () {
+                        dialog.close();
+                    });
                 });
-            });
+            }
+
+            wireDialog('member-delete-confirm', 'member-delete-form',
+                'member-delete-email', 'data-member-delete', '/delete');
+            wireDialog('member-gdpr-confirm', 'member-gdpr-form',
+                'member-gdpr-email', 'data-member-gdpr', '/gdpr-erase');
         })();
     </script>
 </body>
