@@ -1,0 +1,8 @@
+# Schema files copied via project reference to Synergos.CMS.Web during build —
+# generated artifacts, not source.
+appsettings-schema.json
+appsettings-schema.Umbraco.Cms.json
+appsettings-schema.usync.json
+
+# BenchmarkDotNet output dir (gitignored implícito por tools/clean conventions).
+BenchmarkDotNet.Artifacts/

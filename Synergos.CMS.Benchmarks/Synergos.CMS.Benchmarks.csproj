@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- BenchmarkDotNet recomienda Release explícito + ServerGC + Tiered JIT off para repeatable.
+         Aquí solo dejamos el harness; los flags se setean en Program.cs via [Config]. -->
+    <!-- CA1707: BenchmarkDotNet usa underscores convencionalmente en method
+         names para que se rendericen leibles en los reports (Sign_Small_200B
+         vs SignSmall200B). Suppress global para este project. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+
+  <!-- Reference Web para acceder a WebhookSigner + bridge types via Interfaces transitive. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Synergos.CMS.Web\Synergos.CMS.Web.csproj" />
+  </ItemGroup>
+
+</Project>

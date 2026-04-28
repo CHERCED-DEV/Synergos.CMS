@@ -81,4 +81,14 @@
     <PackageVersion Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
+  <!--
+    Performance benchmarks — BenchmarkDotNet 0.15.8 (Olas 259-260,
+    ADR 0087). Ejecuta el harness via `dotnet run -c Release` desde
+    Synergos.CMS.Benchmarks/. Solo benchmarks-project — no leak a
+    runtime ni tests.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
 </Project>
