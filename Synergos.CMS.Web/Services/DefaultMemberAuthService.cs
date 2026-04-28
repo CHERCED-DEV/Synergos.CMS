@@ -111,6 +111,66 @@ public sealed class DefaultMemberAuthService : IMemberAuthService
     public Task LogoutAsync(CancellationToken cancellationToken) =>
         _signInManager.SignOutAsync();
 
+    public async Task<LoginValidationResult> ValidateCredentialsAsync(
+        string emailOrUsername,
+        string password,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(emailOrUsername) || string.IsNullOrWhiteSpace(password))
+        {
+            return new LoginValidationResult(false, null, null, "invalid-credentials");
+        }
+
+        var user = await _memberManager.FindByEmailAsync(emailOrUsername)
+            ?? await _memberManager.FindByNameAsync(emailOrUsername);
+        if (user is null)
+        {
+            return new LoginValidationResult(false, null, null, "invalid-credentials");
+        }
+
+        if (await _memberManager.IsLockedOutAsync(user))
+        {
+            return new LoginValidationResult(false, null, null, "locked-out");
+        }
+
+        var passwordOk = await _memberManager.CheckPasswordAsync(user, password);
+        if (!passwordOk)
+        {
+            // Increment failed attempts counter (Identity standard).
+            await _memberManager.AccessFailedAsync(user);
+            return new LoginValidationResult(false, null, null, "invalid-credentials");
+        }
+
+        // Reset failed counter post-success.
+        await _memberManager.ResetAccessFailedCountAsync(user);
+
+        return new LoginValidationResult(
+            Success: true,
+            Email: user.Email,
+            MemberKey: user.Key,
+            ErrorCode: null);
+    }
+
+    public async Task<MemberAuthResult> SignInByEmailAsync(
+        string email,
+        bool isPersistent,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return MemberAuthResult.Fail("invalid-credentials", "Email vacío.");
+        }
+
+        var user = await _memberManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            return MemberAuthResult.Fail("invalid-credentials", "Member no encontrado.");
+        }
+
+        await _signInManager.SignInAsync(user, isPersistent);
+        return MemberAuthResult.Ok();
+    }
+
     public async Task<MemberAuthResult> ChangePasswordAsync(
         string currentPassword,
         string newPassword,

@@ -34,6 +34,28 @@ public interface IMemberAuthService
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Verifica credenciales SIN firmar sesión — útil para flows que
+    /// necesitan un challenge intermedio (e.g. 2FA TOTP). Si retorna
+    /// <see cref="LoginValidationResult.Success"/> true, el caller
+    /// puede invocar <see cref="SignInByEmailAsync"/> tras el challenge.
+    /// (Ola 201, ADR 0082)
+    /// </summary>
+    Task<LoginValidationResult> ValidateCredentialsAsync(
+        string emailOrUsername,
+        string password,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Firma sesión del miembro identificado por email — usado por
+    /// flows post-challenge donde la password ya fue validada.
+    /// (Ola 201)
+    /// </summary>
+    Task<MemberAuthResult> SignInByEmailAsync(
+        string email,
+        bool isPersistent,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Cierra la sesión del miembro actual.
     /// </summary>
     Task LogoutAsync(CancellationToken cancellationToken);
@@ -108,6 +130,21 @@ public sealed record PasswordResetRequestResult(
     bool EmailExists,
     string? Token,
     string? DisplayName);
+
+/// <summary>
+/// Resultado de validación de credenciales sin firmar sesión.
+/// (Ola 201, ADR 0082)
+/// </summary>
+/// <param name="Success">True si email + password matchean Member válido.</param>
+/// <param name="Email">Email canónico del Member (lowercase) cuando Success=true.</param>
+/// <param name="MemberKey">Member.Key (Guid) cuando Success=true.</param>
+/// <param name="ErrorCode">slug del error: "invalid-credentials" /
+///   "locked-out". Null cuando Success=true.</param>
+public sealed record LoginValidationResult(
+    bool Success,
+    string? Email,
+    Guid? MemberKey,
+    string? ErrorCode);
 
 /// <summary>
 /// Datos del nuevo miembro a registrar.

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
@@ -17,6 +18,9 @@ namespace Synergos.CMS.Web.Controllers;
 [Route("account")]
 public sealed class AccountController : Controller
 {
+    private const string TwoFactorPendingCachePrefix = "syn:2fa-pending:";
+    private static readonly TimeSpan TwoFactorPendingTtl = TimeSpan.FromMinutes(5);
+
     private readonly IMemberAuthService _authService;
     private readonly IMemberAccessGate _gate;
     private readonly IAnalyticsTracker _analytics;
@@ -25,6 +29,7 @@ public sealed class AccountController : Controller
     private readonly IOptions<MembersSettings> _membersSettings;
     private readonly IBrandingProvider _branding;
     private readonly IMemberTwoFactorService _twoFactor;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
@@ -36,6 +41,7 @@ public sealed class AccountController : Controller
         IOptions<MembersSettings> membersSettings,
         IBrandingProvider branding,
         IMemberTwoFactorService twoFactor,
+        IMemoryCache cache,
         ILogger<AccountController> logger)
     {
         _authService = authService;
@@ -46,8 +52,16 @@ public sealed class AccountController : Controller
         _membersSettings = membersSettings;
         _branding = branding;
         _twoFactor = twoFactor;
+        _cache = cache;
         _logger = logger;
     }
+
+    private sealed record PendingTwoFactorLogin(
+        string Email,
+        Guid MemberKey,
+        bool IsPersistent,
+        string? ReturnUrl,
+        DateTime CreatedAtUtc);
 
     [HttpGet("login")]
     [AllowAnonymous]
@@ -68,24 +82,147 @@ public sealed class AccountController : Controller
         string? returnUrl,
         CancellationToken cancellationToken)
     {
-        var result = await _authService.LoginAsync(
-            emailOrUsername, password, rememberMe, cancellationToken);
+        // Olas 201-204 — 2FA-aware login flow:
+        // 1. Validate password sin sign-in.
+        // 2. Si IsEnabled 2FA → cache challenge + redirect /account/2fa-challenge.
+        // 3. Sino → SignInByEmailAsync directo.
+        var validation = await _authService.ValidateCredentialsAsync(
+            emailOrUsername, password, cancellationToken);
 
-        if (!result.Success)
+        if (!validation.Success)
         {
             _analytics.Track("account.login-failed", new Dictionary<string, object?>
             {
-                ["errorCode"] = result.ErrorCode,
+                ["errorCode"] = validation.ErrorCode,
             });
             return RedirectToAction(nameof(Login), new
             {
                 returnUrl,
-                error = result.ErrorCode,
+                error = validation.ErrorCode,
+            });
+        }
+
+        var twoFactorEnabled = validation.MemberKey.HasValue
+            && await _twoFactor.IsEnabledAsync(validation.MemberKey.Value, cancellationToken);
+
+        if (twoFactorEnabled && validation.Email is not null && validation.MemberKey.HasValue)
+        {
+            // Cache pending challenge token. Expires en 5 min.
+            var token = Guid.NewGuid().ToString("N");
+            _cache.Set(
+                TwoFactorPendingCachePrefix + token,
+                new PendingTwoFactorLogin(
+                    Email: validation.Email,
+                    MemberKey: validation.MemberKey.Value,
+                    IsPersistent: rememberMe,
+                    ReturnUrl: returnUrl,
+                    CreatedAtUtc: DateTime.UtcNow),
+                TwoFactorPendingTtl);
+
+            _analytics.Track("account.login-2fa-required", new Dictionary<string, object?>
+            {
+                ["memberKey"] = validation.MemberKey.Value.ToString("N"),
+            });
+
+            return RedirectToAction(nameof(TwoFactorChallenge), new { token });
+        }
+
+        var signInResult = await _authService.SignInByEmailAsync(
+            validation.Email!, rememberMe, cancellationToken);
+        if (!signInResult.Success)
+        {
+            return RedirectToAction(nameof(Login), new
+            {
+                returnUrl,
+                error = signInResult.ErrorCode,
             });
         }
 
         _analytics.Track("account.login");
         return Redirect(SafeReturnUrl(returnUrl));
+    }
+
+    /// <summary>
+    /// GET /account/2fa-challenge?token=X — challenge view post-password.
+    /// El token vive 5min en IMemoryCache. Si expira, redirect a /account/login.
+    /// (Olas 201-204)
+    /// </summary>
+    [HttpGet("2fa-challenge")]
+    [AllowAnonymous]
+    public IActionResult TwoFactorChallenge(
+        [FromQuery] string token,
+        [FromQuery(Name = "error")] string? errorCode = null)
+    {
+        if (string.IsNullOrWhiteSpace(token) ||
+            _cache.Get<PendingTwoFactorLogin>(TwoFactorPendingCachePrefix + token) is null)
+        {
+            return RedirectToAction(nameof(Login));
+        }
+
+        ViewData["Token"] = token;
+        ViewData["ErrorCode"] = errorCode;
+        return View();
+    }
+
+    /// <summary>
+    /// POST /account/2fa-challenge — verifica TOTP/recovery + completes
+    /// sign-in. (Olas 201-204)
+    /// </summary>
+    [HttpPost("2fa-challenge")]
+    [AllowAnonymous]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TwoFactorChallengePost(
+        [FromForm] string token,
+        [FromForm] string code,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return RedirectToAction(nameof(Login));
+        }
+
+        var pending = _cache.Get<PendingTwoFactorLogin>(TwoFactorPendingCachePrefix + token);
+        if (pending is null)
+        {
+            return RedirectToAction(nameof(Login),
+                new { error = "2fa-token-expired" });
+        }
+
+        var verifyResult = await _twoFactor.VerifyAsync(
+            pending.MemberKey,
+            (code ?? string.Empty).Trim(),
+            cancellationToken);
+
+        if (verifyResult == VerificationResult.Invalid ||
+            verifyResult == VerificationResult.NotEnabled)
+        {
+            _analytics.Track("account.login-2fa-failed", new Dictionary<string, object?>
+            {
+                ["memberKey"] = pending.MemberKey.ToString("N"),
+                ["result"] = verifyResult.ToString(),
+            });
+            return RedirectToAction(nameof(TwoFactorChallenge),
+                new { token, error = "invalid-code" });
+        }
+
+        // Verified OK — consume token + sign-in.
+        _cache.Remove(TwoFactorPendingCachePrefix + token);
+
+        var signInResult = await _authService.SignInByEmailAsync(
+            pending.Email, pending.IsPersistent, cancellationToken);
+        if (!signInResult.Success)
+        {
+            return RedirectToAction(nameof(Login),
+                new { error = signInResult.ErrorCode });
+        }
+
+        _analytics.Track("account.login-2fa-success", new Dictionary<string, object?>
+        {
+            ["memberKey"] = pending.MemberKey.ToString("N"),
+            ["method"] = verifyResult == VerificationResult.RecoveryConsumed ? "recovery" : "totp",
+        });
+
+        return Redirect(SafeReturnUrl(pending.ReturnUrl));
     }
 
     [HttpGet("register")]
