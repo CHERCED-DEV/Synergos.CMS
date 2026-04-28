@@ -26,8 +26,10 @@
 8. **No multi-tenant SaaS**. Un deploy = un "origen". Multi-siteRoot
    via hostname nativo de Umbraco. Prohibido `ITenantContext` o
    tenant-resolver middleware.
-9. **Tests al final** de la migración, no en paralelo. Primero migrar,
-   después cubrir. Memoria `feedback_tests_after_full_migration`.
+9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
+   nuevo seam ship con tests (empty / happy / filter / idempotent).
+   Tests project: 111+ passing. Memoria `feedback_tests_after_full_migration`
+   (status: superseded).
 10. **GUIDs verificados cuádruple** antes de cualquier XML uSync
     nuevo. Memoria `feedback_no_preassigned_guids_usync`.
 
@@ -63,7 +65,7 @@ Synergos.CMS/
 │       ├── Languages/           es-CO (default) + en-US
 │       ├── MediaTypes/          synImage + synDocument + synIcon
 │       └── Templates/           Razor template registry
-└── Synergos.CMS.Tests/          xUnit — vacío hasta que migración cierre
+└── Synergos.CMS.Tests/          xUnit — 111+ tests passing (gate liftado ADR 0075)
 ```
 
 ## 3. Dónde está la verdad
