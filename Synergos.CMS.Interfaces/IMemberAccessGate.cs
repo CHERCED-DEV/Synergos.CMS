@@ -36,6 +36,13 @@ public interface IMemberAccessGate
     string? CurrentMemberEmail { get; }
 
     /// <summary>
+    /// Key (Guid) del miembro autenticado, o null si anónimo. Usado
+    /// por flujos que necesitan persistir state per-member (e.g. 2FA
+    /// enrollment + verification). Olas 197-198.
+    /// </summary>
+    Guid? CurrentMemberKey { get; }
+
+    /// <summary>
     /// Roles del miembro autenticado. Vacío si anónimo.
     /// </summary>
     IReadOnlyCollection<string> CurrentMemberRoles { get; }

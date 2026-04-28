@@ -94,13 +94,98 @@ public sealed class UmbracoMemberTwoFactorService : IMemberTwoFactorService
             return Task.FromResult(EnrollmentResult.InvalidCode);
         }
 
+        // Phase 2 — generar 8 recovery codes single-use, persistir
+        // hashed con PBKDF2.
+        var recoveryHashes = GenerateAndHashRecoveryCodes(out var plaintextCodes);
+
         _store.Save(memberKey, new TwoFactorRecord(
             SecretBase32: secretBase32,
             IsEnabled: true,
-            RecoveryCodes: Array.Empty<string>(),  // Phase 2
+            RecoveryCodes: recoveryHashes,
             EnrolledUtc: DateTime.UtcNow));
 
+        // Plaintext codes shown to the member ONCE — caller los obtiene
+        // para mostrar en la confirmación. Almacenados en TempData del
+        // AdminController flow.
+        _lastEnrollmentRecoveryCodes[memberKey] = plaintextCodes;
         return Task.FromResult(EnrollmentResult.Confirmed);
+    }
+
+    /// <summary>
+    /// Devuelve los recovery codes plaintext generados en el enrollment
+    /// más reciente. Single-use — al leerlos se borran del cache. El
+    /// caller debe mostrarlos al member exactamente una vez.
+    /// </summary>
+    public IReadOnlyList<string>? ConsumeLastEnrollmentRecoveryCodes(Guid memberKey)
+    {
+        if (_lastEnrollmentRecoveryCodes.TryRemove(memberKey, out var codes))
+        {
+            return codes;
+        }
+        return null;
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, IReadOnlyList<string>> _lastEnrollmentRecoveryCodes = new();
+
+    private const int RecoveryCodeCount = 8;
+    private const int RecoveryCodeChars = 8;
+    private const int Pbkdf2Iterations = 100_000;
+    private const int Pbkdf2HashBytes = 32;
+    private const int Pbkdf2SaltBytes = 16;
+    private const string RecoveryAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+    private static (IReadOnlyList<string> hashes, IReadOnlyList<string> plaintext) GenerateRecoveryCodesAndHashes()
+    {
+        var plaintext = new List<string>(RecoveryCodeCount);
+        var hashes = new List<string>(RecoveryCodeCount);
+        var charBuf = new char[RecoveryCodeChars];
+
+        for (var i = 0; i < RecoveryCodeCount; i++)
+        {
+            for (var c = 0; c < RecoveryCodeChars; c++)
+            {
+                charBuf[c] = RecoveryAlphabet[RandomNumberGenerator.GetInt32(RecoveryAlphabet.Length)];
+            }
+            var code = new string(charBuf);
+            plaintext.Add(code);
+            hashes.Add(HashRecoveryCode(code));
+        }
+
+        return (hashes, plaintext);
+    }
+
+    private static string HashRecoveryCode(string code)
+    {
+        var salt = new byte[Pbkdf2SaltBytes];
+        RandomNumberGenerator.Fill(salt);
+        using var pbkdf2 = new Rfc2898DeriveBytes(code, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256);
+        var hash = pbkdf2.GetBytes(Pbkdf2HashBytes);
+        return Convert.ToBase64String(salt) + ":" + Convert.ToBase64String(hash);
+    }
+
+    private static bool VerifyRecoveryCode(string candidate, string saltColonHash)
+    {
+        var sep = saltColonHash.IndexOf(':');
+        if (sep < 0) return false;
+        try
+        {
+            var salt = Convert.FromBase64String(saltColonHash[..sep]);
+            var expected = Convert.FromBase64String(saltColonHash[(sep + 1)..]);
+            using var pbkdf2 = new Rfc2898DeriveBytes(candidate, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256);
+            var actual = pbkdf2.GetBytes(Pbkdf2HashBytes);
+            return CryptographicOperations.FixedTimeEquals(expected, actual);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static IReadOnlyList<string> GenerateAndHashRecoveryCodes(out IReadOnlyList<string> plaintextCodes)
+    {
+        var (hashes, plaintext) = GenerateRecoveryCodesAndHashes();
+        plaintextCodes = plaintext;
+        return hashes;
     }
 
     public Task<VerificationResult> VerifyAsync(
@@ -131,8 +216,23 @@ public sealed class UmbracoMemberTwoFactorService : IMemberTwoFactorService
             return Task.FromResult(VerificationResult.TotpOk);
         }
 
-        // Phase 2 — recovery code branch (consumes single-use). Por ahora
-        // no implementado.
+        // Phase 2 — recovery code branch. Iterar hashes; si match,
+        // remove + persist updated record.
+        if (record.RecoveryCodes.Count > 0)
+        {
+            var normalized = (codeOrRecovery ?? string.Empty).Trim().ToUpperInvariant();
+            for (var i = 0; i < record.RecoveryCodes.Count; i++)
+            {
+                if (VerifyRecoveryCode(normalized, record.RecoveryCodes[i]))
+                {
+                    var remaining = record.RecoveryCodes.ToList();
+                    remaining.RemoveAt(i);
+                    _store.Save(memberKey, record with { RecoveryCodes = remaining });
+                    return Task.FromResult(VerificationResult.RecoveryConsumed);
+                }
+            }
+        }
+
         return Task.FromResult(VerificationResult.Invalid);
     }
 

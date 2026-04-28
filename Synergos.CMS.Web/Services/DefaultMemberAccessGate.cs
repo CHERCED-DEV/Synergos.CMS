@@ -35,6 +35,18 @@ public sealed class DefaultMemberAccessGate : IMemberAccessGate
     public string? CurrentMemberEmail =>
         _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Email)?.Value;
 
+    public Guid? CurrentMemberKey
+    {
+        get
+        {
+            // Umbraco MemberIdentityUser persiste el Member.Key en el
+            // claim NameIdentifier (string GUID). Si parse falla,
+            // null para que el caller se comporte como anónimo.
+            var raw = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return Guid.TryParse(raw, out var key) ? key : null;
+        }
+    }
+
     public IReadOnlyCollection<string> CurrentMemberRoles
     {
         get

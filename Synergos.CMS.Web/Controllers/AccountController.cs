@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -23,6 +24,7 @@ public sealed class AccountController : Controller
     private readonly IEmailTemplateRenderer _emailRenderer;
     private readonly IOptions<MembersSettings> _membersSettings;
     private readonly IBrandingProvider _branding;
+    private readonly IMemberTwoFactorService _twoFactor;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
@@ -33,6 +35,7 @@ public sealed class AccountController : Controller
         IEmailTemplateRenderer emailRenderer,
         IOptions<MembersSettings> membersSettings,
         IBrandingProvider branding,
+        IMemberTwoFactorService twoFactor,
         ILogger<AccountController> logger)
     {
         _authService = authService;
@@ -42,6 +45,7 @@ public sealed class AccountController : Controller
         _emailRenderer = emailRenderer;
         _membersSettings = membersSettings;
         _branding = branding;
+        _twoFactor = twoFactor;
         _logger = logger;
     }
 
@@ -366,6 +370,76 @@ public sealed class AccountController : Controller
         _analytics.Track("account.email-confirmed");
         return RedirectToAction(nameof(Login),
             new { msg = "email-confirmed" });
+    }
+
+    /// <summary>
+    /// GET /account/2fa-setup — Member self-service enrollment de TOTP.
+    /// Si ya está enabled, muestra status. Sino genera challenge fresco
+    /// y muestra secret + URI para scan/paste. Olas 197-198.
+    /// </summary>
+    [HttpGet("2fa-setup")]
+    public async Task<IActionResult> TwoFactorSetup(CancellationToken cancellationToken)
+    {
+        var memberKey = _gate.CurrentMemberKey;
+        if (memberKey is null) return RedirectToAction(nameof(Login));
+
+        var enabled = await _twoFactor.IsEnabledAsync(memberKey.Value, cancellationToken);
+        ViewData["IsEnabled"] = enabled;
+
+        if (!enabled)
+        {
+            var challenge = await _twoFactor.StartEnrollmentAsync(memberKey.Value, cancellationToken);
+            ViewData["SecretBase32"] = challenge.SecretBase32;
+            ViewData["ProvisioningUri"] = challenge.ProvisioningUri;
+        }
+        return View();
+    }
+
+    /// <summary>
+    /// POST /account/2fa-setup — Confirma enrollment con primer código
+    /// TOTP. En éxito muestra los recovery codes UNA vez al member.
+    /// Olas 197-198.
+    /// </summary>
+    [HttpPost("2fa-setup")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TwoFactorSetupConfirm(
+        [FromForm] string secret,
+        [FromForm] string code,
+        CancellationToken cancellationToken)
+    {
+        var memberKey = _gate.CurrentMemberKey;
+        if (memberKey is null) return RedirectToAction(nameof(Login));
+
+        var result = await _twoFactor.ConfirmEnrollmentAsync(
+            memberKey.Value, secret, code ?? string.Empty, cancellationToken);
+
+        ViewData["EnrollmentResult"] = result.ToString();
+
+        if (result == EnrollmentResult.Confirmed && _twoFactor is UmbracoMemberTwoFactorService impl)
+        {
+            var recoveryCodes = impl.ConsumeLastEnrollmentRecoveryCodes(memberKey.Value);
+            ViewData["RecoveryCodes"] = recoveryCodes;
+            _analytics.Track("account.2fa-enrolled", new Dictionary<string, object?>
+            {
+                ["memberKey"] = memberKey.Value.ToString("N"),
+            });
+            return View("TwoFactorSetupConfirmed");
+        }
+
+        if (result == EnrollmentResult.InvalidCode)
+        {
+            // Re-render setup with error message + same secret (so QR
+            // doesn't change between attempts).
+            ViewData["IsEnabled"] = false;
+            ViewData["SecretBase32"] = secret;
+            ViewData["ProvisioningUri"] =
+                $"otpauth://totp/Synergos:{Uri.EscapeDataString(_gate.CurrentMemberEmail ?? memberKey.Value.ToString("N"))}" +
+                $"?secret={secret}&issuer=Synergos&algorithm=SHA1&digits=6&period=30";
+            ViewData["ErrorCode"] = "invalid-code";
+            return View(nameof(TwoFactorSetup));
+        }
+
+        return RedirectToAction(nameof(TwoFactorSetup));
     }
 
     private async Task SendEmailConfirmationLinkAsync(

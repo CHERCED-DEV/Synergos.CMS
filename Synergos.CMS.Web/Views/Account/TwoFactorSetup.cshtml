@@ -1,0 +1,84 @@
+@*
+    Vista del AccountController.TwoFactorSetup (Olas 197-198).
+    Member self-service enrollment de 2FA TOTP. Si ya está enabled,
+    muestra status. Sino genera challenge y muestra secret + URI.
+*@
+@{
+    Layout = null;
+    var isEnabled = ViewData["IsEnabled"] as bool? ?? false;
+    var secret = ViewData["SecretBase32"] as string;
+    var provisioningUri = ViewData["ProvisioningUri"] as string;
+    var errorCode = ViewData["ErrorCode"] as string;
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AccountHead")
+    <title>@Umbraco.GetDictionaryValue("Account.TwoFactor.Title", "Configurar verificación en 2 pasos")</title>
+</head>
+<body class="syn-account">
+    <main class="syn-account__main">
+        <h1 class="syn-account__heading">@Umbraco.GetDictionaryValue("Account.TwoFactor.Title", "Configurar verificación en 2 pasos")</h1>
+
+        @if (isEnabled)
+        {
+            <section class="syn-account__info">
+                <p>
+                    <strong>2FA activo</strong> en tu cuenta. Cada login te
+                    pedirá un código TOTP de tu app autenticadora.
+                </p>
+                <p>
+                    Si perdiste el dispositivo, contacta al admin para que
+                    haga reset de tu 2FA.
+                </p>
+            </section>
+        }
+        else
+        {
+            @if (errorCode == "invalid-code")
+            {
+                <p class="syn-account__feedback syn-account__feedback--error" role="alert">
+                    El código no es válido. Verifica que tu app esté sincronizada
+                    en hora y vuelve a intentar.
+                </p>
+            }
+
+            <section class="syn-account__info">
+                <h2>Paso 1 — Escanea o pega el secreto en tu app</h2>
+                <p>
+                    Apps recomendadas: Google Authenticator, Authy, 1Password,
+                    Microsoft Authenticator, Bitwarden.
+                </p>
+                <p>
+                    <strong>Secret (Base32):</strong>
+                    <code class="syn-account__totp-secret">@secret</code>
+                </p>
+                <details class="syn-account__details">
+                    <summary>URI provisioning (otpauth://) — para apps que
+                        soportan paste directo</summary>
+                    <pre class="syn-account__code-block"><code>@provisioningUri</code></pre>
+                </details>
+                <p class="syn-account__hint">
+                    QR rendering deferred — copia el secret manualmente o
+                    parsea el URI con tu app.
+                </p>
+            </section>
+
+            <section class="syn-account__info" style="margin-top:var(--syn-space-xl);">
+                <h2>Paso 2 — Confirma con el primer código</h2>
+                <form method="post" action="/account/2fa-setup">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="secret" value="@secret" />
+                    <label class="syn-account__field">
+                        <span class="syn-account__field-label">Código TOTP de 6 dígitos</span>
+                        <input type="text" name="code" inputmode="numeric"
+                               pattern="[0-9]{6}" required autocomplete="one-time-code"
+                               class="syn-account__field-input" />
+                    </label>
+                    <button type="submit" class="syn-account__submit">Confirmar enrollment</button>
+                </form>
+            </section>
+        }
+    </main>
+</body>
+</html>
