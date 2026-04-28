@@ -50,4 +50,15 @@ public sealed class WebhookTelemetryAlertSettings
     /// dispara aunque Enabled=true (no-op silencioso, log warning).
     /// </summary>
     public string AlertEmail { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Si true (default), cuando un canal previamente alerting vuelve
+    /// a healthy (failRate &lt; threshold con sample suficiente), se
+    /// envía un email de "recovery" al mismo destinatario y se limpia
+    /// el state interno. Olas 236-237 (Cap-240 Batch C). Cierra el
+    /// loop alerting → resolved sin requerir consulta manual al
+    /// dashboard. Set a false si el operador no quiere recibir el
+    /// recovery (ej. solo le interesa la incidencia).
+    /// </summary>
+    public bool RecoveryEmailEnabled { get; init; } = true;
 }

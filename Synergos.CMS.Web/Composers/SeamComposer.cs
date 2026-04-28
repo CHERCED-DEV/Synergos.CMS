@@ -197,9 +197,12 @@ public sealed class SeamComposer : IComposer
         // via per-channel lock. Reset on restart (no persistencia).
         services.AddSingleton<IWebhookTelemetryStore, InMemoryWebhookTelemetryStore>();
 
-        // Olas 195-196 — Telemetry alerts (ADR 0080). Background service
-        // que polléa el store + dispara email cuando algún canal cruza
-        // FailRateThreshold. Opt-in vía WebhookTelemetryAlertSettings.Enabled.
+        // Olas 195-196 + 236-237 — Telemetry alerts (ADR 0080 + Cap-240
+        // Batch C). Scanner extraído del hosted service para hacerse
+        // testable + soporta recovery emails cuando un canal previamente
+        // alerting vuelve a healthy. Singleton porque mantiene state
+        // in-memory de qué canales están firing.
+        services.AddSingleton<WebhookTelemetryAlertScanner>();
         services.AddHostedService<WebhookTelemetryAlertHostedService>();
 
         // Ola 216 — Host bridge (ADR 0083). DefaultHostBridgeContextBuilder
