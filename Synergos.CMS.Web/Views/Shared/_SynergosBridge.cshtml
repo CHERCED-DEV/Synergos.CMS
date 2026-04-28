@@ -1,0 +1,39 @@
+@*
+    Host bridge canónico CMS↔UI. Inyecta window.synergos shape per
+    contract docs/contracts/host-bridge.md. Ola 216, ADR 0083.
+
+    Invocado desde _Layout.cshtml ANTES de los bundle scripts UI para
+    garantizar que window.synergos exista cuando los Web Components
+    hidraten.
+
+    Cero side effects en HTML — solo emite un <script> bloque inline
+    con la definición global. Falla silenciosa si el builder lanza
+    (degradación graceful: UI cae a fallback inline strings + tokens
+    locales).
+*@
+@using System.Text.Json
+@inject Synergos.CMS.Interfaces.IHostBridgeContextBuilder Bridge
+@{
+    string json;
+    try
+    {
+        var ctx = Bridge.Build();
+        json = JsonSerializer.Serialize(ctx, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            // Avoid HTML/script-injection: encoder seguro por default.
+        });
+    }
+    catch (Exception)
+    {
+        // Failure path — emit shape mínimo para que UI no rompa.
+        json = "{\"version\":\"1.0.0\",\"i18n\":{\"culture\":\"es-CO\",\"defaultCulture\":\"es-CO\",\"keys\":{}},\"theme\":{\"variant\":\"light\",\"available\":[\"light\",\"dark\",\"silvergold\"]},\"brand\":{\"key\":\"default\",\"displayName\":\"Synergos\"},\"member\":null,\"page\":{\"id\":0,\"docType\":\"\",\"canonicalUrl\":\"\",\"cultures\":[]}}";
+    }
+}
+<script>
+window.synergos = @Html.Raw(json);
+window.synergos.i18n.t = function(k, f) {
+    if (this.keys && this.keys[k] !== undefined) return this.keys[k];
+    return f !== undefined ? f : k;
+};
+</script>

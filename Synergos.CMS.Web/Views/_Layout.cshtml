@@ -63,6 +63,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     @await Html.PartialAsync("_SeoHead", currentPage)
     @await Html.PartialAsync("_SeoStructuredData", currentPage)
+    @await Html.PartialAsync("_SynergosBridge")
     @if (!string.IsNullOrWhiteSpace(theme?.FaviconUrl))
     {
         <link rel="icon" href="@theme.FaviconUrl" />

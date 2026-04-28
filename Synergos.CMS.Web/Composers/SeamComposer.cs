@@ -195,6 +195,12 @@ public sealed class SeamComposer : IComposer
         // FailRateThreshold. Opt-in vía WebhookTelemetryAlertSettings.Enabled.
         services.AddHostedService<WebhookTelemetryAlertHostedService>();
 
+        // Ola 216 — Host bridge (ADR 0083). DefaultHostBridgeContextBuilder
+        // arma el shape canónico de window.synergos consumed by UI components
+        // via _SynergosBridge.cshtml partial. Transient — depende de scoped
+        // services Umbraco.
+        services.AddTransient<IHostBridgeContextBuilder, DefaultHostBridgeContextBuilder>();
+
         // Olas 178-180 — Member 2FA TOTP (ADR 0074). FileSystemMemberTwoFactorStore
         // persiste secrets en App_Data/syn-2fa/{memberKey}.json. Service
         // wraps Otp.NET para TOTP generation/verification. Singleton store +
