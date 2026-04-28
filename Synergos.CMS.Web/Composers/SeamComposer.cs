@@ -190,6 +190,11 @@ public sealed class SeamComposer : IComposer
         // via per-channel lock. Reset on restart (no persistencia).
         services.AddSingleton<IWebhookTelemetryStore, InMemoryWebhookTelemetryStore>();
 
+        // Olas 195-196 — Telemetry alerts (ADR 0080). Background service
+        // que polléa el store + dispara email cuando algún canal cruza
+        // FailRateThreshold. Opt-in vía WebhookTelemetryAlertSettings.Enabled.
+        services.AddHostedService<WebhookTelemetryAlertHostedService>();
+
         // Olas 178-180 — Member 2FA TOTP (ADR 0074). FileSystemMemberTwoFactorStore
         // persiste secrets en App_Data/syn-2fa/{memberKey}.json. Service
         // wraps Otp.NET para TOTP generation/verification. Singleton store +

@@ -68,5 +68,9 @@ public sealed class OptionsComposer : IComposer
 
         builder.Services.Configure<AdminSettings>(
             builder.Config.GetSection("Synergos:Admin"));
+
+        // Olas 195-196 — Webhook telemetry alerts (ADR 0080).
+        builder.Services.Configure<WebhookTelemetryAlertSettings>(
+            builder.Config.GetSection("Synergos:Admin:WebhookTelemetryAlerts"));
     }
 }
