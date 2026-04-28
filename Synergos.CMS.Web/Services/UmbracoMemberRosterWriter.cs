@@ -17,7 +17,7 @@ public sealed class UmbracoMemberRosterWriter : IMemberRosterWriter
     private readonly IMemberService _memberService;
     private readonly IMemberAuthService _memberAuth;
     private readonly IEmailService _emailService;
-    private readonly RazorEmailTemplateRenderer _emailRenderer;
+    private readonly IEmailTemplateRenderer _emailRenderer;
     private readonly IBrandingProvider _branding;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<UmbracoMemberRosterWriter> _logger;
@@ -26,7 +26,7 @@ public sealed class UmbracoMemberRosterWriter : IMemberRosterWriter
         IMemberService memberService,
         IMemberAuthService memberAuth,
         IEmailService emailService,
-        RazorEmailTemplateRenderer emailRenderer,
+        IEmailTemplateRenderer emailRenderer,
         IBrandingProvider branding,
         IHttpContextAccessor httpContextAccessor,
         ILogger<UmbracoMemberRosterWriter> logger)

@@ -10,29 +10,28 @@ namespace Synergos.CMS.Tests.Services;
 
 /// <summary>
 /// Tests para <see cref="UmbracoMemberRosterWriter"/> (Olas 155-156 +
-/// 181-184 + 227-228). Cubre Lock/Unlock/Delete/SetRoles via NSubstitute
-/// stubs de IMemberService + IMember. SendPasswordResetAsync deferred
-/// (necesita stub adicional de Razor email renderer + IBranding +
-/// IHttpContextAccessor — más simple integración test que unit).
+/// 181-184 + 227-228 + 232). Cubre Lock/Unlock/Delete/SetRoles +
+/// SendPasswordResetAsync via NSubstitute. La inyección por interfaz
+/// <see cref="IEmailTemplateRenderer"/> (Ola 231) habilita stubbing
+/// directo del renderer.
 /// </summary>
 public sealed class UmbracoMemberRosterWriterTests
 {
     private readonly IMemberService _memberService = Substitute.For<IMemberService>();
     private readonly IMemberAuthService _memberAuth = Substitute.For<IMemberAuthService>();
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
+    private readonly IEmailTemplateRenderer _emailRenderer = Substitute.For<IEmailTemplateRenderer>();
     private readonly IBrandingProvider _branding = Substitute.For<IBrandingProvider>();
     private readonly IHttpContextAccessor _httpContextAccessor = Substitute.For<IHttpContextAccessor>();
     private readonly UmbracoMemberRosterWriter _sut;
 
     public UmbracoMemberRosterWriterTests()
     {
-        // RazorEmailTemplateRenderer es concreto (no interface) — pasamos
-        // null! ya que los tests no exercise SendPasswordResetAsync.
         _sut = new UmbracoMemberRosterWriter(
             _memberService,
             _memberAuth,
             _emailService,
-            emailRenderer: null!,
+            _emailRenderer,
             _branding,
             _httpContextAccessor,
             NullLogger<UmbracoMemberRosterWriter>.Instance);
@@ -217,5 +216,124 @@ public sealed class UmbracoMemberRosterWriterTests
             Arg.Is<int[]>(ids => ids[0] == 42),
             Arg.Is<string[]>(r => r.Length == 2 && r.Contains("admin") && r.Contains("moderator")));
         _memberService.DidNotReceive().AssignRoles(Arg.Any<int[]>(), Arg.Any<string[]>());
+    }
+
+    private void StubHttpContext(string scheme = "https", string host = "synergos.test")
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Scheme = scheme;
+        ctx.Request.Host = new HostString(host);
+        _httpContextAccessor.HttpContext.Returns(ctx);
+    }
+
+    [Fact]
+    public async Task SendPasswordResetAsync_HappyPath_RendersAndSendsEmail()
+    {
+        var key = Guid.NewGuid();
+        var member = StubMember(key, email: "alice@example.com", name: "Alice");
+        _memberService.GetByKey(key).Returns(member);
+        _memberAuth.RequestPasswordResetAsync("alice@example.com", Arg.Any<CancellationToken>())
+            .Returns(new PasswordResetRequestResult(EmailExists: true, Token: "tok-123", DisplayName: "Alice"));
+        _branding.GetCurrent().Returns(new BrandIdentity("default", "Synergos"));
+        _emailRenderer.RenderAsync(
+                Arg.Any<string>(),
+                Arg.Any<PasswordResetEmailModel>(),
+                Arg.Any<CancellationToken>())
+            .Returns("<html>reset</html>");
+        StubHttpContext();
+
+        var result = await _sut.SendPasswordResetAsync(key, CancellationToken.None);
+
+        Assert.True(result);
+        await _memberAuth.Received(1).RequestPasswordResetAsync(
+            "alice@example.com", Arg.Any<CancellationToken>());
+        await _emailRenderer.Received(1).RenderAsync(
+            "PasswordReset",
+            Arg.Is<PasswordResetEmailModel>(m =>
+                m.DisplayName == "Alice" &&
+                m.SiteName == "Synergos" &&
+                m.ResetUrl.StartsWith("https://synergos.test/account/reset-password") &&
+                m.ResetUrl.Contains("email=alice%40example.com") &&
+                m.ResetUrl.Contains("token=tok-123")),
+            Arg.Any<CancellationToken>());
+        await _emailService.Received(1).SendAsync(
+            Arg.Is<EmailMessage>(msg =>
+                msg.To == "alice@example.com" &&
+                msg.Subject.Contains("Synergos") &&
+                msg.BodyHtml == "<html>reset</html>"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SendPasswordResetAsync_MemberNotFound_ReturnsFalse()
+    {
+        var key = Guid.NewGuid();
+        _memberService.GetByKey(key).Returns((IMember?)null);
+
+        var result = await _sut.SendPasswordResetAsync(key, CancellationToken.None);
+
+        Assert.False(result);
+        await _memberAuth.DidNotReceive().RequestPasswordResetAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _emailService.DidNotReceive().SendAsync(
+            Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SendPasswordResetAsync_MemberHasNoEmail_ReturnsFalse()
+    {
+        var key = Guid.NewGuid();
+        var member = StubMember(key, email: "");
+        _memberService.GetByKey(key).Returns(member);
+
+        var result = await _sut.SendPasswordResetAsync(key, CancellationToken.None);
+
+        Assert.False(result);
+        await _memberAuth.DidNotReceive().RequestPasswordResetAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SendPasswordResetAsync_AuthReturnsNoToken_ReturnsFalseAndDoesNotSend()
+    {
+        var key = Guid.NewGuid();
+        var member = StubMember(key, email: "ghost@example.com");
+        _memberService.GetByKey(key).Returns(member);
+        // EmailExists=false → defensa contra enumeration; writer no debe enviar email.
+        _memberAuth.RequestPasswordResetAsync("ghost@example.com", Arg.Any<CancellationToken>())
+            .Returns(new PasswordResetRequestResult(EmailExists: false, Token: null, DisplayName: null));
+
+        var result = await _sut.SendPasswordResetAsync(key, CancellationToken.None);
+
+        Assert.False(result);
+        await _emailRenderer.DidNotReceive().RenderAsync(
+            Arg.Any<string>(), Arg.Any<PasswordResetEmailModel>(), Arg.Any<CancellationToken>());
+        await _emailService.DidNotReceive().SendAsync(
+            Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SendPasswordResetAsync_FallbackSiteNameWhenBrandDisplayBlank()
+    {
+        var key = Guid.NewGuid();
+        var member = StubMember(key, email: "bob@example.com", name: "Bob");
+        _memberService.GetByKey(key).Returns(member);
+        _memberAuth.RequestPasswordResetAsync("bob@example.com", Arg.Any<CancellationToken>())
+            .Returns(new PasswordResetRequestResult(EmailExists: true, Token: "tok", DisplayName: "Bob"));
+        _branding.GetCurrent().Returns(new BrandIdentity("default", "  "));
+        _emailRenderer.RenderAsync(
+                Arg.Any<string>(),
+                Arg.Any<PasswordResetEmailModel>(),
+                Arg.Any<CancellationToken>())
+            .Returns("<html/>");
+        StubHttpContext();
+
+        var result = await _sut.SendPasswordResetAsync(key, CancellationToken.None);
+
+        Assert.True(result);
+        await _emailRenderer.Received(1).RenderAsync(
+            "PasswordReset",
+            Arg.Is<PasswordResetEmailModel>(m => m.SiteName == "Synergos"),
+            Arg.Any<CancellationToken>());
     }
 }
