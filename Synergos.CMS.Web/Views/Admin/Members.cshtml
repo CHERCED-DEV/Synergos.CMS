@@ -10,6 +10,9 @@
     var roleFilter = ViewData["RoleFilter"] as string;
     var twoFactorStatus = ViewData["TwoFactorStatus"] as Dictionary<Guid, bool> ?? new();
 
+    bool RoleSelected(MemberRosterItem m, string role) =>
+        m.Roles.Any(r => string.Equals(r, role, StringComparison.OrdinalIgnoreCase));
+
     string PageHref(int p)
     {
         var q = $"?page={p}";
@@ -142,7 +145,31 @@
                                             <button type="submit" class="syn-admin__action syn-admin__action--ghost" title="Disable 2FA — Member tendrá que re-enroll">🔑 Reset 2FA</button>
                                         </form>
                                     }
+                                    <form method="post" action="/admin/members/@m.Key/password-reset" class="syn-admin__item-form" style="margin-top:var(--syn-space-xs);">
+                                        <button type="submit" class="syn-admin__action syn-admin__action--ghost" title="Send password reset email">📧 Reset password</button>
+                                    </form>
+                                    <button type="button" class="syn-admin__action syn-admin__action--reject" style="margin-top:var(--syn-space-xs);"
+                                            data-member-delete="@m.Key" data-member-email="@m.Email">
+                                        🗑 Eliminar
+                                    </button>
                                 </td>
+                            </tr>
+                            @if (allRoles.Count > 0)
+                            {
+                                <tr class="syn-admin__row-extra">
+                                    <td colspan="7">
+                                        <form method="post" action="/admin/members/@m.Key/roles" class="syn-admin__roles-form">
+                                            <span class="syn-admin__roles-label">Roles:</span>
+                                            @foreach (var role in allRoles)
+                                            {
+                                                <label class="syn-admin__role-chip">
+                                                    <input type="checkbox" name="roles" value="@role" checked="@RoleSelected(m, role)" />
+                                                    <span>@role</span>
+                                                </label>
+                                            }
+                                            <button type="submit" class="syn-admin__action syn-admin__action--ghost">Aplicar</button>
+                                        </form>
+                                    </td>
                             </tr>
                         }
                     </tbody>
@@ -175,5 +202,46 @@
             }
         </div>
     </main>
+
+    @* Native <dialog> confirm for hard-delete (irreversible). Olas 181-184. *@
+    <dialog id="member-delete-confirm" class="syn-admin__dialog">
+        <form id="member-delete-form" method="post" class="syn-admin__dialog-form">
+            <h2 class="syn-admin__dialog-title">Eliminar Member <span class="syn-admin__danger">irreversible</span></h2>
+            <p class="syn-admin__dialog-body">
+                Vas a eliminar el Member <code id="member-delete-email"></code> de forma <strong>irreversible</strong>.
+                Comments / form submissions previos persisten con author orphan.
+                El Member 2FA secret + recovery codes se borran.
+            </p>
+            <div class="syn-admin__dialog-actions">
+                <button type="button" data-dialog-cancel class="syn-admin__action syn-admin__action--ghost">@Umbraco.GetDictionaryValue("admin.action.cancel", "Cancelar")</button>
+                <button type="submit" class="syn-admin__action syn-admin__action--reject">🗑 @Umbraco.GetDictionaryValue("admin.action.delete", "Eliminar")</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script>
+        (function () {
+            var dialog = document.getElementById('member-delete-confirm');
+            var form = document.getElementById('member-delete-form');
+            var emailSpan = document.getElementById('member-delete-email');
+            if (!dialog || !form) return;
+
+            document.querySelectorAll('[data-member-delete]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var memberKey = btn.getAttribute('data-member-delete');
+                    var memberEmail = btn.getAttribute('data-member-email') || '';
+                    form.action = '/admin/members/' + memberKey + '/delete';
+                    if (emailSpan) emailSpan.textContent = memberEmail;
+                    dialog.showModal();
+                });
+            });
+
+            dialog.querySelectorAll('[data-dialog-cancel]').forEach(function (cancel) {
+                cancel.addEventListener('click', function () {
+                    dialog.close();
+                });
+            });
+        })();
+    </script>
 </body>
 </html>

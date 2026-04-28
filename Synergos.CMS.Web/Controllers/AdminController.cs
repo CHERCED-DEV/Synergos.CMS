@@ -964,4 +964,102 @@ public sealed class AdminController : Controller
 
         return RedirectToAction(nameof(Members));
     }
+
+    /// <summary>
+    /// POST /admin/members/{key}/delete — hard delete <b>irreversible</b>.
+    /// Threat model en ADR 0078. Requiere confirm dialog en UI. No
+    /// permite delete del propio Member del actor para evitar
+    /// accidental self-locking. Olas 181-184.
+    /// </summary>
+    [HttpPost("members/{memberKey:guid}/delete")]
+    public async Task<IActionResult> DeleteMember(Guid memberKey, CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        // Self-delete guard: aunque la UI no exponga el botón sobre el
+        // current member, validamos por defensa en depth.
+        var currentEmail = _gate.CurrentMemberEmail;
+        if (!string.IsNullOrWhiteSpace(currentEmail))
+        {
+            var roster = _memberRoster.GetRosterPage(1, 1000, null);
+            var match = roster.Items.FirstOrDefault(m => m.Key == memberKey);
+            if (match is not null && string.Equals(match.Email, currentEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                await EmitAuditAsync("member.delete", $"memberKey={memberKey:N}", "failure",
+                    detail: "self-delete blocked", cancellationToken: cancellationToken);
+                return RedirectToAction(nameof(Members));
+            }
+        }
+
+        var ok = await _memberRosterWriter.DeleteAsync(memberKey, cancellationToken);
+        // Auto-reset 2FA state si existe — el record file persiste sino.
+        if (ok) await _memberTwoFactor.DisableAsync(memberKey, cancellationToken);
+
+        await EmitAuditAsync(
+            "member.delete",
+            $"memberKey={memberKey:N}",
+            ok ? "success" : "failure",
+            cancellationToken: cancellationToken);
+
+        return RedirectToAction(nameof(Members));
+    }
+
+    /// <summary>
+    /// POST /admin/members/{key}/password-reset — admin-triggered.
+    /// Genera token + envía email al Member con link a /account/reset-password.
+    /// Idempotent — no leak si Member no existe (audit registra failure).
+    /// Olas 181-184.
+    /// </summary>
+    [HttpPost("members/{memberKey:guid}/password-reset")]
+    public async Task<IActionResult> SendMemberPasswordReset(Guid memberKey, CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var ok = await _memberRosterWriter.SendPasswordResetAsync(memberKey, cancellationToken);
+        await EmitAuditAsync(
+            "member.password-reset-sent",
+            $"memberKey={memberKey:N}",
+            ok ? "success" : "failure",
+            cancellationToken: cancellationToken);
+
+        return RedirectToAction(nameof(Members));
+    }
+
+    /// <summary>
+    /// POST /admin/members/{key}/roles — replace roles set. Form binds
+    /// CSV de role names. Idempotent. Olas 181-184.
+    /// </summary>
+    [HttpPost("members/{memberKey:guid}/roles")]
+    public async Task<IActionResult> SetMemberRoles(
+        Guid memberKey,
+        [FromForm] string[] roles,
+        CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var clean = (roles ?? Array.Empty<string>())
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => r.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var ok = await _memberRosterWriter.SetRolesAsync(memberKey, clean, cancellationToken);
+        await EmitAuditAsync(
+            "member.set-roles",
+            $"memberKey={memberKey:N}",
+            ok ? "success" : "failure",
+            detail: $"roles=[{string.Join(',', clean)}]",
+            cancellationToken: cancellationToken);
+
+        return RedirectToAction(nameof(Members));
+    }
 }
