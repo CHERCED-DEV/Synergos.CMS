@@ -127,29 +127,34 @@
                                     }
                                 </td>
                                 <td>
+                                    @{
+                                        var lockLabel = Umbraco.GetDictionaryValue("admin.action.lock", "Bloquear");
+                                        var unlockLabel = Umbraco.GetDictionaryValue("admin.action.unlock", "Desbloquear");
+                                    }
                                     @if (m.IsLockedOut)
                                     {
                                         <form method="post" action="/admin/members/@m.Key/unlock" class="syn-admin__item-form">
-                                            <button type="submit" class="syn-admin__action syn-admin__action--approve">🔓 @Umbraco.GetDictionaryValue("admin.action.unlock", "Desbloquear")</button>
+                                            <button type="submit" class="syn-admin__action syn-admin__action--approve" aria-label="@($"{unlockLabel} {m.Email}")">🔓 @unlockLabel</button>
                                         </form>
                                     }
                                     else
                                     {
                                         <form method="post" action="/admin/members/@m.Key/lock" class="syn-admin__item-form">
-                                            <button type="submit" class="syn-admin__action syn-admin__action--reject">🔒 @Umbraco.GetDictionaryValue("admin.action.lock", "Bloquear")</button>
+                                            <button type="submit" class="syn-admin__action syn-admin__action--reject" aria-label="@($"{lockLabel} {m.Email}")">🔒 @lockLabel</button>
                                         </form>
                                     }
                                     @if (twoFactorStatus.TryGetValue(m.Key, out var has2fa) && has2fa)
                                     {
                                         <form method="post" action="/admin/members/@m.Key/2fa-reset" class="syn-admin__item-form" style="margin-top:var(--syn-space-xs);">
-                                            <button type="submit" class="syn-admin__action syn-admin__action--ghost" title="Disable 2FA — Member tendrá que re-enroll">🔑 Reset 2FA</button>
+                                            <button type="submit" class="syn-admin__action syn-admin__action--ghost" title="Disable 2FA — Member tendrá que re-enroll" aria-label="@($"Reset 2FA {m.Email}")">🔑 Reset 2FA</button>
                                         </form>
                                     }
                                     <form method="post" action="/admin/members/@m.Key/password-reset" class="syn-admin__item-form" style="margin-top:var(--syn-space-xs);">
-                                        <button type="submit" class="syn-admin__action syn-admin__action--ghost" title="Send password reset email">📧 Reset password</button>
+                                        <button type="submit" class="syn-admin__action syn-admin__action--ghost" title="Send password reset email" aria-label="@($"Reset password {m.Email}")">📧 Reset password</button>
                                     </form>
                                     <button type="button" class="syn-admin__action syn-admin__action--reject" style="margin-top:var(--syn-space-xs);"
-                                            data-member-delete="@m.Key" data-member-email="@m.Email">
+                                            data-member-delete="@m.Key" data-member-email="@m.Email"
+                                            aria-label="@($"Eliminar {m.Email}")">
                                         🗑 Eliminar
                                     </button>
                                 </td>

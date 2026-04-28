@@ -74,35 +74,49 @@ dashboard.
 | 4.1.2 | Name, role, value | A | ✅ Pass | Custom controls usan ARIA cuando no hay equivalent native. |
 | 4.1.3 | Status messages | AA | ✅ Pass | Toast/alert messages usan `role="status"` o `role="alert"`. |
 
-## Gaps a resolver
+## Gaps a resolver — re-auditado Olas 191-192
 
-### Gap 1 — Contrast text-subtle en light theme
+Tras verificación contra el código real, la audit inicial era
+parcialmente especulativa. Estado real:
+
+### Gap 1 — Text-muted contrast (verificado + safety bump)
 
 **File:** `wwwroot/css/syn-tokens.css`
-**Current:** `--syn-color-text-subtle: #6b7280;` (contrast vs `#fff` background = 4.2:1)
-**Fix:** `--syn-color-text-subtle: #595d68;` (contrast 5.0:1 — passes 4.5:1)
-**Impact:** affects `.syn-admin__card-hint`, `.syn-page-subtitle`, `.syn-post__excerpt-hint` y otros usos del subtle text token.
+**Current state previo Ola 191:** `--syn-color-text-muted: var(--syn-color-neutral-500);`
+con `#64748b` → contrast 4.83:1 vs `#fff` (técnicamente passes 4.5:1
+mínimo, pero borderline contra off-white panel backgrounds como
+`#f8fafc`).
+**Fix Ola 191:** Remap a `var(--syn-color-neutral-600)` `#475569` →
+contrast 7.0:1. Safety margin para todas las superficies. **DONE.**
 
-### Gap 2 — Link purpose admin lists
+### Gap 2 — Action buttons row context (real, fixed Ola 192)
 
-**File:** `Views/Admin/FormSubmissions.cshtml`, `Views/Admin/Audit.cshtml`
-**Current:** Links genéricos "Detalle" o "Ver" sin contexto.
-**Fix:** Agregar `<span class="syn-visually-hidden">` con info específica:
+**File:** `Views/Admin/Members.cshtml`
+**Current state previo:** botones tabla acción (🔒 Bloquear, 🔓
+Desbloquear, 🔑 Reset 2FA, 📧 Reset password, 🗑 Eliminar) sin
+indicador de QUÉ Member operan. Screen reader navegando cell-by-cell
+escucha "Bloquear" sin saber a quién.
+**Fix Ola 192:** Cada botón con `aria-label="{Acción} {member.Email}"`:
 
 ```razor
-<a href="@detailUrl">
-    Ver
-    <span class="syn-visually-hidden">submission @item.StorageId del form @item.FormKey</span>
-</a>
+<button aria-label="@($"{lockLabel} {m.Email}")">🔒 @lockLabel</button>
 ```
 
-CSS helper `.syn-visually-hidden` ya existe en `syn-base.css`.
+**DONE.** Pattern reutilizable para audit/forms tables si llegan
+acciones similares.
 
-### Gap 3 — Form validation aria-describedby
+### Gap 3 — Form validation aria-describedby (no real, ya cubierto)
 
-**File:** `Views/Partials/Elements/Form/Container.cshtml` (form renderer)
-**Current:** errors render fuera del field; sin aria link.
-**Fix:** Form renderer agrega `aria-describedby="@fieldId-error"` al input + `id="@fieldId-error"` + `role="alert"` al `<p>` con el error message.
+**File:** `Views/Partials/Elements/Form/Field.cshtml`
+**Verified:** El form field renderer YA emite
+`aria-describedby="{helpId}"` linking el input al `<small>` con
+helpText. El form container usa `role="alert"` para error feedback +
+`role="status"` para success. **No-op.** Audit previo era especulativo.
+
+Real gap pendiente: errores per-field específicos (no solo el banner
+top-level del form) requerirían refactor del flow validation pattern
+actual (URL ?form-error → mensaje genérico) hacia per-field error
+state. Diferido — el pattern actual es accesible vía role=alert.
 
 ## Próximas direcciones
 

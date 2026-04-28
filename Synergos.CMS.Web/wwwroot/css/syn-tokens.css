@@ -212,7 +212,10 @@
 
   --syn-color-text-primary:    var(--syn-color-neutral-900);
   --syn-color-text-secondary:  var(--syn-color-neutral-600);
-  --syn-color-text-muted:      var(--syn-color-neutral-500);
+  /* Ola 191 — text-muted bumpeado de neutral-500 (4.83:1 borderline)
+     a neutral-600 (~7:1) para safety margin sobre off-white panel
+     backgrounds. WCAG 2.1 AA requires 4.5:1 mínimo. */
+  --syn-color-text-muted:      var(--syn-color-neutral-600);
   --syn-color-text-disabled:   var(--syn-color-neutral-400);
   --syn-color-text-inverse:    var(--syn-color-neutral-0);
   --syn-color-text-accent:     var(--syn-color-brand-600);
