@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Synergos.CMS.Web.Services;
 
@@ -5,13 +7,15 @@ namespace Synergos.CMS.Tests.Services;
 
 /// <summary>
 /// Tests para <see cref="FileSystemMemberTwoFactorStore"/>
-/// (Olas 178 + 197). Verifica read/write/delete via temp directory
-/// con cleanup IDisposable.
+/// (Olas 178 + 197 + 221). Verifica read/write/delete via temp
+/// directory con cleanup IDisposable + encryption-at-rest +
+/// migration de legacy plaintext.
 /// </summary>
 public sealed class FileSystemMemberTwoFactorStoreTests : IDisposable
 {
     private readonly string _tempRoot;
     private readonly StubHostEnvironment _env;
+    private readonly IDataProtectionProvider _dataProtection;
     private readonly FileSystemMemberTwoFactorStore _sut;
 
     public FileSystemMemberTwoFactorStoreTests()
@@ -19,7 +23,14 @@ public sealed class FileSystemMemberTwoFactorStoreTests : IDisposable
         _tempRoot = Path.Combine(Path.GetTempPath(), "syn-2fa-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempRoot);
         _env = new StubHostEnvironment(_tempRoot);
-        _sut = new FileSystemMemberTwoFactorStore(_env);
+
+        // Ephemeral data protection provider para tests — keyring in-memory.
+        var services = new ServiceCollection();
+        services.AddDataProtection().UseEphemeralDataProtectionProvider();
+        var sp = services.BuildServiceProvider();
+        _dataProtection = sp.GetRequiredService<IDataProtectionProvider>();
+
+        _sut = new FileSystemMemberTwoFactorStore(_env, _dataProtection);
     }
 
     public void Dispose()
@@ -102,6 +113,58 @@ public sealed class FileSystemMemberTwoFactorStoreTests : IDisposable
         var result = _sut.Read(memberKey);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public void Save_PersistsEncrypted_NotPlaintext()
+    {
+        // Ola 221 — encryption-at-rest. El file en disk NO debe contener
+        // el secret plaintext.
+        var memberKey = Guid.NewGuid();
+        var record = new TwoFactorRecord(
+            SecretBase32: "JBSWY3DPEHPK3PXP",
+            IsEnabled: true,
+            RecoveryCodes: new[] { "salt:hash-leak-marker" },
+            EnrolledUtc: DateTime.UtcNow);
+
+        _sut.Save(memberKey, record);
+
+        var path = Path.Combine(_tempRoot, "App_Data", "syn-2fa", memberKey.ToString("N") + ".json");
+        var diskContent = File.ReadAllText(path);
+
+        Assert.DoesNotContain("JBSWY3DPEHPK3PXP", diskContent);
+        Assert.DoesNotContain("hash-leak-marker", diskContent);
+        // Pero el roundtrip funciona.
+        var read = _sut.Read(memberKey);
+        Assert.Equal("JBSWY3DPEHPK3PXP", read!.SecretBase32);
+    }
+
+    [Fact]
+    public void Read_LegacyPlaintext_MigratesToEncryptedOnNextSave()
+    {
+        // Ola 221 — migración transparente: pre-encryption files (Olas
+        // 178-180) deben seguir siendo legibles.
+        var memberKey = Guid.NewGuid();
+        var path = Path.Combine(_tempRoot, "App_Data", "syn-2fa", memberKey.ToString("N") + ".json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        // Simular legacy plain JSON write (pre-encryption).
+        var legacyJson = System.Text.Json.JsonSerializer.Serialize(new TwoFactorRecord(
+            SecretBase32: "LEGACYSECRET",
+            IsEnabled: true,
+            RecoveryCodes: Array.Empty<string>(),
+            EnrolledUtc: DateTime.UtcNow));
+        File.WriteAllText(path, legacyJson);
+
+        // Read debe entender el legacy formato.
+        var read = _sut.Read(memberKey);
+        Assert.NotNull(read);
+        Assert.Equal("LEGACYSECRET", read!.SecretBase32);
+
+        // Tras un Save, el file ya está encrypted (next read tampoco
+        // contiene el secret plaintext).
+        _sut.Save(memberKey, read);
+        var afterSave = File.ReadAllText(path);
+        Assert.DoesNotContain("LEGACYSECRET", afterSave);
     }
 
     private sealed class StubHostEnvironment : IHostEnvironment

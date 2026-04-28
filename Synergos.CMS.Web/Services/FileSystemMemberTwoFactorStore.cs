@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace Synergos.CMS.Web.Services;
 
@@ -12,35 +14,62 @@ namespace Synergos.CMS.Web.Services;
 /// File-based en lugar de Member custom property porque:
 /// 1. No requiere uSync schema change (rapid iteration).
 /// 2. No accidental export del secret via uSync ExportOnSave.
-/// 3. Permite encryption-at-rest en una ola futura sin migrar
-///    backoffice properties.
+/// 3. Permite encryption-at-rest sin migrar backoffice properties.
 ///
-/// Trade-off: no scale para multi-instance LB sin shared filesystem.
-/// Cuando llegue ese requirement, swap por adapter sobre DB / KMS.
+/// Encryption-at-rest (Olas 221-222, ADR 0084):
+/// El JSON serializado se envuelve con <see cref="IDataProtector"/>
+/// (purpose <c>"Synergos.MemberTwoFactor.v1"</c>). Master key bajo
+/// `App_Data/Keys/` (ASP.NET Core data protection default).
+/// Migración transparente: si Read encuentra plaintext legacy
+/// (Olas 178-180 pre-encryption), parsea directo + re-graba
+/// encrypted en el siguiente Save.
 ///
-/// Olas 178.
+/// Trade-off: no scale para multi-instance LB sin shared filesystem
+/// O shared keyring. Para multi-instance, configurar data protection
+/// con shared key persistence (Redis / Azure KeyVault).
 /// </remarks>
 public sealed class FileSystemMemberTwoFactorStore
 {
     private const string DirectoryName = "syn-2fa";
+    private const string ProtectorPurpose = "Synergos.MemberTwoFactor.v1";
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         WriteIndented = true,
     };
 
     private readonly IHostEnvironment _hostEnvironment;
+    private readonly IDataProtector _protector;
     private readonly object _writeLock = new();
 
-    public FileSystemMemberTwoFactorStore(IHostEnvironment hostEnvironment) =>
+    public FileSystemMemberTwoFactorStore(
+        IHostEnvironment hostEnvironment,
+        IDataProtectionProvider dataProtectionProvider)
+    {
         _hostEnvironment = hostEnvironment;
+        _protector = dataProtectionProvider.CreateProtector(ProtectorPurpose);
+    }
 
     public TwoFactorRecord? Read(Guid memberKey)
     {
         var path = ResolvePath(memberKey);
         if (!File.Exists(path)) return null;
+
+        string json;
         try
         {
-            var json = File.ReadAllText(path);
+            var content = File.ReadAllText(path);
+            try
+            {
+                // Path canónico: encrypted.
+                json = _protector.Unprotect(content);
+            }
+            catch (CryptographicException)
+            {
+                // Legacy fallback: plaintext de pre-Ola 221. Acepta + se
+                // re-encriptará en el próximo Save.
+                json = content;
+            }
+
             return JsonSerializer.Deserialize<TwoFactorRecord>(json);
         }
         catch (JsonException)
@@ -53,10 +82,11 @@ public sealed class FileSystemMemberTwoFactorStore
     {
         var path = ResolvePath(memberKey);
         var json = JsonSerializer.Serialize(record, JsonOpts);
+        var protectedContent = _protector.Protect(json);
         lock (_writeLock)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, json);
+            File.WriteAllText(path, protectedContent);
         }
     }
 
@@ -89,7 +119,8 @@ public sealed class FileSystemMemberTwoFactorStore
 /// <summary>
 /// Persistido per-Member en file. SecretBase32 es el shared secret
 /// TOTP. IsEnabled indica si completó enrollment confirmando el
-/// primer código. RecoveryCodes deferido a Phase 2 (default empty).
+/// primer código. RecoveryCodes son hashes PBKDF2 (single-use) de
+/// los 8 recovery codes generados en enrollment.
 /// </summary>
 public sealed record TwoFactorRecord(
     string SecretBase32,
