@@ -52,6 +52,13 @@ public interface IAuditTrailWriter
         int maxItems,
         string? actorEmailFilter = null,
         string? actionFilter = null);
+
+    /// <summary>
+    /// Devuelve un evento específico por su <see cref="AuditEvent.Id"/>.
+    /// Búsqueda hasta los últimos 30 días para no impactar performance.
+    /// Devuelve null si no existe en esa ventana. (Ola 193)
+    /// </summary>
+    AuditEvent? GetById(string id);
 }
 
 /// <summary>

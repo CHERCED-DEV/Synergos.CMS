@@ -49,6 +49,7 @@ public sealed class WebhookResilienceSettingsValidator : IValidateOptions<Webhoo
             return ValidateOptionsResult.Success;
         }
 
+        var unknown = new List<string>();
         foreach (var key in options.PerChannel.Keys)
         {
             if (!KnownFactoryNames.Contains(key))
@@ -57,7 +58,15 @@ public sealed class WebhookResilienceSettingsValidator : IValidateOptions<Webhoo
                     "Synergos:Admin:WebhookResilience:PerChannel key '{Key}' does not match any known notifier FactoryName. Override will silently not apply. Valid keys: {Valid}",
                     key,
                     string.Join(", ", KnownFactoryNames));
+                unknown.Add(key);
             }
+        }
+
+        // Ola 194 — strict mode falla boot si typo detected.
+        if (unknown.Count > 0 && options.StrictValidation)
+        {
+            return ValidateOptionsResult.Fail(
+                $"WebhookResilience.StrictValidation=true and {unknown.Count} unknown PerChannel keys detected: {string.Join(", ", unknown)}");
         }
 
         return ValidateOptionsResult.Success;

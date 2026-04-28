@@ -85,6 +85,15 @@ public sealed class WebhookResilienceSettings
     /// fields. (Olas 157-158)
     /// </summary>
     public Dictionary<string, WebhookResilienceChannelOverride> PerChannel { get; init; } = new();
+
+    /// <summary>
+    /// Si true, el <c>WebhookResilienceSettingsValidator</c> falla el
+    /// boot (devuelve <c>ValidateOptionsResult.Fail</c>) cuando una key
+    /// del PerChannel dict no matchea ningún FactoryName conocido.
+    /// Si false (default), solo loguea warning y continúa. Útil para
+    /// CI/CD validation pipelines. (Ola 194)
+    /// </summary>
+    public bool StrictValidation { get; init; } = false;
 }
 
 /// <summary>

@@ -812,6 +812,39 @@ public sealed class AdminController : Controller
     }
 
     /// <summary>
+    /// GET /admin/audit/{id} — drill-down detail de un evento específico.
+    /// Búsqueda hasta los últimos 30 días. (Ola 193)
+    /// </summary>
+    [HttpGet("audit/{id:length(8,64)}")]
+    public IActionResult AuditDetail(string id)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var evt = _audit.GetById(id);
+        if (evt is null)
+        {
+            return NotFound();
+        }
+
+        // Eventos cercanos del mismo actor (±5 min ventana) para context.
+        var window = TimeSpan.FromMinutes(5);
+        var nearby = _audit.GetByDateRange(
+            evt.OccurredAtUtc - window,
+            evt.OccurredAtUtc + window,
+            maxItems: 50,
+            actorEmailFilter: evt.ActorEmail,
+            actionFilter: null);
+
+        SetTopbar("audit");
+        ViewData["Event"] = evt;
+        ViewData["Nearby"] = nearby.Where(e => e.Id != evt.Id).ToList();
+        return View();
+    }
+
+    /// <summary>
     /// GET /admin/audit/export — CSV streaming export con los mismos
     /// filtros que el listing. Streamed via Response.Body.WriteAsync
     /// para memoria O(1). Hard cap de CsvExportHardCap. (Ola 164)

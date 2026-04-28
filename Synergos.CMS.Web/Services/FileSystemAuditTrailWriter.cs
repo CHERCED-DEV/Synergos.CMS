@@ -72,6 +72,28 @@ public sealed class FileSystemAuditTrailWriter : IAuditTrailWriter
         return ReadFiltered(files, maxItems, actorEmailFilter, actionFilter);
     }
 
+    public AuditEvent? GetById(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        var match = $"\"Id\":\"{id}\"";
+        var files = ListJsonlFiles().OrderByDescending(f => f).Take(30).ToList();
+        foreach (var file in files)
+        {
+            string[] lines;
+            try { lines = File.ReadAllLines(file, Encoding.UTF8); }
+            catch (IOException) { continue; }
+            for (var i = lines.Length - 1; i >= 0; i--)
+            {
+                var line = lines[i];
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (!line.Contains(match, StringComparison.Ordinal)) continue;
+                try { return JsonSerializer.Deserialize<AuditEvent>(line); }
+                catch (JsonException) { continue; }
+            }
+        }
+        return null;
+    }
+
     public IReadOnlyList<AuditEvent> GetByDateRange(
         DateTime fromUtc,
         DateTime toUtc,

@@ -41,15 +41,54 @@ public class WebhookResilienceSettingsValidatorTests
     }
 
     [Fact]
-    public void Validate_UnknownFactoryName_StillReturnsSuccess()
+    public void Validate_UnknownFactoryName_NonStrict_StillReturnsSuccess()
     {
-        // Validator NUNCA retorna Failure — typos solo loguean warning.
+        // Default mode (StrictValidation=false): typos solo loguean warning.
         var validator = new WebhookResilienceSettingsValidator(NullLogger<WebhookResilienceSettingsValidator>.Instance);
         var settings = new WebhookResilienceSettings
         {
             PerChannel = new Dictionary<string, WebhookResilienceChannelOverride>
             {
                 ["typo-channel-name"] = new() { MaxRetryAttempts = 5 },
+            },
+        };
+
+        var result = validator.Validate(name: null, settings);
+
+        Assert.Equal(ValidateOptionsResult.Success, result);
+    }
+
+    [Fact]
+    public void Validate_UnknownFactoryName_StrictMode_ReturnsFailure()
+    {
+        // Ola 194 — StrictValidation=true falla boot con typo.
+        var validator = new WebhookResilienceSettingsValidator(NullLogger<WebhookResilienceSettingsValidator>.Instance);
+        var settings = new WebhookResilienceSettings
+        {
+            StrictValidation = true,
+            PerChannel = new Dictionary<string, WebhookResilienceChannelOverride>
+            {
+                ["typo-channel-name"] = new() { MaxRetryAttempts = 5 },
+            },
+        };
+
+        var result = validator.Validate(name: null, settings);
+
+        Assert.True(result.Failed);
+        Assert.NotNull(result.FailureMessage);
+        Assert.Contains("typo-channel-name", result.FailureMessage);
+    }
+
+    [Fact]
+    public void Validate_KnownFactoryName_StrictMode_StillSucceeds()
+    {
+        var validator = new WebhookResilienceSettingsValidator(NullLogger<WebhookResilienceSettingsValidator>.Instance);
+        var settings = new WebhookResilienceSettings
+        {
+            StrictValidation = true,
+            PerChannel = new Dictionary<string, WebhookResilienceChannelOverride>
+            {
+                ["comment-moderation-teams"] = new() { MaxRetryAttempts = 5 },
             },
         };
 

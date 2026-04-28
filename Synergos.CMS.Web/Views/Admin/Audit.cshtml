@@ -102,6 +102,7 @@
                             <th>@Umbraco.GetDictionaryValue("admin.col.resource", "Recurso")</th>
                             <th>@Umbraco.GetDictionaryValue("admin.col.outcome", "Resultado")</th>
                             <th>Detail</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -143,6 +144,7 @@
                                         <span class="syn-admin__role-empty">—</span>
                                     }
                                 </td>
+                                <td><a href="/admin/audit/@e.Id" aria-label="@($"Ver detalle del evento {e.Action} {e.Id}")">→</a></td>
                             </tr>
                         }
                     </tbody>
