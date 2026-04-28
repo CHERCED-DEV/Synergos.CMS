@@ -42,6 +42,10 @@
     <PackageVersion Include="xunit" Version="2.9.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageVersion Include="coverlet.collector" Version="6.0.2" />
+    <!-- Olas 227-228 (cap-230, ADR 0084): stub library para Umbraco-heavy
+         interfaces (IMemberService + IMember) sin implementar manual los
+         50+ members. Solo en Tests project — no leak a runtime. -->
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
   </ItemGroup>
 
   <!--
