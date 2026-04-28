@@ -61,4 +61,37 @@ public sealed class WebhookTelemetryAlertSettings
     /// recovery (ej. solo le interesa la incidencia).
     /// </summary>
     public bool RecoveryEmailEnabled { get; init; } = true;
+
+    // ─── Composite notifier channels (Cap-260 Batch B, Olas 254-256) ───
+    // Patterns paralelos a Comments / Forms / Cart. Cada canal opt-in
+    // por URL configurada — vacío = canal no-op silencioso.
+
+    /// <summary>
+    /// URL HTTP(S) del webhook custom para alerts (raw JSON POST).
+    /// Compatible con cualquier endpoint custom. Default vacío =
+    /// canal no-op.
+    /// </summary>
+    public string? WebhookUrl { get; init; }
+
+    /// <summary>
+    /// Bearer token opcional. Si poblado, el canal Webhook adjunta
+    /// header <c>Authorization: Bearer {token}</c>.
+    /// </summary>
+    public string? WebhookBearerToken { get; init; }
+
+    /// <summary>
+    /// Secret compartido para firmar el body del webhook con
+    /// HMAC-SHA256. Si poblado, adjunta header
+    /// <c>X-Synergos-Signature: sha256={hex}</c>.
+    /// </summary>
+    public string? WebhookHmacSecret { get; init; }
+
+    /// <summary>URL de Slack incoming webhook para alerts (Block Kit).</summary>
+    public string? SlackWebhookUrl { get; init; }
+
+    /// <summary>URL de Discord incoming webhook para alerts (embeds).</summary>
+    public string? DiscordWebhookUrl { get; init; }
+
+    /// <summary>URL de Microsoft Teams incoming webhook (MessageCard).</summary>
+    public string? TeamsWebhookUrl { get; init; }
 }

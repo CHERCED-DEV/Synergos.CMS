@@ -9,14 +9,15 @@ namespace Synergos.CMS.Tests.Services;
 
 /// <summary>
 /// Tests para <see cref="WebhookTelemetryAlertScanner"/> (Cap-240
-/// Batch C, Ola 237). Cubre alert firing, cooldown, y recovery
-/// emails cuando un canal previamente alerting vuelve a healthy
-/// (cierra deferred §11.20 #10).
+/// Batch C Ola 237 + refactor Cap-260 Batch B Ola 256). Cubre alert
+/// firing, cooldown, y recovery cuando un canal previamente alerting
+/// vuelve a healthy. Verifica las llamadas al <see cref="IAlertNotifier"/>
+/// composite (no más IEmailService directo).
 /// </summary>
 public sealed class WebhookTelemetryAlertScannerTests
 {
     private readonly IWebhookTelemetryStore _store = Substitute.For<IWebhookTelemetryStore>();
-    private readonly IEmailService _email = Substitute.For<IEmailService>();
+    private readonly IAlertNotifier _notifier = Substitute.For<IAlertNotifier>();
     private readonly FakeTimeProvider _time = new();
 
     private WebhookTelemetryAlertScanner BuildSut(
@@ -40,7 +41,7 @@ public sealed class WebhookTelemetryAlertScannerTests
         var monitor = Substitute.For<IOptionsMonitor<WebhookTelemetryAlertSettings>>();
         monitor.CurrentValue.Returns(settings.Value);
         return new WebhookTelemetryAlertScanner(
-            _store, _email, monitor,
+            _store, _notifier, monitor,
             NullLogger<WebhookTelemetryAlertScanner>.Instance,
             _time);
     }
@@ -63,41 +64,51 @@ public sealed class WebhookTelemetryAlertScannerTests
 
         await sut.ScanAndDispatchAsync(CancellationToken.None);
 
-        await _email.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await _notifier.DidNotReceive().NotifyAlertAsync(
+            Arg.Any<WebhookAlertEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task ScanAndDispatchAsync_BelowMinimumSample_NoAlert()
     {
         var sut = BuildSut(minSample: 100);
-        _store.GetChannelStats().Returns(new[] { Snap("ch", 50, 30) }); // 60% but only 50 samples
+        _store.GetChannelStats().Returns(new[] { Snap("ch", 50, 30) });
 
         await sut.ScanAndDispatchAsync(CancellationToken.None);
 
-        await _email.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await _notifier.DidNotReceive().NotifyAlertAsync(
+            Arg.Any<WebhookAlertEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task ScanAndDispatchAsync_BelowThreshold_NoAlert()
     {
         var sut = BuildSut(threshold: 0.20);
-        _store.GetChannelStats().Returns(new[] { Snap("ch", 1000, 100) }); // 10%
+        _store.GetChannelStats().Returns(new[] { Snap("ch", 1000, 100) });
 
         await sut.ScanAndDispatchAsync(CancellationToken.None);
 
-        await _email.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await _notifier.DidNotReceive().NotifyAlertAsync(
+            Arg.Any<WebhookAlertEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task ScanAndDispatchAsync_AboveThreshold_FiresAlert()
+    public async Task ScanAndDispatchAsync_AboveThreshold_FiresAlertWithCanonicalShape()
     {
         var sut = BuildSut();
-        _store.GetChannelStats().Returns(new[] { Snap("ch", 1000, 500) }); // 50%
+        _store.GetChannelStats().Returns(new[] { Snap("ch", 1000, 500) });
 
         await sut.ScanAndDispatchAsync(CancellationToken.None);
 
-        await _email.Received(1).SendAsync(
-            Arg.Is<EmailMessage>(m => m.Subject.Contains("fail rate breach") && m.To == "ops@example.com"),
+        await _notifier.Received(1).NotifyAlertAsync(
+            Arg.Is<WebhookAlertEvent>(a =>
+                a.ChannelName == "ch" &&
+                a.FailRate == 0.5 &&
+                a.Threshold == 0.20 &&
+                a.TotalCalls == 1000 &&
+                a.FailureCount == 500 &&
+                a.SuccessCount == 500 &&
+                a.CooldownMinutes == 60),
             Arg.Any<CancellationToken>());
     }
 
@@ -111,7 +122,8 @@ public sealed class WebhookTelemetryAlertScannerTests
         _time.Advance(TimeSpan.FromMinutes(10));
         await sut.ScanAndDispatchAsync(CancellationToken.None);
 
-        await _email.Received(1).SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await _notifier.Received(1).NotifyAlertAsync(
+            Arg.Any<WebhookAlertEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -124,13 +136,12 @@ public sealed class WebhookTelemetryAlertScannerTests
         _time.Advance(TimeSpan.FromMinutes(61));
         await sut.ScanAndDispatchAsync(CancellationToken.None);
 
-        await _email.Received(2).SendAsync(
-            Arg.Is<EmailMessage>(m => m.Subject.Contains("fail rate breach")),
-            Arg.Any<CancellationToken>());
+        await _notifier.Received(2).NotifyAlertAsync(
+            Arg.Any<WebhookAlertEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task ScanAndDispatchAsync_RecoveryFires_WhenChannelReturnsHealthy()
+    public async Task ScanAndDispatchAsync_RecoveryFires_WithCanonicalShape()
     {
         var sut = BuildSut();
 
@@ -144,27 +155,33 @@ public sealed class WebhookTelemetryAlertScannerTests
         _store.GetChannelStats().Returns(new[] { Snap("ch", 1000, 50) });
         await sut.ScanAndDispatchAsync(CancellationToken.None);
 
-        await _email.Received(1).SendAsync(
-            Arg.Is<EmailMessage>(m => m.Subject.Contains("fail rate breach")),
-            Arg.Any<CancellationToken>());
-        await _email.Received(1).SendAsync(
-            Arg.Is<EmailMessage>(m => m.Subject.Contains("recovered")),
+        await _notifier.Received(1).NotifyAlertAsync(
+            Arg.Any<WebhookAlertEvent>(), Arg.Any<CancellationToken>());
+        await _notifier.Received(1).NotifyRecoveryAsync(
+            Arg.Is<WebhookRecoveryEvent>(r =>
+                r.ChannelName == "ch" &&
+                r.CurrentFailRate == 0.05 &&
+                r.PriorFailRate == 0.5 &&
+                r.AlertingDuration.TotalMinutes >= 70),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task ScanAndDispatchAsync_NoRecoveryEmail_IfChannelNeverAlerted()
+    public async Task ScanAndDispatchAsync_NoRecovery_IfChannelNeverAlerted()
     {
         var sut = BuildSut();
-        _store.GetChannelStats().Returns(new[] { Snap("ch", 1000, 50) }); // healthy from the start
+        _store.GetChannelStats().Returns(new[] { Snap("ch", 1000, 50) });
 
         await sut.ScanAndDispatchAsync(CancellationToken.None);
 
-        await _email.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await _notifier.DidNotReceive().NotifyAlertAsync(
+            Arg.Any<WebhookAlertEvent>(), Arg.Any<CancellationToken>());
+        await _notifier.DidNotReceive().NotifyRecoveryAsync(
+            Arg.Any<WebhookRecoveryEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task ScanAndDispatchAsync_RecoveryDisabled_NoEmailButStateClears()
+    public async Task ScanAndDispatchAsync_RecoveryDisabled_NoNotifyButStateClears()
     {
         var sut = BuildSut(recoveryEnabled: false);
 
@@ -172,23 +189,21 @@ public sealed class WebhookTelemetryAlertScannerTests
         await sut.ScanAndDispatchAsync(CancellationToken.None);
         _time.Advance(TimeSpan.FromMinutes(70));
 
-        // Healthy now — recovery should NOT email but state should clear.
         _store.GetChannelStats().Returns(new[] { Snap("ch", 1000, 50) });
         await sut.ScanAndDispatchAsync(CancellationToken.None);
 
-        await _email.Received(1).SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
-        await _email.DidNotReceive().SendAsync(
-            Arg.Is<EmailMessage>(m => m.Subject.Contains("recovered")),
-            Arg.Any<CancellationToken>());
+        await _notifier.Received(1).NotifyAlertAsync(
+            Arg.Any<WebhookAlertEvent>(), Arg.Any<CancellationToken>());
+        await _notifier.DidNotReceive().NotifyRecoveryAsync(
+            Arg.Any<WebhookRecoveryEvent>(), Arg.Any<CancellationToken>());
 
         // Verifica que el state se limpió: si vuelve a alerting, dispara
         // como first-time (no como re-fire dentro de cooldown).
-        _time.Advance(TimeSpan.FromMinutes(5)); // dentro de un nuevo "cooldown"
+        _time.Advance(TimeSpan.FromMinutes(5));
         _store.GetChannelStats().Returns(new[] { Snap("ch", 1000, 500) });
         await sut.ScanAndDispatchAsync(CancellationToken.None);
-        await _email.Received(2).SendAsync(
-            Arg.Is<EmailMessage>(m => m.Subject.Contains("fail rate breach")),
-            Arg.Any<CancellationToken>());
+        await _notifier.Received(2).NotifyAlertAsync(
+            Arg.Any<WebhookAlertEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -204,10 +219,10 @@ public sealed class WebhookTelemetryAlertScannerTests
         _store.GetChannelStats().Returns(new[] { Snap("ch", 50, 0) });
         await sut.ScanAndDispatchAsync(CancellationToken.None);
 
-        await _email.Received(1).SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
-        await _email.DidNotReceive().SendAsync(
-            Arg.Is<EmailMessage>(m => m.Subject.Contains("recovered")),
-            Arg.Any<CancellationToken>());
+        await _notifier.Received(1).NotifyAlertAsync(
+            Arg.Any<WebhookAlertEvent>(), Arg.Any<CancellationToken>());
+        await _notifier.DidNotReceive().NotifyRecoveryAsync(
+            Arg.Any<WebhookRecoveryEvent>(), Arg.Any<CancellationToken>());
     }
 
     private sealed class FakeTimeProvider : TimeProvider

@@ -133,6 +133,103 @@ public sealed class CompositeNotifiersTests
         Assert.Equal(1, ch3.Calls);
     }
 
+    [Fact]
+    public async Task CompositeAlert_DispatchesAlertToAllChannels()
+    {
+        var ch1 = new CountingAlertChannel();
+        var ch2 = new CountingAlertChannel();
+        var ch3 = new CountingAlertChannel();
+        var sut = new CompositeAlertNotifier(
+            new[] { (IAlertNotifierChannel)ch1, ch2, ch3 },
+            NullLogger<CompositeAlertNotifier>.Instance);
+
+        await sut.NotifyAlertAsync(
+            new WebhookAlertEvent("ch", 0.5, 0.2, 1000, 500, 500,
+                100, 300, 800, DateTime.UtcNow, 60),
+            CancellationToken.None);
+
+        Assert.Equal(1, ch1.AlertCalls);
+        Assert.Equal(1, ch2.AlertCalls);
+        Assert.Equal(1, ch3.AlertCalls);
+    }
+
+    [Fact]
+    public async Task CompositeAlert_DispatchesRecoveryToAllChannels()
+    {
+        var ch1 = new CountingAlertChannel();
+        var ch2 = new CountingAlertChannel();
+        var sut = new CompositeAlertNotifier(
+            new[] { (IAlertNotifierChannel)ch1, ch2 },
+            NullLogger<CompositeAlertNotifier>.Instance);
+
+        await sut.NotifyRecoveryAsync(
+            new WebhookRecoveryEvent("ch", 0.05, 0.5, 0.2,
+                TimeSpan.FromMinutes(70),
+                DateTime.UtcNow.AddMinutes(-70),
+                DateTime.UtcNow.AddMinutes(-10),
+                1000, 950, 50),
+            CancellationToken.None);
+
+        Assert.Equal(1, ch1.RecoveryCalls);
+        Assert.Equal(1, ch2.RecoveryCalls);
+    }
+
+    [Fact]
+    public async Task CompositeAlert_BrokenChannelDoesNotAbortOthers()
+    {
+        var ch1 = new CountingAlertChannel();
+        var broken = new ThrowingAlertChannel();
+        var ch3 = new CountingAlertChannel();
+        var sut = new CompositeAlertNotifier(
+            new[] { (IAlertNotifierChannel)ch1, broken, ch3 },
+            NullLogger<CompositeAlertNotifier>.Instance);
+
+        await sut.NotifyAlertAsync(
+            new WebhookAlertEvent("ch", 0.5, 0.2, 1000, 500, 500,
+                100, 300, 800, DateTime.UtcNow, 60),
+            CancellationToken.None);
+
+        Assert.Equal(1, ch1.AlertCalls);
+        Assert.Equal(1, ch3.AlertCalls);
+    }
+
+    [Fact]
+    public async Task CompositeAlert_EmptyChannels_NoOp()
+    {
+        var sut = new CompositeAlertNotifier(
+            Array.Empty<IAlertNotifierChannel>(),
+            NullLogger<CompositeAlertNotifier>.Instance);
+
+        await sut.NotifyAlertAsync(
+            new WebhookAlertEvent("ch", 0.5, 0.2, 1000, 500, 500,
+                100, 300, 800, DateTime.UtcNow, 60),
+            CancellationToken.None);
+    }
+
+    private sealed class CountingAlertChannel : IAlertNotifierChannel
+    {
+        public int AlertCalls { get; private set; }
+        public int RecoveryCalls { get; private set; }
+        public Task NotifyAlertAsync(WebhookAlertEvent alert, CancellationToken cancellationToken)
+        {
+            AlertCalls++;
+            return Task.CompletedTask;
+        }
+        public Task NotifyRecoveryAsync(WebhookRecoveryEvent recovery, CancellationToken cancellationToken)
+        {
+            RecoveryCalls++;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingAlertChannel : IAlertNotifierChannel
+    {
+        public Task NotifyAlertAsync(WebhookAlertEvent alert, CancellationToken cancellationToken)
+            => throw new InvalidOperationException("simulated alert channel failure");
+        public Task NotifyRecoveryAsync(WebhookRecoveryEvent recovery, CancellationToken cancellationToken)
+            => throw new InvalidOperationException("simulated alert channel failure");
+    }
+
     private sealed class CountingCommentChannel : ICommentModerationNotifierChannel
     {
         public int Calls { get; private set; }

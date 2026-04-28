@@ -197,11 +197,23 @@ public sealed class SeamComposer : IComposer
         // via per-channel lock. Reset on restart (no persistencia).
         services.AddSingleton<IWebhookTelemetryStore, InMemoryWebhookTelemetryStore>();
 
-        // Olas 195-196 + 236-237 — Telemetry alerts (ADR 0080 + Cap-240
-        // Batch C). Scanner extraído del hosted service para hacerse
-        // testable + soporta recovery emails cuando un canal previamente
-        // alerting vuelve a healthy. Singleton porque mantiene state
-        // in-memory de qué canales están firing.
+        // Olas 195-196 + 236-237 + 254-256 — Telemetry alerts
+        // (ADRs 0080 + 0085 + 0087). Scanner extraído del hosted service
+        // (Cap-240) + Cap-260 Batch B refactor a Composite IAlertNotifier
+        // paralelo a Comments/Forms/Cart. Channels: email (existente) +
+        // slack + discord + teams + webhook (paralelo). Cada uno opt-in
+        // por URL configurada — vacío = canal no-op silencioso.
+        services.AddSingleton<IAlertNotifierChannel, EmailAlertNotifier>();
+        services.AddHttpClient(WebhookAlertNotifier.FactoryName).AddWebhookResilience();
+        services.AddSingleton<IAlertNotifierChannel, WebhookAlertNotifier>();
+        services.AddHttpClient(SlackAlertNotifier.FactoryName).AddWebhookResilience();
+        services.AddSingleton<IAlertNotifierChannel, SlackAlertNotifier>();
+        services.AddHttpClient(DiscordAlertNotifier.FactoryName).AddWebhookResilience();
+        services.AddSingleton<IAlertNotifierChannel, DiscordAlertNotifier>();
+        services.AddHttpClient(TeamsAlertNotifier.FactoryName).AddWebhookResilience();
+        services.AddSingleton<IAlertNotifierChannel, TeamsAlertNotifier>();
+        services.AddSingleton<IAlertNotifier, CompositeAlertNotifier>();
+
         services.AddSingleton<WebhookTelemetryAlertScanner>();
         services.AddHostedService<WebhookTelemetryAlertHostedService>();
 
