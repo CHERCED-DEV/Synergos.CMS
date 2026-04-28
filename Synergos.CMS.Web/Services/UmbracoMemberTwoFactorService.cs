@@ -127,66 +127,17 @@ public sealed class UmbracoMemberTwoFactorService : IMemberTwoFactorService
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, IReadOnlyList<string>> _lastEnrollmentRecoveryCodes = new();
 
-    private const int RecoveryCodeCount = 8;
-    private const int RecoveryCodeChars = 8;
-    private const int Pbkdf2Iterations = 100_000;
-    private const int Pbkdf2HashBytes = 32;
-    private const int Pbkdf2SaltBytes = 16;
-    private const string RecoveryAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-    private static (IReadOnlyList<string> hashes, IReadOnlyList<string> plaintext) GenerateRecoveryCodesAndHashes()
-    {
-        var plaintext = new List<string>(RecoveryCodeCount);
-        var hashes = new List<string>(RecoveryCodeCount);
-        var charBuf = new char[RecoveryCodeChars];
-
-        for (var i = 0; i < RecoveryCodeCount; i++)
-        {
-            for (var c = 0; c < RecoveryCodeChars; c++)
-            {
-                charBuf[c] = RecoveryAlphabet[RandomNumberGenerator.GetInt32(RecoveryAlphabet.Length)];
-            }
-            var code = new string(charBuf);
-            plaintext.Add(code);
-            hashes.Add(HashRecoveryCode(code));
-        }
-
-        return (hashes, plaintext);
-    }
-
-    private static string HashRecoveryCode(string code)
-    {
-        var salt = new byte[Pbkdf2SaltBytes];
-        RandomNumberGenerator.Fill(salt);
-        using var pbkdf2 = new Rfc2898DeriveBytes(code, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256);
-        var hash = pbkdf2.GetBytes(Pbkdf2HashBytes);
-        return Convert.ToBase64String(salt) + ":" + Convert.ToBase64String(hash);
-    }
-
-    private static bool VerifyRecoveryCode(string candidate, string saltColonHash)
-    {
-        var sep = saltColonHash.IndexOf(':');
-        if (sep < 0) return false;
-        try
-        {
-            var salt = Convert.FromBase64String(saltColonHash[..sep]);
-            var expected = Convert.FromBase64String(saltColonHash[(sep + 1)..]);
-            using var pbkdf2 = new Rfc2898DeriveBytes(candidate, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256);
-            var actual = pbkdf2.GetBytes(Pbkdf2HashBytes);
-            return CryptographicOperations.FixedTimeEquals(expected, actual);
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
-    }
-
     private static IReadOnlyList<string> GenerateAndHashRecoveryCodes(out IReadOnlyList<string> plaintextCodes)
     {
-        var (hashes, plaintext) = GenerateRecoveryCodesAndHashes();
+        // Olas 207 — extraído a TwoFactorRecoveryCodes static helper
+        // para tests directos.
+        var (hashes, plaintext) = TwoFactorRecoveryCodes.GenerateBatch();
         plaintextCodes = plaintext;
         return hashes;
     }
+
+    private static bool VerifyRecoveryCode(string candidate, string saltColonHash) =>
+        TwoFactorRecoveryCodes.Verify(candidate, saltColonHash);
 
     public Task<VerificationResult> VerifyAsync(
         Guid memberKey,

@@ -129,6 +129,69 @@ public sealed class FileSystemAuditTrailWriterTests : IDisposable
         Assert.Equal("b", inRange[0].Id);
     }
 
+    [Fact]
+    public async Task GetById_ExistingEvent_ReturnsIt()
+    {
+        var evt = new AuditEvent("unique-target-id-12345", DateTime.UtcNow, "x", "X",
+            "comment.approve", "node=42", "success", "detail-marker");
+        await _sut.WriteAsync(evt, CancellationToken.None);
+
+        var found = _sut.GetById("unique-target-id-12345");
+
+        Assert.NotNull(found);
+        Assert.Equal("unique-target-id-12345", found!.Id);
+        Assert.Equal("comment.approve", found.Action);
+        Assert.Equal("detail-marker", found.Detail);
+    }
+
+    [Fact]
+    public void GetById_NonexistentId_ReturnsNull()
+    {
+        var found = _sut.GetById("does-not-exist");
+
+        Assert.Null(found);
+    }
+
+    [Fact]
+    public void GetById_EmptyOrWhitespaceId_ReturnsNull()
+    {
+        Assert.Null(_sut.GetById(""));
+        Assert.Null(_sut.GetById("   "));
+        Assert.Null(_sut.GetById(null!));
+    }
+
+    [Fact]
+    public async Task GetById_FindsAcrossMultipleFiles()
+    {
+        var dayOne = DateTime.UtcNow.AddDays(-2);
+        var dayTwo = DateTime.UtcNow;
+        await _sut.WriteAsync(new AuditEvent("old-id", dayOne, "x", "X", "act", "r", "success", ""), CancellationToken.None);
+        await _sut.WriteAsync(new AuditEvent("new-id", dayTwo, "x", "X", "act", "r", "success", ""), CancellationToken.None);
+
+        var foundOld = _sut.GetById("old-id");
+        var foundNew = _sut.GetById("new-id");
+
+        Assert.NotNull(foundOld);
+        Assert.NotNull(foundNew);
+    }
+
+    [Fact]
+    public async Task GetById_ReturnsExactJsonShape()
+    {
+        var evt = new AuditEvent("shape-test", DateTime.UtcNow, "actor@x", "Actor X",
+            "form.delete", "formKey=contact storageId=abc", "success", "extra-detail");
+        await _sut.WriteAsync(evt, CancellationToken.None);
+
+        var found = _sut.GetById("shape-test");
+
+        Assert.NotNull(found);
+        Assert.Equal(evt.ActorEmail, found!.ActorEmail);
+        Assert.Equal(evt.ActorName, found.ActorName);
+        Assert.Equal(evt.Resource, found.Resource);
+        Assert.Equal(evt.Outcome, found.Outcome);
+        Assert.Equal(evt.Detail, found.Detail);
+    }
+
     private sealed class StubHostEnvironment : IHostEnvironment
     {
         public StubHostEnvironment(string contentRootPath) =>
