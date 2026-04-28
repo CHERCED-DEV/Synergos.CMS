@@ -8,6 +8,7 @@
     var roster = (MemberRosterPage)ViewData["Roster"]!;
     var allRoles = ViewData["AllRoles"] as IReadOnlyList<string> ?? Array.Empty<string>();
     var roleFilter = ViewData["RoleFilter"] as string;
+    var twoFactorStatus = ViewData["TwoFactorStatus"] as Dictionary<Guid, bool> ?? new();
 
     string PageHref(int p)
     {
@@ -133,6 +134,12 @@
                                     {
                                         <form method="post" action="/admin/members/@m.Key/lock" class="syn-admin__item-form">
                                             <button type="submit" class="syn-admin__action syn-admin__action--reject">🔒 @Umbraco.GetDictionaryValue("admin.action.lock", "Bloquear")</button>
+                                        </form>
+                                    }
+                                    @if (twoFactorStatus.TryGetValue(m.Key, out var has2fa) && has2fa)
+                                    {
+                                        <form method="post" action="/admin/members/@m.Key/2fa-reset" class="syn-admin__item-form" style="margin-top:var(--syn-space-xs);">
+                                            <button type="submit" class="syn-admin__action syn-admin__action--ghost" title="Disable 2FA — Member tendrá que re-enroll">🔑 Reset 2FA</button>
                                         </form>
                                     }
                                 </td>

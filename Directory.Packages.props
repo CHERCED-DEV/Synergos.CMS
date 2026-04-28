@@ -57,4 +57,14 @@
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="8.10.0" />
   </ItemGroup>
 
+  <!--
+    TOTP (Time-based One-Time Password, RFC 6238) — Otp.NET para 2FA Members
+    opt-in (Olas 177-180, ADR 0074). Provee TOTP generation/verification +
+    base32 encoding del shared secret + drift window configurable.
+    Stable 1.4.1 verificado en nuget.org.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="Otp.NET" Version="1.4.1" />
+  </ItemGroup>
+
 </Project>

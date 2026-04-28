@@ -190,6 +190,13 @@ public sealed class SeamComposer : IComposer
         // via per-channel lock. Reset on restart (no persistencia).
         services.AddSingleton<IWebhookTelemetryStore, InMemoryWebhookTelemetryStore>();
 
+        // Olas 178-180 — Member 2FA TOTP (ADR 0074). FileSystemMemberTwoFactorStore
+        // persiste secrets en App_Data/syn-2fa/{memberKey}.json. Service
+        // wraps Otp.NET para TOTP generation/verification. Singleton store +
+        // transient service (depende de scoped IMemberService).
+        services.AddSingleton<FileSystemMemberTwoFactorStore>();
+        services.AddTransient<IMemberTwoFactorService, UmbracoMemberTwoFactorService>();
+
         // Ola 161 — Validator que warn al boot/reload si una key del
         // PerChannel dict no matchea ningún FactoryName conocido.
         services.AddSingleton<

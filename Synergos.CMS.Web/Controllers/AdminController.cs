@@ -44,6 +44,7 @@ public sealed class AdminController : Controller
     private readonly IFormSubmissionReader _formReader;
     private readonly IMemberRosterReader _memberRoster;
     private readonly IMemberRosterWriter _memberRosterWriter;
+    private readonly IMemberTwoFactorService _memberTwoFactor;
     private readonly IAuditTrailWriter _audit;
     private readonly IMemoryCache _cache;
     private readonly IOptionsMonitor<AdminSettings> _adminSettings;
@@ -56,6 +57,7 @@ public sealed class AdminController : Controller
         IFormSubmissionReader formReader,
         IMemberRosterReader memberRoster,
         IMemberRosterWriter memberRosterWriter,
+        IMemberTwoFactorService memberTwoFactor,
         IAuditTrailWriter audit,
         IMemoryCache cache,
         IOptionsMonitor<AdminSettings> adminSettings)
@@ -67,6 +69,7 @@ public sealed class AdminController : Controller
         _formReader = formReader;
         _memberRoster = memberRoster;
         _memberRosterWriter = memberRosterWriter;
+        _memberTwoFactor = memberTwoFactor;
         _audit = audit;
         _cache = cache;
         _adminSettings = adminSettings;
@@ -869,9 +872,10 @@ public sealed class AdminController : Controller
     /// IMemberRosterWriter en POST actions hermanas. Olas 144-145 + 155-156.
     /// </summary>
     [HttpGet("members")]
-    public IActionResult Members(
+    public async Task<IActionResult> Members(
         [FromQuery] int page = 1,
-        [FromQuery(Name = "role")] string? roleFilter = null)
+        [FromQuery(Name = "role")] string? roleFilter = null,
+        CancellationToken cancellationToken = default)
     {
         if (!_gate.HasAnyRole(ModeratorRolesCsv))
         {
@@ -881,10 +885,18 @@ public sealed class AdminController : Controller
         var roster = _memberRoster.GetRosterPage(page, DefaultPageSize, roleFilter);
         var allRoles = _memberRoster.ListAllRoles();
 
+        // Olas 178-180 — read 2FA status per member para el panel admin.
+        var twoFactorStatus = new Dictionary<Guid, bool>();
+        foreach (var m in roster.Items)
+        {
+            twoFactorStatus[m.Key] = await _memberTwoFactor.IsEnabledAsync(m.Key, cancellationToken);
+        }
+
         SetTopbar("members");
         ViewData["Roster"] = roster;
         ViewData["AllRoles"] = allRoles;
         ViewData["RoleFilter"] = roleFilter;
+        ViewData["TwoFactorStatus"] = twoFactorStatus;
         return View();
     }
 
@@ -923,6 +935,29 @@ public sealed class AdminController : Controller
         var ok = await _memberRosterWriter.UnlockAsync(memberKey, cancellationToken);
         await EmitAuditAsync(
             "member.unlock",
+            $"memberKey={memberKey:N}",
+            ok ? "success" : "failure",
+            cancellationToken: cancellationToken);
+
+        return RedirectToAction(nameof(Members));
+    }
+
+    /// <summary>
+    /// POST /admin/members/{key}/2fa-reset — disable 2FA del Member.
+    /// Útil cuando el Member perdió el dispositivo + recovery codes.
+    /// El Member tendrá que re-enroll en su próximo login. Olas 178-180.
+    /// </summary>
+    [HttpPost("members/{memberKey:guid}/2fa-reset")]
+    public async Task<IActionResult> ResetMemberTwoFactor(Guid memberKey, CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var ok = await _memberTwoFactor.DisableAsync(memberKey, cancellationToken);
+        await EmitAuditAsync(
+            "member.2fa-reset",
             $"memberKey={memberKey:N}",
             ok ? "success" : "failure",
             cancellationToken: cancellationToken);
