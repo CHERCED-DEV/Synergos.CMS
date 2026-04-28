@@ -28,16 +28,28 @@ Cubierto en Ola 238:
   `syn:component:error` shape, naming convention, outcome tri-state,
   bubbling default behavior.
 
+Cubierto en Olas 243-245 (Cap-250 Batch B):
+
+- ✅ `host-bridge.contract.test.ts` — shape de `window.synergos`
+  (version + i18n + theme + brand + member + page), degradación
+  graceful, security boundary (no secrets en member), versioning
+  major check.
+- ✅ `i18n-bridge.contract.test.ts` — resolution order de `t(key,
+  fallback)` (3 niveles), naming convention `{Section}.{SubSection}.
+  {Key}`, subset publishing, format placeholders {0}, standalone
+  fallback.
+- ✅ `css-tokens.contract.test.ts` — naming convention `--syn-*`,
+  color primitive scale (neutral/brand/accent + shades 0-950),
+  semantic colors (text/surface/border/state/action), spacing
+  (xs..4xl), typography roles, radius, theme override pattern,
+  fallback defensivo en UI consumption.
+
 Pending (futuro):
 
-- ⬜ `host-bridge.contract.test.ts` — shape de `window.synergos`
-  (i18n + theme + brand + member + page) per
-  `host-bridge.md`.
-- ⬜ `i18n-bridge.contract.test.ts` — `t(key, fallback)` API +
-  Dictionary key naming.
-- ⬜ `css-tokens.contract.test.ts` — naming convention de CSS custom
-  props (`--syn-*`).
 - ⬜ Bundle registry contract — más complejo (HTTP mocked); deferred.
+- ⬜ Validation contra archivos source (`syn-tokens.css`,
+  `Dictionary/*.config`) en lugar de solo shape patterns. Requiere
+  fs read + parse — agregar en CI step.
 
 ## Notas
 
