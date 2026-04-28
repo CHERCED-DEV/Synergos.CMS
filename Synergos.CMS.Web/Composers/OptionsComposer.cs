@@ -76,5 +76,10 @@ public sealed class OptionsComposer : IComposer
         // Ola 216 — Host bridge (ADR 0083). Tuning de window.synergos.
         builder.Services.Configure<HostBridgeSettings>(
             builder.Config.GetSection("Synergos:HostBridge"));
+
+        // Olas 257-258 — Data Protection multi-instance keyring (ADR 0087).
+        // Vacío default = preserva comportamiento per-instance (no breaking).
+        builder.Services.Configure<DataProtectionSettings>(
+            builder.Config.GetSection("Synergos:DataProtection"));
     }
 }
