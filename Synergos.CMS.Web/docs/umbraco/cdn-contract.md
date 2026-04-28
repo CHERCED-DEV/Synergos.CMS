@@ -38,6 +38,138 @@ by owning the contract from the CMS side.
 
 Only after those five are frozen does the real adapter get written.
 
+## Proposal — defaults the CMS would accept (Ola 171)
+
+To accelerate the unblock, here is a concrete proposal the CDN team can
+rubber-stamp or push back on. Every value is negotiable; the goal is to
+remove "we don't know what to ask for" from the path.
+
+### 1. Registry endpoint
+
+Suggested:
+
+```
+GET https://cdn.synergos.example/registry/v1/bundles/{elementKey}
+Headers:
+  Accept: application/json
+  Authorization: Bearer {SYNERGOS_CDN_API_KEY}        ; optional read-only
+  X-Synergos-Cache-Key: {elementKey}                  ; optional, edge cache hint
+```
+
+`{elementKey}` is the schema alias (e.g. `elementSynAccordion`). URL
+format opaque to consumers — the client owns it; CMS never assembles.
+
+Alternative shapes that work equally well:
+- POST batch: `POST /registry/v1/bundles` with `{ "keys": ["elementSynA", "elementSynB"] }` returning a map. Better for SSR rendering many blocks per page (avoid N round-trips). Defer until perf data shows it matters.
+- GraphQL endpoint with `bundle(key: String!)` query.
+
+### 2. Response schema
+
+Suggested JSON shape:
+
+```jsonc
+{
+  "version": "1.4.2",                                  // semver
+  "mainEntry": "https://cdn.synergos.example/elements/elementSynAccordion/1.4.2/main.js",
+  "dependencies": [
+    "https://cdn.synergos.example/elements/elementSynAccordion/1.4.2/styles.css",
+    "https://cdn.synergos.example/shared/web-components-runtime/1.0.0/runtime.js"
+  ],
+  "integrity": {                                       // optional, not in BundleDescriptor today
+    "mainEntry": "sha384-...",
+    "dependencies": ["sha384-...", "sha384-..."]
+  },
+  "frameworkHint": "vanilla|angular|react|lit",        // optional, NOT used for routing per ADR 0015
+  "publishedAtUtc": "2026-04-27T15:00:00Z"             // optional, observability
+}
+```
+
+Mapping to `BundleDescriptor`:
+
+| CDN field | `BundleDescriptor` field | Notes |
+|---|---|---|
+| `mainEntry` | `MainEntryUri` (Uri) | Required. Must be absolute https. |
+| `dependencies` | `Dependencies` (IReadOnlyList&lt;Uri&gt;) | Order = load order. Empty array OK. |
+| `version` | `Version` (string) | Free-form, used for cache busting. |
+| `integrity` | (not yet in record) | When mandated, add via ADR successor. |
+| `frameworkHint` | (not used) | Per ADR 0015: framework is invisible to schema. |
+| `publishedAtUtc` | (not used) | Reserved for future telemetry. |
+
+### 3. Error semantics
+
+Suggested:
+
+| Status | CMS interpretation | Action |
+|---|---|---|
+| 200 | Bundle exists | Return `BundleDescriptor` |
+| 404 | Bundle does NOT exist for this key | Return `null` (placeholder rendered) |
+| 401 / 403 | Auth misconfigured | Return `null` + log error |
+| 429 | Rate limit | Return `null` + warn; fall back to placeholder |
+| 5xx | CDN failure | Return `null` + warn; resilience handler retries 3x then gives up |
+| Connect timeout | CDN unreachable | Same as 5xx |
+
+CMS uses `Microsoft.Extensions.Http.Resilience` standard handler
+(ADR 0064 + 0069) — retries are automatic with exponential backoff.
+The CDN team only needs to commit to the status semantics above; retry
+policy is owned by CMS.
+
+### 4. Versioning policy
+
+Suggested:
+
+- **Path-based major versions**: `/registry/v1/...` → `/registry/v2/...`
+  for breaking changes. CMS opts in by config flip; old version stays
+  online for at least 90 days for rollback.
+- **Field additions are non-breaking** — CMS deserialiser ignores
+  unknown fields. CDN can add `integrity`, `publishedAtUtc`, etc. at
+  any time.
+- **Field removals or type changes** require new major path.
+- **`version` field of the response payload** is free-form (no
+  semver enforcement at the wire).
+
+### 5. Dev / staging endpoints
+
+Suggested:
+
+- **Dev**: `https://cdn-dev.synergos.example/registry/v1/...` — open
+  read access, no auth header required. CMS dev environments point
+  here; integration tests against fixtures (still in-memory).
+- **Staging**: same auth scheme as prod, separate host.
+- **Prod**: `https://cdn.synergos.example/registry/v1/...` — auth
+  required.
+
+If only prod exists, CMS uses `StubBundleRegistryClient` in dev (current
+state). Acceptable.
+
+### Settings the CMS will expose at boot
+
+The composer that wires `HttpBundleRegistryClient` will read:
+
+```jsonc
+{
+  "Synergos": {
+    "Cdn": {
+      "Mode": "real|stub",                             // default "real" once contract freezes
+      "RegistryBaseUrl": "https://cdn.synergos.example",
+      "RegistryPathTemplate": "/registry/v1/bundles/{elementKey}",
+      "ApiKey": "${SYNERGOS_CDN_API_KEY}",             // env var resolution
+      "TimeoutSeconds": 5                              // per-attempt
+    }
+  }
+}
+```
+
+Resilience inherits from `WebhookResilience` PerChannel via FactoryName
+`bundle-registry` — reuses ADR 0069 pattern.
+
+### What needs CDN team sign-off, not negotiation
+
+- The exact 5 points above with concrete values. Anything they
+  disagree with, they propose alternative; the table above is the
+  default position.
+- Confirmation that field-additions are non-breaking (so we don't
+  block on every field add).
+
 ## When CDN unblocks — execution outline (do NOT improvise)
 
 1. **ADR successor to 0012** freezing the final contract. Move the
