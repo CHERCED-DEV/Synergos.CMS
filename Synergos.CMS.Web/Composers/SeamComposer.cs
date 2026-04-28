@@ -174,6 +174,13 @@ public sealed class SeamComposer : IComposer
         // Olas 155-156 — Member roster writer split (lock/unlock) — ISP-clean.
         services.AddTransient<IMemberRosterWriter, UmbracoMemberRosterWriter>();
 
+        // Olas 233-235 — GDPR RTBF coordinator (Cap-240 Batch B). Orquesta
+        // hard-delete del Member + anonimización inline de comments y form
+        // submissions (App_Data/syn-comments/, App_Data/syn-form-submissions/)
+        // + audit terminal "gdpr.rtbf-processed". Transient — depende del
+        // roster writer transient.
+        services.AddTransient<IGdprRtbfCoordinator, FileSystemGdprRtbfCoordinator>();
+
         // Olas 153-154 — Audit trail (ADR 0066). FileSystemAuditTrailWriter
         // persiste eventos admin en App_Data/syn-audit/{yyyy-MM-dd}.jsonl.
         // Singleton — solo depende de IHostEnvironment + ILogger; concurrency

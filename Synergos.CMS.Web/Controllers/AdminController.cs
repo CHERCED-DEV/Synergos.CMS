@@ -45,6 +45,7 @@ public sealed class AdminController : Controller
     private readonly IMemberRosterReader _memberRoster;
     private readonly IMemberRosterWriter _memberRosterWriter;
     private readonly IMemberTwoFactorService _memberTwoFactor;
+    private readonly IGdprRtbfCoordinator _gdpr;
     private readonly IAuditTrailWriter _audit;
     private readonly IMemoryCache _cache;
     private readonly IOptionsMonitor<AdminSettings> _adminSettings;
@@ -58,6 +59,7 @@ public sealed class AdminController : Controller
         IMemberRosterReader memberRoster,
         IMemberRosterWriter memberRosterWriter,
         IMemberTwoFactorService memberTwoFactor,
+        IGdprRtbfCoordinator gdpr,
         IAuditTrailWriter audit,
         IMemoryCache cache,
         IOptionsMonitor<AdminSettings> adminSettings)
@@ -70,6 +72,7 @@ public sealed class AdminController : Controller
         _memberRoster = memberRoster;
         _memberRosterWriter = memberRosterWriter;
         _memberTwoFactor = memberTwoFactor;
+        _gdpr = gdpr;
         _audit = audit;
         _cache = cache;
         _adminSettings = adminSettings;
@@ -1092,6 +1095,49 @@ public sealed class AdminController : Controller
             ok ? "success" : "failure",
             detail: $"roles=[{string.Join(',', clean)}]",
             cancellationToken: cancellationToken);
+
+        return RedirectToAction(nameof(Members));
+    }
+
+    /// <summary>
+    /// POST /admin/members/{key}/gdpr-erase — flujo "Right to be
+    /// Forgotten" (GDPR Art. 17). Olas 233-235 (Cap-240 Batch B).
+    /// Hard-deletes el Member + anonimiza comments y form submissions
+    /// linkeadas + audita "gdpr.rtbf-processed". <b>Irreversible</b>:
+    /// la UI debe mostrar confirm dialog antes de POST. Self-erase
+    /// blocked por defensa en depth.
+    /// </summary>
+    [HttpPost("members/{memberKey:guid}/gdpr-erase")]
+    public async Task<IActionResult> GdprEraseMember(Guid memberKey, CancellationToken cancellationToken)
+    {
+        if (!_gate.HasAnyRole(ModeratorRolesCsv))
+        {
+            return Forbid();
+        }
+
+        var actorEmail = _gate.CurrentMemberEmail ?? string.Empty;
+
+        // Self-erase guard — mismo pattern que DeleteMember.
+        if (!string.IsNullOrWhiteSpace(actorEmail))
+        {
+            var roster = _memberRoster.GetRosterPage(1, 1000, null);
+            var match = roster.Items.FirstOrDefault(m => m.Key == memberKey);
+            if (match is not null && string.Equals(match.Email, actorEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                await EmitAuditAsync("gdpr.rtbf-processed", $"memberKey={memberKey:N}", "failure",
+                    detail: "self-erase blocked", cancellationToken: cancellationToken);
+                return RedirectToAction(nameof(Members));
+            }
+        }
+
+        var result = await _gdpr.ProcessRequestAsync(memberKey, actorEmail, cancellationToken);
+
+        // El coordinator ya emitió su propio audit terminal. Cascada de 2FA
+        // queda alineada con DeleteMember para no dejar el secret huérfano.
+        if (result.MemberDeleted)
+        {
+            await _memberTwoFactor.DisableAsync(memberKey, cancellationToken);
+        }
 
         return RedirectToAction(nameof(Members));
     }
