@@ -53,9 +53,12 @@ Pending (futuro):
 
 ## Notas
 
-- El harness se llama desde el CMS pero **no integra con CI .NET**
-  por ahora. El operador o UI dev lo corre manualmente cuando hace
-  cambios al contract spec o cuando agrega nuevo evento.
+- **CI gating activo** desde Cap-250 Batch C (Ola 246): el workflow
+  `.github/workflows/contract-tests.yml` corre este harness en cada
+  PR que toque `Synergos.CMS.Web/docs/contracts/**`. Bloquea el
+  merge si los tests fallan.
+- El harness se ejecuta separado del CI .NET — no requiere build de
+  Umbraco ni DB. Solo Node 20 + npm install.
 - Si llegan los specs spread to mirror project Synergos.UI, este
   harness queda obsoleto y se elimina (DRY: una sola fuente).
 - El target NO es testear la implementación — es testear que el
