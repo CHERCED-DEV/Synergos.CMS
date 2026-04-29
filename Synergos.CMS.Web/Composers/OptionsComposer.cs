@@ -81,5 +81,10 @@ public sealed class OptionsComposer : IComposer
         // Vacío default = preserva comportamiento per-instance (no breaking).
         builder.Services.Configure<DataProtectionSettings>(
             builder.Config.GetSection("Synergos:DataProtection"));
+
+        // Olas 273-275 — Retention policies generalizadas (ADR 0088).
+        // 0 = nunca purgar (operador gestiona manualmente).
+        builder.Services.Configure<RetentionSettings>(
+            builder.Config.GetSection("Synergos:Retention"));
     }
 }

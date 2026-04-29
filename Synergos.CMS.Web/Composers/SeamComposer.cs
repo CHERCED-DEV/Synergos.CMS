@@ -187,10 +187,18 @@ public sealed class SeamComposer : IComposer
         // gestionada via lock interno.
         services.AddSingleton<IAuditTrailWriter, FileSystemAuditTrailWriter>();
 
-        // Ola 162 — Audit retention background sweep (ADR 0070). Purga
-        // archivos JSONL más viejos que AdminSettings.AuditRetentionDays
-        // al boot + cada 24h. Si retention=0, no-op.
-        services.AddHostedService<AuditRetentionHostedService>();
+        // Ola 162 + Cap-270 Batch B — Retention sweep generalizado
+        // (ADRs 0070 + 0088). RetentionSweepHostedService itera todas
+        // las IRetentionPolicy registradas cada 24h con try-catch
+        // per-policy. Reemplaza al antiguo AuditRetentionHostedService
+        // (deletado) extendiendo el pattern a 4 stores: audit + comments
+        // (rejected) + form-submissions + search-analytics. Cada policy
+        // opt-in via setting de retention days (0 = nunca purgar).
+        services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.AuditRetentionPolicy>();
+        services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.CommentsRetentionPolicy>();
+        services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.FormSubmissionsRetentionPolicy>();
+        services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.SearchAnalyticsRetentionPolicy>();
+        services.AddHostedService<Synergos.CMS.Web.Services.Retention.RetentionSweepHostedService>();
 
         // Olas 165-166 — Webhook telemetry store (ADR 0071). Ring buffer
         // in-memory por canal con last 1000 outcomes. Singleton — thread-safe
