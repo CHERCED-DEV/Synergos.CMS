@@ -66,6 +66,43 @@ $dst = "C:\Users\HITMA\Desktop\synergos-backups\Umbraco.sqlite-$ts.db"
 Copy-Item -Path $src -Destination $dst
 ```
 
+**IMPORTANTE — WAL files:** SQLite en WAL mode (default Umbraco 13)
+mantiene 2 sidecar files: `*.sqlite.db-wal` (write-ahead log) y
+`*.sqlite.db-shm` (shared memory index). Si copias SOLO el `.db`, el
+backup queda **inconsistente** si hay writes pendientes en el WAL.
+Antes de copiar, hacer un checkpoint manual:
+
+```powershell
+sqlite3 $src "PRAGMA wal_checkpoint(TRUNCATE);"
+Copy-Item -Path $src -Destination $dst
+```
+
+O alternativamente copiar los 3 files juntos (`.db`, `.db-wal`,
+`.db-shm`). El `SqliteMaintenanceHostedService` ya corre el checkpoint
+automáticamente cada 24h (Cap-270 Batch D); para backups inmediatos
+post-write-burst, ejecutarlo manual asegura WAL flush.
+
+### SQLite maintenance automático
+
+`SqliteMaintenanceHostedService` (Cap-270 Batch D) corre cada
+`Synergos:SqliteMaintenance:IntervalHours` (default 24h) dos pragmas:
+
+- `PRAGMA wal_checkpoint(TRUNCATE)` — colapsa WAL back into main DB.
+  Sin esto el WAL crece sin límite (audit reveló WAL de 4MB sobre
+  DB de 4MB).
+- `PRAGMA optimize` — actualiza statistics para el query planner.
+
+**Settings**:
+- `Synergos:SqliteMaintenance:Enabled` (default `true`).
+- `Synergos:SqliteMaintenance:IntervalHours` (default `24`).
+- `Synergos:SqliteMaintenance:InitialDelaySeconds` (default `120`)
+  — espera al boot Umbraco antes del primer run para no contender
+  el file lock.
+
+Auto-detect: si la connection string usa
+`Microsoft.Data.Sqlite` provider, el service activa. Para SQL
+Server (futuro), NO-OP silent.
+
 ### App_Data (prod + dev)
 
 ```bash

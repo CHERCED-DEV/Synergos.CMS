@@ -86,5 +86,10 @@ public sealed class OptionsComposer : IComposer
         // 0 = nunca purgar (operador gestiona manualmente).
         builder.Services.Configure<RetentionSettings>(
             builder.Config.GetSection("Synergos:Retention"));
+
+        // Olas 278-279 — SQLite maintenance pragmas (ADR 0088 Batch D).
+        // Activo cuando Umbraco usa SQLite — no-op silent en SQL Server.
+        builder.Services.Configure<SqliteMaintenanceSettings>(
+            builder.Config.GetSection("Synergos:SqliteMaintenance"));
     }
 }

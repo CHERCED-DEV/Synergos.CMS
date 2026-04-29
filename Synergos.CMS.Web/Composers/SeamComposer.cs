@@ -200,6 +200,11 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.SearchAnalyticsRetentionPolicy>();
         services.AddHostedService<Synergos.CMS.Web.Services.Retention.RetentionSweepHostedService>();
 
+        // Olas 278-279 — SQLite maintenance pragmas (Cap-270 Batch D).
+        // Cierra audit finding: WAL crece sin checkpoint reciente.
+        // Auto-detect SQLite via ProviderName; NO-OP si SQL Server.
+        services.AddHostedService<SqliteMaintenanceHostedService>();
+
         // Olas 165-166 — Webhook telemetry store (ADR 0071). Ring buffer
         // in-memory por canal con last 1000 outcomes. Singleton — thread-safe
         // via per-channel lock. Reset on restart (no persistencia).
