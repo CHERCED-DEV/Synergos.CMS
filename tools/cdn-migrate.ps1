@@ -7,26 +7,26 @@ docs/contracts/cdn-bundle-structure.md.
 Cap-280 Batch A.2. Toma una CDN root path como input y aplica:
 
 1. Renombra carpetas top-level de elementos:
-   {tag-sin-prefix}/  →  synergos-{tag}/
+   {tag-sin-prefix}/  ->  synergos-{tag}/
 
-   (e.g. column/ → synergos-column/, accordion/ → synergos-accordion/)
+   (e.g. column/ -> synergos-column/, accordion/ -> synergos-accordion/)
    Skip si ya empieza con "synergos-".
 
-2. Renombra archivos sin extensión a .json:
-   manifest  →  manifest.json
-   meta      →  meta.json
+2. Renombra archivos sin extension a .json:
+   manifest  ->  manifest.json
+   meta      ->  meta.json
 
 3. Calcula SRI integrity hash (sha384) de cada main.js y lo inyecta
-   al manifest.json correspondiente si no está presente.
+   al manifest.json correspondiente si no esta presente.
 
 Soporta -DryRun para preview sin tocar nada.
 Reporta cada cambio + counts agregados al final.
 
 .PARAMETER CdnRoot
-Path absoluto a la raíz de la CDN local (e.g. "C:\LOCAL_CDN").
+Path absoluto a la raiz de la CDN local (e.g. "C:\LOCAL_CDN").
 
 .PARAMETER DryRun
-Si presente, solo muestra qué cambiaría sin aplicar.
+Si presente, solo muestra que cambiaria sin aplicar.
 
 .PARAMETER PrefixFolder
 Subfolder bajo CdnRoot donde viven los bundles. Default "synergos".
@@ -38,9 +38,13 @@ Subfolder bajo CdnRoot donde viven los bundles. Default "synergos".
 .\cdn-migrate.ps1 -CdnRoot "C:\LOCAL_CDN"
 
 .NOTES
-Idempotent: si ya está canonical, todos los pasos son no-op.
-Backup: NO crea backup automático. El operador debe hacer copy
+Idempotent: si ya esta canonical, todos los pasos son no-op.
+Backup: NO crea backup automatico. El operador debe hacer copy
 manual antes de correr en modo apply (DRY-RUN primero).
+
+ASCII-only por encoding safety: PowerShell 5.1 lee .ps1 como ANSI
+por default cuando el archivo no tiene BOM. Sin caracteres Unicode
+en el script source para evitar mojibake en boxes-drawing y emojis.
 #>
 
 [CmdletBinding()]
@@ -55,7 +59,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ─── Validation ──────────────────────────────────────────────────
+# --- Validation -------------------------------------------------
 
 if (-not (Test-Path $CdnRoot)) {
     Write-Host "[error] CdnRoot path doesn't exist: $CdnRoot" -ForegroundColor Red
@@ -70,10 +74,10 @@ if (-not (Test-Path $bundlesRoot)) {
 }
 
 if ($DryRun) {
-    Write-Host "════════════════ DRY RUN — no changes will be applied ════════════════" -ForegroundColor Yellow
+    Write-Host "================ DRY RUN -- no changes will be applied ================" -ForegroundColor Yellow
 } else {
-    Write-Host "════════════════ APPLY MODE — changes will be persisted ════════════════" -ForegroundColor Cyan
-    Write-Host "Tip: corre con -DryRun primero si no estás seguro." -ForegroundColor DarkGray
+    Write-Host "================ APPLY MODE -- changes will be persisted ================" -ForegroundColor Cyan
+    Write-Host "Tip: corre con -DryRun primero si no estas seguro." -ForegroundColor DarkGray
 }
 Write-Host "Root: $CdnRoot"
 Write-Host "Bundles: $bundlesRoot"
@@ -87,23 +91,23 @@ $stats = @{
     Errors         = 0
 }
 
-# ─── Step 1: Rename top-level element folders to synergos-* ──────
+# --- Step 1: Rename top-level element folders to synergos-* -----
 
-Write-Host "── Step 1: Element folder naming ───────────────────────" -ForegroundColor Green
+Write-Host "-- Step 1: Element folder naming -----------------------" -ForegroundColor Green
 $elements = Get-ChildItem -Path $bundlesRoot -Directory
 foreach ($folder in $elements) {
     if ($folder.Name -like "synergos-*") {
-        Write-Host "  ✓ $($folder.Name) (already canonical)" -ForegroundColor DarkGray
+        Write-Host "  [ok] $($folder.Name) (already canonical)" -ForegroundColor DarkGray
         continue
     }
     $newName = "synergos-$($folder.Name)"
     $newPath = Join-Path $folder.Parent.FullName $newName
     if (Test-Path $newPath) {
-        Write-Host "  ! $($folder.Name) → $newName SKIP (target exists)" -ForegroundColor Yellow
+        Write-Host "  [skip] $($folder.Name) -> $newName (target exists)" -ForegroundColor Yellow
         $stats.Errors++
         continue
     }
-    Write-Host "  $($folder.Name) → $newName" -ForegroundColor Cyan
+    Write-Host "  [rename] $($folder.Name) -> $newName" -ForegroundColor Cyan
     if (-not $DryRun) {
         try {
             Rename-Item -Path $folder.FullName -NewName $newName
@@ -119,24 +123,24 @@ foreach ($folder in $elements) {
 
 Write-Host ""
 
-# ─── Step 2: Rename manifest/meta to .json ───────────────────────
+# --- Step 2: Rename manifest/meta to .json ----------------------
 
-Write-Host "── Step 2: manifest/meta → .json extension ─────────────" -ForegroundColor Green
+Write-Host "-- Step 2: manifest/meta -> .json extension ------------" -ForegroundColor Green
 $candidates = @("manifest", "meta")
 foreach ($name in $candidates) {
     $files = Get-ChildItem -Path $bundlesRoot -Recurse -Filter $name -File -ErrorAction SilentlyContinue
     foreach ($file in $files) {
-        # Skip si ya tiene extensión (e.g. manifest.json existente)
+        # Skip si ya tiene extension (e.g. manifest.json existente)
         if ($file.Name -ne $name) { continue }
         $newName = "$name.json"
         $newPath = Join-Path $file.Directory.FullName $newName
         if (Test-Path $newPath) {
-            Write-Host "  ! $($file.FullName) → $newName SKIP (target exists)" -ForegroundColor Yellow
+            Write-Host "  [skip] $($file.FullName) -> $newName (target exists)" -ForegroundColor Yellow
             $stats.Errors++
             continue
         }
         $rel = $file.FullName.Substring($bundlesRoot.Length).TrimStart('\', '/')
-        Write-Host "  $rel → $newName" -ForegroundColor Cyan
+        Write-Host "  [rename] $rel -> $newName" -ForegroundColor Cyan
         if (-not $DryRun) {
             try {
                 Rename-Item -Path $file.FullName -NewName $newName
@@ -153,9 +157,9 @@ foreach ($name in $candidates) {
 
 Write-Host ""
 
-# ─── Step 3: SRI integrity hash injection ────────────────────────
+# --- Step 3: SRI integrity hash injection -----------------------
 
-Write-Host "── Step 3: SRI integrity (sha384) en manifest.json ─────" -ForegroundColor Green
+Write-Host "-- Step 3: SRI integrity (sha384) en manifest.json -----" -ForegroundColor Green
 $manifests = Get-ChildItem -Path $bundlesRoot -Recurse -Filter "manifest.json" -File -ErrorAction SilentlyContinue
 foreach ($manifest in $manifests) {
     $manifestDir = $manifest.Directory.FullName
@@ -174,13 +178,13 @@ foreach ($manifest in $manifests) {
     $mainPath = Join-Path $manifestDir $mainName
 
     if (-not (Test-Path $mainPath)) {
-        Write-Host "  [warn] $rel — main file '$mainName' no existe en $manifestDir" -ForegroundColor Yellow
+        Write-Host "  [warn] $rel -- main file '$mainName' no existe en $manifestDir" -ForegroundColor Yellow
         $stats.Errors++
         continue
     }
 
     if ($json.PSObject.Properties.Name -contains 'integrity' -and $json.integrity -and ($json.integrity -like 'sha384-*')) {
-        Write-Host "  ✓ $rel (integrity already present)" -ForegroundColor DarkGray
+        Write-Host "  [ok] $rel (integrity already present)" -ForegroundColor DarkGray
         $stats.HashesAlready++
         continue
     }
@@ -190,13 +194,14 @@ foreach ($manifest in $manifests) {
     $sha = [System.Security.Cryptography.SHA384]::Create()
     $hash = $sha.ComputeHash($bytes)
     $sri = "sha384-$([Convert]::ToBase64String($hash))"
-
     $bytesLen = $bytes.Length
-    Write-Host "  $rel ← $sri ($bytesLen bytes)" -ForegroundColor Cyan
+
+    Write-Host "  [hash] $rel" -ForegroundColor Cyan
+    Write-Host "         $sri ($bytesLen bytes)" -ForegroundColor DarkCyan
 
     if (-not $DryRun) {
         try {
-            # Inject integrity + size si no están
+            # Inject integrity + size si no estan
             if ($json.PSObject.Properties.Name -notcontains 'integrity') {
                 $json | Add-Member -NotePropertyName 'integrity' -NotePropertyValue $sri -Force
             } else {
@@ -219,12 +224,13 @@ foreach ($manifest in $manifests) {
 }
 
 Write-Host ""
-Write-Host "════════════════ Summary ════════════════" -ForegroundColor Cyan
-Write-Host "Folders renamed:       $($stats.FoldersRenamed)"
-Write-Host "Files renamed:         $($stats.FilesRenamed)"
-Write-Host "Integrity hashes added: $($stats.HashesAdded)"
+Write-Host "================ Summary ================" -ForegroundColor Cyan
+Write-Host "Folders renamed:          $($stats.FoldersRenamed)"
+Write-Host "Files renamed:            $($stats.FilesRenamed)"
+Write-Host "Integrity hashes added:   $($stats.HashesAdded)"
 Write-Host "Integrity hashes already: $($stats.HashesAlready)"
-Write-Host "Errors / skips:        $($stats.Errors)" -ForegroundColor $(if ($stats.Errors -gt 0) { 'Yellow' } else { 'Green' })
+$errorColor = if ($stats.Errors -gt 0) { 'Yellow' } else { 'Green' }
+Write-Host "Errors / skips:           $($stats.Errors)" -ForegroundColor $errorColor
 Write-Host ""
 
 if ($DryRun) {
