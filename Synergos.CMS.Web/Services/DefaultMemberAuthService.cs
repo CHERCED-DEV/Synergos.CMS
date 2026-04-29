@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Identity;
 using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Web.Common.Security;
@@ -70,10 +72,38 @@ public sealed class DefaultMemberAuthService : IMemberAuthService
 
         if (request.SignInImmediately)
         {
-            await _signInManager.SignInAsync(user, isPersistent: false);
+            await SignInWithRoleClaimsAsync(user, isPersistent: false);
         }
 
         return MemberAuthResult.Ok();
+    }
+
+    /// <summary>
+    /// Hotfix Cap-280: Umbraco's <see cref="IMemberSignInManager"/> default
+    /// flow NO emite los Member Groups del usuario como
+    /// <see cref="ClaimTypes.Role"/> claims al cookie. El
+    /// <c>DefaultMemberAccessGate.HasAnyRole</c> lee esos claims; sin
+    /// ellos, todo role-based authorization (e.g. AdminController gate
+    /// para "moderator,admin") falla aunque el Member tenga el group
+    /// asignado en backoffice.
+    ///
+    /// Workaround: capturamos los roles via <c>GetRolesAsync</c> y los
+    /// pasamos explícitamente como Role claims a <c>SignInWithClaimsAsync</c>.
+    /// </summary>
+    private async Task SignInWithRoleClaimsAsync(MemberIdentityUser user, bool isPersistent)
+    {
+        var roles = await _memberManager.GetRolesAsync(user);
+        var roleClaims = roles
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => new Claim(ClaimTypes.Role, r))
+            .ToList();
+
+        // IMemberSignInManager (Umbraco interface) NO expone
+        // SignInWithClaimsAsync. La concrete impl MemberSignInManager
+        // extiende SignInManager<MemberIdentityUser> que sí lo tiene.
+        // Cast safe per Umbraco 13 design.
+        var baseSignIn = (SignInManager<MemberIdentityUser>)_signInManager;
+        await baseSignIn.SignInWithClaimsAsync(user, isPersistent, roleClaims);
     }
 
     public async Task<MemberAuthResult> LoginAsync(
@@ -167,7 +197,7 @@ public sealed class DefaultMemberAuthService : IMemberAuthService
             return MemberAuthResult.Fail("invalid-credentials", "Member no encontrado.");
         }
 
-        await _signInManager.SignInAsync(user, isPersistent);
+        await SignInWithRoleClaimsAsync(user, isPersistent);
         return MemberAuthResult.Ok();
     }
 

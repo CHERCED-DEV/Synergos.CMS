@@ -181,7 +181,8 @@
                                             <button type="submit" class="syn-admin__action syn-admin__action--ghost">Aplicar</button>
                                         </form>
                                     </td>
-                            </tr>
+                                </tr>
+                            }
                         }
                     </tbody>
                 </table>
@@ -241,7 +242,7 @@
             <ul class="syn-admin__dialog-body" style="margin-top:0;">
                 <li>Hard-delete del Member record + cascada 2FA secret/recovery codes.</li>
                 <li><strong>Anonimiza</strong> comments del Member en <code>App_Data/syn-comments/</code> (AuthorName → "[deleted]").</li>
-                <li><strong>Anonimiza</strong> form submissions con email del Member en <code>App_Data/syn-form-submissions/</code> (email field → "[deleted]@gdpr.local").</li>
+                <li><strong>Anonimiza</strong> form submissions con email del Member en <code>App_Data/syn-form-submissions/</code> (email field → "[deleted]@@gdpr.local").</li>
                 <li>Audit trail <code>gdpr.rtbf-processed</code> queda registrado por compliance (NO se borra — GDPR Art. 17(3)).</li>
             </ul>
             <p class="syn-admin__dialog-body">
