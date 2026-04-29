@@ -367,6 +367,12 @@ public sealed class SeamComposer : IComposer
             return new UsyncFolderProbe(absolutePath);
         });
 
+        // Cap-280 Batch C — BundleRegistry probe (ADR 0089). Reporta el
+        // estado del adapter activo: Stub healthy con mensaje informativo,
+        // FileSystem resuelve un probe tag canónico contra el registry,
+        // Unknown mode reporta unhealthy. Visible vía /_health.
+        services.AddSingleton<ISchemaHealthProbe, BundleRegistryProbe>();
+
         // MVC controller discovery for attribute-routed endpoints
         // (HealthController, future controllers). AddControllers is
         // idempotent so calling it here is safe even if Umbraco already
