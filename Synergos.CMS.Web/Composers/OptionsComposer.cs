@@ -97,5 +97,11 @@ public sealed class OptionsComposer : IComposer
         // explícitamente el LocalPath + flag.
         builder.Services.Configure<LocalCdnSettings>(
             builder.Config.GetSection("Synergos:LocalCdn"));
+
+        // Olas 283-285 — Bundle registry client (ADR 0089 Batch B).
+        // Mode={Stub|FileSystem|Http} controla qué adapter resuelve los
+        // bundles UI. Settings detallados via Synergos:BundleRegistry.
+        builder.Services.Configure<BundleRegistrySettings>(
+            builder.Config.GetSection("Synergos:BundleRegistry"));
     }
 }

@@ -57,15 +57,23 @@ public sealed class SeamComposer : IComposer
 
         services.AddSingleton<IDictionaryCache, DictionaryCache>();
 
-        // Ola 8.5 — SynHost stack (ADR 0015 draft).
-        // StubBundleRegistryClient is the dev-time default while the CDN
-        // team has not published the real registry contract (ADR 0012 +
-        // docs/umbraco/cdn-contract.md). It always resolves to null; the
-        // SynHost emitter handles that by emitting a placeholder HTML
-        // comment and still producing the custom element tag. When the
-        // real adapter arrives, this registration swaps to
-        // HttpBundleRegistryClient behind a Synergos:Cdn:Mode switch.
-        services.AddSingleton<IBundleRegistryClient, StubBundleRegistryClient>();
+        // Ola 8.5 + Cap-280 Batch B — SynHost stack (ADR 0015 + 0089).
+        // El IBundleRegistryClient se registra condicionalmente por
+        // Synergos:BundleRegistry:Mode (default Stub):
+        //   - Stub: siempre null. Default cuando no hay CDN.
+        //   - FileSystem: lee registry.json + manifests del filesystem,
+        //     hot-reload via FileSystemWatcher, SRI lazy compute.
+        //     Útil con CDN local (e.g. C:\LOCAL_CDN).
+        //   - Http: GET al registry endpoint remoto (deferred).
+        var bundleRegistryMode = builder.Config["Synergos:BundleRegistry:Mode"] ?? "Stub";
+        if (string.Equals(bundleRegistryMode, "FileSystem", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddSingleton<IBundleRegistryClient, FileSystemBundleRegistryClient>();
+        }
+        else
+        {
+            services.AddSingleton<IBundleRegistryClient, StubBundleRegistryClient>();
+        }
         services.AddSingleton<ISynHostEmitter, DefaultSynHostEmitter>();
 
         // Ola 3 — Web-side adapters.

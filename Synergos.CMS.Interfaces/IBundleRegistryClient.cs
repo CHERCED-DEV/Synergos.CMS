@@ -32,7 +32,23 @@ public interface IBundleRegistryClient
 /// <param name="MainEntryUri">Absolute URI of the main JS entry point.</param>
 /// <param name="Dependencies">Absolute URIs of dependent bundles, in load order.</param>
 /// <param name="Version">Opaque version string (format owned by CDN).</param>
+/// <param name="Tag">Custom element DOM tag (e.g. <c>synergos-column</c>).
+///   Optional — null cuando el registry no expone el dato.</param>
+/// <param name="Alias">CMS schema DocType alias (e.g.
+///   <c>elementStructColumn</c>). Optional.</param>
+/// <param name="Tier">Bundle tier <c>primitive</c> | <c>composition</c> |
+///   <c>module</c> | <c>experience</c>. Optional — útil para budgets.</param>
+/// <param name="Integrity">SRI hash <c>sha384-{base64}</c> emitido al
+///   <c>&lt;script integrity="..."&gt;</c> del HTML. Optional — null
+///   cuando el adapter no calcula hashes.</param>
+/// <param name="Framework">Framework del bundle (<c>angular</c>,
+///   <c>react</c>, <c>svelte</c>, <c>vanilla</c>). Optional.</param>
 public sealed record BundleDescriptor(
     Uri MainEntryUri,
     IReadOnlyList<Uri> Dependencies,
-    string Version);
+    string Version,
+    string? Tag = null,
+    string? Alias = null,
+    string? Tier = null,
+    string? Integrity = null,
+    string? Framework = null);

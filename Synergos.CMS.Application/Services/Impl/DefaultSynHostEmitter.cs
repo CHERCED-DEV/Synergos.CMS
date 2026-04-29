@@ -119,7 +119,19 @@ public sealed class DefaultSynHostEmitter : ISynHostEmitter
         }
         sb.Append("<script src=\"")
           .Append(EncodeAttributeDoubleQuoted(descriptor.MainEntryUri.ToString()))
-          .Append("\" type=\"module\" defer></script>");
+          .Append('"');
+        // Cap-280: SRI integrity emitido cuando el descriptor lo provee
+        // (FileSystemBundleRegistryClient lo computa lazy del main.js).
+        // Defensa contra tampering del bundle (CDN compromised, MITM,
+        // cache poisoning). Browser rechaza ejecución si hash no matchea.
+        if (!string.IsNullOrWhiteSpace(descriptor.Integrity))
+        {
+            sb.Append(" integrity=\"")
+              .Append(EncodeAttributeDoubleQuoted(descriptor.Integrity))
+              .Append('"')
+              .Append(" crossorigin=\"anonymous\"");
+        }
+        sb.Append(" type=\"module\" defer></script>");
         return sb.ToString();
     }
 
