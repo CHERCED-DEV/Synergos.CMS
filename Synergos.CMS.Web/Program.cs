@@ -35,14 +35,14 @@ app.UseStatusCodePagesWithReExecute("/error/{0}");
 // válidos; sino, no-op silent.
 //
 // Smart cache control:
-// - Paths versionados (e.g. /synergos-column/angular/1.0.5/main.js)
+// - Paths versionados semver (e.g. /synergos-column/angular/1.0.5/main.js)
 //   → Cache-Control: public, max-age=1y, immutable.
-// - Paths "latest" (e.g. /synergos-column/angular/latest/main.js)
+// - Paths pointers mutables (latest/, v0/, v1/, ...)
 //   → Cache-Control: no-cache, must-revalidate (browser revalida con
 //     server cada request, devuelve 304 si no cambió).
 //
 // Esto evita el bug "1 year cached version inmovible" cuando el
-// CDN team publica una versión nueva bajo /latest/.
+// CDN team publica una versión nueva bajo un pointer mutable.
 {
     var cdnSettings = app.Services.GetRequiredService<IOptions<LocalCdnSettings>>().Value;
     if (cdnSettings.Enabled &&
@@ -58,8 +58,18 @@ app.UseStatusCodePagesWithReExecute("/error/{0}");
             OnPrepareResponse = ctx =>
             {
                 var path = ctx.Context.Request.Path.Value ?? string.Empty;
-                var isMutablePointer = path.Contains("/latest/", StringComparison.OrdinalIgnoreCase) ||
-                                       path.EndsWith("/latest", StringComparison.OrdinalIgnoreCase);
+                // Pointers mutables (no-cache):
+                //   /latest/    → global "current"
+                //   /v0/, /v1/, /v2/, ... → major-version pointer
+                // Pointers inmutables (cache 1y):
+                //   /1.0.5/, /0.1.0/, ... → semver exacto
+                var isMutablePointer =
+                    path.Contains("/latest/", StringComparison.OrdinalIgnoreCase) ||
+                    path.EndsWith("/latest", StringComparison.OrdinalIgnoreCase) ||
+                    System.Text.RegularExpressions.Regex.IsMatch(
+                        path,
+                        @"/v\d+(/|$)",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 ctx.Context.Response.Headers.CacheControl = isMutablePointer
                     ? "public, no-cache, must-revalidate"
                     : $"public, max-age={maxAge}, immutable";

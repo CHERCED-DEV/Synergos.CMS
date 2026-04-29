@@ -24,20 +24,32 @@ puede negarse a servirlo o tratarlo como integration legacy.
     ├── registry.json                       (opcional — global index)
     └── {tag}/                              ej. synergos-column
         └── {framework}/                    angular | react | svelte | vanilla
-            ├── latest/                     pointer mutable a la versión actual
+            ├── latest/                     pointer mutable global a la versión actual
             │   ├── main.js
             │   ├── main.js.map             (opcional — sourcemap)
             │   ├── manifest.json
             │   └── meta.json               (opcional — editorial metadata)
-            ├── 1.0.0/                      versión inmutable
+            ├── v0/                         pointer mutable major-version (apunta al 0.x.x current)
+            │   └── ... (igual shape que latest)
+            ├── v1/                         pointer mutable major-version (apunta al 1.x.x current)
+            │   └── ...
+            ├── 0.1.0/                      versión inmutable semver exacto
             │   ├── main.js
             │   ├── manifest.json
             │   └── meta.json
-            ├── 1.0.5/
+            ├── 1.0.0/
             │   └── ...
-            └── 1.1.0/
+            └── 1.0.5/
                 └── ...
 ```
+
+### Tipos de pointers
+
+| Path | Tipo | Mutabilidad | Use case |
+|---|---|---|---|
+| `latest/` | Global pointer | Mutable | "Quiero la última versión, sea lo que sea" — sites con auto-update agresivo. |
+| `v{N}/` | Major-version pointer | Mutable dentro del major | "Quiero la última de v1.x.x sin breaking changes" — sites con tolerancia a minor/patch updates. |
+| `0.1.0/`, `1.2.3/` | Semver exacto | Inmutable | "Quiero ESTA versión exacta forever" — production con freeze de version. |
 
 ### Reglas de naming
 
@@ -47,9 +59,10 @@ puede negarse a servirlo o tratarlo como integration legacy.
    `synergos-column/`. **Lowercase con guión**, igual que el tag.
 2. **`{framework}` ∈ { angular, react, svelte, vanilla }**. Lowercase.
    Solo estos 4 oficiales. Otros frameworks deben proponerse via ADR.
-3. **`{version}` semver `MAJOR.MINOR.PATCH`** (sin prefijo `v`).
-   `latest` es el único alias permitido — siempre apunta a la versión
-   más reciente publicada.
+3. **`{version}` semver `MAJOR.MINOR.PATCH`** sin prefijo `v` (ej.
+   `1.0.5`, `0.1.0`). Los aliases mutables permitidos son: `latest/`
+   (global) y `v{MAJOR}/` (e.g. `v0/`, `v1/`). Otros aliases requieren
+   ADR explícito.
 4. **`main.js` es el único entry point obligatorio**. CSS embebido por
    convención (CSS-in-JS o shadow DOM). Si el componente NECESITA un
    `.css` separado (ej. fonts loaded), declararlo en el manifest.
@@ -177,7 +190,8 @@ aplicar:
 | Path | Cache-Control | Por qué |
 |---|---|---|
 | `synergos-X/{fw}/{semver}/*` | `public, max-age=31536000, immutable` | Versión fija — nunca cambia. Cache 1 año seguro. |
-| `synergos-X/{fw}/latest/*` | `public, no-cache, must-revalidate` | Pointer mutable — browser revalida cada request, devuelve 304 si no cambió. |
+| `synergos-X/{fw}/latest/*` | `public, no-cache, must-revalidate` | Pointer mutable global — browser revalida cada request, devuelve 304 si no cambió. |
+| `synergos-X/{fw}/v{N}/*` | `public, no-cache, must-revalidate` | Pointer mutable major-version — mismo trato que `latest`. |
 | `registry.json` | `public, max-age=300, must-revalidate` | Index — refresh cada 5 min para descubrir bundles nuevos. |
 
 CORS: `Access-Control-Allow-Origin: *` para todos. Los bundles son
