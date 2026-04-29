@@ -290,3 +290,50 @@ hr {
   outline: 2px solid var(--syn-color-focus-ring);
   outline-offset: 2px;
 }
+
+/* ── CDN-offline fallback (Cap-310) ──────────────────────────────
+   Default visual para el placeholder que DefaultSynHostEmitter
+   inserta dentro de <synergos-*> cuando el bundle registry no
+   resuelve (Cap-280 Batch D + Cap-300 Batch A). Sin este sheet,
+   el div es invisible (empty styleable). El host puede override
+   por block via [data-block-alias="hero"] selector si necesita
+   altura/ratio especifico. */
+
+[data-synergos-cdn-offline] .syn-cdn-offline-fallback {
+  display: block;
+  min-height: 4rem;
+  padding: var(--syn-space-md);
+  background: linear-gradient(
+    90deg,
+    var(--syn-color-surface-secondary) 0%,
+    var(--syn-color-surface-tertiary) 50%,
+    var(--syn-color-surface-secondary) 100%
+  );
+  background-size: 200% 100%;
+  border: 1px dashed var(--syn-color-border-subtle, var(--syn-color-surface-tertiary));
+  border-radius: var(--syn-radius-md);
+  animation: syn-cdn-offline-shimmer 2s ease-in-out infinite;
+}
+
+[data-synergos-cdn-offline] .syn-cdn-offline-fallback::after {
+  content: attr(data-block-alias);
+  display: block;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary, var(--syn-color-text-primary));
+  font-family: var(--syn-font-family-mono, monospace);
+  text-align: center;
+  line-height: 4rem;
+  opacity: 0.6;
+}
+
+@keyframes syn-cdn-offline-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-synergos-cdn-offline] .syn-cdn-offline-fallback {
+    animation: none;
+    background: var(--syn-color-surface-secondary);
+  }
+}
