@@ -77,13 +77,13 @@ app.UseStatusCodePagesWithReExecute("/error/{0}");
             },
         });
         app.Logger.LogInformation(
-            "Local CDN mounted: path={Path} → route={Route} (versioned cache {MaxAge}s, latest no-cache)",
+            "Local CDN mounted: path={Path} -> route={Route} (versioned cache {MaxAge}s, latest no-cache)",
             cdnSettings.LocalPath, cdnSettings.RoutePath, maxAge);
     }
     else if (cdnSettings.Enabled)
     {
         app.Logger.LogWarning(
-            "Local CDN Enabled=true but LocalPath missing or invalid: {Path} — skipping mount",
+            "Local CDN Enabled=true but LocalPath missing or invalid: {Path} - skipping mount",
             cdnSettings.LocalPath);
     }
 }
