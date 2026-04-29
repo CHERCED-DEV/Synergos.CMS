@@ -59,9 +59,9 @@ Synergos.CMS/
 │   │   ├── adr/                 20 ADRs ratificados — SOURCE OF TRUTH
 │   │   └── umbraco/             cdn-contract.md (externalmente bloqueado)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
-│       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (~200 archivos)
-│       ├── DataTypes/           37 DTSelect* + UrlPicker/MediaPicker/Tags/ContentPicker
-│       ├── Dictionary/          i18n es-CO + en-US (369 keys)
+│       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (223 archivos)
+│       ├── DataTypes/           104 DTSelect* + UrlPicker/MediaPicker/Tags/ContentPicker
+│       ├── Dictionary/          i18n es-CO + en-US (430 keys)
 │       ├── Languages/           es-CO (default) + en-US
 │       ├── MediaTypes/          synImage + synDocument + synIcon
 │       └── Templates/           Razor template registry
@@ -74,8 +74,9 @@ Synergos.CMS/
 |---------------------------------|------------------------------------------------------------|
 | "¿Por qué se tomó esta decisión?" | `Synergos.CMS.Web/docs/adr/NNNN-*.md` (20 ADRs)           |
 | "¿Qué DocTypes existen?"         | `uSync/v9/ContentTypes/`                                   |
-| "¿Qué Dictionary keys hay?"      | `uSync/v9/Dictionary/` (369 archivos .config)              |
+| "¿Qué Dictionary keys hay?"      | `uSync/v9/Dictionary/` (430 archivos .config — alias PascalCase, filename lowercase por convención uSync) |
 | "¿Qué compositions y para qué?"  | `uSync/v9/ContentTypes/compdom*.config` + `compcontent*.config` |
+| "¿Hay compositions reservadas sin consumers?"  | Sí. Marker `[Bloqueado externamente - ...]` o `[Disponible — sin consumers actuales]` al inicio de `<Description>`. NO son orphans; son scaffolding tracked. Cap-260 audit (Cap-270 Batch C) las reconoce. |
 | "¿Qué status global de la migración?" | `refactor-docs/architecture/00-current-state-synergos-cms.md` §11 |
 | "¿Qué hay del legado que NO migramos?" | `refactor-docs/migration/05-legacy-refinement-inventory.md` |
 | "¿Memorias activas del agente?"  | `~/.claude/projects/c--Users-HITMA-Desktop-synergos/memory/MEMORY.md` |
