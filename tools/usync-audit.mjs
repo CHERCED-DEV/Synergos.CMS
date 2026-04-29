@@ -22,6 +22,11 @@
  *   5. Dictionary alias PascalCase: <Dictionary Alias="..."> debe
  *      matchear /^[A-Z][a-zA-Z]+(\.[A-Z][a-zA-Z]+)+$/ (canon contract
  *      docs/contracts/i18n-bridge.md).
+ *   6. Definition GUID cross-check: cada <Definition>{guid}</Definition>
+ *      en GenericProperties de ContentTypes debe apuntar a un DataType
+ *      existente (<DataType Key="{guid}">) en uSync/v9/DataTypes/.
+ *      Definition rota = property no carga el editor en backoffice.
+ *      Cap-290 Batch C (Ola 295).
  */
 
 import { promises as fs } from 'node:fs';
@@ -184,6 +189,30 @@ async function audit() {
         if (!PASCAL_CASE_DICT.test(alias)) {
             err('dictionary-naming',
                 `${alias} en ${path.relative(ROOT, file)} — debe ser PascalCase con dots ({Section}.{SubSection}.{Key})`);
+        }
+    }
+
+    // ─── 6. Definition GUID cross-check (Cap-290 Batch C) ──────────
+    // Cada <Definition>{guid}</Definition> en GenericProperty de un
+    // ContentType debe matchear el <DataType Key="{guid}"> de un
+    // DataType file. Definition rota → property silenciosamente cae
+    // a un editor inválido en backoffice.
+    const dataTypeKeys = new Set(); // lowercase
+    const dataTypeKeyRegex = /<DataType\s+Key="([0-9a-fA-F-]{36})"/;
+    for (const file of dataTypes) {
+        const text = await fs.readFile(file, 'utf-8');
+        const m = text.match(dataTypeKeyRegex);
+        if (m) dataTypeKeys.add(m[1].toLowerCase());
+    }
+    const definitionRefRegex = /<Definition>([0-9a-fA-F-]{36})<\/Definition>/g;
+    for (const file of contentTypes) {
+        const text = await fs.readFile(file, 'utf-8');
+        for (const m of matchAll(text, definitionRefRegex)) {
+            const guid = m[1].toLowerCase();
+            if (!dataTypeKeys.has(guid)) {
+                err('missing-datatype-definition',
+                    `${guid} referenciado en ${path.relative(ROOT, file)} no existe como <DataType Key>`);
+            }
         }
     }
 }
