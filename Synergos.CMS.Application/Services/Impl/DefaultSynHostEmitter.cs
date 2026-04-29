@@ -70,8 +70,19 @@ public sealed class DefaultSynHostEmitter : ISynHostEmitter
         // (e.g. ocultar, dim, mostrar fallback) sin que el server
         // tenga que tomar decisión visual. Cuando el bundle hidrate
         // post-CDN-recovery, el component decide si remueve el atributo.
+        //
+        // Cap-300 Batch A — visible fallback content. Custom Elements
+        // spec: contenido dentro del tag se renderiza as-is hasta que
+        // el bundle registre el component (upgrade). Aprovechamos para
+        // emitir un div placeholder con metadata (block-alias, custom-tag)
+        // que la layer CSS del host estiliza (loading state, error
+        // boundary, etc.). Sin texto literal — el server queda
+        // framework/i18n-agnostic; CSS o el bundle deciden el copy.
         var offlineAttr = descriptor is null ? " data-synergos-cdn-offline=\"true\"" : string.Empty;
-        var elementHtml = $"<{customTag}{offlineAttr} config='{EncodeAttributeSingleQuoted(configJson)}'></{customTag}>";
+        var fallbackContent = descriptor is null
+            ? BuildOfflineFallback(request.BlockAlias, customTag)
+            : string.Empty;
+        var elementHtml = $"<{customTag}{offlineAttr} config='{EncodeAttributeSingleQuoted(configJson)}'>{fallbackContent}</{customTag}>";
 
         return new SynHostEmitResult(scriptHtml, elementHtml, descriptor is not null);
     }
@@ -140,6 +151,20 @@ public sealed class DefaultSynHostEmitter : ISynHostEmitter
         }
         sb.Append(" type=\"module\" defer></script>");
         return sb.ToString();
+    }
+
+    private static string BuildOfflineFallback(string blockAlias, string customTag)
+    {
+        // Empty styleable div. CSS-driven: la layer del host (e.g.
+        // wwwroot/css/syn-base.css o un sheet del CDN) define el
+        // visual via [data-synergos-cdn-offline] .syn-cdn-offline-fallback
+        // o el selector que prefiera. data-attrs exponen identidad
+        // para que CSS pueda diferenciar por block (e.g. distinto
+        // height para Hero vs Badge).
+        return $"<div class=\"syn-cdn-offline-fallback\" "
+             + $"data-block-alias=\"{EncodeAttributeDoubleQuoted(blockAlias)}\" "
+             + $"data-custom-tag=\"{EncodeAttributeDoubleQuoted(customTag)}\" "
+             + $"aria-hidden=\"true\"></div>";
     }
 
     internal static string ToKebabCase(string alias)

@@ -63,6 +63,26 @@ public class DefaultSynHostEmitterTests
         var result = await sut.EmitAsync(Request());
 
         Assert.DoesNotContain("data-synergos-cdn-offline", result.ElementHtml);
+        // Cap-300 Batch A — fallback solo cuando descriptor null.
+        Assert.DoesNotContain("syn-cdn-offline-fallback", result.ElementHtml);
+    }
+
+    [Fact]
+    public async Task EmitAsync_NullRegistryResolution_EmitsVisibleFallbackContent()
+    {
+        var sut = BuildSut(new FakeBundleRegistryClient());
+
+        var result = await sut.EmitAsync(Request("countdownClock"));
+
+        Assert.Contains("<div class=\"syn-cdn-offline-fallback\"", result.ElementHtml);
+        Assert.Contains("data-block-alias=\"countdownClock\"", result.ElementHtml);
+        Assert.Contains("data-custom-tag=\"synergos-countdown-clock\"", result.ElementHtml);
+        Assert.Contains("aria-hidden=\"true\"", result.ElementHtml);
+        // Sandwich check: el div va DENTRO del custom element.
+        var openIdx = result.ElementHtml.IndexOf("<synergos-countdown-clock", StringComparison.Ordinal);
+        var fallbackIdx = result.ElementHtml.IndexOf("<div class=\"syn-cdn-offline-fallback\"", StringComparison.Ordinal);
+        var closeIdx = result.ElementHtml.IndexOf("</synergos-countdown-clock>", StringComparison.Ordinal);
+        Assert.InRange(fallbackIdx, openIdx, closeIdx);
     }
 
     [Fact]
