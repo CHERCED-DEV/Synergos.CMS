@@ -1,3 +1,4 @@
+using System.Globalization;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Services;
@@ -39,11 +40,19 @@ public sealed class LoggerAnalyticsTracker : IAnalyticsTracker
         _logger.LogInformation("Event: {EventName} {Properties}", eventName, serialized);
     }
 
+    // Culture-invariant formatting — los logs son consumidos por
+    // pipelines de ingestion (Logstash/Vector/Splunk) que parsean
+    // números asumiendo punto decimal. Si el host corre con
+    // CurrentCulture=es-CO (o cualquier locale con coma decimal),
+    // value.ToString() emitiría "0,7629" rompiendo el parser.
+    // IFormattable cubre numéricos (int/long/double/decimal/float)
+    // + DateTimeOffset + TimeSpan + Guid en una sola branch.
     private static string Format(object? value) => value switch
     {
         null => "null",
         string s => $"\"{s}\"",
-        DateTime d => d.ToString("O"),
+        DateTime d => d.ToString("O", CultureInfo.InvariantCulture),
+        IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
         _ => value.ToString() ?? "null",
     };
 }
