@@ -32,8 +32,17 @@ app.UseStatusCodePagesWithReExecute("/error/{0}");
 // bundles desde un directorio físico (ej. C:\LOCAL_CDN) bajo el
 // RoutePath configurado. Useful cuando la CDN remota (ADR 0012)
 // no está publicada todavía. Auto-detecta si Enabled+LocalPath son
-// válidos; sino, no-op silent. Cache-Control immutable asume bundles
-// fingerprinted (e.g. element-bundle.{hash}.js).
+// válidos; sino, no-op silent.
+//
+// Smart cache control:
+// - Paths versionados (e.g. /synergos-column/angular/1.0.5/main.js)
+//   → Cache-Control: public, max-age=1y, immutable.
+// - Paths "latest" (e.g. /synergos-column/angular/latest/main.js)
+//   → Cache-Control: no-cache, must-revalidate (browser revalida con
+//     server cada request, devuelve 304 si no cambió).
+//
+// Esto evita el bug "1 year cached version inmovible" cuando el
+// CDN team publica una versión nueva bajo /latest/.
 {
     var cdnSettings = app.Services.GetRequiredService<IOptions<LocalCdnSettings>>().Value;
     if (cdnSettings.Enabled &&
@@ -48,13 +57,17 @@ app.UseStatusCodePagesWithReExecute("/error/{0}");
             ServeUnknownFileTypes = false,
             OnPrepareResponse = ctx =>
             {
-                ctx.Context.Response.Headers.CacheControl =
-                    $"public, max-age={maxAge}, immutable";
+                var path = ctx.Context.Request.Path.Value ?? string.Empty;
+                var isMutablePointer = path.Contains("/latest/", StringComparison.OrdinalIgnoreCase) ||
+                                       path.EndsWith("/latest", StringComparison.OrdinalIgnoreCase);
+                ctx.Context.Response.Headers.CacheControl = isMutablePointer
+                    ? "public, no-cache, must-revalidate"
+                    : $"public, max-age={maxAge}, immutable";
                 ctx.Context.Response.Headers["Access-Control-Allow-Origin"] = "*";
             },
         });
         app.Logger.LogInformation(
-            "Local CDN mounted: path={Path} → route={Route} (cache {MaxAge}s)",
+            "Local CDN mounted: path={Path} → route={Route} (versioned cache {MaxAge}s, latest no-cache)",
             cdnSettings.LocalPath, cdnSettings.RoutePath, maxAge);
     }
     else if (cdnSettings.Enabled)
