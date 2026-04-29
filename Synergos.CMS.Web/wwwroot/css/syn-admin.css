@@ -377,7 +377,8 @@
   border-radius: var(--syn-radius-lg);
 }
 
-.syn-admin__filter-field {
+.syn-admin__filter-field,
+.syn-admin__filter {
   display: flex;
   flex-direction: column;
   gap: var(--syn-space-1);
@@ -392,7 +393,13 @@
   letter-spacing: var(--syn-letter-spacing-eyebrow);
 }
 
-.syn-admin__filter-field input {
+.syn-admin__filter-field input,
+.syn-admin__filter-field select,
+.syn-admin__filter-field textarea,
+.syn-admin__filter input,
+.syn-admin__filter select,
+.syn-admin__filter textarea,
+.syn-admin__filter-select {
   min-height: 40px;
   padding: var(--syn-space-2) var(--syn-space-3);
   background: var(--syn-color-surface-primary);
@@ -404,8 +411,18 @@
   transition: var(--syn-transition-colors);
 }
 
-.syn-admin__filter-field input:focus,
-.syn-admin__filter-field input:focus-visible {
+.syn-admin__filter-field select,
+.syn-admin__filter select,
+.syn-admin__filter-select {
+  cursor: pointer;
+}
+
+.syn-admin__filter-field :is(input, select, textarea):focus,
+.syn-admin__filter-field :is(input, select, textarea):focus-visible,
+.syn-admin__filter :is(input, select, textarea):focus,
+.syn-admin__filter :is(input, select, textarea):focus-visible,
+.syn-admin__filter-select:focus,
+.syn-admin__filter-select:focus-visible {
   outline: none;
   border-color: var(--syn-color-action-primary);
   box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
@@ -833,27 +850,7 @@ a.syn-admin__item-node:hover {
   overflow: hidden;
 }
 
-/* ── Filter field with select ────────────────────────────────── */
-
-.syn-admin__filter-field select {
-  min-height: 40px;
-  padding: var(--syn-space-2) var(--syn-space-3);
-  background: var(--syn-color-surface-primary);
-  border: 1px solid var(--syn-color-border-default);
-  border-radius: var(--syn-radius-md);
-  font-family: inherit;
-  font-size: var(--syn-font-size-sm);
-  color: var(--syn-color-text-primary);
-  cursor: pointer;
-  transition: var(--syn-transition-colors);
-}
-
-.syn-admin__filter-field select:focus,
-.syn-admin__filter-field select:focus-visible {
-  outline: none;
-  border-color: var(--syn-color-action-primary);
-  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
-}
+/* select styles consolidados arriba en .syn-admin__filter-field input/select/textarea */
 
 /* ── Confirm dialog (bulk actions) ───────────────────────────── */
 
