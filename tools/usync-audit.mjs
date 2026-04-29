@@ -27,6 +27,16 @@
  *      existente (<DataType Key="{guid}">) en uSync/v9/DataTypes/.
  *      Definition rota = property no carga el editor en backoffice.
  *      Cap-290 Batch C (Ola 295).
+ *   7. DataType orphan: DataType custom (EditorAlias NO empieza con
+ *      "Umbraco.") definido pero nunca referenciado por ningún
+ *      <Definition>. Built-ins Umbraco se skipean (siempre legítimos).
+ *      Warning level — el operador decide si es intencional.
+ *      Cap-300 Batch B (Ola 299).
+ *   8. Mojibake hygiene: detecta byte sequences típicas de UTF-8 mal
+ *      decodificado como Latin-1 y re-encodeado (PowerShell 5.1 trap).
+ *      Patrones: Ã¡/Ã©/Ã­/Ã³/Ãº/Ã±/Â¿/Â¡. Error level — los XMLs uSync
+ *      con mojibake muestran texto roto en backoffice.
+ *      Cap-300 Batch B (Ola 299).
  */
 
 import { promises as fs } from 'node:fs';
@@ -197,22 +207,59 @@ async function audit() {
     // ContentType debe matchear el <DataType Key="{guid}"> de un
     // DataType file. Definition rota → property silenciosamente cae
     // a un editor inválido en backoffice.
-    const dataTypeKeys = new Set(); // lowercase
-    const dataTypeKeyRegex = /<DataType\s+Key="([0-9a-fA-F-]{36})"/;
+    const dataTypeMeta = new Map(); // key lowercase → { file, alias, editorAlias }
+    const dataTypeKeyRegex = /<DataType\s+Key="([0-9a-fA-F-]{36})"\s+Alias="([^"]+)"/;
+    const editorAliasRegex = /<EditorAlias>([^<]+)<\/EditorAlias>/;
     for (const file of dataTypes) {
         const text = await fs.readFile(file, 'utf-8');
         const m = text.match(dataTypeKeyRegex);
-        if (m) dataTypeKeys.add(m[1].toLowerCase());
+        if (!m) continue;
+        const editorMatch = text.match(editorAliasRegex);
+        dataTypeMeta.set(m[1].toLowerCase(), {
+            file,
+            alias: m[2],
+            editorAlias: editorMatch ? editorMatch[1] : '',
+        });
     }
+    const referencedDefinitions = new Set();
     const definitionRefRegex = /<Definition>([0-9a-fA-F-]{36})<\/Definition>/g;
     for (const file of contentTypes) {
         const text = await fs.readFile(file, 'utf-8');
         for (const m of matchAll(text, definitionRefRegex)) {
             const guid = m[1].toLowerCase();
-            if (!dataTypeKeys.has(guid)) {
+            referencedDefinitions.add(guid);
+            if (!dataTypeMeta.has(guid)) {
                 err('missing-datatype-definition',
                     `${guid} referenciado en ${path.relative(ROOT, file)} no existe como <DataType Key>`);
             }
+        }
+    }
+
+    // ─── 7. DataType orphan (Cap-300 Batch B) ──────────────────────
+    // Custom DataTypes (EditorAlias no empieza con "Umbraco.") sin
+    // consumers son potencialmente dead weight. Built-ins Umbraco se
+    // skipean siempre — son parte del runtime aún cuando un site no
+    // los use directamente.
+    for (const [guid, meta] of dataTypeMeta) {
+        if (meta.editorAlias.startsWith('Umbraco.')) continue;
+        if (referencedDefinitions.has(guid)) continue;
+        warn('orphan-datatype',
+            `${meta.alias} (${path.relative(ROOT, meta.file)}) editor=${meta.editorAlias} sin consumers`);
+    }
+
+    // ─── 8. Mojibake hygiene (Cap-300 Batch B) ─────────────────────
+    // Detecta byte sequences típicas de UTF-8 mal decodificado como
+    // Latin-1 y re-encodeado. PowerShell 5.1 default ANSI encoding
+    // causa este artifact al editar XMLs uSync (memoria
+    // feedback_powershell_utf8_bulk_edits). Patrones comunes para
+    // español es-CO + alemán/francés inadvertidos.
+    const MOJIBAKE_PATTERNS = ['Ã¡', 'Ã©', 'Ã­', 'Ã³', 'Ãº', 'Ã±', 'Ã¼', 'Â¿', 'Â¡', 'Ã‘'];
+    for (const file of allFiles) {
+        const text = await fs.readFile(file, 'utf-8');
+        const found = MOJIBAKE_PATTERNS.filter((p) => text.includes(p));
+        if (found.length > 0) {
+            err('mojibake',
+                `${path.relative(ROOT, file)} contiene ${found.join(', ')} (UTF-8 mal decodificado — re-grabar con encoding correcto)`);
         }
     }
 }
