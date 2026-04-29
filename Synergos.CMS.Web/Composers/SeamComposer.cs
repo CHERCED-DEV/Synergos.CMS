@@ -76,6 +76,11 @@ public sealed class SeamComposer : IComposer
         }
         services.AddSingleton<ISynHostEmitter, DefaultSynHostEmitter>();
 
+        // Warmup hosted service fuerza la construcción del IBundleRegistryClient
+        // singleton al boot — sin esto el adapter queda lazy hasta el primer
+        // SynHost render, ocultando logs de "registry loaded" + watcher status.
+        services.AddHostedService<BundleRegistryWarmupHostedService>();
+
         // Ola 3 — Web-side adapters.
         services.AddSingleton<IContentContextAccessor, UmbracoContentContextAccessor>();
 
