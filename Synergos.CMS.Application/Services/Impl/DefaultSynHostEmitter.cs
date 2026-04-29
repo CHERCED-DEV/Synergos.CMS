@@ -64,7 +64,14 @@ public sealed class DefaultSynHostEmitter : ISynHostEmitter
             ? $"<!-- synHost: bundle registry did not resolve '{EncodeForComment(request.BlockAlias)}'; custom element will not hydrate until a bundle registers -->"
             : BuildScriptTags(descriptor);
 
-        var elementHtml = $"<{customTag} config='{EncodeAttributeSingleQuoted(configJson)}'></{customTag}>";
+        // Cap-280 Batch D — graceful frontend signal. Cuando el registry
+        // no resolvió, marcamos el custom element con
+        // data-synergos-cdn-offline="true". CSS del host puede stylar
+        // (e.g. ocultar, dim, mostrar fallback) sin que el server
+        // tenga que tomar decisión visual. Cuando el bundle hidrate
+        // post-CDN-recovery, el component decide si remueve el atributo.
+        var offlineAttr = descriptor is null ? " data-synergos-cdn-offline=\"true\"" : string.Empty;
+        var elementHtml = $"<{customTag}{offlineAttr} config='{EncodeAttributeSingleQuoted(configJson)}'></{customTag}>";
 
         return new SynHostEmitResult(scriptHtml, elementHtml, descriptor is not null);
     }

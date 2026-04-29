@@ -47,6 +47,22 @@ public class DefaultSynHostEmitterTests
         Assert.StartsWith("<!--", result.ScriptHtml);
         Assert.Contains("did not resolve", result.ScriptHtml);
         Assert.Contains("<synergos-badge", result.ElementHtml);
+        // Cap-280 Batch D — graceful frontend marker.
+        Assert.Contains("data-synergos-cdn-offline=\"true\"", result.ElementHtml);
+    }
+
+    [Fact]
+    public async Task EmitAsync_ResolvedRegistry_DoesNotEmitOfflineAttribute()
+    {
+        var descriptor = new BundleDescriptor(
+            MainEntryUri: new Uri("https://cdn.example.com/synergos/avatar/latest/main.js"),
+            Dependencies: Array.Empty<Uri>(),
+            Version: "0.1.0");
+        var sut = BuildSut(new FakeBundleRegistryClient(descriptor));
+
+        var result = await sut.EmitAsync(Request());
+
+        Assert.DoesNotContain("data-synergos-cdn-offline", result.ElementHtml);
     }
 
     [Fact]
