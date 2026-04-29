@@ -91,5 +91,11 @@ public sealed class OptionsComposer : IComposer
         // Activo cuando Umbraco usa SQLite — no-op silent en SQL Server.
         builder.Services.Configure<SqliteMaintenanceSettings>(
             builder.Config.GetSection("Synergos:SqliteMaintenance"));
+
+        // Olas 281-282 — Local CDN static files endpoint (ADR 0089).
+        // Default Enabled=false: solo se monta si el operador configura
+        // explícitamente el LocalPath + flag.
+        builder.Services.Configure<LocalCdnSettings>(
+            builder.Config.GetSection("Synergos:LocalCdn"));
     }
 }
