@@ -53,10 +53,25 @@ puede negarse a servirlo o tratarlo como integration legacy.
 
 ### Reglas de naming
 
-1. **`{tag}` = exactamente el custom element tag** que el bundle define
-   en `customElements.define(...)`. Ej.: si el bundle hace
-   `customElements.define('synergos-column', ...)`, la carpeta es
-   `synergos-column/`. **Lowercase con guión**, igual que el tag.
+1. **El tag DOM es SIEMPRE `synergos-X`** con prefix — eso es lo que
+   el bundle registra con `customElements.define('synergos-column', ...)`
+   y lo que el HTML emite como `<synergos-column>`.
+   **El path filesystem puede ser:**
+   - **Forma corta** (recomendado por la CDN team): `column/`,
+     `accordion/`, `card/` — sin prefix `synergos-` redundante.
+   - **Forma con prefix** (alternativa): `synergos-column/`,
+     `synergos-accordion/` — útil si la CDN sirve namespaces múltiples
+     y necesita disambiguación.
+
+   El CMS hace el mapeo via setting `Synergos:Cdn:StripFolderPrefix`:
+   - `false` (default): busca `synergos-column/` literal (forma con prefix).
+   - `true`: strip `synergos-` antes de buscar (busca `column/` para
+     un tag `synergos-column`). Activar cuando la CDN usa la forma
+     corta.
+
+   **Cualquiera de las 2 formas es válida**. Elegir UNA y mantenerla
+   consistente en toda la CDN.
+
 2. **`{framework}` ∈ { angular, react, svelte, vanilla }**. Lowercase.
    Solo estos 4 oficiales. Otros frameworks deben proponerse via ADR.
 3. **`{version}` semver `MAJOR.MINOR.PATCH`** sin prefijo `v` (ej.

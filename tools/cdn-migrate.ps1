@@ -4,20 +4,20 @@ Migra una CDN local existente al canon documentado en
 docs/contracts/cdn-bundle-structure.md.
 
 .DESCRIPTION
-Cap-280 Batch A.2. Toma una CDN root path como input y aplica:
+Cap-280 Batch A.2 (revisado). Toma una CDN root path como input y aplica:
 
-1. Renombra carpetas top-level de elementos:
-   {tag-sin-prefix}/  ->  synergos-{tag}/
-
-   (e.g. column/ -> synergos-column/, accordion/ -> synergos-accordion/)
-   Skip si ya empieza con "synergos-".
-
-2. Renombra archivos sin extension a .json:
+1. Renombra archivos sin extension a .json:
    manifest  ->  manifest.json
    meta      ->  meta.json
 
-3. Calcula SRI integrity hash (sha384) de cada main.js y lo inyecta
+2. Calcula SRI integrity hash (sha384) de cada main.js y lo inyecta
    al manifest.json correspondiente si no esta presente.
+
+NO renombra carpetas top-level. La CDN puede usar tanto la forma
+corta (column/) como la forma con prefix (synergos-column/) — ambas
+son válidas. El CMS soporta los 2 estilos via setting
+Synergos:Cdn:StripFolderPrefix. Ver
+docs/contracts/cdn-bundle-structure.md regla 1.
 
 Soporta -DryRun para preview sin tocar nada.
 Reporta cada cambio + counts agregados al final.
@@ -84,48 +84,15 @@ Write-Host "Bundles: $bundlesRoot"
 Write-Host ""
 
 $stats = @{
-    FoldersRenamed = 0
     FilesRenamed   = 0
     HashesAdded    = 0
     HashesAlready  = 0
     Errors         = 0
 }
 
-# --- Step 1: Rename top-level element folders to synergos-* -----
+# --- Step 1: Rename manifest/meta to .json ----------------------
 
-Write-Host "-- Step 1: Element folder naming -----------------------" -ForegroundColor Green
-$elements = Get-ChildItem -Path $bundlesRoot -Directory
-foreach ($folder in $elements) {
-    if ($folder.Name -like "synergos-*") {
-        Write-Host "  [ok] $($folder.Name) (already canonical)" -ForegroundColor DarkGray
-        continue
-    }
-    $newName = "synergos-$($folder.Name)"
-    $newPath = Join-Path $folder.Parent.FullName $newName
-    if (Test-Path $newPath) {
-        Write-Host "  [skip] $($folder.Name) -> $newName (target exists)" -ForegroundColor Yellow
-        $stats.Errors++
-        continue
-    }
-    Write-Host "  [rename] $($folder.Name) -> $newName" -ForegroundColor Cyan
-    if (-not $DryRun) {
-        try {
-            Rename-Item -Path $folder.FullName -NewName $newName
-            $stats.FoldersRenamed++
-        } catch {
-            Write-Host "    [error] $_" -ForegroundColor Red
-            $stats.Errors++
-        }
-    } else {
-        $stats.FoldersRenamed++
-    }
-}
-
-Write-Host ""
-
-# --- Step 2: Rename manifest/meta to .json ----------------------
-
-Write-Host "-- Step 2: manifest/meta -> .json extension ------------" -ForegroundColor Green
+Write-Host "-- Step 1: manifest/meta -> .json extension ------------" -ForegroundColor Green
 $candidates = @("manifest", "meta")
 foreach ($name in $candidates) {
     $files = Get-ChildItem -Path $bundlesRoot -Recurse -Filter $name -File -ErrorAction SilentlyContinue
@@ -157,9 +124,9 @@ foreach ($name in $candidates) {
 
 Write-Host ""
 
-# --- Step 3: SRI integrity hash injection -----------------------
+# --- Step 2: SRI integrity hash injection -----------------------
 
-Write-Host "-- Step 3: SRI integrity (sha384) en manifest.json -----" -ForegroundColor Green
+Write-Host "-- Step 2: SRI integrity (sha384) en manifest.json -----" -ForegroundColor Green
 $manifests = Get-ChildItem -Path $bundlesRoot -Recurse -Filter "manifest.json" -File -ErrorAction SilentlyContinue
 foreach ($manifest in $manifests) {
     $manifestDir = $manifest.Directory.FullName
@@ -225,7 +192,6 @@ foreach ($manifest in $manifests) {
 
 Write-Host ""
 Write-Host "================ Summary ================" -ForegroundColor Cyan
-Write-Host "Folders renamed:          $($stats.FoldersRenamed)"
 Write-Host "Files renamed:            $($stats.FilesRenamed)"
 Write-Host "Integrity hashes added:   $($stats.HashesAdded)"
 Write-Host "Integrity hashes already: $($stats.HashesAlready)"
