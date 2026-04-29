@@ -48,6 +48,9 @@ public sealed class HealthController : ControllerBase
                 name = r.Name,
                 healthy = r.IsHealthy,
                 message = r.Message,
+                // Cap-290 Batch A — opcional; null cuando el probe no
+                // reporta metadata estructurada. Ops dashboards consumen.
+                details = r.Details,
             }),
         };
 

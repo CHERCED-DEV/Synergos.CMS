@@ -29,4 +29,11 @@ public interface ISchemaHealthProbe
 /// <param name="Name">Short stable identifier of the probe (e.g. <c>"schema_version_match"</c>).</param>
 /// <param name="IsHealthy">Probe verdict.</param>
 /// <param name="Message">Optional human-readable detail — required when <paramref name="IsHealthy"/> is <c>false</c>.</param>
-public sealed record SchemaHealthResult(string Name, bool IsHealthy, string? Message = null);
+/// <param name="Details">Optional structured metadata for ops dashboards
+/// (e.g. mode, version, count). Keys are probe-specific; values must be
+/// JSON-serialisable. Cap-290 Batch A — ADR 0090.</param>
+public sealed record SchemaHealthResult(
+    string Name,
+    bool IsHealthy,
+    string? Message = null,
+    IReadOnlyDictionary<string, object?>? Details = null);

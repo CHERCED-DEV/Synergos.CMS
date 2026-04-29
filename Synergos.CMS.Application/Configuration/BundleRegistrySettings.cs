@@ -95,4 +95,12 @@ public sealed class BundleRegistrySettings
     /// si el CDN team escribe múltiples archivos en burst.
     /// </summary>
     public int HotReloadDebounceMilliseconds { get; init; } = 500;
+
+    /// <summary>
+    /// Tag canónico que el <c>BundleRegistryProbe</c> intenta resolver
+    /// para verdict de salud. Default <c>"synergos-column"</c> (primer
+    /// primitive del catalog Synergos). Override útil para CDNs custom
+    /// que no exponen ese tag. Cap-290 Batch A — ADR 0090.
+    /// </summary>
+    public string ProbeTag { get; init; } = "synergos-column";
 }

@@ -48,17 +48,16 @@ public sealed class BundleRegistryProbe : ISchemaHealthProbe
             return new SchemaHealthResult(
                 Name: ProbeName,
                 IsHealthy: true,
-                Message: "stub mode active (no CDN configured)");
+                Message: "stub mode active (no CDN configured)",
+                Details: new Dictionary<string, object?> { ["mode"] = "Stub" });
         }
 
         if (string.Equals(mode, "FileSystem", StringComparison.OrdinalIgnoreCase))
         {
-            // Intenta resolver el test tag canónico. El registry siempre
-            // tiene "synergos-column" si está saludable (es el primer
-            // primitive del catalog en la mayoría de los CDNs Synergos).
-            // Si el operador tiene un setup distinto, puede sobreescribir
-            // via setting futuro ProbeTag.
-            var probeTag = "synergos-column";
+            // Probe tag por default "synergos-column" (primer primitive
+            // Synergos). Operador puede override via BundleRegistrySettings.ProbeTag
+            // para CDNs custom — cap-290 Batch A.
+            var probeTag = string.IsNullOrWhiteSpace(s.ProbeTag) ? "synergos-column" : s.ProbeTag;
             try
             {
                 var descriptor = await _client.TryResolveAsync(probeTag, ct);
@@ -67,27 +66,51 @@ public sealed class BundleRegistryProbe : ISchemaHealthProbe
                     return new SchemaHealthResult(
                         Name: ProbeName,
                         IsHealthy: false,
-                        Message: $"FileSystem mode but probe tag '{probeTag}' did not resolve. Verify registry.json + manifest.json + main.js exist at {s.LocalPath}/{s.BundlesNamespace}/.");
+                        Message: $"FileSystem mode but probe tag '{probeTag}' did not resolve. Verify registry.json + manifest.json + main.js exist at {s.LocalPath}/{s.BundlesNamespace}/.",
+                        Details: new Dictionary<string, object?>
+                        {
+                            ["mode"] = "FileSystem",
+                            ["probeTag"] = probeTag,
+                            ["localPath"] = s.LocalPath,
+                            ["bundlesNamespace"] = s.BundlesNamespace,
+                            ["resolved"] = false,
+                        });
                 }
 
                 var hasIntegrity = !string.IsNullOrWhiteSpace(descriptor.Integrity);
                 return new SchemaHealthResult(
                     Name: ProbeName,
                     IsHealthy: true,
-                    Message: $"FileSystem mode OK. Probe tag '{probeTag}' resolved (framework={descriptor.Framework}, version={descriptor.Version}, integrity={(hasIntegrity ? "present" : "missing")}).");
+                    Message: $"FileSystem mode OK. Probe tag '{probeTag}' resolved (framework={descriptor.Framework}, version={descriptor.Version}, integrity={(hasIntegrity ? "present" : "missing")}).",
+                    Details: new Dictionary<string, object?>
+                    {
+                        ["mode"] = "FileSystem",
+                        ["probeTag"] = probeTag,
+                        ["framework"] = descriptor.Framework,
+                        ["version"] = descriptor.Version,
+                        ["integrity"] = hasIntegrity ? "present" : "missing",
+                        ["resolved"] = true,
+                    });
             }
             catch (Exception ex)
             {
                 return new SchemaHealthResult(
                     Name: ProbeName,
                     IsHealthy: false,
-                    Message: $"FileSystem mode probe failed with exception: {ex.Message}");
+                    Message: $"FileSystem mode probe failed with exception: {ex.Message}",
+                    Details: new Dictionary<string, object?>
+                    {
+                        ["mode"] = "FileSystem",
+                        ["probeTag"] = probeTag,
+                        ["exception"] = ex.GetType().Name,
+                    });
             }
         }
 
         return new SchemaHealthResult(
             Name: ProbeName,
             IsHealthy: false,
-            Message: $"Unknown mode '{mode}'. Valid: Stub | FileSystem | Http.");
+            Message: $"Unknown mode '{mode}'. Valid: Stub | FileSystem | Http.",
+            Details: new Dictionary<string, object?> { ["mode"] = mode });
     }
 }

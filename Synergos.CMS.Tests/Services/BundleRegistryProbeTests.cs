@@ -35,6 +35,9 @@ public sealed class BundleRegistryProbeTests
         Assert.Contains("stub", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         // No debe llamar al client en Stub mode — basta con el setting.
         await client.DidNotReceive().TryResolveAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        // Cap-290 Batch A — Details emitido también en Stub.
+        Assert.NotNull(result.Details);
+        Assert.Equal("Stub", result.Details!["mode"]);
     }
 
     [Fact]
@@ -61,6 +64,42 @@ public sealed class BundleRegistryProbeTests
         Assert.Contains("angular", result.Message ?? string.Empty);
         Assert.Contains("0.1.0", result.Message ?? string.Empty);
         Assert.Contains("present", result.Message ?? string.Empty);
+        // Cap-290 Batch A — Details estructurados.
+        Assert.NotNull(result.Details);
+        Assert.Equal("FileSystem", result.Details!["mode"]);
+        Assert.Equal("synergos-column", result.Details["probeTag"]);
+        Assert.Equal("angular", result.Details["framework"]);
+        Assert.Equal("0.1.0", result.Details["version"]);
+        Assert.Equal("present", result.Details["integrity"]);
+        Assert.Equal(true, result.Details["resolved"]);
+    }
+
+    [Fact]
+    public async Task FileSystemMode_ProbeTagOverride_UsesConfiguredTag()
+    {
+        var descriptor = new BundleDescriptor(
+            MainEntryUri: new Uri("https://cdn/custom-block/react/latest/main.js"),
+            Dependencies: Array.Empty<Uri>(),
+            Version: "1.2.3",
+            Framework: "react");
+        var client = Substitute.For<IBundleRegistryClient>();
+        client.TryResolveAsync("custom-block", Arg.Any<CancellationToken>())
+              .Returns(descriptor);
+        var settings = new BundleRegistrySettings
+        {
+            Mode = "FileSystem",
+            LocalPath = @"C:\CUSTOM_CDN",
+            ProbeTag = "custom-block",
+        };
+        var probe = new BundleRegistryProbe(client, MonitorFor(settings));
+
+        var result = await probe.CheckAsync();
+
+        Assert.True(result.IsHealthy);
+        Assert.Contains("custom-block", result.Message ?? string.Empty);
+        await client.Received(1).TryResolveAsync("custom-block", Arg.Any<CancellationToken>());
+        await client.DidNotReceive().TryResolveAsync("synergos-column", Arg.Any<CancellationToken>());
+        Assert.Equal("custom-block", result.Details!["probeTag"]);
     }
 
     [Fact]
