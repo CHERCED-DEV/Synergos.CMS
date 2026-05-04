@@ -149,7 +149,8 @@ public sealed class LoggerAnalyticsTrackerTests
 
         sut.Track("", new Dictionary<string, object?> { ["k"] = "v" });
 
-        Assert.Empty(logger.ReceivedCalls()
-            .Where(c => c.GetMethodInfo().Name == nameof(ILogger.Log)));
+        Assert.DoesNotContain(
+            logger.ReceivedCalls(),
+            c => c.GetMethodInfo().Name == nameof(ILogger.Log));
     }
 }

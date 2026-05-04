@@ -189,7 +189,11 @@ public class DefaultSynHostEmitterTests
         // escapes <, >, ', ", & to \uXXXX; the resulting JSON is safe
         // inside a single-quoted HTML attribute without further encoding.
         var attrStart = result.ElementHtml.IndexOf("config='", StringComparison.Ordinal) + "config='".Length;
-        var attrEnd = result.ElementHtml.IndexOf("'></", attrStart, StringComparison.Ordinal);
+        // Cap-300 Batch A added inner fallback content when descriptor is
+        // null, so the closing of the config attribute is now `'>` (followed
+        // by either `</` for empty tag OR `<div` for the offline fallback).
+        // Match just `'>` to support both shapes.
+        var attrEnd = result.ElementHtml.IndexOf("'>", attrStart, StringComparison.Ordinal);
         var attrValue = result.ElementHtml[attrStart..attrEnd];
 
         Assert.DoesNotContain("'", attrValue);            // no raw apostrophe
