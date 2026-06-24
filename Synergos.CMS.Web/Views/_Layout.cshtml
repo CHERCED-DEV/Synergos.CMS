@@ -1,4 +1,4 @@
-@*
+﻿@*
     Master layout compartido por pageBase/pageBasic/pageLanding/siteRoot.
     pageBare se mantiene Layout=null a propósito (chrome-less).
 
@@ -77,25 +77,25 @@
     @* Ola 92 — Modular CSS foundations alineados con Synergos.UI design system.
        Orden de carga: tokens → base → utilities → layout → chrome → primitives
        (los themes via _BrandThemeStyle se aplican después como overrides). *@
-    <link rel="stylesheet" href="~/css/syn-tokens.css" />
-    <link rel="stylesheet" href="~/css/syn-base.css" />
-    <link rel="stylesheet" href="~/css/syn-utilities.css" />
-    <link rel="stylesheet" href="~/css/syn-layout.css" />
-    <link rel="stylesheet" href="~/css/syn-chrome.css" />
-    <link rel="stylesheet" href="~/css/syn-primitives.css" />
-    <link rel="stylesheet" href="~/css/syn-pages.css" />
-    <link rel="stylesheet" href="~/css/syn-shop.css" />
-    <link rel="stylesheet" href="~/css/syn-search.css" />
-    <link rel="stylesheet" href="~/css/syn-comments.css" />
-    <link rel="stylesheet" href="~/css/syn-globals.css" />
-    <link rel="stylesheet" href="~/css/syn-flow.css" />
-    <link rel="stylesheet" href="~/css/syn-member.css" />
-    <link rel="stylesheet" href="~/css/syn-blog.css" />
+    <link rel="stylesheet" href="~/css/syn-tokens.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-base.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-utilities.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-layout.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-chrome.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-primitives.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-pages.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-shop.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-search.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-comments.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-globals.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-flow.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-member.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-blog.css" asp-append-version="true" />
     @await Html.PartialAsync("_BrandThemeStyle", brandThemeModel)
     @if (devStubEnabled)
     {
         @* Dev marker — banda fija mostrando que el CDN bundle real (ADR 0012) aún no está. *@
-        <link rel="stylesheet" href="~/css/syn-dev-stub.css" />
+        <link rel="stylesheet" href="~/css/syn-dev-stub.css" asp-append-version="true" />
     }
 </head>
 <body class="syn-page syn-page--chrome-@renderCtx.ChromeMode syn-page--header-@renderCtx.HeaderMode syn-page--footer-@renderCtx.FooterMode">
