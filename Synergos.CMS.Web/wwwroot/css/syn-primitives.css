@@ -756,14 +756,23 @@
 .syn-logo-cloud__cell {
   display: flex;
   justify-content: center;
-  filter: grayscale(1);
-  opacity: 0.7;
-  transition: filter var(--syn-duration-base) var(--syn-easing-out),
+  align-items: center;
+}
+
+/* Wordmark de texto (sin logos reales) — limpio y premium en vez de caja gris. */
+.syn-logo__wordmark {
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  color: var(--syn-color-text-muted);
+  opacity: 0.78;
+  white-space: nowrap;
+  transition: color var(--syn-duration-base) var(--syn-easing-out),
               opacity var(--syn-duration-base) var(--syn-easing-out);
 }
 
-.syn-logo-cloud__cell:hover {
-  filter: none;
+.syn-logo-cloud__cell:hover .syn-logo__wordmark {
+  color: var(--syn-color-text-primary);
   opacity: 1;
 }
 
@@ -832,6 +841,16 @@
 }
 
 .syn-feature-grid {
+  display: block;
+}
+
+.syn-feature-grid__header {
+  text-align: center;
+  max-width: var(--syn-max-width-reading);
+  margin: 0 auto var(--syn-space-2xl);
+}
+
+.syn-feature-grid__items {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: var(--syn-space-lg);

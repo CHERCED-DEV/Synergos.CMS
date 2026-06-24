@@ -22,15 +22,18 @@
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 }
+@* Sin logos de cliente reales: render como wordmark de texto (limpio, premium)
+   en vez de la imagen placeholder gris. Si más adelante hay logos reales,
+   reintroducir <img> condicionado a media real. *@
 @if (!string.IsNullOrWhiteSpace(linkUrl))
 {
     <a class="@classes" href="@linkUrl"@Html.Raw(externalAttrs)>
-        <img src="@mediaRef.Url()" alt="@alt" loading="lazy" />
+        <span class="syn-logo__wordmark">@alt</span>
     </a>
 }
 else
 {
     <span class="@classes">
-        <img src="@mediaRef.Url()" alt="@alt" loading="lazy" />
+        <span class="syn-logo__wordmark">@alt</span>
     </span>
 }

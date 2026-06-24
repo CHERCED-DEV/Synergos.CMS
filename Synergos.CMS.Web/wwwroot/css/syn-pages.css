@@ -68,13 +68,13 @@
    El BlockGrid envuelve cada sección en .umb-block-grid__layout-item,
    así que el aire vive en el "join" entre items (no en el <section>).
    Knob único del ritmo: --syn-section-gap (64 / 96 ≥768). Ley de 8. */
-.syn-page__body > .umb-block-grid > .umb-block-grid__layout-container
+:is(.syn-page__body, .syn-site-root__sections) > .umb-block-grid > .umb-block-grid__layout-container
   > .umb-block-grid__layout-item + .umb-block-grid__layout-item {
   margin-block-start: var(--syn-section-gap);
 }
 
 @media (min-width: 768px) {
-  .syn-page__body > .umb-block-grid > .umb-block-grid__layout-container
+  :is(.syn-page__body, .syn-site-root__sections) > .umb-block-grid > .umb-block-grid__layout-container
     > .umb-block-grid__layout-item + .umb-block-grid__layout-item {
     margin-block-start: var(--syn-section-gap-lg);
   }
@@ -95,7 +95,7 @@
    contenido del hero a su ancho de lectura nativo (720). El CTA queda como
    tarjeta contenida. El ritmo (margin-block-start) es ortogonal e intacto.
    :has() descendiente → robusto sin importar a qué profundidad anide el hero. */
-.syn-page__body > .umb-block-grid > .umb-block-grid__layout-container
+:is(.syn-page__body, .syn-site-root__sections) > .umb-block-grid > .umb-block-grid__layout-container
   > .umb-block-grid__layout-item:has(.syn-hero) {
   width: 100vw;
   margin-inline: calc(50% - 50vw); /* centrado scrollbar-safe (50% = content-box) */
