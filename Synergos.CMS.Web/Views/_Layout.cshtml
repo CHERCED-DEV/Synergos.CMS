@@ -70,6 +70,7 @@
     @await Html.PartialAsync("_SeoHead", currentPage)
     @await Html.PartialAsync("_SeoStructuredData", currentPage)
     @await Html.PartialAsync("_SynergosBridge")
+    @await Html.PartialAsync("_SynHostRuntime")
     @if (!string.IsNullOrWhiteSpace(theme?.FaviconUrl))
     {
         <link rel="icon" href="@theme.FaviconUrl" />

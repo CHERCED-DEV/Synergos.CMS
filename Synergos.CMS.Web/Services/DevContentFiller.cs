@@ -246,9 +246,13 @@ public sealed class DevContentFiller
             ("El editor arma páginas completas sin tocarnos a desarrollo. La arquitectura por capas se nota.", "Diego Restrepo", "Líder de Producto"),
             ("Un solo schema para marca, e-commerce y membresía. La promesa polimórfica es real.", "Sofía Cardona", "Directora Digital"),
         };
-        // Híbrido: si el componente Angular (elementSynTestimonialSection) ya está
-        // importado, se usa el de la CDN; si no, fallback al SSR (cero hueco pre-Import).
-        if (_contentTypeService.Get("elementSynTestimonialSection")?.Key is not null)
+        // Híbrido: el componente Angular (elementSynTestimonialSection) está wired end-to-end
+        // (schema + SynHost + import map). Pero el runtime de Synergos.UI NO provee
+        // @angular/core/rxjs-interop (sg-core.js lo importa, ningún bundle lo expone) → el
+        // Web Component no hidrata. Hasta regenerar ese runtime, usamos el SSR. Flip a true
+        // cuando el build de Synergos.UI esté arreglado → re-fill → testimonios Angular.
+        var useAngularTestimonials = false;   // flip cuando el runtime Angular de Synergos.UI provea rxjs-interop
+        if (useAngularTestimonials && _contentTypeService.Get("elementSynTestimonialSection")?.Key is not null)
         {
             AddSynTestimonials(b, "Lo que dicen de la plataforma", testimonials);
         }
