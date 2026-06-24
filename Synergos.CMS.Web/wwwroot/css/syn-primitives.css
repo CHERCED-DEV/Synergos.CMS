@@ -228,20 +228,20 @@
 /* ── Card composite (elementCompCard) ────────────────────────── */
 
 .syn-card {
-  background: var(--syn-color-surface-primary);
-  border: 1px solid var(--syn-color-border-subtle);
-  border-radius: var(--syn-radius-lg);
+  background: var(--syn-card-surface);
+  border: var(--syn-card-border);
+  border-radius: var(--syn-card-radius);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--syn-shadow-card);
+  box-shadow: var(--syn-card-shadow);
   transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
 }
 
 .syn-card:hover {
-  border-color: var(--syn-color-border-default);
-  box-shadow: var(--syn-shadow-card-hover);
-  transform: translateY(-2px);
+  border-color: var(--syn-card-border-hover);
+  box-shadow: var(--syn-card-shadow-hover);
+  transform: var(--syn-card-lift);
 }
 
 .syn-card__media {
@@ -302,6 +302,7 @@
   text-align: center;
   border-radius: var(--syn-radius-2xl);
   overflow: hidden;
+  box-shadow: var(--syn-shadow-md);
   background: var(--syn-gradient-hero, linear-gradient(135deg,
     var(--syn-color-surface-accent) 0%,
     var(--syn-color-surface-primary) 56%,
@@ -836,38 +837,145 @@
   gap: var(--syn-space-lg);
 }
 
+/* Carrusel SSR: las 3 tarjetas en grilla (1 col mobile, auto-fit ≥768). */
+.syn-testimonial-carousel {
+  display: block;
+}
+
+.syn-testimonial-carousel__track {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--syn-gutter-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 768px) {
+  .syn-testimonial-carousel__track {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+.syn-testimonial-carousel__slide {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .syn-testimonial {
-  padding: var(--syn-space-xl);
-  background: var(--syn-color-surface-secondary);
-  border: 1px solid var(--syn-color-border-subtle);
-  border-radius: var(--syn-radius-lg);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: var(--syn-card-pad-lg);
+  padding-top: var(--syn-space-10);
+  background: var(--syn-card-surface);
+  border: var(--syn-card-border);
+  border-top: 2px solid transparent;
+  border-radius: var(--syn-card-radius);
+  box-shadow: var(--syn-card-shadow);
+  overflow: hidden;
+  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
+}
+
+/* Comilla editorial decorativa (glifo grande, baja opacidad, acento). */
+.syn-testimonial::before {
+  content: '\201C';
+  position: absolute;
+  top: calc(var(--syn-space-2) * -1);
+  inset-inline-start: var(--syn-space-5);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 6rem;
+  line-height: 1;
+  color: var(--syn-color-accent-500);
+  opacity: 0.14;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.syn-testimonial:hover {
+  transform: var(--syn-card-lift);
+  box-shadow: var(--syn-card-shadow-hover);
+  border-color: var(--syn-card-border-hover);
+  border-top-color: var(--syn-color-accent-500);
 }
 
 .syn-testimonial__quote {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
   font-style: italic;
-  margin: 0 0 var(--syn-space-md);
+  margin: 0 0 var(--syn-space-5);
   font-size: var(--syn-font-size-lg);
   color: var(--syn-color-text-primary);
   line-height: var(--syn-line-height-relaxed);
 }
 
 .syn-testimonial__author {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--syn-space-sm);
+  margin: 0;
+  padding-top: var(--syn-space-5);
+  border-top: 1px solid var(--syn-color-border-subtle);
   color: var(--syn-color-text-muted);
   font-size: var(--syn-font-size-sm);
 }
 
-.syn-testimonial__author-name {
-  color: var(--syn-color-text-primary);
-  font-weight: var(--syn-font-weight-semibold);
+.syn-testimonial__identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-1);
+  min-width: 0;
 }
 
-.syn-faq-list {
+/* FIX #1: el <cite> sale itálica+inline; lo forzamos bloque + normal + bold. */
+.syn-testimonial__name {
+  display: block;
+  font-style: normal;
+  font-weight: var(--syn-font-weight-bold);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-snug);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-testimonial__role {
+  display: block;
+  font-style: normal;
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-snug);
+  color: var(--syn-color-text-muted);
+}
+
+.syn-testimonial__avatar {
+  flex: 0 0 auto;
+  width: var(--syn-space-12);
+  height: var(--syn-space-12);
+  border-radius: var(--syn-radius-full);
+  object-fit: cover;
   border: 1px solid var(--syn-color-border-subtle);
-  border-radius: var(--syn-radius-lg);
+}
+
+/* El título "Preguntas frecuentes" vive arriba (fuera del panel); el panel
+   elevado es .syn-faq-list__items. */
+.syn-faq-list {
+  display: block;
+}
+
+.syn-faq-list__title {
+  margin-bottom: var(--syn-space-lg);
+}
+
+.syn-faq-list__items {
+  border: var(--syn-card-border);
+  border-radius: var(--syn-card-radius);
   overflow: hidden;
+  background: var(--syn-card-surface);
+  box-shadow: var(--syn-card-shadow);
 }
 
 .syn-faq-item {
@@ -879,38 +987,49 @@
 }
 
 .syn-faq-item summary {
-  padding: var(--syn-space-md) var(--syn-space-lg);
+  padding: var(--syn-space-lg) var(--syn-space-xl);
   cursor: pointer;
+  font-size: var(--syn-font-size-lg);
   font-weight: var(--syn-font-weight-semibold);
   list-style: none;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--syn-space-md);
   color: var(--syn-color-text-primary);
   transition: var(--syn-transition-colors);
 }
 
 .syn-faq-item summary:hover {
   background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-text-accent);
 }
 
+.syn-faq-item[open] summary {
+  color: var(--syn-color-text-accent);
+}
+
+/* Chevron dibujado en CSS (2px) que rota suave en lugar del salto +/×. */
 .syn-faq-item summary::after {
-  content: '+';
-  font-size: var(--syn-font-size-xl);
-  color: var(--syn-color-text-muted);
+  content: '';
+  flex: none;
+  width: var(--syn-space-sm);
+  height: var(--syn-space-sm);
   margin-inline-start: var(--syn-space-md);
+  border-right: 2px solid var(--syn-color-text-accent);
+  border-bottom: 2px solid var(--syn-color-text-accent);
+  transform: translateY(-2px) rotate(45deg);
   transition: transform var(--syn-duration-base) var(--syn-easing-default);
 }
 
 .syn-faq-item[open] summary::after {
-  content: '×';
-  transform: rotate(0deg);
+  transform: translateY(2px) rotate(225deg);
 }
 
 .syn-faq-item summary::-webkit-details-marker { display: none; }
 
 .syn-faq-item p {
-  padding: 0 var(--syn-space-lg) var(--syn-space-md);
+  padding: 0 var(--syn-space-xl) var(--syn-space-lg);
   margin: 0;
   color: var(--syn-color-text-secondary);
   line-height: var(--syn-line-height-relaxed);

@@ -89,6 +89,35 @@
   .syn-page__after-body { margin-block-start: var(--syn-section-gap); }
 }
 
+/* ── Full-bleed opt-in: SOLO el hero. Todo lo demás queda contenido. ──
+   .syn-site-main sigue siendo la autoridad de ancho (1200 + gutter). Rompemos
+   al viewport SOLO la sección que contiene un .syn-hero, y re-contenemos el
+   contenido del hero a su ancho de lectura nativo (720). El CTA queda como
+   tarjeta contenida. El ritmo (margin-block-start) es ortogonal e intacto.
+   :has() descendiente → robusto sin importar a qué profundidad anide el hero. */
+.syn-page__body > .umb-block-grid > .umb-block-grid__layout-container
+  > .umb-block-grid__layout-item:has(.syn-hero) {
+  width: 100vw;
+  margin-inline: calc(50% - 50vw); /* centrado scrollbar-safe (50% = content-box) */
+}
+
+/* El hero pierde su identidad de tarjeta al sangrar: banda edge-to-edge. */
+.umb-block-grid__layout-item:has(.syn-hero) .syn-hero {
+  border-radius: 0;
+  padding-block: var(--syn-section-gap-lg); /* 96 */
+  padding-inline: 0;
+}
+
+/* Re-contener el contenido a su ancho nativo (720, NO 1200) + gutter lateral. */
+.umb-block-grid__layout-item:has(.syn-hero) .syn-hero__content {
+  padding-inline: var(--syn-gutter);
+}
+@media (min-width: 768px) {
+  .umb-block-grid__layout-item:has(.syn-hero) .syn-hero__content {
+    padding-inline: var(--syn-gutter-lg);
+  }
+}
+
 /* ── Page Standard variant (chrome on, sections) ─────────────── */
 
 .syn-page-standard {
@@ -169,20 +198,20 @@
 .syn-platform-root__site {
   display: block;
   padding: var(--syn-space-xl);
-  background: var(--syn-color-surface-primary);
-  border: 1px solid var(--syn-color-border-subtle);
-  border-radius: var(--syn-radius-lg);
+  background: var(--syn-card-surface);
+  border: var(--syn-card-border);
+  border-radius: var(--syn-card-radius);
   text-decoration: none;
   color: inherit;
   text-align: start;
-  box-shadow: var(--syn-shadow-card);
+  box-shadow: var(--syn-card-shadow);
   transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
 }
 
 .syn-platform-root__site:hover {
-  border-color: var(--syn-color-border-accent);
-  box-shadow: var(--syn-shadow-card-hover);
-  transform: translateY(-2px);
+  border-color: var(--syn-card-border-hover);
+  box-shadow: var(--syn-card-shadow-hover);
+  transform: var(--syn-card-lift);
   text-decoration: none;
 }
 
@@ -336,18 +365,18 @@
 .syn-post-category__item {
   display: flex;
   flex-direction: column;
-  background: var(--syn-color-surface-primary);
-  border: 1px solid var(--syn-color-border-subtle);
-  border-radius: var(--syn-radius-lg);
+  background: var(--syn-card-surface);
+  border: var(--syn-card-border);
+  border-radius: var(--syn-card-radius);
   overflow: hidden;
-  box-shadow: var(--syn-shadow-card);
+  box-shadow: var(--syn-card-shadow);
   transition: transform var(--syn-duration-base) var(--syn-easing-default), var(--syn-transition-colors);
 }
 
 .syn-post-category__item:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--syn-shadow-card-hover);
-  border-color: var(--syn-color-border-accent);
+  transform: var(--syn-card-lift);
+  box-shadow: var(--syn-card-shadow-hover);
+  border-color: var(--syn-card-border-hover);
 }
 
 .syn-post-category__media {
@@ -490,10 +519,11 @@
   display: flex;
   flex-direction: column;
   gap: var(--syn-space-md);
-  padding: var(--syn-space-lg);
-  background: var(--syn-color-surface-secondary);
-  border: 1px solid var(--syn-color-border-subtle);
-  border-radius: var(--syn-radius-lg);
+  padding: var(--syn-card-pad);
+  background: var(--syn-card-surface);
+  border: var(--syn-card-border);
+  border-radius: var(--syn-card-radius);
+  box-shadow: var(--syn-card-shadow);
 }
 
 .syn-blog-highlight__title {

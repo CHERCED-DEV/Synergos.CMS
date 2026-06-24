@@ -289,6 +289,18 @@
   --syn-color-state-danger-border:  rgb(220 38 38 / 0.22);
   --syn-color-state-danger-text:    #b42318;
 
+  /* ── Canonical CARD language — vocabulario único de toda superficie tipo card.
+     Un solo lugar para que las tarjetas no se desincronicen nunca más. ──────── */
+  --syn-card-surface:      var(--syn-color-surface-primary);
+  --syn-card-radius:       var(--syn-radius-lg);
+  --syn-card-border:       1px solid var(--syn-color-border-default);
+  --syn-card-border-hover: var(--syn-color-border-accent);
+  --syn-card-shadow:       var(--syn-shadow-card);
+  --syn-card-shadow-hover: var(--syn-shadow-card-hover);
+  --syn-card-pad:          var(--syn-space-lg);   /* 24 */
+  --syn-card-pad-lg:       var(--syn-space-xl);   /* 32 */
+  --syn-card-lift:         translateY(-2px);
+
   /* Composed shadow aliases per use-case */
   --syn-shadow-card:        var(--syn-shadow-xs);
   --syn-shadow-card-hover:  var(--syn-shadow-lg);
