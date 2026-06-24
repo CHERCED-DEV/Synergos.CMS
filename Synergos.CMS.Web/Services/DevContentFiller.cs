@@ -4,21 +4,19 @@ using Umbraco.Cms.Core.Services;
 namespace Synergos.CMS.Web.Services;
 
 /// <summary>
-/// Dev-only: compone el cuerpo (Layout Composer / BlockGrid) de las
-/// páginas del sitio Synergos con contenido editorial elegante y variado
-/// (MediaTextSplit alternados + MissionBlock + CtaBanner), imágenes reales
-/// (DevMediaFactory) y CTAs con link — todo server-side vía
-/// <see cref="IContentService"/> (Umbraco 13 no tiene Management API).
+/// Dev-only: compone el cuerpo (Layout Composer / BlockGrid) de las páginas
+/// del sitio Synergos con contenido editorial elegante y variado —
+/// Hero (con CTAs) + FeatureGrid + MediaTextSplit + MissionBlock + CtaBanner —
+/// imágenes reales (DevMediaFactory) y BlockList anidados (CTAs/features) —
+/// todo server-side vía <see cref="IContentService"/> (Umbraco 13 sin Management API).
 /// </summary>
 /// <remarks>
 /// Gated por <c>Synergos:DevSeed:Enabled=true</c> (ADR 0013). No destructivo:
-/// escribe <c>heading</c> y <c>sections</c> de páginas existentes; no crea/
-/// borra nodos de contenido (sí crea Media idempotente). GUIDs por alias en
-/// runtime (ADR 0008). Bloques SSR (elementComp*/Corp*) renderizan;
-/// SchemaBlockDefaults evita el JsonReaderException. El Hero (elementCompHero)
-/// se omite: su BlockList anidado ctaItems no es autorable server-side sin
-/// items reales (limitación ADR 0093) — MediaTextSplit cumple el rol de hero.
-/// Jerarquía: H1 = heading de página; H2 = títulos de bloque (distintos).
+/// escribe <c>heading</c>, <c>showTitle</c> y <c>sections</c> de páginas
+/// existentes (crea Media idempotente). GUIDs por alias en runtime (ADR 0008).
+/// Hero/FeatureGrid usan <see cref="BlockListJsonBuilder"/> para sus BlockList
+/// anidados (ctaItems/features) con ≥1 item real. showTitle=false: el Hero
+/// es el H1; los demás bloques usan H2.
 /// </remarks>
 public sealed class DevContentFiller
 {
@@ -32,7 +30,7 @@ public sealed class DevContentFiller
     private readonly DevMediaFactory _media;
     private readonly ILogger<DevContentFiller> _logger;
 
-    private Guid _sectionKey, _splitKey, _missionKey, _ctaKey;
+    private Guid _sectionKey, _heroKey, _splitKey, _featureGridKey, _featureKey, _missionKey, _ctaKey, _buttonKey;
 
     public DevContentFiller(
         IContentService contentService,
@@ -66,19 +64,25 @@ public sealed class DevContentFiller
 
     private bool ResolveKeys(out string missing)
     {
-        var s = _contentTypeService.Get("elementLayoutSection")?.Key;
-        var sp = _contentTypeService.Get("elementCompMediaTextSplit")?.Key;
-        var m = _contentTypeService.Get("elementCorpMissionBlock")?.Key;
-        var c = _contentTypeService.Get("elementCompCtaBanner")?.Key;
+        var map = new (string alias, Action<Guid> set)[]
+        {
+            ("elementLayoutSection", k => _sectionKey = k),
+            ("elementCompHero", k => _heroKey = k),
+            ("elementCompMediaTextSplit", k => _splitKey = k),
+            ("elementCompFeatureGrid", k => _featureGridKey = k),
+            ("elementInfoFeature", k => _featureKey = k),
+            ("elementCorpMissionBlock", k => _missionKey = k),
+            ("elementCompCtaBanner", k => _ctaKey = k),
+            ("elementActionButton", k => _buttonKey = k),
+        };
         var miss = new List<string>();
-        if (s is null) miss.Add("elementLayoutSection");
-        if (sp is null) miss.Add("elementCompMediaTextSplit");
-        if (m is null) miss.Add("elementCorpMissionBlock");
-        if (c is null) miss.Add("elementCompCtaBanner");
+        foreach (var (alias, set) in map)
+        {
+            var key = _contentTypeService.Get(alias)?.Key;
+            if (key is null) { miss.Add(alias); } else { set(key.Value); }
+        }
         missing = string.Join(",", miss);
-        if (miss.Count > 0) return false;
-        _sectionKey = s!.Value; _splitKey = sp!.Value; _missionKey = m!.Value; _ctaKey = c!.Value;
-        return true;
+        return miss.Count == 0;
     }
 
     private int Apply(string pageName, string heading, string sectionsJson, List<string> details)
@@ -86,8 +90,8 @@ public sealed class DevContentFiller
         var page = FindByName(pageName);
         if (page is null) { details.Add($"{pageName}:not-found"); return 0; }
 
-        page.SetValue("heading", heading, Culture);   // H1 de página
-        page.SetValue("showTitle", true);              // mostrar el H1; los bloques usan H2
+        page.SetValue("heading", heading, Culture);
+        page.SetValue("showTitle", false);   // el Hero es el H1 — sin header de página duplicado
         page.SetValue(SectionsAlias, sectionsJson, Culture);
 
         var save = _contentService.SaveAndPublish(page, new[] { Culture });
@@ -107,11 +111,18 @@ public sealed class DevContentFiller
     private string BuildHome()
     {
         var b = new BlockGridJsonBuilder();
-        AddSplit(b, "Un código, infinitos productos",
-            "El motor editorial polimórfico",
-            "<p>Synergos está detrás de marcas profesionales, e-commerce, portales de membresía y experiencias corporativas. Compuesto server-side, sin reescribir código.</p>",
+        AddHero(b, "Una plataforma. Mil productos.",
+            "Un código. Un schema. Infinitos productos.",
+            "<p>Synergos es el motor editorial detrás de marcas profesionales, e-commerce, portales de membresía y experiencias corporativas — compuesto server-side, sin reescribir código.</p>",
             "Synergos Home Hero", "Composición abstracta de capas Synergos", "#0A2540", "#0F58A7",
-            mediaOnRight: false, ctaLabel: "Conoce la visión", ctaUrl: "/synergos/identidad");
+            ("Agendar sesión", "/synergos/contacto"), ("Conoce la visión", "/synergos/identidad"));
+
+        AddFeatureGrid(b, "Por qué Synergos", "Tres ideas, un mismo motor", new[]
+        {
+            ("Polimórfico", "Un código, mil formas", "Profesional, e-commerce, marca o membresía: cambian las instancias de schema, nunca el código."),
+            ("Componible", "El editor arrastra", "122 bundles UI y un Block Grid que el editor opera sin tocar una línea de código."),
+            ("Server-side", "Render robusto", "Composición y publicación server-side: el contenido existe y rinde sin depender del cliente."),
+        });
 
         AddSplit(b, "Arquitectura por capas",
             "Settings · Compositions · Blocks · Pages · Wiring",
@@ -120,8 +131,8 @@ public sealed class DevContentFiller
             mediaOnRight: true, ctaLabel: null, ctaUrl: null);
 
         AddMission(b, "Componés, no programás",
-            "El editor arrastra; la plataforma compone",
-            "<p>122 bundles UI publicados y un Block Grid que el editor opera sin tocar código. El mismo schema sirve a healthcare, e-commerce, membresía o marca corporativa.</p>");
+            "Del schema a la página, sin fricción",
+            "<p>El mismo schema sirve a healthcare, e-commerce, membresía o marca corporativa. Desplegar un vertical es cuestión de días, no de trimestres.</p>");
 
         AddCta(b, "¿Listo para construir el tuyo?",
             "Agenda una sesión técnica y te mostramos el grafo de capas en vivo.",
@@ -132,10 +143,16 @@ public sealed class DevContentFiller
     private string BuildIdentidad()
     {
         var b = new BlockGridJsonBuilder();
-        AddSplit(b, "Nuestra identidad",
-            "Un CMS empresarial polimórfico",
-            "<p>Un código, un schema, 122 bundles UI. Construido para escalar decisiones de arquitectura, no para repetirlas.</p>",
+        AddHero(b, "Construimos la plataforma donde tu producto se vuelve mil productos",
+            "Nuestra identidad",
+            "<p>Un CMS empresarial polimórfico: un código, un schema, 122 bundles UI. Construido para escalar decisiones de arquitectura, no para repetirlas.</p>",
             "Synergos Identidad", "Identidad visual de la plataforma Synergos", "#1A1A2E", "#7A3FF2",
+            ("Hablemos", "/synergos/contacto"));
+
+        AddSplit(b, "Nuestro propósito",
+            "Hacia dónde vamos",
+            "<p>Hacer que las decisiones de arquitectura escalen. Un futuro donde el schema editorial sea tan extensible como un lenguaje.</p>",
+            "Synergos Proposito", "Ilustración del propósito de Synergos", "#7A3FF2", "#C04CFC",
             mediaOnRight: false, ctaLabel: null, ctaUrl: null);
 
         AddSplit(b, "Un schema, polimórfico",
@@ -143,10 +160,6 @@ public sealed class DevContentFiller
             "<p>Profesional independiente, e-commerce, marca corporativa o membership portal: cambian las instancias de schema y los brand assets, nunca el código.</p>",
             "Synergos Polimorfico", "Representación del schema polimórfico", "#0F58A7", "#1FA2A6",
             mediaOnRight: true, ctaLabel: null, ctaUrl: null);
-
-        AddMission(b, "Nuestro propósito",
-            "Hacia dónde vamos",
-            "<p>Hacer que las decisiones de arquitectura escalen. Un futuro donde el schema editorial sea tan extensible como un lenguaje.</p>");
 
         AddCta(b, "¿Quieres ver Synergos por dentro?",
             "Agenda una sesión técnica con el equipo de plataforma.",
@@ -157,11 +170,11 @@ public sealed class DevContentFiller
     private string BuildContacto()
     {
         var b = new BlockGridJsonBuilder();
-        AddSplit(b, "Sesiones técnicas, demos e integración",
-            "Estamos disponibles",
+        AddHero(b, "Hablemos",
+            "Sesiones técnicas, demos e integración",
             "<p>Una llamada de 30 minutos con el equipo de plataforma para resolver cualquier duda — desde schema hasta integración con el CDN.</p>",
             "Synergos Contacto", "Sección de contacto de Synergos", "#0A2540", "#1FA2A6",
-            mediaOnRight: false, ctaLabel: null, ctaUrl: null);
+            ("Agendar ahora", "/synergos/contacto"));
 
         AddMission(b, "Cómo trabajamos",
             "Directo, técnico, sin vueltas",
@@ -174,6 +187,59 @@ public sealed class DevContentFiller
     }
 
     // ───────────────────────── Helpers de bloque ─────────────────────────
+
+    private void AddHero(BlockGridJsonBuilder b, string title, string subtitle, string body,
+        string imgName, string imgAlt, string from, string to, params (string label, string url)[] ctas)
+    {
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var pickerValue = _media.GetOrCreatePickerValue(imgName, imgAlt, from, to, 1600, 720);
+
+        var ctaItems = new BlockListJsonBuilder();
+        foreach (var (label, url) in ctas)
+        {
+            ctaItems.AddBlock(_buttonKey)
+                .Set("ctaLabel", label)
+                .Set("ctaLink", LinkJson(label, url))
+                .ApplyDefaults(_defaults.DefaultsFor(_buttonKey));
+        }
+
+        section.AddChild(SectionContentAreaKey, _heroKey, hero =>
+        {
+            hero.Set("headingTitle", title)
+                .Set("headingSubtitle", subtitle)
+                .Set("textBody", body)
+                .Set("mediaReference", pickerValue)
+                .Set("mediaAlt", imgAlt);
+            if (ctaItems.HasItems) { hero.Set("ctaItems", ctaItems.Build()); }
+            hero.ApplyDefaults(_defaults.DefaultsFor(_heroKey));
+        });
+    }
+
+    private void AddFeatureGrid(BlockGridJsonBuilder b, string title, string subtitle,
+        (string title, string subtitle, string body)[] features)
+    {
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+
+        var items = new BlockListJsonBuilder();
+        foreach (var (ft, fsub, fbody) in features)
+        {
+            items.AddBlock(_featureKey)
+                .Set("headingTitle", ft)
+                .Set("headingSubtitle", fsub)
+                .Set("textBody", $"<p>{fbody}</p>")
+                .Set("mediaAlt", ft)   // compContentMedia.mediaAlt es mandatory
+                .ApplyDefaults(_defaults.DefaultsFor(_featureKey));
+        }
+
+        section.AddChild(SectionContentAreaKey, _featureGridKey, fg =>
+        {
+            fg.Set("headingTitle", title).Set("headingSubtitle", subtitle);
+            if (items.HasItems) { fg.Set("features", items.Build()); }
+            fg.ApplyDefaults(_defaults.DefaultsFor(_featureGridKey));
+        });
+    }
 
     private void AddSplit(BlockGridJsonBuilder b, string title, string subtitle, string body,
         string imgName, string imgAlt, string from, string to, bool mediaOnRight,
@@ -222,8 +288,6 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(_ctaKey)));
     }
 
-    // MultiUrlPicker (Link) stored value: array JSON. url relativo/externo,
-    // udi null. Model.Value<Link>("ctaLink").Url resuelve desde url.
     private static string LinkJson(string name, string url)
         => $"[{{\"name\":\"{Esc(name)}\",\"url\":\"{Esc(url)}\",\"target\":\"\",\"udi\":null,\"icon\":null,\"queryString\":null}}]";
 
