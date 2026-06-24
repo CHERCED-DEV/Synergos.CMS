@@ -18,15 +18,21 @@ public sealed class DevController : ControllerBase
 {
     private readonly DevSeedSettings _settings;
     private readonly DevTestContentSeeder _seeder;
+    private readonly SynergosIdentitySeeder _identitySeeder;
+    private readonly DevContentFiller _filler;
     private readonly ILogger<DevController> _logger;
 
     public DevController(
         IOptions<DevSeedSettings> settings,
         DevTestContentSeeder seeder,
+        SynergosIdentitySeeder identitySeeder,
+        DevContentFiller filler,
         ILogger<DevController> logger)
     {
         _settings = settings.Value;
         _seeder = seeder;
+        _identitySeeder = identitySeeder;
+        _filler = filler;
         _logger = logger;
     }
 
@@ -45,6 +51,33 @@ public sealed class DevController : ControllerBase
         if (!_settings.Enabled) return NotFound();
         _logger.LogInformation("DevClear endpoint invocado.");
         var result = _seeder.Clear();
+        return Ok(result);
+    }
+
+    [HttpPost("clear-all-content")]
+    public IActionResult ClearAllContent()
+    {
+        if (!_settings.Enabled) return NotFound();
+        _logger.LogWarning("DevClearAll endpoint invocado — borra TODO el content tree.");
+        var result = _identitySeeder.ClearAll();
+        return Ok(result);
+    }
+
+    [HttpPost("seed-synergos-identity")]
+    public IActionResult SeedSynergosIdentity()
+    {
+        if (!_settings.Enabled) return NotFound();
+        _logger.LogInformation("SynergosSeed endpoint invocado.");
+        var result = _identitySeeder.Seed();
+        return Ok(result);
+    }
+
+    [HttpPost("fill-synergos-pages")]
+    public IActionResult FillSynergosPages()
+    {
+        if (!_settings.Enabled) return NotFound();
+        _logger.LogInformation("DevContentFiller endpoint invocado (fill-synergos-pages).");
+        var result = _filler.FillSynergosPages();
         return Ok(result);
     }
 

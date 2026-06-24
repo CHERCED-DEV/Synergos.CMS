@@ -356,6 +356,14 @@ public sealed class SeamComposer : IComposer
         // /dev/seed-test-site invoca el seeder. Scope: solo crea/borra
         // el siteRoot "Test Site", nunca otros árboles.
         services.AddTransient<DevTestContentSeeder>();
+        services.AddTransient<SynergosIdentitySeeder>();
+
+        // Autoría server-side de contenido (Umbraco 13 no tiene Management
+        // API). SchemaBlockDefaults siembra props multi-value editor-safe;
+        // DevContentFiller puebla el BlockGrid de páginas existentes.
+        services.AddTransient<SchemaBlockDefaults>();
+        services.AddTransient<DevMediaFactory>();
+        services.AddTransient<DevContentFiller>();
 
         // Health probes. Each registers as an ISchemaHealthProbe; the
         // HealthController resolves them as IEnumerable<ISchemaHealthProbe>.
