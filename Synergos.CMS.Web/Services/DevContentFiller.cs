@@ -23,6 +23,12 @@ public sealed class DevContentFiller
     private const string Culture = "es-CO";
     private const string SectionsAlias = "sections";
     private static readonly Guid SectionContentAreaKey = new("3525d41c-ae84-47ac-9297-2148f6a4aae8");
+    // Áreas de elementLayout3Col (de DTBlockGridSections) — col1/col2/col3.
+    private static readonly Guid Col1AreaKey = new("b3141704-5e2d-4adf-9c83-654377a9717f");
+    private static readonly Guid Col2AreaKey = new("316ace81-08bb-4688-a54b-930b8378d9e7");
+    private static readonly Guid Col3AreaKey = new("ecd5685c-7b37-4311-bb0b-6453949cd898");
+    // El preset 3Col no trae CSS de columnas propio; estas utilities (syn-utilities.css) sí.
+    private const string ThreeColGridClass = "syn-display--grid syn-grid--tpl-3col syn-grid--gap-lg";
 
     private readonly IContentService _contentService;
     private readonly IContentTypeService _contentTypeService;
@@ -32,6 +38,7 @@ public sealed class DevContentFiller
 
     private Guid _sectionKey, _heroKey, _splitKey, _featureGridKey, _featureKey, _missionKey, _ctaKey, _buttonKey;
     private Guid _testimonialsKey, _testimonialItemKey, _faqListKey, _faqItemKey;
+    private Guid _statKey, _threeColKey, _logoCloudKey, _logoItemKey;
 
     public DevContentFiller(
         IContentService contentService,
@@ -58,9 +65,10 @@ public sealed class DevContentFiller
         var filled = 0;
         filled += Apply("Home", "Una plataforma. Mil productos.", BuildHome(), details);
         filled += Apply("Identidad", "Construimos la plataforma donde tu producto se vuelve mil productos", BuildIdentidad(), details);
+        filled += Apply("Productos", "Un motor, muchos productos", BuildProductos(), details);
         filled += Apply("Contacto", "Hablemos", BuildContacto(), details);
 
-        return new FillResult(filled == 3, filled, string.Join("; ", details));
+        return new FillResult(filled == 4, filled, string.Join("; ", details));
     }
 
     private bool ResolveKeys(out string missing)
@@ -79,6 +87,10 @@ public sealed class DevContentFiller
             ("elementInfoTestimonialItem", k => _testimonialItemKey = k),
             ("elementInfoFaqList", k => _faqListKey = k),
             ("elementInfoFaqItem", k => _faqItemKey = k),
+            ("elementInfoStat", k => _statKey = k),
+            ("elementLayout3Col", k => _threeColKey = k),
+            ("elementMediaLogoCloud", k => _logoCloudKey = k),
+            ("elementMediaLogoItem", k => _logoItemKey = k),
         };
         var miss = new List<string>();
         foreach (var (alias, set) in map)
@@ -93,7 +105,14 @@ public sealed class DevContentFiller
     private int Apply(string pageName, string heading, string sectionsJson, List<string> details)
     {
         var page = FindByName(pageName);
-        if (page is null) { details.Add($"{pageName}:not-found"); return 0; }
+        if (page is null)
+        {
+            // No existe → crear bajo el siteRoot "Synergos" (su padre es platformRoot, no root).
+            var site = FindByName("Synergos");
+            if (site is null) { details.Add($"{pageName}:siteroot-not-found"); return 0; }
+            page = _contentService.Create(pageName, site.Id, "pageBase");
+            page.SetCultureName(pageName, Culture);
+        }
 
         page.SetValue("heading", heading, Culture);
         page.SetValue("showTitle", false);   // el Hero es el H1 — sin header de página duplicado
@@ -129,6 +148,11 @@ public sealed class DevContentFiller
             ("Server-side", "Render robusto", "Composición y publicación server-side: el contenido existe y rinde sin depender del cliente."),
         });
 
+        AddStats(b,
+            ("122", "bundles UI publicados"),
+            ("1", "código, todos los verticales"),
+            ("5", "capas estancas"));
+
         AddSplit(b, "Arquitectura por capas",
             "Settings · Compositions · Blocks · Pages · Wiring",
             "<p>Cinco capas estancas y un grafo de dependencias unidireccional mantienen el sistema extensible sin acoplarse. Cada decisión vive donde corresponde.</p>",
@@ -143,6 +167,13 @@ public sealed class DevContentFiller
             ("Migramos cuatro verticales sobre el mismo core. Lo que antes era un trimestre ahora es una semana.", "Laura Méndez", "CTO, Grupo Andino"),
             ("El editor arma páginas completas sin tocarnos a desarrollo. La arquitectura por capas se nota.", "Diego Restrepo", "Líder de Producto"),
             ("Un solo schema para marca, e-commerce y membresía. La promesa polimórfica es real.", "Sofía Cardona", "Directora Digital"));
+
+        AddLogoCloud(b, "Confían en la plataforma",
+            ("Andina", "#0A2540", "#0F58A7"),
+            ("Nimbus", "#143C8C", "#5B7CFA"),
+            ("Vértice", "#0F58A7", "#1FA2A6"),
+            ("Cobalto", "#1A1A2E", "#7A3FF2"),
+            ("Solara", "#7A3FF2", "#C04CFC"));
 
         AddFaq(b, "Preguntas frecuentes",
             ("¿Sirve para más de un tipo de sitio?", "Sí. El mismo código y schema sirven a profesional independiente, e-commerce, marca corporativa o portal de membresía — cambian las instancias, no el código."),
@@ -179,6 +210,40 @@ public sealed class DevContentFiller
         AddCta(b, "¿Quieres ver Synergos por dentro?",
             "Agenda una sesión técnica con el equipo de plataforma.",
             "Agendar sesión técnica", "/synergos/contacto");
+        return b.Build();
+    }
+
+    private string BuildProductos()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Un motor, muchos productos",
+            "Cinco verticales sobre el mismo core",
+            "<p>El mismo schema y los mismos 122 bundles se adaptan a cada negocio. No reescribes código: instancias el vertical, cambias el branding y publicas.</p>",
+            "Synergos Productos", "Verticales de Synergos", "#143C8C", "#1FA2A6",
+            ("Agendar demo", "/synergos/contacto"));
+
+        AddFeatureGrid(b, "Verticales disponibles", "Una receta por tipo de cliente", new[]
+        {
+            ("Profesional", "Médico · abogado · consultor", "Sitio institucional + servicios + agenda + contacto, listo en días."),
+            ("E-commerce", "Catálogo + carrito + checkout", "Producto, variantes, carrito y query server-side sobre el mismo core."),
+            ("Marca corporativa", "Empresa + casos + careers + blog", "Experiencias corporativas con chrome editable por marca."),
+            ("Membresía", "Público + dashboard privado", "Contenido protegido, login y self-service de miembros."),
+        });
+
+        AddStats(b,
+            ("5", "verticales base"),
+            ("122", "bundles UI reutilizables"),
+            ("1", "deploy, multi-dominio"));
+
+        AddSplit(b, "Mismo schema, tu marca",
+            "Branding por provider, no por código",
+            "<p>Colores, tipografía, logo y tono se resuelven por settings y <code>IBrandingProvider</code>. El core nunca conoce tu marca — solo la sirve.</p>",
+            "Synergos Branding", "Personalización de marca en Synergos", "#0F58A7", "#7A3FF2",
+            mediaOnRight: true, ctaLabel: "Ver la identidad", ctaUrl: "/synergos/identidad");
+
+        AddCta(b, "¿Cuál es tu vertical?",
+            "Cuéntanos tu caso y te mostramos la receta que mejor encaja.",
+            "Agendar sesión", "/synergos/contacto");
         return b.Build();
     }
 
@@ -258,6 +323,47 @@ public sealed class DevContentFiller
             fg.Set("headingTitle", title).Set("headingSubtitle", subtitle);
             if (items.HasItems) { fg.Set("features", items.Build()); }
             fg.ApplyDefaults(_defaults.DefaultsFor(_featureGridKey));
+        });
+    }
+
+    private void AddStats(BlockGridJsonBuilder b, params (string value, string label)[] stats)
+    {
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var areas = new[] { Col1AreaKey, Col2AreaKey, Col3AreaKey };
+        section.AddChild(SectionContentAreaKey, _threeColKey, col =>
+        {
+            col.Set("cssClass", ThreeColGridClass);   // las clases del preset no existen en CSS; estas utilities sí
+            col.ApplyDefaults(_defaults.DefaultsFor(_threeColKey));
+            for (var i = 0; i < stats.Length && i < 3; i++)
+            {
+                var (value, label) = stats[i];
+                col.AddChild(areas[i], _statKey, s => s
+                    .Set("statValue", value)
+                    .Set("statLabel", label)
+                    .ApplyDefaults(_defaults.DefaultsFor(_statKey)));
+            }
+        });
+    }
+
+    private void AddLogoCloud(BlockGridJsonBuilder b, string? cloudTitle,
+        params (string name, string from, string to)[] logos)
+    {
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var list = new BlockListJsonBuilder();
+        foreach (var (name, from, to) in logos)
+        {
+            list.AddBlock(_logoItemKey)
+                .Set("mediaReference", _media.GetOrCreatePickerValue(name, name, from, to, 320, 160))
+                .Set("mediaAlt", name)
+                .ApplyDefaults(_defaults.DefaultsFor(_logoItemKey));
+        }
+        section.AddChild(SectionContentAreaKey, _logoCloudKey, lc =>
+        {
+            lc.Set("cloudTitle", cloudTitle);
+            if (list.HasItems) { lc.Set("logoItems", list.Build()); }
+            lc.ApplyDefaults(_defaults.DefaultsFor(_logoCloudKey));
         });
     }
 
