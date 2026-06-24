@@ -31,6 +31,7 @@ public sealed class DevContentFiller
     private readonly ILogger<DevContentFiller> _logger;
 
     private Guid _sectionKey, _heroKey, _splitKey, _featureGridKey, _featureKey, _missionKey, _ctaKey, _buttonKey;
+    private Guid _testimonialsKey, _testimonialItemKey, _faqListKey, _faqItemKey;
 
     public DevContentFiller(
         IContentService contentService,
@@ -74,6 +75,10 @@ public sealed class DevContentFiller
             ("elementCorpMissionBlock", k => _missionKey = k),
             ("elementCompCtaBanner", k => _ctaKey = k),
             ("elementActionButton", k => _buttonKey = k),
+            ("elementInfoTestimonialCarousel", k => _testimonialsKey = k),
+            ("elementInfoTestimonialItem", k => _testimonialItemKey = k),
+            ("elementInfoFaqList", k => _faqListKey = k),
+            ("elementInfoFaqItem", k => _faqItemKey = k),
         };
         var miss = new List<string>();
         foreach (var (alias, set) in map)
@@ -134,6 +139,16 @@ public sealed class DevContentFiller
             "Del schema a la página, sin fricción",
             "<p>El mismo schema sirve a healthcare, e-commerce, membresía o marca corporativa. Desplegar un vertical es cuestión de días, no de trimestres.</p>");
 
+        AddTestimonials(b,
+            ("Migramos cuatro verticales sobre el mismo core. Lo que antes era un trimestre ahora es una semana.", "Laura Méndez", "CTO, Grupo Andino"),
+            ("El editor arma páginas completas sin tocarnos a desarrollo. La arquitectura por capas se nota.", "Diego Restrepo", "Líder de Producto"),
+            ("Un solo schema para marca, e-commerce y membresía. La promesa polimórfica es real.", "Sofía Cardona", "Directora Digital"));
+
+        AddFaq(b, "Preguntas frecuentes",
+            ("¿Sirve para más de un tipo de sitio?", "Sí. El mismo código y schema sirven a profesional independiente, e-commerce, marca corporativa o portal de membresía — cambian las instancias, no el código."),
+            ("¿El editor necesita saber programar?", "No. El contenido se compone en el Layout Composer arrastrando bloques; el desarrollo solo entra para piezas nuevas."),
+            ("¿Cómo se integran los componentes de UI?", "Vía un registry de bundles consumido por el CMS (ADR 0012); los bloques server-side renderizan siempre, los CDN hidratan cuando se publican."));
+
         AddCta(b, "¿Listo para construir el tuyo?",
             "Agenda una sesión técnica y te mostramos el grafo de capas en vivo.",
             "Agendar sesión", "/synergos/contacto");
@@ -179,6 +194,11 @@ public sealed class DevContentFiller
         AddMission(b, "Cómo trabajamos",
             "Directo, técnico, sin vueltas",
             "<p>Cuéntanos tu caso y te mostramos cómo Synergos lo resuelve con el schema actual — o qué pieza nueva haría falta.</p>");
+
+        AddFaq(b, "Antes de escribirnos",
+            ("¿Qué necesito para la sesión?", "Una idea del vertical (marca, e-commerce, membresía…) y, si tienes, tus brand assets. Nosotros llevamos el resto."),
+            ("¿Cuánto dura?", "30 minutos. Salimos con un plan concreto de qué piezas del schema cubren tu caso."),
+            ("¿Trabajan sobre mi marca?", "Sí. El branding se resuelve por provider y settings, sin tocar el core — tu identidad, nuestro motor."));
 
         AddCta(b, "Agenda una sesión",
             "30 minutos con el equipo de plataforma.",
@@ -238,6 +258,47 @@ public sealed class DevContentFiller
             fg.Set("headingTitle", title).Set("headingSubtitle", subtitle);
             if (items.HasItems) { fg.Set("features", items.Build()); }
             fg.ApplyDefaults(_defaults.DefaultsFor(_featureGridKey));
+        });
+    }
+
+    private void AddTestimonials(BlockGridJsonBuilder b, params (string quote, string author, string role)[] items)
+    {
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var list = new BlockListJsonBuilder();
+        foreach (var (quote, author, role) in items)
+        {
+            list.AddBlock(_testimonialItemKey)
+                .Set("textBody", $"<p>{quote}</p>")
+                .Set("authorName", author)
+                .Set("authorRole", role)
+                .Set("mediaAlt", author)
+                .ApplyDefaults(_defaults.DefaultsFor(_testimonialItemKey));
+        }
+        section.AddChild(SectionContentAreaKey, _testimonialsKey, tc =>
+        {
+            if (list.HasItems) { tc.Set("testimonialItems", list.Build()); }
+            tc.ApplyDefaults(_defaults.DefaultsFor(_testimonialsKey));
+        });
+    }
+
+    private void AddFaq(BlockGridJsonBuilder b, string faqTitle, params (string question, string answer)[] items)
+    {
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var list = new BlockListJsonBuilder();
+        foreach (var (question, answer) in items)
+        {
+            list.AddBlock(_faqItemKey)
+                .Set("headingTitle", question)
+                .Set("textBody", $"<p>{answer}</p>")
+                .ApplyDefaults(_defaults.DefaultsFor(_faqItemKey));
+        }
+        section.AddChild(SectionContentAreaKey, _faqListKey, fl =>
+        {
+            fl.Set("faqTitle", faqTitle);
+            if (list.HasItems) { fl.Set("faqItems", list.Build()); }
+            fl.ApplyDefaults(_defaults.DefaultsFor(_faqListKey));
         });
     }
 
