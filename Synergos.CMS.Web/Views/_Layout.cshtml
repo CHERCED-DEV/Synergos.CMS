@@ -38,6 +38,8 @@
     var theme = ThemeProvider.GetThemeForBrand(brand.Key);
     // Logo: el del theme por marca si está configurado; si no, el isotipo de marca (brand asset).
     var logoUrl = !string.IsNullOrWhiteSpace(theme?.LogoLightUrl) ? theme!.LogoLightUrl : Url.Content("~/img/synergoslabs-isotipo.png");
+    // El logo lleva al platformRoot (launcher/entry point), no al home del siteRoot.
+    var platformRootUrl = currentPage?.Root()?.Url() ?? "/";
     var renderCtx = PageRenderContextResolver.Resolve();
     var globalAlert = GlobalComponentResolver.GetActiveAlert();
     var globalBanner = GlobalComponentResolver.GetActiveBanner();
@@ -130,7 +132,7 @@
                 <div class="syn-site-header__inner">
                     @if (siteRoot != null)
                     {
-                        <a class="syn-site-header__brand" href="@siteRoot.Url()">
+                        <a class="syn-site-header__brand" href="@platformRootUrl" aria-label="Volver a la plataforma SynergosLabs">
                             <img class="syn-site-header__logo" src="@logoUrl" alt="" width="34" height="34" loading="eager" />
                             <span class="syn-site-header__brand-name">@siteName</span>
                         </a>
