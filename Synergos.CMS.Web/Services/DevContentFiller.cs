@@ -81,6 +81,9 @@ public sealed class DevContentFiller
         // El nodo "Home" anterior queda redundante → fuera del menú (no se borra).
         HideRedundantHome(site, details);
 
+        // SEO defaults (fallback de title/description del brand) alineados a SynergosLabs.
+        UpdateSiteConfigSeo(details);
+
         // Entry point: launcher en platformRoot.introBody + rename del umbrella a SynergosLabs.
         SeedPlatformLauncher(details);
 
@@ -132,6 +135,12 @@ public sealed class DevContentFiller
 
         page.SetValue("heading", heading, Culture);
         page.SetValue("showTitle", false);   // el Hero es el H1 — sin header de página duplicado
+        if (page.HasProperty("seoTitle")) { page.SetValue("seoTitle", $"{pageName} — {BrandName}", Culture); }
+        if (page.HasProperty("seoDescription"))
+        {
+            var d = page.GetValue<string>("seoDescription", Culture);
+            if (!string.IsNullOrEmpty(d)) { page.SetValue("seoDescription", RebrandText(d), Culture); }
+        }
         page.SetValue(SectionsAlias, sectionsJson, Culture);
 
         var save = _contentService.SaveAndPublish(page, new[] { Culture });
@@ -157,6 +166,11 @@ public sealed class DevContentFiller
         if (site.HasProperty("siteDisplayName")) { site.SetValue("siteDisplayName", BrandName, Culture); }
         if (site.HasProperty("brandDisplayName")) { site.SetValue("brandDisplayName", BrandName, Culture); }
         if (site.HasProperty("seoTitle")) { site.SetValue("seoTitle", $"{BrandName} — Composable Digital Solutions", Culture); }
+        if (site.HasProperty("seoDescription"))
+        {
+            var sd = site.GetValue<string>("seoDescription", Culture);
+            if (!string.IsNullOrEmpty(sd)) { site.SetValue("seoDescription", RebrandText(sd), Culture); }
+        }
         // canonicalHostname (invariant) → el brand resuelve por HostBasedBrandingProvider en dev.
         // Solo si está vacío (no pisar un hostname de producción que haya puesto el arquitecto).
         if (site.HasProperty("canonicalHostname") && string.IsNullOrWhiteSpace(site.GetValue<string>("canonicalHostname")))
@@ -201,7 +215,7 @@ public sealed class DevContentFiller
         AddHero(b, "Una plataforma. Mil productos.",
             "Un código. Un schema. Infinitos productos.",
             "<p>SynergosLabs es el motor editorial detrás de marcas profesionales, e-commerce, portales de membresía y experiencias corporativas — compuesto server-side, sin reescribir código.</p>",
-            "Synergos Home Hero", "Composición abstracta de capas Synergos", "#0A2540", "#0F58A7",
+            "Synergos Home Hero", "Composición abstracta de capas SynergosLabs", "#0A2540", "#0F58A7",
             ("Agendar sesión", "/synergos/contacto"), ("Conoce la visión", "/synergos/identidad"));
 
         AddFeatureGrid(b, "Por qué SynergosLabs", "Tres ideas, un mismo motor", new[]
@@ -255,13 +269,13 @@ public sealed class DevContentFiller
         AddHero(b, "Construimos la plataforma donde tu producto se vuelve mil productos",
             "Nuestra identidad",
             "<p>Un CMS empresarial polimórfico: un código, un schema, 122 bundles UI. Construido para escalar decisiones de arquitectura, no para repetirlas.</p>",
-            "Synergos Identidad", "Identidad visual de la plataforma Synergos", "#1A1A2E", "#7A3FF2",
+            "Synergos Identidad", "Identidad visual de la plataforma SynergosLabs", "#1A1A2E", "#7A3FF2",
             ("Hablemos", "/synergos/contacto"));
 
         AddSplit(b, "Nuestro propósito",
             "Hacia dónde vamos",
             "<p>Hacer que las decisiones de arquitectura escalen. Un futuro donde el schema editorial sea tan extensible como un lenguaje.</p>",
-            "Synergos Proposito", "Ilustración del propósito de Synergos", "#7A3FF2", "#C04CFC",
+            "Synergos Proposito", "Ilustración del propósito de SynergosLabs", "#7A3FF2", "#C04CFC",
             mediaOnRight: false, ctaLabel: null, ctaUrl: null);
 
         AddSplit(b, "Un schema, polimórfico",
@@ -282,7 +296,7 @@ public sealed class DevContentFiller
         AddHero(b, "Un motor, muchos productos",
             "Cinco verticales sobre el mismo core",
             "<p>El mismo schema y los mismos 122 bundles se adaptan a cada negocio. No reescribes código: instancias el vertical, cambias el branding y publicas.</p>",
-            "Synergos Productos", "Verticales de Synergos", "#143C8C", "#1FA2A6",
+            "Synergos Productos", "Verticales de SynergosLabs", "#143C8C", "#1FA2A6",
             ("Agendar demo", "/synergos/contacto"));
 
         AddFeatureGrid(b, "Verticales disponibles", "Una receta por tipo de cliente", new[]
@@ -301,7 +315,7 @@ public sealed class DevContentFiller
         AddSplit(b, "Mismo schema, tu marca",
             "Branding por provider, no por código",
             "<p>Colores, tipografía, logo y tono se resuelven por settings y <code>IBrandingProvider</code>. El core nunca conoce tu marca — solo la sirve.</p>",
-            "Synergos Branding", "Personalización de marca en Synergos", "#0F58A7", "#7A3FF2",
+            "Synergos Branding", "Personalización de marca en SynergosLabs", "#0F58A7", "#7A3FF2",
             mediaOnRight: true, ctaLabel: "Ver la identidad", ctaUrl: "/synergos/identidad");
 
         AddCta(b, "¿Cuál es tu vertical?",
@@ -316,7 +330,7 @@ public sealed class DevContentFiller
         AddHero(b, "Hablemos",
             "Sesiones técnicas, demos e integración",
             "<p>Una llamada de 30 minutos con el equipo de plataforma para resolver cualquier duda — desde schema hasta integración con el CDN.</p>",
-            "Synergos Contacto", "Sección de contacto de Synergos", "#0A2540", "#1FA2A6",
+            "Synergos Contacto", "Sección de contacto de SynergosLabs", "#0A2540", "#1FA2A6",
             ("Agendar ahora", "/synergos/contacto"));
 
         AddMission(b, "Cómo trabajamos",
@@ -502,7 +516,7 @@ public sealed class DevContentFiller
             .Set("headingTitle", title)
             .Set("headingSubtitle", subtitle)
             .Set("textBody", body)
-            .Set("mediaAlt", "Synergos")
+            .Set("mediaAlt", BrandName)
             .ApplyDefaults(_defaults.DefaultsFor(_missionKey)));
     }
 
@@ -577,6 +591,10 @@ public sealed class DevContentFiller
         details.Add("Launcher:ok");
     }
 
+    // Reemplaza "Synergos" suelto por "SynergosLabs" sin duplicar (no toca "SynergosLabs" existente).
+    private static string RebrandText(string? s) =>
+        string.IsNullOrEmpty(s) ? (s ?? "") : System.Text.RegularExpressions.Regex.Replace(s, "Synergos(?!Labs)", BrandName);
+
     private static string LinkJson(string name, string url)
         => $"[{{\"name\":\"{Esc(name)}\",\"url\":\"{Esc(url)}\",\"target\":\"\",\"udi\":null,\"icon\":null,\"queryString\":null}}]";
 
@@ -608,15 +626,29 @@ public sealed class DevContentFiller
     }
 
     /// <summary>Localiza el siteRoot por content type alias (robusto al rename del nodo).</summary>
-    private IContent? FindSiteRoot()
+    private IContent? FindSiteRoot() => FindFirstOfType("siteRoot");
+
+    /// <summary>Primer nodo de un content type alias dado, en cualquier nivel del árbol.</summary>
+    private IContent? FindFirstOfType(string alias)
     {
         foreach (var root in _contentService.GetRootContent())
         {
-            if (root.ContentType.Alias == "siteRoot") { return root; }
-            var child = FindByType(root.Id, "siteRoot");
-            if (child is not null) { return child; }
+            if (root.ContentType.Alias == alias) { return root; }
+            var found = FindByType(root.Id, alias);
+            if (found is not null) { return found; }
         }
         return null;
+    }
+
+    /// <summary>Alinea los SEO defaults del siteConfigSettings (fallback de title/description) a SynergosLabs.</summary>
+    private void UpdateSiteConfigSeo(List<string> details)
+    {
+        var cfg = FindFirstOfType("siteConfigSettings");
+        if (cfg is null) { details.Add("SiteConfig:none"); return; }
+        if (cfg.HasProperty("defaultSeoTitle")) { cfg.SetValue("defaultSeoTitle", $"{BrandName} — Composable Digital Solutions", Culture); }
+        if (cfg.HasProperty("defaultSeoDescription")) { cfg.SetValue("defaultSeoDescription", "SynergosLabs es el motor editorial polimórfico: un código, un schema, múltiples productos sobre el mismo core.", Culture); }
+        var save = _contentService.SaveAndPublish(cfg, new[] { Culture });
+        details.Add(save.Success ? "SiteConfig:seo-ok" : $"SiteConfig:seo-failed:{save.Result}");
     }
 
     private IContent? FindByType(int parentId, string alias)
