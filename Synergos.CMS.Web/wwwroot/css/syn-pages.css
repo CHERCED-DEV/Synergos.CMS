@@ -361,6 +361,22 @@ html:has(.syn-launcher) { overflow-x: clip; }
   margin-bottom: var(--syn-section-gap);
 }
 
+/* Isotipo de marca sobre el título (brand asset real). */
+.syn-launcher__mark {
+  display: block;
+  width: 96px;
+  height: auto;
+  margin: 0 auto var(--syn-space-5);
+  filter: drop-shadow(0 10px 32px rgb(79 110 247 / 0.5));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .syn-launcher__mark { animation: syn-pr-float 6s ease-in-out infinite; }
+}
+@keyframes syn-pr-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
 .syn-launcher__eyebrow {
   display: inline-block;
   font-size: var(--syn-font-size-xs);

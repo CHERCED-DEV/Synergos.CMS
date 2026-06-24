@@ -157,6 +157,12 @@ public sealed class DevContentFiller
         if (site.HasProperty("siteDisplayName")) { site.SetValue("siteDisplayName", BrandName, Culture); }
         if (site.HasProperty("brandDisplayName")) { site.SetValue("brandDisplayName", BrandName, Culture); }
         if (site.HasProperty("seoTitle")) { site.SetValue("seoTitle", $"{BrandName} — Composable Digital Solutions", Culture); }
+        // canonicalHostname (invariant) → el brand resuelve por HostBasedBrandingProvider en dev.
+        // Solo si está vacío (no pisar un hostname de producción que haya puesto el arquitecto).
+        if (site.HasProperty("canonicalHostname") && string.IsNullOrWhiteSpace(site.GetValue<string>("canonicalHostname")))
+        {
+            site.SetValue("canonicalHostname", "synergos.local");
+        }
         site.SetValue(SectionsAlias, BuildHome(), Culture);
 
         var save = _contentService.SaveAndPublish(site, new[] { Culture });

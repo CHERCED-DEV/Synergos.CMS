@@ -78,6 +78,14 @@
   display: block;
 }
 
+.syn-site-header__logo {
+  height: 34px;
+  width: 34px;
+  object-fit: contain;
+  display: block;
+  flex: none;
+}
+
 /* ── Site nav (top-level navigation) ─────────────────────────── */
 
 .syn-site-nav {

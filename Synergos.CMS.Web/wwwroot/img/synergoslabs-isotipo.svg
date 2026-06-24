@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SynergosLabs">
+  <defs>
+    <linearGradient id="slabs-iso" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6ea8fe"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <!-- Triángulo redondeado (corners via stroke-linejoin round) -->
+  <path d="M32 12 L52 48 L12 48 Z" fill="url(#slabs-iso)" stroke="url(#slabs-iso)"
+        stroke-width="9" stroke-linejoin="round"/>
+  <!-- Glifo: 3 nodos conectados (la "sinergia") -->
+  <g stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" fill="none" opacity="0.95">
+    <path d="M32 35 L32 27"/>
+    <path d="M31 37 L23 42"/>
+    <path d="M33 37 L41 42"/>
+  </g>
+  <g fill="#ffffff">
+    <circle cx="32" cy="25" r="3.1"/>
+    <circle cx="21" cy="43" r="3.1"/>
+    <circle cx="43" cy="43" r="3.1"/>
+  </g>
+</svg>

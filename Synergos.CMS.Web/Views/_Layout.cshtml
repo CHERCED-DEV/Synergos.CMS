@@ -36,6 +36,8 @@
 
     var brand = Branding.GetCurrent();
     var theme = ThemeProvider.GetThemeForBrand(brand.Key);
+    // Logo: el del theme por marca si está configurado; si no, el isotipo de marca (brand asset).
+    var logoUrl = !string.IsNullOrWhiteSpace(theme?.LogoLightUrl) ? theme!.LogoLightUrl : Url.Content("~/img/synergoslabs-isotipo.png");
     var renderCtx = PageRenderContextResolver.Resolve();
     var globalAlert = GlobalComponentResolver.GetActiveAlert();
     var globalBanner = GlobalComponentResolver.GetActiveBanner();
@@ -69,6 +71,10 @@
     @if (!string.IsNullOrWhiteSpace(theme?.FaviconUrl))
     {
         <link rel="icon" href="@theme.FaviconUrl" />
+    }
+    else
+    {
+        <link rel="icon" type="image/svg+xml" href="~/img/synergoslabs-isotipo.svg" />
     }
     @* Ola 100 — Manrope font family canónica del design system (Synergos.UI).
        Preconnect + display=swap para evitar FOUT bloqueante. Si el theme override
@@ -124,11 +130,17 @@
                 <div class="syn-site-header__inner">
                     @if (siteRoot != null)
                     {
-                        <a class="syn-site-header__brand" href="@siteRoot.Url()">@siteName</a>
+                        <a class="syn-site-header__brand" href="@siteRoot.Url()">
+                            <img class="syn-site-header__logo" src="@logoUrl" alt="" width="34" height="34" loading="eager" />
+                            <span class="syn-site-header__brand-name">@siteName</span>
+                        </a>
                     }
                     else
                     {
-                        <span class="syn-site-header__brand">@siteName</span>
+                        <span class="syn-site-header__brand">
+                            <img class="syn-site-header__logo" src="@logoUrl" alt="" width="34" height="34" loading="eager" />
+                            <span class="syn-site-header__brand-name">@siteName</span>
+                        </span>
                     }
                     @if (navItems.Any())
                     {

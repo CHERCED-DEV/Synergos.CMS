@@ -27,6 +27,22 @@ public sealed class DevMediaFactory
 {
     private const string MediaTypeAlias = "synImage";
 
+    // Mapa nombre-de-nodo → asset real del brand kit (relativo a _archive/multimedia).
+    // Si el archivo existe, se importa el real; si no, se cae al gradiente generado.
+    private static readonly Dictionary<string, string> RealAssets = new(StringComparer.Ordinal)
+    {
+        // Heroes (full-bleed): fondo oscuro con estrellas → texto blanco legible, on-brand.
+        ["Synergos Home Hero"] = "inspirations/files 2/hero_bg_synergos_dark.png",
+        ["Synergos Identidad"] = "inspirations/files 2/hero_bg_synergos_dark.png",
+        ["Synergos Productos"] = "inspirations/files 2/hero_bg_synergos_dark.png",
+        ["Synergos Contacto"]  = "inspirations/files 2/hero_bg_synergos_dark.png",
+        // Splits (imagen lateral): ilustraciones reales on-brand (fondo claro OK al lado del texto).
+        ["Synergos Capas"]       = "imgs/infofeat 6.png", // columnas + puente = arquitectura por capas
+        ["Synergos Proposito"]   = "imgs/infofeat 4.png", // bombillo + engranaje = propósito
+        ["Synergos Polimorfico"] = "imgs/infofeat 1.png", // cubos 3D = polimórfico
+        ["Synergos Branding"]    = "imgs/mision 2.png",   // piezas + handshake = tu marca encaja
+    };
+
     private readonly IMediaService _mediaService;
     private readonly MediaFileManager _mediaFileManager;
     private readonly MediaUrlGeneratorCollection _mediaUrlGenerators;
@@ -64,27 +80,45 @@ public sealed class DevMediaFactory
 
     private Guid GetOrCreate(string name, string altText, string hexFrom, string hexTo, int width, int height)
     {
+        var realPath = ResolveRealAsset(name);
         var existing = _mediaService.GetRootMedia()
             .FirstOrDefault(m => m.ContentType.Alias == MediaTypeAlias &&
                                  string.Equals(m.Name, name, StringComparison.Ordinal));
         if (existing is not null)
         {
+            // Refresca el binario del nodo existente si hay asset real (misma key → no rompe
+            // las referencias por mediaKey en el contenido; solo cambia el archivo).
+            if (realPath is not null)
+            {
+                using var fs0 = File.OpenRead(realPath);
+                existing.SetValue(_mediaFileManager, _mediaUrlGenerators, _shortStringHelper,
+                    _contentTypeBaseServiceProvider, "umbracoFile", Slug(name) + Path.GetExtension(realPath), fs0);
+                _mediaService.Save(existing);
+                _logger.LogInformation("DevMediaFactory: synImage '{Name}' actualizado al asset real.", name);
+            }
             return existing.Key;
         }
 
         var media = _mediaService.CreateMedia(name, Constants.System.Root, MediaTypeAlias);
 
-        var png = GenerateGradientPng(hexFrom, hexTo, width, height);
-        using (var stream = new MemoryStream(png))
+        if (realPath is not null)
         {
-            var fileName = Slug(name) + ".png";
+            using var fs = File.OpenRead(realPath);
             media.SetValue(_mediaFileManager, _mediaUrlGenerators, _shortStringHelper,
-                _contentTypeBaseServiceProvider, "umbracoFile", fileName, stream);
+                _contentTypeBaseServiceProvider, "umbracoFile", Slug(name) + Path.GetExtension(realPath), fs);
+            _logger.LogInformation("DevMediaFactory: synImage '{Name}' importado del kit ({Path}).", name, realPath);
+        }
+        else
+        {
+            var png = GenerateGradientPng(hexFrom, hexTo, width, height);
+            using var stream = new MemoryStream(png);
+            media.SetValue(_mediaFileManager, _mediaUrlGenerators, _shortStringHelper,
+                _contentTypeBaseServiceProvider, "umbracoFile", Slug(name) + ".png", stream);
+            _logger.LogInformation("DevMediaFactory: synImage '{Name}' creado (gradiente).", name);
         }
         media.SetValue("altDefault", altText); // Variations=Nothing
 
         _mediaService.Save(media);
-        _logger.LogInformation("DevMediaFactory: synImage '{Name}' creado (key={Key}).", name, media.Key);
         return media.Key;
     }
 
@@ -136,6 +170,21 @@ public sealed class DevMediaFactory
         using var ms = new MemoryStream();
         image.Save(ms, new PngEncoder());
         return ms.ToArray();
+    }
+
+    // Resuelve el asset real del kit subiendo desde el CWD hasta encontrar _archive/multimedia.
+    private static string? ResolveRealAsset(string name)
+    {
+        if (!RealAssets.TryGetValue(name, out var rel)) { return null; }
+        var relNative = rel.Replace('/', Path.DirectorySeparatorChar);
+        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, "_archive", "multimedia", relNative);
+            if (File.Exists(candidate)) { return candidate; }
+            dir = dir.Parent;
+        }
+        return null;
     }
 
     private static float Clamp(float v) => v < 0f ? 0f : (v > 255f ? 255f : v);
