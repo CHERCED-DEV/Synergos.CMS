@@ -1,0 +1,58 @@
+@*
+    elementPlatformDomain renderer — tarjeta de dominio del launcher (entry point).
+    Mismo markup que las cards del PlatformRoot, pero data-driven (composable).
+    @model directo (IPublishedElement), como Feature.cshtml.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("headingTitle");
+    if (string.IsNullOrWhiteSpace(title)) { return; }
+    var desc = Model.Value<string>("textBody");
+    var ctaLabel = Model.Value<string>("ctaLabel");
+    var cssClass = Model.Value<string>("cssClass");
+    var link = Model.Value<Umbraco.Cms.Core.Models.Link>("ctaLink");
+
+    // DropDown.Flexible (single): normalmente da el valor directo; defensa por si llega ["live"].
+    var status = CleanEnum(Model.Value<string>("domainStatus"), "live");
+    var icon = CleanEnum(Model.Value<string>("domainIcon"), "grid");
+
+    var isSoon = status == "soon";
+    var href = string.IsNullOrWhiteSpace(link?.Url) ? "#" : link.Url;
+    var badgeLabel = isSoon ? "Próximamente" : "Activo";
+    var cta = !string.IsNullOrWhiteSpace(ctaLabel) ? ctaLabel : (isSoon ? "Ver dominio →" : "Entrar al sitio →");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-platform-root__domain",
+        isSoon ? "syn-platform-root__domain--soon" : null,
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<a class="@classes" href="@href">
+    <span class="syn-platform-root__domain-icon" aria-hidden="true">@DomainIcon(icon)</span>
+    <span class="syn-platform-root__domain-badge syn-platform-root__domain-badge--@(isSoon ? "soon" : "live")">@badgeLabel</span>
+    <h2 class="syn-platform-root__domain-title">@title</h2>
+    @if (!string.IsNullOrWhiteSpace(desc))
+    {
+        <div class="syn-platform-root__domain-desc">@Html.Raw(desc)</div>
+    }
+    <span class="syn-platform-root__domain-cta">@cta</span>
+</a>
+@functions {
+    static string CleanEnum(string raw, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) { return fallback; }
+        var v = raw.Trim();
+        if (v.StartsWith("[")) { v = v.Trim('[', ']', '"', ' '); } // ["live"] -> live
+        v = v.Trim('"', ' ').ToLowerInvariant();
+        return string.IsNullOrEmpty(v) ? fallback : v;
+    }
+
+    static Microsoft.AspNetCore.Html.IHtmlContent DomainIcon(string icon)
+    {
+        const string grid = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"3\" width=\"7.5\" height=\"7.5\" rx=\"1.5\" /><rect x=\"13.5\" y=\"3\" width=\"7.5\" height=\"7.5\" rx=\"1.5\" /><rect x=\"3\" y=\"13.5\" width=\"7.5\" height=\"7.5\" rx=\"1.5\" /><rect x=\"13.5\" y=\"13.5\" width=\"7.5\" height=\"7.5\" rx=\"1.5\" /></svg>";
+        const string document = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z\" /><path d=\"M14 3v5h5\" /><path d=\"M9 13h6M9 17h4\" /></svg>";
+        const string bag = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h13l-1.2 9.5a1 1 0 0 1-1 .9H8.2a1 1 0 0 1-1-.9L6 7z\" /><path d=\"M9 7V5.5a3 3 0 0 1 6 0V7\" /></svg>";
+        var svg = icon switch { "document" => document, "bag" => bag, _ => grid };
+        return new Microsoft.AspNetCore.Html.HtmlString(svg);
+    }
+}

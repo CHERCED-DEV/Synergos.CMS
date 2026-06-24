@@ -68,6 +68,10 @@ public sealed class DevContentFiller
         filled += Apply("Productos", "Un motor, muchos productos", BuildProductos(), details);
         filled += Apply("Contacto", "Hablemos", BuildContacto(), details);
 
+        // Entry point (platformRoot): siembra los dominios composables. No bloquea
+        // el resultado de las 4 páginas; no-op si el schema aún no se importó.
+        SeedPlatformDomains(details);
+
         return new FillResult(filled == 4, filled, string.Join("; ", details));
     }
 
@@ -454,6 +458,68 @@ public sealed class DevContentFiller
             .Set("ctaLink", LinkJson(ctaLabel, url))
             .ApplyDefaults(_defaults.DefaultsFor(_ctaKey)));
     }
+
+    // ───────────────────── Entry point: dominios composables ─────────────────────
+
+    /// <summary>
+    /// Siembra <c>platformRoot.domainCards</c> (BlockList de elementPlatformDomain)
+    /// con los 3 dominios (Entidad/Blogs/Ecommerce). El template los renderiza con
+    /// el look PS3; quedan 100% editables en backoffice. Resuelve el element type por
+    /// separado (opcional): si el schema aún no se importó, es no-op.
+    /// </summary>
+    private void SeedPlatformDomains(List<string> details)
+    {
+        var domainKey = _contentTypeService.Get("elementPlatformDomain")?.Key;
+        if (domainKey is null) { details.Add("PlatformDomains:skipped-no-schema"); return; }
+
+        var pr = _contentService.GetRootContent().FirstOrDefault(c => c.ContentType.Alias == "platformRoot");
+        if (pr is null) { details.Add("PlatformDomains:platformroot-not-found"); return; }
+
+        var site = FindByName("Synergos");
+        var entidadName = string.IsNullOrWhiteSpace(site?.Name) ? "Entidad" : site!.Name;
+
+        var cards = new BlockListJsonBuilder();
+        cards.AddBlock(domainKey.Value)
+            .Set("headingTitle", entidadName)
+            .Set("textBody", "<p>Marca, identidad y páginas institucionales — el sitio editorial completo.</p>")
+            .Set("domainStatus", EnumJson("live"))
+            .Set("domainIcon", EnumJson("grid"))
+            .Set("ctaLabel", "Entrar al sitio →")
+            .Set("ctaLink", LinkJson(entidadName, "/synergos"))
+            .ApplyDefaults(_defaults.DefaultsFor(domainKey.Value));
+        cards.AddBlock(domainKey.Value)
+            .Set("headingTitle", "Blogs")
+            .Set("textBody", "<p>Publicaciones, artículos y contenido editorial sobre el mismo core.</p>")
+            .Set("domainStatus", EnumJson("soon"))
+            .Set("domainIcon", EnumJson("document"))
+            .Set("ctaLabel", "Ver dominio →")
+            .Set("ctaLink", LinkJson("Blogs", "/blogs"))
+            .ApplyDefaults(_defaults.DefaultsFor(domainKey.Value));
+        cards.AddBlock(domainKey.Value)
+            .Set("headingTitle", "Ecommerce")
+            .Set("textBody", "<p>Catálogo, productos y checkout sobre el mismo schema polimórfico.</p>")
+            .Set("domainStatus", EnumJson("soon"))
+            .Set("domainIcon", EnumJson("bag"))
+            .Set("ctaLabel", "Ver dominio →")
+            .Set("ctaLink", LinkJson("Ecommerce", "/ecommerce"))
+            .ApplyDefaults(_defaults.DefaultsFor(domainKey.Value));
+
+        if (!cards.HasItems) { details.Add("PlatformDomains:no-items"); return; }
+
+        pr.SetValue("domainCards", cards.Build(), Culture);
+        var save = _contentService.SaveAndPublish(pr, new[] { Culture });
+        if (!save.Success)
+        {
+            var invalid = save.InvalidProperties is null ? "(null)" : string.Join(",", save.InvalidProperties.Select(p => p.Alias));
+            _logger.LogWarning("DevContentFiller: platformRoot domains falló: {Result}; invalid=[{Invalid}]", save.Result, invalid);
+            details.Add($"PlatformDomains:save-failed:{save.Result}:[{invalid}]");
+            return;
+        }
+        details.Add("PlatformDomains:ok");
+    }
+
+    // DropDown.Flexible (single) almacena un array JSON; ["live"] evita JsonReaderException en el editor.
+    private static string EnumJson(string value) => $"[\"{Esc(value)}\"]";
 
     private static string LinkJson(string name, string url)
         => $"[{{\"name\":\"{Esc(name)}\",\"url\":\"{Esc(url)}\",\"target\":\"\",\"udi\":null,\"icon\":null,\"queryString\":null}}]";
