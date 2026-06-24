@@ -36,10 +36,6 @@
         ? liveSite.SiteDisplayName : "Entidad";
 
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-
-    // Dominios COMPOSABLES (editables en el backoffice). Si vacío → fallback hardcodeado.
-    var domainCards = Model.Value<Umbraco.Cms.Core.Models.Blocks.BlockListModel>("domainCards");
-    var hasComposedDomains = domainCards is { Count: > 0 };
 }
 <!DOCTYPE html>
 <html lang="@culture" data-theme="dark">
@@ -105,15 +101,6 @@
         else
         {
             <section class="syn-platform-root__domains" aria-label="Dominios de la plataforma">
-                @if (hasComposedDomains)
-                {
-                    foreach (var domain in domainCards)
-                    {
-                        @await Html.PartialAsync("Elements/Platform/Domain", domain.Content)
-                    }
-                }
-                else
-                {
                 <a class="syn-platform-root__domain" href="@entidadUrl">
                     <span class="syn-platform-root__domain-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -151,7 +138,6 @@
                     <p class="syn-platform-root__domain-desc">Catálogo, productos y checkout sobre el mismo schema polimórfico.</p>
                     <span class="syn-platform-root__domain-cta">Ver dominio →</span>
                 </a>
-                }
             </section>
         }
     </main>
