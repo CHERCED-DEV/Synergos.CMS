@@ -218,12 +218,20 @@ public sealed class DevContentFiller
             "Synergos Home Hero", "Composición abstracta de capas SynergosLabs", "#0A2540", "#0F58A7",
             ("Agendar sesión", "/synergos/contacto"), ("Conoce la visión", "/synergos/identidad"));
 
-        AddFeatureGrid(b, "Por qué SynergosLabs", "Tres ideas, un mismo motor", new[]
+        var features = new (string title, string subtitle, string body)[]
         {
             ("Polimórfico", "Un código, mil formas", "Profesional, e-commerce, marca o membresía: cambian las instancias de schema, nunca el código."),
             ("Componible", "El editor arrastra", "122 bundles UI y un Block Grid que el editor opera sin tocar una línea de código."),
             ("Server-side", "Render robusto", "Composición y publicación server-side: el contenido existe y rinde sin depender del cliente."),
-        });
+        };
+        if (_contentTypeService.Get("elementSynFeatureGrid")?.Key is not null)
+        {
+            AddSynFeatureGrid(b, "Por qué SynergosLabs", features);
+        }
+        else
+        {
+            AddFeatureGrid(b, "Por qué SynergosLabs", "Tres ideas, un mismo motor", features);
+        }
 
         AddStats(b,
             ("122", "bundles UI publicados"),
@@ -268,10 +276,20 @@ public sealed class DevContentFiller
             ("Cobalto", "#1A1A2E", "#7A3FF2"),
             ("Solara", "#7A3FF2", "#C04CFC"));
 
-        AddFaq(b, "Preguntas frecuentes",
+        var faqs = new (string question, string answer)[]
+        {
             ("¿Sirve para más de un tipo de sitio?", "Sí. El mismo código y schema sirven a profesional independiente, e-commerce, marca corporativa o portal de membresía — cambian las instancias, no el código."),
             ("¿El editor necesita saber programar?", "No. El contenido se compone en el Layout Composer arrastrando bloques; el desarrollo solo entra para piezas nuevas."),
-            ("¿Cómo se integran los componentes de UI?", "Vía un registry de bundles consumido por el CMS (ADR 0012); los bloques server-side renderizan siempre, los CDN hidratan cuando se publican."));
+            ("¿Cómo se integran los componentes de UI?", "Vía un registry de bundles consumido por el CMS (ADR 0012); los bloques server-side renderizan siempre, los CDN hidratan cuando se publican."),
+        };
+        if (_contentTypeService.Get("elementSynFaqSection")?.Key is not null)
+        {
+            AddSynFaq(b, "Preguntas frecuentes", faqs);
+        }
+        else
+        {
+            AddFaq(b, "Preguntas frecuentes", faqs);
+        }
 
         AddCta(b, "¿Listo para construir el tuyo?",
             "Agenda una sesión técnica y te mostramos el grafo de capas en vivo.",
@@ -498,6 +516,37 @@ public sealed class DevContentFiller
         section.AddChild(SectionContentAreaKey, key.Value, c => c
             .Set("headingText", heading)
             .Set("itemsJson", itemsJson)
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    /// <summary>FAQ vía componente Angular CDN (elementSynFaqSection): acordeón interactivo configurado desde el CMS.</summary>
+    private void AddSynFaq(BlockGridJsonBuilder b, string heading, (string question, string answer)[] items)
+    {
+        var key = _contentTypeService.Get("elementSynFaqSection")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var itemsJson = "[" + string.Join(",", items.Select(i =>
+            $"{{\"question\":\"{Esc(i.question)}\",\"answer\":\"{Esc(i.answer)}\"}}")) + "]";
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("headingText", heading)
+            .Set("itemsJson", itemsJson)
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    /// <summary>Feature grid vía componente Angular CDN (elementSynFeatureGrid): grilla de features configurada desde el CMS.</summary>
+    private void AddSynFeatureGrid(BlockGridJsonBuilder b, string heading, (string title, string subtitle, string body)[] features)
+    {
+        var key = _contentTypeService.Get("elementSynFeatureGrid")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var itemsJson = "[" + string.Join(",", features.Select(f =>
+            $"{{\"heading\":\"{Esc(f.title)}\",\"body\":\"{Esc(f.subtitle + " — " + f.body)}\"}}")) + "]";
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("headingText", heading)
+            .Set("itemsJson", itemsJson)
+            .Set("columns", "3")
             .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
 
