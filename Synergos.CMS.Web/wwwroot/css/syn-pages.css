@@ -163,7 +163,11 @@
    Pantalla de arranque: tema oscuro + onda de luz brand/accent animada +
    cards glassy estilo XMB. Congruente: tokens --syn-*, grilla de 8, Manrope. */
 
-.syn-platform-root {
+/* Guard: el chrome del launcher (onda/ribbon 150-200%) lo clipea el body, pero
+   el body-overflow no siempre propaga al html → scroll horizontal. Scopeado. */
+html:has(.syn-launcher) { overflow-x: clip; }
+
+.syn-launcher {
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -179,7 +183,7 @@
 }
 
 /* Onda de luz: 3 capas glow que fluyen lento (blend screen sobre el dark). */
-.syn-platform-root__wave {
+.syn-launcher__wave {
   position: absolute;
   inset: 0;
   z-index: 0;
@@ -188,7 +192,7 @@
   transition: transform 400ms var(--syn-easing-out);
 }
 
-.syn-platform-root__wave span {
+.syn-launcher__wave span {
   position: absolute;
   left: -25%;
   width: 150%;
@@ -201,14 +205,14 @@
   animation: syn-pr-wave 22s ease-in-out infinite;
 }
 
-.syn-platform-root__wave span:nth-child(1) { top: 26%; animation-duration: 24s; }
-.syn-platform-root__wave span:nth-child(2) {
+.syn-launcher__wave span:nth-child(1) { top: 26%; animation-duration: 24s; }
+.syn-launcher__wave span:nth-child(2) {
   top: 42%;
   animation-duration: 18s;
   animation-delay: -7s;
   background: linear-gradient(90deg, transparent, var(--syn-color-accent-500), var(--syn-color-brand-400), transparent);
 }
-.syn-platform-root__wave span:nth-child(3) { top: 56%; animation-duration: 30s; animation-delay: -13s; }
+.syn-launcher__wave span:nth-child(3) { top: 56%; animation-duration: 30s; animation-delay: -13s; }
 
 @keyframes syn-pr-wave {
   0%, 100% { transform: translateX(-8%) translateY(0) rotate(-3deg) scaleY(1); }
@@ -216,7 +220,7 @@
 }
 
 /* Power-on flash — destello inicial "la pantalla se enciende". */
-.syn-platform-root__flash {
+.syn-launcher__flash {
   position: fixed;
   inset: 0;
   z-index: var(--syn-z-top, 9999);
@@ -232,7 +236,7 @@
 }
 
 /* Partículas/estrellas que flotan hacia arriba (polvo de arranque). */
-.syn-platform-root__stars {
+.syn-launcher__stars {
   position: absolute;
   inset: 0;
   z-index: 0;
@@ -241,7 +245,7 @@
   transition: transform 600ms var(--syn-easing-out);
 }
 
-.syn-platform-root__stars span {
+.syn-launcher__stars span {
   position: absolute;
   width: 2px;
   height: 2px;
@@ -252,18 +256,18 @@
   animation: syn-pr-star linear infinite;
 }
 
-.syn-platform-root__stars span:nth-child(1)  { left: 6%;  top: 72%; animation-duration: 10s; animation-delay: 0s; }
-.syn-platform-root__stars span:nth-child(2)  { left: 16%; top: 88%; animation-duration: 13s; animation-delay: 2.5s; width: 3px; height: 3px; }
-.syn-platform-root__stars span:nth-child(3)  { left: 27%; top: 64%; animation-duration: 9s;  animation-delay: 1s; }
-.syn-platform-root__stars span:nth-child(4)  { left: 38%; top: 92%; animation-duration: 15s; animation-delay: 4s; }
-.syn-platform-root__stars span:nth-child(5)  { left: 47%; top: 78%; animation-duration: 11s; animation-delay: 0.5s; width: 3px; height: 3px; }
-.syn-platform-root__stars span:nth-child(6)  { left: 56%; top: 90%; animation-duration: 14s; animation-delay: 3s; }
-.syn-platform-root__stars span:nth-child(7)  { left: 64%; top: 66%; animation-duration: 10s; animation-delay: 5s; }
-.syn-platform-root__stars span:nth-child(8)  { left: 72%; top: 85%; animation-duration: 12s; animation-delay: 1.5s; }
-.syn-platform-root__stars span:nth-child(9)  { left: 81%; top: 74%; animation-duration: 16s; animation-delay: 6s; width: 3px; height: 3px; }
-.syn-platform-root__stars span:nth-child(10) { left: 89%; top: 90%; animation-duration: 11s; animation-delay: 2s; }
-.syn-platform-root__stars span:nth-child(11) { left: 94%; top: 62%; animation-duration: 13s; animation-delay: 4.5s; }
-.syn-platform-root__stars span:nth-child(12) { left: 50%; top: 95%; animation-duration: 9s;  animation-delay: 7s; }
+.syn-launcher__stars span:nth-child(1)  { left: 6%;  top: 72%; animation-duration: 10s; animation-delay: 0s; }
+.syn-launcher__stars span:nth-child(2)  { left: 16%; top: 88%; animation-duration: 13s; animation-delay: 2.5s; width: 3px; height: 3px; }
+.syn-launcher__stars span:nth-child(3)  { left: 27%; top: 64%; animation-duration: 9s;  animation-delay: 1s; }
+.syn-launcher__stars span:nth-child(4)  { left: 38%; top: 92%; animation-duration: 15s; animation-delay: 4s; }
+.syn-launcher__stars span:nth-child(5)  { left: 47%; top: 78%; animation-duration: 11s; animation-delay: 0.5s; width: 3px; height: 3px; }
+.syn-launcher__stars span:nth-child(6)  { left: 56%; top: 90%; animation-duration: 14s; animation-delay: 3s; }
+.syn-launcher__stars span:nth-child(7)  { left: 64%; top: 66%; animation-duration: 10s; animation-delay: 5s; }
+.syn-launcher__stars span:nth-child(8)  { left: 72%; top: 85%; animation-duration: 12s; animation-delay: 1.5s; }
+.syn-launcher__stars span:nth-child(9)  { left: 81%; top: 74%; animation-duration: 16s; animation-delay: 6s; width: 3px; height: 3px; }
+.syn-launcher__stars span:nth-child(10) { left: 89%; top: 90%; animation-duration: 11s; animation-delay: 2s; }
+.syn-launcher__stars span:nth-child(11) { left: 94%; top: 62%; animation-duration: 13s; animation-delay: 4.5s; }
+.syn-launcher__stars span:nth-child(12) { left: 50%; top: 95%; animation-duration: 9s;  animation-delay: 7s; }
 
 @keyframes syn-pr-star {
   0%   { opacity: 0; transform: translateY(12px); }
@@ -273,7 +277,7 @@
 }
 
 /* Ribbon nítido — silueta de la ola (SVG) que fluye sobre el glow. */
-.syn-platform-root__ribbon {
+.syn-launcher__ribbon {
   position: absolute;
   left: 0;
   right: 0;
@@ -287,7 +291,7 @@
   transition: transform 400ms var(--syn-easing-out);
 }
 
-.syn-platform-root__ribbon svg {
+.syn-launcher__ribbon svg {
   display: block;
   width: 200%;
   height: 100%;
@@ -304,7 +308,7 @@
 .syn-pr-ribbon-s3 { stop-color: var(--syn-color-accent-500); stop-opacity: 0; }
 
 /* Reloj estilo XMB (esquina superior derecha). */
-.syn-platform-root__clock {
+.syn-launcher__clock {
   position: absolute;
   top: var(--syn-space-6);
   inset-inline-end: var(--syn-space-8);
@@ -314,7 +318,7 @@
   color: var(--syn-color-text-secondary);
 }
 
-.syn-platform-root__clock-time {
+.syn-launcher__clock-time {
   display: block;
   font-size: var(--syn-font-size-2xl);
   font-weight: var(--syn-font-weight-semibold);
@@ -323,7 +327,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.syn-platform-root__clock-date {
+.syn-launcher__clock-date {
   display: block;
   margin-top: var(--syn-space-1);
   font-size: var(--syn-font-size-xs);
@@ -336,7 +340,7 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.syn-platform-root__main {
+.syn-launcher__main {
   position: relative;
   z-index: 1;
   width: 100%;
@@ -347,17 +351,17 @@
 }
 
 @media (min-width: 768px) {
-  .syn-platform-root__main { padding: var(--syn-section-gap-lg) var(--syn-gutter-lg); }
+  .syn-launcher__main { padding: var(--syn-section-gap-lg) var(--syn-gutter-lg); }
 }
 
-.syn-platform-root__hero {
+.syn-launcher__hero {
   text-align: center;
   max-width: var(--syn-max-width-reading);
   margin-inline: auto;
   margin-bottom: var(--syn-section-gap);
 }
 
-.syn-platform-root__eyebrow {
+.syn-launcher__eyebrow {
   display: inline-block;
   font-size: var(--syn-font-size-xs);
   font-weight: var(--syn-font-weight-bold);
@@ -367,7 +371,7 @@
   margin-bottom: var(--syn-space-4);
 }
 
-.syn-platform-root__title {
+.syn-launcher__title {
   font-size: clamp(var(--syn-font-size-4xl), 5vw + 1rem, var(--syn-font-size-5xl));
   font-weight: var(--syn-font-weight-bold);
   letter-spacing: var(--syn-letter-spacing-tight);
@@ -391,82 +395,86 @@
   to { background-position: 200% center; }
 }
 
-.syn-platform-root__intro {
+.syn-launcher__intro {
   font-size: var(--syn-font-size-lg);
   color: var(--syn-color-text-secondary);
   line-height: var(--syn-line-height-relaxed);
   margin: 0;
 }
 
-.syn-platform-root__domains {
+/* ── Launcher grid: la SECCIÓN compuesta lleva cssClass "syn-launcher__grid";
+   sus cards (block-grid items dentro del área sectionContent) van en fila. ── */
+.syn-launcher__grid .umb-block-grid__layout-container {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--syn-gutter-lg);
 }
 
 @media (min-width: 768px) {
-  .syn-platform-root__domains { grid-template-columns: repeat(3, 1fr); }
+  .syn-launcher__grid .umb-block-grid__layout-container {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
-.syn-platform-root__domain {
+.syn-launcher__grid .umb-block-grid__layout-item { display: flex; }
+
+/* ── Domain card: reskin de elementCompCard → tarjeta glassy del launcher.
+   Card.cshtml emite article.syn-card.syn-card--{variant}.syn-launcher__card.
+   Icono = ::before (chip + glifo data-URI por --grid/--document/--bag);
+   badge = ::after (texto por la variante live/soon). ───────────────────── */
+.syn-card.syn-launcher__card {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--syn-space-2);
+  width: 100%;
   padding: var(--syn-card-pad-lg);
   border-radius: var(--syn-card-radius);
   background: var(--syn-color-overlay-subtle);
   border: 1px solid var(--syn-color-border-inverse);
+  box-shadow: none;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  text-decoration: none;
-  color: inherit;
-  text-align: start;
+  overflow: visible;
   transition: var(--syn-transition-colors),
               transform var(--syn-duration-base) var(--syn-easing-default),
               box-shadow var(--syn-duration-base) var(--syn-easing-default);
   animation: syn-pr-rise 0.7s var(--syn-easing-default) backwards;
 }
 
-.syn-platform-root__domain:nth-child(1) { animation-delay: 0.08s; }
-.syn-platform-root__domain:nth-child(2) { animation-delay: 0.16s; }
-.syn-platform-root__domain:nth-child(3) { animation-delay: 0.24s; }
-
-.syn-platform-root__domain:hover {
+.syn-card.syn-launcher__card:hover {
   transform: translateY(-4px);
   border-color: var(--syn-color-brand-400);
   background: var(--syn-color-overlay-medium);
   box-shadow: 0 0 0 1px rgb(79 110 247 / 0.40), 0 24px 64px -24px rgb(79 110 247 / 0.55);
-  text-decoration: none;
 }
 
-.syn-platform-root__domain-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* Icono (chip translúcido + glifo) */
+.syn-card.syn-launcher__card::before {
+  content: '';
+  display: block;
+  flex: none;
   width: var(--syn-space-12);
   height: var(--syn-space-12);
   border-radius: var(--syn-radius-md);
-  background: var(--syn-color-state-brand-surface);
-  color: var(--syn-color-brand-300);
-  margin-bottom: var(--syn-space-2);
-  transition: var(--syn-transition-colors);
+  background-color: var(--syn-color-state-brand-surface);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: var(--syn-space-6);
+}
+.syn-launcher__card--grid::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a5b4fc' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='7.5' height='7.5' rx='1.5'/%3E%3Crect x='13.5' y='3' width='7.5' height='7.5' rx='1.5'/%3E%3Crect x='3' y='13.5' width='7.5' height='7.5' rx='1.5'/%3E%3Crect x='13.5' y='13.5' width='7.5' height='7.5' rx='1.5'/%3E%3C/svg%3E");
+}
+.syn-launcher__card--document::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a5b4fc' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z'/%3E%3Cpath d='M14 3v5h5'/%3E%3Cpath d='M9 13h6M9 17h4'/%3E%3C/svg%3E");
+}
+.syn-launcher__card--bag::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a5b4fc' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 7h13l-1.2 9.5a1 1 0 0 1-1 .9H8.2a1 1 0 0 1-1-.9L6 7z'/%3E%3Cpath d='M9 7V5.5a3 3 0 0 1 6 0V7'/%3E%3C/svg%3E");
 }
 
-.syn-platform-root__domain-icon svg {
-  width: var(--syn-space-6);
-  height: var(--syn-space-6);
-}
-
-.syn-platform-root__domain:hover .syn-platform-root__domain-icon {
-  background: var(--syn-color-brand-500);
-  color: var(--syn-color-neutral-0);
-}
-
-.syn-platform-root__domain--soon .syn-platform-root__domain-icon { opacity: 0.6; }
-
-.syn-platform-root__domain-badge {
+/* Badge de estado (desde la variante) */
+.syn-card.syn-launcher__card::after {
   position: absolute;
   top: var(--syn-card-pad-lg);
   inset-inline-end: var(--syn-card-pad-lg);
@@ -479,52 +487,60 @@
   letter-spacing: var(--syn-letter-spacing-wide);
   text-transform: uppercase;
 }
-
-.syn-platform-root__domain-badge--live {
+.syn-launcher__card--live::after {
+  content: 'Activo';
   background: var(--syn-color-state-success-surface);
   color: var(--syn-color-state-success-text);
   border: 1px solid var(--syn-color-state-success-border);
 }
-
-.syn-platform-root__domain-badge--soon {
+.syn-launcher__card--soon::after {
+  content: 'Próximamente';
   background: var(--syn-color-overlay-subtle);
   color: var(--syn-color-text-muted);
   border: 1px solid var(--syn-color-border-inverse);
 }
+.syn-launcher__card--soon::before { opacity: 0.6; }
 
-.syn-platform-root__domain-title {
+/* Nodos internos del Card reskineados al look del launcher */
+.syn-launcher__card .syn-card__media { display: none; }
+.syn-launcher__card .syn-card__header { padding: 0; }
+.syn-launcher__card .syn-card__title {
   font-size: var(--syn-font-size-2xl);
   font-weight: var(--syn-font-weight-bold);
   color: var(--syn-color-text-primary);
-  margin: var(--syn-space-2) 0 0;
+  margin: 0;
 }
-
-.syn-platform-root__domain-desc {
+.syn-launcher__card .syn-card__body {
+  padding: 0;
+  flex: 1 1 auto;
   color: var(--syn-color-text-secondary);
   font-size: var(--syn-font-size-base);
   line-height: var(--syn-line-height-relaxed);
-  margin: 0;
-  flex: 1 1 auto;
 }
-
-.syn-platform-root__domain-cta {
+.syn-launcher__card .syn-card__footer {
+  padding: 0;
   margin-top: var(--syn-space-4);
+  border-top: 0;
+  background: transparent;
+}
+.syn-launcher__card .syn-card__cta {
   color: var(--syn-color-text-accent);
   font-weight: var(--syn-font-weight-semibold);
   font-size: var(--syn-font-size-sm);
+  text-decoration: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .syn-platform-root__flash { display: none; }
-  .syn-platform-root__wave span,
-  .syn-platform-root__stars span,
-  .syn-platform-root__ribbon svg,
-  .syn-platform-root__title,
-  .syn-platform-root__main,
-  .syn-platform-root__domain { animation: none; }
-  .syn-platform-root__wave,
-  .syn-platform-root__stars,
-  .syn-platform-root__ribbon { transform: none; }
+  .syn-launcher__flash { display: none; }
+  .syn-launcher__wave span,
+  .syn-launcher__stars span,
+  .syn-launcher__ribbon svg,
+  .syn-launcher__title,
+  .syn-launcher__main,
+  .syn-card.syn-launcher__card { animation: none; }
+  .syn-launcher__wave,
+  .syn-launcher__stars,
+  .syn-launcher__ribbon { transform: none; }
 }
 
 /* ── Post page (blog post) ───────────────────────────────────── */

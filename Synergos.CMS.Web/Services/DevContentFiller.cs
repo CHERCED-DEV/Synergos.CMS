@@ -68,6 +68,10 @@ public sealed class DevContentFiller
         filled += Apply("Productos", "Un motor, muchos productos", BuildProductos(), details);
         filled += Apply("Contacto", "Hablemos", BuildContacto(), details);
 
+        // Entry point: compone el launcher en platformRoot.introBody (Layout Composer),
+        // estilado con clases .syn-launcher* vía cssClass. No bloquea el resultado.
+        SeedPlatformLauncher(details);
+
         return new FillResult(filled == 4, filled, string.Join("; ", details));
     }
 
@@ -453,6 +457,60 @@ public sealed class DevContentFiller
             .Set("ctaLabel", ctaLabel)
             .Set("ctaLink", LinkJson(ctaLabel, url))
             .ApplyDefaults(_defaults.DefaultsFor(_ctaKey)));
+    }
+
+    // ──────────────── Entry point: launcher composable (introBody) ────────────────
+
+    /// <summary>
+    /// Compone el launcher del platformRoot en su <c>introBody</c> (Layout Composer):
+    /// una Section (elementLayoutSection, cssClass=syn-launcher__grid) con 3 Cards
+    /// (elementCompCard) — cada una con cssClass=syn-launcher__card + icono + estado
+    /// y ctaLink a su Site Root. Cero schema nuevo; el look PS3 vive en clases CSS
+    /// (.syn-launcher*) + platform-root.js. Publicado vía IContentService (editable
+    /// en backoffice). Resuelve elementCompCard por separado → no-op si falta.
+    /// </summary>
+    private void SeedPlatformLauncher(List<string> details)
+    {
+        var cardKey = _contentTypeService.Get("elementCompCard")?.Key;
+        if (cardKey is null || _sectionKey == Guid.Empty) { details.Add("Launcher:skipped-no-schema"); return; }
+
+        var pr = _contentService.GetRootContent().FirstOrDefault(c => c.ContentType.Alias == "platformRoot");
+        if (pr is null) { details.Add("Launcher:platformroot-not-found"); return; }
+
+        var site = FindByName("Synergos");
+        var entidadName = string.IsNullOrWhiteSpace(site?.Name) ? "Entidad" : site!.Name;
+
+        var g = new BlockGridJsonBuilder();
+        var section = g.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-launcher__grid").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+
+        void AddCard(string title, string body, string iconClass, string statusClass, string ctaLabel, string url) =>
+            section.AddChild(SectionContentAreaKey, cardKey.Value, c => c
+                .Set("headingTitle", title)
+                .Set("textBody", body)
+                .Set("mediaAlt", title)   // compContentMedia.mediaAlt es mandatory (sin imagen, pero requerido)
+                .Set("ctaLabel", ctaLabel)
+                .Set("ctaLink", LinkJson(title, url))
+                .Set("cssClass", $"syn-launcher__card {iconClass} {statusClass}")
+                .ApplyDefaults(_defaults.DefaultsFor(cardKey.Value)));
+
+        AddCard(entidadName, "<p>Marca, identidad y páginas institucionales — el sitio editorial completo.</p>",
+            "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar al sitio →", "/synergos");
+        AddCard("Blogs", "<p>Publicaciones, artículos y contenido editorial sobre el mismo core.</p>",
+            "syn-launcher__card--document", "syn-launcher__card--soon", "Ver dominio →", "/blogs");
+        AddCard("Ecommerce", "<p>Catálogo, productos y checkout sobre el mismo schema polimórfico.</p>",
+            "syn-launcher__card--bag", "syn-launcher__card--soon", "Ver dominio →", "/ecommerce");
+
+        pr.SetValue("introBody", g.Build(), Culture);
+        var save = _contentService.SaveAndPublish(pr, new[] { Culture });
+        if (!save.Success)
+        {
+            var invalid = save.InvalidProperties is null ? "(null)" : string.Join(",", save.InvalidProperties.Select(p => p.Alias));
+            _logger.LogWarning("DevContentFiller: platformRoot launcher falló: {Result}; invalid=[{Invalid}]", save.Result, invalid);
+            details.Add($"Launcher:save-failed:{save.Result}:[{invalid}]");
+            return;
+        }
+        details.Add("Launcher:ok");
     }
 
     private static string LinkJson(string name, string url)
