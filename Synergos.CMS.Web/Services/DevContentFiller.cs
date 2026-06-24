@@ -251,7 +251,7 @@ public sealed class DevContentFiller
         // @angular/core/rxjs-interop (sg-core.js lo importa, ningún bundle lo expone) → el
         // Web Component no hidrata. Hasta regenerar ese runtime, usamos el SSR. Flip a true
         // cuando el build de Synergos.UI esté arreglado → re-fill → testimonios Angular.
-        var useAngularTestimonials = false;   // flip cuando el runtime Angular de Synergos.UI provea rxjs-interop
+        var useAngularTestimonials = true;   // runtime Angular ya provee rxjs-interop (CDN local) → componente CDN activo
         if (useAngularTestimonials && _contentTypeService.Get("elementSynTestimonialSection")?.Key is not null)
         {
             AddSynTestimonials(b, "Lo que dicen de la plataforma", testimonials);
