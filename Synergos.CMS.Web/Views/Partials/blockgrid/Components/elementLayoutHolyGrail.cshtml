@@ -1,11 +1,11 @@
-@*
+﻿@*
     elementLayoutHolyGrail renderer (Ola 42.7 + semantic HTML).
     3 areas nav + main + aside (2+8+2). Cada area emite el tag
     HTML5 semántico apropiado: nav → <nav>, main → <main>,
     aside → <aside>. Wrapper externo <section>.
     Backoffice preview: App_Plugins/LayoutComposer/views/block-layout-holy-grail.html
 *@
-@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
+@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
 @using Synergos.CMS.Web.Services
 @{
     var element = Model.Content;

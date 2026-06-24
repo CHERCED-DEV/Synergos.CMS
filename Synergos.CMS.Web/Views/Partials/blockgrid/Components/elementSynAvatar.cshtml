@@ -1,8 +1,8 @@
-@*
+﻿@*
     Block Grid convention wrapper. Unwraps the BlockGridItem and
     delegates to the real renderer (Views/Partials/SynHost/Avatar.cshtml)
     so the same partial is usable from LayoutComposer or any other
     composer in future olas. ADR 0015 (composition-agnostic SynHost).
 *@
-@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
+@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
 @await Html.PartialAsync("SynHost/Avatar", Model.Content)
