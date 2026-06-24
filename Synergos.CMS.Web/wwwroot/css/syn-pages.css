@@ -158,18 +158,55 @@
   margin-inline: auto;
 }
 
-/* ── Platform Root (landing del platformRoot) ────────────────── */
+/* ── Platform Root — entry point / showcase de dominios (2026-06-24) ──
+   Layout=null en el template; el design system se carga directo en su <head>.
+   Muestra las capacidades (Entidad / Blogs / Ecommerce) como cards premium. */
 
 .syn-platform-root {
-  display: block;
-  text-align: center;
-  padding: var(--syn-space-3xl) 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, var(--syn-color-surface-accent) 0%, transparent 60%),
+    var(--syn-color-surface-canvas);
+  color: var(--syn-color-text-primary);
 }
 
-.syn-platform-root__welcome {
-  font-size: clamp(var(--syn-font-size-3xl), 4vw + 1rem, var(--syn-font-size-5xl));
+.syn-platform-root__main {
+  width: 100%;
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  padding: var(--syn-section-gap) var(--syn-gutter);
+}
+
+@media (min-width: 768px) {
+  .syn-platform-root__main { padding: var(--syn-section-gap-lg) var(--syn-gutter-lg); }
+}
+
+.syn-platform-root__hero {
+  text-align: center;
+  max-width: var(--syn-max-width-reading);
+  margin-inline: auto;
+  margin-bottom: var(--syn-section-gap);
+}
+
+.syn-platform-root__eyebrow {
+  display: inline-block;
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  color: var(--syn-color-text-accent);
+  margin-bottom: var(--syn-space-4);
+}
+
+.syn-platform-root__title {
+  font-size: clamp(var(--syn-font-size-4xl), 5vw + 1rem, var(--syn-font-size-5xl));
   font-weight: var(--syn-font-weight-bold);
   letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-tight);
+  margin: 0 0 var(--syn-space-4);
   background: linear-gradient(135deg,
     var(--syn-color-action-primary) 0%,
     var(--syn-color-action-emphasis, var(--syn-color-accent-500)) 100%);
@@ -177,55 +214,95 @@
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  margin-bottom: var(--syn-space-md);
 }
 
 .syn-platform-root__intro {
   font-size: var(--syn-font-size-lg);
   color: var(--syn-color-text-secondary);
   line-height: var(--syn-line-height-relaxed);
-  max-width: var(--syn-max-width-reading);
-  margin-inline: auto;
+  margin: 0;
 }
 
-.syn-platform-root__sites {
+.syn-platform-root__domains {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--syn-space-lg);
-  margin-top: var(--syn-space-3xl);
+  grid-template-columns: 1fr;
+  gap: var(--syn-gutter-lg);
 }
 
-.syn-platform-root__site {
-  display: block;
-  padding: var(--syn-space-xl);
+@media (min-width: 768px) {
+  .syn-platform-root__domains { grid-template-columns: repeat(3, 1fr); }
+}
+
+.syn-platform-root__domain {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--syn-space-2);
+  padding: var(--syn-card-pad-lg);
   background: var(--syn-card-surface);
   border: var(--syn-card-border);
   border-radius: var(--syn-card-radius);
+  box-shadow: var(--syn-card-shadow);
   text-decoration: none;
   color: inherit;
   text-align: start;
-  box-shadow: var(--syn-card-shadow);
   transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
 }
 
-.syn-platform-root__site:hover {
+.syn-platform-root__domain:hover {
   border-color: var(--syn-card-border-hover);
   box-shadow: var(--syn-card-shadow-hover);
   transform: var(--syn-card-lift);
   text-decoration: none;
 }
 
-.syn-platform-root__site-title {
-  font-size: var(--syn-font-size-xl);
+.syn-platform-root__domain--soon { opacity: 0.72; }
+.syn-platform-root__domain--soon:hover { opacity: 1; }
+
+.syn-platform-root__domain-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--syn-space-1) var(--syn-space-3);
+  border-radius: var(--syn-radius-full);
+  font-size: var(--syn-font-size-xs);
   font-weight: var(--syn-font-weight-semibold);
-  color: var(--syn-color-text-primary);
-  margin: 0 0 var(--syn-space-2);
+  letter-spacing: var(--syn-letter-spacing-wide);
+  text-transform: uppercase;
 }
 
-.syn-platform-root__site-host {
+.syn-platform-root__domain-badge--live {
+  background: var(--syn-color-state-success-surface);
+  color: var(--syn-color-state-success-text);
+  border: 1px solid var(--syn-color-state-success-border);
+}
+
+.syn-platform-root__domain-badge--soon {
+  background: var(--syn-color-surface-tertiary);
   color: var(--syn-color-text-muted);
+  border: 1px solid var(--syn-color-border-default);
+}
+
+.syn-platform-root__domain-title {
+  font-size: var(--syn-font-size-2xl);
+  font-weight: var(--syn-font-weight-bold);
+  color: var(--syn-color-text-primary);
+  margin: var(--syn-space-2) 0 0;
+}
+
+.syn-platform-root__domain-desc {
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.syn-platform-root__domain-cta {
+  margin-top: var(--syn-space-4);
+  color: var(--syn-color-text-accent);
+  font-weight: var(--syn-font-weight-semibold);
   font-size: var(--syn-font-size-sm);
-  font-family: var(--syn-font-family-mono);
 }
 
 /* ── Post page (blog post) ───────────────────────────────────── */
