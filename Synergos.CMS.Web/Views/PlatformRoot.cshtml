@@ -1,18 +1,20 @@
 @*
-    Template del Document Type `platformRoot` (Ola 69.2, rediseñado 2026-06-24).
+    Template del Document Type `platformRoot` (Ola 69.2; rediseño "boot/launcher"
+    estilo PS3 2026-06-24).
 
-    Entry point público de la plataforma: muestra los DOMINIOS/capacidades
-    (Entidad / Blogs / Ecommerce) como un showcase premium. La "Entidad"
-    enlaza al siteRoot vivo; los dominios aún no construidos enlazan a su
-    ruta (que da 404 hasta que existan) — decisión del arquitecto: dejar
-    todo visualmente montado.
+    Entry point público de la plataforma: pantalla de arranque cinematográfica
+    (tema oscuro + onda de luz animada) que presenta los DOMINIOS/capacidades
+    (Entidad / Blogs / Ecommerce) como un launcher premium. La "Entidad" enlaza
+    al siteRoot vivo; los dominios aún no construidos enlazan a su ruta (que da
+    404 hasta que existan) — decisión del arquitecto: dejar todo montado.
 
-    Layout=null por diseño (el platform root no es un sitio, no tiene chrome
-    del siteRoot). Carga el design system directamente en el <head> para
-    quedar coherente con el resto (mismos tokens / grilla de 8).
+    Congruente con el design system: usa los mismos tokens (--syn-*), grilla de
+    8, Manrope y card language; el look "PS3" se logra con el TEMA OSCURO + una
+    onda de glow brand/accent, no con un sistema ajeno.
 
-    Si el editor llena `introBody` (Block Grid), se renderiza ese cuerpo en
-    lugar del showcase por defecto — flexibilidad sin obligar a llenar nada.
+    Layout=null por diseño (el platform root no es un sitio, no tiene chrome del
+    siteRoot). Si el editor llena `introBody`, se renderiza ese cuerpo en lugar
+    del launcher por defecto.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.PlatformRoot>
 @using Synergos.CMS.Web.PublishedModels
@@ -28,7 +30,6 @@
 
     var hasCustomBody = Model.IntroBody is { Count: > 0 };
 
-    // El siteRoot vivo (Entidad). Si hay varios, toma el primero visible.
     var liveSite = Model.Children<SiteRoot>().FirstOrDefault(s => s.IsVisible());
     var entidadUrl = liveSite?.Url() ?? "/synergos";
     var entidadName = liveSite is not null && !string.IsNullOrWhiteSpace(liveSite.SiteDisplayName)
@@ -37,7 +38,7 @@
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
 }
 <!DOCTYPE html>
-<html lang="@culture">
+<html lang="@culture" data-theme="dark">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -53,6 +54,11 @@
     <link rel="stylesheet" href="~/css/syn-pages.css" asp-append-version="true" />
 </head>
 <body class="syn-platform-root">
+    @* Onda de luz de fondo (estilo arranque PS3) — capas glow brand/accent. *@
+    <div class="syn-platform-root__wave" aria-hidden="true">
+        <span></span><span></span><span></span>
+    </div>
+
     <main class="syn-platform-root__main">
         <header class="syn-platform-root__hero">
             <span class="syn-platform-root__eyebrow">Plataforma Synergos</span>
@@ -70,6 +76,12 @@
         {
             <section class="syn-platform-root__domains" aria-label="Dominios de la plataforma">
                 <a class="syn-platform-root__domain" href="@entidadUrl">
+                    <span class="syn-platform-root__domain-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
+                            <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
+                        </svg>
+                    </span>
                     <span class="syn-platform-root__domain-badge syn-platform-root__domain-badge--live">Activo</span>
                     <h2 class="syn-platform-root__domain-title">@entidadName</h2>
                     <p class="syn-platform-root__domain-desc">Marca, identidad y páginas institucionales — el sitio editorial completo.</p>
@@ -77,6 +89,12 @@
                 </a>
 
                 <a class="syn-platform-root__domain syn-platform-root__domain--soon" href="/blogs">
+                    <span class="syn-platform-root__domain-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M14 3v5h5" />
+                            <path d="M9 13h6M9 17h4" />
+                        </svg>
+                    </span>
                     <span class="syn-platform-root__domain-badge syn-platform-root__domain-badge--soon">Próximamente</span>
                     <h2 class="syn-platform-root__domain-title">Blogs</h2>
                     <p class="syn-platform-root__domain-desc">Publicaciones, artículos y contenido editorial sobre el mismo core.</p>
@@ -84,6 +102,11 @@
                 </a>
 
                 <a class="syn-platform-root__domain syn-platform-root__domain--soon" href="/ecommerce">
+                    <span class="syn-platform-root__domain-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 7h13l-1.2 9.5a1 1 0 0 1-1 .9H8.2a1 1 0 0 1-1-.9L6 7z" /><path d="M9 7V5.5a3 3 0 0 1 6 0V7" />
+                        </svg>
+                    </span>
                     <span class="syn-platform-root__domain-badge syn-platform-root__domain-badge--soon">Próximamente</span>
                     <h2 class="syn-platform-root__domain-title">Ecommerce</h2>
                     <p class="syn-platform-root__domain-desc">Catálogo, productos y checkout sobre el mismo schema polimórfico.</p>

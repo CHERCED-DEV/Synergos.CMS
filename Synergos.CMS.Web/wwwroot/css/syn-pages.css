@@ -158,26 +158,75 @@
   margin-inline: auto;
 }
 
-/* ── Platform Root — entry point / showcase de dominios (2026-06-24) ──
-   Layout=null en el template; el design system se carga directo en su <head>.
-   Muestra las capacidades (Entidad / Blogs / Ecommerce) como cards premium. */
+/* ── Platform Root — entry point "boot/launcher" estilo PS3 (2026-06-24) ──
+   Layout=null en el template (data-theme="dark"); design system en su <head>.
+   Pantalla de arranque: tema oscuro + onda de luz brand/accent animada +
+   cards glassy estilo XMB. Congruente: tokens --syn-*, grilla de 8, Manrope. */
 
 .syn-platform-root {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(ellipse 80% 60% at 50% -10%, var(--syn-color-surface-accent) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 50% -10%, rgb(79 110 247 / 0.22), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 50% 115%, rgb(139 92 246 / 0.18), transparent 65%),
     var(--syn-color-surface-canvas);
   color: var(--syn-color-text-primary);
 }
 
+/* Onda de luz: 3 capas glow que fluyen lento (blend screen sobre el dark). */
+.syn-platform-root__wave {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.syn-platform-root__wave span {
+  position: absolute;
+  left: -25%;
+  width: 150%;
+  height: 40vh;
+  border-radius: 45%;
+  opacity: 0.16;
+  filter: blur(70px);
+  mix-blend-mode: screen;
+  background: linear-gradient(90deg, transparent, var(--syn-color-brand-500), var(--syn-color-accent-500), transparent);
+  animation: syn-pr-wave 22s ease-in-out infinite;
+}
+
+.syn-platform-root__wave span:nth-child(1) { top: 26%; animation-duration: 24s; }
+.syn-platform-root__wave span:nth-child(2) {
+  top: 42%;
+  animation-duration: 18s;
+  animation-delay: -7s;
+  background: linear-gradient(90deg, transparent, var(--syn-color-accent-500), var(--syn-color-brand-400), transparent);
+}
+.syn-platform-root__wave span:nth-child(3) { top: 56%; animation-duration: 30s; animation-delay: -13s; }
+
+@keyframes syn-pr-wave {
+  0%, 100% { transform: translateX(-8%) translateY(0) rotate(-3deg) scaleY(1); }
+  50%      { transform: translateX(8%) translateY(-5%) rotate(3deg) scaleY(1.18); }
+}
+
+@keyframes syn-pr-rise {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .syn-platform-root__main {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: var(--syn-max-width-content);
   margin-inline: auto;
   padding: var(--syn-section-gap) var(--syn-gutter);
+  animation: syn-pr-rise 0.7s var(--syn-easing-default) backwards;
 }
 
 @media (min-width: 768px) {
@@ -208,8 +257,8 @@
   line-height: var(--syn-line-height-tight);
   margin: 0 0 var(--syn-space-4);
   background: linear-gradient(135deg,
-    var(--syn-color-action-primary) 0%,
-    var(--syn-color-action-emphasis, var(--syn-color-accent-500)) 100%);
+    var(--syn-color-brand-300) 0%,
+    var(--syn-color-accent-400) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -240,27 +289,61 @@
   align-items: flex-start;
   gap: var(--syn-space-2);
   padding: var(--syn-card-pad-lg);
-  background: var(--syn-card-surface);
-  border: var(--syn-card-border);
   border-radius: var(--syn-card-radius);
-  box-shadow: var(--syn-card-shadow);
+  background: var(--syn-color-overlay-subtle);
+  border: 1px solid var(--syn-color-border-inverse);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   text-decoration: none;
   color: inherit;
   text-align: start;
-  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
+  transition: var(--syn-transition-colors),
+              transform var(--syn-duration-base) var(--syn-easing-default),
+              box-shadow var(--syn-duration-base) var(--syn-easing-default);
+  animation: syn-pr-rise 0.7s var(--syn-easing-default) backwards;
 }
 
+.syn-platform-root__domain:nth-child(1) { animation-delay: 0.08s; }
+.syn-platform-root__domain:nth-child(2) { animation-delay: 0.16s; }
+.syn-platform-root__domain:nth-child(3) { animation-delay: 0.24s; }
+
 .syn-platform-root__domain:hover {
-  border-color: var(--syn-card-border-hover);
-  box-shadow: var(--syn-card-shadow-hover);
-  transform: var(--syn-card-lift);
+  transform: translateY(-4px);
+  border-color: var(--syn-color-brand-400);
+  background: var(--syn-color-overlay-medium);
+  box-shadow: 0 0 0 1px rgb(79 110 247 / 0.40), 0 24px 64px -24px rgb(79 110 247 / 0.55);
   text-decoration: none;
 }
 
-.syn-platform-root__domain--soon { opacity: 0.72; }
-.syn-platform-root__domain--soon:hover { opacity: 1; }
+.syn-platform-root__domain-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--syn-space-12);
+  height: var(--syn-space-12);
+  border-radius: var(--syn-radius-md);
+  background: var(--syn-color-state-brand-surface);
+  color: var(--syn-color-brand-300);
+  margin-bottom: var(--syn-space-2);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-platform-root__domain-icon svg {
+  width: var(--syn-space-6);
+  height: var(--syn-space-6);
+}
+
+.syn-platform-root__domain:hover .syn-platform-root__domain-icon {
+  background: var(--syn-color-brand-500);
+  color: var(--syn-color-neutral-0);
+}
+
+.syn-platform-root__domain--soon .syn-platform-root__domain-icon { opacity: 0.6; }
 
 .syn-platform-root__domain-badge {
+  position: absolute;
+  top: var(--syn-card-pad-lg);
+  inset-inline-end: var(--syn-card-pad-lg);
   display: inline-flex;
   align-items: center;
   padding: var(--syn-space-1) var(--syn-space-3);
@@ -278,9 +361,9 @@
 }
 
 .syn-platform-root__domain-badge--soon {
-  background: var(--syn-color-surface-tertiary);
+  background: var(--syn-color-overlay-subtle);
   color: var(--syn-color-text-muted);
-  border: 1px solid var(--syn-color-border-default);
+  border: 1px solid var(--syn-color-border-inverse);
 }
 
 .syn-platform-root__domain-title {
@@ -303,6 +386,12 @@
   color: var(--syn-color-text-accent);
   font-weight: var(--syn-font-weight-semibold);
   font-size: var(--syn-font-size-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .syn-platform-root__wave span,
+  .syn-platform-root__main,
+  .syn-platform-root__domain { animation: none; }
 }
 
 /* ── Post page (blog post) ───────────────────────────────────── */
