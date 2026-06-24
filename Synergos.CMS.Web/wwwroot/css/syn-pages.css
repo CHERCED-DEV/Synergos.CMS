@@ -183,8 +183,9 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  overflow: hidden;
   pointer-events: none;
+  transform: translate3d(calc(var(--syn-pr-mx, 0) * 16px), calc(var(--syn-pr-my, 0) * 12px), 0);
+  transition: transform 400ms var(--syn-easing-out);
 }
 
 .syn-platform-root__wave span {
@@ -235,8 +236,9 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  overflow: hidden;
   pointer-events: none;
+  transform: translate3d(calc(var(--syn-pr-mx, 0) * -10px), calc(var(--syn-pr-my, 0) * -8px), 0);
+  transition: transform 600ms var(--syn-easing-out);
 }
 
 .syn-platform-root__stars span {
@@ -268,6 +270,65 @@
   15%  { opacity: 0.75; }
   70%  { opacity: 0.5; }
   100% { opacity: 0; transform: translateY(-70px); }
+}
+
+/* Ribbon nítido — silueta de la ola (SVG) que fluye sobre el glow. */
+.syn-platform-root__ribbon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 38%;
+  height: 30vh;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.65;
+  filter: drop-shadow(0 0 10px rgb(123 147 250 / 0.5));
+  transform: translate3d(calc(var(--syn-pr-mx, 0) * 30px), calc(var(--syn-pr-my, 0) * 20px), 0);
+  transition: transform 400ms var(--syn-easing-out);
+}
+
+.syn-platform-root__ribbon svg {
+  display: block;
+  width: 200%;
+  height: 100%;
+  animation: syn-pr-flow 16s linear infinite;
+}
+
+@keyframes syn-pr-flow {
+  to { transform: translateX(-25%); }
+}
+
+.syn-pr-ribbon-s0 { stop-color: var(--syn-color-brand-500); stop-opacity: 0; }
+.syn-pr-ribbon-s1 { stop-color: var(--syn-color-brand-400); stop-opacity: 0.9; }
+.syn-pr-ribbon-s2 { stop-color: var(--syn-color-accent-400); stop-opacity: 0.9; }
+.syn-pr-ribbon-s3 { stop-color: var(--syn-color-accent-500); stop-opacity: 0; }
+
+/* Reloj estilo XMB (esquina superior derecha). */
+.syn-platform-root__clock {
+  position: absolute;
+  top: var(--syn-space-6);
+  inset-inline-end: var(--syn-space-8);
+  z-index: 2;
+  text-align: end;
+  pointer-events: none;
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-platform-root__clock-time {
+  display: block;
+  font-size: var(--syn-font-size-2xl);
+  font-weight: var(--syn-font-weight-semibold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  color: var(--syn-color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.syn-platform-root__clock-date {
+  display: block;
+  margin-top: var(--syn-space-1);
+  font-size: var(--syn-font-size-xs);
+  letter-spacing: var(--syn-letter-spacing-wide);
+  text-transform: capitalize;
 }
 
 @keyframes syn-pr-rise {
@@ -457,9 +518,13 @@
   .syn-platform-root__flash { display: none; }
   .syn-platform-root__wave span,
   .syn-platform-root__stars span,
+  .syn-platform-root__ribbon svg,
   .syn-platform-root__title,
   .syn-platform-root__main,
   .syn-platform-root__domain { animation: none; }
+  .syn-platform-root__wave,
+  .syn-platform-root__stars,
+  .syn-platform-root__ribbon { transform: none; }
 }
 
 /* ── Post page (blog post) ───────────────────────────────────── */

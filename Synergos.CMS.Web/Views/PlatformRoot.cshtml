@@ -60,9 +60,29 @@
     <div class="syn-platform-root__wave" aria-hidden="true">
         <span></span><span></span><span></span>
     </div>
+    @* Ribbon nítido — silueta de la ola (SVG con borde definido sobre el glow). *@
+    <div class="syn-platform-root__ribbon" aria-hidden="true">
+        <svg viewBox="0 0 2880 240" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="synPrRibbon" x1="0" y1="0" x2="1" y2="0">
+                    <stop class="syn-pr-ribbon-s0" offset="0" />
+                    <stop class="syn-pr-ribbon-s1" offset="0.32" />
+                    <stop class="syn-pr-ribbon-s2" offset="0.62" />
+                    <stop class="syn-pr-ribbon-s3" offset="1" />
+                </linearGradient>
+            </defs>
+            <path d="M0 120 C120 60 240 60 360 120 C480 180 600 180 720 120 C840 60 960 60 1080 120 C1200 180 1320 180 1440 120 C1560 60 1680 60 1800 120 C1920 180 2040 180 2160 120 C2280 60 2400 60 2520 120 C2640 180 2760 180 2880 120"
+                  fill="none" stroke="url(#synPrRibbon)" stroke-width="2.5" stroke-linecap="round" />
+        </svg>
+    </div>
     @* Partículas/estrellas que flotan (ambiente de arranque). *@
     <div class="syn-platform-root__stars" aria-hidden="true">
         <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+    @* Reloj estilo XMB (lo llena platform-root.js). *@
+    <div class="syn-platform-root__clock" aria-hidden="true">
+        <span class="syn-platform-root__clock-time">--:--</span>
+        <span class="syn-platform-root__clock-date"></span>
     </div>
 
     <main class="syn-platform-root__main">
@@ -121,5 +141,6 @@
             </section>
         }
     </main>
+    <script src="~/js/platform-root.js" asp-append-version="true" defer></script>
 </body>
 </html>
