@@ -22,6 +22,7 @@ public sealed class DevContentFiller
 {
     private const string Culture = "es-CO";
     private const string SectionsAlias = "sections";
+    private const string BrandName = "SynergosLabs";   // marca de la Entidad + umbrella (decisión del arquitecto)
     private static readonly Guid SectionContentAreaKey = new("3525d41c-ae84-47ac-9297-2148f6a4aae8");
     // Áreas de elementLayout3Col (de DTBlockGridSections) — col1/col2/col3.
     private static readonly Guid Col1AreaKey = new("b3141704-5e2d-4adf-9c83-654377a9717f");
@@ -63,13 +64,24 @@ public sealed class DevContentFiller
 
         var details = new List<string>();
         var filled = 0;
-        filled += Apply("Home", "Una plataforma. Mil productos.", BuildHome(), details);
+
+        var site = FindSiteRoot();
+        if (site is null) { return new FillResult(false, 0, "siteroot-not-found"); }
+
+        // Afiliación: el HOME vive en el siteRoot (sections), no en un nodo "Home" aparte.
+        // De paso la Entidad se renombra a SynergosLabs (node + display + brand); la URL
+        // /synergos se preserva vía umbracoUrlName para no romper enlaces internos.
+        filled += ApplySiteRootHome(site, details);
+
+        // Páginas navegables (hijas del siteRoot).
         filled += Apply("Identidad", "Construimos la plataforma donde tu producto se vuelve mil productos", BuildIdentidad(), details);
         filled += Apply("Productos", "Un motor, muchos productos", BuildProductos(), details);
         filled += Apply("Contacto", "Hablemos", BuildContacto(), details);
 
-        // Entry point: compone el launcher en platformRoot.introBody (Layout Composer),
-        // estilado con clases .syn-launcher* vía cssClass. No bloquea el resultado.
+        // El nodo "Home" anterior queda redundante → fuera del menú (no se borra).
+        HideRedundantHome(site, details);
+
+        // Entry point: launcher en platformRoot.introBody + rename del umbrella a SynergosLabs.
         SeedPlatformLauncher(details);
 
         return new FillResult(filled == 4, filled, string.Join("; ", details));
@@ -111,8 +123,8 @@ public sealed class DevContentFiller
         var page = FindByName(pageName);
         if (page is null)
         {
-            // No existe → crear bajo el siteRoot "Synergos" (su padre es platformRoot, no root).
-            var site = FindByName("Synergos");
+            // No existe → crear bajo el siteRoot (robusto al rename de la Entidad).
+            var site = FindSiteRoot();
             if (site is null) { details.Add($"{pageName}:siteroot-not-found"); return 0; }
             page = _contentService.Create(pageName, site.Id, "pageBase");
             page.SetCultureName(pageName, Culture);
@@ -134,6 +146,47 @@ public sealed class DevContentFiller
         return 1;
     }
 
+    /// <summary>
+    /// El home de la Entidad vive en el <c>siteRoot.sections</c> (afiliación: el siteRoot
+    /// ES el home; los hijos son las páginas). La marca visible pasa a SynergosLabs vía
+    /// <c>siteDisplayName</c> + <c>brandDisplayName</c>. El nombre del NODO se conserva
+    /// ("Synergos") a propósito: así la URL /synergos y los enlaces internos no cambian.
+    /// </summary>
+    private int ApplySiteRootHome(IContent site, List<string> details)
+    {
+        if (site.HasProperty("siteDisplayName")) { site.SetValue("siteDisplayName", BrandName, Culture); }
+        if (site.HasProperty("brandDisplayName")) { site.SetValue("brandDisplayName", BrandName, Culture); }
+        if (site.HasProperty("seoTitle")) { site.SetValue("seoTitle", $"{BrandName} — Composable Digital Solutions", Culture); }
+        site.SetValue(SectionsAlias, BuildHome(), Culture);
+
+        var save = _contentService.SaveAndPublish(site, new[] { Culture });
+        if (!save.Success)
+        {
+            var invalid = save.InvalidProperties is null ? "(null)" : string.Join(",", save.InvalidProperties.Select(p => p.Alias));
+            _logger.LogWarning("DevContentFiller: siteRoot home+rename falló: {Result}; invalid=[{Invalid}]", save.Result, invalid);
+            details.Add($"SiteRoot:save-failed:{save.Result}:[{invalid}]");
+            return 0;
+        }
+        details.Add("SiteRoot:ok(home+SynergosLabs)");
+        return 1;
+    }
+
+    /// <summary>
+    /// El nodo "Home" anterior duplica el home (ahora en el siteRoot) → lo saca del menú
+    /// principal y del footer vía <c>hideFromMainMenu</c>/<c>hideFromFooter</c> (compNavigation).
+    /// No destructivo (el nodo sigue ahí; el arquitecto decide si lo borra).
+    /// </summary>
+    private void HideRedundantHome(IContent site, List<string> details)
+    {
+        var home = FindDescendant(site.Id, "Home");
+        if (home is null) { details.Add("Home:none"); return; }
+        if (!home.HasProperty("hideFromMainMenu")) { details.Add("Home:redundant(no-hide-prop)"); return; }
+        home.SetValue("hideFromMainMenu", true);
+        if (home.HasProperty("hideFromFooter")) { home.SetValue("hideFromFooter", true); }
+        var save = _contentService.SaveAndPublish(home, new[] { Culture });
+        details.Add(save.Success ? "Home:hidden(nav+footer)" : $"Home:hide-failed:{save.Result}");
+    }
+
     // ───────────────────────── Composición por página ─────────────────────────
 
     private string BuildHome()
@@ -141,11 +194,11 @@ public sealed class DevContentFiller
         var b = new BlockGridJsonBuilder();
         AddHero(b, "Una plataforma. Mil productos.",
             "Un código. Un schema. Infinitos productos.",
-            "<p>Synergos es el motor editorial detrás de marcas profesionales, e-commerce, portales de membresía y experiencias corporativas — compuesto server-side, sin reescribir código.</p>",
+            "<p>SynergosLabs es el motor editorial detrás de marcas profesionales, e-commerce, portales de membresía y experiencias corporativas — compuesto server-side, sin reescribir código.</p>",
             "Synergos Home Hero", "Composición abstracta de capas Synergos", "#0A2540", "#0F58A7",
             ("Agendar sesión", "/synergos/contacto"), ("Conoce la visión", "/synergos/identidad"));
 
-        AddFeatureGrid(b, "Por qué Synergos", "Tres ideas, un mismo motor", new[]
+        AddFeatureGrid(b, "Por qué SynergosLabs", "Tres ideas, un mismo motor", new[]
         {
             ("Polimórfico", "Un código, mil formas", "Profesional, e-commerce, marca o membresía: cambian las instancias de schema, nunca el código."),
             ("Componible", "El editor arrastra", "122 bundles UI y un Block Grid que el editor opera sin tocar una línea de código."),
@@ -211,7 +264,7 @@ public sealed class DevContentFiller
             "Synergos Polimorfico", "Representación del schema polimórfico", "#0F58A7", "#1FA2A6",
             mediaOnRight: true, ctaLabel: null, ctaUrl: null);
 
-        AddCta(b, "¿Quieres ver Synergos por dentro?",
+        AddCta(b, "¿Quieres ver SynergosLabs por dentro?",
             "Agenda una sesión técnica con el equipo de plataforma.",
             "Agendar sesión técnica", "/synergos/contacto");
         return b.Build();
@@ -262,7 +315,7 @@ public sealed class DevContentFiller
 
         AddMission(b, "Cómo trabajamos",
             "Directo, técnico, sin vueltas",
-            "<p>Cuéntanos tu caso y te mostramos cómo Synergos lo resuelve con el schema actual — o qué pieza nueva haría falta.</p>");
+            "<p>Cuéntanos tu caso y te mostramos cómo SynergosLabs lo resuelve con el schema actual — o qué pieza nueva haría falta.</p>");
 
         AddFaq(b, "Antes de escribirnos",
             ("¿Qué necesito para la sesión?", "Una idea del vertical (marca, e-commerce, membresía…) y, si tienes, tus brand assets. Nosotros llevamos el resto."),
@@ -477,8 +530,8 @@ public sealed class DevContentFiller
         var pr = _contentService.GetRootContent().FirstOrDefault(c => c.ContentType.Alias == "platformRoot");
         if (pr is null) { details.Add("Launcher:platformroot-not-found"); return; }
 
-        var site = FindByName("Synergos");
-        var entidadName = string.IsNullOrWhiteSpace(site?.Name) ? "Entidad" : site!.Name;
+        var site = FindSiteRoot();
+        var entidadName = site?.GetValue<string>("siteDisplayName", Culture) is { Length: > 0 } dn ? dn : BrandName;
 
         var g = new BlockGridJsonBuilder();
         var section = g.AddTopLevelBlock(_sectionKey);
@@ -501,6 +554,11 @@ public sealed class DevContentFiller
         AddCard("Ecommerce", "<p>Catálogo, productos y checkout sobre el mismo schema polimórfico.</p>",
             "syn-launcher__card--bag", "syn-launcher__card--soon", "Ver dominio →", "/ecommerce");
 
+        pr.SetCultureName(BrandName, Culture);   // umbrella = SynergosLabs (el hero lee Model.Name)
+        if (pr.HasProperty("welcomeMessage"))
+        {
+            pr.SetValue("welcomeMessage", "Plataforma editorial SynergosLabs — un código, múltiples productos.", Culture);
+        }
         pr.SetValue("introBody", g.Build(), Culture);
         var save = _contentService.SaveAndPublish(pr, new[] { Culture });
         if (!save.Success)
@@ -539,6 +597,29 @@ public sealed class DevContentFiller
             if (Matches(child, name)) return child;
             var deeper = FindDescendant(child.Id, name);
             if (deeper is not null) return deeper;
+        }
+        return null;
+    }
+
+    /// <summary>Localiza el siteRoot por content type alias (robusto al rename del nodo).</summary>
+    private IContent? FindSiteRoot()
+    {
+        foreach (var root in _contentService.GetRootContent())
+        {
+            if (root.ContentType.Alias == "siteRoot") { return root; }
+            var child = FindByType(root.Id, "siteRoot");
+            if (child is not null) { return child; }
+        }
+        return null;
+    }
+
+    private IContent? FindByType(int parentId, string alias)
+    {
+        foreach (var child in _contentService.GetPagedChildren(parentId, 0, 200, out _))
+        {
+            if (child.ContentType.Alias == alias) { return child; }
+            var deeper = FindByType(child.Id, alias);
+            if (deeper is not null) { return deeper; }
         }
         return null;
     }

@@ -22,7 +22,7 @@
     var page = Model;
     if (page is null) { return; }
 
-    var siteRoot = page.Root();
+    var siteRoot = page.AncestorOrSelf("siteRoot") ?? page.Root();
     var siteName = siteRoot?.Value<string>("siteDisplayName") ?? "Synergos";
     var canonicalHost = siteRoot?.Value<string>("canonicalHostname");
     var siteUrl = !string.IsNullOrWhiteSpace(canonicalHost) ? $"https://{canonicalHost}" : null;

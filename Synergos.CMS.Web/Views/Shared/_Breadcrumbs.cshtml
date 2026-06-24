@@ -18,7 +18,7 @@
         .ToList();
     if (trail.Count <= 1) { return; }
 
-    var siteRoot = Model.Root();
+    var siteRoot = Model.AncestorOrSelf("siteRoot") ?? Model.Root();
     var canonicalHost = siteRoot?.Value<string>("canonicalHostname");
     var siteUrl = !string.IsNullOrWhiteSpace(canonicalHost) ? $"https://{canonicalHost}" : null;
     string Json(object? value) => System.Text.Json.JsonSerializer.Serialize(value);

@@ -26,7 +26,7 @@
 @inject Synergos.CMS.Interfaces.IBrandingProvider Branding
 @{
     var page = Model;
-    var siteRoot = page?.Root();
+    var siteRoot = page?.AncestorOrSelf("siteRoot") ?? page?.Root();
     var siteName = siteRoot?.Value<string>("siteDisplayName") ?? "Synergos";
     var canonicalHost = siteRoot?.Value<string>("canonicalHostname");
 

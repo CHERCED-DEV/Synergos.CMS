@@ -23,7 +23,9 @@
 @{
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
     var currentPage = UmbracoContext.PublishedRequest?.PublishedContent;
-    var siteRoot = currentPage?.Root();
+    // El siteRoot real puede estar bajo el platformRoot (entry point), así que
+    // .Root() devolvería el platformRoot. Resolvemos el ancestro siteRoot.
+    var siteRoot = currentPage?.AncestorOrSelf("siteRoot") ?? currentPage?.Root();
     var siteName = siteRoot?.Value<string>("siteDisplayName");
     if (string.IsNullOrWhiteSpace(siteName)) { siteName = "Synergos"; }
     var yearNow = DateTime.UtcNow.Year;
