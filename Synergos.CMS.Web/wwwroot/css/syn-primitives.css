@@ -264,7 +264,7 @@
 .syn-card__title {
   font-size: var(--syn-font-size-xl);
   font-weight: var(--syn-font-weight-semibold);
-  margin: 0 0 var(--syn-space-1);
+  margin: 0 0 var(--syn-space-2);
   color: var(--syn-color-text-primary);
 }
 
@@ -344,7 +344,7 @@
   letter-spacing: var(--syn-letter-spacing-eyebrow);
   text-transform: uppercase;
   color: var(--syn-color-text-accent);
-  margin-bottom: var(--syn-space-md);
+  margin-bottom: var(--syn-space-2);
 }
 
 .syn-hero__title {
@@ -418,7 +418,7 @@
 }
 
 .syn-cta-banner__subtitle {
-  margin: var(--syn-space-1) 0 0;
+  margin: var(--syn-space-2) 0 0;
   opacity: 0.92;
   font-size: var(--syn-font-size-base);
 }
@@ -450,7 +450,6 @@
   grid-template-columns: 1fr;
   gap: var(--syn-space-xl);
   align-items: center;
-  padding: var(--syn-space-lg) 0;
 }
 
 @media (min-width: 768px) {
@@ -786,7 +785,7 @@
 
 .syn-stat {
   text-align: center;
-  padding: var(--syn-space-md);
+  padding: var(--syn-space-lg);
 }
 
 .syn-stat__value {
@@ -809,7 +808,7 @@
 }
 
 .syn-feature {
-  padding: var(--syn-space-md);
+  padding: var(--syn-space-lg);
 }
 
 .syn-feature__icon {
@@ -822,7 +821,7 @@
 .syn-feature__title {
   font-size: var(--syn-font-size-lg);
   font-weight: var(--syn-font-weight-semibold);
-  margin: 0 0 var(--syn-space-1);
+  margin: 0 0 var(--syn-space-2);
   color: var(--syn-color-text-primary);
 }
 
@@ -945,7 +944,7 @@
 .syn-timeline-item__title {
   font-weight: var(--syn-font-weight-semibold);
   color: var(--syn-color-text-primary);
-  margin: 0 0 var(--syn-space-1);
+  margin: 0 0 var(--syn-space-2);
 }
 
 .syn-timeline-item__meta {

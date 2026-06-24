@@ -372,11 +372,13 @@
   grid-template-columns: 1fr;
   gap: var(--syn-space-xl);
   align-items: center;
-  padding: var(--syn-space-2xl) 0;
 }
 
 @media (min-width: 768px) {
-  .syn-mission { grid-template-columns: 1fr 1fr; }
+  .syn-mission {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--syn-space-2xl);
+  }
 }
 
 .syn-mission__media {

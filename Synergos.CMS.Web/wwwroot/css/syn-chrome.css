@@ -20,12 +20,12 @@
   width: 100%;
   max-width: var(--syn-max-width-content);
   margin-inline: auto;
-  padding: var(--syn-space-xl) var(--syn-space-md);
+  padding: var(--syn-space-xl) var(--syn-gutter);
   min-height: 40vh;
 }
 
 @media (min-width: 768px) {
-  .syn-site-main { padding-inline: var(--syn-space-lg); }
+  .syn-site-main { padding-inline: var(--syn-gutter-lg); }
 }
 
 /* ── Site header ─────────────────────────────────────────────── */
