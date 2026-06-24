@@ -1009,7 +1009,8 @@
   padding: var(--syn-space-lg) var(--syn-space-xl);
   cursor: pointer;
   font-size: var(--syn-font-size-lg);
-  font-weight: var(--syn-font-weight-semibold);
+  font-weight: var(--syn-font-weight-bold);
+  color: var(--syn-color-text-primary);
   list-style: none;
   display: flex;
   justify-content: space-between;
@@ -1024,8 +1025,11 @@
   color: var(--syn-color-text-accent);
 }
 
+/* Abierto: el título queda como "header" (fondo sutil + oscuro), claramente
+   distinto del contenido (cuerpo en blanco debajo). */
 .syn-faq-item[open] summary {
-  color: var(--syn-color-text-accent);
+  background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-text-primary);
 }
 
 /* Chevron dibujado en CSS (2px) que rota suave en lugar del salto +/×. */
@@ -1047,10 +1051,12 @@
 
 .syn-faq-item summary::-webkit-details-marker { display: none; }
 
+/* Contenido (respuesta): cuerpo secundario, separado del título con aire arriba. */
 .syn-faq-item p {
-  padding: 0 var(--syn-space-xl) var(--syn-space-lg);
+  padding: var(--syn-space-md) var(--syn-space-xl) var(--syn-space-lg);
   margin: 0;
   color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-base);
   line-height: var(--syn-line-height-relaxed);
 }
 
