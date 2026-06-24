@@ -54,9 +54,15 @@
     <link rel="stylesheet" href="~/css/syn-pages.css" asp-append-version="true" />
 </head>
 <body class="syn-platform-root">
+    @* Power-on flash — destello inicial "la pantalla se enciende". *@
+    <div class="syn-platform-root__flash" aria-hidden="true"></div>
     @* Onda de luz de fondo (estilo arranque PS3) — capas glow brand/accent. *@
     <div class="syn-platform-root__wave" aria-hidden="true">
         <span></span><span></span><span></span>
+    </div>
+    @* Partículas/estrellas que flotan (ambiente de arranque). *@
+    <div class="syn-platform-root__stars" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
     </div>
 
     <main class="syn-platform-root__main">

@@ -214,6 +214,62 @@
   50%      { transform: translateX(8%) translateY(-5%) rotate(3deg) scaleY(1.18); }
 }
 
+/* Power-on flash — destello inicial "la pantalla se enciende". */
+.syn-platform-root__flash {
+  position: fixed;
+  inset: 0;
+  z-index: var(--syn-z-top, 9999);
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 42%, rgb(199 210 254 / 0.85), rgb(79 110 247 / 0.40) 28%, transparent 62%);
+  animation: syn-pr-poweron 1.1s var(--syn-easing-out) forwards;
+}
+
+@keyframes syn-pr-poweron {
+  0%   { opacity: 0; transform: scale(1.25); }
+  16%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+/* Partículas/estrellas que flotan hacia arriba (polvo de arranque). */
+.syn-platform-root__stars {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.syn-platform-root__stars span {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: var(--syn-radius-full);
+  background: var(--syn-color-brand-200);
+  box-shadow: 0 0 6px 1px rgb(165 180 252 / 0.55);
+  opacity: 0;
+  animation: syn-pr-star linear infinite;
+}
+
+.syn-platform-root__stars span:nth-child(1)  { left: 6%;  top: 72%; animation-duration: 10s; animation-delay: 0s; }
+.syn-platform-root__stars span:nth-child(2)  { left: 16%; top: 88%; animation-duration: 13s; animation-delay: 2.5s; width: 3px; height: 3px; }
+.syn-platform-root__stars span:nth-child(3)  { left: 27%; top: 64%; animation-duration: 9s;  animation-delay: 1s; }
+.syn-platform-root__stars span:nth-child(4)  { left: 38%; top: 92%; animation-duration: 15s; animation-delay: 4s; }
+.syn-platform-root__stars span:nth-child(5)  { left: 47%; top: 78%; animation-duration: 11s; animation-delay: 0.5s; width: 3px; height: 3px; }
+.syn-platform-root__stars span:nth-child(6)  { left: 56%; top: 90%; animation-duration: 14s; animation-delay: 3s; }
+.syn-platform-root__stars span:nth-child(7)  { left: 64%; top: 66%; animation-duration: 10s; animation-delay: 5s; }
+.syn-platform-root__stars span:nth-child(8)  { left: 72%; top: 85%; animation-duration: 12s; animation-delay: 1.5s; }
+.syn-platform-root__stars span:nth-child(9)  { left: 81%; top: 74%; animation-duration: 16s; animation-delay: 6s; width: 3px; height: 3px; }
+.syn-platform-root__stars span:nth-child(10) { left: 89%; top: 90%; animation-duration: 11s; animation-delay: 2s; }
+.syn-platform-root__stars span:nth-child(11) { left: 94%; top: 62%; animation-duration: 13s; animation-delay: 4.5s; }
+.syn-platform-root__stars span:nth-child(12) { left: 50%; top: 95%; animation-duration: 9s;  animation-delay: 7s; }
+
+@keyframes syn-pr-star {
+  0%   { opacity: 0; transform: translateY(12px); }
+  15%  { opacity: 0.75; }
+  70%  { opacity: 0.5; }
+  100% { opacity: 0; transform: translateY(-70px); }
+}
+
 @keyframes syn-pr-rise {
   from { opacity: 0; transform: translateY(20px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -256,13 +312,22 @@
   letter-spacing: var(--syn-letter-spacing-tight);
   line-height: var(--syn-line-height-tight);
   margin: 0 0 var(--syn-space-4);
-  background: linear-gradient(135deg,
+  background: linear-gradient(100deg,
     var(--syn-color-brand-300) 0%,
-    var(--syn-color-accent-400) 100%);
+    var(--syn-color-accent-400) 25%,
+    var(--syn-color-brand-200) 50%,
+    var(--syn-color-accent-400) 75%,
+    var(--syn-color-brand-300) 100%);
+  background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
+  animation: syn-pr-shimmer 7s linear infinite;
+}
+
+@keyframes syn-pr-shimmer {
+  to { background-position: 200% center; }
 }
 
 .syn-platform-root__intro {
@@ -389,7 +454,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .syn-platform-root__flash { display: none; }
   .syn-platform-root__wave span,
+  .syn-platform-root__stars span,
+  .syn-platform-root__title,
   .syn-platform-root__main,
   .syn-platform-root__domain { animation: none; }
 }
