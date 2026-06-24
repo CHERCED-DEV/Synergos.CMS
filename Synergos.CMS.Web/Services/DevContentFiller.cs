@@ -240,10 +240,22 @@ public sealed class DevContentFiller
             "Del schema a la página, sin fricción",
             "<p>El mismo schema sirve a healthcare, e-commerce, membresía o marca corporativa. Desplegar un vertical es cuestión de días, no de trimestres.</p>");
 
-        AddTestimonials(b,
+        var testimonials = new (string quote, string author, string role)[]
+        {
             ("Migramos cuatro verticales sobre el mismo core. Lo que antes era un trimestre ahora es una semana.", "Laura Méndez", "CTO, Grupo Andino"),
             ("El editor arma páginas completas sin tocarnos a desarrollo. La arquitectura por capas se nota.", "Diego Restrepo", "Líder de Producto"),
-            ("Un solo schema para marca, e-commerce y membresía. La promesa polimórfica es real.", "Sofía Cardona", "Directora Digital"));
+            ("Un solo schema para marca, e-commerce y membresía. La promesa polimórfica es real.", "Sofía Cardona", "Directora Digital"),
+        };
+        // Híbrido: si el componente Angular (elementSynTestimonialSection) ya está
+        // importado, se usa el de la CDN; si no, fallback al SSR (cero hueco pre-Import).
+        if (_contentTypeService.Get("elementSynTestimonialSection")?.Key is not null)
+        {
+            AddSynTestimonials(b, "Lo que dicen de la plataforma", testimonials);
+        }
+        else
+        {
+            AddTestimonials(b, testimonials);
+        }
 
         AddLogoCloud(b, "Confían en la plataforma",
             ("Andina", "#0A2540", "#0F58A7"),
@@ -463,6 +475,26 @@ public sealed class DevContentFiller
             if (list.HasItems) { tc.Set("testimonialItems", list.Build()); }
             tc.ApplyDefaults(_defaults.DefaultsFor(_testimonialsKey));
         });
+    }
+
+    /// <summary>
+    /// Testimonios vía componente Angular CDN (elementSynTestimonialSection): una Section
+    /// con un bloque syn que el SynHost emite como &lt;synergos-testimonial-section config='...'&gt;.
+    /// Config end-to-end desde el CMS (headingText + items[]); el Angular hidrata desde la CDN.
+    /// </summary>
+    private void AddSynTestimonials(BlockGridJsonBuilder b, string heading,
+        (string quote, string author, string role)[] items)
+    {
+        var key = _contentTypeService.Get("elementSynTestimonialSection")?.Key;
+        if (key is null) { return; }   // aún no importado → omitir (el caller hace fallback SSR)
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var itemsJson = "[" + string.Join(",", items.Select(t =>
+            $"{{\"name\":\"{Esc(t.author)}\",\"quote\":\"{Esc(t.quote)}\",\"role\":\"{Esc(t.role)}\",\"avatarSrc\":\"\"}}")) + "]";
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("headingText", heading)
+            .Set("itemsJson", itemsJson)
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
 
     private void AddFaq(BlockGridJsonBuilder b, string faqTitle, params (string question, string answer)[] items)

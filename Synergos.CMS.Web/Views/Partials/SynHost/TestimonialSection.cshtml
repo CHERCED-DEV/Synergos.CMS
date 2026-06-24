@@ -1,0 +1,28 @@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    // El componente Angular lee config.items como ARRAY (m(config.items) exige
+    // Array.isArray), así que parseamos el JSON del editor a un JsonElement
+    // (array real) antes de meterlo en Props; el emitter lo serializa como array.
+    object? items = null;
+    var itemsJson = Model.Value<string>("itemsJson");
+    if (!string.IsNullOrWhiteSpace(itemsJson))
+    {
+        try { items = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(itemsJson); }
+        catch (System.Text.Json.JsonException) { items = null; }
+    }
+    var theme = Model.Value<string>("theme");
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["headingText"] = Model.Value<string>("headingText"),
+        ["items"] = items,
+        ["theme"] = string.IsNullOrWhiteSpace(theme) ? null : theme,
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "testimonial-section",   // = registry name → ByName → bundle + <synergos-testimonial-section>
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
