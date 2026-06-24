@@ -92,6 +92,12 @@ public sealed class DevMediaFactory
     {
         var c1 = Rgba32.ParseHex(hexFrom);
         var c2 = Rgba32.ParseHex(hexTo);
+        // Punto focal del highlight radial (tercio superior-izquierdo).
+        var fx = width * 0.30f;
+        var fy = height * 0.28f;
+        var maxDist = MathF.Sqrt((width * width) + (height * height));
+        var halfW = width / 2f;
+        var halfH = height / 2f;
         using var image = new Image<Rgba32>(width, height);
         image.ProcessPixelRows(accessor =>
         {
@@ -100,12 +106,30 @@ public sealed class DevMediaFactory
                 var row = accessor.GetRowSpan(y);
                 for (var x = 0; x < row.Length; x++)
                 {
-                    // Gradiente diagonal suave + viñeta sutil.
+                    // Base: gradiente diagonal.
                     var t = (float)(x + y) / (width + height);
-                    var r = (byte)(c1.R + (c2.R - c1.R) * t);
-                    var g = (byte)(c1.G + (c2.G - c1.G) * t);
-                    var b = (byte)(c1.B + (c2.B - c1.B) * t);
-                    row[x] = new Rgba32(r, g, b, 255);
+                    var r = c1.R + ((c2.R - c1.R) * t);
+                    var g = c1.G + ((c2.G - c1.G) * t);
+                    var b = c1.B + ((c2.B - c1.B) * t);
+
+                    // Highlight radial aditivo (luz suave desde el focal).
+                    var dx = x - fx;
+                    var dy = y - fy;
+                    var dist = MathF.Sqrt((dx * dx) + (dy * dy)) / maxDist;
+                    var glow = MathF.Max(0f, 1f - (dist * 1.8f));
+                    glow = glow * glow * 42f;
+
+                    // Viñeta sutil (oscurece bordes para dar profundidad).
+                    var nx = (x - halfW) / halfW;
+                    var ny = (y - halfH) / halfH;
+                    var edge = MathF.Min(1f, (nx * nx) + (ny * ny));
+                    var vignette = edge * edge * 36f;
+
+                    row[x] = new Rgba32(
+                        (byte)Clamp(r + glow - vignette),
+                        (byte)Clamp(g + glow - vignette),
+                        (byte)Clamp(b + glow - vignette),
+                        255);
                 }
             }
         });
@@ -113,6 +137,8 @@ public sealed class DevMediaFactory
         image.Save(ms, new PngEncoder());
         return ms.ToArray();
     }
+
+    private static float Clamp(float v) => v < 0f ? 0f : (v > 255f ? 255f : v);
 
     private static string Slug(string s)
     {
