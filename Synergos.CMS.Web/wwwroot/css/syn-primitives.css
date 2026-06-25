@@ -1424,3 +1424,130 @@ textarea.syn-form-field__input { resize: vertical; min-height: 7rem; }
   box-shadow: var(--syn-shadow-action-hover);
   transform: translateY(-1px);
 }
+
+/* ── Pricing (elementPricingTable + elementPricingPlan) ──────── */
+.syn-pricing__header {
+  text-align: center;
+  margin-bottom: var(--syn-space-2xl);
+}
+.syn-pricing__title {
+  margin: 0 0 var(--syn-space-3);
+  font-size: clamp(var(--syn-font-size-2xl), 3vw, var(--syn-font-size-4xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  color: var(--syn-color-text-primary);
+}
+.syn-pricing__subtitle {
+  margin: 0;
+  font-size: var(--syn-font-size-lg);
+  color: var(--syn-color-text-muted);
+}
+.syn-pricing__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--syn-space-lg);
+  align-items: stretch;
+}
+.syn-plan {
+  display: flex;
+  flex-direction: column;
+  padding: var(--syn-space-xl);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-card-radius);
+  box-shadow: var(--syn-shadow-card);
+  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
+}
+.syn-plan:hover {
+  box-shadow: var(--syn-shadow-card-hover);
+  transform: translateY(-2px);
+}
+.syn-plan--highlighted {
+  border-color: var(--syn-color-action-primary);
+  box-shadow: var(--syn-shadow-brand-md);
+}
+.syn-plan__tag {
+  align-self: flex-start;
+  margin-bottom: var(--syn-space-3);
+  padding: var(--syn-space-1) var(--syn-space-3);
+  border-radius: var(--syn-radius-full);
+  background: var(--syn-color-state-brand-surface);
+  color: var(--syn-color-state-brand-text);
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-semibold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+.syn-plan__name {
+  margin: 0 0 var(--syn-space-2);
+  font-size: var(--syn-font-size-xl);
+  font-weight: var(--syn-font-weight-bold);
+  color: var(--syn-color-text-primary);
+}
+.syn-plan__price {
+  margin: 0 0 var(--syn-space-lg);
+  font-size: var(--syn-font-size-3xl);
+  font-weight: var(--syn-font-weight-bold);
+  line-height: 1;
+  color: var(--syn-color-text-accent);
+}
+.syn-plan__period {
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  color: var(--syn-color-text-muted);
+}
+.syn-plan__features {
+  list-style: none;
+  margin: 0 0 var(--syn-space-xl);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-3);
+}
+.syn-plan__feature {
+  position: relative;
+  padding-left: var(--syn-space-6);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+}
+.syn-plan__feature::before {
+  content: "\2713";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--syn-color-action-primary);
+  font-weight: var(--syn-font-weight-bold);
+}
+.syn-plan__cta {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--syn-space-2) var(--syn-space-5);
+  border-radius: var(--syn-radius-md);
+  border: 1px solid var(--syn-color-action-secondary-border);
+  background: var(--syn-color-action-secondary-surface);
+  color: var(--syn-color-action-secondary-text);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: none;
+  transition: var(--syn-transition-colors), transform var(--syn-duration-fast) var(--syn-easing-out);
+}
+.syn-plan__cta:hover {
+  transform: translateY(-1px);
+  border-color: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary);
+}
+.syn-plan__cta--primary {
+  background: var(--syn-color-action-primary);
+  border-color: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  box-shadow: var(--syn-shadow-action);
+}
+.syn-plan__cta--primary:hover {
+  background: var(--syn-color-action-primary-hover);
+  border-color: var(--syn-color-action-primary-hover);
+  color: var(--syn-color-action-primary-text);
+  box-shadow: var(--syn-shadow-action-hover);
+}

@@ -528,15 +528,31 @@ public sealed class DevContentFiller
             "Synergos Precios Hero", "Planes de SynergosLabs", "#0A2540", "#0F58A7",
             ("Hablar con ventas", "/synergos/contacto"), ("Ver soluciones", "/synergos/soluciones"));
 
-        // NOTA: cifras placeholder estilo MercadoLibre (escalera gratis → profesional → premium).
-        // El arquitecto ajusta los precios reales; el resto del copy y la estructura quedan.
-        var plans = new (string title, string subtitle, string body)[]
+        // Cifras placeholder estilo MercadoLibre (gratis → profesional → premium). El arquitecto
+        // ajusta los precios reales. Tabla composable (precio = DataType) si está importada; si no, SSR.
+        if (_contentTypeService.Get("elementPricingTable")?.Key is not null)
         {
-            ("Inicial", "Gratis", "Para validar tu idea: 1 sitio, los componentes esenciales, publicación en subdominio. Sin costo, para siempre."),
-            ("Profesional", "Desde $129.900 COP/mes", "El más elegido: multi-vertical, dominio propio, más de 120 componentes, branding completo y soporte prioritario."),
-            ("Premium", "A tu medida", "Para escalar sin límites: multi-dominio, SLA, integraciones a medida y un equipo de acompañamiento dedicado."),
-        };
-        FeatureGridAuto(b, "Elige tu plan", "Del primer sitio a todo un ecosistema", plans, 3);
+            AddPricingTable(b, "Elige tu plan", "Del primer sitio a todo un ecosistema",
+                ("Inicial", "Gratis", "", "",
+                 "1 sitio o vertical\nComponentes esenciales\nPublicación en subdominio\nSoporte por comunidad",
+                 false, "Empezar gratis", "/synergos/contacto"),
+                ("Profesional", "$129.900", "/mes", "El más elegido",
+                 "Todo lo de Inicial\nMulti-vertical\nDominio propio\n+120 componentes\nBranding completo\nSoporte prioritario",
+                 true, "Elegir Profesional", "/synergos/contacto"),
+                ("Premium", "A tu medida", "", "",
+                 "Todo lo de Profesional\nMulti-dominio\nSLA garantizado\nIntegraciones a medida\nAcompañamiento dedicado",
+                 false, "Hablar con ventas", "/synergos/contacto"));
+        }
+        else
+        {
+            var plans = new (string title, string subtitle, string body)[]
+            {
+                ("Inicial", "Gratis", "Para validar tu idea: 1 sitio, los componentes esenciales, publicación en subdominio. Sin costo, para siempre."),
+                ("Profesional", "Desde $129.900 COP/mes", "El más elegido: multi-vertical, dominio propio, más de 120 componentes, branding completo y soporte prioritario."),
+                ("Premium", "A tu medida", "Para escalar sin límites: multi-dominio, SLA, integraciones a medida y un equipo de acompañamiento dedicado."),
+            };
+            FeatureGridAuto(b, "Elige tu plan", "Del primer sitio a todo un ecosistema", plans, 3);
+        }
 
         AddMission(b, "¿Cuál me conviene?",
             "Mismo motor, distinta capacidad",
@@ -877,6 +893,41 @@ public sealed class DevContentFiller
              .Set("submitLabel", submitLabel);
             if (list.HasItems) { c.Set("fields", list.Build()); }
             c.ApplyDefaults(_defaults.DefaultsFor(formKey.Value));
+        });
+    }
+
+    // Tabla de precios composable: elementPricingTable + elementPricingPlan (DataTypes propios:
+    // precio, periodo, tagline, features, destacado, CTA). SSR. El editor configura todo en backoffice.
+    private void AddPricingTable(BlockGridJsonBuilder b, string heading, string subheading,
+        params (string name, string price, string period, string tagline, string features, bool highlighted, string ctaLabel, string ctaUrl)[] plans)
+    {
+        var tableKey = _contentTypeService.Get("elementPricingTable")?.Key;
+        var planKey = _contentTypeService.Get("elementPricingPlan")?.Key;
+        if (tableKey is null || planKey is null) { return; }
+
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+
+        var list = new BlockListJsonBuilder();
+        foreach (var p in plans)
+        {
+            var block = list.AddBlock(planKey.Value)
+                .Set("planName", p.name)
+                .Set("planPrice", p.price)
+                .Set("planPeriod", p.period)
+                .Set("planTagline", p.tagline)
+                .Set("planFeatures", p.features)
+                .Set("planHighlighted", p.highlighted ? "1" : "0")
+                .Set("planCtaLabel", p.ctaLabel);
+            if (!string.IsNullOrEmpty(p.ctaUrl)) { block.Set("planCtaLink", LinkJson(p.ctaLabel, p.ctaUrl)); }
+            block.ApplyDefaults(_defaults.DefaultsFor(planKey.Value));
+        }
+
+        section.AddChild(SectionContentAreaKey, tableKey.Value, c =>
+        {
+            c.Set("tableHeading", heading).Set("tableSubheading", subheading);
+            if (list.HasItems) { c.Set("plans", list.Build()); }
+            c.ApplyDefaults(_defaults.DefaultsFor(tableKey.Value));
         });
     }
 
