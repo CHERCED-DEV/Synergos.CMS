@@ -327,6 +327,9 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IConsentLedger, FileSystemConsentLedger>();
         services.AddScoped<IPhiAccessGuard, DefaultPhiAccessGuard>();
 
+        // ADR 0098 H2 — repositorio de historia clínica (versionado, sobre el PHI store).
+        services.AddSingleton<IPatientRepository, FileSystemPatientRepository>();
+
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).
         // Singleton — solo depende de IOptions + IHostEnvironment + ILogger.
