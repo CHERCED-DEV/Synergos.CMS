@@ -1551,3 +1551,34 @@ textarea.syn-form-field__input { resize: vertical; min-height: 7rem; }
   color: var(--syn-color-action-primary-text);
   box-shadow: var(--syn-shadow-action-hover);
 }
+
+/* ── Module mount (elementSynModuleMount, ADR 0096) ───────────── */
+
+/* Degradación sin JS: los módulos stateful son CSR-only. */
+.syn-module-noscript {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--syn-space-2);
+  padding: var(--syn-space-6);
+  text-align: center;
+  color: var(--syn-color-text-muted);
+  background: var(--syn-color-surface-secondary);
+  border: 1px dashed var(--syn-color-border-default);
+  border-radius: var(--syn-radius-2xl);
+}
+.syn-module-noscript__link {
+  font-weight: 600;
+  color: var(--syn-color-action-primary);
+}
+
+/* Fallback CDN-offline (emitido por el SynHost emitter): reserva alto
+   para evitar layout shift mientras el bundle del módulo hidrata. */
+.syn-cdn-offline-fallback[data-block-alias="hello-module"],
+.syn-cdn-offline-fallback[data-block-alias="dashboard"],
+.syn-cdn-offline-fallback[data-block-alias="healthcare"] {
+  display: block;
+  min-height: 320px;
+  border-radius: var(--syn-radius-2xl);
+  background: var(--syn-color-surface-secondary);
+}
