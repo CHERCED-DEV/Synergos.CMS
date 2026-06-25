@@ -888,10 +888,12 @@ public sealed class DevContentFiller
 
         AddCard(entidadName, "<p>Marca, identidad y páginas institucionales — el sitio editorial completo.</p>",
             "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar al sitio →", "/synergos");
-        AddCard("Blogs", "<p>Publicaciones, artículos y contenido editorial sobre el mismo core.</p>",
-            "syn-launcher__card--document", "syn-launcher__card--soon", "Ver dominio →", "/blogs");
-        AddCard("Ecommerce", "<p>Catálogo, productos y checkout sobre el mismo schema polimórfico.</p>",
-            "syn-launcher__card--bag", "syn-launcher__card--soon", "Ver dominio →", "/ecommerce");
+        // "Próximamente": los siteRoots Blogs/Ecommerce aún no existen → el CTA captura interés
+        // hacia Contacto en vez de romper con 404 a /blogs /ecommerce.
+        AddCard("Blogs", "<p>Publicaciones, artículos y contenido editorial sobre el mismo motor.</p>",
+            "syn-launcher__card--document", "syn-launcher__card--soon", "Quiero saber más →", "/synergos/contacto");
+        AddCard("Ecommerce", "<p>Catálogo, productos y checkout sobre la misma plataforma.</p>",
+            "syn-launcher__card--bag", "syn-launcher__card--soon", "Quiero saber más →", "/synergos/contacto");
 
         pr.SetCultureName(BrandName, Culture);   // umbrella = SynergosLabs (el hero lee Model.Name)
         if (pr.HasProperty("welcomeMessage"))
