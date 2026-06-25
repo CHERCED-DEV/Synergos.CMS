@@ -206,21 +206,45 @@
                         var footerNav = siteRoot?.Children
                             .Where(c => c.IsVisible() && !c.Value<bool>("hideFromFooter"))
                             .ToList();
+                        var showFooterNav = footerNav is { Count: > 0 }
+                            && !string.Equals(renderCtx.FooterMode, "minimal", StringComparison.OrdinalIgnoreCase);
                     }
-                    @if (footerNav is { Count: > 0 } && !string.Equals(renderCtx.FooterMode, "minimal", StringComparison.OrdinalIgnoreCase))
+                    @if (showFooterNav)
                     {
-                        <nav class="syn-site-footer__nav" aria-label="Footer navigation">
-                            <ul class="syn-site-footer__nav-list">
-                                @foreach (var item in footerNav)
-                                {
-                                    var navTitle = item.Value<string>("navigationTitle");
-                                    var label = string.IsNullOrWhiteSpace(navTitle) ? item.Name : navTitle;
-                                    <li><a href="@item.Url()">@label</a></li>
-                                }
-                            </ul>
-                        </nav>
+                        <div class="syn-site-footer__top">
+                            <div class="syn-site-footer__brand">
+                                <a class="syn-site-footer__brand-link" href="@platformRootUrl" aria-label="@siteName — volver a la plataforma">
+                                    <img class="syn-site-footer__logo" src="@logoUrl" alt="" width="36" height="36" loading="lazy" />
+                                    <span class="syn-site-footer__brand-name">@siteName</span>
+                                </a>
+                                <p class="syn-site-footer__tagline">Un código, un schema, infinitos productos.</p>
+                            </div>
+                            <nav class="syn-site-footer__nav" aria-label="Footer navigation">
+                                <p class="syn-site-footer__nav-title">Plataforma</p>
+                                <ul class="syn-site-footer__nav-list">
+                                    @foreach (var item in footerNav!)
+                                    {
+                                        var navTitle = item.Value<string>("navigationTitle");
+                                        var label = string.IsNullOrWhiteSpace(navTitle) ? item.Name : navTitle;
+                                        <li><a href="@item.Url()">@label</a></li>
+                                    }
+                                </ul>
+                            </nav>
+                        </div>
                     }
-                    <p class="syn-site-footer__copyright">&copy; @yearNow @siteName</p>
+                    else
+                    {
+                        <div class="syn-site-footer__brand syn-site-footer__brand--solo">
+                            <a class="syn-site-footer__brand-link" href="@platformRootUrl" aria-label="@siteName — volver a la plataforma">
+                                <img class="syn-site-footer__logo" src="@logoUrl" alt="" width="36" height="36" loading="lazy" />
+                                <span class="syn-site-footer__brand-name">@siteName</span>
+                            </a>
+                        </div>
+                    }
+                    <div class="syn-site-footer__legal">
+                        <p class="syn-site-footer__copyright">&copy; @yearNow @siteName. Todos los derechos reservados.</p>
+                        <p class="syn-site-footer__legal-note">Hecho con SynergosLabs.</p>
+                    </div>
                     @if (globalFooterNote is not null)
                     {
                         @await Html.PartialAsync("_GlobalFooterNote", globalFooterNote)

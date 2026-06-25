@@ -44,6 +44,12 @@
   --syn-color-accent-500: #8b5cf6;
   --syn-color-accent-600: #7c3aed;
 
+  /* ── Color channels (RGB tripletes) — para componer glows/gradientes
+     theme-aware vía rgb(var(--syn-channel-brand) / 0.x). Espejan
+     brand-500 (#4f6ef7) y accent-500 (#8b5cf6). ─────────────────── */
+  --syn-channel-brand:  79 110 247;
+  --syn-channel-accent: 139 92 246;
+
   /* ── Color: Danger ────────────────────────────────────────── */
   --syn-color-danger-100: #fff1f2;
   --syn-color-danger-200: #fecdd3;
@@ -67,6 +73,14 @@
   --syn-color-warning-400: #fcd34d;
   --syn-color-warning-500: #f59e0b;
   --syn-color-warning-600: #d97706;
+
+  /* ── Color: Info (sky/cyan — informativo neutro) ──────────────── */
+  --syn-color-info-100: #f0f9ff;
+  --syn-color-info-200: #bae6fd;
+  --syn-color-info-300: #7dd3fc;
+  --syn-color-info-400: #38bdf8;
+  --syn-color-info-500: #0ea5e9;
+  --syn-color-info-600: #0284c7;
 
   /* ── Spacing: 8pt grid (4px = único micro-step para detalles) ── */
   --syn-space-0:  0;
@@ -95,6 +109,7 @@
 
   /* ── Layout widths ────────────────────────────────────────── */
   --syn-max-width-content: 1200px;
+  --syn-max-width-normal:  1040px;  /* container/admin shell estándar (ancla el 1040/1024 hardcodeado) */
   --syn-max-width-reading: 800px;
   --syn-max-width-article: 680px;
   --syn-max-width-hero:    720px;
@@ -277,6 +292,10 @@
   --syn-color-state-info-border:  rgb(15 108 189 / 0.22);
   --syn-color-state-info-text:    #0b4f8a;
 
+  /* Info semantic — para reemplazar hexes ad-hoc tipo #0ea5e9/#0284c7 */
+  --syn-color-info:         var(--syn-color-info-600);
+  --syn-color-info-surface: var(--syn-color-info-100);
+
   --syn-color-state-success-surface: rgb(22 163 74 / 0.10);
   --syn-color-state-success-border:  rgb(22 163 74 / 0.22);
   --syn-color-state-success-text:    #166534;
@@ -308,6 +327,14 @@
   --syn-shadow-floating:    var(--syn-shadow-xl);
   --syn-shadow-action:      var(--syn-shadow-brand-sm);
   --syn-shadow-action-hover: var(--syn-shadow-brand-md);
+
+  /* ── Gradients — fondos de marca compuestos (theme-aware vía channels) ──
+     Hero siempre oscuro por diseño: superficie dark neutral + glow brand.
+     Reemplaza gradientes con RGB crudo en los heros. ──────────────────── */
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-neutral-900) 0%,
+                         var(--syn-color-neutral-800) 50%,
+                         rgb(var(--syn-channel-brand) / 0.30) 100%);
 
   /* ─────────────────────────────────────────────────────────── */
   /* Legacy aliases — backwards compat con dev-stub previo       */
@@ -428,6 +455,14 @@
   --syn-color-state-info-surface: rgb(56 189 248 / 0.16);
   --syn-color-state-info-border:  rgb(56 189 248 / 0.28);
   --syn-color-state-info-text:    #bae6fd;
+
+  --syn-color-info:         var(--syn-color-info-400);
+  --syn-color-info-surface: rgb(56 189 248 / 0.16);
+
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-surface-canvas) 0%,
+                         var(--syn-color-surface-elevated) 46%,
+                         rgb(var(--syn-channel-brand) / 0.22) 100%);
 
   --syn-color-state-success-surface: rgb(34 197 94 / 0.16);
   --syn-color-state-success-border:  rgb(74 222 128 / 0.28);

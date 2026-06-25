@@ -274,7 +274,7 @@ hr {
 
 .syn-skip-link {
   position: absolute;
-  top: -40px;
+  top: -100px;
   left: var(--syn-space-md);
   background: var(--syn-color-action-primary);
   color: var(--syn-color-action-primary-text);

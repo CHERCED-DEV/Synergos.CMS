@@ -294,6 +294,39 @@
   gap: var(--syn-space-1);
 }
 
+/* Card variants — set mínimo coherente sobre tokens canónicos.
+   Cubre tanto los aliases del task (bordered/elevated/ghost/accent)
+   como los valores del enum DT.Select.VariantKey (outlined/neutral). */
+.syn-card--bordered,
+.syn-card--outlined {
+  border: 1px solid var(--syn-color-border-strong);
+  box-shadow: var(--syn-shadow-none);
+}
+
+.syn-card--elevated {
+  border-color: transparent;
+  box-shadow: var(--syn-shadow-md);
+}
+.syn-card--elevated:hover {
+  box-shadow: var(--syn-shadow-lg);
+}
+
+.syn-card--ghost,
+.syn-card--neutral {
+  background: var(--syn-color-surface-secondary);
+  border-color: var(--syn-color-border-subtle);
+  box-shadow: var(--syn-shadow-none);
+}
+
+.syn-card--accent {
+  background: var(--syn-color-surface-accent);
+  border-color: var(--syn-color-border-accent);
+  box-shadow: var(--syn-shadow-brand-sm);
+}
+.syn-card--accent:hover {
+  box-shadow: var(--syn-shadow-brand-md);
+}
+
 /* ── Hero (elementCompHero) ──────────────────────────────────── */
 
 .syn-hero {
@@ -376,6 +409,28 @@
   margin-top: var(--syn-space-md);
 }
 
+/* Contenedor de los CTAs del hero (uno o varios botones/links). */
+.syn-hero__ctas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--syn-space-sm);
+  margin-top: var(--syn-space-xl);
+}
+/* Sobre el hero oscuro el CTA secundario va outline-claro (jerarquía sin romper contraste) */
+.syn-hero__ctas .syn-button--secondary {
+  background: transparent;
+  border-color: rgb(255 255 255 / 0.28);
+  color: #ffffff;
+}
+.syn-hero__ctas .syn-button--secondary:hover {
+  background: rgb(255 255 255 / 0.12);
+  border-color: rgb(255 255 255 / 0.5);
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+
 /* Hero con imagen de fondo: el overlay (::after) es oscuro, así que el
    texto debe ir claro para legibilidad/contraste (WCAG). Solo aplica
    cuando hay .syn-hero__media precediendo al contenido. */
@@ -436,12 +491,16 @@
   align-items: center;
   gap: var(--syn-space-1);
   box-shadow: var(--syn-shadow-sm);
-  transition: transform var(--syn-duration-fast) var(--syn-easing-out);
+  transition: transform var(--syn-duration-fast) var(--syn-easing-out),
+              box-shadow var(--syn-duration-base) var(--syn-easing-default),
+              background-color var(--syn-duration-base) var(--syn-easing-default);
 }
 
 .syn-cta-banner__cta:hover {
   transform: translateY(-1px);
   text-decoration: none;
+  background: var(--syn-color-surface-elevated);
+  box-shadow: var(--syn-shadow-md);
 }
 
 /* ── Media-text split (elementCompMediaTextSplit) ────────────── */
@@ -490,6 +549,20 @@
   margin: 0 0 var(--syn-space-md);
   font-size: var(--syn-font-size-lg);
   line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-media-text-split__text {
+  min-width: 0;
+}
+
+.syn-media-text-split__body {
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-media-text-split__body > * + * {
+  margin-top: var(--syn-space-md);
 }
 
 .syn-media-text-split__cta {
@@ -728,6 +801,17 @@
   border-radius: var(--syn-radius-md);
 }
 
+/* Icono standalone (elementMediaIcon): tamaño controlado en grilla de 8. */
+.syn-icon {
+  width: var(--syn-space-8);
+  height: var(--syn-space-8);
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.syn-icon--sm { width: var(--syn-space-6); height: var(--syn-space-6); }
+.syn-icon--lg { width: var(--syn-space-12); height: var(--syn-space-12); }
+
 .syn-logo img {
   max-height: 48px;
   width: auto;
@@ -746,34 +830,44 @@
 
 .syn-logo-cloud__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--syn-space-lg);
-  align-items: center;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--syn-space-md);
+  align-items: stretch;
   padding: 0;
   list-style: none;
 }
 
+/* Cada celda es un chip sutil — lee como "logo de cliente" premium,
+   no como texto pelado. El wordmark vive dentro vía .syn-logo. */
 .syn-logo-cloud__cell {
   display: flex;
   justify-content: center;
   align-items: center;
+  padding: var(--syn-space-2) var(--syn-space-4);
+  min-height: var(--syn-space-12);
+  background: var(--syn-color-surface-secondary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-md);
+  transition: var(--syn-transition-colors);
 }
 
-/* Wordmark de texto (sin logos reales) — limpio y premium en vez de caja gris. */
+.syn-logo-cloud__cell:hover {
+  border-color: var(--syn-color-border-accent);
+  background: var(--syn-color-surface-accent-soft);
+}
+
+/* Wordmark de texto (sin logos reales) — sello de marca dentro del chip. */
 .syn-logo__wordmark {
-  font-size: var(--syn-font-size-lg);
-  font-weight: var(--syn-font-weight-bold);
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-semibold);
   letter-spacing: var(--syn-letter-spacing-tight);
-  color: var(--syn-color-text-muted);
-  opacity: 0.78;
+  color: var(--syn-color-text-secondary);
   white-space: nowrap;
-  transition: color var(--syn-duration-base) var(--syn-easing-out),
-              opacity var(--syn-duration-base) var(--syn-easing-out);
+  transition: var(--syn-transition-colors);
 }
 
 .syn-logo-cloud__cell:hover .syn-logo__wordmark {
-  color: var(--syn-color-text-primary);
-  opacity: 1;
+  color: var(--syn-color-text-accent);
 }
 
 .syn-avatar {
@@ -792,6 +886,14 @@
 .syn-avatar--lg img { width: 64px; height: 64px; }
 
 /* ── Info: stat / feature / testimonial / faq / timeline ─────── */
+
+/* Contenedor de stats (KPIs) — grilla responsive auto-fit, centrada. */
+.syn-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--syn-space-xl);
+  text-align: center;
+}
 
 .syn-stat {
   text-align: center;
@@ -835,9 +937,43 @@
   color: var(--syn-color-text-primary);
 }
 
+.syn-feature__subtitle {
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  margin: 0 0 var(--syn-space-2);
+  line-height: var(--syn-line-height-normal);
+}
+
 .syn-feature__body {
   color: var(--syn-color-text-secondary);
   line-height: var(--syn-line-height-relaxed);
+}
+
+/* Feature variants — paralelo a las card variants, mismos tokens. */
+.syn-feature--bordered,
+.syn-feature--outlined {
+  border: 1px solid var(--syn-color-border-strong);
+  border-radius: var(--syn-card-radius);
+  background: var(--syn-card-surface);
+}
+
+.syn-feature--elevated {
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-card-radius);
+  background: var(--syn-card-surface);
+  box-shadow: var(--syn-shadow-md);
+}
+
+.syn-feature--ghost,
+.syn-feature--neutral {
+  border-radius: var(--syn-card-radius);
+  background: var(--syn-color-surface-secondary);
+}
+
+.syn-feature--accent {
+  border: 1px solid var(--syn-color-border-accent);
+  border-radius: var(--syn-card-radius);
+  background: var(--syn-color-surface-accent);
 }
 
 .syn-feature-grid {
@@ -848,6 +984,24 @@
   text-align: center;
   max-width: var(--syn-max-width-reading);
   margin: 0 auto var(--syn-space-2xl);
+}
+
+.syn-feature-grid__title {
+  font-size: clamp(var(--syn-font-size-2xl), 3vw + 0.5rem, var(--syn-font-size-4xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-tight);
+  text-align: center;
+  color: var(--syn-color-text-primary);
+  margin: 0 0 var(--syn-space-sm);
+}
+
+.syn-feature-grid__subtitle {
+  font-size: var(--syn-font-size-lg);
+  color: var(--syn-color-text-muted);
+  text-align: center;
+  line-height: var(--syn-line-height-relaxed);
+  margin: 0 0 var(--syn-space-lg);
 }
 
 .syn-feature-grid__items {

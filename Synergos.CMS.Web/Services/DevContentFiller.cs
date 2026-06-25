@@ -423,12 +423,15 @@ public sealed class DevContentFiller
         var pickerValue = _media.GetOrCreatePickerValue(imgName, imgAlt, from, to, 1600, 720);
 
         var ctaItems = new BlockListJsonBuilder();
+        var ctaIndex = 0;
         foreach (var (label, url) in ctas)
         {
-            ctaItems.AddBlock(_buttonKey)
+            var btn = ctaItems.AddBlock(_buttonKey)
                 .Set("ctaLabel", label)
-                .Set("ctaLink", LinkJson(label, url))
-                .ApplyDefaults(_defaults.DefaultsFor(_buttonKey));
+                .Set("ctaLink", LinkJson(label, url));
+            if (ctaIndex > 0) { btn.Set("variantKey", "[\"secondary\"]"); } // jerarquía: 2º CTA = secundario (FlexibleDropdown = JSON array)
+            btn.ApplyDefaults(_defaults.DefaultsFor(_buttonKey));
+            ctaIndex++;
         }
 
         section.AddChild(SectionContentAreaKey, _heroKey, hero =>
