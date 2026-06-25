@@ -103,5 +103,11 @@ public sealed class OptionsComposer : IComposer
         // bundles UI. Settings detallados via Synergos:BundleRegistry.
         builder.Services.Configure<BundleRegistrySettings>(
             builder.Config.GetSection("Synergos:BundleRegistry"));
+
+        // ADR 0097 — Dashboard de métricas. Flush + retención de la
+        // proyección pre-agregada. Default Enabled=true; el panel/identidad
+        // viven en cfgDashboardSettings (uSync) + la app Angular.
+        builder.Services.Configure<DashboardSettings>(
+            builder.Config.GetSection("Synergos:Dashboard"));
     }
 }
