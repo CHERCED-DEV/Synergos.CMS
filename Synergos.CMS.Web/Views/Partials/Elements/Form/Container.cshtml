@@ -14,7 +14,7 @@
       - Bloque success/error leyendo el query del request actual
         (?submitted=1 o ?form-error={code}).
 *@
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @using Umbraco.Cms.Core.Models.Blocks
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.FormsSettings> FormsOptions
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
