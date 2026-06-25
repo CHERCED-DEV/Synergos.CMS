@@ -40,6 +40,19 @@
             rootVars.Add($"--{name}: {value};");
         }
     }
+    // Parsea un hex (#RRGGBB / #RGB) a triplete "R G B" para los channels
+    // theme-aware. Devuelve null si no es hex válido (mantiene el default).
+    string? RgbTriplet(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex)) { return null; }
+        var h = hex.Trim().TrimStart('#');
+        if (h.Length == 3) { h = string.Concat(h[0], h[0], h[1], h[1], h[2], h[2]); }
+        if (h.Length != 6) { return null; }
+        return int.TryParse(h.AsSpan(0, 2), System.Globalization.NumberStyles.HexNumber, null, out var r)
+            && int.TryParse(h.AsSpan(2, 2), System.Globalization.NumberStyles.HexNumber, null, out var g)
+            && int.TryParse(h.AsSpan(4, 2), System.Globalization.NumberStyles.HexNumber, null, out var b)
+            ? $"{r} {g} {b}" : null;
+    }
     if (theme is not null)
     {
         // ── Tokens CANÓNICOS (los que el design system consume de verdad) ──
@@ -62,9 +75,18 @@
         {
             Add("syn-color-accent-600", $"color-mix(in srgb, {theme.AccentColor} 92%, #000 8%)");
         }
-        // Texto y superficie base.
-        Add("syn-color-text-primary", theme.TextColor);
-        Add("syn-color-surface-primary", theme.BackgroundColor);
+        // Channels theme-aware (glows/gradientes) derivados del hex del brand,
+        // para que los glows sigan la identidad del siteRoot (P0-2).
+        Add("syn-channel-brand", RgbTriplet(theme.PrimaryColor));
+        Add("syn-channel-accent", RgbTriplet(theme.AccentColor));
+        // Texto/superficie base SOLO en light: en dark/silverGold la fuente es
+        // el [data-theme] de syn-tokens.css; emitir estos en :root (que carga
+        // después) los pisaría y rompería el tema (P0-5).
+        if (string.Equals(variant, "light", System.StringComparison.OrdinalIgnoreCase))
+        {
+            Add("syn-color-text-primary", theme.TextColor);
+            Add("syn-color-surface-primary", theme.BackgroundColor);
+        }
         // Tipografía canónica (familia Manrope por defecto en syn-tokens.css).
         Add("syn-font-family-heading", theme.HeadingFontFamily);
         Add("syn-font-family-body", theme.BodyFontFamily);

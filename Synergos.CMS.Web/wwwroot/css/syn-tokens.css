@@ -49,6 +49,7 @@
      brand-500 (#4f6ef7) y accent-500 (#8b5cf6). ─────────────────── */
   --syn-channel-brand:  79 110 247;
   --syn-channel-accent: 139 92 246;
+  --syn-channel-ink:    15 23 42;    /* neutral-900 — sombras/scrims/backdrops neutrales (P0-1) */
 
   /* ── Color: Danger ────────────────────────────────────────── */
   --syn-color-danger-100: #fff1f2;
@@ -186,6 +187,7 @@
   --syn-duration-fast:    120ms;
   --syn-duration-base:    200ms;
   --syn-duration-slow:    280ms;
+  --syn-duration-xslow:   400ms;   /* parallax / transforms lentos (P2-4) */
   --syn-duration-loop:    750ms;
   --syn-duration-shimmer: 1400ms;
 
@@ -339,49 +341,7 @@
   /* ─────────────────────────────────────────────────────────── */
   /* Legacy aliases — backwards compat con dev-stub previo       */
   /* ─────────────────────────────────────────────────────────── */
-  --syn-c-primary:       var(--syn-color-brand-500);
-  --syn-c-primary-hover: var(--syn-color-brand-600);
-  --syn-c-accent:        var(--syn-color-accent-500);
-  --syn-c-success:       var(--syn-color-success-600);
-  --syn-c-warning:       var(--syn-color-warning-600);
-  --syn-c-error:         var(--syn-color-danger-600);
-  --syn-c-info:          #0284c7;
-  --syn-c-neutral-0:     var(--syn-color-neutral-0);
-  --syn-c-neutral-50:    var(--syn-color-neutral-50);
-  --syn-c-neutral-100:   var(--syn-color-neutral-100);
-  --syn-c-neutral-200:   var(--syn-color-neutral-200);
-  --syn-c-neutral-300:   var(--syn-color-neutral-300);
-  --syn-c-neutral-500:   var(--syn-color-neutral-500);
-  --syn-c-neutral-700:   var(--syn-color-neutral-700);
-  --syn-c-neutral-900:   var(--syn-color-neutral-900);
-  --syn-c-bg:            var(--syn-color-surface-canvas);
-  --syn-c-surface:       var(--syn-color-surface-secondary);
-  --syn-c-border:        var(--syn-color-border-default);
-  --syn-c-text:          var(--syn-color-text-primary);
-  --syn-c-text-muted:    var(--syn-color-text-muted);
-  --syn-c-link:          var(--syn-color-action-primary);
-
-  --syn-sp-xs:  var(--syn-space-2);
-  --syn-sp-sm:  var(--syn-space-3);
-  --syn-sp-md:  var(--syn-space-4);
-  --syn-sp-lg:  var(--syn-space-8);
-  --syn-sp-xl:  var(--syn-space-16);
-  --syn-sp-2xl: var(--syn-space-24);
-
-  --syn-r-sm:   var(--syn-radius-sm);
-  --syn-r-md:   var(--syn-radius-md);
-  --syn-r-lg:   var(--syn-radius-lg);
-  --syn-r-pill: var(--syn-radius-full);
-
-  --syn-font-body:    var(--syn-font-family-body);
-  --syn-font-heading: var(--syn-font-family-heading);
-  --syn-fs-xs:  var(--syn-font-size-xs);
-  --syn-fs-sm:  var(--syn-font-size-sm);
-  --syn-fs-md:  var(--syn-font-size-base);
-  --syn-fs-lg:  var(--syn-font-size-lg);
-  --syn-fs-xl:  var(--syn-font-size-2xl);
-  --syn-fs-2xl: var(--syn-font-size-4xl);
-  --syn-fs-3xl: var(--syn-font-size-5xl);
+  /* (aliases legacy retirados 2026-06, P2-1: 0 consumidores verificados) */
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -392,14 +352,16 @@
 .theme-dark {
   color-scheme: dark;
 
+  --syn-channel-ink: 2 6 23;    /* neutral-950 — scrims/sombras más profundas en dark (P0-1) */
+
   --syn-color-surface-canvas:    #020817;
   --syn-color-surface-primary:   var(--syn-color-neutral-800);
   --syn-color-surface-secondary: #132033;
   --syn-color-surface-tertiary:  var(--syn-color-neutral-700);
   --syn-color-surface-elevated:  #101a2a;
   --syn-color-surface-inverse:   var(--syn-color-neutral-0);
-  --syn-color-surface-accent:        rgb(79 110 247 / 0.16);
-  --syn-color-surface-accent-soft:   rgb(79 110 247 / 0.12);
+  --syn-color-surface-accent:        rgb(var(--syn-channel-brand) / 0.16);
+  --syn-color-surface-accent-soft:   rgb(var(--syn-channel-brand) / 0.12);
   --syn-color-surface-overlay:       rgb(15 23 42 / 0.84);
   --syn-color-surface-strong:        var(--syn-color-neutral-0);
 
@@ -448,7 +410,7 @@
   --syn-color-focus-ring:        rgb(165 180 252 / 0.88);
   --syn-color-focus-ring-danger: rgb(253 164 175 / 0.88);
 
-  --syn-color-state-brand-surface: rgb(79 110 247 / 0.18);
+  --syn-color-state-brand-surface: rgb(var(--syn-channel-brand) / 0.18);
   --syn-color-state-brand-border:  rgb(165 180 252 / 0.34);
   --syn-color-state-brand-text:    var(--syn-color-brand-200);
 
@@ -480,8 +442,8 @@
   --syn-shadow-card-hover:   0 24px 56px -28px rgb(2 6 23 / 0.86);
   --syn-shadow-panel:        0 8px 24px -18px rgb(2 6 23 / 0.74);
   --syn-shadow-floating:     0 28px 72px -36px rgb(2 6 23 / 0.92);
-  --syn-shadow-action:       0 10px 22px -16px rgb(79 110 247 / 0.44);
-  --syn-shadow-action-hover: 0 18px 34px -18px rgb(79 110 247 / 0.54);
+  --syn-shadow-action:       0 10px 22px -16px rgb(var(--syn-channel-brand) / 0.44);
+  --syn-shadow-action-hover: 0 18px 34px -18px rgb(var(--syn-channel-brand) / 0.54);
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -537,6 +499,30 @@
   --syn-shadow-floating:     0 28px 72px -38px rgb(50 40 22 / 0.32);
   --syn-shadow-action:       0 12px 26px -18px rgb(181 150 89 / 0.34);
   --syn-shadow-action-hover: 0 18px 36px -20px rgb(181 150 89 / 0.44);
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* data-profile — carácter editorial por siteRoot (P1-3).       */
+/* institutional = defaults (sin override). Ortogonal a data-theme. */
+/* ─────────────────────────────────────────────────────────── */
+[data-profile="editorial"] {
+  --syn-line-height-relaxed: 1.8;             /* más aire de lectura */
+  --syn-section-gap:    var(--syn-space-20);
+  --syn-section-gap-lg: var(--syn-space-24);
+  --syn-card-radius:    var(--syn-radius-md);  /* radios más sobrios */
+}
+[data-profile="commercial"] {
+  --syn-section-gap:    var(--syn-space-12);    /* más denso, CTAs a la vista */
+  --syn-card-shadow:    var(--syn-shadow-card-hover);  /* tarjetas prominentes */
+}
+[data-profile="premium"] {
+  --syn-section-gap:    var(--syn-space-24);    /* más respiración */
+  --syn-section-gap-lg: var(--syn-space-24);
+  --syn-card-radius:    var(--syn-radius-2xl);  /* radios generosos */
+}
+[data-profile="minimal"] {
+  --syn-card-radius:    var(--syn-radius-sm);
+  --syn-card-shadow:    none;                   /* plano */
 }
 
 /* ─────────────────────────────────────────────────────────── */

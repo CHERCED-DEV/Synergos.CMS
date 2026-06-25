@@ -5,10 +5,12 @@ using Umbraco.Cms.Core.Web;
 namespace Synergos.CMS.Web.Services;
 
 /// <summary>
-/// Default <see cref="IBrandThemeProvider"/> that reads
-/// <c>themeSettings</c> nodes from the Umbraco content tree (Ola 31
-/// schema — ADR 0020). Resolves the first match by <c>brandKey</c>
-/// under the Settings tree.
+/// Default <see cref="IBrandThemeProvider"/> that reads brand theme
+/// nodes from the Umbraco content tree by PROPERTY (any node with a
+/// <c>primaryColor</c> property — i.e. <c>themeSettings</c> OR the newer
+/// <c>siteConfiguration</c> that composes it). Resolves the first match
+/// by <c>brandKey</c>. (P0-4: antes matcheaba solo el alias legacy
+/// <c>themeSettings</c>, dejando sin tema a sites que siguen la guía.)
 /// </summary>
 /// <remarks>
 /// Lives in <c>Synergos.CMS.Web</c> because it depends on
@@ -19,8 +21,6 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class DefaultBrandThemeProvider : IBrandThemeProvider
 {
-    private const string ThemeSettingsAlias = "themeSettings";
-
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
 
     public DefaultBrandThemeProvider(IUmbracoContextAccessor umbracoContextAccessor) =>
@@ -38,13 +38,17 @@ public sealed class DefaultBrandThemeProvider : IBrandThemeProvider
             return null;
         }
 
+        // P0-4: matchear por PROPIEDAD (no por alias de content type). El alias
+        // `themeSettings` quedó legacy (Ola 71); la guía empuja a crear un nodo
+        // `siteConfiguration` que COMPONE themeSettings (alias distinto). Buscar
+        // por HasProperty("primaryColor") encuentra ambos — un site que sigue la
+        // doc ya no se queda sin tema de marca.
         var themeNode = umbracoContext.Content?
             .GetAtRoot()
-            .SelectMany(root => root.DescendantsOrSelfOfType(ThemeSettingsAlias))
-            .FirstOrDefault(node => string.Equals(
-                node.Value<string>("brandKey"),
-                brandKey,
-                StringComparison.OrdinalIgnoreCase));
+            .SelectMany(root => root.DescendantsOrSelf())
+            .FirstOrDefault(node =>
+                node.HasProperty("primaryColor") &&
+                string.Equals(node.Value<string>("brandKey"), brandKey, StringComparison.OrdinalIgnoreCase));
 
         if (themeNode is null)
         {
