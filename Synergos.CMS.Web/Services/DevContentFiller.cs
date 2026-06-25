@@ -306,17 +306,30 @@ public sealed class DevContentFiller
             "Synergos Identidad", "Identidad visual de la plataforma SynergosLabs", "#1A1A2E", "#7A3FF2",
             ("Hablemos", "/synergos/contacto"));
 
-        AddSplit(b, "Nuestro propósito",
-            "Hacia dónde vamos",
-            "<p>Hacer que las decisiones de arquitectura escalen. Un futuro donde el schema editorial sea tan extensible como un lenguaje.</p>",
-            "Synergos Proposito", "Ilustración del propósito de SynergosLabs", "#7A3FF2", "#C04CFC",
-            mediaOnRight: false, ctaLabel: null, ctaUrl: null);
+        var synSplit = _contentTypeService.Get("elementSynMediaText")?.Key is not null;
+        var bodyProposito = "<p>Hacer que las decisiones de arquitectura escalen. Un futuro donde el schema editorial sea tan extensible como un lenguaje.</p>";
+        if (synSplit)
+        {
+            AddSynSplit(b, "Nuestro propósito", bodyProposito, "Synergos Proposito", "Ilustración del propósito de SynergosLabs", "#7A3FF2", "#C04CFC", mediaOnRight: false);
+        }
+        else
+        {
+            AddSplit(b, "Nuestro propósito", "Hacia dónde vamos", bodyProposito,
+                "Synergos Proposito", "Ilustración del propósito de SynergosLabs", "#7A3FF2", "#C04CFC",
+                mediaOnRight: false, ctaLabel: null, ctaUrl: null);
+        }
 
-        AddSplit(b, "Un schema, polimórfico",
-            "El mismo núcleo, mil formas",
-            "<p>Profesional independiente, e-commerce, marca corporativa o membership portal: cambian las instancias de schema y los brand assets, nunca el código.</p>",
-            "Synergos Polimorfico", "Representación del schema polimórfico", "#0F58A7", "#1FA2A6",
-            mediaOnRight: true, ctaLabel: null, ctaUrl: null);
+        var bodyPolimorfico = "<p>Profesional independiente, e-commerce, marca corporativa o membership portal: cambian las instancias de schema y los brand assets, nunca el código.</p>";
+        if (synSplit)
+        {
+            AddSynSplit(b, "Un schema, polimórfico", bodyPolimorfico, "Synergos Polimorfico", "Representación del schema polimórfico", "#0F58A7", "#1FA2A6", mediaOnRight: true);
+        }
+        else
+        {
+            AddSplit(b, "Un schema, polimórfico", "El mismo núcleo, mil formas", bodyPolimorfico,
+                "Synergos Polimorfico", "Representación del schema polimórfico", "#0F58A7", "#1FA2A6",
+                mediaOnRight: true, ctaLabel: null, ctaUrl: null);
+        }
 
         AddCta(b, "¿Quieres ver SynergosLabs por dentro?",
             "Agenda una sesión técnica con el equipo de plataforma.",
@@ -586,6 +599,24 @@ public sealed class DevContentFiller
             if (list.HasItems) { fl.Set("faqItems", list.Build()); }
             fl.ApplyDefaults(_defaults.DefaultsFor(_faqListKey));
         });
+    }
+
+    /// <summary>Split media+texto vía componente Angular CDN (elementSynMediaText): imagen + heading + body.</summary>
+    private void AddSynSplit(BlockGridJsonBuilder b, string title, string body,
+        string imgName, string imgAlt, string from, string to, bool mediaOnRight)
+    {
+        var key = _contentTypeService.Get("elementSynMediaText")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var picker = _media.GetOrCreatePickerValue(imgName, imgAlt, from, to, 1200, 900);
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("mediaReference", picker)
+            .Set("mediaAlt", imgAlt)
+            .Set("headingText", title)
+            .Set("body", body)
+            .Set("mediaPosition", mediaOnRight ? "right" : "left")
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
 
     private void AddSplit(BlockGridJsonBuilder b, string title, string subtitle, string body,

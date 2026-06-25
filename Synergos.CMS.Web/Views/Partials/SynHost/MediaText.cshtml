@@ -1,0 +1,29 @@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    // El componente Angular media-text espera imageSrc (URL) + body (texto plano).
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    var body = Model.Value<string>("body");
+    if (!string.IsNullOrWhiteSpace(body))
+    {
+        body = System.Text.RegularExpressions.Regex.Replace(body, "<[^>]+>", "").Trim();
+    }
+    var pos = Model.Value<string>("mediaPosition");
+    var theme = Model.Value<string>("theme");
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["imageSrc"] = mediaRef?.Url(),
+        ["imageAlt"] = Model.Value<string>("mediaAlt"),
+        ["headingText"] = Model.Value<string>("headingText"),
+        ["body"] = body,
+        ["mediaPosition"] = string.IsNullOrWhiteSpace(pos) ? null : pos,
+        ["theme"] = string.IsNullOrWhiteSpace(theme) ? null : theme,
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "media-text",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
