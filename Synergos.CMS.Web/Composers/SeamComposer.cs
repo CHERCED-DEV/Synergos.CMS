@@ -211,6 +211,8 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.CommentsRetentionPolicy>();
         services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.FormSubmissionsRetentionPolicy>();
         services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.SearchAnalyticsRetentionPolicy>();
+        // ADR 0097 D5 — retención de los archivos de checkouts del dashboard.
+        services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.DashboardOrdersRetentionPolicy>();
         services.AddHostedService<Synergos.CMS.Web.Services.Retention.RetentionSweepHostedService>();
 
         // Olas 278-279 — SQLite maintenance pragmas (Cap-270 Batch D).
@@ -314,6 +316,9 @@ public sealed class SeamComposer : IComposer
         // Scoped: IMemberRosterReader depende de servicios per-request de
         // Umbraco → no capturarlo en un singleton (captive dependency).
         services.AddScoped<IDashboardReadModel, DefaultDashboardReadModel>();
+
+        // ADR 0097 D5 — export CSV de métricas (singleton; solo depende del store).
+        services.AddSingleton<IMetricsExporter, DefaultMetricsExporter>();
 
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).

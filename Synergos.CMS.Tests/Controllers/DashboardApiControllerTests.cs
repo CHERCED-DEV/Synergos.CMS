@@ -15,8 +15,9 @@ public sealed class DashboardApiControllerTests
     private readonly IDashboardReadModel _readModel = Substitute.For<IDashboardReadModel>();
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
     private readonly IAnalyticsTracker _analytics = Substitute.For<IAnalyticsTracker>();
+    private readonly IMetricsExporter _exporter = Substitute.For<IMetricsExporter>();
 
-    private DashboardApiController BuildSut() => new(_readModel, _gate, _analytics);
+    private DashboardApiController BuildSut() => new(_readModel, _gate, _analytics, _exporter);
 
     [Fact]
     public void GetSales_Anonymous_Returns401()
@@ -78,5 +79,19 @@ public sealed class DashboardApiControllerTests
 
         Assert.IsType<UnauthorizedResult>(result);
         _analytics.DidNotReceive().Track(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object?>>());
+    }
+
+    [Fact]
+    public void ExportCsv_Admin_ReturnsCsvFile_AndAuditsExported()
+    {
+        _gate.IsAuthenticated.Returns(true);
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(true);
+        _exporter.ExportTotalsCsv(Arg.Any<DateTime>(), Arg.Any<DateTime>()).Returns("slug,sum,count\r\n");
+
+        var result = BuildSut().ExportCsv(null, null, null, null);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("text/csv", file.ContentType);
+        _analytics.Received(1).Track("dashboard.exported", Arg.Any<IReadOnlyDictionary<string, object?>>());
     }
 }

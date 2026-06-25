@@ -24,15 +24,18 @@ public sealed class DashboardApiController : ControllerBase
     private readonly IDashboardReadModel _readModel;
     private readonly IMemberAccessGate _gate;
     private readonly IAnalyticsTracker _analytics;
+    private readonly IMetricsExporter _exporter;
 
     public DashboardApiController(
         IDashboardReadModel readModel,
         IMemberAccessGate gate,
-        IAnalyticsTracker analytics)
+        IAnalyticsTracker analytics,
+        IMetricsExporter exporter)
     {
         _readModel = readModel;
         _gate = gate;
         _analytics = analytics;
+        _exporter = exporter;
     }
 
     [HttpGet("sales")]
@@ -81,9 +84,23 @@ public sealed class DashboardApiController : ControllerBase
         return Ok(_readModel.GetAgentInsights());
     }
 
+    [HttpGet("export")]
+    public IActionResult ExportCsv(
+        [FromQuery] string? slug, [FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] string? granularity)
+    {
+        if (Deny("export", "dashboard.exported") is { } denied) return denied;
+        var (f, t, g) = ParseRange(from, to, granularity);
+        var csv = string.IsNullOrWhiteSpace(slug)
+            ? _exporter.ExportTotalsCsv(f, t)
+            : _exporter.ExportSeriesCsv(slug, f, t, g);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
+        var fileName = string.IsNullOrWhiteSpace(slug) ? "metrics-totals.csv" : $"metrics-{slug}.csv";
+        return File(bytes, "text/csv", fileName);
+    }
+
     // Gate de admin en dos capas (auth + rol). Devuelve el IActionResult de
-    // rechazo, o null si pasa (y registra la vista en auditoría).
-    private IActionResult? Deny(string panel)
+    // rechazo, o null si pasa (y registra el acceso en auditoría).
+    private IActionResult? Deny(string panel, string auditEvent = "dashboard.viewed")
     {
         if (!_gate.IsAuthenticated)
         {
@@ -93,7 +110,7 @@ public sealed class DashboardApiController : ControllerBase
         {
             return StatusCode(StatusCodes.Status403Forbidden);
         }
-        _analytics.Track("dashboard.viewed", new Dictionary<string, object?> { ["panel"] = panel });
+        _analytics.Track(auditEvent, new Dictionary<string, object?> { ["panel"] = panel });
         return null;
     }
 
