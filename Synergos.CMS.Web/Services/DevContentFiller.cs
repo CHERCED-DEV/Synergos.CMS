@@ -333,13 +333,21 @@ public sealed class DevContentFiller
             "Synergos Productos", "Verticales de SynergosLabs", "#143C8C", "#1FA2A6",
             ("Agendar demo", "/synergos/contacto"));
 
-        AddFeatureGrid(b, "Verticales disponibles", "Una receta por tipo de cliente", new[]
+        var verticals = new (string title, string subtitle, string body)[]
         {
             ("Profesional", "Médico · abogado · consultor", "Sitio institucional + servicios + agenda + contacto, listo en días."),
             ("E-commerce", "Catálogo + carrito + checkout", "Producto, variantes, carrito y query server-side sobre el mismo core."),
             ("Marca corporativa", "Empresa + casos + careers + blog", "Experiencias corporativas con chrome editable por marca."),
             ("Membresía", "Público + dashboard privado", "Contenido protegido, login y self-service de miembros."),
-        });
+        };
+        if (_contentTypeService.Get("elementSynFeatureGrid")?.Key is not null)
+        {
+            AddSynFeatureGrid(b, "Verticales disponibles", verticals, 2);
+        }
+        else
+        {
+            AddFeatureGrid(b, "Verticales disponibles", "Una receta por tipo de cliente", verticals);
+        }
 
         AddStats(b,
             ("5", "verticales base"),
@@ -371,10 +379,20 @@ public sealed class DevContentFiller
             "Directo, técnico, sin vueltas",
             "<p>Cuéntanos tu caso y te mostramos cómo SynergosLabs lo resuelve con el schema actual — o qué pieza nueva haría falta.</p>");
 
-        AddFaq(b, "Antes de escribirnos",
+        var contactFaqs = new (string question, string answer)[]
+        {
             ("¿Qué necesito para la sesión?", "Una idea del vertical (marca, e-commerce, membresía…) y, si tienes, tus brand assets. Nosotros llevamos el resto."),
             ("¿Cuánto dura?", "30 minutos. Salimos con un plan concreto de qué piezas del schema cubren tu caso."),
-            ("¿Trabajan sobre mi marca?", "Sí. El branding se resuelve por provider y settings, sin tocar el core — tu identidad, nuestro motor."));
+            ("¿Trabajan sobre mi marca?", "Sí. El branding se resuelve por provider y settings, sin tocar el core — tu identidad, nuestro motor."),
+        };
+        if (_contentTypeService.Get("elementSynFaqSection")?.Key is not null)
+        {
+            AddSynFaq(b, "Antes de escribirnos", contactFaqs);
+        }
+        else
+        {
+            AddFaq(b, "Antes de escribirnos", contactFaqs);
+        }
 
         AddCta(b, "Agenda una sesión",
             "30 minutos con el equipo de plataforma.",
@@ -535,7 +553,7 @@ public sealed class DevContentFiller
     }
 
     /// <summary>Feature grid vía componente Angular CDN (elementSynFeatureGrid): grilla de features configurada desde el CMS.</summary>
-    private void AddSynFeatureGrid(BlockGridJsonBuilder b, string heading, (string title, string subtitle, string body)[] features)
+    private void AddSynFeatureGrid(BlockGridJsonBuilder b, string heading, (string title, string subtitle, string body)[] features, int columns = 3)
     {
         var key = _contentTypeService.Get("elementSynFeatureGrid")?.Key;
         if (key is null) { return; }
@@ -546,7 +564,7 @@ public sealed class DevContentFiller
         section.AddChild(SectionContentAreaKey, key.Value, c => c
             .Set("headingText", heading)
             .Set("itemsJson", itemsJson)
-            .Set("columns", "3")
+            .Set("columns", columns.ToString())
             .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
 
