@@ -1,6 +1,7 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.IO;
 using Umbraco.Cms.Core.PropertyEditors;
@@ -32,14 +33,20 @@ public sealed class DevMediaFactory
     private static readonly Dictionary<string, string> RealAssets = new(StringComparer.Ordinal)
     {
         // Heroes (full-bleed): fondo oscuro con estrellas → texto blanco legible, on-brand.
-        ["Synergos Home Hero"] = "inspirations/files 2/hero_bg_synergos_dark.png",
-        ["Synergos Identidad"] = "inspirations/files 2/hero_bg_synergos_dark.png",
+        // Entidad: Home/Identidad/Casos con el hero BRANDED (isotipo + brand);
+        // el resto con el bg dark. Todos dark → texto blanco legible (P1-4).
+        ["Synergos Home Hero"] = "inspirations/files 2/hero_branded_synergos_dark.png",
+        ["Synergos Identidad"] = "inspirations/files 2/hero_branded_synergos_dark.png",
+        ["Synergos Casos Hero"]         = "inspirations/files 2/hero_branded_synergos_dark.png",
         ["Synergos Productos"] = "inspirations/files 2/hero_bg_synergos_dark.png",
         ["Synergos Contacto"]  = "inspirations/files 2/hero_bg_synergos_dark.png",
         ["Synergos Soluciones Hero"]    = "inspirations/files 2/hero_bg_synergos_dark.png",
         ["Synergos Como Funciona Hero"] = "inspirations/files 2/hero_bg_synergos_dark.png",
         ["Synergos Precios Hero"]       = "inspirations/files 2/hero_bg_synergos_dark.png",
-        ["Synergos Casos Hero"]         = "inspirations/files 2/hero_bg_synergos_dark.png",
+        // Verticales: arte on-brand por tema (P1-5) — set hero_branded (misma
+        // composición dark-base, acento gold/dark) para legibilidad consistente.
+        ["Synergos Blogs Hero"]  = "inspirations/files 2/hero_branded_synergos_gold.png",
+        ["Synergos Tienda Hero"] = "inspirations/files 2/hero_branded_synergos_dark.png",
         // Splits (imagen lateral): ilustraciones reales on-brand (fondo claro OK al lado del texto).
         ["Synergos Capas"]       = "imgs/infofeat 6.png", // columnas + puente = arquitectura por capas
         ["Synergos Proposito"]   = "imgs/infofeat 4.png", // bombillo + engranaje = propósito
@@ -80,6 +87,83 @@ public sealed class DevMediaFactory
         var mediaKey = GetOrCreate(name, altText, hexFrom, hexTo, width, height);
         var entryKey = Guid.NewGuid().ToString();
         return $"[{{\"key\":\"{entryKey}\",\"mediaKey\":\"{mediaKey}\",\"crops\":[],\"focalPoint\":null}}]";
+    }
+
+    /// <summary>
+    /// Devuelve el valor JSON de un MediaPicker3 apuntando a la OG image de
+    /// marca (1200×630, gradiente dark + isotipo centrado) para social cards.
+    /// La crea/refresca idempotente por nombre. (P0-3 — el <head> emite
+    /// og:image solo si socialOgImage está seteado.)
+    /// </summary>
+    public string GetOrCreateOgImagePickerValue(string name, string altText)
+    {
+        var mediaKey = GetOrCreateOg(name, altText);
+        var entryKey = Guid.NewGuid().ToString();
+        return $"[{{\"key\":\"{entryKey}\",\"mediaKey\":\"{mediaKey}\",\"crops\":[],\"focalPoint\":null}}]";
+    }
+
+    private Guid GetOrCreateOg(string name, string altText)
+    {
+        var png = GenerateOgPng("#0A2540", "#4f6ef7");
+        var existing = _mediaService.GetRootMedia()
+            .FirstOrDefault(m => m.ContentType.Alias == MediaTypeAlias &&
+                                 string.Equals(m.Name, name, StringComparison.Ordinal));
+        if (existing is not null)
+        {
+            using var fs0 = new MemoryStream(png);
+            existing.SetValue(_mediaFileManager, _mediaUrlGenerators, _shortStringHelper,
+                _contentTypeBaseServiceProvider, "umbracoFile", Slug(name) + ".png", fs0);
+            _mediaService.Save(existing);
+            return existing.Key;
+        }
+        var media = _mediaService.CreateMedia(name, Constants.System.Root, MediaTypeAlias);
+        using var stream = new MemoryStream(png);
+        media.SetValue(_mediaFileManager, _mediaUrlGenerators, _shortStringHelper,
+            _contentTypeBaseServiceProvider, "umbracoFile", Slug(name) + ".png", stream);
+        media.SetValue("altDefault", altText);
+        _mediaService.Save(media);
+        _logger.LogInformation("DevMediaFactory: OG image '{Name}' creada (1200×630).", name);
+        return media.Key;
+    }
+
+    // OG card: gradiente branded 1200×630 + isotipo centrado (si se encuentra).
+    private static byte[] GenerateOgPng(string hexFrom, string hexTo)
+    {
+        const int w = 1200, h = 630;
+        var baseBytes = GenerateGradientPng(hexFrom, hexTo, w, h);
+        var isotipo = ResolveIsotipo();
+        if (isotipo is null) { return baseBytes; }
+        try
+        {
+            using var image = Image.Load<Rgba32>(baseBytes);
+            using var logo = Image.Load<Rgba32>(isotipo);
+            logo.Mutate(x => x.Resize(new ResizeOptions { Size = new Size(0, 260), Mode = ResizeMode.Max }));
+            var loc = new Point((w - logo.Width) / 2, (h - logo.Height) / 2);
+            image.Mutate(x => x.DrawImage(logo, loc, 1f));
+            using var ms = new MemoryStream();
+            image.Save(ms, new PngEncoder());
+            return ms.ToArray();
+        }
+        catch
+        {
+            // Si el composite falla (isotipo ilegible), el gradiente branded sirve.
+            return baseBytes;
+        }
+    }
+
+    // Resuelve el isotipo subiendo desde el CWD (sirve corriendo desde el Web project o la raíz).
+    private static string? ResolveIsotipo()
+    {
+        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (dir is not null)
+        {
+            var nested = Path.Combine(dir.FullName, "Synergos.CMS.Web", "wwwroot", "img", "synergoslabs-isotipo.png");
+            if (File.Exists(nested)) { return nested; }
+            var direct = Path.Combine(dir.FullName, "wwwroot", "img", "synergoslabs-isotipo.png");
+            if (File.Exists(direct)) { return direct; }
+            dir = dir.Parent;
+        }
+        return null;
     }
 
     private Guid GetOrCreate(string name, string altText, string hexFrom, string hexTo, int width, int height)

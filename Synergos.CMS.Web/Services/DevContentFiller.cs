@@ -23,6 +23,8 @@ public sealed class DevContentFiller
     private const string Culture = "es-CO";
     private const string SectionsAlias = "sections";
     private const string BrandName = "SynergosLabs";   // marca de la Entidad + umbrella (decisión del arquitecto)
+    private const string ComponentCount = "120";       // cifra canónica de componentes (P1-9 — sin contradicciones entre páginas)
+    private const string VerticalCount = "4";          // cifra canónica de verticales (P1-9)
     private static readonly Guid SectionContentAreaKey = new("3525d41c-ae84-47ac-9297-2148f6a4aae8");
     // Áreas de elementLayout3Col (de DTBlockGridSections) — col1/col2/col3.
     private static readonly Guid Col1AreaKey = new("b3141704-5e2d-4adf-9c83-654377a9717f");
@@ -90,6 +92,9 @@ public sealed class DevContentFiller
 
         // Entry point: launcher en platformRoot.introBody + rename del umbrella a SynergosLabs.
         SeedPlatformLauncher(details);
+
+        // P1-1: verticales Blogs (silverGold) + Ecommerce (dark) con identidad propia.
+        SeedVerticalSiteRoots(details);
 
         return new FillResult(filled == 8, filled, string.Join("; ", details));   // siteRoot home + 7 páginas hijas
     }
@@ -170,7 +175,7 @@ public sealed class DevContentFiller
     {
         if (site.HasProperty("siteDisplayName")) { site.SetValue("siteDisplayName", BrandName, Culture); }
         if (site.HasProperty("brandDisplayName")) { site.SetValue("brandDisplayName", BrandName, Culture); }
-        if (site.HasProperty("seoTitle")) { site.SetValue("seoTitle", $"{BrandName} — Composable Digital Solutions", Culture); }
+        if (site.HasProperty("seoTitle")) { site.SetValue("seoTitle", $"{BrandName} — Soluciones digitales componibles", Culture); }
         if (site.HasProperty("seoDescription"))
         {
             var sd = site.GetValue<string>("seoDescription", Culture);
@@ -239,8 +244,8 @@ public sealed class DevContentFiller
         }
 
         AddStats(b,
-            ("120", "componentes listos para usar"),
-            ("4", "verticales de negocio"),
+            (ComponentCount, "componentes listos para usar"),
+            (VerticalCount, "verticales de negocio"),
             ("1", "plataforma, multi-dominio"));
 
         AddSplit(b, "Tú compones. El motor hace el resto.",
@@ -354,29 +359,33 @@ public sealed class DevContentFiller
         var b = new BlockGridJsonBuilder();
         AddHero(b, "Un motor, muchos productos",
             "Lo que puedes construir con SynergosLabs",
-            "<p>El mismo motor y los más de 120 componentes se adaptan a cada negocio. Eliges tu vertical, pones tu marca y publicas — sin reescribir nada. Mira las opciones y encuentra la tuya.</p>",
-            "Synergos Productos", "Verticales de SynergosLabs", "#143C8C", "#1FA2A6",
+            "<p>El mismo motor te da todo lo que un sitio necesita —contenido, comercio, miembros, formularios, búsqueda y SEO— en más de 120 componentes listos para combinar. Tú compones; el motor hace el resto.</p>",
+            "Synergos Productos", "Capacidades de SynergosLabs", "#143C8C", "#1FA2A6",
             ("Ver soluciones", "/synergos/soluciones"), ("Ver planes", "/synergos/precios"));
 
-        var verticals = new (string title, string subtitle, string body)[]
+        // P1-10: Productos = CAPACIDADES (qué incluye el motor). Las industrias/casos
+        // viven en Soluciones → las dos páginas dejan de solaparse.
+        var capabilities = new (string title, string subtitle, string body)[]
         {
-            ("Profesional", "Médico · abogado · consultor", "Sitio institucional + servicios + agenda + contacto, listo en días."),
-            ("E-commerce", "Catálogo + carrito + checkout", "Producto, variantes, carrito y query server-side sobre el mismo core."),
-            ("Marca corporativa", "Empresa + casos + careers + blog", "Experiencias corporativas con chrome editable por marca."),
-            ("Membresía", "Público + dashboard privado", "Contenido protegido, login y self-service de miembros."),
+            ("Contenido", "Hero, features, testimonios, FAQ…", "Más de 120 bloques editoriales que tu equipo combina en un editor visual, sin código."),
+            ("Comercio", "Catálogo · carrito · checkout", "Producto, variantes, carrito y consultas server-side listos para tu tienda."),
+            ("Miembros y acceso", "Login · roles · 2FA · portal", "Contenido protegido, autoservicio de miembros y doble factor de fábrica."),
+            ("Formularios y captación", "Forms · anti-spam · avisos", "Captura leads con honeypot, rate-limit y notificación por email — sin integraciones."),
+            ("Búsqueda y SEO", "Examine · sitemap · JSON-LD", "Búsqueda full-text y SEO técnico (sitemap, robots, datos estructurados) incluidos."),
+            ("Identidad por marca", "Tema · tokens · multi-dominio", "Una identidad por sitio: color, tipografía y logo se aplican a todo desde un solo lugar."),
         };
         if (_contentTypeService.Get("elementSynFeatureGrid")?.Key is not null)
         {
-            AddSynFeatureGrid(b, "Verticales disponibles", verticals, 2);
+            AddSynFeatureGrid(b, "Lo que incluye el motor", capabilities, 3);
         }
         else
         {
-            AddFeatureGrid(b, "Verticales disponibles", "Una receta por tipo de cliente", verticals);
+            AddFeatureGrid(b, "Lo que incluye el motor", "Todo lo que un sitio necesita, listo para combinar", capabilities);
         }
 
         AddStats(b,
-            ("5", "verticales base"),
-            ("122", "bundles UI reutilizables"),
+            (VerticalCount, "verticales base"),
+            (ComponentCount, "componentes reutilizables"),
             ("1", "deploy, multi-dominio"));
 
         AddSplit(b, "El mismo motor, tu marca",
@@ -478,7 +487,7 @@ public sealed class DevContentFiller
 
         AddStats(b,
             ("4", "tipos de negocio sobre un core"),
-            ("120", "componentes reutilizables"),
+            (ComponentCount, "componentes reutilizables"),
             ("1", "plataforma, multi-dominio"));
 
         AddCta(b, "¿No ves tu caso?",
@@ -583,15 +592,16 @@ public sealed class DevContentFiller
             ("Ver planes", "/synergos/precios"), ("Hablar con ventas", "/synergos/contacto"));
 
         AddStats(b,
-            ("4", "verticales en producción"),
-            ("120", "componentes reutilizados"),
+            (VerticalCount, "verticales en producción"),
+            (ComponentCount, "componentes reutilizados"),
             ("1", "plataforma para todo el grupo"));
 
+        // P1-11: testimonios DISTINTOS a los del Home (evita la prueba social duplicada).
         var testimonials = new (string quote, string author, string role)[]
         {
-            ("Migramos cuatro líneas de negocio al mismo motor. Lo que antes era un trimestre, hoy es una semana.", "Laura Méndez", "CTO, Grupo Andino"),
-            ("Lanzamos nuestra tienda y el portal de socios sin sumar herramientas. Un solo equipo, una sola factura.", "Diego Restrepo", "Líder de Producto, Nimbus"),
-            ("El equipo de marketing arma campañas completas sin pasar por desarrollo. Ganamos velocidad real.", "Sofía Cardona", "Directora Digital, Vértice"),
+            ("Pasamos de cinco sitios inconexos a una sola plataforma. El mantenimiento cayó a la mitad.", "Andrés Villa", "COO, Retail Norte"),
+            ("Abrimos una línea de negocio nueva en dos semanas, sin tocar lo que ya estaba en producción.", "Carolina Ruiz", "Gerente de E-commerce, Pacífico"),
+            ("Un solo equipo opera marca, tienda y comunidad. Menos proveedores, menos fricción, más foco.", "Mateo Salas", "Director de Tecnología, Altavista"),
         };
         if (_contentTypeService.Get("elementSynTestimonialSection")?.Key is not null)
         {
@@ -980,14 +990,18 @@ public sealed class DevContentFiller
 
         AddCard(entidadName, "<p>Marca, identidad y páginas institucionales — el sitio editorial completo.</p>",
             "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar al sitio →", "/synergos");
-        // "Próximamente": los siteRoots Blogs/Ecommerce aún no existen → el CTA captura interés
-        // hacia Contacto en vez de romper con 404 a /blogs /ecommerce.
+        // P2-8: los verticales Blogs/Tienda ya existen (P1-1) → cards "live" a su siteRoot.
         AddCard("Blogs", "<p>Publicaciones, artículos y contenido editorial sobre el mismo motor.</p>",
-            "syn-launcher__card--document", "syn-launcher__card--soon", "Quiero saber más →", "/synergos/contacto");
-        AddCard("Ecommerce", "<p>Catálogo, productos y checkout sobre la misma plataforma.</p>",
-            "syn-launcher__card--bag", "syn-launcher__card--soon", "Quiero saber más →", "/synergos/contacto");
+            "syn-launcher__card--document", "syn-launcher__card--live", "Entrar a Blogs →", "/blogs");
+        AddCard("Tienda", "<p>Catálogo, productos y checkout sobre la misma plataforma.</p>",
+            "syn-launcher__card--bag", "syn-launcher__card--live", "Entrar a la Tienda →", "/tienda");
 
         pr.SetCultureName(BrandName, Culture);   // umbrella = SynergosLabs (el hero lee Model.Name)
+        // P2-3: identidad propia del launcher (compBranding + compPageTheme) — gestionable
+        // en vez de hardcodeada. HasProperty guarda hasta que se importe el schema.
+        if (pr.HasProperty("brandKey")) { pr.SetValue("brandKey", "synergoslabs"); }              // ^[a-z][a-z0-9-]*$
+        if (pr.HasProperty("brandDisplayName")) { pr.SetValue("brandDisplayName", BrandName, Culture); }
+        if (pr.HasProperty("pageThemeVariant")) { pr.SetValue("pageThemeVariant", "[\"dark\"]"); }  // launcher PS3 oscuro
         if (pr.HasProperty("welcomeMessage"))
         {
             pr.SetValue("welcomeMessage", "Plataforma editorial SynergosLabs — un código, múltiples productos.", Culture);
@@ -1058,10 +1072,67 @@ public sealed class DevContentFiller
     {
         var cfg = FindFirstOfType("siteConfigSettings");
         if (cfg is null) { details.Add("SiteConfig:none"); return; }
-        if (cfg.HasProperty("defaultSeoTitle")) { cfg.SetValue("defaultSeoTitle", $"{BrandName} — Composable Digital Solutions", Culture); }
+        if (cfg.HasProperty("defaultSeoTitle")) { cfg.SetValue("defaultSeoTitle", $"{BrandName} — Soluciones digitales componibles", Culture); }
         if (cfg.HasProperty("defaultSeoDescription")) { cfg.SetValue("defaultSeoDescription", "SynergosLabs es el motor editorial polimórfico: un código, un schema, múltiples productos sobre el mismo core.", Culture); }
+        // P0-3: OG image de marca. Sin socialOgImage, el _SeoHead omite og:image,
+        // twitter:image y Organization.logo → links compartidos salen sin marca.
+        if (cfg.HasProperty("socialOgImage"))
+        {
+            var og = _media.GetOrCreateOgImagePickerValue("SynergosLabs OG", "SynergosLabs — Soluciones digitales componibles");
+            cfg.SetValue("socialOgImage", og, Culture);
+        }
         var save = _contentService.SaveAndPublish(cfg, new[] { Culture });
         details.Add(save.Success ? "SiteConfig:seo-ok" : $"SiteConfig:seo-failed:{save.Result}");
+    }
+
+    /// <summary>
+    /// P1-1: crea los siteRoots verticales (Blogs=silverGold, Ecommerce=dark) bajo el
+    /// platformRoot, con identidad propia (siteDisplayName + brandKey + brandDisplayName
+    /// + pageThemeVariant) y un home mínimo. Idempotente por nombre. "Un motor, mil
+    /// productos": que más de un vertical pinte su tema. La resolución de marca por
+    /// HOSTNAME requiere configurar Culture &amp; Hostnames (arquitecto); por path
+    /// (/blogs, /tienda) ya pintan su pageThemeVariant.
+    /// </summary>
+    private void SeedVerticalSiteRoots(List<string> details)
+    {
+        var pr = _contentService.GetRootContent().FirstOrDefault(c => c.ContentType.Alias == "platformRoot");
+        if (pr is null) { details.Add("Verticals:platformroot-not-found"); return; }
+
+        SeedVertical(pr.Id, "Blogs", "blogs", "SynergosLabs Blogs", "silverGold", "blogs.synergos.local",
+            BuildVerticalHome("Blogs que enganchan", "Publica, organiza y crece tu audiencia",
+                "<p>Un blog editorial sobre el mismo motor: categorías, autores, comentarios y SEO listos. Tu marca, tu voz — sin montar un CMS desde cero.</p>",
+                "Synergos Blogs Hero", "#2A2412", "#B59659"), details);
+
+        SeedVertical(pr.Id, "Tienda", "ecommerce", "SynergosLabs Tienda", "dark", "tienda.synergos.local",
+            BuildVerticalHome("Tu tienda, sobre el mismo motor", "Catálogo, carrito y checkout",
+                "<p>Vende online con producto, variantes, carrito y query server-side sobre el mismo núcleo — sin re-plataformar cuando crezcas.</p>",
+                "Synergos Tienda Hero", "#020817", "#4f6ef7"), details);
+    }
+
+    private void SeedVertical(int parentId, string name, string brandKey, string brandDisplayName,
+        string themeVariant, string hostname, string sectionsJson, List<string> details)
+    {
+        var existing = _contentService.GetPagedChildren(parentId, 0, 100, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "siteRoot" && Matches(c, name));
+        var site = existing ?? _contentService.Create(name, parentId, "siteRoot");
+        site.SetCultureName(name, Culture);
+        site.SetValue("siteDisplayName", name, Culture);              // mandatory (Culture)
+        site.SetValue("brandKey", brandKey);                          // mandatory (Nothing), ^[a-z][a-z0-9-]*$
+        site.SetValue("brandDisplayName", brandDisplayName, Culture); // mandatory (Culture)
+        site.SetValue("pageThemeVariant", $"[\"{themeVariant}\"]");   // FlexibleDropdown → JSON array (trampa conocida)
+        if (site.HasProperty("canonicalHostname")) { site.SetValue("canonicalHostname", hostname); }
+        site.SetValue(SectionsAlias, sectionsJson, Culture);
+        var save = _contentService.SaveAndPublish(site, new[] { Culture });
+        details.Add(save.Success ? $"Vertical:{name}:ok({themeVariant})" : $"Vertical:{name}:failed:{save.Result}");
+    }
+
+    private string BuildVerticalHome(string title, string subtitle, string bodyHtml, string mediaName, string hexFrom, string hexTo)
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, title, subtitle, bodyHtml,
+            mediaName, $"Hero del vertical {title}", hexFrom, hexTo,
+            ("Hablemos", "/synergos/contacto"), ("Ver planes", "/synergos/precios"));
+        return b.Build();
     }
 
     private IContent? FindByType(int parentId, string alias)
