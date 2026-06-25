@@ -36,6 +36,10 @@ public sealed class DevMediaFactory
         ["Synergos Identidad"] = "inspirations/files 2/hero_bg_synergos_dark.png",
         ["Synergos Productos"] = "inspirations/files 2/hero_bg_synergos_dark.png",
         ["Synergos Contacto"]  = "inspirations/files 2/hero_bg_synergos_dark.png",
+        ["Synergos Soluciones Hero"]    = "inspirations/files 2/hero_bg_synergos_dark.png",
+        ["Synergos Como Funciona Hero"] = "inspirations/files 2/hero_bg_synergos_dark.png",
+        ["Synergos Precios Hero"]       = "inspirations/files 2/hero_bg_synergos_dark.png",
+        ["Synergos Casos Hero"]         = "inspirations/files 2/hero_bg_synergos_dark.png",
         // Splits (imagen lateral): ilustraciones reales on-brand (fondo claro OK al lado del texto).
         ["Synergos Capas"]       = "imgs/infofeat 6.png", // columnas + puente = arquitectura por capas
         ["Synergos Proposito"]   = "imgs/infofeat 4.png", // bombillo + engranaje = propósito
