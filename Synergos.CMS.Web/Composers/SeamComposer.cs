@@ -288,7 +288,32 @@ public sealed class SeamComposer : IComposer
         // emite eventos como log estructurado — el operador agrega via
         // su sink standard (Serilog/AI/Elastic). Singleton porque solo
         // depende de ILogger (singleton).
-        services.AddSingleton<IAnalyticsTracker, LoggerAnalyticsTracker>();
+        //
+        // ADR 0097 — Dashboard: el tracker se DECORA con ProjectingAnalyticsTracker,
+        // que además proyecta cada evento (O(1), en memoria, sin IO) al
+        // IMetricsProjectionStore que alimenta el panel. Umbraco 13 no trae
+        // Scrutor → composición manual: registramos el inner concreto y lo
+        // envolvemos. Los consumidores siguen inyectando IAnalyticsTracker.
+        services.AddSingleton<LoggerAnalyticsTracker>();
+        services.AddSingleton<InMemoryMetricsProjectionStore>();
+        services.AddSingleton<IMetricsProjectionStore>(sp =>
+            sp.GetRequiredService<InMemoryMetricsProjectionStore>());
+        services.AddSingleton<IAnalyticsTracker>(sp =>
+            new ProjectingAnalyticsTracker(
+                sp.GetRequiredService<LoggerAnalyticsTracker>(),
+                sp.GetRequiredService<IMetricsProjectionStore>(),
+                sp.GetRequiredService<ILogger<ProjectingAnalyticsTracker>>()));
+
+        // ADR 0097 — Captura explícita de checkouts (revenue, append-only)
+        // + flush periódico de la proyección a JSONL (background, no bloquea
+        // requests).
+        services.AddSingleton<ICheckoutRecorder, FileSystemCheckoutRecorder>();
+        services.AddHostedService<DashboardSnapshotFlushHostedService>();
+
+        // ADR 0097 D2 — read-model compartido (/admin SSR + API Angular).
+        // Scoped: IMemberRosterReader depende de servicios per-request de
+        // Umbraco → no capturarlo en un singleton (captive dependency).
+        services.AddScoped<IDashboardReadModel, DefaultDashboardReadModel>();
 
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).
