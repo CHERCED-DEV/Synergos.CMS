@@ -189,7 +189,7 @@ html:has(.syn-launcher) { overflow-x: clip; }
   z-index: 0;
   pointer-events: none;
   transform: translate3d(calc(var(--syn-pr-mx, 0) * 16px), calc(var(--syn-pr-my, 0) * 12px), 0);
-  transition: transform 400ms var(--syn-easing-out);
+  transition: transform var(--syn-duration-xslow) var(--syn-easing-out);
 }
 
 .syn-launcher__wave span {
@@ -243,7 +243,7 @@ html:has(.syn-launcher) { overflow-x: clip; }
   z-index: 0;
   pointer-events: none;
   transform: translate3d(calc(var(--syn-pr-mx, 0) * -10px), calc(var(--syn-pr-my, 0) * -8px), 0);
-  transition: transform 600ms var(--syn-easing-out);
+  transition: transform var(--syn-duration-xslow) var(--syn-easing-out);
 }
 
 .syn-launcher__stars span {
@@ -291,7 +291,7 @@ html:has(.syn-launcher) { overflow-x: clip; }
   /* glow de marca (era brand-400 123 147 250) → theme-aware. */
   filter: drop-shadow(0 0 10px rgb(var(--syn-channel-brand) / 0.5));
   transform: translate3d(calc(var(--syn-pr-mx, 0) * 30px), calc(var(--syn-pr-my, 0) * 20px), 0);
-  transition: transform 400ms var(--syn-easing-out);
+  transition: transform var(--syn-duration-xslow) var(--syn-easing-out);
 }
 
 .syn-launcher__ribbon svg {

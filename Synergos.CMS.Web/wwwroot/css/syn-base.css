@@ -317,15 +317,13 @@ hr {
   animation: syn-cdn-offline-shimmer 2s ease-in-out infinite;
 }
 
+/* (P1-8) No exponer el alias del componente al usuario en prod: solo el
+   skeleton shimmer (sin texto). El data-block-alias sigue en el DOM para
+   diagnóstico/CSS, pero no se renderiza como contenido visible. */
 [data-synergos-cdn-offline] .syn-cdn-offline-fallback::after {
-  content: attr(data-block-alias);
+  content: "";
   display: block;
-  font-size: var(--syn-font-size-sm);
-  color: var(--syn-color-text-secondary, var(--syn-color-text-primary));
-  font-family: var(--syn-font-family-mono, monospace);
-  text-align: center;
   line-height: 4rem;
-  opacity: 0.6;
 }
 
 @keyframes syn-cdn-offline-shimmer {

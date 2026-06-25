@@ -136,19 +136,8 @@
   font-weight: var(--syn-font-weight-semibold);
 }
 
-.syn-site-nav__link--cta {
-  background: var(--syn-color-action-primary);
-  color: var(--syn-color-action-primary-text);
-  padding: var(--syn-space-2) var(--syn-space-4);
-  box-shadow: var(--syn-shadow-action);
-}
-
-.syn-site-nav__link--cta:hover {
-  background: var(--syn-color-action-primary-hover);
-  color: var(--syn-color-action-primary-text);
-  box-shadow: var(--syn-shadow-action-hover);
-  transform: translateY(-1px);
-}
+/* (P1-7) .syn-site-nav__link--cta retirado — CSS muerto, ninguna vista emitía
+   la clase. Si se quiere un CTA en el header, agregar el link + clase en _Layout. */
 
 /* ── Mobile nav (hamburger CSS-only, <768px) ─────────────────── */
 @media (max-width: 767px) {

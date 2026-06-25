@@ -10,13 +10,13 @@
 /* ── Container widths ────────────────────────────────────────── */
 
 .syn-preset--container-narrow {
-  max-width: 720px;
+  max-width: var(--syn-max-width-hero);   /* 720px (P2-5) */
   margin-inline: auto;
   padding-inline: var(--syn-space-md);
 }
 
 .syn-preset--container-normal {
-  max-width: 1040px;
+  max-width: var(--syn-max-width-normal);   /* 1040px (P2-5) */
   margin-inline: auto;
   padding-inline: var(--syn-space-md);
 }

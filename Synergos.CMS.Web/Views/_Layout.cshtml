@@ -79,6 +79,10 @@
     {
         <link rel="icon" type="image/svg+xml" href="~/img/synergoslabs-isotipo.svg" />
     }
+    @* P1-6/P2-7: fallback PNG (navegadores sin SVG) + apple-touch (iOS home screen).
+       El favicon real del kit reemplaza al .ico pre-rebrand para superficies modernas. *@
+    <link rel="icon" type="image/png" sizes="32x32" href="~/img/favicon-synergos.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="~/img/favicon-synergos.png" />
     @* Ola 100 — Manrope font family canónica del design system (Synergos.UI).
        Preconnect + display=swap para evitar FOUT bloqueante. Si el theme override
        define otra Heading/Body Font Family, el _BrandThemeStyle gana. *@
@@ -147,13 +151,15 @@
                     }
                     @if (navItems.Any())
                     {
-                        <input type="checkbox" id="syn-nav-toggle" class="syn-nav-toggle" aria-hidden="true" />
-                        <label for="syn-nav-toggle" class="syn-nav-burger" aria-label="Abrir o cerrar menú">
+                        @* P2-6: el toggle es el control real — operable por teclado/lector
+                           (sin aria-hidden), con nombre y aria-controls al nav que abre. *@
+                        <input type="checkbox" id="syn-nav-toggle" class="syn-nav-toggle" aria-controls="syn-site-nav" aria-label="Menú de navegación" />
+                        <label for="syn-nav-toggle" class="syn-nav-burger" aria-hidden="true">
                             <span class="syn-nav-burger__bar"></span>
                             <span class="syn-nav-burger__bar"></span>
                             <span class="syn-nav-burger__bar"></span>
                         </label>
-                        <nav class="syn-site-nav" aria-label="Main navigation">
+                        <nav id="syn-site-nav" class="syn-site-nav" aria-label="Navegación principal">
                             <ul class="syn-site-nav__list">
                                 @foreach (var item in navItems)
                                 {
