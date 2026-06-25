@@ -109,5 +109,10 @@ public sealed class OptionsComposer : IComposer
         // viven en cfgDashboardSettings (uSync) + la app Angular.
         builder.Services.Configure<DashboardSettings>(
             builder.Config.GetSection("Synergos:Dashboard"));
+
+        // ADR 0098 — Healthcare (vertical clínico PHI): disclaimer, zona horaria,
+        // retención, 2FA de staff.
+        builder.Services.Configure<HealthcareSettings>(
+            builder.Config.GetSection("Synergos:Healthcare"));
     }
 }

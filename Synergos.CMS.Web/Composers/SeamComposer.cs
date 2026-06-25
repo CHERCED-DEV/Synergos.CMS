@@ -320,6 +320,13 @@ public sealed class SeamComposer : IComposer
         // ADR 0097 D5 — export CSV de métricas (singleton; solo depende del store).
         services.AddSingleton<IMetricsExporter, DefaultMetricsExporter>();
 
+        // ADR 0098 — Healthcare PHI (H1, núcleo de seguridad): store cifrado
+        // atómico (IDataProtector) + libro de consentimientos + access-guard
+        // fail-closed. El guard es Scoped porque IMemberAccessGate es per-request.
+        services.AddSingleton<IPhiStore, FileSystemEncryptedPhiStore>();
+        services.AddSingleton<IConsentLedger, FileSystemConsentLedger>();
+        services.AddScoped<IPhiAccessGuard, DefaultPhiAccessGuard>();
+
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).
         // Singleton — solo depende de IOptions + IHostEnvironment + ILogger.
