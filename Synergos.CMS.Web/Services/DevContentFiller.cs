@@ -398,7 +398,13 @@ public sealed class DevContentFiller
             "Una demo de 30 minutos, sin compromiso",
             "<p>Cuéntanos qué quieres lanzar y te mostramos en vivo cómo SynergosLabs lo resuelve — y qué plan encaja con tu negocio. Sin tecnicismos si no los quieres.</p>",
             "Synergos Contacto", "Sección de contacto de SynergosLabs", "#0A2540", "#1FA2A6",
-            ("Agendar demo", "/synergos/contacto"), ("Ver planes", "/synergos/precios"));
+            ("Ver planes", "/synergos/precios"), ("Ver soluciones", "/synergos/soluciones"));
+
+        AddContactForm(b, "Cuéntanos de tu proyecto", "Enviar mensaje",
+            ("Nombre", "nombre", "text", true, "Tu nombre"),
+            ("Email", "email", "email", true, "tu@correo.com"),
+            ("Empresa", "empresa", "text", false, "Tu empresa (opcional)"),
+            ("¿Qué quieres lanzar?", "mensaje", "textarea", true, "Cuéntanos brevemente tu proyecto…"));
 
         AddMission(b, "Cómo trabajamos",
             "Directo, claro, a tu ritmo",
@@ -419,9 +425,9 @@ public sealed class DevContentFiller
             AddFaq(b, "Antes de escribirnos", contactFaqs);
         }
 
-        AddCta(b, "Agenda tu demo",
-            "30 minutos con el equipo y un plan claro para tu negocio.",
-            "Agendar demo", "/synergos/contacto");
+        AddCta(b, "¿Prefieres ver los planes primero?",
+            "Compara los planes y elige el que encaja — o llena el formulario y te contactamos.",
+            "Ver planes", "/synergos/precios");
         return b.Build();
     }
 
@@ -837,6 +843,41 @@ public sealed class DevContentFiller
             .Set("textBody", body)
             .Set("mediaAlt", BrandName)
             .ApplyDefaults(_defaults.DefaultsFor(_missionKey)));
+    }
+
+    // Formulario de contacto: reusa el sistema de Forms existente (elementFormContainer +
+    // elementFormField, POST a /api/forms/{formInternalKey}/submit → FormSubmissionsController
+    // → honeypot + rate-limit + persistencia + notificación email FormNotification). ADR 0018 + 0030.
+    private void AddContactForm(BlockGridJsonBuilder b, string title, string submitLabel,
+        params (string label, string name, string type, bool required, string placeholder)[] fields)
+    {
+        var formKey = _contentTypeService.Get("elementFormContainer")?.Key;
+        var fieldKey = _contentTypeService.Get("elementFormField")?.Key;
+        if (formKey is null || fieldKey is null) { return; }
+
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+
+        var list = new BlockListJsonBuilder();
+        foreach (var (label, name, type, required, placeholder) in fields)
+        {
+            list.AddBlock(fieldKey.Value)
+                .Set("fieldLabel", label)
+                .Set("fieldName", name)
+                .Set("fieldType", type)
+                .Set("fieldRequired", required ? "1" : "0")
+                .Set("fieldPlaceholder", placeholder)
+                .ApplyDefaults(_defaults.DefaultsFor(fieldKey.Value));
+        }
+
+        section.AddChild(SectionContentAreaKey, formKey.Value, c =>
+        {
+            c.Set("formTitle", title)
+             .Set("formInternalKey", "contacto")   // → /api/forms/contacto/submit (kebab, matchea FormKeyRegex)
+             .Set("submitLabel", submitLabel);
+            if (list.HasItems) { c.Set("fields", list.Build()); }
+            c.ApplyDefaults(_defaults.DefaultsFor(formKey.Value));
+        });
     }
 
     private void AddCta(BlockGridJsonBuilder b, string title, string subtitle, string ctaLabel, string url)
