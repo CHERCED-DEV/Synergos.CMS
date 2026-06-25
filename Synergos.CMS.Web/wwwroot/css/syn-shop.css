@@ -780,7 +780,7 @@
 
 .syn-cart-summary__checkout:hover {
   transform: translateY(-1px);
-  box-shadow: var(--syn-shadow-action-hover), 0 4px 16px 0 rgb(79 110 247 / 0.34);
+  box-shadow: var(--syn-shadow-action-hover), var(--syn-shadow-brand-lg);
 }
 
 .syn-cart-summary__checkout:active {

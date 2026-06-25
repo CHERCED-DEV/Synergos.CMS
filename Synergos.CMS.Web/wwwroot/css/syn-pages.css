@@ -176,8 +176,8 @@ html:has(.syn-launcher) { overflow-x: clip; }
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(ellipse 70% 50% at 50% -10%, rgb(79 110 247 / 0.22), transparent 60%),
-    radial-gradient(ellipse 60% 50% at 50% 115%, rgb(139 92 246 / 0.18), transparent 65%),
+    radial-gradient(ellipse 70% 50% at 50% -10%, rgb(var(--syn-channel-brand) / 0.22), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 50% 115%, rgb(var(--syn-channel-accent) / 0.18), transparent 65%),
     var(--syn-color-surface-canvas);
   color: var(--syn-color-text-primary);
 }
@@ -225,7 +225,8 @@ html:has(.syn-launcher) { overflow-x: clip; }
   inset: 0;
   z-index: var(--syn-z-top, 9999);
   pointer-events: none;
-  background: radial-gradient(circle at 50% 42%, rgb(199 210 254 / 0.85), rgb(79 110 247 / 0.40) 28%, transparent 62%);
+  /* 199 210 254 = núcleo de luz intencional (más claro que brand-500): degradado de luminancia del power-on flash, no glow de marca → se deja literal. */
+  background: radial-gradient(circle at 50% 42%, rgb(199 210 254 / 0.85), rgb(var(--syn-channel-brand) / 0.40) 28%, transparent 62%);
   animation: syn-pr-poweron 1.1s var(--syn-easing-out) forwards;
 }
 
@@ -251,7 +252,8 @@ html:has(.syn-launcher) { overflow-x: clip; }
   height: 2px;
   border-radius: var(--syn-radius-full);
   background: var(--syn-color-brand-200);
-  box-shadow: 0 0 6px 1px rgb(165 180 252 / 0.55);
+  /* glow de marca (era brand-300 165 180 252) → theme-aware. */
+  box-shadow: 0 0 6px 1px rgb(var(--syn-channel-brand) / 0.55);
   opacity: 0;
   animation: syn-pr-star linear infinite;
 }
@@ -286,7 +288,8 @@ html:has(.syn-launcher) { overflow-x: clip; }
   z-index: 0;
   pointer-events: none;
   opacity: 0.65;
-  filter: drop-shadow(0 0 10px rgb(123 147 250 / 0.5));
+  /* glow de marca (era brand-400 123 147 250) → theme-aware. */
+  filter: drop-shadow(0 0 10px rgb(var(--syn-channel-brand) / 0.5));
   transform: translate3d(calc(var(--syn-pr-mx, 0) * 30px), calc(var(--syn-pr-my, 0) * 20px), 0);
   transition: transform 400ms var(--syn-easing-out);
 }
@@ -367,7 +370,7 @@ html:has(.syn-launcher) { overflow-x: clip; }
   width: 96px;
   height: auto;
   margin: 0 auto var(--syn-space-5);
-  filter: drop-shadow(0 10px 32px rgb(79 110 247 / 0.5));
+  filter: drop-shadow(0 10px 32px rgb(var(--syn-channel-brand) / 0.5));
 }
 @media (prefers-reduced-motion: no-preference) {
   .syn-launcher__mark { animation: syn-pr-float 6s ease-in-out infinite; }
@@ -463,7 +466,7 @@ html:has(.syn-launcher) { overflow-x: clip; }
   transform: translateY(-4px);
   border-color: var(--syn-color-brand-400);
   background: var(--syn-color-overlay-medium);
-  box-shadow: 0 0 0 1px rgb(79 110 247 / 0.40), 0 24px 64px -24px rgb(79 110 247 / 0.55);
+  box-shadow: 0 0 0 1px rgb(var(--syn-channel-brand) / 0.40), 0 24px 64px -24px rgb(var(--syn-channel-brand) / 0.55);
 }
 
 /* Icono (chip translúcido + glifo) */

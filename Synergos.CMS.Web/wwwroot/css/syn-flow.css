@@ -63,7 +63,7 @@
   transform: translateY(-2px);
   text-decoration: none;
   color: var(--syn-color-action-primary-text);
-  box-shadow: var(--syn-shadow-action-hover), 0 8px 24px 0 rgb(79 110 247 / 0.4);
+  box-shadow: var(--syn-shadow-action-hover), 0 8px 24px 0 rgb(var(--syn-channel-brand) / 0.4);
 }
 
 .syn-flow-definition__start::after {

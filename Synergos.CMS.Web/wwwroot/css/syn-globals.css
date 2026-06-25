@@ -136,7 +136,7 @@
   position: sticky;
   bottom: 0;
   z-index: var(--syn-z-sticky);
-  box-shadow: 0 -8px 24px -16px rgb(15 23 42 / 0.18);
+  box-shadow: 0 -8px 24px -16px rgb(var(--syn-channel-ink) / 0.18);
 }
 
 .syn-global-banner__inner {
@@ -200,7 +200,7 @@
 }
 
 .syn-global-modal::backdrop {
-  background: rgb(15 23 42 / 0.66);
+  background: rgb(var(--syn-channel-ink) / 0.66);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }
@@ -356,7 +356,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgb(15 23 42 / 0.0) 0%, rgb(15 23 42 / 0.6) 100%);
+  background: linear-gradient(180deg, rgb(var(--syn-channel-ink) / 0.0) 0%, rgb(var(--syn-channel-ink) / 0.6) 100%);
   pointer-events: none;
 }
 
