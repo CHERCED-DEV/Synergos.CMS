@@ -470,6 +470,9 @@ public sealed class DevContentFiller
 
     private void AddStats(BlockGridJsonBuilder b, params (string value, string label)[] stats)
     {
+        // Si el stat-ticker Angular está importado, usa el count-up animado vía CDN;
+        // si no, cae al elementInfoStat SSR. Mismos props (statValue/statLabel).
+        var statKey = _contentTypeService.Get("elementSynStatTicker")?.Key ?? _statKey;
         var section = b.AddTopLevelBlock(_sectionKey);
         section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         var areas = new[] { Col1AreaKey, Col2AreaKey, Col3AreaKey };
@@ -480,10 +483,10 @@ public sealed class DevContentFiller
             for (var i = 0; i < stats.Length && i < 3; i++)
             {
                 var (value, label) = stats[i];
-                col.AddChild(areas[i], _statKey, s => s
+                col.AddChild(areas[i], statKey, s => s
                     .Set("statValue", value)
                     .Set("statLabel", label)
-                    .ApplyDefaults(_defaults.DefaultsFor(_statKey)));
+                    .ApplyDefaults(_defaults.DefaultsFor(statKey)));
             }
         });
     }
