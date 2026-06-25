@@ -43,6 +43,7 @@
 }
 
 .syn-site-header__inner {
+  position: relative;
   width: 100%;
   max-width: var(--syn-max-width-content);
   margin-inline: auto;
@@ -51,6 +52,10 @@
   align-items: center;
   gap: var(--syn-space-lg);
 }
+
+/* Hamburger (CSS-only, sin JS): checkbox oculto + label que togglea el nav en mobile */
+.syn-nav-toggle { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.syn-nav-burger { display: none; }
 
 @media (min-width: 768px) {
   .syn-site-header__inner { padding: var(--syn-space-md) var(--syn-gutter-lg); }
@@ -143,6 +148,59 @@
   color: var(--syn-color-action-primary-text);
   box-shadow: var(--syn-shadow-action-hover);
   transform: translateY(-1px);
+}
+
+/* ── Mobile nav (hamburger CSS-only, <768px) ─────────────────── */
+@media (max-width: 767px) {
+  .syn-nav-burger {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--syn-radius-md);
+    cursor: pointer;
+    transition: var(--syn-transition-colors);
+  }
+  .syn-nav-burger:hover { background: var(--syn-color-overlay-subtle); }
+  .syn-nav-burger__bar {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: var(--syn-color-text-primary);
+    border-radius: var(--syn-radius-full);
+    transition: transform var(--syn-duration-base) var(--syn-easing-default),
+                opacity var(--syn-duration-fast) var(--syn-easing-default);
+  }
+  .syn-site-nav {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: var(--syn-space-sm) var(--syn-gutter) var(--syn-space-md);
+    background: var(--syn-color-surface-primary);
+    border-bottom: 1px solid var(--syn-color-border-subtle);
+    box-shadow: var(--syn-shadow-lg);
+  }
+  .syn-nav-toggle:checked ~ .syn-site-nav { display: flex; }
+  .syn-site-nav__list {
+    flex-direction: column;
+    gap: var(--syn-space-1);
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+  .syn-site-nav__item { display: block; width: 100%; }
+  .syn-site-nav__link { width: 100%; padding: var(--syn-space-3); }
+  .syn-nav-toggle:checked ~ .syn-nav-burger .syn-nav-burger__bar:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .syn-nav-toggle:checked ~ .syn-nav-burger .syn-nav-burger__bar:nth-child(2) { opacity: 0; }
+  .syn-nav-toggle:checked ~ .syn-nav-burger .syn-nav-burger__bar:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 }
 
 /* ── Site aside (Ola 71 — chrome triádico) ───────────────────── */

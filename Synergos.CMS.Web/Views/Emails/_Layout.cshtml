@@ -22,20 +22,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>@(ViewBag.Title ?? siteName)</title>
 </head>
-<body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#222;">
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:Manrope,'Segoe UI',system-ui,Helvetica,Arial,sans-serif;color:#0f172a;">
     @if (!string.IsNullOrWhiteSpace(preheaderText))
     {
-        <div style="display:none;font-size:1px;color:#f4f4f7;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+        <div style="display:none;font-size:1px;color:#f1f5f9;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
             @preheaderText
         </div>
     }
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#f4f4f7;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#f1f5f9;">
         <tr>
             <td align="center" style="padding:24px 16px;">
                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
                     <tr>
-                        <td style="padding:24px 32px;border-bottom:1px solid #eaeaea;">
-                            <strong style="font-size:18px;color:#111;">@siteName</strong>
+                        <td style="padding:24px 32px;border-bottom:1px solid #e2e8f0;">
+                            <strong style="font-size:18px;color:#0f172a;">@siteName</strong>
                         </td>
                     </tr>
                     <tr>
@@ -44,7 +44,7 @@
                         </td>
                     </tr>
                     <tr>
-                        <td style="padding:16px 32px;border-top:1px solid #eaeaea;font-size:12px;color:#666;text-align:center;">
+                        <td style="padding:16px 32px;border-top:1px solid #e2e8f0;font-size:12px;color:#475569;text-align:center;">
                             &copy; @DateTime.UtcNow.Year @siteName
                         </td>
                     </tr>

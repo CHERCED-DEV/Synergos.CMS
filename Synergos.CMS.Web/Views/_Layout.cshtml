@@ -147,6 +147,12 @@
                     }
                     @if (navItems.Any())
                     {
+                        <input type="checkbox" id="syn-nav-toggle" class="syn-nav-toggle" aria-hidden="true" />
+                        <label for="syn-nav-toggle" class="syn-nav-burger" aria-label="Abrir o cerrar menú">
+                            <span class="syn-nav-burger__bar"></span>
+                            <span class="syn-nav-burger__bar"></span>
+                            <span class="syn-nav-burger__bar"></span>
+                        </label>
                         <nav class="syn-site-nav" aria-label="Main navigation">
                             <ul class="syn-site-nav__list">
                                 @foreach (var item in navItems)
