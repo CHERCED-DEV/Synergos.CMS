@@ -74,9 +74,13 @@ public sealed class DevContentFiller
         filled += ApplySiteRootHome(site, details);
 
         // Páginas navegables (hijas del siteRoot).
-        filled += Apply("Identidad", "Construimos la plataforma donde tu producto se vuelve mil productos", BuildIdentidad(), details);
-        filled += Apply("Productos", "Un motor, muchos productos", BuildProductos(), details);
-        filled += Apply("Contacto", "Hablemos", BuildContacto(), details);
+        filled += Apply("Identidad", "Qué es SynergosLabs", BuildIdentidad(), details, 1);
+        filled += Apply("Soluciones", "Soluciones para cada tipo de negocio", BuildSoluciones(), details, 2);
+        filled += Apply("Productos", "Un motor, muchos productos", BuildProductos(), details, 3);
+        filled += Apply("Cómo funciona", "De la idea a producción en cuatro pasos", BuildComoFunciona(), details, 4);
+        filled += Apply("Precios", "Planes que crecen con tu negocio", BuildPrecios(), details, 5);
+        filled += Apply("Casos", "Negocios que ya corren sobre SynergosLabs", BuildCasos(), details, 6);
+        filled += Apply("Contacto", "Hablemos", BuildContacto(), details, 7);
 
         // El nodo "Home" anterior queda redundante → fuera del menú (no se borra).
         HideRedundantHome(site, details);
@@ -87,7 +91,7 @@ public sealed class DevContentFiller
         // Entry point: launcher en platformRoot.introBody + rename del umbrella a SynergosLabs.
         SeedPlatformLauncher(details);
 
-        return new FillResult(filled == 4, filled, string.Join("; ", details));
+        return new FillResult(filled == 8, filled, string.Join("; ", details));   // siteRoot home + 7 páginas hijas
     }
 
     private bool ResolveKeys(out string missing)
@@ -121,7 +125,7 @@ public sealed class DevContentFiller
         return miss.Count == 0;
     }
 
-    private int Apply(string pageName, string heading, string sectionsJson, List<string> details)
+    private int Apply(string pageName, string heading, string sectionsJson, List<string> details, int sortOrder = 0)
     {
         var page = FindByName(pageName);
         if (page is null)
@@ -142,6 +146,7 @@ public sealed class DevContentFiller
             if (!string.IsNullOrEmpty(d)) { page.SetValue("seoDescription", RebrandText(d), Culture); }
         }
         page.SetValue(SectionsAlias, sectionsJson, Culture);
+        if (sortOrder > 0) { page.SortOrder = sortOrder; }   // orden del nav = orden lógico, no orden de creación
 
         var save = _contentService.SaveAndPublish(page, new[] { Culture });
         if (!save.Success)
@@ -212,41 +217,41 @@ public sealed class DevContentFiller
     private string BuildHome()
     {
         var b = new BlockGridJsonBuilder();
-        AddHero(b, "Una plataforma. Mil productos.",
-            "Un código. Un schema. Infinitos productos.",
-            "<p>SynergosLabs es el motor editorial detrás de marcas profesionales, e-commerce, portales de membresía y experiencias corporativas — compuesto server-side, sin reescribir código.</p>",
+        AddHero(b, "Un motor. Mil productos digitales.",
+            "La plataforma componible para lanzar tu negocio online",
+            "<p>Marca, tienda, portal de membresía o sitio profesional: créalo, lánzalo y hazlo crecer sobre un mismo núcleo. Con SynergosLabs cambias el negocio, no la plataforma — y sales a producción en días.</p>",
             "Synergos Home Hero", "Composición abstracta de capas SynergosLabs", "#0A2540", "#0F58A7",
-            ("Agendar sesión", "/synergos/contacto"), ("Conoce la visión", "/synergos/identidad"));
+            ("Ver planes", "/synergos/precios"), ("Cómo funciona", "/synergos/como-funciona"));
 
         var features = new (string title, string subtitle, string body)[]
         {
-            ("Polimórfico", "Un código, mil formas", "Profesional, e-commerce, marca o membresía: cambian las instancias de schema, nunca el código."),
-            ("Componible", "El editor arrastra", "122 bundles UI y un Block Grid que el editor opera sin tocar una línea de código."),
-            ("Server-side", "Render robusto", "Composición y publicación server-side: el contenido existe y rinde sin depender del cliente."),
+            ("Lanza en días, no meses", "Empiezas listo", "Arrancas con una receta probada para tu tipo de negocio y la haces tuya. De la idea a producción sin proyectos eternos."),
+            ("Un motor, todos tus productos", "Menos herramientas, menos costo", "Marca, e-commerce y membresías sobre la misma base: un solo equipo, una sola curva de aprendizaje, una sola factura."),
+            ("Crece sin re-plataformar", "Escala cuando quieras", "Sumas verticales, dominios y componentes sin reemplazar lo que ya funciona. La plataforma crece contigo."),
         };
         if (_contentTypeService.Get("elementSynFeatureGrid")?.Key is not null)
         {
-            AddSynFeatureGrid(b, "Por qué SynergosLabs", features);
+            AddSynFeatureGrid(b, "Por qué elegir SynergosLabs", features);
         }
         else
         {
-            AddFeatureGrid(b, "Por qué SynergosLabs", "Tres ideas, un mismo motor", features);
+            AddFeatureGrid(b, "Por qué elegir SynergosLabs", "Una base, todos tus productos", features);
         }
 
         AddStats(b,
-            ("122", "bundles UI publicados"),
-            ("1", "código, todos los verticales"),
-            ("5", "capas estancas"));
+            ("120", "componentes listos para usar"),
+            ("4", "verticales de negocio"),
+            ("1", "plataforma, multi-dominio"));
 
-        AddSplit(b, "Arquitectura por capas",
-            "Settings · Compositions · Blocks · Pages · Wiring",
-            "<p>Cinco capas estancas y un grafo de dependencias unidireccional mantienen el sistema extensible sin acoplarse. Cada decisión vive donde corresponde.</p>",
-            "Synergos Capas", "Diagrama de las cinco capas de arquitectura", "#0F58A7", "#1FA2A6",
-            mediaOnRight: true, ctaLabel: null, ctaUrl: null);
+        AddSplit(b, "Tú compones. El motor hace el resto.",
+            "Sin tocar código en el día a día",
+            "<p>Tu equipo arma páginas completas arrastrando bloques en un editor visual. El motor se encarga del rendimiento, el SEO y la consistencia de marca — para que te enfoques en el negocio, no en la plomería.</p>",
+            "Synergos Capas", "Editor visual de SynergosLabs", "#0F58A7", "#1FA2A6",
+            mediaOnRight: true, ctaLabel: "Cómo funciona", ctaUrl: "/synergos/como-funciona");
 
-        AddMission(b, "Componés, no programás",
-            "Del schema a la página, sin fricción",
-            "<p>El mismo schema sirve a healthcare, e-commerce, membresía o marca corporativa. Desplegar un vertical es cuestión de días, no de trimestres.</p>");
+        AddMission(b, "Sólido por dentro, simple por fuera",
+            "La base técnica que tu equipo va a respetar",
+            "<p>Arquitectura por capas, render server-side y un sistema de diseño con tokens. Potencia de ingeniería sin la complejidad: extensible cuando lo necesitas, robusto desde el primer día.</p>");
 
         var testimonials = new (string quote, string author, string role)[]
         {
@@ -278,9 +283,9 @@ public sealed class DevContentFiller
 
         var faqs = new (string question, string answer)[]
         {
-            ("¿Sirve para más de un tipo de sitio?", "Sí. El mismo código y schema sirven a profesional independiente, e-commerce, marca corporativa o portal de membresía — cambian las instancias, no el código."),
-            ("¿El editor necesita saber programar?", "No. El contenido se compone en el Layout Composer arrastrando bloques; el desarrollo solo entra para piezas nuevas."),
-            ("¿Cómo se integran los componentes de UI?", "Vía un registry de bundles consumido por el CMS (ADR 0012); los bloques server-side renderizan siempre, los CDN hidratan cuando se publican."),
+            ("¿Sirve para mi tipo de negocio?", "Casi seguro que sí. Marca, e-commerce, membresía o sitio profesional corren sobre el mismo motor. Si tu caso es distinto, lo adaptamos con la misma base."),
+            ("¿Necesito un equipo técnico para operarlo?", "Para el día a día no: el contenido se arma arrastrando bloques. Tu equipo técnico entra solo cuando quieres extender o integrar algo nuevo."),
+            ("¿Puedo empezar pequeño y crecer?", "Sí. Empiezas con un plan inicial y subes cuando el negocio lo pide — sin migraciones ni re-plataformar."),
         };
         if (_contentTypeService.Get("elementSynFaqSection")?.Key is not null)
         {
@@ -291,49 +296,56 @@ public sealed class DevContentFiller
             AddFaq(b, "Preguntas frecuentes", faqs);
         }
 
-        AddCta(b, "¿Listo para construir el tuyo?",
-            "Agenda una sesión técnica y te mostramos el grafo de capas en vivo.",
-            "Agendar sesión", "/synergos/contacto");
+        AddCta(b, "Encuentra el plan para tu negocio",
+            "Compara los planes y lanza esta semana — o habla con nosotros si tienes dudas.",
+            "Ver planes", "/synergos/precios");
         return b.Build();
     }
 
     private string BuildIdentidad()
     {
         var b = new BlockGridJsonBuilder();
-        AddHero(b, "Construimos la plataforma donde tu producto se vuelve mil productos",
-            "Nuestra identidad",
-            "<p>Un CMS empresarial polimórfico: un código, un schema, 122 bundles UI. Construido para escalar decisiones de arquitectura, no para repetirlas.</p>",
+        AddHero(b, "Qué es SynergosLabs",
+            "La plataforma que convierte un negocio en muchos",
+            "<p>SynergosLabs es una plataforma digital componible: un mismo motor con el que creas y operas marcas, tiendas y portales. En vez de construir y mantener un sistema por cada producto, lo haces todo sobre una base — y la haces crecer cuando quieras.</p>",
             "Synergos Identidad", "Identidad visual de la plataforma SynergosLabs", "#1A1A2E", "#7A3FF2",
-            ("Hablemos", "/synergos/contacto"));
+            ("Ver soluciones", "/synergos/soluciones"), ("Ver planes", "/synergos/precios"));
 
         var synSplit = _contentTypeService.Get("elementSynMediaText")?.Key is not null;
-        var bodyProposito = "<p>Hacer que las decisiones de arquitectura escalen. Un futuro donde el schema editorial sea tan extensible como un lenguaje.</p>";
+        var bodyProposito = "<p>Piensa en SynergosLabs como el motor de tu presencia digital. Hoy lanzas tu marca; mañana sumas una tienda; después un portal de miembros. Todo con la misma cuenta, el mismo equipo y la misma identidad — sin empezar de cero cada vez.</p>";
         if (synSplit)
         {
-            AddSynSplit(b, "Nuestro propósito", bodyProposito, "Synergos Proposito", "Ilustración del propósito de SynergosLabs", "#7A3FF2", "#C04CFC", mediaOnRight: false);
+            AddSynSplit(b, "En palabras simples", bodyProposito, "Synergos Proposito", "Cómo funciona SynergosLabs para tu negocio", "#7A3FF2", "#C04CFC", mediaOnRight: false);
         }
         else
         {
-            AddSplit(b, "Nuestro propósito", "Hacia dónde vamos", bodyProposito,
-                "Synergos Proposito", "Ilustración del propósito de SynergosLabs", "#7A3FF2", "#C04CFC",
+            AddSplit(b, "En palabras simples", "Una base, muchos negocios", bodyProposito,
+                "Synergos Proposito", "Cómo funciona SynergosLabs para tu negocio", "#7A3FF2", "#C04CFC",
                 mediaOnRight: false, ctaLabel: null, ctaUrl: null);
         }
 
-        var bodyPolimorfico = "<p>Profesional independiente, e-commerce, marca corporativa o membership portal: cambian las instancias de schema y los brand assets, nunca el código.</p>";
+        var bodyPolimorfico = "<p>Desde un profesional que necesita presencia en línea, hasta un grupo con varias marcas y dominios. Si tu negocio cambia o se expande, la plataforma te sigue el ritmo — en lugar de frenarte con una migración.</p>";
         if (synSplit)
         {
-            AddSynSplit(b, "Un schema, polimórfico", bodyPolimorfico, "Synergos Polimorfico", "Representación del schema polimórfico", "#0F58A7", "#1FA2A6", mediaOnRight: true);
+            AddSynSplit(b, "Para quién es", bodyPolimorfico, "Synergos Polimorfico", "Para qué negocios sirve SynergosLabs", "#0F58A7", "#1FA2A6", mediaOnRight: true);
         }
         else
         {
-            AddSplit(b, "Un schema, polimórfico", "El mismo núcleo, mil formas", bodyPolimorfico,
-                "Synergos Polimorfico", "Representación del schema polimórfico", "#0F58A7", "#1FA2A6",
+            AddSplit(b, "Para quién es", "Negocios que quieren crecer", bodyPolimorfico,
+                "Synergos Polimorfico", "Para qué negocios sirve SynergosLabs", "#0F58A7", "#1FA2A6",
                 mediaOnRight: true, ctaLabel: null, ctaUrl: null);
         }
 
-        AddCta(b, "¿Quieres ver SynergosLabs por dentro?",
-            "Agenda una sesión técnica con el equipo de plataforma.",
-            "Agendar sesión técnica", "/synergos/contacto");
+        FeatureGridAuto(b, "Qué incluye", "Todo lo que necesitas para operar", new (string title, string subtitle, string body)[]
+        {
+            ("Tu marca, en todo", "Identidad propia", "Logo, colores y tipografía aplicados a cada página, sin tocar código."),
+            ("+120 componentes", "Listos para usar", "Bloques de contenido, comercio e interacción que tu equipo combina a voluntad."),
+            ("Multi-dominio", "Una cuenta, varios sitios", "Marcas y dominios distintos sobre la misma plataforma y el mismo equipo."),
+        }, 3);
+
+        AddCta(b, "Veámoslo con tu negocio",
+            "Cuéntanos qué quieres lanzar y te mostramos cómo SynergosLabs lo hace realidad.",
+            "Hablar con ventas", "/synergos/contacto");
         return b.Build();
     }
 
@@ -341,10 +353,10 @@ public sealed class DevContentFiller
     {
         var b = new BlockGridJsonBuilder();
         AddHero(b, "Un motor, muchos productos",
-            "Cinco verticales sobre el mismo core",
-            "<p>El mismo schema y los mismos 122 bundles se adaptan a cada negocio. No reescribes código: instancias el vertical, cambias el branding y publicas.</p>",
+            "Lo que puedes construir con SynergosLabs",
+            "<p>El mismo motor y los más de 120 componentes se adaptan a cada negocio. Eliges tu vertical, pones tu marca y publicas — sin reescribir nada. Mira las opciones y encuentra la tuya.</p>",
             "Synergos Productos", "Verticales de SynergosLabs", "#143C8C", "#1FA2A6",
-            ("Agendar demo", "/synergos/contacto"));
+            ("Ver soluciones", "/synergos/soluciones"), ("Ver planes", "/synergos/precios"));
 
         var verticals = new (string title, string subtitle, string body)[]
         {
@@ -367,36 +379,36 @@ public sealed class DevContentFiller
             ("122", "bundles UI reutilizables"),
             ("1", "deploy, multi-dominio"));
 
-        AddSplit(b, "Mismo schema, tu marca",
-            "Branding por provider, no por código",
-            "<p>Colores, tipografía, logo y tono se resuelven por settings y <code>IBrandingProvider</code>. El core nunca conoce tu marca — solo la sirve.</p>",
+        AddSplit(b, "El mismo motor, tu marca",
+            "Tu identidad, de punta a punta",
+            "<p>Colores, tipografía, logo y tono se aplican a todo el sitio desde un solo lugar. Cada negocio luce 100% propio — el motor es el mismo, la marca es tuya.</p>",
             "Synergos Branding", "Personalización de marca en SynergosLabs", "#0F58A7", "#7A3FF2",
-            mediaOnRight: true, ctaLabel: "Ver la identidad", ctaUrl: "/synergos/identidad");
+            mediaOnRight: true, ctaLabel: "Qué es SynergosLabs", ctaUrl: "/synergos/identidad");
 
-        AddCta(b, "¿Cuál es tu vertical?",
-            "Cuéntanos tu caso y te mostramos la receta que mejor encaja.",
-            "Agendar sesión", "/synergos/contacto");
+        AddCta(b, "¿Cuál es tu caso?",
+            "Mira las soluciones por tipo de negocio o cuéntanos el tuyo y te mostramos la receta que encaja.",
+            "Ver soluciones", "/synergos/soluciones");
         return b.Build();
     }
 
     private string BuildContacto()
     {
         var b = new BlockGridJsonBuilder();
-        AddHero(b, "Hablemos",
-            "Sesiones técnicas, demos e integración",
-            "<p>Una llamada de 30 minutos con el equipo de plataforma para resolver cualquier duda — desde schema hasta integración con el CDN.</p>",
+        AddHero(b, "Hablemos de tu proyecto",
+            "Una demo de 30 minutos, sin compromiso",
+            "<p>Cuéntanos qué quieres lanzar y te mostramos en vivo cómo SynergosLabs lo resuelve — y qué plan encaja con tu negocio. Sin tecnicismos si no los quieres.</p>",
             "Synergos Contacto", "Sección de contacto de SynergosLabs", "#0A2540", "#1FA2A6",
-            ("Agendar ahora", "/synergos/contacto"));
+            ("Agendar demo", "/synergos/contacto"), ("Ver planes", "/synergos/precios"));
 
         AddMission(b, "Cómo trabajamos",
-            "Directo, técnico, sin vueltas",
-            "<p>Cuéntanos tu caso y te mostramos cómo SynergosLabs lo resuelve con el schema actual — o qué pieza nueva haría falta.</p>");
+            "Directo, claro, a tu ritmo",
+            "<p>Empezamos por tu objetivo de negocio, no por la tecnología. Te mostramos qué puedes lanzar ya y cómo crecer después — y si tu equipo es técnico, entramos en el detalle que quieras.</p>");
 
         var contactFaqs = new (string question, string answer)[]
         {
-            ("¿Qué necesito para la sesión?", "Una idea del vertical (marca, e-commerce, membresía…) y, si tienes, tus brand assets. Nosotros llevamos el resto."),
-            ("¿Cuánto dura?", "30 minutos. Salimos con un plan concreto de qué piezas del schema cubren tu caso."),
-            ("¿Trabajan sobre mi marca?", "Sí. El branding se resuelve por provider y settings, sin tocar el core — tu identidad, nuestro motor."),
+            ("¿Qué necesito para la demo?", "Una idea de lo que quieres lanzar (marca, tienda, membresía…) y, si tienes, tu logo y colores. Del resto nos encargamos nosotros."),
+            ("¿Cuánto dura?", "30 minutos. Sales con un plan concreto y una recomendación de plan para tu caso."),
+            ("¿Trabajan sobre mi marca?", "Sí. Tu identidad se aplica a todo el sitio — tu marca, nuestro motor."),
         };
         if (_contentTypeService.Get("elementSynFaqSection")?.Key is not null)
         {
@@ -407,9 +419,176 @@ public sealed class DevContentFiller
             AddFaq(b, "Antes de escribirnos", contactFaqs);
         }
 
-        AddCta(b, "Agenda una sesión",
-            "30 minutos con el equipo de plataforma.",
-            "Agendar", "/synergos/contacto");
+        AddCta(b, "Agenda tu demo",
+            "30 minutos con el equipo y un plan claro para tu negocio.",
+            "Agendar demo", "/synergos/contacto");
+        return b.Build();
+    }
+
+    // Auto-fallback: usa el componente Angular (CDN) si su ElementType está importado; si no, SSR.
+    private void FeatureGridAuto(BlockGridJsonBuilder b, string heading, string subtitle, (string title, string subtitle, string body)[] features, int columns = 3)
+    {
+        if (_contentTypeService.Get("elementSynFeatureGrid")?.Key is not null) { AddSynFeatureGrid(b, heading, features, columns); }
+        else { AddFeatureGrid(b, heading, subtitle, features); }
+    }
+
+    private void FaqAuto(BlockGridJsonBuilder b, string heading, (string question, string answer)[] items)
+    {
+        if (_contentTypeService.Get("elementSynFaqSection")?.Key is not null) { AddSynFaq(b, heading, items); }
+        else { AddFaq(b, heading, items); }
+    }
+
+    private void SplitAuto(BlockGridJsonBuilder b, string title, string subtitle, string body,
+        string imgName, string imgAlt, string from, string to, bool mediaOnRight, string? ctaLabel = null, string? ctaUrl = null)
+    {
+        if (_contentTypeService.Get("elementSynMediaText")?.Key is not null) { AddSynSplit(b, title, body, imgName, imgAlt, from, to, mediaOnRight); }
+        else { AddSplit(b, title, subtitle, body, imgName, imgAlt, from, to, mediaOnRight, ctaLabel, ctaUrl); }
+    }
+
+    // ─────────── Soluciones — por tipo de negocio (orientada al comprador) ───────────
+    private string BuildSoluciones()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Una solución para cada tipo de negocio",
+            "Elige tu caso y arranca sobre un motor probado",
+            "<p>No importa qué vendas o a quién: marca, tienda, membresía o servicios profesionales corren sobre el mismo núcleo de SynergosLabs. Eliges tu caso, pones tu marca y sales a producción en días.</p>",
+            "Synergos Soluciones Hero", "Soluciones de SynergosLabs por tipo de negocio", "#0A2540", "#1FA2A6",
+            ("Ver planes", "/synergos/precios"), ("Hablar con ventas", "/synergos/contacto"));
+
+        var verticals = new (string title, string subtitle, string body)[]
+        {
+            ("Marca y empresa", "Posiciona tu marca", "Sitio institucional, casos de éxito, blog y vacantes — con la identidad de tu marca y listo para crecer."),
+            ("Tienda online", "Vende sin fricción", "Catálogo, variantes, carrito y checkout sobre el mismo motor. Tu e-commerce, con tu marca y tu dominio."),
+            ("Membresía y portal", "Fideliza a tu comunidad", "Contenido protegido, login y autoservicio de miembros. Ideal para una comunidad, una academia o un SaaS."),
+            ("Profesional independiente", "Consigue más clientes", "Médico, abogado o consultor: presencia, servicios, agenda y contacto — en línea en cuestión de días."),
+        };
+        FeatureGridAuto(b, "Soluciones disponibles", "Una receta por tipo de cliente", verticals, 2);
+
+        SplitAuto(b, "Cambias el negocio, no la plataforma",
+            "El mismo motor, mil formas",
+            "<p>El secreto: un solo núcleo componible. Cuando tu negocio cambia o suma una línea, no reemplazas la tecnología — agregas un vertical y publicas. Menos riesgo, menos costo, más velocidad.</p>",
+            "Synergos Polimorfico", "El motor componible de SynergosLabs", "#0F58A7", "#7A3FF2",
+            mediaOnRight: true, ctaLabel: "Cómo funciona", ctaUrl: "/synergos/como-funciona");
+
+        AddStats(b,
+            ("4", "tipos de negocio sobre un core"),
+            ("120", "componentes reutilizables"),
+            ("1", "plataforma, multi-dominio"));
+
+        AddCta(b, "¿No ves tu caso?",
+            "El mismo motor se adapta a negocios fuera de catálogo. Cuéntanos el tuyo y te mostramos cómo encaja.",
+            "Hablar con ventas", "/synergos/contacto");
+        return b.Build();
+    }
+
+    // ─────────── Cómo funciona — proceso en 4 pasos + reaseguro técnico ───────────
+    private string BuildComoFunciona()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "De la idea a producción en cuatro pasos",
+            "Simple para ti, sólido por dentro",
+            "<p>Lanzar con SynergosLabs no es un proyecto de meses. Eliges una base lista, la haces tuya y publicas — mientras el motor se encarga del rendimiento, el SEO y la consistencia.</p>",
+            "Synergos Como Funciona Hero", "Proceso de SynergosLabs en cuatro pasos", "#143C8C", "#5B7CFA",
+            ("Ver planes", "/synergos/precios"), ("Ver soluciones", "/synergos/soluciones"));
+
+        var steps = new (string title, string subtitle, string body)[]
+        {
+            ("1 · Elige tu base", "Empiezas listo", "Arrancas con una receta probada para tu tipo de negocio — no desde una página en blanco."),
+            ("2 · Pon tu marca", "Tu identidad en minutos", "Logo, colores y tipografía se aplican a todo el sitio sin tocar una línea de código."),
+            ("3 · Compón tu contenido", "Arrastra y suelta", "Tu equipo arma las páginas con el editor visual y más de 120 componentes listos para usar."),
+            ("4 · Publica y crece", "En vivo en días", "Sales a producción y sumas dominios, verticales y componentes cuando el negocio lo pida."),
+        };
+        FeatureGridAuto(b, "El proceso", "Cuatro pasos, sin fricción", steps, 2);
+
+        SplitAuto(b, "Sólido para tu equipo técnico",
+            "Potencia de ingeniería, sin la complejidad",
+            "<p>Bajo el capó: arquitectura por capas, render server-side y un sistema de diseño con tokens. Extensible cuando lo necesitas, robusto desde el primer día — la base que tu equipo va a respetar.</p>",
+            "Synergos Capas", "Arquitectura por capas de SynergosLabs", "#0F58A7", "#1FA2A6",
+            mediaOnRight: false, ctaLabel: "Qué es SynergosLabs", ctaUrl: "/synergos/identidad");
+
+        AddCta(b, "Empieza hoy",
+            "Elige un plan y publica tu primer producto esta semana — o agenda una demo y te lo mostramos en vivo.",
+            "Ver planes", "/synergos/precios");
+        return b.Build();
+    }
+
+    // ─────────── Precios — escalera estilo MercadoLibre (placeholders editables) ───────────
+    private string BuildPrecios()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Planes que crecen con tu negocio",
+            "Empieza gratis, escala cuando quieras",
+            "<p>Todos los planes corren sobre el mismo motor: cambias capacidad y soporte, nunca la tecnología. Sin permanencia — subes, bajas o cancelas cuando lo necesites.</p>",
+            "Synergos Precios Hero", "Planes de SynergosLabs", "#0A2540", "#0F58A7",
+            ("Hablar con ventas", "/synergos/contacto"), ("Ver soluciones", "/synergos/soluciones"));
+
+        // NOTA: cifras placeholder estilo MercadoLibre (escalera gratis → profesional → premium).
+        // El arquitecto ajusta los precios reales; el resto del copy y la estructura quedan.
+        var plans = new (string title, string subtitle, string body)[]
+        {
+            ("Inicial", "Gratis", "Para validar tu idea: 1 sitio, los componentes esenciales, publicación en subdominio. Sin costo, para siempre."),
+            ("Profesional", "Desde $129.900 COP/mes", "El más elegido: multi-vertical, dominio propio, más de 120 componentes, branding completo y soporte prioritario."),
+            ("Premium", "A tu medida", "Para escalar sin límites: multi-dominio, SLA, integraciones a medida y un equipo de acompañamiento dedicado."),
+        };
+        FeatureGridAuto(b, "Elige tu plan", "Del primer sitio a todo un ecosistema", plans, 3);
+
+        AddMission(b, "¿Cuál me conviene?",
+            "Mismo motor, distinta capacidad",
+            "<p>Si estás validando, empieza en Inicial. Si ya vendes o necesitas tu dominio y soporte, Profesional. Si manejas varias marcas o dominios, Premium. Cambias de plan cuando quieras, sin migraciones.</p>");
+
+        var faqs = new (string question, string answer)[]
+        {
+            ("¿Puedo cambiar de plan después?", "Sí. Subes o bajas cuando quieras y los cambios aplican de inmediato — sin migraciones ni re-plataformar."),
+            ("¿Hay permanencia?", "No. Los planes pagos son mes a mes; cancelas cuando quieras sin penalidad."),
+            ("¿Qué incluye el plan gratis?", "Lo necesario para lanzar y validar: un sitio, los componentes esenciales y publicación en un subdominio."),
+        };
+        FaqAuto(b, "Preguntas sobre los planes", faqs);
+
+        AddCta(b, "¿Dudas sobre qué plan elegir?",
+            "Hablemos 15 minutos y te recomendamos el que mejor encaja con tu negocio. Sin compromiso.",
+            "Hablar con ventas", "/synergos/contacto");
+        return b.Build();
+    }
+
+    // ─────────── Casos — prueba social orientada a resultados ───────────
+    private string BuildCasos()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Negocios que ya corren sobre SynergosLabs",
+            "Resultados, no promesas",
+            "<p>Equipos que cambiaron meses de desarrollo por semanas, y varias herramientas por una sola plataforma. Estas son sus historias.</p>",
+            "Synergos Casos Hero", "Casos de clientes de SynergosLabs", "#1A1A2E", "#7A3FF2",
+            ("Ver planes", "/synergos/precios"), ("Hablar con ventas", "/synergos/contacto"));
+
+        AddStats(b,
+            ("4", "verticales en producción"),
+            ("120", "componentes reutilizados"),
+            ("1", "plataforma para todo el grupo"));
+
+        var testimonials = new (string quote, string author, string role)[]
+        {
+            ("Migramos cuatro líneas de negocio al mismo motor. Lo que antes era un trimestre, hoy es una semana.", "Laura Méndez", "CTO, Grupo Andino"),
+            ("Lanzamos nuestra tienda y el portal de socios sin sumar herramientas. Un solo equipo, una sola factura.", "Diego Restrepo", "Líder de Producto, Nimbus"),
+            ("El equipo de marketing arma campañas completas sin pasar por desarrollo. Ganamos velocidad real.", "Sofía Cardona", "Directora Digital, Vértice"),
+        };
+        if (_contentTypeService.Get("elementSynTestimonialSection")?.Key is not null)
+        {
+            AddSynTestimonials(b, "Lo que dicen nuestros clientes", testimonials);
+        }
+        else
+        {
+            AddTestimonials(b, testimonials);
+        }
+
+        SplitAuto(b, "Cómo lo lograron",
+            "Una base, muchas marcas",
+            "<p>En vez de mantener un sitio por cada negocio, el Grupo Andino consolidó marca, tienda y membresía sobre un solo motor. Menos costo de mantenimiento, una identidad coherente y la libertad de sumar verticales sin re-plataformar.</p>",
+            "Synergos Capas", "Resultado de consolidar en SynergosLabs", "#0F58A7", "#1FA2A6",
+            mediaOnRight: true, ctaLabel: "Ver soluciones", ctaUrl: "/synergos/soluciones");
+
+        AddCta(b, "¿Listo para ser el próximo caso?",
+            "Empieza con el plan que encaja con tu negocio — o cuéntanos tu caso y te mostramos el camino.",
+            "Ver planes", "/synergos/precios");
         return b.Build();
     }
 
