@@ -40,6 +40,7 @@ public sealed class DevContentFiller
     private readonly ILogger<DevContentFiller> _logger;
 
     private Guid _sectionKey, _heroKey, _splitKey, _featureGridKey, _featureKey, _missionKey, _ctaKey, _buttonKey;
+    private string? _blogAuthorUdi;   // UDI del autor sembrado; los posts lo referencian en authorRef
     private Guid _testimonialsKey, _testimonialItemKey, _faqListKey, _faqItemKey;
     private Guid _statKey, _threeColKey, _logoCloudKey, _logoItemKey;
 
@@ -1152,6 +1153,10 @@ public sealed class DevContentFiller
 
         const string gFrom = "#2A2412", gTo = "#B59659";   // gradiente dorado (identidad Blogs)
 
+        _blogAuthorUdi = SeedAuthor(blogs.Id, "Equipo SynergosLabs", "Redacción",
+            "<p>El equipo de producto e ingeniería de SynergosLabs. Escribimos sobre cómo construimos un motor componible y qué aprendemos en el camino.</p>",
+            details);
+
         var producto = SeedCategory(blogs.Id, "Producto",
             "Novedades, lanzamientos y guías de SynergosLabs.", details);
         var ingenieria = SeedCategory(blogs.Id, "Ingeniería",
@@ -1241,6 +1246,32 @@ public sealed class DevContentFiller
         return save.Success ? cat.Id : 0;
     }
 
+    private string? SeedAuthor(int parentId, string name, string role, string bioHtml, List<string> details)
+    {
+        if (_contentTypeService.Get("authorPage")?.Key is null)
+        {
+            details.Add("Blog:author-schema-not-imported");
+            return null;
+        }
+        var existing = _contentService.GetPagedChildren(parentId, 0, 200, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "authorPage" && Matches(c, name));
+        var author = existing ?? _contentService.Create(name, parentId, "authorPage");
+        author.SetCultureName(name, Culture);
+        if (author.HasProperty("authorName")) { author.SetValue("authorName", name, Culture); }
+        if (author.HasProperty("authorRole")) { author.SetValue("authorRole", role, Culture); }
+        if (author.HasProperty("authorAvatar"))
+        {
+            author.SetValue("authorAvatar", _media.GetOrCreatePickerValue($"Avatar {name}", name, "#2A2412", "#B59659", 320, 320), Culture);
+        }
+        var b = new BlockGridJsonBuilder();
+        AddMission(b, $"Sobre {name}", "", bioHtml);
+        author.SetValue(SectionsAlias, b.Build(), Culture);
+        if (author.HasProperty("seoTitle")) { author.SetValue("seoTitle", $"{name} — Blog {BrandName}", Culture); }
+        var save = _contentService.SaveAndPublish(author, new[] { Culture });
+        details.Add(save.Success ? $"Blog:author:{name}:ok" : $"Blog:author:{name}:failed:{save.Result}");
+        return save.Success ? $"umb://document/{author.Key:N}" : null;
+    }
+
     private void SeedPost(int categoryId, string title, string excerpt, string publishDate,
         string readTimeMinutes, string[] tags, string hexFrom, string hexTo, string sectionsJson, List<string> details)
     {
@@ -1257,6 +1288,7 @@ public sealed class DevContentFiller
         }
         if (post.HasProperty("tags")) { post.SetValue("tags", TagsJson(tags), Culture); }   // Umbraco.Tags (Culture)
         post.SetValue(SectionsAlias, sectionsJson, Culture);
+        if (_blogAuthorUdi is not null && post.HasProperty("authorRef")) { post.SetValue("authorRef", _blogAuthorUdi, Culture); }
         if (post.HasProperty("seoTitle")) { post.SetValue("seoTitle", $"{title} — {BrandName}", Culture); }
         if (post.HasProperty("seoDescription")) { post.SetValue("seoDescription", excerpt, Culture); }
         var save = _contentService.SaveAndPublish(post, new[] { Culture });

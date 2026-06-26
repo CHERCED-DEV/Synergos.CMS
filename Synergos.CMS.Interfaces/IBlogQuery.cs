@@ -48,7 +48,8 @@ public sealed record BlogQueryRequest(
     int MaxItems = 6,
     int Skip = 0,
     string? CategoryAliasOrName = null,
-    string? TagsCsv = null);
+    string? TagsCsv = null,
+    Guid? AuthorKey = null);
 
 /// <summary>
 /// Snapshot inmutable de un post para listings. Producido por

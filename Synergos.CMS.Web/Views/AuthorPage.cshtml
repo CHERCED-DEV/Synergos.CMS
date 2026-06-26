@@ -1,0 +1,68 @@
+@*
+    Template del Document Type `authorPage` (ADR 0027). Renderiza la
+    página pública de un autor: avatar + nombre + rol + bio (Layout
+    Composer) + listado de sus posts (IBlogQuery filtrado por AuthorKey).
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.AuthorPage>
+@inject Synergos.CMS.Interfaces.IBlogQuery BlogQuery
+@using Umbraco.Extensions
+@{
+    Layout = "_Layout";
+    if (Model is null) { return; }
+
+    var name = !string.IsNullOrWhiteSpace(Model.AuthorName) ? Model.AuthorName : Model.Name;
+    var role = Model.AuthorRole;
+    var avatar = Model.AuthorAvatar;
+    var sections = Model.Sections;
+    var posts = BlogQuery.GetPosts(new Synergos.CMS.Interfaces.BlogQueryRequest(
+        MaxItems: 24, AuthorKey: Model.Key));
+}
+<article class="syn-author">
+    <header class="syn-author__header">
+        @if (avatar is not null)
+        {
+            <img class="syn-author__avatar" src="@avatar.Url()" alt="@name" width="96" height="96" loading="eager" />
+        }
+        <h1 class="syn-author__name">@name</h1>
+        @if (!string.IsNullOrWhiteSpace(role))
+        {
+            <p class="syn-author__role">@role</p>
+        }
+    </header>
+
+    @if (sections is not null && sections.Any())
+    {
+        <div class="syn-author__bio">
+            @await Html.GetBlockGridHtmlAsync(sections)
+        </div>
+    }
+
+    <section class="syn-author__posts">
+        <h2 class="syn-author__posts-title">@Umbraco.GetDictionaryValue("blog.authorposts", "Artículos del autor")</h2>
+        @if (posts.Count == 0)
+        {
+            <p class="syn-author__empty">@Umbraco.GetDictionaryValue("blog.empty", "Aún no hay artículos.")</p>
+        }
+        else
+        {
+            <ul class="syn-author__post-list">
+                @foreach (var post in posts)
+                {
+                    <li class="syn-author__post-item">
+                        <a class="syn-author__post-link" href="@post.Url">
+                            @if (!string.IsNullOrWhiteSpace(post.HeroImageUrl))
+                            {
+                                <img class="syn-author__post-image" src="@post.HeroImageUrl" alt="" loading="lazy" />
+                            }
+                            <h3 class="syn-author__post-title">@post.Title</h3>
+                            @if (post.PublishDate.HasValue)
+                            {
+                                <time datetime="@post.PublishDate.Value.ToString("yyyy-MM-dd")">@post.PublishDate.Value.ToString("dd MMM yyyy")</time>
+                            }
+                        </a>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</article>

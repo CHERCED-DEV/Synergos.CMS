@@ -68,6 +68,12 @@ public sealed class DefaultBlogQuery : IBlogQuery
             });
         }
 
+        // Author filter (por referencia authorRef → authorPage)
+        if (request.AuthorKey is Guid authorKey)
+        {
+            allPosts = allPosts.Where(p => p.Value<IPublishedContent>("authorRef")?.Key == authorKey);
+        }
+
         // Sort: publishDate desc; nodos sin fecha al final por nombre
         var ordered = allPosts
             .Select(p => (Post: p, Date: p.Value<DateTime?>("publishDate")))
