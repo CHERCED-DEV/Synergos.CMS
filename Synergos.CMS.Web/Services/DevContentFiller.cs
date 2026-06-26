@@ -1353,6 +1353,13 @@ public sealed class DevContentFiller
             ("Hablemos", "/synergos/contacto"), ("Ver planes", "/synergos/precios"));
         AddBlogHighlight(b, "Lo más reciente");
         AddArticleList(b, "Todos los artículos");
+        // Testimonios vía componente Angular CDN (hidrata desde la CDN).
+        AddSynTestimonials(b, "Lo que dicen nuestros lectores", new (string quote, string author, string role)[]
+        {
+            ("Los artículos van al grano y se nota la experiencia real.", "Andrés Gómez", "Lector"),
+            ("Mi fuente para entender arquitectura de plataformas.", "Valentina Díaz", "Suscriptora"),
+            ("Cada post me ahorra horas de investigación.", "Felipe Castro", "Lector"),
+        });
         return b.Build();
     }
 
@@ -1504,12 +1511,19 @@ public sealed class DevContentFiller
             "Synergos Tienda Hero", "Hero del vertical Tienda", "#020817", "#4f6ef7",
             ("Ver el catálogo", "/tienda/ropa"), ("Hablar con ventas", "/synergos/contacto"));
         AddProductGrid(b);
-        // Componente CDN-Angular REAL (bundle ~25KB → hidrata <synergos-faq-section>):
-        // acordeón interactivo servido desde la CDN — demuestra el render híbrido en la demo.
-        AddSynBlock(b, "elementSynFaqSection", c => c
-            .Set("headingText", "Preguntas frecuentes")
-            .Set("theme", "dark")
-            .Set("itemsJson", "[{\"question\":\"¿Hacen envíos a todo el país?\",\"answer\":\"Sí, enviamos a toda Colombia con seguimiento incluido.\"},{\"question\":\"¿Puedo devolver un producto?\",\"answer\":\"Tenés 30 días para devoluciones, sin preguntas.\"},{\"question\":\"¿Qué medios de pago aceptan?\",\"answer\":\"Tarjetas, PSE y pago contra entrega en ciudades principales.\"}]"));
+        // Componentes CDN-Angular (hidratan <synergos-*> desde la CDN): testimonios + FAQ interactivo.
+        AddSynTestimonials(b, "Lo que dicen nuestros clientes", new (string quote, string author, string role)[]
+        {
+            ("Calidad impecable y envío rápido. Repito sin dudar.", "Mariana López", "Cliente verificada"),
+            ("El proceso de compra fue de dos clics. Facilísimo.", "Julián Torres", "Cliente verificado"),
+            ("Los productos son tal cual las fotos. Recomendado.", "Carolina Ruiz", "Cliente verificada"),
+        });
+        AddSynFaq(b, "Preguntas frecuentes", new (string question, string answer)[]
+        {
+            ("¿Hacen envíos a todo el país?", "Sí, enviamos a toda Colombia con seguimiento incluido."),
+            ("¿Puedo devolver un producto?", "Tenés 30 días para devoluciones, sin preguntas."),
+            ("¿Qué medios de pago aceptan?", "Tarjetas, PSE y pago contra entrega en ciudades principales."),
+        });
         return b.Build();
     }
 
@@ -1636,6 +1650,20 @@ public sealed class DevContentFiller
 
         AddMission(b, "Aviso importante", "",
             "<p>Este sistema registra información médica pero NO brinda consejo clínico. Un profesional de la salud licenciado es responsable de todo diagnóstico y decisión.</p>");
+
+        // Componentes CDN-Angular (hidratan <synergos-*> desde la CDN): testimonios + FAQ clínico.
+        AddSynTestimonials(b, "Lo que dicen las clínicas", new (string quote, string author, string role)[]
+        {
+            ("Pasamos de carpetas a historia clínica versionada en una semana.", "Dra. Patricia Niño", "Directora médica"),
+            ("La agenda sin sobrecupos nos ordenó el día a día.", "Dr. Camilo Rojas", "Medicina general"),
+            ("El acceso auditado nos dio tranquilidad con los datos.", "Lucía Fernández", "Administradora"),
+        });
+        AddSynFaq(b, "Preguntas frecuentes", new (string question, string answer)[]
+        {
+            ("¿Cómo agendo una cita?", "Llená el formulario de abajo o llamanos; te confirmamos en minutos."),
+            ("¿Mis datos están seguros?", "Sí: la información clínica va cifrada y con acceso auditado por consentimiento."),
+            ("¿Atienden urgencias?", "Para urgencias acudí al servicio de emergencias; acá agendamos consultas y controles."),
+        });
 
         AddContactForm(b, "Pedir una cita", "Solicitar cita",
             ("Nombre", "nombre", "text", true, "Tu nombre"),
