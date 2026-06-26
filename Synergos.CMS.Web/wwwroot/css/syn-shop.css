@@ -1202,3 +1202,118 @@
   color: var(--syn-color-state-brand-text);
   font-variant-numeric: tabular-nums;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   Fase 0 — cart button + toast
+   ════════════════════════════════════════════════════════════════
+   Header de la Tienda (brandKey "ecommerce"): botón de carrito con
+   ícono SVG (currentColor) + badge contador (ItemCount, SSR + live JS).
+   Toast efímero al agregar al carrito. Solo tokens --syn-* (la Tienda
+   es dark → todo theme-aware). Cargado siempre via _Layout.
+   ──────────────────────────────────────────────────────────────── */
+
+.syn-cart-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--syn-space-2);
+  flex-shrink: 0;
+  width: var(--syn-control-h-md, 40px);
+  height: var(--syn-control-h-md, 40px);
+  border-radius: var(--syn-radius-full);
+  color: var(--syn-color-text-primary);
+  text-decoration: none;
+  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-out);
+}
+
+.syn-cart-button:hover {
+  color: var(--syn-color-text-accent);
+  background: var(--syn-color-surface-secondary);
+  transform: translateY(-1px);
+}
+
+.syn-cart-button:focus-visible {
+  outline: 2px solid var(--syn-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.syn-cart-button__icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
+.syn-cart-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--syn-space-1);
+  border-radius: var(--syn-radius-full);
+  background: var(--syn-color-accent-500);
+  color: var(--syn-color-text-inverse);
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-bold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px var(--syn-color-surface-primary);
+}
+
+.syn-cart-badge--empty {
+  display: none;
+}
+
+/* ── Toast (fixed bottom-right, slide-in) ──────────────────────── */
+.syn-toast {
+  position: fixed;
+  bottom: var(--syn-space-6, 24px);
+  right: var(--syn-space-6, 24px);
+  z-index: 1000;
+  max-width: min(360px, calc(100vw - var(--syn-space-8, 32px)));
+  padding: var(--syn-space-3) var(--syn-space-4);
+  background: var(--syn-color-surface-elevated);
+  color: var(--syn-color-text-primary);
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-md);
+  box-shadow: var(--syn-shadow-floating);
+  font-family: var(--syn-font-family-body);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity var(--syn-duration-base) var(--syn-easing-out),
+              transform var(--syn-duration-base) var(--syn-easing-out);
+  pointer-events: none;
+}
+
+.syn-toast--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (max-width: 480px) {
+  .syn-toast {
+    left: var(--syn-space-4, 16px);
+    right: var(--syn-space-4, 16px);
+    bottom: var(--syn-space-4, 16px);
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .syn-toast {
+    transition: opacity var(--syn-duration-fast, 120ms) linear;
+    transform: none;
+  }
+  .syn-toast--visible {
+    transform: none;
+  }
+  .syn-cart-button:hover {
+    transform: none;
+  }
+}

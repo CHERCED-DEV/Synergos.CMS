@@ -19,6 +19,7 @@
 @inject Synergos.CMS.Interfaces.IBrandThemeProvider ThemeProvider
 @inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
 @inject Synergos.CMS.Interfaces.IGlobalComponentResolver GlobalComponentResolver
+@inject Synergos.CMS.Interfaces.ICartService CartService
 @inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @{
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
@@ -36,6 +37,13 @@
 
     var brand = Branding.GetCurrent();
     var theme = ThemeProvider.GetThemeForBrand(brand.Key);
+    // Fase 0 — carrito: el header de la Tienda (brandKey "ecommerce") muestra el
+    // botón de carrito con badge de ItemCount (SSR). Otros verticales no lo ven.
+    // Fallback por URL si el brand no resolvió (p.ej. página suelta bajo /tienda).
+    var isShop = string.Equals(brand.Key, "ecommerce", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(siteRoot?.Value<string>("brandKey"), "ecommerce", StringComparison.OrdinalIgnoreCase)
+        || (currentPage?.Url() ?? "").StartsWith("/tienda", StringComparison.OrdinalIgnoreCase);
+    var cartCount = isShop ? CartService.GetCart().ItemCount : 0;
     // Logo: el del theme por marca si está configurado; si no, el isotipo de marca (brand asset).
     var logoUrl = !string.IsNullOrWhiteSpace(theme?.LogoLightUrl) ? theme!.LogoLightUrl : Url.Content("~/img/synergoslabs-isotipo.png");
     // El logo lleva al platformRoot (launcher/entry point), no al home del siteRoot.
@@ -178,6 +186,20 @@
                             </ul>
                         </nav>
                     }
+                    @if (isShop)
+                    {
+                        @* Fase 0 — botón de carrito: ícono + badge con ItemCount (SSR).
+                           El aria-label ya anuncia la cantidad → el badge es decorativo
+                           (aria-hidden). JS (syn-shop.js) actualiza data-cart-count en vivo. *@
+                        <a class="syn-cart-button" href="/tienda/carrito" data-cart-button aria-label="Carrito (@cartCount)">
+                            <svg class="syn-cart-button__icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                <circle cx="9" cy="21" r="1"></circle>
+                                <circle cx="20" cy="21" r="1"></circle>
+                                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                            </svg>
+                            <span class="syn-cart-badge@(cartCount == 0 ? " syn-cart-badge--empty" : "")" data-cart-count aria-hidden="true">@cartCount</span>
+                        </a>
+                    }
                 </div>
             </header>
         }
@@ -271,6 +293,12 @@
     @if (globalModal is not null)
     {
         @await Html.PartialAsync("_GlobalModal", globalModal)
+    }
+    @if (isShop)
+    {
+        @* Fase 0 — interacción del carrito: add-to-cart (PDP) + qty +/- → fetch a
+           /api/shop/cart/*, actualiza el badge y muestra un toast. *@
+        <script src="~/js/syn-shop.js" asp-append-version="true" defer></script>
     }
 </body>
 </html>
