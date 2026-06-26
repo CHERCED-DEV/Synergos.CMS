@@ -38,8 +38,8 @@ public sealed record AppointmentRequest(
 /// <summary>Resultado de una reserva: la cita creada, o el motivo del conflicto.</summary>
 public sealed record AppointmentBookResult(bool Booked, AppointmentSlot? Slot, string? ConflictReason);
 
-/// <summary>Cita registrada. Tiempos en UTC; la UI convierte a la zona del consultorio.</summary>
-/// <param name="Status"><c>"booked"</c> | <c>"cancelled"</c> | <c>"completed"</c>.</param>
+/// <summary>Cita registrada. Tiempos en UTC; la UI convierte a la zona del consultorio.
+/// <c>Status</c>: <c>"booked"</c> | <c>"cancelled"</c> | <c>"completed"</c>.</summary>
 public sealed record AppointmentSlot(
     Guid AppointmentId,
     Guid PatientKey,
