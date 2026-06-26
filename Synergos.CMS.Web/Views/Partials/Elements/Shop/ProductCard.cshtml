@@ -9,6 +9,7 @@
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.IShopQuery ShopQuery
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @{
     var sku = Model.Value<string>("productSku");
     if (string.IsNullOrWhiteSpace(sku)) { return; }
@@ -77,7 +78,7 @@
             @if (showPrice)
             {
                 <span class="syn-product-card__price">
-                    @product.Price.ToString("N0", coCulture) @product.Currency
+                    @PriceFormatter.Format(product.Price, product.Currency)
                 </span>
             }
             @if (!product.InStock)

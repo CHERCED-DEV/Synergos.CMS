@@ -12,6 +12,7 @@
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ICartService CartService
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @{
     var title = Model.Value<string>("summaryTitle");
     var showShipping = Model.Value<bool>("showShipping");
@@ -50,7 +51,7 @@
                     <a class="syn-cart-summary__line-name" href="@line.ProductUrl">@line.ProductName</a>
                     <span class="syn-cart-summary__line-qty">×@line.Quantity</span>
                     <span class="syn-cart-summary__line-total">
-                        @line.LineTotal.ToString("N0", coCulture) @cart.Currency
+                        @PriceFormatter.Format(line.LineTotal, cart.Currency)
                     </span>
                 </li>
             }
@@ -58,7 +59,7 @@
 
         <dl class="syn-cart-summary__lines">
             <dt>Subtotal</dt>
-            <dd data-line="subtotal">@cart.Subtotal.ToString("N0", coCulture) @cart.Currency</dd>
+            <dd data-line="subtotal">@PriceFormatter.Format(cart.Subtotal, cart.Currency)</dd>
             @if (showShipping)
             {
                 <dt>Envío</dt><dd data-line="shipping">—</dd>
@@ -69,7 +70,7 @@
             }
             <dt class="syn-cart-summary__total-label">Total</dt>
             <dd data-line="total" class="syn-cart-summary__total-value">
-                @cart.Subtotal.ToString("N0", coCulture) @cart.Currency
+                @PriceFormatter.Format(cart.Subtotal, cart.Currency)
             </dd>
         </dl>
 

@@ -8,6 +8,7 @@
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.IShopQuery ShopQuery
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @{
     var categoryFilter = Model.Value<string>("categoryFilter");
     var maxItemsRaw = Model.Value<string>("maxItems");
@@ -58,7 +59,7 @@
                         }
                         <h3 class="syn-product-grid__name">@product.Name</h3>
                         <span class="syn-product-grid__price">
-                            @product.Price.ToString("N0", coCulture) @product.Currency
+                            @PriceFormatter.Format(product.Price, product.Currency)
                         </span>
                         @if (!product.InStock)
                         {

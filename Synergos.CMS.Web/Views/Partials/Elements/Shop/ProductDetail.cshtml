@@ -1,14 +1,14 @@
 @*
     elementShopProductDetail renderer (Ola 33 schema + Ola 39 runtime).
-    Query por SKU a productPage. Render detail: gallery + name + price +
-    description + variants (si showVariantPicker). Reviews/related son
-    placeholders para hidratación JS (no hay entidades review/related en
-    el schema por ahora).
+    Bucket B — query por SKU vía IShopQuery.GetProductBySku (seam), sin
+    tree-walk inline al árbol Umbraco. Render detail: gallery + name +
+    price (vía IPriceFormatter es-CO) + description + variants (si
+    showVariantPicker). Reviews/related son placeholders para hidratación
+    JS (no hay entidades review/related en el schema por ahora).
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
-@using Umbraco.Cms.Core.Models.PublishedContent
-@using Umbraco.Extensions
-@inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
+@inject Synergos.CMS.Interfaces.IShopQuery ShopQuery
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @{
     var sku = Model.Value<string>("productSku");
     if (string.IsNullOrWhiteSpace(sku)) { return; }
@@ -24,14 +24,7 @@
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
-    IPublishedContent? product = null;
-    if (UmbracoContextAccessor.TryGetUmbracoContext(out var ctx) && ctx.Content != null)
-    {
-        product = ctx.Content
-            .GetAtRoot()
-            .SelectMany(r => r.DescendantsOrSelfOfType("productPage"))
-            .FirstOrDefault(p => string.Equals(p.Value<string>("productSku"), sku, StringComparison.OrdinalIgnoreCase));
-    }
+    var product = ShopQuery.GetProductBySku(sku);
 }
 <article class="@classes"
          data-sku="@sku"

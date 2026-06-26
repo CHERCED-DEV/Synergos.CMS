@@ -12,6 +12,7 @@
     deprecación en futura ola.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @{
     var sku = Model.Value<string>("productSku");
     var qty = Model.Value<string>("quantity") ?? "1";
@@ -26,6 +27,11 @@
         string.IsNullOrWhiteSpace(variant) ? null : $"syn-cart-item--{variant}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    // unitPrice es un string editor-facing: si es un decimal crudo lo formateamos
+    // es-CO vía IPriceFormatter; si ya viene con formato, se muestra tal cual.
+    var unitPriceDisplay = decimal.TryParse(unitPrice, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var unitPriceVal)
+        ? PriceFormatter.Format(unitPriceVal)
+        : unitPrice;
 }
 <article class="@classes"
          data-sku="@sku"
@@ -34,6 +40,6 @@
          data-update-endpoint="@updateEndpoint">
     <span class="syn-cart-item__sku">@sku</span>
     <span class="syn-cart-item__qty">×@qty</span>
-    <span class="syn-cart-item__price">@unitPrice</span>
+    <span class="syn-cart-item__price">@unitPriceDisplay</span>
     <button type="button" class="syn-cart-item__remove" aria-label="Remover">×</button>
 </article>

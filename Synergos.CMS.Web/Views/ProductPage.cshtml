@@ -12,6 +12,7 @@
 @using Umbraco.Cms.Core.Models.Blocks
 @using Umbraco.Cms.Core.Models.PublishedContent
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CartSettings> CartSettingsOpt
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @{
     Layout = "_Layout";
     var product = UmbracoContext.PublishedRequest?.PublishedContent;
@@ -74,7 +75,7 @@
 
         <section class="syn-product__pricing">
             <p class="syn-product__price" data-price="@price.ToString(CultureInfo.InvariantCulture)">
-                @price.ToString("N0", CultureInfo.GetCultureInfo("es-CO")) @currency
+                @PriceFormatter.Format(price, currency)
             </p>
             @if (inStock)
             {

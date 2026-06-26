@@ -135,6 +135,17 @@ public sealed class SeamComposer : IComposer
         // Consumido por ProductGrid block + ProductCategoryPage.cshtml.
         services.AddTransient<IShopQuery, DefaultShopQuery>();
 
+        // Bucket B (B-1) — Price formatter es-CO centralizado. Unifica el
+        // render del precio (miles con punto, sin decimales, + moneda) que
+        // antes se duplicaba inline en 6+ renderers Razor de Shop. Lógica
+        // pura en Application; el composer extrae IOptions<CartSettings>.Value
+        // y la inyecta como POCO (mismo patrón que AppsettingsFeatureGate)
+        // para no referenciar Microsoft.Extensions.Options desde Application.
+        // Singleton — stateless, solo cierra sobre la moneda default.
+        services.AddSingleton<IPriceFormatter>(sp =>
+            new EsCoPriceFormatter(
+                sp.GetRequiredService<IOptions<CartSettings>>().Value));
+
         // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
         // sigue en su valor default bajo env != "Development". No detiene
         // el app; solo señala en el log para que el operador rote la clave
