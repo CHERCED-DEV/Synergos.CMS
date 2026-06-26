@@ -17,7 +17,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--syn-space-2);
-  min-height: 40px;
+  min-height: var(--syn-control-h-md);   /* 40 (FIX 3) */
   padding: var(--syn-space-2) var(--syn-space-5);
   border-radius: var(--syn-radius-md);
   border: 1px solid transparent;
@@ -45,13 +45,13 @@
 }
 
 .syn-button--sm {
-  min-height: 32px;
+  min-height: var(--syn-control-h-sm);   /* 32 (FIX 3) */
   padding: var(--syn-space-1) var(--syn-space-3);
   font-size: var(--syn-font-size-xs);
 }
 
 .syn-button--lg {
-  min-height: 48px;
+  min-height: var(--syn-control-h-lg);   /* 48 (FIX 3) */
   padding: var(--syn-space-3) var(--syn-space-6);
   font-size: var(--syn-font-size-base);
 }
@@ -880,14 +880,14 @@
 
 .syn-avatar img {
   border-radius: 50%;
-  width: 48px;
-  height: 48px;
+  width: var(--syn-size-avatar-md);    /* 48 (FIX 3) */
+  height: var(--syn-size-avatar-md);
   object-fit: cover;
   display: block;
 }
 
-.syn-avatar--sm img { width: 32px; height: 32px; }
-.syn-avatar--lg img { width: 64px; height: 64px; }
+.syn-avatar--sm img { width: var(--syn-size-avatar-sm); height: var(--syn-size-avatar-sm); }  /* 32 (FIX 3) */
+.syn-avatar--lg img { width: var(--syn-size-avatar-xl); height: var(--syn-size-avatar-xl); }  /* 64 (FIX 3) */
 
 /* ── Info: stat / feature / testimonial / faq / timeline ─────── */
 
@@ -1409,7 +1409,7 @@ textarea.syn-form-field__input { resize: vertical; min-height: 7rem; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 48px;
+  min-height: var(--syn-control-h-lg);   /* 48 (FIX 3) */
   padding: var(--syn-space-3) var(--syn-space-6);
   font-family: inherit;
   font-size: var(--syn-font-size-base);
@@ -1527,7 +1527,7 @@ textarea.syn-form-field__input { resize: vertical; min-height: 7rem; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
+  min-height: var(--syn-control-h-lg);   /* 48 — antes 44 off-grid (FIX 3) */
   padding: var(--syn-space-2) var(--syn-space-5);
   border-radius: var(--syn-radius-md);
   border: 1px solid var(--syn-color-action-secondary-border);

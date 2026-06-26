@@ -123,6 +123,20 @@
   --syn-section-gap:    var(--syn-space-16);  /* 64px — aire entre secciones  */
   --syn-section-gap-lg: var(--syn-space-24);  /* 96px — aire entre secc. ≥768 */
 
+  /* ── Control heights + avatar sizes (FIX 3)
+     Alturas canónicas de controles interactivos (botones, CTAs,
+     submits) y tamaños de avatar. Todo on-grid 8pt — elimina los
+     off-grid 52/44/36px y los literales repetidos. Fuente ÚNICA. ── */
+  --syn-control-h-sm: 2rem;     /* 32px */
+  --syn-control-h-md: 2.5rem;   /* 40px */
+  --syn-control-h-lg: 3rem;     /* 48px */
+
+  --syn-size-avatar-sm:  2rem;    /* 32px */
+  --syn-size-avatar-md:  3rem;    /* 48px */
+  --syn-size-avatar-lg:  3.5rem;  /* 56px */
+  --syn-size-avatar-xl:  4rem;    /* 64px */
+  --syn-size-avatar-2xl: 6rem;    /* 96px */
+
   /* ── Typography ───────────────────────────────────────────── */
   --syn-font-family-sans: 'Manrope', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --syn-font-family-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -505,19 +519,29 @@
 /* data-profile — carácter editorial por siteRoot (P1-3).       */
 /* institutional = defaults (sin override). Ortogonal a data-theme. */
 /* ─────────────────────────────────────────────────────────── */
+/* REGLA ÚNICA del section-gap por profile (FIX 2): el gap de
+   desktop = gap de móvil + 1 paso de la escala 8pt. Así el delta
+   móvil→desktop es uniforme y no hay saltos (p.ej. el viejo
+   commercial 48→96 doblaba el aire). Pares vigentes:
+     default     64→96  (space-16 → space-24, +1 paso)
+     editorial   80→96  (space-20 → space-24, +1 paso)
+     commercial  48→64  (space-12 → space-16, +1 paso)
+     premium     96→96  (space-24 → space-24, CAP — no hay token
+                         mayor a 96 en la escala; tope intencional) */
 [data-profile="editorial"] {
   --syn-line-height-relaxed: 1.8;             /* más aire de lectura */
-  --syn-section-gap:    var(--syn-space-20);
-  --syn-section-gap-lg: var(--syn-space-24);
+  --syn-section-gap:    var(--syn-space-20);    /* 80 */
+  --syn-section-gap-lg: var(--syn-space-24);    /* 96 — +1 paso */
   --syn-card-radius:    var(--syn-radius-md);  /* radios más sobrios */
 }
 [data-profile="commercial"] {
-  --syn-section-gap:    var(--syn-space-12);    /* más denso, CTAs a la vista */
+  --syn-section-gap:    var(--syn-space-12);    /* 48 — más denso, CTAs a la vista */
+  --syn-section-gap-lg: var(--syn-space-16);    /* 64 — +1 paso (antes heredaba 96 → saltaba 48→96) */
   --syn-card-shadow:    var(--syn-shadow-card-hover);  /* tarjetas prominentes */
 }
 [data-profile="premium"] {
-  --syn-section-gap:    var(--syn-space-24);    /* más respiración */
-  --syn-section-gap-lg: var(--syn-space-24);
+  --syn-section-gap:    var(--syn-space-24);    /* 96 — más respiración */
+  --syn-section-gap-lg: var(--syn-space-24);    /* 96 — CAP de escala (no hay token mayor) */
   --syn-card-radius:    var(--syn-radius-2xl);  /* radios generosos */
 }
 [data-profile="minimal"] {

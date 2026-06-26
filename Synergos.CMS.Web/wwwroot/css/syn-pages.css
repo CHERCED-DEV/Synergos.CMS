@@ -367,7 +367,7 @@ html:has(.syn-launcher) { overflow-x: clip; }
 /* Isotipo de marca sobre el título (brand asset real). */
 .syn-launcher__mark {
   display: block;
-  width: 96px;
+  width: var(--syn-size-avatar-2xl);    /* 96 — isotipo, height auto (FIX 3) */
   height: auto;
   margin: 0 auto var(--syn-space-5);
   filter: drop-shadow(0 10px 32px rgb(var(--syn-channel-brand) / 0.5));
@@ -614,8 +614,8 @@ html:has(.syn-launcher) { overflow-x: clip; }
 }
 
 .syn-post__author-avatar {
-  width: 32px;
-  height: 32px;
+  width: var(--syn-size-avatar-sm);    /* 32 (FIX 3) */
+  height: var(--syn-size-avatar-sm);
   border-radius: 50%;
   object-fit: cover;
 }
@@ -1027,8 +1027,8 @@ html:has(.syn-launcher) { overflow-x: clip; }
 }
 
 .syn-author-page__avatar {
-  width: 96px;
-  height: 96px;
+  width: var(--syn-size-avatar-2xl);    /* 96 (FIX 3) */
+  height: var(--syn-size-avatar-2xl);
   border-radius: var(--syn-radius-full);
   object-fit: cover;
   background: var(--syn-color-surface-secondary);

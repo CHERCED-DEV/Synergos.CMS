@@ -57,8 +57,8 @@
 }
 
 .syn-author__avatar {
-  width: 56px;
-  height: 56px;
+  width: var(--syn-size-avatar-lg);    /* 56 (FIX 3) */
+  height: var(--syn-size-avatar-lg);
   border-radius: 50%;
   background: var(--syn-color-state-brand-surface);
   flex-shrink: 0;

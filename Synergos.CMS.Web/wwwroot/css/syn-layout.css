@@ -171,3 +171,130 @@
 .syn-spacer--lg  { height: var(--syn-space-lg); }
 .syn-spacer--xl  { height: var(--syn-space-xl); }
 .syn-spacer--2xl { height: var(--syn-space-2xl); }
+
+/* ============================================================
+   Layout Composer — backing .syn-layout* (FIX 1, P0)
+   ============================================================
+   Causa raíz: los renderers elementLayout*.cshtml emiten clases
+   .syn-layout / .syn-layout--{preset} / .syn-layout__area que NO
+   tenían NINGUNA regla CSS → multi-columna colapsaba sin grid ni
+   gap. Estas reglas son el backing que faltaba. Las clases coinciden
+   EXACTO con lo que emite cada renderer (verificado contra los 14
+   .cshtml en Views/Partials/blockgrid/Components/):
+     Section→--section · Container→--container · Stack→--stack ·
+     Grid→--grid · Column→--column + --span-{1..12} (+ var inline
+     --syn-col-span) · 1Col→--1col · 2ColEven→--2col-even ·
+     MainSidebar→--main-sidebar · SidebarMain→--sidebar-main ·
+     3Col→--3col · 4Col→--4col · HolyGrail→--holy-grail · Hero→--hero.
+   Los grid-template-columns reusan los presets de .syn-grid--tpl-*
+   (syn-utilities.css): main-sidebar=1fr 280px · sidebar-main=280px 1fr
+   · holy-grail=240px 1fr 240px.
+   NOTA: --section/--container/--1col/--hero/--stack NO llevan
+   padding-block — el ritmo ENTRE secciones lo da el join del
+   block-grid (syn-pages.css .umb-block-grid__layout-item + item →
+   --syn-section-gap). Duplicarlo acumularía aire.
+   NOTA: .syn-layout--v-{variant} (primary/secondary/ghost/outlined/
+   neutral/emphasis, de DTSelectVariantKey) son variantes VISUALES,
+   no spacing → sin regla aquí (el spacing vertical lo dan las clases
+   syn-space--top/bottom/inline-* de compDomSpacing).
+   ------------------------------------------------------------ */
+
+.syn-layout {
+  display: block;
+  width: 100%;
+}
+
+/* Cada área apila sus bloques dropeados con 24px on-grid.
+   min-width:0 evita que el contenido (p.ej. line-clamp) reviente la celda. */
+.syn-layout__area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-lg);   /* 24 */
+  min-width: 0;
+}
+
+/* Presets estructurales (sin padding-block — ver nota de cabecera). */
+.syn-layout--section,
+.syn-layout--container,
+.syn-layout--1col,
+.syn-layout--hero,
+.syn-layout--stack {
+  display: block;
+}
+
+/* Grid libre: las columnas hijas (.syn-layout--column) declaran su span. */
+.syn-layout--grid {
+  display: grid;
+  gap: var(--syn-space-lg);   /* 24 */
+}
+
+/* Columna del grid libre: consume la var inline --syn-col-span que
+   emite el renderer Column (style="--syn-col-span: N;"). */
+.syn-layout--column {
+  grid-column: span var(--syn-col-span, 12);
+}
+
+/* Fallback por clase --span-{1..12} (por si la var inline faltara). */
+.syn-layout--span-1  { --syn-col-span: 1; }
+.syn-layout--span-2  { --syn-col-span: 2; }
+.syn-layout--span-3  { --syn-col-span: 3; }
+.syn-layout--span-4  { --syn-col-span: 4; }
+.syn-layout--span-5  { --syn-col-span: 5; }
+.syn-layout--span-6  { --syn-col-span: 6; }
+.syn-layout--span-7  { --syn-col-span: 7; }
+.syn-layout--span-8  { --syn-col-span: 8; }
+.syn-layout--span-9  { --syn-col-span: 9; }
+.syn-layout--span-10 { --syn-col-span: 10; }
+.syn-layout--span-11 { --syn-col-span: 11; }
+.syn-layout--span-12 { --syn-col-span: 12; }
+
+/* Presets multi-columna como GRID real (gap 24 on-grid).
+   Cada .syn-layout__area hijo es una CELDA del grid; sigue apilando
+   su propio contenido con su gap interno. */
+.syn-layout--2col-even {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--syn-space-lg);
+}
+
+.syn-layout--3col {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--syn-space-lg);
+}
+
+.syn-layout--4col {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--syn-space-lg);
+}
+
+.syn-layout--main-sidebar {
+  display: grid;
+  grid-template-columns: 1fr 280px;   /* espeja .syn-grid--tpl-main-sidebar */
+  gap: var(--syn-space-lg);
+}
+
+.syn-layout--sidebar-main {
+  display: grid;
+  grid-template-columns: 280px 1fr;   /* espeja .syn-grid--tpl-sidebar-main */
+  gap: var(--syn-space-lg);
+}
+
+.syn-layout--holy-grail {
+  display: grid;
+  grid-template-columns: 240px 1fr 240px;   /* espeja .syn-grid--tpl-holy-grail */
+  gap: var(--syn-space-lg);
+}
+
+/* Móvil: todos los multi-columna colapsan a 1 columna apilada. */
+@media (max-width: 768px) {
+  .syn-layout--2col-even,
+  .syn-layout--3col,
+  .syn-layout--4col,
+  .syn-layout--main-sidebar,
+  .syn-layout--sidebar-main,
+  .syn-layout--holy-grail {
+    grid-template-columns: 1fr;
+  }
+}

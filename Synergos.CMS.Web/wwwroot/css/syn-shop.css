@@ -160,7 +160,7 @@
   justify-content: center;
   gap: var(--syn-space-2);
   margin-top: var(--syn-space-2);
-  min-height: 40px;
+  min-height: var(--syn-control-h-md);   /* 40 (FIX 3) */
   padding: var(--syn-space-2) var(--syn-space-4);
   background: var(--syn-color-action-primary);
   color: var(--syn-color-action-primary-text);
@@ -392,7 +392,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--syn-space-2);
-  min-height: 52px;
+  min-height: var(--syn-control-h-lg);   /* 48 — antes 52 off-grid (FIX 3) */
   padding: var(--syn-space-3) var(--syn-space-8);
   background: var(--syn-color-action-primary);
   color: var(--syn-color-action-primary-text);
@@ -475,7 +475,7 @@
   align-items: center;
   justify-content: center;
   min-width: 48px;
-  min-height: 40px;
+  min-height: var(--syn-control-h-md);   /* 40 (FIX 3) */
   padding: var(--syn-space-2) var(--syn-space-3);
   background: var(--syn-color-surface-primary);
   border: 1px solid var(--syn-color-border-default);
@@ -762,7 +762,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--syn-space-2);
-  min-height: 52px;
+  min-height: var(--syn-control-h-lg);   /* 48 — antes 52 off-grid (FIX 3) */
   padding: var(--syn-space-3) var(--syn-space-6);
   background: linear-gradient(135deg,
     var(--syn-color-action-primary) 0%,
@@ -939,7 +939,7 @@
   justify-content: center;
   gap: var(--syn-space-2);
   width: 100%;
-  min-height: 52px;
+  min-height: var(--syn-control-h-lg);   /* 48 — antes 52 off-grid (FIX 3) */
   padding: var(--syn-space-3) var(--syn-space-8);
   background: var(--syn-color-action-primary);
   color: var(--syn-color-action-primary-text);
@@ -1030,7 +1030,7 @@
 .syn-product-category__sort a {
   display: inline-flex;
   align-items: center;
-  min-height: 36px;
+  min-height: var(--syn-control-h-md);   /* 40 — antes 36 off-grid (FIX 3) */
   padding: var(--syn-space-1) var(--syn-space-4);
   background: var(--syn-color-surface-primary);
   border: 1px solid var(--syn-color-border-default);
@@ -1168,7 +1168,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--syn-space-1);
-  min-height: 40px;
+  min-height: var(--syn-control-h-md);   /* 40 (FIX 3) */
   padding: var(--syn-space-2) var(--syn-space-5);
   background: var(--syn-color-action-ghost-surface);
   border: 1px solid var(--syn-color-border-default);
@@ -1191,8 +1191,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  min-height: 40px;
+  min-width: var(--syn-control-h-md);    /* 40 — pager cuadrado (FIX 3) */
+  min-height: var(--syn-control-h-md);   /* 40 (FIX 3) */
   padding: 0 var(--syn-space-3);
   background: var(--syn-color-state-brand-surface);
   border: 1px solid var(--syn-color-state-brand-border);
