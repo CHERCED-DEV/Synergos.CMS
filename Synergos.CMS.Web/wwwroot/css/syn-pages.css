@@ -681,6 +681,68 @@ html:has(.syn-launcher) { overflow-x: clip; }
   border-top: 1px solid var(--syn-color-border-subtle);
 }
 
+/* ── Artículos relacionados — grilla de tarjetas con thumbnail recortado.
+   Antes: .syn-post__related* tenía CERO CSS → la imagen salía a tamaño
+   natural (gigante, sin recorte) y los items en bloque vertical. Ahora
+   grid responsive alineado al measure del artículo + thumbnail 16/9
+   object-fit cover. Heredable a TODOS los posts. ──────────────────── */
+.syn-post__related {
+  max-width: var(--syn-max-width-article);
+  margin-inline: auto;
+  margin-top: var(--syn-space-3xl);
+  padding-top: var(--syn-space-xl);
+  border-top: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-post__related-title {
+  font-size: var(--syn-font-size-2xl);
+  color: var(--syn-color-text-primary);
+  margin-bottom: var(--syn-space-lg);
+}
+
+.syn-post__related-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: var(--syn-space-lg);
+}
+
+.syn-post__related-item {
+  margin: 0;
+}
+
+.syn-post__related-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-sm);
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--syn-duration-base) var(--syn-easing-out);
+}
+
+.syn-post__related-link:hover {
+  transform: translateY(-2px);
+}
+
+.syn-post__related-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--syn-radius-md);
+  box-shadow: var(--syn-shadow-card);
+}
+
+.syn-post__related-item-title {
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-primary);
+  line-height: var(--syn-line-height-snug);
+  margin: 0;
+}
+
 /* ── S2 — listado de categoría de Blogs (PostCategoryPage) ───────
    Grid de tarjetas con la misma calidad que .syn-product-category.
    Las clases espejan EXACTAMENTE PostCategoryPage.cshtml:
