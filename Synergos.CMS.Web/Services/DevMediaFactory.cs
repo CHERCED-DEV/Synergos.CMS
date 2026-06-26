@@ -45,8 +45,10 @@ public sealed class DevMediaFactory
         ["Synergos Precios Hero"]       = "inspirations/files 2/hero_bg_synergos_dark.png",
         // Verticales: arte on-brand por tema (P1-5) — set hero_branded (misma
         // composición dark-base, acento gold/dark) para legibilidad consistente.
-        ["Synergos Blogs Hero"]  = "inspirations/files 2/hero_branded_synergos_gold.png",
-        ["Synergos Tienda Hero"] = "inspirations/files 2/hero_branded_synergos_dark.png",
+        // Verticales: fondo SIN texto horneado (los "branded_*" llevan "Synergos /
+        // Composable Digital Solutions" grabado → competía con el título del vertical).
+        ["Synergos Blogs Hero"]  = "inspirations/files 2/hero_bg_synergos_gold.png",
+        ["Synergos Tienda Hero"] = "inspirations/files 2/hero_bg_synergos_dark.png",
         // Splits (imagen lateral): ilustraciones reales on-brand (fondo claro OK al lado del texto).
         ["Synergos Capas"]       = "imgs/infofeat 6.png", // columnas + puente = arquitectura por capas
         ["Synergos Proposito"]   = "imgs/infofeat 4.png", // bombillo + engranaje = propósito
