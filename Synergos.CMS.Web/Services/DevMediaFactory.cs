@@ -32,12 +32,13 @@ public sealed class DevMediaFactory
     // Si el archivo existe, se importa el real; si no, se cae al gradiente generado.
     private static readonly Dictionary<string, string> RealAssets = new(StringComparer.Ordinal)
     {
-        // Heroes (full-bleed): fondo oscuro con estrellas → texto blanco legible, on-brand.
-        // Entidad: Home/Identidad/Casos con el hero BRANDED (isotipo + brand);
-        // el resto con el bg dark. Todos dark → texto blanco legible (P1-4).
-        ["Synergos Home Hero"] = "inspirations/files 2/hero_branded_synergos_dark.png",
-        ["Synergos Identidad"] = "inspirations/files 2/hero_branded_synergos_dark.png",
-        ["Synergos Casos Hero"]         = "inspirations/files 2/hero_branded_synergos_dark.png",
+        // Heroes (full-bleed): fondo oscuro on-brand SIN texto horneado → texto blanco
+        // legible. Antes Home/Identidad/Casos usaban hero_branded_* (lleva grabado
+        // "Synergos / Composable Digital Solutions" = marca de agua que competía con el
+        // título); migrados a hero_bg (mismo gradiente, sin texto). S5a.
+        ["Synergos Home Hero"] = "inspirations/files 2/hero_bg_synergos_dark.png",
+        ["Synergos Identidad"] = "inspirations/files 2/hero_bg_synergos_dark.png",
+        ["Synergos Casos Hero"]         = "inspirations/files 2/hero_bg_synergos_dark.png",
         ["Synergos Productos"] = "inspirations/files 2/hero_bg_synergos_dark.png",
         ["Synergos Contacto"]  = "inspirations/files 2/hero_bg_synergos_dark.png",
         ["Synergos Soluciones Hero"]    = "inspirations/files 2/hero_bg_synergos_dark.png",
@@ -54,6 +55,14 @@ public sealed class DevMediaFactory
         ["Synergos Proposito"]   = "imgs/infofeat 4.png", // bombillo + engranaje = propósito
         ["Synergos Polimorfico"] = "imgs/infofeat 1.png", // cubos 3D = polimórfico
         ["Synergos Branding"]    = "imgs/mision 2.png",   // piezas + handshake = tu marca encaja
+        // S4 — cabecera gold a medida por post (1 distinta por artículo, reconocible).
+        // Key = "Blog {title}" (lo que pasa SeedPost). Un typo cae silencioso al gradiente.
+        ["Blog Un motor, mil productos: la idea detrás de SynergosLabs"] = "inspirations/s2/blog_header_synergos_gold_aurora.png",
+        ["Blog Lanzamos los verticales: Blogs y Tienda"]                 = "inspirations/s2/blog_header_synergos_gold_ripples.png",
+        ["Blog Componer en vez de programar: el editor visual"]          = "inspirations/s2/blog_header_synergos_gold_waves.png",
+        ["Blog Arquitectura por capas: el grafo de dependencias"]        = "inspirations/s2/blog_header_synergos_gold_network.png",
+        ["Blog Identidad por siteRoot: una marca, mil caras"]            = "inspirations/s2/blog_header_synergos_gold_blobs.png",
+        ["Blog CDN híbrida: componentes Angular sobre SSR"]              = "inspirations/s2/blog_header_synergos_gold_aurora.png",
     };
 
     private readonly IMediaService _mediaService;
