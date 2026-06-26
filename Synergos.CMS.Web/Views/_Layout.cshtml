@@ -47,7 +47,10 @@
     var globalModal = GlobalComponentResolver.GetActiveModal();
 
     var brandThemeModel = new Synergos.CMS.Application.Dto.Responses.BrandThemeStyleModel(theme, renderCtx.ThemeVariant);
-    var devStubEnabled = Configuration.GetValue<bool>("Synergos:DevCss:Enabled");
+    // Banner "SYN DEV STUB" SOLO bajo un flag dedicado (default off). Antes colgaba de
+    // DevCss.Enabled → se mostraba siempre en dev aunque el CDN estuviera vivo, haciendo
+    // ver el sitio roto en demos. El CDN local ya publica bundles (ADR 0099).
+    var devStubEnabled = Configuration.GetValue<bool>("Synergos:DevStub:Enabled");
 
     // Ola 69.4 + 71.6 — compSiteChrome triádico: si el siteRoot tiene
     // bloques en siteHeaderBlocks/siteFooterBlocks/siteAsideBlocks, los
