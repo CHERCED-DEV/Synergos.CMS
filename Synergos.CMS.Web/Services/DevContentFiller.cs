@@ -95,6 +95,7 @@ public sealed class DevContentFiller
 
         // P1-1: verticales Blogs (silverGold) + Ecommerce (dark) con identidad propia.
         SeedVerticalSiteRoots(details);
+        SeedBlog(details);
 
         return new FillResult(filled == 8, filled, string.Join("; ", details));   // siteRoot home + 7 páginas hijas
     }
@@ -1099,9 +1100,7 @@ public sealed class DevContentFiller
         if (pr is null) { details.Add("Verticals:platformroot-not-found"); return; }
 
         SeedVertical(pr.Id, "Blogs", "blogs", "SynergosLabs Blogs", "silverGold", "blogs.synergos.local",
-            BuildVerticalHome("Blogs que enganchan", "Publica, organiza y crece tu audiencia",
-                "<p>Un blog editorial sobre el mismo motor: categorías, autores, comentarios y SEO listos. Tu marca, tu voz — sin montar un CMS desde cero.</p>",
-                "Synergos Blogs Hero", "#2A2412", "#B59659"), details);
+            BuildBlogsHome(), details);
 
         SeedVertical(pr.Id, "Tienda", "ecommerce", "SynergosLabs Tienda", "dark", "tienda.synergos.local",
             BuildVerticalHome("Tu tienda, sobre el mismo motor", "Catálogo, carrito y checkout",
@@ -1134,6 +1133,197 @@ public sealed class DevContentFiller
             ("Hablemos", "/synergos/contacto"), ("Ver planes", "/synergos/precios"));
         return b.Build();
     }
+
+    // ───────────────── Blog (entrega grande componible, ADR 0027) ─────────────────
+    // La infra de blog ya existe (postCategoryPage/postPage + IBlogQuery + bloques
+    // ArticleList/BlogHighlight). Acá sembramos CONTENIDO componible: categorías +
+    // posts bajo el siteRoot Blogs, y el feed featureado en su home. Idempotente por
+    // nombre; no-op si el schema de blog no está importado.
+    private void SeedBlog(List<string> details)
+    {
+        if (_contentTypeService.Get("postCategoryPage")?.Key is null
+            || _contentTypeService.Get("postPage")?.Key is null)
+        {
+            details.Add("Blog:schema-not-imported");
+            return;
+        }
+        var blogs = FindBlogsSiteRoot();
+        if (blogs is null) { details.Add("Blog:blogs-siteroot-not-found"); return; }
+
+        const string gFrom = "#2A2412", gTo = "#B59659";   // gradiente dorado (identidad Blogs)
+
+        var producto = SeedCategory(blogs.Id, "Producto",
+            "Novedades, lanzamientos y guías de SynergosLabs.", details);
+        var ingenieria = SeedCategory(blogs.Id, "Ingeniería",
+            "Cómo construimos el motor: arquitectura y decisiones.", details);
+
+        if (producto > 0)
+        {
+            SeedPost(producto, "Un motor, mil productos: la idea detrás de SynergosLabs",
+                "Por qué un solo núcleo componible puede ser marca, tienda, membresía o blog — sin reescribir nada.",
+                "2026-06-22", "5", new[] { "producto", "plataforma" }, gFrom, gTo,
+                BuildArticle(
+                    "La idea: un núcleo componible",
+                    "<p>La promesa de SynergosLabs es simple: un solo motor, mil productos. En vez de un CMS por cada tipo de sitio, hay un núcleo componible que se adapta poniéndole tu marca y eligiendo tu vertical.</p>",
+                    "Componer, no programar",
+                    "<p>Tu equipo arma páginas completas arrastrando bloques en un editor visual. El motor se encarga del rendimiento, el SEO y la consistencia de marca.</p>",
+                    "Blog Motor Componible", gFrom, gTo), details);
+
+            SeedPost(producto, "Lanzamos los verticales: Blogs y Tienda",
+                "Dos verticales nuevos sobre el mismo motor, cada uno con su identidad: Blogs en dorado, Tienda en oscuro.",
+                "2026-06-18", "4", new[] { "producto", "lanzamiento" }, gFrom, gTo,
+                BuildArticle(
+                    "Dos verticales, un motor",
+                    "<p>Estrenamos dos verticales que comparten núcleo pero no identidad: <strong>Blogs</strong> con una línea editorial cálida en dorado, y <strong>Tienda</strong> con un tono comercial oscuro.</p>",
+                    "Identidad por siteRoot",
+                    "<p>Cada vertical pinta su propia paleta, tipografía y tono desde un solo lugar — sin tocar el código del motor.</p>",
+                    "Blog Verticales", gFrom, gTo), details);
+
+            SeedPost(producto, "Componer en vez de programar: el editor visual",
+                "Cómo el Layout Composer deja que el equipo editorial arme páginas completas sin pasar por desarrollo.",
+                "2026-06-12", "6", new[] { "producto", "editor" }, gFrom, gTo,
+                BuildArticle(
+                    "El contenido no debería ser código",
+                    "<p>El look es código (CSS/JS); el contenido no. El Layout Composer separa ambos: el equipo editorial compone arrastrando bloques, no escribiendo plantillas.</p>",
+                    "Bloques gobernados por diseño",
+                    "<p>Más de 120 bloques usan tokens de diseño (grilla de 8, Manrope, paleta de marca) para que todo salga coherente por defecto.</p>",
+                    "Blog Editor Visual", gFrom, gTo), details);
+        }
+
+        if (ingenieria > 0)
+        {
+            SeedPost(ingenieria, "Arquitectura por capas: el grafo de dependencias",
+                "Interfaces ← Application ← Web ← Tests. Cómo un grafo unidireccional mantiene el motor mantenible a escala.",
+                "2026-06-20", "7", new[] { "ingeniería", "arquitectura" }, gFrom, gTo,
+                BuildArticle(
+                    "Dependencias en una sola dirección",
+                    "<p>Interfaces ← Application ← Web ← Tests. La capa de aplicación no conoce Umbraco ni ASP.NET; eso la hace probable y portable.</p>",
+                    "Seams, no acoplamiento",
+                    "<p>Cada integración externa entra por una interfaz (seam). Cambiar de proveedor no toca a los consumidores.</p>",
+                    "Blog Arquitectura", gFrom, gTo), details);
+
+            SeedPost(ingenieria, "Identidad por siteRoot: una marca, mil caras",
+                "Cómo un solo deploy sirve múltiples marcas por hostname, cada una con su paleta — sin multi-tenant.",
+                "2026-06-15", "5", new[] { "ingeniería", "identidad" }, gFrom, gTo,
+                BuildArticle(
+                    "Multi-marca no es multi-tenant",
+                    "<p>Un mismo deploy resuelve la marca activa por hostname y aplica su identidad vía tokens — sin middleware de tenants.</p>",
+                    "Tokens como fuente de verdad",
+                    "<p>Color, tipografía y radios viven en tokens; cada marca mapea los suyos y el resto del sistema los consume.</p>",
+                    "Blog Identidad", gFrom, gTo), details);
+
+            SeedPost(ingenieria, "CDN híbrida: componentes Angular sobre SSR",
+                "Bloques server-side por defecto, hidratados con componentes Angular desde la CDN cuando aportan valor.",
+                "2026-06-10", "6", new[] { "ingeniería", "cdn" }, gFrom, gTo,
+                BuildArticle(
+                    "Lo mejor de dos mundos",
+                    "<p>Render server-side para velocidad y SEO, más islas Angular publicadas a una CDN cuando una pieza necesita interactividad rica.</p>",
+                    "Framework-agnóstico",
+                    "<p>El schema no conoce el framework; un cliente de registry resuelve el bundle en runtime. Angular es el primer adapter, no un lock-in.</p>",
+                    "Blog CDN", gFrom, gTo), details);
+        }
+
+        details.Add($"Blog:seeded(prod={producto > 0},ing={ingenieria > 0})");
+    }
+
+    private int SeedCategory(int parentId, string name, string description, List<string> details)
+    {
+        var existing = _contentService.GetPagedChildren(parentId, 0, 200, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "postCategoryPage" && Matches(c, name));
+        var cat = existing ?? _contentService.Create(name, parentId, "postCategoryPage");
+        cat.SetCultureName(name, Culture);
+        cat.SetValue("categoryName", name, Culture);                 // mandatory (Culture)
+        if (cat.HasProperty("description")) { cat.SetValue("description", description, Culture); }
+        if (cat.HasProperty("seoTitle")) { cat.SetValue("seoTitle", $"{name} — Blog {BrandName}", Culture); }
+        if (cat.HasProperty("seoDescription")) { cat.SetValue("seoDescription", description, Culture); }
+        var save = _contentService.SaveAndPublish(cat, new[] { Culture });
+        details.Add(save.Success ? $"Blog:cat:{name}:ok" : $"Blog:cat:{name}:failed:{save.Result}");
+        return save.Success ? cat.Id : 0;
+    }
+
+    private void SeedPost(int categoryId, string title, string excerpt, string publishDate,
+        string readTimeMinutes, string[] tags, string hexFrom, string hexTo, string sectionsJson, List<string> details)
+    {
+        var existing = _contentService.GetPagedChildren(categoryId, 0, 500, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "postPage" && Matches(c, title));
+        var post = existing ?? _contentService.Create(title, categoryId, "postPage");
+        post.SetCultureName(title, Culture);
+        post.SetValue("publishDate", publishDate);                   // mandatory (Nothing), ISO YYYY-MM-DD
+        if (post.HasProperty("readTimeMinutes")) { post.SetValue("readTimeMinutes", readTimeMinutes); }  // Nothing
+        if (post.HasProperty("excerpt")) { post.SetValue("excerpt", excerpt, Culture); }
+        if (post.HasProperty("heroImage"))
+        {
+            post.SetValue("heroImage", _media.GetOrCreatePickerValue($"Blog {title}", title, hexFrom, hexTo, 1600, 720), Culture);
+        }
+        if (post.HasProperty("tags")) { post.SetValue("tags", TagsJson(tags), Culture); }   // Umbraco.Tags (Culture)
+        post.SetValue(SectionsAlias, sectionsJson, Culture);
+        if (post.HasProperty("seoTitle")) { post.SetValue("seoTitle", $"{title} — {BrandName}", Culture); }
+        if (post.HasProperty("seoDescription")) { post.SetValue("seoDescription", excerpt, Culture); }
+        var save = _contentService.SaveAndPublish(post, new[] { Culture });
+        var label = title.Length > 24 ? title[..24] : title;
+        details.Add(save.Success ? $"Blog:post:{label}:ok" : $"Blog:post:{label}:failed:{save.Result}");
+    }
+
+    // Cuerpo de artículo componible: sección de intro + split con imagen + CTA.
+    // NO incluye hero: el template PostPage ya renderiza heroImage + título + meta.
+    private string BuildArticle(string h1, string b1, string h2, string b2,
+        string mediaName, string hexFrom, string hexTo)
+    {
+        var b = new BlockGridJsonBuilder();
+        AddMission(b, h1, "", b1);
+        AddSplit(b, h2, "", b2, mediaName, h2, hexFrom, hexTo, mediaOnRight: true, ctaLabel: null, ctaUrl: null);
+        AddCta(b, "¿Querés ver SynergosLabs en acción?",
+            "Una demo de 30 minutos, sin compromiso.", "Hablar con ventas", "/synergos/contacto");
+        return b.Build();
+    }
+
+    // Home del vertical Blogs: hero + feed (destacados + listado). Los bloques de feed
+    // consultan IBlogQuery en runtime, así que muestran los posts apenas existan.
+    private string BuildBlogsHome()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Blogs que enganchan", "Publica, organiza y crece tu audiencia",
+            "<p>Un blog editorial sobre el mismo motor: categorías, autores y SEO listos. Tu marca, tu voz — sin montar un CMS desde cero.</p>",
+            "Synergos Blogs Hero", "Hero del vertical Blogs", "#2A2412", "#B59659",
+            ("Hablemos", "/synergos/contacto"), ("Ver planes", "/synergos/precios"));
+        AddBlogHighlight(b, "Lo más reciente");
+        AddArticleList(b, "Todos los artículos");
+        return b.Build();
+    }
+
+    private void AddBlogHighlight(BlockGridJsonBuilder b, string title)
+    {
+        var key = _contentTypeService.Get("elementCompBlogHighlight")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("highlightTitle", title)
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    private void AddArticleList(BlockGridJsonBuilder b, string title)
+    {
+        var key = _contentTypeService.Get("elementCompArticleList")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("listTitle", title)
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    private IContent? FindBlogsSiteRoot()
+    {
+        var pr = _contentService.GetRootContent().FirstOrDefault(c => c.ContentType.Alias == "platformRoot");
+        if (pr is null) { return null; }
+        return _contentService.GetPagedChildren(pr.Id, 0, 200, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "siteRoot"
+                && string.Equals(c.GetValue<string>("brandKey"), "blogs", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string TagsJson(string[] tags)
+        => "[" + string.Join(",", tags.Select(t => $"\"{Esc(t)}\"")) + "]";
 
     private IContent? FindByType(int parentId, string alias)
     {
