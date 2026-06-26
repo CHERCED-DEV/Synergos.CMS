@@ -1104,6 +1104,11 @@ public sealed class DevContentFiller
         var pr = _contentService.GetRootContent().FirstOrDefault(c => c.ContentType.Alias == "platformRoot");
         if (pr is null) { details.Add("Verticals:platformroot-not-found"); return; }
 
+        // El platformRoot TAMBIÉN compone compBranding (mandatory). Si quedó vacío no
+        // puede re-publicar y CADA uSync import falla con
+        // "Invalid Properties: brandKey, brandDisplayName". Lo sembramos defensivo.
+        SeedPlatformBranding(pr, details);
+
         SeedVertical(pr.Id, "Blogs", "blogs", "SynergosLabs Blogs", "silverGold", "blogs.synergos.local",
             BuildBlogsHome(), details);
 
@@ -1124,14 +1129,37 @@ public sealed class DevContentFiller
             .FirstOrDefault(c => c.ContentType.Alias == "siteRoot" && Matches(c, name));
         var site = existing ?? _contentService.Create(name, parentId, "siteRoot");
         site.SetCultureName(name, Culture);
-        site.SetValue("siteDisplayName", name, Culture);              // mandatory (Culture)
-        site.SetValue("brandKey", brandKey);                          // mandatory (Nothing), ^[a-z][a-z0-9-]*$
-        site.SetValue("brandDisplayName", brandDisplayName, Culture); // mandatory (Culture)
+        SetIdentityField(site, "siteDisplayName", name);              // mandatory (Culture)
+        SetIdentityField(site, "brandKey", brandKey);                // mandatory (Nothing), ^[a-z][a-z0-9-]*$
+        SetIdentityField(site, "brandDisplayName", brandDisplayName); // mandatory (Culture)
         site.SetValue("pageThemeVariant", $"[\"{themeVariant}\"]");   // FlexibleDropdown → JSON array (trampa conocida)
         if (site.HasProperty("canonicalHostname")) { site.SetValue("canonicalHostname", hostname); }
         site.SetValue(SectionsAlias, sectionsJson, Culture);
         var save = _contentService.SaveAndPublish(site, new[] { Culture });
         details.Add(save.Success ? $"Vertical:{name}:ok({themeVariant})" : $"Vertical:{name}:failed:{save.Result}");
+    }
+
+    // Siembra el branding del platformRoot SOLO si está vacío (no pisa lo que el
+    // arquitecto haya puesto). Sin esto, el platformRoot no re-publica.
+    private void SeedPlatformBranding(IContent pr, List<string> details)
+    {
+        if (!string.IsNullOrWhiteSpace(pr.GetValue<string>("brandKey"))) { return; }
+        SetIdentityField(pr, "brandKey", "default");
+        SetIdentityField(pr, "brandDisplayName", "SynergosLabs");
+        var save = _contentService.SaveAndPublish(pr, new[] { Culture });
+        details.Add(save.Success ? "PlatformRoot:branding-seeded" : $"PlatformRoot:branding-failed:{save.Result}");
+    }
+
+    // Setea un campo de identidad respetando la variación REAL de la propiedad
+    // (Culture vs Nothing) — blinda contra desajustes XML↔DB que producen
+    // "Invalid Properties" al publicar (brandKey=Nothing, brandDisplayName=Culture).
+    private static void SetIdentityField(IContent node, string alias, string value)
+    {
+        if (!node.HasProperty(alias)) { return; }
+        var variesByCulture = node.Properties[alias]?.PropertyType
+            .Variations.HasFlag(Umbraco.Cms.Core.Models.ContentVariation.Culture) ?? false;
+        if (variesByCulture) { node.SetValue(alias, value, Culture); }
+        else { node.SetValue(alias, value); }
     }
 
     // ───────────────── Blog (entrega grande componible, ADR 0027) ─────────────────

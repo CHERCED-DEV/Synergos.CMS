@@ -126,7 +126,10 @@ public sealed class BlockGridJsonBuilder
         public BlockBuilder Set(string propertyAlias, object? value)
         {
             if (value is null) return this;
-            _contentEntry[propertyAlias] = value;
+            // El editor Umbraco.TrueFalse almacena Int32 (1/0). Un bool .NET se
+            // serializaría como "True"/"False" (string) y rompe el indexado Examine
+            // ("Cannot assign value 'True' ... expecting System.Int32"). Normalizamos.
+            _contentEntry[propertyAlias] = value is bool b ? (b ? 1 : 0) : value;
             return this;
         }
 
