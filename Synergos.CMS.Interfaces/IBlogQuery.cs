@@ -44,6 +44,8 @@ public interface IBlogQuery
 ///   <c>postCategoryPage</c> a filtrar. Vacío = todas las categorías.</param>
 /// <param name="TagsCsv">Tags separados por coma. Match OR — un post
 ///   incluye si tiene cualquiera de los tags. Vacío = sin filtro.</param>
+/// <param name="AuthorKey">Clave (Key) del autor a filtrar — match contra
+///   <c>authorRef</c> del post. Null = sin filtro de autor.</param>
 public sealed record BlogQueryRequest(
     int MaxItems = 6,
     int Skip = 0,

@@ -92,7 +92,7 @@ public sealed class DevMediaFactory
     /// <summary>
     /// Devuelve el valor JSON de un MediaPicker3 apuntando a la OG image de
     /// marca (1200×630, gradiente dark + isotipo centrado) para social cards.
-    /// La crea/refresca idempotente por nombre. (P0-3 — el <head> emite
+    /// La crea/refresca idempotente por nombre. (P0-3 — el &lt;head&gt; emite
     /// og:image solo si socialOgImage está seteado.)
     /// </summary>
     public string GetOrCreateOgImagePickerValue(string name, string altText)
