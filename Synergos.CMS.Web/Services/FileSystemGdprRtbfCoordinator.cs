@@ -45,6 +45,7 @@ public sealed class FileSystemGdprRtbfCoordinator : IGdprRtbfCoordinator
     private readonly IHostEnvironment _environment;
     private readonly IOptions<CommentsSettings> _commentsOptions;
     private readonly IOptions<FormsSettings> _formsOptions;
+    private readonly IHealthcareDataAnonymizer _healthcare;
     private readonly ILogger<FileSystemGdprRtbfCoordinator> _logger;
 
     public FileSystemGdprRtbfCoordinator(
@@ -54,6 +55,7 @@ public sealed class FileSystemGdprRtbfCoordinator : IGdprRtbfCoordinator
         IHostEnvironment environment,
         IOptions<CommentsSettings> commentsOptions,
         IOptions<FormsSettings> formsOptions,
+        IHealthcareDataAnonymizer healthcare,
         ILogger<FileSystemGdprRtbfCoordinator> logger)
     {
         _memberService = memberService;
@@ -62,6 +64,7 @@ public sealed class FileSystemGdprRtbfCoordinator : IGdprRtbfCoordinator
         _environment = environment;
         _commentsOptions = commentsOptions;
         _formsOptions = formsOptions;
+        _healthcare = healthcare;
         _logger = logger;
     }
 
@@ -93,6 +96,9 @@ public sealed class FileSystemGdprRtbfCoordinator : IGdprRtbfCoordinator
         // puede reintentar el delete por separado).
         var commentsCount = await AnonymizeCommentsAsync(memberKeyString, cancellationToken);
         var formsCount = await AnonymizeFormSubmissionsAsync(originalEmail, cancellationToken);
+        // ADR 0098 — de-identifica la PHI clínica del paciente ANTES del hard-delete
+        // (para no dejar PHI huérfana ni violar la retención legal de 6 años).
+        var phiCount = await _healthcare.AnonymizeForMemberAsync(memberKey, cancellationToken);
 
         var deleted = await _rosterWriter.DeleteAsync(memberKey, cancellationToken);
         if (!deleted)
@@ -101,7 +107,7 @@ public sealed class FileSystemGdprRtbfCoordinator : IGdprRtbfCoordinator
             // un delete concurrente en backoffice. Caller decide reintentar.
             await AuditAsync(memberKey, actorEmail, originalEmail,
                 commentsCount, formsCount, outcome: "partial",
-                detail: $"delete-failed,comments={commentsCount},forms={formsCount}",
+                detail: $"delete-failed,comments={commentsCount},forms={formsCount},phi={phiCount}",
                 cancellationToken);
             return new RtbfResult(
                 MemberDeleted: false,
@@ -114,7 +120,7 @@ public sealed class FileSystemGdprRtbfCoordinator : IGdprRtbfCoordinator
 
         await AuditAsync(memberKey, actorEmail, originalEmail,
             commentsCount, formsCount, outcome: "success",
-            detail: $"originalEmail={originalEmail},comments={commentsCount},forms={formsCount}",
+            detail: $"originalEmail={originalEmail},comments={commentsCount},forms={formsCount},phi={phiCount}",
             cancellationToken);
 
         _logger.LogWarning(

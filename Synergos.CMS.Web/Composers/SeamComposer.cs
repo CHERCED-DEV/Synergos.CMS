@@ -213,6 +213,8 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.SearchAnalyticsRetentionPolicy>();
         // ADR 0097 D5 — retención de los archivos de checkouts del dashboard.
         services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.DashboardOrdersRetentionPolicy>();
+        // ADR 0098 H3 — retención de registros clínicos PHI (6 años por defecto).
+        services.AddSingleton<IRetentionPolicy, Synergos.CMS.Web.Services.Retention.HealthcareRetentionPolicy>();
         services.AddHostedService<Synergos.CMS.Web.Services.Retention.RetentionSweepHostedService>();
 
         // Olas 278-279 — SQLite maintenance pragmas (Cap-270 Batch D).
@@ -337,6 +339,10 @@ public sealed class SeamComposer : IComposer
 
         // ADR 0098 H2c — recetas (RECORD-KEEPER, sobre el PHI store).
         services.AddSingleton<IPrescriptionService, FileSystemPrescriptionService>();
+
+        // ADR 0098 H3 — de-identificador PHI (lo invoca el coordinador RTBF
+        // antes del hard-delete del Member).
+        services.AddSingleton<IHealthcareDataAnonymizer, FileSystemHealthcareDataAnonymizer>();
 
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).

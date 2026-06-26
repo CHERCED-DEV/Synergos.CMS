@@ -23,6 +23,7 @@ public sealed class FileSystemGdprRtbfCoordinatorTests : IDisposable
     private readonly IMemberService _memberService = Substitute.For<IMemberService>();
     private readonly IMemberRosterWriter _rosterWriter = Substitute.For<IMemberRosterWriter>();
     private readonly IAuditTrailWriter _audit = Substitute.For<IAuditTrailWriter>();
+    private readonly IHealthcareDataAnonymizer _healthcare = Substitute.For<IHealthcareDataAnonymizer>();
     private readonly FileSystemGdprRtbfCoordinator _sut;
 
     public FileSystemGdprRtbfCoordinatorTests()
@@ -41,6 +42,7 @@ public sealed class FileSystemGdprRtbfCoordinatorTests : IDisposable
             _env,
             commentsOpts,
             formsOpts,
+            _healthcare,
             NullLogger<FileSystemGdprRtbfCoordinator>.Instance);
     }
 
