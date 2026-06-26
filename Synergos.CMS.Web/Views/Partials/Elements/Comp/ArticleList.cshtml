@@ -50,26 +50,28 @@
                         {
                             <img class="syn-article-list__image" src="@post.HeroImageUrl" alt="" loading="lazy" />
                         }
-                        <h3 class="syn-article-list__item-title">@post.Title</h3>
-                        @if (!string.IsNullOrWhiteSpace(post.Excerpt))
-                        {
-                            <p class="syn-article-list__excerpt">@post.Excerpt</p>
-                        }
-                        <div class="syn-article-list__meta">
-                            @if (post.PublishDate.HasValue)
+                        <div class="syn-article-list__body">
+                            <h3 class="syn-article-list__item-title">@post.Title</h3>
+                            @if (!string.IsNullOrWhiteSpace(post.Excerpt))
                             {
-                                <time class="syn-article-list__date" datetime="@post.PublishDate.Value.ToString("yyyy-MM-dd")">
-                                    @post.PublishDate.Value.ToString("dd MMM yyyy")
-                                </time>
+                                <p class="syn-article-list__excerpt">@post.Excerpt</p>
                             }
-                            @if (!string.IsNullOrWhiteSpace(post.CategoryName))
-                            {
-                                <span class="syn-article-list__category">@post.CategoryName</span>
-                            }
-                            @if (post.ReadTimeMinutes.HasValue)
-                            {
-                                <span class="syn-article-list__read-time">@post.ReadTimeMinutes min</span>
-                            }
+                            <div class="syn-article-list__meta">
+                                @if (post.PublishDate.HasValue)
+                                {
+                                    <time class="syn-article-list__date" datetime="@post.PublishDate.Value.ToString("yyyy-MM-dd")">
+                                        @post.PublishDate.Value.ToString("dd MMM yyyy")
+                                    </time>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(post.CategoryName))
+                                {
+                                    <span class="syn-article-list__category">@post.CategoryName</span>
+                                }
+                                @if (post.ReadTimeMinutes.HasValue)
+                                {
+                                    <span class="syn-article-list__read-time">@post.ReadTimeMinutes min</span>
+                                }
+                            </div>
                         </div>
                     </a>
                 </li>

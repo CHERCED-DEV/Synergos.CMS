@@ -1,4 +1,4 @@
-@*
+﻿@*
     Template del Document Type `authorPage` (ADR 0027). Renderiza la
     página pública de un autor: avatar + nombre + rol + bio (Layout
     Composer) + listado de sus posts (IBlogQuery filtrado por AuthorKey).
@@ -17,44 +17,44 @@
     var posts = BlogQuery.GetPosts(new Synergos.CMS.Interfaces.BlogQueryRequest(
         MaxItems: 24, AuthorKey: Model.Key));
 }
-<article class="syn-author">
-    <header class="syn-author__header">
+<article class="syn-author-page">
+    <header class="syn-author-page__header">
         @if (avatar is not null)
         {
-            <img class="syn-author__avatar" src="@avatar.Url()" alt="@name" width="96" height="96" loading="eager" />
+            <img class="syn-author-page__avatar" src="@avatar.Url()" alt="@name" width="96" height="96" loading="eager" />
         }
-        <h1 class="syn-author__name">@name</h1>
+        <h1 class="syn-author-page__name">@name</h1>
         @if (!string.IsNullOrWhiteSpace(role))
         {
-            <p class="syn-author__role">@role</p>
+            <p class="syn-author-page__role">@role</p>
         }
     </header>
 
     @if (sections is not null && sections.Any())
     {
-        <div class="syn-author__bio">
+        <div class="syn-author-page__bio">
             @await Html.GetBlockGridHtmlAsync(sections)
         </div>
     }
 
-    <section class="syn-author__posts">
-        <h2 class="syn-author__posts-title">@Umbraco.GetDictionaryValue("blog.authorposts", "Artículos del autor")</h2>
+    <section class="syn-author-page__posts">
+        <h2 class="syn-author-page__posts-title">@Umbraco.GetDictionaryValue("blog.authorposts", "Artículos del autor")</h2>
         @if (posts.Count == 0)
         {
-            <p class="syn-author__empty">@Umbraco.GetDictionaryValue("blog.empty", "Aún no hay artículos.")</p>
+            <p class="syn-author-page__empty">@Umbraco.GetDictionaryValue("blog.empty", "Aún no hay artículos.")</p>
         }
         else
         {
-            <ul class="syn-author__post-list">
+            <ul class="syn-author-page__post-list">
                 @foreach (var post in posts)
                 {
-                    <li class="syn-author__post-item">
-                        <a class="syn-author__post-link" href="@post.Url">
+                    <li class="syn-author-page__post-item">
+                        <a class="syn-author-page__post-link" href="@post.Url">
                             @if (!string.IsNullOrWhiteSpace(post.HeroImageUrl))
                             {
-                                <img class="syn-author__post-image" src="@post.HeroImageUrl" alt="" loading="lazy" />
+                                <img class="syn-author-page__post-image" src="@post.HeroImageUrl" alt="" loading="lazy" />
                             }
-                            <h3 class="syn-author__post-title">@post.Title</h3>
+                            <h3 class="syn-author-page__post-title">@post.Title</h3>
                             @if (post.PublishDate.HasValue)
                             {
                                 <time datetime="@post.PublishDate.Value.ToString("yyyy-MM-dd")">@post.PublishDate.Value.ToString("dd MMM yyyy")</time>

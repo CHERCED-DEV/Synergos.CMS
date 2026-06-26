@@ -681,18 +681,45 @@ html:has(.syn-launcher) { overflow-x: clip; }
   border-top: 1px solid var(--syn-color-border-subtle);
 }
 
-/* ── Post category (listado) ─────────────────────────────────── */
+/* ── S2 — listado de categoría de Blogs (PostCategoryPage) ───────
+   Grid de tarjetas con la misma calidad que .syn-product-category.
+   Las clases espejan EXACTAMENTE PostCategoryPage.cshtml:
+   __header > __title (h1) + __description; __items (ul) > __item (li)
+   > __link (a) > __image (img) + __item-title (h2) + __excerpt + __meta;
+   __pagination (nav) > __pagination-prev / __pagination-current /
+   __pagination-next; __empty. ──────────────────────────────────── */
 
 .syn-post-category {
   /* Hereda syn-page */
 }
 
-.syn-post-category__list {
+.syn-post-category__header {
+  margin-bottom: var(--syn-space-2xl);
+}
+
+.syn-post-category__title {
+  font-size: clamp(var(--syn-font-size-3xl), 4vw + 1rem, var(--syn-font-size-5xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-tight);
+  color: var(--syn-color-text-primary);
+  margin: 0 0 var(--syn-space-md);
+}
+
+.syn-post-category__description {
+  font-size: var(--syn-font-size-lg);
+  color: var(--syn-color-text-secondary);
+  line-height: var(--syn-line-height-relaxed);
+  max-width: var(--syn-max-width-reading);
+  margin: 0;
+}
+
+.syn-post-category__items {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: var(--syn-space-lg);
-  margin-top: var(--syn-space-xl);
   list-style: none;
+  margin: 0;
   padding: 0;
 }
 
@@ -713,38 +740,43 @@ html:has(.syn-launcher) { overflow-x: clip; }
   border-color: var(--syn-card-border-hover);
 }
 
-.syn-post-category__media {
-  aspect-ratio: 16 / 9;
-  background: var(--syn-color-surface-secondary);
-  overflow: hidden;
-}
-
-.syn-post-category__media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.syn-post-category__content {
-  padding: var(--syn-space-md);
-  flex: 1;
+.syn-post-category__link {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
 }
 
-.syn-post-category__title {
+.syn-post-category__link:hover {
+  text-decoration: none;
+  color: inherit;
+}
+
+.syn-post-category__image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  background: var(--syn-color-surface-secondary);
+  transition: transform var(--syn-duration-slow) var(--syn-easing-default);
+}
+
+.syn-post-category__item:hover .syn-post-category__image {
+  transform: scale(1.04);
+}
+
+.syn-post-category__item-title {
   font-size: var(--syn-font-size-xl);
   font-weight: var(--syn-font-weight-semibold);
+  line-height: var(--syn-line-height-snug);
   color: var(--syn-color-text-primary);
-  margin: 0 0 var(--syn-space-2);
+  margin: 0;
+  padding: var(--syn-space-md) var(--syn-space-md) 0;
+  transition: var(--syn-transition-colors);
 }
 
-.syn-post-category__title a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.syn-post-category__title a:hover {
+.syn-post-category__link:hover .syn-post-category__item-title {
   color: var(--syn-color-action-primary);
 }
 
@@ -753,7 +785,8 @@ html:has(.syn-launcher) { overflow-x: clip; }
   font-size: var(--syn-font-size-base);
   line-height: var(--syn-line-height-relaxed);
   flex: 1;
-  margin: 0 0 var(--syn-space-md);
+  margin: var(--syn-space-2) 0 0;
+  padding: 0 var(--syn-space-md);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -762,24 +795,78 @@ html:has(.syn-launcher) { overflow-x: clip; }
 
 .syn-post-category__meta {
   display: flex;
-  gap: var(--syn-space-sm);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--syn-space-2);
   font-size: var(--syn-font-size-xs);
   color: var(--syn-color-text-muted);
+  padding: var(--syn-space-md);
 }
 
-/* ── Post category — empty state ─────────────────────────────── */
+.syn-post-category__meta > * + *::before {
+  content: '·';
+  margin-inline-end: var(--syn-space-2);
+  color: var(--syn-color-text-disabled);
+}
 
+/* Paginación — botones ghost */
+.syn-post-category__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--syn-space-md);
+  margin-top: var(--syn-space-2xl);
+}
+
+.syn-post-category__pagination-prev,
+.syn-post-category__pagination-next {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-2);
+  min-height: 40px;
+  padding: var(--syn-space-2) var(--syn-space-4);
+  background: var(--syn-color-action-ghost-surface);
+  color: var(--syn-color-action-ghost-text);
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-md);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: none;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-post-category__pagination-prev:hover,
+.syn-post-category__pagination-next:hover {
+  background: var(--syn-color-action-ghost-surface-hover);
+  color: var(--syn-color-action-ghost-text-hover);
+  border-color: var(--syn-color-border-accent);
+  text-decoration: none;
+}
+
+.syn-post-category__pagination-current {
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Post category — empty state (patrón dashed canónico) */
 .syn-post-category__empty,
 .syn-page__empty {
   text-align: center;
-  padding: var(--syn-space-3xl) var(--syn-space-md);
+  padding: var(--syn-space-3xl);
   color: var(--syn-color-text-muted);
   background: var(--syn-color-surface-secondary);
+  border: 1px dashed var(--syn-color-border-subtle);
   border-radius: var(--syn-radius-lg);
-  border: 2px dashed var(--syn-color-border-default);
 }
 
-/* ── Article list (block elementCompArticleList) ─────────────── */
+/* ── S1 — feed Blogs (block elementCompArticleList) ──────────────
+   Lista editorial: thumbnail a la izquierda + texto a la derecha
+   (apila en móvil). Las clases espejan EXACTAMENTE ArticleList.cshtml:
+   .syn-article-list (section) > __title (h2) + __items (ul) > __item
+   (li) > __link (a) > __image (img) + __item-title (h3) + __excerpt (p)
+   + __meta (div) > __date / __category / __read-time. ──────────── */
 
 .syn-article-list {
   display: flex;
@@ -787,51 +874,89 @@ html:has(.syn-launcher) { overflow-x: clip; }
   gap: var(--syn-space-lg);
 }
 
-.syn-article-list__item {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: var(--syn-space-md);
-  align-items: start;
-  padding-bottom: var(--syn-space-lg);
-  border-bottom: 1px solid var(--syn-color-border-subtle);
+/* Encabezado del feed (h2 del bloque) */
+.syn-article-list__title {
+  font-size: var(--syn-font-size-2xl);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-snug);
+  color: var(--syn-color-text-primary);
+  margin: 0;
 }
 
-@media (max-width: 480px) {
-  .syn-article-list__item {
-    grid-template-columns: 1fr;
-  }
+/* Reset de la lista — sin bullets ni padding */
+.syn-article-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.syn-article-list__item {
+  border-bottom: 1px solid var(--syn-color-border-subtle);
 }
 
 .syn-article-list__item:last-child {
   border-bottom: 0;
 }
 
-.syn-article-list__media {
+/* El item entero es un bloque enlazado con hover-lift sutil */
+.syn-article-list__link {
+  display: grid;
+  grid-template-columns: clamp(96px, 22vw, 140px) 1fr;
+  gap: var(--syn-space-md);
+  align-items: start;
+  padding: var(--syn-space-md);
+  margin-inline: calc(-1 * var(--syn-space-md));
+  border-radius: var(--syn-radius-lg);
+  text-decoration: none;
+  color: inherit;
+  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
+}
+
+.syn-article-list__link:hover {
+  background: var(--syn-color-surface-secondary);
+  transform: translateY(-2px);
+  text-decoration: none;
+  color: inherit;
+}
+
+@media (max-width: 480px) {
+  .syn-article-list__link {
+    grid-template-columns: 1fr;
+    gap: var(--syn-space-sm);
+  }
+}
+
+.syn-article-list__image {
+  width: 100%;
   aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
   border-radius: var(--syn-radius-md);
-  overflow: hidden;
   background: var(--syn-color-surface-secondary);
 }
 
-.syn-article-list__media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+/* Columna de texto: thumbnail en col 1, TODO el texto (título+excerpt+meta)
+   apilado en col 2. Sin este wrapper el grid auto-colocaba el excerpt bajo la
+   imagen. min-width:0 habilita el line-clamp del excerpt en la celda del grid. */
+.syn-article-list__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.syn-article-list__title {
+.syn-article-list__item-title {
   font-size: var(--syn-font-size-lg);
   font-weight: var(--syn-font-weight-semibold);
+  line-height: var(--syn-line-height-snug);
   color: var(--syn-color-text-primary);
   margin: 0 0 var(--syn-space-2);
+  transition: var(--syn-transition-colors);
 }
 
-.syn-article-list__title a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.syn-article-list__title a:hover {
+.syn-article-list__link:hover .syn-article-list__item-title {
   color: var(--syn-color-action-primary);
 }
 
@@ -840,11 +965,193 @@ html:has(.syn-launcher) { overflow-x: clip; }
   font-size: var(--syn-font-size-sm);
   line-height: var(--syn-line-height-relaxed);
   margin: 0 0 var(--syn-space-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .syn-article-list__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--syn-space-2);
   font-size: var(--syn-font-size-xs);
   color: var(--syn-color-text-muted);
+}
+
+/* Separador "·" entre metadatos (no antes del primero) */
+.syn-article-list__meta > * + *::before {
+  content: '·';
+  margin-inline-end: var(--syn-space-2);
+  color: var(--syn-color-text-disabled);
+}
+
+.syn-article-list__category {
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-accent);
+  text-transform: uppercase;
+  letter-spacing: var(--syn-letter-spacing-wide);
+}
+
+/* Empty state — patrón dashed canónico */
+.syn-article-list__empty {
+  text-align: center;
+  padding: var(--syn-space-3xl);
+  color: var(--syn-color-text-muted);
+  background: var(--syn-color-surface-secondary);
+  border: 1px dashed var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  margin: 0;
+}
+
+/* ── S3 — página de Autor (AuthorPage) ───────────────────────────
+   NOTA: namespace renombrado a .syn-author-page para no colisionar con
+   el byline reutilizable .syn-author (flex 56px) de syn-blog.css que
+   usan los posts. Las clases espejan EXACTAMENTE AuthorPage.cshtml:
+   __header > __avatar (img) + __name (h1) + __role; __bio; __posts >
+   __posts-title (h2) + __empty | __post-list (ul) > __post-item (li)
+   > __post-link (a) > __post-image (img) + __post-title (h3). ───── */
+
+.syn-author-page {
+  display: block;
+}
+
+.syn-author-page__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--syn-space-2);
+  margin-bottom: var(--syn-space-2xl);
+}
+
+.syn-author-page__avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: var(--syn-radius-full);
+  object-fit: cover;
+  background: var(--syn-color-surface-secondary);
+  border: 1px solid var(--syn-color-border-subtle);
+  box-shadow: var(--syn-shadow-card);
+}
+
+.syn-author-page__name {
+  font-size: var(--syn-font-size-3xl);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-tight);
+  color: var(--syn-color-text-primary);
+  margin: var(--syn-space-2) 0 0;
+}
+
+.syn-author-page__role {
+  font-size: var(--syn-font-size-base);
+  color: var(--syn-color-text-muted);
+  margin: 0;
+}
+
+.syn-author-page__bio {
+  max-width: var(--syn-max-width-reading);
+  margin: 0 auto var(--syn-space-2xl);
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+  text-align: center;
+}
+
+.syn-author-page__posts-title {
+  font-size: var(--syn-font-size-2xl);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-snug);
+  color: var(--syn-color-text-primary);
+  margin: 0 0 var(--syn-space-lg);
+}
+
+.syn-author-page__post-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--syn-space-lg);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.syn-author-page__post-item {
+  display: flex;
+  flex-direction: column;
+  background: var(--syn-card-surface);
+  border: var(--syn-card-border);
+  border-radius: var(--syn-card-radius);
+  overflow: hidden;
+  box-shadow: var(--syn-card-shadow);
+  transition: transform var(--syn-duration-base) var(--syn-easing-default), var(--syn-transition-colors);
+}
+
+.syn-author-page__post-item:hover {
+  transform: var(--syn-card-lift);
+  box-shadow: var(--syn-card-shadow-hover);
+  border-color: var(--syn-card-border-hover);
+}
+
+.syn-author-page__post-link {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: var(--syn-space-2);
+  text-decoration: none;
+  color: inherit;
+}
+
+.syn-author-page__post-link:hover {
+  text-decoration: none;
+  color: inherit;
+}
+
+.syn-author-page__post-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  background: var(--syn-color-surface-secondary);
+  transition: transform var(--syn-duration-slow) var(--syn-easing-default);
+}
+
+.syn-author-page__post-item:hover .syn-author-page__post-image {
+  transform: scale(1.04);
+}
+
+.syn-author-page__post-title {
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-semibold);
+  line-height: var(--syn-line-height-snug);
+  color: var(--syn-color-text-primary);
+  margin: 0;
+  padding: 0 var(--syn-space-md);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-author-page__post-link:hover .syn-author-page__post-title {
+  color: var(--syn-color-action-primary);
+}
+
+.syn-author-page__post-link time {
+  font-size: var(--syn-font-size-xs);
+  color: var(--syn-color-text-muted);
+  padding: 0 var(--syn-space-md) var(--syn-space-md);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Empty state — patrón dashed canónico */
+.syn-author-page__empty {
+  text-align: center;
+  padding: var(--syn-space-3xl);
+  color: var(--syn-color-text-muted);
+  background: var(--syn-color-surface-secondary);
+  border: 1px dashed var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  margin: 0;
 }
 
 /* ── Blog highlight block ────────────────────────────────────── */
