@@ -97,6 +97,7 @@ public sealed class DevContentFiller
         // P1-1: verticales Blogs (silverGold) + Ecommerce (dark) con identidad propia.
         SeedVerticalSiteRoots(details);
         SeedBlog(details);
+        SeedShop(details);
 
         return new FillResult(filled == 8, filled, string.Join("; ", details));   // siteRoot home + 7 páginas hijas
     }
@@ -1104,9 +1105,7 @@ public sealed class DevContentFiller
             BuildBlogsHome(), details);
 
         SeedVertical(pr.Id, "Tienda", "ecommerce", "SynergosLabs Tienda", "dark", "tienda.synergos.local",
-            BuildVerticalHome("Tu tienda, sobre el mismo motor", "Catálogo, carrito y checkout",
-                "<p>Vende online con producto, variantes, carrito y query server-side sobre el mismo núcleo — sin re-plataformar cuando crezcas.</p>",
-                "Synergos Tienda Hero", "#020817", "#4f6ef7"), details);
+            BuildTiendaHome(), details);
 
         // ADR 0098 H0.5 — Healthcare es un VERTICAL completo (siteRoot propio,
         // identidad clínica clara). Landing pública + intake; la app clínica
@@ -1130,15 +1129,6 @@ public sealed class DevContentFiller
         site.SetValue(SectionsAlias, sectionsJson, Culture);
         var save = _contentService.SaveAndPublish(site, new[] { Culture });
         details.Add(save.Success ? $"Vertical:{name}:ok({themeVariant})" : $"Vertical:{name}:failed:{save.Result}");
-    }
-
-    private string BuildVerticalHome(string title, string subtitle, string bodyHtml, string mediaName, string hexFrom, string hexTo)
-    {
-        var b = new BlockGridJsonBuilder();
-        AddHero(b, title, subtitle, bodyHtml,
-            mediaName, $"Hero del vertical {title}", hexFrom, hexTo,
-            ("Hablemos", "/synergos/contacto"), ("Ver planes", "/synergos/precios"));
-        return b.Build();
     }
 
     // ───────────────── Blog (entrega grande componible, ADR 0027) ─────────────────
@@ -1376,6 +1366,129 @@ public sealed class DevContentFiller
 
     private static string TagsJson(string[] tags)
         => "[" + string.Join(",", tags.Select(t => $"\"{Esc(t)}\"")) + "]";
+
+    // ───────────────── Tienda (catálogo componible, ADR e-commerce) ─────────────────
+    // La infra de shop ya existe (productCategoryPage/productPage + IShopQuery +
+    // bloques elementShop*). Acá sembramos CONTENIDO: categorías + productos bajo
+    // el siteRoot Tienda, y el grid featureado en su home. Idempotente por nombre.
+    private void SeedShop(List<string> details)
+    {
+        if (_contentTypeService.Get("productCategoryPage")?.Key is null
+            || _contentTypeService.Get("productPage")?.Key is null)
+        {
+            details.Add("Shop:schema-not-imported");
+            return;
+        }
+        var tienda = FindVertical("ecommerce");
+        if (tienda is null) { details.Add("Shop:tienda-not-found"); return; }
+
+        const string dFrom = "#020817", dTo = "#4f6ef7";   // gradiente oscuro (identidad Tienda)
+
+        var ropa = SeedProductCategory(tienda.Id, "Ropa", "Prendas con la identidad de tu marca.", details);
+        var accesorios = SeedProductCategory(tienda.Id, "Accesorios", "Complementos para tu colección.", details);
+
+        if (ropa > 0)
+        {
+            SeedProduct(ropa, "TSHIRT-NEGRA-001", "Camiseta esencial negra", "89000", new[] { "ropa", "camiseta" },
+                dFrom, dTo, BuildProductBody("<p>Algodón premium de 180g, corte regular. El básico que combina con todo y dura lavada tras lavada.</p>", "Producto Camiseta", dFrom, dTo), details);
+            SeedProduct(ropa, "HOODIE-GRIS-001", "Hoodie gris premium", "189000", new[] { "ropa", "hoodie" },
+                dFrom, dTo, BuildProductBody("<p>Felpa pesada con interior perchado y capucha forrada. Abriga sin sacrificar estilo.</p>", "Producto Hoodie", dFrom, dTo), details);
+            SeedProduct(ropa, "GORRA-001", "Gorra clásica", "59000", new[] { "ropa", "gorra" },
+                dFrom, dTo, BuildProductBody("<p>Ajustable, bordado de marca al frente. Para todos los días.</p>", "Producto Gorra", dFrom, dTo), details);
+        }
+        if (accesorios > 0)
+        {
+            SeedProduct(accesorios, "TOTE-001", "Tote bag de lona", "49000", new[] { "accesorios", "bolso" },
+                dFrom, dTo, BuildProductBody("<p>Lona resistente con asas reforzadas. Lleva todo con estilo y de forma sostenible.</p>", "Producto Tote", dFrom, dTo), details);
+            SeedProduct(accesorios, "MUG-001", "Taza cerámica", "39000", new[] { "accesorios", "taza" },
+                dFrom, dTo, BuildProductBody("<p>Cerámica de 350ml, apta para microondas y lavavajillas. Tu café, tu marca.</p>", "Producto Taza", dFrom, dTo), details);
+            SeedProduct(accesorios, "STICKER-PACK-001", "Pack de stickers", "19000", new[] { "accesorios", "stickers" },
+                dFrom, dTo, BuildProductBody("<p>10 stickers vinílicos resistentes al agua. Personalizá tu laptop, agenda o botella.</p>", "Producto Stickers", dFrom, dTo), details);
+        }
+
+        details.Add($"Shop:seeded(ropa={ropa > 0},acc={accesorios > 0})");
+    }
+
+    private int SeedProductCategory(int parentId, string name, string description, List<string> details)
+    {
+        var existing = _contentService.GetPagedChildren(parentId, 0, 200, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "productCategoryPage" && Matches(c, name));
+        var cat = existing ?? _contentService.Create(name, parentId, "productCategoryPage");
+        cat.SetCultureName(name, Culture);
+        cat.SetValue("categoryName", name, Culture);                  // mandatory (Culture)
+        if (cat.HasProperty("categoryDescription")) { cat.SetValue("categoryDescription", description, Culture); }
+        if (cat.HasProperty("seoTitle")) { cat.SetValue("seoTitle", $"{name} — Tienda {BrandName}", Culture); }
+        if (cat.HasProperty("seoDescription")) { cat.SetValue("seoDescription", description, Culture); }
+        var save = _contentService.SaveAndPublish(cat, new[] { Culture });
+        details.Add(save.Success ? $"Shop:cat:{name}:ok" : $"Shop:cat:{name}:failed:{save.Result}");
+        return save.Success ? cat.Id : 0;
+    }
+
+    private void SeedProduct(int categoryId, string sku, string name, string priceBase, string[] tags,
+        string hexFrom, string hexTo, string sectionsJson, List<string> details)
+    {
+        var existing = _contentService.GetPagedChildren(categoryId, 0, 500, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "productPage" && Matches(c, name));
+        var p = existing ?? _contentService.Create(name, categoryId, "productPage");
+        p.SetCultureName(name, Culture);
+        p.SetValue("productSku", sku);                               // Nothing, mandatory
+        p.SetValue("productName", name, Culture);                    // Culture, mandatory
+        p.SetValue("productPriceBase", priceBase);                   // Nothing, mandatory (numérico)
+        if (p.HasProperty("productInStock")) { p.SetValue("productInStock", true); }
+        if (p.HasProperty("productImages"))
+        {
+            p.SetValue("productImages", _media.GetOrCreatePickerValue($"Producto {name}", name, hexFrom, hexTo, 800, 800), Culture);
+        }
+        if (p.HasProperty("tags")) { p.SetValue("tags", TagsJson(tags), Culture); }
+        p.SetValue(SectionsAlias, sectionsJson, Culture);
+        if (p.HasProperty("seoTitle")) { p.SetValue("seoTitle", $"{name} — {BrandName}", Culture); }
+        var save = _contentService.SaveAndPublish(p, new[] { Culture });
+        var label = name.Length > 24 ? name[..24] : name;
+        details.Add(save.Success ? $"Shop:product:{label}:ok" : $"Shop:product:{label}:failed:{save.Result}");
+    }
+
+    // Cuerpo componible de la página de producto (la ficha precio/imágenes la
+    // renderiza ProductPage.cshtml; esto es la descripción + detalles + CTA).
+    private string BuildProductBody(string descHtml, string mediaName, string hexFrom, string hexTo)
+    {
+        var b = new BlockGridJsonBuilder();
+        AddMission(b, "Descripción", "", descHtml);
+        AddSplit(b, "Detalles", "", "<p>Materiales de calidad, pensados para durar. Envío a todo el país y devolución sin vueltas.</p>",
+            mediaName, "Detalle del producto", hexFrom, hexTo, mediaOnRight: true, ctaLabel: null, ctaUrl: null);
+        AddCta(b, "¿Listo para comprar?", "Agregá al carrito y completá tu compra en minutos.", "Ver la tienda", "/tienda");
+        return b.Build();
+    }
+
+    // Home del vertical Tienda: hero + grid de productos (consulta IShopQuery en runtime).
+    private string BuildTiendaHome()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Tu tienda, sobre el mismo motor", "Catálogo, carrito y checkout",
+            "<p>Vende online con producto, variantes, carrito y consultas server-side sobre el mismo núcleo — sin re-plataformar cuando crezcas.</p>",
+            "Synergos Tienda Hero", "Hero del vertical Tienda", "#020817", "#4f6ef7",
+            ("Ver el catálogo", "/tienda/ropa"), ("Hablar con ventas", "/synergos/contacto"));
+        AddProductGrid(b);
+        return b.Build();
+    }
+
+    private void AddProductGrid(BlockGridJsonBuilder b)
+    {
+        var key = _contentTypeService.Get("elementShopProductGrid")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c => c   // defaults: todas las categorías, 12 items, grid
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    private IContent? FindVertical(string brandKey)
+    {
+        var pr = _contentService.GetRootContent().FirstOrDefault(c => c.ContentType.Alias == "platformRoot");
+        if (pr is null) { return null; }
+        return _contentService.GetPagedChildren(pr.Id, 0, 200, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "siteRoot"
+                && string.Equals(c.GetValue<string>("brandKey"), brandKey, StringComparison.OrdinalIgnoreCase));
+    }
 
     // ADR 0098 H0.5 — home pública del vertical Healthcare: landing + servicios +
     // disclaimer (RECORD-KEEPER) + intake de cita. Todo componible.
