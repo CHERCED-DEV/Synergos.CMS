@@ -998,6 +998,8 @@ public sealed class DevContentFiller
             "syn-launcher__card--document", "syn-launcher__card--live", "Entrar a Blogs →", "/blogs");
         AddCard("Tienda", "<p>Catálogo, productos y checkout sobre la misma plataforma.</p>",
             "syn-launcher__card--bag", "syn-launcher__card--live", "Entrar a la Tienda →", "/tienda");
+        AddCard("Healthcare", "<p>Historia clínica, agenda y recetas — un vertical clínico completo sobre el mismo motor.</p>",
+            "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar a Healthcare →", "/healthcare");
 
         pr.SetCultureName(BrandName, Culture);   // umbrella = SynergosLabs (el hero lee Model.Name)
         // P2-3: identidad propia del launcher (compBranding + compPageTheme) — gestionable
