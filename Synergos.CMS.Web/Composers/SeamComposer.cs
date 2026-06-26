@@ -335,6 +335,9 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<Synergos.CMS.Application.Services.AppointmentSchedulingService>();
         services.AddSingleton<IAppointmentScheduler, LockingAppointmentScheduler>();
 
+        // ADR 0098 H2c — recetas (RECORD-KEEPER, sobre el PHI store).
+        services.AddSingleton<IPrescriptionService, FileSystemPrescriptionService>();
+
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).
         // Singleton — solo depende de IOptions + IHostEnvironment + ILogger.
