@@ -98,6 +98,7 @@ public sealed class DevContentFiller
         SeedVerticalSiteRoots(details);
         SeedBlog(details);
         SeedShop(details);
+        SeedHealthcarePages(details);
 
         return new FillResult(filled == 8, filled, string.Join("; ", details));   // siteRoot home + 7 páginas hijas
     }
@@ -1490,6 +1491,72 @@ public sealed class DevContentFiller
         return _contentService.GetPagedChildren(pr.Id, 0, 200, out _)
             .FirstOrDefault(c => c.ContentType.Alias == "siteRoot"
                 && string.Equals(c.GetValue<string>("brandKey"), brandKey, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Páginas públicas internas del vertical Healthcare (Servicios, Equipo) bajo su
+    // siteRoot, componibles. Heredan la identidad clínica del siteRoot.
+    private void SeedHealthcarePages(List<string> details)
+    {
+        var hc = FindVertical("healthcare");
+        if (hc is null) { details.Add("HealthcarePages:healthcare-not-found"); return; }
+        SeedSiteRootPage(hc.Id, "Servicios", "Servicios clínicos", BuildHealthcareServicios(), details);
+        SeedSiteRootPage(hc.Id, "Equipo", "Nuestro equipo", BuildHealthcareEquipo(), details);
+    }
+
+    // Crea/actualiza una pageBase bajo un siteRoot ESPECÍFICO (vs Apply, que usa la
+    // Entidad). Mismo patrón: heading + showTitle=false + seo + sections.
+    private int SeedSiteRootPage(int parentId, string name, string heading, string sectionsJson, List<string> details)
+    {
+        var page = _contentService.GetPagedChildren(parentId, 0, 200, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "pageBase" && Matches(c, name));
+        page ??= _contentService.Create(name, parentId, "pageBase");
+        page.SetCultureName(name, Culture);
+        if (page.HasProperty("heading")) { page.SetValue("heading", heading, Culture); }
+        if (page.HasProperty("showTitle")) { page.SetValue("showTitle", false); }
+        if (page.HasProperty("seoTitle")) { page.SetValue("seoTitle", $"{name} — Healthcare {BrandName}", Culture); }
+        page.SetValue(SectionsAlias, sectionsJson, Culture);
+        var save = _contentService.SaveAndPublish(page, new[] { Culture });
+        details.Add(save.Success ? $"HealthcarePage:{name}:ok" : $"HealthcarePage:{name}:failed:{save.Result}");
+        return save.Success ? page.Id : 0;
+    }
+
+    private string BuildHealthcareServicios()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Servicios clínicos", "Atención integral, registro impecable",
+            "<p>Desde la consulta hasta el seguimiento, todo queda registrado y accesible para tu equipo — con la privacidad del paciente protegida.</p>",
+            "Healthcare Servicios Hero", "Servicios de Healthcare", "#0B3B3C", "#1FA2A6",
+            ("Pedir una cita", "/healthcare"), ("Hablar con ventas", "/synergos/contacto"));
+        FeatureGridAuto(b, "Lo que ofrecemos", "Cobertura completa de la práctica",
+            new (string title, string subtitle, string body)[]
+            {
+                ("Consulta médica", "Presencial o virtual", "Agenda, atiende y registra la consulta con historia clínica versionada."),
+                ("Controles y seguimiento", "Continuidad del cuidado", "Citas de control con acceso al historial completo del paciente."),
+                ("Recetas", "Registro formal", "Emisión y consulta de recetas, vinculadas al paciente."),
+                ("Consentimiento informado", "Transparencia", "El paciente controla quién accede a su información clínica."),
+            }, 2);
+        AddCta(b, "¿Listo para empezar?", "Pedí una cita o agendá una demo para tu equipo.", "Pedir una cita", "/healthcare");
+        return b.Build();
+    }
+
+    private string BuildHealthcareEquipo()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Nuestro equipo", "Profesionales a cargo de tu salud",
+            "<p>Un equipo comprometido con el cuidado y la privacidad. Conocé a los profesionales detrás de la práctica.</p>",
+            "Healthcare Equipo Hero", "Equipo de Healthcare", "#0B3B3C", "#1FA2A6",
+            ("Pedir una cita", "/healthcare"));
+        FeatureGridAuto(b, "El equipo", "Profesionales licenciados",
+            new (string title, string subtitle, string body)[]
+            {
+                ("Dra. Laura Méndez", "Medicina general", "Más de 10 años en atención primaria y prevención."),
+                ("Dr. Andrés Villa", "Cardiología", "Especialista en salud cardiovascular y controles de seguimiento."),
+                ("Dra. Sofía Cardona", "Pediatría", "Cuidado integral de niños y adolescentes."),
+            }, 3);
+        AddMission(b, "Compromiso con tu privacidad", "",
+            "<p>Tu información clínica está cifrada y solo accesible por el personal autorizado con tu consentimiento. Este sistema registra; el profesional decide.</p>");
+        AddCta(b, "Agendá tu cita", "Reservá con el especialista que necesitás.", "Pedir una cita", "/healthcare");
+        return b.Build();
     }
 
     // ADR 0098 H0.5 — home pública del vertical Healthcare: landing + servicios +
