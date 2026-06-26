@@ -1,0 +1,40 @@
+# css-parity-allowlist.txt — Gate G-3 allowlist (anti-drift, Ola 2)
+#
+# Una clase o prefijo por línea. `#` = comentario, líneas vacías ignoradas.
+#  - prefijo: termina en `-` (o `*`) → match de prefijo (ej. `syn-icon-`)
+#  - clase exacta: cualquier otra cosa (ej. `syn-foo`)
+#
+# Solo para clases `syn-*` LEGÍTIMAMENTE sin regla CSS en wwwroot/css:
+#  (1) hidratadas / generadas por JS en runtime,
+#  (2) modificadores dinámicos no-op (`--{variant}` sin estilo propio),
+#  (3) clases de componentes CDN (estilo vive en el bundle Angular).
+#
+# NO usar para clases que deberían tener CSS y no lo tienen — eso es un
+# bug a arreglar escribiendo el CSS, no a allowlistear.
+#
+# ── Notas del checker (cobertura automática, NO necesitan allowlist) ──
+# El checker ya trata como cubiertas (sin necesidad de listarlas aquí):
+#  - bloques BEM cuya pinta vive en hijos/modificadores estilizados
+#    (ej. `syn-nav` con `.syn-nav__link` / `.syn-nav--vertical`).
+#  - modificadores no-op sobre un bloque estilizado
+#    (ej. `syn-page--bare` con `.syn-page` ya estilizado).
+#  - prefijos dinámicos `syn-foo--@variant` (solo cuenta el prefijo).
+#  - nombres de CSS custom properties en `Add("syn-color-..", v)` de
+#    _BrandThemeStyle.cshtml (son `--syn-*` vars, no clases).
+#  - valores de atributos HTML `id=/for=/href=` (no son clases).
+
+# ─────────────────────────────────────────────────────────────────────
+# Entradas vigentes
+# ─────────────────────────────────────────────────────────────────────
+
+# Wrapper de layout flex puro: la dirección/gap/justify se aplican vía
+# las utilities de compDomFlex que LayoutCssBuilder.Build(Model) agrega
+# a la misma lista de clases. El bloque es un hook semántico sin pinta
+# propia por diseño. (Views/Partials/Elements/Action/CtaGroup.cshtml)
+syn-cta-group
+
+# Wrapper de agrupación puro: envuelve secciones reusables (Layout
+# Composer) renderizadas in-place; los hijos son secciones completas que
+# se estilan solas. El wrapper no tiene identidad visual propia.
+# (Views/Partials/blockgrid/Components/elementLayoutSnippetRef.cshtml)
+syn-snippet-ref
