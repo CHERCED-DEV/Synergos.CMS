@@ -67,15 +67,23 @@
 /* Ritmo vertical entre secciones top-level del Layout Composer.
    El BlockGrid envuelve cada sección en .umb-block-grid__layout-item,
    así que el aire vive en el "join" entre items (no en el <section>).
-   Knob único del ritmo: --syn-section-gap (64 / 96 ≥768). Ley de 8. */
-:is(.syn-page__body, .syn-site-root__sections) > .umb-block-grid > .umb-block-grid__layout-container
-  > .umb-block-grid__layout-item + .umb-block-grid__layout-item {
+   ANTES se acotaba por wrapper (:is(.syn-page__body, .syn-site-root__sections))
+   y se SALTABA .syn-post__body, .syn-product__body, .syn-author-page__bio… →
+   posts/productos/autor con gap 0 ("apeñuscado en casi toda la plataforma").
+   Ahora wrapper-agnóstica: acota por CONTENIDO (items que contienen una
+   .syn-layout--section, preset que solo existe a nivel raíz) → el ritmo
+   aplica en TODA página y el contenido anidado conserva su propio gap.
+   Knob único: --syn-section-gap (64 / 96 ≥768). Ley de 8. */
+.umb-block-grid__layout-container
+  > .umb-block-grid__layout-item:has(> .syn-layout--section)
+  + .umb-block-grid__layout-item:has(> .syn-layout--section) {
   margin-block-start: var(--syn-section-gap);
 }
 
 @media (min-width: 768px) {
-  :is(.syn-page__body, .syn-site-root__sections) > .umb-block-grid > .umb-block-grid__layout-container
-    > .umb-block-grid__layout-item + .umb-block-grid__layout-item {
+  .umb-block-grid__layout-container
+    > .umb-block-grid__layout-item:has(> .syn-layout--section)
+    + .umb-block-grid__layout-item:has(> .syn-layout--section) {
     margin-block-start: var(--syn-section-gap-lg);
   }
 }
