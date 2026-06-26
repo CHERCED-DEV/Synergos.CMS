@@ -422,12 +422,12 @@
 .syn-hero__ctas .syn-button--secondary {
   background: transparent;
   border-color: rgb(255 255 255 / 0.28);
-  color: #ffffff;
+  color: var(--syn-color-neutral-0);
 }
 .syn-hero__ctas .syn-button--secondary:hover {
   background: rgb(255 255 255 / 0.12);
   border-color: rgb(255 255 255 / 0.5);
-  color: #ffffff;
+  color: var(--syn-color-neutral-0);
   transform: translateY(-2px);
 }
 
@@ -437,7 +437,7 @@
    accent es claro) y dejaba el título ilegible sobre el overlay. Igual
    que el CTA secundario del hero, que ya usa #ffffff. */
 .syn-hero__media ~ .syn-hero__content .syn-hero__title {
-  color: #ffffff;
+  color: var(--syn-color-neutral-0);
 }
 .syn-hero__media ~ .syn-hero__content .syn-hero__subtitle,
 .syn-hero__media ~ .syn-hero__content .syn-hero__body {
@@ -580,11 +580,6 @@
 
 /* ── Text primitives ─────────────────────────────────────────── */
 
-.syn-heading {
-  margin: 0 0 var(--syn-space-md);
-  color: var(--syn-color-text-primary);
-}
-
 .syn-heading-group__eyebrow {
   display: block;
   font-size: var(--syn-font-size-xs);
@@ -638,7 +633,15 @@
   margin: var(--syn-space-md) 0;
 }
 
-.syn-quote__cite {
+.syn-quote__body {
+  margin: 0;
+}
+
+.syn-quote__body > * + * {
+  margin-top: var(--syn-space-sm);
+}
+
+.syn-quote__attribution {
   display: block;
   margin-top: var(--syn-space-sm);
   font-style: normal;
@@ -694,6 +697,10 @@
   background: var(--syn-color-state-danger-surface);
   color: var(--syn-color-state-danger-text);
   border-color: var(--syn-color-state-danger-border);
+}
+
+.syn-alert-bar__message {
+  margin: 0;
 }
 
 .syn-alert-bar__action {
@@ -756,20 +763,29 @@
 /* ── Breadcrumbs ─────────────────────────────────────────────── */
 
 .syn-breadcrumbs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--syn-space-2);
-  align-items: center;
   font-size: var(--syn-font-size-sm);
   color: var(--syn-color-text-muted);
-  list-style: none;
   margin: 0 0 var(--syn-space-md);
+}
+
+.syn-breadcrumbs__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--syn-space-2);
+  list-style: none;
+  margin: 0;
   padding: 0;
 }
 
-.syn-breadcrumbs li + li::before {
+.syn-breadcrumbs__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-2);
+}
+
+.syn-breadcrumbs__item:not(:last-child)::after {
   content: '/';
-  margin-right: var(--syn-space-2);
   color: var(--syn-color-border-default);
 }
 
@@ -800,9 +816,73 @@
   border-radius: var(--syn-radius-md);
 }
 
+.syn-image__caption {
+  margin-top: var(--syn-space-sm);
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-normal);
+  color: var(--syn-color-text-muted);
+  text-align: center;
+}
+
 .syn-video video {
   width: 100%;
   border-radius: var(--syn-radius-md);
+}
+
+/* ── Gallery (elementMediaGallery + elementMediaGalleryItem) ──── */
+
+/* La columna se controla con --syn-gallery-cols; los modifiers
+   --cols-{N} solo setean esa var. El grid colapsa a 1 col en móvil. */
+.syn-gallery {
+  --syn-gallery-cols: 3;
+}
+
+.syn-gallery--cols-1 { --syn-gallery-cols: 1; }
+.syn-gallery--cols-2 { --syn-gallery-cols: 2; }
+.syn-gallery--cols-3 { --syn-gallery-cols: 3; }
+.syn-gallery--cols-4 { --syn-gallery-cols: 4; }
+.syn-gallery--cols-5 { --syn-gallery-cols: 5; }
+.syn-gallery--cols-6 { --syn-gallery-cols: 6; }
+
+.syn-gallery__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--syn-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .syn-gallery__grid {
+    grid-template-columns: repeat(var(--syn-gallery-cols, 3), 1fr);
+    gap: var(--syn-space-4);
+  }
+}
+
+.syn-gallery__cell {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.syn-gallery-item {
+  margin: 0;
+}
+
+.syn-gallery-item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--syn-radius-md);
+}
+
+.syn-gallery-item__caption {
+  margin-top: var(--syn-space-2);
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-normal);
+  color: var(--syn-color-text-muted);
 }
 
 /* Icono standalone (elementMediaIcon): tamaño controlado en grilla de 8. */
@@ -1243,15 +1323,45 @@
   border-radius: 50%;
 }
 
+.syn-timeline-item__date {
+  display: block;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  margin: 0 0 var(--syn-space-2);
+}
+
+.syn-timeline-item__date-label {
+  font-weight: var(--syn-font-weight-semibold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  margin-inline-end: var(--syn-space-2);
+}
+
+.syn-timeline-item__date-value {
+  color: var(--syn-color-text-accent);
+  font-weight: var(--syn-font-weight-semibold);
+}
+
 .syn-timeline-item__title {
   font-weight: var(--syn-font-weight-semibold);
   color: var(--syn-color-text-primary);
   margin: 0 0 var(--syn-space-2);
 }
 
-.syn-timeline-item__meta {
+.syn-timeline-item__subtitle {
   font-size: var(--syn-font-size-sm);
   color: var(--syn-color-text-muted);
+  margin: 0 0 var(--syn-space-2);
+}
+
+.syn-timeline-item__body {
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-timeline-item__body > * + * {
+  margin-top: var(--syn-space-2);
 }
 
 /* ── Key/Value + Social share + Contact info ─────────────────── */
@@ -1312,16 +1422,72 @@
   color: var(--syn-color-text-secondary);
 }
 
-.syn-contact-info__item {
-  display: flex;
-  align-items: center;
-  gap: var(--syn-space-sm);
+.syn-contact-info__email,
+.syn-contact-info__phone,
+.syn-contact-info__address {
+  display: block;
+  color: var(--syn-color-text-secondary);
+  text-decoration: none;
+  transition: var(--syn-transition-colors);
 }
 
-.syn-contact-info__label {
-  color: var(--syn-color-text-muted);
+.syn-contact-info__email:hover,
+.syn-contact-info__phone:hover {
+  color: var(--syn-color-text-accent);
+  text-decoration: none;
+}
+
+.syn-contact-info__address {
+  font-style: normal;
+}
+
+/* ── Data table (elementCorpDataTable) ───────────────────────── */
+
+/* El wrapper hace scroll-x en móvil para no romper el layout. */
+.syn-data-table {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--syn-radius-md);
+  border: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-data-table__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-data-table__caption {
+  padding: var(--syn-space-2) var(--syn-space-3);
+  text-align: start;
+  font-size: var(--syn-font-size-xs);
   font-weight: var(--syn-font-weight-semibold);
-  min-width: 80px;
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  color: var(--syn-color-text-muted);
+}
+
+.syn-data-table__table th,
+.syn-data-table__table td {
+  padding: var(--syn-space-2) var(--syn-space-3);
+  text-align: start;
+  border-bottom: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-data-table__table thead th {
+  background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-text-primary);
+  font-weight: var(--syn-font-weight-semibold);
+  white-space: nowrap;
+}
+
+.syn-data-table__table tbody tr:nth-child(even) {
+  background: var(--syn-color-surface-secondary);
+}
+
+.syn-data-table__table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 /* ── Forms (elementFormContainer + elementFormField) ─────────── */

@@ -148,8 +148,10 @@
     align-items: center;
     gap: 5px;
     margin-left: auto;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;   /* touch target WCAG 2.5.5 (≥44x44) */
     border-radius: var(--syn-radius-md);
     cursor: pointer;
     transition: var(--syn-transition-colors);
@@ -370,6 +372,16 @@
 .syn-site-footer__copyright,
 .syn-site-footer__legal-note {
   margin: 0;
+}
+
+/* Móvil estrecho: la fila legal se apila (copyright sobre nota) en
+   vez de pelear el space-between con texto wrappeado. */
+@media (max-width: 480px) {
+  .syn-site-footer__legal {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--syn-space-2);
+  }
 }
 
 .syn-site-footer a {

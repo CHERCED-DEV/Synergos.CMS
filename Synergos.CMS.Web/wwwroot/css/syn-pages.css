@@ -609,35 +609,49 @@ html:has(.syn-launcher) { overflow-x: clip; }
 .syn-post__meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--syn-space-md);
   font-size: var(--syn-font-size-sm);
   color: var(--syn-color-text-muted);
   margin-bottom: var(--syn-space-md);
 }
 
-.syn-post__author {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--syn-space-2);
+/* Separador "·" entre metadatos (no antes del primero) */
+.syn-post__meta > * + *::before {
+  content: '·';
+  margin-inline-end: var(--syn-space-md);
+  color: var(--syn-color-text-disabled);
 }
 
-.syn-post__author-avatar {
-  width: var(--syn-size-avatar-sm);    /* 32 (FIX 3) */
-  height: var(--syn-size-avatar-sm);
-  border-radius: 50%;
-  object-fit: cover;
-}
-
+/* NOTA: el byline del autor (avatar+nombre+rol) se renderiza con el
+   bloque reutilizable .syn-author (syn-blog.css), no con clases propias
+   del post. Las antiguas .syn-post__author* quedaron sin emisor y se
+   eliminaron (regla de parity: borrar el muerto). */
 .syn-post__date,
 .syn-post__reading-time {
   color: var(--syn-color-text-muted);
 }
 
+/* El hero respira más ancho que el measure del artículo (680): rompe el cap
+   hasta el ancho de lectura (800) y se re-centra con margen negativo simétrico.
+   El delta (800-680)/2 se reparte; clamp a 0 evita desbordes si el contenedor
+   ya es más angosto que 680 (viewport chico). overflow:hidden del wrapper
+   contiene la imagen al radio. */
 .syn-post__hero {
-  margin: var(--syn-space-xl) 0;
+  width: min(var(--syn-max-width-reading), calc(100% + 2 * var(--syn-hero-bleed, 60px)));
+  margin-block: var(--syn-space-xl);
+  margin-inline: calc(-1 * var(--syn-hero-bleed, 60px));
   border-radius: var(--syn-radius-lg);
   overflow: hidden;
   box-shadow: var(--syn-shadow-card);
+}
+
+@media (max-width: 767px) {
+  /* En móvil el contenedor ya es < 680: sin breakout, el hero llena el ancho. */
+  .syn-post__hero {
+    width: 100%;
+    margin-inline: 0;
+  }
 }
 
 .syn-post__hero img {
@@ -971,7 +985,9 @@ html:has(.syn-launcher) { overflow-x: clip; }
   border-bottom: 0;
 }
 
-/* El item entero es un bloque enlazado con hover-lift sutil */
+/* El item entero es un bloque enlazado. Variante FILA de la post-card
+   canónica: comparte el vocabulario --syn-card-* (radius/lift/sombra-hover)
+   con la grid (categoría/autor) para hover-motion coherente. */
 .syn-article-list__link {
   display: grid;
   grid-template-columns: clamp(96px, 22vw, 140px) 1fr;
@@ -979,15 +995,19 @@ html:has(.syn-launcher) { overflow-x: clip; }
   align-items: start;
   padding: var(--syn-space-md);
   margin-inline: calc(-1 * var(--syn-space-md));
-  border-radius: var(--syn-radius-lg);
+  border: var(--syn-card-border);
+  border-color: transparent;
+  border-radius: var(--syn-card-radius);
   text-decoration: none;
   color: inherit;
-  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
+  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default), box-shadow var(--syn-duration-base) var(--syn-easing-default);
 }
 
 .syn-article-list__link:hover {
-  background: var(--syn-color-surface-secondary);
-  transform: translateY(-2px);
+  background: var(--syn-card-surface);
+  transform: var(--syn-card-lift);
+  box-shadow: var(--syn-card-shadow-hover);
+  border-color: var(--syn-card-border-hover);
   text-decoration: none;
   color: inherit;
 }
@@ -1127,7 +1147,7 @@ html:has(.syn-launcher) { overflow-x: clip; }
   color: var(--syn-color-text-secondary);
   font-size: var(--syn-font-size-base);
   line-height: var(--syn-line-height-relaxed);
-  text-align: center;
+  text-align: start;
 }
 
 .syn-author-page__posts-title {
@@ -1224,32 +1244,150 @@ html:has(.syn-launcher) { overflow-x: clip; }
   margin: 0;
 }
 
-/* ── Blog highlight block ────────────────────────────────────── */
+/* ── Blog highlight block (elementCompBlogHighlight) ──────────────
+   Sección destacada: el primer post (__item--primary) ocupa toda la fila
+   con imagen grande; los siguientes van en grid bajo él. Reusa el
+   vocabulario post-card canónico (--syn-card-*) y el mismo hover-motion
+   (lift + sombra-hover + image scale) que categoría/autor/feed.
+   Clases espejan BlogHighlight.cshtml: __title, __empty, __items >
+   __item (+__item--primary) > __link > __image + __item-title + __excerpt
+   + __meta > __date / __category. ─────────────────────────────────── */
 
 .syn-blog-highlight {
   display: flex;
   flex-direction: column;
-  gap: var(--syn-space-md);
-  padding: var(--syn-card-pad);
-  background: var(--syn-card-surface);
-  border: var(--syn-card-border);
-  border-radius: var(--syn-card-radius);
-  box-shadow: var(--syn-card-shadow);
+  gap: var(--syn-space-lg);
 }
 
 .syn-blog-highlight__title {
   font-size: var(--syn-font-size-2xl);
   font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-snug);
   color: var(--syn-color-text-primary);
   margin: 0;
+}
+
+.syn-blog-highlight__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--syn-space-lg);
+}
+
+.syn-blog-highlight__item {
+  display: flex;
+  flex-direction: column;
+  background: var(--syn-card-surface);
+  border: var(--syn-card-border);
+  border-radius: var(--syn-card-radius);
+  overflow: hidden;
+  box-shadow: var(--syn-card-shadow);
+  transition: transform var(--syn-duration-base) var(--syn-easing-default), var(--syn-transition-colors), box-shadow var(--syn-duration-base) var(--syn-easing-default);
+}
+
+.syn-blog-highlight__item:hover {
+  transform: var(--syn-card-lift);
+  box-shadow: var(--syn-card-shadow-hover);
+  border-color: var(--syn-card-border-hover);
+}
+
+/* El primer post ocupa la fila completa (banner destacado). */
+.syn-blog-highlight__item--primary {
+  grid-column: 1 / -1;
+}
+
+.syn-blog-highlight__link {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
+}
+
+.syn-blog-highlight__link:hover {
+  text-decoration: none;
+  color: inherit;
+}
+
+.syn-blog-highlight__image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  background: var(--syn-color-surface-secondary);
+  transition: transform var(--syn-duration-slow) var(--syn-easing-default);
+}
+
+.syn-blog-highlight__item:hover .syn-blog-highlight__image {
+  transform: scale(1.04);
+}
+
+/* El primary luce su imagen en formato banner (más panorámico). */
+.syn-blog-highlight__item--primary .syn-blog-highlight__image {
+  aspect-ratio: 21 / 9;
+}
+
+.syn-blog-highlight__item-title {
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-semibold);
+  line-height: var(--syn-line-height-snug);
+  color: var(--syn-color-text-primary);
+  margin: 0;
+  padding: var(--syn-space-md) var(--syn-space-md) 0;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-blog-highlight__item--primary .syn-blog-highlight__item-title {
+  font-size: var(--syn-font-size-2xl);
+}
+
+.syn-blog-highlight__link:hover .syn-blog-highlight__item-title {
+  color: var(--syn-color-action-primary);
 }
 
 .syn-blog-highlight__excerpt {
   color: var(--syn-color-text-secondary);
   font-size: var(--syn-font-size-base);
   line-height: var(--syn-line-height-relaxed);
+  flex: 1;
+  margin: var(--syn-space-2) 0 0;
+  padding: 0 var(--syn-space-md);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.syn-blog-highlight__cta {
-  align-self: start;
+.syn-blog-highlight__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--syn-space-2);
+  font-size: var(--syn-font-size-xs);
+  color: var(--syn-color-text-muted);
+  padding: var(--syn-space-md);
+}
+
+.syn-blog-highlight__meta > * + *::before {
+  content: '·';
+  margin-inline-end: var(--syn-space-2);
+  color: var(--syn-color-text-disabled);
+}
+
+.syn-blog-highlight__category {
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-accent);
+  text-transform: uppercase;
+  letter-spacing: var(--syn-letter-spacing-wide);
+}
+
+/* Empty state — patrón dashed canónico */
+.syn-blog-highlight__empty {
+  text-align: center;
+  padding: var(--syn-space-3xl);
+  color: var(--syn-color-text-muted);
+  background: var(--syn-color-surface-secondary);
+  border: 1px dashed var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  margin: 0;
 }

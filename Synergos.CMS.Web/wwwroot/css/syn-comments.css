@@ -107,7 +107,7 @@
 .syn-comment-thread__field {
   display: flex;
   flex-direction: column;
-  gap: var(--syn-space-2);
+  gap: var(--syn-form-label-gap);
 }
 
 .syn-comment-thread__field label {
@@ -176,6 +176,15 @@
   background: var(--syn-color-action-primary-hover);
   box-shadow: var(--syn-shadow-action-hover);
   transform: translateY(-1px);
+}
+
+/* Móvil: el submit ocupa todo el ancho (no flota a la derecha en
+   pantallas estrechas — touch target full-bleed). */
+@media (max-width: 479px) {
+  .syn-comment-thread__submit {
+    width: 100%;
+    align-self: stretch;
+  }
 }
 
 /* ── Login prompt (gated mode) ───────────────────────────────── */

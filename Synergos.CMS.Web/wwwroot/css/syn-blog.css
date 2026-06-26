@@ -54,6 +54,20 @@
   padding: var(--syn-space-md);
   background: var(--syn-color-surface-secondary);
   border-radius: var(--syn-radius-md);
+  text-decoration: none;
+  color: inherit;
+  transition: var(--syn-transition-colors);
+}
+
+/* Cuando el byline es un enlace a la AuthorPage (PostPage) */
+a.syn-author:hover {
+  background: var(--syn-color-surface-tertiary);
+  text-decoration: none;
+  color: inherit;
+}
+
+a.syn-author:hover .syn-author__name {
+  color: var(--syn-color-action-primary);
 }
 
 .syn-author__avatar {
@@ -83,6 +97,7 @@
   font-weight: var(--syn-font-weight-semibold);
   color: var(--syn-color-text-primary);
   margin: 0;
+  transition: var(--syn-transition-colors);
 }
 
 .syn-author__role {

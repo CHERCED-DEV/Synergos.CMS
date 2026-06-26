@@ -27,6 +27,9 @@
         ? category.CategoryName
         : category?.Name;
     var categoryUrl = category?.Url();
+    var author = Model.AuthorRef as AuthorPage;
+    var authorName = !string.IsNullOrWhiteSpace(author?.AuthorName) ? author.AuthorName : author?.Name;
+    var tags = Model.Tags;
 }
 <article class="syn-post">
     <header class="syn-post__header">
@@ -48,9 +51,29 @@
             }
             @if (readTimeMinutes.HasValue)
             {
-                <span class="syn-post__read-time">@readTimeMinutes min</span>
+                <span class="syn-post__reading-time">
+                    <span class="syn-reading-time">@readTimeMinutes min</span>
+                </span>
             }
         </div>
+        @if (author is not null)
+        {
+            <a class="syn-author" href="@author.Url()">
+                <span class="syn-author__avatar">
+                    @if (author.AuthorAvatar is not null)
+                    {
+                        <img src="@author.AuthorAvatar.Url()" alt="@authorName" loading="lazy" />
+                    }
+                </span>
+                <span class="syn-author__info">
+                    <span class="syn-author__name">@authorName</span>
+                    @if (!string.IsNullOrWhiteSpace(author.AuthorRole))
+                    {
+                        <span class="syn-author__role">@author.AuthorRole</span>
+                    }
+                </span>
+            </a>
+        }
     </header>
     @if (heroImage is not null)
     {
@@ -63,6 +86,15 @@
         <div class="syn-post__body">
             @await Html.GetBlockGridHtmlAsync(sections)
         </div>
+    }
+    @if (tags is not null && tags.Any())
+    {
+        <ul class="syn-tag-list syn-post__tags">
+            @foreach (var tag in tags)
+            {
+                <li><span class="syn-tag">@tag</span></li>
+            }
+        </ul>
     }
 </article>
 @{

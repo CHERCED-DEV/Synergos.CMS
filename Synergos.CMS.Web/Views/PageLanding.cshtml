@@ -18,11 +18,22 @@
     var renderCtx = PageRenderContextResolver.Resolve();
     var heading = currentContent?.Value<string>("heading");
     if (string.IsNullOrWhiteSpace(heading)) { heading = currentContent?.Name; }
+    // Eyebrow: campo dedicado si existe, si no la sección contenedora (parent).
+    var eyebrow = currentContent?.Value<string>("eyebrow");
+    if (string.IsNullOrWhiteSpace(eyebrow))
+    {
+        var parent = currentContent?.Parent;
+        eyebrow = parent is not null && parent.Level > 1 ? parent.Name : null;
+    }
 }
 <article class="syn-page syn-page-landing">
     @if (renderCtx.ShowTitle && !string.IsNullOrWhiteSpace(heading))
     {
         <header class="syn-page__header">
+            @if (!string.IsNullOrWhiteSpace(eyebrow))
+            {
+                <span class="syn-page__eyebrow">@eyebrow</span>
+            }
             <h1 class="syn-page__title">@heading</h1>
         </header>
     }

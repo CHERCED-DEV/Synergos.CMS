@@ -48,12 +48,20 @@
   max-width: 420px;
 }
 
+/* Campo: wrapper label↔input. Mismo modelo que .syn-account__field y
+   .syn-comment-thread__field (gap único, sin margin-bottom). El markup
+   debe envolver cada par <label>+<input> en <div class="syn-member-login__field">. */
+.syn-member-login__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-form-label-gap);
+}
+
 .syn-member-login__label {
   font-size: var(--syn-font-size-sm);
   font-weight: var(--syn-font-weight-medium);
   color: var(--syn-color-text-secondary);
   display: block;
-  margin-bottom: var(--syn-space-2);
 }
 
 .syn-member-login input[type="email"],
@@ -68,8 +76,11 @@
   font-family: inherit;
   font-size: var(--syn-font-size-base);
   color: var(--syn-color-text-primary);
-  margin-bottom: var(--syn-space-md);
   transition: var(--syn-transition-colors);
+}
+
+.syn-member-login input:hover {
+  border-color: var(--syn-color-brand-400);
 }
 
 .syn-member-login input:focus,

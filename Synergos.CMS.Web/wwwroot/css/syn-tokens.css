@@ -108,6 +108,11 @@
   --syn-space-2xl: var(--syn-space-12);
   --syn-space-3xl: var(--syn-space-16);
 
+  /* Form rhythm: gap único label↔input para TODOS los *__field
+     (account / member-login / comment-thread). Fuente ÚNICA — así
+     los tres campos quedan idénticos y on-grid 8pt. */
+  --syn-form-label-gap: var(--syn-space-2);   /* 8px */
+
   /* ── Layout widths ────────────────────────────────────────── */
   --syn-max-width-content: 1200px;
   --syn-max-width-normal:  1040px;  /* container/admin shell estándar (ancla el 1040/1024 hardcodeado) */

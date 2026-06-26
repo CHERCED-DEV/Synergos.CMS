@@ -9,14 +9,12 @@
     var title = Model.Value<string>("headingTitle");
     if (string.IsNullOrWhiteSpace(title)) { return; }
     var subtitle = Model.Value<string>("headingSubtitle");
-    var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
     var ariaLabel = Model.Value<string>("ariaLabel");
     var headingLevel = (ViewData["HeadingLevel"] as string) ?? "h2";
     var classes = string.Join(" ", new[]
     {
-        "syn-heading",
-        string.IsNullOrWhiteSpace(variant) ? null : $"syn-heading--{variant}",
+        "syn-heading-group__title",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 }
@@ -24,6 +22,6 @@
     <@headingLevel class="@classes"@(string.IsNullOrWhiteSpace(ariaLabel) ? "" : $" aria-label=\"{ariaLabel}\"")>@title</@headingLevel>
     @if (!string.IsNullOrWhiteSpace(subtitle))
     {
-        <p class="syn-heading__subtitle">@subtitle</p>
+        <p class="syn-heading-group__subtitle">@subtitle</p>
     }
 </header>

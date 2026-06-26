@@ -51,7 +51,7 @@
   border: 1px solid var(--syn-color-border-inverse);
   box-shadow:
     0 0 0 1px rgb(var(--syn-channel-brand) / 0.12),
-    0 28px 72px -36px rgb(2 6 23 / 0.85);
+    0 28px 72px -36px rgb(var(--syn-channel-ink) / 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   animation: syn-pr-rise 0.7s var(--syn-easing-default) 0.06s backwards;
@@ -102,7 +102,7 @@
 .syn-account__field {
   display: flex;
   flex-direction: column;
-  gap: var(--syn-space-3);
+  gap: var(--syn-form-label-gap);
 }
 
 .syn-account__field > label,
@@ -121,7 +121,7 @@
   width: 100%;
   min-height: 48px;
   padding: var(--syn-space-3) var(--syn-space-4);
-  background: rgb(2 6 23 / 0.30);
+  background: rgb(var(--syn-channel-ink) / 0.30);
   border: 1px solid var(--syn-color-border-inverse);
   border-radius: var(--syn-radius-md);
   font-family: inherit;
@@ -179,7 +179,7 @@ label.syn-account__field {
   gap: var(--syn-space-2);
   cursor: pointer;
   color: var(--syn-color-text-secondary);
-  font-weight: var(--syn-font-weight-normal);
+  font-weight: var(--syn-font-weight-regular);
 }
 
 .syn-account__field--checkbox input[type="checkbox"] {

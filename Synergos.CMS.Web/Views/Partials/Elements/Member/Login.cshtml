@@ -23,9 +23,13 @@
     {
         <input type="hidden" name="returnUrl" value="@redirect" />
     }
-    <label class="syn-member-login__label" for="syn-login-email-@Model.Key">Email</label>
-    <input id="syn-login-email-@Model.Key" type="email" name="email" required autocomplete="username" />
-    <label class="syn-member-login__label" for="syn-login-password-@Model.Key">Contraseña</label>
-    <input id="syn-login-password-@Model.Key" type="password" name="password" required autocomplete="current-password" />
+    <div class="syn-member-login__field">
+        <label class="syn-member-login__label" for="syn-login-email-@Model.Key">Email</label>
+        <input id="syn-login-email-@Model.Key" type="email" name="email" required autocomplete="username" />
+    </div>
+    <div class="syn-member-login__field">
+        <label class="syn-member-login__label" for="syn-login-password-@Model.Key">Contraseña</label>
+        <input id="syn-login-password-@Model.Key" type="password" name="password" required autocomplete="current-password" />
+    </div>
     <button type="submit" class="syn-member-login__submit">@("Iniciar sesión")</button>
 </form>

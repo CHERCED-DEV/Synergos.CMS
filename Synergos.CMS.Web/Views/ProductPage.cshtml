@@ -33,53 +33,74 @@
         : null;
 }
 <article class="syn-product" data-sku="@sku" data-currency="@currency">
-    <header class="syn-product__header">
-        @if (!string.IsNullOrWhiteSpace(categoryName))
-        {
-            <a class="syn-product__category" href="@category!.Url()">@categoryName</a>
-        }
-        <h1 class="syn-product__name">@name</h1>
-        <p class="syn-product__sku">SKU: @sku</p>
-    </header>
-
     @if (images.Length > 0)
     {
-        <figure class="syn-product__gallery">
-            @foreach (var img in images)
+        <div class="syn-product__gallery">
+            <figure class="syn-product__gallery-stage">
+                <img class="syn-product__image" src="@images[0].Url()" alt="@name"
+                     data-main-image loading="eager" />
+            </figure>
+            @if (images.Length > 1)
             {
-                <img class="syn-product__image" src="@img.Url()" alt="@name" loading="lazy" />
+                <ul class="syn-product__thumbs" role="list">
+                    @for (var i = 0; i < images.Length; i++)
+                    {
+                        var img = images[i];
+                        <li class="syn-product__thumb-item">
+                            <button type="button"
+                                    class="syn-product__thumb@(i == 0 ? " syn-product__thumb--active" : "")"
+                                    data-thumb
+                                    data-thumb-src="@img.Url()"
+                                    aria-pressed="@(i == 0 ? "true" : "false")"
+                                    aria-label="@string.Format(Umbraco.GetDictionaryValue("shop.viewImage", "Ver imagen {0}"), i + 1)">
+                                <img class="syn-product__thumb-image" src="@img.Url()" alt="" loading="lazy" />
+                            </button>
+                        </li>
+                    }
+                </ul>
             }
-        </figure>
+        </div>
     }
 
-    <section class="syn-product__pricing">
-        <p class="syn-product__price" data-price="@price.ToString(CultureInfo.InvariantCulture)">
-            @price.ToString("N0", CultureInfo.GetCultureInfo("es-CO")) @currency
-        </p>
+    <div class="syn-product__info">
+        <header class="syn-product__header">
+            @if (!string.IsNullOrWhiteSpace(categoryName))
+            {
+                <a class="syn-product__category" href="@category!.Url()">@categoryName</a>
+            }
+            <h1 class="syn-product__name">@name</h1>
+            <p class="syn-product__sku">SKU: @sku</p>
+        </header>
+
+        <section class="syn-product__pricing">
+            <p class="syn-product__price" data-price="@price.ToString(CultureInfo.InvariantCulture)">
+                @price.ToString("N0", CultureInfo.GetCultureInfo("es-CO")) @currency
+            </p>
+            @if (inStock)
+            {
+                <p class="syn-product__stock syn-product__stock--in">@Umbraco.GetDictionaryValue("shop.inStock", "Disponible")</p>
+            }
+            else
+            {
+                <p class="syn-product__stock syn-product__stock--out">@Umbraco.GetDictionaryValue("shop.outOfStock", "Agotado")</p>
+            }
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(variantsJson))
+        {
+            <section class="syn-product__variants" data-variants="@variantsJson"
+                     aria-label="@Umbraco.GetDictionaryValue("shop.variants", "Variantes")">
+                @* El design system frontend hidrata el selector según data-variants. *@
+            </section>
+        }
+
         @if (inStock)
         {
-            <p class="syn-product__stock syn-product__stock--in">@Umbraco.GetDictionaryValue("shop.inStock", "Disponible")</p>
+            <button type="button" class="syn-product__add-to-cart" data-action="add-to-cart" data-sku="@sku">
+                @Umbraco.GetDictionaryValue("shop.addToCart", "Agregar al carrito")
+            </button>
         }
-        else
-        {
-            <p class="syn-product__stock syn-product__stock--out">@Umbraco.GetDictionaryValue("shop.outOfStock", "Agotado")</p>
-        }
-    </section>
-
-    @if (!string.IsNullOrWhiteSpace(variantsJson))
-    {
-        <section class="syn-product__variants" data-variants="@variantsJson"
-                 aria-label="@Umbraco.GetDictionaryValue("shop.variants", "Variantes")">
-            @* El design system frontend hidrata el selector según data-variants. *@
-        </section>
-    }
-
-    @if (inStock)
-    {
-        <button type="button" class="syn-product__add-to-cart" data-action="add-to-cart" data-sku="@sku">
-            @Umbraco.GetDictionaryValue("shop.addToCart", "Agregar al carrito")
-        </button>
-    }
+    </div>
 
     @if (sections is not null && sections.Any())
     {

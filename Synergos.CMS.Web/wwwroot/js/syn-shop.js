@@ -160,6 +160,26 @@
         e.preventDefault();
         clampQty(input, incBtn ? 1 : -1);
       }
+      return;
+    }
+
+    // Galería PDP: click en un thumbnail [data-thumb] cambia el src de
+    // la imagen principal [data-main-image] y marca el thumb activo.
+    var thumb = e.target.closest("[data-thumb]");
+    if (thumb) {
+      var gallery = thumb.closest(".syn-product__gallery");
+      if (!gallery) { return; }
+      var main = gallery.querySelector("[data-main-image]");
+      var src = thumb.getAttribute("data-thumb-src");
+      if (!main || !src) { return; }
+      e.preventDefault();
+      main.setAttribute("src", src);
+      var thumbs = gallery.querySelectorAll("[data-thumb]");
+      for (var k = 0; k < thumbs.length; k++) {
+        var isActive = thumbs[k] === thumb;
+        thumbs[k].classList.toggle("syn-product__thumb--active", isActive);
+        thumbs[k].setAttribute("aria-pressed", isActive ? "true" : "false");
+      }
     }
   });
 })();
