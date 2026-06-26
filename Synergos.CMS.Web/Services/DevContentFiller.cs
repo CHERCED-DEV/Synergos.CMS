@@ -1504,7 +1504,29 @@ public sealed class DevContentFiller
             "Synergos Tienda Hero", "Hero del vertical Tienda", "#020817", "#4f6ef7",
             ("Ver el catálogo", "/tienda/ropa"), ("Hablar con ventas", "/synergos/contacto"));
         AddProductGrid(b);
+        // Componente CDN-Angular REAL (bundle ~25KB → hidrata <synergos-faq-section>):
+        // acordeón interactivo servido desde la CDN — demuestra el render híbrido en la demo.
+        AddSynBlock(b, "elementSynFaqSection", c => c
+            .Set("headingText", "Preguntas frecuentes")
+            .Set("theme", "dark")
+            .Set("itemsJson", "[{\"question\":\"¿Hacen envíos a todo el país?\",\"answer\":\"Sí, enviamos a toda Colombia con seguimiento incluido.\"},{\"question\":\"¿Puedo devolver un producto?\",\"answer\":\"Tenés 30 días para devoluciones, sin preguntas.\"},{\"question\":\"¿Qué medios de pago aceptan?\",\"answer\":\"Tarjetas, PSE y pago contra entrega en ciudades principales.\"}]"));
         return b.Build();
+    }
+
+    // Siembra un bloque CDN-Angular (elementSyn* → <synergos-*> hidratado desde la CDN).
+    // Para demos: preferir estos sobre los Razor nativos donde aporten (ver memoria
+    // feedback_prefer_cdn_angular_components). Sale no-op si el schema no está importado.
+    private void AddSynBlock(BlockGridJsonBuilder b, string alias, Action<BlockGridJsonBuilder.BlockBuilder> configure)
+    {
+        var key = _contentTypeService.Get(alias)?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            configure(c);
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
     }
 
     private void AddProductGrid(BlockGridJsonBuilder b)
