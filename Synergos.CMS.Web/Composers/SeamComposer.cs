@@ -330,6 +330,11 @@ public sealed class SeamComposer : IComposer
         // ADR 0098 H2 — repositorio de historia clínica (versionado, sobre el PHI store).
         services.AddSingleton<IPatientRepository, FileSystemPatientRepository>();
 
+        // ADR 0098 H2b — agenda de citas: lógica pura (Application) + scheduler Web
+        // con lock async por-doctor (anti-overbooking) sobre el PHI store.
+        services.AddSingleton<Synergos.CMS.Application.Services.AppointmentSchedulingService>();
+        services.AddSingleton<IAppointmentScheduler, LockingAppointmentScheduler>();
+
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).
         // Singleton — solo depende de IOptions + IHostEnvironment + ILogger.
