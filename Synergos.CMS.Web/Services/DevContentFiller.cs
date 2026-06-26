@@ -1274,6 +1274,7 @@ public sealed class DevContentFiller
         AddSplit(b, h2, "", b2, mediaName, h2, hexFrom, hexTo, mediaOnRight: true, ctaLabel: null, ctaUrl: null);
         AddCta(b, "¿Querés ver SynergosLabs en acción?",
             "Una demo de 30 minutos, sin compromiso.", "Hablar con ventas", "/synergos/contacto");
+        AddCommentThread(b, "Comentarios");
         return b.Build();
     }
 
@@ -1310,6 +1311,19 @@ public sealed class DevContentFiller
         section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c => c
             .Set("listTitle", title)
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    // Hilo de comentarios (ADR 0038). Se auto-enlaza al nodo actual al renderizar,
+    // así que dropearlo en el cuerpo del post muestra los comentarios de ese post.
+    private void AddCommentThread(BlockGridJsonBuilder b, string heading)
+    {
+        var key = _contentTypeService.Get("elementCommentThread")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("heading", heading)
             .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
 
