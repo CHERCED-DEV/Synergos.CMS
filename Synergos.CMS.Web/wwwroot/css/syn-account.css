@@ -1,67 +1,88 @@
 /* ============================================================
-   Synergos CMS — Account views
+   Synergos CMS — Account views (frame "launcher / PS3")
    ============================================================
    Login + Register + Profile + ForgotPassword + ResetPassword +
-   ResendConfirmation + Registered + ConfirmEmail.
+   ResendConfirmation + Registered + ConfirmEmail + TwoFactor*.
    Layout=null views — autocontenidas, NO heredan _Layout chrome.
 
-   Cada Account view debe cargar en su <head>:
-     <link rel="stylesheet" href="~/css/syn-tokens.css" />
-     <link rel="stylesheet" href="~/css/syn-base.css" />
-     <link rel="stylesheet" href="~/css/syn-account.css" />
+   Igualadas al landing de la plataforma (PlatformRoot.cshtml): el
+   <body> lleva `syn-account syn-launcher` para heredar el fondo dark
+   premium + el chrome animado que inyecta platform-root.js (onda,
+   ribbon, partículas, reloj, power-on flash) sobre cualquier
+   `.syn-launcher`. El hero (isotipo + eyebrow + título) reusa las
+   clases `.syn-launcher__*`. Aquí solo vive la TARJETA premium que
+   contiene el formulario y sus controles.
 
-   Razón: Layout=null bypasses _Layout.cshtml, por lo que el
-   <link> de tokens NO se inyecta automáticamente. Cargar los 3
-   en orden garantiza estilo correcto sin FOUC y sin @import en
-   CSS (que bloquea render).
+   Cada Account view carga en su <head> (via _AccountHead) el MISMO
+   bundle que PlatformRoot:
+     syn-tokens · syn-base · syn-utilities · syn-primitives ·
+     syn-pages (.syn-launcher*) · syn-account (este archivo)
+   + Manrope + favicon. Razón: Layout=null bypassea _Layout.cshtml,
+   por lo que el <link> de tokens NO se inyecta automáticamente.
    ------------------------------------------------------------ */
 
-/* ── Account shell ───────────────────────────────────────────── */
-
-.syn-account {
-  min-height: 100vh;
-  background: linear-gradient(135deg,
-    var(--syn-color-surface-canvas) 0%,
-    var(--syn-color-surface-secondary) 100%);
+/* ── Frame: el launcher centra su contenido; lo encogemos al ancho
+   de un formulario (no el ancho de contenido del landing). ────── */
+.syn-account .syn-launcher__main {
+  max-width: 30rem;          /* 480px — columna de formulario */
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--syn-space-lg);
-  font-family: var(--syn-font-family-body);
 }
 
-.syn-account__main {
+.syn-account .syn-launcher__hero {
+  margin-bottom: var(--syn-space-8);
+}
+
+/* ── Tarjeta premium (glass/surface, mismo lenguaje que las cards
+   del launcher: overlay translúcido + borde sutil + blur + glow). ── */
+.syn-account__card {
+  position: relative;
+  z-index: 1;
   width: 100%;
-  max-width: 440px;
-  background: var(--syn-color-surface-primary);
-  border: 1px solid var(--syn-color-border-subtle);
-  border-radius: var(--syn-radius-xl);
-  padding: var(--syn-space-2xl) var(--syn-space-xl);
-  box-shadow: var(--syn-shadow-floating);
+  padding: var(--syn-space-8) var(--syn-space-8) var(--syn-space-7);
+  border-radius: var(--syn-card-radius, var(--syn-radius-2xl));
+  background: var(--syn-color-overlay-subtle);
+  border: 1px solid var(--syn-color-border-inverse);
+  box-shadow:
+    0 0 0 1px rgb(var(--syn-channel-brand) / 0.12),
+    0 28px 72px -36px rgb(2 6 23 / 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: syn-pr-rise 0.7s var(--syn-easing-default) 0.06s backwards;
 }
 
 @media (max-width: 480px) {
-  .syn-account__main {
-    border-radius: var(--syn-radius-lg);
-    padding: var(--syn-space-xl) var(--syn-space-lg);
+  .syn-account__card {
+    padding: var(--syn-space-6) var(--syn-space-5) var(--syn-space-5);
+    border-radius: var(--syn-radius-xl);
   }
 }
 
+/* Título interno de la tarjeta (cuando una vista necesita un H1 en
+   la tarjeta en vez de en el hero — fallback / vistas de estado). */
 .syn-account__heading {
-  font-size: var(--syn-font-size-3xl);
+  font-size: var(--syn-font-size-2xl);
   font-weight: var(--syn-font-weight-bold);
   letter-spacing: var(--syn-letter-spacing-tight);
   color: var(--syn-color-text-primary);
-  margin-bottom: var(--syn-space-xl);
+  margin: 0 0 var(--syn-space-5);
   text-align: center;
 }
 
 .syn-account__intro {
   text-align: center;
   color: var(--syn-color-text-secondary);
-  margin-bottom: var(--syn-space-lg);
+  margin: 0 0 var(--syn-space-6);
   font-size: var(--syn-font-size-base);
   line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-account__hint {
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-relaxed);
+  margin: 0 0 var(--syn-space-5);
 }
 
 /* ── Form ────────────────────────────────────────────────────── */
@@ -69,8 +90,8 @@
 .syn-account__form {
   display: flex;
   flex-direction: column;
-  gap: var(--syn-space-md);
-  margin-bottom: var(--syn-space-lg);
+  gap: var(--syn-space-4);
+  margin: 0;
 }
 
 .syn-account__field {
@@ -79,7 +100,8 @@
   gap: var(--syn-space-2);
 }
 
-.syn-account__field label {
+.syn-account__field > label,
+.syn-account__field-label {
   font-size: var(--syn-font-size-sm);
   font-weight: var(--syn-font-weight-medium);
   color: var(--syn-color-text-secondary);
@@ -88,45 +110,62 @@
 .syn-account__field input[type="email"],
 .syn-account__field input[type="password"],
 .syn-account__field input[type="text"],
-.syn-account__field input[type="tel"] {
+.syn-account__field input[type="tel"],
+.syn-account__field-input {
   display: block;
   width: 100%;
   min-height: 44px;
   padding: var(--syn-space-3) var(--syn-space-4);
-  background: var(--syn-color-surface-primary);
-  border: 1px solid var(--syn-color-border-default);
+  background: rgb(var(--syn-channel-brand) / 0.06);
+  border: 1px solid var(--syn-color-border-inverse);
   border-radius: var(--syn-radius-md);
   font-family: inherit;
   font-size: var(--syn-font-size-base);
   color: var(--syn-color-text-primary);
-  transition: var(--syn-transition-colors);
+  transition: var(--syn-transition-colors),
+              box-shadow var(--syn-duration-fast) var(--syn-easing-out);
 }
 
-.syn-account__field input:hover {
-  border-color: var(--syn-color-border-strong);
+.syn-account__field input:hover,
+.syn-account__field-input:hover {
+  border-color: var(--syn-color-brand-400);
 }
 
 .syn-account__field input:focus,
-.syn-account__field input:focus-visible {
+.syn-account__field input:focus-visible,
+.syn-account__field-input:focus,
+.syn-account__field-input:focus-visible {
   outline: none;
   border-color: var(--syn-color-action-primary);
   box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
 }
 
-.syn-account__field input:disabled {
+.syn-account__field input:disabled,
+.syn-account__field-input:disabled {
   background: var(--syn-color-action-disabled-surface);
   color: var(--syn-color-action-disabled-text);
   cursor: not-allowed;
 }
 
-.syn-account__field input::placeholder {
+.syn-account__field input::placeholder,
+.syn-account__field-input::placeholder {
   color: var(--syn-color-text-disabled);
+}
+
+.syn-account__field small {
+  font-size: var(--syn-font-size-xs);
+  color: var(--syn-color-text-muted);
+}
+
+/* Una etiqueta-contenedora (label envuelve span + input, patrón 2FA). */
+label.syn-account__field {
+  cursor: text;
 }
 
 .syn-account__field--checkbox {
   flex-direction: row;
   align-items: center;
-  gap: var(--syn-space-sm);
+  gap: var(--syn-space-3);
 }
 
 .syn-account__field--checkbox label {
@@ -135,6 +174,7 @@
   gap: var(--syn-space-2);
   cursor: pointer;
   color: var(--syn-color-text-secondary);
+  font-weight: var(--syn-font-weight-normal);
 }
 
 .syn-account__field--checkbox input[type="checkbox"] {
@@ -144,7 +184,7 @@
   cursor: pointer;
 }
 
-/* ── Submit button ───────────────────────────────────────────── */
+/* ── Submit (primario on-brand) ─────────────────────────────── */
 
 .syn-account__submit {
   display: flex;
@@ -160,16 +200,25 @@
   font-family: inherit;
   font-size: var(--syn-font-size-base);
   font-weight: var(--syn-font-weight-semibold);
+  text-decoration: none;
   cursor: pointer;
-  box-shadow: var(--syn-shadow-action);
-  transition: var(--syn-transition-colors), transform var(--syn-duration-fast) var(--syn-easing-out);
+  box-shadow: 0 12px 30px -14px rgb(var(--syn-channel-brand) / 0.7);
+  transition: var(--syn-transition-colors),
+              transform var(--syn-duration-fast) var(--syn-easing-out),
+              box-shadow var(--syn-duration-fast) var(--syn-easing-out);
   margin-top: var(--syn-space-2);
 }
 
 .syn-account__submit:hover {
   background: var(--syn-color-action-primary-hover);
-  box-shadow: var(--syn-shadow-action-hover);
+  box-shadow: 0 18px 40px -16px rgb(var(--syn-channel-brand) / 0.85);
   transform: translateY(-1px);
+}
+
+.syn-account__submit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring),
+              0 12px 30px -14px rgb(var(--syn-channel-brand) / 0.7);
 }
 
 .syn-account__submit:active {
@@ -184,145 +233,231 @@
   transform: none;
 }
 
-/* ── Messages: error / success ───────────────────────────────── */
+/* ── Mensajes: error / éxito / info / feedback genérico ──────── */
 
-.syn-account__error {
+.syn-account__error,
+.syn-account__success,
+.syn-account__info,
+.syn-account__feedback {
+  border-radius: var(--syn-radius-md);
+  padding: var(--syn-space-3) var(--syn-space-4);
+  margin: 0 0 var(--syn-space-4);
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-account__error,
+.syn-account__feedback--error {
   background: var(--syn-color-state-danger-surface);
   color: var(--syn-color-state-danger-text);
   border: 1px solid var(--syn-color-state-danger-border);
-  border-radius: var(--syn-radius-md);
-  padding: var(--syn-space-sm) var(--syn-space-md);
-  margin-bottom: var(--syn-space-md);
-  font-size: var(--syn-font-size-sm);
   font-weight: var(--syn-font-weight-medium);
 }
 
-.syn-account__success {
+.syn-account__success,
+.syn-account__feedback--success {
   background: var(--syn-color-state-success-surface);
   color: var(--syn-color-state-success-text);
   border: 1px solid var(--syn-color-state-success-border);
-  border-radius: var(--syn-radius-md);
-  padding: var(--syn-space-sm) var(--syn-space-md);
-  margin-bottom: var(--syn-space-md);
-  font-size: var(--syn-font-size-sm);
   font-weight: var(--syn-font-weight-medium);
 }
 
-.syn-account__info {
+.syn-account__feedback--info {
   background: var(--syn-color-state-info-surface);
   color: var(--syn-color-state-info-text);
   border: 1px solid var(--syn-color-state-info-border);
-  border-radius: var(--syn-radius-md);
-  padding: var(--syn-space-sm) var(--syn-space-md);
-  margin-bottom: var(--syn-space-md);
-  font-size: var(--syn-font-size-sm);
 }
 
-/* ── Alt links (Register/Login switch) ───────────────────────── */
-
-.syn-account__alt {
-  text-align: center;
-  margin: var(--syn-space-md) 0 0;
-  font-size: var(--syn-font-size-sm);
-  color: var(--syn-color-text-muted);
+/* `.syn-account__info` se usa también como SECCIÓN de contenido
+   (Profile/TwoFactor): cuando envuelve bloques, no es un banner. */
+.syn-account__info {
+  background: var(--syn-color-overlay-subtle);
+  color: var(--syn-color-text-secondary);
+  border: 1px solid var(--syn-color-border-inverse);
 }
 
-.syn-account__alt a {
-  color: var(--syn-color-action-primary);
-  font-weight: var(--syn-font-weight-medium);
-  text-decoration: none;
-}
-
-.syn-account__alt a:hover {
-  color: var(--syn-color-action-primary-hover);
-  text-decoration: underline;
-}
-
-/* ── Forgot password link inline ─────────────────────────────── */
-
-.syn-account__forgot-link {
-  text-align: end;
-  font-size: var(--syn-font-size-sm);
-  margin-top: calc(var(--syn-space-3) * -1);
-}
-
-.syn-account__forgot-link a {
-  color: var(--syn-color-action-primary);
-  text-decoration: none;
-  font-weight: var(--syn-font-weight-medium);
-}
-
-.syn-account__forgot-link a:hover {
-  text-decoration: underline;
-}
-
-/* ── Profile (logged-in view) ────────────────────────────────── */
-
-.syn-account__profile-header {
-  display: flex;
-  align-items: center;
-  gap: var(--syn-space-md);
-  margin-bottom: var(--syn-space-lg);
-  padding-bottom: var(--syn-space-md);
-  border-bottom: 1px solid var(--syn-color-border-subtle);
-}
-
-.syn-account__profile-avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--syn-color-state-brand-surface);
-  color: var(--syn-color-state-brand-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--syn-font-size-2xl);
-  font-weight: var(--syn-font-weight-bold);
-  flex-shrink: 0;
-}
-
-.syn-account__profile-name {
-  margin: 0;
+.syn-account__info h2,
+.syn-account__change-password h2 {
   font-size: var(--syn-font-size-lg);
   font-weight: var(--syn-font-weight-semibold);
   color: var(--syn-color-text-primary);
+  margin: 0 0 var(--syn-space-3);
 }
 
-.syn-account__profile-email {
-  margin: var(--syn-space-1) 0 0;
+.syn-account__info p {
+  margin: 0 0 var(--syn-space-3);
+}
+
+.syn-account__info p:last-child {
+  margin-bottom: 0;
+}
+
+.syn-account__info strong {
+  color: var(--syn-color-text-primary);
+}
+
+/* ── Secciones internas (Profile / TwoFactor) ───────────────── */
+
+.syn-account__change-password {
+  margin-top: var(--syn-space-7);
+  padding-top: var(--syn-space-6);
+  border-top: 1px solid var(--syn-color-border-inverse);
+}
+
+.syn-account__info + .syn-account__info {
+  margin-top: var(--syn-space-5);
+}
+
+.syn-account__info dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--syn-space-2) var(--syn-space-4);
+  margin: 0;
+}
+
+.syn-account__info dt {
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
   color: var(--syn-color-text-muted);
+}
+
+.syn-account__info dd {
+  margin: 0;
+  color: var(--syn-color-text-primary);
+  font-weight: var(--syn-font-weight-medium);
+}
+
+/* ── Alt links (Register/Login switch · back to login) ──────── */
+
+.syn-account__alt {
+  text-align: center;
+  margin: var(--syn-space-5) 0 0;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+}
+
+.syn-account__alt a,
+.syn-account__card a:not(.syn-account__submit) {
+  color: var(--syn-color-text-accent);
+  font-weight: var(--syn-font-weight-medium);
+  text-decoration: none;
+}
+
+.syn-account__alt a:hover,
+.syn-account__card a:not(.syn-account__submit):hover {
+  text-decoration: underline;
+}
+
+.syn-account__alt a:focus-visible,
+.syn-account__card a:not(.syn-account__submit):focus-visible {
+  outline: 2px solid var(--syn-color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--syn-radius-sm);
+}
+
+/* Link "olvidé contraseña" alineado a la derecha bajo el campo. */
+.syn-account__forgot-link {
+  text-align: end;
+  font-size: var(--syn-font-size-sm);
+  margin-top: calc(var(--syn-space-2) * -1);
+}
+
+/* ── 2FA: QR, secret, recovery codes ────────────────────────── */
+
+.syn-account__qr-image {
+  display: block;
+  margin: var(--syn-space-3) 0;
+  border-radius: var(--syn-radius-md);
+  background: var(--syn-color-neutral-0);
+  padding: var(--syn-space-3);
+}
+
+.syn-account__details {
+  margin-top: var(--syn-space-3);
+}
+
+.syn-account__details summary {
+  cursor: pointer;
+  color: var(--syn-color-text-accent);
+  font-weight: var(--syn-font-weight-medium);
   font-size: var(--syn-font-size-sm);
 }
 
-.syn-account__profile-actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--syn-space-sm);
-  margin-top: var(--syn-space-lg);
+.syn-account__totp-secret,
+.syn-account__code-block {
+  display: inline-block;
+  font-family: var(--syn-font-family-mono, monospace);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-primary);
+  background: rgb(var(--syn-channel-brand) / 0.10);
+  border: 1px solid var(--syn-color-border-inverse);
+  border-radius: var(--syn-radius-sm);
+  padding: var(--syn-space-1) var(--syn-space-2);
+  word-break: break-all;
 }
 
-@media (min-width: 480px) {
-  .syn-account__profile-actions {
-    flex-direction: row;
-    justify-content: space-between;
+.syn-account__code-block {
+  display: block;
+  padding: var(--syn-space-3);
+  overflow-x: auto;
+}
+
+.syn-account__recovery-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--syn-space-2) var(--syn-space-4);
+  margin: var(--syn-space-3) 0;
+  padding-inline-start: var(--syn-space-5);
+}
+
+.syn-account__recovery-list code {
+  font-family: var(--syn-font-family-mono, monospace);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-primary);
+  letter-spacing: var(--syn-letter-spacing-wide);
+}
+
+@media (max-width: 480px) {
+  .syn-account__recovery-list {
+    grid-template-columns: 1fr;
   }
 }
 
+/* ── Logout (form + botón ghost danger) ─────────────────────── */
+
 .syn-account__logout {
+  margin: var(--syn-space-6) 0 0;
+}
+
+.syn-account__logout-button {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--syn-space-2) var(--syn-space-5);
   background: transparent;
   color: var(--syn-color-action-danger);
   border: 1px solid var(--syn-color-action-danger);
   border-radius: var(--syn-radius-md);
-  padding: var(--syn-space-2) var(--syn-space-4);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
   font-weight: var(--syn-font-weight-semibold);
   cursor: pointer;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  transition: var(--syn-transition-colors);
 }
 
-.syn-account__logout:hover {
+.syn-account__logout-button:hover {
   background: var(--syn-color-action-danger);
   color: var(--syn-color-action-danger-text);
+}
+
+.syn-account__logout-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring-danger);
+}
+
+/* ── Reduced motion: la tarjeta no entra animada ────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .syn-account__card { animation: none; }
 }

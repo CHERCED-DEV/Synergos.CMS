@@ -1,59 +1,62 @@
 @*
     AccountController.ResendConfirmation (Ola 84). Anti-enumeration:
     respondemos OK siempre. Solo se envía email si el member existe y
-    no está confirmado todavía.
+    no está confirmado todavía. Frame "launcher / PS3". Campo `email`
+    sin cambios.
 *@
 @{
     Layout = null;
     var messageCode = ViewData["MessageCode"] as string;
+    var title = Umbraco.GetDictionaryValue("Account.ResendConfirmation.Title", "Reenviar email de confirmación");
 }
 <!DOCTYPE html>
-<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">
 <head>
     @await Html.PartialAsync("_AccountHead")
-    <title>@Umbraco.GetDictionaryValue("Account.ResendConfirmation.Title", "Reenviar email de confirmación")</title>
+    <title>@title</title>
 </head>
-<body class="syn-account">
-    <main class="syn-account__main">
-        <h1 class="syn-account__heading">
-            @Umbraco.GetDictionaryValue("Account.ResendConfirmation.Title", "Reenviar email de confirmación")
-        </h1>
+<body class="syn-account syn-launcher">
+    <main class="syn-launcher__main">
+        @await Html.PartialAsync("_AccountHero", (object)title)
 
-        @if (string.Equals(messageCode, "sent", StringComparison.Ordinal))
-        {
-            <p class="syn-account__success" role="status" aria-live="polite">
-                @Umbraco.GetDictionaryValue("Account.ResendConfirmation.Sent",
-                    "Si el email está registrado y aún no fue confirmado, te enviamos un nuevo link. Revisa tu bandeja de entrada (y la carpeta de spam).")
-            </p>
-            <p class="syn-account__alt"><a href="/account/login">@Umbraco.GetDictionaryValue("Account.BackToLogin", "Volver al login")</a></p>
-        }
-        else
-        {
-            <p class="syn-account__intro">
-                @Umbraco.GetDictionaryValue("Account.ResendConfirmation.Intro",
-                    "Si no recibiste el email de confirmación o expiró el link anterior, ingresa tu email para enviarte uno nuevo.")
-            </p>
+        <div class="syn-account__card">
+            @if (string.Equals(messageCode, "sent", StringComparison.Ordinal))
+            {
+                <p class="syn-account__success" role="status" aria-live="polite">
+                    @Umbraco.GetDictionaryValue("Account.ResendConfirmation.Sent",
+                        "Si el email está registrado y aún no fue confirmado, te enviamos un nuevo link. Revisa tu bandeja de entrada (y la carpeta de spam).")
+                </p>
+                <p class="syn-account__alt"><a href="/account/login">@Umbraco.GetDictionaryValue("Account.BackToLogin", "Volver al login")</a></p>
+            }
+            else
+            {
+                <p class="syn-account__intro">
+                    @Umbraco.GetDictionaryValue("Account.ResendConfirmation.Intro",
+                        "Si no recibiste el email de confirmación o expiró el link anterior, ingresa tu email para enviarte uno nuevo.")
+                </p>
 
-            <form class="syn-account__form" action="/account/resend-confirmation" method="post" novalidate>
-                <div class="syn-account__field">
-                    <label for="syn-resend-email">@Umbraco.GetDictionaryValue("Account.Login.EmailLabel", "Email")</label>
-                    <input id="syn-resend-email"
-                           type="email"
-                           name="email"
-                           autocomplete="email"
-                           required
-                           aria-required="true" />
-                </div>
+                <form class="syn-account__form" action="/account/resend-confirmation" method="post" novalidate>
+                    <div class="syn-account__field">
+                        <label for="syn-resend-email">@Umbraco.GetDictionaryValue("Account.Login.EmailLabel", "Email")</label>
+                        <input id="syn-resend-email"
+                               type="email"
+                               name="email"
+                               autocomplete="email"
+                               required
+                               aria-required="true" />
+                    </div>
 
-                <button type="submit" class="syn-account__submit">
-                    @Umbraco.GetDictionaryValue("Account.ResendConfirmation.Submit", "Reenviar link")
-                </button>
-            </form>
+                    <button type="submit" class="syn-account__submit">
+                        @Umbraco.GetDictionaryValue("Account.ResendConfirmation.Submit", "Reenviar link")
+                    </button>
+                </form>
 
-            <p class="syn-account__alt">
-                <a href="/account/login">@Umbraco.GetDictionaryValue("Account.BackToLogin", "Volver al login")</a>
-            </p>
-        }
+                <p class="syn-account__alt">
+                    <a href="/account/login">@Umbraco.GetDictionaryValue("Account.BackToLogin", "Volver al login")</a>
+                </p>
+            }
+        </div>
     </main>
+    <script src="~/js/platform-root.js" asp-append-version="true" defer></script>
 </body>
 </html>
