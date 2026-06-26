@@ -214,11 +214,16 @@ public sealed class DevContentFiller
     {
         var home = FindDescendant(site.Id, "Home");
         if (home is null) { details.Add("Home:none"); return; }
-        if (!home.HasProperty("hideFromMainMenu")) { details.Add("Home:redundant(no-hide-prop)"); return; }
-        home.SetValue("hideFromMainMenu", true);
-        if (home.HasProperty("hideFromFooter")) { home.SetValue("hideFromFooter", true); }
-        var save = _contentService.SaveAndPublish(home, new[] { Culture });
-        details.Add(save.Success ? "Home:hidden(nav+footer)" : $"Home:hide-failed:{save.Result}");
+        // El home real vive en siteRoot.sections → este nodo "Home" es redundante.
+        // Antes lo re-publicábamos oculto del menú, pero seguía vivo + indexado.
+        // Además sus sections viejas tenían mediaOnRight="True", que reventaba el
+        // reindex Examine (incluso al despublicar y en un rebuild del índice interno,
+        // que sí indexa drafts). Limpiamos las sections ("[]") y despublicamos. No se
+        // borra: queda draft recuperable, ya sin contenido tóxico.
+        home.SetValue(SectionsAlias, string.Empty, Culture);   // BlockGrid vacío = "" (NO "[]", que rompe LayoutPresetDefaults)
+        _contentService.Save(home);
+        var unpub = _contentService.Unpublish(home, "*");
+        details.Add(unpub.Success ? "Home:cleared+unpublished" : $"Home:unpublish-failed:{unpub.Result}");
     }
 
     // ───────────────────────── Composición por página ─────────────────────────
