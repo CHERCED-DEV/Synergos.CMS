@@ -1107,6 +1107,12 @@ public sealed class DevContentFiller
             BuildVerticalHome("Tu tienda, sobre el mismo motor", "Catálogo, carrito y checkout",
                 "<p>Vende online con producto, variantes, carrito y query server-side sobre el mismo núcleo — sin re-plataformar cuando crezcas.</p>",
                 "Synergos Tienda Hero", "#020817", "#4f6ef7"), details);
+
+        // ADR 0098 H0.5 — Healthcare es un VERTICAL completo (siteRoot propio,
+        // identidad clínica clara). Landing pública + intake; la app clínica
+        // (patients/agenda/recetas) montará <synergos-healthcare> en páginas gated (H4).
+        SeedVertical(pr.Id, "Healthcare", "healthcare", "SynergosLabs Healthcare", "light", "healthcare.synergos.local",
+            BuildHealthcareHome(), details);
     }
 
     private void SeedVertical(int parentId, string name, string brandKey, string brandDisplayName,
@@ -1370,6 +1376,40 @@ public sealed class DevContentFiller
 
     private static string TagsJson(string[] tags)
         => "[" + string.Join(",", tags.Select(t => $"\"{Esc(t)}\"")) + "]";
+
+    // ADR 0098 H0.5 — home pública del vertical Healthcare: landing + servicios +
+    // disclaimer (RECORD-KEEPER) + intake de cita. Todo componible.
+    private string BuildHealthcareHome()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Tu consultorio, en orden",
+            "Historia clínica, agenda y recetas en un solo lugar",
+            "<p>SynergosLabs Healthcare reúne la historia de tus pacientes, la agenda de citas y las recetas — cifrado y con acceso auditado. Pedí una cita abajo o conocé la plataforma.</p>",
+            "Synergos Healthcare Hero", "Hero del vertical Healthcare", "#0B3B3C", "#1FA2A6",
+            ("Hablar con ventas", "/synergos/contacto"), ("Ver planes", "/synergos/precios"));
+
+        FeatureGridAuto(b, "Lo que incluye", "Todo para la práctica clínica",
+            new (string title, string subtitle, string body)[]
+            {
+                ("Historia clínica", "Versionada y cifrada", "Registro de pacientes con historial inmutable y acceso auditado."),
+                ("Agenda de citas", "Sin sobrecupos", "Reserva con control anti-overbooking por doctor."),
+                ("Recetas", "Registro formal", "Emisión y consulta de recetas — el sistema registra, el profesional decide."),
+                ("Consentimiento", "Paciente → doctor", "Libro de consentimientos que gobierna el acceso a la información clínica."),
+            }, 2);
+
+        AddMission(b, "Aviso importante", "",
+            "<p>Este sistema registra información médica pero NO brinda consejo clínico. Un profesional de la salud licenciado es responsable de todo diagnóstico y decisión.</p>");
+
+        AddContactForm(b, "Pedir una cita", "Solicitar cita",
+            ("Nombre", "nombre", "text", true, "Tu nombre"),
+            ("Email", "email", "email", true, "tu@correo.com"),
+            ("Teléfono", "telefono", "tel", false, "Tu teléfono (opcional)"),
+            ("Motivo de consulta", "motivo", "textarea", true, "Contanos brevemente el motivo…"));
+
+        AddCta(b, "¿Tu equipo quiere conocer la plataforma?",
+            "Agendá una demo y te mostramos la práctica completa.", "Hablar con ventas", "/synergos/contacto");
+        return b.Build();
+    }
 
     private IContent? FindByType(int parentId, string alias)
     {
