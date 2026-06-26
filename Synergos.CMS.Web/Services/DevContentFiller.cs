@@ -252,11 +252,6 @@ public sealed class DevContentFiller
             AddFeatureGrid(b, "Por qué elegir SynergosLabs", "Una base, todos tus productos", features);
         }
 
-        AddStats(b,
-            (ComponentCount, "componentes listos para usar"),
-            (VerticalCount, "verticales de negocio"),
-            ("1", "plataforma, multi-dominio"));
-
         AddSplit(b, "Tú compones. El motor hace el resto.",
             "Sin tocar código en el día a día",
             "<p>Tu equipo arma páginas completas arrastrando bloques en un editor visual. El motor se encarga del rendimiento, el SEO y la consistencia de marca — para que te enfoques en el negocio, no en la plomería.</p>",
@@ -287,6 +282,11 @@ public sealed class DevContentFiller
         {
             AddTestimonials(b, testimonials);
         }
+
+        AddStats(b,
+            (ComponentCount, "componentes listos para usar"),
+            (VerticalCount, "verticales de negocio"),
+            ("1", "plataforma, multi-dominio"));
 
         AddLogoCloud(b, "Confían en la plataforma",
             ("Andina", "#0A2540", "#0F58A7"),
@@ -372,6 +372,12 @@ public sealed class DevContentFiller
             "Synergos Productos", "Capacidades de SynergosLabs", "#143C8C", "#1FA2A6",
             ("Ver soluciones", "/synergos/soluciones"), ("Ver planes", "/synergos/precios"));
 
+        AddSplit(b, "El mismo motor, tu marca",
+            "Tu identidad, de punta a punta",
+            "<p>Colores, tipografía, logo y tono se aplican a todo el sitio desde un solo lugar. Cada negocio luce 100% propio — el motor es el mismo, la marca es tuya.</p>",
+            "Synergos Branding", "Personalización de marca en SynergosLabs", "#0F58A7", "#7A3FF2",
+            mediaOnRight: true, ctaLabel: "Qué es SynergosLabs", ctaUrl: "/synergos/identidad");
+
         // P1-10: Productos = CAPACIDADES (qué incluye el motor). Las industrias/casos
         // viven en Soluciones → las dos páginas dejan de solaparse.
         var capabilities = new (string title, string subtitle, string body)[]
@@ -396,12 +402,6 @@ public sealed class DevContentFiller
             (VerticalCount, "verticales base"),
             (ComponentCount, "componentes reutilizables"),
             ("1", "deploy, multi-dominio"));
-
-        AddSplit(b, "El mismo motor, tu marca",
-            "Tu identidad, de punta a punta",
-            "<p>Colores, tipografía, logo y tono se aplican a todo el sitio desde un solo lugar. Cada negocio luce 100% propio — el motor es el mismo, la marca es tuya.</p>",
-            "Synergos Branding", "Personalización de marca en SynergosLabs", "#0F58A7", "#7A3FF2",
-            mediaOnRight: true, ctaLabel: "Qué es SynergosLabs", ctaUrl: "/synergos/identidad");
 
         AddCta(b, "¿Cuál es tu caso?",
             "Mira las soluciones por tipo de negocio o cuéntanos el tuyo y te mostramos la receta que encaja.",
@@ -600,11 +600,6 @@ public sealed class DevContentFiller
             "Synergos Casos Hero", "Casos de clientes de SynergosLabs", "#1A1A2E", "#7A3FF2",
             ("Ver planes", "/synergos/precios"), ("Hablar con ventas", "/synergos/contacto"));
 
-        AddStats(b,
-            (VerticalCount, "verticales en producción"),
-            (ComponentCount, "componentes reutilizados"),
-            ("1", "plataforma para todo el grupo"));
-
         // P1-11: testimonios DISTINTOS a los del Home (evita la prueba social duplicada).
         var testimonials = new (string quote, string author, string role)[]
         {
@@ -620,6 +615,11 @@ public sealed class DevContentFiller
         {
             AddTestimonials(b, testimonials);
         }
+
+        AddStats(b,
+            (VerticalCount, "verticales en producción"),
+            (ComponentCount, "componentes reutilizados"),
+            ("1", "plataforma para todo el grupo"));
 
         SplitAuto(b, "Cómo lo lograron",
             "Una base, muchas marcas",
@@ -1360,6 +1360,9 @@ public sealed class DevContentFiller
             ("Mi fuente para entender arquitectura de plataformas.", "Valentina Díaz", "Suscriptora"),
             ("Cada post me ahorra horas de investigación.", "Felipe Castro", "Lector"),
         });
+        AddCta(b, "¿Listo para publicar tu historia?",
+            "Lanzá tu blog sobre el mismo motor y empezá a crecer tu audiencia.",
+            "Hablar con ventas", "/synergos/contacto");
         return b.Build();
     }
 
@@ -1524,6 +1527,9 @@ public sealed class DevContentFiller
             ("¿Puedo devolver un producto?", "Tenés 30 días para devoluciones, sin preguntas."),
             ("¿Qué medios de pago aceptan?", "Tarjetas, PSE y pago contra entrega en ciudades principales."),
         });
+        AddCta(b, "¿Listo para vender online?",
+            "Lanzá tu tienda esta semana.",
+            "Ver el catálogo", "/tienda/ropa");
         return b.Build();
     }
 
@@ -1604,6 +1610,8 @@ public sealed class DevContentFiller
                 ("Recetas", "Registro formal", "Emisión y consulta de recetas, vinculadas al paciente."),
                 ("Consentimiento informado", "Transparencia", "El paciente controla quién accede a su información clínica."),
             }, 2);
+        AddMission(b, "Cada servicio, registrado de punta a punta", "",
+            "<p>Consulta, control, receta o consentimiento: todo queda en la historia clínica versionada del paciente, con acceso auditado. El sistema registra; el profesional decide y firma cada acto clínico.</p>");
         AddCta(b, "¿Listo para empezar?", "Pedí una cita o agendá una demo para tu equipo.", "Pedir una cita", "/healthcare");
         return b.Build();
     }
@@ -1614,7 +1622,7 @@ public sealed class DevContentFiller
         AddHero(b, "Nuestro equipo", "Profesionales a cargo de tu salud",
             "<p>Un equipo comprometido con el cuidado y la privacidad. Conocé a los profesionales detrás de la práctica.</p>",
             "Healthcare Equipo Hero", "Equipo de Healthcare", "#0B3B3C", "#1FA2A6",
-            ("Pedir una cita", "/healthcare"));
+            ("Pedir una cita", "/healthcare"), ("Hablar con ventas", "/synergos/contacto"));
         FeatureGridAuto(b, "El equipo", "Profesionales licenciados",
             new (string title, string subtitle, string body)[]
             {
@@ -1639,6 +1647,9 @@ public sealed class DevContentFiller
             "Synergos Healthcare Hero", "Hero del vertical Healthcare", "#0B3B3C", "#1FA2A6",
             ("Hablar con ventas", "/synergos/contacto"), ("Ver planes", "/synergos/precios"));
 
+        AddMission(b, "Aviso importante", "",
+            "<p>Este sistema registra información médica pero NO brinda consejo clínico. Un profesional de la salud licenciado es responsable de todo diagnóstico y decisión.</p>");
+
         FeatureGridAuto(b, "Lo que incluye", "Todo para la práctica clínica",
             new (string title, string subtitle, string body)[]
             {
@@ -1647,9 +1658,6 @@ public sealed class DevContentFiller
                 ("Recetas", "Registro formal", "Emisión y consulta de recetas — el sistema registra, el profesional decide."),
                 ("Consentimiento", "Paciente → doctor", "Libro de consentimientos que gobierna el acceso a la información clínica."),
             }, 2);
-
-        AddMission(b, "Aviso importante", "",
-            "<p>Este sistema registra información médica pero NO brinda consejo clínico. Un profesional de la salud licenciado es responsable de todo diagnóstico y decisión.</p>");
 
         // Componentes CDN-Angular (hidratan <synergos-*> desde la CDN): testimonios + FAQ clínico.
         AddSynTestimonials(b, "Lo que dicen las clínicas", new (string quote, string author, string role)[]
@@ -1664,6 +1672,9 @@ public sealed class DevContentFiller
             ("¿Mis datos están seguros?", "Sí: la información clínica va cifrada y con acceso auditado por consentimiento."),
             ("¿Atienden urgencias?", "Para urgencias acudí al servicio de emergencias; acá agendamos consultas y controles."),
         });
+
+        AddMission(b, "Cuidado y privacidad, de la mano", "",
+            "<p>Acompañamos a tu equipo en la transición: migración de historias, capacitación y soporte. La información clínica viaja cifrada y con acceso auditado por consentimiento — desde el primer día.</p>");
 
         AddContactForm(b, "Pedir una cita", "Solicitar cita",
             ("Nombre", "nombre", "text", true, "Tu nombre"),
