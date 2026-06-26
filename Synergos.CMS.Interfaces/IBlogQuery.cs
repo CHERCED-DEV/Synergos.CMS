@@ -25,6 +25,13 @@ public interface IBlogQuery
     /// sin <c>publishDate</c> se ordenan por nombre del nodo.
     /// </summary>
     IReadOnlyList<PostSummary> GetPosts(BlogQueryRequest request);
+
+    /// <summary>
+    /// Devuelve posts relacionados con el post de clave <paramref name="postKey"/>:
+    /// los que comparten tags (peso mayor) o la misma categoría, excluyendo el
+    /// propio post, ordenados por relevancia y fecha. Vacío si no hay coincidencias.
+    /// </summary>
+    IReadOnlyList<PostSummary> GetRelated(Guid postKey, int maxItems);
 }
 
 /// <summary>

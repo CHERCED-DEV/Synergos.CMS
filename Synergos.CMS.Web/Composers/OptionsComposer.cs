@@ -114,5 +114,9 @@ public sealed class OptionsComposer : IComposer
         // retención, 2FA de staff.
         builder.Services.Configure<HealthcareSettings>(
             builder.Config.GetSection("Synergos:Healthcare"));
+
+        // ADR 0027 — Blog: tamaño de página de categoría + posts relacionados.
+        builder.Services.Configure<BlogSettings>(
+            builder.Config.GetSection("Synergos:Blog"));
     }
 }

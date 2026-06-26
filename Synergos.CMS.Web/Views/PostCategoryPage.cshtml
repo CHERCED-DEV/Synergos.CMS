@@ -11,27 +11,28 @@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.PostCategoryPage>
 @inject Synergos.CMS.Interfaces.IBlogQuery BlogQuery
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.BlogSettings> BlogOptions
 @using Umbraco.Extensions
 @{
     Layout = "_Layout";
     if (Model is null) { return; }
 
-    const int PageSize = 12;
+    var pageSize = BlogOptions.Value.CategoryPageSize > 0 ? BlogOptions.Value.CategoryPageSize : 12;
     var pageRaw = HttpContextAccessor.HttpContext?.Request?.Query["page"].ToString();
     var pageNumber = int.TryParse(pageRaw, out var p) && p > 0 ? p : 1;
-    var skip = (pageNumber - 1) * PageSize;
+    var skip = (pageNumber - 1) * pageSize;
 
     var categoryName = !string.IsNullOrWhiteSpace(Model.CategoryName) ? Model.CategoryName : Model.Name;
     var description = Model.Description;
 
     // Fetch one extra to detect if there's a next page
     var posts = BlogQuery.GetPosts(new Synergos.CMS.Interfaces.BlogQueryRequest(
-        MaxItems: PageSize + 1,
+        MaxItems: pageSize + 1,
         Skip: skip,
         CategoryAliasOrName: Model.Name));
 
-    var hasNext = posts.Count > PageSize;
-    var visible = hasNext ? posts.Take(PageSize).ToArray() : posts;
+    var hasNext = posts.Count > pageSize;
+    var visible = hasNext ? posts.Take(pageSize).ToArray() : posts;
     var hasPrev = pageNumber > 1;
 
     var baseUrl = Model.Url();

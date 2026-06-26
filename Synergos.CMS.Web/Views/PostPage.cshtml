@@ -10,6 +10,8 @@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.PostPage>
 @using Synergos.CMS.Web.PublishedModels
 @using Umbraco.Extensions
+@inject Synergos.CMS.Interfaces.IBlogQuery BlogQuery
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.BlogSettings> BlogOptions
 @{
     Layout = "_Layout";
     if (Model is null) { return; }
@@ -63,3 +65,28 @@
         </div>
     }
 </article>
+@{
+    var related = BlogOptions.Value.RelatedPostsCount > 0
+        ? BlogQuery.GetRelated(Model.Key, BlogOptions.Value.RelatedPostsCount)
+        : System.Array.Empty<Synergos.CMS.Interfaces.PostSummary>();
+}
+@if (related.Count > 0)
+{
+    <aside class="syn-post__related">
+        <h2 class="syn-post__related-title">@Umbraco.GetDictionaryValue("blog.relatedposts", "Artículos relacionados")</h2>
+        <ul class="syn-post__related-items">
+            @foreach (var rel in related)
+            {
+                <li class="syn-post__related-item">
+                    <a class="syn-post__related-link" href="@rel.Url">
+                        @if (!string.IsNullOrWhiteSpace(rel.HeroImageUrl))
+                        {
+                            <img class="syn-post__related-image" src="@rel.HeroImageUrl" alt="" loading="lazy" />
+                        }
+                        <h3 class="syn-post__related-item-title">@rel.Title</h3>
+                    </a>
+                </li>
+            }
+        </ul>
+    </aside>
+}

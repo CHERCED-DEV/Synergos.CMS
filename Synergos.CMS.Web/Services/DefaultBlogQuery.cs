@@ -85,6 +85,47 @@ public sealed class DefaultBlogQuery : IBlogQuery
             .ToArray();
     }
 
+    public IReadOnlyList<PostSummary> GetRelated(Guid postKey, int maxItems)
+    {
+        if (!_umbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext))
+        {
+            return Array.Empty<PostSummary>();
+        }
+        var current = umbracoContext.Content?.GetById(postKey);
+        if (current is null || !string.Equals(current.ContentType.Alias, PostPageAlias, StringComparison.Ordinal))
+        {
+            return Array.Empty<PostSummary>();
+        }
+
+        var currentTags = new HashSet<string>(
+            current.Value<IEnumerable<string>>("tags") ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var parent = current.Parent;
+        var categoryId = parent is { } cat && string.Equals(cat.ContentType.Alias, PostCategoryPageAlias, StringComparison.Ordinal)
+            ? cat.Id : 0;
+
+        var root = current.Root();
+        var candidates = root is not null
+            ? root.DescendantsOrSelfOfType(PostPageAlias).Where(p => p.Id != current.Id)
+            : Enumerable.Empty<IPublishedContent>();
+
+        var max = maxItems > 0 ? maxItems : 3;
+        return candidates
+            .Select(p =>
+            {
+                var tags = p.Value<IEnumerable<string>>("tags") ?? Array.Empty<string>();
+                var shared = tags.Count(t => currentTags.Contains(t));
+                var sameCategory = categoryId != 0 && p.Parent?.Id == categoryId ? 1 : 0;
+                var date = p.Value<DateTime?>("publishDate");
+                return (Post: p, Score: shared * 2 + sameCategory, Date: date);
+            })
+            .Where(x => x.Score > 0)                          // solo si comparte tag o categoría
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.Date ?? DateTime.MinValue)
+            .Take(max)
+            .Select(x => Project(x.Post, x.Date))
+            .ToArray();
+    }
+
     private static PostSummary Project(IPublishedContent post, DateTime? publishDate)
     {
         var heroImage = post.Value<IPublishedContent>("heroImage");
