@@ -58,8 +58,8 @@ public sealed class CommentsController : ControllerBase
     [Consumes("application/x-www-form-urlencoded")]
     public async Task<IActionResult> Submit(
         int nodeId,
-        string body,
-        string? authorName,
+        [FromForm] string body,
+        [FromForm] string? authorName,
         CancellationToken cancellationToken)
     {
         var settings = _options.Value;
