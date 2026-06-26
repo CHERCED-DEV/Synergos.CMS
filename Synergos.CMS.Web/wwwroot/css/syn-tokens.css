@@ -499,18 +499,65 @@
   --syn-color-border-default: #d9d0c0;
   --syn-color-border-strong:  #c4b28a;
   --syn-color-border-accent:  #b59659;
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  /* C-2 — overlay scale (warm ink) faltante en silver-gold; espejo de la UI. */
+  --syn-color-overlay-subtle: rgb(32 39 52 / 0.06);
+  --syn-color-overlay-medium: rgb(32 39 52 / 0.14);
+  --syn-color-overlay-strong: rgb(32 39 52 / 0.24);
 
   --syn-color-action-primary:        #2a3240;
   --syn-color-action-primary-hover:  #1c2230;
   --syn-color-action-primary-active: #3a4456;
   --syn-color-action-primary-text:   #fffaf2;
+  --syn-color-action-primary-border: transparent;
   --syn-color-action-emphasis:       #b59659;
 
+  /* C-2 — botones secondary/ghost/danger/disabled faltaban en el vertical
+     Blogs gold: chips y CTAs secundarios caían a defaults. Espejo de la UI. */
+  --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
+  --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
+  --syn-color-action-secondary-text:           var(--syn-color-text-primary);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-text-accent);
+  --syn-color-action-secondary-border:         var(--syn-color-border-default);
+  --syn-color-action-secondary-border-hover:   var(--syn-color-border-accent);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  --syn-color-action-danger:       var(--syn-color-danger-500);
+  --syn-color-action-danger-hover: var(--syn-color-danger-600);
+  --syn-color-action-danger-text:  var(--syn-color-neutral-0);
+
+  --syn-color-action-disabled-surface: #eee5d6;
+  --syn-color-action-disabled-border:  #e0d5c1;
+  --syn-color-action-disabled-text:    #a59a87;
+
   --syn-color-focus-ring: rgb(181 150 89 / 0.76);
+  --syn-color-focus-ring-danger: rgb(239 68 68 / 0.52);
 
   --syn-color-state-brand-surface: rgb(181 150 89 / 0.12);
   --syn-color-state-brand-border:  rgb(181 150 89 / 0.28);
   --syn-color-state-brand-text:    #8f7035;
+
+  /* C-2 — chips de estado info/success/warning/danger faltantes en silver-gold. */
+  --syn-color-state-info-surface: rgb(47 111 147 / 0.10);
+  --syn-color-state-info-border:  rgb(47 111 147 / 0.20);
+  --syn-color-state-info-text:    #1e536f;
+
+  --syn-color-state-success-surface: rgb(22 163 74 / 0.10);
+  --syn-color-state-success-border:  rgb(22 163 74 / 0.20);
+  --syn-color-state-success-text:    #166534;
+
+  --syn-color-state-warning-surface: rgb(217 119 6 / 0.12);
+  --syn-color-state-warning-border:  rgb(217 119 6 / 0.22);
+  --syn-color-state-warning-text:    #9a5a04;
+
+  --syn-color-state-danger-surface: rgb(220 38 38 / 0.10);
+  --syn-color-state-danger-border:  rgb(220 38 38 / 0.22);
+  --syn-color-state-danger-text:    #b42318;
 
   --syn-shadow-card:         0 10px 28px -20px rgb(71 54 26 / 0.24);
   --syn-shadow-card-hover:   0 24px 54px -32px rgb(71 54 26 / 0.28);
