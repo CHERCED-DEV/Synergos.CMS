@@ -431,13 +431,17 @@
   transform: translateY(-2px);
 }
 
-/* Hero con imagen de fondo: el overlay (::after) es oscuro, así que el
-   texto debe ir claro para legibilidad/contraste (WCAG). Solo aplica
-   cuando hay .syn-hero__media precediendo al contenido. */
-.syn-hero__media ~ .syn-hero__content .syn-hero__title,
+/* Hero con imagen de fondo: el overlay (::after) es SIEMPRE oscuro
+   (basado en --syn-channel-ink), así que el texto va blanco fijo —
+   NO --syn-color-text-on-accent, que en el tema dark es #0f172a (su
+   accent es claro) y dejaba el título ilegible sobre el overlay. Igual
+   que el CTA secundario del hero, que ya usa #ffffff. */
+.syn-hero__media ~ .syn-hero__content .syn-hero__title {
+  color: #ffffff;
+}
 .syn-hero__media ~ .syn-hero__content .syn-hero__subtitle,
 .syn-hero__media ~ .syn-hero__content .syn-hero__body {
-  color: var(--syn-color-text-on-accent, #ffffff);
+  color: rgb(255 255 255 / 0.88);
 }
 
 /* ── CTA Banner (elementCompCtaBanner) ───────────────────────── */
