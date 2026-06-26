@@ -17,9 +17,9 @@
 @{
     var settings = CommentsOptions.Value;
     var heading = Model.Value<string>("heading")
-        ?? Umbraco.GetDictionaryValue("Comments.Heading", "Comentarios");
+        ?? ("Comentarios");
     var placeholder = Model.Value<string>("placeholder")
-        ?? Umbraco.GetDictionaryValue("Comments.Placeholder", "Comparte tu opinión…");
+        ?? ("Comparte tu opinión…");
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
     var classes = string.Join(" ", new[]
@@ -47,7 +47,7 @@
     @if (comments.Count == 0)
     {
         <p class="syn-comment-thread__empty">
-            @Umbraco.GetDictionaryValue("Comments.Empty", "Aún no hay comentarios. Sé el primero.")
+            @("Aún no hay comentarios. Sé el primero.")
         </p>
     }
     else
@@ -77,12 +77,12 @@
             @if (!settings.RequireAuthentication)
             {
                 <div class="syn-comment-thread__field">
-                    <label for="syn-comment-name">@Umbraco.GetDictionaryValue("Comments.NameLabel", "Tu nombre")</label>
+                    <label for="syn-comment-name">@("Tu nombre")</label>
                     <input id="syn-comment-name" type="text" name="authorName" autocomplete="name" required />
                 </div>
             }
             <div class="syn-comment-thread__field">
-                <label for="syn-comment-body">@Umbraco.GetDictionaryValue("Comments.BodyLabel", "Tu comentario")</label>
+                <label for="syn-comment-body">@("Tu comentario")</label>
                 <textarea id="syn-comment-body"
                           name="body"
                           rows="4"
@@ -92,7 +92,7 @@
                           aria-required="true"></textarea>
             </div>
             <button type="submit" class="syn-comment-thread__submit">
-                @Umbraco.GetDictionaryValue("Comments.Submit", "Publicar")
+                @("Publicar")
             </button>
         </form>
     }
@@ -100,7 +100,7 @@
     {
         <p class="syn-comment-thread__login-prompt">
             <a href="/account/login?returnUrl=@(Context.Request.Path)">
-                @Umbraco.GetDictionaryValue("Comments.LoginToComment", "Inicia sesión para comentar")
+                @("Inicia sesión para comentar")
             </a>
         </p>
     }

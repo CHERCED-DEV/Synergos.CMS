@@ -37,7 +37,7 @@
 
     @if (cart.Lines.Count == 0)
     {
-        <p class="syn-cart-summary__empty">@Umbraco.GetDictionaryValue("cart.empty", "Tu carrito está vacío.")</p>
+        <p class="syn-cart-summary__empty">@("Tu carrito está vacío.")</p>
     }
     else
     {
