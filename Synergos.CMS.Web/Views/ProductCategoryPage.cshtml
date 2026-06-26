@@ -25,7 +25,7 @@
     var sortBy = string.IsNullOrWhiteSpace(sortRaw) ? "name" : sortRaw;
 
     var categoryName = !string.IsNullOrWhiteSpace(Model.CategoryName) ? Model.CategoryName : Model.Name;
-    var description = Model.Description;
+    var description = Model.CategoryDescription;
 
     var products = ShopQuery.GetProducts(new Synergos.CMS.Interfaces.ShopQueryRequest(
         MaxItems: PageSize + 1,
