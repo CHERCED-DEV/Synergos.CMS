@@ -24,10 +24,13 @@
 /* ── Frame: el launcher centra su contenido; lo encogemos al ancho
    de un formulario (no el ancho de contenido del landing). ────── */
 .syn-account .syn-launcher__main {
-  max-width: 30rem;          /* 480px — columna de formulario */
+  max-width: 31rem;          /* ~496px — columna de formulario + gutter */
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding-inline: var(--syn-space-4);   /* gutter: la tarjeta nunca pega al borde en móvil */
+  box-sizing: border-box;
 }
 
 .syn-account .syn-launcher__hero {
@@ -40,7 +43,9 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  padding: var(--syn-space-8) var(--syn-space-8) var(--syn-space-7);
+  padding: var(--syn-space-10) var(--syn-space-10) var(--syn-space-8);
+  /* OJO: --syn-space-7 NO existe (scale 4/5/6/8/10/12). Antes la tarjeta
+     usaba space-7 en el shorthand -> padding INVÁLIDO -> tarjeta sin padding. */
   border-radius: var(--syn-card-radius, var(--syn-radius-2xl));
   background: var(--syn-color-overlay-subtle);
   border: 1px solid var(--syn-color-border-inverse);
@@ -54,7 +59,7 @@
 
 @media (max-width: 480px) {
   .syn-account__card {
-    padding: var(--syn-space-6) var(--syn-space-5) var(--syn-space-5);
+    padding: var(--syn-space-8) var(--syn-space-6) var(--syn-space-6);
     border-radius: var(--syn-radius-xl);
   }
 }
@@ -90,14 +95,14 @@
 .syn-account__form {
   display: flex;
   flex-direction: column;
-  gap: var(--syn-space-4);
+  gap: var(--syn-space-5);
   margin: 0;
 }
 
 .syn-account__field {
   display: flex;
   flex-direction: column;
-  gap: var(--syn-space-2);
+  gap: var(--syn-space-3);
 }
 
 .syn-account__field > label,
@@ -114,9 +119,9 @@
 .syn-account__field-input {
   display: block;
   width: 100%;
-  min-height: 44px;
+  min-height: 48px;
   padding: var(--syn-space-3) var(--syn-space-4);
-  background: rgb(var(--syn-channel-brand) / 0.06);
+  background: rgb(2 6 23 / 0.30);
   border: 1px solid var(--syn-color-border-inverse);
   border-radius: var(--syn-radius-md);
   font-family: inherit;
@@ -299,7 +304,7 @@ label.syn-account__field {
 /* ── Secciones internas (Profile / TwoFactor) ───────────────── */
 
 .syn-account__change-password {
-  margin-top: var(--syn-space-7);
+  margin-top: var(--syn-space-8);
   padding-top: var(--syn-space-6);
   border-top: 1px solid var(--syn-color-border-inverse);
 }
