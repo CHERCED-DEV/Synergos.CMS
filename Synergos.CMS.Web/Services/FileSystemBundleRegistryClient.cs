@@ -122,7 +122,15 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
         }
 
         var entryScript = string.IsNullOrWhiteSpace(manifest.EntryScript) ? "main.js" : manifest.EntryScript;
-        var mainEntryUrl = BuildPublicUrl(s.PublicBaseUrl, s.BundlesNamespace, folderName, framework, slot, entryScript);
+        // PERF: emitir la URL VERSIONADA (semver, p.ej. /0.1.0/main.js) en vez del pointer
+        // mutable (/latest/). El versionado se sirve con Cache-Control immutable max-age=1y
+        // (Program.cs) → el navegador NO revalida en cada navegación (el no-cache de /latest/
+        // causaba round-trips por bundle en cada page nav = lentitud). Un republish cambia el
+        // semver en el registry (hot-reload) → cache-bust natural. SRI idéntico (mismo main.js).
+        var urlSlot = System.Text.RegularExpressions.Regex.IsMatch(version, @"^\d+\.\d+\.\d+")
+            ? version
+            : slot;
+        var mainEntryUrl = BuildPublicUrl(s.PublicBaseUrl, s.BundlesNamespace, folderName, framework, urlSlot, entryScript);
 
         string? integrity = manifest.Integrity;
         if (string.IsNullOrWhiteSpace(integrity) && s.ComputeIntegrityIfMissing)
