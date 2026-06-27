@@ -11,6 +11,25 @@ builder.CreateUmbracoBuilder()
     .AddComposers()
     .Build();
 
+// PERF: cache de estáticos hasheados de wwwroot. El UseStaticFiles (parameterless) de
+// Umbraco resuelve estos StaticFileOptions de DI. Los assets con ?v=<hash> (CSS/JS via
+// asp-append-version) son inmutables por contenido → cache 1 año; el hash cambia al
+// editar → cache-bust natural (seguro incluso en dev). Sin esto, el navegador revalidaba
+// ~9 CSS por navegación. Solo toca peticiones con ?v= (no afecta el CDN, que pasa
+// StaticFileOptions explícitos, ni assets sin versionar).
+builder.Services.Configure<StaticFileOptions>(o =>
+{
+    var prev = o.OnPrepareResponse;
+    o.OnPrepareResponse = ctx =>
+    {
+        prev?.Invoke(ctx);
+        if (ctx.Context.Request.Query.ContainsKey("v"))
+        {
+            ctx.Context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+        }
+    };
+});
+
 WebApplication app = builder.Build();
 
 await app.BootUmbracoAsync();
