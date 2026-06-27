@@ -146,6 +146,13 @@ public sealed class SeamComposer : IComposer
             new EsCoPriceFormatter(
                 sp.GetRequiredService<IOptions<CartSettings>>().Value));
 
+        // Motor de pago (PSP) — seam IPaymentProvider, stub-first (doc 16/17).
+        // Hoy ICheckoutRecorder solo REGISTRA la orden; faltaba procesar el cobro.
+        // StubPaymentProvider (Application, puro) auto-autoriza para que el checkout
+        // corra end-to-end en demo; swap por adapter real (Stripe/Wompi/PayU CO)
+        // sin tocar el motor. Singleton — el stub mantiene estado en memoria.
+        services.AddSingleton<IPaymentProvider, StubPaymentProvider>();
+
         // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
         // sigue en su valor default bajo env != "Development". No detiene
         // el app; solo señala en el log para que el operador rote la clave
