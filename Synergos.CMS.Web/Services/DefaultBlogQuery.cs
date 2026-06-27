@@ -91,6 +91,23 @@ public sealed class DefaultBlogQuery : IBlogQuery
             .ToArray();
     }
 
+    public IReadOnlyList<PostSummary> GetByTag(string tag, int maxItems)
+    {
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            return Array.Empty<PostSummary>();
+        }
+        // Reusa el pipeline de GetPosts (single source of truth para el
+        // recorrido del árbol + sort por publishDate). El filtro de tags
+        // de GetPosts es exacto case-insensitive, OR sobre el CSV; un solo
+        // tag ⇒ match exacto de ese tag. (Un tag con coma se trataría como
+        // dos términos OR — caso patológico aceptado, los tags no llevan coma.)
+        return GetPosts(new BlogQueryRequest(
+            MaxItems: maxItems > 0 ? maxItems : 24,
+            Skip: 0,
+            TagsCsv: tag.Trim()));
+    }
+
     public IReadOnlyList<PostSummary> GetRelated(Guid postKey, int maxItems)
     {
         if (!_umbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext))

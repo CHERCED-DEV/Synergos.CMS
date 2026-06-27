@@ -91,6 +91,89 @@
   overflow-wrap: break-word;
 }
 
+/* ── Actions row (like + reply) ──────────────────────────────── */
+
+.syn-comment-thread__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--syn-space-md);
+  margin-top: var(--syn-space-sm);
+}
+
+.syn-comment-thread__like-form {
+  margin: 0;
+  display: inline-flex;
+}
+
+.syn-comment-thread__like,
+.syn-comment-thread__reply-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+  min-height: 32px;
+  padding: var(--syn-space-1) var(--syn-space-3);
+  background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-text-muted);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-full);
+  font-family: inherit;
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-medium);
+  cursor: pointer;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-comment-thread__like:hover,
+.syn-comment-thread__reply-toggle:hover {
+  background: var(--syn-color-state-brand-surface);
+  color: var(--syn-color-state-brand-text);
+  border-color: var(--syn-color-state-brand-border);
+}
+
+.syn-comment-thread__like-icon {
+  color: var(--syn-color-text-disabled);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-comment-thread__like:hover .syn-comment-thread__like-icon {
+  color: var(--syn-color-action-danger, var(--syn-color-state-danger-text));
+}
+
+.syn-comment-thread__like-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.syn-comment-thread__like:focus-visible,
+.syn-comment-thread__reply-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+}
+
+/* ── Nested replies (2-level thread, ADR 0100) ───────────────── */
+
+.syn-comment__replies {
+  list-style: none;
+  margin: var(--syn-space-md) 0 0;
+  padding: 0 0 0 var(--syn-space-lg);
+  border-left: 2px solid var(--syn-color-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+}
+
+.syn-comment-thread__item--reply {
+  padding: var(--syn-space-md);
+  background: var(--syn-color-surface-secondary);
+}
+
+/* En móvil reducimos la sangría del hilo para no comer ancho. */
+@media (max-width: 479px) {
+  .syn-comment__replies {
+    padding-left: var(--syn-space-md);
+  }
+}
+
 /* ── Form ────────────────────────────────────────────────────── */
 
 .syn-comment-thread__form {
@@ -102,6 +185,17 @@
   border: 1px solid var(--syn-color-border-subtle);
   border-radius: var(--syn-radius-lg);
   margin-top: var(--syn-space-xl);
+}
+
+/* Reply form: anidada bajo su comentario, más compacta. El atributo
+   [hidden] la oculta hasta que el reply-toggle (JS) la revela. */
+.syn-comment-thread__form--reply {
+  margin-top: var(--syn-space-md);
+  padding: var(--syn-space-md);
+}
+
+.syn-comment-thread__form--reply[hidden] {
+  display: none;
 }
 
 .syn-comment-thread__field {

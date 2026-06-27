@@ -32,6 +32,16 @@ public interface IBlogQuery
     /// propio post, ordenados por relevancia y fecha. Vacío si no hay coincidencias.
     /// </summary>
     IReadOnlyList<PostSummary> GetRelated(Guid postKey, int maxItems);
+
+    /// <summary>
+    /// Devuelve los posts del sitio actual que llevan el tag
+    /// <paramref name="tag"/> (match case-insensitive, exacto sobre cada
+    /// tag), ordenados por <c>publishDate</c> descendente. Usado por la
+    /// tag page (Ola 230, ADR 0100). Vacío si <paramref name="tag"/> está
+    /// en blanco o ningún post lo lleva. Atajo sobre
+    /// <see cref="GetPosts"/> con <c>TagsCsv</c> de un solo tag.
+    /// </summary>
+    IReadOnlyList<PostSummary> GetByTag(string tag, int maxItems);
 }
 
 /// <summary>

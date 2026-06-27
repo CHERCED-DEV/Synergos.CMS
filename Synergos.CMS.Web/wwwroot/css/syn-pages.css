@@ -570,6 +570,60 @@ html:has(.syn-launcher) { overflow-x: clip; }
   .syn-launcher__ribbon { transform: none; }
 }
 
+/* ── Reading progress bar (PostPage, syn-reading.js) ─────────── */
+/* Barra fija arriba del viewport que se llena con el % de scroll del
+   artículo. El JS escribe width%; sin JS queda en 0 (invisible). */
+.syn-reading-progress {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: 3px;
+  background: transparent;
+  z-index: var(--syn-z-sticky);
+  pointer-events: none;
+}
+
+.syn-reading-progress__bar {
+  height: 100%;
+  width: 0;
+  background: var(--syn-color-action-primary);
+  border-end-end-radius: var(--syn-radius-full);
+  border-start-end-radius: var(--syn-radius-full);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .syn-reading-progress__bar {
+    transition: width var(--syn-duration-fast) var(--syn-easing-out);
+  }
+}
+
+/* ── Post layout: 2 columnas (TOC sticky | artículo) en ≥1024px,
+   1 columna apilada en móvil/tablet. El aside se oculta cuando no
+   hay headings (syn-reading.js pone [hidden] en el nav). ──────── */
+.syn-post-layout {
+  display: block;
+  max-width: var(--syn-max-width-article);
+  margin-inline: auto;
+}
+
+@media (min-width: 1024px) {
+  .syn-post-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--syn-post-toc-width, 220px);
+    gap: var(--syn-space-3xl);
+    align-items: start;
+    /* El measure de lectura (680) + gap + TOC (220) ⇒ ensanchamos el
+       contenedor para que el artículo conserve su medida cómoda. */
+    max-width: calc(var(--syn-max-width-article) + var(--syn-space-3xl) + var(--syn-post-toc-width, 220px));
+  }
+  /* En 2-col el artículo ya no se auto-centra (la grilla lo coloca). */
+  .syn-post-layout .syn-post {
+    margin-inline: 0;
+    max-width: none;
+    min-width: 0;
+  }
+}
+
 /* ── Post page (blog post) ───────────────────────────────────── */
 
 .syn-post {
@@ -701,6 +755,104 @@ html:has(.syn-launcher) { overflow-x: clip; }
   margin-top: var(--syn-space-2xl);
   padding-top: var(--syn-space-md);
   border-top: 1px solid var(--syn-color-border-subtle);
+}
+
+/* ── Share bar fijo al pie del artículo ──────────────────────── */
+.syn-post__share {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--syn-space-md);
+  margin-top: var(--syn-space-xl);
+  padding-top: var(--syn-space-lg);
+  border-top: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-post__share-label {
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  color: var(--syn-color-text-muted);
+}
+
+/* ── Sidebar + TOC (aside sticky en 2-col) ───────────────────── */
+.syn-post__sidebar {
+  display: none;   /* sólo visible en 2-col (≥1024px) */
+}
+
+@media (min-width: 1024px) {
+  .syn-post__sidebar {
+    display: block;
+  }
+}
+
+.syn-post__toc {
+  position: sticky;
+  inset-block-start: var(--syn-space-2xl);
+  max-height: calc(100vh - var(--syn-space-3xl));
+  overflow-y: auto;
+  padding-inline-start: var(--syn-space-md);
+  border-inline-start: 2px solid var(--syn-color-border-subtle);
+}
+
+.syn-post__toc-title {
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  color: var(--syn-color-text-muted);
+  margin: 0 0 var(--syn-space-md);
+}
+
+.syn-post__toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-1);
+}
+
+.syn-post__toc-item--h3 {
+  padding-inline-start: var(--syn-space-md);
+}
+
+.syn-post__toc-link {
+  display: block;
+  padding: var(--syn-space-1) 0 var(--syn-space-1) var(--syn-space-md);
+  /* La línea izquierda del enlace se solapa con el borde del nav: el
+     margen negativo alinea el border-inline-start del enlace activo con
+     el borde del contenedor. */
+  margin-inline-start: calc(-1 * var(--syn-space-md) - 2px);
+  border-inline-start: 2px solid transparent;
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-snug);
+  color: var(--syn-color-text-muted);
+  text-decoration: none;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-post__toc-link:hover {
+  color: var(--syn-color-text-primary);
+}
+
+.syn-post__toc-link.is-active {
+  color: var(--syn-color-action-primary);
+  font-weight: var(--syn-font-weight-semibold);
+  border-inline-start-color: var(--syn-color-action-primary);
+}
+
+/* Anchor offset: el scroll a un heading no queda pegado al borde. */
+.syn-post__body h2,
+.syn-post__body h3 {
+  scroll-margin-top: var(--syn-space-2xl);
+}
+
+/* Comentarios fijos: respetan el measure del artículo y se centran. */
+.syn-post__comments {
+  max-width: var(--syn-max-width-article);
+  margin-inline: auto;
 }
 
 /* ── Artículos relacionados — grilla de tarjetas con thumbnail recortado.

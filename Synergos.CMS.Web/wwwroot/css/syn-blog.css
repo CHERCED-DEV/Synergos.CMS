@@ -185,3 +185,58 @@ a.syn-author:hover .syn-author__name {
 .syn-pull-quote__cite::before {
   content: '— ';
 }
+
+/* ── Callout / admonition (info|success|warning|danger) ──────── */
+
+.syn-callout {
+  display: flex;
+  gap: var(--syn-space-md);
+  margin: var(--syn-space-xl) 0;
+  padding: var(--syn-space-lg);
+  background: var(--syn-color-state-info-surface);
+  border: 1px solid var(--syn-color-state-info-border);
+  border-left-width: 4px;
+  border-radius: var(--syn-radius-md);
+  color: var(--syn-color-state-info-text);
+}
+
+.syn-callout--success {
+  background: var(--syn-color-state-success-surface);
+  border-color: var(--syn-color-state-success-border);
+  color: var(--syn-color-state-success-text);
+}
+
+.syn-callout--warning {
+  background: var(--syn-color-state-warning-surface);
+  border-color: var(--syn-color-state-warning-border);
+  color: var(--syn-color-state-warning-text);
+}
+
+.syn-callout--danger {
+  background: var(--syn-color-state-danger-surface);
+  border-color: var(--syn-color-state-danger-border);
+  color: var(--syn-color-state-danger-text);
+}
+
+.syn-callout__icon {
+  flex-shrink: 0;
+  font-size: var(--syn-font-size-xl);
+  line-height: 1;
+}
+
+.syn-callout__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.syn-callout__title {
+  margin: 0 0 var(--syn-space-1);
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-bold);
+  color: inherit;
+}
+
+.syn-callout__body p {
+  margin: 0;
+  line-height: var(--syn-line-height-relaxed);
+}

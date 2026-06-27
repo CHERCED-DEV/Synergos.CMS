@@ -36,6 +36,15 @@ public interface ICommentRepository
     Task<Comment> AddAsync(NewComment comment, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Incrementa en uno el contador de "me gusta" de un comentario
+    /// existente (Ola 230, ADR 0100). Devuelve el comentario actualizado,
+    /// o <c>null</c> si no existe (o no está aprobado — no se reacciona
+    /// a comentarios en cola de moderación). No idempotente por diseño:
+    /// cada POST suma uno (sin tracking de identidad de quien reacciona).
+    /// </summary>
+    Task<Comment?> LikeAsync(int nodeId, string commentId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Devuelve los comentarios pendientes de moderación
     /// (Approved=false) para el nodo, ordenados por
     /// <see cref="Comment.CreatedAtUtc"/> descendente (más nuevo
@@ -141,6 +150,14 @@ public sealed record PendingCommentsPage(
 ///   muestra en el render. Default true en la impl FileSystem (sin
 ///   moderación in-line). Adapter de moderación puede flipear a
 ///   false al crear.</param>
+/// <param name="ParentId">Id del comentario padre cuando este es una
+///   respuesta (anidación a 1 nivel — hilo de 2 niveles, ADR 0100).
+///   <c>null</c> = comentario top-level. Backward-compat: los
+///   comentarios persistidos antes de Ola 230 no tienen el campo en su
+///   JSON y deserializan a <c>null</c> ⇒ top-level. Las respuestas a
+///   una respuesta se aplanan al hilo del top-level (sin nesting > 2).</param>
+/// <param name="Likes">Contador acumulado de reacciones "me gusta".
+///   Default 0. Backward-compat: ausente en JSON legacy ⇒ 0.</param>
 public sealed record Comment(
     string Id,
     int NodeId,
@@ -148,14 +165,22 @@ public sealed record Comment(
     string AuthorName,
     string Body,
     DateTime CreatedAtUtc,
-    bool Approved);
+    bool Approved,
+    Guid? ParentId = null,
+    int Likes = 0);
 
 /// <summary>
 /// Datos para crear un comentario nuevo. El repository asigna Id,
 /// CreatedAtUtc y decide Approved según política.
 /// </summary>
+/// <param name="ParentId">Id del comentario top-level al que responde, o
+///   <c>null</c> para un comentario nuevo de primer nivel. El repository
+///   valida que el padre exista y sea top-level; si el padre apuntado es
+///   a su vez una respuesta, la nueva respuesta se re-ancla al abuelo
+///   (top-level) para mantener el hilo en 2 niveles. ADR 0100.</param>
 public sealed record NewComment(
     int NodeId,
     string? MemberKey,
     string AuthorName,
-    string Body);
+    string Body,
+    Guid? ParentId = null);

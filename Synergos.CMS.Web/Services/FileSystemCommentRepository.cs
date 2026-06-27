@@ -277,6 +277,13 @@ public sealed class FileSystemCommentRepository : ICommentRepository
             body = body[..settings.MaxBodyLengthChars];
         }
 
+        // Ola 230 (ADR 0100): anidación de 1 nivel. Resolvemos el parent
+        // pedido contra el store del nodo y NORMALIZAMOS a top-level:
+        //  - parent inexistente / no aprobado  ⇒ el nuevo es top-level.
+        //  - parent es una respuesta (tiene ParentId)  ⇒ re-anclamos al
+        //    abuelo top-level para no exceder 2 niveles.
+        var parentId = ResolveTopLevelParent(existing, comment.ParentId);
+
         var persisted = new Comment(
             Id: Guid.NewGuid().ToString("N"),
             NodeId: comment.NodeId,
@@ -284,7 +291,9 @@ public sealed class FileSystemCommentRepository : ICommentRepository
             AuthorName: comment.AuthorName,
             Body: body.Trim(),
             CreatedAtUtc: DateTime.UtcNow,
-            Approved: !settings.RequireModeration);
+            Approved: !settings.RequireModeration,
+            ParentId: parentId,
+            Likes: 0);
 
         existing.Add(persisted);
 
@@ -292,12 +301,59 @@ public sealed class FileSystemCommentRepository : ICommentRepository
         await File.WriteAllBytesAsync(path, json, cancellationToken);
 
         _logger.LogInformation(
-            "Comment persisted: nodeId={NodeId} commentId={CommentId} approved={Approved}",
+            "Comment persisted: nodeId={NodeId} commentId={CommentId} parentId={ParentId} approved={Approved}",
             persisted.NodeId,
             persisted.Id,
+            persisted.ParentId,
             persisted.Approved);
 
         return persisted;
+    }
+
+    public async Task<Comment?> LikeAsync(int nodeId, string commentId, CancellationToken cancellationToken)
+    {
+        var existing = LoadAll(nodeId);
+        var index = existing.FindIndex(c => string.Equals(c.Id, commentId, StringComparison.Ordinal));
+        if (index < 0 || !existing[index].Approved)
+        {
+            return null;
+        }
+
+        var updated = existing[index] with { Likes = existing[index].Likes + 1 };
+        existing[index] = updated;
+        await PersistAsync(nodeId, existing, cancellationToken);
+
+        _logger.LogInformation(
+            "Comment liked: nodeId={NodeId} commentId={CommentId} likes={Likes}",
+            nodeId, commentId, updated.Likes);
+
+        return updated;
+    }
+
+    /// <summary>
+    /// Devuelve el Id (como Guid) del comentario top-level al que debe
+    /// anclarse una respuesta, o <c>null</c> si la respuesta debe quedar
+    /// como top-level. Garantiza el invariante "máximo 2 niveles":
+    /// si el parent pedido ya es una respuesta, sube al abuelo.
+    /// </summary>
+    private static Guid? ResolveTopLevelParent(List<Comment> existing, Guid? requestedParentId)
+    {
+        if (requestedParentId is not { } parentGuid)
+        {
+            return null;
+        }
+
+        var parent = existing.FirstOrDefault(c =>
+            Guid.TryParseExact(c.Id, "N", out var cid) && cid == parentGuid);
+
+        if (parent is null || !parent.Approved)
+        {
+            // Parent fantasma o no aprobado ⇒ degradar a top-level.
+            return null;
+        }
+
+        // Parent es a su vez una respuesta ⇒ re-anclar al abuelo top-level.
+        return parent.ParentId ?? parentGuid;
     }
 
     private List<Comment> LoadAll(int nodeId)

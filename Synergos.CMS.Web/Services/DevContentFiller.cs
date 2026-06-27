@@ -1,3 +1,4 @@
+using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
 
@@ -37,10 +38,12 @@ public sealed class DevContentFiller
     private readonly IContentTypeService _contentTypeService;
     private readonly SchemaBlockDefaults _defaults;
     private readonly DevMediaFactory _media;
+    private readonly ICommentRepository _comments;
     private readonly ILogger<DevContentFiller> _logger;
 
     private Guid _sectionKey, _heroKey, _splitKey, _featureGridKey, _featureKey, _missionKey, _ctaKey, _buttonKey;
     private string? _blogAuthorUdi;   // UDI del autor sembrado; los posts lo referencian en authorRef
+    private int _blogSeedPostId;      // node id del post de arquitectura (para sembrar comentarios)
     private Guid _testimonialsKey, _testimonialItemKey, _faqListKey, _faqItemKey;
     private Guid _statKey, _threeColKey, _logoCloudKey, _logoItemKey;
 
@@ -49,12 +52,14 @@ public sealed class DevContentFiller
         IContentTypeService contentTypeService,
         SchemaBlockDefaults defaults,
         DevMediaFactory media,
+        ICommentRepository comments,
         ILogger<DevContentFiller> logger)
     {
         _contentService = contentService;
         _contentTypeService = contentTypeService;
         _defaults = defaults;
         _media = media;
+        _comments = comments;
         _logger = logger;
     }
 
@@ -1229,12 +1234,16 @@ public sealed class DevContentFiller
 
         if (ingenieria > 0)
         {
-            SeedPost(ingenieria, "Arquitectura por capas: el grafo de dependencias",
+            _blogSeedPostId = SeedPost(ingenieria, "Arquitectura por capas: el grafo de dependencias",
                 "Interfaces ← Application ← Web ← Tests. Cómo un grafo unidireccional mantiene el motor mantenible a escala.",
                 "2026-06-20", "7", new[] { "ingeniería", "arquitectura" }, gFrom, gTo,
-                BuildArticle(
+                BuildRichArticle(
                     "Dependencias en una sola dirección",
-                    "<p>Interfaces ← Application ← Web ← Tests. La capa de aplicación no conoce Umbraco ni ASP.NET; eso la hace probable y portable.</p>",
+                    "<p>Interfaces ← Application ← Web ← Tests. La capa de aplicación no conoce Umbraco ni ASP.NET; eso la hace probable y portable.</p>"
+                    + "<blockquote class=\"syn-pull-quote\">El secreto no es agregar capas, sino que las flechas apunten siempre en la misma dirección.<cite class=\"syn-pull-quote__cite\">Principio de diseño SynergosLabs</cite></blockquote>"
+                    + "<aside class=\"syn-callout syn-callout--info\"><span class=\"syn-callout__icon\" aria-hidden=\"true\">ℹ️</span><div class=\"syn-callout__body\"><p class=\"syn-callout__title\">Regla de oro</p><p>Si una capa necesita conocer a la de arriba, la abstracción está mal puesta: invertí la dependencia con una interfaz (seam).</p></div></aside>"
+                    + "<p>En la práctica, el contrato vive en <code>Interfaces</code> y la implementación concreta en <code>Web</code>:</p>"
+                    + "<pre class=\"syn-code-block\"><span class=\"syn-code-block__lang\">csharp</span><code>public interface IBlogQuery\n{\n    IReadOnlyList&lt;PostSummary&gt; GetByTag(string tag, int maxItems);\n}</code></pre>",
                     "Seams, no acoplamiento",
                     "<p>Cada integración externa entra por una interfaz (seam). Cambiar de proveedor no toca a los consumidores.</p>",
                     "Blog Arquitectura", gFrom, gTo), details);
@@ -1259,6 +1268,9 @@ public sealed class DevContentFiller
                     "<p>El schema no conoce el framework; un cliente de registry resuelve el bundle en runtime. Angular es el primer adapter, no un lock-in.</p>",
                     "Blog CDN", gFrom, gTo), details);
         }
+
+        // Hilo de comentarios de demo (anidado + likes) sobre el post de arquitectura.
+        SeedComments(_blogSeedPostId, details);
 
         details.Add($"Blog:seeded(prod={producto > 0},ing={ingenieria > 0})");
     }
@@ -1304,7 +1316,7 @@ public sealed class DevContentFiller
         return save.Success ? $"umb://document/{author.Key:N}" : null;
     }
 
-    private void SeedPost(int categoryId, string title, string excerpt, string publishDate,
+    private int SeedPost(int categoryId, string title, string excerpt, string publishDate,
         string readTimeMinutes, string[] tags, string hexFrom, string hexTo, string sectionsJson, List<string> details)
     {
         var existing = _contentService.GetPagedChildren(categoryId, 0, 500, out _)
@@ -1326,10 +1338,55 @@ public sealed class DevContentFiller
         var save = _contentService.SaveAndPublish(post, new[] { Culture });
         var label = title.Length > 24 ? title[..24] : title;
         details.Add(save.Success ? $"Blog:post:{label}:ok" : $"Blog:post:{label}:failed:{save.Result}");
+        return save.Success ? post.Id : 0;
+    }
+
+    // Siembra un hilo de comentarios de demo (anidado a 2 niveles + likes,
+    // ADR 0100) sobre un post. Idempotente: no-op si el nodo ya tiene
+    // comentarios. El repository persiste un JSON por nodo bajo App_Data.
+    private void SeedComments(int nodeId, List<string> details)
+    {
+        if (nodeId <= 0) { return; }
+        if (_comments.GetApprovedForNode(nodeId).Count > 0)
+        {
+            details.Add($"Blog:comments:{nodeId}:exists");
+            return;
+        }
+        try
+        {
+            var parent = _comments.AddAsync(
+                new NewComment(nodeId, MemberKey: null, AuthorName: "Mariana Ríos",
+                    Body: "Excelente explicación del grafo de dependencias. ¿Cómo manejan los DTOs entre Application y Web?"),
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            var parentGuid = Guid.ParseExact(parent.Id, "N");
+            _comments.AddAsync(
+                new NewComment(nodeId, null, "Equipo SynergosLabs",
+                    Body: "Buena pregunta. Los DTOs viven en Application y Web sólo los proyecta — nunca al revés. Así la capa de aplicación sigue sin conocer ASP.NET.",
+                    ParentId: parentGuid),
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            _comments.AddAsync(
+                new NewComment(nodeId, null, "Diego Torres",
+                    Body: "Me sirvió muchísimo para refactorizar un proyecto legacy. Gracias."),
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            // Un par de likes en el comentario top-level para mostrar la reacción.
+            _comments.LikeAsync(nodeId, parent.Id, CancellationToken.None).GetAwaiter().GetResult();
+            _comments.LikeAsync(nodeId, parent.Id, CancellationToken.None).GetAwaiter().GetResult();
+
+            details.Add($"Blog:comments:{nodeId}:seeded(3+2likes)");
+        }
+        catch (Exception ex)
+        {
+            details.Add($"Blog:comments:{nodeId}:failed:{ex.GetType().Name}");
+        }
     }
 
     // Cuerpo de artículo componible: sección de intro + split con imagen + CTA.
     // NO incluye hero: el template PostPage ya renderiza heroImage + título + meta.
+    // NO incluye el hilo de comentarios: PostPage lo renderiza fijo al pie
+    // (ADR 0100) — dropearlo aquí lo duplicaría.
     private string BuildArticle(string h1, string b1, string h2, string b2,
         string mediaName, string hexFrom, string hexTo)
     {
@@ -1338,7 +1395,21 @@ public sealed class DevContentFiller
         AddSplit(b, h2, "", b2, mediaName, h2, hexFrom, hexTo, mediaOnRight: true, ctaLabel: null, ctaUrl: null);
         AddCta(b, "¿Querés ver SynergosLabs en acción?",
             "Una demo de 30 minutos, sin compromiso.", "Hablar con ventas", "/synergos/contacto");
-        AddCommentThread(b, "Comentarios");
+        return b.Build();
+    }
+
+    // Cuerpo de artículo RICO: intro con pull-quote + callout + code block
+    // embebidos en el RTE (clases .syn-pull-quote / .syn-callout / .syn-code-block,
+    // estilizadas en syn-blog.css), + split + CTA. Para que la demo no sea plana.
+    // Los h2 del cuerpo alimentan el TOC auto-construido (syn-reading.js).
+    private string BuildRichArticle(string h1, string introHtml, string h2, string b2,
+        string mediaName, string hexFrom, string hexTo)
+    {
+        var b = new BlockGridJsonBuilder();
+        AddMission(b, h1, "", introHtml);
+        AddSplit(b, h2, "", b2, mediaName, h2, hexFrom, hexTo, mediaOnRight: true, ctaLabel: null, ctaUrl: null);
+        AddCta(b, "¿Querés ver SynergosLabs en acción?",
+            "Una demo de 30 minutos, sin compromiso.", "Hablar con ventas", "/synergos/contacto");
         return b.Build();
     }
 

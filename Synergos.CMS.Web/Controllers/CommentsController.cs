@@ -60,6 +60,7 @@ public sealed class CommentsController : ControllerBase
         int nodeId,
         [FromForm] string body,
         [FromForm] string? authorName,
+        [FromForm] string? parentId,
         CancellationToken cancellationToken)
     {
         var settings = _options.Value;
@@ -96,18 +97,26 @@ public sealed class CommentsController : ControllerBase
             ? _gate.CurrentMemberDisplayName
             : null;
 
+        // Ola 230 (ADR 0100): parentId opcional para respuestas anidadas.
+        // Parse tolerante — "N" hex (formato de Comment.Id) o "D"; valor
+        // inválido/vacío ⇒ null (top-level). El repository normaliza a
+        // 2 niveles y degrada parents fantasma.
+        Guid? parsedParent = Guid.TryParse(parentId, out var pg) ? pg : null;
+
         var comment = await _repository.AddAsync(
             new NewComment(
                 NodeId: nodeId,
                 MemberKey: memberKey,
                 AuthorName: resolvedAuthor,
-                Body: body),
+                Body: body,
+                ParentId: parsedParent),
             cancellationToken);
 
         _analytics.Track("comment.added", new Dictionary<string, object?>
         {
             ["nodeId"] = nodeId,
             ["approved"] = comment.Approved,
+            ["isReply"] = comment.ParentId.HasValue,
             ["bodyLength"] = comment.Body.Length,
         });
 
@@ -121,5 +130,46 @@ public sealed class CommentsController : ControllerBase
 
         var anchor = comment.Approved ? $"#comment-{comment.Id}" : "#comment-pending";
         return Redirect($"{referrer}{anchor}");
+    }
+
+    /// <summary>
+    /// Incrementa el contador de "me gusta" de un comentario (Ola 230,
+    /// ADR 0100). POST sin body — el comentario se identifica por
+    /// nodeId + commentId en la ruta. Redirige de vuelta al hilo anclado
+    /// en el comentario. No requiere auth (reacción ligera, anónima);
+    /// rate-limited por IP igual que el POST de creación.
+    /// </summary>
+    [HttpPost("{nodeId:int}/{commentId}/like")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Like(
+        int nodeId,
+        string commentId,
+        CancellationToken cancellationToken)
+    {
+        var referrer = Request.Headers.Referer.ToString();
+        if (string.IsNullOrWhiteSpace(referrer))
+        {
+            referrer = "/";
+        }
+
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (!_rateLimiter.TryRegister(clientIp, $"comment-like:{nodeId}"))
+        {
+            return Redirect($"{referrer}#comment-error-rate-limited");
+        }
+
+        var updated = await _repository.LikeAsync(nodeId, commentId, cancellationToken);
+        if (updated is null)
+        {
+            return Redirect($"{referrer}#comment-error-not-found");
+        }
+
+        _analytics.Track("comment.liked", new Dictionary<string, object?>
+        {
+            ["nodeId"] = nodeId,
+            ["likes"] = updated.Likes,
+        });
+
+        return Redirect($"{referrer}#comment-{updated.Id}");
     }
 }

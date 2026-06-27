@@ -1,12 +1,16 @@
 @*
-    elementCommentThread renderer (Ola 68).
+    elementCommentThread renderer (Ola 68 · anidación + reacciones Ola 230, ADR 0100).
 
-    Renderiza los comentarios aprobados del nodo padre actual +
-    form POST para crear uno nuevo. Consume ICommentRepository +
-    IMemberAccessGate + IOptions<CommentsSettings>.
+    Renderiza los comentarios aprobados del nodo padre actual como un
+    árbol de 2 niveles (top-level + replies anidadas bajo su padre) +
+    form POST para crear uno nuevo. Cada comentario top-level lleva su
+    propio form de "responder" (parentId oculto) y cada comentario
+    (top o reply) un botón de "me gusta" con su contador.
+
+    Consume ICommentRepository + IMemberAccessGate + IOptions<CommentsSettings>.
 
     Si CommentsSettings.RequireAuthentication=true (default) y el
-    visitante no esta autenticado, el form se reemplaza por un link a
+    visitante no esta autenticado, los forms se reemplazan por un link a
     /account/login con returnUrl.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
@@ -40,6 +44,14 @@
     var comments = CommentsRepo.GetApprovedForNode(nodeId.Value);
     var canPost = !settings.RequireAuthentication || MemberGate.IsAuthenticated;
     var coCulture = System.Globalization.CultureInfo.GetCultureInfo("es-CO");
+
+    // Árbol de 2 niveles: top-level (ParentId==null) en orden natural y
+    // las replies agrupadas bajo el Id de su padre (Comment.Id es hex "N").
+    var topLevel = comments.Where(c => c.ParentId is null).ToList();
+    var repliesByParent = comments
+        .Where(c => c.ParentId is not null)
+        .GroupBy(c => c.ParentId!.Value.ToString("N"))
+        .ToDictionary(g => g.Key, g => g.OrderBy(c => c.CreatedAtUtc).ToList());
 }
 <section class="@classes" data-node-id="@nodeId">
     <h2 class="syn-comment-thread__heading">@heading</h2>
@@ -53,8 +65,9 @@
     else
     {
         <ol class="syn-comment-thread__list">
-            @foreach (var comment in comments)
+            @foreach (var comment in topLevel)
             {
+                var replies = repliesByParent.TryGetValue(comment.Id, out var r) ? r : null;
                 <li class="syn-comment-thread__item" id="comment-@comment.Id">
                     <header class="syn-comment-thread__meta">
                         <span class="syn-comment-thread__author">@comment.AuthorName</span>
@@ -63,6 +76,87 @@
                         </time>
                     </header>
                     <p class="syn-comment-thread__body">@comment.Body</p>
+                    <div class="syn-comment-thread__actions">
+                        <form class="syn-comment-thread__like-form"
+                              action="/api/comments/@nodeId/@comment.Id/like"
+                              method="post">
+                            <button type="submit" class="syn-comment-thread__like"
+                                    aria-label="@("Me gusta este comentario")">
+                                <span class="syn-comment-thread__like-icon" aria-hidden="true">♥</span>
+                                <span class="syn-comment-thread__like-count">@comment.Likes</span>
+                            </button>
+                        </form>
+                        @if (canPost)
+                        {
+                            <button type="button"
+                                    class="syn-comment-thread__reply-toggle"
+                                    aria-expanded="false"
+                                    data-reply-target="reply-@comment.Id">
+                                @("Responder")
+                            </button>
+                        }
+                    </div>
+
+                    @if (replies is not null && replies.Count > 0)
+                    {
+                        <ol class="syn-comment__replies">
+                            @foreach (var reply in replies)
+                            {
+                                <li class="syn-comment-thread__item syn-comment-thread__item--reply" id="comment-@reply.Id">
+                                    <header class="syn-comment-thread__meta">
+                                        <span class="syn-comment-thread__author">@reply.AuthorName</span>
+                                        <time class="syn-comment-thread__date" datetime="@reply.CreatedAtUtc.ToString("O")">
+                                            @reply.CreatedAtUtc.ToString("dd MMM yyyy HH:mm", coCulture)
+                                        </time>
+                                    </header>
+                                    <p class="syn-comment-thread__body">@reply.Body</p>
+                                    <div class="syn-comment-thread__actions">
+                                        <form class="syn-comment-thread__like-form"
+                                              action="/api/comments/@nodeId/@reply.Id/like"
+                                              method="post">
+                                            <button type="submit" class="syn-comment-thread__like"
+                                                    aria-label="@("Me gusta este comentario")">
+                                                <span class="syn-comment-thread__like-icon" aria-hidden="true">♥</span>
+                                                <span class="syn-comment-thread__like-count">@reply.Likes</span>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </li>
+                            }
+                        </ol>
+                    }
+
+                    @if (canPost)
+                    {
+                        <form class="syn-comment-thread__form syn-comment-thread__form--reply"
+                              id="reply-@comment.Id"
+                              action="/api/comments/@nodeId"
+                              method="post"
+                              hidden
+                              novalidate>
+                            <input type="hidden" name="parentId" value="@comment.Id" />
+                            @if (!settings.RequireAuthentication)
+                            {
+                                <div class="syn-comment-thread__field">
+                                    <label for="syn-reply-name-@comment.Id">@("Tu nombre")</label>
+                                    <input id="syn-reply-name-@comment.Id" type="text" name="authorName" autocomplete="name" required />
+                                </div>
+                            }
+                            <div class="syn-comment-thread__field">
+                                <label for="syn-reply-body-@comment.Id">@("Tu respuesta")</label>
+                                <textarea id="syn-reply-body-@comment.Id"
+                                          name="body"
+                                          rows="3"
+                                          maxlength="@settings.MaxBodyLengthChars"
+                                          placeholder="@placeholder"
+                                          required
+                                          aria-required="true"></textarea>
+                            </div>
+                            <button type="submit" class="syn-comment-thread__submit">
+                                @("Responder")
+                            </button>
+                        </form>
+                    }
                 </li>
             }
         </ol>
