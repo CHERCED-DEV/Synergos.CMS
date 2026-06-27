@@ -264,3 +264,32 @@
   border-radius: var(--syn-radius-full);
   transition: width var(--syn-duration-slow) var(--syn-easing-default);
 }
+
+/* Flow trigger (elementFlowTrigger) — CTA <a> que dispara un flow.
+   Antes sin CSS (orphan atrapado por check-css-parity) -> link pelado.
+   Boton primario on-brand, paridad con .syn-flow-definition__start. */
+.syn-flow-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--syn-space-2);
+  min-height: var(--syn-control-h-lg);
+  padding: var(--syn-space-3) var(--syn-space-6);
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  border: 1px solid transparent;
+  border-radius: var(--syn-radius-md);
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: none;
+  cursor: pointer;
+  transition: var(--syn-transition-colors),
+              transform var(--syn-duration-fast) var(--syn-easing-out);
+}
+.syn-flow-trigger:hover {
+  background: var(--syn-color-action-primary-hover);
+  transform: translateY(-1px);
+}
+.syn-flow-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+}

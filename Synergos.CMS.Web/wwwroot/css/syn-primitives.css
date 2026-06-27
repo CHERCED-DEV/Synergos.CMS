@@ -1752,3 +1752,22 @@ textarea.syn-form-field__input { resize: vertical; min-height: 7rem; }
   border-radius: var(--syn-radius-2xl);
   background: var(--syn-color-surface-secondary);
 }
+
+/* Embeds de iframe (elementFormEmbed / elementCorpMapEmbed) — antes sin CSS
+   (orphans atrapados por check-css-parity): el iframe traia height pero no
+   width -> ~300px. Ahora full-width responsive, altura del atributo height. */
+.syn-form-embed,
+.syn-map-embed {
+  width: 100%;
+  margin-block: var(--syn-space-lg);
+  border-radius: var(--syn-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--syn-shadow-card);
+}
+.syn-form-embed iframe,
+.syn-map-embed iframe {
+  display: block;
+  width: 100%;
+  border: 0;
+  min-height: 320px;
+}
