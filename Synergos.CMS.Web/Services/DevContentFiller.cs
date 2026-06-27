@@ -105,6 +105,14 @@ public sealed class DevContentFiller
         SeedShop(details);
         SeedHealthcarePages(details);
 
+        // OLA 4.6 (ADR 0102): verticales #7 Educación (scholar) + #8 Booking (meridian).
+        // Núcleos de negocio nuevos, 100% composables (siteRoot + páginas como nodos de
+        // contenido cuyo body es un Layout Composer). Booking = registro enterprise de
+        // reservas/citas: precios vía IPriceFormatter (Servicios reusa la infra de Shop)
+        // → precios sin hardcode.
+        SeedEducacion(details);
+        SeedBooking(details);
+
         return new FillResult(filled == 8, filled, string.Join("; ", details));   // siteRoot home + 7 páginas hijas
     }
 
@@ -1011,6 +1019,11 @@ public sealed class DevContentFiller
             "syn-launcher__card--bag", "syn-launcher__card--live", "Entrar a la Tienda →", "/tienda");
         AddCard("Healthcare", "<p>Historia clínica, agenda y recetas — un vertical clínico completo sobre el mismo motor.</p>",
             "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar a Healthcare →", "/healthcare");
+        // OLA 4.6 — cards composables de los verticales #7/#8 (mismo patrón, sin hardcode).
+        AddCard("Educación", "<p>Cursos, catálogo y inscripciones — una academia completa sobre el mismo motor.</p>",
+            "syn-launcher__card--document", "syn-launcher__card--live", "Entrar a Educación →", "/educacion");
+        AddCard("Booking", "<p>Reservas y citas: catálogo de servicios, calendario y registro multipaso — una plataforma de reservas completa sobre el mismo motor.</p>",
+            "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar a Booking →", "/booking");
 
         pr.SetCultureName(BrandName, Culture);   // umbrella = SynergosLabs (el hero lee Model.Name)
         // P2-3: identidad propia del launcher (compBranding + compPageTheme) — gestionable
@@ -1130,6 +1143,15 @@ public sealed class DevContentFiller
         // (patients/agenda/recetas) montará <synergos-healthcare> en páginas gated (H4).
         SeedVertical(pr.Id, "Healthcare", "healthcare", "SynergosLabs Healthcare", "light", "healthcare.synergos.local",
             BuildHealthcareHome(), details);
+
+        // OLA 4.6 — vertical #7 Educación: identidad académica "Scholar" (light, marfil/teal/gold).
+        SeedVertical(pr.Id, "Educacion", "educacion", "SynergosLabs Educación", "scholar", "educacion.synergos.local",
+            BuildEducacionHome(), details);
+
+        // OLA 4.6 — vertical #8 Booking: registro enterprise de reservas/citas con
+        // identidad propia "Meridian" (el tema lo define otro agente; acá solo se referencia).
+        SeedVertical(pr.Id, "Booking", "meridian", "SynergosLabs Booking", "meridian", "booking.synergos.local",
+            BuildBookingHome(), details);
     }
 
     private void SeedVertical(int parentId, string name, string brandKey, string brandDisplayName,
@@ -1639,6 +1661,197 @@ public sealed class DevContentFiller
                 && string.Equals(c.GetValue<string>("brandKey"), brandKey, StringComparison.OrdinalIgnoreCase));
     }
 
+    // ─────────── Componentes CDN-Angular reutilizables (OLA 4.6) ───────────
+    // Mismo patrón que AddSynTestimonials/AddSynFaq: cada uno emite un bloque syn que
+    // el SynHost hidrata como <synergos-*> desde la CDN. Config end-to-end desde el CMS.
+    // Sale no-op si el ElementType aún no está importado (el llamador degrada con grace).
+
+    /// <summary>Acordeón interactivo (elementSynAccordion): items {title, content}. Reusable para temario/lecciones, horarios, FAQ.</summary>
+    private void AddSynAccordion(BlockGridJsonBuilder b, (string title, string content)[] items, bool allowMultiple = false)
+    {
+        var key = _contentTypeService.Get("elementSynAccordion")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var itemsJson = "[" + string.Join(",", items.Select(i =>
+            $"{{\"title\":\"{Esc(i.title)}\",\"content\":\"{Esc(i.content)}\"}}")) + "]";
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("itemsJson", itemsJson)
+            .Set("allowMultiple", allowMultiple)
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    /// <summary>Carrusel (elementSynCarousel): slides {imageUrl, alt, caption}. Reusable para platos/cursos destacados.</summary>
+    private void AddSynCarousel(BlockGridJsonBuilder b, (string name, string caption, string from, string to)[] slides)
+    {
+        var key = _contentTypeService.Get("elementSynCarousel")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var slidesJson = "[" + string.Join(",", slides.Select(s =>
+        {
+            var url = _media.GetOrCreateMediaUrl(s.name, s.caption, s.from, s.to, 1200, 720);
+            return $"{{\"imageUrl\":\"{Esc(url)}\",\"alt\":\"{Esc(s.caption)}\",\"caption\":\"{Esc(s.caption)}\",\"linkUrl\":\"\"}}";
+        })) + "]";
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("slidesJson", slidesJson)
+            .Set("autoplayInterval", "5000")
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    /// <summary>Galería con lightbox (elementSynLightboxGallery): images {thumbUrl, fullUrl, alt, caption}. Reusable para mostrar espacios/servicios de Booking.</summary>
+    private void AddSynGallery(BlockGridJsonBuilder b, int columns, (string name, string caption, string from, string to)[] images)
+    {
+        var key = _contentTypeService.Get("elementSynLightboxGallery")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var imagesJson = "[" + string.Join(",", images.Select(im =>
+        {
+            var url = _media.GetOrCreateMediaUrl(im.name, im.caption, im.from, im.to, 1000, 800);
+            return $"{{\"thumbUrl\":\"{Esc(url)}\",\"fullUrl\":\"{Esc(url)}\",\"alt\":\"{Esc(im.caption)}\",\"caption\":\"{Esc(im.caption)}\"}}";
+        })) + "]";
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("imagesJson", imagesJson)
+            .Set("columns", columns.ToString())
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    /// <summary>Buscador en vivo (elementSynSearchBox): apunta a un endpoint GET. Reusable para filtrar el catálogo de cursos.</summary>
+    private void AddSynSearchBox(BlockGridJsonBuilder b, string placeholder, string endpoint, string paramName)
+    {
+        var key = _contentTypeService.Get("elementSynSearchBox")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("searchPlaceholder", placeholder)
+            .Set("searchEndpoint", endpoint)
+            .Set("searchParamName", paramName)
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    /// <summary>Grilla de datos filtrable/paginada (elementSynDataGrid): columns {field,label,sortable,filterable} + dataSource GET. Catálogo de cursos.</summary>
+    private void AddSynDataGrid(BlockGridJsonBuilder b, string dataSource, (string field, string label, bool sortable, bool filterable)[] columns, int pageSize = 9)
+    {
+        var key = _contentTypeService.Get("elementSynDataGrid")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var columnsJson = "[" + string.Join(",", columns.Select(col =>
+            $"{{\"field\":\"{Esc(col.field)}\",\"label\":\"{Esc(col.label)}\",\"sortable\":{(col.sortable ? "true" : "false")},\"filterable\":{(col.filterable ? "true" : "false")}}}")) + "]";
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("dataSource", dataSource)
+            .Set("columnsJson", columnsJson)
+            .Set("pageSize", pageSize.ToString())
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    /// <summary>
+    /// Formulario multi-paso (elementSynFormStepper): steps {title, fields[{name,label,type,required,placeholder}]}.
+    /// Reusable para inscripción a curso y reservas. POST al endpoint de Forms (honeypot + rate-limit + email).
+    /// </summary>
+    private void AddSynFormStepper(BlockGridJsonBuilder b, string submitEndpoint,
+        (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[] steps)
+    {
+        var key = _contentTypeService.Get("elementSynFormStepper")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var stepsJson = "[" + string.Join(",", steps.Select(s =>
+        {
+            var fields = "[" + string.Join(",", s.fields.Select(f =>
+            {
+                var optionsJson = f.options is { Length: > 0 }
+                    ? ",\"options\":[" + string.Join(",", f.options.Select(o => $"\"{Esc(o)}\"")) + "]"
+                    : "";
+                return $"{{\"name\":\"{Esc(f.name)}\",\"label\":\"{Esc(f.label)}\",\"type\":\"{Esc(f.type)}\",\"required\":{(f.required ? "true" : "false")},\"placeholder\":\"{Esc(f.placeholder)}\"{optionsJson}}}";
+            })) + "]";
+            return $"{{\"title\":\"{Esc(s.title)}\",\"fields\":{fields}}}";
+        })) + "]";
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("stepsJson", stepsJson)
+            .Set("submitEndpoint", submitEndpoint)
+            .Set("allowSkip", false)
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    /// <summary>Cuenta regresiva (elementSynCountdownDigital): ISO datetime. Reusable para "próxima apertura de inscripciones".</summary>
+    private void AddSynCountdown(BlockGridJsonBuilder b, string endDateTimeIso)
+    {
+        var key = _contentTypeService.Get("elementSynCountdownDigital")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("endDateTime", endDateTimeIso)
+            .Set("showLabels", true)
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    /// <summary>
+    /// Calendario month-view (elementSynCalendar): eventsEndpoint (GET JSON con slots/eventos) +
+    /// initialMonth (YYYY-MM, opcional → mes actual). Reusable para elegir fecha/slot de la reserva.
+    /// </summary>
+    private void AddSynCalendar(BlockGridJsonBuilder b, string eventsEndpoint, string? initialMonth = null)
+    {
+        var key = _contentTypeService.Get("elementSynCalendar")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("eventsEndpoint", eventsEndpoint);           // mandatory (URL ^https?://|^/)
+            if (!string.IsNullOrWhiteSpace(initialMonth)) { c.Set("initialMonth", initialMonth); }
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
+    // ─────────── Componentes SSR-only (no hidratan; render Razor nativo) ───────────
+
+    /// <summary>Login de miembro (elementMemberLogin, SSR). CTA "inscribirse" para curso gated. redirectLink opcional.</summary>
+    private void AddMemberLogin(BlockGridJsonBuilder b, string redirectUrl)
+    {
+        var key = _contentTypeService.Get("elementMemberLogin")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("loginEndpoint", "/account/login");   // AccountController (ADR 0034)
+            if (!string.IsNullOrWhiteSpace(redirectUrl)) { c.Set("redirectLink", LinkJson("Mi cuenta", redirectUrl)); }
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
+    /// <summary>Mapa embebido (elementCorpMapEmbed, SSR): iframe sandbox. Reusable para la ubicación (ej. página Reservar de Booking).</summary>
+    private void AddMapEmbed(BlockGridJsonBuilder b, string mapUrl, string mapTitle, int height = 420)
+    {
+        var key = _contentTypeService.Get("elementCorpMapEmbed")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("mapUrl", mapUrl)
+            .Set("mapTitle", mapTitle)             // mandatory
+            .Set("mapHeight", height.ToString())
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
+    /// <summary>Grid de productos del Shop filtrado por categoría (precios vía IPriceFormatter, scoped al siteRoot). Reusable para el catálogo de servicios de Booking.</summary>
+    private void AddProductGridFiltered(BlockGridJsonBuilder b, string categoryName, string sortBy = "name", int maxItems = 24)
+    {
+        var key = _contentTypeService.Get("elementShopProductGrid")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("categoryFilter", categoryName)
+            .Set("sortBy", sortBy)
+            .Set("maxItems", maxItems.ToString())
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
     // Páginas públicas internas del vertical Healthcare (Servicios, Equipo) bajo su
     // siteRoot, componibles. Heredan la identidad clínica del siteRoot.
     private void SeedHealthcarePages(List<string> details)
@@ -1755,6 +1968,484 @@ public sealed class DevContentFiller
 
         AddCta(b, "¿Tu equipo quiere conocer la plataforma?",
             "Agendá una demo y te mostramos la práctica completa.", "Hablar con ventas", "/synergos/contacto");
+        return b.Build();
+    }
+
+    // ═══════════════════════ Vertical #7 — Educación (scholar) ═══════════════════════
+    // Núcleo de negocio nuevo, 100% composable. El siteRoot "Educacion" (theme scholar)
+    // se crea en SeedVerticalSiteRoots con BuildEducacionHome() como body. Acá sembramos
+    // las dos páginas clave (Cursos + un Curso detalle) como nodos pageBase bajo el siteRoot.
+    // Cero contenido baked en .cshtml: todo es Layout Composer (bloques nativos + elementSyn* CDN).
+    private const string ScholarFrom = "#0E7C7B", ScholarTo = "#D9A441";   // teal→gold (identidad scholar)
+
+    private void SeedEducacion(List<string> details)
+    {
+        var edu = FindVertical("educacion");
+        if (edu is null) { details.Add("Educacion:siteroot-not-found"); return; }
+        SeedSiteRootPage(edu.Id, "Cursos", "Catálogo de cursos", BuildEducacionCursos(), details);
+        SeedSiteRootPage(edu.Id, "Curso", "Fundamentos de plataformas componibles", BuildEducacionCursoDetalle(), details);
+        details.Add("Educacion:pages-ok");
+    }
+
+    // Home Educación: hero + cursos destacados (feature-grid/cards) + value props + planes (pricing) + CTA.
+    private string BuildEducacionHome()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Aprende lo que el mercado pide",
+            "Cursos prácticos con certificación, a tu ritmo",
+            "<p>Una academia online sobre el mismo motor: catálogo, lecciones, instructores e inscripciones. Aprende habilidades reales con proyectos guiados y obtén tu certificado.</p>",
+            "Educacion Home Hero", "Hero de la academia Educación", ScholarFrom, ScholarTo,
+            ("Ver cursos", "/educacion/cursos"), ("Ver planes", "/educacion#planes"));
+
+        // Cursos destacados — feature-grid (CDN si está, SSR si no).
+        FeatureGridAuto(b, "Cursos destacados", "Los más elegidos por nuestra comunidad", new (string title, string subtitle, string body)[]
+        {
+            ("Fundamentos de plataformas componibles", "12 lecciones · 8 h", "Aprende a pensar en componentes, temas y verticales sobre un mismo núcleo."),
+            ("Diseño de sistemas con tokens", "10 lecciones · 6 h", "Construye una línea de diseño coherente con grilla de 8, tipografía y paleta por marca."),
+            ("Arquitectura limpia en la práctica", "14 lecciones · 9 h", "Grafo de dependencias, seams y pruebas: la base que tu equipo va a respetar."),
+        }, 3);
+
+        // Value props — por qué estudiar acá.
+        FeatureGridAuto(b, "Por qué aprender con nosotros", "Aprendizaje que se nota", new (string title, string subtitle, string body)[]
+        {
+            ("Proyectos reales", "Aprendes haciendo", "Cada curso termina en un proyecto que puedes mostrar en tu portafolio."),
+            ("Instructores expertos", "De la industria", "Profesionales que construyen producto, no solo teoría de aula."),
+            ("Certificación", "Avala tu progreso", "Obtén un certificado verificable al completar cada ruta de aprendizaje."),
+        }, 3);
+
+        AddSynTestimonials(b, "Lo que dicen nuestros estudiantes", new (string quote, string author, string role)[]
+        {
+            ("Pasé de teoría suelta a construir un proyecto completo en seis semanas.", "Camila Restrepo", "Estudiante · Frontend"),
+            ("Los instructores responden dudas reales, no genéricas. Se nota la experiencia.", "Sebastián Mora", "Estudiante · Backend"),
+            ("El certificado me sirvió para subir de rol en mi empresa.", "Daniela Quintero", "Egresada"),
+        });
+
+        // Planes — pricing composable (precio = DataType, editable; SSR si la tabla no está).
+        AddEducacionPlanes(b);
+
+        FaqAuto(b, "Preguntas frecuentes", new (string question, string answer)[]
+        {
+            ("¿Necesito conocimientos previos?", "Cada curso indica su nivel. Hay rutas desde cero y rutas avanzadas para perfiles con experiencia."),
+            ("¿Los cursos tienen certificado?", "Sí. Al completar un curso obtienes un certificado verificable que puedes compartir."),
+            ("¿Puedo estudiar a mi ritmo?", "Sí. El contenido queda disponible y avanzas cuando puedas; algunas rutas tienen cohortes en vivo."),
+        });
+
+        AddCta(b, "Empieza a aprender hoy",
+            "Explora el catálogo y arranca tu primer curso esta semana.",
+            "Ver cursos", "/educacion/cursos");
+        return b.Build();
+    }
+
+    // Planes de la academia — pricing table composable (placeholders editables, precio = DataType).
+    private void AddEducacionPlanes(BlockGridJsonBuilder b)
+    {
+        if (_contentTypeService.Get("elementPricingTable")?.Key is not null)
+        {
+            AddPricingTable(b, "Planes de acceso", "Elige cómo quieres aprender",
+                ("Curso suelto", "$89.000", "/curso", "",
+                 "Acceso de por vida a 1 curso\nProyecto guiado\nCertificado del curso\nSoporte de la comunidad",
+                 false, "Comprar curso", "/educacion/cursos"),
+                ("Membresía", "$49.900", "/mes", "El más elegido",
+                 "Acceso a TODO el catálogo\nRutas de aprendizaje\nCertificados ilimitados\nCohortes en vivo\nSoporte prioritario",
+                 true, "Suscribirme", "/educacion/curso"),
+                ("Equipos", "A tu medida", "", "",
+                 "Todo lo de Membresía\nPaneles de progreso\nFacturación por equipo\nRutas a medida\nAcompañamiento dedicado",
+                 false, "Hablar con ventas", "/synergos/contacto"));
+        }
+        else
+        {
+            FeatureGridAuto(b, "Planes de acceso", "Elige cómo quieres aprender", new (string title, string subtitle, string body)[]
+            {
+                ("Curso suelto", "$89.000", "Acceso de por vida a un curso, con proyecto guiado y certificado."),
+                ("Membresía", "$49.900/mes", "El más elegido: todo el catálogo, rutas, certificados y cohortes en vivo."),
+                ("Equipos", "A tu medida", "Para empresas: paneles de progreso, facturación por equipo y rutas a medida."),
+            }, 3);
+        }
+    }
+
+    // Página Cursos: catálogo grid filtrable. Usa data-grid CDN (filtra/pagina contra un
+    // endpoint) + search-box; si no están importados, cae a feature-grid de cursos.
+    private string BuildEducacionCursos()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Catálogo de cursos",
+            "Filtra por tema y encuentra tu próxima habilidad",
+            "<p>Explora todos los cursos disponibles. Busca por tema, nivel o duración y empieza cuando quieras.</p>",
+            "Educacion Cursos Hero", "Hero del catálogo de cursos", ScholarFrom, ScholarTo,
+            ("Ver planes", "/educacion#planes"), ("Hablar con nosotros", "/synergos/contacto"));
+
+        // Buscador en vivo (CDN). Apunta al endpoint de búsqueda del CMS (Examine, ADR de search).
+        AddSynSearchBox(b, "Buscar cursos por tema o nivel…", "/api/search", "q");
+
+        // Catálogo filtrable/paginable (CDN data-grid). dataSource = endpoint GET JSON.
+        // Si el data-grid no está importado, fallback a un feature-grid del catálogo.
+        if (_contentTypeService.Get("elementSynDataGrid")?.Key is not null)
+        {
+            AddSynDataGrid(b, "/api/search?type=curso", new (string field, string label, bool sortable, bool filterable)[]
+            {
+                ("title", "Curso", true, true),
+                ("level", "Nivel", true, true),
+                ("duration", "Duración", true, false),
+                ("category", "Categoría", true, true),
+            }, pageSize: 9);
+        }
+        else
+        {
+            FeatureGridAuto(b, "Todos los cursos", "Explora el catálogo completo", new (string title, string subtitle, string body)[]
+            {
+                ("Fundamentos de plataformas componibles", "Principiante · 8 h", "Piensa en componentes, temas y verticales sobre un mismo núcleo."),
+                ("Diseño de sistemas con tokens", "Intermedio · 6 h", "Línea de diseño coherente: grilla de 8, tipografía y paleta por marca."),
+                ("Arquitectura limpia en la práctica", "Avanzado · 9 h", "Grafo de dependencias, seams y pruebas aplicadas."),
+                ("Render server-side y SEO técnico", "Intermedio · 5 h", "Velocidad, sitemap y datos estructurados desde el primer día."),
+                ("Componentes Angular sobre la CDN", "Avanzado · 7 h", "Islas de interactividad publicadas a una CDN, framework-agnóstico."),
+                ("Identidad de marca por sitio", "Intermedio · 4 h", "Una marca, mil caras: temas y tokens por propiedad."),
+            }, 3);
+        }
+
+        AddCta(b, "¿No sabes por dónde empezar?",
+            "Cuéntanos tu objetivo y te armamos una ruta de aprendizaje a tu medida.",
+            "Hablar con nosotros", "/synergos/contacto");
+        return b.Build();
+    }
+
+    // Página Curso detalle: temario/lecciones (accordion) + instructor + CTA inscribirse
+    // (member-login para el contenido gated + form-stepper de inscripción).
+    private string BuildEducacionCursoDetalle()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Fundamentos de plataformas componibles",
+            "12 lecciones · 8 horas · Nivel principiante · Certificado",
+            "<p>Aprende a construir y operar un producto digital sobre un mismo núcleo componible: componentes, temas, verticales e identidad por marca. Termina con un proyecto real para tu portafolio.</p>",
+            "Educacion Curso Detalle Hero", "Hero del curso Fundamentos", ScholarFrom, ScholarTo,
+            ("Inscribirme", "/educacion/curso#inscripcion"), ("Ver el temario", "/educacion/curso#temario"));
+
+        AddMission(b, "Lo que vas a lograr", "",
+            "<p>Al terminar serás capaz de componer páginas completas sin tocar código, aplicar una línea de diseño coherente con tokens y entender cómo un solo motor sirve marca, tienda y membresía.</p>");
+
+        // Temario / lecciones — acordeón CDN interactivo (title + content).
+        AddSynAccordion(b, new (string title, string content)[]
+        {
+            ("Módulo 1 · El núcleo componible", "Qué es un motor componible, cómo se piensa en componentes y por qué un solo core puede ser muchos productos."),
+            ("Módulo 2 · Componer, no programar", "El editor visual, los bloques nativos y los componentes de la CDN. Armas una página completa de cero."),
+            ("Módulo 3 · Línea de diseño con tokens", "Grilla de 8, tipografía, paleta por marca y ritmo vertical. Tu sitio se ve premium por defecto."),
+            ("Módulo 4 · Identidad por marca", "Temas por propiedad, data-theme y branding. Una marca, mil caras sobre el mismo deploy."),
+            ("Módulo 5 · Proyecto final", "Construyes y publicas un vertical completo con su identidad. Lo agregas a tu portafolio."),
+        }, allowMultiple: false);
+
+        // Instructor — media-text split (CDN si está, SSR si no).
+        SplitAuto(b, "Tu instructor",
+            "Quien te acompaña",
+            "<p><strong>Andrés Gómez</strong> — Ingeniero de plataforma con 12 años construyendo productos digitales. Ha liderado equipos que migraron decenas de sitios a un solo motor componible y enseña con proyectos reales, no diapositivas.</p>",
+            "Educacion Instructor", "Foto del instructor del curso", ScholarFrom, ScholarTo,
+            mediaOnRight: true, ctaLabel: null, ctaUrl: null);
+
+        // CTA inscribirse — para contenido gated: member-login (SSR) + form-stepper (CDN) de inscripción.
+        AddMission(b, "Inscríbete al curso", "",
+            "<p>Crea tu cuenta o inicia sesión para acceder a las lecciones y al proyecto guiado. Si tu empresa cubre tu formación, completa la inscripción y te enviamos la factura.</p>");
+        AddMemberLogin(b, "/educacion/curso");
+        AddSynFormStepper(b, "/api/forms/inscripcion-curso/submit", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
+        {
+            ("Tus datos", new (string, string, string, bool, string, string[])[]
+            {
+                ("Nombre completo", "nombre", "text", true, "Tu nombre", Array.Empty<string>()),
+                ("Email", "email", "email", true, "tu@correo.com", Array.Empty<string>()),
+            }),
+            ("Tu objetivo", new (string, string, string, bool, string, string[])[]
+            {
+                ("¿Qué quieres lograr con el curso?", "objetivo", "textarea", true, "Cuéntanos brevemente…", Array.Empty<string>()),
+                ("¿Tu empresa cubre la formación?", "empresa", "select", false, "", new[] { "Sí", "No", "No estoy seguro" }),
+            }),
+        });
+
+        FaqAuto(b, "Antes de inscribirte", new (string question, string answer)[]
+        {
+            ("¿Cuánto dura el acceso?", "El acceso al curso es de por vida; puedes repasarlo cuando quieras."),
+            ("¿Recibo certificado?", "Sí, al completar el proyecto final obtienes un certificado verificable."),
+            ("¿Hay devolución?", "Tienes 14 días de garantía: si el curso no es para ti, te devolvemos tu dinero."),
+        });
+
+        AddCta(b, "¿Listo para empezar?",
+            "Inscríbete hoy y construye tu primer proyecto esta semana.",
+            "Ver más cursos", "/educacion/cursos");
+        return b.Build();
+    }
+
+    // ═══════════════════════ Vertical #8 — Booking (meridian) ═══════════════════════
+    // Núcleo de negocio nuevo, 100% composable: plataforma de reservas/citas, registro
+    // ENTERPRISE. El siteRoot "Booking" (theme meridian, definido por otro agente — acá solo
+    // se referencia el LITERAL) se crea en SeedVerticalSiteRoots con BuildBookingHome() como
+    // body. El catálogo de SERVICIOS reservables reusa la infra de Shop (productCategoryPage +
+    // productPage) → los precios se renderizan vía IPriceFormatter (es-CO), CERO precio
+    // hardcodeado. DefaultShopQuery scopea por siteRoot, así que los servicios no se cruzan
+    // con la Tienda. Páginas: Servicios + Reservar. CERO contenido baked en .cshtml.
+    private const string MeridianFrom = "#0A2540", MeridianTo = "#1FA2A6";   // gradiente neutro on-brand (NO define el tema; el tema lo pinta data-theme="meridian")
+
+    private void SeedBooking(List<string> details)
+    {
+        var booking = FindVertical("meridian");
+        if (booking is null) { details.Add("Booking:siteroot-not-found"); return; }
+
+        // El catálogo de servicios reservables son productCategoryPage + productPage bajo el
+        // siteRoot de Booking: precio = productPriceBase (numérico), formateado por
+        // IPriceFormatter. Sin hardcode. Categorías = tipos de recurso/servicio.
+        SeedServiceCategoriesAndItems(booking.Id, details);
+
+        SeedSiteRootPage(booking.Id, "Servicios", "Catálogo de servicios", BuildBookingServicios(), details);
+        SeedSiteRootPage(booking.Id, "Reservar", "Reserva tu cita", BuildBookingReservar(), details);
+        details.Add("Booking:pages-ok");
+    }
+
+    // Siembra el catálogo de servicios reservables como Shop scoped al siteRoot de Booking.
+    // Cada servicio es un productPage con productPriceBase NUMÉRICO (lo formatea IPriceFormatter
+    // en el render — es-CO). Categorías = áreas de servicio. CERO precio hardcodeado.
+    private void SeedServiceCategoriesAndItems(int bookingId, List<string> details)
+    {
+        if (_contentTypeService.Get("productCategoryPage")?.Key is null
+            || _contentTypeService.Get("productPage")?.Key is null)
+        {
+            details.Add("Booking:shop-schema-not-imported(services-fallback-cards)");
+            return;
+        }
+
+        var consultoria = SeedProductCategory(bookingId, "Consultoría", "Sesiones con especialistas.", details);
+        var espacios    = SeedProductCategory(bookingId, "Espacios", "Salas y recursos reservables.", details);
+        var bienestar   = SeedProductCategory(bookingId, "Bienestar", "Servicios de bienestar y cuidado.", details);
+
+        if (consultoria > 0)
+        {
+            SeedProduct(consultoria, "SVC-ASESORIA-30", "Asesoría express · 30 min", "90000", new[] { "consultoría", "30min" },
+                MeridianFrom, MeridianTo, BuildServiceBody("<p>Sesión 1:1 de 30 minutos con un especialista para resolver una duda puntual. Confirmación inmediata y enlace de videollamada.</p>", "Booking Asesoria Express", MeridianFrom, MeridianTo), details);
+            SeedProduct(consultoria, "SVC-ASESORIA-60", "Consultoría estratégica · 60 min", "160000", new[] { "consultoría", "60min" },
+                MeridianFrom, MeridianTo, BuildServiceBody("<p>Una hora de consultoría a profundidad con diagnóstico y plan de acción. Ideal para decisiones de negocio.</p>", "Booking Consultoria Estrategica", MeridianFrom, MeridianTo), details);
+        }
+        if (espacios > 0)
+        {
+            SeedProduct(espacios, "SPC-SALA-REUNION", "Sala de reuniones · 2 h", "120000", new[] { "espacio", "sala" },
+                MeridianFrom, MeridianTo, BuildServiceBody("<p>Sala equipada para hasta 8 personas, con pantalla y conexión. Reserva por bloques de dos horas.</p>", "Booking Sala Reuniones", MeridianFrom, MeridianTo), details);
+            SeedProduct(espacios, "SPC-AUDITORIO", "Auditorio · jornada", "480000", new[] { "espacio", "evento" },
+                MeridianFrom, MeridianTo, BuildServiceBody("<p>Auditorio para hasta 60 asistentes con sonido y proyección. Disponible por media jornada o jornada completa.</p>", "Booking Auditorio", MeridianFrom, MeridianTo), details);
+        }
+        if (bienestar > 0)
+        {
+            SeedProduct(bienestar, "WEL-MASAJE-60", "Masaje terapéutico · 60 min", "140000", new[] { "bienestar", "60min" },
+                MeridianFrom, MeridianTo, BuildServiceBody("<p>Sesión de masaje terapéutico de una hora con profesional certificado. Agenda tu horario preferido.</p>", "Booking Masaje", MeridianFrom, MeridianTo), details);
+            SeedProduct(bienestar, "WEL-NUTRICION", "Plan nutricional · valoración", "110000", new[] { "bienestar", "nutrición" },
+                MeridianFrom, MeridianTo, BuildServiceBody("<p>Valoración nutricional inicial con plan personalizado y seguimiento. Cupos limitados por día.</p>", "Booking Nutricion", MeridianFrom, MeridianTo), details);
+        }
+
+        details.Add($"Booking:services-seeded(con={consultoria > 0},esp={espacios > 0},bie={bienestar > 0})");
+    }
+
+    // Cuerpo composable de la ficha de servicio (la ficha precio/imagen la renderiza ProductPage;
+    // esto es descripción + detalles + CTA reservar, sin precio hardcodeado).
+    private string BuildServiceBody(string descHtml, string mediaName, string hexFrom, string hexTo)
+    {
+        var b = new BlockGridJsonBuilder();
+        AddMission(b, "El servicio", "", descHtml);
+        AddSplit(b, "Cómo funciona", "", "<p>Elige tu servicio, selecciona fecha y hora disponibles en el calendario y completa tus datos. Recibes la confirmación por correo al instante.</p>",
+            mediaName, "Detalle del servicio", hexFrom, hexTo, mediaOnRight: true, ctaLabel: null, ctaUrl: null);
+        AddCta(b, "¿Listo para reservar?", "Elige fecha y hora y asegura tu cupo en minutos.", "Reservar ahora", "/booking/reservar");
+        return b.Build();
+    }
+
+    // Home Booking: hero (propuesta + CTA "Reservar") + servicios/cómo-funciona (feature-grid)
+    // + value props + planes (pricing) + testimonios + FAQ + CTA.
+    private string BuildBookingHome()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Reservas y citas, sin fricción",
+            "Tu agenda en línea, disponible 24/7",
+            "<p>Una plataforma de reservas enterprise sobre el mismo motor: catálogo de servicios, calendario en tiempo real y confirmación automática. Tus clientes reservan en minutos; tu equipo gestiona en un solo lugar.</p>",
+            "Booking Home Hero", "Hero de la plataforma de reservas Booking", MeridianFrom, MeridianTo,
+            ("Reservar", "/booking/reservar"), ("Ver servicios", "/booking/servicios"));
+
+        // Cómo funciona — feature-grid (CDN si está, SSR si no).
+        FeatureGridAuto(b, "Cómo funciona", "Reservar es cuestión de minutos", new (string title, string subtitle, string body)[]
+        {
+            ("1 · Elige tu servicio", "Catálogo claro", "Explora servicios y recursos reservables con duración y precio por adelantado."),
+            ("2 · Selecciona fecha y hora", "Disponibilidad real", "El calendario muestra los cupos libres en tiempo real; eliges el que te sirve."),
+            ("3 · Confirma y listo", "Sin llamadas", "Completas tus datos y recibes la confirmación por correo al instante."),
+        }, 3);
+
+        // Value props — por qué reservar acá.
+        FeatureGridAuto(b, "Por qué reservar con nosotros", "Una experiencia que se nota", new (string title, string subtitle, string body)[]
+        {
+            ("Disponibilidad 24/7", "Reserva cuando quieras", "Tu agenda abierta a toda hora, sin depender de horarios de atención."),
+            ("Confirmación al instante", "Cero esperas", "Recibes tu confirmación y recordatorios por correo automáticamente."),
+            ("Gestión centralizada", "Todo en un lugar", "Servicios, calendario y reservas en una sola plataforma para tu equipo."),
+        }, 3);
+
+        // Planes — pricing composable (precio = DataType, editable; SSR si la tabla no está).
+        AddBookingPlanes(b);
+
+        AddSynTestimonials(b, "Lo que dicen nuestros clientes", new (string quote, string author, string role)[]
+        {
+            ("Pasamos de agendar por WhatsApp a un calendario que se gestiona solo.", "Valentina Ríos", "Gerente de operaciones"),
+            ("La confirmación automática nos eliminó los no-shows casi por completo.", "Andrés Patiño", "Director de servicio"),
+            ("Montamos el catálogo de salas en una tarde. Reservar es de dos clics.", "Lucía Gómez", "Coordinadora de espacios"),
+        });
+
+        FaqAuto(b, "Preguntas frecuentes", new (string question, string answer)[]
+        {
+            ("¿Necesito crear una cuenta para reservar?", "No es obligatorio: puedes reservar como invitado. Crear cuenta te deja gestionar tus reservas."),
+            ("¿Puedo cancelar o reprogramar?", "Sí. Desde el enlace de confirmación puedes cambiar o cancelar tu cita según las reglas del servicio."),
+            ("¿Cómo se cobran los servicios?", "Cada servicio muestra su precio en pesos colombianos (es-CO). El pago se coordina según la configuración del negocio."),
+        });
+
+        AddCta(b, "Empieza a recibir reservas hoy",
+            "Explora el catálogo de servicios y haz tu primera reserva esta semana.",
+            "Ver servicios", "/booking/servicios");
+        return b.Build();
+    }
+
+    // Planes de la plataforma de reservas — pricing table composable (placeholders editables,
+    // precio = DataType). SSR fallback si la tabla no está importada.
+    private void AddBookingPlanes(BlockGridJsonBuilder b)
+    {
+        if (_contentTypeService.Get("elementPricingTable")?.Key is not null)
+        {
+            AddPricingTable(b, "Planes para tu negocio", "Del primer servicio a toda una agenda",
+                ("Inicial", "Gratis", "", "",
+                 "1 servicio reservable\nCalendario básico\nConfirmación por correo\nSoporte por comunidad",
+                 false, "Empezar gratis", "/synergos/contacto"),
+                ("Profesional", "$149.900", "/mes", "El más elegido",
+                 "Servicios ilimitados\nMúltiples recursos\nRecordatorios automáticos\nGestión de cancelaciones\nReportes de ocupación\nSoporte prioritario",
+                 true, "Elegir Profesional", "/synergos/contacto"),
+                ("Enterprise", "A tu medida", "", "",
+                 "Todo lo de Profesional\nMulti-sede\nIntegraciones a medida\nSLA garantizado\nAcompañamiento dedicado",
+                 false, "Hablar con ventas", "/synergos/contacto"));
+        }
+        else
+        {
+            FeatureGridAuto(b, "Planes para tu negocio", "Del primer servicio a toda una agenda", new (string title, string subtitle, string body)[]
+            {
+                ("Inicial", "Gratis", "Para empezar: un servicio reservable, calendario básico y confirmación por correo."),
+                ("Profesional", "$149.900/mes", "El más elegido: servicios y recursos ilimitados, recordatorios y reportes de ocupación."),
+                ("Enterprise", "A tu medida", "Para escalar: multi-sede, integraciones a medida, SLA y acompañamiento dedicado."),
+            }, 3);
+        }
+    }
+
+    // Página Servicios: catálogo de servicios/recursos reservables. search-box + data-grid
+    // filtrable (categorías/duración/precio vía IPriceFormatter es-CO) → fallback feature-grid
+    // si el data-grid no resuelve. Si Shop está importado, también muestra el precio real
+    // por categoría (elementShopProductGrid scoped, IPriceFormatter) — CERO precio hardcodeado.
+    private string BuildBookingServicios()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Catálogo de servicios",
+            "Encuentra el servicio o recurso que necesitas reservar",
+            "<p>Explora todos los servicios y recursos disponibles. Filtra por categoría, duración o precio y reserva el que se ajuste a ti.</p>",
+            "Booking Servicios Hero", "Hero del catálogo de servicios", MeridianFrom, MeridianTo,
+            ("Reservar", "/booking/reservar"), ("Hablar con nosotros", "/synergos/contacto"));
+
+        // Buscador en vivo (CDN). Apunta al endpoint de búsqueda del CMS (Examine).
+        AddSynSearchBox(b, "Buscar servicios por nombre o categoría…", "/api/search", "q");
+
+        // Catálogo filtrable/paginable (CDN data-grid). dataSource = endpoint GET JSON.
+        // Columnas incluyen precio (lo formatea el render es-CO). Fallback a feature-grid.
+        if (_contentTypeService.Get("elementSynDataGrid")?.Key is not null)
+        {
+            AddSynDataGrid(b, "/api/search?type=servicio", new (string field, string label, bool sortable, bool filterable)[]
+            {
+                ("title", "Servicio", true, true),
+                ("category", "Categoría", true, true),
+                ("duration", "Duración", true, false),
+                ("price", "Precio", true, false),
+            }, pageSize: 9);
+        }
+        else
+        {
+            FeatureGridAuto(b, "Todos los servicios", "Explora el catálogo completo", new (string title, string subtitle, string body)[]
+            {
+                ("Asesoría express", "Consultoría · 30 min", "Sesión 1:1 puntual con un especialista, confirmación inmediata."),
+                ("Consultoría estratégica", "Consultoría · 60 min", "Diagnóstico a profundidad con plan de acción."),
+                ("Sala de reuniones", "Espacios · 2 h", "Sala equipada para hasta 8 personas, por bloques de dos horas."),
+                ("Auditorio", "Espacios · jornada", "Hasta 60 asistentes, media jornada o jornada completa."),
+                ("Masaje terapéutico", "Bienestar · 60 min", "Sesión de una hora con profesional certificado."),
+                ("Plan nutricional", "Bienestar · valoración", "Valoración inicial con plan personalizado y seguimiento."),
+            }, 3);
+        }
+
+        // Si Shop está importado, además mostramos el precio REAL por categoría (es-CO).
+        if (_contentTypeService.Get("elementShopProductGrid")?.Key is not null)
+        {
+            AddMission(b, "Consultoría", "", "<p>Sesiones con especialistas.</p>");
+            AddProductGridFiltered(b, "Consultoría", sortBy: "price-asc");
+            AddMission(b, "Espacios", "", "<p>Salas y recursos reservables.</p>");
+            AddProductGridFiltered(b, "Espacios", sortBy: "price-asc");
+            AddMission(b, "Bienestar", "", "<p>Servicios de bienestar y cuidado.</p>");
+            AddProductGridFiltered(b, "Bienestar", sortBy: "price-asc");
+        }
+
+        AddCta(b, "¿No encuentras lo que buscas?",
+            "Cuéntanos qué necesitas reservar y configuramos el servicio a tu medida.",
+            "Hablar con nosotros", "/synergos/contacto");
+        return b.Build();
+    }
+
+    // Página Reservar: calendar (elegir fecha/slot) + form-stepper multipaso (datos de la
+    // reserva) + confirmación + (opcional) map-embed/horarios en accordion. Todo CDN con
+    // fallback con grace. CERO contenido baked en .cshtml.
+    private string BuildBookingReservar()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Reserva tu cita",
+            "Elige fecha y hora, sin llamadas",
+            "<p>Selecciona el día y el horario disponibles en el calendario, completa tus datos y recibe la confirmación por correo en minutos.</p>",
+            "Booking Reservar Hero", "Hero de la página de reserva", MeridianFrom, MeridianTo,
+            ("Ver servicios", "/booking/servicios"), ("Volver al inicio", "/booking"));
+
+        // Paso 1 — calendario: elegir fecha/slot. eventsEndpoint = GET JSON de disponibilidad.
+        AddMission(b, "1 · Elige fecha y hora", "",
+            "<p>Toca un día disponible en el calendario para ver los horarios libres. La disponibilidad se actualiza en tiempo real.</p>");
+        AddSynCalendar(b, "/api/booking/availability");
+
+        // Paso 2 — datos de la reserva: form-stepper multipaso → POST a Forms (honeypot + rate-limit + email).
+        AddMission(b, "2 · Completa tus datos", "",
+            "<p>Confirma el servicio, la fecha y la hora elegidas y déjanos tus datos de contacto. Te enviamos la confirmación al correo.</p>");
+        AddSynFormStepper(b, "/api/forms/reserva-cita/submit", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
+        {
+            ("Tu reserva", new (string, string, string, bool, string, string[])[]
+            {
+                ("Servicio", "servicio", "select", true, "", new[] { "Asesoría express", "Consultoría estratégica", "Sala de reuniones", "Auditorio", "Masaje terapéutico", "Plan nutricional" }),
+                ("Fecha", "fecha", "text", true, "DD/MM/AAAA", Array.Empty<string>()),
+                ("Hora", "hora", "text", true, "Ej. 10:00 AM", Array.Empty<string>()),
+            }),
+            ("Tus datos", new (string, string, string, bool, string, string[])[]
+            {
+                ("Nombre", "nombre", "text", true, "Tu nombre", Array.Empty<string>()),
+                ("Email", "email", "email", true, "tu@correo.com", Array.Empty<string>()),
+                ("Teléfono", "telefono", "tel", true, "Tu teléfono", Array.Empty<string>()),
+                ("Nota (opcional)", "nota", "textarea", false, "Indícanos cualquier detalle de tu reserva…", Array.Empty<string>()),
+            }),
+        });
+
+        // Confirmación — mensaje de qué sigue tras reservar.
+        AddMission(b, "3 · Confirmación", "",
+            "<p>Al enviar tu reserva recibirás un correo con los detalles y un enlace para reprogramar o cancelar. Te enviaremos un recordatorio antes de tu cita.</p>");
+
+        // Opcional — ubicación (map-embed SSR) + horarios de atención (accordion CDN).
+        AddMapEmbed(b, "https://www.openstreetmap.org/export/embed.html?bbox=-74.08%2C4.60%2C-74.05%2C4.63&layer=mapnik",
+            "Ubicación", height: 420);
+
+        AddSynAccordion(b, new (string title, string content)[]
+        {
+            ("Lunes a viernes", "Atención de 8:00 a. m. a 6:00 p. m. · Reservas en línea 24/7."),
+            ("Sábados", "Atención de 9:00 a. m. a 1:00 p. m. · Reservas en línea 24/7."),
+            ("Domingos y festivos", "Sin atención presencial · Reservas en línea para días hábiles."),
+        }, allowMultiple: true);
+
+        FaqAuto(b, "Sobre tu reserva", new (string question, string answer)[]
+        {
+            ("¿Puedo cambiar o cancelar mi cita?", "Sí, desde el enlace que te enviamos por correo, según las reglas del servicio."),
+            ("¿Recibo recordatorios?", "Sí. Te enviamos la confirmación al reservar y un recordatorio antes de tu cita."),
+            ("¿Qué pasa si llego tarde?", "Cada servicio define su tolerancia; revisa los detalles en el correo de confirmación."),
+        });
+
+        AddCta(b, "¿Aún no eliges servicio?",
+            "Revisa el catálogo completo antes de reservar.",
+            "Ver servicios", "/booking/servicios");
         return b.Build();
     }
 

@@ -134,6 +134,21 @@ public sealed class DevMediaFactory
         return BuildPickerJson(mediaKey);
     }
 
+    /// <summary>
+    /// Devuelve la URL pública del archivo de una imagen synImage con el nombre dado;
+    /// la crea idempotente si no existe (misma lógica que <see cref="GetOrCreatePickerValue"/>:
+    /// ilustración real del kit o gradiente limpio on-brand, SIN texto). La necesitan los
+    /// componentes CDN-Angular (carousel/gallery) cuyo JSON de config lleva URLs planas,
+    /// no el valor MediaPicker3. Devuelve "" si no se pudo resolver la URL.
+    /// </summary>
+    public string GetOrCreateMediaUrl(string name, string altText,
+        string hexFrom = "#0A2540", string hexTo = "#0F58A7", int width = 1200, int height = 800)
+    {
+        var mediaKey = GetOrCreate(name, altText, hexFrom, hexTo, width, height);
+        var media = _mediaService.GetById(mediaKey);
+        return media?.GetUrl("umbracoFile", _mediaUrlGenerators) ?? string.Empty;
+    }
+
     private static string BuildPickerJson(Guid mediaKey)
     {
         var entryKey = Guid.NewGuid().ToString();

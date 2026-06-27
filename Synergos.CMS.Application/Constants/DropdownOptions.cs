@@ -38,6 +38,12 @@ public static class DropdownOptions
 
         /// <summary>Vertical Propiedades "Terra Lux" (OLA 4.5, ADR 0101).</summary>
         public const string TerraLux = "terraLux";
+
+        /// <summary>Vertical Educación "Scholar" enterprise (OLA 4.6, ADR 0102).</summary>
+        public const string Scholar = "scholar";
+
+        /// <summary>Vertical Booking "Meridian" enterprise (OLA 4.6, ADR 0102).</summary>
+        public const string Meridian = "meridian";
     }
 
     /// <summary>Mirror de <c>DTSelectPageSurface</c>.</summary>

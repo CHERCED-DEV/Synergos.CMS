@@ -800,6 +800,235 @@
 }
 
 /* ─────────────────────────────────────────────────────────── */
+/* scholar theme — vertical Educación "Scholar" (OLA 4.6, ADR 0102) */
+/* Registro ENTERPRISE: base cool off-white + ink navy profundo  */
+/* + primary indigo-corporativo, accent gold SOBRIO y mínimo     */
+/* (solo emphasis). Académico-corporativo, restringido, confiable.*/
+/* Paridad token-a-token con eventsNight — 75 familias.          */
+/* color-scheme: light.                                          */
+/* ─────────────────────────────────────────────────────────── */
+:root[data-theme="scholar"],
+[data-theme="scholar"],
+.theme-scholar {
+  color-scheme: light;
+
+  /* Channels theme-aware — primary indigo-corporativo #2E5AAC,
+     accent gold sobrio #C99A2E (mínimo), ink navy para scrims. */
+  --syn-channel-brand:  46 90 172;
+  --syn-channel-accent: 201 154 46;
+  --syn-channel-ink:    27 42 74;
+
+  --syn-color-surface-canvas:    #F6F8FB;   /* cool off-white */
+  --syn-color-surface-primary:   #FFFFFF;   /* surface blanco */
+  --syn-color-surface-secondary: #EEF2F8;
+  --syn-color-surface-tertiary:  #E2E8F2;
+  --syn-color-surface-elevated:  #FFFFFF;
+  --syn-color-surface-inverse:   #1B2A4A;
+  --syn-color-surface-accent:        #E7EDF7;
+  --syn-color-surface-accent-soft:   rgb(46 90 172 / 0.08);
+  --syn-color-surface-overlay:       rgb(255 255 255 / 0.90);
+  --syn-color-surface-strong:        #1B2A4A;
+
+  --syn-color-text-primary:    #1B2A4A;   /* ink navy profundo */
+  --syn-color-text-secondary:  #2A3450;   /* slate */
+  --syn-color-text-muted:      #5A6480;
+  --syn-color-text-disabled:   #9AA2B6;
+  --syn-color-text-inverse:    #F6F8FB;
+  --syn-color-text-accent:     #2E5AAC;   /* indigo para texto enlazado */
+  --syn-color-text-on-accent:  #FFFFFF;
+
+  --syn-color-border-subtle:  #E6EBF3;
+  --syn-color-border-default: #D2DAE8;
+  --syn-color-border-strong:  #B4C0D6;
+  --syn-color-border-accent:  #2E5AAC;
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  --syn-color-overlay-subtle: rgb(27 42 74 / 0.06);
+  --syn-color-overlay-medium: rgb(27 42 74 / 0.14);
+  --syn-color-overlay-strong: rgb(27 42 74 / 0.24);
+
+  --syn-color-action-primary:        #2E5AAC;   /* indigo — CTA principal */
+  --syn-color-action-primary-hover:  #264C93;
+  --syn-color-action-primary-active: #356AC4;
+  --syn-color-action-primary-text:   #FFFFFF;
+  --syn-color-action-primary-border: transparent;
+  --syn-color-action-emphasis:       #C99A2E;   /* gold sobrio — solo emphasis */
+
+  --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
+  --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
+  --syn-color-action-secondary-text:           var(--syn-color-text-primary);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-text-accent);
+  --syn-color-action-secondary-border:         var(--syn-color-border-default);
+  --syn-color-action-secondary-border-hover:   var(--syn-color-border-accent);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  --syn-color-action-danger:       #B23B30;
+  --syn-color-action-danger-hover: #973026;
+  --syn-color-action-danger-text:  #FFFFFF;
+
+  --syn-color-action-disabled-surface: #EDF1F7;
+  --syn-color-action-disabled-border:  #DDE4EF;
+  --syn-color-action-disabled-text:    #A2AABE;
+
+  --syn-color-focus-ring:        rgb(46 90 172 / 0.70);
+  --syn-color-focus-ring-danger: rgb(178 59 48 / 0.55);
+
+  --syn-color-state-brand-surface: rgb(46 90 172 / 0.08);
+  --syn-color-state-brand-border:  rgb(46 90 172 / 0.24);
+  --syn-color-state-brand-text:    #264C93;
+
+  --syn-color-state-info-surface: rgb(46 90 172 / 0.08);
+  --syn-color-state-info-border:  rgb(46 90 172 / 0.22);
+  --syn-color-state-info-text:    #264C93;
+
+  --syn-color-info:         #2E5AAC;
+  --syn-color-info-surface: rgb(46 90 172 / 0.08);
+
+  --syn-color-state-success-surface: rgb(31 122 90 / 0.10);
+  --syn-color-state-success-border:  rgb(31 122 90 / 0.24);
+  --syn-color-state-success-text:    #176046;
+
+  --syn-color-state-warning-surface: rgb(201 154 46 / 0.14);
+  --syn-color-state-warning-border:  rgb(201 154 46 / 0.28);
+  --syn-color-state-warning-text:    #856014;
+
+  --syn-color-state-danger-surface: rgb(178 59 48 / 0.10);
+  --syn-color-state-danger-border:  rgb(178 59 48 / 0.24);
+  --syn-color-state-danger-text:    #8C2C23;
+
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-surface-canvas) 0%,
+                         var(--syn-color-surface-secondary) 50%,
+                         rgb(var(--syn-channel-brand) / 0.14) 100%);
+
+  --syn-shadow-card:         0 10px 28px -20px rgb(27 42 74 / 0.18);
+  --syn-shadow-card-hover:   0 24px 54px -32px rgb(27 42 74 / 0.22);
+  --syn-shadow-panel:        0 12px 30px -24px rgb(27 42 74 / 0.16);
+  --syn-shadow-floating:     0 28px 72px -38px rgb(27 42 74 / 0.26);
+  --syn-shadow-action:       0 12px 26px -18px rgb(var(--syn-channel-brand) / 0.26);
+  --syn-shadow-action-hover: 0 18px 36px -20px rgb(var(--syn-channel-brand) / 0.34);
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* meridian theme — vertical Booking "Meridian" (OLA 4.6, ADR 0102) */
+/* Registro ENTERPRISE de scheduling/SaaS: base light slate +    */
+/* ink graphite + primary teal-azul profesional, accent azul más  */
+/* claro, confirm/success sobrio. Profesional, limpio, corporativo*/
+/* (distinto de scholar: teal vs indigo). Paridad token-a-token   */
+/* con eventsNight — 75 familias. color-scheme: light.            */
+/* ─────────────────────────────────────────────────────────── */
+:root[data-theme="meridian"],
+[data-theme="meridian"],
+.theme-meridian {
+  color-scheme: light;
+
+  /* Channels theme-aware — primary teal-azul #0F6E8C,
+     accent azul más claro #3A8DBE, ink graphite para scrims. */
+  --syn-channel-brand:  15 110 140;
+  --syn-channel-accent: 58 141 190;
+  --syn-channel-ink:    28 39 51;
+
+  --syn-color-surface-canvas:    #F4F7F9;   /* light slate */
+  --syn-color-surface-primary:   #FFFFFF;   /* surface blanco */
+  --syn-color-surface-secondary: #EAF0F4;
+  --syn-color-surface-tertiary:  #DCE6EC;
+  --syn-color-surface-elevated:  #FFFFFF;
+  --syn-color-surface-inverse:   #1C2733;
+  --syn-color-surface-accent:        #E2EEF3;
+  --syn-color-surface-accent-soft:   rgb(15 110 140 / 0.08);
+  --syn-color-surface-overlay:       rgb(255 255 255 / 0.90);
+  --syn-color-surface-strong:        #1C2733;
+
+  --syn-color-text-primary:    #1C2733;   /* ink graphite */
+  --syn-color-text-secondary:  #3A4856;
+  --syn-color-text-muted:      #64727F;
+  --syn-color-text-disabled:   #9AA6B0;
+  --syn-color-text-inverse:    #F4F7F9;
+  --syn-color-text-accent:     #0F6E8C;   /* teal-azul para texto enlazado */
+  --syn-color-text-on-accent:  #FFFFFF;
+
+  --syn-color-border-subtle:  #E4EBF0;
+  --syn-color-border-default: #CFDAE2;
+  --syn-color-border-strong:  #AFC0CB;
+  --syn-color-border-accent:  #0F6E8C;
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  --syn-color-overlay-subtle: rgb(28 39 51 / 0.06);
+  --syn-color-overlay-medium: rgb(28 39 51 / 0.14);
+  --syn-color-overlay-strong: rgb(28 39 51 / 0.24);
+
+  --syn-color-action-primary:        #0F6E8C;   /* teal-azul — CTA principal */
+  --syn-color-action-primary-hover:  #0C5B74;
+  --syn-color-action-primary-active: #1380A2;
+  --syn-color-action-primary-text:   #FFFFFF;
+  --syn-color-action-primary-border: transparent;
+  --syn-color-action-emphasis:       #3A8DBE;   /* azul más claro */
+
+  --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
+  --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
+  --syn-color-action-secondary-text:           var(--syn-color-text-primary);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-text-accent);
+  --syn-color-action-secondary-border:         var(--syn-color-border-default);
+  --syn-color-action-secondary-border-hover:   var(--syn-color-border-accent);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  --syn-color-action-danger:       #B23B30;
+  --syn-color-action-danger-hover: #973026;
+  --syn-color-action-danger-text:  #FFFFFF;
+
+  --syn-color-action-disabled-surface: #EBF1F4;
+  --syn-color-action-disabled-border:  #DBE4EA;
+  --syn-color-action-disabled-text:    #A1ADB7;
+
+  --syn-color-focus-ring:        rgb(15 110 140 / 0.70);
+  --syn-color-focus-ring-danger: rgb(178 59 48 / 0.55);
+
+  --syn-color-state-brand-surface: rgb(15 110 140 / 0.08);
+  --syn-color-state-brand-border:  rgb(15 110 140 / 0.24);
+  --syn-color-state-brand-text:    #0C5B74;
+
+  --syn-color-state-info-surface: rgb(58 141 190 / 0.10);
+  --syn-color-state-info-border:  rgb(58 141 190 / 0.24);
+  --syn-color-state-info-text:    #2A6589;
+
+  --syn-color-info:         #3A8DBE;
+  --syn-color-info-surface: rgb(58 141 190 / 0.10);
+
+  /* confirm/success sobrio (verde-teal corporativo #1F7A5A) */
+  --syn-color-state-success-surface: rgb(31 122 90 / 0.10);
+  --syn-color-state-success-border:  rgb(31 122 90 / 0.24);
+  --syn-color-state-success-text:    #176046;
+
+  --syn-color-state-warning-surface: rgb(194 138 36 / 0.14);
+  --syn-color-state-warning-border:  rgb(194 138 36 / 0.28);
+  --syn-color-state-warning-text:    #7E5912;
+
+  --syn-color-state-danger-surface: rgb(178 59 48 / 0.10);
+  --syn-color-state-danger-border:  rgb(178 59 48 / 0.24);
+  --syn-color-state-danger-text:    #8C2C23;
+
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-surface-canvas) 0%,
+                         var(--syn-color-surface-secondary) 50%,
+                         rgb(var(--syn-channel-brand) / 0.14) 100%);
+
+  --syn-shadow-card:         0 10px 28px -20px rgb(28 39 51 / 0.18);
+  --syn-shadow-card-hover:   0 24px 54px -32px rgb(28 39 51 / 0.22);
+  --syn-shadow-panel:        0 12px 30px -24px rgb(28 39 51 / 0.16);
+  --syn-shadow-floating:     0 28px 72px -38px rgb(28 39 51 / 0.26);
+  --syn-shadow-action:       0 12px 26px -18px rgb(var(--syn-channel-brand) / 0.26);
+  --syn-shadow-action-hover: 0 18px 36px -20px rgb(var(--syn-channel-brand) / 0.34);
+}
+
+/* ─────────────────────────────────────────────────────────── */
 /* data-profile — carácter editorial por siteRoot (P1-3).       */
 /* institutional = defaults (sin override). Ortogonal a data-theme. */
 /* ─────────────────────────────────────────────────────────── */
