@@ -11,7 +11,13 @@
     2. siteRoot variant (renderCtx.ThemeVariant) — emite vars override
        envueltas en [data-theme=X] que viene en <html>.
        Variantes: light (no override), dark (invierte fondos/texto),
-       silverGold (paleta neutra), brand (refuerza primary).
+       silverGold (paleta neutra), eventsNight (vertical Eventos),
+       terraLux (vertical Propiedades), brand (refuerza primary).
+       El contrato brandKey↔pageThemeVariant↔data-theme (1:1) y la
+       "recipe de tema" están en ADR 0101. Cada variante NO-"light"
+       trae su superficie/texto desde su [data-theme] en syn-tokens.css;
+       este partial sólo inyecta surface/text base en la rama "light"
+       (line ~85) para no pisar el tema (P0-5).
 
     Las pages NO pueden override la variante (decision arquitectonica
     Ola 71: tema gestionado unica y exclusivamente desde el siteRoot).

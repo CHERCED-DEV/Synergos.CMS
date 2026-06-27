@@ -10,7 +10,8 @@ namespace Synergos.CMS.Application.Dto.Responses;
 /// </summary>
 /// <param name="Theme">Brand theme con colores, fonts y assets — null
 ///   cuando no hay <c>themeSettings</c> configurado para el brand activo.</param>
-/// <param name="PageThemeVariant">Variante de tema decidida por la
-///   página actual (light / dark / silverGold / brand). Null o vacío
-///   se trata como "light" (no override).</param>
+/// <param name="PageThemeVariant">Variante de tema resuelta desde el
+///   siteRoot (light / dark / silverGold / eventsNight / terraLux /
+///   brand). Null o vacío se trata como "light" (no override). Contrato
+///   brandKey↔pageThemeVariant↔data-theme (1:1) en ADR 0101.</param>
 public sealed record BrandThemeStyleModel(BrandTheme? Theme, string? PageThemeVariant);

@@ -32,6 +32,12 @@ public static class DropdownOptions
         public const string Dark = "dark";
         public const string SilverGold = "silverGold";
         public const string Brand = "brand";
+
+        /// <summary>Vertical Eventos "Electric Night" (OLA 4.5, ADR 0101).</summary>
+        public const string EventsNight = "eventsNight";
+
+        /// <summary>Vertical Propiedades "Terra Lux" (OLA 4.5, ADR 0101).</summary>
+        public const string TerraLux = "terraLux";
     }
 
     /// <summary>Mirror de <c>DTSelectPageSurface</c>.</summary>

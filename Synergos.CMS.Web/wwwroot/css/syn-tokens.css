@@ -468,12 +468,18 @@
 /* ─────────────────────────────────────────────────────────── */
 /* Silver-Gold theme — warm premium palette                    */
 /* ─────────────────────────────────────────────────────────── */
-:root[data-theme="silver-gold"],
+/* CANÓNICO (SoT): `silverGold` (camelCase) — es el value que emiten
+   DTSelectPageThemeVariant.config, DropdownOptions.PageThemeVariant,
+   el contenido publicado (blogs.config) y el seeder, así que el runtime
+   pinta <html data-theme="silverGold">. El alias `silver-gold` (kebab) y
+   las clases `.theme-*` quedan como ALIASES DEPRECADOS: nada los emite,
+   se conservan para no romper referencias externas. Ver ADR 0101. */
 :root[data-theme="silverGold"],
-[data-theme="silver-gold"],
+:root[data-theme="silver-gold"],   /* alias deprecado (kebab) */
 [data-theme="silverGold"],
-.theme-silver-gold,
-.theme-silverGold {
+[data-theme="silver-gold"],         /* alias deprecado (kebab) */
+.theme-silverGold,
+.theme-silver-gold {                /* alias deprecado (kebab) */
   color-scheme: light;
 
   --syn-color-surface-canvas:    #f5f1e8;
@@ -565,6 +571,232 @@
   --syn-shadow-floating:     0 28px 72px -38px rgb(50 40 22 / 0.32);
   --syn-shadow-action:       0 12px 26px -18px rgb(181 150 89 / 0.34);
   --syn-shadow-action-hover: 0 18px 36px -20px rgb(181 150 89 / 0.44);
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* eventsNight theme — vertical Eventos "Electric Night"       */
+/* Base midnight + electric violet/cyan. Registro propio (NO    */
+/* clon de dark): paleta saturada para agendas/countdown.       */
+/* Familias = paridad token-a-token con dark/silver-gold.       */
+/* ─────────────────────────────────────────────────────────── */
+:root[data-theme="eventsNight"],
+[data-theme="eventsNight"],
+.theme-eventsNight {
+  color-scheme: dark;
+
+  /* Channels theme-aware — primary electric violet #7C5CFF,
+     accent cyan #22D3EE, ink midnight para scrims profundos. */
+  --syn-channel-brand:  124 92 255;
+  --syn-channel-accent: 34 211 238;
+  --syn-channel-ink:    11 16 32;
+
+  --syn-color-surface-canvas:    #0B1020;   /* base midnight */
+  --syn-color-surface-primary:   #141A2E;   /* surface */
+  --syn-color-surface-secondary: #1B2238;
+  --syn-color-surface-tertiary:  #232C46;
+  --syn-color-surface-elevated:  #1A2138;
+  --syn-color-surface-inverse:   #F4F6FF;
+  --syn-color-surface-accent:        rgb(124 92 255 / 0.18);
+  --syn-color-surface-accent-soft:   rgb(124 92 255 / 0.12);
+  --syn-color-surface-overlay:       rgb(11 16 32 / 0.86);
+  --syn-color-surface-strong:        #F4F6FF;
+
+  --syn-color-text-primary:    #F4F6FF;   /* text */
+  --syn-color-text-secondary:  #C3C9E8;
+  --syn-color-text-muted:      #98A0C4;
+  --syn-color-text-disabled:   #6B7299;
+  --syn-color-text-inverse:    #0B1020;
+  --syn-color-text-accent:     #A78BFF;
+  --syn-color-text-on-accent:  #0B1020;
+
+  --syn-color-border-subtle:  rgb(196 181 253 / 0.12);
+  --syn-color-border-default: rgb(124 92 255 / 0.24);
+  --syn-color-border-strong:  rgb(124 92 255 / 0.40);
+  --syn-color-border-accent:  rgb(34 211 238 / 0.50);
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  --syn-color-overlay-subtle: rgb(244 246 255 / 0.06);
+  --syn-color-overlay-medium: rgb(244 246 255 / 0.14);
+  --syn-color-overlay-strong: rgb(244 246 255 / 0.22);
+
+  --syn-color-action-primary:        #7C5CFF;   /* electric violet */
+  --syn-color-action-primary-hover:  #6A48F0;
+  --syn-color-action-primary-active: #8C70FF;
+  --syn-color-action-primary-text:   #0B1020;
+  --syn-color-action-primary-border: transparent;
+  --syn-color-action-emphasis:       #22D3EE;   /* accent cyan */
+
+  --syn-color-action-secondary-surface:        rgb(244 246 255 / 0.05);
+  --syn-color-action-secondary-surface-hover:  rgb(244 246 255 / 0.09);
+  --syn-color-action-secondary-text:           #F4F6FF;
+  --syn-color-action-secondary-text-hover:     #C9BCFF;
+  --syn-color-action-secondary-border:         rgb(124 92 255 / 0.30);
+  --syn-color-action-secondary-border-hover:   rgb(34 211 238 / 0.50);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  --syn-color-action-danger:       var(--syn-color-danger-400);
+  --syn-color-action-danger-hover: var(--syn-color-danger-300);
+  --syn-color-action-danger-text:  #0B1020;
+
+  --syn-color-action-disabled-surface: rgb(152 160 196 / 0.10);
+  --syn-color-action-disabled-border:  rgb(152 160 196 / 0.18);
+  --syn-color-action-disabled-text:    #6B7299;
+
+  --syn-color-focus-ring:        rgb(34 211 238 / 0.82);
+  --syn-color-focus-ring-danger: rgb(253 164 175 / 0.82);
+
+  --syn-color-state-brand-surface: rgb(124 92 255 / 0.18);
+  --syn-color-state-brand-border:  rgb(124 92 255 / 0.36);
+  --syn-color-state-brand-text:    #C9BCFF;
+
+  --syn-color-state-info-surface: rgb(34 211 238 / 0.16);
+  --syn-color-state-info-border:  rgb(34 211 238 / 0.30);
+  --syn-color-state-info-text:    #A5F0FB;
+
+  --syn-color-info:         #22D3EE;
+  --syn-color-info-surface: rgb(34 211 238 / 0.16);
+
+  /* success / early-bird #34D399 */
+  --syn-color-state-success-surface: rgb(52 211 153 / 0.16);
+  --syn-color-state-success-border:  rgb(52 211 153 / 0.30);
+  --syn-color-state-success-text:    #6EE7B7;
+
+  --syn-color-state-warning-surface: rgb(245 158 11 / 0.16);
+  --syn-color-state-warning-border:  rgb(252 211 77 / 0.30);
+  --syn-color-state-warning-text:    #fde68a;
+
+  --syn-color-state-danger-surface: rgb(239 68 68 / 0.16);
+  --syn-color-state-danger-border:  rgb(251 113 133 / 0.32);
+  --syn-color-state-danger-text:    #fecdd3;
+
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-surface-canvas) 0%,
+                         var(--syn-color-surface-elevated) 46%,
+                         rgb(var(--syn-channel-brand) / 0.30) 100%);
+
+  --syn-shadow-card:         0 10px 28px -18px rgb(11 16 32 / 0.80);
+  --syn-shadow-card-hover:   0 24px 56px -28px rgb(11 16 32 / 0.88);
+  --syn-shadow-panel:        0 8px 24px -18px rgb(11 16 32 / 0.76);
+  --syn-shadow-floating:     0 28px 72px -36px rgb(11 16 32 / 0.92);
+  --syn-shadow-action:       0 10px 22px -16px rgb(var(--syn-channel-brand) / 0.50);
+  --syn-shadow-action-hover: 0 18px 34px -18px rgb(var(--syn-channel-accent) / 0.46);
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* terraLux theme — vertical Propiedades "Terra Lux"           */
+/* Base warm ivory + bronze/sage. Registro propio (paridad      */
+/* token-a-token con silver-gold, paleta cálida residencial).   */
+/* ─────────────────────────────────────────────────────────── */
+:root[data-theme="terraLux"],
+[data-theme="terraLux"],
+.theme-terraLux {
+  color-scheme: light;
+
+  /* Channels theme-aware — primary warm bronze #B08D57,
+     accent sage #2F6F5E, ink warm para sombras cálidas. */
+  --syn-channel-brand:  176 141 87;
+  --syn-channel-accent: 47 111 94;
+  --syn-channel-ink:    28 43 36;
+
+  --syn-color-surface-canvas:    #FBF8F3;   /* warm ivory */
+  --syn-color-surface-primary:   #FFFFFF;   /* surface */
+  --syn-color-surface-secondary: #F4EFE6;
+  --syn-color-surface-tertiary:  #ECE4D6;
+  --syn-color-surface-elevated:  #FFFDF9;
+  --syn-color-surface-inverse:   #1C2B24;
+  --syn-color-surface-accent:        #F1EADC;
+  --syn-color-surface-accent-soft:   rgb(176 141 87 / 0.12);
+  --syn-color-surface-overlay:       rgb(255 255 255 / 0.88);
+  --syn-color-surface-strong:        #1C2B24;
+
+  --syn-color-text-primary:    #1C2B24;   /* ink */
+  --syn-color-text-secondary:  #45554C;
+  --syn-color-text-muted:      #6A7269;
+  --syn-color-text-disabled:   #9AA096;
+  --syn-color-text-inverse:    #FBF8F3;
+  --syn-color-text-accent:     #8A6A38;
+  --syn-color-text-on-accent:  #FFFDF9;
+
+  --syn-color-border-subtle:  #EFE7D8;
+  --syn-color-border-default: #DBD2C0;
+  --syn-color-border-strong:  #C6B895;
+  --syn-color-border-accent:  #B08D57;
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  --syn-color-overlay-subtle: rgb(28 43 36 / 0.06);
+  --syn-color-overlay-medium: rgb(28 43 36 / 0.14);
+  --syn-color-overlay-strong: rgb(28 43 36 / 0.24);
+
+  --syn-color-action-primary:        #2F6F5E;   /* sage — CTA principal */
+  --syn-color-action-primary-hover:  #265C4D;
+  --syn-color-action-primary-active: #38826D;
+  --syn-color-action-primary-text:   #FFFDF9;
+  --syn-color-action-primary-border: transparent;
+  --syn-color-action-emphasis:       #B08D57;   /* warm bronze */
+
+  --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
+  --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
+  --syn-color-action-secondary-text:           var(--syn-color-text-primary);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-text-accent);
+  --syn-color-action-secondary-border:         var(--syn-color-border-default);
+  --syn-color-action-secondary-border-hover:   var(--syn-color-border-accent);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  /* alert terracotta #C2603D mapeada al rol danger del tema */
+  --syn-color-action-danger:       #C2603D;
+  --syn-color-action-danger-hover: #A84F30;
+  --syn-color-action-danger-text:  #FFFDF9;
+
+  --syn-color-action-disabled-surface: #EFE7D8;
+  --syn-color-action-disabled-border:  #E2D8C5;
+  --syn-color-action-disabled-text:    #A59A86;
+
+  --syn-color-focus-ring:        rgb(47 111 94 / 0.72);
+  --syn-color-focus-ring-danger: rgb(194 96 61 / 0.55);
+
+  --syn-color-state-brand-surface: rgb(176 141 87 / 0.12);
+  --syn-color-state-brand-border:  rgb(176 141 87 / 0.28);
+  --syn-color-state-brand-text:    #8A6A38;
+
+  --syn-color-state-info-surface: rgb(47 111 94 / 0.10);
+  --syn-color-state-info-border:  rgb(47 111 94 / 0.22);
+  --syn-color-state-info-text:    #235446;
+
+  --syn-color-info:         #2F6F5E;
+  --syn-color-info-surface: rgb(47 111 94 / 0.10);
+
+  --syn-color-state-success-surface: rgb(47 111 94 / 0.12);
+  --syn-color-state-success-border:  rgb(47 111 94 / 0.24);
+  --syn-color-state-success-text:    #235446;
+
+  --syn-color-state-warning-surface: rgb(176 141 87 / 0.14);
+  --syn-color-state-warning-border:  rgb(176 141 87 / 0.26);
+  --syn-color-state-warning-text:    #7A5E2E;
+
+  /* danger usa la terracotta del tema (#C2603D) */
+  --syn-color-state-danger-surface: rgb(194 96 61 / 0.12);
+  --syn-color-state-danger-border:  rgb(194 96 61 / 0.24);
+  --syn-color-state-danger-text:    #9A4326;
+
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-surface-canvas) 0%,
+                         var(--syn-color-surface-secondary) 50%,
+                         rgb(var(--syn-channel-brand) / 0.22) 100%);
+
+  --syn-shadow-card:         0 10px 28px -20px rgb(70 53 26 / 0.22);
+  --syn-shadow-card-hover:   0 24px 54px -32px rgb(70 53 26 / 0.26);
+  --syn-shadow-panel:        0 12px 30px -24px rgb(70 53 26 / 0.20);
+  --syn-shadow-floating:     0 28px 72px -38px rgb(48 38 22 / 0.30);
+  --syn-shadow-action:       0 12px 26px -18px rgb(var(--syn-channel-accent) / 0.30);
+  --syn-shadow-action-hover: 0 18px 36px -20px rgb(var(--syn-channel-accent) / 0.40);
 }
 
 /* ─────────────────────────────────────────────────────────── */
