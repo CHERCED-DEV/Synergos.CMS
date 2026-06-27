@@ -120,6 +120,14 @@ public sealed class DevContentFiller
         SeedEventos(details);
         SeedPropiedades(details);
 
+        // OLA 4.8: vertical #11 Hoteles (terraLux). Vertical-slice de reservas de
+        // alojamiento, 100% composable: siteRoot "Hoteles" cuyo body es un Layout
+        // Composer. La pieza estrella es el ElementType elementSynBookingWizard
+        // (asistente de reserva multipaso) que el SynHost emite como
+        // <synergos-booking-wizard config='...'> y la CDN hidrata; llama a
+        // /api/booking/* (BookingController). CERO contenido baked en .cshtml.
+        SeedHoteles(details);
+
         return new FillResult(filled == 8, filled, string.Join("; ", details));   // siteRoot home + 7 páginas hijas
     }
 
@@ -1036,6 +1044,9 @@ public sealed class DevContentFiller
             "syn-launcher__card--document", "syn-launcher__card--live", "Entrar a Eventos →", "/eventos");
         AddCard("Propiedades", "<p>Inmobiliario premium: listado filtrable, galería con lightbox y fichas de propiedad — un portal de propiedades completo sobre el mismo motor.</p>",
             "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar a Propiedades →", "/propiedades");
+        // OLA 4.8 — card composable del vertical #11 Hoteles (mismo patrón, sin hardcode).
+        AddCard("Hoteles", "<p>Reservas de alojamiento: catálogo de hoteles, galería y asistente de reserva multipaso — una plataforma de booking de hoteles completa sobre el mismo motor.</p>",
+            "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar a Hoteles →", "/hoteles");
 
         pr.SetCultureName(BrandName, Culture);   // umbrella = SynergosLabs (el hero lee Model.Name)
         // P2-3: identidad propia del launcher (compBranding + compPageTheme) — gestionable
@@ -1174,6 +1185,13 @@ public sealed class DevContentFiller
         // propia "terraLux" (el tema ya existe en DTSelect; acá solo se referencia el literal).
         SeedVertical(pr.Id, "Propiedades", "propiedades", "SynergosLabs Propiedades", "terraLux", "propiedades.synergos.local",
             BuildPropiedadesHome(), details);
+
+        // OLA 4.8 — vertical #11 Hoteles: reservas de alojamiento. Reusa el tema
+        // EXISTENTE "terraLux" (cálido/premium, encaja con hotelería; no se crea tema
+        // nuevo — solo se referencia el literal). brandKey="hoteles" → FindVertical lo
+        // localiza para sembrar sus páginas.
+        SeedVertical(pr.Id, "Hoteles", "hoteles", "SynergosLabs Hoteles", "terraLux", "hoteles.synergos.local",
+            BuildHotelesHome(), details);
     }
 
     private void SeedVertical(int parentId, string name, string brandKey, string brandDisplayName,
@@ -1860,6 +1878,31 @@ public sealed class DevContentFiller
         {
             c.Set("eventsEndpoint", eventsEndpoint);           // mandatory (URL ^https?://|^/)
             if (!string.IsNullOrWhiteSpace(initialMonth)) { c.Set("initialMonth", initialMonth); }
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
+    /// <summary>
+    /// Asistente de reserva multipaso (elementSynBookingWizard): el SynHost lo emite como
+    /// &lt;synergos-booking-wizard config='...'&gt; y la CDN hidrata el componente Angular,
+    /// que llama a la API de reservas (/api/booking/*, BookingController). Config end-to-end
+    /// desde el CMS (apiBase + destinationLabel + currency). Sale no-op con grace si el
+    /// ElementType aún no está importado (degradación silenciosa, sin reventar la siembra).
+    /// </summary>
+    private void AddSynBookingWizard(BlockGridJsonBuilder b, string apiBase, string destinationLabel, string currency = "COP")
+    {
+        var key = _contentTypeService.Get("elementSynBookingWizard")?.Key;
+        if (key is null) { return; }   // schema aún sin importar → grace (el caller ya compuso el resto)
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            // Los valores de un bloque del BlockGrid se almacenan planos en el JSON; la
+            // variación Culture de la propiedad la resuelve el contexto de cultura de la
+            // página (misma mecánica que AddSynCalendar/AddSynTestimonials).
+            c.Set("apiBase", apiBase);                  // Nothing (config compartida) — base de /api/booking
+            c.Set("destinationLabel", destinationLabel); // Culture — nombre del alojamiento
+            c.Set("currency", currency);                // Nothing (config compartida) — ISO 3 letras
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
         });
     }
@@ -3002,6 +3045,112 @@ public sealed class DevContentFiller
         AddCta(b, "¿Quieres conocerla en persona?",
             "Agenda tu visita hoy y deja que un asesor te acompañe en cada paso.",
             "Ver más propiedades", "/propiedades/listado");
+        return b.Build();
+    }
+
+    // ═══════════════════════ Vertical #11 — Hoteles (terraLux) ═══════════════════════
+    // Vertical-slice de reservas de alojamiento, 100% composable. El siteRoot "Hoteles"
+    // (tema EXISTENTE terraLux — solo se referencia el literal, NO se crea tema nuevo) se
+    // crea en SeedVerticalSiteRoots con BuildHotelesHome() como body. La pieza estrella es
+    // el ElementType elementSynBookingWizard: el SynHost lo emite como
+    // <synergos-booking-wizard config='...'> y la CDN hidrata el componente Angular, que
+    // llama a /api/booking/* (BookingController). Páginas: Home (con el wizard embebido) +
+    // Reservar (wizard a pantalla completa). CERO contenido baked en .cshtml; CERO precio
+    // hardcodeado (los hoteles del catálogo reusan la infra de Shop → IPriceFormatter es-CO).
+    private const string TerraHotelFrom = "#3A2A1A", TerraHotelTo = "#C79A5B";   // gradiente cálido on-brand (NO define el tema; lo pinta data-theme="terraLux")
+
+    private void SeedHoteles(List<string> details)
+    {
+        var hoteles = FindVertical("hoteles");
+        if (hoteles is null) { details.Add("Hoteles:siteroot-not-found"); return; }
+
+        // Página opcional "Reservar": el booking-wizard a pantalla completa.
+        SeedSiteRootPage(hoteles.Id, "Reservar", "Reserva tu estadía", BuildHotelesReservar(), details);
+        details.Add("Hoteles:pages-ok");
+    }
+
+    // Home Hoteles: hero (propuesta + CTA "Reservar") + value props (feature-grid) + el
+    // bloque booking-wizard embebido + testimonios + FAQ + CTA. Todo composable, con
+    // fallback con grace si un ElementType CDN aún no está importado.
+    private string BuildHotelesHome()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Tu próxima estadía, a un clic",
+            "Reserva tu hotel sin fricción, en minutos",
+            "<p>Una plataforma de reservas de alojamiento sobre el mismo motor: elige fechas, compara opciones y confirma tu estadía con disponibilidad en tiempo real. Tú reservas en minutos; el hotel gestiona en un solo lugar.</p>",
+            "Hoteles Home Hero", "Hero de la plataforma de reservas de hoteles", TerraHotelFrom, TerraHotelTo,
+            ("Reservar ahora", "/hoteles/reservar"), ("Hablar con nosotros", "/synergos/contacto"));
+
+        // Value props — por qué reservar acá (CDN si está, SSR si no).
+        FeatureGridAuto(b, "Por qué reservar con nosotros", "Una experiencia que se nota", new (string title, string subtitle, string body)[]
+        {
+            ("Disponibilidad en tiempo real", "Sin sorpresas", "El asistente muestra los cupos libres al instante; reservas el que te sirve."),
+            ("Confirmación inmediata", "Cero esperas", "Recibes tu confirmación y recordatorios por correo automáticamente."),
+            ("Mejor precio garantizado", "Sin intermediarios", "Reservas directo con el alojamiento — más claridad y mejores tarifas."),
+        }, 3);
+
+        // Pieza estrella del vertical-slice: el asistente de reserva multipaso embebido.
+        // Llama a /api/booking/* (BookingController). destinationLabel = nombre del destino.
+        AddMission(b, "Reserva en tres pasos", "",
+            "<p>Elige fechas y huéspedes, selecciona tu habitación y completa tus datos. El asistente te guía paso a paso y confirma tu reserva al instante.</p>");
+        AddSynBookingWizard(b, "/api/booking", "Hoteles SynergosLabs");
+
+        AddSynTestimonials(b, "Lo que dicen nuestros huéspedes", new (string quote, string author, string role)[]
+        {
+            ("Reservé en menos de cinco minutos y la confirmación llegó al instante. Impecable.", "Camila Torres", "Viajera frecuente"),
+            ("La disponibilidad en tiempo real me evitó la típica sorpresa de 'no hay cupo'.", "Julián Mejía", "Viaje de negocios"),
+            ("Reservar directo con el hotel me dio mejor tarifa que en las grandes plataformas.", "Daniela Ospina", "Escapada de fin de semana"),
+        });
+
+        FaqAuto(b, "Preguntas frecuentes", new (string question, string answer)[]
+        {
+            ("¿Necesito una cuenta para reservar?", "No es obligatorio: puedes reservar como invitado. Crear cuenta te deja gestionar tus reservas."),
+            ("¿Puedo cancelar o cambiar fechas?", "Sí. Desde el enlace de confirmación puedes modificar o cancelar según la política del alojamiento."),
+            ("¿En qué moneda se muestran los precios?", "En pesos colombianos (COP), con el formato local es-CO."),
+        });
+
+        AddCta(b, "Empieza tu reserva hoy",
+            "Elige tus fechas y asegura tu estadía esta semana.",
+            "Reservar ahora", "/hoteles/reservar");
+        return b.Build();
+    }
+
+    // Página Reservar: el booking-wizard a pantalla completa (paso a paso) + horarios/
+    // políticas en accordion + FAQ + CTA. Todo CDN con fallback con grace.
+    private string BuildHotelesReservar()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Reserva tu estadía",
+            "Elige fechas y habitación, sin llamadas",
+            "<p>Completa tu reserva en pocos pasos: fechas, huéspedes, habitación y datos de contacto. Recibes la confirmación por correo en minutos.</p>",
+            "Hoteles Reservar Hero", "Hero de la página de reserva de hoteles", TerraHotelFrom, TerraHotelTo,
+            ("Volver al inicio", "/hoteles"), ("Hablar con nosotros", "/synergos/contacto"));
+
+        // El asistente de reserva multipaso a pantalla completa. apiBase apunta a la API
+        // de reservas (/api/booking/*, BookingController); el componente Angular hidrata
+        // desde la CDN. Grace: si el ElementType no está importado, el bloque se omite.
+        AddMission(b, "Completa tu reserva", "",
+            "<p>El asistente te guía paso a paso. La disponibilidad se actualiza en tiempo real y la confirmación llega a tu correo al instante.</p>");
+        AddSynBookingWizard(b, "/api/booking", "Hoteles SynergosLabs");
+
+        // Políticas y horarios — accordion CDN (degrada con grace).
+        AddSynAccordion(b, new (string title, string content)[]
+        {
+            ("Check-in / Check-out", "Entrada desde las 3:00 p. m. · Salida hasta las 12:00 m. · Late check-out sujeto a disponibilidad."),
+            ("Política de cancelación", "Cancelación gratuita hasta 48 horas antes de la fecha de entrada · Después aplica un cargo según la tarifa."),
+            ("Mascotas y servicios", "Consulta la disponibilidad de habitaciones pet-friendly, parqueadero y desayuno al momento de reservar."),
+        }, allowMultiple: true);
+
+        FaqAuto(b, "Sobre tu reserva", new (string question, string answer)[]
+        {
+            ("¿Puedo modificar mi reserva?", "Sí, desde el enlace que te enviamos por correo, según la política del alojamiento."),
+            ("¿Recibo recordatorios?", "Sí. Te enviamos la confirmación al reservar y un recordatorio antes de tu llegada."),
+            ("¿Cómo se cobra la estadía?", "El precio se muestra en pesos colombianos (es-CO); el pago se coordina según la configuración del alojamiento."),
+        });
+
+        AddCta(b, "¿Tienes dudas antes de reservar?",
+            "Escríbenos y un asesor te ayuda a encontrar la estadía ideal.",
+            "Hablar con nosotros", "/synergos/contacto");
         return b.Build();
     }
 
