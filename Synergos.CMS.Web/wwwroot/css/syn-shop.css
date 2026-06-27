@@ -1053,6 +1053,136 @@
 }
 
 /* ════════════════════════════════════════════════════════════════
+   Ola 3 — PDP unificada: trust signals · urgencia · descuento
+   ════════════════════════════════════════════════════════════════
+   El núcleo PDP (_ProductDetailCore.cshtml) lo comparten ProductPage
+   (template) y elementShopProductDetail (bloque). Estas clases viven
+   en la columna .syn-product__info. Tema oscuro → solo tokens
+   semánticos. ──────────────────────────────────────────────────── */
+
+/* — Descuento PDP: precio tachado + badge de ahorro. PREPARADO pero
+     inactivo: requiere el campo de schema `productPriceCompareAt` (no
+     existe hoy). SEGUIMIENTO uSync — cuando exista, el core emitirá
+     .syn-product__compare-at + .syn-product__discount junto al precio. — */
+.syn-product__compare-at {
+  font-size: var(--syn-font-size-lg);
+  color: var(--syn-color-text-muted);
+  text-decoration: line-through;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+.syn-product__discount {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+  padding: var(--syn-space-1) var(--syn-space-3);
+  background: var(--syn-color-state-danger-surface);
+  color: var(--syn-color-state-danger-text);
+  border: 1px solid var(--syn-color-state-danger-border);
+  border-radius: var(--syn-radius-full);
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-wide);
+  font-variant-numeric: tabular-nums;
+}
+
+/* — Urgencia de stock ("Solo quedan N"): PREPARADO pero inactivo —
+     requiere un contador numérico de stock en el schema productPage
+     (sólo existe el booleano productInStock). SEGUIMIENTO uSync. — */
+.syn-product__stock-urgency {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-2);
+  width: fit-content;
+  padding: var(--syn-space-1) var(--syn-space-3);
+  background: var(--syn-color-state-warning-surface);
+  color: var(--syn-color-state-warning-text);
+  border: 1px solid var(--syn-color-state-warning-border);
+  border-radius: var(--syn-radius-md);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  margin: 0;
+}
+
+.syn-product__stock-urgency::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: var(--syn-radius-full);
+  background: var(--syn-color-state-warning-text);
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .syn-product__stock-urgency::before {
+    animation: syn-product-pulse 1.8s var(--syn-easing-default) infinite;
+  }
+}
+
+@keyframes syn-product-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* — Trust signals: VIVO. Lista alimentada por Dictionary
+     Shop.Product.Trust.* (envío / devoluciones / garantía). Check icon
+     SVG inline en currentColor. Separada del CTA por un divider sutil. — */
+.syn-product__trust {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+  list-style: none;
+  margin: var(--syn-space-md) 0 0;
+  padding: var(--syn-space-md) 0 0;
+  border-top: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-product__trust-item {
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-2);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-product__trust-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--syn-color-state-success-text);
+}
+
+.syn-product__trust-text {
+  line-height: var(--syn-line-height-snug, var(--syn-line-height-tight));
+}
+
+/* — Estado "no encontrado" del bloque (antes .syn-product-detail__empty) — */
+.syn-product__empty {
+  padding: var(--syn-space-2xl);
+  text-align: center;
+  color: var(--syn-color-text-muted);
+  background: var(--syn-color-surface-secondary);
+  border-radius: var(--syn-radius-lg);
+  border: 2px dashed var(--syn-color-border-default);
+}
+
+.syn-product__empty code {
+  font-family: var(--syn-font-family-mono);
+  color: var(--syn-color-text-primary);
+}
+
+/* — Placeholders de hidratación JS del bloque (reviews / related).
+     Cruzan ambas columnas bajo gallery + info en el grid ≥768px. — */
+.syn-product__reviews,
+.syn-product__related {
+  margin-top: var(--syn-space-2xl);
+  padding-top: var(--syn-space-xl);
+  border-top: 1px solid var(--syn-color-border-subtle);
+  grid-column: 1 / -1;
+}
+
+/* ════════════════════════════════════════════════════════════════
    S6 — ProductCategoryPage  (Views/ProductCategoryPage.cshtml)
    ════════════════════════════════════════════════════════════════
    Landing de categoría: header + sort + grid de productos + paginación.

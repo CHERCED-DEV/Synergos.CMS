@@ -38,7 +38,7 @@
 
     @if (cart.Lines.Count == 0)
     {
-        <p class="syn-cart-summary__empty">@("Tu carrito está vacío.")</p>
+        <p class="syn-cart-summary__empty">@Umbraco.GetDictionaryValue("Shop.Cart.Empty")</p>
     }
     else
     {
@@ -58,24 +58,24 @@
         </ul>
 
         <dl class="syn-cart-summary__lines">
-            <dt>Subtotal</dt>
+            <dt>@Umbraco.GetDictionaryValue("Shop.Cart.Subtotal")</dt>
             <dd data-line="subtotal">@PriceFormatter.Format(cart.Subtotal, cart.Currency)</dd>
             @if (showShipping)
             {
-                <dt>Envío</dt><dd data-line="shipping">—</dd>
+                <dt>@Umbraco.GetDictionaryValue("Shop.Cart.Shipping")</dt><dd data-line="shipping">—</dd>
             }
             @if (showTax)
             {
-                <dt>Impuestos</dt><dd data-line="tax">—</dd>
+                <dt>@Umbraco.GetDictionaryValue("Shop.Cart.Tax")</dt><dd data-line="tax">—</dd>
             }
-            <dt class="syn-cart-summary__total-label">Total</dt>
+            <dt class="syn-cart-summary__total-label">@Umbraco.GetDictionaryValue("Shop.Cart.Total")</dt>
             <dd data-line="total" class="syn-cart-summary__total-value">
                 @PriceFormatter.Format(cart.Subtotal, cart.Currency)
             </dd>
         </dl>
 
         <form action="@checkoutEndpoint" method="post" class="syn-cart-summary__checkout-form">
-            <button type="submit" class="syn-cart-summary__checkout">Proceder al pago</button>
+            <button type="submit" class="syn-cart-summary__checkout">@Umbraco.GetDictionaryValue("Shop.Cart.Checkout")</button>
         </form>
     }
 </aside>

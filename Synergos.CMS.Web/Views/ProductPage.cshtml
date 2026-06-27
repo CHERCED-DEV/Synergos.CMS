@@ -1,107 +1,32 @@
 ﻿@*
     Template del Document Type `productPage`. Renderiza un producto
-    individual: imágenes + nombre + precio + stock + variantes JSON +
-    botón Add to Cart (cliente JS hace POST a /api/shop/cart/add) +
-    body opcional via Layout Composer (sections).
+    individual reutilizando el núcleo PDP compartido
+    `Elements/Shop/_ProductDetailCore` (imágenes + nombre + precio +
+    stock + variantes JSON + Add to Cart + trust signals) + body
+    opcional via Layout Composer (sections).
+
+    PDP-1 (Ola 3): este template y el bloque editor-drop
+    `Elements/Shop/ProductDetail` convergen en _ProductDetailCore — una
+    sola fuente visual de la PDP (misma estructura `.syn-product`, mismo
+    IPriceFormatter, misma moneda).
 
     El chrome lo aplica _Layout.cshtml. compSeo + compTagging se
     consumen en _SeoHead, etc.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
-@using System.Globalization
 @using Umbraco.Cms.Core.Models.Blocks
-@using Umbraco.Cms.Core.Models.PublishedContent
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CartSettings> CartSettingsOpt
-@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @{
     Layout = "_Layout";
     var product = UmbracoContext.PublishedRequest?.PublishedContent;
     if (product is null) { return; }
 
     var sku = product.Value<string>("productSku") ?? string.Empty;
-    var name = product.Value<string>("productName") ?? product.Name ?? sku;
-    var priceRaw = product.Value<string>("productPriceBase");
-    var price = decimal.TryParse(priceRaw, NumberStyles.Number, CultureInfo.InvariantCulture, out var p) ? p : 0m;
-    var inStock = product.Value<bool>("productInStock");
-    var images = product.Value<IEnumerable<IPublishedContent>>("productImages")?.ToArray() ?? Array.Empty<IPublishedContent>();
-    var variantsJson = product.Value<string>("productVariantsJson");
     var sections = product.Value<BlockGridModel>("sections");
-
     var currency = CartSettingsOpt.Value.Currency;
-    var category = product.Parent;
-    var categoryName = category is { } c && string.Equals(c.ContentType.Alias, "productCategoryPage", StringComparison.Ordinal)
-        ? (c.Value<string>("categoryName") ?? c.Name)
-        : null;
 }
 <article class="syn-product" data-sku="@sku" data-currency="@currency">
-    @if (images.Length > 0)
-    {
-        <div class="syn-product__gallery">
-            <figure class="syn-product__gallery-stage">
-                <img class="syn-product__image" src="@images[0].Url()" alt="@name"
-                     data-main-image loading="eager" />
-            </figure>
-            @if (images.Length > 1)
-            {
-                <ul class="syn-product__thumbs" role="list">
-                    @for (var i = 0; i < images.Length; i++)
-                    {
-                        var img = images[i];
-                        <li class="syn-product__thumb-item">
-                            <button type="button"
-                                    class="syn-product__thumb@(i == 0 ? " syn-product__thumb--active" : "")"
-                                    data-thumb
-                                    data-thumb-src="@img.Url()"
-                                    aria-pressed="@(i == 0 ? "true" : "false")"
-                                    aria-label="@string.Format(Umbraco.GetDictionaryValue("shop.viewImage", "Ver imagen {0}"), i + 1)">
-                                <img class="syn-product__thumb-image" src="@img.Url()" alt="" loading="lazy" />
-                            </button>
-                        </li>
-                    }
-                </ul>
-            }
-        </div>
-    }
-
-    <div class="syn-product__info">
-        <header class="syn-product__header">
-            @if (!string.IsNullOrWhiteSpace(categoryName))
-            {
-                <a class="syn-product__category" href="@category!.Url()">@categoryName</a>
-            }
-            <h1 class="syn-product__name">@name</h1>
-            <p class="syn-product__sku">SKU: @sku</p>
-        </header>
-
-        <section class="syn-product__pricing">
-            <p class="syn-product__price" data-price="@price.ToString(CultureInfo.InvariantCulture)">
-                @PriceFormatter.Format(price, currency)
-            </p>
-            @if (inStock)
-            {
-                <p class="syn-product__stock syn-product__stock--in">@Umbraco.GetDictionaryValue("shop.inStock", "Disponible")</p>
-            }
-            else
-            {
-                <p class="syn-product__stock syn-product__stock--out">@Umbraco.GetDictionaryValue("shop.outOfStock", "Agotado")</p>
-            }
-        </section>
-
-        @if (!string.IsNullOrWhiteSpace(variantsJson))
-        {
-            <section class="syn-product__variants" data-variants="@variantsJson"
-                     aria-label="@Umbraco.GetDictionaryValue("shop.variants", "Variantes")">
-                @* El design system frontend hidrata el selector según data-variants. *@
-            </section>
-        }
-
-        @if (inStock)
-        {
-            <button type="button" class="syn-product__add-to-cart" data-action="add-to-cart" data-sku="@sku">
-                @Umbraco.GetDictionaryValue("shop.addToCart", "Agregar al carrito")
-            </button>
-        }
-    </div>
+    @await Html.PartialAsync("Elements/Shop/_ProductDetailCore", product)
 
     @if (sections is not null && sections.Any())
     {

@@ -65,7 +65,7 @@
          }>
     @if (product is null)
     {
-        <p class="syn-product-card__empty">Producto no encontrado: <code>@sku</code></p>
+        <p class="syn-product-card__empty">@Umbraco.GetDictionaryValue("Shop.Filter.NoResults") <code>@sku</code></p>
     }
     else
     {
@@ -83,7 +83,7 @@
             }
             @if (!product.InStock)
             {
-                <span class="syn-product-card__out-of-stock">Sin stock</span>
+                <span class="syn-product-card__out-of-stock">@Umbraco.GetDictionaryValue("Shop.Product.OutOfStock")</span>
             }
         </a>
         @if (showAddToCart && product.InStock)
@@ -93,7 +93,7 @@
                     data-action="add-to-cart"
                     data-sku="@sku"
                     data-price="@product.Price.ToString(System.Globalization.CultureInfo.InvariantCulture)">
-                Añadir al carrito
+                @Umbraco.GetDictionaryValue("Shop.Product.AddToCart")
             </button>
         }
     }

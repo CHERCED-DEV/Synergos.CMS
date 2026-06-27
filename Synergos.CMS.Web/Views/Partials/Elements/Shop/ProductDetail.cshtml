@@ -1,14 +1,26 @@
 @*
     elementShopProductDetail renderer (Ola 33 schema + Ola 39 runtime).
-    Bucket B — query por SKU vía IShopQuery.GetProductBySku (seam), sin
-    tree-walk inline al árbol Umbraco. Render detail: gallery + name +
-    price (vía IPriceFormatter es-CO) + description + variants (si
-    showVariantPicker). Reviews/related son placeholders para hidratación
-    JS (no hay entidades review/related en el schema por ahora).
+
+    PDP-1 (Ola 3): converge con `Views/ProductPage.cshtml`. Ambos
+    renderizan la PDP a través del núcleo compartido
+    `Elements/Shop/_ProductDetailCore`, de modo que el bloque editor-drop
+    y el template canónico emiten la MISMA estructura `.syn-product`
+    (gallery / info / pricing / stock / variants / add-to-cart / trust)
+    con el mismo IPriceFormatter y la misma moneda. Una sola fuente
+    visual de PDP.
+
+    El bloque resuelve por SKU el IPublishedContent del `productPage`
+    (el record ProductSummary de IShopQuery no expone imágenes múltiples,
+    descripción ni variantsJson — el core necesita el content tipado), y
+    delega el render al core. El wrapper conserva las clases del bloque
+    (variant / cssClass) y los placeholders de reviews / related para
+    hidratación JS (sin entidades review/related en el schema todavía).
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
-@inject Synergos.CMS.Interfaces.IShopQuery ShopQuery
-@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
+@using System.Globalization
+@using Umbraco.Cms.Core.Models.PublishedContent
+@using Umbraco.Cms.Core.Web
+@inject IUmbracoContextAccessor UmbracoContextAccessor
 @{
     var sku = Model.Value<string>("productSku");
     if (string.IsNullOrWhiteSpace(sku)) { return; }
@@ -19,83 +31,47 @@
     var cssClass = Model.Value<string>("cssClass");
     var classes = string.Join(" ", new[]
     {
-        "syn-product-detail",
-        string.IsNullOrWhiteSpace(variant) ? null : $"syn-product-detail--{variant}",
+        "syn-product",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-product--{variant}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
-    var product = ShopQuery.GetProductBySku(sku);
+    // Resolver el IPublishedContent del producto por SKU. Mismo patrón que
+    // DefaultShopQuery (la seam IShopQuery devuelve ProductSummary, sin el
+    // content tipado que el core consume). Sin tree-walk si no hay contexto.
+    IPublishedContent? product = null;
+    if (UmbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext) && umbracoContext.Content is not null)
+    {
+        product = umbracoContext.Content.GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelfOfType("productPage"))
+            .FirstOrDefault(pp => string.Equals(pp.Value<string>("productSku"), sku, StringComparison.OrdinalIgnoreCase));
+    }
 }
 <article class="@classes"
          data-sku="@sku"
          data-show-variant-picker="@showVariantPicker"
          data-show-reviews="@showReviews"
          data-show-related="@showRelated">
-    @if (product == null)
+    @if (product is null)
     {
-        <p class="syn-product-detail__empty">Producto no encontrado: <code>@sku</code></p>
+        <p class="syn-product__empty">@Umbraco.GetDictionaryValue("Shop.Filter.NoResults") <code>@sku</code></p>
     }
     else
     {
-        var productName = product.Value<string>("productName") ?? product.Name;
-        var productDescription = product.Value<string>("productDescription");
-        var productPriceBase = product.Value<string>("productPriceBase");
-        var productImages = product.Value<IEnumerable<IPublishedContent>>("productImages")?.ToList() ?? new List<IPublishedContent>();
-        var inStock = product.Value<bool>("productInStock");
-        var variantsJson = product.Value<string>("productVariantsJson");
-        <div class="syn-product-detail__gallery">
-            @{ var isFirst = true; }
-            @foreach (var img in productImages)
-            {
-                <img class="syn-product-detail__image@(isFirst ? " syn-product-detail__image--primary" : "")"
-                     src="@img.Url()"
-                     alt="@productName"
-                     loading="@(isFirst ? "eager" : "lazy")" />
-                isFirst = false;
-            }
-        </div>
-        <div class="syn-product-detail__info">
-            <h1 class="syn-product-detail__name">@productName</h1>
-            @if (!string.IsNullOrWhiteSpace(productPriceBase))
-            {
-                <div class="syn-product-detail__price">@productPriceBase</div>
-            }
-            @if (!inStock)
-            {
-                <p class="syn-product-detail__out-of-stock">Sin stock</p>
-            }
-            @if (!string.IsNullOrWhiteSpace(productDescription))
-            {
-                <div class="syn-product-detail__description">@Html.Raw(productDescription)</div>
-            }
-            @if (showVariantPicker && !string.IsNullOrWhiteSpace(variantsJson))
-            {
-                <div class="syn-product-detail__variants"
-                     data-variants-json="@variantsJson"
-                     data-pending="variant-picker-hydration">
-                    <!-- JS del design-system hidrata el variant picker desde el JSON. -->
-                </div>
-            }
-            @if (inStock)
-            {
-                <button type="button"
-                        class="syn-product-detail__add-to-cart"
-                        data-action="add-to-cart"
-                        data-sku="@sku"
-                        data-price="@productPriceBase">Añadir al carrito</button>
-            }
-        </div>
+        @await Html.PartialAsync("Elements/Shop/_ProductDetailCore", product)
+
         @if (showReviews)
         {
-            <section class="syn-product-detail__reviews"
+            <section class="syn-product__reviews"
                      data-pending="reviews-integration"
-                     data-sku="@sku">
+                     data-sku="@sku"
+                     aria-label="@Umbraco.GetDictionaryValue("Shop.Product.Rating")">
                 <!-- Reviews se cargan via endpoint externo (provider TBD) — hidratación JS. -->
             </section>
         }
         @if (showRelated)
         {
-            <section class="syn-product-detail__related"
+            <section class="syn-product__related"
                      data-pending="related-query"
                      data-sku="@sku">
                 <!-- Related products resueltos por categoría/tags comunes — hidratación JS. -->

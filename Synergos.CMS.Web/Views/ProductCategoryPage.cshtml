@@ -48,16 +48,16 @@
         }
     </header>
 
-    <nav class="syn-product-category__sort" aria-label="@Umbraco.GetDictionaryValue("shop.sort", "Ordenar por")">
-        <a href="@baseUrl?sort=name" class="@(sortBy == "name" ? "is-active" : "")">@Umbraco.GetDictionaryValue("shop.sort.name", "Nombre")</a>
-        <a href="@baseUrl?sort=price-asc" class="@(sortBy == "price-asc" ? "is-active" : "")">@Umbraco.GetDictionaryValue("shop.sort.priceAsc", "Precio: menor a mayor")</a>
-        <a href="@baseUrl?sort=price-desc" class="@(sortBy == "price-desc" ? "is-active" : "")">@Umbraco.GetDictionaryValue("shop.sort.priceDesc", "Precio: mayor a menor")</a>
-        <a href="@baseUrl?sort=newest" class="@(sortBy == "newest" ? "is-active" : "")">@Umbraco.GetDictionaryValue("shop.sort.newest", "Más recientes")</a>
+    <nav class="syn-product-category__sort" aria-label="@Umbraco.GetDictionaryValue("Shop.Filter.SortBy")">
+        <a href="@baseUrl?sort=name" class="@(sortBy == "name" ? "is-active" : "")">@Umbraco.GetDictionaryValue("Shop.Filter.Name")</a>
+        <a href="@baseUrl?sort=price-asc" class="@(sortBy == "price-asc" ? "is-active" : "")">@Umbraco.GetDictionaryValue("Shop.Filter.PriceLow")</a>
+        <a href="@baseUrl?sort=price-desc" class="@(sortBy == "price-desc" ? "is-active" : "")">@Umbraco.GetDictionaryValue("Shop.Filter.PriceHigh")</a>
+        <a href="@baseUrl?sort=newest" class="@(sortBy == "newest" ? "is-active" : "")">@Umbraco.GetDictionaryValue("Shop.Filter.Newest")</a>
     </nav>
 
     @if (visible.Count == 0)
     {
-        <p class="syn-product-category__empty">@Umbraco.GetDictionaryValue("shop.empty", "Aún no hay productos en esta categoría.")</p>
+        <p class="syn-product-category__empty">@Umbraco.GetDictionaryValue("Shop.Filter.NoResults")</p>
     }
     else
     {
@@ -83,7 +83,7 @@
                                 </span>
                                 @if (!product.InStock)
                                 {
-                                    <span class="syn-product-card__out-of-stock">@Umbraco.GetDictionaryValue("shop.outOfStock", "Agotado")</span>
+                                    <span class="syn-product-card__out-of-stock">@Umbraco.GetDictionaryValue("Shop.Product.OutOfStock")</span>
                                 }
                             </div>
                         </a>
@@ -95,7 +95,7 @@
                                         data-action="add-to-cart"
                                         data-sku="@product.Sku"
                                         data-price="@product.Price.ToString(CultureInfo.InvariantCulture)">
-                                    @Umbraco.GetDictionaryValue("shop.addToCart", "Agregar al carrito")
+                                    @Umbraco.GetDictionaryValue("Shop.Product.AddToCart")
                                 </button>
                             </div>
                         }
@@ -106,18 +106,18 @@
 
         @if (hasPrev || hasNext)
         {
-            <nav class="syn-product-category__pagination" aria-label="@Umbraco.GetDictionaryValue("shop.pagination", "Paginación")">
+            <nav class="syn-product-category__pagination" aria-label="@Umbraco.GetDictionaryValue("Shop.Pagination")">
                 @if (hasPrev)
                 {
                     <a class="syn-product-category__pagination-prev" href="@baseUrl?page=@(pageNumber - 1)&sort=@sortBy" rel="prev">
-                        @Umbraco.GetDictionaryValue("shop.previous", "Anteriores")
+                        @Umbraco.GetDictionaryValue("Shop.Pagination.Previous")
                     </a>
                 }
                 <span class="syn-product-category__pagination-current">@pageNumber</span>
                 @if (hasNext)
                 {
                     <a class="syn-product-category__pagination-next" href="@baseUrl?page=@(pageNumber + 1)&sort=@sortBy" rel="next">
-                        @Umbraco.GetDictionaryValue("shop.next", "Siguientes")
+                        @Umbraco.GetDictionaryValue("Shop.Pagination.Next")
                     </a>
                 }
             </nav>

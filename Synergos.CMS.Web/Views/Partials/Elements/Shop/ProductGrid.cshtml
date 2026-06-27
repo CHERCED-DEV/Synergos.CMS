@@ -44,7 +44,7 @@
          data-layout="@layout">
     @if (products.Count == 0)
     {
-        <p class="syn-product-grid__empty">—</p>
+        <p class="syn-product-grid__empty">@Umbraco.GetDictionaryValue("Shop.Filter.NoResults")</p>
     }
     else
     {
@@ -63,7 +63,7 @@
                         </span>
                         @if (!product.InStock)
                         {
-                            <span class="syn-product-grid__out-of-stock">Sin stock</span>
+                            <span class="syn-product-grid__out-of-stock">@Umbraco.GetDictionaryValue("Shop.Product.OutOfStock")</span>
                         }
                     </a>
                 </article>
