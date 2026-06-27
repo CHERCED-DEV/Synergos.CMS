@@ -113,6 +113,13 @@ public sealed class DevContentFiller
         SeedEducacion(details);
         SeedBooking(details);
 
+        // OLA 4.7: verticales #9 Eventos (eventsNight) + #10 Propiedades (terraLux).
+        // Núcleos de negocio nuevos, 100% composables (siteRoot + páginas como nodos de
+        // contenido cuyo body es un Layout Composer). Propiedades reusa la infra de Shop
+        // (cada propiedad = productPage) → precios vía IPriceFormatter (es-CO), sin hardcode.
+        SeedEventos(details);
+        SeedPropiedades(details);
+
         return new FillResult(filled == 8, filled, string.Join("; ", details));   // siteRoot home + 7 páginas hijas
     }
 
@@ -1024,6 +1031,11 @@ public sealed class DevContentFiller
             "syn-launcher__card--document", "syn-launcher__card--live", "Entrar a Educación →", "/educacion");
         AddCard("Booking", "<p>Reservas y citas: catálogo de servicios, calendario y registro multipaso — una plataforma de reservas completa sobre el mismo motor.</p>",
             "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar a Booking →", "/booking");
+        // OLA 4.7 — cards composables de los verticales #9/#10 (mismo patrón, sin hardcode).
+        AddCard("Eventos", "<p>Registro premium de eventos: cartelera, cuenta regresiva, agenda y tickets — una plataforma de eventos completa sobre el mismo motor.</p>",
+            "syn-launcher__card--document", "syn-launcher__card--live", "Entrar a Eventos →", "/eventos");
+        AddCard("Propiedades", "<p>Inmobiliario premium: listado filtrable, galería con lightbox y fichas de propiedad — un portal de propiedades completo sobre el mismo motor.</p>",
+            "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar a Propiedades →", "/propiedades");
 
         pr.SetCultureName(BrandName, Culture);   // umbrella = SynergosLabs (el hero lee Model.Name)
         // P2-3: identidad propia del launcher (compBranding + compPageTheme) — gestionable
@@ -1152,6 +1164,16 @@ public sealed class DevContentFiller
         // identidad propia "Meridian" (el tema lo define otro agente; acá solo se referencia).
         SeedVertical(pr.Id, "Booking", "meridian", "SynergosLabs Booking", "meridian", "booking.synergos.local",
             BuildBookingHome(), details);
+
+        // OLA 4.7 — vertical #9 Eventos: registro premium de eventos con identidad propia
+        // "eventsNight" (el tema ya existe en DTSelect; acá solo se referencia el literal).
+        SeedVertical(pr.Id, "Eventos", "eventos", "SynergosLabs Eventos", "eventsNight", "eventos.synergos.local",
+            BuildEventosHome(), details);
+
+        // OLA 4.7 — vertical #10 Propiedades: portal inmobiliario premium con identidad
+        // propia "terraLux" (el tema ya existe en DTSelect; acá solo se referencia el literal).
+        SeedVertical(pr.Id, "Propiedades", "propiedades", "SynergosLabs Propiedades", "terraLux", "propiedades.synergos.local",
+            BuildPropiedadesHome(), details);
     }
 
     private void SeedVertical(int parentId, string name, string brandKey, string brandDisplayName,
@@ -1168,6 +1190,11 @@ public sealed class DevContentFiller
         if (site.HasProperty("canonicalHostname")) { site.SetValue("canonicalHostname", hostname); }
         site.SetValue(SectionsAlias, sectionsJson, Culture);
         var save = _contentService.SaveAndPublish(site, new[] { Culture });
+        if (!save.Success)
+        {
+            var invalid = save.InvalidProperties is null ? "(null)" : string.Join(",", save.InvalidProperties.Select(p => p.Alias));
+            _logger.LogWarning("DevContentFiller: vertical '{Name}' falló: {Result}; invalid=[{Invalid}]", name, save.Result, invalid);
+        }
         details.Add(save.Success ? $"Vertical:{name}:ok({themeVariant})" : $"Vertical:{name}:failed:{save.Result}");
     }
 
@@ -1789,6 +1816,36 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
 
+    /// <summary>Cuenta regresiva tipo reloj (elementSynCountdownClock): ISO datetime + labelFormat opcional. Reusable para el countdown al próximo evento.</summary>
+    private void AddSynCountdownClock(BlockGridJsonBuilder b, string endDateTimeIso, string? labelFormat = null)
+    {
+        var key = _contentTypeService.Get("elementSynCountdownClock")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("endDateTime", endDateTimeIso);   // mandatory (ISO 8601)
+            if (!string.IsNullOrWhiteSpace(labelFormat)) { c.Set("labelFormat", labelFormat); }
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
+    /// <summary>Timeline horizontal con scroll-snap (elementSynTimelineHorizontal): events {date,title,description}. Reusable para la agenda/programa de un evento.</summary>
+    private void AddSynTimelineHorizontal(BlockGridJsonBuilder b, (string date, string title, string description)[] events, bool snapEnabled = true)
+    {
+        var key = _contentTypeService.Get("elementSynTimelineHorizontal")?.Key;
+        if (key is null) { return; }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var eventsJson = "[" + string.Join(",", events.Select(e =>
+            $"{{\"date\":\"{Esc(e.date)}\",\"title\":\"{Esc(e.title)}\",\"description\":\"{Esc(e.description)}\"}}")) + "]";
+        section.AddChild(SectionContentAreaKey, key.Value, c => c
+            .Set("eventsJson", eventsJson)          // mandatory
+            .Set("snapEnabled", snapEnabled)
+            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+    }
+
     /// <summary>
     /// Calendario month-view (elementSynCalendar): eventsEndpoint (GET JSON con slots/eventos) +
     /// initialMonth (YYYY-MM, opcional → mes actual). Reusable para elegir fecha/slot de la reserva.
@@ -1846,8 +1903,8 @@ public sealed class DevContentFiller
         var section = b.AddTopLevelBlock(_sectionKey);
         section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c => c
-            .Set("categoryFilter", categoryName)
-            .Set("sortBy", sortBy)
+            .Set("categoryFilter", categoryName)            // Textstring → string plano OK
+            .Set("sortBy", $"[\"{sortBy}\"]")               // DropDown.Flexible → JSON array (trampa multi-value)
             .Set("maxItems", maxItems.ToString())
             .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
@@ -2446,6 +2503,505 @@ public sealed class DevContentFiller
         AddCta(b, "¿Aún no eliges servicio?",
             "Revisa el catálogo completo antes de reservar.",
             "Ver servicios", "/booking/servicios");
+        return b.Build();
+    }
+
+    // ═══════════════════════ Vertical #9 — Eventos (eventsNight) ═══════════════════════
+    // Núcleo de negocio nuevo, 100% composable: registro PREMIUM de eventos. El siteRoot
+    // "Eventos" (theme eventsNight, ya existe en DTSelect — acá solo se referencia el LITERAL)
+    // se crea en SeedVerticalSiteRoots con BuildEventosHome() como body. Páginas: Agenda
+    // (cartelera filtrable) + Evento (detalle con programa + lineup + registro). CERO
+    // contenido baked en .cshtml: todo es Layout Composer (bloques nativos + elementSyn* CDN).
+    // El gradiente NO define el tema (lo pinta data-theme="eventsNight"); es neutro on-brand.
+    private const string EventsFrom = "#0B1020", EventsTo = "#7A3FF2";   // nocturno → violeta (on-brand, NO es el tema)
+
+    // Fecha objetivo del countdown — relativa a "ahora" para que siempre quede en el futuro
+    // (idempotente y sin fechas quemadas que caduquen). El editor puede ajustarla en backoffice.
+    private static string NextEventIso() => DateTime.UtcNow.AddDays(30).ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+    private void SeedEventos(List<string> details)
+    {
+        var ev = FindVertical("eventos");
+        if (ev is null) { details.Add("Eventos:siteroot-not-found"); return; }
+        SeedSiteRootPage(ev.Id, "Agenda", "Cartelera de eventos", BuildEventosAgenda(), details);
+        SeedSiteRootPage(ev.Id, "Evento", "Synergos Summit 2026", BuildEventoDetalle(), details);
+        details.Add("Eventos:pages-ok");
+    }
+
+    // Home Eventos: hero (próximo evento + CTA) + countdown (clock/digital) + eventos
+    // destacados (feature-grid) + agenda (timeline-horizontal) + testimonios + FAQ + CTA.
+    private string BuildEventosHome()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Vive los eventos que importan",
+            "Conferencias, talleres y experiencias premium en un solo lugar",
+            "<p>Una plataforma de eventos sobre el mismo motor: cartelera, cuenta regresiva, agenda y tickets. Descubre el próximo gran evento y asegura tu cupo antes de que se agote.</p>",
+            "Eventos Home Hero", "Hero de la plataforma de eventos", EventsFrom, EventsTo,
+            ("Ver el evento", "/eventos/evento"), ("Ver cartelera", "/eventos/agenda"));
+
+        // Countdown: requiere el schema fix de endDateTime (Nothing→Culture) que entra con
+        // el uSync import pendiente. Hasta entonces no se siembra (rompería el publish del
+        // siteRoot por validación culture del mandatory). Post-import: quitar el `&& false`.
+        if (false && _contentTypeService.Get("elementSynCountdownClock")?.Key is not null)
+        {
+            AddSynCountdownClock(b, NextEventIso(), "Faltan {days} días, {hours} h y {minutes} min para el Synergos Summit");
+        }
+
+        // Eventos destacados — feature-grid (CDN si está, SSR si no).
+        FeatureGridAuto(b, "Eventos destacados", "Lo que no te puedes perder esta temporada", new (string title, string subtitle, string body)[]
+        {
+            ("Synergos Summit 2026", "Conferencia · 2 días", "El gran encuentro anual de plataformas componibles: keynotes, casos reales y networking."),
+            ("Taller de diseño con tokens", "Workshop · 1 día", "Práctica intensiva para construir una línea de diseño coherente con grilla de 8."),
+            ("Noche de lanzamiento", "Experiencia · 1 noche", "Presentación en vivo de las nuevas capacidades, con demos y experiencias inmersivas."),
+        }, 3);
+
+        // Agenda del día — timeline horizontal con scroll-snap (CDN). Sin fallback rígido:
+        // si no está importado, degrada con grace (no-op) y la home sigue completa.
+        AddSynTimelineHorizontal(b, new (string date, string title, string description)[]
+        {
+            ("09:00", "Registro y café", "Acreditación, kit del asistente y networking de apertura."),
+            ("10:00", "Keynote de apertura", "La visión: un motor, mil productos. Hacia dónde va la plataforma."),
+            ("12:30", "Almuerzo y expo", "Espacio de muestras, demos en vivo y conversaciones con los equipos."),
+            ("14:00", "Tracks paralelos", "Diseño, arquitectura y producto: elige tu ruta de la tarde."),
+            ("17:30", "Panel de cierre", "Casos reales y preguntas del público con los referentes de la industria."),
+            ("19:00", "After & networking", "Cierre distendido para seguir las conversaciones que importan."),
+        });
+
+        AddSynTestimonials(b, "Lo que dicen los asistentes", new (string quote, string author, string role)[]
+        {
+            ("El mejor evento del año: contenido de altísimo nivel y una producción impecable.", "Mariana López", "Product Lead"),
+            ("Salí con ideas accionables y contactos reales. Volvería sin pensarlo.", "Julián Torres", "Ingeniero de plataforma"),
+            ("La organización fue de lujo: cero fricción desde el registro hasta el cierre.", "Carolina Ruiz", "Directora de Diseño"),
+        });
+
+        FaqAuto(b, "Preguntas frecuentes", new (string question, string answer)[]
+        {
+            ("¿Cómo consigo mi entrada?", "Elige el evento, completa el registro de tickets y recibe tu acceso por correo al instante."),
+            ("¿Los eventos son presenciales o virtuales?", "Hay de ambos: cada evento indica su modalidad y sede en la ficha de detalle."),
+            ("¿Puedo transferir mi entrada?", "Sí, desde el enlace de tu confirmación puedes transferir o actualizar tus datos."),
+        });
+
+        AddCta(b, "Asegura tu lugar",
+            "Los cupos premium se agotan rápido. Revisa la cartelera y regístrate hoy.",
+            "Ver cartelera", "/eventos/agenda");
+        return b.Build();
+    }
+
+    // Página Agenda (cartelera): search-box + data-grid filtrable (fecha/categoría/precio
+    // vía IPriceFormatter es-CO) → fallback feature-grid si el data-grid no resuelve.
+    private string BuildEventosAgenda()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Cartelera de eventos",
+            "Filtra por fecha, categoría o precio y encuentra tu próxima experiencia",
+            "<p>Explora todos los eventos disponibles. Busca por nombre, categoría o fecha y asegura tu cupo en minutos.</p>",
+            "Eventos Agenda Hero", "Hero de la cartelera de eventos", EventsFrom, EventsTo,
+            ("Ver el evento destacado", "/eventos/evento"), ("Hablar con nosotros", "/synergos/contacto"));
+
+        // Buscador en vivo (CDN). Apunta al endpoint de búsqueda del CMS (Examine).
+        AddSynSearchBox(b, "Buscar eventos por nombre o categoría…", "/api/search", "q");
+
+        // Cartelera filtrable/paginable (CDN data-grid). dataSource = endpoint GET JSON.
+        // La columna de precio la formatea el render (es-CO, IPriceFormatter). Fallback feature-grid.
+        if (_contentTypeService.Get("elementSynDataGrid")?.Key is not null)
+        {
+            AddSynDataGrid(b, "/api/search?type=evento", new (string field, string label, bool sortable, bool filterable)[]
+            {
+                ("title", "Evento", true, true),
+                ("date", "Fecha", true, true),
+                ("category", "Categoría", true, true),
+                ("price", "Precio", true, false),
+            }, pageSize: 9);
+        }
+        else
+        {
+            FeatureGridAuto(b, "Todos los eventos", "Explora la cartelera completa", new (string title, string subtitle, string body)[]
+            {
+                ("Synergos Summit 2026", "Conferencia · 12 mar", "Dos días de keynotes, casos reales y networking de primer nivel."),
+                ("Taller de diseño con tokens", "Workshop · 20 mar", "Práctica intensiva de línea de diseño con grilla de 8."),
+                ("Arquitectura limpia en vivo", "Masterclass · 28 mar", "Grafo de dependencias, seams y pruebas, aplicados en directo."),
+                ("Noche de lanzamiento", "Experiencia · 5 abr", "Presentación inmersiva de las nuevas capacidades de la plataforma."),
+                ("Meetup de producto", "Comunidad · 18 abr", "Conversaciones abiertas sobre roadmap y casos de la comunidad."),
+                ("Hackathon componible", "Competencia · 2-3 may", "48 horas construyendo verticales sobre un mismo núcleo."),
+            }, 3);
+        }
+
+        AddCta(b, "¿No encuentras tu evento?",
+            "Cuéntanos qué tipo de experiencia buscas y te avisamos cuando esté en cartelera.",
+            "Hablar con nosotros", "/synergos/contacto");
+        return b.Build();
+    }
+
+    // Página Evento (detalle): timeline del programa + lineup (feature-grid) + form-stepper
+    // (registro/ticket) + map-embed (sede) + FAQ. Todo CDN con fallback con grace.
+    private string BuildEventoDetalle()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Synergos Summit 2026",
+            "Conferencia · 2 días · Bogotá · Presencial y en vivo",
+            "<p>El gran encuentro anual de plataformas componibles. Dos días de keynotes, tracks paralelos, casos reales y networking con los referentes de la industria. Cupos premium limitados.</p>",
+            "Evento Detalle Hero", "Hero del evento Synergos Summit", EventsFrom, EventsTo,
+            ("Registrarme", "/eventos/evento#registro"), ("Ver el programa", "/eventos/evento#programa"));
+
+        // Countdown: gated hasta el schema fix de endDateTime (Nothing→Culture) del import
+        // pendiente. Post-import: quitar el `&& false`. (Ver BuildEventosHome.)
+        if (false && _contentTypeService.Get("elementSynCountdownClock")?.Key is not null)
+        {
+            AddSynCountdownClock(b, NextEventIso(), "Comienza en {days} días, {hours} h y {minutes} min");
+        }
+
+        AddMission(b, "Lo que vas a vivir", "",
+            "<p>Dos días intensivos con lo mejor de la industria: keynotes de visión, tracks técnicos y de producto, una expo con demos en vivo y espacios de networking diseñados para que te lleves contactos y aprendizajes reales.</p>");
+
+        // Programa / agenda del evento — timeline horizontal con scroll-snap (CDN).
+        AddSynTimelineHorizontal(b, new (string date, string title, string description)[]
+        {
+            ("Día 1 · 09:00", "Registro y bienvenida", "Acreditación, kit del asistente y café de apertura."),
+            ("Día 1 · 10:00", "Keynote de apertura", "La visión de la plataforma componible y hacia dónde va."),
+            ("Día 1 · 14:00", "Tracks técnicos", "Arquitectura, diseño y rendimiento en sesiones paralelas."),
+            ("Día 2 · 09:30", "Casos reales", "Equipos que migraron a un solo motor cuentan su historia."),
+            ("Día 2 · 14:00", "Taller práctico", "Construyes un vertical completo con tu identidad, en vivo."),
+            ("Día 2 · 17:30", "Panel y cierre", "Preguntas del público y networking de despedida."),
+        });
+
+        // Lineup / speakers — feature-grid (CDN si está, SSR si no).
+        FeatureGridAuto(b, "Lineup de speakers", "Quienes te van a acompañar", new (string title, string subtitle, string body)[]
+        {
+            ("Andrés Gómez", "Ingeniero de plataforma", "12 años construyendo productos componibles a escala."),
+            ("Laura Méndez", "CTO, Grupo Andino", "Lideró la consolidación de cuatro verticales sobre un solo core."),
+            ("Diego Restrepo", "Líder de Producto", "Especialista en composición visual y sistemas de diseño."),
+            ("Sofía Cardona", "Directora Digital", "Estrategia multi-marca y multi-dominio sobre un mismo motor."),
+        }, 4);
+
+        // Registro / ticket — form-stepper multipaso (CDN) → POST a Forms (honeypot + rate-limit + email).
+        AddMission(b, "Registro y tickets", "",
+            "<p>Completa tu registro para asegurar tu cupo. Elige tu tipo de entrada y déjanos tus datos; recibes la confirmación y tu acceso por correo al instante.</p>");
+        AddSynFormStepper(b, "/api/forms/registro-evento/submit", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
+        {
+            ("Tu entrada", new (string, string, string, bool, string, string[])[]
+            {
+                ("Tipo de entrada", "ticket", "select", true, "", new[] { "General", "Premium", "VIP", "Estudiante" }),
+                ("Cantidad", "cantidad", "select", true, "", new[] { "1", "2", "3", "4", "5+" }),
+            }),
+            ("Tus datos", new (string, string, string, bool, string, string[])[]
+            {
+                ("Nombre completo", "nombre", "text", true, "Tu nombre", Array.Empty<string>()),
+                ("Email", "email", "email", true, "tu@correo.com", Array.Empty<string>()),
+                ("Empresa (opcional)", "empresa", "text", false, "Tu empresa", Array.Empty<string>()),
+            }),
+        });
+
+        // Sede — map-embed (SSR).
+        AddMapEmbed(b, "https://www.openstreetmap.org/export/embed.html?bbox=-74.08%2C4.60%2C-74.05%2C4.63&layer=mapnik",
+            "Sede del evento", height: 420);
+
+        FaqAuto(b, "Antes de registrarte", new (string question, string answer)[]
+        {
+            ("¿Qué incluye la entrada?", "Acceso a los dos días, kit del asistente, almuerzos y espacios de networking. Premium y VIP suman beneficios extra."),
+            ("¿Habrá grabaciones?", "Sí. Los registrados reciben acceso a las grabaciones de las keynotes y tracks principales."),
+            ("¿Puedo facturar a mi empresa?", "Sí. Indica los datos de tu empresa en el registro y te enviamos la factura."),
+        });
+
+        AddCta(b, "Asegura tu cupo",
+            "Los cupos premium se agotan rápido. Regístrate hoy y vive el Synergos Summit.",
+            "Ver la cartelera", "/eventos/agenda");
+        return b.Build();
+    }
+
+    // ═══════════════════════ Vertical #10 — Propiedades (terraLux) ═══════════════════════
+    // Núcleo de negocio nuevo, 100% composable: portal inmobiliario PREMIUM. El siteRoot
+    // "Propiedades" (theme terraLux, ya existe en DTSelect — acá solo se referencia el LITERAL)
+    // se crea en SeedVerticalSiteRoots con BuildPropiedadesHome() como body. El catálogo de
+    // PROPIEDADES reusa la infra de Shop (productCategoryPage + productPage) → cada propiedad
+    // tiene productPriceBase NUMÉRICO formateado por IPriceFormatter (es-CO) → CERO precio
+    // hardcodeado. DefaultShopQuery scopea por siteRoot, así que no se cruzan con la Tienda.
+    // Páginas: Listado + Propiedad (detalle). CERO contenido baked en .cshtml.
+    private const string TerraFrom = "#1C140D", TerraTo = "#C08A3E";   // tierra → ocre cálido (on-brand, NO es el tema)
+
+    private void SeedPropiedades(List<string> details)
+    {
+        var prop = FindVertical("propiedades");
+        if (prop is null) { details.Add("Propiedades:siteroot-not-found"); return; }
+
+        // El catálogo de propiedades son productCategoryPage + productPage bajo el siteRoot
+        // de Propiedades: precio = productPriceBase (numérico), formateado por IPriceFormatter
+        // en el render (es-CO). Sin hardcode. Categorías = tipos de propiedad.
+        SeedPropertyCategoriesAndItems(prop.Id, details);
+
+        SeedSiteRootPage(prop.Id, "Listado", "Propiedades disponibles", BuildPropiedadesListado(), details);
+        SeedSiteRootPage(prop.Id, "Propiedad", "Apartamento de lujo en Chicó", BuildPropiedadDetalle(), details);
+        details.Add("Propiedades:pages-ok");
+    }
+
+    // Siembra el catálogo de propiedades como Shop scoped al siteRoot de Propiedades.
+    // Cada propiedad es un productPage con productPriceBase NUMÉRICO (lo formatea
+    // IPriceFormatter en el render — es-CO). Categorías = tipos de propiedad. CERO precio hardcodeado.
+    private void SeedPropertyCategoriesAndItems(int propiedadesId, List<string> details)
+    {
+        if (_contentTypeService.Get("productCategoryPage")?.Key is null
+            || _contentTypeService.Get("productPage")?.Key is null)
+        {
+            details.Add("Propiedades:shop-schema-not-imported(properties-fallback-cards)");
+            return;
+        }
+
+        var apartamentos = SeedProductCategory(propiedadesId, "Apartamentos", "Vivienda vertical con amenidades.", details);
+        var casas        = SeedProductCategory(propiedadesId, "Casas", "Vivienda unifamiliar con espacio propio.", details);
+        var comercial    = SeedProductCategory(propiedadesId, "Comercial", "Locales y oficinas para tu negocio.", details);
+
+        if (apartamentos > 0)
+        {
+            SeedProduct(apartamentos, "APT-CHICO-001", "Apartamento de lujo en Chicó", "1250000000", new[] { "apartamento", "chicó", "3 hab" },
+                TerraFrom, TerraTo, BuildPropertyBody("<p>Apartamento de 120 m² con acabados premium, tres habitaciones, balcón panorámico y dos parqueaderos. En el corazón de Chicó.</p>", "Propiedad Apartamento Chico", TerraFrom, TerraTo), details);
+            SeedProduct(apartamentos, "APT-CEDRITOS-002", "Apartamento familiar en Cedritos", "620000000", new[] { "apartamento", "cedritos", "2 hab" },
+                TerraFrom, TerraTo, BuildPropertyBody("<p>Acogedor apartamento de 78 m² con dos habitaciones, cocina integral y zona social iluminada. Conjunto con piscina y gimnasio.</p>", "Propiedad Apartamento Cedritos", TerraFrom, TerraTo), details);
+        }
+        if (casas > 0)
+        {
+            SeedProduct(casas, "CASA-USAQUEN-001", "Casa con jardín en Usaquén", "2100000000", new[] { "casa", "usaquén", "4 hab" },
+                TerraFrom, TerraTo, BuildPropertyBody("<p>Casa de 240 m² en dos niveles, cuatro habitaciones, estudio, jardín privado y garaje doble. Sector residencial exclusivo.</p>", "Propiedad Casa Usaquen", TerraFrom, TerraTo), details);
+            SeedProduct(casas, "CASA-LAGOS-002", "Casa campestre en Los Lagos", "1480000000", new[] { "casa", "campestre", "3 hab" },
+                TerraFrom, TerraTo, BuildPropertyBody("<p>Casa campestre de 180 m² con tres habitaciones, terraza, BBQ y amplio lote arborizado. Ideal para descanso y naturaleza.</p>", "Propiedad Casa Campestre", TerraFrom, TerraTo), details);
+        }
+        if (comercial > 0)
+        {
+            SeedProduct(comercial, "OFI-CENTRO-001", "Oficina en torre empresarial", "890000000", new[] { "oficina", "comercial", "centro" },
+                TerraFrom, TerraTo, BuildPropertyBody("<p>Oficina de 95 m² en torre AAA con recepción, dos salas de reunión y vista a la ciudad. Excelente conectividad y parqueaderos.</p>", "Propiedad Oficina", TerraFrom, TerraTo), details);
+            SeedProduct(comercial, "LOC-ZONA-T-002", "Local comercial en Zona T", "1650000000", new[] { "local", "comercial", "zona t" },
+                TerraFrom, TerraTo, BuildPropertyBody("<p>Local de 140 m² a pie de calle en la Zona T, con vitrina amplia y alto flujo peatonal. Ideal para retail o gastronomía.</p>", "Propiedad Local", TerraFrom, TerraTo), details);
+        }
+
+        details.Add($"Propiedades:properties-seeded(apt={apartamentos > 0},casa={casas > 0},com={comercial > 0})");
+    }
+
+    // Cuerpo composable de la ficha de propiedad (la ficha precio/imagen la renderiza
+    // ProductPage; esto es galería + descripción + specs + ubicación + CTA, sin precio hardcodeado).
+    private string BuildPropertyBody(string descHtml, string mediaName, string hexFrom, string hexTo)
+    {
+        var b = new BlockGridJsonBuilder();
+        // Galería con lightbox (CDN) de la propiedad.
+        AddSynGallery(b, 3, new (string name, string caption, string from, string to)[]
+        {
+            ($"{mediaName} Sala", "Zona social", hexFrom, hexTo),
+            ($"{mediaName} Cocina", "Cocina", hexFrom, hexTo),
+            ($"{mediaName} Habitacion", "Habitación principal", hexFrom, hexTo),
+            ($"{mediaName} Bano", "Baño", hexFrom, hexTo),
+            ($"{mediaName} Exterior", "Exterior", hexFrom, hexTo),
+            ($"{mediaName} Vista", "Vista", hexFrom, hexTo),
+        });
+        AddMission(b, "Sobre la propiedad", "", descHtml);
+        // Ficha de specs — feature-grid (CDN si está, SSR si no).
+        FeatureGridAuto(b, "Ficha técnica", "Lo esencial de un vistazo", new (string title, string subtitle, string body)[]
+        {
+            ("Área", "Metros cuadrados", "Distribución optimizada y espacios amplios."),
+            ("Habitaciones", "Descanso", "Dormitorios con buena iluminación y closets."),
+            ("Baños", "Comodidad", "Baños con acabados de alta gama."),
+            ("Parqueadero", "Movilidad", "Cupos privados y zonas de visitantes."),
+        }, 4);
+        // Ubicación — map-embed (SSR).
+        AddMapEmbed(b, "https://www.openstreetmap.org/export/embed.html?bbox=-74.06%2C4.66%2C-74.03%2C4.69&layer=mapnik",
+            "Ubicación de la propiedad", height: 380);
+        AddCta(b, "¿Te interesa esta propiedad?", "Agenda una visita o solicita más información sin compromiso.", "Agendar visita", "/propiedades/propiedad#contacto");
+        return b.Build();
+    }
+
+    // Home Propiedades: hero + propiedades destacadas (data-grid o carousel) + galería
+    // (lightbox-gallery) + value props (feature-grid) + testimonios + CTA.
+    private string BuildPropiedadesHome()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Encuentra el lugar que estás buscando",
+            "Propiedades premium con la mejor experiencia de búsqueda",
+            "<p>Un portal inmobiliario sobre el mismo motor: listado filtrable, galerías inmersivas y fichas completas. Apartamentos, casas y espacios comerciales — todo en un solo lugar.</p>",
+            "Propiedades Home Hero", "Hero del portal de propiedades", TerraFrom, TerraTo,
+            ("Ver propiedades", "/propiedades/listado"), ("Hablar con un asesor", "/synergos/contacto"));
+
+        // Propiedades destacadas — carousel (CDN) si está; si no, feature-grid.
+        if (_contentTypeService.Get("elementSynCarousel")?.Key is not null)
+        {
+            AddSynCarousel(b, new (string name, string caption, string from, string to)[]
+            {
+                ("Destacada Chico", "Apartamento de lujo en Chicó", TerraFrom, TerraTo),
+                ("Destacada Usaquen", "Casa con jardín en Usaquén", TerraFrom, TerraTo),
+                ("Destacada Zona T", "Local comercial en Zona T", TerraFrom, TerraTo),
+                ("Destacada Cedritos", "Apartamento familiar en Cedritos", TerraFrom, TerraTo),
+            });
+        }
+        else
+        {
+            FeatureGridAuto(b, "Propiedades destacadas", "Selección premium del mes", new (string title, string subtitle, string body)[]
+            {
+                ("Apartamento de lujo en Chicó", "3 hab · 120 m²", "Acabados premium, balcón panorámico y dos parqueaderos."),
+                ("Casa con jardín en Usaquén", "4 hab · 240 m²", "Dos niveles, estudio, jardín privado y garaje doble."),
+                ("Local comercial en Zona T", "140 m² · pie de calle", "Vitrina amplia y alto flujo peatonal para retail o gastronomía."),
+            }, 3);
+        }
+
+        // Galería inmersiva — lightbox-gallery (CDN). Degrada con grace si no está importado.
+        AddSynGallery(b, 3, new (string name, string caption, string from, string to)[]
+        {
+            ("Galeria Apartamento", "Apartamentos con vista", TerraFrom, TerraTo),
+            ("Galeria Casa", "Casas con jardín", TerraFrom, TerraTo),
+            ("Galeria Oficina", "Oficinas premium", TerraFrom, TerraTo),
+            ("Galeria Penthouse", "Penthouses exclusivos", TerraFrom, TerraTo),
+            ("Galeria Local", "Locales comerciales", TerraFrom, TerraTo),
+            ("Galeria Campestre", "Propiedades campestres", TerraFrom, TerraTo),
+        });
+
+        // Value props — por qué buscar acá.
+        FeatureGridAuto(b, "Por qué buscar con nosotros", "Una experiencia que se nota", new (string title, string subtitle, string body)[]
+        {
+            ("Listado curado", "Calidad verificada", "Cada propiedad pasa por revisión: fotos reales y datos confiables."),
+            ("Búsqueda inteligente", "Encuentra rápido", "Filtra por tipo, precio y ubicación y llega a lo que buscas en segundos."),
+            ("Asesoría experta", "De principio a fin", "Te acompañamos en la visita, la negociación y el cierre."),
+        }, 3);
+
+        AddSynTestimonials(b, "Lo que dicen nuestros clientes", new (string quote, string author, string role)[]
+        {
+            ("Encontré mi apartamento en una semana. La búsqueda es clarísima y las fotos, reales.", "Valentina Ríos", "Compradora"),
+            ("El asesor entendió justo lo que buscaba. Cero vueltas, todo transparente.", "Andrés Patiño", "Comprador"),
+            ("Vendí mi casa más rápido de lo que esperaba. La ficha quedó impecable.", "Lucía Gómez", "Vendedora"),
+        });
+
+        AddCta(b, "¿Listo para encontrar tu próximo hogar?",
+            "Explora el listado completo y agenda una visita esta semana.",
+            "Ver propiedades", "/propiedades/listado");
+        return b.Build();
+    }
+
+    // Página Listado: search-box + data-grid filtrable (tipo/precio vía IPriceFormatter/
+    // ubicación) → fallback feature-grid. Si Shop está importado, además muestra el precio
+    // real por categoría (elementShopProductGrid scoped, IPriceFormatter) — CERO precio hardcodeado.
+    private string BuildPropiedadesListado()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Propiedades disponibles",
+            "Filtra por tipo, precio y ubicación y encuentra tu lugar",
+            "<p>Explora todo el inventario disponible. Busca por tipo de propiedad, rango de precio o zona y agenda tu visita en minutos.</p>",
+            "Propiedades Listado Hero", "Hero del listado de propiedades", TerraFrom, TerraTo,
+            ("Ver una propiedad", "/propiedades/propiedad"), ("Hablar con un asesor", "/synergos/contacto"));
+
+        // Buscador en vivo (CDN). Apunta al endpoint de búsqueda del CMS (Examine).
+        AddSynSearchBox(b, "Buscar por zona, tipo o nombre…", "/api/search", "q");
+
+        // Listado filtrable/paginable (CDN data-grid). dataSource = endpoint GET JSON.
+        // La columna de precio la formatea el render (es-CO, IPriceFormatter). Fallback feature-grid.
+        if (_contentTypeService.Get("elementSynDataGrid")?.Key is not null)
+        {
+            AddSynDataGrid(b, "/api/search?type=propiedad", new (string field, string label, bool sortable, bool filterable)[]
+            {
+                ("title", "Propiedad", true, true),
+                ("category", "Tipo", true, true),
+                ("location", "Ubicación", true, true),
+                ("price", "Precio", true, false),
+            }, pageSize: 9);
+        }
+        else
+        {
+            FeatureGridAuto(b, "Todas las propiedades", "Explora el inventario completo", new (string title, string subtitle, string body)[]
+            {
+                ("Apartamento de lujo en Chicó", "Apartamento · 3 hab", "120 m², balcón panorámico y dos parqueaderos."),
+                ("Apartamento familiar en Cedritos", "Apartamento · 2 hab", "78 m², conjunto con piscina y gimnasio."),
+                ("Casa con jardín en Usaquén", "Casa · 4 hab", "240 m² en dos niveles, jardín privado y garaje doble."),
+                ("Casa campestre en Los Lagos", "Casa · 3 hab", "180 m² con terraza, BBQ y lote arborizado."),
+                ("Oficina en torre empresarial", "Comercial · oficina", "95 m² en torre AAA con vista a la ciudad."),
+                ("Local comercial en Zona T", "Comercial · local", "140 m² a pie de calle con alto flujo peatonal."),
+            }, 3);
+        }
+
+        // Si Shop está importado, además mostramos el precio REAL por categoría (es-CO).
+        if (_contentTypeService.Get("elementShopProductGrid")?.Key is not null)
+        {
+            AddMission(b, "Apartamentos", "", "<p>Vivienda vertical con amenidades.</p>");
+            AddProductGridFiltered(b, "Apartamentos", sortBy: "price-asc");
+            AddMission(b, "Casas", "", "<p>Vivienda unifamiliar con espacio propio.</p>");
+            AddProductGridFiltered(b, "Casas", sortBy: "price-asc");
+            AddMission(b, "Comercial", "", "<p>Locales y oficinas para tu negocio.</p>");
+            AddProductGridFiltered(b, "Comercial", sortBy: "price-asc");
+        }
+
+        AddCta(b, "¿No encuentras lo que buscas?",
+            "Cuéntanos qué necesitas y un asesor te arma una selección a tu medida.",
+            "Hablar con un asesor", "/synergos/contacto");
+        return b.Build();
+    }
+
+    // Página Propiedad (detalle): lightbox-gallery (fotos) + media-text (descripción) +
+    // ficha (feature-grid de specs) + map-embed (ubicación) + form de contacto (form-stepper
+    // o member-login) + CTA. Todo CDN con fallback con grace. CERO precio hardcodeado.
+    private string BuildPropiedadDetalle()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Apartamento de lujo en Chicó",
+            "3 habitaciones · 120 m² · 2 parqueaderos · Chicó, Bogotá",
+            "<p>Un apartamento excepcional en una de las mejores zonas de la ciudad: acabados premium, luz natural y un balcón con vista panorámica. Agenda tu visita y conócelo en persona.</p>",
+            "Propiedad Detalle Hero", "Hero de la ficha de propiedad", TerraFrom, TerraTo,
+            ("Agendar visita", "/propiedades/propiedad#contacto"), ("Ver más propiedades", "/propiedades/listado"));
+
+        // Galería de fotos — lightbox-gallery (CDN). Degrada con grace si no está importado.
+        AddSynGallery(b, 3, new (string name, string caption, string from, string to)[]
+        {
+            ("Chico Sala", "Sala principal", TerraFrom, TerraTo),
+            ("Chico Cocina", "Cocina integral", TerraFrom, TerraTo),
+            ("Chico Habitacion", "Habitación principal", TerraFrom, TerraTo),
+            ("Chico Bano", "Baño con acabados de lujo", TerraFrom, TerraTo),
+            ("Chico Balcon", "Balcón con vista panorámica", TerraFrom, TerraTo),
+            ("Chico Comedor", "Comedor y zona social", TerraFrom, TerraTo),
+        });
+
+        // Descripción — media-text split (CDN si está, SSR si no).
+        SplitAuto(b, "Sobre esta propiedad",
+            "Un hogar pensado al detalle",
+            "<p>120 m² distribuidos con criterio: zona social amplia e iluminada, cocina integral con isla, tres habitaciones con closets y un balcón que se vuelve tu lugar favorito. Pisos en madera, ventanería de piso a techo y dos parqueaderos privados.</p>",
+            "Propiedad Chico Descripcion", "Interior del apartamento", TerraFrom, TerraTo,
+            mediaOnRight: true, ctaLabel: null, ctaUrl: null);
+
+        // Ficha técnica — feature-grid de specs (CDN si está, SSR si no).
+        FeatureGridAuto(b, "Ficha técnica", "Especificaciones de la propiedad", new (string title, string subtitle, string body)[]
+        {
+            ("120 m²", "Área construida", "Distribución optimizada en un solo nivel."),
+            ("3 habitaciones", "Descanso", "Dormitorios con closets y excelente iluminación."),
+            ("2 baños", "Comodidad", "Baño principal con vestier y acabados de alta gama."),
+            ("2 parqueaderos", "Movilidad", "Cupos privados cubiertos más depósito."),
+            ("Balcón", "Exterior", "Vista panorámica a la ciudad y los cerros."),
+            ("Estrato 6", "Sector", "Una de las mejores zonas residenciales de Bogotá."),
+        }, 3);
+
+        // Ubicación — map-embed (SSR).
+        AddMapEmbed(b, "https://www.openstreetmap.org/export/embed.html?bbox=-74.06%2C4.66%2C-74.03%2C4.69&layer=mapnik",
+            "Ubicación de la propiedad", height: 420);
+
+        // Contacto — para gestionar interés: member-login (SSR, cuenta del cliente) +
+        // form-stepper (CDN) de agendamiento → POST a Forms (honeypot + rate-limit + email).
+        AddMission(b, "Agenda una visita", "",
+            "<p>Déjanos tus datos y la fecha que prefieres; un asesor te confirma la visita y resuelve tus dudas. Si ya tienes cuenta, inicia sesión para hacer seguimiento a tus favoritos.</p>");
+        AddMemberLogin(b, "/propiedades/propiedad");
+        AddSynFormStepper(b, "/api/forms/contacto-propiedad/submit", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
+        {
+            ("Tu interés", new (string, string, string, bool, string, string[])[]
+            {
+                ("¿Qué te interesa?", "interes", "select", true, "", new[] { "Agendar una visita", "Recibir más información", "Hacer una oferta" }),
+                ("Fecha preferida (opcional)", "fecha", "text", false, "DD/MM/AAAA", Array.Empty<string>()),
+            }),
+            ("Tus datos", new (string, string, string, bool, string, string[])[]
+            {
+                ("Nombre", "nombre", "text", true, "Tu nombre", Array.Empty<string>()),
+                ("Email", "email", "email", true, "tu@correo.com", Array.Empty<string>()),
+                ("Teléfono", "telefono", "tel", true, "Tu teléfono", Array.Empty<string>()),
+                ("Mensaje (opcional)", "mensaje", "textarea", false, "Cuéntanos cualquier detalle…", Array.Empty<string>()),
+            }),
+        });
+
+        FaqAuto(b, "Antes de agendar", new (string question, string answer)[]
+        {
+            ("¿El precio es negociable?", "Cada propiedad tiene un rango; tu asesor te orienta según las condiciones del momento."),
+            ("¿Puedo financiar la compra?", "Sí. Te conectamos con opciones de crédito hipotecario y leasing habitacional."),
+            ("¿Cómo agendo una visita?", "Completa el formulario o llámanos; coordinamos día y hora a tu conveniencia."),
+        });
+
+        AddCta(b, "¿Quieres conocerla en persona?",
+            "Agenda tu visita hoy y deja que un asesor te acompañe en cada paso.",
+            "Ver más propiedades", "/propiedades/listado");
         return b.Build();
     }
 

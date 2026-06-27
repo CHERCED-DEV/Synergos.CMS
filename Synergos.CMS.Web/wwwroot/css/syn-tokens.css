@@ -575,63 +575,67 @@
 
 /* ─────────────────────────────────────────────────────────── */
 /* eventsNight theme — vertical Eventos "Electric Night"       */
-/* Base midnight + electric violet/cyan. Registro propio (NO    */
-/* clon de dark): paleta saturada para agendas/countdown.       */
-/* Familias = paridad token-a-token con dark/silver-gold.       */
+/* Registro PREMIUM dark: midnight azul-índigo profundo y       */
+/* sereno + violet/cyan como ACENTOS CONTROLADOS (vibrantes,    */
+/* no chillones). Energía de eventos contenida en superficies   */
+/* sobrias; contraste AA fuerte y jerarquía de texto clara.     */
+/* Registro propio (NO clon de dark). Paridad token-a-token con */
+/* meridian/eventsNight — 75 familias. color-scheme: dark.      */
 /* ─────────────────────────────────────────────────────────── */
 :root[data-theme="eventsNight"],
 [data-theme="eventsNight"],
 .theme-eventsNight {
   color-scheme: dark;
 
-  /* Channels theme-aware — primary electric violet #7C5CFF,
-     accent cyan #22D3EE, ink midnight para scrims profundos. */
+  /* Channels theme-aware — primary electric violet #7C5CFF (controlado),
+     accent cyan #2BC4DE (cyan refinado, menos eléctrico), ink midnight
+     más profundo para scrims premium. */
   --syn-channel-brand:  124 92 255;
-  --syn-channel-accent: 34 211 238;
-  --syn-channel-ink:    11 16 32;
+  --syn-channel-accent: 43 196 222;
+  --syn-channel-ink:    8 12 26;
 
-  --syn-color-surface-canvas:    #0B1020;   /* base midnight */
-  --syn-color-surface-primary:   #141A2E;   /* surface */
-  --syn-color-surface-secondary: #1B2238;
-  --syn-color-surface-tertiary:  #232C46;
-  --syn-color-surface-elevated:  #1A2138;
-  --syn-color-surface-inverse:   #F4F6FF;
-  --syn-color-surface-accent:        rgb(124 92 255 / 0.18);
-  --syn-color-surface-accent-soft:   rgb(124 92 255 / 0.12);
-  --syn-color-surface-overlay:       rgb(11 16 32 / 0.86);
-  --syn-color-surface-strong:        #F4F6FF;
+  --syn-color-surface-canvas:    #080C1A;   /* midnight profundo (base elegante) */
+  --syn-color-surface-primary:   #11172B;   /* surface elevada sobre canvas */
+  --syn-color-surface-secondary: #161D34;
+  --syn-color-surface-tertiary:  #1F2842;
+  --syn-color-surface-elevated:  #141B32;
+  --syn-color-surface-inverse:   #F5F7FF;
+  --syn-color-surface-accent:        rgb(124 92 255 / 0.14);
+  --syn-color-surface-accent-soft:   rgb(124 92 255 / 0.09);
+  --syn-color-surface-overlay:       rgb(8 12 26 / 0.88);
+  --syn-color-surface-strong:        #F5F7FF;
 
-  --syn-color-text-primary:    #F4F6FF;   /* text */
-  --syn-color-text-secondary:  #C3C9E8;
-  --syn-color-text-muted:      #98A0C4;
-  --syn-color-text-disabled:   #6B7299;
-  --syn-color-text-inverse:    #0B1020;
-  --syn-color-text-accent:     #A78BFF;
-  --syn-color-text-on-accent:  #0B1020;
+  --syn-color-text-primary:    #F5F7FF;   /* alto contraste sobre midnight */
+  --syn-color-text-secondary:  #C7CDEC;
+  --syn-color-text-muted:      #9AA2C8;
+  --syn-color-text-disabled:   #5E6690;
+  --syn-color-text-inverse:    #080C1A;
+  --syn-color-text-accent:     #B3A0FF;   /* violet claro AA sobre surface */
+  --syn-color-text-on-accent:  #080C1A;
 
-  --syn-color-border-subtle:  rgb(196 181 253 / 0.12);
-  --syn-color-border-default: rgb(124 92 255 / 0.24);
-  --syn-color-border-strong:  rgb(124 92 255 / 0.40);
-  --syn-color-border-accent:  rgb(34 211 238 / 0.50);
+  --syn-color-border-subtle:  rgb(199 205 236 / 0.10);
+  --syn-color-border-default: rgb(124 92 255 / 0.20);
+  --syn-color-border-strong:  rgb(124 92 255 / 0.36);
+  --syn-color-border-accent:  rgb(43 196 222 / 0.46);
   --syn-color-border-inverse: rgb(255 255 255 / 0.16);
 
-  --syn-color-overlay-subtle: rgb(244 246 255 / 0.06);
-  --syn-color-overlay-medium: rgb(244 246 255 / 0.14);
-  --syn-color-overlay-strong: rgb(244 246 255 / 0.22);
+  --syn-color-overlay-subtle: rgb(245 247 255 / 0.05);
+  --syn-color-overlay-medium: rgb(245 247 255 / 0.12);
+  --syn-color-overlay-strong: rgb(245 247 255 / 0.20);
 
-  --syn-color-action-primary:        #7C5CFF;   /* electric violet */
-  --syn-color-action-primary-hover:  #6A48F0;
-  --syn-color-action-primary-active: #8C70FF;
-  --syn-color-action-primary-text:   #0B1020;
+  --syn-color-action-primary:        #7C5CFF;   /* electric violet (acento controlado) */
+  --syn-color-action-primary-hover:  #8E73FF;
+  --syn-color-action-primary-active: #6A48F0;
+  --syn-color-action-primary-text:   #080C1A;
   --syn-color-action-primary-border: transparent;
-  --syn-color-action-emphasis:       #22D3EE;   /* accent cyan */
+  --syn-color-action-emphasis:       #2BC4DE;   /* accent cyan refinado */
 
-  --syn-color-action-secondary-surface:        rgb(244 246 255 / 0.05);
-  --syn-color-action-secondary-surface-hover:  rgb(244 246 255 / 0.09);
-  --syn-color-action-secondary-text:           #F4F6FF;
-  --syn-color-action-secondary-text-hover:     #C9BCFF;
-  --syn-color-action-secondary-border:         rgb(124 92 255 / 0.30);
-  --syn-color-action-secondary-border-hover:   rgb(34 211 238 / 0.50);
+  --syn-color-action-secondary-surface:        rgb(245 247 255 / 0.04);
+  --syn-color-action-secondary-surface-hover:  rgb(245 247 255 / 0.08);
+  --syn-color-action-secondary-text:           #F5F7FF;
+  --syn-color-action-secondary-text-hover:     #CBBEFF;
+  --syn-color-action-secondary-border:         rgb(124 92 255 / 0.26);
+  --syn-color-action-secondary-border-hover:   rgb(43 196 222 / 0.46);
 
   --syn-color-action-ghost-surface:        transparent;
   --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
@@ -640,103 +644,110 @@
 
   --syn-color-action-danger:       var(--syn-color-danger-400);
   --syn-color-action-danger-hover: var(--syn-color-danger-300);
-  --syn-color-action-danger-text:  #0B1020;
+  --syn-color-action-danger-text:  #080C1A;
 
-  --syn-color-action-disabled-surface: rgb(152 160 196 / 0.10);
-  --syn-color-action-disabled-border:  rgb(152 160 196 / 0.18);
-  --syn-color-action-disabled-text:    #6B7299;
+  --syn-color-action-disabled-surface: rgb(154 162 200 / 0.09);
+  --syn-color-action-disabled-border:  rgb(154 162 200 / 0.16);
+  --syn-color-action-disabled-text:    #5E6690;
 
-  --syn-color-focus-ring:        rgb(34 211 238 / 0.82);
+  --syn-color-focus-ring:        rgb(43 196 222 / 0.80);
   --syn-color-focus-ring-danger: rgb(253 164 175 / 0.82);
 
-  --syn-color-state-brand-surface: rgb(124 92 255 / 0.18);
-  --syn-color-state-brand-border:  rgb(124 92 255 / 0.36);
-  --syn-color-state-brand-text:    #C9BCFF;
+  --syn-color-state-brand-surface: rgb(124 92 255 / 0.16);
+  --syn-color-state-brand-border:  rgb(124 92 255 / 0.32);
+  --syn-color-state-brand-text:    #CBBEFF;
 
-  --syn-color-state-info-surface: rgb(34 211 238 / 0.16);
-  --syn-color-state-info-border:  rgb(34 211 238 / 0.30);
-  --syn-color-state-info-text:    #A5F0FB;
+  --syn-color-state-info-surface: rgb(43 196 222 / 0.14);
+  --syn-color-state-info-border:  rgb(43 196 222 / 0.28);
+  --syn-color-state-info-text:    #9FE9F6;
 
-  --syn-color-info:         #22D3EE;
-  --syn-color-info-surface: rgb(34 211 238 / 0.16);
+  --syn-color-info:         #2BC4DE;
+  --syn-color-info-surface: rgb(43 196 222 / 0.14);
 
-  /* success / early-bird #34D399 */
-  --syn-color-state-success-surface: rgb(52 211 153 / 0.16);
-  --syn-color-state-success-border:  rgb(52 211 153 / 0.30);
+  /* success / early-bird #34D399 (verde menta sobrio) */
+  --syn-color-state-success-surface: rgb(52 211 153 / 0.15);
+  --syn-color-state-success-border:  rgb(52 211 153 / 0.28);
   --syn-color-state-success-text:    #6EE7B7;
 
-  --syn-color-state-warning-surface: rgb(245 158 11 / 0.16);
-  --syn-color-state-warning-border:  rgb(252 211 77 / 0.30);
+  --syn-color-state-warning-surface: rgb(245 158 11 / 0.15);
+  --syn-color-state-warning-border:  rgb(252 211 77 / 0.28);
   --syn-color-state-warning-text:    #fde68a;
 
-  --syn-color-state-danger-surface: rgb(239 68 68 / 0.16);
-  --syn-color-state-danger-border:  rgb(251 113 133 / 0.32);
+  --syn-color-state-danger-surface: rgb(239 68 68 / 0.15);
+  --syn-color-state-danger-border:  rgb(251 113 133 / 0.30);
   --syn-color-state-danger-text:    #fecdd3;
 
   --syn-gradient-hero: linear-gradient(135deg,
                          var(--syn-color-surface-canvas) 0%,
-                         var(--syn-color-surface-elevated) 46%,
-                         rgb(var(--syn-channel-brand) / 0.30) 100%);
+                         var(--syn-color-surface-elevated) 50%,
+                         rgb(var(--syn-channel-brand) / 0.24) 100%);
 
-  --syn-shadow-card:         0 10px 28px -18px rgb(11 16 32 / 0.80);
-  --syn-shadow-card-hover:   0 24px 56px -28px rgb(11 16 32 / 0.88);
-  --syn-shadow-panel:        0 8px 24px -18px rgb(11 16 32 / 0.76);
-  --syn-shadow-floating:     0 28px 72px -36px rgb(11 16 32 / 0.92);
-  --syn-shadow-action:       0 10px 22px -16px rgb(var(--syn-channel-brand) / 0.50);
-  --syn-shadow-action-hover: 0 18px 34px -18px rgb(var(--syn-channel-accent) / 0.46);
+  --syn-shadow-card:         0 10px 28px -18px rgb(8 12 26 / 0.82);
+  --syn-shadow-card-hover:   0 24px 56px -28px rgb(8 12 26 / 0.90);
+  --syn-shadow-panel:        0 8px 24px -18px rgb(8 12 26 / 0.78);
+  --syn-shadow-floating:     0 28px 72px -36px rgb(8 12 26 / 0.94);
+  --syn-shadow-action:       0 10px 22px -16px rgb(var(--syn-channel-brand) / 0.42);
+  --syn-shadow-action-hover: 0 18px 34px -18px rgb(var(--syn-channel-accent) / 0.40);
 }
 
 /* ─────────────────────────────────────────────────────────── */
 /* terraLux theme — vertical Propiedades "Terra Lux"           */
-/* Base warm ivory + bronze/sage. Registro propio (paridad      */
-/* token-a-token con silver-gold, paleta cálida residencial).   */
+/* Registro INMOBILIARIO PREMIUM ARQUITECTÓNICO (revista de     */
+/* arquitectura): neutros fríos sofisticados (stone/greige/     */
+/* charcoal, NO marfil amarillento), verde profundo             */
+/* arquitectónico como CTA principal, y un metálico champagne/  */
+/* bronce SOBRIO y discreto sólo en rol emphasis (no            */
+/* protagonista). Lujo sereno y editorial, NO rústico-cozy.     */
+/* Paridad token-a-token con meridian — 75 familias.            */
+/* color-scheme: light.                                         */
 /* ─────────────────────────────────────────────────────────── */
 :root[data-theme="terraLux"],
 [data-theme="terraLux"],
 .theme-terraLux {
   color-scheme: light;
 
-  /* Channels theme-aware — primary warm bronze #B08D57,
-     accent sage #2F6F5E, ink warm para sombras cálidas. */
-  --syn-channel-brand:  176 141 87;
-  --syn-channel-accent: 47 111 94;
-  --syn-channel-ink:    28 43 36;
+  /* Channels theme-aware — primary verde arquitectónico profundo
+     #2C4A40, accent champagne/bronce sobrio #A88A5E (discreto),
+     ink charcoal frío para scrims editoriales. */
+  --syn-channel-brand:  44 74 64;
+  --syn-channel-accent: 168 138 94;
+  --syn-channel-ink:    35 38 43;
 
-  --syn-color-surface-canvas:    #FBF8F3;   /* warm ivory */
-  --syn-color-surface-primary:   #FFFFFF;   /* surface */
-  --syn-color-surface-secondary: #F4EFE6;
-  --syn-color-surface-tertiary:  #ECE4D6;
-  --syn-color-surface-elevated:  #FFFDF9;
-  --syn-color-surface-inverse:   #1C2B24;
-  --syn-color-surface-accent:        #F1EADC;
-  --syn-color-surface-accent-soft:   rgb(176 141 87 / 0.12);
-  --syn-color-surface-overlay:       rgb(255 255 255 / 0.88);
-  --syn-color-surface-strong:        #1C2B24;
+  --syn-color-surface-canvas:    #F4F2EE;   /* stone/greige frío (no marfil) */
+  --syn-color-surface-primary:   #FFFFFF;   /* surface blanco editorial */
+  --syn-color-surface-secondary: #ECEAE4;   /* stone secundario */
+  --syn-color-surface-tertiary:  #E1DED7;   /* greige terciario */
+  --syn-color-surface-elevated:  #FBFAF8;   /* elevada casi-blanca, neutra */
+  --syn-color-surface-inverse:   #23262B;   /* charcoal frío */
+  --syn-color-surface-accent:        #E9E5DC;   /* greige cálido muy sutil */
+  --syn-color-surface-accent-soft:   rgb(168 138 94 / 0.10);
+  --syn-color-surface-overlay:       rgb(255 255 255 / 0.90);
+  --syn-color-surface-strong:        #23262B;
 
-  --syn-color-text-primary:    #1C2B24;   /* ink */
-  --syn-color-text-secondary:  #45554C;
-  --syn-color-text-muted:      #6A7269;
-  --syn-color-text-disabled:   #9AA096;
-  --syn-color-text-inverse:    #FBF8F3;
-  --syn-color-text-accent:     #8A6A38;
-  --syn-color-text-on-accent:  #FFFDF9;
+  --syn-color-text-primary:    #23262B;   /* charcoal frío sofisticado */
+  --syn-color-text-secondary:  #444851;   /* slate-grafito */
+  --syn-color-text-muted:      #6B6F77;   /* gris neutro frío */
+  --syn-color-text-disabled:   #A0A2A7;
+  --syn-color-text-inverse:    #F4F2EE;
+  --syn-color-text-accent:     #2C4A40;   /* verde arquitectónico para enlaces */
+  --syn-color-text-on-accent:  #FBFAF8;
 
-  --syn-color-border-subtle:  #EFE7D8;
-  --syn-color-border-default: #DBD2C0;
-  --syn-color-border-strong:  #C6B895;
-  --syn-color-border-accent:  #B08D57;
+  --syn-color-border-subtle:  #E7E4DD;
+  --syn-color-border-default: #D6D2C9;
+  --syn-color-border-strong:  #B9B4A8;
+  --syn-color-border-accent:  #A88A5E;   /* champagne discreto en bordes */
   --syn-color-border-inverse: rgb(255 255 255 / 0.16);
 
-  --syn-color-overlay-subtle: rgb(28 43 36 / 0.06);
-  --syn-color-overlay-medium: rgb(28 43 36 / 0.14);
-  --syn-color-overlay-strong: rgb(28 43 36 / 0.24);
+  --syn-color-overlay-subtle: rgb(35 38 43 / 0.06);
+  --syn-color-overlay-medium: rgb(35 38 43 / 0.14);
+  --syn-color-overlay-strong: rgb(35 38 43 / 0.24);
 
-  --syn-color-action-primary:        #2F6F5E;   /* sage — CTA principal */
-  --syn-color-action-primary-hover:  #265C4D;
-  --syn-color-action-primary-active: #38826D;
-  --syn-color-action-primary-text:   #FFFDF9;
+  --syn-color-action-primary:        #2C4A40;   /* verde arquitectónico — CTA principal */
+  --syn-color-action-primary-hover:  #243D35;
+  --syn-color-action-primary-active: #35594D;
+  --syn-color-action-primary-text:   #FBFAF8;
   --syn-color-action-primary-border: transparent;
-  --syn-color-action-emphasis:       #B08D57;   /* warm bronze */
+  --syn-color-action-emphasis:       #A88A5E;   /* champagne/bronce sobrio (sólo emphasis) */
 
   --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
   --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
@@ -750,53 +761,54 @@
   --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
   --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
 
-  /* alert terracotta #C2603D mapeada al rol danger del tema */
-  --syn-color-action-danger:       #C2603D;
-  --syn-color-action-danger-hover: #A84F30;
-  --syn-color-action-danger-text:  #FFFDF9;
+  /* alert brick/clay arquitectónico #B4503C (frío, no terracotta cálida) */
+  --syn-color-action-danger:       #B4503C;
+  --syn-color-action-danger-hover: #9C4231;
+  --syn-color-action-danger-text:  #FBFAF8;
 
-  --syn-color-action-disabled-surface: #EFE7D8;
-  --syn-color-action-disabled-border:  #E2D8C5;
-  --syn-color-action-disabled-text:    #A59A86;
+  --syn-color-action-disabled-surface: #ECEAE4;
+  --syn-color-action-disabled-border:  #DEDAD2;
+  --syn-color-action-disabled-text:    #A6A39B;
 
-  --syn-color-focus-ring:        rgb(47 111 94 / 0.72);
-  --syn-color-focus-ring-danger: rgb(194 96 61 / 0.55);
+  --syn-color-focus-ring:        rgb(44 74 64 / 0.72);
+  --syn-color-focus-ring-danger: rgb(180 80 60 / 0.55);
 
-  --syn-color-state-brand-surface: rgb(176 141 87 / 0.12);
-  --syn-color-state-brand-border:  rgb(176 141 87 / 0.28);
-  --syn-color-state-brand-text:    #8A6A38;
+  --syn-color-state-brand-surface: rgb(44 74 64 / 0.08);
+  --syn-color-state-brand-border:  rgb(44 74 64 / 0.22);
+  --syn-color-state-brand-text:    #243D35;
 
-  --syn-color-state-info-surface: rgb(47 111 94 / 0.10);
-  --syn-color-state-info-border:  rgb(47 111 94 / 0.22);
-  --syn-color-state-info-text:    #235446;
+  --syn-color-state-info-surface: rgb(44 74 64 / 0.08);
+  --syn-color-state-info-border:  rgb(44 74 64 / 0.20);
+  --syn-color-state-info-text:    #1F352E;
 
-  --syn-color-info:         #2F6F5E;
-  --syn-color-info-surface: rgb(47 111 94 / 0.10);
+  --syn-color-info:         #2C4A40;
+  --syn-color-info-surface: rgb(44 74 64 / 0.08);
 
-  --syn-color-state-success-surface: rgb(47 111 94 / 0.12);
-  --syn-color-state-success-border:  rgb(47 111 94 / 0.24);
-  --syn-color-state-success-text:    #235446;
+  --syn-color-state-success-surface: rgb(44 74 64 / 0.10);
+  --syn-color-state-success-border:  rgb(44 74 64 / 0.22);
+  --syn-color-state-success-text:    #1F352E;
 
-  --syn-color-state-warning-surface: rgb(176 141 87 / 0.14);
-  --syn-color-state-warning-border:  rgb(176 141 87 / 0.26);
-  --syn-color-state-warning-text:    #7A5E2E;
+  /* warning usa el champagne/bronce sobrio del tema */
+  --syn-color-state-warning-surface: rgb(168 138 94 / 0.14);
+  --syn-color-state-warning-border:  rgb(168 138 94 / 0.26);
+  --syn-color-state-warning-text:    #745B33;
 
-  /* danger usa la terracotta del tema (#C2603D) */
-  --syn-color-state-danger-surface: rgb(194 96 61 / 0.12);
-  --syn-color-state-danger-border:  rgb(194 96 61 / 0.24);
-  --syn-color-state-danger-text:    #9A4326;
+  /* danger usa el brick/clay arquitectónico (#B4503C) */
+  --syn-color-state-danger-surface: rgb(180 80 60 / 0.10);
+  --syn-color-state-danger-border:  rgb(180 80 60 / 0.22);
+  --syn-color-state-danger-text:    #8E3A2A;
 
   --syn-gradient-hero: linear-gradient(135deg,
                          var(--syn-color-surface-canvas) 0%,
                          var(--syn-color-surface-secondary) 50%,
-                         rgb(var(--syn-channel-brand) / 0.22) 100%);
+                         rgb(var(--syn-channel-brand) / 0.12) 100%);
 
-  --syn-shadow-card:         0 10px 28px -20px rgb(70 53 26 / 0.22);
-  --syn-shadow-card-hover:   0 24px 54px -32px rgb(70 53 26 / 0.26);
-  --syn-shadow-panel:        0 12px 30px -24px rgb(70 53 26 / 0.20);
-  --syn-shadow-floating:     0 28px 72px -38px rgb(48 38 22 / 0.30);
-  --syn-shadow-action:       0 12px 26px -18px rgb(var(--syn-channel-accent) / 0.30);
-  --syn-shadow-action-hover: 0 18px 36px -20px rgb(var(--syn-channel-accent) / 0.40);
+  --syn-shadow-card:         0 10px 28px -20px rgb(35 38 43 / 0.16);
+  --syn-shadow-card-hover:   0 24px 54px -32px rgb(35 38 43 / 0.20);
+  --syn-shadow-panel:        0 12px 30px -24px rgb(35 38 43 / 0.14);
+  --syn-shadow-floating:     0 28px 72px -38px rgb(35 38 43 / 0.24);
+  --syn-shadow-action:       0 12px 26px -18px rgb(var(--syn-channel-brand) / 0.24);
+  --syn-shadow-action-hover: 0 18px 36px -20px rgb(var(--syn-channel-brand) / 0.32);
 }
 
 /* ─────────────────────────────────────────────────────────── */

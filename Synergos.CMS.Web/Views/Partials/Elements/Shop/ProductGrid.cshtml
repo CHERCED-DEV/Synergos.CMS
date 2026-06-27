@@ -6,7 +6,7 @@
     con la nomenclatura canonical del seam (ProductCategoryPage usa lo
     mismo).
 *@
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Synergos.CMS.Interfaces.IShopQuery ShopQuery
 @inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @{
