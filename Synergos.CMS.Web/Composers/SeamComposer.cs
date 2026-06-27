@@ -153,6 +153,21 @@ public sealed class SeamComposer : IComposer
         // sin tocar el motor. Singleton — el stub mantiene estado en memoria.
         services.AddSingleton<IPaymentProvider, StubPaymentProvider>();
 
+        // Motor de reservas (vertical Hoteles) — 3 seams stub-first (doc 17),
+        // calcando IPaymentProvider. Hoy sirven la demo end-to-end en memoria;
+        // se cambian por adapters reales (PMS / channel-manager) sin tocar el
+        // motor. ADR 0002 (Application pura, sin Umbraco).
+        //   - IRoomAvailabilityProvider: search por fecha+ocupación → ofertas
+        //     (Room Type × Rate Plan). Stub: catálogo sembrado en memoria.
+        //   - IReservationService: Hold/Confirm/Cancel/Get. Stub: estado en
+        //     ConcurrentDictionary; Confirm idempotente. Singleton para que el
+        //     estado persista entre requests del mismo proceso.
+        //   - ICancellationPolicyEvaluator: penalidad por fecha. Stub puro/
+        //     determinista (non-refundable → total; refundable → 0 si a tiempo).
+        services.AddSingleton<IRoomAvailabilityProvider, StubRoomAvailabilityProvider>();
+        services.AddSingleton<IReservationService, StubReservationService>();
+        services.AddSingleton<ICancellationPolicyEvaluator, StubCancellationPolicyEvaluator>();
+
         // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
         // sigue en su valor default bajo env != "Development". No detiene
         // el app; solo señala en el log para que el operador rote la clave
