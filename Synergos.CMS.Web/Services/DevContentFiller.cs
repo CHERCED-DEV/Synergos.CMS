@@ -1683,6 +1683,17 @@ public sealed class DevContentFiller
     private string BuildTiendaHome()
     {
         var b = new BlockGridJsonBuilder();
+
+        // OLA 2 — REFRAME (aditivo): el siteRoot Tienda abre DIRECTO en la app e-commerce.
+        // Entrar a /tienda = la app de tienda (catálogo/carrito/checkout) montada como módulo
+        // Angular vía elementSynStorefront → <synergos-storefront>. Lo explicativo (hero,
+        // catálogo SSR, testimonios, FAQ, CTA) se conserva como sub-secciones por debajo de la
+        // app. Si el ElementType aún no está importado, AddSynStorefront sale no-op con grace y
+        // el home conserva intactas todas las sub-secciones de abajo (no-destructivo).
+        AddSynStorefront(b, "/api/shop",
+            "Compra en nuestra tienda online",
+            "Catálogo, carrito y checkout en un solo lugar. Explora, agrega al carrito y paga en minutos.");
+
         AddHero(b, "Tu tienda, sobre el mismo motor", "Catálogo, carrito y checkout",
             "<p>Vende online con producto, variantes, carrito y consultas server-side sobre el mismo núcleo — sin re-plataformar cuando crezcas.</p>",
             "Synergos Tienda Hero", "Hero del vertical Tienda", "#020817", "#4f6ef7",
@@ -1983,6 +1994,28 @@ public sealed class DevContentFiller
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/travel
+            c.Set("heading", heading);        // Culture — título de la app
+            c.Set("subheading", subheading);  // Culture — subtítulo de la app
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
+    /// <summary>
+    /// Monta la app Tienda e-commerce (elementSynStorefront → &lt;synergos-storefront&gt;)
+    /// como módulo Angular CDN. Calque de <see cref="AddSynTravelShell"/>: el SynHost emite
+    /// el custom element con su config (apiBase/heading/subheading) y la CDN lo hidrata.
+    /// Sale no-op con grace si el ElementType aún no está importado (el caller compone el
+    /// resto del home), preservando lo existente.
+    /// </summary>
+    private void AddSynStorefront(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    {
+        var key = _contentTypeService.Get("elementSynStorefront")?.Key;
+        if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-storefront__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/shop
             c.Set("heading", heading);        // Culture — título de la app
             c.Set("subheading", subheading);  // Culture — subtítulo de la app
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
