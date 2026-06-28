@@ -200,6 +200,24 @@ public sealed class SeamComposer : IComposer
         // sesión) vive en memoria del proceso, igual que el StubReservationService.
         services.AddSingleton<ITravelCartService, TravelCartService>();
 
+        // OLA 2 Tienda — motor del marketplace e-commerce (doc tienda-app-spec).
+        // Dos seams stub-first, aditivos (no tocan Booking/Travel ni el carrito
+        // cookie IShopQuery/ICartService de los bloques Razor del CMS). ADR 0002
+        // (Application pura, sin Umbraco) + ADR 0075 (seam con tests canónicos).
+        //   - IProductCatalogProvider: búsqueda facetada (texto + categoría +
+        //     facetas → productos + facetas derivadas) + detalle del producto
+        //     (PDP: variantes + reviews + Q&A). Stub: catálogo sembrado en memoria
+        //     (3 categorías × 6 productos). Adapter real: Examine/Lucene o Algolia.
+        //     Singleton — stateless, catálogo estático.
+        //   - IShopOrderService: motor transaccional del checkout, calcando
+        //     TravelCartService. Resuelve precio/stock real desde el catálogo
+        //     (anti-tampering), aparta stock vía IReservationService.HoldItemAsync,
+        //     abre UNA sesión de pago (IPaymentProvider) por el total; Confirm
+        //     captura y confirma. Idempotente. Singleton — el estado de las órdenes
+        //     (orderRef → líneas + sesión) vive en memoria del proceso.
+        services.AddSingleton<IProductCatalogProvider, StubProductCatalogProvider>();
+        services.AddSingleton<IShopOrderService, StubShopOrderService>();
+
         // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
         // sigue en su valor default bajo env != "Development". No detiene
         // el app; solo señala en el log para que el operador rote la clave
