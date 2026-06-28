@@ -247,6 +247,33 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<StubReactionService>()));
         services.AddSingleton<ISocialProfileProjection, StubSocialProfileProjection>();
 
+        // OLA 4 Educación — LMS (doc educacion-app-spec). Dos seams stub-first,
+        // aditivos (no tocan Booking/Travel/Shop/Blogs). ADR 0002 (Application pura,
+        // sin Umbraco) + ADR 0075 (seam con tests canónicos).
+        //   - ICourseCatalogProvider: catálogo buscable (texto/categoría/nivel →
+        //     cursos) + detalle del curso (PDP: módulos → lecciones + instructor +
+        //     planes de precio/cuotas). Stub: catálogo sembrado (3 categorías ×
+        //     cursos × módulos × lecciones). Adapter real: Examine sobre coursePage.
+        //     POLIMORFISMO Blogs: el contenido editorial de cada lección NO se
+        //     duplica — se SIEMBRA en el IContentStream EXISTENTE con Kind=lesson y
+        //     se referencia por id (DIP; depende de la abstracción de feed, no del
+        //     módulo Blogs ni de su schema; no instancia Blogs). Por eso el catálogo
+        //     recibe el IContentStream ya registrado arriba.
+        //   - IEnrollmentService: motor transaccional de matrícula + progreso,
+        //     calcando StubShopOrderService/StubReservationService. Resuelve el
+        //     precio real desde el catálogo (anti-tampering), abre UNA sesión de
+        //     pago (IPaymentProvider) si el curso es de pago o activa la matrícula
+        //     de inmediato si es gratis; Confirm captura y activa. Añade lo propio
+        //     del LMS: progreso por lección (idempotente) + certificado al 100%.
+        // Singletons — el estado (matrículas + progreso + lecciones sembradas) vive
+        // en el proceso, igual que el resto de stubs del motor.
+        services.AddSingleton<ICourseCatalogProvider>(sp =>
+            new StubCourseCatalogProvider(sp.GetRequiredService<IContentStream>()));
+        services.AddSingleton<IEnrollmentService>(sp =>
+            new StubEnrollmentService(
+                sp.GetRequiredService<ICourseCatalogProvider>(),
+                sp.GetRequiredService<IPaymentProvider>()));
+
         // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
         // sigue en su valor default bajo env != "Development". No detiene
         // el app; solo señala en el log para que el operador rote la clave
