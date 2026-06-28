@@ -1522,6 +1522,17 @@ public sealed class DevContentFiller
     private string BuildBlogsHome()
     {
         var b = new BlockGridJsonBuilder();
+
+        // OLA 3 — REFRAME (aditivo): el siteRoot Blogs abre DIRECTO en la app red social.
+        // Entrar a /blogs = la app de blogs (feed, perfiles, publicar, reacciones) montada como
+        // módulo Angular vía elementSynBlogs → <synergos-blogs>. Lo explicativo (hero, destacados,
+        // listado de artículos, testimonios, CTA) se conserva como sub-secciones por debajo de la
+        // app. Si el ElementType aún no está importado, AddSynBlogs sale no-op con grace y el home
+        // conserva intactas todas las sub-secciones de abajo (no-destructivo).
+        AddSynBlogs(b, "/api/blogs",
+            "Conecta, publica y crece tu audiencia",
+            "Una red social editorial: sigue autores, publica historias y reacciona en tiempo real.");
+
         AddHero(b, "Blogs que enganchan", "Publica, organiza y crece tu audiencia",
             "<p>Un blog editorial sobre el mismo motor: categorías, autores y SEO listos. Tu marca, tu voz — sin montar un CMS desde cero.</p>",
             "Synergos Blogs Hero", "Hero del vertical Blogs", "#2A2412", "#B59659",
@@ -2017,6 +2028,28 @@ public sealed class DevContentFiller
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/shop
+            c.Set("heading", heading);        // Culture — título de la app
+            c.Set("subheading", subheading);  // Culture — subtítulo de la app
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
+    /// <summary>
+    /// Monta la app red social de Blogs (elementSynBlogs → &lt;synergos-blogs&gt;)
+    /// como módulo Angular CDN. Calque de <see cref="AddSynStorefront"/>: el SynHost emite
+    /// el custom element con su config (apiBase/heading/subheading) y la CDN lo hidrata por
+    /// el alias kebab "blogs". Sale no-op con grace si el ElementType aún no está importado
+    /// (el caller compone el resto del home), preservando lo existente (no-destructivo).
+    /// </summary>
+    private void AddSynBlogs(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    {
+        var key = _contentTypeService.Get("elementSynBlogs")?.Key;
+        if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-blogs__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/blogs
             c.Set("heading", heading);        // Culture — título de la app
             c.Set("subheading", subheading);  // Culture — subtítulo de la app
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
