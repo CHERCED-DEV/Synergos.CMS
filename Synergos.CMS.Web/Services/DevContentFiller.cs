@@ -1966,6 +1966,29 @@ public sealed class DevContentFiller
         });
     }
 
+    /// <summary>
+    /// App de reservas multi-producto (elementSynTravelShell): el organismo que monta la
+    /// app Booking entera (vuelos, hoteles, paquetes). El SynHost lo emite como
+    /// &lt;synergos-travel-shell config='...'&gt; y la CDN hidrata el módulo Angular, que
+    /// orquesta búsqueda/disponibilidad/selección/reserva contra la API de viajes. Config
+    /// end-to-end desde el CMS: apiBase + heading/subheading. Sale no-op con grace si el
+    /// ElementType aún no está importado (el caller conserva el resto del home).
+    /// </summary>
+    private void AddSynTravelShell(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    {
+        var key = _contentTypeService.Get("elementSynTravelShell")?.Key;
+        if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-travel__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/travel
+            c.Set("heading", heading);        // Culture — título de la app
+            c.Set("subheading", subheading);  // Culture — subtítulo de la app
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
     // ─────────── Componentes SSR-only (no hidratan; render Razor nativo) ───────────
 
     /// <summary>Login de miembro (elementMemberLogin, SSR). CTA "inscribirse" para curso gated. redirectLink opcional.</summary>
@@ -2337,6 +2360,8 @@ public sealed class DevContentFiller
     // productPage) → los precios se renderizan vía IPriceFormatter (es-CO), CERO precio
     // hardcodeado. DefaultShopQuery scopea por siteRoot, así que los servicios no se cruzan
     // con la Tienda. Páginas: Servicios + Reservar. CERO contenido baked en .cshtml.
+    // OLA 1 — el home abre DIRECTO en la app: BuildBookingHome() monta elementSynTravelShell
+    // (<synergos-travel-shell>) como contenido principal; lo explicativo queda como sub-secciones.
     private const string MeridianFrom = "#0A2540", MeridianTo = "#1FA2A6";   // gradiente neutro on-brand (NO define el tema; el tema lo pinta data-theme="meridian")
 
     private void SeedBooking(List<string> details)
@@ -2412,6 +2437,17 @@ public sealed class DevContentFiller
     private string BuildBookingHome()
     {
         var b = new BlockGridJsonBuilder();
+
+        // OLA 1 — REFRAME (aditivo): el siteRoot Booking abre DIRECTO en la app multi-producto.
+        // Entrar a /booking = la app de reservas (vuelos/hoteles/paquetes) montada como módulo
+        // Angular vía elementSynTravelShell → <synergos-travel-shell>. Lo explicativo (cómo
+        // funciona, value props, planes, testimonios, FAQ) ya vive en SynergosLabs y aquí queda
+        // como sub-secciones por debajo de la app. Si el ElementType aún no está importado,
+        // AddSynTravelShell sale no-op con grace y el home conserva el hero + sub-secciones.
+        AddSynTravelShell(b, "/api/travel",
+            "Reserva tu próximo viaje",
+            "Vuelos, hoteles y paquetes en un solo lugar. Busca, compara y reserva en minutos.");
+
         AddHero(b, "Reservas y citas, sin fricción",
             "Tu agenda en línea, disponible 24/7",
             "<p>Una plataforma de reservas enterprise sobre el mismo motor: catálogo de servicios, calendario en tiempo real y confirmación automática. Tus clientes reservan en minutos; tu equipo gestiona en un solo lugar.</p>",

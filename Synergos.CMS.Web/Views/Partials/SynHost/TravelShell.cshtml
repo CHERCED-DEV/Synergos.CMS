@@ -1,0 +1,22 @@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    // apiBase: default /api/travel si el editor no lo setea (NO mandatory).
+    var apiBase = Model.Value<string>("apiBase");
+    if (string.IsNullOrWhiteSpace(apiBase)) { apiBase = "/api/travel"; }
+
+    // config: JSON opcional autorado por el editor; el emitter lo fusiona sobre
+    // los props base (productos activos, defaults). Si está vacío o malformado,
+    // el componente Angular resuelve sus defaults (degrada con grace).
+    var config = Model.Value<string>("config");
+
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["apiBase"] = apiBase,
+        ["heading"] = Model.Value<string>("heading"),
+        ["subheading"] = Model.Value<string>("subheading"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("travelShell", props, config, System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
