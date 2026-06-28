@@ -2056,6 +2056,28 @@ public sealed class DevContentFiller
         });
     }
 
+    /// <summary>
+    /// Monta la app LMS de Educación (elementSynAcademy → &lt;synergos-academy&gt;)
+    /// como módulo Angular CDN. Calque de <see cref="AddSynBlogs"/>: el SynHost emite
+    /// el custom element con su config (apiBase/heading/subheading) y la CDN lo hidrata por
+    /// el alias kebab "academy". Sale no-op con grace si el ElementType aún no está importado
+    /// (el caller compone el resto del home), preservando lo existente (no-destructivo).
+    /// </summary>
+    private void AddSynAcademy(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    {
+        var key = _contentTypeService.Get("elementSynAcademy")?.Key;
+        if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-academy__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/academy
+            c.Set("heading", heading);        // Culture — título de la app
+            c.Set("subheading", subheading);  // Culture — subtítulo de la app
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
     // ─────────── Componentes SSR-only (no hidratan; render Razor nativo) ───────────
 
     /// <summary>Login de miembro (elementMemberLogin, SSR). CTA "inscribirse" para curso gated. redirectLink opcional.</summary>
@@ -2240,6 +2262,18 @@ public sealed class DevContentFiller
     private string BuildEducacionHome()
     {
         var b = new BlockGridJsonBuilder();
+
+        // OLA 4 — REFRAME (aditivo): el siteRoot Educación abre DIRECTO en la app LMS.
+        // Entrar a /educacion = la app de academia (catálogo, lecciones, inscripciones,
+        // progreso) montada como módulo Angular vía elementSynAcademy → <synergos-academy>.
+        // Lo explicativo (hero, cursos destacados, value props, testimonios, planes, FAQ, CTA)
+        // se conserva como sub-secciones por debajo de la app. Si el ElementType aún no está
+        // importado (o el bundle "academy" aún no está publicado en la CDN), AddSynAcademy sale
+        // no-op con grace y el home conserva intactas todas las sub-secciones de abajo (no-destructivo).
+        AddSynAcademy(b, "/api/academy",
+            "Aprende lo que el mercado pide",
+            "Una academia online: catálogo, lecciones, instructores e inscripciones — a tu ritmo.");
+
         AddHero(b, "Aprende lo que el mercado pide",
             "Cursos prácticos con certificación, a tu ritmo",
             "<p>Una academia online sobre el mismo motor: catálogo, lecciones, instructores e inscripciones. Aprende habilidades reales con proyectos guiados y obtén tu certificado.</p>",
