@@ -134,7 +134,10 @@ public sealed class FileSystemBundleRegistryClientTests : IDisposable
         Assert.Equal("primitive", d.Tier);
         Assert.Equal("angular", d.Framework);
         Assert.Equal("0.1.0", d.Version);
-        Assert.Equal("/cdn-bundles/synergos/column/angular/latest/main.js",
+        // PERF (commit 656a92b): el client emite la URL VERSIONADA (semver, immutable
+        // cache 1y) en vez del pointer mutable /latest/ (no-cache). El slot "latest"
+        // del registry resuelve a la versión 0.1.0 → la URL usa /0.1.0/.
+        Assert.Equal("/cdn-bundles/synergos/column/angular/0.1.0/main.js",
             d.MainEntryUri.ToString());
         Assert.NotNull(d.Integrity);
         Assert.StartsWith("sha384-", d.Integrity);
