@@ -1105,13 +1105,14 @@ public sealed class DevContentFiller
 
     /// <summary>
     /// Serializa el catálogo de dominios al JSON que consume &lt;synergos-app-launcher&gt;
-    /// (apps[] de objetos {slug, displayName, tagline, status, url, icon}). Misma fuente
-    /// que las cards estáticas → cero duplicación, cero hardcode en el componente.
+    /// (apps[] de objetos {id, name, tagline, status, url, icon} — el shape que espera
+    /// normalizeApps del componente). Misma fuente que las cards estáticas → cero
+    /// duplicación, cero hardcode en el componente.
     /// </summary>
     private static string BuildAppsCatalogJson(
         IEnumerable<(string Slug, string Name, string Tagline, string Status, string Url, string Icon)> apps)
         => "[" + string.Join(",", apps.Select(a =>
-            $"{{\"slug\":\"{Esc(a.Slug)}\",\"displayName\":\"{Esc(a.Name)}\",\"tagline\":\"{Esc(a.Tagline)}\",\"status\":\"{Esc(a.Status)}\",\"url\":\"{Esc(a.Url)}\",\"icon\":\"{Esc(a.Icon)}\"}}")) + "]";
+            $"{{\"id\":\"{Esc(a.Slug)}\",\"name\":\"{Esc(a.Name)}\",\"tagline\":\"{Esc(a.Tagline)}\",\"status\":\"{Esc(a.Status)}\",\"url\":\"{Esc(a.Url)}\",\"icon\":\"{Esc(a.Icon)}\"}}")) + "]";
 
     private static string Esc(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 

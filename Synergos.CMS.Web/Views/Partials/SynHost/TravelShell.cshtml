@@ -16,7 +16,7 @@
         ["heading"] = Model.Value<string>("heading"),
         ["subheading"] = Model.Value<string>("subheading"),
     };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("travelShell", props, config, System.Globalization.CultureInfo.CurrentUICulture);
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("travel-shell", props, config, System.Globalization.CultureInfo.CurrentUICulture);
     var result = await Emitter.EmitAsync(request);
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

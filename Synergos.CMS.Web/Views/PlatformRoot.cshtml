@@ -1,4 +1,4 @@
-@*
+﻿@*
     Template del Document Type `platformRoot` — shell genérico del entry point.
 
     El launcher (PS3) ya NO está hardcodeado: el contenido (cards de dominio)
@@ -43,6 +43,7 @@
     <link rel="stylesheet" href="~/css/syn-utilities.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/syn-primitives.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/syn-pages.css" asp-append-version="true" />
+    @await Html.PartialAsync("_SynHostRuntime")
 </head>
 <body class="syn-launcher">
     <div class="syn-launcher__main">
