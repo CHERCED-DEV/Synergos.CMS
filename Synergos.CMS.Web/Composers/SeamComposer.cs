@@ -218,6 +218,35 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IProductCatalogProvider, StubProductCatalogProvider>();
         services.AddSingleton<IShopOrderService, StubShopOrderService>();
 
+        // OLA 3 Blogs — red social (doc blogs-app-spec). Seams stub-first, aditivos
+        // (no tocan Booking/Travel/Shop). ADR 0002 (Application pura, sin Umbraco) +
+        // ADR 0075 (seam con tests canónicos). Reusa ICommentRepository EXISTENTE
+        // para los comentarios del post (BlogsController deriva un nodeId estable del
+        // id string del post) — no se crea otro seam de comentarios.
+        //   - IContentStream: ABSTRACCIÓN REUSABLE de feed/contenido (Actor-Verb-Object,
+        //     ActivityStreams 2.0). Genérica por Kind (post|article|lesson…) para que
+        //     EDUCACIÓN la reuse por polimorfismo (filtrando Kind=lesson) sin instanciar
+        //     Blogs ni copiar su schema. El stub compone ISocialGraphService (feed
+        //     "Siguiendo") + IReactionService (métricas) — DIP, no duplica estado.
+        //   - ISocialGraphService: grafo dirigido asimétrico (follow/unfollow idempotente,
+        //     followers/following + conteos). Estado en memoria del proceso.
+        //   - IReactionService: reacciones/likes por item (toggle idempotente por
+        //     (actor,objeto), conteos por tipo + estado-por-usuario). Estado en memoria.
+        //   - ISocialProfileProjection: Member → perfil social (handle/bio/banner) para
+        //     el header del perfil. Stub sobre el catálogo sembrado.
+        // Singletons — el estado social (grafo/reacciones/posts creados) vive en el
+        // proceso, igual que StubReactionService de healthcare/reservas. El stub de
+        // ContentStream pide el StubReactionService concreto para leer conteos O(1):
+        // registramos el concreto y lo exponemos bajo la interfaz (composición manual).
+        services.AddSingleton<StubReactionService>();
+        services.AddSingleton<IReactionService>(sp => sp.GetRequiredService<StubReactionService>());
+        services.AddSingleton<ISocialGraphService, StubSocialGraphService>();
+        services.AddSingleton<IContentStream>(sp =>
+            new StubContentStream(
+                sp.GetRequiredService<ISocialGraphService>(),
+                sp.GetRequiredService<StubReactionService>()));
+        services.AddSingleton<ISocialProfileProjection, StubSocialProfileProjection>();
+
         // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
         // sigue en su valor default bajo env != "Development". No detiene
         // el app; solo señala en el log para que el operador rote la clave
