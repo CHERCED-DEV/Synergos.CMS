@@ -14,7 +14,7 @@
         ["destinationLabel"] = Model.Value<string>("destinationLabel"),
         ["currency"] = currency,
     };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("bookingWizard", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("booking-wizard", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
     var result = await Emitter.EmitAsync(request);
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
