@@ -483,6 +483,27 @@ public sealed class SeamComposer : IComposer
         // antes del hard-delete del Member).
         services.AddSingleton<IHealthcareDataAnonymizer, FileSystemHealthcareDataAnonymizer>();
 
+        // OLA 5 Healthcare EHR-lite — dashboard clínico de DEMO (doc healthcare-app-spec).
+        // Capa ADITIVA distinta del núcleo PHI de producción de arriba (ADR 0098):
+        // sirve datos sembrados coherentes para la app Angular module-healthcare-ehr
+        // (/api/ehr → EhrController). Seams stub-first, lógica pura (ADR 0002), tipos
+        // prefijados por dominio (Ehr*/Clinical*/MedicalDoctor) para no colisionar con
+        // los records de IPatientRepository/IAppointmentScheduler en el namespace.
+        //   - IPatientRegistry / IDoctorDirectory: padrón + staff sembrados (memoria).
+        //   - IClinicalRecordService: historia + encuentros (SOAP). REUSA IAuditTrailWriter
+        //     (ADR 0037) — cada lectura/escritura de PHI emite un evento append-only.
+        //   - IClinicalPrescriptionService: recetas por paciente (RECORD-KEEPER), idem audit.
+        //   - IClinicalSchedulingService: agenda. REUSA el motor de reservas (cita = ítem
+        //     reservable polimórfico): HoldItemAsync → copago opcional vía IPaymentProvider
+        //     → ConfirmAsync (misma máquina Held→Confirmed de hoteles/aerolíneas).
+        // Singletons — el estado (citas creadas, encuentros, recetas) vive en el proceso,
+        // igual que el resto de stubs del motor.
+        services.AddSingleton<IPatientRegistry, StubPatientRegistry>();
+        services.AddSingleton<IDoctorDirectory, StubDoctorDirectory>();
+        services.AddSingleton<IClinicalRecordService, StubClinicalRecordService>();
+        services.AddSingleton<IClinicalPrescriptionService, StubClinicalPrescriptionService>();
+        services.AddSingleton<IClinicalSchedulingService, StubClinicalSchedulingService>();
+
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).
         // Singleton — solo depende de IOptions + IHostEnvironment + ILogger.
