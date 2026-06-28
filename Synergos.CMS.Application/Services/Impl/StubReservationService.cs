@@ -87,6 +87,49 @@ public sealed class StubReservationService : IReservationService
         return Task.FromResult(reservation);
     }
 
+    public Task<Reservation> HoldItemAsync(TravelItemReservationRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (string.IsNullOrWhiteSpace(request.ProductRef))
+        {
+            throw new ArgumentException("La referencia del producto (offerId) es obligatoria.", nameof(request));
+        }
+        if (request.TotalPrice <= 0m)
+        {
+            throw new ArgumentException("El total de la reserva debe ser mayor a cero.", nameof(request));
+        }
+        if (string.IsNullOrWhiteSpace(request.Currency))
+        {
+            throw new ArgumentException("La moneda es obligatoria.", nameof(request));
+        }
+
+        // Generaliza el hold hotel a un ítem polimórfico: los campos hotel-only
+        // (RoomType/RatePlan, CheckIn/CheckOut, ocupación) no aplican a vuelo/auto,
+        // así que se dejan como placeholders neutros y la identidad del producto
+        // viaja en ProductType/ProductRef/ProductLabel. El resto del ciclo de vida
+        // (Confirm/Cancel/Get/ExpireStaleHolds) es común — opera por id, no por forma.
+        var id = $"resv_{Guid.NewGuid():N}";
+        var today = DateOnly.FromDateTime(_now().UtcDateTime);
+        var reservation = new Reservation(
+            id,
+            ReservationStatus.Held,
+            RoomTypeCode: request.ProductRef,
+            RatePlanCode: request.ProductType.ToString(),
+            CheckIn: today,
+            CheckOut: today.AddDays(1),
+            GuestName: request.GuestName,
+            GuestEmail: request.GuestEmail,
+            TotalPrice: request.TotalPrice,
+            Currency: request.Currency,
+            PaymentSessionId: null,
+            ExpiresAt: _now() + _holdWindow,
+            ProductType: request.ProductType,
+            ProductRef: request.ProductRef,
+            ProductLabel: request.ProductLabel);
+        _reservations[id] = reservation;
+        return Task.FromResult(reservation);
+    }
+
     public Task<Reservation> ConfirmAsync(string reservationId, string paymentSessionId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(reservationId) || !_reservations.TryGetValue(reservationId, out var current))

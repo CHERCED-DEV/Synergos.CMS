@@ -36,6 +36,43 @@ public sealed record ReservationRequest(
     string Currency);
 
 /// <summary>
+/// Tipo de producto reservable del carrito de viaje multi-producto. El motor es
+/// polimórfico sobre esto: cada ítem (vuelo/hotel/auto/traslado) se aparta como
+/// una reserva, todas se agrupan bajo una sola sesión de pago.
+/// </summary>
+public enum TravelProductType
+{
+    /// <summary>Habitación de hotel (Room Type × Rate Plan).</summary>
+    Hotel,
+    /// <summary>Vuelo (itinerario × familia tarifaria).</summary>
+    Flight,
+    /// <summary>Alquiler de auto (categoría × proveedor).</summary>
+    Car,
+    /// <summary>Traslado (aeropuerto ↔ hotel).</summary>
+    Transfer,
+}
+
+/// <summary>
+/// Solicitud GENÉRICA para apartar un ítem heterogéneo del carrito de viaje
+/// (vuelo/hotel/auto/traslado). Generaliza <see cref="ReservationRequest"/>
+/// (que es la forma hotel) a un ítem polimórfico: identifica el producto por
+/// <see cref="ProductType"/> + <see cref="ProductRef"/> (offerId/código del
+/// proveedor) + una etiqueta human-facing + total a cobrar. La especialización
+/// (room/rate, fare, categoría de auto) viaja como <see cref="ProductRef"/>; el
+/// motor de pago solo necesita total + descripción. Lo arma la sesión de
+/// carrito desde la <c>TravelCartItem</c> elegida, sin acoplar el motor a la
+/// forma de ningún producto. (Doc booking-app-spec §4 — <c>ITravelProductProvider</c>.)
+/// </summary>
+public sealed record TravelItemReservationRequest(
+    TravelProductType ProductType,
+    string ProductRef,
+    string ProductLabel,
+    string GuestName,
+    string GuestEmail,
+    decimal TotalPrice,
+    string Currency);
+
+/// <summary>
 /// Estado de una reserva. <see cref="PaymentSessionId"/> queda poblado al
 /// confirmar (liga la reserva con la sesión del <see cref="IPaymentProvider"/>).
 /// <see cref="ExpiresAt"/> marca el límite del hold: si se confirma después de
@@ -54,7 +91,10 @@ public sealed record Reservation(
     decimal TotalPrice,
     string Currency,
     string? PaymentSessionId = null,
-    DateTimeOffset? ExpiresAt = null);
+    DateTimeOffset? ExpiresAt = null,
+    TravelProductType ProductType = TravelProductType.Hotel,
+    string? ProductRef = null,
+    string? ProductLabel = null);
 
 /// <summary>
 /// Servicio de reservas del vertical Hoteles. Es la pieza del MOTOR que
@@ -74,6 +114,18 @@ public interface IReservationService
 {
     /// <summary>Aparta una reserva (estado <see cref="ReservationStatus.Held"/>).</summary>
     Task<Reservation> HoldAsync(ReservationRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Aparta un ítem GENÉRICO del carrito de viaje (vuelo/hotel/auto/traslado)
+    /// como una reserva <see cref="ReservationStatus.Held"/>. Es la vía
+    /// polimórfica que usa la sesión de carrito multi-producto
+    /// (<c>ITravelCartService</c>) para apartar ítems heterogéneos bajo una sola
+    /// transacción, sin acoplar el motor a la forma hotel de
+    /// <see cref="HoldAsync(ReservationRequest, CancellationToken)"/> (que sigue
+    /// intacta para el flujo Hoteles). El resto del ciclo de vida (Confirm /
+    /// Cancel / Get / ExpireStaleHolds) es común a ambos tipos de hold.
+    /// </summary>
+    Task<Reservation> HoldItemAsync(TravelItemReservationRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Confirma una reserva apartada ligándola a la sesión de pago capturada.

@@ -183,6 +183,23 @@ public sealed class SeamComposer : IComposer
         // Singleton — stateless, catálogo estático. ADR 0002 (Application pura).
         services.AddSingleton<IFlightAvailabilityProvider, StubFlightAvailabilityProvider>();
 
+        // OLA 1 Booking — motor transaccional multi-producto (doc booking-app-spec).
+        // Tercer producto del carrito de viaje: autos. Seam stub-first calcando
+        // IFlightAvailabilityProvider. StubCarRentalProvider (Application, puro/
+        // determinista) sirve un catálogo sembrado (categorías SIPP × rentadoras)
+        // para que la búsqueda corra end-to-end; el adapter real (agregador de
+        // rentadoras) se enchufa sin tocar el motor. Singleton — stateless.
+        services.AddSingleton<ICarRentalProvider, StubCarRentalProvider>();
+
+        // OLA 1 Booking — carrito de viaje multi-producto: toma N ítems
+        // heterogéneos (hotel|vuelo|auto), aparta CADA uno como reserva
+        // (IReservationService.HoldItemAsync, vía polimórfica aditiva que NO toca
+        // el flujo hotel) y abre UNA sola sesión de pago (IPaymentProvider) por el
+        // total. ConfirmAsync captura el pago y confirma todas las reservas.
+        // Idempotente. Singleton — el estado del carrito (orderRef → reservas +
+        // sesión) vive en memoria del proceso, igual que el StubReservationService.
+        services.AddSingleton<ITravelCartService, TravelCartService>();
+
         // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
         // sigue en su valor default bajo env != "Development". No detiene
         // el app; solo señala en el log para que el operador rote la clave
