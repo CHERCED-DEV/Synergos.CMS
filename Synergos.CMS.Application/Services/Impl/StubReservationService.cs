@@ -19,7 +19,35 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// </remarks>
 public sealed class StubReservationService : IReservationService
 {
+    /// <summary>
+    /// Ventana de hold por defecto: 15 min para completar checkout/pago antes
+    /// de que el cupo se libere automáticamente. Aprendizaje de NS.Booking (doc 17).
+    /// </summary>
+    public static readonly TimeSpan DefaultHoldWindow = TimeSpan.FromMinutes(15);
+
     private readonly ConcurrentDictionary<string, Reservation> _reservations = new(StringComparer.Ordinal);
+    private readonly TimeSpan _holdWindow;
+    private readonly Func<DateTimeOffset> _now;
+
+    /// <summary>
+    /// Default ctor — hold window de 15 min y reloj real (<see cref="DateTimeOffset.UtcNow"/>).
+    /// </summary>
+    public StubReservationService()
+        : this(DefaultHoldWindow, null)
+    {
+    }
+
+    /// <summary>
+    /// Ctor configurable: <paramref name="holdWindow"/> para ajustar la ventana
+    /// del hold (≤ 0 cae al default) y <paramref name="now"/> como time source
+    /// inyectable para determinismo en tests (ADR 0002: Application sin Umbraco,
+    /// time source simple en vez de un clock framework). Null = reloj real.
+    /// </summary>
+    public StubReservationService(TimeSpan holdWindow, Func<DateTimeOffset>? now)
+    {
+        _holdWindow = holdWindow > TimeSpan.Zero ? holdWindow : DefaultHoldWindow;
+        _now = now ?? (() => DateTimeOffset.UtcNow);
+    }
 
     public Task<Reservation> HoldAsync(ReservationRequest request, CancellationToken cancellationToken = default)
     {
@@ -53,7 +81,8 @@ public sealed class StubReservationService : IReservationService
             request.GuestEmail,
             request.TotalPrice,
             request.Currency,
-            PaymentSessionId: null);
+            PaymentSessionId: null,
+            ExpiresAt: _now() + _holdWindow);
         _reservations[id] = reservation;
         return Task.FromResult(reservation);
     }
@@ -68,12 +97,26 @@ public sealed class StubReservationService : IReservationService
         {
             throw new InvalidOperationException("No se puede confirmar una reserva cancelada.");
         }
+        if (current.Status == ReservationStatus.Expired)
+        {
+            throw new InvalidOperationException("No se puede confirmar una reserva con el hold vencido.");
+        }
 
         // Idempotente: si ya está Confirmed, devuelve el mismo estado (sin
         // sobreescribir el PaymentSessionId original ni duplicar efecto).
         if (current.Status == ReservationStatus.Confirmed)
         {
             return Task.FromResult(current);
+        }
+
+        // Hold vencido (Held pero now > ExpiresAt): la confirmación llega tarde,
+        // el cupo ya no está garantizado. La marca Expired in-line para que un
+        // GetAsync posterior lo refleje, y rechaza la confirmación. El scanner
+        // de fondo también la habría barrido, pero no dependemos de su timing.
+        if (current.ExpiresAt is { } expiresAt && _now() > expiresAt)
+        {
+            _reservations[reservationId] = current with { Status = ReservationStatus.Expired };
+            throw new InvalidOperationException("El hold de la reserva venció antes de confirmar.");
         }
 
         var confirmed = current with { Status = ReservationStatus.Confirmed, PaymentSessionId = paymentSessionId };
@@ -101,4 +144,27 @@ public sealed class StubReservationService : IReservationService
 
     public Task<Reservation?> GetAsync(string reservationId, CancellationToken cancellationToken = default)
         => Task.FromResult(_reservations.TryGetValue(reservationId ?? string.Empty, out var r) ? r : null);
+
+    public Task<int> ExpireStaleHoldsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = _now();
+        var expired = 0;
+        foreach (var kvp in _reservations)
+        {
+            var current = kvp.Value;
+            if (current.Status != ReservationStatus.Held
+                || current.ExpiresAt is not { } expiresAt
+                || now <= expiresAt)
+            {
+                continue;
+            }
+            // TryUpdate: solo transiciona si sigue siendo el mismo Held (evita
+            // pisar una confirmación/cancelación que entró en paralelo). Idempotente.
+            if (_reservations.TryUpdate(kvp.Key, current with { Status = ReservationStatus.Expired }, current))
+            {
+                expired++;
+            }
+        }
+        return Task.FromResult(expired);
+    }
 }

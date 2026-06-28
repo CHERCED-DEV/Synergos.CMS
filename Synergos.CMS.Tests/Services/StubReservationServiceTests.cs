@@ -75,4 +75,45 @@ public class StubReservationServiceTests
         // Conserva la sesión original — no la sobreescribe en la 2ª confirmación.
         Assert.Equal("stub_session_1", second.PaymentSessionId);
     }
+
+    // ── Hold-timeout + auto-cancel (aprendizaje NS.Booking, doc 17) ──
+
+    [Fact] // hold setea ExpiresAt = now + holdWindow
+    public async Task Hold_SetsExpiresAt()
+    {
+        var now = new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.Zero);
+        var svc = new StubReservationService(TimeSpan.FromMinutes(15), () => now);
+        var held = await svc.HoldAsync(Req());
+        Assert.Equal(now + TimeSpan.FromMinutes(15), held.ExpiresAt);
+    }
+
+    [Fact] // confirmar tras vencer falla y deja la reserva Expired
+    public async Task Confirm_AfterExpiry_FailsAndExpires()
+    {
+        var clock = new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.Zero);
+        var svc = new StubReservationService(TimeSpan.FromMinutes(15), () => clock);
+        var held = await svc.HoldAsync(Req());
+        clock = clock.AddMinutes(20); // pasa la ventana del hold
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.ConfirmAsync(held.Id, "s"));
+        Assert.Equal(ReservationStatus.Expired, (await svc.GetAsync(held.Id))!.Status);
+    }
+
+    [Fact] // el scanner expira solo los Held vencidos (no toca vigentes ni confirmados)
+    public async Task ExpireStaleHolds_ReleasesExpiredOnly()
+    {
+        var clock = new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.Zero);
+        var svc = new StubReservationService(TimeSpan.FromMinutes(15), () => clock);
+        var stale = await svc.HoldAsync(Req());
+        var confirmed = await svc.HoldAsync(Req());
+        await svc.ConfirmAsync(confirmed.Id, "s");
+        clock = clock.AddMinutes(20);
+        var fresh = await svc.HoldAsync(Req()); // creado a las 12:20 → vence 12:35
+
+        var expired = await svc.ExpireStaleHoldsAsync();
+
+        Assert.Equal(1, expired); // solo el stale
+        Assert.Equal(ReservationStatus.Expired, (await svc.GetAsync(stale.Id))!.Status);
+        Assert.Equal(ReservationStatus.Confirmed, (await svc.GetAsync(confirmed.Id))!.Status);
+        Assert.Equal(ReservationStatus.Held, (await svc.GetAsync(fresh.Id))!.Status);
+    }
 }

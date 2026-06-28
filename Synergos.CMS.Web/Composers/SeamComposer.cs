@@ -168,6 +168,10 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IReservationService, StubReservationService>();
         services.AddSingleton<ICancellationPolicyEvaluator, StubCancellationPolicyEvaluator>();
 
+        // Auto-cancel de holds vencidos (aprendizaje NS.Booking, doc 17): barre
+        // cada ~2 min los Held cuyo ExpiresAt pasó y libera el cupo (→ Expired).
+        services.AddHostedService<HoldExpirationScannerHostedService>();
+
         // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
         // sigue en su valor default bajo env != "Development". No detiene
         // el app; solo señala en el log para que el operador rote la clave
