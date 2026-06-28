@@ -1,0 +1,18 @@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    // apps: JSON con la lista de dominios (slug, displayName, tagline, status, url).
+    // Si el editor no lo setea, el componente Angular resuelve un catálogo vacío
+    // (degrada con grace; no rompe el render).
+    var apps = Model.Value<string>("apps");
+
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["apps"] = apps,
+        ["heading"] = Model.Value<string>("heading"),
+        ["subheading"] = Model.Value<string>("subheading"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("appLauncher", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

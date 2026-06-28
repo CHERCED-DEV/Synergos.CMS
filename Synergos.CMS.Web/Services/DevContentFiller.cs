@@ -316,6 +316,13 @@ public sealed class DevContentFiller
             (VerticalCount, "verticales de negocio"),
             ("1", "plataforma, multi-dominio"));
 
+        // Hub explicador: el app-launcher presenta y LANZA cada dominio (sección/galería
+        // por dominio: qué es + CTA deep-link a la app real). Aditivo + con grace: si el
+        // ElementType aún no está importado, el bloque se omite y el home queda intacto.
+        // Mismo catálogo que el launcher de la plataforma (DomainAppCatalog).
+        AddSynAppLauncher(b, BuildAppsCatalogJson(DomainAppCatalog(BrandName)),
+            "Explora las apps", "Un motor, mil productos: entra a cualquier dominio y míralo en vivo.");
+
         AddLogoCloud(b, "Confían en la plataforma",
             ("Andina", "#0A2540", "#0F58A7"),
             ("Nimbus", "#143C8C", "#5B7CFA"),
@@ -1011,7 +1018,19 @@ public sealed class DevContentFiller
         var site = FindSiteRoot();
         var entidadName = site?.GetValue<string>("siteDisplayName", Culture) is { Length: > 0 } dn ? dn : BrandName;
 
+        // Catálogo de dominios — fuente única de verdad (DomainAppCatalog). Alimenta TANTO
+        // el módulo Angular (elementSynAppLauncher, vía apps[] JSON) COMO las cards
+        // estáticas (grace fallback). Reusado por el home del hub (BuildHome).
+        var apps = DomainAppCatalog(entidadName);
+
         var g = new BlockGridJsonBuilder();
+
+        // Aditivo + no-destructivo: el módulo Angular se monta PRIMERO (si su ElementType
+        // está importado); las cards estáticas de abajo quedan como grace fallback y como
+        // experiencia base si el bundle CDN aún no hidrata. Ambos consumen el mismo catálogo.
+        var appsJson = BuildAppsCatalogJson(apps);
+        AddSynAppLauncher(g, appsJson, "Explora las apps", "Un motor, mil productos: entra a cualquier dominio y míralo en vivo.");
+
         var section = g.AddTopLevelBlock(_sectionKey);
         section.Set("cssClass", "syn-launcher__grid").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
 
@@ -1025,28 +1044,12 @@ public sealed class DevContentFiller
                 .Set("cssClass", $"syn-launcher__card {iconClass} {statusClass}")
                 .ApplyDefaults(_defaults.DefaultsFor(cardKey.Value)));
 
-        AddCard(entidadName, "<p>Marca, identidad y páginas institucionales — el sitio editorial completo.</p>",
-            "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar al sitio →", "/synergos");
-        // P2-8: los verticales Blogs/Tienda ya existen (P1-1) → cards "live" a su siteRoot.
-        AddCard("Blogs", "<p>Publicaciones, artículos y contenido editorial sobre el mismo motor.</p>",
-            "syn-launcher__card--document", "syn-launcher__card--live", "Entrar a Blogs →", "/blogs");
-        AddCard("Tienda", "<p>Catálogo, productos y checkout sobre la misma plataforma.</p>",
-            "syn-launcher__card--bag", "syn-launcher__card--live", "Entrar a la Tienda →", "/tienda");
-        AddCard("Healthcare", "<p>Historia clínica, agenda y recetas — un vertical clínico completo sobre el mismo motor.</p>",
-            "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar a Healthcare →", "/healthcare");
-        // OLA 4.6 — cards composables de los verticales #7/#8 (mismo patrón, sin hardcode).
-        AddCard("Educación", "<p>Cursos, catálogo y inscripciones — una academia completa sobre el mismo motor.</p>",
-            "syn-launcher__card--document", "syn-launcher__card--live", "Entrar a Educación →", "/educacion");
-        AddCard("Booking", "<p>Reservas y citas: catálogo de servicios, calendario y registro multipaso — una plataforma de reservas completa sobre el mismo motor.</p>",
-            "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar a Booking →", "/booking");
-        // OLA 4.7 — cards composables de los verticales #9/#10 (mismo patrón, sin hardcode).
-        AddCard("Eventos", "<p>Registro premium de eventos: cartelera, cuenta regresiva, agenda y tickets — una plataforma de eventos completa sobre el mismo motor.</p>",
-            "syn-launcher__card--document", "syn-launcher__card--live", "Entrar a Eventos →", "/eventos");
-        AddCard("Propiedades", "<p>Inmobiliario premium: listado filtrable, galería con lightbox y fichas de propiedad — un portal de propiedades completo sobre el mismo motor.</p>",
-            "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar a Propiedades →", "/propiedades");
-        // OLA 4.8 — card composable del vertical #11 Hoteles (mismo patrón, sin hardcode).
-        AddCard("Hoteles", "<p>Reservas de alojamiento: catálogo de hoteles, galería y asistente de reserva multipaso — una plataforma de booking de hoteles completa sobre el mismo motor.</p>",
-            "syn-launcher__card--grid", "syn-launcher__card--live", "Entrar a Hoteles →", "/hoteles");
+        foreach (var a in apps)
+        {
+            AddCard(a.Name, $"<p>{a.Tagline}</p>",
+                $"syn-launcher__card--{a.Icon}", $"syn-launcher__card--{a.Status}",
+                $"Entrar a {a.Name} →", a.Url);
+        }
 
         pr.SetCultureName(BrandName, Culture);   // umbrella = SynergosLabs (el hero lee Model.Name)
         // P2-3: identidad propia del launcher (compBranding + compPageTheme) — gestionable
@@ -1076,6 +1079,39 @@ public sealed class DevContentFiller
 
     private static string LinkJson(string name, string url)
         => $"[{{\"name\":\"{Esc(name)}\",\"url\":\"{Esc(url)}\",\"target\":\"\",\"udi\":null,\"icon\":null,\"queryString\":null}}]";
+
+    /// <summary>
+    /// Catálogo de dominios del hub (fuente única de verdad). Cada entrada = una app real
+    /// que vive en su siteRoot; el hub la presenta y la lanza (deep-link). Reusado por el
+    /// launcher de la plataforma (cards + módulo Angular) y por el home del hub. El nombre
+    /// de la Entidad se inyecta (lee siteDisplayName) para no hardcodear la marca.
+    /// </summary>
+    private static (string Slug, string Name, string Tagline, string Status, string Url, string Icon)[] DomainAppCatalog(string entidadName) => new[]
+    {
+        ("entidad", entidadName, "Marca, identidad y páginas institucionales — el sitio editorial completo.", "live", "/synergos", "grid"),
+        // P2-8: los verticales Blogs/Tienda ya existen (P1-1) → cards "live" a su siteRoot.
+        ("blogs", "Blogs", "Publicaciones, artículos y contenido editorial sobre el mismo motor.", "live", "/blogs", "document"),
+        ("tienda", "Tienda", "Catálogo, productos y checkout sobre la misma plataforma.", "live", "/tienda", "bag"),
+        ("healthcare", "Healthcare", "Historia clínica, agenda y recetas — un vertical clínico completo sobre el mismo motor.", "live", "/healthcare", "grid"),
+        // OLA 4.6 — verticales #7/#8.
+        ("educacion", "Educación", "Cursos, catálogo y inscripciones — una academia completa sobre el mismo motor.", "live", "/educacion", "document"),
+        ("booking", "Booking", "Reservas y citas: catálogo de servicios, calendario y registro multipaso — una plataforma de reservas completa sobre el mismo motor.", "live", "/booking", "grid"),
+        // OLA 4.7 — verticales #9/#10.
+        ("eventos", "Eventos", "Registro premium de eventos: cartelera, cuenta regresiva, agenda y tickets — una plataforma de eventos completa sobre el mismo motor.", "live", "/eventos", "document"),
+        ("propiedades", "Propiedades", "Inmobiliario premium: listado filtrable, galería con lightbox y fichas de propiedad — un portal de propiedades completo sobre el mismo motor.", "live", "/propiedades", "grid"),
+        // OLA 4.8 — vertical #11 Hoteles.
+        ("hoteles", "Hoteles", "Reservas de alojamiento: catálogo de hoteles, galería y asistente de reserva multipaso — una plataforma de booking de hoteles completa sobre el mismo motor.", "live", "/hoteles", "grid"),
+    };
+
+    /// <summary>
+    /// Serializa el catálogo de dominios al JSON que consume &lt;synergos-app-launcher&gt;
+    /// (apps[] de objetos {slug, displayName, tagline, status, url, icon}). Misma fuente
+    /// que las cards estáticas → cero duplicación, cero hardcode en el componente.
+    /// </summary>
+    private static string BuildAppsCatalogJson(
+        IEnumerable<(string Slug, string Name, string Tagline, string Status, string Url, string Icon)> apps)
+        => "[" + string.Join(",", apps.Select(a =>
+            $"{{\"slug\":\"{Esc(a.Slug)}\",\"displayName\":\"{Esc(a.Name)}\",\"tagline\":\"{Esc(a.Tagline)}\",\"status\":\"{Esc(a.Status)}\",\"url\":\"{Esc(a.Url)}\",\"icon\":\"{Esc(a.Icon)}\"}}")) + "]";
 
     private static string Esc(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
@@ -1903,6 +1939,29 @@ public sealed class DevContentFiller
             c.Set("apiBase", apiBase);                  // Nothing (config compartida) — base de /api/booking
             c.Set("destinationLabel", destinationLabel); // Culture — nombre del alojamiento
             c.Set("currency", currency);                // Nothing (config compartida) — ISO 3 letras
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
+    /// <summary>
+    /// App launcher / galería de dominios (elementSynAppLauncher): el organismo del hub
+    /// que presenta y lanza cada app de dominio. El SynHost lo emite como
+    /// &lt;synergos-app-launcher config='...'&gt; y la CDN hidrata; la lógica (filtros,
+    /// estado, embed-vs-deeplink) vive en el módulo Angular. Config end-to-end desde el
+    /// CMS: apps[] (JSON) + heading/subheading. Sale no-op si el ElementType aún no está
+    /// importado (el caller degrada con grace al grid de cards estáticas existente).
+    /// </summary>
+    private void AddSynAppLauncher(BlockGridJsonBuilder b, string appsJson, string heading, string subheading)
+    {
+        var key = _contentTypeService.Get("elementSynAppLauncher")?.Key;
+        if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el fallback)
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-launcher__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("apps", appsJson);          // Nothing (config compartida) — catálogo JSON de dominios
+            c.Set("heading", heading);        // Culture — título de la galería
+            c.Set("subheading", subheading);  // Culture — subtítulo de la galería
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
         });
     }
