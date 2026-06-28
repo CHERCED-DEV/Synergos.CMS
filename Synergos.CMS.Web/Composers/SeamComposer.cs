@@ -172,6 +172,17 @@ public sealed class SeamComposer : IComposer
         // cada ~2 min los Held cuyo ExpiresAt pasó y libera el cupo (→ Expired).
         services.AddHostedService<HoldExpirationScannerHostedService>();
 
+        // Motor de vuelos (vertical Aerolíneas, doc 18) — seam stub-first
+        // calcando IRoomAvailabilityProvider de Hoteles. StubFlightAvailability
+        // Provider (Application, puro/determinista) sirve un catálogo sembrado
+        // en memoria (rutas BOG-MDE/CTG/MIA × itinerarios × familias tarifarias)
+        // para que la búsqueda corra end-to-end en demo; el adapter real
+        // (GDS / NDC con cotización en vivo) se enchufa sin tocar el motor.
+        // El flujo hold/pay/confirm reusará IReservationService/IPaymentProvider
+        // (generalizar ReservationRequest hotel→genérico es follow-up).
+        // Singleton — stateless, catálogo estático. ADR 0002 (Application pura).
+        services.AddSingleton<IFlightAvailabilityProvider, StubFlightAvailabilityProvider>();
+
         // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
         // sigue en su valor default bajo env != "Development". No detiene
         // el app; solo señala en el log para que el operador rote la clave
