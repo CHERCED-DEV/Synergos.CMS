@@ -534,6 +534,38 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<StubEventTicketingService>(),
                 sp.GetRequiredService<IEventCatalogProvider>()));
 
+        // OLA 7 Propiedades — portal inmobiliario (doc propiedades-app-spec).
+        // Cuatro seams stub-first, aditivos (no tocan Booking/Travel/Shop/Blogs/
+        // Educación/Healthcare/Eventos). ADR 0002 (Application pura, sin Umbraco) +
+        // ADR 0075 (tests canónicos). Caso especial del marco: la transacción central
+        // NO es un pago — es agendar visita + generar lead. REUSA el motor (no lo
+        // reinventa) con el paso de pago DESACTIVADO, validando su generalidad.
+        // Tipos prefijados Property*/Visit*/Mortgage*/Lead* para no colisionar.
+        //   - IPropertyCatalogProvider: search facetado (texto/tipo/precio/hab/
+        //     ubicación → listados + facetas) + ficha (specs + galería + geo). Stub:
+        //     catálogo sembrado con geo (varias ciudades CO × tipos). Adapter real:
+        //     Examine sobre propertyListing o API MLS. Singleton — stateless.
+        //   - IVisitSchedulingService: agendar visita = recurso reservable
+        //     POLIMÓRFICO (igual que habitación/asiento/médico). BookAsync llama
+        //     IReservationService.HoldItemAsync → ConfirmAsync con PaymentSessionId
+        //     neutro "visit-free" (la visita es gratis): demuestra el flujo
+        //     seleccionar→[pagar]→confirmar con el paso de pago OFF. Idempotente por
+        //     slot. Singleton — el estado de slots apartados vive en el proceso.
+        //   - IMortgageCalculator: amortización francesa pura/determinista (sin
+        //     estado). Singleton.
+        //   - ILeadCaptureService: captura el lead (contactar agente). REUSA
+        //     IAuditTrailWriter (ADR 0037) + IAnalyticsTracker (ADR 0067) — no crea
+        //     seams nuevos. Singleton — el estado de leads vive en el proceso.
+        services.AddSingleton<IPropertyCatalogProvider, StubPropertyCatalogProvider>();
+        services.AddSingleton<IVisitSchedulingService>(sp =>
+            new StubVisitSchedulingService(sp.GetRequiredService<IReservationService>()));
+        services.AddSingleton<IMortgageCalculator, StubMortgageCalculator>();
+        services.AddSingleton<ILeadCaptureService>(sp =>
+            new StubLeadCaptureService(
+                sp.GetRequiredService<IAuditTrailWriter>(),
+                sp.GetRequiredService<IAnalyticsTracker>(),
+                null));
+
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).
         // Singleton — solo depende de IOptions + IHostEnvironment + ILogger.
