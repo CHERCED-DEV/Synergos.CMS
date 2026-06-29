@@ -504,6 +504,36 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IClinicalPrescriptionService, StubClinicalPrescriptionService>();
         services.AddSingleton<IClinicalSchedulingService, StubClinicalSchedulingService>();
 
+        // OLA 6 Eventos — plataforma de eventos enterprise (doc eventos-app-spec).
+        // Tres seams stub-first, aditivos (no tocan Booking/Travel/Shop/Blogs/Educación/
+        // Healthcare). ADR 0002 (Application pura, sin Umbraco) + ADR 0075 (tests
+        // canónicos). REUSA el motor (no reinventa): cada asiento/cupo es un recurso
+        // reservable polimórfico (Event×Tier×Seat), apartado vía IReservationService.
+        // HoldItemAsync con UNA sesión IPaymentProvider — igual que TravelCartService/
+        // StubShopOrderService. Tipos prefijados Event*/Ticket* para no colisionar.
+        //   - IEventCatalogProvider: search (texto) + ficha (tiers + seat-map JSON
+        //     compatible con synergos-seat-map). Stub: catálogo sembrado (4 eventos,
+        //     mezcla general/reserved). Adapter real: Examine sobre eventPage / ticketing.
+        //   - IEventTicketingService: checkout (resuelve precio/aforo real → HoldItemAsync
+        //     por unidad → 1 PaymentSession por el total) + confirm (captura + e-tickets
+        //     QR determinista). Idempotente por orderRef. Singleton — el estado (órdenes
+        //     + tickets) vive en el proceso, igual que el resto de stubs del motor.
+        //   - IEventManagementService: dashboard (asistentes/aforo/vendidos) + check-in
+        //     idempotente. NO duplica estado: lee del StubEventTicketingService concreto
+        //     por composición (DIP, mismo patrón que StubContentStream→StubReactionService),
+        //     por eso registramos el concreto y lo exponemos bajo la interfaz.
+        services.AddSingleton<IEventCatalogProvider, StubEventCatalogProvider>();
+        services.AddSingleton<StubEventTicketingService>(sp =>
+            new StubEventTicketingService(
+                sp.GetRequiredService<IEventCatalogProvider>(),
+                sp.GetRequiredService<IReservationService>(),
+                sp.GetRequiredService<IPaymentProvider>()));
+        services.AddSingleton<IEventTicketingService>(sp => sp.GetRequiredService<StubEventTicketingService>());
+        services.AddSingleton<IEventManagementService>(sp =>
+            new StubEventManagementService(
+                sp.GetRequiredService<StubEventTicketingService>(),
+                sp.GetRequiredService<IEventCatalogProvider>()));
+
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).
         // Singleton — solo depende de IOptions + IHostEnvironment + ILogger.
