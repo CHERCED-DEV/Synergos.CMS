@@ -2100,6 +2100,52 @@ public sealed class DevContentFiller
         });
     }
 
+    /// <summary>
+    /// Monta el portal inmobiliario demo de Propiedades (elementSynRealty → &lt;synergos-realty&gt;)
+    /// como módulo Angular CDN. Calque de <see cref="AddSynEhr"/>: el SynHost emite el custom
+    /// element con su config (apiBase/heading/subheading) y la CDN lo hidrata por el alias kebab
+    /// "realty". Sale no-op con grace si el ElementType aún no está importado (el caller compone
+    /// el resto del home), preservando lo existente (no-destructivo).
+    /// </summary>
+    private void AddSynRealty(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    {
+        var key = _contentTypeService.Get("elementSynRealty")?.Key;
+        if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-realty__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/realty
+            c.Set("heading", heading);        // Culture — título de la app
+            c.Set("subheading", subheading);  // Culture — subtítulo de la app
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
+    /// <summary>
+    /// Monta la app de Eventos demo (elementSynEventos → &lt;synergos-eventos&gt;) como
+    /// módulo Angular CDN. Calque de <see cref="AddSynEhr"/>: el SynHost emite el custom
+    /// element con su config (apiBase/heading/subheading/role) y la CDN lo hidrata por el
+    /// alias kebab "eventos". El <paramref name="role"/> distingue la cara (attendee=ticketing,
+    /// organizer=manager). Sale no-op con grace si el ElementType aún no está importado
+    /// (el caller compone el resto del home), preservando lo existente (no-destructivo).
+    /// </summary>
+    private void AddSynEventos(BlockGridJsonBuilder b, string apiBase, string heading, string subheading, string role)
+    {
+        var key = _contentTypeService.Get("elementSynEventos")?.Key;
+        if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-eventos__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/eventos
+            c.Set("heading", heading);        // Culture — título de la app
+            c.Set("subheading", subheading);  // Culture — subtítulo de la app
+            c.Set("role", role);              // Nothing — cara de la app (attendee/organizer)
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
     // ─────────── Componentes SSR-only (no hidratan; render Razor nativo) ───────────
 
     /// <summary>Login de miembro (elementMemberLogin, SSR). CTA "inscribirse" para curso gated. redirectLink opcional.</summary>
@@ -2806,6 +2852,20 @@ public sealed class DevContentFiller
     private string BuildEventosHome()
     {
         var b = new BlockGridJsonBuilder();
+
+        // OLA 6 — REFRAME (aditivo): el siteRoot Eventos abre DIRECTO en la app real.
+        // Entrar a /eventos = la plataforma de eventos demo (catálogo → ficha → tickets →
+        // check-in) montada como módulo Angular vía elementSynEventos → <synergos-eventos>,
+        // cara de asistente (role="attendee"). Lo explicativo (hero, eventos destacados,
+        // agenda, testimonios, FAQ, CTA) se conserva como sub-secciones por debajo de la app.
+        // Si el ElementType aún no está importado (o el bundle "eventos" aún no está publicado
+        // en la CDN), AddSynEventos sale no-op con grace y el home conserva intactas todas las
+        // sub-secciones de abajo (no-destructivo). NO toca el countdown gateado más abajo.
+        AddSynEventos(b, "/api/eventos",
+            "Vive los eventos que importan",
+            "Catálogo, tickets y check-in en vivo — la plataforma de eventos en una sola app.",
+            "attendee");
+
         AddHero(b, "Vive los eventos que importan",
             "Conferencias, talleres y experiencias premium en un solo lugar",
             "<p>Una plataforma de eventos sobre el mismo motor: cartelera, cuenta regresiva, agenda y tickets. Descubre el próximo gran evento y asegura tu cupo antes de que se agote.</p>",
@@ -3083,6 +3143,18 @@ public sealed class DevContentFiller
     private string BuildPropiedadesHome()
     {
         var b = new BlockGridJsonBuilder();
+
+        // OLA 7 — REFRAME (aditivo): el siteRoot Propiedades abre DIRECTO en la app inmobiliaria.
+        // Entrar a /propiedades = el portal inmobiliario (búsqueda lista↔mapa, ficha, agendar
+        // visita, calculadora de hipoteca) montado como módulo Angular vía elementSynRealty →
+        // <synergos-realty>. Lo explicativo (hero, destacadas, galería, value props, testimonios,
+        // CTA) se conserva como sub-secciones por debajo de la app. Si el ElementType aún no está
+        // importado (o el bundle "realty" aún no está publicado en la CDN), AddSynRealty sale
+        // no-op con grace y el home conserva intactas todas las sub-secciones de abajo (no-destructivo).
+        AddSynRealty(b, "/api/realty",
+            "Encuentra el lugar que estás buscando",
+            "El portal inmobiliario en vivo: busca en lista o mapa, abre la ficha, agenda una visita y calcula tu hipoteca.");
+
         AddHero(b, "Encuentra el lugar que estás buscando",
             "Propiedades premium con la mejor experiencia de búsqueda",
             "<p>Un portal inmobiliario sobre el mismo motor: listado filtrable, galerías inmersivas y fichas completas. Apartamentos, casas y espacios comerciales — todo en un solo lugar.</p>",
