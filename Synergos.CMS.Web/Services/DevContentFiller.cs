@@ -2078,6 +2078,28 @@ public sealed class DevContentFiller
         });
     }
 
+    /// <summary>
+    /// Monta el dashboard clínico demo de Healthcare (elementSynEhr → &lt;synergos-ehr&gt;)
+    /// como módulo Angular CDN. Calque de <see cref="AddSynAcademy"/>: el SynHost emite
+    /// el custom element con su config (apiBase/heading/subheading) y la CDN lo hidrata por
+    /// el alias kebab "ehr". Sale no-op con grace si el ElementType aún no está importado
+    /// (el caller compone el resto del home), preservando lo existente (no-destructivo).
+    /// </summary>
+    private void AddSynEhr(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    {
+        var key = _contentTypeService.Get("elementSynEhr")?.Key;
+        if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-ehr__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/ehr
+            c.Set("heading", heading);        // Culture — título de la app
+            c.Set("subheading", subheading);  // Culture — subtítulo de la app
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
     // ─────────── Componentes SSR-only (no hidratan; render Razor nativo) ───────────
 
     /// <summary>Login de miembro (elementMemberLogin, SSR). CTA "inscribirse" para curso gated. redirectLink opcional.</summary>
@@ -2196,6 +2218,18 @@ public sealed class DevContentFiller
     private string BuildHealthcareHome()
     {
         var b = new BlockGridJsonBuilder();
+
+        // OLA 5 — REFRAME (aditivo): el siteRoot Healthcare abre DIRECTO en el dashboard clínico.
+        // Entrar a /healthcare = la app EHR demo (pacientes, agenda, recetas, signos) montada como
+        // módulo Angular vía elementSynEhr → <synergos-ehr>. Lo explicativo (hero, aviso, features,
+        // testimonios, FAQ, intake de cita, CTA) se conserva como sub-secciones por debajo de la app.
+        // Si el ElementType aún no está importado (o el bundle "ehr" aún no está publicado en la CDN),
+        // AddSynEhr sale no-op con grace y el home conserva intactas todas las sub-secciones de abajo
+        // (no-destructivo). NO toca el vertical Healthcare de PRODUCCIÓN (ADR 0098, schema/PHI propio).
+        AddSynEhr(b, "/api/ehr",
+            "Tu consultorio, en orden",
+            "Historia clínica, agenda y recetas en un solo lugar — el dashboard clínico en vivo.");
+
         AddHero(b, "Tu consultorio, en orden",
             "Historia clínica, agenda y recetas en un solo lugar",
             "<p>SynergosLabs Healthcare reúne la historia de tus pacientes, la agenda de citas y las recetas — cifrado y con acceso auditado. Pedí una cita abajo o conocé la plataforma.</p>",
