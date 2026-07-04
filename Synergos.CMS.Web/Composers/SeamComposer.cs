@@ -566,6 +566,60 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IAnalyticsTracker>(),
                 null));
 
+        // +1 GOBIERNO — portal de trámites (doc gobierno-app-spec; rescate D7 doc 21).
+        // Seis seams stub-first, aditivos (no tocan los otros verticales). ADR 0002
+        // (Application pura, sin Umbraco) + ADR 0075 (tests canónicos). El objeto
+        // transaccional NO es una orden que cierra: es un EXPEDIENTE de larga vida con
+        // máquina de estados AUDITADA (radicado→en-revisión→subsanación→resuelto/
+        // rechazado) — cada transición es un evento append-only en IAuditTrailWriter
+        // (el diferenciador del dominio). REUSA el motor: la tasa es un pago OPCIONAL
+        // vía IPaymentProvider (trámite gratuito = paso de pago OFF, igual que la
+        // visita de Propiedades).
+        //   - ITramiteCatalogProvider: catálogo buscable (texto+categoría) + ficha con
+        //     formulario dinámico DATA-DRIVEN (campos tipo/label/required/opciones —
+        //     patrón GOV.UK task-list: cada trámite varía sin tocar el módulo). Stub:
+        //     5 trámites CO sembrados (gratuitos y con tasa). Adapter real: SUIT /
+        //     Content Delivery API. Singleton — stateless.
+        //   - IGovFeeCalculator: tasa pura/determinista (≤0 o desconocido = exento).
+        //   - IApplicationService (StubApplicationService): AGREGADO RAÍZ del
+        //     expediente — radicar valida el trámite + campos requeridos, calcula la
+        //     tasa, abre sesión de pago solo si cobra, y asienta el primer estado.
+        //     Fuente de verdad del estado; siembra expedientes en varios estados para
+        //     la demo del ciclo de vida. Registramos el concreto y lo exponemos bajo
+        //     la interfaz para que los hermanos compongan (DIP, mismo patrón
+        //     StubEventTicketingService).
+        //   - ICaseWorkflowService: máquina de estados (tabla de transiciones legales,
+        //     idempotente al re-transicionar al estado actual); CADA transición legal
+        //     → gov.case-transition append-only.
+        //   - ICaseTrackingProvider: expediente+timeline + bandeja por rol (ciudadano
+        //     ve los suyos por email / funcionario ve la cola). Solo LEE el agregado.
+        //   - IDocumentUploadService: valida tipo (PDF/JPG/PNG) + peso (≤10 MB), crea
+        //     refs accepted/rejected, adjunta solo las aceptadas + audita la subida.
+        // Singletons — el estado (expedientes) vive en memoria del proceso, igual que
+        // el resto de stubs del motor.
+        services.AddSingleton<ITramiteCatalogProvider, StubTramiteCatalogProvider>();
+        services.AddSingleton<IGovFeeCalculator, StubGovFeeCalculator>();
+        services.AddSingleton<StubApplicationService>(sp =>
+            new StubApplicationService(
+                sp.GetRequiredService<ITramiteCatalogProvider>(),
+                sp.GetRequiredService<IGovFeeCalculator>(),
+                sp.GetRequiredService<IPaymentProvider>(),
+                sp.GetRequiredService<IAuditTrailWriter>(),
+                null));
+        services.AddSingleton<IApplicationService>(sp => sp.GetRequiredService<StubApplicationService>());
+        services.AddSingleton<ICaseWorkflowService>(sp =>
+            new StubCaseWorkflowService(
+                sp.GetRequiredService<StubApplicationService>(),
+                sp.GetRequiredService<IAuditTrailWriter>(),
+                null));
+        services.AddSingleton<ICaseTrackingProvider>(sp =>
+            new StubCaseTrackingProvider(sp.GetRequiredService<StubApplicationService>()));
+        services.AddSingleton<IDocumentUploadService>(sp =>
+            new StubDocumentUploadService(
+                sp.GetRequiredService<StubApplicationService>(),
+                sp.GetRequiredService<IAuditTrailWriter>(),
+                null));
+
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).
         // Singleton — solo depende de IOptions + IHostEnvironment + ILogger.
