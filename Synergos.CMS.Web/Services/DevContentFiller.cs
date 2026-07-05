@@ -1235,6 +1235,13 @@ public sealed class DevContentFiller
         // localiza para sembrar sus páginas.
         SeedVertical(pr.Id, "Hoteles", "hoteles", "SynergosLabs Hoteles", "terraLux", "hoteles.synergos.local",
             BuildHotelesHome(), details);
+
+        // D7 (doc 21) — vertical #12 Gobierno: portal ciudadano de trámites. Reusa el tema
+        // EXISTENTE "scholar" (indigo institucional; no se crea tema nuevo — solo se
+        // referencia el literal). brandKey="gobierno" → FindVertical lo localiza (la
+        // vitrina F3 activa su CTA sola al existir). Entrar a /gobierno = la app.
+        SeedVertical(pr.Id, "Gobierno", "gobierno", "SynergosLabs Gobierno", "scholar", "gobierno.synergos.local",
+            BuildGobiernoHome(), details);
     }
 
     private void SeedVertical(int parentId, string name, string brandKey, string brandDisplayName,
@@ -2124,6 +2131,26 @@ public sealed class DevContentFiller
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/realty
             c.Set("heading", heading);        // Culture — título de la app
             c.Set("subheading", subheading);  // Culture — subtítulo de la app
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
+    /// <summary>
+    /// Monta la app de Gobierno demo (elementSynGov → &lt;synergos-gov&gt;) como bloque
+    /// principal del home del vertical. Grace: si el ElementType aún no está importado,
+    /// sale no-op y el caller compone el resto del home.
+    /// </summary>
+    private void AddSynGov(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    {
+        var key = _contentTypeService.Get("elementSynGov")?.Key;
+        if (key is null) { return; }   // schema aún sin importar → grace
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-gov__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/gov
+            c.Set("heading", heading);        // Culture — título del portal
+            c.Set("subheading", subheading);  // Culture — subtítulo del portal
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
         });
     }
@@ -3380,6 +3407,31 @@ public sealed class DevContentFiller
     // Home Hoteles: hero (propuesta + CTA "Reservar") + value props (feature-grid) + el
     // bloque booking-wizard embebido + testimonios + FAQ + CTA. Todo composable, con
     // fallback con grace si un ElementType CDN aún no está importado.
+    private string BuildGobiernoHome()
+    {
+        var b = new BlockGridJsonBuilder();
+
+        // Reframe apps-reales: entrar a /gobierno = la app (el portal ciudadano se monta
+        // PRIMERO). Grace: si elementSynGov no está importado, queda el home editorial.
+        AddSynGov(b, "/api/gov", "Tus trámites, sin filas",
+            "Radica, paga la tasa si aplica y sigue tu expediente por etapas — en lenguaje claro.");
+
+        AddHero(b, "Trámites del Estado, en lenguaje claro",
+            "Un solo lugar para radicar y hacer seguimiento",
+            "<p>Consulta los requisitos, radica tu solicitud con un formulario guiado, adjunta tus documentos y sigue tu expediente etapa por etapa hasta la resolución. Sin filas, sin vueltas.</p>",
+            "Gobierno Home Hero", "Hero del portal ciudadano de trámites", GovFrom, GovTo,
+            ("Ver trámites", "/gobierno"), ("Conocer la plataforma", "/synergos/apps/gobierno"));
+
+        FeatureGridAuto(b, "Cómo funciona", "Tres pasos, cero filas", new (string title, string subtitle, string body)[]
+        {
+            ("Consulta el trámite", "Lenguaje claro", "Requisitos, costos y tiempos explicados sin jerga, antes de empezar."),
+            ("Radica en línea", "Formulario guiado", "Un asistente paso a paso valida tus datos y documentos antes de enviar."),
+            ("Sigue tu expediente", "Carpeta ciudadana", "Cada etapa queda registrada y auditada; te avisamos si debes subsanar."),
+        }, 3);
+
+        return b.Build();
+    }
+
     private string BuildHotelesHome()
     {
         var b = new BlockGridJsonBuilder();
