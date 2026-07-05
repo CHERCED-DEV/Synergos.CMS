@@ -128,6 +128,12 @@ public sealed class DevContentFiller
         // /api/booking/* (BookingController). CERO contenido baked en .cshtml.
         SeedHoteles(details);
 
+        // F3 (doc 21 §4) — vitrina SynergosLabs: el contenido explicativo de los dominios
+        // se RE-COMPONE como sub-páginas /synergos/apps/<dominio> con el arco
+        // preview → demo → app. Estrictamente aditivo y no-destructivo: los homes de
+        // dominio NO se tocan y el copy de origen (Build*Home) se conserva intacto.
+        SeedAppsShowcase(details);
+
         return new FillResult(filled == 8, filled, string.Join("; ", details));   // siteRoot home + 7 páginas hijas
     }
 
@@ -3453,6 +3459,432 @@ public sealed class DevContentFiller
         AddCta(b, "¿Tienes dudas antes de reservar?",
             "Escríbenos y un asesor te ayuda a encontrar la estadía ideal.",
             "Hablar con nosotros", "/synergos/contacto");
+        return b.Build();
+    }
+
+    // ═══════════ F3 — Vitrina SynergosLabs (doc 21 §4): preview → demo → app ═══════════
+    // Reubica (re-compone, NO borra) el contenido explicativo de los dominios hacia el hub
+    // SynergosLabs: una página índice "Apps" bajo el siteRoot Entidad (/synergos/apps) +
+    // una sub-página por dominio (/synergos/apps/<dominio>) con el arco:
+    //   1. PREVIEW — qué es el dominio, para quién, qué demuestra del motor (copy ADAPTADO
+    //      del Build*Home del dominio; el origen queda intacto — F3 es no-destructivo).
+    //   2. DEMO — una pieza viva representativa embebida como bloque (product-grid para
+    //      Tienda, booking-wizard para Booking, feed real para Blogs…) con grace si su
+    //      ElementType aún no está importado; donde no hay pieza viva, feature-grid.
+    //   3. APP — CTA deep-link "Abrir la app" al dominio real (/tienda, /booking, …).
+    // Composición 100% server-side (IContentService + bloques existentes): cero schema
+    // nuevo, cero import requerido, idempotente por nombre. La identidad por-página no es
+    // posible en pageBase (compPageTheme solo compone en siteRoot/platformRoot), así que
+    // las sub-páginas heredan la identidad del hub y el acento visual del dominio lo
+    // llevan los gradientes de media (mismo patrón que los Build*Home).
+    private const string GovFrom = "#0B0C0C", GovTo = "#1D70B8";   // institucional (on-brand, NO define tema)
+
+    /// <summary>
+    /// Catálogo de la vitrina (ordenado por la ola de profundidad del doc 21 §3). Slug =
+    /// segmento URL bajo /synergos/apps/; AppUrl = deep-link a la app real. Gobierno aún no
+    /// tiene siteRoot (baseline pendiente de F0): su AppUrl se resuelve en runtime — si el
+    /// vertical aparece, el re-fill idempotente activa el deep-link solo.
+    /// </summary>
+    private (string Name, string Slug, string Blurb, string AppUrl)[] ShowcaseCatalog() => new[]
+    {
+        ("Tienda", "tienda", "Del catálogo al checkout: e-commerce completo con precios es-CO reales.", "/tienda"),
+        ("Booking", "booking", "Reservas y citas con disponibilidad en tiempo real sobre el motor transaccional.", "/booking"),
+        ("Eventos", "eventos", "Cartelera, tickets con retención de cupo y agenda viva del evento.", "/eventos"),
+        ("Propiedades", "propiedades", "Portal inmobiliario premium: fichas inmersivas y visitas sin paso de pago.", "/propiedades"),
+        ("Educación", "educacion", "Una academia online: catálogo, temario interactivo e inscripciones.", "/educacion"),
+        ("Blogs", "blogs", "La cara social del motor: feed editorial, autores y comentarios en vivo.", "/blogs"),
+        ("Healthcare", "healthcare", "Historia clínica, agenda sin sobrecupos y acceso auditado por consentimiento.", "/healthcare"),
+        ("Gobierno", "gobierno", "Trámites en lenguaje claro con carpeta ciudadana y seguimiento por etapas.",
+            FindVertical("gobierno") is not null ? "/gobierno" : ""),
+    };
+
+    private void SeedAppsShowcase(List<string> details)
+    {
+        var site = FindSiteRoot();
+        if (site is null) { details.Add("AppsShowcase:siteroot-not-found"); return; }
+
+        var domains = ShowcaseCatalog();
+
+        // Página índice /synergos/apps — entra al nav del hub después de Contacto (sortOrder 8).
+        var appsId = SeedShowcasePage(site.Id, "Apps", "Explora las apps por dentro",
+            BuildAppsShowcaseIndex(domains), details, sortOrder: 8);
+        if (appsId == 0) { return; }
+
+        var order = 0;
+        foreach (var d in domains)
+        {
+            var sections = d.Slug switch
+            {
+                "tienda" => BuildShowcaseTienda(),
+                "booking" => BuildShowcaseBooking(),
+                "eventos" => BuildShowcaseEventos(),
+                "propiedades" => BuildShowcasePropiedades(),
+                "educacion" => BuildShowcaseEducacion(),
+                "blogs" => BuildShowcaseBlogs(),
+                "healthcare" => BuildShowcaseHealthcare(),
+                "gobierno" => BuildShowcaseGobierno(d.AppUrl),
+                _ => null,
+            };
+            if (sections is null) { continue; }
+            SeedShowcasePage(appsId, d.Name, $"{d.Name} — la app por dentro", sections, details, sortOrder: ++order);
+        }
+        details.Add("AppsShowcase:ok");
+    }
+
+    // Crea/actualiza una pageBase de la vitrina bajo un padre específico (idempotente por
+    // nombre, mismo patrón que SeedSiteRootPage pero con SEO de la vitrina + sortOrder).
+    private int SeedShowcasePage(int parentId, string name, string heading, string sectionsJson,
+        List<string> details, int sortOrder = 0)
+    {
+        var page = _contentService.GetPagedChildren(parentId, 0, 200, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "pageBase" && Matches(c, name));
+        page ??= _contentService.Create(name, parentId, "pageBase");
+        page.SetCultureName(name, Culture);
+        if (page.HasProperty("heading")) { page.SetValue("heading", heading, Culture); }
+        if (page.HasProperty("showTitle")) { page.SetValue("showTitle", false); }   // el Hero es el H1
+        if (page.HasProperty("seoTitle")) { page.SetValue("seoTitle", $"{name} — Apps {BrandName}", Culture); }
+        page.SetValue(SectionsAlias, sectionsJson, Culture);
+        if (sortOrder > 0) { page.SortOrder = sortOrder; }
+        var save = _contentService.SaveAndPublish(page, new[] { Culture });
+        if (!save.Success)
+        {
+            var invalid = save.InvalidProperties is null ? "(null)" : string.Join(",", save.InvalidProperties.Select(p => p.Alias));
+            _logger.LogWarning("DevContentFiller: vitrina '{Page}' falló: {Result}; invalid=[{Invalid}]", name, save.Result, invalid);
+            details.Add($"AppsShowcase:{name}:failed:{save.Result}:[{invalid}]");
+            return 0;
+        }
+        details.Add($"AppsShowcase:{name}:ok");
+        return page.Id;
+    }
+
+    // Índice de la vitrina: hero + el launcher (la puerta, mismo catálogo que el hub) +
+    // cards que llevan al RECORRIDO de cada dominio (no a la app — eso lo hace el launcher).
+    private string BuildAppsShowcaseIndex((string Name, string Slug, string Blurb, string AppUrl)[] domains)
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Explora las apps por dentro",
+            "Preview, demo en vivo y la app real — dominio por dominio",
+            "<p>Cada dominio de SynergosLabs es una app real sobre el mismo motor. Aquí conoces cada una: qué es, para quién es y qué demuestra — con una demo viva para probarla sin salir de la página y la puerta a la app completa.</p>",
+            "Apps Showcase Hero", "Galería de apps de SynergosLabs", "#0A2540", "#7A3FF2",
+            ("Ir al lanzador", "/"), ("Hablar con ventas", "/synergos/contacto"));
+
+        // La puerta: el mismo módulo launcher del hub (grace si el ElementType no está importado).
+        var site = FindSiteRoot();
+        var entidadName = site?.GetValue<string>("siteDisplayName", Culture) is { Length: > 0 } dn ? dn : BrandName;
+        AddSynAppLauncher(b, BuildAppsCatalogJson(DomainAppCatalog(entidadName)),
+            "Abre cualquier app", "Directo a la app real de cada dominio — o sigue bajando y recórrelas una a una.");
+
+        AddShowcaseCards(b, domains);
+
+        AddCta(b, "¿Quieres tu propia app sobre este motor?",
+            "Cuéntanos tu caso y te mostramos el camino en una demo de 30 minutos.",
+            "Hablar con ventas", "/synergos/contacto");
+        return b.Build();
+    }
+
+    // Cards de navegación índice → recorridos (elementCompCard, mismas clases del launcher —
+    // cero CSS nuevo). Grace: sin cards, feature-grid SSR + el nav del hub siguen dando acceso.
+    private void AddShowcaseCards(BlockGridJsonBuilder b, (string Name, string Slug, string Blurb, string AppUrl)[] domains)
+    {
+        var cardKey = _contentTypeService.Get("elementCompCard")?.Key;
+        if (cardKey is null)
+        {
+            FeatureGridAuto(b, "Los recorridos", "Preview → demo → app, dominio por dominio",
+                domains.Select(d => (d.Name, "Preview → demo → app", d.Blurb)).ToArray(), 3);
+            return;
+        }
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-launcher__grid").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        foreach (var d in domains)
+        {
+            var url = $"/synergos/apps/{d.Slug}";
+            section.AddChild(SectionContentAreaKey, cardKey.Value, c => c
+                .Set("headingTitle", d.Name)
+                .Set("textBody", $"<p>{d.Blurb}</p>")
+                .Set("mediaAlt", d.Name)   // compContentMedia.mediaAlt es mandatory (sin imagen, pero requerido)
+                .Set("ctaLabel", $"Conocer {d.Name} →")
+                .Set("ctaLink", LinkJson(d.Name, url))
+                .Set("cssClass", "syn-launcher__card")
+                .ApplyDefaults(_defaults.DefaultsFor(cardKey.Value)));
+        }
+    }
+
+    // ── Recorridos por dominio (arco preview → demo → app) ──
+    // El copy del PREVIEW se ADAPTA del Build*Home de cada dominio (origen intacto).
+
+    // Origen del copy: BuildTiendaHome (hero + subheading del storefront).
+    private string BuildShowcaseTienda()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Tienda — vende sin fricción",
+            "Catálogo, carrito y checkout sobre el mismo motor",
+            "<p>La app Tienda demuestra el ciclo de venta completo: producto con variantes, carrito, checkout y precios en pesos colombianos formateados por el motor. Para negocios que venden online — y para ver el comercio corriendo sobre el mismo núcleo que el resto de las apps.</p>",
+            "Apps Tienda Hero", "Preview de la app Tienda", "#020817", "#4f6ef7",
+            ("Abrir la app", "/tienda"), ("Ver todas las apps", "/synergos/apps"));
+
+        FeatureGridAuto(b, "Qué demuestra del motor", "Comercio componible, sin hardcode", new (string title, string subtitle, string body)[]
+        {
+            ("Catálogo vivo", "Producto componible", "Cada producto es contenido del CMS; el grid consulta el catálogo real en el servidor."),
+            ("Carrito y checkout", "Motor transaccional", "El flujo de compra corre sobre el mismo motor de sesiones y órdenes que Booking y Eventos."),
+            ("Precios es-CO", "Cero hardcode", "El precio es un dato numérico formateado al render — cambia el dato y cambia toda la app."),
+        }, 3);
+
+        // DEMO — pieza viva: el grid de productos REAL de la Tienda (misma data, precios es-CO).
+        AddMission(b, "Demo en vivo — el catálogo real", "",
+            "<p>Este grid consulta los mismos productos que ves en la app Tienda, con sus precios reales formateados es-CO. No es una captura: es el motor respondiendo.</p>");
+        AddProductGridFiltered(b, "Ropa", sortBy: "price-asc");
+
+        AddCta(b, "Recorre la app completa",
+            "Catálogo, carrito y checkout te esperan en la Tienda real.",
+            "Abrir la app", "/tienda");
+        return b.Build();
+    }
+
+    // Origen del copy: BuildBookingHome (hero + cómo funciona + value props).
+    private string BuildShowcaseBooking()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Booking — reservas y citas sin fricción",
+            "La agenda en línea, disponible 24/7",
+            "<p>La app Booking demuestra el motor de reservas de punta a punta: catálogo de servicios, disponibilidad en tiempo real y confirmación automática. Para negocios que viven de la agenda — consultorías, espacios, bienestar y viajes.</p>",
+            "Apps Booking Hero", "Preview de la app Booking", MeridianFrom, MeridianTo,
+            ("Abrir la app", "/booking"), ("Ver todas las apps", "/synergos/apps"));
+
+        FeatureGridAuto(b, "Qué demuestra del motor", "El recurso reservable es polimórfico", new (string title, string subtitle, string body)[]
+        {
+            ("Disponibilidad real", "Calendario en vivo", "Los cupos se consultan al motor en tiempo real; nadie reserva dos veces el mismo lugar."),
+            ("Retención anti-conflicto", "Hold con timeout", "El motor retiene el cupo mientras completas tus datos y lo libera si no confirmas."),
+            ("Confirmación instantánea", "Cero llamadas", "Eliges, confirmas y recibes tu comprobante al instante — el ciclo entero en línea."),
+        }, 3);
+
+        // DEMO — pieza viva: el asistente de reserva multipaso contra el motor real (/api/booking).
+        AddMission(b, "Demo en vivo — reserva de verdad", "",
+            "<p>El asistente de abajo es el motor real de reservas: consulta disponibilidad, retiene tu cupo y confirma. Pruébalo aquí mismo.</p>");
+        AddSynBookingWizard(b, "/api/booking", "Booking SynergosLabs");
+
+        AddCta(b, "Recorre la app completa",
+            "Catálogo de servicios, calendario y reservas en la app real.",
+            "Abrir la app", "/booking");
+        return b.Build();
+    }
+
+    // Origen del copy: BuildEventosHome (hero + destacados + agenda del Summit).
+    private string BuildShowcaseEventos()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Eventos — experiencias que se agotan",
+            "Cartelera, tickets y agenda sobre el mismo motor",
+            "<p>La app Eventos demuestra el motor bajo presión: cupos limitados, retención del ticket mientras te registras y confirmación con acceso al instante. Para organizadores de conferencias, conciertos y experiencias premium.</p>",
+            "Apps Eventos Hero", "Preview de la app Eventos", EventsFrom, EventsTo,
+            ("Abrir la app", "/eventos"), ("Ver todas las apps", "/synergos/apps"));
+
+        FeatureGridAuto(b, "Qué demuestra del motor", "El mismo hold, otro recurso: el ticket", new (string title, string subtitle, string body)[]
+        {
+            ("Ticket con retención", "Cupo asegurado", "El motor retiene tu ticket mientras completas el registro — igual que un cupo de reserva."),
+            ("Agenda viva", "Programa interactivo", "El programa del evento se navega en una línea de tiempo con scroll, no en un PDF."),
+            ("Registro end-to-end", "Del interés al acceso", "Eliges tu entrada, te registras y el acceso llega a tu correo al instante."),
+        }, 3);
+
+        // DEMO — pieza viva: la agenda del próximo evento como timeline interactiva (CDN).
+        AddMission(b, "Demo en vivo — la agenda del Summit", "",
+            "<p>Así se navega el programa de un evento en la app: desliza la línea de tiempo. Es el mismo organismo que usa la app real.</p>");
+        AddSynTimelineHorizontal(b, new (string date, string title, string description)[]
+        {
+            ("09:00", "Registro y café", "Acreditación, kit del asistente y networking de apertura."),
+            ("10:00", "Keynote de apertura", "La visión: un motor, mil productos. Hacia dónde va la plataforma."),
+            ("12:30", "Almuerzo y expo", "Espacio de muestras, demos en vivo y conversaciones con los equipos."),
+            ("14:00", "Tracks paralelos", "Diseño, arquitectura y producto: elige tu ruta de la tarde."),
+            ("17:30", "Panel de cierre", "Casos reales y preguntas del público con los referentes de la industria."),
+        });
+
+        AddCta(b, "Recorre la app completa",
+            "Cartelera, ficha del evento y registro de tickets en la app real.",
+            "Abrir la app", "/eventos");
+        return b.Build();
+    }
+
+    // Origen del copy: BuildPropiedadesHome (hero + destacadas + galería + value props).
+    private string BuildShowcasePropiedades()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Propiedades — encuentra tu lugar",
+            "Un portal inmobiliario premium sobre el mismo motor",
+            "<p>La app Propiedades demuestra que el motor también funciona sin pago: listado filtrable, fichas profundas con galería inmersiva y visitas que se agendan con el mismo motor de reservas — con el paso de pago apagado. Para inmobiliarias y constructoras.</p>",
+            "Apps Propiedades Hero", "Preview de la app Propiedades", TerraFrom, TerraTo,
+            ("Abrir la app", "/propiedades"), ("Ver todas las apps", "/synergos/apps"));
+
+        FeatureGridAuto(b, "Qué demuestra del motor", "Transacción sin pago, contenido con precio", new (string title, string subtitle, string body)[]
+        {
+            ("Ficha inmersiva", "Galería lightbox", "Cada propiedad se recorre en una galería a pantalla completa, con specs y ubicación."),
+            ("Precios reales es-CO", "Cero hardcode", "Cada propiedad es contenido con precio numérico formateado al render."),
+            ("Visita = reserva", "Pago apagable", "Agendar una visita usa el motor transaccional con el paso de pago en OFF."),
+        }, 3);
+
+        // DEMO — piezas vivas: galería inmersiva (CDN, reusa la media existente del dominio)
+        // + inventario REAL con precios es-CO (mismo catálogo que la app).
+        AddMission(b, "Demo en vivo — la galería inmersiva", "",
+            "<p>Toca cualquier imagen: es la misma galería lightbox que usan las fichas de la app real.</p>");
+        AddSynGallery(b, 3, new (string name, string caption, string from, string to)[]
+        {
+            ("Galeria Apartamento", "Apartamentos con vista", TerraFrom, TerraTo),
+            ("Galeria Casa", "Casas con jardín", TerraFrom, TerraTo),
+            ("Galeria Oficina", "Oficinas premium", TerraFrom, TerraTo),
+            ("Galeria Penthouse", "Penthouses exclusivos", TerraFrom, TerraTo),
+            ("Galeria Local", "Locales comerciales", TerraFrom, TerraTo),
+            ("Galeria Campestre", "Propiedades campestres", TerraFrom, TerraTo),
+        });
+        AddMission(b, "Y el inventario es real", "",
+            "<p>Estos apartamentos son los del portal, con sus precios reales formateados es-CO por el motor.</p>");
+        AddProductGridFiltered(b, "Apartamentos", sortBy: "price-asc");
+
+        AddCta(b, "Recorre la app completa",
+            "Listado, fichas profundas y agendamiento de visitas en la app real.",
+            "Abrir la app", "/propiedades");
+        return b.Build();
+    }
+
+    // Origen del copy: BuildEducacionHome (hero + value props) + BuildEducacionCursoDetalle (temario).
+    private string BuildShowcaseEducacion()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Educación — aprende a tu ritmo",
+            "Una academia online completa sobre el mismo motor",
+            "<p>La app Educación demuestra el motor como academia: catálogo de cursos, temario interactivo, inscripciones y certificados. Para academias, empresas que capacitan equipos y creadores de cursos.</p>",
+            "Apps Educacion Hero", "Preview de la app Educación", ScholarFrom, ScholarTo,
+            ("Abrir la app", "/educacion"), ("Ver todas las apps", "/synergos/apps"));
+
+        FeatureGridAuto(b, "Qué demuestra del motor", "El LMS es otra cara del mismo núcleo", new (string title, string subtitle, string body)[]
+        {
+            ("Catálogo filtrable", "Cursos como contenido", "Cada curso es contenido componible; el catálogo se busca y filtra en vivo."),
+            ("Aula con temario", "Lecciones interactivas", "El temario se navega por módulos expandibles — el aula, sin salir del navegador."),
+            ("Inscripción sobre el motor", "Checkout compartido", "Inscribirse usa el mismo motor transaccional que la Tienda y Booking."),
+        }, 3);
+
+        // DEMO — pieza viva: el temario interactivo (acordeón CDN) de un curso real.
+        AddMission(b, "Demo en vivo — el temario interactivo", "",
+            "<p>Expande los módulos: es el mismo organismo de temario que usa el aula de la app real.</p>");
+        AddSynAccordion(b, new (string title, string content)[]
+        {
+            ("Módulo 1 · El núcleo componible", "Qué es un motor componible, cómo se piensa en componentes y por qué un solo core puede ser muchos productos."),
+            ("Módulo 2 · Componer, no programar", "El editor visual, los bloques nativos y los componentes de la CDN. Armas una página completa de cero."),
+            ("Módulo 3 · Línea de diseño con tokens", "Grilla de 8, tipografía, paleta por marca y ritmo vertical. Tu sitio se ve premium por defecto."),
+            ("Módulo 4 · Proyecto final", "Construyes y publicas un vertical completo con su identidad. Lo agregas a tu portafolio."),
+        }, allowMultiple: false);
+
+        AddCta(b, "Recorre la app completa",
+            "Catálogo, ficha de curso e inscripción en la app real.",
+            "Abrir la app", "/educacion");
+        return b.Build();
+    }
+
+    // Origen del copy: BuildBlogsHome (hero + subheading de la app social).
+    private string BuildShowcaseBlogs()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Blogs — publica y crece tu audiencia",
+            "Una red social editorial sobre el mismo motor",
+            "<p>La app Blogs demuestra la cara social del motor: feed de publicaciones, autores, categorías y comentarios. Para medios, creadores y equipos que viven del contenido — con SEO y marca propios desde el día uno.</p>",
+            "Apps Blogs Hero", "Preview de la app Blogs", "#2A2412", "#B59659",
+            ("Abrir la app", "/blogs"), ("Ver todas las apps", "/synergos/apps"));
+
+        FeatureGridAuto(b, "Qué demuestra del motor", "Editorial y comunidad sobre el mismo núcleo", new (string title, string subtitle, string body)[]
+        {
+            ("Feed en vivo", "Contenido real", "Los destacados y el listado de abajo consultan las publicaciones reales del dominio Blogs."),
+            ("Autores y categorías", "Editorial completo", "Cada post tiene autor, categoría, tags y SEO listos — sin montar otro sistema."),
+            ("Comentarios", "Comunidad", "Hilos de comentarios sobre cada publicación, gestionados por el motor."),
+        }, 3);
+
+        // DEMO — piezas vivas: el feed REAL del dominio Blogs (destacados + listado, IBlogQuery).
+        AddMission(b, "Demo en vivo — el feed real", "",
+            "<p>Estos bloques consultan las publicaciones reales del dominio Blogs. Publica un post allá y aparece aquí.</p>");
+        AddBlogHighlight(b, "Lo más reciente del blog");
+        AddArticleList(b, "Publicaciones del dominio");
+
+        AddCta(b, "Recorre la app completa",
+            "Feed, perfiles de autor y publicaciones en la app real.",
+            "Abrir la app", "/blogs");
+        return b.Build();
+    }
+
+    // Origen del copy: BuildHealthcareHome (hero + features + aviso RECORD-KEEPER).
+    private string BuildShowcaseHealthcare()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Healthcare — el consultorio en orden",
+            "Historia clínica, agenda y recetas en un solo lugar",
+            "<p>La app Healthcare demuestra el motor en un dominio regulado: historia clínica versionada, agenda sin sobrecupos y acceso auditado por consentimiento. Para clínicas y profesionales de la salud que necesitan registro impecable.</p>",
+            "Apps Healthcare Hero", "Preview de la app Healthcare", "#0B3B3C", "#1FA2A6",
+            ("Abrir la app", "/healthcare"), ("Ver todas las apps", "/synergos/apps"));
+
+        FeatureGridAuto(b, "Qué demuestra del motor", "Confianza y auditoría de primera clase", new (string title, string subtitle, string body)[]
+        {
+            ("Agenda clínica", "La cita es un recurso", "La cita médica es el mismo recurso reservable del motor — con control anti-sobrecupos."),
+            ("Acceso auditado", "Privacidad primero", "Cada acceso a la información clínica queda registrado; el consentimiento gobierna."),
+            ("Dos portales, un grafo", "Paciente y clínico", "El mismo dato clínico alimenta el portal del paciente y el del profesional."),
+        }, 3);
+
+        // DEMO — pieza viva: el recorrido del paciente como timeline interactiva (CDN).
+        AddMission(b, "Demo en vivo — el recorrido del paciente", "",
+            "<p>Desliza la línea de tiempo: así fluye una atención de punta a punta dentro de la app.</p>");
+        AddSynTimelineHorizontal(b, new (string date, string title, string description)[]
+        {
+            ("Paso 1", "Agenda tu cita", "Eliges especialista y horario con disponibilidad real — sin sobrecupos."),
+            ("Paso 2", "Check-in", "Confirmas tus datos y el motivo de consulta antes de llegar."),
+            ("Paso 3", "Consulta", "El profesional registra la atención en la historia clínica versionada."),
+            ("Paso 4", "Receta", "La receta queda emitida y vinculada a tu historia — el sistema registra, el profesional decide."),
+            ("Paso 5", "Seguimiento", "Controles y resultados quedan en tu historia, con acceso auditado por consentimiento."),
+        });
+
+        AddCta(b, "Recorre la app completa",
+            "Agenda, historia clínica y recetas en la app real.",
+            "Abrir la app", "/healthcare");
+        return b.Build();
+    }
+
+    // Origen del copy: doc 21 §2.8 (spec Gobierno — GOV.UK/GOV.CO); aún no hay Build*Home de
+    // Gobierno (baseline v1 pendiente de F0, decisión D7) → demo = feature-grid del recorrido
+    // (regla F3: donde no hay pieza viva, feature-grid/media) y el deep-link se activa solo
+    // cuando el vertical aparezca (appUrl vacío hasta entonces).
+    private string BuildShowcaseGobierno(string appUrl)
+    {
+        var hasApp = !string.IsNullOrEmpty(appUrl);
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Gobierno — trámites sin filas",
+            "Servicios ciudadanos claros, sobre el mismo motor",
+            "<p>La app Gobierno demuestra el motor al servicio público: catálogo de trámites en lenguaje claro, formularios paso a paso que guardan tu avance y una carpeta ciudadana para seguir cada solicitud. Para entidades que quieren atender en línea, con accesibilidad de primera clase.</p>",
+            "Apps Gobierno Hero", "Preview de la app Gobierno", GovFrom, GovTo,
+            hasApp
+                ? new[] { ("Abrir la app", appUrl), ("Ver todas las apps", "/synergos/apps") }
+                : new[] { ("Ver todas las apps", "/synergos/apps"), ("Hablar con ventas", "/synergos/contacto") });
+
+        FeatureGridAuto(b, "Qué demuestra del motor", "Cita y pago son pasos apagables", new (string title, string subtitle, string body)[]
+        {
+            ("Trámite guiado", "Paso a paso", "Un formulario dirigido por definición: solo pregunta lo que aplica y guarda tu avance entre sesiones."),
+            ("Carpeta ciudadana", "Seguimiento con plazos", "Cada solicitud tiene su expediente con etapas, fechas y días restantes."),
+            ("Cita y tasa opcionales", "Motor flexible", "La cita y el pago son pasos del mismo motor transaccional — encendibles por trámite."),
+        }, 3);
+
+        // DEMO — sin pieza viva todavía (sin schema del dominio): el recorrido del trámite
+        // como feature-grid (grace, regla F3).
+        FeatureGridAuto(b, "Así se ve un trámite", "Del catálogo al radicado", new (string title, string subtitle, string body)[]
+        {
+            ("1 · Encuentra tu trámite", "Catálogo claro", "Buscas por entidad, categoría o canal y entiendes requisitos antes de empezar."),
+            ("2 · Completa el formulario", "Guarda y continúa", "Respondes por pasos, adjuntas documentos y retomas cuando quieras."),
+            ("3 · Radica y sigue", "Comprobante y carpeta", "Recibes tu radicado y sigues el estado, etapa por etapa, en tu carpeta."),
+        }, 3);
+
+        if (hasApp)
+        {
+            AddCta(b, "Recorre la app completa",
+                "Catálogo de trámites, formulario guiado y carpeta ciudadana en la app real.",
+                "Abrir la app", appUrl);
+        }
+        else
+        {
+            AddCta(b, "La app de Gobierno está en camino",
+                "El motor ya está listo para trámites; mientras la app llega, explora las demás apps del ecosistema.",
+                "Ver todas las apps", "/synergos/apps");
+        }
         return b.Build();
     }
 
