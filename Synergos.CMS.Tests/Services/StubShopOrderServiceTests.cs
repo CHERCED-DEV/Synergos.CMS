@@ -177,4 +177,54 @@ public class StubShopOrderServiceTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.ConfirmAsync(checkout.OrderRef));
     }
+
+    // ── OLA 1 Tienda T0 — GetOrderAsync + integración con el tracking ──
+
+    [Fact] // lookup: GetOrder resuelve la orden por ref; desconocida (o vacía) → null
+    public async Task GetOrder_ByRef_ResolvesOrNull()
+    {
+        var svc = Make();
+        var checkout = await svc.CheckoutAsync(new[] { Laptop(qty: 2) }, Customer());
+
+        var order = await svc.GetOrderAsync(checkout.OrderRef);
+
+        Assert.NotNull(order);
+        Assert.Equal(checkout.OrderRef, order!.OrderRef);
+        Assert.Equal(OrderStatus.Pending, order.Status);
+        Assert.Equal(checkout.PaymentSessionId, order.PaymentSessionId);
+        Assert.Single(order.Lines);
+
+        Assert.Null(await svc.GetOrderAsync("ord_fantasma"));
+        Assert.Null(await svc.GetOrderAsync(""));
+    }
+
+    [Fact] // integración: la orden ALIMENTA el timeline del tracking al confirmar (etapa "paid")
+    public async Task Confirm_FeedsOrderTrackingTimeline()
+    {
+        var tracking = new StubOrderTrackingService();
+        var svc = new StubShopOrderService(
+            new StubProductCatalogProvider(),
+            new StubReservationService(),
+            new StubPaymentProvider(),
+            tracking,
+            null);
+
+        var checkout = await svc.CheckoutAsync(new[] { Laptop() }, Customer());
+        // Antes de confirmar no hay timeline (la orden Pending no rastrea).
+        Assert.Null(await tracking.GetTimelineAsync(checkout.OrderRef));
+
+        await svc.ConfirmAsync(checkout.OrderRef);
+
+        var timeline = await tracking.GetTimelineAsync(checkout.OrderRef);
+        Assert.NotNull(timeline);
+        Assert.Equal(StubOrderTrackingService.StagePaid, timeline!.CurrentStage);
+        Assert.True(timeline.Stages[0].Reached);
+
+        // Doble confirm (idempotente) no re-avanza ni duplica la etapa.
+        var reachedAt = timeline.Stages[0].ReachedAt;
+        await svc.ConfirmAsync(checkout.OrderRef);
+        var after = await tracking.GetTimelineAsync(checkout.OrderRef);
+        Assert.Equal(reachedAt, after!.Stages[0].ReachedAt);
+        Assert.Equal(StubOrderTrackingService.StagePaid, after.CurrentStage);
+    }
 }

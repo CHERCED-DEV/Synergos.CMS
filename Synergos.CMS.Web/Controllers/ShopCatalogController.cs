@@ -12,6 +12,11 @@ namespace Synergos.CMS.Web.Controllers;
 /// precios es-CO con <see cref="IPriceFormatter"/>. Expone el contrato que el
 /// módulo Angular <c>storefront-module</c> consume:
 /// <c>GET search · GET product/{id} · POST checkout · POST confirm · GET orders</c>.
+/// OLA 1 Tienda (entrega A, fase T0) agrega la cara post-venta + cuenta:
+/// wishlist/listas (<see cref="IUserCollection"/>), tracking de la orden
+/// (<see cref="IOrderTrackingService"/>), devoluciones/RMA
+/// (<see cref="IReturnService"/>) y mensajería comprador↔vendedor
+/// (<see cref="IMessagingService"/>).
 /// </summary>
 /// <remarks>
 /// Coexiste con <c>ShopController</c> (route <c>api/shop/cart</c>, carrito cookie
@@ -31,18 +36,32 @@ namespace Synergos.CMS.Web.Controllers;
 [Route("api/shop")]
 public sealed class ShopCatalogController : ControllerBase
 {
+    private const string DefaultCollection = "wishlist";
+
     private readonly IProductCatalogProvider _catalog;
     private readonly IShopOrderService _orders;
     private readonly IPriceFormatter _priceFormatter;
+    private readonly IUserCollection _collections;
+    private readonly IOrderTrackingService _tracking;
+    private readonly IReturnService _returns;
+    private readonly IMessagingService _messaging;
 
     public ShopCatalogController(
         IProductCatalogProvider catalog,
         IShopOrderService orders,
-        IPriceFormatter priceFormatter)
+        IPriceFormatter priceFormatter,
+        IUserCollection collections,
+        IOrderTrackingService tracking,
+        IReturnService returns,
+        IMessagingService messaging)
     {
         _catalog = catalog;
         _orders = orders;
         _priceFormatter = priceFormatter;
+        _collections = collections;
+        _tracking = tracking;
+        _returns = returns;
+        _messaging = messaging;
     }
 
     // ── 1. Search ──────────────────────────────────────────────────
@@ -245,6 +264,274 @@ public sealed class ShopCatalogController : ControllerBase
         return Ok(new OrdersResponse(Orders: dtos));
     }
 
+    // ── 6. Wishlist / listas (IUserCollection, seam genérico P11) ──
+    // GET  /api/shop/wishlist?owner=<email>&collection=<nombre?>  → items
+    // GET  /api/shop/wishlist/collections?owner=<email>           → resumen de listas
+    // POST /api/shop/wishlist { owner, collection?, itemRef }     → agrega (idempotente)
+    // DELETE /api/shop/wishlist?owner=&collection=&itemRef=       → quita
+    [HttpGet("wishlist")]
+    public async Task<IActionResult> Wishlist(
+        [FromQuery] string? owner,
+        [FromQuery] string? collection,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(owner))
+        {
+            return BadRequest(new { error = "El parámetro 'owner' (email) es requerido." });
+        }
+
+        var name = string.IsNullOrWhiteSpace(collection) ? DefaultCollection : collection.Trim();
+        var items = await _collections.GetAsync(owner.Trim(), name, cancellationToken);
+        return Ok(new WishlistResponse(
+            Owner: owner.Trim(),
+            Collection: name,
+            Items: items.Select(ToCollectionItemDto).ToList()));
+    }
+
+    [HttpGet("wishlist/collections")]
+    public async Task<IActionResult> WishlistCollections(
+        [FromQuery] string? owner,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(owner))
+        {
+            return BadRequest(new { error = "El parámetro 'owner' (email) es requerido." });
+        }
+
+        var summaries = await _collections.GetCollectionsAsync(owner.Trim(), cancellationToken);
+        return Ok(new CollectionsResponse(
+            Owner: owner.Trim(),
+            Collections: summaries
+                .Select(s => new CollectionSummaryDto(s.Collection, s.Count, s.UpdatedAt))
+                .ToList()));
+    }
+
+    [HttpPost("wishlist")]
+    public async Task<IActionResult> WishlistAdd(
+        [FromBody] WishlistItemRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null
+            || string.IsNullOrWhiteSpace(request.Owner)
+            || string.IsNullOrWhiteSpace(request.ItemRef))
+        {
+            return BadRequest(new { error = "owner e itemRef son requeridos." });
+        }
+
+        var name = string.IsNullOrWhiteSpace(request.Collection) ? DefaultCollection : request.Collection.Trim();
+        var item = await _collections.AddAsync(request.Owner.Trim(), name, request.ItemRef.Trim(), cancellationToken);
+        return Ok(ToCollectionItemDto(item));
+    }
+
+    [HttpDelete("wishlist")]
+    public async Task<IActionResult> WishlistRemove(
+        [FromQuery] string? owner,
+        [FromQuery] string? collection,
+        [FromQuery] string? itemRef,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(itemRef))
+        {
+            return BadRequest(new { error = "owner e itemRef son requeridos." });
+        }
+
+        var name = string.IsNullOrWhiteSpace(collection) ? DefaultCollection : collection.Trim();
+        var removed = await _collections.RemoveAsync(owner.Trim(), name, itemRef.Trim(), cancellationToken);
+        return Ok(new { removed });
+    }
+
+    // ── 7. Tracking de la orden (IOrderTrackingService, seam genérico P4) ──
+    // GET /api/shop/order/{orderRef}/tracking → etapas + fechas + etapa actual.
+    // La orden alimenta el timeline al confirmar el pago (etapa "paid"); las
+    // etapas siguientes las mueve el fulfillment/vendedor. Orden Pending →
+    // timeline aún no iniciado (stages vacías, currentStage null).
+    [HttpGet("order/{orderRef}/tracking")]
+    public async Task<IActionResult> OrderTracking(string orderRef, CancellationToken cancellationToken)
+    {
+        var order = await _orders.GetOrderAsync(orderRef, cancellationToken);
+        if (order is null)
+        {
+            return NotFound(new { error = "Orden no encontrada." });
+        }
+
+        var timeline = await _tracking.GetTimelineAsync(order.OrderRef, cancellationToken);
+        return Ok(new TrackingResponse(
+            OrderRef: order.OrderRef,
+            OrderNumber: order.OrderNumber,
+            OrderStatus: order.Status.ToString(),
+            CurrentStage: timeline?.CurrentStage,
+            Stages: timeline?.Stages
+                .Select(s => new TrackingStageDto(s.Stage, s.Label, s.Reached, s.ReachedAt, s.Note))
+                .ToList() ?? new List<TrackingStageDto>()));
+    }
+
+    // ── 8. Devoluciones / RMA (IReturnService) ────────────────────
+    // POST /api/shop/order/{orderRef}/return { lineId, reason } → abre el RMA
+    // GET  /api/shop/order/{orderRef}/return                    → RMAs de la orden
+    // POST /api/shop/return/{rmaId}/advance { status, note? }   → mueve el RMA
+    //      (aprobada/rechazada/recibida/reembolsada — reembolso vía PSP)
+    [HttpPost("order/{orderRef}/return")]
+    public async Task<IActionResult> RequestReturn(
+        string orderRef,
+        [FromBody] ReturnRequestBody? request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.LineId) || string.IsNullOrWhiteSpace(request.Reason))
+        {
+            return BadRequest(new { error = "lineId y reason son requeridos." });
+        }
+
+        var order = await _orders.GetOrderAsync(orderRef, cancellationToken);
+        if (order is null)
+        {
+            return NotFound(new { error = "Orden no encontrada." });
+        }
+
+        try
+        {
+            var rma = await _returns.RequestAsync(order.OrderRef, request.LineId.Trim(), request.Reason.Trim(), cancellationToken);
+            return Ok(ToReturnDto(rma));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("order/{orderRef}/return")]
+    public async Task<IActionResult> ReturnsForOrder(string orderRef, CancellationToken cancellationToken)
+    {
+        var order = await _orders.GetOrderAsync(orderRef, cancellationToken);
+        if (order is null)
+        {
+            return NotFound(new { error = "Orden no encontrada." });
+        }
+
+        var cases = await _returns.GetForOrderAsync(order.OrderRef, cancellationToken);
+        return Ok(new ReturnsResponse(Returns: cases.Select(ToReturnDto).ToList()));
+    }
+
+    [HttpPost("return/{rmaId}/advance")]
+    public async Task<IActionResult> AdvanceReturn(
+        string rmaId,
+        [FromBody] ReturnAdvanceBody? request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.Status))
+        {
+            return BadRequest(new { error = "status es requerido (approved|rejected|received|refunded)." });
+        }
+        if (!Enum.TryParse<ShopReturnStatus>(request.Status.Trim(), ignoreCase: true, out var target))
+        {
+            return BadRequest(new { error = $"Estado '{request.Status}' inválido." });
+        }
+
+        try
+        {
+            var rma = await _returns.AdvanceAsync(rmaId, target, request.Note, cancellationToken);
+            return Ok(ToReturnDto(rma));
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Transición ilegal o reembolso no procesable.
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // ── 9. Mensajería comprador↔vendedor (IMessagingService, P7 v1) ──
+    // POST /api/shop/messages { contextRef, from, to, body }  → inicia/retoma hilo
+    // POST /api/shop/messages/{threadId}/reply { from, body } → responde
+    // GET  /api/shop/messages/{threadId}                      → hilo completo
+    // GET  /api/shop/messages?participant=<email>             → bandeja
+    [HttpPost("messages")]
+    public async Task<IActionResult> StartThread(
+        [FromBody] StartThreadRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null
+            || string.IsNullOrWhiteSpace(request.ContextRef)
+            || string.IsNullOrWhiteSpace(request.From)
+            || string.IsNullOrWhiteSpace(request.To)
+            || string.IsNullOrWhiteSpace(request.Body))
+        {
+            return BadRequest(new { error = "contextRef, from, to y body son requeridos." });
+        }
+
+        try
+        {
+            var thread = await _messaging.StartThreadAsync(
+                request.ContextRef.Trim(), request.From.Trim(), request.To.Trim(), request.Body, cancellationToken);
+            return Ok(ToThreadDto(thread));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("messages/{threadId}/reply")]
+    public async Task<IActionResult> ReplyThread(
+        string threadId,
+        [FromBody] ReplyRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.From) || string.IsNullOrWhiteSpace(request.Body))
+        {
+            return BadRequest(new { error = "from y body son requeridos." });
+        }
+
+        try
+        {
+            var thread = await _messaging.ReplyAsync(threadId, request.From.Trim(), request.Body, cancellationToken);
+            return Ok(ToThreadDto(thread));
+        }
+        catch (ArgumentException ex) when (string.Equals(ex.ParamName, "threadId", StringComparison.Ordinal))
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("messages/{threadId}")]
+    public async Task<IActionResult> GetThread(string threadId, CancellationToken cancellationToken)
+    {
+        var thread = await _messaging.GetThreadAsync(threadId, cancellationToken);
+        if (thread is null)
+        {
+            return NotFound(new { error = "Hilo no encontrado." });
+        }
+        return Ok(ToThreadDto(thread));
+    }
+
+    [HttpGet("messages")]
+    public async Task<IActionResult> Inbox(
+        [FromQuery] string? participant,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(participant))
+        {
+            return BadRequest(new { error = "El parámetro 'participant' (email) es requerido." });
+        }
+
+        var threads = await _messaging.GetInboxAsync(participant.Trim(), cancellationToken);
+        return Ok(new InboxResponse(Threads: threads
+            .Select(t => new ThreadSummaryDto(
+                ThreadId: t.ThreadId,
+                ContextRef: t.ContextRef,
+                Participants: t.Participants,
+                LastMessagePreview: t.LastMessagePreview,
+                LastMessageAt: t.LastMessageAt,
+                MessageCount: t.MessageCount))
+            .ToList()));
+    }
+
     // ── Helpers ────────────────────────────────────────────────────
 
     private ProductDto ToProductDto(CatalogProductSummary p) => new(
@@ -262,6 +549,35 @@ public sealed class ShopCatalogController : ControllerBase
         InStock: p.Stock > 0,
         Description: null,
         ImageUrls: null);
+
+    private static CollectionItemDto ToCollectionItemDto(UserCollectionItem i) => new(
+        Owner: i.Owner,
+        Collection: i.Collection,
+        ItemRef: i.ItemRef,
+        AddedAt: i.AddedAt);
+
+    private ReturnDto ToReturnDto(ShopReturnCase c) => new(
+        RmaId: c.RmaId,
+        OrderRef: c.OrderRef,
+        LineRef: c.LineRef,
+        ProductName: c.ProductName,
+        Quantity: c.Quantity,
+        RefundAmount: c.RefundAmount,
+        RefundAmountFormatted: _priceFormatter.Format(c.RefundAmount, c.Currency),
+        Currency: c.Currency,
+        Reason: c.Reason,
+        Status: c.Status.ToString(),
+        RequestedAt: c.RequestedAt,
+        UpdatedAt: c.UpdatedAt,
+        Note: c.Note);
+
+    private static ThreadDto ToThreadDto(MessageThread t) => new(
+        ThreadId: t.ThreadId,
+        ContextRef: t.ContextRef,
+        Participants: t.Participants,
+        Messages: t.Messages.Select(m => new ThreadMessageDto(m.MessageId, m.From, m.Body, m.SentAt)).ToList(),
+        CreatedAt: t.CreatedAt,
+        LastMessageAt: t.LastMessageAt);
 
     private OrderLineDto ToOrderLineDto(ShopOrderLine l) => new(
         ProductId: l.ProductId,
@@ -377,4 +693,90 @@ public sealed class ShopCatalogController : ControllerBase
         IReadOnlyList<OrderLineDto> Items);
 
     public sealed record OrdersResponse(IReadOnlyList<OrderDto> Orders);
+
+    // ── OLA 1 Tienda T0 — wishlist / tracking / devoluciones / mensajes ──
+
+    /// <summary>POST /api/shop/wishlist — agregar un ítem a una lista del usuario.</summary>
+    public sealed record WishlistItemRequest(string Owner, string? Collection, string ItemRef);
+
+    public sealed record CollectionItemDto(
+        string Owner,
+        string Collection,
+        string ItemRef,
+        DateTimeOffset AddedAt);
+
+    public sealed record WishlistResponse(
+        string Owner,
+        string Collection,
+        IReadOnlyList<CollectionItemDto> Items);
+
+    public sealed record CollectionSummaryDto(string Collection, int Count, DateTimeOffset UpdatedAt);
+
+    public sealed record CollectionsResponse(
+        string Owner,
+        IReadOnlyList<CollectionSummaryDto> Collections);
+
+    public sealed record TrackingStageDto(
+        string Stage,
+        string Label,
+        bool Reached,
+        DateTimeOffset? ReachedAt,
+        string? Note);
+
+    /// <summary>Timeline de la orden; stages vacías + currentStage null = tracking aún no iniciado (orden Pending).</summary>
+    public sealed record TrackingResponse(
+        string OrderRef,
+        string OrderNumber,
+        string OrderStatus,
+        string? CurrentStage,
+        IReadOnlyList<TrackingStageDto> Stages);
+
+    /// <summary>POST /api/shop/order/{ref}/return — abrir un RMA sobre una línea.</summary>
+    public sealed record ReturnRequestBody(string LineId, string Reason);
+
+    /// <summary>POST /api/shop/return/{rmaId}/advance — mover el RMA de estado.</summary>
+    public sealed record ReturnAdvanceBody(string Status, string? Note);
+
+    public sealed record ReturnDto(
+        string RmaId,
+        string OrderRef,
+        string LineRef,
+        string ProductName,
+        int Quantity,
+        decimal RefundAmount,
+        string RefundAmountFormatted,
+        string Currency,
+        string Reason,
+        string Status,
+        DateTimeOffset RequestedAt,
+        DateTimeOffset UpdatedAt,
+        string? Note);
+
+    public sealed record ReturnsResponse(IReadOnlyList<ReturnDto> Returns);
+
+    /// <summary>POST /api/shop/messages — iniciar (o retomar) el hilo del contexto.</summary>
+    public sealed record StartThreadRequest(string ContextRef, string From, string To, string Body);
+
+    /// <summary>POST /api/shop/messages/{threadId}/reply — responder en el hilo.</summary>
+    public sealed record ReplyRequest(string From, string Body);
+
+    public sealed record ThreadMessageDto(string MessageId, string From, string Body, DateTimeOffset SentAt);
+
+    public sealed record ThreadDto(
+        string ThreadId,
+        string ContextRef,
+        IReadOnlyList<string> Participants,
+        IReadOnlyList<ThreadMessageDto> Messages,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset LastMessageAt);
+
+    public sealed record ThreadSummaryDto(
+        string ThreadId,
+        string ContextRef,
+        IReadOnlyList<string> Participants,
+        string LastMessagePreview,
+        DateTimeOffset LastMessageAt,
+        int MessageCount);
+
+    public sealed record InboxResponse(IReadOnlyList<ThreadSummaryDto> Threads);
 }

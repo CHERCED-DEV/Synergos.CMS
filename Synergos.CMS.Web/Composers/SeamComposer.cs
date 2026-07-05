@@ -216,7 +216,45 @@ public sealed class SeamComposer : IComposer
         //     captura y confirma. Idempotente. Singleton — el estado de las órdenes
         //     (orderRef → líneas + sesión) vive en memoria del proceso.
         services.AddSingleton<IProductCatalogProvider, StubProductCatalogProvider>();
-        services.AddSingleton<IShopOrderService, StubShopOrderService>();
+
+        // OLA 1 Tienda (entrega A, fase T0 del spec tienda.md) — seams de la cara
+        // compradora post-venta + cuenta, stub-first y aditivos (ADR 0002 + 0075).
+        // Dos son GENÉRICOS (plan doc 21 §1.4 — nacen genéricos, los reusan las
+        // 8 olas) y dos componen el motor existente:
+        //   - IUserCollection (P11, GENÉRICO): favoritos/wishlist/listas/saved-
+        //     searches por Member. itemRef opaco (sku/listingId/courseId…) — un
+        //     contrato, N dominios. Singleton — estado en memoria del proceso.
+        //   - IOrderTrackingService (P4, GENÉRICO): timeline de estados de una
+        //     orden/expediente (Order≈Booking≈Ticket≈Radicado). Pipeline default
+        //     de Tienda (pago→preparación→envío→entrega); otros dominios
+        //     construyen su instancia con su pipeline. Las órdenes de shop lo
+        //     ALIMENTAN: StubShopOrderService avanza a "paid" al confirmar.
+        //   - IShopOrderService: mismo motor transaccional de la OLA 2, ahora
+        //     construido con el tracking enchufado (factory manual — mismo patrón
+        //     StubEventTicketingService) + GetOrderAsync (detalle de mis compras).
+        //   - IReturnService (Tienda): devoluciones/reclamos (RMA) sobre una
+        //     línea de una orden pagada — máquina solicitada→aprobada/rechazada→
+        //     recibida→reembolsada; reembolso vía IPaymentProvider.RefundAsync;
+        //     AUDITADO con IAuditTrailWriter (ADR 0037), igual que Gobierno.
+        //   - IMessagingService (P7 v1, GENÉRICO): hilos 1:1 comprador↔vendedor
+        //     (post-venta). ThreadId determinista por (contexto+par) — sin hilos
+        //     duplicados. v1 simple; SH-7 v2/v3 (DM/In Basket) agregan encima.
+        services.AddSingleton<IUserCollection, StubUserCollection>();
+        services.AddSingleton<IOrderTrackingService, StubOrderTrackingService>();
+        services.AddSingleton<IShopOrderService>(sp =>
+            new StubShopOrderService(
+                sp.GetRequiredService<IProductCatalogProvider>(),
+                sp.GetRequiredService<IReservationService>(),
+                sp.GetRequiredService<IPaymentProvider>(),
+                sp.GetRequiredService<IOrderTrackingService>(),
+                null));
+        services.AddSingleton<IReturnService>(sp =>
+            new StubReturnService(
+                sp.GetRequiredService<IShopOrderService>(),
+                sp.GetRequiredService<IPaymentProvider>(),
+                sp.GetRequiredService<IAuditTrailWriter>(),
+                null));
+        services.AddSingleton<IMessagingService, StubMessagingService>();
 
         // OLA 3 Blogs — red social (doc blogs-app-spec). Seams stub-first, aditivos
         // (no tocan Booking/Travel/Shop). ADR 0002 (Application pura, sin Umbraco) +

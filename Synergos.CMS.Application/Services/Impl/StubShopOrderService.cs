@@ -28,6 +28,7 @@ public sealed class StubShopOrderService : IShopOrderService
     private readonly IProductCatalogProvider _catalog;
     private readonly IReservationService _reservations;
     private readonly IPaymentProvider _payments;
+    private readonly IOrderTrackingService? _tracking;
     private readonly Func<DateTimeOffset> _now;
     private readonly ConcurrentDictionary<string, OrderState> _orders = new(StringComparer.Ordinal);
 
@@ -35,7 +36,7 @@ public sealed class StubShopOrderService : IShopOrderService
         IProductCatalogProvider catalog,
         IReservationService reservations,
         IPaymentProvider payments)
-        : this(catalog, reservations, payments, null)
+        : this(catalog, reservations, payments, null, null)
     {
     }
 
@@ -48,10 +49,28 @@ public sealed class StubShopOrderService : IShopOrderService
         IReservationService reservations,
         IPaymentProvider payments,
         Func<DateTimeOffset>? now)
+        : this(catalog, reservations, payments, null, now)
+    {
+    }
+
+    /// <summary>
+    /// Ctor completo (OLA 1 Tienda T0): <paramref name="tracking"/> opcional —
+    /// si viene, la orden ALIMENTA su timeline al confirmar el pago (avanza a
+    /// la etapa inicial "paid" del pipeline pago→preparación→envío→entrega;
+    /// las etapas siguientes las mueve el fulfillment/vendedor vía
+    /// <see cref="IOrderTrackingService.AdvanceAsync"/>). Null = sin tracking.
+    /// </summary>
+    public StubShopOrderService(
+        IProductCatalogProvider catalog,
+        IReservationService reservations,
+        IPaymentProvider payments,
+        IOrderTrackingService? tracking,
+        Func<DateTimeOffset>? now)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
+        _tracking = tracking;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -214,6 +233,20 @@ public sealed class StubShopOrderService : IShopOrderService
 
         var paid = order with { Status = OrderStatus.Paid };
         _orders[orderRef] = paid;
+
+        // 3) La orden pagada alimenta su timeline de tracking (seam genérico
+        //    IOrderTrackingService): etapa inicial "paid" del pipeline
+        //    pago→preparación→envío→entrega. AdvanceAsync es idempotente, así
+        //    que un doble confirm no duplica la etapa.
+        if (_tracking is not null)
+        {
+            await _tracking.AdvanceAsync(
+                orderRef,
+                StubOrderTrackingService.StagePaid,
+                $"Pago capturado — orden {paid.OrderNumber}.",
+                cancellationToken);
+        }
+
         return ToConfirmation(paid);
     }
 
@@ -232,6 +265,15 @@ public sealed class StubShopOrderService : IShopOrderService
             .ToList();
 
         return Task.FromResult<IReadOnlyList<ShopOrder>>(orders);
+    }
+
+    public Task<ShopOrder?> GetOrderAsync(string orderRef, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(orderRef) || !_orders.TryGetValue(orderRef.Trim(), out var order))
+        {
+            return Task.FromResult<ShopOrder?>(null);
+        }
+        return Task.FromResult<ShopOrder?>(ToOrder(order));
     }
 
     private static ShopConfirmationResult ToConfirmation(OrderState order) => new(

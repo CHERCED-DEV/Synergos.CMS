@@ -132,4 +132,13 @@ public interface IShopOrderService
     /// reciente a la más antigua. Lista vacía si no tiene órdenes.
     /// </summary>
     Task<IReadOnlyList<ShopOrder>> GetOrdersAsync(string customerEmail, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resuelve una orden por su referencia — la usan el detalle de "mis
+    /// compras", el tracking (<see cref="IOrderTrackingService"/>) y las
+    /// devoluciones (<see cref="IReturnService"/>) para validar la orden real
+    /// (anti-tampering). Devuelve <c>null</c> si no existe (o el ref viene
+    /// vacío).
+    /// </summary>
+    Task<ShopOrder?> GetOrderAsync(string orderRef, CancellationToken cancellationToken = default);
 }
