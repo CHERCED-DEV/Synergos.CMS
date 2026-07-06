@@ -1627,6 +1627,10 @@ public sealed class DevContentFiller
         var tienda = FindVertical("ecommerce");
         if (tienda is null) { details.Add("Shop:tienda-not-found"); return; }
 
+        // OLA 1 entrega B — cara B de la Tienda: /tienda/vender monta la consola del
+        // vendedor (<synergos-seller>). Grace si elementSynSeller no está importado.
+        SeedSiteRootPage(tienda.Id, "Vender", "Tu negocio, en un solo panel", BuildTiendaVender(), details);
+
         const string dFrom = "#020817", dTo = "#4f6ef7";   // gradiente oscuro (identidad Tienda)
 
         var ropa = SeedProductCategory(tienda.Id, "Ropa", "Prendas con la identidad de tu marca.", details);
@@ -1705,6 +1709,15 @@ public sealed class DevContentFiller
     }
 
     // Home del vertical Tienda: hero + grid de productos (consulta IShopQuery en runtime).
+    private string BuildTiendaVender()
+    {
+        var v = new BlockGridJsonBuilder();
+        // La consola es la app entera de la página (100% config del CMS: apiBase por prop).
+        AddSynSeller(v, "/api/shop", "Tu negocio, en un solo panel",
+            "Ventas, publicaciones, mensajes y devoluciones — la consola del vendedor sobre el mismo motor.");
+        return v.Build();
+    }
+
     private string BuildTiendaHome()
     {
         var b = new BlockGridJsonBuilder();
@@ -2151,6 +2164,25 @@ public sealed class DevContentFiller
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/gov
             c.Set("heading", heading);        // Culture — título del portal
             c.Set("subheading", subheading);  // Culture — subtítulo del portal
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
+    /// <summary>
+    /// Monta la consola del vendedor (elementSynSeller → &lt;synergos-seller&gt;) como bloque
+    /// principal de la página. Grace: no-op si el ElementType aún no está importado.
+    /// </summary>
+    private void AddSynSeller(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    {
+        var key = _contentTypeService.Get("elementSynSeller")?.Key;
+        if (key is null) { return; }   // schema aún sin importar → grace
+        var section = b.AddTopLevelBlock(_sectionKey);
+        section.Set("cssClass", "syn-seller__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/shop
+            c.Set("heading", heading);        // Culture — título de la consola
+            c.Set("subheading", subheading);  // Culture — subtítulo de la consola
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
         });
     }
