@@ -582,12 +582,23 @@ public sealed class SeamComposer : IComposer
         //     idempotente. NO duplica estado: lee del StubEventTicketingService concreto
         //     por composición (DIP, mismo patrón que StubContentStream→StubReactionService),
         //     por eso registramos el concreto y lo exponemos bajo la interfaz.
+        // OLA 3 Eventos (doc 21 §2.6) — app completa: "Mis tickets" (holder email),
+        // transferir (QR rotativo SafeTix-like + auditado), geo en el search,
+        // crear evento (organizador → publica al catálogo) y tracking del ciclo
+        // (paid→confirmed→attended). El ticketing ahora ALIMENTA su timeline de
+        // eventos (instancia PROPIA del seam genérico IOrderTrackingService con
+        // EventPipeline — NO reusa el singleton de Tienda cuyo pipeline es de
+        // envío) y AUDITA las transferencias (IAuditTrailWriter, ADR 0037). El
+        // management publica los eventos creados vía IEventCatalogProvider (DIP).
         services.AddSingleton<IEventCatalogProvider, StubEventCatalogProvider>();
         services.AddSingleton<StubEventTicketingService>(sp =>
             new StubEventTicketingService(
                 sp.GetRequiredService<IEventCatalogProvider>(),
                 sp.GetRequiredService<IReservationService>(),
-                sp.GetRequiredService<IPaymentProvider>()));
+                sp.GetRequiredService<IPaymentProvider>(),
+                new StubOrderTrackingService(StubEventTicketingService.EventPipeline, null),
+                sp.GetRequiredService<IAuditTrailWriter>(),
+                null));
         services.AddSingleton<IEventTicketingService>(sp => sp.GetRequiredService<StubEventTicketingService>());
         services.AddSingleton<IEventManagementService>(sp =>
             new StubEventManagementService(

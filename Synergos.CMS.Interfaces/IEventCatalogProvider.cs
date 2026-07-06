@@ -1,9 +1,14 @@
 namespace Synergos.CMS.Interfaces;
 
+/// <summary>Coordenada del venue de un evento para el mapa/discovery (calca <c>StayGeo</c>).</summary>
+public sealed record EventGeo(double Lat, double Lng);
+
 /// <summary>
 /// Resumen de un evento para el catálogo/agenda (cara de asistente). Es la
 /// unidad que la pantalla de catálogo lista para la búsqueda; el detalle
 /// (tiers + seat-map) se resuelve aparte con <see cref="IEventCatalogProvider.GetEventAsync"/>.
+/// <see cref="Geo"/> es la coordenada del venue para el mapa de discovery (null si
+/// el evento no tiene ubicación geocodificada).
 /// </summary>
 public sealed record EventSummary(
     string Id,
@@ -16,7 +21,8 @@ public sealed record EventSummary(
     string ImageUrl,
     decimal PriceFrom,
     string Currency,
-    string Mode);
+    string Mode,
+    EventGeo? Geo = null);
 
 /// <summary>
 /// Una categoría de ticket reservable de un evento (General / VIP / Early-bird).
@@ -109,4 +115,15 @@ public interface IEventCatalogProvider
     /// Devuelve la ficha del evento por id o slug, o null si no existe.
     /// </summary>
     Task<EventDetail?> GetEventAsync(string eventId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Publica un evento nuevo (creado por un organizador) en el catálogo:
+    /// desde ese momento aparece en <see cref="SearchAsync"/> y su ficha se
+    /// resuelve en <see cref="GetEventAsync"/>. Devuelve el detalle publicado
+    /// (con su id/slug ya asignados). El adapter real persiste en el índice/CMS;
+    /// el stub lo agrega al catálogo en memoria. Es la seam que consume
+    /// <see cref="IEventManagementService.CreateEventAsync"/> — la cara de
+    /// organizador NO conoce el almacenamiento del catálogo (DIP).
+    /// </summary>
+    Task<EventDetail> PublishEventAsync(EventDetail draft, CancellationToken cancellationToken = default);
 }

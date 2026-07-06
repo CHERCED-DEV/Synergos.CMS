@@ -29,9 +29,27 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// </remarks>
 public sealed class StubEventTicketingService : IEventTicketingService
 {
+    /// <summary>Etapa que siembra ConfirmAsync en el timeline de eventos.</summary>
+    public const string StageConfirmed = "confirmed";
+
+    /// <summary>
+    /// Pipeline de tracking del dominio Eventos (seam genérico
+    /// <see cref="IOrderTrackingService"/>): pago → confirmado → asistió.
+    /// ConfirmAsync avanza a "confirmed" (marca "paid" de paso, monotónico); la
+    /// etapa "attended" la mueve el check-in / la operación del evento.
+    /// </summary>
+    public static readonly IReadOnlyList<OrderTrackingStageDefinition> EventPipeline = new[]
+    {
+        new OrderTrackingStageDefinition("paid", "Pago confirmado"),
+        new OrderTrackingStageDefinition(StageConfirmed, "Compra confirmada"),
+        new OrderTrackingStageDefinition("attended", "Asistió al evento"),
+    };
+
     private readonly IEventCatalogProvider _catalog;
     private readonly IReservationService _reservations;
     private readonly IPaymentProvider _payments;
+    private readonly IOrderTrackingService? _tracking;
+    private readonly IAuditTrailWriter? _audit;
     private readonly Func<DateTimeOffset> _now;
     private readonly ConcurrentDictionary<string, OrderState> _orders = new(StringComparer.Ordinal);
 
@@ -39,7 +57,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
         IEventCatalogProvider catalog,
         IReservationService reservations,
         IPaymentProvider payments)
-        : this(catalog, reservations, payments, null)
+        : this(catalog, reservations, payments, null, null, null)
     {
     }
 
@@ -52,10 +70,31 @@ public sealed class StubEventTicketingService : IEventTicketingService
         IReservationService reservations,
         IPaymentProvider payments,
         Func<DateTimeOffset>? now)
+        : this(catalog, reservations, payments, null, null, now)
+    {
+    }
+
+    /// <summary>
+    /// Ctor completo (OLA 3 Eventos): <paramref name="tracking"/> opcional — si
+    /// viene, la compra ALIMENTA su timeline al confirmar (avanza a "confirmed" del
+    /// <see cref="EventPipeline"/>; construir el tracker con ese pipeline).
+    /// <paramref name="audit"/> opcional — si viene, cada transferencia de ticket se
+    /// asienta append-only (<see cref="IAuditTrailWriter"/>). Todos null ≡ ctor
+    /// original (aditivo).
+    /// </summary>
+    public StubEventTicketingService(
+        IEventCatalogProvider catalog,
+        IReservationService reservations,
+        IPaymentProvider payments,
+        IOrderTrackingService? tracking,
+        IAuditTrailWriter? audit,
+        Func<DateTimeOffset>? now)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
+        _tracking = tracking;
+        _audit = audit;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -232,7 +271,134 @@ public sealed class StubEventTicketingService : IEventTicketingService
 
         var confirmed = order with { Status = EventOrderStatus.Confirmed };
         _orders[orderRef] = confirmed;
+
+        // 3) La compra confirmada alimenta su timeline de tracking (seam genérico
+        //    IOrderTrackingService): avanza a "confirmed" del pipeline
+        //    paid→confirmed→attended (marca "paid" de paso, monotónico).
+        //    AdvanceAsync es idempotente → un doble confirm no duplica la etapa.
+        if (_tracking is not null)
+        {
+            await _tracking.AdvanceAsync(
+                orderRef,
+                StageConfirmed,
+                $"Compra confirmada — {confirmed.Units.Count} ticket(s).",
+                cancellationToken);
+        }
+
         return ToConfirmation(confirmed);
+    }
+
+    public Task<IReadOnlyList<EventTicket>> GetTicketsAsync(string holderEmail, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(holderEmail))
+        {
+            return Task.FromResult<IReadOnlyList<EventTicket>>(Array.Empty<EventTicket>());
+        }
+
+        var email = holderEmail.Trim();
+        var tickets = _orders.Values
+            .Where(o => o.Status == EventOrderStatus.Confirmed)
+            .SelectMany(o => o.Units.Select(u => (o.EventId, Unit: u)))
+            .Where(x => string.Equals(x.Unit.HolderEmail, email, StringComparison.OrdinalIgnoreCase))
+            .Select(x => ToTicket(x.EventId, x.Unit))
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<EventTicket>>(tickets);
+    }
+
+    public async Task<EventTicketTransferResult> TransferTicketAsync(
+        string ticketId,
+        string toEmail,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(ticketId))
+        {
+            throw new ArgumentException("El ticket es obligatorio.", nameof(ticketId));
+        }
+        if (string.IsNullOrWhiteSpace(toEmail) || !toEmail.Contains('@', StringComparison.Ordinal))
+        {
+            throw new ArgumentException("El email de destino es inválido.", nameof(toEmail));
+        }
+
+        var id = ticketId.Trim();
+        var newEmail = toEmail.Trim();
+
+        // Localizar la unidad confirmada correspondiente al ticket.
+        foreach (var kvp in _orders)
+        {
+            var order = kvp.Value;
+            if (order.Status != EventOrderStatus.Confirmed)
+            {
+                continue;
+            }
+            for (var i = 0; i < order.Units.Count; i++)
+            {
+                var unit = order.Units[i];
+                if (!string.Equals(TicketId(unit.ReservationId), id, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                // Ya usado/cancelado → no transferible.
+                if (unit.CheckedIn)
+                {
+                    throw new ArgumentException("El ticket ya fue usado y no puede transferirse.", nameof(ticketId));
+                }
+
+                // Idempotente: transferir al portador actual no rota ni re-audita.
+                if (string.Equals(unit.HolderEmail, newEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    var same = ToTicket(order.EventId, unit);
+                    return new EventTicketTransferResult(same, same.Qr);
+                }
+
+                // Reasignar holder + rotar el QR (bump de versión ⇒ QR viejo inválido).
+                var derivedName = DeriveNameFromEmail(newEmail);
+                var updatedUnit = unit with
+                {
+                    HolderEmail = newEmail,
+                    HolderName = derivedName,
+                    QrVersion = unit.QrVersion + 1,
+                };
+                var updatedUnits = order.Units.ToList();
+                updatedUnits[i] = updatedUnit;
+                _orders[kvp.Key] = order with { Units = updatedUnits };
+
+                var ticket = ToTicket(order.EventId, updatedUnit);
+
+                // Auditar la transferencia (append-only, ADR 0037).
+                if (_audit is not null)
+                {
+                    await _audit.WriteAsync(
+                        new AuditEvent(
+                            Id: Guid.NewGuid().ToString("N"),
+                            OccurredAtUtc: _now().UtcDateTime,
+                            ActorEmail: unit.HolderEmail,
+                            ActorName: unit.HolderName,
+                            Action: "event.ticket.transfer",
+                            Resource: $"{order.EventId}/{id}",
+                            Outcome: "success",
+                            Detail: $"Ticket transferido de '{unit.HolderEmail}' a '{newEmail}'; QR rotado a v{updatedUnit.QrVersion}."),
+                        cancellationToken);
+                }
+
+                return new EventTicketTransferResult(ticket, ticket.Qr);
+            }
+        }
+
+        throw new ArgumentException($"Ticket '{ticketId}' no encontrado.", nameof(ticketId));
+    }
+
+    // Deriva un nombre razonable del email del nuevo portador (la parte local,
+    // capitalizada). El adapter real resolvería el nombre del Member/cuenta.
+    private static string DeriveNameFromEmail(string email)
+    {
+        var local = email.Split('@', 2)[0].Replace('.', ' ').Replace('_', ' ').Trim();
+        if (string.IsNullOrEmpty(local))
+        {
+            return email;
+        }
+        return char.ToUpperInvariant(local[0]) + local[1..];
     }
 
     // ── Lectura para la cara de organizador (StubEventManagementService) ──
@@ -257,8 +423,8 @@ public sealed class StubEventTicketingService : IEventTicketingService
             .SelectMany(o => o.Units)
             .Select(u => new EventAttendee(
                 TicketId: TicketId(u.ReservationId),
-                Name: u.AttendeeName,
-                Email: u.AttendeeEmail,
+                Name: u.HolderName,
+                Email: u.HolderEmail,
                 Tier: u.TierCode,
                 Seat: u.Seat,
                 CheckedIn: u.CheckedIn))
@@ -308,25 +474,52 @@ public sealed class StubEventTicketingService : IEventTicketingService
 
     private EventConfirmationResult ToConfirmation(OrderState order)
     {
-        var tickets = order.Units.Select(u => new EventTicket(
-            Id: TicketId(u.ReservationId),
-            Qr: BuildQr(order.EventId, TicketId(u.ReservationId)),
-            EventId: order.EventId,
-            AttendeeName: u.AttendeeName,
-            Tier: u.TierCode,
-            Seat: u.Seat)).ToList();
+        var tickets = order.Units.Select(u => ToTicket(order.EventId, u)).ToList();
         return new EventConfirmationResult(order.Status.ToString(), tickets);
     }
 
+    // Proyecta una unidad confirmada a su e-ticket (con QR rotativo + holder + estado).
+    private static EventTicket ToTicket(string eventId, UnitState u)
+    {
+        var ticketId = TicketId(u.ReservationId);
+        return new EventTicket(
+            Id: ticketId,
+            Qr: BuildQr(eventId, ticketId, u.HolderEmail, u.QrVersion),
+            EventId: eventId,
+            AttendeeName: u.HolderName,
+            Tier: u.TierCode,
+            Seat: u.Seat,
+            HolderEmail: u.HolderEmail,
+            Status: TicketStatus(u));
+    }
+
+    // Estado del ticket para la cara de asistente: used (ya escaneado) tiene
+    // prioridad; luego transferred (QR rotado al menos una vez); si no, valid.
+    private static string TicketStatus(UnitState u)
+    {
+        if (u.CheckedIn)
+        {
+            return "used";
+        }
+        return u.QrVersion > 0 ? "transferred" : "valid";
+    }
+
     // Ticket id determinista derivado del id de la reserva (estable entre
-    // confirmaciones de la misma orden → idempotencia del QR).
+    // confirmaciones de la misma orden → idempotencia del ticket).
     private static string TicketId(string reservationId)
         => "tkt_" + reservationId.Replace("resv_", string.Empty, StringComparison.Ordinal);
 
-    // Payload QR determinista por ticket. Hoy un string estable no-secreto; el
-    // adapter real lo firma con HMAC server-side (spec §8 — anti-fraude).
-    private static string BuildQr(string eventId, string ticketId)
-        => $"SYN-TKT-{eventId}-{ticketId}";
+    // Payload QR ROTATIVO determinista por ticket (SafeTix-like): incluye el holder
+    // + la versión, así que transferir (bump de versión) INVALIDA el QR viejo y
+    // emite uno nuevo. Hoy un string estable no-secreto; el adapter real lo firma
+    // con HMAC server-side (spec §8 — anti-fraude/anti-reventa).
+    private static string BuildQr(string eventId, string ticketId, string holderEmail, int qrVersion)
+    {
+        var holderTag = Math.Abs(
+            StringComparer.OrdinalIgnoreCase.GetHashCode(holderEmail ?? string.Empty))
+            .ToString("X8");
+        return $"SYN-TKT-{eventId}-{ticketId}-v{qrVersion}-{holderTag}";
+    }
 
     private sealed record PlannedUnit(string TierCode, string TierName, decimal Price, string? Seat);
 
@@ -342,6 +535,19 @@ public sealed class StubEventTicketingService : IEventTicketingService
         string ReservationId)
     {
         public bool CheckedIn { get; init; }
+
+        /// <summary>Email del portador ACTUAL del ticket (cambia al transferir).</summary>
+        public string HolderEmail { get; init; } = AttendeeEmail;
+
+        /// <summary>Nombre del portador actual (cambia al transferir).</summary>
+        public string HolderName { get; init; } = AttendeeName;
+
+        /// <summary>
+        /// Versión del QR — arranca en 0 y se incrementa en cada transferencia
+        /// (SafeTix-like: el QR es determinista por holder+ticket+versión, así que
+        /// bumpear la versión INVALIDA el QR viejo y emite uno nuevo).
+        /// </summary>
+        public int QrVersion { get; init; }
     }
 
     private enum EventOrderStatus { Pending, Confirmed }

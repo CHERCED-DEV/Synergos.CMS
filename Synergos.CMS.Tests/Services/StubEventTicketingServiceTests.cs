@@ -134,4 +134,88 @@ public class StubEventTicketingServiceTests
     {
         await Assert.ThrowsAsync<ArgumentException>(() => Make().ConfirmAsync("nope"));
     }
+
+    // ── OLA 3 — Mis tickets / transferir / tracking ─────────────────────
+
+    [Fact] // happy: "Mis tickets" del comprador (holder) tras confirmar; email desconocido → vacío
+    public async Task GetTickets_ByHolder_ReturnsConfirmedTickets()
+    {
+        var svc = Make();
+        var checkout = await svc.CheckoutAsync("evt-festival-estereo",
+            new[] { new EventCheckoutItem("GEN", null, 2) },
+            new[] { Attendee("1"), Attendee("2") });
+        await svc.ConfirmAsync(checkout.OrderRef);
+
+        // El comprador (primer asistente) es holder de sus tickets.
+        var mine = await svc.GetTicketsAsync("asistente1@synergos.co");
+        Assert.Single(mine);
+        Assert.All(mine, t => Assert.Equal("valid", t.Status));
+
+        Assert.Empty(await svc.GetTicketsAsync("nadie@synergos.co"));
+    }
+
+    [Fact] // happy: transferir reasigna holder, rota el QR (viejo != nuevo) y cambia estado
+    public async Task Transfer_RotatesQr_AndReassignsHolder()
+    {
+        var svc = Make();
+        var checkout = await svc.CheckoutAsync("evt-festival-estereo",
+            new[] { new EventCheckoutItem("GEN", null, 1) }, new[] { Attendee("1") });
+        var confirmation = await svc.ConfirmAsync(checkout.OrderRef);
+        var ticket = confirmation.Tickets.Single();
+        var oldQr = ticket.Qr;
+
+        var transfer = await svc.TransferTicketAsync(ticket.Id, "nuevo.duenio@synergos.co");
+
+        Assert.NotEqual(oldQr, transfer.NewQr);        // QR viejo invalidado
+        Assert.Equal(transfer.NewQr, transfer.Ticket.Qr);
+        Assert.Equal("nuevo.duenio@synergos.co", transfer.Ticket.HolderEmail);
+        Assert.Equal("transferred", transfer.Ticket.Status);
+
+        // El ticket ya no aparece para el holder original; sí para el nuevo.
+        Assert.Empty(await svc.GetTicketsAsync("asistente1@synergos.co"));
+        Assert.Single(await svc.GetTicketsAsync("nuevo.duenio@synergos.co"));
+    }
+
+    [Fact] // idempotent: transferir al holder actual no rota el QR ni cambia nada
+    public async Task Transfer_ToCurrentHolder_IsIdempotent()
+    {
+        var svc = Make();
+        var checkout = await svc.CheckoutAsync("evt-festival-estereo",
+            new[] { new EventCheckoutItem("GEN", null, 1) }, new[] { Attendee("1") });
+        var ticket = (await svc.ConfirmAsync(checkout.OrderRef)).Tickets.Single();
+
+        var again = await svc.TransferTicketAsync(ticket.Id, "asistente1@synergos.co");
+        Assert.Equal(ticket.Qr, again.NewQr); // sin rotar
+    }
+
+    [Fact] // filter/invalid: transferir un ticket inexistente o a email inválido lanza
+    public async Task Transfer_InvalidTicketOrEmail_Throws()
+    {
+        var svc = Make();
+        await Assert.ThrowsAsync<ArgumentException>(() => svc.TransferTicketAsync("tkt_no-existe", "x@y.co"));
+
+        var checkout = await svc.CheckoutAsync("evt-festival-estereo",
+            new[] { new EventCheckoutItem("GEN", null, 1) }, new[] { Attendee("1") });
+        var ticket = (await svc.ConfirmAsync(checkout.OrderRef)).Tickets.Single();
+        await Assert.ThrowsAsync<ArgumentException>(() => svc.TransferTicketAsync(ticket.Id, "sin-arroba"));
+    }
+
+    [Fact] // happy: confirmar alimenta el timeline de tracking (pipeline eventos)
+    public async Task Confirm_FeedsTrackingTimeline()
+    {
+        var tracking = new StubOrderTrackingService(StubEventTicketingService.EventPipeline, null);
+        var svc = new StubEventTicketingService(
+            new StubEventCatalogProvider(), new StubReservationService(), new StubPaymentProvider(),
+            tracking, null, null);
+
+        var checkout = await svc.CheckoutAsync("evt-festival-estereo",
+            new[] { new EventCheckoutItem("GEN", null, 1) }, new[] { Attendee("1") });
+
+        Assert.Null(await tracking.GetTimelineAsync(checkout.OrderRef)); // aún no confirmado
+
+        await svc.ConfirmAsync(checkout.OrderRef);
+        var timeline = await tracking.GetTimelineAsync(checkout.OrderRef);
+        Assert.NotNull(timeline);
+        Assert.Equal("confirmed", timeline!.CurrentStage);
+    }
 }

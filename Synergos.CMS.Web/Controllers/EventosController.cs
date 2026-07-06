@@ -185,6 +185,90 @@ public sealed class EventosController : ControllerBase
         return Ok(new CheckInResponse(result.Status));
     }
 
+    // ── 7. Mis tickets (cara de asistente) ──────────────────────────────
+    // GET /api/eventos/tickets?holder= → { tickets:[...] }
+    [HttpGet("tickets")]
+    public async Task<IActionResult> Tickets([FromQuery] string? holder, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(holder))
+        {
+            return BadRequest(new { error = "holder es requerido." });
+        }
+
+        var tickets = await _ticketing.GetTicketsAsync(holder.Trim(), cancellationToken);
+        return Ok(new TicketsResponse(tickets.Select(ToTicketDto).ToList()));
+    }
+
+    // ── 8. Transferir ticket (reasigna holder + rota QR + auditado) ─────
+    // POST /api/eventos/ticket/{id}/transfer { toEmail } → { ticket, newQr }
+    [HttpPost("ticket/{id}/transfer")]
+    public async Task<IActionResult> TransferTicket(
+        string id,
+        [FromBody] TransferRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return BadRequest(new { error = "El id del ticket es requerido." });
+        }
+        if (request is null || string.IsNullOrWhiteSpace(request.ToEmail))
+        {
+            return BadRequest(new { error = "toEmail es requerido." });
+        }
+
+        EventTicketTransferResult result;
+        try
+        {
+            result = await _ticketing.TransferTicketAsync(id.Trim(), request.ToEmail.Trim(), cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        return Ok(new TransferResponse(ToTicketDto(result.Ticket), result.NewQr));
+    }
+
+    // ── 9. Crear evento (organizador → publica al catálogo) ─────────────
+    // POST /api/eventos/event { draft } → { eventId }
+    [HttpPost("event")]
+    public async Task<IActionResult> CreateEvent([FromBody] EventDraftRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.Name))
+        {
+            return BadRequest(new { error = "name es requerido." });
+        }
+
+        var tiers = (request.Tiers ?? Array.Empty<EventTierDraftRequest>())
+            .Select(t => new EventTierDraft(t.Name, t.Price, t.Capacity))
+            .ToList();
+
+        var draft = new EventDraft(
+            Name: request.Name.Trim(),
+            Venue: request.Venue ?? string.Empty,
+            Date: request.Date,
+            Tiers: tiers,
+            SeatMap: null,
+            City: request.City,
+            Category: request.Category,
+            Currency: request.Currency,
+            Description: request.Description,
+            Organizer: request.Organizer,
+            ImageUrl: request.ImageUrl);
+
+        EventCreateResult result;
+        try
+        {
+            result = await _management.CreateEventAsync(draft, cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        return Ok(new CreateEventResponse(result.EventId));
+    }
+
     // ── Mappers a DTOs JSON estables ────────────────────────────────────
 
     private EventSummaryDto ToSummaryDto(EventSummary s) => new(
@@ -199,7 +283,8 @@ public sealed class EventosController : ControllerBase
         PriceFrom: s.PriceFrom,
         PriceFromFormatted: _priceFormatter.Format(s.PriceFrom, s.Currency),
         Currency: s.Currency,
-        Mode: s.Mode);
+        Mode: s.Mode,
+        Geo: s.Geo is null ? null : new EventGeoDto(s.Geo.Lat, s.Geo.Lng));
 
     private EventTierDto ToTierDto(EventTier t) => new(
         Code: t.Code,
@@ -240,7 +325,9 @@ public sealed class EventosController : ControllerBase
         EventId: t.EventId,
         AttendeeName: t.AttendeeName,
         Tier: t.Tier,
-        Seat: t.Seat);
+        Seat: t.Seat,
+        HolderEmail: t.HolderEmail,
+        Status: t.Status);
 
     private static EventAttendeeDto ToAttendeeDto(EventAttendee a) => new(
         TicketId: a.TicketId,
@@ -267,6 +354,8 @@ public sealed class EventosController : ControllerBase
 
     // ── Response DTOs (JSON estable para la UI) ─────────────────────────
 
+    public sealed record EventGeoDto(double Lat, double Lng);
+
     public sealed record EventSummaryDto(
         string Id,
         string Slug,
@@ -279,7 +368,10 @@ public sealed class EventosController : ControllerBase
         decimal PriceFrom,
         string PriceFromFormatted,
         string Currency,
-        string Mode);
+        string Mode,
+        // Contrato: la clave es "geo" (lat/lng del venue para el mapa/discovery),
+        // null si el evento no tiene ubicación geocodificada.
+        [property: JsonPropertyName("geo")] EventGeoDto? Geo);
 
     public sealed record EventsResponse(IReadOnlyList<EventSummaryDto> Events);
 
@@ -331,9 +423,39 @@ public sealed class EventosController : ControllerBase
         string EventId,
         string AttendeeName,
         string Tier,
-        string? Seat);
+        string? Seat,
+        string HolderEmail,
+        string Status);
 
     public sealed record ConfirmResponse(string Status, IReadOnlyList<EventTicketDto> Tickets);
+
+    // ── OLA 3 — Mis tickets / transferir / crear evento ─────────────────
+
+    public sealed record TicketsResponse(IReadOnlyList<EventTicketDto> Tickets);
+
+    public sealed record TransferRequest(string ToEmail);
+
+    public sealed record TransferResponse(
+        EventTicketDto Ticket,
+        // Contrato exacto: la clave es "newQr" — el nuevo payload QR emitido tras
+        // la transferencia (el QR viejo queda invalidado).
+        [property: JsonPropertyName("newQr")] string NewQr);
+
+    public sealed record EventTierDraftRequest(string Name, decimal Price, int Capacity);
+
+    public sealed record EventDraftRequest(
+        string Name,
+        string? Venue,
+        DateTimeOffset Date,
+        IReadOnlyList<EventTierDraftRequest>? Tiers,
+        string? City,
+        string? Category,
+        string? Currency,
+        string? Description,
+        string? Organizer,
+        string? ImageUrl);
+
+    public sealed record CreateEventResponse(string EventId);
 
     public sealed record EventAttendeeDto(
         string TicketId,

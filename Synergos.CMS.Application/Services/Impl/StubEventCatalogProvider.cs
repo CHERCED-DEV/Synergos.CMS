@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -22,13 +23,18 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
 {
     private const string Currency = "COP";
 
-    // Catálogo sembrado: 4 eventos en categorías distintas, mezclando modo
-    // general (cantidad por tier) y reserved (seat-map por zona).
-    private static readonly IReadOnlyList<EventDetail> Catalog = BuildCatalog();
+    // Catálogo sembrado (4 eventos, mezcla general/reserved) + eventos publicados
+    // por organizadores en runtime (PublishEventAsync). ConcurrentDictionary
+    // keyed por id → el estado (eventos creados en la demo) vive en el proceso,
+    // igual que el resto de stubs del motor. Sembrado en el ctor estático.
+    private static readonly ConcurrentDictionary<string, EventDetail> Catalog = BuildCatalog();
+
+    // Contador monotónico para el id de eventos publicados por organizadores.
+    private static int _publishedCounter;
 
     public Task<IReadOnlyList<EventSummary>> SearchAsync(string? query, CancellationToken cancellationToken = default)
     {
-        IEnumerable<EventDetail> source = Catalog;
+        IEnumerable<EventDetail> source = Catalog.Values;
 
         if (!string.IsNullOrWhiteSpace(query))
         {
@@ -56,14 +62,34 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
         }
 
         var id = eventId.Trim();
-        var match = Catalog.FirstOrDefault(e =>
+        var match = Catalog.Values.FirstOrDefault(e =>
             string.Equals(e.Summary.Id, id, StringComparison.OrdinalIgnoreCase)
             || string.Equals(e.Summary.Slug, id, StringComparison.OrdinalIgnoreCase));
 
         return Task.FromResult(match);
     }
 
-    private static IReadOnlyList<EventDetail> BuildCatalog()
+    public Task<EventDetail> PublishEventAsync(EventDetail draft, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        if (string.IsNullOrWhiteSpace(draft.Summary.Id))
+        {
+            throw new ArgumentException("El evento publicado requiere un id.", nameof(draft));
+        }
+        // Aditivo idempotente: mismo id → reemplaza (re-publicar es no-op efectivo).
+        Catalog[draft.Summary.Id] = draft;
+        return Task.FromResult(draft);
+    }
+
+    /// <summary>
+    /// Reserva el siguiente id estable para un evento publicado por un organizador
+    /// (<c>evt-org-N</c>). Determinista dentro del proceso; el adapter real usa el
+    /// id del CMS/índice.
+    /// </summary>
+    public static string NextPublishedId()
+        => $"evt-org-{Interlocked.Increment(ref _publishedCounter)}";
+
+    private static ConcurrentDictionary<string, EventDetail> BuildCatalog()
     {
         var festival = new EventDetail(
             Summary: new EventSummary(
@@ -77,7 +103,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 ImageUrl: "/media/eventos/festival-estereo.webp",
                 PriceFrom: 180_000m,
                 Currency: Currency,
-                Mode: "general"),
+                Mode: "general",
+                Geo: new EventGeo(4.6584, -74.0936)), // Parque Simón Bolívar, Bogotá
             Description: "Dos escenarios, más de 20 artistas nacionales e internacionales y food trucks. La cita musical del año en Bogotá.",
             Organizer: "Estéreo Producciones",
             Tiers: new[]
@@ -100,7 +127,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 ImageUrl: "/media/eventos/sinfonico.webp",
                 PriceFrom: 90_000m,
                 Currency: Currency,
-                Mode: "reserved"),
+                Mode: "reserved",
+                Geo: new EventGeo(6.2447, -75.5749)), // Teatro Metropolitano, Medellín
             Description: "La Orquesta Filarmónica interpreta un programa de clásicos. Asientos numerados por zona.",
             Organizer: "Teatro Metropolitano",
             Tiers: new[]
@@ -148,7 +176,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 ImageUrl: "/media/eventos/cumbre-tech.webp",
                 PriceFrom: 250_000m,
                 Currency: Currency,
-                Mode: "general"),
+                Mode: "general",
+                Geo: new EventGeo(4.6280, -74.0644)), // Ágora Bogotá
             Description: "Keynotes de líderes de la industria, talleres prácticos y networking. El evento de tecnología más grande del país.",
             Organizer: "Synergos Labs",
             Tiers: new[]
@@ -170,7 +199,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 ImageUrl: "/media/eventos/obra-infantil.webp",
                 PriceFrom: 45_000m,
                 Currency: Currency,
-                Mode: "general"),
+                Mode: "general",
+                Geo: new EventGeo(3.4508, -76.5320)), // Teatro Municipal, Cali
             Description: "Una adaptación familiar del clásico de Dickens, con música en vivo. Apta para todo público.",
             Organizer: "Teatro Municipal de Cali",
             Tiers: new[]
@@ -179,7 +209,13 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
             },
             SeatMap: null);
 
-        return new[] { festival, teatro, conferencia, teatroInfantil };
+        var seeded = new[] { festival, teatro, conferencia, teatroInfantil };
+        var map = new ConcurrentDictionary<string, EventDetail>(StringComparer.Ordinal);
+        foreach (var e in seeded)
+        {
+            map[e.Summary.Id] = e;
+        }
+        return map;
     }
 
     // Construye una fila de N asientos; los que estén en soldLabels arrancan como

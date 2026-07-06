@@ -32,6 +32,34 @@ public sealed record EventManageView(
 public sealed record EventCheckInResult(string Status);
 
 /// <summary>
+/// Un tier del borrador de evento del organizador: nombre visible + precio +
+/// aforo. El <see cref="Capacity"/> debe ser &gt; 0.
+/// </summary>
+public sealed record EventTierDraft(string Name, decimal Price, int Capacity);
+
+/// <summary>
+/// Borrador de evento nuevo que arma el organizador (cara de creación). Se valida
+/// y se publica en el catálogo vía <see cref="IEventManagementService.CreateEventAsync"/>.
+/// <see cref="SeatMap"/> es opcional (modo reserved); sin él, el evento es modo
+/// general (selección por cantidad de tier).
+/// </summary>
+public sealed record EventDraft(
+    string Name,
+    string Venue,
+    DateTimeOffset Date,
+    IReadOnlyList<EventTierDraft> Tiers,
+    EventSeatMap? SeatMap = null,
+    string? City = null,
+    string? Category = null,
+    string? Currency = null,
+    string? Description = null,
+    string? Organizer = null,
+    string? ImageUrl = null);
+
+/// <summary>Resultado de crear un evento: el id asignado al evento publicado.</summary>
+public sealed record EventCreateResult(string EventId);
+
+/// <summary>
 /// Cara de organizador (operacional) del vertical Eventos: dashboard de
 /// asistentes/aforo + check-in onsite por ticket. No transacciona — opera sobre
 /// los e-tickets ya emitidos por <see cref="IEventTicketingService"/>.
@@ -61,4 +89,14 @@ public interface IEventManagementService
     /// si el ticket no existe.
     /// </summary>
     Task<EventCheckInResult> CheckInAsync(string ticketId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Publica un evento nuevo del organizador en el catálogo (aparece en el
+    /// search desde ese momento). Valida el borrador (nombre/venue obligatorios,
+    /// al menos un tier, cada aforo &gt; 0) y delega la publicación al
+    /// <see cref="IEventCatalogProvider.PublishEventAsync"/> (DIP — no conoce el
+    /// almacenamiento). Devuelve el id del evento publicado. Lanza
+    /// <see cref="ArgumentException"/> si el borrador es inválido.
+    /// </summary>
+    Task<EventCreateResult> CreateEventAsync(EventDraft draft, CancellationToken cancellationToken = default);
 }

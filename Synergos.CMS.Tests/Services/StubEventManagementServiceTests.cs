@@ -83,4 +83,44 @@ public class StubEventManagementServiceTests
         var attendee = (await mgmt.GetManageAsync("evt-festival-estereo")).Attendees.Single();
         Assert.True(attendee.CheckedIn);
     }
+
+    // ── OLA 3 — Crear evento (organizador) ──────────────────────────────
+
+    [Fact] // happy: crear un evento lo publica y queda buscable + con ficha resoluble
+    public async Task CreateEvent_PublishesToCatalog()
+    {
+        var (mgmt, _) = Make();
+        var draft = new EventDraft(
+            Name: "Concierto de Prueba",
+            Venue: "Movistar Arena",
+            Date: DateTimeOffset.UtcNow.AddDays(45),
+            Tiers: new[]
+            {
+                new EventTierDraft("General", 120_000m, 500),
+                new EventTierDraft("VIP", 300_000m, 100),
+            });
+
+        var result = await mgmt.CreateEventAsync(draft);
+        Assert.False(string.IsNullOrWhiteSpace(result.EventId));
+
+        // El dashboard del evento recién creado resuelve (aforo = suma de tiers, 0 vendidos).
+        var view = await mgmt.GetManageAsync(result.EventId);
+        Assert.Equal(600, view.Capacity);
+        Assert.Equal(0, view.Sold);
+    }
+
+    [Fact] // filter/invalid: sin tiers o aforo <= 0 lanza
+    public async Task CreateEvent_InvalidDraft_Throws()
+    {
+        var (mgmt, _) = Make();
+
+        // sin tiers
+        await Assert.ThrowsAsync<ArgumentException>(() => mgmt.CreateEventAsync(
+            new EventDraft("Sin tiers", "Venue", DateTimeOffset.UtcNow, Array.Empty<EventTierDraft>())));
+
+        // aforo <= 0
+        await Assert.ThrowsAsync<ArgumentException>(() => mgmt.CreateEventAsync(
+            new EventDraft("Aforo cero", "Venue", DateTimeOffset.UtcNow,
+                new[] { new EventTierDraft("General", 10_000m, 0) })));
+    }
 }

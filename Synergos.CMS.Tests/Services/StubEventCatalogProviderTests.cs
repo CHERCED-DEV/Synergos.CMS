@@ -77,4 +77,38 @@ public class StubEventCatalogProviderTests
         Assert.Null(await svc.GetEventAsync("nope"));
         Assert.Null(await svc.GetEventAsync(""));
     }
+
+    // ── OLA 3 — Geo en el search + publicar evento ──────────────────────
+
+    [Fact] // happy: el search devuelve geo (lat/lng) por evento para el mapa/discovery
+    public async Task Search_IncludesGeo()
+    {
+        var results = await Make().SearchAsync(null);
+        var withGeo = results.Where(e => e.Geo is not null).ToList();
+        Assert.NotEmpty(withGeo);
+        Assert.All(withGeo, e =>
+        {
+            Assert.InRange(e.Geo!.Lat, -90, 90);
+            Assert.InRange(e.Geo.Lng, -180, 180);
+        });
+    }
+
+    [Fact] // happy: publicar un evento lo hace visible en search + ficha
+    public async Task Publish_MakesEventDiscoverable()
+    {
+        var svc = Make();
+        var id = StubEventCatalogProvider.NextPublishedId();
+        var detail = new EventDetail(
+            Summary: new EventSummary(
+                id, "evento-de-prueba", "Evento de Prueba", "Evento", "Bogotá", "Venue X",
+                DateTimeOffset.UtcNow.AddDays(30), "", 50_000m, "COP", "general", null),
+            Description: "", Organizer: "Org",
+            Tiers: new[] { new EventTier("GEN", "General", 50_000m, "COP", 100, 100, 10) },
+            SeatMap: null);
+
+        await svc.PublishEventAsync(detail);
+
+        Assert.NotNull(await svc.GetEventAsync(id));
+        Assert.Contains(await svc.SearchAsync("Prueba"), e => e.Id == id);
+    }
 }

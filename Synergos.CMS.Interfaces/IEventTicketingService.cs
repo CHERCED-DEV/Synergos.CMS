@@ -30,10 +30,13 @@ public sealed record EventCheckoutResult(
     string Currency);
 
 /// <summary>
-/// Un e-ticket emitido al confirmar: id único + payload QR determinista (no
-/// falsificable a futuro vía firma HMAC; hoy un string estable) + a qué
+/// Un e-ticket emitido al confirmar: id único + payload QR ROTATIVO determinista
+/// (SafeTix-like: cambia al transferir el ticket; no falsificable a futuro vía
+/// firma HMAC — hoy un string estable derivado de holder+ticket+versión) + a qué
 /// asistente / tier / asiento corresponde. Lo escanea la cara de organizador
-/// (<see cref="IEventManagementService.CheckInAsync"/>).
+/// (<see cref="IEventManagementService.CheckInAsync"/>). <see cref="HolderEmail"/>
+/// es el email del portador actual (cambia al transferir); <see cref="Status"/> =
+/// valid | used | transferred | cancelled.
 /// </summary>
 public sealed record EventTicket(
     string Id,
@@ -41,7 +44,15 @@ public sealed record EventTicket(
     string EventId,
     string AttendeeName,
     string Tier,
-    string? Seat);
+    string? Seat,
+    string HolderEmail = "",
+    string Status = "valid");
+
+/// <summary>
+/// Resultado de transferir un ticket: el ticket ya reasignado al nuevo portador
+/// (con su QR rotado) + el nuevo payload QR. El QR viejo queda invalidado.
+/// </summary>
+public sealed record EventTicketTransferResult(EventTicket Ticket, string NewQr);
 
 /// <summary>
 /// Resultado de confirmar la orden: estado final + los e-tickets emitidos (uno
@@ -91,4 +102,26 @@ public interface IEventTicketingService
     /// si la orden no existe o el pago no se pudo capturar.
     /// </summary>
     Task<EventConfirmationResult> ConfirmAsync(string orderRef, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Devuelve los e-tickets del asistente <paramref name="holderEmail"/> (los
+    /// que compró o los que le transfirieron), con su id/evento/tier/asiento, QR
+    /// vigente y estado (valid | used | transferred | cancelled). "Mis tickets"
+    /// de la cara de asistente. Vacío si el email no tiene tickets.
+    /// </summary>
+    Task<IReadOnlyList<EventTicket>> GetTicketsAsync(string holderEmail, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Transfiere el ticket <paramref name="ticketId"/> al portador
+    /// <paramref name="toEmail"/>: reasigna el holder, INVALIDA el QR viejo y
+    /// emite uno nuevo (rotativo determinista por holder+ticket+versión) y lo
+    /// AUDITA (<see cref="IAuditTrailWriter"/>). IDEMPOTENTE: transferir al mismo
+    /// portador actual devuelve el ticket sin rotar ni re-auditar. Lanza
+    /// <see cref="ArgumentException"/> si el ticket no existe, el email destino es
+    /// inválido, o el ticket ya fue usado/cancelado (no transferible).
+    /// </summary>
+    Task<EventTicketTransferResult> TransferTicketAsync(
+        string ticketId,
+        string toEmail,
+        CancellationToken cancellationToken = default);
 }
