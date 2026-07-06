@@ -30,6 +30,7 @@ public sealed class TravelController : ControllerBase
     private readonly IFlightAvailabilityProvider _flights;
     private readonly ICarRentalProvider _cars;
     private readonly ITravelCartService _cart;
+    private readonly IStayContentProvider _stays;
     private readonly IPriceFormatter _priceFormatter;
 
     public TravelController(
@@ -37,12 +38,14 @@ public sealed class TravelController : ControllerBase
         IFlightAvailabilityProvider flights,
         ICarRentalProvider cars,
         ITravelCartService cart,
+        IStayContentProvider stays,
         IPriceFormatter priceFormatter)
     {
         _hotels = hotels;
         _flights = flights;
         _cars = cars;
         _cart = cart;
+        _stays = stays;
         _priceFormatter = priceFormatter;
     }
 
@@ -73,18 +76,34 @@ public sealed class TravelController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
 
-        var results = offers.Select(o => new HotelOfferDto(
-            OfferId: $"{o.RoomTypeCode}/{o.RatePlanCode}",
-            Product: TravelProductType.Hotel.ToString(),
-            RoomTypeCode: o.RoomTypeCode,
-            RoomTypeName: o.RoomTypeName,
-            RatePlanCode: o.RatePlanCode,
-            BoardBasis: o.BoardBasis,
-            Refundable: o.Refundable,
-            RoomsLeft: o.RoomsLeft,
-            Price: o.TotalPrice,
-            PriceFormatted: _priceFormatter.Format(o.TotalPrice, o.Currency),
-            Currency: o.Currency)).ToList();
+        // Geo por oferta (mapa SH-8): cada room type pertenece a una estadía
+        // sembrada del IStayContentProvider — resolver una vez por código.
+        var staysByRoomType = new Dictionary<string, StayDetail?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var code in offers.Select(o => o.RoomTypeCode).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            staysByRoomType[code] = await _stays.GetStayAsync(code, cancellationToken);
+        }
+
+        var results = offers.Select(o =>
+        {
+            var stay = staysByRoomType.GetValueOrDefault(o.RoomTypeCode);
+            return new HotelOfferDto(
+                OfferId: $"{o.RoomTypeCode}/{o.RatePlanCode}",
+                Product: TravelProductType.Hotel.ToString(),
+                RoomTypeCode: o.RoomTypeCode,
+                RoomTypeName: o.RoomTypeName,
+                RatePlanCode: o.RatePlanCode,
+                BoardBasis: o.BoardBasis,
+                Refundable: o.Refundable,
+                RoomsLeft: o.RoomsLeft,
+                Price: o.TotalPrice,
+                PriceFormatted: _priceFormatter.Format(o.TotalPrice, o.Currency),
+                Currency: o.Currency,
+                StayId: stay?.StayId,
+                StayName: stay?.Name,
+                City: stay?.City,
+                Geo: stay is null ? null : new GeoDto(stay.Geo.Lat, stay.Geo.Lng));
+        }).ToList();
 
         return Ok(new { offers = results });
     }
@@ -277,7 +296,117 @@ public sealed class TravelController : ControllerBase
             Items: items));
     }
 
+    // ── 6. Trips ("Mis viajes") ────────────────────────────────────
+    // GET /api/travel/trips?traveler=<email> → { trips:[...] }
+    [HttpGet("trips")]
+    public async Task<IActionResult> Trips(
+        [FromQuery] string? traveler,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(traveler))
+        {
+            return BadRequest(new { error = "El parámetro 'traveler' (email) es requerido." });
+        }
+
+        var trips = await _cart.GetTripsAsync(traveler.Trim(), cancellationToken);
+        return Ok(new TripsResponse(trips.Select(ToTripDto).ToList()));
+    }
+
+    // ── 7. Detalle de la orden de viaje (MMB) ──────────────────────
+    // GET /api/travel/order/{orderRef} → { trip:{...} }
+    [HttpGet("order/{orderRef}")]
+    public async Task<IActionResult> Order(string orderRef, CancellationToken cancellationToken)
+    {
+        var order = await _cart.GetOrderAsync(orderRef, cancellationToken);
+        if (order is null)
+        {
+            return NotFound(new { error = "Orden de viaje no encontrada." });
+        }
+        return Ok(new { trip = ToTripDto(order) });
+    }
+
+    // ── 8. Cancelar orden (MMB v1) ─────────────────────────────────
+    // POST /api/travel/order/{orderRef}/cancel → { status, refunded, ... }
+    [HttpPost("order/{orderRef}/cancel")]
+    public async Task<IActionResult> CancelOrder(string orderRef, CancellationToken cancellationToken)
+    {
+        TravelCancellationResult result;
+        try
+        {
+            result = await _cart.CancelOrderAsync(orderRef, cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+
+        return Ok(new CancelOrderResponse(
+            Status: result.Status,
+            Refunded: result.Refunded,
+            RefundAmount: result.RefundAmount,
+            RefundAmountFormatted: _priceFormatter.Format(result.RefundAmount, result.Currency),
+            Currency: result.Currency,
+            OrderRef: result.OrderRef));
+    }
+
+    // ── 9. Ficha de estadía rica ───────────────────────────────────
+    // GET /api/travel/stay/{id} → { stay:{gallery,amenities,description,specs,geo,reviews} }
+    // {id} = stayId ("ctg-getsemani") o room type code ("DLX").
+    [HttpGet("stay/{id}")]
+    public async Task<IActionResult> Stay(string id, CancellationToken cancellationToken)
+    {
+        var stay = await _stays.GetStayAsync(id, cancellationToken);
+        if (stay is null)
+        {
+            return NotFound(new { error = "Estadía no encontrada." });
+        }
+
+        return Ok(new
+        {
+            stay = new StayDto(
+                StayId: stay.StayId,
+                Name: stay.Name,
+                City: stay.City,
+                Region: stay.Region,
+                Address: stay.Address,
+                Description: stay.Description,
+                Gallery: stay.Gallery,
+                Amenities: stay.Amenities,
+                Specs: stay.Specs.Select(s => new StaySpecDto(s.Label, s.Value)).ToList(),
+                Geo: new GeoDto(stay.Geo.Lat, stay.Geo.Lng),
+                Reviews: new StayReviewsDto(
+                    Average: stay.Reviews.Average,
+                    Count: stay.Reviews.Count,
+                    Highlight: stay.Reviews.Highlight,
+                    Categories: stay.Reviews.Categories
+                        .Select(c => new StayReviewCategoryDto(c.Category, c.Score)).ToList()),
+                RoomTypeCodes: stay.RoomTypeCodes),
+        });
+    }
+
     // ── Helpers ────────────────────────────────────────────────────
+
+    private TripDto ToTripDto(TravelOrder order) => new(
+        OrderRef: order.OrderRef,
+        Status: order.Status,
+        ConfirmationCode: order.ConfirmationCode,
+        GuestName: order.GuestName,
+        GuestEmail: order.GuestEmail,
+        CurrentStage: order.CurrentStage,
+        Total: order.Total,
+        TotalFormatted: _priceFormatter.Format(order.Total, order.Currency),
+        Currency: order.Currency,
+        CreatedAt: order.CreatedAt,
+        UpdatedAt: order.UpdatedAt,
+        Items: order.Items.Select(i => new ConfirmItemDto(
+            Product: i.Product.ToString(),
+            OfferId: i.OfferId,
+            Label: i.Label,
+            ReservationId: i.ReservationId,
+            Status: i.Status,
+            Price: i.Price,
+            PriceFormatted: _priceFormatter.Format(i.Price, i.Currency),
+            Currency: i.Currency)).ToList());
 
     // El stub de hoteles solo necesita ocupación por habitación; sin edades reales
     // en la query, sembramos edades de niño (8) para satisfacer "niño con adulto".
@@ -295,7 +424,10 @@ public sealed class TravelController : ControllerBase
 
     public sealed record HotelOfferDto(
         string OfferId, string Product, string RoomTypeCode, string RoomTypeName, string RatePlanCode,
-        string BoardBasis, bool Refundable, int RoomsLeft, decimal Price, string PriceFormatted, string Currency);
+        string BoardBasis, bool Refundable, int RoomsLeft, decimal Price, string PriceFormatted, string Currency,
+        string? StayId = null, string? StayName = null, string? City = null, GeoDto? Geo = null);
+
+    public sealed record GeoDto(double Lat, double Lng);
 
     public sealed record FlightOfferDto(
         string OfferId, string Product, string FlightId, string Origin, string Destination, int Stops,
@@ -316,4 +448,27 @@ public sealed class TravelController : ControllerBase
 
     public sealed record ConfirmResponse(
         string Status, string ConfirmationCode, string OrderRef, IReadOnlyList<ConfirmItemDto> Items);
+
+    public sealed record TripDto(
+        string OrderRef, string Status, string? ConfirmationCode, string GuestName, string GuestEmail,
+        string? CurrentStage, decimal Total, string TotalFormatted, string Currency,
+        DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, IReadOnlyList<ConfirmItemDto> Items);
+
+    public sealed record TripsResponse(IReadOnlyList<TripDto> Trips);
+
+    public sealed record CancelOrderResponse(
+        string Status, bool Refunded, decimal RefundAmount, string RefundAmountFormatted,
+        string Currency, string OrderRef);
+
+    public sealed record StaySpecDto(string Label, string Value);
+
+    public sealed record StayReviewCategoryDto(string Category, double Score);
+
+    public sealed record StayReviewsDto(
+        double Average, int Count, string Highlight, IReadOnlyList<StayReviewCategoryDto> Categories);
+
+    public sealed record StayDto(
+        string StayId, string Name, string City, string Region, string Address, string Description,
+        IReadOnlyList<string> Gallery, IReadOnlyList<string> Amenities, IReadOnlyList<StaySpecDto> Specs,
+        GeoDto Geo, StayReviewsDto Reviews, IReadOnlyList<string> RoomTypeCodes);
 }

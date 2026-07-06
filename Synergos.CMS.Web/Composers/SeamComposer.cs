@@ -198,7 +198,29 @@ public sealed class SeamComposer : IComposer
         // total. ConfirmAsync captura el pago y confirma todas las reservas.
         // Idempotente. Singleton — el estado del carrito (orderRef → reservas +
         // sesión) vive en memoria del proceso, igual que el StubReservationService.
-        services.AddSingleton<ITravelCartService, TravelCartService>();
+        //
+        // OLA 2 Booking (doc 21 §2.2) — cara viajera: el carrito ahora registra el
+        // guest del checkout ("Mis viajes" por email), expone GetTrips/GetOrder/
+        // CancelOrder (MMB v1: cancela reservas + refund si capturado, idempotente)
+        // y ALIMENTA su timeline de viaje al confirmar. El tracker de viaje es una
+        // instancia PROPIA del seam genérico IOrderTrackingService con el pipeline
+        // travel (paid→confirmed→upcoming→completed) — NO reusa el singleton de
+        // Tienda, cuyo pipeline es pago→preparación→envío→entrega.
+        services.AddSingleton<ITravelCartService>(sp =>
+            new TravelCartService(
+                sp.GetRequiredService<IReservationService>(),
+                sp.GetRequiredService<IPaymentProvider>(),
+                new StubOrderTrackingService(TravelCartService.TravelPipeline, null),
+                null));
+
+        // OLA 2 Booking — ficha de estadía rica (galería/amenities/specs/geo/
+        // reviews) separada de la disponibilidad (IRoomAvailabilityProvider
+        // intacto). Stub: 6 propiedades CO sembradas (Cartagena/Medellín/Bogotá/
+        // Eje Cafetero) con geo real; 4 "hospedan" los room types del stub de
+        // disponibilidad para que el search de hotel emita lat/lng por oferta
+        // (mapa SH-8). Adapter real: contenido CMS / channel-manager. Singleton —
+        // stateless, catálogo estático.
+        services.AddSingleton<IStayContentProvider, StubStayContentProvider>();
 
         // OLA 2 Tienda — motor del marketplace e-commerce (doc tienda-app-spec).
         // Dos seams stub-first, aditivos (no tocan Booking/Travel ni el carrito

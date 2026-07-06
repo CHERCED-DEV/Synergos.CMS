@@ -23,14 +23,55 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// </remarks>
 public sealed class TravelCartService : ITravelCartService
 {
+    // Estados agregados del carrito (JSON estable hacia la UI — doc 21 §2.2).
+    private const string StatusPendingPayment = "PendingPayment";
+    private const string StatusCancelled = "Cancelled";
+
+    /// <summary>Etapa que siembra ConfirmAsync en el timeline de viaje.</summary>
+    public const string StageConfirmed = "confirmed";
+
+    /// <summary>
+    /// Pipeline de tracking del dominio Booking (seam genérico
+    /// <see cref="IOrderTrackingService"/>): pago → confirmado → próximo →
+    /// completado. ConfirmAsync avanza a "confirmed" (marca "paid" de paso,
+    /// monotónico); "upcoming"/"completed" los mueve la operación.
+    /// </summary>
+    public static readonly IReadOnlyList<OrderTrackingStageDefinition> TravelPipeline = new[]
+    {
+        new OrderTrackingStageDefinition("paid", "Pago confirmado"),
+        new OrderTrackingStageDefinition(StageConfirmed, "Reserva confirmada"),
+        new OrderTrackingStageDefinition("upcoming", "Próximo a viajar"),
+        new OrderTrackingStageDefinition("completed", "Viaje completado"),
+    };
+
     private readonly IReservationService _reservations;
     private readonly IPaymentProvider _payments;
+    private readonly IOrderTrackingService? _tracking;
+    private readonly Func<DateTimeOffset> _now;
     private readonly ConcurrentDictionary<string, CartOrder> _orders = new(StringComparer.Ordinal);
 
     public TravelCartService(IReservationService reservations, IPaymentProvider payments)
+        : this(reservations, payments, null, null)
+    {
+    }
+
+    /// <summary>
+    /// Ctor completo (OLA 2 Booking): <paramref name="tracking"/> opcional — si
+    /// viene, la orden ALIMENTA su timeline de viaje al confirmar (pipeline
+    /// <see cref="TravelPipeline"/>; construir el tracker con ese pipeline).
+    /// <paramref name="now"/> = time source inyectable para determinismo en
+    /// tests (null = reloj real). Ambos null ≡ ctor original (aditivo).
+    /// </summary>
+    public TravelCartService(
+        IReservationService reservations,
+        IPaymentProvider payments,
+        IOrderTrackingService? tracking,
+        Func<DateTimeOffset>? now)
     {
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
+        _tracking = tracking;
+        _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
     public async Task<TravelCheckoutResult> CheckoutAsync(
@@ -111,7 +152,11 @@ public sealed class TravelCartService : ITravelCartService
                 Metadata: null),
             cancellationToken);
 
-        _orders[orderRef] = new CartOrder(orderRef, session.SessionId, total, currency, lines);
+        // Registra el guest (email = clave de "Mis viajes") + fechas del ciclo.
+        var createdAt = _now();
+        _orders[orderRef] = new CartOrder(
+            orderRef, session.SessionId, total, currency, lines,
+            guest.Name.Trim(), guest.Email.Trim(), createdAt, createdAt);
 
         return new TravelCheckoutResult(orderRef, session.SessionId, total, currency);
     }
@@ -121,6 +166,10 @@ public sealed class TravelCartService : ITravelCartService
         if (string.IsNullOrWhiteSpace(orderRef) || !_orders.TryGetValue(orderRef, out var order))
         {
             throw new ArgumentException("Carrito de viaje no encontrado.", nameof(orderRef));
+        }
+        if (string.Equals(order.Status, StatusCancelled, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("El carrito de viaje ya fue cancelado.");
         }
 
         // 1) Capturar el pago del carrito completo (idempotente en el PSP).
@@ -151,12 +200,152 @@ public sealed class TravelCartService : ITravelCartService
 
         var allConfirmed = confirmedItems.All(i =>
             string.Equals(i.Status, ReservationStatus.Confirmed.ToString(), StringComparison.Ordinal));
+        var status = allConfirmed ? ReservationStatus.Confirmed.ToString() : "Partial";
+        var confirmationCode = BuildConfirmationCode(order.OrderRef);
+
+        // 3) Sella el estado agregado en la orden (para "Mis viajes"/MMB) y
+        //    alimenta el timeline de viaje (paid→confirmed, monotónico; el
+        //    AdvanceAsync es idempotente así que el re-confirm no duplica).
+        _orders[order.OrderRef] = order with
+        {
+            Status = status,
+            ConfirmationCode = confirmationCode,
+            UpdatedAt = _now(),
+        };
+        if (_tracking is not null && allConfirmed)
+        {
+            await _tracking.AdvanceAsync(
+                order.OrderRef,
+                StageConfirmed,
+                $"Viaje confirmado — código {confirmationCode}.",
+                cancellationToken);
+        }
 
         return new TravelConfirmationResult(
             OrderRef: order.OrderRef,
-            Status: allConfirmed ? ReservationStatus.Confirmed.ToString() : "Partial",
-            ConfirmationCode: BuildConfirmationCode(order.OrderRef),
+            Status: status,
+            ConfirmationCode: confirmationCode,
             Items: confirmedItems);
+    }
+
+    public async Task<IReadOnlyList<TravelOrder>> GetTripsAsync(string travelerEmail, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(travelerEmail))
+        {
+            return Array.Empty<TravelOrder>();
+        }
+
+        var email = travelerEmail.Trim();
+        var matches = _orders.Values
+            .Where(o => string.Equals(o.GuestEmail, email, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(o => o.CreatedAt)
+            .ToList();
+
+        var trips = new List<TravelOrder>(matches.Count);
+        foreach (var order in matches)
+        {
+            trips.Add(await ToTravelOrderAsync(order, cancellationToken));
+        }
+        return trips;
+    }
+
+    public async Task<TravelOrder?> GetOrderAsync(string orderRef, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(orderRef) || !_orders.TryGetValue(orderRef.Trim(), out var order))
+        {
+            return null;
+        }
+        return await ToTravelOrderAsync(order, cancellationToken);
+    }
+
+    public async Task<TravelCancellationResult> CancelOrderAsync(string orderRef, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(orderRef) || !_orders.TryGetValue(orderRef.Trim(), out var order))
+        {
+            throw new ArgumentException("Carrito de viaje no encontrado.", nameof(orderRef));
+        }
+
+        // Idempotente: re-cancelar devuelve el resultado sellado, sin doble
+        // reembolso ni re-cancelación de reservas.
+        if (string.Equals(order.Status, StatusCancelled, StringComparison.Ordinal))
+        {
+            return new TravelCancellationResult(
+                order.OrderRef, order.Status, order.Refunded, order.RefundAmount, order.Currency);
+        }
+
+        // 1) Cancela CADA reserva del carrito (CancelAsync es idempotente por
+        //    reserva en el motor).
+        foreach (var line in order.Lines)
+        {
+            await _reservations.CancelAsync(
+                line.ReservationId, $"Cancelación del viaje {order.OrderRef} (MMB).", cancellationToken);
+        }
+
+        // 2) Reembolso SOLO si el pago estaba capturado: el PSP devuelve
+        //    Refunded únicamente sobre una sesión Captured (pre-confirm el stub
+        //    responde con outcome no-Refunded y no hay nada que devolver).
+        //    Nota: ICancellationPolicyEvaluator NO aplica aquí — evalúa por
+        //    ratePlanCode+checkIn del vertical Hoteles (BookingController), y
+        //    las líneas heterogéneas del carrito no cargan fechas/rate plan;
+        //    el MMB v1 reembolsa total (política demo).
+        var refunded = false;
+        var refundAmount = 0m;
+        var outcome = await _payments.RefundAsync(order.PaymentSessionId, null, cancellationToken);
+        if (outcome.Status == PaymentStatus.Refunded)
+        {
+            refunded = true;
+            refundAmount = outcome.AmountCaptured;
+        }
+
+        var cancelled = order with
+        {
+            Status = StatusCancelled,
+            Refunded = refunded,
+            RefundAmount = refundAmount,
+            UpdatedAt = _now(),
+        };
+        _orders[order.OrderRef] = cancelled;
+
+        return new TravelCancellationResult(
+            cancelled.OrderRef, cancelled.Status, cancelled.Refunded, cancelled.RefundAmount, cancelled.Currency);
+    }
+
+    // Proyecta la orden interna a TravelOrder leyendo el estado de cada ítem
+    // EN VIVO del motor de reservas (fuente de verdad) + la etapa del timeline.
+    private async Task<TravelOrder> ToTravelOrderAsync(CartOrder order, CancellationToken cancellationToken)
+    {
+        var items = new List<TravelOrderItem>(order.Lines.Count);
+        foreach (var line in order.Lines)
+        {
+            var reservation = await _reservations.GetAsync(line.ReservationId, cancellationToken);
+            items.Add(new TravelOrderItem(
+                Product: line.Product,
+                OfferId: line.OfferId,
+                Label: line.Label,
+                ReservationId: line.ReservationId,
+                Status: reservation?.Status.ToString() ?? ReservationStatus.Held.ToString(),
+                Price: line.Price,
+                Currency: line.Currency));
+        }
+
+        string? currentStage = null;
+        if (_tracking is not null)
+        {
+            currentStage = (await _tracking.GetTimelineAsync(order.OrderRef, cancellationToken))?.CurrentStage;
+        }
+
+        return new TravelOrder(
+            OrderRef: order.OrderRef,
+            Status: order.Status,
+            ConfirmationCode: order.ConfirmationCode,
+            GuestName: order.GuestName,
+            GuestEmail: order.GuestEmail,
+            Items: items,
+            Total: order.Total,
+            Currency: order.Currency,
+            CreatedAt: order.CreatedAt,
+            UpdatedAt: order.UpdatedAt,
+            CurrentStage: currentStage);
     }
 
     // Código de confirmación human-facing derivado determinísticamente del
@@ -177,5 +366,15 @@ public sealed class TravelCartService : ITravelCartService
         string PaymentSessionId,
         decimal Total,
         string Currency,
-        IReadOnlyList<CartLine> Lines);
+        IReadOnlyList<CartLine> Lines,
+        string GuestName,
+        string GuestEmail,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset UpdatedAt)
+    {
+        public string Status { get; init; } = StatusPendingPayment;
+        public string? ConfirmationCode { get; init; }
+        public bool Refunded { get; init; }
+        public decimal RefundAmount { get; init; }
+    }
 }

@@ -53,6 +53,43 @@ public sealed record TravelConfirmationResult(
     IReadOnlyList<TravelOrderItem> Items);
 
 /// <summary>
+/// Una orden de viaje del historial del viajero ("Mis viajes" — OLA 2 Booking,
+/// doc 21 §2.2). <see cref="Status"/> es el estado agregado del carrito:
+/// "PendingPayment" (checkout hecho, sin confirmar), "Confirmed" (pago capturado
+/// + reservas confirmadas), "Partial" (alguna reserva no quedó confirmada) o
+/// "Cancelled" (MMB canceló). <see cref="CurrentStage"/> es la etapa del
+/// timeline de viaje (<c>IOrderTrackingService</c>, pipeline paid→confirmed→
+/// upcoming→completed) o null si el tracking no inició. El estado de cada ítem
+/// se lee EN VIVO del motor de reservas (fuente de verdad).
+/// </summary>
+public sealed record TravelOrder(
+    string OrderRef,
+    string Status,
+    string? ConfirmationCode,
+    string GuestName,
+    string GuestEmail,
+    IReadOnlyList<TravelOrderItem> Items,
+    decimal Total,
+    string Currency,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    string? CurrentStage);
+
+/// <summary>
+/// Resultado de <see cref="ITravelCartService.CancelOrderAsync"/> (MMB v1 —
+/// Manage My Booking): estado final del carrito ("Cancelled"), si hubo
+/// reembolso (<see cref="Refunded"/> solo cuando el pago estaba capturado) y
+/// el monto devuelto. Idempotente: re-cancelar devuelve el mismo resultado
+/// sin doble reembolso.
+/// </summary>
+public sealed record TravelCancellationResult(
+    string OrderRef,
+    string Status,
+    bool Refunded,
+    decimal RefundAmount,
+    string Currency);
+
+/// <summary>
 /// Carrito de viaje multi-producto server-side liviano — es el MOTOR
 /// transaccional del dominio Booking (doc booking-app-spec). Generaliza el flujo
 /// de un producto (Hoteles/Aerolíneas: search → hold → pay → confirm) al caso
@@ -96,4 +133,26 @@ public interface ITravelCartService
     /// antes de confirmar.
     /// </summary>
     Task<TravelConfirmationResult> ConfirmAsync(string orderRef, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Devuelve las órdenes de viaje del viajero identificado por
+    /// <paramref name="travelerEmail"/> (match case-insensitive contra el email
+    /// registrado en el checkout), más reciente primero. Email vacío o sin
+    /// órdenes → lista vacía (no lanza).
+    /// </summary>
+    Task<IReadOnlyList<TravelOrder>> GetTripsAsync(string travelerEmail, CancellationToken cancellationToken = default);
+
+    /// <summary>Devuelve la orden de viaje por referencia, o null si no existe.</summary>
+    Task<TravelOrder?> GetOrderAsync(string orderRef, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// MMB v1 — cancela la orden de viaje completa: cancela CADA reserva del
+    /// carrito (<see cref="IReservationService.CancelAsync"/> por ítem) y
+    /// reembolsa vía <c>IPaymentProvider.RefundAsync</c> SOLO si el pago estaba
+    /// capturado (pre-confirm no hay nada que devolver). Idempotente:
+    /// re-cancelar el mismo <paramref name="orderRef"/> devuelve el mismo
+    /// resultado sin doble reembolso. Lanza <see cref="ArgumentException"/> si
+    /// el orderRef no existe.
+    /// </summary>
+    Task<TravelCancellationResult> CancelOrderAsync(string orderRef, CancellationToken cancellationToken = default);
 }
