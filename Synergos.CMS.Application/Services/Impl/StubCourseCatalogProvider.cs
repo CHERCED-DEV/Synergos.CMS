@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -35,21 +36,41 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     private readonly IContentStream _contentStream;
     private readonly object _seedLock = new();
 
+    // Cara de LECTURA del motor de matrícula (alumnos + ingresos por curso) para
+    // el panel del instructor. Opcional (null = métricas en cero): se enchufa por
+    // property injection en el composer DESPUÉS de construir ambos singletons, para
+    // no crear un ciclo catálogo↔matrícula en el ctor (DIP). No lo toca el flujo
+    // del catálogo; solo GetForInstructorAsync lo consulta.
+    public IEnrollmentMetrics? EnrollmentMetrics { get; set; }
+
     // Mapping lessonId → contentItemId (id real asignado por el IContentStream al
     // sembrar la lección como Kind=lesson). Poblado una sola vez (idempotente).
     private Dictionary<string, string>? _lessonContentIds;
+
+    // Cursos publicados por instructores en runtime (PublishCourseAsync), keyed por
+    // id. Aditivo al catálogo sembrado (AcademyDemoSeed.Courses): el search y el
+    // detalle recorren ambos. El estado vive en el proceso, igual que el resto de
+    // stubs del motor. Sus lecciones se siembran al feed al publicar.
+    private readonly ConcurrentDictionary<string, AcademyDemoSeed.SeedCourse> _published = new(StringComparer.OrdinalIgnoreCase);
+
+    // Contador monotónico para el id de cursos publicados por instructores.
+    private static int _publishedCounter;
 
     public StubCourseCatalogProvider(IContentStream contentStream)
     {
         _contentStream = contentStream ?? throw new ArgumentNullException(nameof(contentStream));
     }
 
+    // Vista unificada del catálogo: cursos sembrados + publicados en runtime.
+    private IEnumerable<AcademyDemoSeed.SeedCourse> AllCourses()
+        => AcademyDemoSeed.Courses.Concat(_published.Values);
+
     public async Task<CourseSearchResult> SearchAsync(CourseQuery query, CancellationToken cancellationToken = default)
     {
         await EnsureLessonsSeededAsync(cancellationToken);
         query ??= new CourseQuery();
 
-        IEnumerable<AcademyDemoSeed.SeedCourse> filtered = AcademyDemoSeed.Courses;
+        IEnumerable<AcademyDemoSeed.SeedCourse> filtered = AllCourses();
 
         // 1) Filtro de texto (título / resumen / categoría / instructor).
         if (!string.IsNullOrWhiteSpace(query.Text))
@@ -89,7 +110,7 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     {
         await EnsureLessonsSeededAsync(cancellationToken);
 
-        var course = AcademyDemoSeed.Courses.FirstOrDefault(c =>
+        var course = AllCourses().FirstOrDefault(c =>
             string.Equals(c.Id, courseId, StringComparison.OrdinalIgnoreCase));
         if (course is null)
         {
@@ -120,6 +141,153 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
             Instructor: AcademyDemoSeed.InstructorById(course.InstructorId),
             Modules: modules,
             Plans: plans);
+    }
+
+    // ── Cara de AUTOR: panel del instructor + publicar curso ────────────
+
+    public async Task<InstructorCoursesResult> GetForInstructorAsync(string instructorId, CancellationToken cancellationToken = default)
+    {
+        await EnsureLessonsSeededAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(instructorId))
+        {
+            return new InstructorCoursesResult(instructorId ?? string.Empty, Array.Empty<InstructorCourse>(), 0, 0m, AcademyDemoSeed.Currency);
+        }
+
+        var id = instructorId.Trim();
+        var owned = AllCourses()
+            .Where(c => string.Equals(c.InstructorId, id, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(c => c.Rating)
+            .ThenBy(c => c.Title, StringComparer.Ordinal)
+            .ToList();
+
+        var rows = new List<InstructorCourse>(owned.Count);
+        var totalStudents = 0;
+        var totalRevenue = 0m;
+        foreach (var course in owned)
+        {
+            // Las métricas de matrícula (alumnos + ingresos) las provee el motor de
+            // matrícula por composición (IEnrollmentMetrics) — el catálogo no las
+            // duplica. Sin el seam enchufado, ceros (los cursos aún se listan).
+            var stats = EnrollmentMetrics is not null
+                ? await EnrollmentMetrics.GetCourseStatsAsync(course.Id, cancellationToken)
+                : new CourseEnrollmentStats(0, 0m);
+
+            rows.Add(new InstructorCourse(
+                Course: ToSummary(course),
+                Metrics: new CourseMetrics(stats.Students, stats.Revenue, AcademyDemoSeed.Currency, course.Rating)));
+            totalStudents += stats.Students;
+            totalRevenue += stats.Revenue;
+        }
+
+        return new InstructorCoursesResult(id, rows, totalStudents, totalRevenue, AcademyDemoSeed.Currency);
+    }
+
+    public async Task<CourseDetail> PublishCourseAsync(CourseDraft draft, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        if (string.IsNullOrWhiteSpace(draft.Title))
+        {
+            throw new ArgumentException("El título del curso es obligatorio.", nameof(draft));
+        }
+        if (draft.Modules is null || draft.Modules.Count == 0)
+        {
+            throw new ArgumentException("El curso requiere al menos un módulo.", nameof(draft));
+        }
+        if (draft.Modules.Any(m => m is null || m.Lessons is null || m.Lessons.Count == 0))
+        {
+            throw new ArgumentException("Cada módulo requiere al menos una lección.", nameof(draft));
+        }
+
+        await EnsureLessonsSeededAsync(cancellationToken);
+
+        // Id/slug estables asignados por el catálogo (el adapter real usa el del CMS).
+        var courseId = $"course-org-{Interlocked.Increment(ref _publishedCounter)}";
+        var instructorId = string.IsNullOrWhiteSpace(draft.InstructorId) ? "ins-desconocido" : draft.InstructorId.Trim();
+        var title = draft.Title.Trim();
+        var category = string.IsNullOrWhiteSpace(draft.Category) ? "General" : draft.Category.Trim();
+
+        // Construye módulos → lecciones con ids estables + siembra cada lección al
+        // MISMO feed que usa Blogs (Kind=lesson) — polimorfismo, no instanciación.
+        var seedModules = new List<AcademyDemoSeed.SeedModule>(draft.Modules.Count);
+        var newLessonIds = new Dictionary<string, string>(StringComparer.Ordinal);
+        var moduleOrder = 1;
+        foreach (var m in draft.Modules)
+        {
+            var lessonOrder = 1;
+            var seedLessons = new List<AcademyDemoSeed.SeedLesson>(m.Lessons.Count);
+            foreach (var l in m.Lessons)
+            {
+                if (l is null || string.IsNullOrWhiteSpace(l.Title))
+                {
+                    throw new ArgumentException("Cada lección requiere un título.", nameof(draft));
+                }
+
+                var lessonId = $"{courseId}-l{moduleOrder}-{lessonOrder}";
+                var contentBody = string.IsNullOrWhiteSpace(l.ContentBody)
+                    ? $"Lección: {l.Title.Trim()}"
+                    : l.ContentBody.Trim();
+
+                var item = await _contentStream.CreateAsync(
+                    new NewContentItem(
+                        AuthorId: instructorId,
+                        Body: contentBody,
+                        MediaUrl: l.VideoUrl,
+                        Kind: "lesson"),
+                    cancellationToken);
+                newLessonIds[lessonId] = item.Id;
+
+                seedLessons.Add(new AcademyDemoSeed.SeedLesson(
+                    Id: lessonId,
+                    Title: l.Title.Trim(),
+                    Order: lessonOrder,
+                    DurationMinutes: Math.Max(0, l.DurationMinutes),
+                    VideoRef: l.VideoUrl,
+                    IsPreview: lessonOrder == 1 && moduleOrder == 1, // 1ª lección = preview
+                    ContentBody: contentBody,
+                    Resources: Array.Empty<CourseResource>()));
+                lessonOrder++;
+            }
+
+            seedModules.Add(new AcademyDemoSeed.SeedModule(
+                Id: $"{courseId}-m{moduleOrder}",
+                Title: string.IsNullOrWhiteSpace(m.Title) ? $"Módulo {moduleOrder}" : m.Title.Trim(),
+                Order: moduleOrder,
+                Lessons: seedLessons));
+            moduleOrder++;
+        }
+
+        var seedCourse = new AcademyDemoSeed.SeedCourse(
+            Id: courseId,
+            Title: title,
+            Summary: string.IsNullOrWhiteSpace(draft.Summary) ? title : draft.Summary.Trim(),
+            Description: string.IsNullOrWhiteSpace(draft.Description) ? string.Empty : draft.Description.Trim(),
+            Category: category,
+            Level: string.IsNullOrWhiteSpace(draft.Level) ? "Principiante" : draft.Level.Trim(),
+            InstructorId: instructorId,
+            CoverImageUrl: draft.CoverImageUrl,
+            Price: Math.Max(0m, draft.Price),
+            Rating: 0.0, // sin reseñas todavía
+            Outcomes: draft.Outcomes ?? Array.Empty<string>(),
+            Modules: seedModules);
+
+        _published[courseId] = seedCourse;
+
+        // Publica el mapping de las lecciones nuevas para que ToLesson resuelva su
+        // ContentItemId (sin re-sembrar el catálogo entero).
+        lock (_seedLock)
+        {
+            var map = _lessonContentIds is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : new Dictionary<string, string>(_lessonContentIds, StringComparer.Ordinal);
+            foreach (var kv in newLessonIds)
+            {
+                map[kv.Key] = kv.Value;
+            }
+            _lessonContentIds = map;
+        }
+
+        return (await GetCourseAsync(courseId, cancellationToken))!;
     }
 
     // ── Siembra POLIMÓRFICA de lecciones en el IContentStream (Kind=lesson) ──

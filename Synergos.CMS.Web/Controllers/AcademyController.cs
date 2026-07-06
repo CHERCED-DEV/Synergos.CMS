@@ -32,15 +32,18 @@ public sealed class AcademyController : ControllerBase
 {
     private readonly ICourseCatalogProvider _catalog;
     private readonly IEnrollmentService _enrollments;
+    private readonly ICertificateService _certificates;
     private readonly IPriceFormatter _priceFormatter;
 
     public AcademyController(
         ICourseCatalogProvider catalog,
         IEnrollmentService enrollments,
+        ICertificateService certificates,
         IPriceFormatter priceFormatter)
     {
         _catalog = catalog;
         _enrollments = enrollments;
+        _certificates = certificates;
         _priceFormatter = priceFormatter;
     }
 
@@ -195,45 +198,53 @@ public sealed class AcademyController : ControllerBase
     }
 
     // ── 5. Get progress ────────────────────────────────────────────────
-    // GET /api/academy/progress?courseId=&student= → { completedLessonIds:[...], percent }
+    // GET /api/academy/progress?student=&course= → { completedLessonIds:[...], percent }
+    // Acepta el nombre canónico del contrato (course/student) y el legacy (courseId)
+    // que aún consume el módulo course-player — sin romper la UI existente.
     [HttpGet("progress")]
     public async Task<IActionResult> GetProgress(
-        [FromQuery] string? courseId,
         [FromQuery] string? student,
+        [FromQuery] string? course,
+        [FromQuery] string? courseId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(courseId) || string.IsNullOrWhiteSpace(student))
+        var courseKey = FirstNonEmpty(course, courseId);
+        if (string.IsNullOrWhiteSpace(courseKey) || string.IsNullOrWhiteSpace(student))
         {
-            return BadRequest(new { error = "courseId y student son requeridos." });
+            return BadRequest(new { error = "student y course son requeridos." });
         }
 
-        var progress = await _enrollments.GetProgressAsync(courseId.Trim(), student.Trim(), cancellationToken);
-        var certificate = await _enrollments.GetCertificateAsync(courseId.Trim(), student.Trim(), cancellationToken);
+        var progress = await _enrollments.GetProgressAsync(courseKey.Trim(), student.Trim(), cancellationToken);
+        var certificate = await _certificates.GetAsync(student.Trim(), courseKey.Trim(), cancellationToken);
 
         return Ok(ToProgressDto(progress, certificate));
     }
 
     // ── 6. Post progress (marcar lección) ──────────────────────────────
-    // POST /api/academy/progress { courseId, lessonId, student } → { percent }
+    // POST /api/academy/progress { student, course, lesson } → { percent }
+    // Acepta el shape canónico del contrato (course/lesson) y el legacy
+    // (courseId/lessonId) que aún consume el módulo course-player.
     [HttpPost("progress")]
     public async Task<IActionResult> MarkProgress(
         [FromBody] MarkProgressRequest? request,
         CancellationToken cancellationToken)
     {
+        var courseKey = request is null ? null : FirstNonEmpty(request.Course, request.CourseId);
+        var lessonKey = request is null ? null : FirstNonEmpty(request.Lesson, request.LessonId);
         if (request is null
-            || string.IsNullOrWhiteSpace(request.CourseId)
-            || string.IsNullOrWhiteSpace(request.LessonId)
+            || string.IsNullOrWhiteSpace(courseKey)
+            || string.IsNullOrWhiteSpace(lessonKey)
             || string.IsNullOrWhiteSpace(request.Student))
         {
-            return BadRequest(new { error = "courseId, lessonId y student son requeridos." });
+            return BadRequest(new { error = "student, course y lesson son requeridos." });
         }
 
         CourseProgress progress;
         try
         {
             progress = await _enrollments.MarkLessonAsync(
-                request.CourseId.Trim(),
-                request.LessonId.Trim(),
+                courseKey.Trim(),
+                lessonKey.Trim(),
                 request.Student.Trim(),
                 cancellationToken);
         }
@@ -243,11 +254,111 @@ public sealed class AcademyController : ControllerBase
         }
 
         var certificate = progress.Percent >= 100
-            ? await _enrollments.GetCertificateAsync(request.CourseId.Trim(), request.Student.Trim(), cancellationToken)
+            ? await _certificates.GetAsync(request.Student.Trim(), courseKey.Trim(), cancellationToken)
             : null;
 
         return Ok(ToProgressDto(progress, certificate));
     }
+
+    // ── 7. Certificate (credencial verificable) ─────────────────────────
+    // GET /api/academy/certificate?student=&course= → { certificate | null }
+    [HttpGet("certificate")]
+    public async Task<IActionResult> GetCertificate(
+        [FromQuery] string? student,
+        [FromQuery] string? course,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(student) || string.IsNullOrWhiteSpace(course))
+        {
+            return BadRequest(new { error = "student y course son requeridos." });
+        }
+
+        var certificate = await _certificates.GetAsync(student.Trim(), course.Trim(), cancellationToken);
+        return Ok(new CertificateResponse(
+            Certificate: certificate is null
+                ? null
+                : new CertificateDto(certificate.Id, certificate.StudentName, certificate.IssuedAt, certificate.VerifyUrl)));
+    }
+
+    // ── 8. Instructor: sus cursos + métricas (panel de autor) ───────────
+    // GET /api/academy/instructor/courses?instructor= → { courses:[...] }
+    [HttpGet("instructor/courses")]
+    public async Task<IActionResult> InstructorCourses(
+        [FromQuery] string? instructor,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(instructor))
+        {
+            return BadRequest(new { error = "instructor es requerido." });
+        }
+
+        var result = await _catalog.GetForInstructorAsync(instructor.Trim(), cancellationToken);
+
+        var courses = result.Courses.Select(ic => new InstructorCourseDto(
+            Course: ToCourseDto(ic.Course),
+            Students: ic.Metrics.Students,
+            Revenue: ic.Metrics.Revenue,
+            RevenueFormatted: _priceFormatter.Format(ic.Metrics.Revenue, ic.Metrics.Currency),
+            Rating: ic.Metrics.Rating)).ToList();
+
+        return Ok(new InstructorCoursesResponse(
+            Instructor: result.InstructorId,
+            Courses: courses,
+            TotalStudents: result.TotalStudents,
+            TotalRevenue: result.TotalRevenue,
+            TotalRevenueFormatted: _priceFormatter.Format(result.TotalRevenue, result.Currency)));
+    }
+
+    // ── 9. Publish course (curriculum builder del instructor) ───────────
+    // POST /api/academy/course { draft } → { courseId }
+    [HttpPost("course")]
+    public async Task<IActionResult> PublishCourse(
+        [FromBody] CourseDraftRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.Title))
+        {
+            return BadRequest(new { error = "El título del curso es requerido." });
+        }
+        if (request.Modules is null || request.Modules.Count == 0)
+        {
+            return BadRequest(new { error = "El curso requiere al menos un módulo." });
+        }
+
+        var draft = new CourseDraft(
+            Title: request.Title,
+            Summary: request.Summary ?? string.Empty,
+            Description: request.Description ?? string.Empty,
+            School: request.School ?? string.Empty,
+            Category: request.Category ?? string.Empty,
+            Level: request.Level ?? string.Empty,
+            InstructorId: request.Instructor ?? request.InstructorId ?? string.Empty,
+            Price: request.Price,
+            Modules: request.Modules.Select(m => new CourseDraftModule(
+                Title: m.Title ?? string.Empty,
+                Lessons: (m.Lessons ?? new List<CourseDraftLessonRequest>()).Select(l => new CourseDraftLesson(
+                    Title: l.Title ?? string.Empty,
+                    VideoUrl: l.VideoUrl,
+                    DurationMinutes: l.Duration,
+                    ContentBody: l.ContentBody)).ToList())).ToList(),
+            Outcomes: request.Outcomes,
+            CoverImageUrl: request.CoverImageUrl);
+
+        CourseDetail published;
+        try
+        {
+            published = await _catalog.PublishCourseAsync(draft, cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        return Ok(new PublishCourseResponse(CourseId: published.Course.Id));
+    }
+
+    private static string? FirstNonEmpty(string? a, string? b)
+        => !string.IsNullOrWhiteSpace(a) ? a : b;
 
     // ── Helpers ────────────────────────────────────────────────────────
 
@@ -302,8 +413,45 @@ public sealed class AcademyController : ControllerBase
     /// <summary>POST /api/academy/confirm — la inscripción a capturar.</summary>
     public sealed record ConfirmEnrollRequest(string OrderRef);
 
-    /// <summary>POST /api/academy/progress — la lección a marcar completa.</summary>
-    public sealed record MarkProgressRequest(string CourseId, string LessonId, string Student);
+    /// <summary>
+    /// POST /api/academy/progress — la lección a marcar completa. El contrato
+    /// canónico usa <c>student/course/lesson</c>; se conservan <c>courseId/lessonId</c>
+    /// (nullable) para el módulo course-player existente. El controller toma el
+    /// primero no vacío de cada par.
+    /// </summary>
+    public sealed record MarkProgressRequest(
+        string Student,
+        string? Course = null,
+        string? Lesson = null,
+        string? CourseId = null,
+        string? LessonId = null);
+
+    /// <summary>POST /api/academy/course — borrador que publica el instructor (curriculum builder).</summary>
+    public sealed record CourseDraftRequest(
+        string Title,
+        string? Summary = null,
+        string? Description = null,
+        string? School = null,
+        string? Category = null,
+        string? Level = null,
+        string? Instructor = null,
+        string? InstructorId = null,
+        decimal Price = 0m,
+        IReadOnlyList<CourseDraftModuleRequest>? Modules = null,
+        IReadOnlyList<string>? Outcomes = null,
+        string? CoverImageUrl = null);
+
+    /// <summary>Un módulo del borrador del curso (título + lecciones).</summary>
+    public sealed record CourseDraftModuleRequest(
+        string? Title,
+        List<CourseDraftLessonRequest>? Lessons);
+
+    /// <summary>Una lección del borrador (título + video + duración).</summary>
+    public sealed record CourseDraftLessonRequest(
+        string? Title,
+        string? VideoUrl = null,
+        int Duration = 0,
+        string? ContentBody = null);
 
     // ── Response DTOs (JSON estable para la UI) ────────────────────────
 
@@ -387,4 +535,26 @@ public sealed class AcademyController : ControllerBase
         string? LastLessonId,
         bool Completed,
         CertificateDto? Certificate);
+
+    /// <summary>GET /api/academy/certificate — { certificate | null }.</summary>
+    public sealed record CertificateResponse(CertificateDto? Certificate);
+
+    /// <summary>Una fila del panel del instructor: el curso + sus métricas (alumnos/ingresos/rating).</summary>
+    public sealed record InstructorCourseDto(
+        CourseDto Course,
+        int Students,
+        decimal Revenue,
+        string RevenueFormatted,
+        double Rating);
+
+    /// <summary>GET /api/academy/instructor/courses — { courses:[...] } + totales del panel.</summary>
+    public sealed record InstructorCoursesResponse(
+        string Instructor,
+        IReadOnlyList<InstructorCourseDto> Courses,
+        int TotalStudents,
+        decimal TotalRevenue,
+        string TotalRevenueFormatted);
+
+    /// <summary>POST /api/academy/course — { courseId } del curso publicado.</summary>
+    public sealed record PublishCourseResponse(string CourseId);
 }

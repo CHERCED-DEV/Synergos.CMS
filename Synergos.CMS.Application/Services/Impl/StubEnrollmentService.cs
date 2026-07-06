@@ -22,10 +22,28 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// del proceso, suficiente para demo; un adapter real delega a DB. ConfirmAsync y
 /// MarkLessonAsync son idempotentes. ADR 0075 (seam con tests canónicos).
 /// </remarks>
-public sealed class StubEnrollmentService : IEnrollmentService
+public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetrics
 {
+    /// <summary>Etapa inicial del pipeline de aprendizaje — se siembra al activar la matrícula.</summary>
+    public const string StageEnrolled = "enrolled";
+
+    /// <summary>
+    /// Pipeline del ciclo de aprendizaje (LMS): matriculado → en progreso →
+    /// completado. Instancia PROPIA del seam genérico <see cref="IOrderTrackingService"/>
+    /// — NO reusa el pipeline de Tienda (pago→envío→entrega). Al activar la
+    /// matrícula avanza a "enrolled"; la primera lección marcada, a "in-progress"; el
+    /// 100%, a "completed".
+    /// </summary>
+    public static readonly IReadOnlyList<OrderTrackingStageDefinition> AcademyPipeline = new[]
+    {
+        new OrderTrackingStageDefinition(StageEnrolled, "Matriculado"),
+        new OrderTrackingStageDefinition("in-progress", "En progreso"),
+        new OrderTrackingStageDefinition("completed", "Completado"),
+    };
+
     private readonly ICourseCatalogProvider _catalog;
     private readonly IPaymentProvider _payments;
+    private readonly IOrderTrackingService? _tracking;
     private readonly Func<DateTimeOffset> _now;
 
     // Matrículas por orderRef (rama de pago) y por enrollmentId (acceso directo).
@@ -36,7 +54,7 @@ public sealed class StubEnrollmentService : IEnrollmentService
     private readonly ConcurrentDictionary<string, ProgressState> _progress = new(StringComparer.Ordinal);
 
     public StubEnrollmentService(ICourseCatalogProvider catalog, IPaymentProvider payments)
-        : this(catalog, payments, null)
+        : this(catalog, payments, null, null)
     {
     }
 
@@ -45,9 +63,25 @@ public sealed class StubEnrollmentService : IEnrollmentService
     /// determinismo en tests (ADR 0002). Null = reloj real.
     /// </summary>
     public StubEnrollmentService(ICourseCatalogProvider catalog, IPaymentProvider payments, Func<DateTimeOffset>? now)
+        : this(catalog, payments, null, now)
+    {
+    }
+
+    /// <summary>
+    /// Ctor completo: además del catálogo y el pago, recibe el
+    /// <see cref="IOrderTrackingService"/> del pipeline de aprendizaje
+    /// (<see cref="AcademyPipeline"/>) que la matrícula ALIMENTA (enrolled →
+    /// in-progress → completed). Null = sin tracking (el motor sigue funcionando).
+    /// </summary>
+    public StubEnrollmentService(
+        ICourseCatalogProvider catalog,
+        IPaymentProvider payments,
+        IOrderTrackingService? tracking,
+        Func<DateTimeOffset>? now)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
+        _tracking = tracking;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -77,6 +111,8 @@ public sealed class StubEnrollmentService : IEnrollmentService
                 course.Id, studentName, studentEmail, EnrollmentStatus.Active,
                 orderRef: null, paymentSessionId: null, total: 0m, currency: course.Currency);
             _byEnrollmentId[freeEnrollment.EnrollmentId] = freeEnrollment;
+            // Alimenta el timeline de aprendizaje: matrícula activa → "enrolled".
+            await AdvanceTrackingAsync(freeEnrollment.EnrollmentId, StageEnrolled, cancellationToken);
             return new CourseEnrollmentResult(
                 Enrolled: true,
                 EnrollmentId: freeEnrollment.EnrollmentId,
@@ -145,6 +181,8 @@ public sealed class StubEnrollmentService : IEnrollmentService
         var active = enrollment with { Status = EnrollmentStatus.Active };
         _byOrderRef[orderRef] = active;
         _byEnrollmentId[active.EnrollmentId] = active;
+        // Alimenta el timeline de aprendizaje al confirmar el pago → "enrolled".
+        await AdvanceTrackingAsync(active.EnrollmentId, StageEnrolled, cancellationToken);
         return ToConfirmation(active);
     }
 
@@ -193,7 +231,20 @@ public sealed class StubEnrollmentService : IEnrollmentService
                 return existing with { LastLessonId = lessonId };
             });
 
-        return BuildProgress(courseId, student, allLessons.Count);
+        var progress = BuildProgress(courseId, student, allLessons.Count);
+
+        // Alimenta el timeline de aprendizaje según el avance (monotónico/idempotente
+        // en el tracker): cualquier lección marcada → "in-progress"; el 100% →
+        // "completed". Resuelve el enrollmentId del alumno para este curso (el mismo
+        // ref que la matrícula sembró al activarse).
+        var enrollmentId = ResolveEnrollmentId(courseId, student);
+        if (enrollmentId is not null)
+        {
+            var stage = progress.Percent >= 100 ? "completed" : "in-progress";
+            await AdvanceTrackingAsync(enrollmentId, stage, cancellationToken);
+        }
+
+        return progress;
     }
 
     public async Task<Certificate?> GetCertificateAsync(string courseId, string student, CancellationToken cancellationToken = default)
@@ -230,7 +281,51 @@ public sealed class StubEnrollmentService : IEnrollmentService
             VerifyUrl: $"/academy/verify/{certId}");
     }
 
+    // ── IEnrollmentMetrics (cara de lectura para el panel del instructor) ──
+
+    public Task<CourseEnrollmentStats> GetCourseStatsAsync(string courseId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(courseId))
+        {
+            return Task.FromResult(new CourseEnrollmentStats(0, 0m));
+        }
+
+        var id = courseId.Trim();
+        // Alumnos = matrículas activas del curso; ingreso = suma de sus totales
+        // (los gratuitos suman 0). Cuenta sobre _byEnrollmentId (fuente única de
+        // cada matrícula, sin doblar la del índice por orderRef).
+        var active = _byEnrollmentId.Values
+            .Where(e => e.Status == EnrollmentStatus.Active
+                        && string.Equals(e.CourseId, id, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return Task.FromResult(new CourseEnrollmentStats(active.Count, active.Sum(e => e.Total)));
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────
+
+    // Avanza el timeline de aprendizaje de una matrícula (si hay tracker enchufado).
+    // El tracker es idempotente/monotónico: re-avanzar a una etapa alcanzada es no-op.
+    private async Task AdvanceTrackingAsync(string enrollmentId, string stage, CancellationToken cancellationToken)
+    {
+        if (_tracking is null || string.IsNullOrWhiteSpace(enrollmentId))
+        {
+            return;
+        }
+        await _tracking.AdvanceAsync(enrollmentId, stage, note: null, cancellationToken);
+    }
+
+    // Resuelve el enrollmentId de la matrícula activa de un alumno en un curso
+    // (por email + courseId). Null si el alumno no está matriculado — el progreso
+    // se registra igual, pero sin timeline hasta que exista la matrícula.
+    private string? ResolveEnrollmentId(string courseId, string student)
+    {
+        var match = _byEnrollmentId.Values.FirstOrDefault(e =>
+            string.Equals(e.CourseId, courseId, StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(e.StudentEmail, student, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(e.StudentName, student, StringComparison.OrdinalIgnoreCase)));
+        return match?.EnrollmentId;
+    }
 
     private EnrollmentState CreateEnrollment(
         string courseId, string studentName, string studentEmail, EnrollmentStatus status,

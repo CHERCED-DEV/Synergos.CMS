@@ -93,6 +93,67 @@ public sealed record CourseLesson(
 public sealed record CourseResource(string Title, string Url, string Kind);
 
 /// <summary>
+/// Borrador de un curso que un instructor PUBLICA desde el panel (curriculum
+/// builder). Es el input de <see cref="ICourseCatalogProvider.PublishCourseAsync"/>:
+/// metadatos + precio + currículum (módulos → lecciones). El proveedor le asigna
+/// id/slug estables, siembra las lecciones al feed (IContentStream Kind=lesson) y
+/// lo agrega al catálogo. Calca <c>EventDraft</c> (Eventos) / <c>CourseDetail</c>.
+/// </summary>
+public sealed record CourseDraft(
+    string Title,
+    string Summary,
+    string Description,
+    string School,
+    string Category,
+    string Level,
+    string InstructorId,
+    decimal Price,
+    IReadOnlyList<CourseDraftModule> Modules,
+    IReadOnlyList<string>? Outcomes = null,
+    string? CoverImageUrl = null);
+
+/// <summary>Un módulo del borrador: título + sus lecciones (orden = posición en la lista).</summary>
+public sealed record CourseDraftModule(
+    string Title,
+    IReadOnlyList<CourseDraftLesson> Lessons);
+
+/// <summary>Una lección del borrador: título + video + duración (+ cuerpo editorial opcional).</summary>
+public sealed record CourseDraftLesson(
+    string Title,
+    string? VideoUrl,
+    int DurationMinutes,
+    string? ContentBody = null);
+
+/// <summary>
+/// Métricas agregadas de un curso para el panel del instructor (performance +
+/// revenue): matriculados, ingresos acumulados y rating. Las alimenta el motor de
+/// matrícula (<c>IEnrollmentService</c>) por composición — el catálogo no las duplica.
+/// </summary>
+public sealed record CourseMetrics(
+    int Students,
+    decimal Revenue,
+    string Currency,
+    double Rating);
+
+/// <summary>
+/// Un curso del instructor con sus métricas (la fila del dashboard del panel).
+/// </summary>
+public sealed record InstructorCourse(
+    CourseSummary Course,
+    CourseMetrics Metrics);
+
+/// <summary>
+/// Resultado de <see cref="ICourseCatalogProvider.GetForInstructorAsync"/>: los
+/// cursos del instructor con métricas + los totales del panel (alumnos e ingresos).
+/// </summary>
+public sealed record InstructorCoursesResult(
+    string InstructorId,
+    IReadOnlyList<InstructorCourse> Courses,
+    int TotalStudents,
+    decimal TotalRevenue,
+    string Currency);
+
+/// <summary>
 /// Un plan de precio de inscripción: contado o N cuotas (EMI). El motor cobra
 /// <see cref="Total"/>; <see cref="Installments"/> es informativo para la UI
 /// (app-spec §4 — cuotas/EMI estándar en cursos de precio alto).
@@ -144,4 +205,24 @@ public interface ICourseCatalogProvider
     /// vía <see cref="CourseLesson.ContentItemId"/> (IContentStream Kind=lesson).
     /// </summary>
     Task<CourseDetail?> GetCourseAsync(string courseId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Devuelve los cursos publicados por un instructor con sus métricas
+    /// (matriculados, ingresos, rating) + los totales del panel. Es la cara de
+    /// AUTOR del LMS (performance/revenue). Nunca lanza por instructor sin cursos:
+    /// devuelve <c>Courses = []</c> + totales en cero.
+    /// </summary>
+    Task<InstructorCoursesResult> GetForInstructorAsync(string instructorId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Publica un curso nuevo (creado por un instructor) en el catálogo: desde ese
+    /// momento aparece en <see cref="SearchAsync"/> y su detalle se resuelve en
+    /// <see cref="GetCourseAsync"/>. Siembra las lecciones al feed
+    /// (<see cref="IContentStream"/> Kind=lesson) igual que el catálogo sembrado
+    /// (polimorfismo Blogs). Devuelve el detalle publicado (con id/slug asignados).
+    /// Valida ≥1 módulo. El adapter real escribe a <c>IContentService</c>/índice; el
+    /// stub lo agrega al catálogo en memoria. Es la seam que consume el panel del
+    /// instructor — la cara de autor NO conoce el almacenamiento del catálogo (DIP).
+    /// </summary>
+    Task<CourseDetail> PublishCourseAsync(CourseDraft draft, CancellationToken cancellationToken = default);
 }

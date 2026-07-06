@@ -132,3 +132,24 @@ public interface IEnrollmentService
     /// </summary>
     Task<Certificate?> GetCertificateAsync(string courseId, string student, CancellationToken cancellationToken = default);
 }
+
+/// <summary>Métricas de matrícula agregadas de un curso: cuántos alumnos y cuánto ingreso acumulado.</summary>
+public sealed record CourseEnrollmentStats(int Students, decimal Revenue);
+
+/// <summary>
+/// Cara de LECTURA del motor de matrícula para el panel del instructor
+/// (performance/revenue) — seam ISP-clean separado del flujo transaccional de
+/// <see cref="IEnrollmentService"/>. Lo COMPONE el catálogo para armar las
+/// métricas por curso sin duplicar el estado de las matrículas (DIP): el catálogo
+/// depende de esta abstracción, no del store de matrículas. Opcional en la
+/// construcción del catálogo (null = métricas en cero) para no crear un ciclo de
+/// dependencias en el composer.
+/// </summary>
+public interface IEnrollmentMetrics
+{
+    /// <summary>
+    /// Devuelve las métricas de matrícula de un curso (alumnos activos + ingreso
+    /// acumulado de las matrículas de pago). Curso sin matrículas → ceros; nunca lanza.
+    /// </summary>
+    Task<CourseEnrollmentStats> GetCourseStatsAsync(string courseId, CancellationToken cancellationToken = default);
+}

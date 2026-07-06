@@ -325,14 +325,43 @@ public sealed class SeamComposer : IComposer
         //     pago (IPaymentProvider) si el curso es de pago o activa la matrícula
         //     de inmediato si es gratis; Confirm captura y activa. Añade lo propio
         //     del LMS: progreso por lección (idempotente) + certificado al 100%.
-        // Singletons — el estado (matrículas + progreso + lecciones sembradas) vive
-        // en el proceso, igual que el resto de stubs del motor.
-        services.AddSingleton<ICourseCatalogProvider>(sp =>
+        // OLA 5 Educación (doc 21 §2.4) — app completa: certificado verificable
+        // público (seam DEDICADO ICertificateService), panel del instructor
+        // (GetForInstructorAsync con métricas + PublishCourseAsync al catálogo) y
+        // tracking del ciclo de aprendizaje (enrolled→in-progress→completed). El
+        // motor de matrícula ahora ALIMENTA su timeline de aprendizaje (instancia
+        // PROPIA del seam genérico IOrderTrackingService con AcademyPipeline — NO
+        // reusa el singleton de Tienda, cuyo pipeline es de envío) y expone la cara
+        // de lectura IEnrollmentMetrics (alumnos/ingresos por curso) que el catálogo
+        // COMPONE para el panel (DIP, sin duplicar el estado de matrículas). El
+        // catálogo recibe ese seam por property injection DESPUÉS de construir ambos
+        // singletons, para no crear un ciclo catálogo↔matrícula en el ctor.
+        //
+        // Singletons — el estado (matrículas + progreso + lecciones sembradas +
+        // cursos publicados + timelines) vive en el proceso, igual que el resto de
+        // stubs del motor.
+        services.AddSingleton<StubCourseCatalogProvider>(sp =>
             new StubCourseCatalogProvider(sp.GetRequiredService<IContentStream>()));
-        services.AddSingleton<IEnrollmentService>(sp =>
-            new StubEnrollmentService(
+        services.AddSingleton<ICourseCatalogProvider>(sp => sp.GetRequiredService<StubCourseCatalogProvider>());
+        services.AddSingleton<StubEnrollmentService>(sp =>
+        {
+            var enrollment = new StubEnrollmentService(
                 sp.GetRequiredService<ICourseCatalogProvider>(),
-                sp.GetRequiredService<IPaymentProvider>()));
+                sp.GetRequiredService<IPaymentProvider>(),
+                new StubOrderTrackingService(StubEnrollmentService.AcademyPipeline, null),
+                null);
+            // Enchufa la cara de lectura en el catálogo (DIP) para el panel del
+            // instructor — se resuelve tras construir ambos singletons.
+            sp.GetRequiredService<StubCourseCatalogProvider>().EnrollmentMetrics = enrollment;
+            return enrollment;
+        });
+        services.AddSingleton<IEnrollmentService>(sp => sp.GetRequiredService<StubEnrollmentService>());
+        services.AddSingleton<IEnrollmentMetrics>(sp => sp.GetRequiredService<StubEnrollmentService>());
+        // Certificado verificable — seam dedicado, compone catálogo + progreso.
+        services.AddSingleton<ICertificateService>(sp =>
+            new StubCertificateService(
+                sp.GetRequiredService<ICourseCatalogProvider>(),
+                sp.GetRequiredService<IEnrollmentService>()));
 
         // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
         // sigue en su valor default bajo env != "Development". No detiene
