@@ -631,10 +631,26 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IVisitSchedulingService>(sp =>
             new StubVisitSchedulingService(sp.GetRequiredService<IReservationService>()));
         services.AddSingleton<IMortgageCalculator, StubMortgageCalculator>();
+        // OLA 4 Propiedades (doc 21 §2.7) — cara completa: la captura de leads ahora
+        // compone el catálogo para resolver el agente dueño del inmueble y alimentar el
+        // mini-CRM del agente (kanban Nuevo→Contactado→Visita→Cerrado, avance auditado
+        // vía IAuditTrailWriter). El itemRef del lead sigue siendo forense.
         services.AddSingleton<ILeadCaptureService>(sp =>
             new StubLeadCaptureService(
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 sp.GetRequiredService<IAnalyticsTracker>(),
+                sp.GetRequiredService<IPropertyCatalogProvider>(),
+                null));
+        // OLA 4 Propiedades — búsquedas guardadas + alertas: da SEMÁNTICA a las
+        // saved-searches sobre el seam GENÉRICO IUserCollection (colección
+        // "saved-searches") + re-ejecuta los criterios contra IPropertyCatalogProvider
+        // para contar nuevos matches (la alerta). Los favoritos van directo sobre
+        // IUserCollection (colección "favorites") desde el RealtyController. Singleton —
+        // el índice id→criterios vive en el proceso, igual que el resto de stubs.
+        services.AddSingleton<ISavedSearchService>(sp =>
+            new StubSavedSearchService(
+                sp.GetRequiredService<IUserCollection>(),
+                sp.GetRequiredService<IPropertyCatalogProvider>(),
                 null));
 
         // +1 GOBIERNO — portal de trámites (doc gobierno-app-spec; rescate D7 doc 21).

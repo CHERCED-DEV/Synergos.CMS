@@ -83,6 +83,72 @@ public class StubLeadCaptureServiceTests
         Assert.Equal("realty.lead-captured", analytics.Events[0]);
     }
 
+    // ── OLA 4 §2.6 — mini-CRM del agente (kanban + avance auditado) ─────
+
+    [Fact] // happy: el lead capturado queda asignado al agente del inmueble y sale en su kanban
+    public async Task GetForAgent_ReturnsCapturedLead()
+    {
+        var catalog = new StubPropertyCatalogProvider();
+        var svc = new StubLeadCaptureService(null, null, catalog, () => Clock);
+
+        var captured = await svc.CaptureAsync("prop-001", Contact(), "Interesado en Chicó");
+
+        // prop-001 → agente "Laura Gómez" → agentId "laura-gomez".
+        var leads = await svc.GetForAgentAsync("laura-gomez");
+        Assert.Contains(leads, l => l.LeadId == captured.LeadId && l.Status == LeadStatus.Nuevo);
+    }
+
+    [Fact] // empty: agente desconocido → lista vacía (sin lanzar)
+    public async Task GetForAgent_Unknown_ReturnsEmpty()
+    {
+        var svc = new StubLeadCaptureService();
+        Assert.Empty(await svc.GetForAgentAsync("nadie"));
+        Assert.Empty(await svc.GetForAgentAsync(""));
+    }
+
+    [Fact] // happy: avanzar cambia el estado y deja rastro en el audit
+    public async Task Advance_ChangesStatus_AndAudits()
+    {
+        var audit = new CapturingAuditTrailWriter();
+        var catalog = new StubPropertyCatalogProvider();
+        var svc = new StubLeadCaptureService(audit, null, catalog, () => Clock);
+
+        var captured = await svc.CaptureAsync("prop-002", Contact(), "Interesado en Laureles");
+        var beforeCount = audit.Events.Count;
+
+        var advanced = await svc.AdvanceLeadAsync(captured.LeadId, LeadStatus.Contactado);
+
+        Assert.Equal(LeadStatus.Contactado, advanced.Status);
+        Assert.Equal(beforeCount + 1, audit.Events.Count);
+        Assert.Equal("realty.lead-advanced", audit.Events[^1].Action);
+
+        var leads = await svc.GetForAgentAsync("andres-mejia");
+        Assert.Contains(leads, l => l.LeadId == captured.LeadId && l.Status == LeadStatus.Contactado);
+    }
+
+    [Fact] // idempotent: avanzar al estado actual no re-audita
+    public async Task Advance_SameStatus_IsIdempotent()
+    {
+        var audit = new CapturingAuditTrailWriter();
+        var catalog = new StubPropertyCatalogProvider();
+        var svc = new StubLeadCaptureService(audit, null, catalog, () => Clock);
+
+        var captured = await svc.CaptureAsync("prop-001", Contact(), "Hola");
+        var count = audit.Events.Count;
+
+        var r = await svc.AdvanceLeadAsync(captured.LeadId, LeadStatus.Nuevo); // ya está en Nuevo
+        Assert.Equal(LeadStatus.Nuevo, r.Status);
+        Assert.Equal(count, audit.Events.Count); // sin evento nuevo
+    }
+
+    [Fact] // inválido: avanzar un lead inexistente lanza
+    public async Task Advance_UnknownLead_Throws()
+    {
+        var svc = new StubLeadCaptureService();
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            svc.AdvanceLeadAsync("lead_nope", LeadStatus.Cerrado));
+    }
+
     // ── Fakes hand-written (evita el trap NSubstitute Returns-inside-Returns) ──
 
     private sealed class CapturingAuditTrailWriter : IAuditTrailWriter

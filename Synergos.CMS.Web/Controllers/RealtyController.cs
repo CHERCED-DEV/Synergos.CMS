@@ -31,10 +31,14 @@ namespace Synergos.CMS.Web.Controllers;
 [Route("api/realty")]
 public sealed class RealtyController : ControllerBase
 {
+    private const string FavoritesCollection = "favorites";
+
     private readonly IPropertyCatalogProvider _catalog;
     private readonly IVisitSchedulingService _visits;
     private readonly IMortgageCalculator _mortgage;
     private readonly ILeadCaptureService _leads;
+    private readonly IUserCollection _collections;
+    private readonly ISavedSearchService _savedSearches;
     private readonly IPriceFormatter _priceFormatter;
 
     public RealtyController(
@@ -42,12 +46,16 @@ public sealed class RealtyController : ControllerBase
         IVisitSchedulingService visits,
         IMortgageCalculator mortgage,
         ILeadCaptureService leads,
+        IUserCollection collections,
+        ISavedSearchService savedSearches,
         IPriceFormatter priceFormatter)
     {
         _catalog = catalog;
         _visits = visits;
         _mortgage = mortgage;
         _leads = leads;
+        _collections = collections;
+        _savedSearches = savedSearches;
         _priceFormatter = priceFormatter;
     }
 
@@ -200,6 +208,168 @@ public sealed class RealtyController : ControllerBase
         return Ok(new LeadResponse(result.LeadId));
     }
 
+    // ── 6. Cuenta: favoritos + búsquedas guardadas (doc §4) ─────────────
+    // GET /api/realty/saved?user= → { favorites:[...], searches:[...] }
+    [HttpGet("saved")]
+    public async Task<IActionResult> Saved([FromQuery] string? user, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(user))
+        {
+            return BadRequest(new { error = "El parámetro user es requerido." });
+        }
+
+        var owner = user.Trim();
+        var favorites = await _collections.GetAsync(owner, FavoritesCollection, cancellationToken);
+        var searches = await _savedSearches.GetForOwnerAsync(owner, cancellationToken);
+
+        return Ok(new SavedResponse(
+            Favorites: favorites.Select(f => f.ItemRef).ToList(),
+            Searches: searches.Select(ToSavedSearchDto).ToList()));
+    }
+
+    // ── 7. Guardar una búsqueda (con criterios) ─────────────────────────
+    // POST /api/realty/saved-search { user, criteria } → { id, label, criteria }
+    [HttpPost("saved-search")]
+    public async Task<IActionResult> SaveSearch([FromBody] SaveSearchRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.User))
+        {
+            return BadRequest(new { error = "user es requerido." });
+        }
+
+        var criteria = (request.Criteria ?? new SearchCriteria()).ToQuery();
+
+        SavedSearch saved;
+        try
+        {
+            saved = await _savedSearches.SaveAsync(request.User.Trim(), criteria, request.Label, cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        return Ok(ToSavedSearchDto(saved));
+    }
+
+    // ── 8. Alertas: nuevos matches de una búsqueda guardada ─────────────
+    // GET /api/realty/saved/{id}/matches → { count, listings:[...] }
+    [HttpGet("saved/{id}/matches")]
+    public async Task<IActionResult> SavedMatches(string id, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return BadRequest(new { error = "El id de la búsqueda es requerido." });
+        }
+
+        SavedSearchMatches matches;
+        try
+        {
+            matches = await _savedSearches.GetMatchesAsync(id.Trim(), cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+
+        return Ok(new SavedMatchesResponse(
+            Count: matches.Count,
+            Listings: matches.Listings.Select(ToListingDto).ToList()));
+    }
+
+    // ── 9. Favoritos: marcar / desmarcar un inmueble ────────────────────
+    // POST /api/realty/favorite { user, listingId } → { favorites:[...] }
+    [HttpPost("favorite")]
+    public async Task<IActionResult> AddFavorite([FromBody] FavoriteRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.User) || string.IsNullOrWhiteSpace(request.ListingId))
+        {
+            return BadRequest(new { error = "user y listingId son requeridos." });
+        }
+
+        await _collections.AddAsync(request.User.Trim(), FavoritesCollection, request.ListingId.Trim(), cancellationToken);
+        var favorites = await _collections.GetAsync(request.User.Trim(), FavoritesCollection, cancellationToken);
+        return Ok(new FavoritesResponse(favorites.Select(f => f.ItemRef).ToList()));
+    }
+
+    // DELETE /api/realty/favorite { user, listingId } → { favorites:[...] }
+    [HttpDelete("favorite")]
+    public async Task<IActionResult> RemoveFavorite([FromBody] FavoriteRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.User) || string.IsNullOrWhiteSpace(request.ListingId))
+        {
+            return BadRequest(new { error = "user y listingId son requeridos." });
+        }
+
+        await _collections.RemoveAsync(request.User.Trim(), FavoritesCollection, request.ListingId.Trim(), cancellationToken);
+        var favorites = await _collections.GetAsync(request.User.Trim(), FavoritesCollection, cancellationToken);
+        return Ok(new FavoritesResponse(favorites.Select(f => f.ItemRef).ToList()));
+    }
+
+    // ── 10. Consola del agente: mini-CRM de leads (doc §6) ──────────────
+    // GET /api/realty/agent/leads?agent= → { leads:[...] }
+    [HttpGet("agent/leads")]
+    public async Task<IActionResult> AgentLeads([FromQuery] string? agent, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(agent))
+        {
+            return BadRequest(new { error = "El parámetro agent es requerido." });
+        }
+
+        var leads = await _leads.GetForAgentAsync(agent.Trim(), cancellationToken);
+        return Ok(new AgentLeadsResponse(leads.Select(ToAgentLeadDto).ToList()));
+    }
+
+    // POST /api/realty/lead/{id}/advance { status } → { leadId, status }
+    [HttpPost("lead/{id}/advance")]
+    public async Task<IActionResult> AdvanceLead(string id, [FromBody] AdvanceLeadRequest? request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return BadRequest(new { error = "El id del lead es requerido." });
+        }
+        if (request is null || string.IsNullOrWhiteSpace(request.Status)
+            || !Enum.TryParse<LeadStatus>(request.Status.Trim(), ignoreCase: true, out var status))
+        {
+            return BadRequest(new { error = "status es requerido y debe ser Nuevo|Contactado|Visita|Cerrado." });
+        }
+
+        LeadAdvanceResult result;
+        try
+        {
+            result = await _leads.AdvanceLeadAsync(id.Trim(), status, cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+
+        return Ok(new AdvanceLeadResponse(result.LeadId, result.Status.ToString()));
+    }
+
+    // ── 11. Publicar inmueble (agente, wizard SH-6 — doc §7) ────────────
+    // POST /api/realty/listing { draft } → { listingId }
+    [HttpPost("listing")]
+    public async Task<IActionResult> PublishListing([FromBody] PublishListingRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return BadRequest(new { error = "El borrador del inmueble es requerido." });
+        }
+
+        PropertyDetail published;
+        try
+        {
+            published = await _catalog.PublishListingAsync(request.ToDraft(), cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        return Ok(new PublishListingResponse(published.Summary.Id));
+    }
+
     // ── Mappers a DTOs JSON estables ────────────────────────────────────
 
     private ListingDto ToListingDto(PropertyListing l) => new(
@@ -226,6 +396,23 @@ public sealed class RealtyController : ControllerBase
         Name: f.Name,
         Values: f.Values.Select(v => new FacetValueDto(v.Value, v.Count)).ToList());
 
+    private static SavedSearchDto ToSavedSearchDto(SavedSearch s) => new(
+        Id: s.Id,
+        Label: s.Label,
+        Criteria: SearchCriteria.From(s.Criteria),
+        SavedAt: s.SavedAt);
+
+    private static AgentLeadDto ToAgentLeadDto(AgentLead l) => new(
+        LeadId: l.LeadId,
+        AgentId: l.AgentId,
+        ListingId: l.ListingId,
+        Name: l.Name,
+        Email: l.Email,
+        Phone: l.Phone,
+        Message: l.Message,
+        Status: l.Status.ToString(),
+        CreatedAt: l.CreatedAt);
+
     // ── Request DTOs (binding del módulo Angular) ───────────────────────
 
     public sealed record ContactRequest(string Name, string Email, string? Phone);
@@ -235,6 +422,66 @@ public sealed class RealtyController : ControllerBase
     public sealed record MortgageRequest(decimal Price, decimal DownPayment, int TermMonths, decimal AnnualRate);
 
     public sealed record LeadRequest(string ListingId, ContactRequest Contact, string? Message);
+
+    /// <summary>Criterios de búsqueda (espejo JSON de <see cref="PropertyQuery"/>).</summary>
+    public sealed record SearchCriteria(
+        string? Text = null,
+        string? Type = null,
+        decimal? MinPrice = null,
+        decimal? MaxPrice = null,
+        int? Beds = null,
+        string? Location = null)
+    {
+        public PropertyQuery ToQuery() => new(Text, Type, MinPrice, MaxPrice, Beds, Location);
+
+        public static SearchCriteria From(PropertyQuery q) =>
+            new(q.Text, q.Type, q.MinPrice, q.MaxPrice, q.Beds, q.Location);
+    }
+
+    public sealed record SaveSearchRequest(string User, SearchCriteria? Criteria, string? Label);
+
+    public sealed record FavoriteRequest(string User, string ListingId);
+
+    public sealed record AdvanceLeadRequest(string Status);
+
+    public sealed record GeoRequest(double Lat, double Lng);
+
+    public sealed record PublishListingRequest(
+        string? Title,
+        string? Type,
+        string? Operation,
+        decimal Price,
+        int Beds,
+        int Baths,
+        int Area,
+        string? City,
+        GeoRequest? Geo,
+        IReadOnlyList<string>? Gallery,
+        string? Description,
+        string? Neighborhood,
+        int Stratum,
+        string? Currency,
+        string? AgentName,
+        string? AgentPhone)
+    {
+        public PropertyDraft ToDraft() => new(
+            Title: Title ?? string.Empty,
+            Type: Type ?? string.Empty,
+            Operation: Operation ?? string.Empty,
+            Price: Price,
+            Beds: Beds,
+            Baths: Baths,
+            Area: Area,
+            City: City ?? string.Empty,
+            Geo: new PropertyGeo(Geo?.Lat ?? 0d, Geo?.Lng ?? 0d),
+            Gallery: Gallery ?? Array.Empty<string>(),
+            Description: Description ?? string.Empty,
+            Neighborhood: Neighborhood,
+            Stratum: Stratum,
+            Currency: Currency,
+            AgentName: AgentName,
+            AgentPhone: AgentPhone);
+    }
 
     // ── Response DTOs (JSON estable para la UI) ─────────────────────────
 
@@ -302,4 +549,37 @@ public sealed class RealtyController : ControllerBase
         IReadOnlyList<MortgageScheduleDto> Schedule);
 
     public sealed record LeadResponse(string LeadId);
+
+    public sealed record SavedSearchDto(
+        string Id,
+        string Label,
+        SearchCriteria Criteria,
+        DateTimeOffset SavedAt);
+
+    public sealed record SavedResponse(
+        IReadOnlyList<string> Favorites,
+        IReadOnlyList<SavedSearchDto> Searches);
+
+    public sealed record SavedMatchesResponse(
+        int Count,
+        IReadOnlyList<ListingDto> Listings);
+
+    public sealed record FavoritesResponse(IReadOnlyList<string> Favorites);
+
+    public sealed record AgentLeadDto(
+        string LeadId,
+        string AgentId,
+        string ListingId,
+        string Name,
+        string Email,
+        string? Phone,
+        string Message,
+        string Status,
+        DateTimeOffset CreatedAt);
+
+    public sealed record AgentLeadsResponse(IReadOnlyList<AgentLeadDto> Leads);
+
+    public sealed record AdvanceLeadResponse(string LeadId, string Status);
+
+    public sealed record PublishListingResponse(string ListingId);
 }

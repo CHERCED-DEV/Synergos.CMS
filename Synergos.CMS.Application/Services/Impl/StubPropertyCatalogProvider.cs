@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -21,13 +22,19 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
 {
     private const string Cop = "COP";
 
-    private readonly IReadOnlyList<PropertyDetail> _catalog = Seed();
+    // Catálogo sembrado + inmuebles publicados por agentes en runtime
+    // (PublishListingAsync). ConcurrentDictionary keyed por id → el estado (listados
+    // creados en la demo) vive en el proceso, igual que el resto de stubs del motor.
+    private static readonly ConcurrentDictionary<string, PropertyDetail> Catalog = BuildCatalog();
+
+    // Contador monotónico para el id de inmuebles publicados por agentes.
+    private static int _publishedCounter;
 
     public Task<PropertySearchResult> SearchAsync(PropertyQuery query, CancellationToken cancellationToken = default)
     {
         query ??= new PropertyQuery();
 
-        var matches = _catalog
+        var matches = Catalog.Values
             .Select(d => d.Summary)
             .Where(l => MatchesText(l, query.Text))
             .Where(l => query.Type is null || string.Equals(l.Type, query.Type, StringComparison.OrdinalIgnoreCase))
@@ -59,10 +66,86 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
         }
 
         var id = listingId.Trim();
-        var detail = _catalog.FirstOrDefault(d =>
+        var detail = Catalog.Values.FirstOrDefault(d =>
             string.Equals(d.Summary.Id, id, StringComparison.OrdinalIgnoreCase)
             || string.Equals(d.Summary.Slug, id, StringComparison.OrdinalIgnoreCase));
         return Task.FromResult(detail);
+    }
+
+    public Task<PropertyDetail> PublishListingAsync(PropertyDraft draft, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        if (string.IsNullOrWhiteSpace(draft.Title))
+        {
+            throw new ArgumentException("El título del inmueble es obligatorio.", nameof(draft));
+        }
+        if (draft.Price <= 0m)
+        {
+            throw new ArgumentException("El precio del inmueble debe ser mayor a cero.", nameof(draft));
+        }
+        if (draft.Geo is null)
+        {
+            throw new ArgumentException("La ubicación (geo) del inmueble es obligatoria.", nameof(draft));
+        }
+
+        var id = $"prop-org-{Interlocked.Increment(ref _publishedCounter)}";
+        var slug = Slugify(draft.Title) + "-" + id;
+        var currency = string.IsNullOrWhiteSpace(draft.Currency) ? Cop : draft.Currency!.Trim();
+        var neighborhood = string.IsNullOrWhiteSpace(draft.Neighborhood) ? draft.City.Trim() : draft.Neighborhood!.Trim();
+        var gallery = (draft.Gallery ?? Array.Empty<string>())
+            .Where(g => !string.IsNullOrWhiteSpace(g))
+            .Select(g => g.Trim())
+            .ToList();
+
+        var summary = new PropertyListing(
+            Id: id, Slug: slug, Title: draft.Title.Trim(),
+            Operation: string.IsNullOrWhiteSpace(draft.Operation) ? "venta" : draft.Operation.Trim(),
+            Type: string.IsNullOrWhiteSpace(draft.Type) ? "apartamento" : draft.Type.Trim(),
+            Price: draft.Price, Currency: currency,
+            City: draft.City.Trim(), Neighborhood: neighborhood,
+            Beds: draft.Beds, Baths: draft.Baths, AreaM2: draft.Area, Stratum: draft.Stratum,
+            Lat: draft.Geo.Lat, Lng: draft.Geo.Lng,
+            ImageUrl: gallery.Count > 0 ? gallery[0] : $"/media/realty/{slug}.jpg",
+            Featured: false);
+
+        var specs = new List<PropertySpec>
+        {
+            new("Área", $"{draft.Area} m²"),
+            new("Habitaciones", draft.Beds.ToString()),
+            new("Baños", draft.Baths.ToString()),
+            new("Estrato", draft.Stratum.ToString()),
+        };
+
+        var location = new PropertyLocation(draft.Geo.Lat, draft.Geo.Lng,
+            Address: $"{neighborhood}, {draft.City.Trim()}", Neighborhood: neighborhood, City: draft.City.Trim());
+
+        var detail = new PropertyDetail(
+            summary,
+            string.IsNullOrWhiteSpace(draft.Description) ? string.Empty : draft.Description.Trim(),
+            specs,
+            Array.Empty<string>(),
+            gallery,
+            location,
+            string.IsNullOrWhiteSpace(draft.AgentName) ? "Agente" : draft.AgentName!.Trim(),
+            string.IsNullOrWhiteSpace(draft.AgentPhone) ? string.Empty : draft.AgentPhone!.Trim());
+
+        Catalog[id] = detail;
+        return Task.FromResult(detail);
+    }
+
+    // Slug amable a partir del título (ascii-ish, sin acentos sofisticados — suficiente
+    // para la demo; el adapter real usa el slug del CMS).
+    private static string Slugify(string title)
+    {
+        var chars = title.Trim().ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
+            .ToArray();
+        var slug = new string(chars);
+        while (slug.Contains("--", StringComparison.Ordinal))
+        {
+            slug = slug.Replace("--", "-", StringComparison.Ordinal);
+        }
+        return slug.Trim('-');
     }
 
     private static bool MatchesText(PropertyListing l, string? text)
@@ -104,9 +187,9 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
     // ── Catálogo sembrado (memoria, determinista) ───────────────────────
     // Varias ciudades CO × tipos. Geo real (lat/lng) para que el mapa pinte
     // pins coherentes. Precios y estratos plausibles del mercado CO.
-    private static IReadOnlyList<PropertyDetail> Seed()
+    private static ConcurrentDictionary<string, PropertyDetail> BuildCatalog()
     {
-        return new List<PropertyDetail>
+        var seed = new List<PropertyDetail>
         {
             Listing(
                 id: "prop-001", slug: "apto-chico-norte-bogota",
@@ -188,6 +271,10 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
                 amenities: new[] { "Salón comunal", "Vigilancia", "Ascensor", "Parqueadero visitantes" },
                 agentName: "Diego Salas", agentPhone: "+57 313 555 1004"),
         };
+
+        return new ConcurrentDictionary<string, PropertyDetail>(
+            seed.ToDictionary(d => d.Summary.Id, StringComparer.Ordinal),
+            StringComparer.Ordinal);
     }
 
     private static PropertyDetail Listing(

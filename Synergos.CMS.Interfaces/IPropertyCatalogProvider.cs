@@ -89,6 +89,34 @@ public sealed record PropertyDetail(
 /// </summary>
 public sealed record PropertySpec(string Label, string Value);
 
+/// <summary>Coordenada geográfica de un inmueble a publicar (pin en el mapa, wizard SH-6).</summary>
+public sealed record PropertyGeo(double Lat, double Lng);
+
+/// <summary>
+/// Borrador de un inmueble que el agente publica desde la consola (doc
+/// propiedades-app-spec §7 — wizard de publicación SH-6). Al publicarlo aparece en
+/// <see cref="IPropertyCatalogProvider.SearchAsync"/>. El precio debe ser mayor a
+/// cero; el resto de campos son metadatos de la ficha. La galería son URLs de las
+/// fotos ya subidas (el media-uploader del wizard resuelve el almacenamiento).
+/// </summary>
+public sealed record PropertyDraft(
+    string Title,
+    string Type,
+    string Operation,
+    decimal Price,
+    int Beds,
+    int Baths,
+    int Area,
+    string City,
+    PropertyGeo Geo,
+    IReadOnlyList<string> Gallery,
+    string Description,
+    string? Neighborhood = null,
+    int Stratum = 0,
+    string? Currency = null,
+    string? AgentName = null,
+    string? AgentPhone = null);
+
 /// <summary>
 /// Catálogo de listados del vertical Propiedades. Es la pieza del MOTOR que
 /// resuelve "qué propiedades hay" (búsqueda facetada) + "el detalle de esta
@@ -118,4 +146,15 @@ public interface IPropertyCatalogProvider
     /// Devuelve la ficha del listado por id o slug, o null si no existe.
     /// </summary>
     Task<PropertyDetail?> GetListingAsync(string listingId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Publica un inmueble nuevo (creado por un agente) en el catálogo: desde ese
+    /// momento aparece en <see cref="SearchAsync"/> y su ficha se resuelve en
+    /// <see cref="GetListingAsync"/>. Devuelve el detalle publicado (con su id/slug ya
+    /// asignados). Lanza <see cref="ArgumentException"/> si el borrador es inválido
+    /// (título vacío o precio ≤ 0). El adapter real persiste en el índice/CMS; el stub
+    /// lo agrega al catálogo en memoria. Es la seam que consume el wizard de publicación
+    /// de la consola del agente (DIP — la cara de agente NO conoce el almacenamiento).
+    /// </summary>
+    Task<PropertyDetail> PublishListingAsync(PropertyDraft draft, CancellationToken cancellationToken = default);
 }

@@ -88,4 +88,38 @@ public class StubPropertyCatalogProviderTests
             first.Listings.Select(l => l.Id),
             second.Listings.Select(l => l.Id));
     }
+
+    // ── OLA 4 §2.7 — publicar inmueble (agente, wizard SH-6) ────────────
+
+    private static PropertyDraft Draft(decimal price = 450_000_000m) => new(
+        Title: "Apartamento nuevo en Envigado", Type: "apartamento", Operation: "venta",
+        Price: price, Beds: 2, Baths: 2, Area: 78, City: "Medellín",
+        Geo: new PropertyGeo(6.1710, -75.5910),
+        Gallery: new[] { "/media/realty/nuevo-1.jpg" },
+        Description: "Inmueble publicado por el agente en la demo.");
+
+    [Fact] // happy: publicar aparece en el search + resuelve su ficha por el id devuelto
+    public async Task Publish_Happy_AppearsInSearch()
+    {
+        var svc = Make();
+        var published = await svc.PublishListingAsync(Draft());
+
+        Assert.StartsWith("prop-org-", published.Summary.Id);
+
+        var byId = await svc.GetListingAsync(published.Summary.Id);
+        Assert.NotNull(byId);
+        Assert.Equal(published.Summary.Id, byId!.Summary.Id);
+
+        var result = await svc.SearchAsync(new PropertyQuery(Location: "Medellín"));
+        Assert.Contains(result.Listings, l => l.Id == published.Summary.Id);
+    }
+
+    [Fact] // filter/inválido: precio ≤ 0 lanza; título vacío lanza
+    public async Task Publish_InvalidPriceOrTitle_Throws()
+    {
+        var svc = Make();
+        await Assert.ThrowsAsync<System.ArgumentException>(() => svc.PublishListingAsync(Draft(price: 0m)));
+        await Assert.ThrowsAsync<System.ArgumentException>(() =>
+            svc.PublishListingAsync(Draft() with { Title = "  " }));
+    }
 }
