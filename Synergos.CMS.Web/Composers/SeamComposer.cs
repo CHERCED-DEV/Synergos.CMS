@@ -307,6 +307,26 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<StubReactionService>()));
         services.AddSingleton<ISocialProfileProjection, StubSocialProfileProjection>();
 
+        // OLA 6 Blogs (doc 21 §2.3) — app social completa sobre el motor social ya
+        // vivo. Aditivo (no toca los otros dominios). El único seam NUEVO es el
+        // centro de notificaciones; el resto reusa lo existente:
+        //   - INotificationFeed: DERIVA notificaciones dirigidas (follow/reacción/
+        //     mención) del grafo + reacciones vivos — sin store paralelo (compone el
+        //     StubReactionService concreto para leer las reacciones por objeto, misma
+        //     técnica que StubContentStream). Stateless → singleton.
+        //   - DMs reusan IMessagingService (contexto "dm"); guardados reusan
+        //     IUserCollection (colección "saved"); explore/trending + long-form
+        //     (Kind=article) reusan IContentStream + IReactionService; el studio
+        //     compone grafo + reacciones. Todo vía BlogsController.
+        // La data de demo de DMs/guardados vive en seams GENÉRICOS compartidos con
+        // otros dominios, así que se siembra al boot desde un hosted service (no en
+        // el ctor de la mensajería genérica) — idempotente.
+        services.AddSingleton<INotificationFeed>(sp =>
+            new StubNotificationFeed(
+                sp.GetRequiredService<ISocialGraphService>(),
+                sp.GetRequiredService<StubReactionService>()));
+        services.AddHostedService<BlogsDemoSeedHostedService>();
+
         // OLA 4 Educación — LMS (doc educacion-app-spec). Dos seams stub-first,
         // aditivos (no tocan Booking/Travel/Shop/Blogs). ADR 0002 (Application pura,
         // sin Umbraco) + ADR 0075 (seam con tests canónicos).

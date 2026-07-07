@@ -112,6 +112,26 @@ public sealed class StubReactionService : IReactionService
             ? CountSnapshot(bucket)
             : 0;
 
+    /// <summary>
+    /// Snapshot de las reacciones de un objeto: <c>(actorId, tipo)</c> por cada
+    /// actor que reaccionó. Lo consume el <see cref="StubNotificationFeed"/> para
+    /// derivar notificaciones "X reaccionó a tu post" sin duplicar el estado de
+    /// reacciones (misma técnica de composición que <see cref="StubContentStream"/>).
+    /// Lista vacía si el objeto no tiene reacciones.
+    /// </summary>
+    public IReadOnlyList<KeyValuePair<string, string>> ReactionsFor(string objectKey)
+    {
+        if (string.IsNullOrWhiteSpace(objectKey) || !_reactions.TryGetValue(objectKey, out var bucket))
+        {
+            return Array.Empty<KeyValuePair<string, string>>();
+        }
+
+        lock (bucket)
+        {
+            return bucket.ToList();
+        }
+    }
+
     private static int CountSnapshot(Dictionary<string, string> bucket)
     {
         lock (bucket)

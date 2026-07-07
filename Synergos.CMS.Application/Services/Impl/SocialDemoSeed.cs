@@ -145,6 +145,46 @@ internal static class SocialDemoSeed
             },
         };
 
+    /// <summary>
+    /// Hilos de DM sembrados (OLA 6 — SH-7 v2). Cada uno se INYECTA al
+    /// <see cref="IMessagingService"/> genérico con contexto <c>dm</c> para que la
+    /// bandeja de Blogs arranque poblada sin duplicar el store de mensajería.
+    /// Los participantes son actorId (mismos actores del feed). Cada mensaje trae
+    /// (from, body) en orden cronológico.
+    /// </summary>
+    public static readonly IReadOnlyList<SeedDmThread> DmThreads = new[]
+    {
+        new SeedDmThread(new[]
+        {
+            new SeedDm("act-mateo", "Vi tu post de arquitectura, brutal. ¿Tenés algo escrito más largo sobre el patrón stub-first?"),
+            new SeedDm("act-elena", "¡Gracias Mateo! Justo estoy armando un artículo. Te paso el borrador esta semana."),
+            new SeedDm("act-mateo", "Perfecto, quedo atento 🙌"),
+        }),
+        new SeedDmThread(new[]
+        {
+            new SeedDm("act-sofia", "Elena, ¿te sirve si armo un dashboard con percentiles para el ejemplo del hilo?"),
+            new SeedDm("act-elena", "Sí, total. Con p50/p95/p99 se ve clarísimo el punto."),
+        }),
+    };
+
+    /// <summary>
+    /// Ítems guardados sembrados por actor: <c>owner → [postId]</c>. Se INYECTAN a
+    /// la colección genérica <c>saved</c> del <see cref="IUserCollection"/> para
+    /// que la vista "Guardados" de Blogs arranque poblada.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string[]> Saved =
+        new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            ["act-elena"] = new[] { "post-003", "post-008" },
+            ["act-mateo"] = new[] { "post-001" },
+        };
+
+    /// <summary>Contexto opaco de los hilos de DM en el <see cref="IMessagingService"/>.</summary>
+    public const string DmContext = "dm";
+
+    /// <summary>Colección de guardados en el <see cref="IUserCollection"/>.</summary>
+    public const string SavedCollection = "saved";
+
     /// <summary>Post sembrado (forma interna de la semilla).</summary>
     public sealed record SeedPost(
         string Id,
@@ -153,4 +193,10 @@ internal static class SocialDemoSeed
         int OffsetMinutes,
         string Body,
         string? MediaUrl);
+
+    /// <summary>Hilo de DM sembrado: los mensajes en orden cronológico.</summary>
+    public sealed record SeedDmThread(IReadOnlyList<SeedDm> Messages);
+
+    /// <summary>Mensaje sembrado de un hilo de DM: quién lo mandó + qué dice.</summary>
+    public sealed record SeedDm(string From, string Body);
 }
