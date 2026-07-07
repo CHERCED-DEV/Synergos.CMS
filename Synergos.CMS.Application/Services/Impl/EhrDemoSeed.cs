@@ -202,6 +202,110 @@ internal static class EhrDemoSeed
             DiagnosisCode: "J45.9", SignedByClinician: true),
     };
 
+    /// <summary>
+    /// Resultados de laboratorio sembrados (OLA 7), fechas relativas al instante base.
+    /// Coherentes con la historia de cada paciente (Jorge diabético/HTA → glicemia y
+    /// perfil lipídico altos; Valentina hipotiroidea → TSH alta; etc.). Cada uno
+    /// referencia paciente + médico ordenante reales del padrón.
+    /// </summary>
+    public static IReadOnlyList<EhrLabResult> LabResults(DateTime nowUtc) => new[]
+    {
+        // Jorge Medina — control cardiometabólico (Dr. Carlos Mejía).
+        new EhrLabResult(
+            Id: "lab-seed-jorge-hba1c", PatientId: "pat-jorge-medina",
+            PanelName: "Perfil metabólico", TestName: "Hemoglobina glicosilada (HbA1c)",
+            Value: "8.1", Unit: "%", ReferenceLow: 4.0, ReferenceHigh: 5.7,
+            Flag: "high", ResultedAtUtc: nowUtc.AddDays(-4),
+            OrderId: null, OrderedByDoctorId: "doc-carlos-mejia",
+            Notes: "Control glicémico subóptimo. Reforzar adherencia."),
+        new EhrLabResult(
+            Id: "lab-seed-jorge-glucose", PatientId: "pat-jorge-medina",
+            PanelName: "Perfil metabólico", TestName: "Glucosa en ayunas",
+            Value: "148", Unit: "mg/dL", ReferenceLow: 70, ReferenceHigh: 100,
+            Flag: "high", ResultedAtUtc: nowUtc.AddDays(-4),
+            OrderId: null, OrderedByDoctorId: "doc-carlos-mejia", Notes: null),
+        new EhrLabResult(
+            Id: "lab-seed-jorge-ldl", PatientId: "pat-jorge-medina",
+            PanelName: "Perfil lipídico", TestName: "Colesterol LDL",
+            Value: "132", Unit: "mg/dL", ReferenceLow: 0, ReferenceHigh: 100,
+            Flag: "high", ResultedAtUtc: nowUtc.AddDays(-4),
+            OrderId: null, OrderedByDoctorId: "doc-carlos-mejia", Notes: null),
+        new EhrLabResult(
+            Id: "lab-seed-jorge-creat", PatientId: "pat-jorge-medina",
+            PanelName: "Función renal", TestName: "Creatinina sérica",
+            Value: "0.9", Unit: "mg/dL", ReferenceLow: 0.7, ReferenceHigh: 1.3,
+            Flag: "normal", ResultedAtUtc: nowUtc.AddDays(-4),
+            OrderId: null, OrderedByDoctorId: "doc-carlos-mejia", Notes: null),
+        // Camila Restrepo — control migraña (Dra. Ana Ríos).
+        new EhrLabResult(
+            Id: "lab-seed-camila-hb", PatientId: "pat-camila-restrepo",
+            PanelName: "Hemograma", TestName: "Hemoglobina",
+            Value: "13.4", Unit: "g/dL", ReferenceLow: 12.0, ReferenceHigh: 16.0,
+            Flag: "normal", ResultedAtUtc: nowUtc.AddDays(-19),
+            OrderId: null, OrderedByDoctorId: "doc-ana-rios", Notes: null),
+        // Valentina Cruz — hipotiroidismo (Dra. Ana Ríos).
+        new EhrLabResult(
+            Id: "lab-seed-valentina-tsh", PatientId: "pat-valentina-cruz",
+            PanelName: "Perfil tiroideo", TestName: "TSH",
+            Value: "6.8", Unit: "mUI/L", ReferenceLow: 0.4, ReferenceHigh: 4.0,
+            Flag: "high", ResultedAtUtc: nowUtc.AddDays(-9),
+            OrderId: null, OrderedByDoctorId: "doc-ana-rios",
+            Notes: "TSH elevada — considerar ajuste de levotiroxina."),
+        new EhrLabResult(
+            Id: "lab-seed-valentina-t4", PatientId: "pat-valentina-cruz",
+            PanelName: "Perfil tiroideo", TestName: "T4 libre",
+            Value: "0.7", Unit: "ng/dL", ReferenceLow: 0.8, ReferenceHigh: 1.8,
+            Flag: "low", ResultedAtUtc: nowUtc.AddDays(-9),
+            OrderId: null, OrderedByDoctorId: "doc-ana-rios", Notes: null),
+    };
+
+    /// <summary>
+    /// Estados de cuenta sembrados por paciente (OLA 7), coherentes con las citas y
+    /// el copago nominal de consulta. Montos en COP.
+    /// </summary>
+    public static IReadOnlyDictionary<string, EhrBillingStatement> Billing(DateTime nowUtc) => new Dictionary<string, EhrBillingStatement>(StringComparer.Ordinal)
+    {
+        ["pat-jorge-medina"] = new EhrBillingStatement(
+            PatientId: "pat-jorge-medina",
+            Statement: new[]
+            {
+                new EhrBillingLine("bill-jorge-1", nowUtc.AddDays(-40), "Consulta cardiología — control", 180_000m, 80_000m, "paid"),
+                new EhrBillingLine("bill-jorge-2", nowUtc.AddDays(-5), "Consulta cardiología — reevaluación", 180_000m, 80_000m, "due"),
+                new EhrBillingLine("bill-jorge-3", nowUtc.AddDays(-4), "Perfil metabólico + lipídico", 145_000m, 43_500m, "pending-insurance"),
+            },
+            Balance: 123_500m, Currency: "COP",
+            Plan: new EhrInsurancePlan("EPS Sura — Plan Complementario", "SURA-79521336", "Cobertura 70%", 80_000m)),
+        ["pat-camila-restrepo"] = new EhrBillingStatement(
+            PatientId: "pat-camila-restrepo",
+            Statement: new[]
+            {
+                new EhrBillingLine("bill-camila-1", nowUtc.AddDays(-21), "Consulta medicina interna", 160_000m, 80_000m, "paid"),
+            },
+            Balance: 0m, Currency: "COP",
+            Plan: new EhrInsurancePlan("Nueva EPS — Contributivo", "NEPS-1012448901", "Cobertura 50%", 80_000m)),
+        ["pat-valentina-cruz"] = new EhrBillingStatement(
+            PatientId: "pat-valentina-cruz",
+            Statement: new[]
+            {
+                new EhrBillingLine("bill-valentina-1", nowUtc.AddDays(-9), "Perfil tiroideo", 95_000m, 28_500m, "due"),
+            },
+            Balance: 28_500m, Currency: "COP",
+            Plan: new EhrInsurancePlan("Compensar EPS — Contributivo", "COMP-1001337620", "Cobertura 70%", 80_000m)),
+        ["pat-sara-gomez"] = new EhrBillingStatement(
+            PatientId: "pat-sara-gomez",
+            Statement: new[]
+            {
+                new EhrBillingLine("bill-sara-1", nowUtc.AddDays(-12), "Consulta pediatría — crisis asmática", 150_000m, 0m, "paid"),
+            },
+            Balance: 0m, Currency: "COP",
+            Plan: new EhrInsurancePlan("Sanitas EPS — Contributivo", "SAN-1028776140", "Cobertura 100% (menor)", 0m)),
+        ["pat-andres-pardo"] = new EhrBillingStatement(
+            PatientId: "pat-andres-pardo",
+            Statement: Array.Empty<EhrBillingLine>(),
+            Balance: 0m, Currency: "COP",
+            Plan: new EhrInsurancePlan("Medicina prepagada Colsanitas", "COLS-1094220515", "Cobertura 90%", 60_000m)),
+    };
+
     /// <summary>Recetas sembradas, fechas relativas al instante base.</summary>
     public static IReadOnlyList<EhrPrescription> Prescriptions(DateTime nowUtc) => new[]
     {

@@ -613,6 +613,47 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IClinicalPrescriptionService, StubClinicalPrescriptionService>();
         services.AddSingleton<IClinicalSchedulingService, StubClinicalSchedulingService>();
 
+        // OLA 7 Healthcare EHR-lite (doc 21 §2.5) — DOS portales de un mismo grafo
+        // clínico. Seams NUEVOS, aditivos (no tocan el vertical Healthcare de
+        // PRODUCCIÓN de ADR 0098 ni los seams EHR-lite de OLA 5 de arriba). Todos
+        // reusan lo existente y auditan PHI vía IAuditTrailWriter (ADR 0037):
+        //   - IClinicalResultsProvider: labs por paciente (valor/rango/flag). Semilla
+        //     coherente con la historia (Jorge diabético→HbA1c alta; Valentina
+        //     hipotiroidea→TSH alta). El order-entry lo ALIMENTA (bucle order→result).
+        //   - IClinicalMedicationService: medicación activa DERIVADA de las recetas
+        //     vivas (DIP, compone IClinicalPrescriptionService) + refill que enruta al
+        //     In Basket del médico vía IMessagingService (contexto 'clinical', genérico
+        //     Ola 1 reusado). El concreto expone GetPendingRefillsForProvider para que
+        //     el In Basket lea las solicitudes por composición.
+        //   - IClinicalOrderService: order-entry (lab/eRx/imaging/referral); una orden
+        //     de lab libera un resultado coherente (compone IClinicalResultsProvider).
+        //   - IClinicalBillingService: estado de cuenta + saldo + plan, sembrado.
+        //   - IEhrInBasketService: cola tipada del proveedor (result|refill|message)
+        //     que DERIVA de resultados + refills + mensajería — sin store paralelo
+        //     (compone el StubClinicalMedicationService concreto, mismo patrón que
+        //     StubContentStream→StubReactionService).
+        // Singletons — el estado (resultados/refills/órdenes creados) vive en el
+        // proceso, igual que el resto de stubs del motor.
+        services.AddSingleton<IClinicalResultsProvider, StubClinicalResultsProvider>();
+        services.AddSingleton<StubClinicalMedicationService>(sp =>
+            new StubClinicalMedicationService(
+                sp.GetRequiredService<IClinicalPrescriptionService>(),
+                sp.GetRequiredService<IMessagingService>(),
+                sp.GetRequiredService<IAuditTrailWriter>()));
+        services.AddSingleton<IClinicalMedicationService>(sp => sp.GetRequiredService<StubClinicalMedicationService>());
+        services.AddSingleton<IClinicalOrderService>(sp =>
+            new StubClinicalOrderService(
+                sp.GetRequiredService<IDoctorDirectory>(),
+                sp.GetRequiredService<IClinicalResultsProvider>(),
+                sp.GetRequiredService<IAuditTrailWriter>()));
+        services.AddSingleton<IClinicalBillingService, StubClinicalBillingService>();
+        services.AddSingleton<IEhrInBasketService>(sp =>
+            new StubEhrInBasketService(
+                sp.GetRequiredService<IClinicalResultsProvider>(),
+                sp.GetRequiredService<StubClinicalMedicationService>(),
+                sp.GetRequiredService<IMessagingService>(),
+                sp.GetRequiredService<IPatientRegistry>()));
+
         // OLA 6 Eventos — plataforma de eventos enterprise (doc eventos-app-spec).
         // Tres seams stub-first, aditivos (no tocan Booking/Travel/Shop/Blogs/Educación/
         // Healthcare). ADR 0002 (Application pura, sin Umbraco) + ADR 0075 (tests

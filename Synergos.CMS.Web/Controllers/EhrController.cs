@@ -30,24 +30,45 @@ namespace Synergos.CMS.Web.Controllers;
 [Route("api/ehr")]
 public sealed class EhrController : ControllerBase
 {
+    /// <summary>Contexto de los hilos de mensajería del In Basket clínico (SH-7 v3).</summary>
+    private const string ClinicalMessageContext = "clinical";
+
     private readonly IPatientRegistry _patients;
     private readonly IDoctorDirectory _doctors;
     private readonly IClinicalRecordService _records;
     private readonly IClinicalPrescriptionService _prescriptions;
     private readonly IClinicalSchedulingService _scheduling;
+    private readonly IClinicalResultsProvider _results;
+    private readonly IClinicalMedicationService _medications;
+    private readonly IClinicalOrderService _orders;
+    private readonly IClinicalBillingService _billing;
+    private readonly IEhrInBasketService _inBasket;
+    private readonly IMessagingService _messaging;
 
     public EhrController(
         IPatientRegistry patients,
         IDoctorDirectory doctors,
         IClinicalRecordService records,
         IClinicalPrescriptionService prescriptions,
-        IClinicalSchedulingService scheduling)
+        IClinicalSchedulingService scheduling,
+        IClinicalResultsProvider results,
+        IClinicalMedicationService medications,
+        IClinicalOrderService orders,
+        IClinicalBillingService billing,
+        IEhrInBasketService inBasket,
+        IMessagingService messaging)
     {
         _patients = patients;
         _doctors = doctors;
         _records = records;
         _prescriptions = prescriptions;
         _scheduling = scheduling;
+        _results = results;
+        _medications = medications;
+        _orders = orders;
+        _billing = billing;
+        _inBasket = inBasket;
+        _messaging = messaging;
     }
 
     // ── 1. Pacientes (lista buscable) ──────────────────────────────────
@@ -214,7 +235,216 @@ public sealed class EhrController : ControllerBase
         }
     }
 
+    // ── OLA 7 · Portal paciente + clínico (doc 21 §2.5) ─────────────────
+
+    // 8. Portal paciente — home
+    // GET /api/ehr/portal/home?patient= → { nextAppointment, pendingTasks, unreadMessages, activeMeds }
+    [HttpGet("portal/home")]
+    public async Task<IActionResult> PortalHome([FromQuery] string? patient, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(patient))
+        {
+            return BadRequest(new { error = "El parámetro patient es requerido." });
+        }
+
+        var found = await _patients.GetAsync(patient, cancellationToken);
+        if (found is null)
+        {
+            return NotFound(new { error = $"Paciente '{patient}' no encontrado." });
+        }
+
+        var appointments = await CollectPatientAppointmentsAsync(patient, cancellationToken);
+        var now = DateTime.UtcNow;
+        var next = appointments
+            .Where(a => a.StartUtc >= now && !string.Equals(a.Status, "cancelled", StringComparison.Ordinal))
+            .OrderBy(a => a.StartUtc)
+            .FirstOrDefault();
+
+        var meds = await _medications.GetActiveForPatientAsync(patient, cancellationToken);
+        var results = await _results.GetForPatientAsync(patient, cancellationToken);
+        var inbox = await _messaging.GetInboxAsync(patient, cancellationToken);
+
+        // Tareas pendientes del paciente (demo): resultados anormales por revisar +
+        // saldo pendiente. Derivadas, no un store paralelo.
+        var pendingTasks = new List<PortalTaskDto>();
+        var abnormal = results.Count(r => !string.Equals(r.Flag, "normal", StringComparison.OrdinalIgnoreCase));
+        if (abnormal > 0)
+        {
+            pendingTasks.Add(new PortalTaskDto("review-results", $"Tienes {abnormal} resultado(s) por revisar", "results"));
+        }
+        var statement = await _billing.GetForPatientAsync(patient, cancellationToken);
+        if (statement is not null && statement.Balance > 0)
+        {
+            pendingTasks.Add(new PortalTaskDto("pay-balance", "Tienes un saldo pendiente por pagar", "billing"));
+        }
+
+        return Ok(new PortalHomeResponse(
+            NextAppointment: next is null ? null : ToAppointmentDto(next),
+            PendingTasks: pendingTasks,
+            UnreadMessages: inbox.Sum(t => t.MessageCount),
+            ActiveMeds: meds.Select(ToMedicationDto).ToList()));
+    }
+
+    // 9. Resultados de laboratorio
+    // GET /api/ehr/results?patient= → { results:[...] }
+    [HttpGet("results")]
+    public async Task<IActionResult> Results([FromQuery] string? patient, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(patient))
+        {
+            return BadRequest(new { error = "El parámetro patient es requerido." });
+        }
+        var results = await _results.GetForPatientAsync(patient, cancellationToken);
+        return Ok(new LabResultsResponse(results.Select(ToLabResultDto).ToList()));
+    }
+
+    // 10. Medicamentos activos
+    // GET /api/ehr/medications?patient= → { medications:[...] }
+    [HttpGet("medications")]
+    public async Task<IActionResult> Medications([FromQuery] string? patient, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(patient))
+        {
+            return BadRequest(new { error = "El parámetro patient es requerido." });
+        }
+        var meds = await _medications.GetActiveForPatientAsync(patient, cancellationToken);
+        return Ok(new MedicationsResponse(meds.Select(ToMedicationDto).ToList()));
+    }
+
+    // 11. Solicitar refill
+    // POST /api/ehr/refill { patient, medId, note? } → { refill }
+    [HttpPost("refill")]
+    public async Task<IActionResult> Refill([FromBody] RefillBody? body, CancellationToken cancellationToken)
+    {
+        if (body is null || string.IsNullOrWhiteSpace(body.Patient) || string.IsNullOrWhiteSpace(body.MedId))
+        {
+            return BadRequest(new { error = "patient y medId son requeridos." });
+        }
+        try
+        {
+            var refill = await _medications.RequestRefillAsync(
+                new RefillRequest(body.Patient.Trim(), body.MedId.Trim(), body.Note),
+                cancellationToken);
+            return Ok(new RefillEnvelope(ToRefillDto(refill)));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // 12. Mensajes (paciente ↔ equipo, contexto clinical)
+    // GET /api/ehr/messages?user= → { threads:[...] }
+    [HttpGet("messages")]
+    public async Task<IActionResult> Messages([FromQuery] string? user, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(user))
+        {
+            return BadRequest(new { error = "El parámetro user es requerido." });
+        }
+        var inbox = await _messaging.GetInboxAsync(user, cancellationToken);
+        var clinical = inbox.Where(t => IsClinicalContext(t.ContextRef)).Select(ToThreadSummaryDto).ToList();
+        return Ok(new MessagesResponse(clinical));
+    }
+
+    // 13. Enviar mensaje (paciente → equipo, contexto clinical)
+    // POST /api/ehr/message { from, to, body, threadId? } → { thread }
+    [HttpPost("message")]
+    public async Task<IActionResult> SendMessage([FromBody] SendMessageBody? body, CancellationToken cancellationToken)
+    {
+        if (body is null || string.IsNullOrWhiteSpace(body.From) || string.IsNullOrWhiteSpace(body.Body))
+        {
+            return BadRequest(new { error = "from y body son requeridos." });
+        }
+
+        try
+        {
+            MessageThread thread;
+            if (!string.IsNullOrWhiteSpace(body.ThreadId))
+            {
+                // Respuesta a un hilo existente.
+                thread = await _messaging.ReplyAsync(body.ThreadId.Trim(), body.From.Trim(), body.Body, cancellationToken);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(body.To))
+                {
+                    return BadRequest(new { error = "to (o threadId) es requerido para iniciar un hilo." });
+                }
+                // Nuevo hilo clínico: contexto namespaced para que el In Basket lo reconozca.
+                var contextRef = $"{ClinicalMessageContext}:msg:{body.From.Trim()}:{body.To.Trim()}";
+                thread = await _messaging.StartThreadAsync(contextRef, body.From.Trim(), body.To.Trim(), body.Body, cancellationToken);
+            }
+            return Ok(new ThreadEnvelope(ToThreadDto(thread)));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // 14. In Basket del proveedor (cola tipada)
+    // GET /api/ehr/inbasket?provider=&type= → { items:[...] }
+    [HttpGet("inbasket")]
+    public async Task<IActionResult> InBasket([FromQuery] string? provider, [FromQuery] string? type, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            return BadRequest(new { error = "El parámetro provider es requerido." });
+        }
+        var items = await _inBasket.GetForProviderAsync(provider, type, cancellationToken);
+        return Ok(new InBasketResponse(items.Select(ToInBasketDto).ToList()));
+    }
+
+    // 15. Colocar orden clínica (lab / eRx / imaging / referral)
+    // POST /api/ehr/order { patient, provider, type, detail } → { order }
+    [HttpPost("order")]
+    public async Task<IActionResult> PlaceOrder([FromBody] PlaceOrderBody? body, CancellationToken cancellationToken)
+    {
+        if (body is null
+            || string.IsNullOrWhiteSpace(body.Patient)
+            || string.IsNullOrWhiteSpace(body.Provider)
+            || string.IsNullOrWhiteSpace(body.Type)
+            || string.IsNullOrWhiteSpace(body.Detail))
+        {
+            return BadRequest(new { error = "patient, provider, type y detail son requeridos." });
+        }
+        try
+        {
+            var order = await _orders.PlaceAsync(
+                new PlaceOrderRequest(body.Patient.Trim(), body.Provider.Trim(), body.Type.Trim(), body.Detail),
+                cancellationToken);
+            return Ok(new OrderEnvelope(ToOrderDto(order)));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // 16. Facturación del paciente
+    // GET /api/ehr/billing?patient= → { statement, balance, currency, plan }
+    [HttpGet("billing")]
+    public async Task<IActionResult> Billing([FromQuery] string? patient, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(patient))
+        {
+            return BadRequest(new { error = "El parámetro patient es requerido." });
+        }
+        var statement = await _billing.GetForPatientAsync(patient, cancellationToken);
+        if (statement is null)
+        {
+            return NotFound(new { error = $"Paciente '{patient}' no encontrado." });
+        }
+        return Ok(ToBillingDto(statement));
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────
+
+    private static bool IsClinicalContext(string contextRef)
+        => !string.IsNullOrEmpty(contextRef)
+            && (string.Equals(contextRef, ClinicalMessageContext, StringComparison.Ordinal)
+                || contextRef.StartsWith($"{ClinicalMessageContext}:", StringComparison.Ordinal));
 
     private async Task<IReadOnlyList<ClinicalAppointment>> CollectPatientAppointmentsAsync(string patientId, CancellationToken cancellationToken)
     {
@@ -276,6 +506,50 @@ public sealed class EhrController : ControllerBase
     private static VitalsDto ToVitalsDto(ClinicalVitals v) => new(
         v.SystolicMmHg, v.DiastolicMmHg, v.HeartRateBpm, v.TemperatureC,
         v.WeightKg, v.HeightCm, v.GlucoseMgDl, v.OxygenSaturationPct);
+
+    // ── OLA 7 mappers ───────────────────────────────────────────────────
+
+    private static LabResultDto ToLabResultDto(EhrLabResult r) => new(
+        Id: r.Id, PatientId: r.PatientId, PanelName: r.PanelName, TestName: r.TestName,
+        Value: r.Value, Unit: r.Unit, ReferenceLow: r.ReferenceLow, ReferenceHigh: r.ReferenceHigh,
+        Flag: r.Flag, ResultedAtUtc: r.ResultedAtUtc, OrderId: r.OrderId,
+        OrderedByDoctorId: r.OrderedByDoctorId, Notes: r.Notes);
+
+    private static MedicationDto ToMedicationDto(EhrMedication m) => new(
+        MedicationId: m.MedicationId, PatientId: m.PatientId, MedicationName: m.MedicationName,
+        Dosage: m.Dosage, Frequency: m.Frequency, Instructions: m.Instructions,
+        PrescribedByDoctorId: m.PrescribedByDoctorId, PrescribedByDoctorName: m.PrescribedByDoctorName,
+        PrescribedAtUtc: m.PrescribedAtUtc, Status: m.Status, RefillsRemaining: m.RefillsRemaining);
+
+    private static RefillDto ToRefillDto(EhrRefillRequest r) => new(
+        Id: r.Id, PatientId: r.PatientId, MedicationId: r.MedicationId, MedicationName: r.MedicationName,
+        ProviderId: r.ProviderId, RequestedAtUtc: r.RequestedAtUtc, Status: r.Status, Note: r.Note);
+
+    private static OrderDto ToOrderDto(EhrClinicalOrder o) => new(
+        Id: o.Id, PatientId: o.PatientId, ProviderId: o.ProviderId, ProviderName: o.ProviderName,
+        Type: o.Type, Detail: o.Detail, PlacedAtUtc: o.PlacedAtUtc, Status: o.Status);
+
+    private static InBasketItemDto ToInBasketDto(EhrInBasketItem i) => new(
+        Id: i.Id, Type: i.Type, ProviderId: i.ProviderId, PatientId: i.PatientId,
+        PatientName: i.PatientName, Title: i.Title, Preview: i.Preview, Priority: i.Priority,
+        OccurredAtUtc: i.OccurredAtUtc, RefId: i.RefId);
+
+    private static ThreadSummaryDto ToThreadSummaryDto(MessageThreadSummary s) => new(
+        ThreadId: s.ThreadId, ContextRef: s.ContextRef, Participants: s.Participants,
+        LastMessagePreview: s.LastMessagePreview, LastMessageAt: s.LastMessageAt.UtcDateTime,
+        MessageCount: s.MessageCount);
+
+    private static ThreadDto ToThreadDto(MessageThread t) => new(
+        ThreadId: t.ThreadId, ContextRef: t.ContextRef, Participants: t.Participants,
+        Messages: t.Messages.Select(m => new ThreadMessageDto(m.MessageId, m.From, m.Body, m.SentAt.UtcDateTime)).ToList(),
+        CreatedAt: t.CreatedAt.UtcDateTime, LastMessageAt: t.LastMessageAt.UtcDateTime);
+
+    private static BillingDto ToBillingDto(EhrBillingStatement s) => new(
+        PatientId: s.PatientId,
+        Statement: s.Statement.Select(l => new BillingLineDto(
+            l.Id, l.ServiceDateUtc, l.Description, l.Amount, l.PatientResponsibility, l.Status)).ToList(),
+        Balance: s.Balance, Currency: s.Currency,
+        Plan: new InsurancePlanDto(s.Plan.PlanName, s.Plan.MemberId, s.Plan.Coverage, s.Plan.CopayAmount));
 
     // ── Request bodies (binding del módulo UI) ─────────────────────────
 
@@ -352,4 +626,78 @@ public sealed class EhrController : ControllerBase
         IReadOnlyList<EncounterDto> Encounters,
         IReadOnlyList<PrescriptionDto> Prescriptions,
         IReadOnlyList<AppointmentDto> Appointments);
+
+    // ── OLA 7 · Request bodies ──────────────────────────────────────────
+
+    public sealed record RefillBody(string Patient, string MedId, string? Note);
+
+    public sealed record SendMessageBody(string From, string? To, string Body, string? ThreadId);
+
+    public sealed record PlaceOrderBody(string Patient, string Provider, string Type, string Detail);
+
+    // ── OLA 7 · Response DTOs ───────────────────────────────────────────
+
+    public sealed record PortalTaskDto(string Key, string Label, string Target);
+
+    public sealed record PortalHomeResponse(
+        AppointmentDto? NextAppointment,
+        IReadOnlyList<PortalTaskDto> PendingTasks,
+        int UnreadMessages,
+        IReadOnlyList<MedicationDto> ActiveMeds);
+
+    public sealed record LabResultDto(
+        string Id, string PatientId, string PanelName, string TestName,
+        string Value, string Unit, double? ReferenceLow, double? ReferenceHigh,
+        string Flag, DateTime ResultedAtUtc, string? OrderId, string? OrderedByDoctorId, string? Notes);
+
+    public sealed record LabResultsResponse(IReadOnlyList<LabResultDto> Results);
+
+    public sealed record MedicationDto(
+        string MedicationId, string PatientId, string MedicationName, string Dosage, string Frequency,
+        string? Instructions, string PrescribedByDoctorId, string PrescribedByDoctorName,
+        DateTime PrescribedAtUtc, string Status, int? RefillsRemaining);
+
+    public sealed record MedicationsResponse(IReadOnlyList<MedicationDto> Medications);
+
+    public sealed record RefillDto(
+        string Id, string PatientId, string MedicationId, string MedicationName,
+        string ProviderId, DateTime RequestedAtUtc, string Status, string? Note);
+
+    public sealed record RefillEnvelope(RefillDto Refill);
+
+    public sealed record OrderDto(
+        string Id, string PatientId, string ProviderId, string ProviderName,
+        string Type, string Detail, DateTime PlacedAtUtc, string Status);
+
+    public sealed record OrderEnvelope(OrderDto Order);
+
+    public sealed record InBasketItemDto(
+        string Id, string Type, string ProviderId, string PatientId, string PatientName,
+        string Title, string Preview, string Priority, DateTime OccurredAtUtc, string RefId);
+
+    public sealed record InBasketResponse(IReadOnlyList<InBasketItemDto> Items);
+
+    public sealed record ThreadMessageDto(string MessageId, string From, string Body, DateTime SentAt);
+
+    public sealed record ThreadDto(
+        string ThreadId, string ContextRef, IReadOnlyList<string> Participants,
+        IReadOnlyList<ThreadMessageDto> Messages, DateTime CreatedAt, DateTime LastMessageAt);
+
+    public sealed record ThreadEnvelope(ThreadDto Thread);
+
+    public sealed record ThreadSummaryDto(
+        string ThreadId, string ContextRef, IReadOnlyList<string> Participants,
+        string LastMessagePreview, DateTime LastMessageAt, int MessageCount);
+
+    public sealed record MessagesResponse(IReadOnlyList<ThreadSummaryDto> Threads);
+
+    public sealed record BillingLineDto(
+        string Id, DateTime ServiceDateUtc, string Description, decimal Amount,
+        decimal PatientResponsibility, string Status);
+
+    public sealed record InsurancePlanDto(string PlanName, string MemberId, string Coverage, decimal CopayAmount);
+
+    public sealed record BillingDto(
+        string PatientId, IReadOnlyList<BillingLineDto> Statement,
+        decimal Balance, string Currency, InsurancePlanDto Plan);
 }
