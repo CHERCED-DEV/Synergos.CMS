@@ -11,27 +11,24 @@ public sealed record GovCitizen(
     string? Phone = null);
 
 /// <summary>
-/// Resultado de radicar una solicitud: el <see cref="CaseId"/> interno del expediente,
-/// el <see cref="Radicado"/> (número público con QR del comprobante) y la
-/// <see cref="PaymentSessionId"/> si el trámite cobra tasa (<see cref="Fee"/> &gt; 0):
-/// el motor abrió una sesión de pago (<see cref="IPaymentProvider"/>) para cobrarla.
-/// Trámite gratuito (Fee = 0) → <see cref="PaymentSessionId"/> null (paso de pago OFF,
-/// igual que la visita de Propiedades).
+/// Resultado de radicar una solicitud: el expediente recién creado
+/// (<see cref="Case"/>, en estado <c>Radicado</c> con su número de radicado y primer
+/// hito del timeline) + la <see cref="PaymentSessionId"/> si el trámite cobra tasa (el
+/// motor abrió una sesión de pago vía <see cref="IPaymentProvider"/>). Trámite gratuito
+/// → <see cref="PaymentSessionId"/> null (paso de pago OFF, igual que la visita de
+/// Propiedades).
 /// </summary>
 public sealed record RadicarResult(
-    string CaseId,
-    string Radicado,
-    decimal Fee,
-    string Currency,
+    CaseDetail Case,
     string? PaymentSessionId = null);
 
 /// <summary>
 /// Agregado raíz del expediente — radica una solicitud del vertical Gobierno (doc
-/// gobierno-app-spec §4). Es la pieza del MOTOR que transforma "formulario lleno" en
-/// un <strong>expediente de larga vida con número de radicado</strong>: valida el
-/// trámite contra el catálogo, calcula la tasa (<see cref="IGovFeeCalculator"/>), abre
-/// la sesión de pago si aplica (<see cref="IPaymentProvider"/>), y asienta el primer
-/// estado del expediente (radicado) auditándolo vía <see cref="IAuditTrailWriter"/>.
+/// gobierno.md §4). Es la pieza del MOTOR que transforma "formulario lleno" en un
+/// <strong>expediente de larga vida con número de radicado</strong>: valida el trámite
+/// contra el catálogo, calcula la tasa (<see cref="IGovFeeCalculator"/>), abre la sesión
+/// de pago si aplica (<see cref="IPaymentProvider"/>), y asienta el primer estado del
+/// expediente (radicado) auditándolo vía <see cref="IAuditTrailWriter"/>.
 /// </summary>
 /// <remarks>
 /// Lógica pura en <c>Synergos.CMS.Application</c> — cero dependencia de
@@ -56,7 +53,7 @@ public interface IApplicationService
     /// </summary>
     Task<RadicarResult> RadicarAsync(
         string tramiteId,
-        IReadOnlyDictionary<string, string> formData,
+        IReadOnlyDictionary<string, string> answers,
         GovCitizen citizen,
         CancellationToken cancellationToken = default);
 }

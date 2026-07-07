@@ -5,12 +5,12 @@ namespace Synergos.CMS.Application.Services.Impl;
 
 /// <summary>
 /// Default <see cref="IApplicationService"/> — agregado raíz STUB del expediente del
-/// vertical Gobierno (doc gobierno-app-spec §4), calcando <c>StubEventTicketingService</c>
-/// de Eventos. Radica solicitudes (valida el trámite contra
+/// vertical Gobierno (doc gobierno.md §4), calcando <c>StubEventTicketingService</c> de
+/// Eventos. Radica solicitudes (valida el trámite contra
 /// <see cref="ITramiteCatalogProvider"/>, exige los campos requeridos del formulario
-/// dinámico, calcula la tasa con <see cref="IGovFeeCalculator"/> y abre la sesión de
-/// pago con <see cref="IPaymentProvider"/> solo si la tasa aplica) y es la FUENTE DE
-/// VERDAD del estado de los expedientes: <see cref="ICaseTrackingProvider"/> /
+/// dinámico seccionado, calcula la tasa con <see cref="IGovFeeCalculator"/> y abre la
+/// sesión de pago con <see cref="IPaymentProvider"/> solo si la tasa aplica) y es la
+/// FUENTE DE VERDAD del estado de los expedientes: <see cref="ICaseTrackingProvider"/> /
 /// <see cref="ICaseWorkflowService"/> / <see cref="IDocumentUploadService"/> lo leen y
 /// mutan por composición (DIP), sin duplicar estado.
 /// </summary>
@@ -22,20 +22,40 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// <c>gov.case-radicado</c> en <see cref="IAuditTrailWriter"/> (ADR 0037 — el rastro
 /// forense es el diferenciador del dominio). <see cref="RadicarAsync"/> NO es
 /// idempotente por diseño (cada radicación crea un expediente nuevo, como una orden);
-/// la idempotencia vive en las transiciones (<c>StubCaseWorkflowService</c>). Siembra
+/// la idempotencia vive en las decisiones (<c>StubCaseWorkflowService</c>). Siembra
 /// expedientes en varios estados para que la demo muestre el ciclo de vida completo
 /// (bandeja ciudadano + cola funcionario) sin radicar primero. Estado en memoria del
 /// proceso (Singleton). ADR 0075.
 /// </remarks>
 public sealed class StubApplicationService : IApplicationService
 {
+    /// <summary>Etapa legible por estado (cara ciudadano/funcionario).</summary>
+    private static readonly IReadOnlyDictionary<CaseStatus, string> StageLabels =
+        new Dictionary<CaseStatus, string>
+        {
+            [CaseStatus.Radicado] = "Radicado",
+            [CaseStatus.EnRevision] = "En revisión",
+            [CaseStatus.Subsanacion] = "Información solicitada",
+            [CaseStatus.Resuelto] = "Aprobado",
+            [CaseStatus.Rechazado] = "Rechazado",
+        };
+
+    // Orden canónico de hitos del timeline (patrón GOV.UK: enviado → revisión →
+    // decisión). El estado terminal (Resuelto/Rechazado) ocupa el hito "Decisión".
+    private static readonly CaseStatus[] MilestoneOrder =
+    {
+        CaseStatus.Radicado,
+        CaseStatus.EnRevision,
+        CaseStatus.Resuelto,
+    };
+
     private readonly ITramiteCatalogProvider _catalog;
     private readonly IGovFeeCalculator _fees;
     private readonly IPaymentProvider _payments;
     private readonly IAuditTrailWriter? _audit;
     private readonly Func<DateTimeOffset> _now;
     private readonly ConcurrentDictionary<string, CaseState> _cases = new(StringComparer.OrdinalIgnoreCase);
-    private int _radicadoSequence = 1005;
+    private int _radicadoSequence = 1006;
 
     public StubApplicationService(
         ITramiteCatalogProvider catalog,
@@ -66,7 +86,7 @@ public sealed class StubApplicationService : IApplicationService
 
     public async Task<RadicarResult> RadicarAsync(
         string tramiteId,
-        IReadOnlyDictionary<string, string> formData,
+        IReadOnlyDictionary<string, string> answers,
         GovCitizen citizen,
         CancellationToken cancellationToken = default)
     {
@@ -74,9 +94,9 @@ public sealed class StubApplicationService : IApplicationService
         {
             throw new ArgumentException("El trámite es obligatorio.", nameof(tramiteId));
         }
-        if (formData is null)
+        if (answers is null)
         {
-            throw new ArgumentException("Las respuestas del formulario son obligatorias.", nameof(formData));
+            throw new ArgumentException("Las respuestas del formulario son obligatorias.", nameof(answers));
         }
         if (citizen is null || string.IsNullOrWhiteSpace(citizen.Name) || string.IsNullOrWhiteSpace(citizen.Email))
         {
@@ -86,19 +106,24 @@ public sealed class StubApplicationService : IApplicationService
         var detail = await _catalog.GetAsync(tramiteId.Trim(), cancellationToken)
             ?? throw new ArgumentException($"Trámite '{tramiteId.Trim()}' no encontrado.", nameof(tramiteId));
 
-        // Formulario dinámico data-driven: exigir cada campo requerido de la definición.
-        foreach (var field in detail.FormDefinition.Fields)
+        // Formulario dinámico data-driven: exigir cada campo requerido de la definición
+        // (recorre todas las secciones del formulario seccionado).
+        foreach (var section in detail.FormDefinition.Sections)
         {
-            if (field.Required
-                && (!formData.TryGetValue(field.Key, out var value) || string.IsNullOrWhiteSpace(value)))
+            foreach (var field in section.Fields)
             {
-                throw new ArgumentException(
-                    $"El campo requerido '{field.Label}' ({field.Key}) está vacío.", nameof(formData));
+                if (field.Required
+                    && (!answers.TryGetValue(field.Id, out var value) || string.IsNullOrWhiteSpace(value)))
+                {
+                    throw new ArgumentException(
+                        $"El campo requerido '{field.Label}' ({field.Id}) está vacío.", nameof(answers));
+                }
             }
         }
 
         var occurred = _now();
-        var quote = _fees.Calculate(detail.Summary.Id, detail.Fee, detail.Currency);
+        var summary = detail.Summary;
+        var quote = _fees.Calculate(summary.Id, summary.FeeMinor, summary.Currency);
         var caseId = $"case_{Guid.NewGuid():N}";
         var radicado = NextRadicado(occurred);
 
@@ -114,8 +139,8 @@ public sealed class StubApplicationService : IApplicationService
                     Items: new[]
                     {
                         new PaymentLineItem(
-                            Sku: detail.Summary.Id,
-                            Description: $"Tasa — {detail.Summary.Name}",
+                            Sku: summary.Id,
+                            Description: $"Tasa — {summary.Name}",
                             UnitPrice: quote.Amount,
                             Quantity: 1),
                     },
@@ -127,22 +152,27 @@ public sealed class StubApplicationService : IApplicationService
         var cleanCitizen = new GovCitizen(
             citizen.Name.Trim(), citizen.Email.Trim(), citizen.DocumentId?.Trim(), citizen.Phone?.Trim());
 
-        _cases[caseId] = new CaseState(
+        var state = new CaseState(
             CaseId: caseId,
             Radicado: radicado,
-            TramiteId: detail.Summary.Id,
-            TramiteName: detail.Summary.Name,
+            TramiteId: summary.Id,
+            TramiteName: summary.Name,
+            Agency: summary.Agency,
             Citizen: cleanCitizen,
-            FormData: new Dictionary<string, string>(formData, StringComparer.Ordinal),
+            FormData: new Dictionary<string, string>(answers, StringComparer.Ordinal),
             Documents: Array.Empty<CitizenDocumentRef>(),
             Status: CaseStatus.Radicado,
-            Fee: quote.Amount,
+            Priority: CasePriority.Normal,
+            SlaDays: summary.EstimatedDays,
+            FeeMinor: quote.Amount,
             Currency: quote.Currency,
             RadicadoAt: occurred,
-            Timeline: new[]
+            History: new[]
             {
-                new CaseTimelineEntry(CaseStatus.Radicado, occurred, cleanCitizen.Email, "Solicitud radicada en línea."),
-            });
+                new HistoryEntry(CaseStatus.Radicado, occurred, cleanCitizen.Email, "Solicitud radicada en línea."),
+            },
+            Decision: null);
+        _cases[caseId] = state;
 
         // Rastro forense append-only del primer estado del expediente (ADR 0037).
         if (_audit is not null)
@@ -156,11 +186,11 @@ public sealed class StubApplicationService : IApplicationService
                     Action: "gov.case-radicado",
                     Resource: radicado,
                     Outcome: "success",
-                    Detail: $"Expediente radicado para el trámite {detail.Summary.Id} (tasa {quote.Amount} {quote.Currency})."),
+                    Detail: $"Expediente radicado para el trámite {summary.Id} (tasa {quote.Amount} {quote.Currency})."),
                 cancellationToken);
         }
 
-        return new RadicarResult(caseId, radicado, quote.Amount, quote.Currency, paymentSessionId);
+        return new RadicarResult(ToDetail(state, occurred), paymentSessionId);
     }
 
     // ── Superficie de composición (DIP) para tracking / workflow / documentos ──
@@ -169,52 +199,68 @@ public sealed class StubApplicationService : IApplicationService
 
     /// <summary>
     /// Devuelve el expediente por id de caso O por número de radicado, o null si no
-    /// existe. Búsqueda case-insensitive.
+    /// existe. Búsqueda case-insensitive. El timeline se proyecta relativo al "ahora".
     /// </summary>
     public CaseDetail? FindCase(string caseIdOrRadicado)
     {
         var state = Resolve(caseIdOrRadicado);
-        return state is null ? null : ToDetail(state);
+        return state is null ? null : ToDetail(state, _now());
     }
 
     /// <summary>Devuelve todos los expedientes (para armar las bandejas).</summary>
     public IReadOnlyList<CaseDetail> ListCases()
-        => _cases.Values.Select(ToDetail).ToList();
-
-    /// <summary>
-    /// Aplica una transición YA VALIDADA por la máquina de estados
-    /// (<c>StubCaseWorkflowService</c> es quien decide legalidad e idempotencia):
-    /// cambia el estado y agrega la entrada al timeline. Devuelve el estado resultante.
-    /// Lanza <see cref="ArgumentException"/> si el expediente no existe.
-    /// </summary>
-    public CaseStatus ApplyTransition(string caseIdOrRadicado, CaseStatus to, string actor, string note, DateTimeOffset occurredAt)
     {
-        var state = Resolve(caseIdOrRadicado)
-            ?? throw new ArgumentException($"Expediente '{caseIdOrRadicado}' no encontrado.", nameof(caseIdOrRadicado));
-
-        var timeline = state.Timeline.ToList();
-        timeline.Add(new CaseTimelineEntry(to, occurredAt, actor, note));
-        _cases[state.CaseId] = state with { Status = to, Timeline = timeline };
-        return to;
+        var now = _now();
+        return _cases.Values.Select(s => ToDetail(s, now)).ToList();
     }
 
     /// <summary>
-    /// Adjunta al expediente las referencias de documentos ACEPTADAS (las rechazadas
-    /// no se adjuntan — solo viajan en el resultado del upload). Lanza
+    /// Devuelve todos los expedientes junto con su entidad (agency) para la cola del
+    /// funcionario, que filtra por entidad. La agency es interna al agregado (no viaja
+    /// en <see cref="CaseDetail"/>), así que se expone aquí para la composición (DIP).
+    /// </summary>
+    public IReadOnlyList<(CaseDetail Case, string Agency)> ListCasesWithAgency()
+    {
+        var now = _now();
+        return _cases.Values.Select(s => (ToDetail(s, now), s.Agency)).ToList();
+    }
+
+    /// <summary>
+    /// Aplica una decisión YA VALIDADA por la máquina de estados
+    /// (<c>StubCaseWorkflowService</c> es quien decide legalidad e idempotencia):
+    /// cambia el estado, agrega la entrada al historial y registra la decisión terminal
+    /// si el destino lo es. Devuelve el expediente actualizado. Lanza
     /// <see cref="ArgumentException"/> si el expediente no existe.
     /// </summary>
-    public void AttachDocuments(string caseIdOrRadicado, IReadOnlyList<CitizenDocumentRef> accepted)
+    public CaseDetail ApplyDecision(
+        string caseIdOrRadicado,
+        CaseStatus to,
+        string actor,
+        string note,
+        DateTimeOffset occurredAt,
+        CaseDecision? decision)
     {
         var state = Resolve(caseIdOrRadicado)
             ?? throw new ArgumentException($"Expediente '{caseIdOrRadicado}' no encontrado.", nameof(caseIdOrRadicado));
 
-        if (accepted.Count == 0)
-        {
-            return;
-        }
+        var history = state.History.ToList();
+        history.Add(new HistoryEntry(to, occurredAt, actor, note));
+        var updated = state with { Status = to, History = history, Decision = decision ?? state.Decision };
+        _cases[state.CaseId] = updated;
+        return ToDetail(updated, occurredAt);
+    }
+
+    /// <summary>
+    /// Adjunta un documento (ya aceptado) al expediente. Lanza
+    /// <see cref="ArgumentException"/> si el expediente no existe.
+    /// </summary>
+    public void AttachDocument(string caseIdOrRadicado, CitizenDocumentRef document)
+    {
+        var state = Resolve(caseIdOrRadicado)
+            ?? throw new ArgumentException($"Expediente '{caseIdOrRadicado}' no encontrado.", nameof(caseIdOrRadicado));
 
         var docs = state.Documents.ToList();
-        docs.AddRange(accepted);
+        docs.Add(document);
         _cases[state.CaseId] = state with { Documents = docs };
     }
 
@@ -233,7 +279,9 @@ public sealed class StubApplicationService : IApplicationService
             string.Equals(c.Radicado, key, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static CaseDetail ToDetail(CaseState s) => new(
+    // ── Proyección estado → CaseDetail (timeline done/current/pending + SLA) ──
+
+    private static CaseDetail ToDetail(CaseState s, DateTimeOffset now) => new(
         CaseId: s.CaseId,
         Radicado: s.Radicado,
         TramiteId: s.TramiteId,
@@ -242,27 +290,130 @@ public sealed class StubApplicationService : IApplicationService
         FormData: s.FormData,
         Documents: s.Documents,
         Status: s.Status,
-        Fee: s.Fee,
+        CurrentStage: StageLabels[s.Status],
+        Priority: s.Priority,
+        SlaDaysLeft: SlaDaysLeft(s, now),
+        FeeMinor: s.FeeMinor,
         Currency: s.Currency,
         RadicadoAt: s.RadicadoAt,
-        Timeline: s.Timeline);
+        Timeline: BuildTimeline(s),
+        Decision: s.Decision);
+
+    // Días de SLA restantes = (radicación + días estimados) − hoy. Terminal ⇒ 0.
+    private static int SlaDaysLeft(CaseState s, DateTimeOffset now)
+    {
+        if (s.Status is CaseStatus.Resuelto or CaseStatus.Rechazado)
+        {
+            return 0;
+        }
+        var due = s.RadicadoAt.AddDays(s.SlaDays);
+        return (int)Math.Ceiling((due - now).TotalDays);
+    }
+
+    // Timeline como 3 hitos (radicado/revisión/decisión) con estado visual:
+    // done = ya ocurrió, current = estado actual, pending = aún no alcanzado.
+    // Subsanación es un hito insertado (ocurrió) entre revisión y decisión.
+    private static IReadOnlyList<CaseTimelineEntry> BuildTimeline(CaseState s)
+    {
+        var reached = s.History.Select(h => h.Status).ToHashSet();
+        var entries = new List<CaseTimelineEntry>();
+
+        foreach (var milestone in MilestoneOrder)
+        {
+            // El hito "Decisión" (Resuelto) se marca current también si el expediente
+            // terminó en Rechazado — comparten el hito final.
+            var isDecisionMilestone = milestone == CaseStatus.Resuelto;
+            var terminalReached = s.Status is CaseStatus.Resuelto or CaseStatus.Rechazado;
+
+            var lastForMilestone = s.History.LastOrDefault(h =>
+                h.Status == milestone
+                || (isDecisionMilestone && h.Status == CaseStatus.Rechazado));
+
+            string state;
+            DateTimeOffset date;
+            string label;
+            string note;
+
+            if (isDecisionMilestone)
+            {
+                label = "Decisión";
+                if (terminalReached && lastForMilestone is not null)
+                {
+                    state = "current";
+                    date = lastForMilestone.OccurredAt;
+                    note = lastForMilestone.Note;
+                }
+                else
+                {
+                    state = "pending";
+                    date = s.RadicadoAt;
+                    note = string.Empty;
+                }
+            }
+            else if (reached.Contains(milestone))
+            {
+                var hist = s.History.Last(h => h.Status == milestone);
+                label = MilestoneLabel(milestone);
+                date = hist.OccurredAt;
+                note = hist.Note;
+                state = s.Status == milestone && !terminalReached ? "current" : "done";
+            }
+            else
+            {
+                label = MilestoneLabel(milestone);
+                state = "pending";
+                date = s.RadicadoAt;
+                note = string.Empty;
+            }
+
+            entries.Add(new CaseTimelineEntry(
+                Id: milestone.ToString().ToLowerInvariant(),
+                Label: label,
+                Date: date,
+                State: state,
+                Note: note));
+        }
+
+        // Si el expediente está en subsanación, ese es el hito "current"; la revisión
+        // queda done y la decisión pending. Insertamos el hito de subsanación.
+        if (s.Status == CaseStatus.Subsanacion)
+        {
+            var sub = s.History.Last(h => h.Status == CaseStatus.Subsanacion);
+            entries.Insert(2, new CaseTimelineEntry(
+                Id: "subsanacion",
+                Label: "Información solicitada",
+                Date: sub.OccurredAt,
+                State: "current",
+                Note: sub.Note));
+        }
+
+        return entries;
+    }
+
+    private static string MilestoneLabel(CaseStatus s) => s switch
+    {
+        CaseStatus.Radicado => "Radicado",
+        CaseStatus.EnRevision => "En revisión",
+        _ => "Decisión",
+    };
 
     private string NextRadicado(DateTimeOffset occurredAt)
-        => $"RAD-{occurredAt.Year}-{Interlocked.Increment(ref _radicadoSequence):D4}";
+        => $"SG-{occurredAt.Year}-{Interlocked.Increment(ref _radicadoSequence):D6}";
 
-    // ── Seed: expedientes en varios estados (demo del ciclo de vida completo) ──
+    // ── Seed: expedientes en varios estados con prioridad/SLA (demo del ciclo) ──
 
     private void Seed()
     {
         var baseDate = new DateTimeOffset(2026, 6, 20, 9, 0, 0, TimeSpan.FromHours(-5));
         const string officer = "funcionario@entidad.gov.co";
 
-        // 1) Radicado — recién llega a la cola.
+        // 1) Radicado — recién llega a la cola (prioridad normal).
         SeedCase(
             caseId: "case-1001",
-            radicado: "RAD-2026-1001",
+            radicado: "SG-2026-001001",
             tramiteId: "trm-certificado-residencia",
             tramiteName: "Certificado de residencia",
+            agency: "Alcaldía Municipal",
             citizen: new GovCitizen("María Fernanda López", "maria.lopez@correo.co", "52841937", "+57 310 555 0101"),
             formData: new Dictionary<string, string>
             {
@@ -272,19 +423,23 @@ public sealed class StubApplicationService : IApplicationService
                 ["barrio"] = "El Lago",
                 ["correo"] = "maria.lopez@correo.co",
             },
-            fee: 0m,
+            priority: CasePriority.Normal,
+            slaDays: 2,
+            feeMinor: 0m,
             radicadoAt: baseDate.AddDays(8),
-            timeline: new[]
+            history: new[]
             {
-                new CaseTimelineEntry(CaseStatus.Radicado, baseDate.AddDays(8), "maria.lopez@correo.co", "Solicitud radicada en línea."),
-            });
+                new HistoryEntry(CaseStatus.Radicado, baseDate.AddDays(8), "maria.lopez@correo.co", "Solicitud radicada en línea."),
+            },
+            decision: null);
 
-        // 2) En revisión — el funcionario la tomó.
+        // 2) En revisión — el funcionario la tomó (prioridad alta).
         SeedCase(
             caseId: "case-1002",
-            radicado: "RAD-2026-1002",
+            radicado: "SG-2026-001002",
             tramiteId: "trm-licencia-conduccion",
             tramiteName: "Renovación de licencia de conducción",
+            agency: "Secretaría de Movilidad",
             citizen: new GovCitizen("Carlos Andrés Pérez", "carlos.perez@correo.co", "80234561", "+57 315 555 0202"),
             formData: new Dictionary<string, string>
             {
@@ -294,20 +449,24 @@ public sealed class StubApplicationService : IApplicationService
                 ["examenMedico"] = "true",
                 ["correo"] = "carlos.perez@correo.co",
             },
-            fee: 95_000m,
+            priority: CasePriority.High,
+            slaDays: 5,
+            feeMinor: 95_000m,
             radicadoAt: baseDate.AddDays(5),
-            timeline: new[]
+            history: new[]
             {
-                new CaseTimelineEntry(CaseStatus.Radicado, baseDate.AddDays(5), "carlos.perez@correo.co", "Solicitud radicada en línea."),
-                new CaseTimelineEntry(CaseStatus.EnRevision, baseDate.AddDays(6), officer, "Expediente asignado para revisión."),
-            });
+                new HistoryEntry(CaseStatus.Radicado, baseDate.AddDays(5), "carlos.perez@correo.co", "Solicitud radicada en línea."),
+                new HistoryEntry(CaseStatus.EnRevision, baseDate.AddDays(6), officer, "Expediente asignado para revisión."),
+            },
+            decision: null);
 
-        // 3) Subsanación — falta un documento; el ciudadano debe responder.
+        // 3) Subsanación — falta un documento; el ciudadano debe responder (alta).
         SeedCase(
             caseId: "case-1003",
-            radicado: "RAD-2026-1003",
+            radicado: "SG-2026-001003",
             tramiteId: "trm-pasaporte",
             tramiteName: "Expedición de pasaporte",
+            agency: "Cancillería",
             citizen: new GovCitizen("Juliana Ríos", "juliana.rios@correo.co", "1020456789", "+57 300 555 0303"),
             formData: new Dictionary<string, string>
             {
@@ -317,32 +476,29 @@ public sealed class StubApplicationService : IApplicationService
                 ["ciudad"] = "Bogotá",
                 ["correo"] = "juliana.rios@correo.co",
             },
-            fee: 189_000m,
+            priority: CasePriority.High,
+            slaDays: 8,
+            feeMinor: 189_000m,
             radicadoAt: baseDate.AddDays(2),
-            timeline: new[]
+            history: new[]
             {
-                new CaseTimelineEntry(CaseStatus.Radicado, baseDate.AddDays(2), "juliana.rios@correo.co", "Solicitud radicada en línea."),
-                new CaseTimelineEntry(CaseStatus.EnRevision, baseDate.AddDays(3), officer, "Expediente asignado para revisión."),
-                new CaseTimelineEntry(CaseStatus.Subsanacion, baseDate.AddDays(4), officer, "La foto no cumple el fondo blanco — adjuntar una nueva."),
+                new HistoryEntry(CaseStatus.Radicado, baseDate.AddDays(2), "juliana.rios@correo.co", "Solicitud radicada en línea."),
+                new HistoryEntry(CaseStatus.EnRevision, baseDate.AddDays(3), officer, "Expediente asignado para revisión."),
+                new HistoryEntry(CaseStatus.Subsanacion, baseDate.AddDays(4), officer, "La foto no cumple el fondo blanco — adjuntar una nueva."),
             },
+            decision: null,
             documents: new[]
             {
-                new CitizenDocumentRef(
-                    Id: "doc-1003-01",
-                    CaseId: "case-1003",
-                    FileName: "cedula.pdf",
-                    ContentType: "application/pdf",
-                    SizeBytes: 412_884,
-                    ValidationStatus: "accepted",
-                    SecureUrl: "/api/gov/case/case-1003/document/doc-1003-01"),
+                new CitizenDocumentRef("doc-1003-01", "case-1003", "cedula.pdf", "accepted", baseDate.AddDays(2)),
             });
 
-        // 4) Resuelto — ciclo completo favorable.
+        // 4) Resuelto (aprobado) — ciclo completo favorable (prioridad normal).
         SeedCase(
             caseId: "case-1004",
-            radicado: "RAD-2026-1004",
+            radicado: "SG-2026-001004",
             tramiteId: "trm-registro-mercantil",
             tramiteName: "Registro mercantil de empresa",
+            agency: "Cámara de Comercio",
             citizen: new GovCitizen("Andrés Felipe Torres", "andres.torres@correo.co", "900123456", "+57 320 555 0404"),
             formData: new Dictionary<string, string>
             {
@@ -352,32 +508,29 @@ public sealed class StubApplicationService : IApplicationService
                 ["representante"] = "Andrés Felipe Torres",
                 ["correo"] = "andres.torres@correo.co",
             },
-            fee: 320_000m,
+            priority: CasePriority.Normal,
+            slaDays: 3,
+            feeMinor: 320_000m,
             radicadoAt: baseDate.AddDays(-6),
-            timeline: new[]
+            history: new[]
             {
-                new CaseTimelineEntry(CaseStatus.Radicado, baseDate.AddDays(-6), "andres.torres@correo.co", "Solicitud radicada en línea."),
-                new CaseTimelineEntry(CaseStatus.EnRevision, baseDate.AddDays(-5), officer, "Expediente asignado para revisión."),
-                new CaseTimelineEntry(CaseStatus.Resuelto, baseDate.AddDays(-3), officer, "Registro mercantil expedido — certificado disponible."),
+                new HistoryEntry(CaseStatus.Radicado, baseDate.AddDays(-6), "andres.torres@correo.co", "Solicitud radicada en línea."),
+                new HistoryEntry(CaseStatus.EnRevision, baseDate.AddDays(-5), officer, "Expediente asignado para revisión."),
+                new HistoryEntry(CaseStatus.Resuelto, baseDate.AddDays(-3), officer, "Registro mercantil expedido — certificado disponible."),
             },
+            decision: new CaseDecision("approve", "Registro mercantil expedido — certificado disponible.", baseDate.AddDays(-3), officer),
             documents: new[]
             {
-                new CitizenDocumentRef(
-                    Id: "doc-1004-01",
-                    CaseId: "case-1004",
-                    FileName: "acta-constitucion.pdf",
-                    ContentType: "application/pdf",
-                    SizeBytes: 1_204_113,
-                    ValidationStatus: "accepted",
-                    SecureUrl: "/api/gov/case/case-1004/document/doc-1004-01"),
+                new CitizenDocumentRef("doc-1004-01", "case-1004", "acta-constitucion.pdf", "accepted", baseDate.AddDays(-6)),
             });
 
-        // 5) Rechazado — ciclo completo desfavorable.
+        // 5) Rechazado — ciclo completo desfavorable (prioridad low).
         SeedCase(
             caseId: "case-1005",
-            radicado: "RAD-2026-1005",
+            radicado: "SG-2026-001005",
             tramiteId: "trm-afiliacion-salud",
             tramiteName: "Afiliación al régimen subsidiado de salud",
+            agency: "Secretaría de Salud",
             citizen: new GovCitizen("Luz Dary Gómez", "luz.gomez@correo.co", "39765432", "+57 311 555 0505"),
             formData: new Dictionary<string, string>
             {
@@ -387,14 +540,44 @@ public sealed class StubApplicationService : IApplicationService
                 ["eps"] = "Nueva EPS",
                 ["correo"] = "luz.gomez@correo.co",
             },
-            fee: 0m,
+            priority: CasePriority.Low,
+            slaDays: 10,
+            feeMinor: 0m,
             radicadoAt: baseDate.AddDays(-10),
-            timeline: new[]
+            history: new[]
             {
-                new CaseTimelineEntry(CaseStatus.Radicado, baseDate.AddDays(-10), "luz.gomez@correo.co", "Solicitud radicada en línea."),
-                new CaseTimelineEntry(CaseStatus.EnRevision, baseDate.AddDays(-9), officer, "Expediente asignado para revisión."),
-                new CaseTimelineEntry(CaseStatus.Rechazado, baseDate.AddDays(-7), officer, "Puntaje SISBÉN fuera del rango del régimen subsidiado."),
-            });
+                new HistoryEntry(CaseStatus.Radicado, baseDate.AddDays(-10), "luz.gomez@correo.co", "Solicitud radicada en línea."),
+                new HistoryEntry(CaseStatus.EnRevision, baseDate.AddDays(-9), officer, "Expediente asignado para revisión."),
+                new HistoryEntry(CaseStatus.Rechazado, baseDate.AddDays(-7), officer, "Puntaje SISBÉN fuera del rango del régimen subsidiado."),
+            },
+            decision: new CaseDecision("reject", "Puntaje SISBÉN fuera del rango del régimen subsidiado.", baseDate.AddDays(-7), officer));
+
+        // 6) Radicado — segundo en la cola, prioridad normal (más volumen para el funcionario).
+        SeedCase(
+            caseId: "case-1006",
+            radicado: "SG-2026-001006",
+            tramiteId: "trm-subsidio-vivienda",
+            tramiteName: "Solicitud de subsidio de vivienda",
+            agency: "Ministerio de Vivienda",
+            citizen: new GovCitizen("Diego Martínez", "diego.martinez@correo.co", "1015789456", "+57 312 555 0606"),
+            formData: new Dictionary<string, string>
+            {
+                ["nombreCompleto"] = "Diego Martínez",
+                ["cedula"] = "1015789456",
+                ["integrantes"] = "4",
+                ["ingresos"] = "1800000",
+                ["modalidad"] = "Compra de vivienda nueva",
+                ["correo"] = "diego.martinez@correo.co",
+            },
+            priority: CasePriority.Normal,
+            slaDays: 30,
+            feeMinor: 0m,
+            radicadoAt: baseDate.AddDays(7),
+            history: new[]
+            {
+                new HistoryEntry(CaseStatus.Radicado, baseDate.AddDays(7), "diego.martinez@correo.co", "Solicitud radicada en línea."),
+            },
+            decision: null);
     }
 
     private void SeedCase(
@@ -402,11 +585,15 @@ public sealed class StubApplicationService : IApplicationService
         string radicado,
         string tramiteId,
         string tramiteName,
+        string agency,
         GovCitizen citizen,
         IReadOnlyDictionary<string, string> formData,
-        decimal fee,
+        CasePriority priority,
+        int slaDays,
+        decimal feeMinor,
         DateTimeOffset radicadoAt,
-        IReadOnlyList<CaseTimelineEntry> timeline,
+        IReadOnlyList<HistoryEntry> history,
+        CaseDecision? decision,
         IReadOnlyList<CitizenDocumentRef>? documents = null)
     {
         _cases[caseId] = new CaseState(
@@ -414,27 +601,38 @@ public sealed class StubApplicationService : IApplicationService
             Radicado: radicado,
             TramiteId: tramiteId,
             TramiteName: tramiteName,
+            Agency: agency,
             Citizen: citizen,
             FormData: formData,
             Documents: documents ?? Array.Empty<CitizenDocumentRef>(),
-            Status: timeline[^1].Status,
-            Fee: fee,
+            Status: history[^1].Status,
+            Priority: priority,
+            SlaDays: slaDays,
+            FeeMinor: feeMinor,
             Currency: "COP",
             RadicadoAt: radicadoAt,
-            Timeline: timeline);
+            History: history,
+            Decision: decision);
     }
+
+    /// <summary>Una transición cruda del historial interno (fuente del timeline proyectado).</summary>
+    private sealed record HistoryEntry(CaseStatus Status, DateTimeOffset OccurredAt, string Actor, string Note);
 
     private sealed record CaseState(
         string CaseId,
         string Radicado,
         string TramiteId,
         string TramiteName,
+        string Agency,
         GovCitizen Citizen,
         IReadOnlyDictionary<string, string> FormData,
         IReadOnlyList<CitizenDocumentRef> Documents,
         CaseStatus Status,
-        decimal Fee,
+        CasePriority Priority,
+        int SlaDays,
+        decimal FeeMinor,
         string Currency,
         DateTimeOffset RadicadoAt,
-        IReadOnlyList<CaseTimelineEntry> Timeline);
+        IReadOnlyList<HistoryEntry> History,
+        CaseDecision? Decision);
 }

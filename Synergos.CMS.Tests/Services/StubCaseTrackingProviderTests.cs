@@ -9,12 +9,13 @@ namespace Synergos.CMS.Tests.Services;
 
 /// <summary>
 /// Cubre <see cref="StubCaseTrackingProvider"/> (seam <c>ICaseTrackingProvider</c>,
-/// seguimiento + bandejas del portal Gobierno): empty (expediente/actor desconocido) /
-/// happy (expediente + estado + timeline; también por radicado) / filter (el caso
-/// central del dominio: ciudadano ve SOLO los suyos por email, funcionario/admin ve
-/// toda la cola, orden por fecha de radicación desc) / idempotent (leer dos veces =
-/// mismo resultado). Lee el agregado sembrado de <see cref="StubApplicationService"/>
-/// por composición (DIP), sin duplicar estado. ADR 0075.
+/// seguimiento + bandejas del portal Gobierno): empty (expediente/ciudadano desconocido) /
+/// happy (expediente + estado + timeline done/current/pending; también por radicado) /
+/// filter (el caso central del dominio: ciudadano ve SOLO los suyos por email; cola del
+/// funcionario filtra por entidad + estado y ordena por prioridad/SLA) / idempotent
+/// (leer dos veces = mismo resultado). Lee el agregado sembrado de
+/// <see cref="StubApplicationService"/> por composición (DIP), sin duplicar estado.
+/// ADR 0075.
 /// </summary>
 public class StubCaseTrackingProviderTests
 {
@@ -39,15 +40,15 @@ public class StubCaseTrackingProviderTests
         Assert.Null(await tracking.GetCaseAsync(string.Empty));
     }
 
-    [Fact] // empty: ciudadano sin expedientes ve bandeja vacía (no lanza)
-    public async Task GetInbox_UnknownCitizen_ReturnsEmpty()
+    [Fact] // empty: ciudadano sin expedientes ve carpeta vacía (no lanza)
+    public async Task ListForCitizen_Unknown_ReturnsEmpty()
     {
         var (tracking, _) = Make();
-        var inbox = await tracking.GetInboxAsync("nadie@correo.co", "citizen");
+        var inbox = await tracking.ListForCitizenAsync("nadie@correo.co");
         Assert.Empty(inbox);
     }
 
-    [Fact] // happy: expediente sembrado trae estado + timeline + documentos
+    [Fact] // happy: expediente sembrado trae estado + timeline done/current/pending + docs
     public async Task GetCase_Seeded_ReturnsStatusAndTimeline()
     {
         var (tracking, _) = Make();
@@ -55,12 +56,13 @@ public class StubCaseTrackingProviderTests
         var detail = await tracking.GetCaseAsync("case-1003");
 
         Assert.NotNull(detail);
-        Assert.Equal("RAD-2026-1003", detail!.Radicado);
+        Assert.Equal("SG-2026-001003", detail!.Radicado);
         Assert.Equal(CaseStatus.Subsanacion, detail.Status);
-        Assert.Equal(3, detail.Timeline.Count); // radicado → en-revisión → subsanación
+        Assert.Equal("Información solicitada", detail.CurrentStage);
         Assert.Single(detail.Documents);
-        // El timeline es el espejo del ciclo: el último evento es el estado actual.
-        Assert.Equal(detail.Status, detail.Timeline[^1].Status);
+        // Timeline tiene un hito current (el estado actual) y estados válidos.
+        Assert.Contains(detail.Timeline, t => t.State == "current");
+        Assert.All(detail.Timeline, t => Assert.Contains(t.State, new[] { "done", "current", "pending" }));
     }
 
     [Fact] // happy: el expediente también se consulta por número de radicado
@@ -69,43 +71,57 @@ public class StubCaseTrackingProviderTests
         var (tracking, _) = Make();
 
         var byId = await tracking.GetCaseAsync("case-1003");
-        var byRadicado = await tracking.GetCaseAsync("RAD-2026-1003");
+        var byRadicado = await tracking.GetCaseAsync("SG-2026-001003");
 
         Assert.NotNull(byRadicado);
         Assert.Equal(byId!.CaseId, byRadicado!.CaseId);
     }
 
     [Fact] // filter: el ciudadano ve SOLO sus expedientes (por email)
-    public async Task GetInbox_Citizen_SeesOnlyTheirCases()
+    public async Task ListForCitizen_SeesOnlyTheirCases()
     {
         var (tracking, _) = Make();
 
-        var inbox = await tracking.GetInboxAsync("maria.lopez@correo.co", "citizen");
+        var inbox = await tracking.ListForCitizenAsync("maria.lopez@correo.co");
 
         var item = Assert.Single(inbox);
         Assert.Equal("case-1001", item.CaseId);
         Assert.Equal("María Fernanda López", item.CitizenName);
     }
 
-    [Fact] // filter: funcionario/admin ven toda la cola, ordenada por radicación desc
-    public async Task GetInbox_Officer_SeesFullQueueOrdered()
+    [Fact] // filter: la cola completa del funcionario ordena por prioridad y SLA
+    public async Task GetQueue_NoFilters_ReturnsFullQueueOrdered()
     {
         var (tracking, _) = Make();
 
-        var officer = await tracking.GetInboxAsync("funcionario@entidad.gov.co", "officer");
-        var admin = await tracking.GetInboxAsync("root@entidad.gov.co", "admin");
+        var queue = await tracking.GetQueueAsync(null, null);
 
-        Assert.Equal(5, officer.Count);
-        Assert.Equal(officer.Select(i => i.CaseId), admin.Select(i => i.CaseId));
-        // Orden: fecha de radicación descendente (el más reciente primero).
+        Assert.Equal(6, queue.Count);
+        // Orden: prioridad descendente (High primero), luego SLA ascendente.
         Assert.Equal(
-            officer.OrderByDescending(i => i.RadicadoAt).Select(i => i.CaseId),
-            officer.Select(i => i.CaseId));
-        Assert.Equal("case-1001", officer[0].CaseId);
+            queue.OrderByDescending(i => i.Priority).ThenBy(i => i.SlaDaysLeft).Select(i => i.CaseId),
+            queue.Select(i => i.CaseId));
+        Assert.Equal(CasePriority.High, queue[0].Priority);
     }
 
-    [Fact] // filter: los expedientes radicados nuevos aparecen en la bandeja del ciudadano
-    public async Task GetInbox_AfterRadicar_IncludesNewCase()
+    [Fact] // filter: la cola filtra por entidad y por estado (slug público)
+    public async Task GetQueue_ByAgencyAndStatus_Filters()
+    {
+        var (tracking, _) = Make();
+
+        var byAgency = await tracking.GetQueueAsync("Cancillería", null);
+        Assert.All(byAgency, i => Assert.Equal("Expedición de pasaporte", i.TramiteName));
+
+        var submitted = await tracking.GetQueueAsync(null, "submitted");
+        Assert.NotEmpty(submitted);
+        Assert.All(submitted, i => Assert.Equal(CaseStatus.Radicado, i.Status));
+
+        var approved = await tracking.GetQueueAsync(null, "approved");
+        Assert.All(approved, i => Assert.Equal(CaseStatus.Resuelto, i.Status));
+    }
+
+    [Fact] // filter: los expedientes radicados nuevos aparecen en la carpeta del ciudadano
+    public async Task ListForCitizen_AfterRadicar_IncludesNewCase()
     {
         var (tracking, cases) = Make();
         var citizen = new GovCitizen("Ana Torres", "ana.torres@correo.co");
@@ -120,20 +136,20 @@ public class StubCaseTrackingProviderTests
             },
             citizen);
 
-        var inbox = await tracking.GetInboxAsync("ana.torres@correo.co", "citizen");
+        var inbox = await tracking.ListForCitizenAsync("ana.torres@correo.co");
 
         var item = Assert.Single(inbox);
-        Assert.Equal(result.CaseId, item.CaseId);
+        Assert.Equal(result.Case.CaseId, item.CaseId);
         Assert.Equal(CaseStatus.Radicado, item.Status);
     }
 
-    [Fact] // idempotent: leer la bandeja dos veces devuelve lo mismo
-    public async Task GetInbox_Twice_IsIdempotent()
+    [Fact] // idempotent: leer la cola dos veces devuelve lo mismo
+    public async Task GetQueue_Twice_IsIdempotent()
     {
         var (tracking, _) = Make();
 
-        var first = await tracking.GetInboxAsync("x", "officer");
-        var second = await tracking.GetInboxAsync("x", "officer");
+        var first = await tracking.GetQueueAsync(null, null);
+        var second = await tracking.GetQueueAsync(null, null);
 
         Assert.Equal(first.Select(i => i.CaseId), second.Select(i => i.CaseId));
     }

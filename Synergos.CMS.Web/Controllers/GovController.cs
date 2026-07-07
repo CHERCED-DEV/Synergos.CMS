@@ -1,44 +1,49 @@
 using Microsoft.AspNetCore.Mvc;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
 
 /// <summary>
-/// API JSON del vertical <strong>Gobierno / Trámites</strong> (el +1 del doc 19 —
-/// portal de servicios al ciudadano, doc gobierno-app-spec; rescate D7 doc 21). La
-/// consume el módulo Angular <c>module-gov-services</c>: entrar al dominio = caer
-/// directo en la app real (catálogo de trámites → ficha → radicar → seguimiento del
-/// expediente, + cola del funcionario con máquina de estados auditada).
+/// API JSON del vertical <strong>Gobierno / Trámites</strong> (OLA 8 — portal de
+/// servicios al ciudadano GOV.CO/GOV.UK, doc gobierno.md). La consume el módulo Angular
+/// <c>module-gov-services</c> con normalizers ESTRICTOS: entrar al dominio = caer directo
+/// en la app real, con DOS caras — ciudadano (catálogo → ficha → formulario → radicar →
+/// carpeta/seguimiento) y funcionario (cola → expediente → decisión con máquina de
+/// estados auditada).
 /// </summary>
 /// <remarks>
-/// La capa Web SOLO orquesta y mapea a DTOs JSON estables — toda la lógica vive en
-/// los seams (Application, sin Umbraco — ADR 0002), reusando el MOTOR:
+/// La capa Web SOLO orquesta y mapea a DTOs JSON estables (claves camelCase — contrato
+/// estricto de la UI) — toda la lógica vive en los seams (Application, sin Umbraco —
+/// ADR 0002), reusando el MOTOR:
 /// <list type="bullet">
-/// <item><see cref="ITramiteCatalogProvider"/> — catálogo buscable + ficha con el
-///   formulario dinámico data-driven (patrón GOV.UK task-list).</item>
-/// <item><see cref="IApplicationService"/> — radicar = crear el expediente; la tasa
-///   es un pago OPCIONAL (<see cref="IPaymentProvider"/> solo si Fee &gt; 0).</item>
-/// <item><see cref="ICaseWorkflowService"/> — máquina de estados del expediente
-///   (radicado→en-revisión→subsanación→resuelto/rechazado); cada transición se audita
-///   append-only (<see cref="IAuditTrailWriter"/> — el diferenciador del dominio).</item>
-/// <item><see cref="ICaseTrackingProvider"/> — seguimiento + bandejas (ciudadano ve
-///   los suyos / funcionario ve la cola).</item>
+/// <item><see cref="ITramiteCatalogProvider"/> — catálogo buscable + ficha con pasos +
+///   elegibilidad + requisitos + formulario dinámico seccionado (patrón GOV.UK).</item>
+/// <item><see cref="IApplicationService"/> — radicar = crear el expediente; la tasa es
+///   un pago OPCIONAL (<see cref="IPaymentProvider"/> solo si Fee &gt; 0).</item>
+/// <item><see cref="ICaseWorkflowService"/> — decisión del funcionario (approve/reject/
+///   request-info) → máquina de estados auditada (<see cref="IAuditTrailWriter"/>).</item>
+/// <item><see cref="ICaseTrackingProvider"/> — carpeta del ciudadano + cola del
+///   funcionario (prioridad + SLA).</item>
 /// <item><see cref="IDocumentUploadService"/> — adjuntar documentos (metadata).</item>
+/// <item><see cref="IMessagingService"/> (contexto <c>gov</c>) — correspondencia del
+///   expediente con la entidad.</item>
 /// </list>
-/// El precio se formatea es-CO vía <see cref="IPriceFormatter"/>. Contrato (lo
-/// programa el agente UI): <c>GET tramites · GET tramite/{id} · POST application ·
-/// POST application/{id}/documents · GET case/{id} · GET inbox ·
-/// POST case/{id}/transition</c>.
+/// El precio se formatea es-CO vía <see cref="IPriceFormatter"/>.
 /// </remarks>
 [ApiController]
 [Route("api/gov")]
 public sealed class GovController : ControllerBase
 {
+    private const string OfficerParticipant = GovCorrespondenceSeeder.OfficerParticipant;
+    private const string MessagingContext = GovCorrespondenceSeeder.Context;
+
     private readonly ITramiteCatalogProvider _catalog;
     private readonly IApplicationService _applications;
     private readonly ICaseWorkflowService _workflow;
     private readonly ICaseTrackingProvider _tracking;
     private readonly IDocumentUploadService _documents;
+    private readonly IMessagingService _messaging;
     private readonly IGovFeeCalculator _fees;
     private readonly IPriceFormatter _priceFormatter;
 
@@ -48,6 +53,7 @@ public sealed class GovController : ControllerBase
         ICaseWorkflowService workflow,
         ICaseTrackingProvider tracking,
         IDocumentUploadService documents,
+        IMessagingService messaging,
         IGovFeeCalculator fees,
         IPriceFormatter priceFormatter)
     {
@@ -56,193 +62,202 @@ public sealed class GovController : ControllerBase
         _workflow = workflow;
         _tracking = tracking;
         _documents = documents;
+        _messaging = messaging;
         _fees = fees;
         _priceFormatter = priceFormatter;
     }
 
-    // ── 1. Catálogo de trámites (home del dominio) ──────────────────────
-    // GET /api/gov/tramites?q=&category= → { tramites:[...] }
-    [HttpGet("tramites")]
-    public async Task<IActionResult> Tramites(
+    // ══════════════════════ CIUDADANO ══════════════════════
+
+    // ── 1. Catálogo de trámites ─────────────────────────────────────────
+    // GET /api/gov/services?q=&category= → { services:[...] }
+    [HttpGet("services")]
+    public async Task<IActionResult> Services(
         [FromQuery] string? q,
         [FromQuery] string? category,
         CancellationToken cancellationToken)
     {
-        var tramites = await _catalog.SearchAsync(q, category, cancellationToken);
-        return Ok(new TramitesResponse(tramites.Select(ToTramiteDto).ToList()));
+        var services = await _catalog.SearchAsync(q, category, cancellationToken);
+        return Ok(new ServicesResponse(services.Select(ToServiceDto).ToList()));
     }
 
-    // ── 2. Ficha del trámite (form definition data-driven + requisitos + tasa) ──
-    // GET /api/gov/tramite/{id} → { tramite, formDefinition, requirements, fee }
-    [HttpGet("tramite/{id}")]
-    public async Task<IActionResult> Tramite(string id, CancellationToken cancellationToken)
+    // ── 2. Ficha del trámite (pasos + elegibilidad + requisitos + tasa) ─
+    // GET /api/gov/service/{id} → { service:{...} }
+    [HttpGet("service/{id}")]
+    public async Task<IActionResult> Service(string id, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            return BadRequest(new { error = "El id del trámite es requerido." });
-        }
-
-        var detail = await _catalog.GetAsync(id, cancellationToken);
+        var detail = await _catalog.GetAsync(id ?? string.Empty, cancellationToken);
         if (detail is null)
         {
             return NotFound(new { error = $"Trámite '{id}' no encontrado." });
         }
 
-        var quote = _fees.Calculate(detail.Summary.Id, detail.Fee, detail.Currency);
-        return Ok(new TramiteDetailResponse(
-            Tramite: new TramiteDetailDto(
-                ToTramiteDto(detail.Summary),
-                detail.Description,
-                detail.EligibilityText,
-                detail.Normativa,
-                detail.RequiresAppointment),
-            FormDefinition: new FormDefinitionDto(
-                detail.FormDefinition.Fields
-                    .Select(f => new FormFieldDto(f.Key, f.Label, f.Type, f.Required, f.Options))
-                    .ToList()),
-            Requirements: detail.Requirements,
-            Fee: ToFeeDto(quote)));
+        var s = detail.Summary;
+        return Ok(new ServiceDetailResponse(new ServiceDetailDto(
+            Id: s.Id,
+            Name: s.Name,
+            Summary: s.Summary,
+            Category: s.Category,
+            Agency: s.Agency,
+            Steps: detail.Steps.Select(st => new StepDto(st.Id, st.Title, st.Detail)).ToList(),
+            Eligibility: detail.Eligibility,
+            Required: detail.Required,
+            FeeMinor: s.FeeMinor,
+            Currency: s.Currency)));
     }
 
-    // ── 3. Radicar solicitud (crea el expediente; tasa = pago opcional) ─
-    // POST /api/gov/application { tramiteId, formData, citizen } → { caseId, radicado, fee? }
+    // ── 3. Formulario dinámico seccionado ───────────────────────────────
+    // GET /api/gov/form/{serviceId} → { form:{ id, title, sections:[...] } }
+    [HttpGet("form/{serviceId}")]
+    public async Task<IActionResult> Form(string serviceId, CancellationToken cancellationToken)
+    {
+        var detail = await _catalog.GetAsync(serviceId ?? string.Empty, cancellationToken);
+        if (detail is null)
+        {
+            return NotFound(new { error = $"Trámite '{serviceId}' no encontrado." });
+        }
+
+        var f = detail.FormDefinition;
+        return Ok(new FormResponse(new FormDto(
+            Id: f.Id,
+            Title: f.Title,
+            Sections: f.Sections.Select(sec => new FormSectionDto(
+                sec.Id,
+                sec.Title,
+                sec.Fields.Select(ToFieldDto).ToList())).ToList())));
+    }
+
+    // ── 4. Radicar solicitud (crea el expediente; tasa = pago opcional) ─
+    // POST /api/gov/application { serviceId, answers } → { application:{...} }
     [HttpPost("application")]
-    public async Task<IActionResult> Application(
-        [FromBody] ApplicationRequest? request,
+    public async Task<IActionResult> CreateApplication(
+        [FromBody] CreateApplicationRequest? request,
         CancellationToken cancellationToken)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.TramiteId))
+        if (request is null || string.IsNullOrWhiteSpace(request.ServiceId))
         {
-            return BadRequest(new { error = "tramiteId es requerido." });
+            return BadRequest(new { error = "serviceId es requerido." });
         }
-        if (request.Citizen is null)
-        {
-            return BadRequest(new { error = "citizen es requerido." });
-        }
+
+        var answers = request.Answers ?? new Dictionary<string, string>();
+        var citizen = ResolveCitizen(answers);
 
         RadicarResult result;
         try
         {
-            result = await _applications.RadicarAsync(
-                request.TramiteId.Trim(),
-                request.FormData ?? new Dictionary<string, string>(),
-                new GovCitizen(
-                    request.Citizen.Name,
-                    request.Citizen.Email,
-                    request.Citizen.DocumentId,
-                    request.Citizen.Phone),
-                cancellationToken);
+            result = await _applications.RadicarAsync(request.ServiceId.Trim(), answers, citizen, cancellationToken);
         }
         catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
 
-        // fee solo viaja cuando el trámite cobra (tasa opcional — Fee 0 = gratis).
-        var fee = result.Fee > 0m
-            ? new ApplicationFeeDto(
-                result.Fee,
-                result.Currency,
-                _priceFormatter.Format(result.Fee, result.Currency),
-                result.PaymentSessionId)
-            : null;
-
-        return Ok(new ApplicationResponse(result.CaseId, result.Radicado, fee));
+        return Ok(new ApplicationResponse(ToApplicationSummaryDto(result.Case)));
     }
 
-    // ── 4. Adjuntar documentos al expediente (metadata + auditoría) ─────
-    // POST /api/gov/application/{id}/documents { files:[...] } → { uploaded:[...] }
-    [HttpPost("application/{id}/documents")]
-    public async Task<IActionResult> Documents(
-        string id,
-        [FromBody] DocumentsRequest? request,
+    // ── 5. Mis solicitudes (carpeta del ciudadano) ─────────────────────
+    // GET /api/gov/applications?citizen= → { applications:[...] }
+    [HttpGet("applications")]
+    public async Task<IActionResult> Applications([FromQuery] string? citizen, CancellationToken cancellationToken)
+    {
+        var items = await _tracking.ListForCitizenAsync(citizen ?? string.Empty, cancellationToken);
+        return Ok(new ApplicationsResponse(items.Select(ToApplicationSummaryFromInbox).ToList()));
+    }
+
+    // ── 6. Detalle de una solicitud (timeline + documentos + mensajes) ──
+    // GET /api/gov/application/{id} → { application:{...} }
+    [HttpGet("application/{id}")]
+    public async Task<IActionResult> Application(string id, CancellationToken cancellationToken)
+    {
+        var detail = await _tracking.GetCaseAsync(id ?? string.Empty, cancellationToken);
+        if (detail is null)
+        {
+            return NotFound(new { error = $"Solicitud '{id}' no encontrada." });
+        }
+
+        var messages = await LoadMessagesAsync(detail, cancellationToken);
+        return Ok(new ApplicationDetailResponse(new ApplicationDetailDto(
+            Id: detail.CaseId,
+            Reference: detail.Radicado,
+            ServiceId: detail.TramiteId,
+            ServiceName: detail.TramiteName,
+            Status: GovStatusSlugs.ToSlug(detail.Status),
+            SubmittedAt: detail.RadicadoAt,
+            CurrentStage: detail.CurrentStage,
+            Timeline: detail.Timeline.Select(ToTimelineDto).ToList(),
+            Documents: detail.Documents.Select(ToDocumentDto).ToList(),
+            Messages: messages)));
+    }
+
+    // ── 7. Adjuntar un documento al expediente ──────────────────────────
+    // POST /api/gov/document { applicationId, name } → { document:{...} }
+    [HttpPost("document")]
+    public async Task<IActionResult> Document(
+        [FromBody] DocumentRequest? request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(id))
+        if (request is null || string.IsNullOrWhiteSpace(request.ApplicationId) || string.IsNullOrWhiteSpace(request.Name))
         {
-            return BadRequest(new { error = "El id del expediente es requerido." });
-        }
-        if (request?.Files is null || request.Files.Count == 0)
-        {
-            return BadRequest(new { error = "files es requerido (al menos un archivo)." });
+            return BadRequest(new { error = "applicationId y name son requeridos." });
         }
 
-        DocumentUploadResult result;
+        CitizenDocumentRef doc;
         try
         {
-            result = await _documents.UploadAsync(
-                id.Trim(),
-                request.Files
-                    .Select(f => new CitizenDocumentUpload(f.FileName, f.ContentType, f.SizeBytes))
-                    .ToList(),
-                cancellationToken);
+            doc = await _documents.UploadAsync(request.ApplicationId.Trim(), request.Name.Trim(), cancellationToken);
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return NotFound(new { error = ex.Message });
         }
 
-        return Ok(new DocumentsResponse(result.Uploaded.Select(ToDocumentDto).ToList()));
+        return Ok(new DocumentResponse(ToDocumentDto(doc)));
     }
 
-    // ── 5. Seguimiento del expediente (estado + timeline) ───────────────
-    // GET /api/gov/case/{id} → { case, status, timeline }
+    // ══════════════════════ FUNCIONARIO ══════════════════════
+
+    // ── 8. Cola del funcionario ─────────────────────────────────────────
+    // GET /api/gov/queue?agency=&status= → { cases:[...] }
+    [HttpGet("queue")]
+    public async Task<IActionResult> Queue(
+        [FromQuery] string? agency,
+        [FromQuery] string? status,
+        CancellationToken cancellationToken)
+    {
+        var cases = await _tracking.GetQueueAsync(agency, status, cancellationToken);
+        return Ok(new QueueResponse(cases.Select(ToQueueDto).ToList()));
+    }
+
+    // ── 9. Detalle del expediente (funcionario) ─────────────────────────
+    // GET /api/gov/case/{id} → { case:{ application, answers, documents, timeline, decision? } }
     [HttpGet("case/{id}")]
     public async Task<IActionResult> Case(string id, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            return BadRequest(new { error = "El id del expediente es requerido." });
-        }
-
-        var detail = await _tracking.GetCaseAsync(id, cancellationToken);
+        var detail = await _tracking.GetCaseAsync(id ?? string.Empty, cancellationToken);
         if (detail is null)
         {
             return NotFound(new { error = $"Expediente '{id}' no encontrado." });
         }
 
-        return Ok(new CaseResponse(
-            Case: ToCaseDto(detail),
-            Status: ToStatusSlug(detail.Status),
-            Timeline: detail.Timeline.Select(ToTimelineDto).ToList()));
+        return Ok(new CaseResponse(await ToCaseDtoAsync(detail, cancellationToken)));
     }
 
-    // ── 6. Bandeja (ciudadano ve los suyos / funcionario ve la cola) ────
-    // GET /api/gov/inbox?actor=&role= → { cases:[...] }
-    [HttpGet("inbox")]
-    public async Task<IActionResult> Inbox(
-        [FromQuery] string? actor,
-        [FromQuery] string? role,
+    // ── 10. Decisión del funcionario (máquina de estados auditada) ──────
+    // POST /api/gov/decision { caseId, outcome, note } → { case:{...} }
+    [HttpPost("decision")]
+    public async Task<IActionResult> Decision(
+        [FromBody] DecisionRequest? request,
         CancellationToken cancellationToken)
     {
-        var items = await _tracking.GetInboxAsync(actor ?? string.Empty, role ?? "citizen", cancellationToken);
-        return Ok(new InboxResponse(items.Select(ToInboxDto).ToList()));
-    }
-
-    // ── 7. Transición del expediente (máquina de estados auditada) ──────
-    // POST /api/gov/case/{id}/transition { to, note } → { status }
-    [HttpPost("case/{id}/transition")]
-    public async Task<IActionResult> Transition(
-        string id,
-        [FromBody] TransitionRequest? request,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(id))
+        if (request is null || string.IsNullOrWhiteSpace(request.CaseId) || string.IsNullOrWhiteSpace(request.Outcome))
         {
-            return BadRequest(new { error = "El id del expediente es requerido." });
-        }
-        if (request is null || !TryParseStatus(request.To, out var to))
-        {
-            return BadRequest(new
-            {
-                error = "to es requerido: radicado | en-revision | subsanacion | resuelto | rechazado.",
-            });
+            return BadRequest(new { error = "caseId y outcome (approve | reject | request-info) son requeridos." });
         }
 
-        CaseTransitionResult result;
+        CaseDetail updated;
         try
         {
-            result = await _workflow.TransitionAsync(id.Trim(), to, request.Note ?? string.Empty, cancellationToken);
+            updated = await _workflow.DecideAsync(request.CaseId.Trim(), request.Outcome.Trim(), request.Note ?? string.Empty, cancellationToken);
         }
         catch (ArgumentException ex)
         {
@@ -253,208 +268,289 @@ public sealed class GovController : ControllerBase
             return Conflict(new { error = ex.Message });
         }
 
-        return Ok(new TransitionResponse(ToStatusSlug(result.Status)));
+        return Ok(new CaseResponse(await ToCaseDtoAsync(updated, cancellationToken)));
     }
 
-    // ── Mappers a DTOs JSON estables ────────────────────────────────────
+    // ══════════════════════ Mappers ══════════════════════
 
-    private TramiteDto ToTramiteDto(TramiteSummary t) => new(
+    private ServiceDto ToServiceDto(TramiteSummary t) => new(
         Id: t.Id,
-        Slug: t.Slug,
         Name: t.Name,
-        Entity: t.Entity,
+        Summary: t.Summary,
         Category: t.Category,
-        Channel: t.Channel,
-        EstimatedTime: t.EstimatedTime,
-        Fee: t.Fee,
-        FeeFormatted: t.Fee > 0m ? _priceFormatter.Format(t.Fee, t.Currency) : "Gratis",
+        Agency: t.Agency,
+        EstimatedDays: t.EstimatedDays,
+        FeeMinor: t.FeeMinor,
         Currency: t.Currency);
 
-    private FeeDto ToFeeDto(GovFeeQuote quote) => new(
-        Amount: quote.Amount,
-        Currency: quote.Currency,
-        Formatted: quote.Exempt ? "Gratis" : _priceFormatter.Format(quote.Amount, quote.Currency),
-        Exempt: quote.Exempt);
+    private static FieldDto ToFieldDto(TramiteFormField f)
+    {
+        // options solo viaja para select/radio; pattern solo si está definido —
+        // el normalizer estricto de la UI acepta ausencia (null) de ambos.
+        var options = f.Options.Count > 0
+            ? f.Options.Select(o => new FieldOptionDto(o.Value, o.Label)).ToList()
+            : null;
+        return new FieldDto(
+            Id: f.Id,
+            Label: f.Label,
+            Type: f.Type,
+            Required: f.Required,
+            Help: f.Help,
+            Options: options,
+            Pattern: f.Pattern);
+    }
 
-    private CaseDto ToCaseDto(CaseDetail c) => new(
-        CaseId: c.CaseId,
-        Radicado: c.Radicado,
-        TramiteId: c.TramiteId,
-        TramiteName: c.TramiteName,
-        Citizen: new CitizenDto(c.Citizen.Name, c.Citizen.Email, c.Citizen.DocumentId, c.Citizen.Phone),
-        FormData: c.FormData,
-        Documents: c.Documents.Select(ToDocumentDto).ToList(),
-        Fee: c.Fee,
-        FeeFormatted: c.Fee > 0m ? _priceFormatter.Format(c.Fee, c.Currency) : "Gratis",
-        Currency: c.Currency,
-        RadicadoAt: c.RadicadoAt);
+    private ApplicationSummaryDto ToApplicationSummaryDto(CaseDetail c) => new(
+        Id: c.CaseId,
+        Reference: c.Radicado,
+        ServiceId: c.TramiteId,
+        ServiceName: c.TramiteName,
+        Status: GovStatusSlugs.ToSlug(c.Status),
+        SubmittedAt: c.RadicadoAt,
+        CurrentStage: c.CurrentStage);
+
+    private static ApplicationSummaryDto ToApplicationSummaryFromInbox(CaseInboxItem i) => new(
+        Id: i.CaseId,
+        Reference: i.Radicado,
+        ServiceId: string.Empty, // la lista de la carpeta no necesita el serviceId
+        ServiceName: i.TramiteName,
+        Status: GovStatusSlugs.ToSlug(i.Status),
+        SubmittedAt: i.RadicadoAt,
+        CurrentStage: i.CurrentStage);
+
+    private static QueueCaseDto ToQueueDto(CaseInboxItem i) => new(
+        Id: i.CaseId,
+        Reference: i.Radicado,
+        ServiceName: i.TramiteName,
+        CitizenName: i.CitizenName,
+        Status: GovStatusSlugs.ToSlug(i.Status),
+        SubmittedAt: i.RadicadoAt,
+        Priority: i.Priority.ToString().ToLowerInvariant(),
+        SlaDaysLeft: i.SlaDaysLeft);
+
+    // El detalle del funcionario muestra las respuestas con su ETIQUETA humana (no el
+    // fieldId), resolviéndolas contra la definición del formulario del trámite. Si el
+    // trámite ya no existe en el catálogo, cae al fieldId como etiqueta.
+    private async Task<CaseDto> ToCaseDtoAsync(CaseDetail c, CancellationToken cancellationToken)
+    {
+        var labels = await ResolveFieldLabelsAsync(c.TramiteId, cancellationToken);
+        return new CaseDto(
+            Application: new CaseApplicationDto(
+                Id: c.CaseId,
+                Reference: c.Radicado,
+                ServiceName: c.TramiteName,
+                CitizenName: c.Citizen.Name,
+                Status: GovStatusSlugs.ToSlug(c.Status),
+                SubmittedAt: c.RadicadoAt,
+                CurrentStage: c.CurrentStage),
+            Answers: c.FormData
+                .Select(kv => new AnswerDto(labels.GetValueOrDefault(kv.Key, kv.Key), kv.Value))
+                .ToList(),
+            Documents: c.Documents.Select(ToDocumentDto).ToList(),
+            Timeline: c.Timeline.Select(ToTimelineDto).ToList(),
+            Decision: c.Decision is null
+                ? null
+                : new DecisionDto(c.Decision.Outcome, c.Decision.Note, c.Decision.DecidedAt, c.Decision.DecidedBy));
+    }
+
+    private async Task<IReadOnlyDictionary<string, string>> ResolveFieldLabelsAsync(string tramiteId, CancellationToken cancellationToken)
+    {
+        var detail = await _catalog.GetAsync(tramiteId, cancellationToken);
+        if (detail is null)
+        {
+            return new Dictionary<string, string>();
+        }
+        return detail.FormDefinition.Sections
+            .SelectMany(s => s.Fields)
+            .GroupBy(f => f.Id)
+            .ToDictionary(g => g.Key, g => g.First().Label);
+    }
 
     private static DocumentDto ToDocumentDto(CitizenDocumentRef d) => new(
         Id: d.Id,
-        FileName: d.FileName,
-        ContentType: d.ContentType,
-        SizeBytes: d.SizeBytes,
-        ValidationStatus: d.ValidationStatus,
-        SecureUrl: d.SecureUrl);
+        Name: d.Name,
+        Status: d.Status,
+        UploadedAt: d.UploadedAt);
 
-    private static TimelineEntryDto ToTimelineDto(CaseTimelineEntry e) => new(
-        Status: ToStatusSlug(e.Status),
-        OccurredAt: e.OccurredAt,
-        Actor: e.Actor,
+    private static TimelineDto ToTimelineDto(CaseTimelineEntry e) => new(
+        Id: e.Id,
+        Label: e.Label,
+        Date: e.Date,
+        State: e.State,
         Note: e.Note);
 
-    private static InboxItemDto ToInboxDto(CaseInboxItem i) => new(
-        CaseId: i.CaseId,
-        Radicado: i.Radicado,
-        TramiteName: i.TramiteName,
-        CitizenName: i.CitizenName,
-        Status: ToStatusSlug(i.Status),
-        RadicadoAt: i.RadicadoAt);
-
-    // Estados del expediente como slugs kebab estables para la UI (status tags).
-    private static string ToStatusSlug(CaseStatus status) => status switch
+    // Resuelve el ciudadano desde las respuestas del formulario (once-only lo prellena):
+    // nombre + correo + documento + teléfono si el trámite los pidió.
+    private static GovCitizen ResolveCitizen(IReadOnlyDictionary<string, string> answers)
     {
-        CaseStatus.Radicado => "radicado",
-        CaseStatus.EnRevision => "en-revision",
-        CaseStatus.Subsanacion => "subsanacion",
-        CaseStatus.Resuelto => "resuelto",
-        CaseStatus.Rechazado => "rechazado",
-        _ => status.ToString().ToLowerInvariant(),
-    };
-
-    private static bool TryParseStatus(string? value, out CaseStatus status)
-    {
-        switch (value?.Trim().ToLowerInvariant().Replace("-", string.Empty))
-        {
-            case "radicado":
-                status = CaseStatus.Radicado;
-                return true;
-            case "enrevision":
-                status = CaseStatus.EnRevision;
-                return true;
-            case "subsanacion":
-                status = CaseStatus.Subsanacion;
-                return true;
-            case "resuelto":
-                status = CaseStatus.Resuelto;
-                return true;
-            case "rechazado":
-                status = CaseStatus.Rechazado;
-                return true;
-            default:
-                status = default;
-                return false;
-        }
+        answers.TryGetValue("nombreCompleto", out var name);
+        answers.TryGetValue("correo", out var email);
+        answers.TryGetValue("cedula", out var doc);
+        answers.TryGetValue("telefono", out var phone);
+        return new GovCitizen(
+            name ?? string.Empty,
+            email ?? string.Empty,
+            string.IsNullOrWhiteSpace(doc) ? null : doc,
+            string.IsNullOrWhiteSpace(phone) ? null : phone);
     }
 
-    // ── Request DTOs (binding del módulo Angular) ───────────────────────
+    // La correspondencia del expediente vive en IMessagingService (contexto 'gov',
+    // contextRef = radicado). Se localiza el hilo por la bandeja del ciudadano filtrando
+    // el contexto — sin reconstruir el threadId. outgoing = el mensaje lo envió el
+    // ciudadano (desde su perspectiva de carpeta).
+    private async Task<IReadOnlyList<MessageDto>> LoadMessagesAsync(CaseDetail detail, CancellationToken cancellationToken)
+    {
+        var citizenEmail = detail.Citizen.Email;
+        if (string.IsNullOrWhiteSpace(citizenEmail))
+        {
+            return Array.Empty<MessageDto>();
+        }
 
-    public sealed record CitizenRequest(string Name, string Email, string? DocumentId, string? Phone);
+        var wanted = $"{MessagingContext}:{detail.Radicado}";
+        var inbox = await _messaging.GetInboxAsync(citizenEmail, cancellationToken);
+        var summary = inbox.FirstOrDefault(t => string.Equals(t.ContextRef, wanted, StringComparison.OrdinalIgnoreCase));
+        if (summary is null)
+        {
+            return Array.Empty<MessageDto>();
+        }
 
-    public sealed record ApplicationRequest(
-        string TramiteId,
-        Dictionary<string, string>? FormData,
-        CitizenRequest Citizen);
+        var thread = await _messaging.GetThreadAsync(summary.ThreadId, cancellationToken);
+        if (thread is null)
+        {
+            return Array.Empty<MessageDto>();
+        }
 
-    public sealed record FileRequest(string FileName, string ContentType, long SizeBytes);
+        return thread.Messages
+            .Select(m => new MessageDto(
+                Id: m.MessageId,
+                Author: string.Equals(m.From, citizenEmail, StringComparison.OrdinalIgnoreCase) ? detail.Citizen.Name : "Entidad",
+                Body: m.Body,
+                CreatedAtUtc: m.SentAt,
+                Outgoing: string.Equals(m.From, citizenEmail, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
 
-    public sealed record DocumentsRequest(List<FileRequest> Files);
+    // ══════════════════════ Request DTOs ══════════════════════
 
-    public sealed record TransitionRequest(string To, string? Note);
+    public sealed record CreateApplicationRequest(string ServiceId, Dictionary<string, string>? Answers);
 
-    // ── Response DTOs (JSON estable para la UI) ─────────────────────────
+    public sealed record DocumentRequest(string ApplicationId, string Name);
 
-    public sealed record TramiteDto(
+    public sealed record DecisionRequest(string CaseId, string Outcome, string? Note);
+
+    // ══════════════════════ Response DTOs (camelCase por defecto) ══════════════════════
+
+    public sealed record ServiceDto(
         string Id,
-        string Slug,
         string Name,
-        string Entity,
+        string Summary,
         string Category,
-        string Channel,
-        string EstimatedTime,
-        decimal Fee,
-        string FeeFormatted,
+        string Agency,
+        int EstimatedDays,
+        decimal FeeMinor,
         string Currency);
 
-    public sealed record TramitesResponse(IReadOnlyList<TramiteDto> Tramites);
+    public sealed record ServicesResponse(IReadOnlyList<ServiceDto> Services);
 
-    public sealed record TramiteDetailDto(
-        TramiteDto Summary,
-        string Description,
-        string EligibilityText,
-        string Normativa,
-        bool RequiresAppointment);
+    public sealed record StepDto(string Id, string Title, string Detail);
 
-    public sealed record FormFieldDto(
-        string Key,
+    public sealed record ServiceDetailDto(
+        string Id,
+        string Name,
+        string Summary,
+        string Category,
+        string Agency,
+        IReadOnlyList<StepDto> Steps,
+        IReadOnlyList<string> Eligibility,
+        IReadOnlyList<string> Required,
+        decimal FeeMinor,
+        string Currency);
+
+    public sealed record ServiceDetailResponse(ServiceDetailDto Service);
+
+    public sealed record FieldOptionDto(string Value, string Label);
+
+    public sealed record FieldDto(
+        string Id,
         string Label,
         string Type,
         bool Required,
-        IReadOnlyList<string> Options);
+        string Help,
+        IReadOnlyList<FieldOptionDto>? Options,
+        string? Pattern);
 
-    public sealed record FormDefinitionDto(IReadOnlyList<FormFieldDto> Fields);
+    public sealed record FormSectionDto(string Id, string Title, IReadOnlyList<FieldDto> Fields);
 
-    public sealed record FeeDto(decimal Amount, string Currency, string Formatted, bool Exempt);
+    public sealed record FormDto(string Id, string Title, IReadOnlyList<FormSectionDto> Sections);
 
-    public sealed record TramiteDetailResponse(
-        TramiteDetailDto Tramite,
-        FormDefinitionDto FormDefinition,
-        IReadOnlyList<string> Requirements,
-        FeeDto Fee);
+    public sealed record FormResponse(FormDto Form);
 
-    public sealed record ApplicationFeeDto(
-        decimal Amount,
-        string Currency,
-        string Formatted,
-        string? PaymentSessionId);
-
-    public sealed record ApplicationResponse(string CaseId, string Radicado, ApplicationFeeDto? Fee);
-
-    public sealed record DocumentDto(
+    public sealed record ApplicationSummaryDto(
         string Id,
-        string FileName,
-        string ContentType,
-        long SizeBytes,
-        string ValidationStatus,
-        string SecureUrl);
+        string Reference,
+        string ServiceId,
+        string ServiceName,
+        string Status,
+        DateTimeOffset SubmittedAt,
+        string CurrentStage);
 
-    public sealed record DocumentsResponse(IReadOnlyList<DocumentDto> Uploaded);
+    public sealed record ApplicationResponse(ApplicationSummaryDto Application);
 
-    public sealed record CitizenDto(string Name, string Email, string? DocumentId, string? Phone);
+    public sealed record ApplicationsResponse(IReadOnlyList<ApplicationSummaryDto> Applications);
 
-    public sealed record CaseDto(
-        string CaseId,
-        string Radicado,
-        string TramiteId,
-        string TramiteName,
-        CitizenDto Citizen,
-        IReadOnlyDictionary<string, string> FormData,
+    public sealed record TimelineDto(string Id, string Label, DateTimeOffset Date, string State, string Note);
+
+    public sealed record DocumentDto(string Id, string Name, string Status, DateTimeOffset UploadedAt);
+
+    public sealed record MessageDto(string Id, string Author, string Body, DateTimeOffset CreatedAtUtc, bool Outgoing);
+
+    public sealed record ApplicationDetailDto(
+        string Id,
+        string Reference,
+        string ServiceId,
+        string ServiceName,
+        string Status,
+        DateTimeOffset SubmittedAt,
+        string CurrentStage,
+        IReadOnlyList<TimelineDto> Timeline,
         IReadOnlyList<DocumentDto> Documents,
-        decimal Fee,
-        string FeeFormatted,
-        string Currency,
-        DateTimeOffset RadicadoAt);
+        IReadOnlyList<MessageDto> Messages);
 
-    public sealed record TimelineEntryDto(
-        string Status,
-        DateTimeOffset OccurredAt,
-        string Actor,
-        string Note);
+    public sealed record ApplicationDetailResponse(ApplicationDetailDto Application);
 
-    public sealed record CaseResponse(
-        CaseDto Case,
-        string Status,
-        IReadOnlyList<TimelineEntryDto> Timeline);
+    public sealed record DocumentResponse(DocumentDto Document);
 
-    public sealed record InboxItemDto(
-        string CaseId,
-        string Radicado,
-        string TramiteName,
+    public sealed record QueueCaseDto(
+        string Id,
+        string Reference,
+        string ServiceName,
         string CitizenName,
         string Status,
-        DateTimeOffset RadicadoAt);
+        DateTimeOffset SubmittedAt,
+        string Priority,
+        int SlaDaysLeft);
 
-    public sealed record InboxResponse(IReadOnlyList<InboxItemDto> Cases);
+    public sealed record QueueResponse(IReadOnlyList<QueueCaseDto> Cases);
 
-    public sealed record TransitionResponse(string Status);
+    public sealed record CaseApplicationDto(
+        string Id,
+        string Reference,
+        string ServiceName,
+        string CitizenName,
+        string Status,
+        DateTimeOffset SubmittedAt,
+        string CurrentStage);
+
+    public sealed record AnswerDto(string Label, string Value);
+
+    public sealed record DecisionDto(string Outcome, string Note, DateTimeOffset DecidedAt, string DecidedBy);
+
+    public sealed record CaseDto(
+        CaseApplicationDto Application,
+        IReadOnlyList<AnswerDto> Answers,
+        IReadOnlyList<DocumentDto> Documents,
+        IReadOnlyList<TimelineDto> Timeline,
+        DecisionDto? Decision);
+
+    public sealed record CaseResponse(CaseDto Case);
 }

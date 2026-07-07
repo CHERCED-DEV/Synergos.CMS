@@ -796,6 +796,11 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<StubApplicationService>(),
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 null));
+        // OLA 8 Gobierno — correspondencia del expediente sobre el seam GENÉRICO
+        // IMessagingService (contexto 'gov', contextRef = radicado). Se siembra al boot
+        // desde un hosted service (no en el ctor de la mensajería, compartida por varios
+        // dominios), igual que BlogsDemoSeedHostedService. Idempotente.
+        services.AddHostedService<GovCorrespondenceSeedHostedService>();
 
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).

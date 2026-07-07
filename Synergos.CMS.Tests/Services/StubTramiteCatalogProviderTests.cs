@@ -10,8 +10,9 @@ namespace Synergos.CMS.Tests.Services;
 /// Cubre <see cref="StubTramiteCatalogProvider"/> (seam
 /// <c>ITramiteCatalogProvider</c>, catálogo de trámites del portal Gobierno): los 4
 /// casos canónicos (ADR 0075) — empty (texto sin match / id desconocido) / happy
-/// (catálogo sembrado + ficha con formulario data-driven) / filter (texto + categoría,
-/// el caso central del catálogo) / idempotent (buscar dos veces = mismo resultado).
+/// (catálogo sembrado + ficha con formulario seccionado data-driven) / filter (texto +
+/// categoría, el caso central del catálogo) / idempotent (buscar dos veces = mismo
+/// resultado).
 /// </summary>
 public class StubTramiteCatalogProviderTests
 {
@@ -37,26 +38,29 @@ public class StubTramiteCatalogProviderTests
     {
         var result = await Make().SearchAsync(null, null);
 
-        Assert.Equal(5, result.Count);
+        Assert.Equal(7, result.Count);
         Assert.Equal(result.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).Select(t => t.Id), result.Select(t => t.Id));
         // Mezcla de gratuitos y con tasa (la tasa opcional es del dominio).
-        Assert.Contains(result, t => t.Fee == 0m);
-        Assert.Contains(result, t => t.Fee > 0m);
+        Assert.Contains(result, t => t.FeeMinor == 0m);
+        Assert.Contains(result, t => t.FeeMinor > 0m);
     }
 
-    [Fact] // happy: la ficha trae formulario dinámico data-driven + requisitos + tasa
-    public async Task Get_ById_ReturnsDetailWithFormDefinition()
+    [Fact] // happy: la ficha trae pasos + elegibilidad + requisitos + formulario seccionado
+    public async Task Get_ById_ReturnsDetailWithSectionedForm()
     {
         var detail = await Make().GetAsync("trm-pasaporte");
 
         Assert.NotNull(detail);
         Assert.Equal("Expedición de pasaporte", detail!.Summary.Name);
-        Assert.Equal(189_000m, detail.Fee);
+        Assert.Equal(189_000m, detail.Summary.FeeMinor);
         Assert.True(detail.RequiresAppointment);
-        Assert.NotEmpty(detail.Requirements);
-        Assert.NotEmpty(detail.FormDefinition.Fields);
-        Assert.Contains(detail.FormDefinition.Fields, f => f.Type == "select" && f.Options.Count > 0);
-        Assert.Contains(detail.FormDefinition.Fields, f => f.Required);
+        Assert.NotEmpty(detail.Steps);
+        Assert.NotEmpty(detail.Eligibility);
+        Assert.NotEmpty(detail.Required);
+        Assert.NotEmpty(detail.FormDefinition.Sections);
+        var fields = detail.FormDefinition.Sections.SelectMany(s => s.Fields).ToList();
+        Assert.Contains(fields, f => f.Type == "select" && f.Options.Count > 0);
+        Assert.Contains(fields, f => f.Required);
     }
 
     [Fact] // happy: la ficha también se resuelve por slug

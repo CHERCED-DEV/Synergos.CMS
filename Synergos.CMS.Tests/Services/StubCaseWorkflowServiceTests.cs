@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading.Tasks;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
@@ -10,11 +9,12 @@ namespace Synergos.CMS.Tests.Services;
 /// <summary>
 /// Cubre <see cref="StubCaseWorkflowService"/> (seam <c>ICaseWorkflowService</c>,
 /// máquina de estados AUDITADA del expediente — el diferenciador del dominio Gobierno):
-/// empty (expediente vacío/desconocido) / happy (transición legal avanza + audita
-/// append-only) / filter (transiciones ILEGALES rechazadas: saltos y terminales) /
-/// idempotent (re-transicionar al estado actual no re-audita ni toca el timeline — el
-/// caso central del dominio). Sobre los expedientes sembrados: case-1001 Radicado,
-/// case-1002 EnRevision, case-1004 Resuelto, case-1005 Rechazado. ADR 0075.
+/// empty (expediente vacío/desconocido / outcome inválido) / happy (decisión legal
+/// avanza + audita append-only + registra la resolución) / filter (decisiones ILEGALES
+/// rechazadas: sobre terminales) / idempotent (aplicar el outcome cuyo estado destino ya
+/// es el actual no re-audita — el caso central del dominio). Sobre los expedientes
+/// sembrados: case-1001 submitted, case-1002 in-review, case-1004 approved, case-1005
+/// rejected. ADR 0075.
 /// </summary>
 public class StubCaseWorkflowServiceTests
 {
@@ -34,105 +34,103 @@ public class StubCaseWorkflowServiceTests
     }
 
     [Fact] // empty: expediente vacío o desconocido lanza ArgumentException
-    public async Task Transition_UnknownCase_Throws()
+    public async Task Decide_UnknownCase_Throws()
     {
         var (workflow, _, _) = Make();
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            workflow.TransitionAsync(string.Empty, CaseStatus.EnRevision, "nota"));
+            workflow.DecideAsync(string.Empty, "approve", "nota"));
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            workflow.TransitionAsync("case-que-no-existe", CaseStatus.EnRevision, "nota"));
+            workflow.DecideAsync("case-que-no-existe", "approve", "nota"));
     }
 
-    [Fact] // happy: transición legal avanza el estado + agrega timeline + audita
-    public async Task Transition_Legal_AdvancesAndAudits()
+    [Fact] // empty: outcome desconocido lanza ArgumentException
+    public async Task Decide_UnknownOutcome_Throws()
+    {
+        var (workflow, _, _) = Make();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            workflow.DecideAsync("case-1002", "maybe", "nota"));
+    }
+
+    [Fact] // happy: decisión legal avanza el estado + agrega timeline + audita + resuelve
+    public async Task Decide_Approve_AdvancesAndAudits()
     {
         var (workflow, cases, audit) = Make();
 
-        var result = await workflow.TransitionAsync("case-1001", CaseStatus.EnRevision, "Asignado a revisión.");
+        var updated = await workflow.DecideAsync("case-1002", "approve", "Licencia expedida.");
 
-        Assert.Equal(CaseStatus.EnRevision, result.Status);
+        Assert.Equal(CaseStatus.Resuelto, updated.Status);
+        Assert.Equal("Aprobado", updated.CurrentStage);
+        Assert.NotNull(updated.Decision);
+        Assert.Equal("approve", updated.Decision!.Outcome);
+        Assert.Equal("Licencia expedida.", updated.Decision.Note);
 
-        var detail = cases.FindCase("case-1001");
-        Assert.Equal(CaseStatus.EnRevision, detail!.Status);
-        Assert.Equal(2, detail.Timeline.Count);
-        Assert.Equal("Asignado a revisión.", detail.Timeline[^1].Note);
+        Assert.Equal(CaseStatus.Resuelto, cases.FindCase("case-1002")!.Status);
 
-        // CADA transición legal = evento append-only gov.case-transition (ADR 0037).
+        // CADA decisión legal = evento append-only gov.case-decision (ADR 0037).
         var evt = Assert.Single(audit.Events);
-        Assert.Equal("gov.case-transition", evt.Action);
-        Assert.Equal(detail.Radicado, evt.Resource);
-        Assert.Contains("Radicado", evt.Detail);
-        Assert.Contains("EnRevision", evt.Detail);
+        Assert.Equal("gov.case-decision", evt.Action);
+        Assert.Equal(updated.Radicado, evt.Resource);
+        Assert.Contains("approve", evt.Detail);
     }
 
-    [Fact] // happy: la cadena completa del ciclo (con vuelta por subsanación) es legal
-    public async Task Transition_FullLifecycleChain_IsLegal()
+    [Fact] // happy: request-info lleva a subsanación y NO registra resolución terminal
+    public async Task Decide_RequestInfo_MovesToInfoRequested()
     {
         var (workflow, _, audit) = Make();
 
-        // case-1002 está sembrado EnRevision.
-        await workflow.TransitionAsync("case-1002", CaseStatus.Subsanacion, "Falta un documento.");
-        await workflow.TransitionAsync("case-1002", CaseStatus.EnRevision, "Ciudadano subsanó.");
-        var final = await workflow.TransitionAsync("case-1002", CaseStatus.Resuelto, "Licencia expedida.");
+        var updated = await workflow.DecideAsync("case-1002", "request-info", "Falta un documento.");
+
+        Assert.Equal(CaseStatus.Subsanacion, updated.Status);
+        Assert.Null(updated.Decision); // request-info no es una resolución terminal
+        Assert.Single(audit.Events);
+    }
+
+    [Fact] // happy: el ciclo request-info → approve es legal (subsanación → aprobado)
+    public async Task Decide_InfoThenApprove_IsLegal()
+    {
+        var (workflow, _, audit) = Make();
+
+        await workflow.DecideAsync("case-1002", "request-info", "Falta un documento.");
+        var final = await workflow.DecideAsync("case-1002", "approve", "Licencia expedida tras subsanar.");
 
         Assert.Equal(CaseStatus.Resuelto, final.Status);
-        Assert.Equal(3, audit.Events.Count); // una auditoría por transición legal
+        Assert.Equal(2, audit.Events.Count); // una auditoría por decisión legal
     }
 
-    [Fact] // filter: saltarse etapas es ilegal (radicado no pasa directo a resuelto)
-    public async Task Transition_SkippingStages_Throws()
+    [Fact] // filter: los estados terminales no admiten nuevas decisiones
+    public async Task Decide_FromTerminalStates_Throws()
     {
         var (workflow, _, _) = Make();
 
+        // case-1004 approved y case-1005 rejected son terminales.
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            workflow.TransitionAsync("case-1001", CaseStatus.Resuelto, "salto ilegal"));
+            workflow.DecideAsync("case-1004", "reject", "reabrir"));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            workflow.TransitionAsync("case-1001", CaseStatus.Subsanacion, "salto ilegal"));
+            workflow.DecideAsync("case-1005", "approve", "reabrir"));
     }
 
-    [Fact] // filter: los estados terminales no admiten salida
-    public async Task Transition_FromTerminalStates_Throws()
+    [Fact] // idempotent: aprobar un expediente ya aprobado no re-audita ni cambia nada
+    public async Task Decide_ToCurrentTerminalState_IsIdempotent()
     {
-        var (workflow, _, _) = Make();
+        var (workflow, _, audit) = Make();
 
-        // case-1004 Resuelto y case-1005 Rechazado son terminales.
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            workflow.TransitionAsync("case-1004", CaseStatus.EnRevision, "reabrir"));
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            workflow.TransitionAsync("case-1005", CaseStatus.EnRevision, "reabrir"));
-    }
+        // case-1004 ya está approved (Resuelto) → approve es idempotente.
+        var result = await workflow.DecideAsync("case-1004", "approve", "repetida");
 
-    [Fact] // filter: retroceder a radicado nunca es legal
-    public async Task Transition_BackToRadicado_Throws()
-    {
-        var (workflow, _, _) = Make();
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            workflow.TransitionAsync("case-1002", CaseStatus.Radicado, "retroceso ilegal"));
-    }
-
-    [Fact] // idempotent: re-transicionar al estado actual no re-audita ni toca timeline
-    public async Task Transition_ToCurrentState_IsIdempotent()
-    {
-        var (workflow, cases, audit) = Make();
-        var before = cases.FindCase("case-1002")!.Timeline.Count;
-
-        var result = await workflow.TransitionAsync("case-1002", CaseStatus.EnRevision, "repetida");
-
-        Assert.Equal(CaseStatus.EnRevision, result.Status);
+        Assert.Equal(CaseStatus.Resuelto, result.Status);
         Assert.Empty(audit.Events); // sin doble efecto
-        Assert.Equal(before, cases.FindCase("case-1002")!.Timeline.Count);
     }
 
-    [Fact] // el expediente también transiciona referenciado por número de radicado
-    public async Task Transition_ByRadicado_Works()
+    [Fact] // el expediente también decide referenciado por número de radicado
+    public async Task Decide_ByRadicado_Works()
     {
         var (workflow, cases, _) = Make();
 
-        var result = await workflow.TransitionAsync("RAD-2026-1001", CaseStatus.EnRevision, "por radicado");
+        var result = await workflow.DecideAsync("SG-2026-001001", "request-info", "por radicado");
 
-        Assert.Equal(CaseStatus.EnRevision, result.Status);
-        Assert.Equal(CaseStatus.EnRevision, cases.FindCase("case-1001")!.Status);
+        Assert.Equal(CaseStatus.Subsanacion, result.Status);
+        Assert.Equal(CaseStatus.Subsanacion, cases.FindCase("case-1001")!.Status);
     }
 }
