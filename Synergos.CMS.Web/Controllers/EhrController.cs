@@ -260,29 +260,88 @@ public sealed class EhrController : ControllerBase
             .OrderBy(a => a.StartUtc)
             .FirstOrDefault();
 
-        var meds = await _medications.GetActiveForPatientAsync(patient, cancellationToken);
         var results = await _results.GetForPatientAsync(patient, cancellationToken);
         var inbox = await _messaging.GetInboxAsync(patient, cancellationToken);
-
-        // Tareas pendientes del paciente (demo): resultados anormales por revisar +
-        // saldo pendiente. Derivadas, no un store paralelo.
-        var pendingTasks = new List<PortalTaskDto>();
-        var abnormal = results.Count(r => !string.Equals(r.Flag, "normal", StringComparison.OrdinalIgnoreCase));
-        if (abnormal > 0)
-        {
-            pendingTasks.Add(new PortalTaskDto("review-results", $"Tienes {abnormal} resultado(s) por revisar", "results"));
-        }
         var statement = await _billing.GetForPatientAsync(patient, cancellationToken);
-        if (statement is not null && statement.Balance > 0)
+
+        var unreadMessages = inbox.Where(t => IsClinicalContext(t.ContextRef)).Sum(t => t.MessageCount);
+        var balanceMinor = statement is null ? 0L : (long)decimal.Truncate(Math.Max(0m, statement.Balance));
+        var currency = statement?.Currency ?? "COP";
+
+        // e-Check-In disponible = próxima cita en ventana de 48h sin check-in previo.
+        var pendingCheckins = next is not null
+            && !string.Equals(next.Status, "checked-in", StringComparison.OrdinalIgnoreCase)
+            && (next.StartUtc - now).TotalHours <= 48
+                ? 1 : 0;
+
+        // Cards del home derivadas de datos VIVOS (deep-link a las vistas del portal).
+        var cards = new List<HomeCardDto>();
+
+        if (next is not null)
         {
-            pendingTasks.Add(new PortalTaskDto("pay-balance", "Tienes un saldo pendiente por pagar", "billing"));
+            cards.Add(new HomeCardDto(
+                Id: $"card-appt-{next.Id}", Kind: "appointment",
+                Title: "Tu próxima cita",
+                Detail: $"{next.StartUtc:yyyy-MM-dd HH:mm} · {(string.IsNullOrWhiteSpace(next.Specialty) ? "Consulta" : next.Specialty)} · {next.DoctorName}",
+                Action: "visits", ActionLabel: "Ver cita", Tone: "brand"));
+
+            if (pendingCheckins > 0)
+            {
+                cards.Add(new HomeCardDto(
+                    Id: $"card-checkin-{next.Id}", Kind: "checkin",
+                    Title: "e-Check-In disponible",
+                    Detail: "Completa tu registro antes de llegar y ahorra tiempo en recepción.",
+                    Action: "echeckin", ActionLabel: "Hacer check-in", Tone: "success"));
+            }
         }
+
+        var latestResult = results.OrderByDescending(r => r.ResultedAtUtc).FirstOrDefault();
+        if (latestResult is not null)
+        {
+            var abnormal = results.Count(r => !string.Equals(r.Flag, "normal", StringComparison.OrdinalIgnoreCase));
+            cards.Add(new HomeCardDto(
+                Id: $"card-result-{latestResult.Id}", Kind: "result",
+                Title: abnormal > 0 ? "Resultados por revisar" : "Nuevo resultado disponible",
+                Detail: abnormal > 0
+                    ? $"Tienes {abnormal} resultado(s) fuera de rango. Revísalos con tu médico."
+                    : $"Tu último resultado ({latestResult.TestName}) ya está disponible.",
+                Action: "results", ActionLabel: "Ver resultados",
+                Tone: abnormal > 0 ? "warning" : "success"));
+        }
+
+        if (unreadMessages > 0)
+        {
+            cards.Add(new HomeCardDto(
+                Id: "card-messages", Kind: "message",
+                Title: "Mensajes de tu equipo de salud",
+                Detail: $"Tienes {unreadMessages} mensaje(s) en tu bandeja.",
+                Action: "messages", ActionLabel: "Abrir mensajes", Tone: "brand"));
+        }
+
+        if (balanceMinor > 0)
+        {
+            cards.Add(new HomeCardDto(
+                Id: "card-balance", Kind: "balance",
+                Title: "Saldo pendiente",
+                Detail: $"Tienes un saldo de {balanceMinor:N0} {currency} por pagar.",
+                Action: "billing", ActionLabel: "Pagar ahora", Tone: "warning"));
+        }
+
+        // Cuidado preventivo — card estable de recordatorio (siempre útil).
+        cards.Add(new HomeCardDto(
+            Id: "card-reminder-health", Kind: "reminder",
+            Title: "Cuidado preventivo",
+            Detail: "Revisa tus vacunas y tamizajes al día en tu resumen de salud.",
+            Action: "health", ActionLabel: "Ver mi salud", Tone: "neutral"));
 
         return Ok(new PortalHomeResponse(
+            Patient: ToPatientDto(found),
+            Cards: cards,
             NextAppointment: next is null ? null : ToAppointmentDto(next),
-            PendingTasks: pendingTasks,
-            UnreadMessages: inbox.Sum(t => t.MessageCount),
-            ActiveMeds: meds.Select(ToMedicationDto).ToList()));
+            BalanceMinor: balanceMinor,
+            Currency: currency,
+            UnreadMessages: unreadMessages,
+            PendingCheckins: pendingCheckins));
     }
 
     // 9. Resultados de laboratorio
@@ -325,7 +384,9 @@ public sealed class EhrController : ControllerBase
             var refill = await _medications.RequestRefillAsync(
                 new RefillRequest(body.Patient.Trim(), body.MedId.Trim(), body.Note),
                 cancellationToken);
-            return Ok(new RefillEnvelope(ToRefillDto(refill)));
+            // La UI lee `status` top-level (requested|approved|denied); el seam usa
+            // 'pending' para una solicitud recién creada → 'requested'.
+            return Ok(new RefillEnvelope(RefillLifecycleStatus(refill.Status), ToRefillDto(refill)));
         }
         catch (ArgumentException ex)
         {
@@ -343,8 +404,18 @@ public sealed class EhrController : ControllerBase
             return BadRequest(new { error = "El parámetro user es requerido." });
         }
         var inbox = await _messaging.GetInboxAsync(user, cancellationToken);
-        var clinical = inbox.Where(t => IsClinicalContext(t.ContextRef)).Select(ToThreadSummaryDto).ToList();
-        return Ok(new MessagesResponse(clinical));
+        var clinical = inbox.Where(t => IsClinicalContext(t.ContextRef)).ToList();
+
+        // La UI espera hilos COMPLETOS (con mensajes) — el inbox solo trae resúmenes,
+        // así que hidratamos cada hilo con GetThreadAsync. Best-effort: si un hilo se
+        // fue, cae al shape del resumen (messages vacío) sin romper.
+        var threads = new List<ThreadDto>(clinical.Count);
+        foreach (var summary in clinical)
+        {
+            var full = await _messaging.GetThreadAsync(summary.ThreadId, cancellationToken);
+            threads.Add(full is null ? ToThreadDtoFromSummary(summary, user) : ToThreadDto(full, user));
+        }
+        return Ok(new MessagesResponse(threads));
     }
 
     // 13. Enviar mensaje (paciente → equipo, contexto clinical)
@@ -375,7 +446,7 @@ public sealed class EhrController : ControllerBase
                 var contextRef = $"{ClinicalMessageContext}:msg:{body.From.Trim()}:{body.To.Trim()}";
                 thread = await _messaging.StartThreadAsync(contextRef, body.From.Trim(), body.To.Trim(), body.Body, cancellationToken);
             }
-            return Ok(new ThreadEnvelope(ToThreadDto(thread)));
+            return Ok(new ThreadEnvelope(ToThreadDto(thread, body.From.Trim())));
         }
         catch (ArgumentException ex)
         {
@@ -559,14 +630,15 @@ public sealed class EhrController : ControllerBase
         => DateOnly.TryParse(date, out var parsed) ? parsed : DateOnly.FromDateTime(DateTime.UtcNow);
 
     private static PatientDto ToPatientDto(EhrPatient p) => new(
-        Id: p.Id, FullName: p.FullName, DocumentId: p.DocumentId, Gender: p.Gender,
-        DateOfBirth: p.DateOfBirth.ToString("yyyy-MM-dd"), AgeYears: p.AgeYears,
-        Phone: p.Phone, Email: p.Email, City: p.City, BloodType: p.BloodType,
-        Allergies: p.Allergies, ChronicConditions: p.ChronicConditions,
-        PrimaryDoctorId: p.PrimaryDoctorId, AvatarUrl: p.AvatarUrl);
+        Id: p.Id, Name: p.FullName, Document: p.DocumentId, Sex: p.Gender,
+        Age: p.AgeYears, Phone: p.Phone, Email: p.Email, BloodType: p.BloodType,
+        Problems: p.ChronicConditions, Allergies: p.Allergies,
+        PrimaryDoctorId: p.PrimaryDoctorId ?? string.Empty, Active: true,
+        City: p.City, AvatarUrl: p.AvatarUrl);
 
     private static DoctorDto ToDoctorDto(MedicalDoctor d) => new(
-        Id: d.Id, FullName: d.FullName, Specialty: d.Specialty, LicenseNumber: d.LicenseNumber,
+        Id: d.Id, Name: d.FullName, Specialty: d.Specialty, License: d.LicenseNumber,
+        Phone: string.Empty, Email: string.Empty, AcceptingPatients: true,
         Rating: d.Rating, YearsExperience: d.YearsExperience, AvatarUrl: d.AvatarUrl,
         WorkingDays: d.WorkingDays.Select(w => (int)w).ToList(),
         SlotStartHour: d.SlotStartHour, SlotEndHour: d.SlotEndHour, SlotMinutes: d.SlotMinutes);
@@ -580,39 +652,79 @@ public sealed class EhrController : ControllerBase
 
     private static EncounterDto ToEncounterDto(ClinicalEncounter e) => new(
         Id: e.Id, PatientId: e.PatientId, DoctorId: e.DoctorId, DoctorName: e.DoctorName,
-        OccurredAtUtc: e.OccurredAtUtc, ReasonForVisit: e.ReasonForVisit,
-        Soap: new SoapDto(e.Soap.Subjective, e.Soap.Objective, e.Soap.Assessment, e.Soap.Plan,
-            e.Soap.Vitals is null ? null : ToVitalsDto(e.Soap.Vitals)),
-        DiagnosisCode: e.DiagnosisCode, SignedByClinician: e.SignedByClinician);
+        Date: e.OccurredAtUtc.ToString("yyyy-MM-dd"), Reason: e.ReasonForVisit,
+        Soap: new SoapDto(
+            Subjective: e.Soap.Subjective,
+            Objective: ToVitalsDto(e.Soap.Vitals),
+            Assessment: e.Soap.Assessment,
+            Plan: e.Soap.Plan),
+        // e.Soap.Objective (texto libre) va como firma-legible no; la firma = iniciales
+        // del clínico si el encuentro está firmado (la UI muestra la firma como string).
+        Signature: e.SignedByClinician ? ClinicianInitials(e.DoctorName) : string.Empty);
+
+    // Iniciales del clínico para la "firma" que muestra la UI (data-url o iniciales).
+    private static string ClinicianInitials(string doctorName)
+    {
+        if (string.IsNullOrWhiteSpace(doctorName)) { return string.Empty; }
+        var parts = doctorName.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => !p.EndsWith('.') && p.Length > 1).ToList();
+        return parts.Count == 0
+            ? string.Empty
+            : string.Concat(parts.Take(2).Select(p => char.ToUpperInvariant(p[0])));
+    }
 
     private static PrescriptionDto ToPrescriptionDto(EhrPrescription p) => new(
         Id: p.Id, PatientId: p.PatientId, DoctorId: p.DoctorId, DoctorName: p.DoctorName,
-        IssuedAtUtc: p.IssuedAtUtc, Status: p.Status, EncounterId: p.EncounterId,
+        Date: p.IssuedAtUtc.ToString("yyyy-MM-dd"),
         Items: p.Items.Select(i => new PrescriptionItemDto(
-            i.MedicationName, i.Dosage, i.Frequency, i.DurationDays, i.Instructions)).ToList());
+            Drug: i.MedicationName, Dose: i.Dosage, Frequency: i.Frequency, DurationDays: i.DurationDays)).ToList(),
+        Interactions: Array.Empty<string>());
 
-    private static AppointmentDto ToAppointmentDto(ClinicalAppointment a) => new(
-        Id: a.Id, PatientId: a.PatientId, PatientName: a.PatientName,
-        DoctorId: a.DoctorId, DoctorName: a.DoctorName, Specialty: a.Specialty,
-        StartUtc: a.StartUtc, EndUtc: a.EndUtc, Status: a.Status, ReservationId: a.ReservationId);
+    private static AppointmentDto ToAppointmentDto(ClinicalAppointment a)
+    {
+        var date = a.StartUtc.ToString("yyyy-MM-dd");
+        var time = a.StartUtc.ToString("HH:mm");
+        return new AppointmentDto(
+            Id: a.Id, PatientId: a.PatientId, PatientName: a.PatientName,
+            DoctorId: a.DoctorId, DoctorName: a.DoctorName,
+            Date: date, Time: time,
+            DurationMin: Math.Max(0, (int)(a.EndUtc - a.StartUtc).TotalMinutes),
+            Reason: string.IsNullOrWhiteSpace(a.Specialty) ? "Consulta" : a.Specialty,
+            Status: a.Status,
+            Slot: new AppointmentSlotDto(date, time),
+            ReservationId: a.ReservationId);
+    }
 
-    private static VitalsDto ToVitalsDto(ClinicalVitals v) => new(
-        v.SystolicMmHg, v.DiastolicMmHg, v.HeartRateBpm, v.TemperatureC,
-        v.WeightKg, v.HeightCm, v.GlucoseMgDl, v.OxygenSaturationPct);
+    // Vitals con las claves que espera la UI (systolic/diastolic/heartRate/…). Null-safe:
+    // vitals ausentes → todos 0 (el normalizer de la UI también defaultea a 0).
+    private static VitalsDto ToVitalsDto(ClinicalVitals? v) => new(
+        Systolic: v?.SystolicMmHg ?? 0, Diastolic: v?.DiastolicMmHg ?? 0,
+        HeartRate: v?.HeartRateBpm ?? 0, Temperature: v?.TemperatureC ?? 0,
+        Weight: v?.WeightKg ?? 0, Height: v?.HeightCm ?? 0, Glucose: v?.GlucoseMgDl ?? 0);
 
     // ── OLA 7 mappers ───────────────────────────────────────────────────
 
     private static LabResultDto ToLabResultDto(EhrLabResult r) => new(
-        Id: r.Id, PatientId: r.PatientId, PanelName: r.PanelName, TestName: r.TestName,
-        Value: r.Value, Unit: r.Unit, ReferenceLow: r.ReferenceLow, ReferenceHigh: r.ReferenceHigh,
-        Flag: r.Flag, ResultedAtUtc: r.ResultedAtUtc, OrderId: r.OrderId,
-        OrderedByDoctorId: r.OrderedByDoctorId, Notes: r.Notes);
+        Id: r.Id, PatientId: r.PatientId, Panel: r.PanelName, Name: r.TestName,
+        Value: r.Value, Unit: r.Unit, RefLow: r.ReferenceLow, RefHigh: r.ReferenceHigh,
+        Flag: r.Flag, Date: r.ResultedAtUtc.ToString("yyyy-MM-dd"), Released: true,
+        Comment: r.Notes ?? string.Empty);
+
+    /// <summary>Farmacia de la demo (el seam no modela la farmacia dispensadora aún).</summary>
+    private const string DemoPharmacy = "Farmacia Synergos";
 
     private static MedicationDto ToMedicationDto(EhrMedication m) => new(
-        MedicationId: m.MedicationId, PatientId: m.PatientId, MedicationName: m.MedicationName,
-        Dosage: m.Dosage, Frequency: m.Frequency, Instructions: m.Instructions,
-        PrescribedByDoctorId: m.PrescribedByDoctorId, PrescribedByDoctorName: m.PrescribedByDoctorName,
-        PrescribedAtUtc: m.PrescribedAtUtc, Status: m.Status, RefillsRemaining: m.RefillsRemaining);
+        Id: m.MedicationId, PatientId: m.PatientId, Drug: m.MedicationName,
+        Dose: m.Dosage, Frequency: m.Frequency, Instructions: m.Instructions ?? string.Empty,
+        Pharmacy: DemoPharmacy, RefillsLeft: m.RefillsRemaining ?? 0, RefillStatus: null);
+
+    // Mapea el estado del seam (pending|approved|denied) al lifecycle que espera la UI.
+    private static string RefillLifecycleStatus(string seamStatus) => seamStatus switch
+    {
+        "approved" => "approved",
+        "denied" => "denied",
+        _ => "requested",
+    };
 
     private static RefillDto ToRefillDto(EhrRefillRequest r) => new(
         Id: r.Id, PatientId: r.PatientId, MedicationId: r.MedicationId, MedicationName: r.MedicationName,
@@ -622,27 +734,90 @@ public sealed class EhrController : ControllerBase
         Id: o.Id, PatientId: o.PatientId, ProviderId: o.ProviderId, ProviderName: o.ProviderName,
         Type: o.Type, Detail: o.Detail, PlacedAtUtc: o.PlacedAtUtc, Status: o.Status);
 
+    // El seam tipa result|refill|message; la UI espera result|refill|advice|cosign.
+    // 'message' del paciente = 'advice' en la bandeja del clínico.
+    private static string ToInBasketKind(string type) => type switch
+    {
+        "result" => "result",
+        "refill" => "refill",
+        "cosign" => "cosign",
+        _ => "advice",
+    };
+
     private static InBasketItemDto ToInBasketDto(EhrInBasketItem i) => new(
-        Id: i.Id, Type: i.Type, ProviderId: i.ProviderId, PatientId: i.PatientId,
-        PatientName: i.PatientName, Title: i.Title, Preview: i.Preview, Priority: i.Priority,
-        OccurredAtUtc: i.OccurredAtUtc, RefId: i.RefId);
+        Id: i.Id, Kind: ToInBasketKind(i.Type), PatientId: i.PatientId,
+        PatientName: i.PatientName, Title: i.Title, Detail: i.Preview,
+        Priority: i.Priority, CreatedAtUtc: i.OccurredAtUtc, Done: false);
 
-    private static ThreadSummaryDto ToThreadSummaryDto(MessageThreadSummary s) => new(
-        ThreadId: s.ThreadId, ContextRef: s.ContextRef, Participants: s.Participants,
-        LastMessagePreview: s.LastMessagePreview, LastMessageAt: s.LastMessageAt.UtcDateTime,
-        MessageCount: s.MessageCount);
+    // El "otro" participante del hilo (la contraparte del usuario que consulta).
+    private static string OtherParticipant(IReadOnlyList<string> participants, string self)
+        => participants.FirstOrDefault(p => !string.Equals(p, self, StringComparison.OrdinalIgnoreCase))
+            ?? (participants.Count > 0 ? participants[0] : string.Empty);
 
-    private static ThreadDto ToThreadDto(MessageThread t) => new(
-        ThreadId: t.ThreadId, ContextRef: t.ContextRef, Participants: t.Participants,
-        Messages: t.Messages.Select(m => new ThreadMessageDto(m.MessageId, m.From, m.Body, m.SentAt.UtcDateTime)).ToList(),
-        CreatedAt: t.CreatedAt.UtcDateTime, LastMessageAt: t.LastMessageAt.UtcDateTime);
+    // Asunto legible del hilo a partir del contextRef namespaced ('clinical:refill:…').
+    private static string ThreadSubject(string contextRef)
+    {
+        if (string.IsNullOrWhiteSpace(contextRef)) { return "Mensaje"; }
+        var parts = contextRef.Split(':');
+        return parts.Length >= 2 ? parts[1] switch
+        {
+            "refill" => "Solicitud de resurtido",
+            "result" => "Resultado de laboratorio",
+            "advice" => "Consejo médico",
+            "msg" => "Mensaje al equipo de salud",
+            _ => "Mensaje clínico",
+        } : "Mensaje clínico";
+    }
 
-    private static BillingDto ToBillingDto(EhrBillingStatement s) => new(
-        PatientId: s.PatientId,
-        Statement: s.Statement.Select(l => new BillingLineDto(
-            l.Id, l.ServiceDateUtc, l.Description, l.Amount, l.PatientResponsibility, l.Status)).ToList(),
-        Balance: s.Balance, Currency: s.Currency,
-        Plan: new InsurancePlanDto(s.Plan.PlanName, s.Plan.MemberId, s.Plan.Coverage, s.Plan.CopayAmount));
+    private static ThreadDto ToThreadDto(MessageThread t, string self)
+    {
+        var messages = t.Messages
+            .Select(m => new ThreadMessageDto(
+                Id: m.MessageId, Author: m.From, Body: m.Body,
+                CreatedAtUtc: m.SentAt.UtcDateTime,
+                Outgoing: string.Equals(m.From, self, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        var last = t.Messages.Count > 0 ? t.Messages[^1].Body : string.Empty;
+        return new ThreadDto(
+            Id: t.ThreadId,
+            Participant: OtherParticipant(t.Participants, self),
+            Subject: ThreadSubject(t.ContextRef),
+            LastMessage: last,
+            LastAtUtc: t.LastMessageAt.UtcDateTime,
+            Unread: 0,
+            Messages: messages);
+    }
+
+    // Fallback cuando solo tenemos el resumen (hilo no rehidratable): shape completo
+    // con messages vacío (el normalizer de la UI lo tolera).
+    private static ThreadDto ToThreadDtoFromSummary(MessageThreadSummary s, string self) => new(
+        Id: s.ThreadId,
+        Participant: OtherParticipant(s.Participants, self),
+        Subject: ThreadSubject(s.ContextRef),
+        LastMessage: s.LastMessagePreview,
+        LastAtUtc: s.LastMessageAt.UtcDateTime,
+        Unread: 0,
+        Messages: Array.Empty<ThreadMessageDto>());
+
+    private static BillingDto ToBillingDto(EhrBillingStatement s)
+    {
+        // amountMinor = responsabilidad del paciente por línea (lo que debe/pagó);
+        // COP no tiene subdivisión menor, así que la unidad menor entera = el monto COP.
+        var lines = s.Statement
+            .Select(l => new BillingLineDto(
+                Id: l.Id,
+                Date: l.ServiceDateUtc.ToString("yyyy-MM-dd"),
+                Description: l.Description,
+                AmountMinor: (long)decimal.Truncate(l.PatientResponsibility)))
+            .ToList();
+        var statement = new BillingStatementDto(
+            PatientId: s.PatientId,
+            Currency: s.Currency,
+            BalanceMinor: (long)decimal.Truncate(s.Balance),
+            PlanActive: !string.IsNullOrWhiteSpace(s.Plan.PlanName),
+            Lines: lines);
+        return new BillingDto(statement);
+    }
 
     // ── Request bodies (binding del módulo UI) ─────────────────────────
 
@@ -663,25 +838,27 @@ public sealed class EhrController : ControllerBase
     // ── Response DTOs (JSON estable para la UI) ────────────────────────
 
     public sealed record PatientDto(
-        string Id, string FullName, string DocumentId, string Gender,
-        string DateOfBirth, int AgeYears, string Phone, string Email, string City, string BloodType,
-        IReadOnlyList<string> Allergies, IReadOnlyList<string> ChronicConditions,
-        string? PrimaryDoctorId, string? AvatarUrl);
+        string Id, string Name, string Document, string Sex,
+        int Age, string Phone, string Email, string BloodType,
+        IReadOnlyList<string> Problems, IReadOnlyList<string> Allergies,
+        string PrimaryDoctorId, bool Active,
+        string City, string? AvatarUrl);
 
     public sealed record PatientsResponse(IReadOnlyList<PatientDto> Patients);
 
     public sealed record DoctorDto(
-        string Id, string FullName, string Specialty, string LicenseNumber,
+        string Id, string Name, string Specialty, string License,
+        string Phone, string Email, bool AcceptingPatients,
         double Rating, int YearsExperience, string? AvatarUrl,
         IReadOnlyList<int> WorkingDays, int SlotStartHour, int SlotEndHour, int SlotMinutes);
 
     public sealed record DoctorsResponse(IReadOnlyList<DoctorDto> Doctors);
 
     public sealed record VitalsDto(
-        double? SystolicMmHg, double? DiastolicMmHg, double? HeartRateBpm, double? TemperatureC,
-        double? WeightKg, double? HeightCm, double? GlucoseMgDl, double? OxygenSaturationPct);
+        double Systolic, double Diastolic, double HeartRate, double Temperature,
+        double Weight, double Height, double Glucose);
 
-    public sealed record SoapDto(string Subjective, string Objective, string Assessment, string Plan, VitalsDto? Vitals);
+    public sealed record SoapDto(string Subjective, VitalsDto Objective, string Assessment, string Plan);
 
     public sealed record HistoryDto(
         string PatientId, string ChiefComplaint,
@@ -691,23 +868,25 @@ public sealed class EhrController : ControllerBase
 
     public sealed record EncounterDto(
         string Id, string PatientId, string DoctorId, string DoctorName,
-        DateTime OccurredAtUtc, string ReasonForVisit, SoapDto Soap,
-        string? DiagnosisCode, bool SignedByClinician);
+        string Date, string Reason, SoapDto Soap, string Signature);
 
     public sealed record EncounterEnvelope(EncounterDto Encounter);
 
-    public sealed record PrescriptionItemDto(string MedicationName, string Dosage, string Frequency, int DurationDays, string? Instructions);
+    public sealed record PrescriptionItemDto(string Drug, string Dose, string Frequency, int DurationDays);
 
     public sealed record PrescriptionDto(
         string Id, string PatientId, string DoctorId, string DoctorName,
-        DateTime IssuedAtUtc, string Status, string? EncounterId,
-        IReadOnlyList<PrescriptionItemDto> Items);
+        string Date, IReadOnlyList<PrescriptionItemDto> Items,
+        IReadOnlyList<string> Interactions);
 
     public sealed record PrescriptionEnvelope(PrescriptionDto Prescription);
 
+    public sealed record AppointmentSlotDto(string Date, string Time);
+
     public sealed record AppointmentDto(
         string Id, string PatientId, string PatientName, string DoctorId, string DoctorName,
-        string Specialty, DateTime StartUtc, DateTime EndUtc, string Status, string ReservationId);
+        string Date, string Time, int DurationMin, string Reason, string Status,
+        AppointmentSlotDto Slot, string ReservationId);
 
     public sealed record AppointmentsResponse(IReadOnlyList<AppointmentDto> Appointments);
 
@@ -730,13 +909,18 @@ public sealed class EhrController : ControllerBase
 
     // ── OLA 7 · Response DTOs ───────────────────────────────────────────
 
-    public sealed record PortalTaskDto(string Key, string Label, string Target);
+    public sealed record HomeCardDto(
+        string Id, string Kind, string Title, string Detail,
+        string? Action, string? ActionLabel, string Tone);
 
     public sealed record PortalHomeResponse(
+        PatientDto Patient,
+        IReadOnlyList<HomeCardDto> Cards,
         AppointmentDto? NextAppointment,
-        IReadOnlyList<PortalTaskDto> PendingTasks,
+        long BalanceMinor,
+        string Currency,
         int UnreadMessages,
-        IReadOnlyList<MedicationDto> ActiveMeds);
+        int PendingCheckins);
 
     public sealed record ScheduleSlotDto(
         string AppointmentId, string PatientId, string PatientName, string DoctorId, string DoctorName,
@@ -755,16 +939,15 @@ public sealed class EhrController : ControllerBase
         IReadOnlyList<HealthMaintenanceDto> Maintenance);
 
     public sealed record LabResultDto(
-        string Id, string PatientId, string PanelName, string TestName,
-        string Value, string Unit, double? ReferenceLow, double? ReferenceHigh,
-        string Flag, DateTime ResultedAtUtc, string? OrderId, string? OrderedByDoctorId, string? Notes);
+        string Id, string PatientId, string Panel, string Name,
+        string Value, string Unit, double? RefLow, double? RefHigh,
+        string Flag, string Date, bool Released, string Comment);
 
     public sealed record LabResultsResponse(IReadOnlyList<LabResultDto> Results);
 
     public sealed record MedicationDto(
-        string MedicationId, string PatientId, string MedicationName, string Dosage, string Frequency,
-        string? Instructions, string PrescribedByDoctorId, string PrescribedByDoctorName,
-        DateTime PrescribedAtUtc, string Status, int? RefillsRemaining);
+        string Id, string PatientId, string Drug, string Dose, string Frequency,
+        string Instructions, string Pharmacy, int RefillsLeft, string? RefillStatus);
 
     public sealed record MedicationsResponse(IReadOnlyList<MedicationDto> Medications);
 
@@ -772,7 +955,7 @@ public sealed class EhrController : ControllerBase
         string Id, string PatientId, string MedicationId, string MedicationName,
         string ProviderId, DateTime RequestedAtUtc, string Status, string? Note);
 
-    public sealed record RefillEnvelope(RefillDto Refill);
+    public sealed record RefillEnvelope(string Status, RefillDto Refill);
 
     public sealed record OrderDto(
         string Id, string PatientId, string ProviderId, string ProviderName,
@@ -781,32 +964,28 @@ public sealed class EhrController : ControllerBase
     public sealed record OrderEnvelope(OrderDto Order);
 
     public sealed record InBasketItemDto(
-        string Id, string Type, string ProviderId, string PatientId, string PatientName,
-        string Title, string Preview, string Priority, DateTime OccurredAtUtc, string RefId);
+        string Id, string Kind, string PatientId, string PatientName,
+        string Title, string Detail, string Priority, DateTime CreatedAtUtc, bool Done);
 
     public sealed record InBasketResponse(IReadOnlyList<InBasketItemDto> Items);
 
-    public sealed record ThreadMessageDto(string MessageId, string From, string Body, DateTime SentAt);
+    public sealed record ThreadMessageDto(
+        string Id, string Author, string Body, DateTime CreatedAtUtc, bool Outgoing);
 
     public sealed record ThreadDto(
-        string ThreadId, string ContextRef, IReadOnlyList<string> Participants,
-        IReadOnlyList<ThreadMessageDto> Messages, DateTime CreatedAt, DateTime LastMessageAt);
+        string Id, string Participant, string Subject, string LastMessage,
+        DateTime LastAtUtc, int Unread, IReadOnlyList<ThreadMessageDto> Messages);
 
     public sealed record ThreadEnvelope(ThreadDto Thread);
 
-    public sealed record ThreadSummaryDto(
-        string ThreadId, string ContextRef, IReadOnlyList<string> Participants,
-        string LastMessagePreview, DateTime LastMessageAt, int MessageCount);
-
-    public sealed record MessagesResponse(IReadOnlyList<ThreadSummaryDto> Threads);
+    public sealed record MessagesResponse(IReadOnlyList<ThreadDto> Threads);
 
     public sealed record BillingLineDto(
-        string Id, DateTime ServiceDateUtc, string Description, decimal Amount,
-        decimal PatientResponsibility, string Status);
+        string Id, string Date, string Description, long AmountMinor);
 
-    public sealed record InsurancePlanDto(string PlanName, string MemberId, string Coverage, decimal CopayAmount);
+    public sealed record BillingStatementDto(
+        string PatientId, string Currency, long BalanceMinor, bool PlanActive,
+        IReadOnlyList<BillingLineDto> Lines);
 
-    public sealed record BillingDto(
-        string PatientId, IReadOnlyList<BillingLineDto> Statement,
-        decimal Balance, string Currency, InsurancePlanDto Plan);
+    public sealed record BillingDto(BillingStatementDto Statement);
 }
