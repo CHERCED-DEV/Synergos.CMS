@@ -439,7 +439,100 @@ public sealed class EhrController : ControllerBase
         return Ok(ToBillingDto(statement));
     }
 
+    // 17. Tablero clínico del día (schedule board con máquina de estados)
+    // GET /api/ehr/schedule?date= → { slots:[...] } (deriva de la agenda viva)
+    [HttpGet("schedule")]
+    public async Task<IActionResult> Schedule([FromQuery] string? date, CancellationToken cancellationToken)
+    {
+        var day = ParseDateOrToday(date);
+        var appts = await _scheduling.GetByDateAsync(day, doctorId: null, cancellationToken);
+        var now = DateTime.UtcNow;
+        var slots = appts
+            .OrderBy(a => a.StartUtc)
+            .Select(a => new ScheduleSlotDto(
+                AppointmentId: a.Id,
+                PatientId: a.PatientId,
+                PatientName: a.PatientName,
+                DoctorId: a.DoctorId,
+                DoctorName: a.DoctorName,
+                Time: a.StartUtc.ToString("HH:mm"),
+                DurationMin: Math.Max(0, (int)(a.EndUtc - a.StartUtc).TotalMinutes),
+                Reason: string.IsNullOrWhiteSpace(a.Specialty) ? "Consulta" : a.Specialty,
+                Type: "in-person",
+                State: DeriveScheduleState(a.StartUtc, a.EndUtc, now),
+                CheckedInAhead: (Math.Abs(a.Id.GetHashCode()) % 2) == 0))
+            .ToList();
+        return Ok(new ScheduleResponse(slots));
+    }
+
+    // 18. Resumen de salud del paciente (Mi salud): condiciones/alergias/vacunas/preventivo
+    // GET /api/ehr/health?patient= → { conditions, allergies, immunizations, maintenance }
+    [HttpGet("health")]
+    public async Task<IActionResult> Health([FromQuery] string? patient, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(patient))
+        {
+            return BadRequest(new { error = "El parámetro patient es requerido." });
+        }
+        var person = await _patients.GetAsync(patient, cancellationToken);
+        if (person is null)
+        {
+            return NotFound(new { error = $"Paciente '{patient}' no encontrado." });
+        }
+        var history = await _records.GetHistoryAsync(patient, cancellationToken);
+
+        // Condiciones/alergias son datos REALES del registro; vacunas y cuidado
+        // preventivo se derivan de forma determinista (capa demo, coherente con la
+        // tarjeta "Cuidado preventivo" del home).
+        var conditions = (history?.ActiveProblems?.Count > 0 ? history.ActiveProblems : person.ChronicConditions)
+            ?? Array.Empty<string>();
+        var allergies = (history?.Allergies?.Count > 0 ? history.Allergies : person.Allergies)
+            ?? Array.Empty<string>();
+
+        var seed = Math.Abs(person.Id.GetHashCode());
+        var immunizations = new List<ImmunizationDto>
+        {
+            new($"imm-flu-{person.Id}", "Influenza (anual)", ClinicRelDate(-8 - (seed % 4)), (seed % 3) == 0 ? "due" : "complete"),
+            new($"imm-covid-{person.Id}", "COVID-19 (refuerzo)", ClinicRelDate(-14 - (seed % 6)), (seed % 2) == 0 ? "complete" : "due"),
+            new($"imm-tdap-{person.Id}", "Tétanos/difteria (Td)", ClinicRelDate(-60 - (seed % 24)), person.AgeYears >= 50 ? "overdue" : "complete"),
+        };
+        var maintenance = new List<HealthMaintenanceDto>();
+        if (person.AgeYears >= 45)
+        {
+            maintenance.Add(new($"pm-colon-{person.Id}", "Tamizaje de colon",
+                "Colonoscopia o prueba de sangre oculta según riesgo.", person.AgeYears >= 50 ? "overdue" : "due", ClinicRelDate(-2)));
+        }
+        maintenance.Add(new($"pm-bp-{person.Id}", "Control de presión arterial",
+            "Toma de presión en consulta de control.", (seed % 2) == 0 ? "due" : "complete", ClinicRelDate(1)));
+        if (string.Equals(person.Gender, "F", StringComparison.OrdinalIgnoreCase) && person.AgeYears >= 40)
+        {
+            maintenance.Add(new($"pm-mammo-{person.Id}", "Mamografía",
+                "Tamizaje de mama bienal.", "due", ClinicRelDate(3)));
+        }
+
+        return Ok(new HealthSummaryResponse(
+            Conditions: conditions,
+            Allergies: allergies,
+            Immunizations: immunizations,
+            Maintenance: maintenance));
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────
+
+    // Estado de llegada determinista a partir de la hora de la cita vs. ahora.
+    private static string DeriveScheduleState(DateTime startUtc, DateTime endUtc, DateTime now)
+    {
+        if (now >= endUtc) { return "checked-out"; }
+        if (now >= startUtc) { return "in-visit"; }
+        var minutesToStart = (startUtc - now).TotalMinutes;
+        if (minutesToStart <= 30) { return "roomed"; }
+        if (minutesToStart <= 60) { return "arrived"; }
+        return "scheduled";
+    }
+
+    // Fecha relativa (meses respecto a hoy UTC) en formato yyyy-MM-dd para la demo.
+    private static string ClinicRelDate(int months)
+        => DateTime.UtcNow.AddMonths(months).ToString("yyyy-MM-dd");
 
     private static bool IsClinicalContext(string contextRef)
         => !string.IsNullOrEmpty(contextRef)
@@ -644,6 +737,22 @@ public sealed class EhrController : ControllerBase
         IReadOnlyList<PortalTaskDto> PendingTasks,
         int UnreadMessages,
         IReadOnlyList<MedicationDto> ActiveMeds);
+
+    public sealed record ScheduleSlotDto(
+        string AppointmentId, string PatientId, string PatientName, string DoctorId, string DoctorName,
+        string Time, int DurationMin, string Reason, string Type, string State, bool CheckedInAhead);
+
+    public sealed record ScheduleResponse(IReadOnlyList<ScheduleSlotDto> Slots);
+
+    public sealed record ImmunizationDto(string Id, string Name, string Date, string Status);
+
+    public sealed record HealthMaintenanceDto(string Id, string Name, string Detail, string Status, string DueDate);
+
+    public sealed record HealthSummaryResponse(
+        IReadOnlyList<string> Conditions,
+        IReadOnlyList<string> Allergies,
+        IReadOnlyList<ImmunizationDto> Immunizations,
+        IReadOnlyList<HealthMaintenanceDto> Maintenance);
 
     public sealed record LabResultDto(
         string Id, string PatientId, string PanelName, string TestName,

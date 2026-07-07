@@ -10,9 +10,17 @@
     // el componente Angular resuelve sus defaults (degrada con grace).
     var config = Model.Value<string>("config");
 
+    // patient: identidad demo del portal del paciente. Igual que apiBase, es un
+    // DEFAULT overridable: si el editor autora `config.patient` (o el prop), gana
+    // el suyo. Sin esto el componente cae a su placeholder y muestra "datos de
+    // ejemplo". Debe ser un id sembrado real (EhrDemoSeed) para pegarle al backend.
+    var patient = Model.Value<string>("patient");
+    if (string.IsNullOrWhiteSpace(patient)) { patient = "pat-jorge-medina"; }
+
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["apiBase"] = apiBase,
+        ["patient"] = patient,
         ["heading"] = Model.Value<string>("heading"),
         ["subheading"] = Model.Value<string>("subheading"),
     };
