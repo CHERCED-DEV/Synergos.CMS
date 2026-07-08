@@ -428,7 +428,10 @@
   --syn-color-text-disabled:   var(--syn-color-neutral-500);
   --syn-color-text-inverse:    var(--syn-color-neutral-900);
   --syn-color-text-accent:     var(--syn-color-brand-300);
-  --syn-color-text-on-accent:  var(--syn-color-neutral-900);
+  /* text ON the saturated brand/accent gradient stays LIGHT even in dark theme
+     (los presets .syn-preset--theme-brand/-accent lo consumen; antes caía a
+     neutral-900 = texto oscuro sobre gradiente índigo, ilegible en /tienda). */
+  --syn-color-text-on-accent:  var(--syn-color-neutral-0);
 
   --syn-color-border-subtle:  rgb(148 163 184 / 0.12);
   --syn-color-border-default: var(--syn-color-neutral-700);
@@ -685,7 +688,9 @@
   --syn-color-text-disabled:   #5E6690;
   --syn-color-text-inverse:    #080C1A;
   --syn-color-text-accent:     #B3A0FF;   /* violet claro AA sobre surface */
-  --syn-color-text-on-accent:  #080C1A;
+  /* text ON el gradiente brand/accent saturado = claro (antes #080C1A oscuro,
+     ilegible sobre el índigo en /eventos). */
+  --syn-color-text-on-accent:  #F4F6FF;
 
   --syn-color-border-subtle:  rgb(199 205 236 / 0.10);
   --syn-color-border-default: rgb(124 92 255 / 0.20);
