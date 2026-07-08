@@ -408,23 +408,26 @@
      ══════════════════════════════════════════════════════════════════════ */
 
   /* ── Bordes hairline — profundidad por GEOMETRÍA, no por sombras ─────────
-     Jerarquía barely→standard→prominent sobre los border-color theme-aware.
-     shadow-as-border = anillo `0 0 0 1px` SIN offset/blur (patrón Vercel/
-     Geist), para usar en box-shadow. PROHIBIDO "drop-shadow soup": la
-     elevación se comunica con hairline + escalera de superficie, jamás
-     apilando sombras difusas. */
-  --syn-border-1: 1px solid var(--syn-color-border-subtle);          /* barely    */
-  --syn-border-2: 1px solid var(--syn-color-border-default);         /* standard  */
-  --syn-border-3: 1px solid var(--syn-color-border-strong);          /* prominent */
-  --syn-border-hairline: 0 0 0 1px var(--syn-color-border-default);  /* box-shadow ring */
+     Jerarquía barely→standard→prominent, REDECLARADA por-tema con valores
+     explícitos (tinta en claros / blanco sutil en oscuros) → hairline SIEMPRE
+     visible, nunca transparent. shadow-as-border = anillo `0 0 0 1px` SIN
+     offset/blur (patrón Vercel/Geist), para usar en box-shadow. PROHIBIDO
+     "drop-shadow soup": la elevación se comunica con hairline + escalera de
+     superficie, jamás apilando sombras difusas. */
+  --syn-border-1: 1px solid rgb(15 23 42 / 0.06);        /* barely    — tinta hairline */
+  --syn-border-2: 1px solid rgb(15 23 42 / 0.10);        /* standard  — borde crisp de panel */
+  --syn-border-3: 1px solid rgb(15 23 42 / 0.16);        /* prominent */
+  --syn-border-hairline: 0 0 0 1px rgb(15 23 42 / 0.10); /* box-shadow ring */
 
   /* ── Escalera de superficie 1..4 (canvas→panel→raised→elevado) ──────────
-     Alias sobre los surface theme-aware ⇒ hereda dark/light/gold/vertical
-     sin redeclarar por-tema. Profundidad por capas, no por sombra. */
-  --syn-surface-1: var(--syn-color-surface-canvas);      /* canvas / base */
-  --syn-surface-2: var(--syn-color-surface-primary);     /* panel         */
-  --syn-surface-3: var(--syn-color-surface-secondary);   /* raised        */
-  --syn-surface-4: var(--syn-color-surface-elevated);    /* elevado       */
+     MONOTÓNICA y REDECLARADA por-tema con valores explícitos: en oscuros el
+     canvas es el más oscuro y 2/3/4 suben en luz (pasos perceptibles ~6-10%);
+     en claros el canvas es el más claro y 2/3/4 bajan sutil. Un card en
+     surface-2 SIEMPRE despega del canvas. Profundidad por capas, no por sombra. */
+  --syn-surface-1: #ffffff;   /* canvas / base — el más claro (light default) */
+  --syn-surface-2: #f4f7fb;   /* panel  — 1 paso más oscuro (card despega) */
+  --syn-surface-3: #eaeff6;   /* raised */
+  --syn-surface-4: #dfe6f0;   /* elevado */
 
   /* ── Tracking display + peso (Manrope big & LIGHT · Linear/Geist) ───────
      Rampa de tracking negativo SOLO para display ≥48px; nunca en body.
@@ -599,6 +602,18 @@
   --syn-shadow-floating:     0 28px 72px -36px rgb(2 6 23 / 0.92);
   --syn-shadow-action:       0 10px 22px -16px rgb(var(--syn-channel-brand) / 0.44);
   --syn-shadow-action-hover: 0 18px 34px -18px rgb(var(--syn-channel-brand) / 0.54);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma dark). Canvas
+     #020817 → panel/raised/elevado progresivamente MÁS CLAROS (monotónico).
+     Hairline = blanco sutil → borde crisp tipo Linear/Raycast. */
+  --syn-surface-1: #020817;   /* canvas — el más oscuro */
+  --syn-surface-2: #202d45;   /* panel  — card despega (~1.45:1 vs canvas + hairline) */
+  --syn-surface-3: #2a3852;   /* raised */
+  --syn-surface-4: #354463;   /* elevado */
+  --syn-border-1: 1px solid rgb(255 255 255 / 0.06);        /* barely    */
+  --syn-border-2: 1px solid rgb(255 255 255 / 0.10);        /* standard  — hairline crisp */
+  --syn-border-3: 1px solid rgb(255 255 255 / 0.16);        /* prominent */
+  --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -727,6 +742,18 @@
   --syn-shadow-floating:     0 28px 72px -38px rgb(50 40 22 / 0.32);
   --syn-shadow-action:       0 12px 26px -18px rgb(181 150 89 / 0.34);
   --syn-shadow-action-hover: 0 18px 36px -20px rgb(181 150 89 / 0.44);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma). Canvas cream
+     #f5f1e8 → panel/raised/elevado progresivamente más cálidos/oscuros
+     (monotónico). Hairline = tinta marrón cálida sutil → crisp sobre cream. */
+  --syn-surface-1: #f5f1e8;   /* canvas cream — el más claro */
+  --syn-surface-2: #efeade;   /* panel  — card despega del canvas */
+  --syn-surface-3: #e7e0d0;   /* raised */
+  --syn-surface-4: #ddd3bf;   /* elevado */
+  --syn-border-1: 1px solid rgb(71 54 26 / 0.08);
+  --syn-border-2: 1px solid rgb(71 54 26 / 0.14);
+  --syn-border-3: 1px solid rgb(71 54 26 / 0.22);
+  --syn-border-hairline: 0 0 0 1px rgb(71 54 26 / 0.14);
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -846,6 +873,18 @@
   --syn-shadow-floating:     0 28px 72px -36px rgb(8 12 26 / 0.94);
   --syn-shadow-action:       0 10px 22px -16px rgb(var(--syn-channel-brand) / 0.42);
   --syn-shadow-action-hover: 0 18px 34px -18px rgb(var(--syn-channel-accent) / 0.40);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma). Canvas midnight
+     #080c1a → panel/raised/elevado progresivamente MÁS CLAROS (tinte violeta,
+     monotónico). Hairline = blanco sutil → borde crisp. */
+  --syn-surface-1: #080c1a;   /* canvas midnight — el más oscuro */
+  --syn-surface-2: #171d33;   /* panel  — card despega */
+  --syn-surface-3: #212843;   /* raised */
+  --syn-surface-4: #2c3455;   /* elevado */
+  --syn-border-1: 1px solid rgb(255 255 255 / 0.06);
+  --syn-border-2: 1px solid rgb(255 255 255 / 0.10);
+  --syn-border-3: 1px solid rgb(255 255 255 / 0.16);
+  --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -967,6 +1006,18 @@
   --syn-shadow-floating:     0 28px 72px -38px rgb(35 38 43 / 0.24);
   --syn-shadow-action:       0 12px 26px -18px rgb(var(--syn-channel-brand) / 0.24);
   --syn-shadow-action-hover: 0 18px 36px -20px rgb(var(--syn-channel-brand) / 0.32);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma). Canvas stone
+     #f4f2ee → panel/raised/elevado progresivamente más greige/oscuros
+     (monotónico). Hairline = tinta charcoal frío sutil → crisp editorial. */
+  --syn-surface-1: #f4f2ee;   /* canvas stone — el más claro */
+  --syn-surface-2: #ece9e3;   /* panel  — card despega del canvas */
+  --syn-surface-3: #e1ddd4;   /* raised */
+  --syn-surface-4: #d5cfc2;   /* elevado */
+  --syn-border-1: 1px solid rgb(35 38 43 / 0.07);
+  --syn-border-2: 1px solid rgb(35 38 43 / 0.12);
+  --syn-border-3: 1px solid rgb(35 38 43 / 0.18);
+  --syn-border-hairline: 0 0 0 1px rgb(35 38 43 / 0.12);
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -1081,6 +1132,18 @@
   --syn-shadow-floating:     0 28px 72px -38px rgb(27 42 74 / 0.26);
   --syn-shadow-action:       0 12px 26px -18px rgb(var(--syn-channel-brand) / 0.26);
   --syn-shadow-action-hover: 0 18px 36px -20px rgb(var(--syn-channel-brand) / 0.34);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma). Canvas cool
+     off-white #f6f8fb → panel/raised/elevado progresivamente más azul-gris/
+     oscuros (monotónico). Hairline = tinta navy sutil → crisp corporativo. */
+  --syn-surface-1: #f6f8fb;   /* canvas cool off-white — el más claro */
+  --syn-surface-2: #eef2f8;   /* panel  — card despega del canvas */
+  --syn-surface-3: #e3e9f3;   /* raised */
+  --syn-surface-4: #d6e0ee;   /* elevado */
+  --syn-border-1: 1px solid rgb(27 42 74 / 0.07);
+  --syn-border-2: 1px solid rgb(27 42 74 / 0.12);
+  --syn-border-3: 1px solid rgb(27 42 74 / 0.18);
+  --syn-border-hairline: 0 0 0 1px rgb(27 42 74 / 0.12);
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -1196,6 +1259,18 @@
   --syn-shadow-floating:     0 28px 72px -38px rgb(28 39 51 / 0.26);
   --syn-shadow-action:       0 12px 26px -18px rgb(var(--syn-channel-brand) / 0.26);
   --syn-shadow-action-hover: 0 18px 36px -20px rgb(var(--syn-channel-brand) / 0.34);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma). Canvas light
+     slate #f4f7f9 → panel/raised/elevado progresivamente más slate/oscuros
+     (monotónico). Hairline = tinta graphite sutil → crisp SaaS. */
+  --syn-surface-1: #f4f7f9;   /* canvas light slate — el más claro */
+  --syn-surface-2: #eaf0f4;   /* panel  — card despega del canvas */
+  --syn-surface-3: #dde7ee;   /* raised */
+  --syn-surface-4: #cfdce6;   /* elevado */
+  --syn-border-1: 1px solid rgb(28 39 51 / 0.07);
+  --syn-border-2: 1px solid rgb(28 39 51 / 0.12);
+  --syn-border-3: 1px solid rgb(28 39 51 / 0.18);
+  --syn-border-hairline: 0 0 0 1px rgb(28 39 51 / 0.12);
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -1244,6 +1319,17 @@
     --syn-color-text-secondary:    var(--syn-color-neutral-300);
     --syn-color-text-muted:        var(--syn-color-neutral-300);  /* a11y — ~5.3:1 (era neutral-400 ~4.2:1) */
     --syn-color-border-default:    var(--syn-color-neutral-700);
+
+    /* Escalera + hairlines dark (espejo de [data-theme="dark"]) — sin esto el
+       ladder heredaría los valores light del :root en auto-dark. */
+    --syn-surface-1: #020817;
+    --syn-surface-2: #202d45;
+    --syn-surface-3: #2a3852;
+    --syn-surface-4: #354463;
+    --syn-border-1: 1px solid rgb(255 255 255 / 0.06);
+    --syn-border-2: 1px solid rgb(255 255 255 / 0.10);
+    --syn-border-3: 1px solid rgb(255 255 255 / 0.16);
+    --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
   }
 }
 

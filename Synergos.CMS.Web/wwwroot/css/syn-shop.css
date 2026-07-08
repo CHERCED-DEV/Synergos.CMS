@@ -53,18 +53,19 @@
 
 .syn-product-card {
   display: block;
-  background: var(--syn-color-surface-primary);
-  border: 1px solid var(--syn-color-border-subtle);
+  /* Forma por GEOMETRÍA: surface-2 (panel, despega del canvas) + hairline
+     visible border-2. Sin drop-shadow (invisible en dark · ADR 0094 / doc 23). */
+  background: var(--syn-surface-2);
+  border: var(--syn-border-2);
   border-radius: var(--syn-radius-lg);
   overflow: hidden;
-  box-shadow: var(--syn-shadow-card);
   transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
   position: relative;
 }
 
 .syn-product-card:hover {
-  border-color: var(--syn-color-border-accent);
-  box-shadow: var(--syn-shadow-card-hover);
+  background: var(--syn-surface-3);
+  border: var(--syn-border-3);
   transform: translateY(-2px);
 }
 
@@ -208,17 +209,18 @@
 .syn-product-grid__item {
   display: flex;
   flex-direction: column;
-  background: var(--syn-color-surface-primary);
-  border: 1px solid var(--syn-color-border-subtle);
+  /* Forma por GEOMETRÍA: surface-2 (panel, despega del canvas) + hairline
+     visible border-2. Sin drop-shadow (invisible en dark · ADR 0094 / doc 23). */
+  background: var(--syn-surface-2);
+  border: var(--syn-border-2);
   border-radius: var(--syn-radius-lg);
   overflow: hidden;
-  box-shadow: var(--syn-shadow-card);
   transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
 }
 
 .syn-product-grid__item:hover {
-  border-color: var(--syn-color-border-accent);
-  box-shadow: var(--syn-shadow-card-hover);
+  background: var(--syn-surface-3);
+  border: var(--syn-border-3);
   transform: translateY(-2px);
 }
 
