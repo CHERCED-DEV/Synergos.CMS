@@ -358,6 +358,13 @@
   --syn-color-state-danger-border:  rgb(220 38 38 / 0.22);
   --syn-color-state-danger-text:    #b42318;
 
+  /* Degraded — rol "datos de ejemplo/demo" (banner persistente, no alerta).
+     Derivado de warning ~12% / 700. Espejo de $color-state-degraded-* en la UI
+     (_semantic.scss). Consumido por SynStatusBanner. */
+  --syn-color-state-degraded-surface: rgb(217 119 6 / 0.12);
+  --syn-color-state-degraded-border:  rgb(217 119 6 / 0.24);
+  --syn-color-state-degraded-text:    #9a5a04;
+
   /* ── Canonical CARD language — vocabulario único de toda superficie tipo card.
      Un solo lugar para que las tarjetas no se desincronicen nunca más. ──────── */
   --syn-card-surface:      var(--syn-color-surface-primary);
@@ -499,6 +506,11 @@
   --syn-color-state-danger-border:  rgb(251 113 133 / 0.32);
   --syn-color-state-danger-text:    #fecdd3;
 
+  /* Degraded — tinte cálido AA sobre canvas oscuro (espejo de warning dark). */
+  --syn-color-state-degraded-surface: rgb(245 158 11 / 0.16);
+  --syn-color-state-degraded-border:  rgb(252 211 77 / 0.30);
+  --syn-color-state-degraded-text:    #fde68a;
+
   --syn-shadow-card:         0 10px 28px -18px rgb(2 6 23 / 0.78);
   --syn-shadow-card-hover:   0 24px 56px -28px rgb(2 6 23 / 0.86);
   --syn-shadow-panel:        0 8px 24px -18px rgb(2 6 23 / 0.74);
@@ -609,6 +621,11 @@
   --syn-color-state-danger-surface: rgb(220 38 38 / 0.10);
   --syn-color-state-danger-border:  rgb(220 38 38 / 0.22);
   --syn-color-state-danger-text:    #b42318;
+
+  /* Degraded — tinte cálido sobre canvas gold (espejo de warning silverGold). */
+  --syn-color-state-degraded-surface: rgb(217 119 6 / 0.12);
+  --syn-color-state-degraded-border:  rgb(217 119 6 / 0.22);
+  --syn-color-state-degraded-text:    #9a5a04;
 
   /* State semantic — surface/border REDECLARADOS con tintes translúcidos que
      componen sobre el canvas cálido (el default -100 opaco lo blanqueaba).
