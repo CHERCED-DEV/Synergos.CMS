@@ -821,22 +821,64 @@ public sealed class DevContentFiller
     }
 
     /// <summary>
-    /// Testimonios vía componente Angular CDN (elementSynTestimonialSection): una Section
-    /// con un bloque syn que el SynHost emite como &lt;synergos-testimonial-section config='...'&gt;.
-    /// Config end-to-end desde el CMS (headingText + items[]); el Angular hidrata desde la CDN.
+    /// Prueba social vía componente Angular CDN. Prefiere <c>elementSynTestimonialCarousel</c>
+    /// (&lt;synergos-testimonial-carousel&gt;: estrellas de rating + avatar/chip + autoplay);
+    /// si no está importado cae a <c>elementSynTestimonialSection</c> (grid, sin rating). En
+    /// ambos casos banda <c>surface</c>, preservando el ritmo de secciones. Config end-to-end
+    /// desde el CMS; el Angular hidrata desde la CDN. (Audit doc 22, hallazgo H-B.)
     /// </summary>
     private void AddSynTestimonials(BlockGridJsonBuilder b, string heading,
         (string quote, string author, string role)[] items)
     {
-        var key = _contentTypeService.Get("elementSynTestimonialSection")?.Key;
-        if (key is null) { return; }   // aún no importado → omitir (el caller hace fallback SSR)
+        var carouselKey = _contentTypeService.Get("elementSynTestimonialCarousel")?.Key;
+        if (carouselKey is not null)
+        {
+            AddSynTestimonialCarousel(b, heading, items, carouselKey.Value);
+            return;
+        }
+
+        // Fallback: la Section CDN (grid, sin rating) si el carousel no está importado.
+        var sectionKey = _contentTypeService.Get("elementSynTestimonialSection")?.Key;
+        if (sectionKey is null) { return; }   // ninguno importado → el caller hace fallback SSR
         var section = BeginSection(b, ThemeSurface);   // prueba social → banda surface (sutil)
         var itemsJson = "[" + string.Join(",", items.Select(t =>
             $"{{\"name\":\"{Esc(t.author)}\",\"quote\":\"{Esc(t.quote)}\",\"role\":\"{Esc(t.role)}\",\"avatarSrc\":\"\"}}")) + "]";
-        section.AddChild(SectionContentAreaKey, key.Value, c => c
+        section.AddChild(SectionContentAreaKey, sectionKey.Value, c => c
             .Set("headingText", heading)
             .Set("itemsJson", itemsJson)
-            .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
+            .ApplyDefaults(_defaults.DefaultsFor(sectionKey.Value)));
+    }
+
+    /// <summary>
+    /// Compone la prueba social como <c>elementSynTestimonialCarousel</c> (estrellas + avatar
+    /// + autoplay). El carousel Angular no pinta título propio (solo aria-label), así que el
+    /// heading de la sección se compone como un <c>elementTextHeading</c> SSR arriba del
+    /// componente, dentro de la misma banda surface (el renderer de la Section itera todos
+    /// los hijos del area, en orden). El JSON de testimonios usa el CONTRATO del componente
+    /// (quote/author/role/avatar/rating — UI = fuente de verdad, ver SynHost/TestimonialCarousel).
+    /// </summary>
+    private void AddSynTestimonialCarousel(BlockGridJsonBuilder b, string heading,
+        (string quote, string author, string role)[] items, Guid carouselKey)
+    {
+        var section = BeginSection(b, ThemeSurface);   // prueba social → banda surface (sutil)
+
+        var headingKey = _contentTypeService.Get("elementTextHeading")?.Key;
+        if (headingKey is not null && !string.IsNullOrWhiteSpace(heading))
+        {
+            section.AddChild(SectionContentAreaKey, headingKey.Value, h => h
+                .Set("headingTitle", heading)
+                .ApplyDefaults(_defaults.DefaultsFor(headingKey.Value)));
+        }
+
+        // avatar vacío → chip de iniciales digno: no hay retratos reales en el brand kit y un
+        // gradiente sin texto sería un círculo anónimo (peor que el monograma) — audit H-B.
+        // rating entero 4-5 (el componente redondea a estrellas enteras vía Math.round): mezcla
+        // realista (mayoría 5★, un 4★ cada 3) en vez de forzar 5★ en todos.
+        var json = "[" + string.Join(",", items.Select((t, i) =>
+            $"{{\"quote\":\"{Esc(t.quote)}\",\"author\":\"{Esc(t.author)}\",\"role\":\"{Esc(t.role)}\",\"avatar\":\"\",\"rating\":{(i % 3 == 2 ? 4 : 5)}}}")) + "]";
+        section.AddChild(SectionContentAreaKey, carouselKey, c => c
+            .Set("testimonialsJson", json)
+            .ApplyDefaults(_defaults.DefaultsFor(carouselKey)));
     }
 
     /// <summary>FAQ vía componente Angular CDN (elementSynFaqSection): acordeón interactivo configurado desde el CMS.</summary>
@@ -1011,7 +1053,11 @@ public sealed class DevContentFiller
 
     private void AddCta(BlockGridJsonBuilder b, string title, string subtitle, string ctaLabel, string url)
     {
-        var section = BeginSection(b, ThemeBrand);   // CTA banner final → banda brand (cierre fuerte)
+        // CTA final = banda DARK contrastante (dirección doc 23): el .syn-cta-banner YA es
+        // un gradiente brand; ponerlo sobre una sección brand duplicaba el gradiente y las
+        // esquinas redondeadas del banner revelaban el gradiente más oscuro de la sección
+        // detrás (triángulo azul en la esquina). Dark = el banner brand flota como acento.
+        var section = BeginSection(b, ThemeDark);
         section.AddChild(SectionContentAreaKey, _ctaKey, c => c
             .Set("headingTitle", title)
             .Set("headingSubtitle", subtitle)
