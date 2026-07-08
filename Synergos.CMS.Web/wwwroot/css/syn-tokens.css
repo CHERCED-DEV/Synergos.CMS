@@ -29,11 +29,16 @@
   --syn-color-neutral-900: #0f172a;
 
   /* ── Color: Brand (indigo-blue, 6 pasos) ──────────────────── */
+  /* BLINDAJE #4f6ef7 (Ola 0, doc 23) — está a UN PASO de Tailwind
+     indigo-500 = "olor a IA". Usar brand-500 SOLO como voltage puntual:
+     CTA primario · foco · link · borde-señal. PROHIBIDO en gradientes de
+     fondo y fills grandes; apoyarlo siempre en neutros ligeramente fríos
+     (un acento por superficie). La variedad va ENTRE bandas por-siteRoot. */
   --syn-color-brand-100: #eef1ff;
   --syn-color-brand-200: #d4dcff;
   --syn-color-brand-300: #a5b4fc;
   --syn-color-brand-400: #7b93fa;
-  --syn-color-brand-500: #4f6ef7;
+  --syn-color-brand-500: #4f6ef7;   /* voltage puntual — ver BLINDAJE arriba */
   --syn-color-brand-600: #3854d8;
 
   /* ── Color: Accent (violet premium) ───────────────────────── */
@@ -392,6 +397,80 @@
                          var(--syn-color-neutral-900) 0%,
                          var(--syn-color-neutral-800) 50%,
                          rgb(var(--syn-channel-brand) / 0.30) 100%);
+
+  /* ══════════════════════════════════════════════════════════════════════
+     OLA 0 — Cimientos de la línea premium (aditivo · doc 23 · ADR 0094).
+     Tokens --syn-* como defaults HEREDABLES: cada Ola de vertical los toma
+     por defecto → mata el drift de la auditoría 22 sin re-auditar. Aditivo
+     de bajo riesgo: NO cambia ningún valor de color existente (el rewrite
+     OKLCH de la rampa --syn-color-* es Ola 0b, pendiente). La mayoría son
+     alias sobre tokens ya theme-aware ⇒ heredan por-tema sin redeclarar.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* ── Bordes hairline — profundidad por GEOMETRÍA, no por sombras ─────────
+     Jerarquía barely→standard→prominent sobre los border-color theme-aware.
+     shadow-as-border = anillo `0 0 0 1px` SIN offset/blur (patrón Vercel/
+     Geist), para usar en box-shadow. PROHIBIDO "drop-shadow soup": la
+     elevación se comunica con hairline + escalera de superficie, jamás
+     apilando sombras difusas. */
+  --syn-border-1: 1px solid var(--syn-color-border-subtle);          /* barely    */
+  --syn-border-2: 1px solid var(--syn-color-border-default);         /* standard  */
+  --syn-border-3: 1px solid var(--syn-color-border-strong);          /* prominent */
+  --syn-border-hairline: 0 0 0 1px var(--syn-color-border-default);  /* box-shadow ring */
+
+  /* ── Escalera de superficie 1..4 (canvas→panel→raised→elevado) ──────────
+     Alias sobre los surface theme-aware ⇒ hereda dark/light/gold/vertical
+     sin redeclarar por-tema. Profundidad por capas, no por sombra. */
+  --syn-surface-1: var(--syn-color-surface-canvas);      /* canvas / base */
+  --syn-surface-2: var(--syn-color-surface-primary);     /* panel         */
+  --syn-surface-3: var(--syn-color-surface-secondary);   /* raised        */
+  --syn-surface-4: var(--syn-color-surface-elevated);    /* elevado       */
+
+  /* ── Tracking display + peso (Manrope big & LIGHT · Linear/Geist) ───────
+     Rampa de tracking negativo SOLO para display ≥48px; nunca en body.
+     Pesos display 300–510: grande y LIGERO, NUNCA grande y bold. */
+  --syn-tracking-tight:      -0.02em;   /* display ≥48px */
+  --syn-tracking-tighter:    -0.03em;   /* display ≥72px */
+  --syn-font-weight-display: 510;       /* headings display (rango 300–510) */
+
+  /* ── Mono — eyebrows / labels "console marker" (Supabase/Vercel/Resend) ─
+     12px uppercase tracking ~1.2px; conecta el marketing con el chrome del
+     producto. Lidera con ui-monospace (distinto de --syn-font-family-mono). */
+  --syn-font-mono: ui-monospace, 'JetBrains Mono', 'Cascadia Code', 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  /* ── Radios — jerarquía semántica, regla concéntrica hijo ≤ padre ───────
+     pill (9999) SOLO para el CTA primario / toggle track; md (6–10px) es el
+     workhorse del resto. Prohibido rounded uniforme en todo (lee barato). */
+  --syn-radius-pill: 9999px;
+
+  /* ── Focus ring (:focus-visible, contraste ≥3:1) ────────────────────────
+     Color theme-aware vía --syn-color-focus-ring. width/offset tokenizados
+     (los consume el mixin _focus.scss). --syn-focus-ring = anillo box-shadow
+     para elementos que no pueden usar outline. */
+  --syn-focus-ring-width:  2px;
+  --syn-focus-ring-offset: 2px;
+  --syn-focus-ring: 0 0 0 var(--syn-focus-ring-width) var(--syn-color-focus-ring);
+
+  /* ── Motion tokenizado (CSS-first; solo transform/opacity, nunca "all") ─
+     ease-out = lo que ENTRA; ease-emphasized = sheets/drawers (curva iOS).
+     Escala dur premium 150/220/320. motion-scale (0..1) override por-tema/
+     vertical (Gov=0 crisp · Blogs~1 · Tienda/Booking~0.7). Reduced-motion:
+     el bridge UI colapsa estas duraciones + motion-scale→0 (MISMA query que
+     --syn-duration-*, sin duplicar). */
+  --syn-ease-out:        cubic-bezier(0.22, 1, 0.36, 1);
+  --syn-ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
+  --syn-dur-fast: 150ms;
+  --syn-dur-base: 220ms;
+  --syn-dur-slow: 320ms;
+  --syn-motion-scale: 1;
+
+  /* ── Grano SVG (feTurbulence) — OFF por defecto ─────────────────────────
+     Knob del ruido opt-in. Se enciende vía tab Estilo (clase .syn-grain o
+     subiendo --syn-grain-opacity) SOLO en pisos de gradiente del hero para
+     matar banding. NUNCA global (mata performance y ensucia texto/cards).
+     La utilidad .syn-grain vive al final de este archivo. */
+  --syn-grain-opacity: 0;
+  --syn-grain-blend:   overlay;
 
   /* ─────────────────────────────────────────────────────────── */
   /* Legacy aliases — backwards compat con dev-stub previo       */
@@ -1166,4 +1245,24 @@
     --syn-color-text-muted:        var(--syn-color-neutral-300);  /* a11y — ~5.3:1 (era neutral-400 ~4.2:1) */
     --syn-color-border-default:    var(--syn-color-neutral-700);
   }
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* OLA 0 — Grano SVG opt-in (feTurbulence baseFrequency 0.65).  */
+/* NO global: sólo pinta ruido cuando el elemento lleva la clase */
+/* .syn-grain (encendible vía tab Estilo). Va en ::after con     */
+/* z-index -1 detrás del piso de gradiente del hero para matar   */
+/* banding, sin tocar texto ni cards. Opacidad/blend tokenizados */
+/* (--syn-grain-opacity / --syn-grain-blend) para tuning fino.   */
+/* ─────────────────────────────────────────────────────────── */
+.syn-grain { --syn-grain-opacity: 0.5; position: relative; isolation: isolate; }
+.syn-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--syn-grain-opacity);
+  mix-blend-mode: var(--syn-grain-blend, overlay);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='syn-grain-n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23syn-grain-n)'/%3E%3C/svg%3E");
 }
