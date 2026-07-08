@@ -126,6 +126,81 @@
   }
 }
 
+/* ── SISTEMA DE ESQUINAS — bandas temáticas full-bleed (fix de raíz) ──
+   Las bandas .syn-preset--theme-{surface,dark,brand,accent} (que BeginSection
+   asigna por la ola de ritmo) llevaban color pero NO eran full-bleed: quedaban
+   como rectángulos de color ~1200px con esquinas duras flotando en el canvas, y
+   cualquier card/banner REDONDEADA anidada revelaba en su esquina el color de la
+   banda → triángulo/artefacto (pasó en el CTA banner y en testimonios).
+
+   Fix de RAÍZ (doc 23): la banda temática rompe a viewport completo
+   (edge-to-edge), plana (SIN radio, no es una "card redondeada" detrás),
+   separada por HAIRLINE (no por gap), y su contenido se RE-CONTIENE al ancho
+   normal (1040) con gutter. Así ningún elemento redondeado anidado revela una
+   esquina de color ajeno: flota sobre una banda plana de borde a borde y la
+   regla concéntrica (hijo ≤ padre) se cumple. Mismo mecanismo que el hero.
+   Scopeado a secciones TOP-LEVEL (las únicas que reciben theme). El selector
+   :is() de las 4 bandas se repite por bloque para no perder el scope. */
+
+/* 1) Breakout a 100vw (idéntico al hero). */
+:is(.syn-page__body, .syn-site-root__sections) > .umb-block-grid > .umb-block-grid__layout-container
+  > .umb-block-grid__layout-item:has(> .syn-layout--section:is(
+      .syn-preset--theme-surface, .syn-preset--theme-dark,
+      .syn-preset--theme-brand, .syn-preset--theme-accent)) {
+  width: 100vw;
+  margin-inline: calc(50% - 50vw);   /* centrado scrollbar-safe */
+}
+
+/* 2) La banda pierde su identidad de tarjeta: plana, con su propio aire interno
+   (la "escena") y hairline de costura arriba/abajo. */
+.syn-layout--section:is(
+  .syn-preset--theme-surface, .syn-preset--theme-dark,
+  .syn-preset--theme-brand, .syn-preset--theme-accent) {
+  border-radius: 0;
+  border-block: var(--syn-border-2);
+  padding-block: var(--syn-space-3xl);   /* 64 */
+}
+
+/* 3) Re-contener el contenido de la banda al ancho normal (1040) + gutter, ya
+   que la banda sangró a 100vw. .syn-layout__area es el hijo directo del renderer. */
+.syn-layout--section:is(
+  .syn-preset--theme-surface, .syn-preset--theme-dark,
+  .syn-preset--theme-brand, .syn-preset--theme-accent) > .syn-layout__area {
+  max-width: var(--syn-max-width-normal);   /* 1040 */
+  margin-inline: auto;
+  padding-inline: var(--syn-gutter);
+}
+
+@media (min-width: 768px) {
+  .syn-layout--section:is(
+    .syn-preset--theme-surface, .syn-preset--theme-dark,
+    .syn-preset--theme-brand, .syn-preset--theme-accent) {
+    padding-block: var(--syn-section-gap-lg);   /* 96 */
+  }
+  .syn-layout--section:is(
+    .syn-preset--theme-surface, .syn-preset--theme-dark,
+    .syn-preset--theme-brand, .syn-preset--theme-accent) > .syn-layout__area {
+    padding-inline: var(--syn-gutter-lg);
+  }
+}
+
+/* 4) Ritmo: la banda full-bleed BUTTS contra sus vecinos (su padding interno es
+   el aire; la costura es el hairline) → matamos el join-gap de 96px en cualquier
+   junta que toque una banda. Entre dos secciones CONTENIDAS el gap se conserva.
+   Va después del join rule y con especificidad ≥ → gana. */
+.umb-block-grid__layout-container
+  > .umb-block-grid__layout-item:has(> .syn-layout--section:is(
+      .syn-preset--theme-surface, .syn-preset--theme-dark,
+      .syn-preset--theme-brand, .syn-preset--theme-accent))
+  + .umb-block-grid__layout-item,
+.umb-block-grid__layout-container
+  > .umb-block-grid__layout-item
+  + .umb-block-grid__layout-item:has(> .syn-layout--section:is(
+      .syn-preset--theme-surface, .syn-preset--theme-dark,
+      .syn-preset--theme-brand, .syn-preset--theme-accent)) {
+  margin-block-start: 0;
+}
+
 /* ── Page Standard variant (chrome on, sections) ─────────────── */
 
 .syn-page-standard {

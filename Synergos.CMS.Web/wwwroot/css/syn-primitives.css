@@ -451,9 +451,16 @@
   flex-direction: column;
   gap: var(--syn-space-md);
   padding: var(--syn-space-xl);
-  background: linear-gradient(135deg,
-    var(--syn-color-action-primary) 0%,
-    var(--syn-color-action-emphasis, var(--syn-color-accent-500)) 100%);
+  /* Gradiente de marca por-siteRoot (action-primary→emphasis) + scrim de tinta
+     theme-aware (channel-ink) que lo oscurece lo justo para que el texto blanco
+     (text-on-accent) pase AA en TODOS los temas — en dark el gradiente base es
+     claro (brand-400/accent-400) y el texto blanco caía a ~2.84:1. Conserva el
+     matiz de marca; profundidad por color, no por sombra apilada. */
+  background:
+    linear-gradient(0deg, rgb(var(--syn-channel-ink) / 0.34), rgb(var(--syn-channel-ink) / 0.34)),
+    linear-gradient(135deg,
+      var(--syn-color-action-primary) 0%,
+      var(--syn-color-action-emphasis, var(--syn-color-accent-500)) 100%);
   color: var(--syn-color-text-on-accent);
   border-radius: var(--syn-radius-xl);
   box-shadow: var(--syn-shadow-action-hover);
@@ -484,8 +491,12 @@
 }
 
 .syn-cta-banner__cta {
-  background: var(--syn-color-surface-primary);
-  color: var(--syn-color-action-primary);
+  /* Chip de acción CLARO brand-neutral (neutral-0 + tinta neutral-900): pop
+     garantizado sobre el gradiente de marca en CUALQUIER tema (en dark,
+     surface-primary caía a neutral-800 = botón oscuro recesado). El acento de la
+     superficie lo lleva la card; el botón es el chip neutro que resalta. */
+  background: var(--syn-color-neutral-0);
+  color: var(--syn-color-neutral-900);
   padding: var(--syn-space-3) var(--syn-space-6);
   border-radius: var(--syn-radius-md);
   font-weight: var(--syn-font-weight-semibold);
@@ -503,7 +514,7 @@
 .syn-cta-banner__cta:hover {
   transform: translateY(-1px);
   text-decoration: none;
-  background: var(--syn-color-surface-elevated);
+  background: var(--syn-color-neutral-0);
   box-shadow: var(--syn-shadow-md);
 }
 

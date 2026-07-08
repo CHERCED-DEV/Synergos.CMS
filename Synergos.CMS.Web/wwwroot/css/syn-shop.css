@@ -70,7 +70,14 @@
 }
 
 .syn-product-card__link {
-  display: block;
+  /* El renderer emite <img>, <h3>, <span> DIRECTO en el link (sin __media/__body
+     wrappers): el link es el cuerpo padded. La imagen sangra fuera del padding
+     para tocar los bordes; el texto respira dentro. */
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+  height: 100%;
+  padding: var(--syn-space-md);
   text-decoration: none;
   color: inherit;
 }
@@ -88,8 +95,12 @@
 }
 
 .syn-product-card__image {
-  width: 100%;
-  height: 100%;
+  /* Sangra fuera del padding del link hasta los bordes de la card (recortada al
+     radio por overflow:hidden del contenedor); encuadre 4/5 consistente. Si el
+     producto no trae imagen el <img> no se emite → NO se reserva hueco vacío. */
+  width: calc(100% + 2 * var(--syn-space-md));
+  margin: calc(-1 * var(--syn-space-md)) calc(-1 * var(--syn-space-md)) var(--syn-space-2);
+  aspect-ratio: 4 / 5;
   object-fit: cover;
   display: block;
   transition: transform var(--syn-duration-slow) var(--syn-easing-default);
@@ -137,6 +148,7 @@
   gap: var(--syn-space-2);
   font-size: var(--syn-font-size-lg);
   font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-tracking-tight);
   color: var(--syn-color-text-primary);
   font-variant-numeric: tabular-nums;
 }
@@ -156,11 +168,13 @@
 
 .syn-product-card__add-to-cart {
   display: flex;
-  width: 100%;
+  width: auto;                          /* hermano del link (fuera del padding) */
   align-items: center;
   justify-content: center;
   gap: var(--syn-space-2);
-  margin-top: var(--syn-space-2);
+  /* Se insetea a los lados para alinear con el cuerpo padded; el bottom-padding
+     del link da la separación con el precio. */
+  margin: 0 var(--syn-space-md) var(--syn-space-md);
   min-height: var(--syn-control-h-md);   /* 40 (FIX 3) */
   padding: var(--syn-space-2) var(--syn-space-4);
   background: var(--syn-color-action-primary);
@@ -201,6 +215,9 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: var(--syn-space-lg);
+  /* hug-content en el eje de bloque: cada card mide su contenido (no se estira a
+     la fila) → cero espacio muerto cuando un producto no trae imagen. */
+  align-items: start;
   list-style: none;
   padding: 0;
   margin: 0;
@@ -225,9 +242,13 @@
 }
 
 .syn-product-grid__link {
+  /* Igual que la product-card: link = cuerpo padded (el renderer emite img+texto
+     directo, sin __media/__body). La imagen sangra; el texto respira. */
   display: flex;
   flex-direction: column;
+  gap: var(--syn-space-2);
   height: 100%;
+  padding: var(--syn-space-md);
   text-decoration: none;
   color: inherit;
 }
@@ -240,9 +261,13 @@
 }
 
 .syn-product-grid__image {
-  width: 100%;
-  height: 100%;
+  /* Sangra fuera del padding del link a los bordes de la card (recortada al radio
+     por overflow:hidden); encuadre 4/5. Sin imagen → sin <img> → sin hueco vacío. */
+  width: calc(100% + 2 * var(--syn-space-md));
+  margin: calc(-1 * var(--syn-space-md)) calc(-1 * var(--syn-space-md)) var(--syn-space-2);
+  aspect-ratio: 4 / 5;
   object-fit: cover;
+  display: block;
   transition: transform var(--syn-duration-slow) var(--syn-easing-default);
 }
 
@@ -273,8 +298,8 @@
 .syn-product-grid__price {
   font-size: var(--syn-font-size-lg);
   font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-tracking-tight);
   color: var(--syn-color-text-primary);
-  margin-top: auto;
   font-variant-numeric: tabular-nums;
 }
 
