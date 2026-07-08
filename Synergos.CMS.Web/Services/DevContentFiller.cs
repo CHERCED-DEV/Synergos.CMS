@@ -676,6 +676,31 @@ public sealed class DevContentFiller
 
     // ───────────────────────── Helpers de bloque ─────────────────────────
 
+    // ── Ritmo de secciones — bandas de tono/densidad (pura composición) ──────
+    // Cada Add* crea su wrapper elementLayoutSection a través de BeginSection, que
+    // setea el `theme` de compDomPresetChrome. LayoutCssBuilder lo traduce a la
+    // clase `syn-preset--theme-*` que estila syn-layout.css (nada de look hardcodeado).
+    // El `theme` es un Umbraco.DropDown.Flexible (DTSelectTheme) → se almacena como
+    // array JSON de un solo valor, igual que variantKey (["secondary"]).
+    // Mapa semántico por tipo de bloque → ritmo alternado y CONSISTENTE en todas las
+    // homes/landings: hero/features/faq/pricing/listas = claro (sin theme, chrome
+    // por defecto); split/testimonios/formulario = surface (banda sutil); mission =
+    // dark (ancla fuerte); stats/números = accent; cta banner final = brand.
+    // Se usan SOLO valores soportados por el CSS (light/surface/dark/brand/accent).
+    private const string ThemeSurface = "surface";
+    private const string ThemeDark = "dark";
+    private const string ThemeBrand = "brand";
+    private const string ThemeAccent = "accent";
+
+    private BlockGridJsonBuilder.BlockBuilder BeginSection(BlockGridJsonBuilder b, string? theme = null)
+    {
+        var section = b.AddTopLevelBlock(_sectionKey);
+        // theme ANTES de ApplyDefaults: éste no pisa un valor ya seteado (["dark"]).
+        if (theme is not null) { section.Set("theme", $"[\"{theme}\"]"); }
+        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        return section;
+    }
+
     private void AddHero(BlockGridJsonBuilder b, string title, string subtitle, string body,
         string imgName, string imgAlt, string from, string to, params (string label, string url)[] ctas)
     {
@@ -737,8 +762,7 @@ public sealed class DevContentFiller
         // Si el stat-ticker Angular está importado, usa el count-up animado vía CDN;
         // si no, cae al elementInfoStat SSR. Mismos props (statValue/statLabel).
         var statKey = _contentTypeService.Get("elementSynStatTicker")?.Key ?? _statKey;
-        var section = b.AddTopLevelBlock(_sectionKey);
-        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var section = BeginSection(b, ThemeAccent);   // números → banda accent (contrasta con el CTA brand)
         var areas = new[] { Col1AreaKey, Col2AreaKey, Col3AreaKey };
         section.AddChild(SectionContentAreaKey, _threeColKey, col =>
         {
@@ -778,8 +802,7 @@ public sealed class DevContentFiller
 
     private void AddTestimonials(BlockGridJsonBuilder b, params (string quote, string author, string role)[] items)
     {
-        var section = b.AddTopLevelBlock(_sectionKey);
-        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var section = BeginSection(b, ThemeSurface);   // prueba social → banda surface (sutil)
         var list = new BlockListJsonBuilder();
         foreach (var (quote, author, role) in items)
         {
@@ -807,8 +830,7 @@ public sealed class DevContentFiller
     {
         var key = _contentTypeService.Get("elementSynTestimonialSection")?.Key;
         if (key is null) { return; }   // aún no importado → omitir (el caller hace fallback SSR)
-        var section = b.AddTopLevelBlock(_sectionKey);
-        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var section = BeginSection(b, ThemeSurface);   // prueba social → banda surface (sutil)
         var itemsJson = "[" + string.Join(",", items.Select(t =>
             $"{{\"name\":\"{Esc(t.author)}\",\"quote\":\"{Esc(t.quote)}\",\"role\":\"{Esc(t.role)}\",\"avatarSrc\":\"\"}}")) + "]";
         section.AddChild(SectionContentAreaKey, key.Value, c => c
@@ -874,8 +896,7 @@ public sealed class DevContentFiller
     {
         var key = _contentTypeService.Get("elementSynMediaText")?.Key;
         if (key is null) { return; }
-        var section = b.AddTopLevelBlock(_sectionKey);
-        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var section = BeginSection(b, ThemeSurface);   // media+texto → banda surface (sutil)
         var picker = _media.GetOrCreatePickerValue(imgName, imgAlt, from, to, 1200, 900);
         section.AddChild(SectionContentAreaKey, key.Value, c => c
             .Set("mediaReference", picker)
@@ -890,8 +911,7 @@ public sealed class DevContentFiller
         string imgName, string imgAlt, string from, string to, bool mediaOnRight,
         string? ctaLabel, string? ctaUrl)
     {
-        var section = b.AddTopLevelBlock(_sectionKey);
-        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var section = BeginSection(b, ThemeSurface);   // media+texto → banda surface (sutil)
         var pickerValue = _media.GetOrCreatePickerValue(imgName, imgAlt, from, to, 1200, 900);
         section.AddChild(SectionContentAreaKey, _splitKey, split =>
         {
@@ -911,8 +931,7 @@ public sealed class DevContentFiller
 
     private void AddMission(BlockGridJsonBuilder b, string title, string subtitle, string body)
     {
-        var section = b.AddTopLevelBlock(_sectionKey);
-        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var section = BeginSection(b, ThemeDark);   // misión/about → ancla fuerte oscura
         section.AddChild(SectionContentAreaKey, _missionKey, m => m
             .Set("headingTitle", title)
             .Set("headingSubtitle", subtitle)
@@ -931,8 +950,7 @@ public sealed class DevContentFiller
         var fieldKey = _contentTypeService.Get("elementFormField")?.Key;
         if (formKey is null || fieldKey is null) { return; }
 
-        var section = b.AddTopLevelBlock(_sectionKey);
-        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var section = BeginSection(b, ThemeSurface);   // formulario → banda surface (sutil)
 
         var list = new BlockListJsonBuilder();
         foreach (var (label, name, type, required, placeholder) in fields)
@@ -993,8 +1011,7 @@ public sealed class DevContentFiller
 
     private void AddCta(BlockGridJsonBuilder b, string title, string subtitle, string ctaLabel, string url)
     {
-        var section = b.AddTopLevelBlock(_sectionKey);
-        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        var section = BeginSection(b, ThemeBrand);   // CTA banner final → banda brand (cierre fuerte)
         section.AddChild(SectionContentAreaKey, _ctaKey, c => c
             .Set("headingTitle", title)
             .Set("headingSubtitle", subtitle)
