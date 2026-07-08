@@ -490,7 +490,11 @@
   font-size: var(--syn-font-size-base);
 }
 
-.syn-cta-banner__cta {
+/* Selector con 2 clases (0,2,0) para GANARLE a `.syn-preset--theme-dark a`
+   (0,1,1): la banda del CTA ahora es theme-dark y su regla de links pintaba el
+   chip en brand-300 (lavanda) sobre blanco = 1.99:1 ilegible. El chip es su
+   propio componente, no un link de contenido. */
+.syn-cta-banner .syn-cta-banner__cta {
   /* Chip de acción CLARO brand-neutral (neutral-0 + tinta neutral-900): pop
      garantizado sobre el gradiente de marca en CUALQUIER tema (en dark,
      surface-primary caía a neutral-800 = botón oscuro recesado). El acento de la
@@ -511,10 +515,11 @@
               background-color var(--syn-duration-base) var(--syn-easing-default);
 }
 
-.syn-cta-banner__cta:hover {
+.syn-cta-banner .syn-cta-banner__cta:hover {
   transform: translateY(-1px);
   text-decoration: none;
   background: var(--syn-color-neutral-0);
+  color: var(--syn-color-neutral-900);
   box-shadow: var(--syn-shadow-md);
 }
 
