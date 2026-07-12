@@ -1,10 +1,28 @@
 ﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+    // El componente Angular (sg-testimonial-carousel) lee config.testimonials como
+    // ARRAY (normalizeTestimonials exige Array.isArray) con claves quote/author/role/
+    // avatar/rating — el contrato de la UI es la fuente de verdad. Parseamos el JSON
+    // del editor a un JsonElement (array real) y lo emitimos bajo la clave `testimonials`
+    // (NO `testimonialsJson`), para que el config mergeado del emitter matchee ese
+    // contrato; si no, el componente no encuentra el array y pinta "No hay testimonios".
+    object? testimonials = null;
+    var testimonialsJson = Model.Value<string>("testimonialsJson");
+    if (!string.IsNullOrWhiteSpace(testimonialsJson))
+    {
+        try { testimonials = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(testimonialsJson); }
+        catch (System.Text.Json.JsonException) { testimonials = null; }
+    }
+    // autoplayInterval: "0" = off (semántica del schema); vacío/ausente = autoplay on con
+    // el default del componente. El componente pausa en hover/focus y respeta reduced-motion.
+    var intervalStr = Model.Value<string>("autoplayInterval");
+    var autoplayOff = int.TryParse(intervalStr, out var iv) && iv == 0;
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["testimonialsJson"] = Model.Value<string>("testimonialsJson"),
-        ["autoplayInterval"] = Model.Value<string>("autoplayInterval"),
+        ["testimonials"] = testimonials,
+        ["autoplay"] = !autoplayOff,
+        ["autoplayInterval"] = string.IsNullOrWhiteSpace(intervalStr) ? null : intervalStr,
     };
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "testimonial-carousel",
