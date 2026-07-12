@@ -126,6 +126,18 @@
   }
 }
 
+/* ── Hero PEGADO al header ── El hero es el tope de la página: neutraliza el aire
+   superior para que la banda toque el header sticky (que ya da la separación visual).
+   (a) el main no aporta padding-top cuando la página lidera con un hero; (b) el item
+   del hero no hereda el section-gap aunque le preceda una sección de app vacía (h:0,
+   p.ej. el mount SSR de un vertical). Sin esto queda una franja blanca header↔hero. */
+.syn-site-main:has(.syn-hero) {
+  padding-top: 0;
+}
+.umb-block-grid__layout-item:has(.syn-hero) {
+  margin-block-start: 0 !important;
+}
+
 /* ── SISTEMA DE ESQUINAS — bandas temáticas full-bleed (fix de raíz) ──
    Las bandas .syn-preset--theme-{surface,dark,brand,accent} (que BeginSection
    asigna por la ola de ritmo) llevaban color pero NO eran full-bleed: quedaban
