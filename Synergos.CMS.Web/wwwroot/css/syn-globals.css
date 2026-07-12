@@ -379,6 +379,15 @@
     grid-template-columns: 1fr 1fr;
     gap: var(--syn-space-2xl);
   }
+
+  /* Sin imagen no forzar 2 columnas: evita la mitad izquierda vacía con el
+     texto desbalanceado a la derecha (caso disclaimer text-only). */
+  .syn-mission:not(:has(.syn-mission__media)) {
+    grid-template-columns: 1fr;
+  }
+  .syn-mission:not(:has(.syn-mission__media)) .syn-mission__body {
+    max-width: 68ch;   /* ancho de línea legible cuando ocupa todo el ancho */
+  }
 }
 
 .syn-mission__media {

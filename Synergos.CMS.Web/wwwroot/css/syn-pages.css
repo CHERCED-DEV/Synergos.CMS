@@ -682,7 +682,9 @@ html:has(.syn-launcher) { overflow-x: clip; }
 }
 
 @media (min-width: 1024px) {
-  .syn-post-layout {
+  /* Guard :has() — la grilla 2-col SOLO cuando hay TOC visible (el JS pone
+     nav[hidden] si el post no tiene H2/H3). Sin esto queda un canalón de 220px vacío. */
+  .syn-post-layout:has(.syn-post__toc:not([hidden])) {
     display: grid;
     grid-template-columns: minmax(0, 1fr) var(--syn-post-toc-width, 220px);
     gap: var(--syn-space-3xl);
@@ -692,7 +694,7 @@ html:has(.syn-launcher) { overflow-x: clip; }
     max-width: calc(var(--syn-max-width-article) + var(--syn-space-3xl) + var(--syn-post-toc-width, 220px));
   }
   /* En 2-col el artículo ya no se auto-centra (la grilla lo coloca). */
-  .syn-post-layout .syn-post {
+  .syn-post-layout:has(.syn-post__toc:not([hidden])) .syn-post {
     margin-inline: 0;
     max-width: none;
     min-width: 0;

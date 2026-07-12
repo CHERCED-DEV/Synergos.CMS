@@ -53,7 +53,15 @@
 
 .syn-preset--theme-dark {
   background: var(--syn-color-neutral-900);
-  color: var(--syn-color-neutral-100);
+  /* Re-scopa los tokens semánticos de texto a valores on-dark: así CUALQUIER
+     componente que declare `color: var(--syn-color-text-*)` (p.ej. .syn-mission__body)
+     es legible sobre el fondo oscuro — no solo el texto directo. La rampa neutral es
+     estable (neutral-0=blanco siempre) → seguro en páginas light y dark. */
+  --syn-color-text-primary:   var(--syn-color-neutral-0);
+  --syn-color-text-secondary: var(--syn-color-neutral-300);
+  --syn-color-text-muted:     var(--syn-color-neutral-400);
+  --syn-color-text-accent:    var(--syn-color-brand-300);   /* stat value, eyebrows: legible sobre dark */
+  color: var(--syn-color-text-primary);
 }
 
 .syn-preset--theme-dark a { color: var(--syn-color-brand-300); }
@@ -63,6 +71,11 @@
   background: linear-gradient(135deg,
     var(--syn-color-brand-500) 0%,
     var(--syn-color-brand-600) 100%);
+  /* Idem: todo texto sobre la banda de marca usa el token on-accent */
+  --syn-color-text-primary:   var(--syn-color-text-on-accent);
+  --syn-color-text-secondary: var(--syn-color-text-on-accent);
+  --syn-color-text-muted:     var(--syn-color-text-on-accent);
+  --syn-color-text-accent:    var(--syn-color-text-on-accent);
   color: var(--syn-color-text-on-accent);
 }
 
@@ -75,7 +88,25 @@
   background: linear-gradient(135deg,
     var(--syn-color-accent-500) 0%,
     var(--syn-color-accent-600) 100%);
+  --syn-color-text-primary:   var(--syn-color-text-on-accent);
+  --syn-color-text-secondary: var(--syn-color-text-on-accent);
+  --syn-color-text-muted:     var(--syn-color-text-on-accent);
+  --syn-color-text-accent:    var(--syn-color-text-on-accent);
   color: var(--syn-color-text-on-accent);
+}
+
+/* Re-ancla de texto para SUPERFICIES CLARAS PROPIAS dentro de una banda temática.
+   El re-mapeo de la banda (arriba) aclara text-* para el fondo oscuro/marca; pero una
+   card/feature/testimonial/newsletter trae su PROPIA superficie clara → heredaría texto
+   claro sobre superficie clara = ilegible. Aquí se re-anclan a la rampa oscura.
+   Band-scoped ⇒ páginas con data-theme (Tienda/Eventos) quedan intactas. */
+.syn-preset--theme-dark  :is(.syn-card, .syn-feature--elevated, .syn-feature--bordered, .syn-feature--accent, .syn-testimonial, .syn-newsletter),
+.syn-preset--theme-brand :is(.syn-card, .syn-feature--elevated, .syn-feature--bordered, .syn-feature--accent, .syn-testimonial, .syn-newsletter),
+.syn-preset--theme-accent :is(.syn-card, .syn-feature--elevated, .syn-feature--bordered, .syn-feature--accent, .syn-testimonial, .syn-newsletter) {
+  --syn-color-text-primary:   var(--syn-color-neutral-900);
+  --syn-color-text-secondary: var(--syn-color-neutral-600);
+  --syn-color-text-muted:     var(--syn-color-neutral-600);
+  --syn-color-text-accent:    var(--syn-color-brand-600);
 }
 
 /* ── Section spacing helpers ─────────────────────────────────── */

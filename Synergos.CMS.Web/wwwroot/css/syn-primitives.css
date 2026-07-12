@@ -177,7 +177,8 @@
 .syn-badge--neutral,
 .syn-info-badge--neutral {
   background: var(--syn-color-surface-tertiary);
-  color: var(--syn-color-text-secondary);
+  /* Ancla a un ink oscuro (su fondo es un chip claro OPACO que no se re-mapea en bandas) */
+  color: var(--syn-color-neutral-700);
   border-color: var(--syn-color-border-subtle);
 }
 
@@ -537,6 +538,14 @@
     grid-template-columns: 1fr 1fr;
     gap: var(--syn-space-2xl);
   }
+
+  /* Sin media no forzar 2 columnas (evita la mitad vacía) — mismo patrón que .syn-mission */
+  .syn-media-text-split:not(:has(.syn-media-text-split__media)) {
+    grid-template-columns: 1fr;
+  }
+  .syn-media-text-split:not(:has(.syn-media-text-split__media)) .syn-media-text-split__body {
+    max-width: 68ch;
+  }
 }
 
 .syn-media-text-split--media-right .syn-media-text-split__media {
@@ -560,6 +569,7 @@
 .syn-media-text-split__title {
   font-size: var(--syn-font-size-3xl);
   font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
   margin: 0 0 var(--syn-space-sm);
   color: var(--syn-color-text-primary);
 }
@@ -590,7 +600,7 @@
   align-items: center;
   gap: var(--syn-space-1);
   margin-top: var(--syn-space-md);
-  color: var(--syn-color-action-primary);
+  color: var(--syn-color-text-accent);   /* hereda re-map de banda (era action-primary → invisible en banda brand) */
   font-weight: var(--syn-font-weight-semibold);
 }
 
@@ -667,6 +677,7 @@
 }
 
 .syn-richtext {
+  max-width: 68ch;   /* largo de línea legible (espeja .syn-mission__body) */
   line-height: var(--syn-line-height-relaxed);
   color: var(--syn-color-text-secondary);
 }
@@ -1026,8 +1037,15 @@
 .syn-feature__icon {
   font-size: var(--syn-font-size-3xl);
   margin-bottom: var(--syn-space-sm);
-  color: var(--syn-color-action-primary);
+  color: var(--syn-color-text-accent);   /* hereda el re-map de banda (era action-primary → invisible en banda brand) */
   display: block;
+}
+
+/* Si el icono es un <img> (Feature.cshtml), acotarlo a 48px on-grid — sin esto revienta al tamaño natural del asset. */
+img.syn-feature__icon {
+  width: var(--syn-space-12);
+  height: var(--syn-space-12);
+  object-fit: contain;
 }
 
 .syn-feature__title {
