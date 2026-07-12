@@ -475,6 +475,56 @@
   --syn-grain-opacity: 0;
   --syn-grain-blend:   overlay;
 
+  /* ══════════════════════════════════════════════════════════════════════
+     OLA 1 — tokens de acabado (doc 24). ADITIVO: 0 consumidores rompibles.
+     control-h NO se toca (32/40/48 es decisión anti-off-grid deliberada).
+     shadow-card-hover se reconcilia en la ola de product-card, no aquí.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* Radios de control (regla concéntrica: hijo ≤ padre) */
+  --syn-radius-field: var(--syn-radius-md);                                /* 10px — alias semántico control multi-elemento */
+  --syn-radius-inner: calc(var(--syn-radius-field) - var(--syn-space-1));  /* 10−4 = 6px — radio hijo = externo − padding */
+
+  /* Micro-step off-grid intencional (gap label↔hint / chip pad). NO es space-3 (=16). */
+  --syn-space-3b: 0.75rem;                                                 /* 12px — excepción documentada fuera de la escala 8pt */
+
+  /* Numérico tabular (precios/contadores/tablas): font-variant-numeric: var(--syn-numeric) */
+  --syn-numeric: tabular-nums;
+
+  /* Motion micro — cuelga de la familia --syn-ease-*/--syn-dur-* (Ola 0), no del legacy */
+  --syn-ease-exit:      var(--syn-easing-in);                              /* = cubic-bezier(0.4,0,1,1) — no duplicar literal */
+  --syn-ease-standard:  cubic-bezier(0.2, 0, 0, 1);                        /* in-out estándar */
+  --syn-press-duration: 90ms;                                             /* active/press (transform:scale) — bajo fast */
+  --syn-skeleton-delay: 200ms;                                            /* no mostrar skeleton antes de 200ms */
+  --syn-skeleton-min:   400ms;                                            /* si aparece, sostener min 400ms */
+  --syn-stagger-step:   36ms;                                             /* delay incremental por item */
+
+  /* Iconografía */
+  --syn-icon-stroke:  2;                                                   /* stroke-width unitless @24 */
+  --syn-icon-size-sm: 1rem;                                                /* 16px */
+  --syn-icon-size-md: 1.25rem;                                             /* 20px */
+  --syn-icon-size-lg: 1.5rem;                                              /* 24px */
+
+  /* Avatar tints — paleta desaturada determinista (hash(nombre)%6). El monograma
+     usa --syn-avatar-tint-ink (≥7:1 sobre los 6 tints en los 7 temas). Distinto de
+     --syn-image-placeholder-* (ese = 1 plato neutro por tema para packshots sin foto). */
+  --syn-avatar-tint-1: #d9c8b0;   /* sand   */
+  --syn-avatar-tint-2: #c9d3c0;   /* sage   */
+  --syn-avatar-tint-3: #bcd0d6;   /* mist   */
+  --syn-avatar-tint-4: #cdc6dd;   /* lilac  */
+  --syn-avatar-tint-5: #ddc4c4;   /* clay   */
+  --syn-avatar-tint-6: #c6cddd;   /* slate-blue */
+  --syn-avatar-tint-ink: var(--syn-color-neutral-800);   /* #1e293b — ≥7:1 sobre cualquier tint */
+
+  /* ── Image-placeholder / scrim / highlight (valores LIGHT/base; los temas redeclaran) ── */
+  --syn-image-placeholder-surface: #e8ecf6;   /* plato brand-tinted sobre canvas blanco */
+  --syn-image-placeholder-ink:     #475569;   /* neutral-600 · 6.41:1 ✓ AA */
+  --syn-scrim: linear-gradient(to top,
+                 rgb(var(--syn-channel-ink) / 0.78) 0%,
+                 rgb(var(--syn-channel-ink) / 0.45) 30%,
+                 rgb(var(--syn-channel-ink) / 0)    68%);   /* theme-aware vía channel-ink (cada tema lo reevalúa) */
+  --syn-highlight-top: none;                                 /* base OFF — solo dark/eventsNight lo encienden */
+
   /* ─────────────────────────────────────────────────────────── */
   /* Legacy aliases — backwards compat con dev-stub previo       */
   /* ─────────────────────────────────────────────────────────── */
@@ -614,6 +664,11 @@
   --syn-border-2: 1px solid rgb(255 255 255 / 0.10);        /* standard  — hairline crisp */
   --syn-border-3: 1px solid rgb(255 255 255 / 0.16);        /* prominent */
   --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
+
+  /* Ola 1 — image-placeholder + highlight-top (dark) */
+  --syn-image-placeholder-surface: #293a5c;   /* raised dark tinte brand */
+  --syn-image-placeholder-ink:     #cbd5e1;   /* neutral-300 · 7.63:1 ✓ AA */
+  --syn-highlight-top: inset 0 1px 0 0 rgb(255 255 255 / 0.06);   /* top-light Linear/Raycast */
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -754,6 +809,12 @@
   --syn-border-2: 1px solid rgb(71 54 26 / 0.14);
   --syn-border-3: 1px solid rgb(71 54 26 / 0.22);
   --syn-border-hairline: 0 0 0 1px rgb(71 54 26 / 0.14);
+
+  /* Ola 1 — channel-ink cálido (fix coherencia: scrim/sombras alineados con las
+     sombras cálidas existentes 71 54 26; sin esto heredaría el frío 15 23 42) */
+  --syn-channel-ink: 71 54 26;
+  --syn-image-placeholder-surface: #ece3d1;   /* champagne cálido */
+  --syn-image-placeholder-ink:     #5c513a;   /* marrón fuerte · 6.12:1 ✓ AA */
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -885,6 +946,11 @@
   --syn-border-2: 1px solid rgb(255 255 255 / 0.10);
   --syn-border-3: 1px solid rgb(255 255 255 / 0.16);
   --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
+
+  /* Ola 1 — image-placeholder + highlight-top (eventsNight) */
+  --syn-image-placeholder-surface: #22284a;   /* raised midnight tinte violet */
+  --syn-image-placeholder-ink:     #cdd2ef;   /* violet claro · 9.56:1 ✓ AA */
+  --syn-highlight-top: inset 0 1px 0 0 rgb(255 255 255 / 0.07);
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -1018,6 +1084,10 @@
   --syn-border-2: 1px solid rgb(35 38 43 / 0.12);
   --syn-border-3: 1px solid rgb(35 38 43 / 0.18);
   --syn-border-hairline: 0 0 0 1px rgb(35 38 43 / 0.12);
+
+  /* Ola 1 — image-placeholder (terraLux · ink = verde arquitectónico brand) */
+  --syn-image-placeholder-surface: #e5e1d7;   /* greige neutro */
+  --syn-image-placeholder-ink:     #2c4a40;   /* 7.44:1 ✓ AA · on-brand */
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -1144,6 +1214,10 @@
   --syn-border-2: 1px solid rgb(27 42 74 / 0.12);
   --syn-border-3: 1px solid rgb(27 42 74 / 0.18);
   --syn-border-hairline: 0 0 0 1px rgb(27 42 74 / 0.12);
+
+  /* Ola 1 — image-placeholder (scholar · ink = indigo brand) */
+  --syn-image-placeholder-surface: #e4eaf4;   /* azul-gris frío */
+  --syn-image-placeholder-ink:     #264c93;   /* 6.85:1 ✓ AA · on-brand */
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -1271,6 +1345,10 @@
   --syn-border-2: 1px solid rgb(28 39 51 / 0.12);
   --syn-border-3: 1px solid rgb(28 39 51 / 0.18);
   --syn-border-hairline: 0 0 0 1px rgb(28 39 51 / 0.12);
+
+  /* Ola 1 — image-placeholder (meridian · ink = teal-azul action) */
+  --syn-image-placeholder-surface: #e0eaf0;   /* slate frío */
+  --syn-image-placeholder-ink:     #0c5b74;   /* 6.22:1 ✓ AA · on-brand */
 }
 
 /* ─────────────────────────────────────────────────────────── */
