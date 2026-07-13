@@ -101,6 +101,16 @@
 .syn-space--inline-md  { padding-inline: var(--syn-space-md); }
 .syn-space--inline-lg  { padding-inline: var(--syn-space-lg); }
 
+/* Responsive del spacing de sección: en pantallas chicas los pasos grandes bajan
+   UN escalón. El knob compuesto (2xl) NO cambia — el design system lo rinde
+   responsivo. El ritmo desktop (48/32px) es demasiado aire en móvil. */
+@media (max-width: 767px) {
+  .syn-space--top-2xl    { padding-top: var(--syn-space-xl); }     /* 48 → 32 */
+  .syn-space--bottom-2xl { padding-bottom: var(--syn-space-xl); }
+  .syn-space--top-xl     { padding-top: var(--syn-space-lg); }     /* 32 → 24 */
+  .syn-space--bottom-xl  { padding-bottom: var(--syn-space-lg); }
+}
+
 /* ── Visibility per breakpoint (compDomVisibility) ───────────── */
 
 @media (max-width: 640px) {
