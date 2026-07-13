@@ -75,9 +75,10 @@ public sealed class EventosController : ControllerBase
         return Ok(new EventDetailResponse(
             Event: ToSummaryDto(detail.Summary),
             Description: detail.Description,
-            Organizer: detail.Organizer,
+            Organizer: new EventOrganizerDto(detail.Organizer, string.Empty, string.Empty),
             Tiers: detail.Tiers.Select(ToTierDto).ToList(),
-            SeatMap: ToSeatMapDto(detail.SeatMap)));
+            SeatMap: ToSeatMapDto(detail.SeatMap),
+            Venue: ToVenueDto(detail)));
     }
 
     // ── 3. Checkout (apartar + abrir sesión de pago) ────────────────────
@@ -279,15 +280,35 @@ public sealed class EventosController : ControllerBase
         City: s.City,
         Venue: s.Venue,
         StartUtc: s.StartUtc,
+        StartsAt: s.StartUtc,   // la UI lee `startsAt` (mismo instante que startUtc)
         ImageUrl: s.ImageUrl,
         Cover: s.ImageUrl,
         PriceFrom: s.PriceFrom,
+        FromAmount: s.PriceFrom,   // la UI lee `fromAmount` (número); sin esto todo salía "Gratis"
         PriceFromFormatted: _priceFormatter.Format(s.PriceFrom, s.Currency),
         Currency: s.Currency,
         Mode: s.Mode,
-        Geo: s.Geo is null ? null : new EventGeoDto(s.Geo.Lat, s.Geo.Lng));
+        Geo: s.Geo is null ? null : new EventGeoDto(s.Geo.Lat, s.Geo.Lng),
+        Subtitle: string.IsNullOrWhiteSpace(s.Venue) ? s.City : $"{s.Venue} · {s.City}",
+        Status: DeriveEventStatus(s.StartUtc),
+        Badges: DeriveEventBadges(s.Mode));
+
+    // Estado de ciclo de vida para la UI (EventStatus = upcoming|on-sale|sold-out|
+    // past). El summary solo conoce la dimensión temporal (el aforo no vive en
+    // EventSummary), así que derivamos por fecha: `past` si ya arrancó, si no
+    // `upcoming`. on-sale/sold-out requieren aforo → no se emiten.
+    private static string DeriveEventStatus(DateTimeOffset startUtc)
+        => startUtc <= DateTimeOffset.UtcNow ? "past" : "upcoming";
+
+    // Chips freeform del summary derivados del único campo con fuente (el modo de
+    // venta): reserved → asientos numerados; general → entrada general.
+    private static IReadOnlyList<string> DeriveEventBadges(string mode)
+        => string.Equals(mode, "reserved", StringComparison.OrdinalIgnoreCase)
+            ? new[] { "Asientos numerados" }
+            : new[] { "Entrada general" };
 
     private EventTierDto ToTierDto(EventTier t) => new(
+        Id: t.Code,   // la UI lee `tier.id` para el checkout (mismo valor que code)
         Code: t.Code,
         Name: t.Name,
         Price: t.Price,
@@ -317,6 +338,37 @@ public sealed class EventosController : ControllerBase
                     Label: r.Label,
                     Seats: r.Seats.Select(seat => new EventSeatDto(seat.Id, seat.Label, seat.Status)).ToList()))
                     .ToList()))
+                .ToList());
+    }
+
+    // Proyecta el venue con la forma anidada que lee la ficha v2 (EventVenue →
+    // VenueZone → SeatMapPayload): venue.zones[].seatmap.rows[].seats[]. Reusa el
+    // seat-map del dominio; solo presente en eventos modo reserved (SeatMap != null).
+    // La dirección de calle no existe en el dominio → cadena vacía; la ciudad viene
+    // del summary. `type` del asiento = tier de la zona (price-level).
+    private static EventVenueDto? ToVenueDto(EventDetail detail)
+    {
+        var map = detail.SeatMap;
+        if (map is null)
+        {
+            return null;
+        }
+        return new EventVenueDto(
+            Name: map.VenueName,
+            Address: string.Empty,
+            City: detail.Summary.City,
+            Zones: map.Zones.Select(z => new EventVenueZoneDto(
+                Id: z.Id,
+                Name: z.Name,
+                Amount: z.Price,
+                Seatmap: new EventVenueSeatmapDto(
+                    Rows: z.Rows.Select(r => new EventVenueRowDto(
+                        RowNumber: r.Label,
+                        Seats: r.Seats.Select(seat => new EventVenueSeatDto(
+                            Id: seat.Id,
+                            Type: z.TierCode,
+                            Available: !string.Equals(seat.Status, "sold", StringComparison.OrdinalIgnoreCase),
+                            Price: z.Price)).ToList())).ToList())))
                 .ToList());
     }
 
@@ -365,19 +417,32 @@ public sealed class EventosController : ControllerBase
         string City,
         string Venue,
         DateTimeOffset StartUtc,
+        // Contrato (EventSummary.startsAt): la UI lee `startsAt` (ISO) para la fecha
+        // en cards/ficha/wallet. `startUtc` se conserva para consumers previos; ambos
+        // portan el mismo instante.
+        DateTimeOffset StartsAt,
         string ImageUrl,
         string Cover,
         decimal PriceFrom,
+        decimal FromAmount,
         string PriceFromFormatted,
         string Currency,
         string Mode,
         // Contrato: la clave es "geo" (lat/lng del venue para el mapa/discovery),
         // null si el evento no tiene ubicación geocodificada.
-        [property: JsonPropertyName("geo")] EventGeoDto? Geo);
+        [property: JsonPropertyName("geo")] EventGeoDto? Geo,
+        // Contrato UI (EventSummary): subtítulo compuesto (venue · ciudad), estado de
+        // ciclo de vida derivado de la fecha, y chips freeform derivados del modo.
+        string Subtitle,
+        string Status,
+        IReadOnlyList<string> Badges);
 
     public sealed record EventsResponse(IReadOnlyList<EventSummaryDto> Events);
 
     public sealed record EventTierDto(
+        // Contrato: la UI lee `id` (el checkout manda tier.id). `code` se conserva
+        // para consumers previos; ambos portan el código del tier.
+        string Id,
         string Code,
         string Name,
         decimal Price,
@@ -403,14 +468,57 @@ public sealed class EventosController : ControllerBase
 
     public sealed record EventSeatMapDto(string VenueName, IReadOnlyList<EventZoneDto> Zones);
 
+    // Contrato UI (EventOrganizer): la ficha lee organizer.name (objeto).
+    public sealed record EventOrganizerDto(string Name, string Headline, string Avatar);
+
+    // ── Venue anidado (contrato UI EventVenue → VenueZone → SeatMapPayload) ──────
+    // Es la forma que consume <synergos-seat-map>; distinta del EventSeatMapDto plano
+    // de arriba (que se conserva por compat). rowNumber/available/type calcan las
+    // claves exactas que lee la UI v2.
+
+    public sealed record EventVenueSeatDto(
+        string Id,
+        // `type` (opcional en SeatMapSeat): se puebla con el tier de la zona
+        // (price-level), útil para colorear el asiento por tier en el seat-map.
+        string Type,
+        bool Available,
+        decimal Price);
+
+    public sealed record EventVenueRowDto(
+        // Contrato: la UI lee `rowNumber` (number|string); acá el label de la fila.
+        [property: JsonPropertyName("rowNumber")] string RowNumber,
+        IReadOnlyList<EventVenueSeatDto> Seats);
+
+    public sealed record EventVenueSeatmapDto(IReadOnlyList<EventVenueRowDto> Rows);
+
+    public sealed record EventVenueZoneDto(
+        string Id,
+        string Name,
+        decimal Amount,
+        // Contrato: la clave es "seatmap" (payload para <synergos-seat-map>).
+        [property: JsonPropertyName("seatmap")] EventVenueSeatmapDto Seatmap);
+
+    public sealed record EventVenueDto(
+        string Name,
+        string Address,
+        string City,
+        IReadOnlyList<EventVenueZoneDto> Zones);
+
     public sealed record EventDetailResponse(
         EventSummaryDto Event,
         string Description,
-        string Organizer,
+        // Contrato: la UI lee `organizer.name` (objeto {name,headline,avatar}), no un
+        // string. headline/avatar no tienen fuente en EventDetail → cadena vacía.
+        EventOrganizerDto Organizer,
         IReadOnlyList<EventTierDto> Tiers,
         // Contrato exacto: la clave es "seatmap" (todo minúscula), null en eventos
         // modo general. El default camelCase daría "seatMap"; lo fijamos al contrato.
-        [property: JsonPropertyName("seatmap")] EventSeatMapDto? SeatMap);
+        // Se conserva para consumers previos; la ficha v2 lee la forma anidada `venue`.
+        [property: JsonPropertyName("seatmap")] EventSeatMapDto? SeatMap,
+        // Contrato UI (EventVenue): la ficha lee `venue.zones[]` con la forma anidada
+        // {id,name,amount,seatmap:{rows:[{rowNumber,seats:[{id,type,available,price}]}]}}.
+        // null en eventos modo general (sin asientos numerados).
+        [property: JsonPropertyName("venue")] EventVenueDto? Venue);
 
     public sealed record CheckoutResponse(
         string OrderRef,

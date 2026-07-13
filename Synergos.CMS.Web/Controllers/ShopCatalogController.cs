@@ -128,6 +128,10 @@ public sealed class ShopCatalogController : ControllerBase
         var variants = detail.Variants.Select(v => new VariantDto(
             VariantId: v.VariantId,
             Name: v.Name,
+            // La UI (storefront) lee variant.label para el chip de variantes y la
+            // etiqueta del carrito; sin esto mostraba el slug crudo del variantId.
+            // Label = Name legible ('16 GB RAM · 512 GB SSD'). Name queda por compat.
+            Label: v.Name,
             Price: v.Price,
             PriceFormatted: _priceFormatter.Format(v.Price, v.Currency),
             Currency: v.Currency,
@@ -644,6 +648,7 @@ public sealed class ShopCatalogController : ControllerBase
     public sealed record VariantDto(
         string VariantId,
         string Name,
+        string Label,
         decimal Price,
         string PriceFormatted,
         string Currency,

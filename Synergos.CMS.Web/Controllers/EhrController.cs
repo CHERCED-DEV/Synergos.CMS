@@ -630,11 +630,24 @@ public sealed class EhrController : ControllerBase
         => DateOnly.TryParse(date, out var parsed) ? parsed : DateOnly.FromDateTime(DateTime.UtcNow);
 
     private static PatientDto ToPatientDto(EhrPatient p) => new(
-        Id: p.Id, Name: p.FullName, Document: p.DocumentId, Sex: p.Gender,
+        Id: p.Id, Name: p.FullName, Document: p.DocumentId, Sex: NormalizeSex(p.Gender),
         Age: p.AgeYears, Phone: p.Phone, Email: p.Email, BloodType: p.BloodType,
         Problems: p.ChronicConditions, Allergies: p.Allergies,
         PrimaryDoctorId: p.PrimaryDoctorId ?? string.Empty, Active: true,
         City: p.City, AvatarUrl: p.AvatarUrl);
+
+    // El registro modela el sexo como texto libre ("Masculino"/"Femenino"/…); la UI
+    // (readSex) espera el código 'M'|'F'|'X'. Mapeo por inicial, case-insensitive.
+    private static string NormalizeSex(string? gender)
+    {
+        if (string.IsNullOrWhiteSpace(gender)) { return "X"; }
+        return char.ToUpperInvariant(gender.TrimStart()[0]) switch
+        {
+            'M' => "M",
+            'F' => "F",
+            _ => "X",
+        };
+    }
 
     private static DoctorDto ToDoctorDto(MedicalDoctor d) => new(
         Id: d.Id, Name: d.FullName, Specialty: d.Specialty, License: d.LicenseNumber,

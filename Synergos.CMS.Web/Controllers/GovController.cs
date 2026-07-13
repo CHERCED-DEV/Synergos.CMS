@@ -543,7 +543,7 @@ public sealed class GovController : ControllerBase
 
     public sealed record AnswerDto(string Label, string Value);
 
-    public sealed record DecisionDto(string Outcome, string Note, DateTimeOffset DecidedAt, string DecidedBy);
+    public sealed record DecisionDto(string Outcome, string Note, DateTimeOffset DecidedAtUtc, string DecidedBy);
 
     public sealed record CaseDto(
         CaseApplicationDto Application,

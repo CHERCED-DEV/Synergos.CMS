@@ -99,10 +99,16 @@ public sealed class TravelController : ControllerBase
                 Price: o.TotalPrice,
                 PriceFormatted: _priceFormatter.Format(o.TotalPrice, o.Currency),
                 Currency: o.Currency,
+                // ADR 0083: la UI lee title/subtitle/rating top-level. Title = nombre de
+                // la estadía si resolvió, si no el room type; subtitle compone tipo + régimen;
+                // rating deriva del promedio de reviews de la estadía (null si no resolvió).
+                Title: stay?.Name ?? o.RoomTypeName,
+                Subtitle: $"{o.RoomTypeName} · {o.BoardBasis}",
                 StayId: stay?.StayId,
                 StayName: stay?.Name,
                 City: stay?.City,
-                Geo: stay is null ? null : new GeoDto(stay.Geo.Lat, stay.Geo.Lng));
+                Geo: stay is null ? null : new GeoDto(stay.Geo.Lat, stay.Geo.Lng),
+                Rating: stay?.Reviews.Average);
         }).ToList();
 
         return Ok(new { offers = results });
@@ -381,7 +387,15 @@ public sealed class TravelController : ControllerBase
                     Highlight: stay.Reviews.Highlight,
                     Categories: stay.Reviews.Categories
                         .Select(c => new StayReviewCategoryDto(c.Category, c.Score)).ToList()),
-                RoomTypeCodes: stay.RoomTypeCodes),
+                RoomTypeCodes: stay.RoomTypeCodes,
+                // ADR 0083: la UI lee rating + reviewCount top-level (además del bloque
+                // reviews anidado, que se conserva para consumers existentes).
+                Rating: stay.Reviews.Average,
+                ReviewCount: stay.Reviews.Count,
+                // rates[] mínimo derivado de RoomTypeCodes: la disponibilidad/precio vive
+                // en IRoomAvailabilityProvider, no en el contenido de la estadía — aquí solo
+                // se expone el código de tipo de habitación para que rates[] deje de ser undefined.
+                Rates: stay.RoomTypeCodes.Select(c => new StayRateDto(c)).ToList()),
         });
     }
 
@@ -426,7 +440,9 @@ public sealed class TravelController : ControllerBase
     public sealed record HotelOfferDto(
         string OfferId, string Product, string RoomTypeCode, string RoomTypeName, string RatePlanCode,
         string BoardBasis, bool Refundable, int RoomsLeft, decimal Price, string PriceFormatted, string Currency,
-        string? StayId = null, string? StayName = null, string? City = null, GeoDto? Geo = null);
+        string Title, string Subtitle,
+        string? StayId = null, string? StayName = null, string? City = null, GeoDto? Geo = null,
+        double? Rating = null);
 
     public sealed record GeoDto(double Lat, double Lng);
 
@@ -468,9 +484,12 @@ public sealed class TravelController : ControllerBase
     public sealed record StayReviewsDto(
         double Average, int Count, string Highlight, IReadOnlyList<StayReviewCategoryDto> Categories);
 
+    public sealed record StayRateDto(string RoomTypeCode);
+
     public sealed record StayDto(
         string StayId, string Name, string City, string Region, string Address, string Description,
         IReadOnlyList<string> Gallery, IReadOnlyList<string> Images, IReadOnlyList<string> Amenities,
         IReadOnlyList<StaySpecDto> Specs,
-        GeoDto Geo, StayReviewsDto Reviews, IReadOnlyList<string> RoomTypeCodes);
+        GeoDto Geo, StayReviewsDto Reviews, IReadOnlyList<string> RoomTypeCodes,
+        double Rating, int ReviewCount, IReadOnlyList<StayRateDto> Rates);
 }

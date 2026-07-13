@@ -92,23 +92,34 @@ public sealed class AcademyController : ControllerBase
             Order: m.Order,
             Lessons: m.Lessons.Select(ToLessonDto).ToList())).ToList();
 
-        var plans = detail.Plans.Select(p => new PlanDto(
-            Code: p.Code,
-            Label: p.Label,
-            Total: p.Total,
-            TotalFormatted: _priceFormatter.Format(p.Total, p.Currency),
-            Currency: p.Currency,
-            Installments: p.Installments,
-            InstallmentFormatted: p.Installments > 1
+        var plans = detail.Plans.Select(p =>
+        {
+            // Cadena EMI que la UI lee en 'installments' (ej "3 x $172.800"); vacía en contado.
+            var installmentString = p.Installments > 1
                 ? $"{p.Installments} x {_priceFormatter.Format(decimal.Round(p.Total / p.Installments, 0, MidpointRounding.AwayFromZero), p.Currency)}"
-                : _priceFormatter.Format(p.Total, p.Currency))).ToList();
+                : string.Empty;
+            return new PlanDto(
+                Code: p.Code,
+                Label: p.Label,
+                Total: p.Total,
+                Amount: p.Total,
+                Price: p.Total,
+                TotalFormatted: _priceFormatter.Format(p.Total, p.Currency),
+                Currency: p.Currency,
+                Installments: installmentString,
+                InstallmentCount: p.Installments,
+                InstallmentFormatted: p.Installments > 1
+                    ? installmentString
+                    : _priceFormatter.Format(p.Total, p.Currency));
+        }).ToList();
 
         var instructor = new InstructorDto(
             Id: detail.Instructor.Id,
             Name: detail.Instructor.Name,
             Headline: detail.Instructor.Headline,
             Bio: detail.Instructor.Bio,
-            AvatarUrl: detail.Instructor.AvatarUrl);
+            AvatarUrl: detail.Instructor.AvatarUrl,
+            Avatar: detail.Instructor.AvatarUrl);
 
         return Ok(new CourseDetailResponse(
             Course: course,
@@ -295,7 +306,8 @@ public sealed class AcademyController : ControllerBase
         var result = await _catalog.GetForInstructorAsync(instructor.Trim(), cancellationToken);
 
         var courses = result.Courses.Select(ic => new InstructorCourseDto(
-            Course: ToCourseDto(ic.Course),
+            // studentCount real desde las métricas del panel (la card lo lee en course.studentCount).
+            Course: ToCourseDto(ic.Course) with { StudentCount = ic.Metrics.Students },
             Students: ic.Metrics.Students,
             Revenue: ic.Metrics.Revenue,
             RevenueFormatted: _priceFormatter.Format(ic.Metrics.Revenue, ic.Metrics.Currency),
@@ -367,7 +379,7 @@ public sealed class AcademyController : ControllerBase
         Title: c.Title,
         Summary: c.Summary,
         Category: c.Category,
-        Level: c.Level,
+        Level: MapLevel(c.Level),
         InstructorName: c.InstructorName,
         CoverImageUrl: c.CoverImageUrl,
         Cover: c.CoverImageUrl,
@@ -378,8 +390,20 @@ public sealed class AcademyController : ControllerBase
         Rating: c.Rating,
         LessonCount: c.LessonCount,
         DurationMinutes: c.DurationMinutes,
+        // studentCount no viene en el catálogo (CourseSummary); el panel de instructor lo
+        // rellena desde métricas vía `with`. En el grid general queda null (dato ausente).
+        StudentCount: null,
         Description: null,
         Outcomes: null);
+
+    // Vocabulario de nivel que la UI lee: 'beginner' | 'intermediate' | 'advanced'.
+    // La data del catálogo viene en español (Principiante/Intermedio/Avanzado).
+    private static string MapLevel(string? level) => (level ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "avanzado" => "advanced",
+        "intermedio" => "intermediate",
+        _ => "beginner",
+    };
 
     private static LessonDto ToLessonDto(CourseLesson l) => new(
         Id: l.Id,
@@ -472,6 +496,7 @@ public sealed class AcademyController : ControllerBase
         double Rating,
         int LessonCount,
         int DurationMinutes,
+        int? StudentCount,
         string? Description,
         IReadOnlyList<string>? Outcomes);
 
@@ -500,15 +525,19 @@ public sealed class AcademyController : ControllerBase
         string Name,
         string Headline,
         string Bio,
-        string? AvatarUrl);
+        string? AvatarUrl,
+        string? Avatar);
 
     public sealed record PlanDto(
         string Code,
         string Label,
         decimal Total,
+        decimal Amount,
+        decimal Price,
         string TotalFormatted,
         string Currency,
-        int Installments,
+        string Installments,
+        int InstallmentCount,
         string InstallmentFormatted);
 
     public sealed record CourseDetailResponse(

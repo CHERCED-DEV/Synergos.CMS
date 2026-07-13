@@ -109,9 +109,13 @@ public sealed class BlogsController : ControllerBase
         }
 
         var post = await ToPostDto(item, DemoCurrentActor, cancellationToken);
-        var comments = _comments.GetApprovedForNode(NodeIdFor(id))
-            .Select(ToCommentDto)
-            .ToList();
+
+        var approved = _comments.GetApprovedForNode(NodeIdFor(id));
+        var comments = new List<CommentDto>(approved.Count);
+        foreach (var c in approved)
+        {
+            comments.Add(await ToCommentDto(c, cancellationToken));
+        }
 
         return Ok(new PostDetailResponse(Post: post, Comments: comments));
     }
@@ -234,9 +238,10 @@ public sealed class BlogsController : ControllerBase
         }
 
         var counts = await _graph.GetCountsAsync(profile.ActorId, cancellationToken);
+        var viewerFollows = await _graph.IsFollowingAsync(DemoCurrentActor, profile.ActorId, cancellationToken);
 
         return Ok(new ProfileResponse(
-            Author: ToProfileDto(profile),
+            Author: ToProfileDto(profile) with { Following = viewerFollows },
             Posts: posts,
             Stats: new ProfileStatsDto(
                 Posts: posts.Count,
@@ -357,9 +362,12 @@ public sealed class BlogsController : ControllerBase
         var dtos = events.Select(n => new NotificationDto(
             Id: n.Id,
             Type: n.Type,
+            Verb: n.Type,
             Actor: new AuthorDto(n.Actor.Id, n.Actor.Handle, n.Actor.DisplayName, n.Actor.AvatarUrl, n.Actor.Verified),
             ObjectId: n.ObjectId,
+            PostId: n.ObjectId,
             Text: n.Text,
+            Summary: n.Text,
             CreatedUtc: n.CreatedUtc)).ToList();
 
         return Ok(new NotificationsResponse(Notifications: dtos));
@@ -523,6 +531,7 @@ public sealed class BlogsController : ControllerBase
         return new PostDto(
             Id: item.Id,
             Kind: item.Kind,
+            ObjectKind: MapObjectKind(item.Kind),
             Author: new AuthorDto(
                 Id: item.Author.Id,
                 Handle: item.Author.Handle,
@@ -534,11 +543,24 @@ public sealed class BlogsController : ControllerBase
             Media: string.IsNullOrWhiteSpace(item.MediaUrl)
                 ? System.Array.Empty<PostMediaDto>()
                 : new[] { new PostMediaDto(item.MediaUrl!, "image", BuildMediaAlt(item.Body)) },
+            Hashtags: ExtractTags(item.Body),
             CreatedUtc: item.CreatedUtc,
+            CreatedAtUtc: item.CreatedUtc,
             Reactions: ToReactionsDto(reactions),
             Comments: item.Metrics.Comments,
-            Reposts: item.Metrics.Reposts);
+            CommentCount: item.Metrics.Comments,
+            Reposts: item.Metrics.Reposts,
+            RepostCount: item.Metrics.Reposts);
     }
+
+    // Vocabulario UI del tipo de objeto del feed: la app espera
+    // postPage|lesson|post; el stream emite article|lesson|post|…
+    private static string MapObjectKind(string? kind) => (kind?.Trim().ToLowerInvariant()) switch
+    {
+        "article" => "postPage",
+        "lesson" => "lesson",
+        _ => "post",
+    };
 
     private static string BuildMediaAlt(string? body)
     {
@@ -550,15 +572,57 @@ public sealed class BlogsController : ControllerBase
     private static ReactionsDto ToReactionsDto(ReactionState state) => new(
         Total: state.Total,
         CountsByType: state.CountsByType,
-        MyReaction: state.MyReaction);
+        MyReaction: state.MyReaction,
+        Counts: state.CountsByType
+            .Select(kv => new ReactionCountDto(kv.Key, kv.Value))
+            .ToList(),
+        Mine: state.MyReaction);
 
-    private static CommentDto ToCommentDto(Comment c) => new(
-        Id: c.Id,
-        Author: c.AuthorName,
-        Body: c.Body,
-        CreatedUtc: c.CreatedAtUtc,
-        ParentId: c.ParentId?.ToString(),
-        Likes: c.Likes);
+    private async Task<CommentDto> ToCommentDto(Comment c, CancellationToken cancellationToken)
+    {
+        var author = await ResolveCommentAuthor(c, cancellationToken);
+        return new CommentDto(
+            Id: c.Id,
+            Author: author,
+            Body: c.Body,
+            CreatedUtc: c.CreatedAtUtc,
+            CreatedAtUtc: c.CreatedAtUtc,
+            ParentId: c.ParentId?.ToString(),
+            Likes: c.Likes,
+            LikeCount: c.Likes);
+    }
+
+    // Resuelve el autor del comentario al AuthorDto (objeto) que la UI lee. Si el
+    // comentario trae MemberKey y hay perfil social resoluble, se usa; si no, se
+    // deriva un autor del propio comentario (nombre visible + handle-slug), sin
+    // inventar verificación ni avatar.
+    private async Task<AuthorDto> ResolveCommentAuthor(Comment c, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(c.MemberKey))
+        {
+            var profile = await _profiles.GetByActorIdAsync(c.MemberKey, cancellationToken);
+            if (profile is not null)
+            {
+                return ToProfileDto(profile);
+            }
+        }
+
+        var id = string.IsNullOrWhiteSpace(c.MemberKey) ? c.Id : c.MemberKey!;
+        return new AuthorDto(
+            Id: id,
+            Handle: HandleFromName(c.AuthorName),
+            DisplayName: string.IsNullOrWhiteSpace(c.AuthorName) ? id : c.AuthorName,
+            AvatarUrl: null,
+            Verified: false);
+    }
+
+    // Deriva un @handle estable del nombre visible (minúsculas, solo alfanuméricos).
+    private static string HandleFromName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "anon";
+        var slug = new string(name.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+        return slug.Length == 0 ? "anon" : slug;
+    }
 
     private static AuthorDto ToProfileDto(SocialProfile p) => new(
         Id: p.ActorId,
@@ -720,14 +784,23 @@ public sealed class BlogsController : ControllerBase
     public sealed record PostDto(
         string Id,
         string Kind,
+        // Contrato UI: la app lee `objectKind` (postPage|lesson|post), no `kind` (article).
+        string ObjectKind,
         AuthorDto Author,
         string Body,
         string? MediaUrl,
         IReadOnlyList<PostMediaDto> Media,
+        // Contrato UI: `hashtags:[...]` derivado del cuerpo (#tag).
+        IReadOnlyList<string> Hashtags,
         DateTime CreatedUtc,
+        // Contrato UI: la app lee `createdAtUtc`, no `createdUtc` (o muestra "ahora").
+        DateTime CreatedAtUtc,
         ReactionsDto Reactions,
         int Comments,
-        int Reposts);
+        // Contrato UI: la app lee `commentCount`/`repostCount`, no `comments`/`reposts`.
+        int CommentCount,
+        int Reposts,
+        int RepostCount);
 
     /// <summary>Contrato UI: la app lee `media:[{url,kind,alt}]` (array), no `mediaUrl` (string).</summary>
     public sealed record PostMediaDto(string Url, string Kind, string Alt);
@@ -737,20 +810,35 @@ public sealed class BlogsController : ControllerBase
         string Handle,
         string DisplayName,
         string? AvatarUrl,
-        bool Verified);
+        bool Verified,
+        // Contrato UI (solo header de perfil): ¿el viewer sigue a este autor?
+        // Defaultea a false para no romper los otros call-sites de AuthorDto
+        // (post/notificación/participante), donde el dato no aplica.
+        bool Following = false);
 
     public sealed record ReactionsDto(
         int Total,
         IReadOnlyDictionary<string, int> CountsByType,
-        string? MyReaction);
+        string? MyReaction,
+        // Contrato UI: `reactions.counts:[{type,count}]` (array) y `reactions.mine`.
+        IReadOnlyList<ReactionCountDto> Counts,
+        string? Mine);
+
+    /// <summary>Contrato UI: un conteo de reacciones por tipo — `{type,count}`.</summary>
+    public sealed record ReactionCountDto(string Type, int Count);
 
     public sealed record CommentDto(
         string Id,
-        string Author,
+        // Contrato UI: `comment.author` es un OBJETO {id,handle,displayName,avatarUrl,
+        // verified}, no un string — un string se descarta y el hilo queda vacío.
+        AuthorDto Author,
         string Body,
         DateTime CreatedUtc,
+        // Contrato UI: la app lee `createdAtUtc` y `likeCount`.
+        DateTime CreatedAtUtc,
         string? ParentId,
-        int Likes);
+        int Likes,
+        int LikeCount);
 
     public sealed record ProfileStatsDto(int Posts, int Followers, int Following);
 
@@ -786,9 +874,15 @@ public sealed class BlogsController : ControllerBase
     public sealed record NotificationDto(
         string Id,
         string Type,
+        // Contrato UI: la app lee `verb` (= tipo del evento).
+        string Verb,
         AuthorDto Actor,
         string? ObjectId,
+        // Contrato UI: la app lee `postId` (= objeto referenciado).
+        string? PostId,
         string Text,
+        // Contrato UI: la app lee `summary`, no `text`.
+        string Summary,
         DateTime CreatedUtc);
 
     // ── OLA 6 — Explore / trending ─────────────────────────────────

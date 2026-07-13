@@ -99,7 +99,12 @@ public sealed class RealtyController : ControllerBase
 
         return Ok(new ListingDetailResponse(
             Listing: ToListingDto(detail.Summary),
-            Specs: detail.Specs.Select(s => new SpecDto(s.Label, s.Value)).ToList(),
+            // PDP specs: la UI (normalizeSpecs) lee `specs` como OBJETO numérico, no
+            // como array {label,value}. El array humano se conserva en `specList`.
+            Specs: new SpecsDto(
+                detail.Summary.Beds, detail.Summary.Baths, detail.Summary.AreaM2,
+                0, 0, detail.Summary.Stratum, 0, 0),
+            SpecList: detail.Specs.Select(s => new SpecDto(s.Label, s.Value)).ToList(),
             Amenities: detail.Amenities,
             Gallery: detail.Gallery,
             Description: detail.Description,
@@ -376,7 +381,8 @@ public sealed class RealtyController : ControllerBase
         Id: l.Id,
         Slug: l.Slug,
         Title: l.Title,
-        Operation: l.Operation,
+        // Vocabulario UI: la UI espera 'sale'/'rent' (no 'venta'/'arriendo').
+        Operation: MapOperation(l.Operation),
         Type: l.Type,
         Price: l.Price,
         PriceFormatted: _priceFormatter.Format(l.Price, l.Currency),
@@ -392,13 +398,60 @@ public sealed class RealtyController : ControllerBase
         // Geo anidado: la UI lee `listing.geo.{neighborhood,city,lat,lng}` (card
         // subtítulo + marcadores del mapa). Sin esto quedaba " · " y mapa sin pines.
         Geo: new LocationDto(l.Lat, l.Lng, string.Empty, l.Neighborhood, l.City),
+        // Specs anidado: la UI lee `listing.specs.{beds,baths,areaBuilt,stratum}`
+        // (card + comparador). Los campos sin fuente en el resumen van en 0.
+        Specs: new SpecsDto(l.Beds, l.Baths, l.AreaM2, 0, 0, l.Stratum, 0, 0),
+        // Subtítulo de la card (línea de specs) que la UI lee como `listing.subtitle`.
+        Subtitle: BuildSubtitle(l),
+        // Chips string[] que la UI lee como `listing.badges` (Destacado/Estrato/estado).
+        Badges: BuildBadges(l),
         ImageUrl: l.ImageUrl,
         Cover: l.ImageUrl,
         Featured: l.Featured);
 
     private static FacetDto ToFacetDto(PropertyFacet f) => new(
         Name: f.Name,
-        Values: f.Values.Select(v => new FacetValueDto(v.Value, v.Count)).ToList());
+        // La UI lee `facets[].key` + `values[].label`; se conservan Name/Value legacy.
+        Key: f.Name,
+        Values: f.Values.Select(v => new FacetValueDto(v.Value, v.Value, v.Count)).ToList());
+
+    // ── Helpers de reshape (vocabulario + derivaciones para la UI) ──────
+
+    /// <summary>Mapea la operación es-CO al vocabulario que la UI espera (sale/rent).</summary>
+    private static string MapOperation(string operation) =>
+        (operation ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "venta" => "sale",
+            "arriendo" => "rent",
+            _ => operation ?? string.Empty
+        };
+
+    /// <summary>Línea de specs de la card (`listing.subtitle`) desde beds/baths/área/estrato.</summary>
+    private static string BuildSubtitle(PropertyListing l)
+    {
+        var parts = new List<string>(4);
+        if (l.Beds > 0) parts.Add($"{l.Beds} hab");
+        if (l.Baths > 0) parts.Add($"{l.Baths} baños");
+        if (l.AreaM2 > 0) parts.Add($"{l.AreaM2} m²");
+        if (l.Stratum > 0) parts.Add($"Estrato {l.Stratum}");
+        return string.Join(" · ", parts);
+    }
+
+    /// <summary>Chips derivados (`listing.badges`) desde Featured/Estrato/operación.</summary>
+    private static IReadOnlyList<string> BuildBadges(PropertyListing l)
+    {
+        var badges = new List<string>(3);
+        if (l.Featured) badges.Add("Destacado");
+        if (l.Stratum > 0) badges.Add($"Estrato {l.Stratum}");
+        var status = (l.Operation ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "venta" => "En venta",
+            "arriendo" => "En arriendo",
+            _ => null
+        };
+        if (status is not null) badges.Add(status);
+        return badges;
+    }
 
     private static SavedSearchDto ToSavedSearchDto(SavedSearch s) => new(
         Id: s.Id,
@@ -507,13 +560,16 @@ public sealed class RealtyController : ControllerBase
         double Lat,
         double Lng,
         LocationDto Geo,
+        SpecsDto Specs,
+        string Subtitle,
+        IReadOnlyList<string> Badges,
         string ImageUrl,
         string Cover,
         bool Featured);
 
-    public sealed record FacetValueDto(string Value, int Count);
+    public sealed record FacetValueDto(string Value, string Label, int Count);
 
-    public sealed record FacetDto(string Name, IReadOnlyList<FacetValueDto> Values);
+    public sealed record FacetDto(string Name, string Key, IReadOnlyList<FacetValueDto> Values);
 
     public sealed record ListingsResponse(
         IReadOnlyList<ListingDto> Listings,
@@ -521,13 +577,31 @@ public sealed class RealtyController : ControllerBase
 
     public sealed record SpecDto(string Label, string Value);
 
+    /// <summary>
+    /// Specs numéricos anidados que la UI espera (normalizeSpecs → objeto, no array):
+    /// `listing.specs` en card/comparador y `specs` en la PDP. Los campos sin fuente
+    /// en el resumen (areaPrivate/parking/ageYears/floor) van en 0.
+    /// </summary>
+    public sealed record SpecsDto(
+        int Beds,
+        int Baths,
+        int AreaBuilt,
+        int AreaPrivate,
+        int Parking,
+        int Stratum,
+        int AgeYears,
+        int Floor);
+
     public sealed record LocationDto(double Lat, double Lng, string Address, string Neighborhood, string City);
 
-    public sealed record AgentDto(string Name, string Phone);
+    // Agency/Rating: la UI lee `agent.agency` + `agent.rating`. PropertyDetail solo
+    // expone AgentName/AgentPhone → sin fuente; se emiten como null (no se inventan).
+    public sealed record AgentDto(string Name, string Phone, string? Agency = null, double? Rating = null);
 
     public sealed record ListingDetailResponse(
         ListingDto Listing,
-        IReadOnlyList<SpecDto> Specs,
+        SpecsDto Specs,
+        IReadOnlyList<SpecDto> SpecList,
         IReadOnlyList<string> Amenities,
         IReadOnlyList<string> Gallery,
         string Description,
