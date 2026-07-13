@@ -531,10 +531,20 @@ public sealed class BlogsController : ControllerBase
                 Verified: item.Author.Verified),
             Body: item.Body,
             MediaUrl: item.MediaUrl,
+            Media: string.IsNullOrWhiteSpace(item.MediaUrl)
+                ? System.Array.Empty<PostMediaDto>()
+                : new[] { new PostMediaDto(item.MediaUrl!, "image", BuildMediaAlt(item.Body)) },
             CreatedUtc: item.CreatedUtc,
             Reactions: ToReactionsDto(reactions),
             Comments: item.Metrics.Comments,
             Reposts: item.Metrics.Reposts);
+    }
+
+    private static string BuildMediaAlt(string? body)
+    {
+        var text = (body ?? string.Empty).Trim();
+        if (text.Length == 0) return "Imagen del post";
+        return text.Length <= 80 ? text : text[..80].TrimEnd() + "…";
     }
 
     private static ReactionsDto ToReactionsDto(ReactionState state) => new(
@@ -713,10 +723,14 @@ public sealed class BlogsController : ControllerBase
         AuthorDto Author,
         string Body,
         string? MediaUrl,
+        IReadOnlyList<PostMediaDto> Media,
         DateTime CreatedUtc,
         ReactionsDto Reactions,
         int Comments,
         int Reposts);
+
+    /// <summary>Contrato UI: la app lee `media:[{url,kind,alt}]` (array), no `mediaUrl` (string).</summary>
+    public sealed record PostMediaDto(string Url, string Kind, string Alt);
 
     public sealed record AuthorDto(
         string Id,

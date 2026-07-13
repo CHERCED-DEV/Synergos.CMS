@@ -371,6 +371,7 @@ public sealed class TravelController : ControllerBase
                 Address: stay.Address,
                 Description: stay.Description,
                 Gallery: stay.Gallery,
+                Images: stay.Gallery,
                 Amenities: stay.Amenities,
                 Specs: stay.Specs.Select(s => new StaySpecDto(s.Label, s.Value)).ToList(),
                 Geo: new GeoDto(stay.Geo.Lat, stay.Geo.Lng),
@@ -469,6 +470,7 @@ public sealed class TravelController : ControllerBase
 
     public sealed record StayDto(
         string StayId, string Name, string City, string Region, string Address, string Description,
-        IReadOnlyList<string> Gallery, IReadOnlyList<string> Amenities, IReadOnlyList<StaySpecDto> Specs,
+        IReadOnlyList<string> Gallery, IReadOnlyList<string> Images, IReadOnlyList<string> Amenities,
+        IReadOnlyList<StaySpecDto> Specs,
         GeoDto Geo, StayReviewsDto Reviews, IReadOnlyList<string> RoomTypeCodes);
 }

@@ -83,13 +83,13 @@ internal static class SocialDemoSeed
     {
         new SeedPost("post-001", "act-elena", "post", 0,
             "Tres años después sigo convencido: la mejor arquitectura es la que te deja borrar código sin miedo. Acoplamiento bajo > cleverness.",
-            "/media/blogs/posts/clean-arch.webp"),
+            "/media/blogs/posts/clean-arch.jpg"),
         new SeedPost("post-002", "act-mateo", "post", -35,
             "Acabo de migrar todo el design system a tokens semánticos. Cambiar el brand entero es ahora un solo archivo. Atomic design pagando dividendos.",
             null),
         new SeedPost("post-003", "act-sofia", "article", -90,
             "Escribí sobre por qué tus dashboards mienten: agregaciones que esconden la cola, promedios sin percentiles y el sesgo de supervivencia. Hilo 🧵",
-            "/media/blogs/posts/dashboards-lie.webp"),
+            "/media/blogs/posts/dashboards-lie.jpg"),
         new SeedPost("post-004", "act-andres", "post", -150,
             "PSA: revisar el costo de egress ANTES de elegir multi-región. Nos ahorramos un susto este mes mirando los data-transfer charges.",
             null),
@@ -98,13 +98,13 @@ internal static class SocialDemoSeed
             null),
         new SeedPost("post-006", "act-mateo", "post", -310,
             "Recordatorio de que la grilla de 8pt no es dogma, es disciplina. El ritmo vertical consistente es lo que separa un UI 'ok' de uno que se siente premium.",
-            "/media/blogs/posts/8pt-grid.webp"),
+            "/media/blogs/posts/8pt-grid.jpg"),
         new SeedPost("post-007", "act-sofia", "post", -420,
             "Pasé el finde reproduciendo un paper de embeddings. El 80% del tiempo fue limpiar datos. El otro 20% también. Bienvenidos a ML real.",
             null),
         new SeedPost("post-008", "act-andres", "article", -540,
             "Guía: cómo instrumentar trazas distribuidas sin volverte loco. OpenTelemetry, sampling con cabeza, y por qué el contexto de propagación lo es todo.",
-            "/media/blogs/posts/otel-tracing.webp"),
+            "/media/blogs/posts/otel-tracing.jpg"),
     };
 
     /// <summary>

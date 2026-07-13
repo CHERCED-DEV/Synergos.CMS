@@ -220,13 +220,10 @@ public sealed class StubStayContentProvider : IStayContentProvider
         return Task.FromResult(match);
     }
 
-    // Galería determinista por estadía: URLs estables servibles en demo
-    // (placeholder remoto seeded — el adapter real las lee del CMS/media).
+    // Galería determinista por estadía: cover local coherente con el tema
+    // (servido desde wwwroot/media/booking/; el adapter real las leería del CMS/media).
     private static IReadOnlyList<string> GalleryFor(string stayId) => new[]
     {
-        $"https://picsum.photos/seed/syn-stay-{stayId}-1/960/640",
-        $"https://picsum.photos/seed/syn-stay-{stayId}-2/960/640",
-        $"https://picsum.photos/seed/syn-stay-{stayId}-3/960/640",
-        $"https://picsum.photos/seed/syn-stay-{stayId}-4/960/640",
+        $"/media/booking/{stayId}.jpg",
     };
 }

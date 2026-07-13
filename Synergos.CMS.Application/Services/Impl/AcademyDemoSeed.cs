@@ -60,7 +60,7 @@ internal static class AcademyDemoSeed
             Category: "Desarrollo",
             Level: "Intermedio",
             InstructorId: "ins-elena",
-            CoverImageUrl: "/media/academy/courses/clean-architecture.webp",
+            CoverImageUrl: "/media/academy/courses/clean-architecture.jpg",
             Price: 320_000m,
             Rating: 4.8,
             Outcomes: new[]
@@ -99,7 +99,7 @@ internal static class AcademyDemoSeed
             Category: "Diseño",
             Level: "Principiante",
             InstructorId: "ins-mateo",
-            CoverImageUrl: "/media/academy/courses/design-systems.webp",
+            CoverImageUrl: "/media/academy/courses/design-systems.jpg",
             Price: 240_000m,
             Rating: 4.6,
             Outcomes: new[]
@@ -135,7 +135,7 @@ internal static class AcademyDemoSeed
             Category: "Datos",
             Level: "Avanzado",
             InstructorId: "ins-sofia",
-            CoverImageUrl: "/media/academy/courses/ml-applied.webp",
+            CoverImageUrl: "/media/academy/courses/ml-applied.jpg",
             Price: 480_000m,
             Rating: 4.9,
             Outcomes: new[]
@@ -174,7 +174,7 @@ internal static class AcademyDemoSeed
             Category: "Desarrollo",
             Level: "Principiante",
             InstructorId: "ins-elena",
-            CoverImageUrl: "/media/academy/courses/git-fundamentals.webp",
+            CoverImageUrl: "/media/academy/courses/git-fundamentals.jpg",
             Price: 0m,
             Rating: 4.5,
             Outcomes: new[]

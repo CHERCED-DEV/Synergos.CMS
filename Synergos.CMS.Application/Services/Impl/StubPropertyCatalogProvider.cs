@@ -302,12 +302,11 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
             new("Piso", floor),
         };
 
+        // Cover local coherente con el tema (servido desde wwwroot/media/realty/).
+        // Un solo cover por listado: la PLP usa gallery[0]; la ficha muestra la galería.
         var gallery = new List<string>
         {
-            $"/media/realty/{slug}-1.jpg",
-            $"/media/realty/{slug}-2.jpg",
-            $"/media/realty/{slug}-3.jpg",
-            $"/media/realty/{slug}-4.jpg",
+            $"/media/realty/{slug}.jpg",
         };
 
         var location = new PropertyLocation(lat, lng,

@@ -390,6 +390,7 @@ public sealed class RealtyController : ControllerBase
         Lat: l.Lat,
         Lng: l.Lng,
         ImageUrl: l.ImageUrl,
+        Cover: l.ImageUrl,
         Featured: l.Featured);
 
     private static FacetDto ToFacetDto(PropertyFacet f) => new(
@@ -503,6 +504,7 @@ public sealed class RealtyController : ControllerBase
         double Lat,
         double Lng,
         string ImageUrl,
+        string Cover,
         bool Featured);
 
     public sealed record FacetValueDto(string Value, int Count);
