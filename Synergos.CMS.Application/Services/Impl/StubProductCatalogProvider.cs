@@ -31,10 +31,10 @@ public sealed class StubProductCatalogProvider : IProductCatalogProvider
             Price: 5_200_000m,
             Brand: "Aurora",
             Category: "Tecnología",
-            ImageUrl: "/media/shop/laptop-pro-14.webp",
+            ImageUrl: "/media/shop/laptop-pro-14.jpg",
             Rating: 4.7,
             Description: "Ultrabook de 14 pulgadas con pantalla de alta resolución, 18 horas de batería y chip de bajo consumo. Ideal para trabajo y creación.",
-            Images: new[] { "/media/shop/laptop-pro-14.webp", "/media/shop/laptop-pro-14-2.webp", "/media/shop/laptop-pro-14-3.webp" },
+            Images: new[] { "/media/shop/laptop-pro-14.jpg", "/media/shop/laptop-pro-14-2.jpg", "/media/shop/laptop-pro-14-3.jpg" },
             Variants: new[]
             {
                 new CatalogVariant("tec-laptop-pro-14-16-512", "16 GB RAM · 512 GB SSD", 5_200_000m, 12),
@@ -57,10 +57,10 @@ public sealed class StubProductCatalogProvider : IProductCatalogProvider
             Price: 680_000m,
             Brand: "Sonido",
             Category: "Tecnología",
-            ImageUrl: "/media/shop/audifonos-anc.webp",
+            ImageUrl: "/media/shop/audifonos-anc.jpg",
             Rating: 4.5,
             Description: "Audífonos over-ear con cancelación activa de ruido, 30 horas de autonomía y carga rápida.",
-            Images: new[] { "/media/shop/audifonos-anc.webp", "/media/shop/audifonos-anc-2.webp" },
+            Images: new[] { "/media/shop/audifonos-anc.jpg", "/media/shop/audifonos-anc-2.jpg" },
             Variants: new[]
             {
                 new CatalogVariant("tec-audifonos-anc-negro", "Negro medianoche", 680_000m, 40),
@@ -78,10 +78,10 @@ public sealed class StubProductCatalogProvider : IProductCatalogProvider
             Price: 1_350_000m,
             Brand: "Barista",
             Category: "Hogar",
-            ImageUrl: "/media/shop/cafetera-espresso.webp",
+            ImageUrl: "/media/shop/cafetera-espresso.jpg",
             Rating: 4.3,
             Description: "Cafetera espresso con molino integrado, espumador de leche y panel táctil. 15 bares de presión.",
-            Images: new[] { "/media/shop/cafetera-espresso.webp", "/media/shop/cafetera-espresso-2.webp" },
+            Images: new[] { "/media/shop/cafetera-espresso.jpg", "/media/shop/cafetera-espresso-2.jpg" },
             Variants: new[]
             {
                 new CatalogVariant("hog-cafetera-espresso-inox", "Acero inoxidable", 1_350_000m, 9),
@@ -102,10 +102,10 @@ public sealed class StubProductCatalogProvider : IProductCatalogProvider
             Price: 1_790_000m,
             Brand: "CleanBot",
             Category: "Hogar",
-            ImageUrl: "/media/shop/aspiradora-robot.webp",
+            ImageUrl: "/media/shop/aspiradora-robot.jpg",
             Rating: 4.1,
             Description: "Robot aspirador y trapeador con mapeo láser LiDAR, app móvil y vaciado automático.",
-            Images: new[] { "/media/shop/aspiradora-robot.webp" },
+            Images: new[] { "/media/shop/aspiradora-robot.jpg" },
             Variants: Array.Empty<CatalogVariant>(),
             Reviews: new[]
             {
@@ -120,10 +120,10 @@ public sealed class StubProductCatalogProvider : IProductCatalogProvider
             Price: 2_450_000m,
             Brand: "Trail",
             Category: "Deportes",
-            ImageUrl: "/media/shop/bici-mtb-29.webp",
+            ImageUrl: "/media/shop/bici-mtb-29.jpg",
             Rating: 4.6,
             Description: "Mountain bike de aluminio rin 29, 21 velocidades, frenos de disco hidráulicos y suspensión delantera.",
-            Images: new[] { "/media/shop/bici-mtb-29.webp", "/media/shop/bici-mtb-29-2.webp" },
+            Images: new[] { "/media/shop/bici-mtb-29.jpg", "/media/shop/bici-mtb-29-2.jpg" },
             Variants: new[]
             {
                 new CatalogVariant("dep-bici-mtb-29-m", "Talla M (1.65-1.75 m)", 2_450_000m, 7),
@@ -144,10 +144,10 @@ public sealed class StubProductCatalogProvider : IProductCatalogProvider
             Price: 420_000m,
             Brand: "Veloz",
             Category: "Deportes",
-            ImageUrl: "/media/shop/tenis-running.webp",
+            ImageUrl: "/media/shop/tenis-running.jpg",
             Rating: 4.4,
             Description: "Zapatillas de running con espuma de retorno de energía, malla transpirable y suela de alta tracción.",
-            Images: new[] { "/media/shop/tenis-running.webp", "/media/shop/tenis-running-2.webp" },
+            Images: new[] { "/media/shop/tenis-running.jpg", "/media/shop/tenis-running-2.jpg" },
             Variants: new[]
             {
                 new CatalogVariant("dep-tenis-running-39", "Talla 39", 420_000m, 15),

@@ -124,7 +124,7 @@ public sealed class ShopCatalogController : ControllerBase
             return NotFound(new { error = $"Producto '{id}' no encontrado." });
         }
 
-        var product = ToProductDto(detail.Product) with { Description = detail.Description, ImageUrls = detail.ImageUrls };
+        var product = ToProductDto(detail.Product) with { Description = detail.Description, ImageUrls = detail.ImageUrls, Images = detail.ImageUrls ?? System.Array.Empty<string>() };
         var variants = detail.Variants.Select(v => new VariantDto(
             VariantId: v.VariantId,
             Name: v.Name,
@@ -551,7 +551,10 @@ public sealed class ShopCatalogController : ControllerBase
         Stock: p.Stock,
         InStock: p.Stock > 0,
         Description: null,
-        ImageUrls: null);
+        ImageUrls: null,
+        // La UI lee product.images (array). Emitimos ImageUrl como array de 1 (o vacío
+        // → la card cae al monograma). Contrato alineado (UI = fuente de verdad).
+        Images: p.ImageUrl is null ? System.Array.Empty<string>() : new[] { p.ImageUrl });
 
     private static CollectionItemDto ToCollectionItemDto(UserCollectionItem i) => new(
         Owner: i.Owner,
@@ -626,7 +629,8 @@ public sealed class ShopCatalogController : ControllerBase
         int Stock,
         bool InStock,
         string? Description,
-        IReadOnlyList<string>? ImageUrls);
+        IReadOnlyList<string>? ImageUrls,
+        IReadOnlyList<string> Images);
 
     public sealed record FacetDto(string Key, string Label, IReadOnlyList<FacetValueDto> Values);
 
