@@ -384,6 +384,10 @@
      texto desbalanceado a la derecha (caso disclaimer text-only). */
   .syn-mission:not(:has(.syn-mission__media)) {
     grid-template-columns: 1fr;
+    /* Texto-solo: header y body son filas del grid; el gap 2xl entre ellas
+       (pensado para separar del media) deja un hueco enorme título↔cuerpo.
+       El header ya trae su margin-bottom, así que basta un gap chico. */
+    gap: var(--syn-space-sm);
   }
   .syn-mission:not(:has(.syn-mission__media)) .syn-mission__body {
     max-width: 68ch;   /* ancho de línea legible cuando ocupa todo el ancho */
