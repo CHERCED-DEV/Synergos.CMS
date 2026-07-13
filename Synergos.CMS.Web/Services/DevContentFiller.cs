@@ -2382,10 +2382,19 @@ public sealed class DevContentFiller
         page.SetCultureName(name, Culture);
         if (page.HasProperty("heading")) { page.SetValue("heading", heading, Culture); }
         if (page.HasProperty("showTitle")) { page.SetValue("showTitle", false); }
-        if (page.HasProperty("seoTitle")) { page.SetValue("seoTitle", $"{name} — Healthcare {BrandName}", Culture); }
+        // El sufijo del <title> se deriva del siteDisplayName del siteRoot padre (igual
+        // que _SeoHead compone og:site_name), NO de una marca hardcodeada. Así cada
+        // vertical (Healthcare, Educación, …) hereda su propio nombre y title↔og quedan
+        // consistentes. Fallback a BrandName si el padre no expone siteDisplayName.
+        if (page.HasProperty("seoTitle"))
+        {
+            var siteName = _contentService.GetById(parentId)?.GetValue<string>("siteDisplayName", Culture);
+            if (string.IsNullOrWhiteSpace(siteName)) { siteName = BrandName; }
+            page.SetValue("seoTitle", $"{name} — {siteName}", Culture);
+        }
         page.SetValue(SectionsAlias, sectionsJson, Culture);
         var save = _contentService.SaveAndPublish(page, new[] { Culture });
-        details.Add(save.Success ? $"HealthcarePage:{name}:ok" : $"HealthcarePage:{name}:failed:{save.Result}");
+        details.Add(save.Success ? $"SiteRootPage:{name}:ok" : $"SiteRootPage:{name}:failed:{save.Result}");
         return save.Success ? page.Id : 0;
     }
 
