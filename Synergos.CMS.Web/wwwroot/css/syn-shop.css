@@ -679,6 +679,25 @@
   color: var(--syn-color-action-danger);
 }
 
+/* Responsive del carrito en móvil: target táctil WCAG 2.5.5 (44x44, como
+   .syn-cart-button) y reflow del item a 2 columnas para no desbordar en 320px. */
+@media (max-width: 767px) {
+  .syn-cart-item__remove { width: 44px; height: 44px; }
+}
+@media (max-width: 479.98px) {
+  .syn-cart-item {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "sku remove"
+      "qty price";
+    row-gap: var(--syn-space-sm);
+  }
+  .syn-cart-item__sku   { grid-area: sku; min-width: 0; overflow-wrap: anywhere; }
+  .syn-cart-item__qty   { grid-area: qty; }
+  .syn-cart-item__price { grid-area: price; }
+  .syn-cart-item__remove { grid-area: remove; justify-self: end; }
+}
+
 /* ── Cart summary (block elementShopCartSummary) ─────────────── */
 
 .syn-cart-summary {
@@ -733,6 +752,8 @@
 }
 
 .syn-cart-summary__line-name {
+  min-width: 0;                 /* deja que el track 1fr se encoja bajo min-content */
+  overflow-wrap: anywhere;      /* nombres largos parten en vez de desbordar el panel */
   color: var(--syn-color-text-primary);
   font-weight: var(--syn-font-weight-medium);
   text-decoration: none;

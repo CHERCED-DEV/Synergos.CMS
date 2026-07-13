@@ -1584,21 +1584,24 @@ img.syn-feature__icon {
 }
 .syn-form-field__input {
   width: 100%;
+  min-height: var(--syn-control-h-lg);
   padding: var(--syn-space-3) var(--syn-space-4);
   font-family: inherit;
   font-size: var(--syn-font-size-base);
   color: var(--syn-color-text-primary);
   background: var(--syn-color-surface-secondary);
   border: 1px solid var(--syn-color-border-default);
-  border-radius: var(--syn-radius-md);
+  border-radius: var(--syn-radius-field);
   transition: var(--syn-transition-colors);
 }
 .syn-form-field__input::placeholder { color: var(--syn-color-text-muted); }
-.syn-form-field__input:focus {
+/* a11y — :focus-visible (no dispara con mouse) + token de foco canónico
+   (antes usaba state-brand-surface = superficie wash, anillo de bajo contraste). */
+.syn-form-field__input:focus-visible {
   outline: none;
   background: var(--syn-color-surface-primary);
   border-color: var(--syn-color-action-primary);
-  box-shadow: 0 0 0 3px var(--syn-color-state-brand-surface);
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
 }
 textarea.syn-form-field__input { resize: vertical; min-height: 7rem; }
 .syn-form-field__help {

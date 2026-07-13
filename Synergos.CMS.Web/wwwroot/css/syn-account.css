@@ -119,11 +119,11 @@
 .syn-account__field-input {
   display: block;
   width: 100%;
-  min-height: 48px;
+  min-height: var(--syn-control-h-lg);   /* =48px, tokenizado */
   padding: var(--syn-space-3) var(--syn-space-4);
   background: rgb(var(--syn-channel-ink) / 0.30);
   border: 1px solid var(--syn-color-border-inverse);
-  border-radius: var(--syn-radius-md);
+  border-radius: var(--syn-radius-field);
   font-family: inherit;
   font-size: var(--syn-font-size-base);
   color: var(--syn-color-text-primary);
@@ -143,6 +143,15 @@
   outline: none;
   border-color: var(--syn-color-action-primary);
   box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+}
+
+/* a11y — estado inválido por-campo (borde + anillo danger) para que un lector
+   de pantalla / usuario de teclado sepa QUÉ campo falló, no sólo el banner.
+   Se activa cuando la vista marca aria-invalid="true" en el input. */
+.syn-account__field input[aria-invalid="true"],
+.syn-account__field-input[aria-invalid="true"] {
+  border-color: var(--syn-color-state-danger-border);
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring-danger);
 }
 
 .syn-account__field input:disabled,
@@ -196,12 +205,12 @@ label.syn-account__field {
   width: 100%;
   align-items: center;
   justify-content: center;
-  min-height: 48px;
+  min-height: var(--syn-control-h-lg);   /* =48px, tokenizado */
   padding: var(--syn-space-3) var(--syn-space-6);
   background: var(--syn-color-action-primary);
   color: var(--syn-color-action-primary-text);
   border: 1px solid transparent;
-  border-radius: var(--syn-radius-md);
+  border-radius: var(--syn-radius-field);
   font-family: inherit;
   font-size: var(--syn-font-size-base);
   font-weight: var(--syn-font-weight-semibold);
