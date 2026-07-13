@@ -407,7 +407,11 @@ html:has(.syn-launcher) { overflow-x: clip; }
   margin-top: var(--syn-space-1);
   font-size: var(--syn-font-size-xs);
   letter-spacing: var(--syn-letter-spacing-wide);
-  text-transform: capitalize;
+}
+/* es-CO: la fecha ya viene en minúscula del toLocaleDateString; capitalizamos
+   SOLO la primera letra (no `capitalize`, que ponía "De Julio"). */
+.syn-launcher__clock-date::first-letter {
+  text-transform: uppercase;
 }
 
 @keyframes syn-pr-rise {
