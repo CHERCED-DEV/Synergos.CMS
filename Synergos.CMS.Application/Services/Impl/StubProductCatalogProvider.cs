@@ -146,7 +146,7 @@ public sealed class StubProductCatalogProvider : IProductCatalogProvider
             Category: "Deportes",
             ImageUrl: "/media/shop/tenis-running.jpg",
             Rating: 4.4,
-            Description: "Zapatillas de running con espuma de retorno de energía, malla transpirable y suela de alta tracción.",
+            Description: "Tenis de running con espuma de retorno de energía, malla transpirable y suela de alta tracción.",
             Images: new[] { "/media/shop/tenis-running.jpg", "/media/shop/tenis-running-2.jpg" },
             Variants: new[]
             {

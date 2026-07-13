@@ -33,10 +33,12 @@ public sealed class EsCoPriceFormatter : IPriceFormatter
 
     public string Format(decimal amount, string? currency = null)
     {
-        var code = string.IsNullOrWhiteSpace(currency)
-            ? _defaultCurrency
-            : currency.Trim();
+        // Formato símbolo-prefijo es-CO ('$ 5.200.000') para alinear con las apps
+        // Angular vivas (Intl currency es-CO) — antes emitía código-sufijo
+        // ('5.200.000 COP'), dos registros en el mismo journey. El código de moneda
+        // queda informativo (demo mono-moneda COP; el símbolo de cultura es '$').
+        _ = string.IsNullOrWhiteSpace(currency) ? _defaultCurrency : currency.Trim();
 
-        return $"{amount.ToString("N0", EsCo)} {code}";
+        return amount.ToString("C0", EsCo);
     }
 }

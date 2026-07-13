@@ -738,6 +738,19 @@ public sealed class DevContentFiller
         });
     }
 
+    /// <summary>
+    /// Compone un hero SSR SOLO si el módulo Angular <paramref name="moduleAlias"/>
+    /// NO está importado. Cuando el módulo existe (hidrata en vivo con su propio
+    /// hero/header), evita el doble-hero + doble-H1 componiendo únicamente el mount;
+    /// si el ElementType falta, el hero SSR queda como fallback no-hydrate.
+    /// </summary>
+    private void AddFallbackHero(BlockGridJsonBuilder b, string moduleAlias, string title, string subtitle, string body,
+        string imgName, string imgAlt, string from, string to, params (string label, string url)[] ctas)
+    {
+        if (_contentTypeService.Get(moduleAlias)?.Key is not null) { return; }
+        AddHero(b, title, subtitle, body, imgName, imgAlt, from, to, ctas);
+    }
+
     private void AddFeatureGrid(BlockGridJsonBuilder b, string title, string subtitle,
         (string title, string subtitle, string body)[] features)
     {
@@ -1100,30 +1113,34 @@ public sealed class DevContentFiller
 
         var g = new BlockGridJsonBuilder();
 
-        // Aditivo + no-destructivo: el módulo Angular se monta PRIMERO (si su ElementType
-        // está importado); las cards estáticas de abajo quedan como grace fallback y como
-        // experiencia base si el bundle CDN aún no hidrata. Ambos consumen el mismo catálogo.
+        // Aditivo + no-destructivo: el módulo Angular <synergos-app-launcher> se monta
+        // SIEMPRE (si su ElementType está importado). Las cards estáticas de abajo son
+        // grace fallback: SOLO se componen si el módulo NO está importado, para evitar el
+        // doble-catálogo (el módulo renderiza su propio grid del mismo catálogo).
         var appsJson = BuildAppsCatalogJson(apps);
         AddSynAppLauncher(g, appsJson, "Explora las apps", "Un motor, mil productos: entra a cualquier dominio y míralo en vivo.");
 
-        var section = g.AddTopLevelBlock(_sectionKey);
-        section.Set("cssClass", "syn-launcher__grid").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
-
-        void AddCard(string title, string body, string iconClass, string statusClass, string ctaLabel, string url) =>
-            section.AddChild(SectionContentAreaKey, cardKey.Value, c => c
-                .Set("headingTitle", title)
-                .Set("textBody", body)
-                .Set("mediaAlt", title)   // compContentMedia.mediaAlt es mandatory (sin imagen, pero requerido)
-                .Set("ctaLabel", ctaLabel)
-                .Set("ctaLink", LinkJson(title, url))
-                .Set("cssClass", $"syn-launcher__card {iconClass} {statusClass}")
-                .ApplyDefaults(_defaults.DefaultsFor(cardKey.Value)));
-
-        foreach (var a in apps)
+        if (_contentTypeService.Get("elementSynAppLauncher")?.Key is null)
         {
-            AddCard(a.Name, $"<p>{a.Tagline}</p>",
-                $"syn-launcher__card--{a.Icon}", $"syn-launcher__card--{a.Status}",
-                $"Entrar a {a.Name} →", a.Url);
+            var section = g.AddTopLevelBlock(_sectionKey);
+            section.Set("cssClass", "syn-launcher__grid").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+
+            void AddCard(string title, string body, string iconClass, string statusClass, string ctaLabel, string url) =>
+                section.AddChild(SectionContentAreaKey, cardKey.Value, c => c
+                    .Set("headingTitle", title)
+                    .Set("textBody", body)
+                    .Set("mediaAlt", title)   // compContentMedia.mediaAlt es mandatory (sin imagen, pero requerido)
+                    .Set("ctaLabel", ctaLabel)
+                    .Set("ctaLink", LinkJson(title, url))
+                    .Set("cssClass", $"syn-launcher__card {iconClass} {statusClass}")
+                    .ApplyDefaults(_defaults.DefaultsFor(cardKey.Value)));
+
+            foreach (var a in apps)
+            {
+                AddCard(a.Name, $"<p>{a.Tagline}</p>",
+                    $"syn-launcher__card--{a.Icon}", $"syn-launcher__card--{a.Status}",
+                    $"Entrar a {a.Name} →", a.Url);
+            }
         }
 
         pr.SetCultureName(BrandName, Culture);   // umbrella = SynergosLabs (el hero lee Model.Name)
@@ -1615,7 +1632,7 @@ public sealed class DevContentFiller
             "Conecta, publica y crece tu audiencia",
             "Una red social editorial: sigue autores, publica historias y reacciona en tiempo real.");
 
-        AddHero(b, "Blogs que enganchan", "Publica, organiza y crece tu audiencia",
+        AddFallbackHero(b, "elementSynBlogs", "Blogs que enganchan", "Publica, organiza y crece tu audiencia",
             "<p>Un blog editorial sobre el mismo motor: categorías, autores y SEO listos. Tu marca, tu voz — sin montar un CMS desde cero.</p>",
             "Synergos Blogs Hero", "Hero del vertical Blogs", "#2A2412", "#B59659",
             ("Hablemos", "/synergos/contacto"), ("Ver planes", "/synergos/precios"));
@@ -1801,7 +1818,7 @@ public sealed class DevContentFiller
             "Compra en nuestra tienda online",
             "Catálogo, carrito y checkout en un solo lugar. Explora, agrega al carrito y paga en minutos.");
 
-        AddHero(b, "Tu tienda, sobre el mismo motor", "Catálogo, carrito y checkout",
+        AddFallbackHero(b, "elementSynStorefront", "Tu tienda, sobre el mismo motor", "Catálogo, carrito y checkout",
             "<p>Vende online con producto, variantes, carrito y consultas server-side sobre el mismo núcleo — sin re-plataformar cuando crezcas.</p>",
             "Synergos Tienda Hero", "Hero del vertical Tienda", "#020817", "#4f6ef7",
             ("Ver el catálogo", "/tienda/ropa"), ("Hablar con ventas", "/synergos/contacto"));
@@ -2430,7 +2447,7 @@ public sealed class DevContentFiller
             "Tu consultorio, en orden",
             "Historia clínica, agenda y recetas en un solo lugar — el dashboard clínico en vivo.");
 
-        AddHero(b, "Tu consultorio, en orden",
+        AddFallbackHero(b, "elementSynEhr", "Tu consultorio, en orden",
             "Historia clínica, agenda y recetas en un solo lugar",
             "<p>SynergosLabs Healthcare reúne la historia de tus pacientes, la agenda de citas y las recetas — cifrado y con acceso auditado. Pedí una cita abajo o conocé la plataforma.</p>",
             "Synergos Healthcare Hero", "Hero del vertical Healthcare", "#0B3B3C", "#1FA2A6",
@@ -2508,7 +2525,7 @@ public sealed class DevContentFiller
             "Aprende lo que el mercado pide",
             "Una academia online: catálogo, lecciones, instructores e inscripciones — a tu ritmo.");
 
-        AddHero(b, "Aprende lo que el mercado pide",
+        AddFallbackHero(b, "elementSynAcademy", "Aprende lo que el mercado pide",
             "Cursos prácticos con certificación, a tu ritmo",
             "<p>Una academia online sobre el mismo motor: catálogo, lecciones, instructores e inscripciones. Aprende habilidades reales con proyectos guiados y obtén tu certificado.</p>",
             "Educacion Home Hero", "Hero de la academia Educación", ScholarFrom, ScholarTo,
@@ -2783,7 +2800,7 @@ public sealed class DevContentFiller
             "Reserva tu próximo viaje",
             "Vuelos, hoteles y paquetes en un solo lugar. Busca, compara y reserva en minutos.");
 
-        AddHero(b, "Reservas y citas, sin fricción",
+        AddFallbackHero(b, "elementSynTravelShell", "Reservas y citas, sin fricción",
             "Tu agenda en línea, disponible 24/7",
             "<p>Una plataforma de reservas enterprise sobre el mismo motor: catálogo de servicios, calendario en tiempo real y confirmación automática. Tus clientes reservan en minutos; tu equipo gestiona en un solo lugar.</p>",
             "Booking Home Hero", "Hero de la plataforma de reservas Booking", MeridianFrom, MeridianTo,
@@ -3020,7 +3037,7 @@ public sealed class DevContentFiller
             "Catálogo, tickets y check-in en vivo — la plataforma de eventos en una sola app.",
             "attendee");
 
-        AddHero(b, "Vive los eventos que importan",
+        AddFallbackHero(b, "elementSynEventos", "Vive los eventos que importan",
             "Conferencias, talleres y experiencias premium en un solo lugar",
             "<p>Una plataforma de eventos sobre el mismo motor: cartelera, cuenta regresiva, agenda y tickets. Descubre el próximo gran evento y asegura tu cupo antes de que se agote.</p>",
             "Eventos Home Hero", "Hero de la plataforma de eventos", EventsFrom, EventsTo,
@@ -3309,7 +3326,7 @@ public sealed class DevContentFiller
             "Encuentra el lugar que estás buscando",
             "El portal inmobiliario en vivo: busca en lista o mapa, abre la ficha, agenda una visita y calcula tu hipoteca.");
 
-        AddHero(b, "Encuentra el lugar que estás buscando",
+        AddFallbackHero(b, "elementSynRealty", "Encuentra el lugar que estás buscando",
             "Propiedades premium con la mejor experiencia de búsqueda",
             "<p>Un portal inmobiliario sobre el mismo motor: listado filtrable, galerías inmersivas y fichas completas. Apartamentos, casas y espacios comerciales — todo en un solo lugar.</p>",
             "Propiedades Home Hero", "Hero del portal de propiedades", TerraFrom, TerraTo,
@@ -3537,7 +3554,7 @@ public sealed class DevContentFiller
         AddSynGov(b, "/api/gov", "Tus trámites, sin filas",
             "Radica, paga la tasa si aplica y sigue tu expediente por etapas — en lenguaje claro.");
 
-        AddHero(b, "Trámites del Estado, en lenguaje claro",
+        AddFallbackHero(b, "elementSynGov", "Trámites del Estado, en lenguaje claro",
             "Un solo lugar para radicar y hacer seguimiento",
             "<p>Consulta los requisitos, radica tu solicitud con un formulario guiado, adjunta tus documentos y sigue tu expediente etapa por etapa hasta la resolución. Sin filas, sin vueltas.</p>",
             "Gobierno Home Hero", "Hero del portal ciudadano de trámites", GovFrom, GovTo,
