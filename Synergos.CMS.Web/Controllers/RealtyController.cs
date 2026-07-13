@@ -431,7 +431,7 @@ public sealed class RealtyController : ControllerBase
     {
         var parts = new List<string>(4);
         if (l.Beds > 0) parts.Add($"{l.Beds} hab");
-        if (l.Baths > 0) parts.Add($"{l.Baths} baños");
+        if (l.Baths > 0) parts.Add($"{l.Baths} {(l.Baths == 1 ? "baño" : "baños")}");
         if (l.AreaM2 > 0) parts.Add($"{l.AreaM2} m²");
         if (l.Stratum > 0) parts.Add($"Estrato {l.Stratum}");
         return string.Join(" · ", parts);
