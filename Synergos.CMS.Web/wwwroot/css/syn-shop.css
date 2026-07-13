@@ -793,7 +793,7 @@
   padding: var(--syn-space-3) var(--syn-space-6);
   background: linear-gradient(135deg,
     var(--syn-color-action-primary) 0%,
-    var(--syn-color-action-emphasis, var(--syn-color-accent-500)) 100%);
+    var(--syn-color-action-emphasis-strong, var(--syn-color-action-emphasis, var(--syn-color-accent-500))) 100%);
   color: var(--syn-color-action-primary-text);
   border: 1px solid transparent;
   border-radius: var(--syn-radius-md);

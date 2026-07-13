@@ -49,6 +49,9 @@
   --syn-color-accent-400: #a78bfa;
   --syn-color-accent-500: #8b5cf6;
   --syn-color-accent-600: #7c3aed;
+  /* a11y — piso oscuro del ramp accent para gradientes con texto claro:
+     blanco sobre accent-700 = 7.10:1 (accent-500 solo daba 4.23). */
+  --syn-color-accent-700: #6d28d9;
 
   /* ── Color channels (RGB tripletes) — para componer glows/gradientes
      theme-aware vía rgb(var(--syn-channel-brand) / 0.x). Espejan
@@ -288,6 +291,10 @@
   --syn-color-action-primary-active: var(--syn-color-brand-700);
   --syn-color-action-primary-text:   var(--syn-color-neutral-0);
   --syn-color-action-emphasis:       var(--syn-color-accent-600);   /* AA: accent-500 4.23 → 600 5.70 */
+  /* a11y — stop OSCURO del gradiente CTA (primary→emphasis) para temas cuyo
+     emphasis metálico es demasiado claro para texto claro. Default = emphasis
+     (temas que ya pasan quedan idénticos); override AA sólo en los que fallan. */
+  --syn-color-action-emphasis-strong: var(--syn-color-action-emphasis);
 
   --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
   --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
@@ -720,13 +727,15 @@
      invertir la jerarquía muted > disabled. */
   --syn-color-text-disabled:   #736e64;
   --syn-color-text-inverse:    #fcf7ee;
-  --syn-color-text-accent:     #8f7035;
+  /* a11y — text-accent #8f7035 (4.11 canvas) → #87692f (4.55 canvas / 4.98 surface). */
+  --syn-color-text-accent:     #87692f;
   --syn-color-text-on-accent:  #fffaf2;
 
   --syn-color-border-subtle:  #eee5d6;
   --syn-color-border-default: #d9d0c0;
   --syn-color-border-strong:  #c4b28a;
-  --syn-color-border-accent:  #b59659;
+  /* a11y — border-accent #b59659 (2.49 canvas) → #96793a (3.66:1) para UI 3:1. */
+  --syn-color-border-accent:  #96793a;
   --syn-color-border-inverse: rgb(255 255 255 / 0.16);
 
   /* C-2 — overlay scale (warm ink) faltante en silver-gold; espejo de la UI. */
@@ -740,6 +749,7 @@
   --syn-color-action-primary-text:   #fffaf2;
   --syn-color-action-primary-border: transparent;
   --syn-color-action-emphasis:       #b59659;
+  --syn-color-action-emphasis-strong: #8a6b34;  /* a11y — stop AA-oscuro CTA (texto claro 5.0:1) */
 
   /* C-2 — botones secondary/ghost/danger/disabled faltaban en el vertical
      Blogs gold: chips y CTAs secundarios caían a defaults. Espejo de la UI. */
@@ -763,7 +773,9 @@
   --syn-color-action-disabled-border:  #e0d5c1;
   --syn-color-action-disabled-text:    #a59a87;
 
-  --syn-color-focus-ring: rgb(181 150 89 / 0.76);
+  /* a11y — focus-ring metálico (1.95:1 vs canvas) → oro profundo (5.44:1),
+     mantiene la identidad dorada y cumple WCAG 1.4.11 (3:1). */
+  --syn-color-focus-ring: rgb(111 87 31 / 0.95);
   --syn-color-focus-ring-danger: rgb(239 68 68 / 0.52);
 
   --syn-color-state-brand-surface: rgb(181 150 89 / 0.12);
@@ -781,7 +793,8 @@
 
   --syn-color-state-warning-surface: rgb(217 119 6 / 0.12);
   --syn-color-state-warning-border:  rgb(217 119 6 / 0.22);
-  --syn-color-state-warning-text:    #9a5a04;
+  /* a11y — warning-text #9a5a04 (4.31 sobre warning-surface cálida) → #8f5303 (4.86). */
+  --syn-color-state-warning-text:    #8f5303;
 
   --syn-color-state-danger-surface: rgb(220 38 38 / 0.10);
   --syn-color-state-danger-border:  rgb(220 38 38 / 0.22);
@@ -790,7 +803,7 @@
   /* Degraded — tinte cálido sobre canvas gold (espejo de warning silverGold). */
   --syn-color-state-degraded-surface: rgb(217 119 6 / 0.12);
   --syn-color-state-degraded-border:  rgb(217 119 6 / 0.22);
-  --syn-color-state-degraded-text:    #9a5a04;
+  --syn-color-state-degraded-text:    #8f5303;  /* a11y — espejo de warning-text */
 
   /* State semantic — surface/border REDECLARADOS con tintes translúcidos que
      componen sobre el canvas cálido (el default -100 opaco lo blanqueaba).
@@ -882,7 +895,9 @@
   --syn-color-overlay-medium: rgb(245 247 255 / 0.12);
   --syn-color-overlay-strong: rgb(245 247 255 / 0.20);
 
-  --syn-color-action-primary:        #7C5CFF;   /* electric violet (acento controlado) */
+  /* a11y — violet aclarado #7C5CFF→#8064FF para que la tinta oscura del CTA
+     (#080C1A) alcance AA 4.81:1 (era 4.48). Conserva el registro eléctrico. */
+  --syn-color-action-primary:        #8064FF;   /* electric violet (acento controlado) */
   --syn-color-action-primary-hover:  #8E73FF;
   --syn-color-action-primary-active: #6A48F0;
   --syn-color-action-primary-text:   #080C1A;
@@ -1157,6 +1172,7 @@
   --syn-color-action-primary-text:   #FFFFFF;
   --syn-color-action-primary-border: transparent;
   --syn-color-action-emphasis:       #C99A2E;   /* gold sobrio — solo emphasis */
+  --syn-color-action-emphasis-strong: #8a6a1d;  /* a11y — stop AA-oscuro CTA (texto claro) */
 
   --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
   --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
@@ -1287,6 +1303,7 @@
   --syn-color-action-primary-text:   #FFFFFF;
   --syn-color-action-primary-border: transparent;
   --syn-color-action-emphasis:       #3A8DBE;   /* azul más claro */
+  --syn-color-action-emphasis-strong: #2f6f96;  /* a11y — stop AA-oscuro CTA (texto claro 4.6:1) */
 
   --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
   --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);

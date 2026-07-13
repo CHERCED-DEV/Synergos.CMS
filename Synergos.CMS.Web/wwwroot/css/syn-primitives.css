@@ -95,9 +95,10 @@
 }
 
 .syn-button--emphasis {
+  /* a11y — accent-500→600 subido a 600→700 (texto claro sobre accent-500 = 4.23 <AA). */
   background: linear-gradient(135deg,
-    var(--syn-color-accent-500) 0%,
-    var(--syn-color-accent-600) 100%);
+    var(--syn-color-accent-600) 0%,
+    var(--syn-color-accent-700) 100%);
   color: var(--syn-color-text-on-accent);
   border-color: transparent;
   box-shadow: var(--syn-shadow-accent-md);
@@ -219,9 +220,10 @@
 
 .syn-badge--emphasis,
 .syn-info-badge--emphasis {
+  /* a11y — accent-500→600 subido a 600→700 (texto claro sobre accent-500 = 4.23 <AA). */
   background: linear-gradient(135deg,
-    var(--syn-color-accent-500) 0%,
-    var(--syn-color-accent-600) 100%);
+    var(--syn-color-accent-600) 0%,
+    var(--syn-color-accent-700) 100%);
   color: var(--syn-color-text-on-accent);
   border-color: transparent;
 }
@@ -458,10 +460,10 @@
      claro (brand-400/accent-400) y el texto blanco caía a ~2.84:1. Conserva el
      matiz de marca; profundidad por color, no por sombra apilada. */
   background:
-    linear-gradient(0deg, rgb(var(--syn-channel-ink) / 0.34), rgb(var(--syn-channel-ink) / 0.34)),
+    linear-gradient(0deg, rgb(var(--syn-channel-ink) / 0.42), rgb(var(--syn-channel-ink) / 0.42)),
     linear-gradient(135deg,
       var(--syn-color-action-primary) 0%,
-      var(--syn-color-action-emphasis, var(--syn-color-accent-500)) 100%);
+      var(--syn-color-action-emphasis-strong, var(--syn-color-action-emphasis, var(--syn-color-accent-500))) 100%);
   color: var(--syn-color-text-on-accent);
   border-radius: var(--syn-radius-xl);
   box-shadow: var(--syn-shadow-action-hover);

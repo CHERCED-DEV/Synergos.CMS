@@ -68,9 +68,11 @@
 .syn-preset--theme-dark a:hover { color: var(--syn-color-brand-200); }
 
 .syn-preset--theme-brand {
+  /* a11y — piso del gradiente brand-500→600 subido a 600→700: blanco/on-accent
+     sobre brand-500 daba 4.28 (<AA); sobre brand-600 = 6.13, brand-700 = 8.84. */
   background: linear-gradient(135deg,
-    var(--syn-color-brand-500) 0%,
-    var(--syn-color-brand-600) 100%);
+    var(--syn-color-brand-600) 0%,
+    var(--syn-color-brand-700) 100%);
   /* Idem: todo texto sobre la banda de marca usa el token on-accent */
   --syn-color-text-primary:   var(--syn-color-text-on-accent);
   --syn-color-text-secondary: var(--syn-color-text-on-accent);
@@ -85,9 +87,10 @@
 }
 
 .syn-preset--theme-accent {
+  /* a11y — piso accent-500→600 subido a 600→700 (blanco sobre accent-500 = 4.23 <AA). */
   background: linear-gradient(135deg,
-    var(--syn-color-accent-500) 0%,
-    var(--syn-color-accent-600) 100%);
+    var(--syn-color-accent-600) 0%,
+    var(--syn-color-accent-700) 100%);
   --syn-color-text-primary:   var(--syn-color-text-on-accent);
   --syn-color-text-secondary: var(--syn-color-text-on-accent);
   --syn-color-text-muted:     var(--syn-color-text-on-accent);
