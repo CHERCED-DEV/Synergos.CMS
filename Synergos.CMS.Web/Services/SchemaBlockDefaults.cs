@@ -84,6 +84,20 @@ public sealed class SchemaBlockDefaults
             // requieren un BlockList NO vacío (con ≥1 item real) para
             // autorarse server-side. Limitación conocida (ver ADR 0093).
         }
+
+        // Padding COMPUESTO del preset Section: la banda trae su propio aire
+        // vertical (arriba/abajo) + gutter (lados) vía los knobs de compDomSpacing
+        // (spacingTop/Bottom/Inline → .syn-space--*). Así el ritmo NO depende de
+        // parches CSS: cada sección se auto-padea. El hero sobre-escribe a "none"
+        // (es una banda full-bleed autocontenida que pega al header). ApplyDefaults
+        // no pisa un valor ya seteado, así el opt-out del hero se respeta.
+        if (string.Equals(ct.Alias, "elementLayoutSection", StringComparison.Ordinal))
+        {
+            defaults["spacingTop"] = "[\"2xl\"]";
+            defaults["spacingBottom"] = "[\"2xl\"]";
+            defaults["spacingInline"] = "[\"lg\"]";
+        }
+
         return defaults;
     }
 }

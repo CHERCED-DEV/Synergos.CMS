@@ -705,6 +705,12 @@ public sealed class DevContentFiller
         string imgName, string imgAlt, string from, string to, params (string label, string url)[] ctas)
     {
         var section = b.AddTopLevelBlock(_sectionKey);
+        // El hero es una banda full-bleed autocontenida (.syn-hero trae su padding
+        // interno) → sección SIN spacing, para pegar al header sin aire alrededor de
+        // la banda. Se setea ANTES de ApplyDefaults para que el default 2xl no lo pise.
+        section.Set("spacingTop", "[\"none\"]");
+        section.Set("spacingBottom", "[\"none\"]");
+        section.Set("spacingInline", "[\"none\"]");
         section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         var pickerValue = _media.GetOrCreatePickerValue(imgName, imgAlt, from, to, 1600, 720);
 
@@ -2068,7 +2074,9 @@ public sealed class DevContentFiller
         var key = _contentTypeService.Get("elementSynAppLauncher")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el fallback)
         var section = b.AddTopLevelBlock(_sectionKey);
-        section.Set("cssClass", "syn-launcher__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.Set("cssClass", "syn-launcher__module")
+            .Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]")   // app-mount: la app se auto-espacia
+            .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apps", appsJson);          // Nothing (config compartida) — catálogo JSON de dominios
@@ -2091,7 +2099,9 @@ public sealed class DevContentFiller
         var key = _contentTypeService.Get("elementSynTravelShell")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
         var section = b.AddTopLevelBlock(_sectionKey);
-        section.Set("cssClass", "syn-travel__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.Set("cssClass", "syn-travel__module")
+            .Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]")   // app-mount: la app se auto-espacia
+            .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/travel
@@ -2113,7 +2123,9 @@ public sealed class DevContentFiller
         var key = _contentTypeService.Get("elementSynStorefront")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
         var section = b.AddTopLevelBlock(_sectionKey);
-        section.Set("cssClass", "syn-storefront__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.Set("cssClass", "syn-storefront__module")
+            .Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]")   // app-mount: la app se auto-espacia
+            .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/shop
@@ -2135,7 +2147,9 @@ public sealed class DevContentFiller
         var key = _contentTypeService.Get("elementSynBlogs")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
         var section = b.AddTopLevelBlock(_sectionKey);
-        section.Set("cssClass", "syn-blogs__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.Set("cssClass", "syn-blogs__module")
+            .Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]")   // app-mount: la app se auto-espacia
+            .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/blogs
@@ -2157,7 +2171,9 @@ public sealed class DevContentFiller
         var key = _contentTypeService.Get("elementSynAcademy")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
         var section = b.AddTopLevelBlock(_sectionKey);
-        section.Set("cssClass", "syn-academy__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.Set("cssClass", "syn-academy__module")
+            .Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]")   // app-mount: la app se auto-espacia
+            .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/academy
@@ -2179,7 +2195,9 @@ public sealed class DevContentFiller
         var key = _contentTypeService.Get("elementSynEhr")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
         var section = b.AddTopLevelBlock(_sectionKey);
-        section.Set("cssClass", "syn-ehr__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.Set("cssClass", "syn-ehr__module")
+            .Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]")   // app-mount: la app se auto-espacia
+            .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/ehr
@@ -2201,7 +2219,9 @@ public sealed class DevContentFiller
         var key = _contentTypeService.Get("elementSynRealty")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
         var section = b.AddTopLevelBlock(_sectionKey);
-        section.Set("cssClass", "syn-realty__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.Set("cssClass", "syn-realty__module")
+            .Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]")   // app-mount: la app se auto-espacia
+            .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/realty
@@ -2221,7 +2241,9 @@ public sealed class DevContentFiller
         var key = _contentTypeService.Get("elementSynGov")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace
         var section = b.AddTopLevelBlock(_sectionKey);
-        section.Set("cssClass", "syn-gov__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.Set("cssClass", "syn-gov__module")
+            .Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]")   // app-mount: la app se auto-espacia
+            .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/gov
@@ -2240,7 +2262,9 @@ public sealed class DevContentFiller
         var key = _contentTypeService.Get("elementSynSeller")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace
         var section = b.AddTopLevelBlock(_sectionKey);
-        section.Set("cssClass", "syn-seller__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.Set("cssClass", "syn-seller__module")
+            .Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]")   // app-mount: la app se auto-espacia
+            .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/shop
@@ -2263,7 +2287,9 @@ public sealed class DevContentFiller
         var key = _contentTypeService.Get("elementSynEventos")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
         var section = b.AddTopLevelBlock(_sectionKey);
-        section.Set("cssClass", "syn-eventos__module").ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
+        section.Set("cssClass", "syn-eventos__module")
+            .Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]")   // app-mount: la app se auto-espacia
+            .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
             c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/eventos

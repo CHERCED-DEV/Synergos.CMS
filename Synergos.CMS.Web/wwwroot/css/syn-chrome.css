@@ -21,12 +21,11 @@
   width: 100%;
   max-width: var(--syn-max-width-content);
   margin-inline: auto;
-  padding: var(--syn-space-xl) var(--syn-gutter);
+  /* Padding = 0: el main es autoridad de ancho, NO de espaciado. Cada sección
+     se auto-padea (arriba/abajo/lados) vía los knobs del Layout Composer
+     (spacingTop/Bottom/Inline → .syn-space--*). Fuente ÚNICA de padding. */
+  padding: 0;
   min-height: 40vh;
-}
-
-@media (min-width: 768px) {
-  .syn-site-main { padding-inline: var(--syn-gutter-lg); }
 }
 
 /* ── Site header ─────────────────────────────────────────────── */

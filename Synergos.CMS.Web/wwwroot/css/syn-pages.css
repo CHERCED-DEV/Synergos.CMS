@@ -74,28 +74,13 @@
    .syn-layout--section, preset que solo existe a nivel raíz) → el ritmo
    aplica en TODA página y el contenido anidado conserva su propio gap.
    Knob único: --syn-section-gap (64 / 96 ≥768). Ley de 8. */
-.umb-block-grid__layout-container
-  > .umb-block-grid__layout-item:has(> .syn-layout--section)
-  + .umb-block-grid__layout-item:has(> .syn-layout--section) {
-  margin-block-start: var(--syn-section-gap);
-}
-
-@media (min-width: 768px) {
-  .umb-block-grid__layout-container
-    > .umb-block-grid__layout-item:has(> .syn-layout--section)
-    + .umb-block-grid__layout-item:has(> .syn-layout--section) {
-    margin-block-start: var(--syn-section-gap-lg);
-  }
-}
-
-/* La región de cierre (sectionsAfterBody) respeta el mismo cadence. */
-.syn-page__after-body {
-  margin-block-start: var(--syn-section-gap-lg);
-}
-
-@media (max-width: 767px) {
-  .syn-page__after-body { margin-block-start: var(--syn-section-gap); }
-}
+/* RITMO = PADDING-DENTRO (compuesto). El espaciado de sección ya NO sale de
+   márgenes CSS entre bloques, sino de los knobs del Layout Composer:
+   spacingTop/spacingBottom/spacingInline (compDomSpacing → .syn-space--*), con
+   default 2xl/2xl/lg en el preset Section (SchemaBlockDefaults). Cada banda se
+   auto-padea → seams limpios entre temas + hero pega al header (spacing "none").
+   Se retiró el margin-block-start entre items y el margin de after-body para no
+   duplicar aire. Ver doc 25 + SchemaBlockDefaults.Compute. */
 
 /* ── Full-bleed opt-in: SOLO el hero. Todo lo demás queda contenido. ──
    .syn-site-main sigue siendo la autoridad de ancho (1200 + gutter). Rompemos
@@ -126,17 +111,9 @@
   }
 }
 
-/* ── Hero PEGADO al header ── El hero es el tope de la página: neutraliza el aire
-   superior para que la banda toque el header sticky (que ya da la separación visual).
-   (a) el main no aporta padding-top cuando la página lidera con un hero; (b) el item
-   del hero no hereda el section-gap aunque le preceda una sección de app vacía (h:0,
-   p.ej. el mount SSR de un vertical). Sin esto queda una franja blanca header↔hero. */
-.syn-site-main:has(.syn-hero) {
-  padding-top: 0;
-}
-.umb-block-grid__layout-item:has(.syn-hero) {
-  margin-block-start: 0 !important;
-}
+/* Hero flush al header: ya NO por parche. La sección del hero se compone con
+   spacing "none" (AddHero) y el ritmo es padding-dentro (sin margen que lo empuje),
+   así la banda pega al header por construcción. */
 
 /* ── SISTEMA DE ESQUINAS — bandas temáticas full-bleed (fix de raíz) ──
    Las bandas .syn-preset--theme-{surface,dark,brand,accent} (que BeginSection
