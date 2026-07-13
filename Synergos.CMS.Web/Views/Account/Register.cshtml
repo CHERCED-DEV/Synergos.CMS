@@ -49,7 +49,8 @@
                            name="email"
                            autocomplete="email"
                            required
-                           aria-required="true" />
+                           aria-required="true"
+                           aria-invalid="@(errorCode == "email-taken" || errorCode == "invalid-input" ? "true" : null)" />
                 </div>
 
                 <div class="syn-account__field">
@@ -61,6 +62,7 @@
                            required
                            aria-required="true"
                            aria-describedby="syn-reg-password-help"
+                           aria-invalid="@(errorCode == "weak-password" || errorCode == "invalid-input" ? "true" : null)"
                            minlength="8" />
                     <small id="syn-reg-password-help">@Umbraco.GetDictionaryValue("Account.Register.PasswordHelp", "Mínimo 8 caracteres.")</small>
                 </div>

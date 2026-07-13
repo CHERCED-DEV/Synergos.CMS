@@ -48,7 +48,8 @@
                            name="emailOrUsername"
                            autocomplete="email"
                            required
-                           aria-required="true" />
+                           aria-required="true"
+                           aria-invalid="@(!string.IsNullOrEmpty(errorCode) ? "true" : null)" />
                 </div>
 
                 <div class="syn-account__field">
@@ -58,7 +59,8 @@
                            name="password"
                            autocomplete="current-password"
                            required
-                           aria-required="true" />
+                           aria-required="true"
+                           aria-invalid="@(!string.IsNullOrEmpty(errorCode) ? "true" : null)" />
                 </div>
 
                 <p class="syn-account__forgot-link">
