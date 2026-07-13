@@ -97,8 +97,11 @@ public sealed class ShopCatalogController : ControllerBase
             cancellationToken);
 
         var products = result.Products.Select(ToProductDto).ToList();
+        // La UI (shop-api.client.ts:411 normalizeFacets) lee entry['key']; el backend
+        // reshapea a esa clave (UI = fuente de verdad). Antes emitía 'field' → las
+        // facetas se descartaban silenciosamente y el PLP quedaba sin filtros.
         var facetDtos = result.Facets.Select(f => new FacetDto(
-            Field: f.Field,
+            Key: f.Field,
             Label: f.Label,
             Values: f.Values.Select(v => new FacetValueDto(v.Value, v.Count)).ToList())).ToList();
 
@@ -625,7 +628,7 @@ public sealed class ShopCatalogController : ControllerBase
         string? Description,
         IReadOnlyList<string>? ImageUrls);
 
-    public sealed record FacetDto(string Field, string Label, IReadOnlyList<FacetValueDto> Values);
+    public sealed record FacetDto(string Key, string Label, IReadOnlyList<FacetValueDto> Values);
 
     public sealed record FacetValueDto(string Value, int Count);
 
