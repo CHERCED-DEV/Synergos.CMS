@@ -77,16 +77,34 @@ public sealed record EventSeatMap(
     IReadOnlyList<EventZone> Zones);
 
 /// <summary>
+/// El acto/artista protagonista de la ficha (perfil "Artista"). Adaptado al tipo
+/// de evento: headliner (música), keynote (conferencia), compañía (teatro), etc.
+/// <see cref="Followers"/> es el seguimiento social aproximado (chip "N seguidores").
+/// </summary>
+public sealed record EventArtist(string Name, string Headline, int Followers);
+
+/// <summary>
+/// Una entrada de la agenda del evento (sección "Agenda" de la ficha): hora +
+/// qué pasa + quién (ponente/acto). <see cref="Speaker"/> puede ir vacío.
+/// </summary>
+public sealed record EventSession(string Id, string Time, string Title, string Speaker);
+
+/// <summary>
 /// Ficha completa de un evento: el resumen + descripción/organizador + sus tiers
 /// (precio/aforo) + el seat-map (si es modo reserved). Es lo que la pantalla de
-/// ficha renderiza y desde donde el asistente hace Select.
+/// ficha renderiza y desde donde el asistente hace Select. <see cref="Artist"/>,
+/// <see cref="Highlights"/> y <see cref="Sessions"/> alimentan los bloques
+/// artista / "por qué asistir" / agenda (opcionales — null/vacío los oculta).
 /// </summary>
 public sealed record EventDetail(
     EventSummary Summary,
     string Description,
     string Organizer,
     IReadOnlyList<EventTier> Tiers,
-    EventSeatMap? SeatMap);
+    EventSeatMap? SeatMap,
+    EventArtist? Artist = null,
+    IReadOnlyList<string>? Highlights = null,
+    IReadOnlyList<EventSession>? Sessions = null);
 
 /// <summary>
 /// Catálogo de eventos del vertical Eventos. Es la pieza del MOTOR que resuelve

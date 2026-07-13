@@ -113,7 +113,25 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 new EventTier("VIP", "VIP", 420_000m, Currency, Capacity: 800, Remaining: 95, MaxPerOrder: 4),
                 new EventTier("EARLY", "Early Bird", 140_000m, Currency, Capacity: 1000, Remaining: 0, MaxPerOrder: 6),
             },
-            SeatMap: null);
+            SeatMap: null,
+            Artist: new EventArtist("Cordillera Eléctrica", "Headliner · fusión andina y electrónica en vivo", 328_000),
+            Highlights: new[]
+            {
+                "Dos escenarios en paralelo, sin cruces de set",
+                "Más de 20 artistas nacionales e internacionales",
+                "Cierre estelar con Cordillera Eléctrica",
+                "Zona de food trucks abierta todo el día",
+                "E-ticket QR y check-in ágil en el ingreso",
+                "Aforo controlado en el Parque Simón Bolívar",
+            },
+            Sessions: new[]
+            {
+                new EventSession("fest-s1", "14:00", "Apertura de puertas y zona de food trucks", ""),
+                new EventSession("fest-s2", "16:00", "Bandas emergentes en el Escenario Norte", "La Sonora Bogotá"),
+                new EventSession("fest-s3", "18:30", "Cumbia electrónica en el Escenario Sur", "Bruma Tropical"),
+                new EventSession("fest-s4", "20:30", "Acto internacional invitado en el Escenario Norte", "Selva Neón"),
+                new EventSession("fest-s5", "22:00", "Cierre estelar en el Escenario Sur", "Cordillera Eléctrica"),
+            });
 
         var teatro = new EventDetail(
             Summary: new EventSummary(
@@ -162,7 +180,25 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                             BuildRow("C", 6, soldLabels: Array.Empty<string>()),
                             BuildRow("D", 6, soldLabels: Array.Empty<string>()),
                         }),
-                }));
+                }),
+            Artist: new EventArtist("Orquesta Filarmónica de Medellín", "Filarmónica de Medellín, con dirección invitada de Santiago Villa", 27_800),
+            Highlights: new[]
+            {
+                "Programa de clásicos: Beethoven, Dvořák y Chaikovski",
+                "Dirección invitada del maestro Santiago Villa",
+                "Asientos numerados por zona: Platea o Balcón",
+                "Acústica del Teatro Metropolitano de Medellín",
+                "Charla previa gratuita sobre el repertorio",
+                "Confirmación inmediata con e-ticket QR",
+            },
+            Sessions: new[]
+            {
+                new EventSession("sinf-s1", "19:00", "Apertura de puertas y acomodación por zona", ""),
+                new EventSession("sinf-s2", "19:40", "Charla previa: claves del programa", "Santiago Villa"),
+                new EventSession("sinf-s3", "20:00", "Primera parte: Beethoven y Dvořák", "Orquesta Filarmónica de Medellín"),
+                new EventSession("sinf-s4", "20:50", "Intermedio", ""),
+                new EventSession("sinf-s5", "21:10", "Segunda parte y bis: Chaikovski", "Orquesta Filarmónica de Medellín"),
+            });
 
         var conferencia = new EventDetail(
             Summary: new EventSummary(
@@ -185,7 +221,25 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 new EventTier("STD", "Estándar", 250_000m, Currency, Capacity: 1200, Remaining: 430, MaxPerOrder: 10),
                 new EventTier("PRO", "Pro (talleres incluidos)", 480_000m, Currency, Capacity: 300, Remaining: 58, MaxPerOrder: 5),
             },
-            SeatMap: null);
+            SeatMap: null,
+            Artist: new EventArtist("Valeria Cárdenas", "Keynote principal · VP de Ingeniería, plataforma fintech latam", 41_200),
+            Highlights: new[]
+            {
+                "Keynotes de líderes de producto e ingeniería",
+                "Talleres prácticos incluidos con el plan Pro",
+                "Networking con más de 2.000 asistentes tech",
+                "Demos en vivo de startups colombianas",
+                "Ágora Centro de Convenciones, corazón de Bogotá",
+                "Certificado digital de asistencia",
+            },
+            Sessions: new[]
+            {
+                new EventSession("tech-s1", "08:30", "Registro y acreditación", ""),
+                new EventSession("tech-s2", "09:30", "Keynote de apertura: el futuro del software en Colombia", "Valeria Cárdenas"),
+                new EventSession("tech-s3", "11:00", "Panel: escalar producto en mercados latam", "Mariana Ospina y Julián Ríos"),
+                new EventSession("tech-s4", "13:30", "Talleres prácticos simultáneos (acceso plan Pro)", "Andrés Gómez y equipo Synergos Labs"),
+                new EventSession("tech-s5", "16:00", "Networking y cierre", ""),
+            });
 
         var teatroInfantil = new EventDetail(
             Summary: new EventSummary(
@@ -207,7 +261,24 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
             {
                 new EventTier("GEN", "General", 45_000m, Currency, Capacity: 400, Remaining: 210, MaxPerOrder: 8),
             },
-            SeatMap: null);
+            SeatMap: null,
+            Artist: new EventArtist("Compañía Teatral La Ronda", "Compañía residente · teatro familiar y música en vivo", 8_730),
+            Highlights: new[]
+            {
+                "Adaptación familiar del clásico de Charles Dickens",
+                "Villancicos y música orquestal interpretados en vivo",
+                "Títeres, proyecciones y nieve escénica",
+                "Función de 70 minutos apta desde los 4 años",
+                "En la sala histórica del Teatro Municipal de Cali",
+                "Encuentro con el elenco al final de la función",
+            },
+            Sessions: new[]
+            {
+                new EventSession("obra-s1", "15:30", "Apertura de puertas y acomodación", ""),
+                new EventSession("obra-s2", "16:00", "Preludio de villancicos en vivo", "Ensamble del Teatro Municipal"),
+                new EventSession("obra-s3", "16:15", "Función: Cuento de Navidad", "Compañía Teatral La Ronda"),
+                new EventSession("obra-s4", "17:25", "Encuentro con el elenco y fotos", ""),
+            });
 
         var seeded = new[] { festival, teatro, conferencia, teatroInfantil };
         var map = new ConcurrentDictionary<string, EventDetail>(StringComparer.Ordinal);

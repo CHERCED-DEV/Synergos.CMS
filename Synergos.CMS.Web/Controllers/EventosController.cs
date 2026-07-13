@@ -75,6 +75,9 @@ public sealed class EventosController : ControllerBase
         return Ok(new EventDetailResponse(
             Event: ToSummaryDto(detail.Summary),
             Description: detail.Description,
+            Highlights: detail.Highlights ?? Array.Empty<string>(),
+            Sessions: (detail.Sessions ?? Array.Empty<EventSession>()).Select(ToSessionDto).ToList(),
+            Artist: ToArtistDto(detail.Artist),
             Organizer: new EventOrganizerDto(detail.Organizer, string.Empty, string.Empty),
             Tiers: detail.Tiers.Select(ToTierDto).ToList(),
             SeatMap: ToSeatMapDto(detail.SeatMap),
@@ -307,6 +310,16 @@ public sealed class EventosController : ControllerBase
             ? new[] { "Asientos numerados" }
             : new[] { "Entrada general" };
 
+    // Artista: null-safe. Si el evento no lo provee, cadena vacía → el normalizador
+    // cliente cae a event.title (contrato UI: artist.name || event.title).
+    private static EventArtistDto ToArtistDto(EventArtist? a) =>
+        a is null
+            ? new EventArtistDto(string.Empty, string.Empty, 0)
+            : new EventArtistDto(a.Name, a.Headline, a.Followers);
+
+    private static EventSessionDto ToSessionDto(EventSession s) =>
+        new(s.Id, s.Time, s.Title, s.Speaker);
+
     private EventTierDto ToTierDto(EventTier t) => new(
         Id: t.Code,   // la UI lee `tier.id` para el checkout (mismo valor que code)
         Code: t.Code,
@@ -477,6 +490,12 @@ public sealed class EventosController : ControllerBase
     // Contrato UI (EventOrganizer): la ficha lee organizer.name (objeto).
     public sealed record EventOrganizerDto(string Name, string Headline, string Avatar);
 
+    // Contrato UI (EventArtist): la ficha lee artist.{name,headline,followers}.
+    public sealed record EventArtistDto(string Name, string Headline, int Followers);
+
+    // Contrato UI (EventSession): la agenda lee session.{id,time,title,speaker}.
+    public sealed record EventSessionDto(string Id, string Time, string Title, string Speaker);
+
     // ── Venue anidado (contrato UI EventVenue → VenueZone → SeatMapPayload) ──────
     // Es la forma que consume <synergos-seat-map>; distinta del EventSeatMapDto plano
     // de arriba (que se conserva por compat). rowNumber/available/type calcan las
@@ -513,6 +532,12 @@ public sealed class EventosController : ControllerBase
     public sealed record EventDetailResponse(
         EventSummaryDto Event,
         string Description,
+        // Contrato UI: la ficha lee `highlights` (string[], bullets "por qué asistir")
+        // y `sessions` (agenda). Vacíos ocultan la sección (el template hace .length>0).
+        IReadOnlyList<string> Highlights,
+        IReadOnlyList<EventSessionDto> Sessions,
+        // Contrato UI: la ficha lee `artist.{name,headline,followers}` (perfil del acto).
+        EventArtistDto Artist,
         // Contrato: la UI lee `organizer.name` (objeto {name,headline,avatar}), no un
         // string. headline/avatar no tienen fuente en EventDetail → cadena vacía.
         EventOrganizerDto Organizer,
