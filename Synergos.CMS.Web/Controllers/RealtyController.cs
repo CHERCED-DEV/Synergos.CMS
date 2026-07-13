@@ -389,6 +389,9 @@ public sealed class RealtyController : ControllerBase
         Stratum: l.Stratum,
         Lat: l.Lat,
         Lng: l.Lng,
+        // Geo anidado: la UI lee `listing.geo.{neighborhood,city,lat,lng}` (card
+        // subtítulo + marcadores del mapa). Sin esto quedaba " · " y mapa sin pines.
+        Geo: new LocationDto(l.Lat, l.Lng, string.Empty, l.Neighborhood, l.City),
         ImageUrl: l.ImageUrl,
         Cover: l.ImageUrl,
         Featured: l.Featured);
@@ -503,6 +506,7 @@ public sealed class RealtyController : ControllerBase
         int Stratum,
         double Lat,
         double Lng,
+        LocationDto Geo,
         string ImageUrl,
         string Cover,
         bool Featured);
