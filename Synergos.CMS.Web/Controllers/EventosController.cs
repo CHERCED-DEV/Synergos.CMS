@@ -311,6 +311,7 @@ public sealed class EventosController : ControllerBase
         Id: t.Code,   // la UI lee `tier.id` para el checkout (mismo valor que code)
         Code: t.Code,
         Name: t.Name,
+        Amount: t.Price,   // la UI lee `tier.amount` (major units) para el precio
         Price: t.Price,
         PriceFormatted: _priceFormatter.Format(t.Price, t.Currency),
         Currency: t.Currency,
@@ -445,6 +446,11 @@ public sealed class EventosController : ControllerBase
         string Id,
         string Code,
         string Name,
+        // La UI (TicketTier) lee `amount` (major units) — `tierPriceLabel` hace
+        // formatPrice(tier.amount). Se emite explícito (ADR 0083) en vez de depender
+        // del fallback `amount ?? price` del normalizador cliente. `price`/`priceFormatted`
+        // se conservan para consumers previos; todos portan el mismo valor.
+        decimal Amount,
         decimal Price,
         string PriceFormatted,
         string Currency,
