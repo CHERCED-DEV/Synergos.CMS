@@ -42,7 +42,11 @@ public sealed class DefaultShopQuery : IShopQuery
             return Array.Empty<ProductSummary>();
         }
 
-        var siteRoots = umbracoContext.PublishedRequest?.PublishedContent?.Root() is { } currentRoot
+        // Trampa .Root() vs AncestorOrSelf("siteRoot"): .Root() devuelve el
+        // platformRoot (umbrella) → DescendantsOrSelfOfType barrería TODOS los
+        // siteRoots (Tienda + Propiedades + Booking…), mezclando productos con
+        // inmuebles y servicios. Scopeamos al siteRoot ACTUAL del request.
+        var siteRoots = umbracoContext.PublishedRequest?.PublishedContent?.AncestorOrSelf("siteRoot") is { } currentRoot
             ? new[] { currentRoot }
             : umbracoContext.Content?.GetAtRoot().ToArray() ?? Array.Empty<IPublishedContent>();
 
@@ -98,7 +102,12 @@ public sealed class DefaultShopQuery : IShopQuery
             return null;
         }
 
-        var match = umbracoContext.Content.GetAtRoot()
+        // Scopear al siteRoot actual (evita colisión de SKU entre siteRoots que
+        // reusan productPage); fallback global si no hay contexto de siteRoot.
+        var scopeRoots = umbracoContext.PublishedRequest?.PublishedContent?.AncestorOrSelf("siteRoot") is { } sr
+            ? new[] { sr }
+            : umbracoContext.Content.GetAtRoot().ToArray();
+        var match = scopeRoots
             .SelectMany(r => r.DescendantsOrSelfOfType(ProductPageAlias))
             .FirstOrDefault(p => string.Equals(p.Value<string>("productSku"), sku, StringComparison.OrdinalIgnoreCase));
         return match is null ? null : Project(match, ParsePrice(match));
