@@ -398,6 +398,12 @@ public sealed class DevContentFiller
             ("Multi-dominio", "Una cuenta, varios sitios", "Marcas y dominios distintos sobre la misma plataforma y el mismo equipo."),
         }, 3);
 
+        // Beat de PRUEBA antes del cierre: cifras que respaldan "un motor, muchos productos".
+        AddStats(b,
+            ("1", "motor para todos tus productos"),
+            (VerticalCount, "verticales sobre la misma base"),
+            (ComponentCount, "componentes reutilizables"));
+
         AddCta(b, "Veámoslo con tu negocio",
             "Cuéntanos qué quieres lanzar y te mostramos cómo SynergosLabs lo hace realidad.",
             "Hablar con ventas", "/synergos/contacto");
@@ -520,14 +526,28 @@ public sealed class DevContentFiller
             "Synergos Soluciones Hero", "Soluciones de SynergosLabs por tipo de negocio", "#0A2540", "#1FA2A6",
             ("Ver planes", "/synergos/precios"), ("Hablar con ventas", "/synergos/contacto"));
 
-        var verticals = new (string title, string subtitle, string body)[]
+        // Las soluciones REALES son las verticales vivas: el launcher deep-linkea a la
+        // página showcase de cada una (/synergos/apps/<slug>, arco preview→demo→app). Fuente
+        // única = ShowcaseCatalog (cero hardcode). Fallback SSR (cards) si el launcher no está.
+        var solApps = ShowcaseCatalog()
+            .Where(d => !string.IsNullOrEmpty(d.AppUrl))
+            .Select(d => (Slug: d.Slug, Name: d.Name, Tagline: d.Blurb, Status: "live",
+                Url: $"/synergos/apps/{d.Slug}",
+                Icon: d.Slug switch { "tienda" => "bag", "eventos" or "educacion" or "blogs" => "document", _ => "grid" }))
+            .ToArray();
+        if (_contentTypeService.Get("elementSynAppLauncher")?.Key is not null)
         {
-            ("Marca y empresa", "Posiciona tu marca", "Sitio institucional, casos de éxito, blog y vacantes — con la identidad de tu marca y listo para crecer."),
-            ("Tienda online", "Vende sin fricción", "Catálogo, variantes, carrito y checkout sobre el mismo motor. Tu e-commerce, con tu marca y tu dominio."),
-            ("Membresía y portal", "Fideliza a tu comunidad", "Contenido protegido, login y autoservicio de miembros. Ideal para una comunidad, una academia o un SaaS."),
-            ("Profesional independiente", "Consigue más clientes", "Médico, abogado o consultor: presencia, servicios, agenda y contacto — en línea en cuestión de días."),
-        };
-        FeatureGridAuto(b, "Soluciones disponibles", "Una receta por tipo de cliente", verticals, 2);
+            AddSynAppLauncher(b, BuildAppsCatalogJson(solApps),
+                "Soluciones disponibles",
+                "Entra a cualquier vertical y míralo por dentro — la misma base, tu marca.");
+        }
+        else
+        {
+            var cards = solApps
+                .Select(a => (title: a.Name, subtitle: "La app por dentro", body: a.Tagline))
+                .ToArray();
+            FeatureGridAuto(b, "Soluciones disponibles", "Una vertical por tipo de negocio", cards, 3);
+        }
 
         SplitAuto(b, "Cambias el negocio, no la plataforma",
             "El mismo motor, mil formas",
@@ -570,6 +590,12 @@ public sealed class DevContentFiller
             "<p>Bajo el capó: arquitectura por capas, render server-side y un sistema de diseño con tokens. Extensible cuando lo necesitas, robusto desde el primer día — la base que tu equipo va a respetar.</p>",
             "Synergos Capas", "Arquitectura por capas de SynergosLabs", "#0F58A7", "#1FA2A6",
             mediaOnRight: false, ctaLabel: "Qué es SynergosLabs", ctaUrl: "/synergos/identidad");
+
+        // Beat de PRUEBA antes del cierre: cifras de velocidad/simplicidad del proceso.
+        AddStats(b,
+            ("4", "pasos a producción"),
+            ("0", "código para publicar"),
+            (ComponentCount, "componentes para arrastrar"));
 
         AddCta(b, "Empieza hoy",
             "Elige un plan y publica tu primer producto esta semana — o agenda una demo y te lo mostramos en vivo.",
@@ -641,6 +667,16 @@ public sealed class DevContentFiller
             "Synergos Casos Hero", "Casos de clientes de SynergosLabs", "#1A1A2E", "#7A3FF2",
             ("Ver planes", "/synergos/precios"), ("Hablar con ventas", "/synergos/contacto"));
 
+        // Beat de RESULTADO: casos cuantificados (negocio · reto · cifra). Coherentes con
+        // los testimonios de abajo (mismas empresas) → la cifra arriba, la voz humana debajo.
+        var cases = new (string title, string subtitle, string body)[]
+        {
+            ("Retail Norte", "5 sitios → 1 plataforma", "Consolidó cinco sitios inconexos en un solo motor. El costo de mantenimiento cayó a la mitad."),
+            ("Pacífico E-commerce", "Nueva línea en 2 semanas", "Abrió una línea de negocio nueva sobre la misma base, sin tocar lo que ya estaba en producción."),
+            ("Grupo Altavista", "1 equipo, 3 verticales", "Un solo equipo opera marca, tienda y comunidad — menos proveedores, menos fricción, más foco."),
+        };
+        FeatureGridAuto(b, "Casos de éxito", "Negocios reales, resultados medibles", cases, 3);
+
         // P1-11: testimonios DISTINTOS a los del Home (evita la prueba social duplicada).
         var testimonials = new (string quote, string author, string role)[]
         {
@@ -656,6 +692,14 @@ public sealed class DevContentFiller
         {
             AddTestimonials(b, testimonials);
         }
+
+        // Muro de clientes: da amplitud a la prueba social (empresas de los casos + más).
+        AddLogoCloud(b, "Negocios que ya confían en SynergosLabs",
+            ("Retail Norte", "#0A2540", "#0F58A7"),
+            ("Pacífico", "#143C8C", "#5B7CFA"),
+            ("Altavista", "#0F58A7", "#1FA2A6"),
+            ("Grupo Andino", "#1A1A2E", "#7A3FF2"),
+            ("Nimbus", "#7A3FF2", "#C04CFC"));
 
         AddStats(b,
             (VerticalCount, "verticales en producción"),
