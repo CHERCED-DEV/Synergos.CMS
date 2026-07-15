@@ -599,7 +599,8 @@ public sealed class DevContentFiller
 
         AddCta(b, "Empieza hoy",
             "Elige un plan y publica tu primer producto esta semana — o agenda una demo y te lo mostramos en vivo.",
-            "Ver planes", "/synergos/precios");
+            "Ver planes", "/synergos/precios",
+            "Agendar demo", "/synergos/contacto");
         return b.Build();
     }
 
@@ -723,7 +724,8 @@ public sealed class DevContentFiller
 
         AddCta(b, "¿Listo para ser el próximo caso?",
             "Empieza con el plan que encaja con tu negocio — o cuéntanos tu caso y te mostramos el camino.",
-            "Ver planes", "/synergos/precios");
+            "Ver planes", "/synergos/precios",
+            "Cuéntanos tu caso", "/synergos/contacto");
         return b.Build();
     }
 
@@ -1129,19 +1131,29 @@ public sealed class DevContentFiller
         });
     }
 
-    private void AddCta(BlockGridJsonBuilder b, string title, string subtitle, string ctaLabel, string url)
+    private void AddCta(BlockGridJsonBuilder b, string title, string subtitle, string ctaLabel, string url,
+        string? cta2Label = null, string? cta2Url = null)
     {
         // CTA final = banda DARK contrastante (dirección doc 23): el .syn-cta-banner YA es
         // un gradiente brand; ponerlo sobre una sección brand duplicaba el gradiente y las
         // esquinas redondeadas del banner revelaban el gradiente más oscuro de la sección
         // detrás (triángulo azul en la esquina). Dark = el banner brand flota como acento.
         var section = BeginSection(b, ThemeDark);
-        section.AddChild(SectionContentAreaKey, _ctaKey, c => c
-            .Set("headingTitle", title)
-            .Set("headingSubtitle", subtitle)
-            .Set("ctaLabel", ctaLabel)
-            .Set("ctaLink", LinkJson(ctaLabel, url))
-            .ApplyDefaults(_defaults.DefaultsFor(_ctaKey)));
+        section.AddChild(SectionContentAreaKey, _ctaKey, c =>
+        {
+            c.Set("headingTitle", title)
+             .Set("headingSubtitle", subtitle)
+             .Set("ctaLabel", ctaLabel)
+             .Set("ctaLink", LinkJson(ctaLabel, url));
+            // 2º CTA opcional (ghost) cuando el copy ofrece dos caminos. Requiere las props
+            // ctaSecondaryLabel/Link del schema; sin ellas (schema no importado) el renderer
+            // cae a un solo botón (grace).
+            if (!string.IsNullOrWhiteSpace(cta2Label) && !string.IsNullOrWhiteSpace(cta2Url))
+            {
+                c.Set("ctaSecondaryLabel", cta2Label!).Set("ctaSecondaryLink", LinkJson(cta2Label!, cta2Url!));
+            }
+            c.ApplyDefaults(_defaults.DefaultsFor(_ctaKey));
+        });
     }
 
     // ──────────────── Entry point: launcher composable (introBody) ────────────────

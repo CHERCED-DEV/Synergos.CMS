@@ -526,6 +526,30 @@
   box-shadow: var(--syn-shadow-md);
 }
 
+/* Dual-CTA: los dos botones juntos como un solo ítem flex (donde iba el chip único). */
+.syn-cta-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-3);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* CTA secundario = ghost sobre la banda de marca (borde + tinta claros, fondo transparente)
+   → jerarquía clara vs el chip primario sólido, legible en cualquier tema. */
+.syn-cta-banner .syn-cta-banner__cta--secondary {
+  background: transparent;
+  color: var(--syn-color-neutral-0);
+  border: 1px solid var(--syn-color-neutral-0);
+  box-shadow: none;
+}
+
+.syn-cta-banner .syn-cta-banner__cta--secondary:hover {
+  background: var(--syn-color-neutral-0);
+  color: var(--syn-color-neutral-900);
+  box-shadow: var(--syn-shadow-sm);
+}
+
 /* ── Media-text split (elementCompMediaTextSplit) ────────────── */
 
 .syn-media-text-split {

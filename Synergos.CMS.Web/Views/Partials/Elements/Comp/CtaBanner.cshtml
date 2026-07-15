@@ -12,6 +12,12 @@
     if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(ctaLabel) || string.IsNullOrWhiteSpace(ctaUrl)) { return; }
     var subtitle = Model.Value<string>("headingSubtitle");
     var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab") || string.Equals(ctaLink?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
+    // CTA secundario opcional (ghost) — dual-CTA cuando el copy ofrece dos caminos.
+    var cta2Label = Model.Value<string>("ctaSecondaryLabel");
+    var cta2Link = Model.Value<Link>("ctaSecondaryLink");
+    var cta2Url = cta2Link?.Url;
+    var hasCta2 = !string.IsNullOrWhiteSpace(cta2Label) && !string.IsNullOrWhiteSpace(cta2Url);
+    var cta2NewTab = string.Equals(cta2Link?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
     var classes = string.Join(" ", new[]
@@ -29,5 +35,15 @@
             <p class="syn-cta-banner__subtitle">@subtitle</p>
         }
     </div>
-    <a class="syn-cta-banner__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+    @if (hasCta2)
+    {
+        <div class="syn-cta-banner__actions">
+            <a class="syn-cta-banner__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+            <a class="syn-cta-banner__cta syn-cta-banner__cta--secondary" href="@cta2Url"@(cta2NewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@cta2Label</a>
+        </div>
+    }
+    else
+    {
+        <a class="syn-cta-banner__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+    }
 </aside>
