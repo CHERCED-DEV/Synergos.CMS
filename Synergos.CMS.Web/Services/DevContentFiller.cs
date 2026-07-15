@@ -370,7 +370,7 @@ public sealed class DevContentFiller
         var bodyProposito = "<p>Piensa en SynergosLabs como el motor de tu presencia digital. Hoy lanzas tu marca; mañana sumas una tienda; después un portal de miembros. Todo con la misma cuenta, el mismo equipo y la misma identidad — sin empezar de cero cada vez.</p>";
         if (synSplit)
         {
-            AddSynSplit(b, "En palabras simples", bodyProposito, "Synergos Proposito", "Cómo funciona SynergosLabs para tu negocio", "#7A3FF2", "#C04CFC", mediaOnRight: false);
+            AddSynSplit(b, "En palabras simples", bodyProposito, "Synergos Proposito", "Cómo funciona SynergosLabs para tu negocio", "#7A3FF2", "#C04CFC", mediaOnRight: false, subtitle: "Una base, muchos negocios");
         }
         else
         {
@@ -382,7 +382,7 @@ public sealed class DevContentFiller
         var bodyPolimorfico = "<p>Desde un profesional que necesita presencia en línea, hasta un grupo con varias marcas y dominios. Si tu negocio cambia o se expande, la plataforma te sigue el ritmo — en lugar de frenarte con una migración.</p>";
         if (synSplit)
         {
-            AddSynSplit(b, "Para quién es", bodyPolimorfico, "Synergos Polimorfico", "Para qué negocios sirve SynergosLabs", "#0F58A7", "#1FA2A6", mediaOnRight: true);
+            AddSynSplit(b, "Para quién es", bodyPolimorfico, "Synergos Polimorfico", "Para qué negocios sirve SynergosLabs", "#0F58A7", "#1FA2A6", mediaOnRight: true, subtitle: "Negocios que quieren crecer");
         }
         else
         {
@@ -512,7 +512,7 @@ public sealed class DevContentFiller
     private void SplitAuto(BlockGridJsonBuilder b, string title, string subtitle, string body,
         string imgName, string imgAlt, string from, string to, bool mediaOnRight, string? ctaLabel = null, string? ctaUrl = null)
     {
-        if (_contentTypeService.Get("elementSynMediaText")?.Key is not null) { AddSynSplit(b, title, body, imgName, imgAlt, from, to, mediaOnRight); }
+        if (_contentTypeService.Get("elementSynMediaText")?.Key is not null) { AddSynSplit(b, title, body, imgName, imgAlt, from, to, mediaOnRight, subtitle); }
         else { AddSplit(b, title, subtitle, body, imgName, imgAlt, from, to, mediaOnRight, ctaLabel, ctaUrl); }
     }
 
@@ -997,17 +997,23 @@ public sealed class DevContentFiller
 
     /// <summary>Split media+texto vía componente Angular CDN (elementSynMediaText): imagen + heading + body.</summary>
     private void AddSynSplit(BlockGridJsonBuilder b, string title, string body,
-        string imgName, string imgAlt, string from, string to, bool mediaOnRight)
+        string imgName, string imgAlt, string from, string to, bool mediaOnRight, string? subtitle = null)
     {
         var key = _contentTypeService.Get("elementSynMediaText")?.Key;
         if (key is null) { return; }
         var section = BeginSection(b, ThemeSurface);   // media+texto → banda surface (sutil)
         var picker = _media.GetOrCreatePickerValue(imgName, imgAlt, from, to, 1200, 900);
+        // elementSynMediaText no expone una prop de subtítulo; para no perder la frase de
+        // valor en el path CDN (paridad con la rama SSR AddSplit → headingSubtitle) se
+        // pliega como línea-lead del body. El body ya se renderiza como HTML.
+        var richBody = string.IsNullOrWhiteSpace(subtitle)
+            ? body
+            : $"<p class=\"syn-media-text__lead\"><strong>{System.Net.WebUtility.HtmlEncode(subtitle)}</strong></p>{body}";
         section.AddChild(SectionContentAreaKey, key.Value, c => c
             .Set("mediaReference", picker)
             .Set("mediaAlt", imgAlt)
             .Set("headingText", title)
-            .Set("body", body)
+            .Set("body", richBody)
             .Set("mediaPosition", mediaOnRight ? "right" : "left")
             .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
