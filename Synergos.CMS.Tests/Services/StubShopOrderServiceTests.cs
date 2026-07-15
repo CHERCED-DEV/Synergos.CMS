@@ -141,6 +141,55 @@ public class StubShopOrderServiceTests
         Assert.Empty(await svc.GetOrdersAsync(""));
     }
 
+    // ── T2 (doc 25) — ownership por Member autenticado ──────────────
+
+    [Fact] // filter: GetOrdersByMember trae SOLO las del dueño (memberKey); ni de otro member ni de invitados
+    public async Task GetOrdersByMember_ReturnsOnlyOwnedOrders_NewestFirst()
+    {
+        var clock = new DateTimeOffset(2026, 7, 2, 10, 0, 0, TimeSpan.Zero);
+        var svc = Make(now: () => clock);
+        var alice = Guid.NewGuid();
+        var bob = Guid.NewGuid();
+
+        var a1 = await svc.CheckoutAsync(new[] { Laptop() }, new ShopCustomer("Alice", "alice@syn.co", alice));
+        await svc.ConfirmAsync(a1.OrderRef);
+        clock = clock.AddMinutes(5);
+        var a2 = await svc.CheckoutAsync(new[] { Headphones() }, new ShopCustomer("Alice", "alice@syn.co", alice));
+        await svc.ConfirmAsync(a2.OrderRef);
+        // Orden de otro member + orden de invitado (sin memberKey) NO deben aparecer.
+        await svc.CheckoutAsync(new[] { Laptop() }, new ShopCustomer("Bob", "bob@syn.co", bob));
+        await svc.CheckoutAsync(new[] { Laptop() }, new ShopCustomer("Guest", "guest@syn.co"));
+
+        var mine = await svc.GetOrdersByMemberAsync(alice);
+
+        Assert.Equal(2, mine.Count);
+        Assert.All(mine, o => Assert.Equal(alice, o.OwnerMemberKey));
+        Assert.Equal(a2.OrderRef, mine[0].OrderRef);   // más reciente primero
+        Assert.Equal(a1.OrderRef, mine[1].OrderRef);
+    }
+
+    [Fact] // filter empty: member sin órdenes, o Guid.Empty, → vacío (las de invitado nunca entran)
+    public async Task GetOrdersByMember_NoneOrEmptyKey_ReturnsEmpty()
+    {
+        var svc = Make();
+        await svc.CheckoutAsync(new[] { Laptop() }, new ShopCustomer("Guest", "guest@syn.co"));  // invitado
+        Assert.Empty(await svc.GetOrdersByMemberAsync(Guid.NewGuid()));   // member sin órdenes
+        Assert.Empty(await svc.GetOrdersByMemberAsync(Guid.Empty));       // key vacía
+    }
+
+    [Fact] // happy: checkout con memberKey liga el dueño; invitado → OwnerMemberKey null (aditivo)
+    public async Task Checkout_WithMemberKey_BindsOwner()
+    {
+        var svc = Make();
+        var member = Guid.NewGuid();
+
+        var owned = await svc.CheckoutAsync(new[] { Laptop() }, new ShopCustomer("Alice", "alice@syn.co", member));
+        var guest = await svc.CheckoutAsync(new[] { Laptop() }, new ShopCustomer("Guest", "guest@syn.co"));
+
+        Assert.Equal(member, (await svc.GetOrderAsync(owned.OrderRef))!.OwnerMemberKey);
+        Assert.Null((await svc.GetOrderAsync(guest.OrderRef))!.OwnerMemberKey);
+    }
+
     [Fact] // idempotent: re-confirmar el mismo orderRef da el mismo resultado (sin doble efecto)
     public async Task Confirm_Twice_IsIdempotent()
     {

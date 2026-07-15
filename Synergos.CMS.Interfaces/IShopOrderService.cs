@@ -28,8 +28,15 @@ public sealed record ShopCartItem(
     string? VariantId,
     int Quantity);
 
-/// <summary>Datos del comprador del checkout (un check-out por orden).</summary>
-public sealed record ShopCustomer(string Name, string Email);
+/// <summary>
+/// Datos del comprador del checkout (un check-out por orden).
+/// <see cref="MemberKey"/> (T2, doc 25) es la identidad de confianza-servidor:
+/// el <c>key</c> del Member autenticado cuando hay sesión, o <c>null</c> en el
+/// checkout de invitado. La deriva el controller de <see cref="IMemberAccessGate"/>,
+/// nunca del body (anti-tampering) — liga la orden a un login real, no a un email
+/// tecleado.
+/// </summary>
+public sealed record ShopCustomer(string Name, string Email, Guid? MemberKey = null);
 
 /// <summary>
 /// Resultado de <see cref="IShopOrderService.CheckoutAsync"/>: la referencia de
@@ -68,7 +75,12 @@ public sealed record ShopOrder(
     decimal Total,
     string Currency,
     string? PaymentSessionId,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    // T2 (doc 25): dueño de la orden = key del Member que la colocó autenticado,
+    // o null en órdenes de invitado. Es la llave de ownership que cierra el IDOR:
+    // el historial y los endpoints por-orden se filtran/gatean por este campo,
+    // no por el email (enumerable). Aditivo → órdenes previas quedan sin dueño.
+    Guid? OwnerMemberKey = null);
 
 /// <summary>
 /// Resultado de <see cref="IShopOrderService.ConfirmAsync"/>: estado de la orden
@@ -132,6 +144,16 @@ public interface IShopOrderService
     /// reciente a la más antigua. Lista vacía si no tiene órdenes.
     /// </summary>
     Task<IReadOnlyList<ShopOrder>> GetOrdersAsync(string customerEmail, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Devuelve el historial de órdenes cuyo <see cref="ShopOrder.OwnerMemberKey"/>
+    /// es <paramref name="memberKey"/> (T2, doc 25), de la más reciente a la más
+    /// antigua. Es la vía SEGURA de "mis compras": la identidad viene de la sesión
+    /// (server-trusted), no de un email en la query — por eso cierra el IDOR que
+    /// <see cref="GetOrdersAsync"/> abría (email enumerable). Lista vacía si el
+    /// member no tiene órdenes; las de invitado (OwnerMemberKey null) nunca entran.
+    /// </summary>
+    Task<IReadOnlyList<ShopOrder>> GetOrdersByMemberAsync(Guid memberKey, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Resuelve una orden por su referencia — la usan el detalle de "mis

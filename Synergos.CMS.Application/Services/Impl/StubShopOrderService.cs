@@ -218,7 +218,9 @@ public sealed class StubShopOrderService : IShopOrderService
             Total: total,
             Currency: currency!,
             Lines: lines,
-            CreatedAt: _now());
+            CreatedAt: _now(),
+            // T2: el dueño viene de la sesión (server-trusted) o null si es invitado.
+            OwnerMemberKey: customer.MemberKey);
 
         await _store.WriteAsync(orderRef, JsonSerializer.Serialize(order, _json), cancellationToken);
 
@@ -289,6 +291,21 @@ public sealed class StubShopOrderService : IShopOrderService
             .ToList();
     }
 
+    public async Task<IReadOnlyList<ShopOrder>> GetOrdersByMemberAsync(Guid memberKey, CancellationToken cancellationToken = default)
+    {
+        if (memberKey == Guid.Empty)
+        {
+            return Array.Empty<ShopOrder>();
+        }
+
+        var all = await LoadAllAsync(cancellationToken);
+        return all
+            .Where(o => o.OwnerMemberKey == memberKey)   // ownership por key, no por email
+            .OrderByDescending(o => o.CreatedAt)
+            .Select(ToOrder)
+            .ToList();
+    }
+
     public async Task<ShopOrder?> GetOrderAsync(string orderRef, CancellationToken cancellationToken = default)
     {
         var order = await LoadAsync(orderRef, cancellationToken);
@@ -344,7 +361,8 @@ public sealed class StubShopOrderService : IShopOrderService
         Total: order.Total,
         Currency: order.Currency,
         PaymentSessionId: order.PaymentSessionId,
-        CreatedAt: order.CreatedAt);
+        CreatedAt: order.CreatedAt,
+        OwnerMemberKey: order.OwnerMemberKey);
 
     private static ShopOrderLine ToLine(PersistedOrderLine l) => new(
         ProductId: l.ProductId,

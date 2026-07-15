@@ -45,6 +45,7 @@ public sealed class ShopCatalogController : ControllerBase
     private readonly IOrderTrackingService _tracking;
     private readonly IReturnService _returns;
     private readonly IMessagingService _messaging;
+    private readonly IMemberAccessGate _gate;
 
     public ShopCatalogController(
         IProductCatalogProvider catalog,
@@ -53,7 +54,8 @@ public sealed class ShopCatalogController : ControllerBase
         IUserCollection collections,
         IOrderTrackingService tracking,
         IReturnService returns,
-        IMessagingService messaging)
+        IMessagingService messaging,
+        IMemberAccessGate gate)
     {
         _catalog = catalog;
         _orders = orders;
@@ -62,6 +64,49 @@ public sealed class ShopCatalogController : ControllerBase
         _tracking = tracking;
         _returns = returns;
         _messaging = messaging;
+        _gate = gate;
+    }
+
+    // ── T2 (doc 25) — identidad de confianza-servidor ──────────────
+    // La identidad del comprador SIEMPRE se deriva de la sesión (cookie → gate),
+    // nunca del body/query. RequireMember gatea la lectura-de-lo-propio + gestión.
+
+    /// <summary>
+    /// Exige un Member autenticado. Devuelve (401, default) si es anónimo, o
+    /// (null, actorKey) con la key server-trusted si hay sesión. Molde de
+    /// <c>DashboardApiController</c>/<c>HealthcareApiController</c> — el guard
+    /// decide 401, el endpoint decide qué hace con actorKey.
+    /// </summary>
+    private (IActionResult? denied, Guid actorKey) RequireMember()
+    {
+        if (!_gate.IsAuthenticated || _gate.CurrentMemberKey is not Guid actorKey)
+        {
+            return (Unauthorized(new { error = "Se requiere iniciar sesión." }), default);
+        }
+        return (null, actorKey);
+    }
+
+    /// <summary>
+    /// Guard de ownership por-orden (defensa en profundidad). El orderRef ya es
+    /// una credencial bearer inadivinable (ord_{guid:N}) — el self-service de
+    /// invitado depende de ella y no se rompe. Pero si la orden TIENE dueño
+    /// (la colocó un member logueado), ningún OTRO member autenticado puede
+    /// tocarla; admin overridea. Cierra el acceso cruzado entre members sin
+    /// gatear el flujo de invitado.
+    /// </summary>
+    private IActionResult? DenyIfForeignMember(ShopOrder order)
+    {
+        if (order.OwnerMemberKey is Guid owner
+            && _gate.IsAuthenticated
+            && _gate.CurrentMemberKey != owner
+            && !_gate.HasAnyRole("admin"))
+        {
+            // StatusCode(403) directo, NO Forbid(): con auth de members Forbid()
+            // redirige al login (302); un API quiere el 403 limpio (molde
+            // HealthcareApiController/DashboardApiController).
+            return StatusCode(StatusCodes.Status403Forbidden);
+        }
+        return null;
     }
 
     // ── 1. Search ──────────────────────────────────────────────────
@@ -185,13 +230,21 @@ public sealed class ShopCatalogController : ControllerBase
             .Select(i => new ShopCartItem(i.ProductId, i.VariantId, i.Qty))
             .ToList();
 
+        // T2: con sesión, la identidad es SERVER-TRUSTED (gate → cookie): la orden
+        // se liga al memberKey y se ignora el name/email del body (anti-tampering —
+        // no se puede colocar una orden a nombre de otro). Sin sesión → invitado con
+        // los datos del form, OwnerMemberKey null (guest checkout sigue abierto).
+        var customer = _gate.IsAuthenticated && _gate.CurrentMemberKey is Guid memberKey
+            ? new ShopCustomer(
+                Name: _gate.CurrentMemberDisplayName ?? request.Customer.Name.Trim(),
+                Email: _gate.CurrentMemberEmail ?? request.Customer.Email.Trim(),
+                MemberKey: memberKey)
+            : new ShopCustomer(request.Customer.Name.Trim(), request.Customer.Email.Trim());
+
         ShopCheckoutResult result;
         try
         {
-            result = await _orders.CheckoutAsync(
-                items,
-                new ShopCustomer(request.Customer.Name.Trim(), request.Customer.Email.Trim()),
-                cancellationToken);
+            result = await _orders.CheckoutAsync(items, customer, cancellationToken);
         }
         catch (ArgumentException ex)
         {
@@ -244,18 +297,21 @@ public sealed class ShopCatalogController : ControllerBase
     }
 
     // ── 5. Orders (historial) ──────────────────────────────────────
-    // GET /api/shop/orders?customer=<email> → { orders:[...] }
+    // GET /api/shop/orders → { orders:[...] } — SOLO las del member logueado.
+    // T2 (doc 25): guard-first. Antes tomaba ?customer=<email> y devolvía las
+    // órdenes de CUALQUIER email (IDOR: email enumerable → historial ajeno). Ahora
+    // la identidad viene de la sesión (server-trusted) y el filtro es por memberKey;
+    // el ?customer= se ignora. Anónimo → 401.
     [HttpGet("orders")]
-    public async Task<IActionResult> Orders(
-        [FromQuery] string? customer,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> Orders(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(customer))
+        var (denied, actorKey) = RequireMember();
+        if (denied is not null)
         {
-            return BadRequest(new { error = "El parámetro 'customer' (email) es requerido." });
+            return denied;
         }
 
-        var orders = await _orders.GetOrdersAsync(customer.Trim(), cancellationToken);
+        var orders = await _orders.GetOrdersByMemberAsync(actorKey, cancellationToken);
 
         var dtos = orders.Select(o => new OrderDto(
             OrderRef: o.OrderRef,
@@ -362,6 +418,10 @@ public sealed class ShopCatalogController : ControllerBase
         {
             return NotFound(new { error = "Orden no encontrada." });
         }
+        if (DenyIfForeignMember(order) is { } forbidden)
+        {
+            return forbidden;
+        }
 
         var timeline = await _tracking.GetTimelineAsync(order.OrderRef, cancellationToken);
         return Ok(new TrackingResponse(
@@ -400,6 +460,10 @@ public sealed class ShopCatalogController : ControllerBase
         {
             return NotFound(new { error = "Orden no encontrada." });
         }
+        if (DenyIfForeignMember(order) is { } forbidden)
+        {
+            return forbidden;
+        }
 
         try
         {
@@ -419,6 +483,10 @@ public sealed class ShopCatalogController : ControllerBase
         if (order is null)
         {
             return NotFound(new { error = "Orden no encontrada." });
+        }
+        if (DenyIfForeignMember(order) is { } forbidden)
+        {
+            return forbidden;
         }
 
         var cases = await _returns.GetForOrderAsync(order.OrderRef, cancellationToken);
