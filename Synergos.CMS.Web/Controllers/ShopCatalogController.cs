@@ -145,6 +145,7 @@ public sealed class ShopCatalogController : ControllerBase
             Date: r.Date)).ToList();
         var questions = detail.Questions.Select(qa => new QuestionDto(
             Asker: qa.Asker,
+            Author: qa.Asker,   // clave que lee la UI en la Q&A de la PDP
             Question: qa.Question,
             Answer: qa.Answer,
             Answered: qa.Answer is not null,
@@ -265,6 +266,7 @@ public sealed class ShopCatalogController : ControllerBase
             Total: o.Total,
             TotalFormatted: _priceFormatter.Format(o.Total, o.Currency),
             Currency: o.Currency,
+            Date: o.CreatedAt,
             CreatedAt: o.CreatedAt,
             Items: o.Lines.Select(ToOrderLineDto).ToList())).ToList();
 
@@ -368,7 +370,12 @@ public sealed class ShopCatalogController : ControllerBase
             OrderStatus: order.Status.ToString(),
             CurrentStage: timeline?.CurrentStage,
             Stages: timeline?.Stages
-                .Select(s => new TrackingStageDto(s.Stage, s.Label, s.Reached, s.ReachedAt, s.Note))
+                .Select(s => new TrackingStageDto(
+                    s.Stage, s.Label,
+                    // done si ya se alcanzó; current si es la etapa activa; pending si no.
+                    State: s.Reached ? "done" : (s.Stage == timeline.CurrentStage ? "current" : "pending"),
+                    Date: s.ReachedAt,
+                    s.Reached, s.ReachedAt, s.Note))
                 .ToList() ?? new List<TrackingStageDto>()));
     }
 
@@ -592,6 +599,9 @@ public sealed class ShopCatalogController : ControllerBase
     private OrderLineDto ToOrderLineDto(ShopOrderLine l) => new(
         ProductId: l.ProductId,
         VariantId: l.VariantId,
+        Title: l.ProductName,   // clave que lee la UI (confirm + historial)
+        Qty: l.Quantity,
+        Amount: l.LineTotal,
         ProductName: l.ProductName,
         Quantity: l.Quantity,
         UnitPrice: l.UnitPrice,
@@ -657,7 +667,8 @@ public sealed class ShopCatalogController : ControllerBase
 
     public sealed record ReviewDto(string Author, int Rating, string Title, string Body, DateOnly Date);
 
-    public sealed record QuestionDto(string Asker, string Question, string? Answer, bool Answered, DateOnly Date);
+    // La UI lee `author` (sin fallback a asker) → sin él la Q&A muestra "Comprador".
+    public sealed record QuestionDto(string Asker, string Author, string Question, string? Answer, bool Answered, DateOnly Date);
 
     public sealed record ProductDetailResponse(
         ProductDto Product,
@@ -675,6 +686,12 @@ public sealed class ShopCatalogController : ControllerBase
     public sealed record OrderLineDto(
         string ProductId,
         string? VariantId,
+        // Claves canónicas que lee la UI (ADR 0083): title/qty/amount. Sin ellas
+        // el confirm filtra la línea (item sin title → null) y el historial la pinta
+        // con título vacío, qty=1 y monto=0. ProductName/Quantity/LineTotal se conservan.
+        string Title,
+        int Qty,
+        decimal Amount,
         string ProductName,
         int Quantity,
         decimal UnitPrice,
@@ -701,6 +718,9 @@ public sealed class ShopCatalogController : ControllerBase
         decimal Total,
         string TotalFormatted,
         string Currency,
+        // `date` es la clave que lee la UI en el historial (normalizeOrders). CreatedAt
+        // se conserva para consumers previos; ambas portan el mismo instante.
+        DateTimeOffset Date,
         DateTimeOffset CreatedAt,
         IReadOnlyList<OrderLineDto> Items);
 
@@ -731,6 +751,10 @@ public sealed class ShopCatalogController : ControllerBase
     public sealed record TrackingStageDto(
         string Stage,
         string Label,
+        // `state` (done|current|pending) y `date` son lo que lee la UI (normalizeTracking);
+        // se derivan de Reached + CurrentStage. Reached/ReachedAt se conservan.
+        string State,
+        DateTimeOffset? Date,
         bool Reached,
         DateTimeOffset? ReachedAt,
         string? Note);
