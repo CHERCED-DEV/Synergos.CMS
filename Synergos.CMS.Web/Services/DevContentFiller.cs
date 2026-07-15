@@ -25,7 +25,7 @@ public sealed class DevContentFiller
     private const string SectionsAlias = "sections";
     private const string BrandName = "SynergosLabs";   // marca de la Entidad + umbrella (decisión del arquitecto)
     private const string ComponentCount = "120";       // cifra canónica de componentes (P1-9 — sin contradicciones entre páginas)
-    private const string VerticalCount = "4";          // cifra canónica de verticales (P1-9)
+    private const string VerticalCount = "8";          // cifra canónica de verticales vivas (= ShowcaseCatalog: Tienda/Booking/Eventos/Propiedades/Educación/Blogs/Healthcare/Gobierno)
     private static readonly Guid SectionContentAreaKey = new("3525d41c-ae84-47ac-9297-2148f6a4aae8");
     // Áreas de elementLayout3Col (de DTBlockGridSections) — col1/col2/col3.
     private static readonly Guid Col1AreaKey = new("b3141704-5e2d-4adf-9c83-654377a9717f");
@@ -364,7 +364,7 @@ public sealed class DevContentFiller
             "La plataforma que convierte un negocio en muchos",
             "<p>SynergosLabs es una plataforma digital componible: un mismo motor con el que creas y operas marcas, tiendas y portales. En vez de construir y mantener un sistema por cada producto, lo haces todo sobre una base — y la haces crecer cuando quieras.</p>",
             "Synergos Identidad", "Identidad visual de la plataforma SynergosLabs", "#1A1A2E", "#7A3FF2",
-            ("Ver soluciones", "/synergos/soluciones"), ("Ver planes", "/synergos/precios"));
+            ("Ver soluciones", "/synergos/soluciones"), ("Ver los productos", "/synergos/productos"));
 
         var synSplit = _contentTypeService.Get("elementSynMediaText")?.Key is not null;
         var bodyProposito = "<p>Piensa en SynergosLabs como el motor de tu presencia digital. Hoy lanzas tu marca; mañana sumas una tienda; después un portal de miembros. Todo con la misma cuenta, el mismo equipo y la misma identidad — sin empezar de cero cada vez.</p>";
@@ -434,7 +434,7 @@ public sealed class DevContentFiller
             ("Miembros y acceso", "Login · roles · 2FA · portal", "Contenido protegido, autoservicio de miembros y doble factor de fábrica."),
             ("Formularios y captación", "Forms · anti-spam · avisos", "Captura leads con honeypot, rate-limit y notificación por email — sin integraciones."),
             ("Búsqueda y SEO", "Examine · sitemap · JSON-LD", "Búsqueda full-text y SEO técnico (sitemap, robots, datos estructurados) incluidos."),
-            ("Identidad por marca", "Tema · tokens · multi-dominio", "Una identidad por sitio: color, tipografía y logo se aplican a todo desde un solo lugar."),
+            ("Rendimiento y SSR", "Server-side · caché · Core Web Vitals", "Render server-side, imágenes optimizadas y caché de fábrica — rápido sin que tu equipo lo configure."),
         };
         if (_contentTypeService.Get("elementSynFeatureGrid")?.Key is not null)
         {
@@ -452,7 +452,7 @@ public sealed class DevContentFiller
 
         AddCta(b, "¿Cuál es tu caso?",
             "Mira las soluciones por tipo de negocio o cuéntanos el tuyo y te mostramos la receta que encaja.",
-            "Ver soluciones", "/synergos/soluciones");
+            "Hablar con ventas", "/synergos/contacto");
         return b.Build();
     }
 
@@ -556,7 +556,7 @@ public sealed class DevContentFiller
             mediaOnRight: true, ctaLabel: "Cómo funciona", ctaUrl: "/synergos/como-funciona");
 
         AddStats(b,
-            ("4", "tipos de negocio sobre un core"),
+            (VerticalCount, "verticales listas para arrancar"),
             (ComponentCount, "componentes reutilizables"),
             ("1", "plataforma, multi-dominio"));
 
@@ -639,6 +639,14 @@ public sealed class DevContentFiller
             FeatureGridAuto(b, "Elige tu plan", "Del primer sitio a todo un ecosistema", plans, 3);
         }
 
+        // Reaseguro: lo que TODOS los planes comparten (mismo motor) — antes de la guía de elección.
+        FeatureGridAuto(b, "Todos los planes incluyen", "El mismo motor, en cualquier plan", new (string title, string subtitle, string body)[]
+        {
+            ("El mismo motor", "Sin versiones capadas", "Todos los planes corren sobre el mismo core: cambias capacidad y soporte, nunca la tecnología."),
+            ("SSR + SEO técnico", "Rápido y encontrable", "Render server-side, sitemap, robots y datos estructurados incluidos desde el plan gratis."),
+            ("Tu marca con tokens", "Identidad de fábrica", "Color, tipografía y logo por tokens — tu sitio luce propio en cualquier plan."),
+        }, 3);
+
         AddMission(b, "¿Cuál me conviene?",
             "Mismo motor, distinta capacidad",
             "<p>Si estás validando, empieza en Inicial. Si ya vendes o necesitas tu dominio y soporte, Profesional. Si manejas varias marcas o dominios, Premium. Cambias de plan cuando quieras, sin migraciones.</p>");
@@ -701,10 +709,11 @@ public sealed class DevContentFiller
             ("Grupo Andino", "#1A1A2E", "#7A3FF2"),
             ("Nimbus", "#7A3FF2", "#C04CFC"));
 
+        // Métricas de RESULTADO (no de inventario) — coherentes con los casos/testimonios de arriba.
         AddStats(b,
-            (VerticalCount, "verticales en producción"),
-            (ComponentCount, "componentes reutilizados"),
-            ("1", "plataforma para todo el grupo"));
+            ("50%", "menos costo de mantenimiento"),
+            ("2 sem", "para abrir una línea nueva"),
+            ("5→1", "sitios consolidados en una plataforma"));
 
         SplitAuto(b, "Cómo lo lograron",
             "Una base, muchas marcas",
