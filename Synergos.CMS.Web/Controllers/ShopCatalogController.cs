@@ -574,6 +574,7 @@ public sealed class ShopCatalogController : ControllerBase
         AddedAt: i.AddedAt);
 
     private ReturnDto ToReturnDto(ShopReturnCase c) => new(
+        ClaimId: c.RmaId,   // clave que lee la UI
         RmaId: c.RmaId,
         OrderRef: c.OrderRef,
         LineRef: c.LineRef,
@@ -583,10 +584,20 @@ public sealed class ShopCatalogController : ControllerBase
         RefundAmountFormatted: _priceFormatter.Format(c.RefundAmount, c.Currency),
         Currency: c.Currency,
         Reason: c.Reason,
-        Status: c.Status.ToString(),
+        Status: MapReturnStatusToUi(c.Status),
         RequestedAt: c.RequestedAt,
         UpdatedAt: c.UpdatedAt,
         Note: c.Note);
+
+    // Vocabulario del estado del RMA al que lee la UI (ES). El ciclo interno
+    // (Requested→Approved/Received→Refunded, o Rejected terminal) se colapsa a 3.
+    private static string MapReturnStatusToUi(ShopReturnStatus s) => s switch
+    {
+        ShopReturnStatus.Requested => "abierto",
+        ShopReturnStatus.Approved or ShopReturnStatus.Received => "en-revision",
+        ShopReturnStatus.Refunded or ShopReturnStatus.Rejected => "resuelto",
+        _ => "abierto",
+    };
 
     private static ThreadDto ToThreadDto(MessageThread t) => new(
         ThreadId: t.ThreadId,
@@ -774,6 +785,9 @@ public sealed class ShopCatalogController : ControllerBase
     public sealed record ReturnAdvanceBody(string Status, string? Note);
 
     public sealed record ReturnDto(
+        // La UI lee `claimId` (?? id) y `status` en vocabulario ES {abierto,en-revision,
+        // resuelto}. RmaId se conserva; Status porta el valor ES-mapeado.
+        string ClaimId,
         string RmaId,
         string OrderRef,
         string LineRef,
