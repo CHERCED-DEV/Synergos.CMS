@@ -710,11 +710,13 @@ public sealed class DevContentFiller
             ("Grupo Andino", "#1A1A2E", "#7A3FF2"),
             ("Nimbus", "#7A3FF2", "#C04CFC"));
 
-        // Métricas de RESULTADO (no de inventario) — coherentes con los casos/testimonios de arriba.
+        // Métricas de RESULTADO (no de inventario) — coherentes con los casos/testimonios.
+        // Valores NUMÉRICOS: el stat-ticker (elementSynStatTicker) hace count-up y su
+        // statValue valida ^\d+(\.\d+)?$ — la unidad va en el label, no en el número.
         AddStats(b,
-            ("50%", "menos costo de mantenimiento"),
-            ("2 sem", "para abrir una línea nueva"),
-            ("5→1", "sitios consolidados en una plataforma"));
+            ("50", "% menos en costo de mantenimiento"),
+            ("2", "semanas para abrir una línea nueva"),
+            ("5", "sitios consolidados en una sola plataforma"));
 
         SplitAuto(b, "Cómo lo lograron",
             "Una base, muchas marcas",
