@@ -1,4 +1,5 @@
-using System.Collections.Concurrent;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -15,28 +16,35 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// Lógica pura en <c>Synergos.CMS.Application</c> — cero dependencia de
 /// Umbraco/AspNetCore (ADR 0002). NO toca los flujos Booking/Travel (aditivo):
 /// usa la vía polimórfica <see cref="IReservationService.HoldItemAsync"/> con
-/// <see cref="TravelProductType.Hotel"/> como discriminador neutro (el e-commerce
-/// no tiene tipo propio en el enum del motor; la identidad del producto viaja en
-/// ProductRef/ProductLabel). El precio NUNCA se confía al cliente: se resuelve
-/// desde el catálogo en checkout (anti-tampering). Estado (orderRef → orden +
-/// reservas + sesión) en memoria (proceso), suficiente para demo; un adapter real
-/// delega a DB/OMS. <see cref="ConfirmAsync"/> es idempotente: re-confirmar el
-/// mismo orderRef devuelve el mismo resultado sin doble captura. ADR 0075.
+/// <see cref="TravelProductType.Hotel"/> como discriminador neutro. El precio
+/// NUNCA se confía al cliente: se resuelve desde el catálogo en checkout
+/// (anti-tampering). <b>T1 (doc 25):</b> el estado (orderRef → superset
+/// <see cref="PersistedOrder"/>) ya NO vive en un diccionario del proceso sino
+/// detrás del seam <see cref="IShopOrderStore"/> — con un adapter FileSystem la
+/// orden SOBREVIVE un reinicio. <see cref="ConfirmAsync"/> es idempotente:
+/// re-confirmar el mismo orderRef devuelve el mismo resultado sin doble captura.
+/// ADR 0075.
 /// </remarks>
 public sealed class StubShopOrderService : IShopOrderService
 {
+    private static readonly JsonSerializerOptions _json = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,   // acentos es-CO legibles en disco
+    };
+
     private readonly IProductCatalogProvider _catalog;
     private readonly IReservationService _reservations;
     private readonly IPaymentProvider _payments;
     private readonly IOrderTrackingService? _tracking;
+    private readonly IShopOrderStore _store;
     private readonly Func<DateTimeOffset> _now;
-    private readonly ConcurrentDictionary<string, OrderState> _orders = new(StringComparer.Ordinal);
 
     public StubShopOrderService(
         IProductCatalogProvider catalog,
         IReservationService reservations,
         IPaymentProvider payments)
-        : this(catalog, reservations, payments, null, null)
+        : this(catalog, reservations, payments, null, new InMemoryShopOrderStore(), null)
     {
     }
 
@@ -49,16 +57,12 @@ public sealed class StubShopOrderService : IShopOrderService
         IReservationService reservations,
         IPaymentProvider payments,
         Func<DateTimeOffset>? now)
-        : this(catalog, reservations, payments, null, now)
+        : this(catalog, reservations, payments, null, new InMemoryShopOrderStore(), now)
     {
     }
 
     /// <summary>
-    /// Ctor completo (OLA 1 Tienda T0): <paramref name="tracking"/> opcional —
-    /// si viene, la orden ALIMENTA su timeline al confirmar el pago (avanza a
-    /// la etapa inicial "paid" del pipeline pago→preparación→envío→entrega;
-    /// las etapas siguientes las mueve el fulfillment/vendedor vía
-    /// <see cref="IOrderTrackingService.AdvanceAsync"/>). Null = sin tracking.
+    /// Ctor con tracking (OLA 1 Tienda T0). Persistencia en memoria por default.
     /// </summary>
     public StubShopOrderService(
         IProductCatalogProvider catalog,
@@ -66,11 +70,28 @@ public sealed class StubShopOrderService : IShopOrderService
         IPaymentProvider payments,
         IOrderTrackingService? tracking,
         Func<DateTimeOffset>? now)
+        : this(catalog, reservations, payments, tracking, new InMemoryShopOrderStore(), now)
+    {
+    }
+
+    /// <summary>
+    /// Ctor completo (T1): <paramref name="store"/> es el backing store durable
+    /// (FileSystem en Web, InMemory en tests). Si viene <paramref name="tracking"/>,
+    /// la orden alimenta su timeline al confirmar el pago (etapa "paid").
+    /// </summary>
+    public StubShopOrderService(
+        IProductCatalogProvider catalog,
+        IReservationService reservations,
+        IPaymentProvider payments,
+        IOrderTrackingService? tracking,
+        IShopOrderStore store,
+        Func<DateTimeOffset>? now)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _tracking = tracking;
+        _store = store ?? throw new ArgumentNullException(nameof(store));
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -92,7 +113,7 @@ public sealed class StubShopOrderService : IShopOrderService
         // 1) Resolver precio/stock REAL de cada línea desde el catálogo (no se
         //    confía en el precio del cliente) + apartar el stock (un hold por
         //    línea) vía la vía polimórfica del motor de reservas.
-        var lines = new List<LineState>(items.Count);
+        var lines = new List<PersistedOrderLine>(items.Count);
         var paymentLines = new List<PaymentLineItem>(items.Count);
         string? currency = null;
         decimal total = 0m;
@@ -165,7 +186,7 @@ public sealed class StubShopOrderService : IShopOrderService
                     Currency: currency!),
                 cancellationToken);
 
-            lines.Add(new LineState(
+            lines.Add(new PersistedOrderLine(
                 item.ProductId, item.VariantId, productName, item.Quantity, unitPrice, lineTotal, currency!, reservation.Id));
             paymentLines.Add(new PaymentLineItem(
                 Sku: productRef,
@@ -188,7 +209,7 @@ public sealed class StubShopOrderService : IShopOrderService
                 Metadata: null),
             cancellationToken);
 
-        _orders[orderRef] = new OrderState(
+        var order = new PersistedOrder(
             OrderRef: orderRef,
             OrderNumber: BuildOrderNumber(orderRef),
             PaymentSessionId: session.SessionId,
@@ -199,12 +220,15 @@ public sealed class StubShopOrderService : IShopOrderService
             Lines: lines,
             CreatedAt: _now());
 
+        await _store.WriteAsync(orderRef, JsonSerializer.Serialize(order, _json), cancellationToken);
+
         return new ShopCheckoutResult(orderRef, session.SessionId, total, currency!);
     }
 
     public async Task<ShopConfirmationResult> ConfirmAsync(string orderRef, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(orderRef) || !_orders.TryGetValue(orderRef, out var order))
+        var order = await LoadAsync(orderRef, cancellationToken);
+        if (order is null)
         {
             throw new ArgumentException("Orden no encontrada.", nameof(orderRef));
         }
@@ -232,12 +256,11 @@ public sealed class StubShopOrderService : IShopOrderService
         }
 
         var paid = order with { Status = OrderStatus.Paid };
-        _orders[orderRef] = paid;
+        await _store.WriteAsync(orderRef, JsonSerializer.Serialize(paid, _json), cancellationToken);
 
         // 3) La orden pagada alimenta su timeline de tracking (seam genérico
         //    IOrderTrackingService): etapa inicial "paid" del pipeline
-        //    pago→preparación→envío→entrega. AdvanceAsync es idempotente, así
-        //    que un doble confirm no duplica la etapa.
+        //    pago→preparación→envío→entrega. AdvanceAsync es idempotente.
         if (_tracking is not null)
         {
             await _tracking.AdvanceAsync(
@@ -250,33 +273,60 @@ public sealed class StubShopOrderService : IShopOrderService
         return ToConfirmation(paid);
     }
 
-    public Task<IReadOnlyList<ShopOrder>> GetOrdersAsync(string customerEmail, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ShopOrder>> GetOrdersAsync(string customerEmail, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(customerEmail))
         {
-            return Task.FromResult<IReadOnlyList<ShopOrder>>(Array.Empty<ShopOrder>());
+            return Array.Empty<ShopOrder>();
         }
 
         var email = customerEmail.Trim();
-        var orders = _orders.Values
+        var all = await LoadAllAsync(cancellationToken);
+        return all
             .Where(o => string.Equals(o.CustomerEmail, email, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(o => o.CreatedAt)
             .Select(ToOrder)
             .ToList();
-
-        return Task.FromResult<IReadOnlyList<ShopOrder>>(orders);
     }
 
-    public Task<ShopOrder?> GetOrderAsync(string orderRef, CancellationToken cancellationToken = default)
+    public async Task<ShopOrder?> GetOrderAsync(string orderRef, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(orderRef) || !_orders.TryGetValue(orderRef.Trim(), out var order))
-        {
-            return Task.FromResult<ShopOrder?>(null);
-        }
-        return Task.FromResult<ShopOrder?>(ToOrder(order));
+        var order = await LoadAsync(orderRef, cancellationToken);
+        return order is null ? null : ToOrder(order);
     }
 
-    private static ShopConfirmationResult ToConfirmation(OrderState order) => new(
+    // ── Carga desde el store (deserialización defensiva) ────────────────
+    private async Task<PersistedOrder?> LoadAsync(string? orderRef, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(orderRef))
+        {
+            return null;
+        }
+        var json = await _store.ReadAsync(orderRef.Trim(), cancellationToken);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+        try { return JsonSerializer.Deserialize<PersistedOrder>(json, _json); }
+        catch (JsonException) { return null; }   // archivo corrupto → como si no existiera
+    }
+
+    private async Task<List<PersistedOrder>> LoadAllAsync(CancellationToken cancellationToken)
+    {
+        var raws = await _store.ListAsync(cancellationToken);
+        var orders = new List<PersistedOrder>(raws.Count);
+        foreach (var json in raws)
+        {
+            if (string.IsNullOrWhiteSpace(json)) continue;
+            PersistedOrder? order;
+            try { order = JsonSerializer.Deserialize<PersistedOrder>(json, _json); }
+            catch (JsonException) { continue; }
+            if (order is not null) orders.Add(order);
+        }
+        return orders;
+    }
+
+    private static ShopConfirmationResult ToConfirmation(PersistedOrder order) => new(
         OrderRef: order.OrderRef,
         OrderNumber: order.OrderNumber,
         Status: order.Status.ToString(),
@@ -284,7 +334,7 @@ public sealed class StubShopOrderService : IShopOrderService
         Total: order.Total,
         Currency: order.Currency);
 
-    private static ShopOrder ToOrder(OrderState order) => new(
+    private static ShopOrder ToOrder(PersistedOrder order) => new(
         OrderRef: order.OrderRef,
         OrderNumber: order.OrderNumber,
         Status: order.Status,
@@ -296,7 +346,7 @@ public sealed class StubShopOrderService : IShopOrderService
         PaymentSessionId: order.PaymentSessionId,
         CreatedAt: order.CreatedAt);
 
-    private static ShopOrderLine ToLine(LineState l) => new(
+    private static ShopOrderLine ToLine(PersistedOrderLine l) => new(
         ProductId: l.ProductId,
         VariantId: l.VariantId,
         ProductName: l.ProductName,
@@ -309,28 +359,4 @@ public sealed class StubShopOrderService : IShopOrderService
     // (idempotente: re-confirmar el mismo orderRef da el mismo número).
     private static string BuildOrderNumber(string orderRef)
         => "SYN-" + orderRef.Replace("ord_", string.Empty, StringComparison.Ordinal)[..8].ToUpperInvariant();
-
-    private sealed record LineState(
-        string ProductId,
-        string? VariantId,
-        string ProductName,
-        int Quantity,
-        decimal UnitPrice,
-        decimal LineTotal,
-        string Currency,
-        string ReservationId);
-
-    private sealed record OrderState(
-        string OrderRef,
-        string OrderNumber,
-        string PaymentSessionId,
-        string CustomerName,
-        string CustomerEmail,
-        decimal Total,
-        string Currency,
-        IReadOnlyList<LineState> Lines,
-        DateTimeOffset CreatedAt)
-    {
-        public OrderStatus Status { get; init; } = OrderStatus.Pending;
-    }
 }

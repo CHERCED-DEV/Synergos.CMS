@@ -66,6 +66,10 @@ public sealed class OptionsComposer : IComposer
         builder.Services.Configure<CommentsSettings>(
             builder.Config.GetSection("Synergos:Comments"));
 
+        // T1 (doc 25) — persistencia durable de órdenes de Tienda.
+        builder.Services.Configure<ShopOrdersSettings>(
+            builder.Config.GetSection("Synergos:ShopOrders"));
+
         builder.Services.Configure<AdminSettings>(
             builder.Config.GetSection("Synergos:Admin"));
 

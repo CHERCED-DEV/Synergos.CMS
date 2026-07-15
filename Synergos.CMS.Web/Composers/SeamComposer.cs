@@ -263,13 +263,18 @@ public sealed class SeamComposer : IComposer
         //     duplicados. v1 simple; SH-7 v2/v3 (DM/In Basket) agregan encima.
         services.AddSingleton<IUserCollection, StubUserCollection>();
         services.AddSingleton<IOrderTrackingService, StubOrderTrackingService>();
+        // T1 (doc 25) — persistencia durable de órdenes tras el seam IShopOrderStore.
+        // El motor no cambia; solo su backing store pasa de memoria a disco (JSON por
+        // orderRef, App_Data/syn-orders/). Una orden confirmada sobrevive un reinicio.
+        services.AddSingleton<IShopOrderStore, FileSystemShopOrderStore>();
         services.AddSingleton<IShopOrderService>(sp =>
             new StubShopOrderService(
                 sp.GetRequiredService<IProductCatalogProvider>(),
                 sp.GetRequiredService<IReservationService>(),
                 sp.GetRequiredService<IPaymentProvider>(),
                 sp.GetRequiredService<IOrderTrackingService>(),
-                null));
+                sp.GetRequiredService<IShopOrderStore>(),
+                now: null));
         services.AddSingleton<IReturnService>(sp =>
             new StubReturnService(
                 sp.GetRequiredService<IShopOrderService>(),
