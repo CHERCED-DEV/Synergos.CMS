@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Synergos.CMS.Interfaces;
+using Umbraco.Cms.Core.Services;
 
 namespace Synergos.CMS.Web.Services;
 
@@ -39,11 +40,31 @@ public sealed class DefaultMemberAccessGate : IMemberAccessGate
     {
         get
         {
-            // Umbraco MemberIdentityUser persiste el Member.Key en el
-            // claim NameIdentifier (string GUID). Si parse falla,
-            // null para que el caller se comporte como anónimo.
-            var raw = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            return Guid.TryParse(raw, out var key) ? key : null;
+            var http = _httpContextAccessor.HttpContext;
+            var raw = http?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(raw))
+            {
+                return null;
+            }
+
+            // Si el claim YA es un GUID (setups que lo emiten así), úsalo directo.
+            if (Guid.TryParse(raw, out var direct))
+            {
+                return direct;
+            }
+
+            // Umbraco 13: el claim NameIdentifier del cookie de member lleva el
+            // Member.Id (ENTERO), no el Key (GUID) — y el GUID no viaja en ningún
+            // otro claim. Lo resolvemos del Id vía IMemberService (cache de Umbraco).
+            // Se toma del request scope: este gate es Singleton e IMemberService es
+            // Scoped (resolverlo por ctor sería un captive dependency).
+            if (!int.TryParse(raw, out var memberId) || http is null)
+            {
+                return null;
+            }
+
+            var members = http.RequestServices.GetService(typeof(IMemberService)) as IMemberService;
+            return members?.GetById(memberId)?.Key;
         }
     }
 
