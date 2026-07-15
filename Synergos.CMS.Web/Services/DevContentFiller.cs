@@ -367,7 +367,7 @@ public sealed class DevContentFiller
             ("Ver soluciones", "/synergos/soluciones"), ("Ver los productos", "/synergos/productos"));
 
         var synSplit = _contentTypeService.Get("elementSynMediaText")?.Key is not null;
-        var bodyProposito = "<p>Piensa en SynergosLabs como el motor de tu presencia digital. Hoy lanzas tu marca; mañana sumas una tienda; después un portal de miembros. Todo con la misma cuenta, el mismo equipo y la misma identidad — sin empezar de cero cada vez.</p>";
+        var bodyProposito = "<p>Piensa en SynergosLabs como el motor de tu presencia digital: todo lo que publicas vive sobre la misma cuenta, el mismo equipo y la misma identidad. Sumas una línea de negocio nueva cuando la necesitas — sin empezar de cero ni migrar cada vez.</p>";
         if (synSplit)
         {
             AddSynSplit(b, "En palabras simples", bodyProposito, "Synergos Proposito", "Cómo funciona SynergosLabs para tu negocio", "#7A3FF2", "#C04CFC", mediaOnRight: false, subtitle: "Una base, muchos negocios");
@@ -463,13 +463,13 @@ public sealed class DevContentFiller
             "Una demo de 30 minutos, sin compromiso",
             "<p>Cuéntanos qué quieres lanzar y te mostramos en vivo cómo SynergosLabs lo resuelve — y qué plan encaja con tu negocio. Sin tecnicismos si no los quieres.</p>",
             "Synergos Contacto", "Sección de contacto de SynergosLabs", "#0A2540", "#1FA2A6",
-            ("Ver planes", "/synergos/precios"), ("Ver soluciones", "/synergos/soluciones"));
+            ("Agendar mi demo", "#form-contacto"), ("Ver planes", "/synergos/precios"));
 
         AddContactForm(b, "Cuéntanos de tu proyecto", "Enviar mensaje",
             ("Nombre", "nombre", "text", true, "Tu nombre"),
             ("Email", "email", "email", true, "tu@correo.com"),
             ("Empresa", "empresa", "text", false, "Tu empresa (opcional)"),
-            ("¿Qué quieres lanzar?", "mensaje", "textarea", true, "Cuéntanos brevemente tu proyecto…"));
+            ("¿Qué tienes en mente?", "mensaje", "textarea", true, "Cuéntanos brevemente tu proyecto…"));
 
         AddMission(b, "Cómo trabajamos",
             "Directo, claro, a tu ritmo",

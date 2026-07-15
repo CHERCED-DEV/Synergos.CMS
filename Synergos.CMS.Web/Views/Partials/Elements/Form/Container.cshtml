@@ -43,6 +43,9 @@
     if (string.IsNullOrWhiteSpace(submitLabel)) { submitLabel = "Enviar"; }
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
+    // Ancla in-page: id derivado de la key interna compuesta (p.ej. formInternalKey
+    // "contacto" → id="form-contacto"), para que un CTA pueda hacer scroll al formulario.
+    var anchorId = !string.IsNullOrWhiteSpace(internalKey) ? $"form-{internalKey}" : null;
     var classes = string.Join(" ", new[]
     {
         "syn-form",
@@ -72,7 +75,7 @@
         }
     }
 }
-<section class="@classes" data-form-internal="@isInternal.ToString().ToLowerInvariant()">
+<section id="@anchorId" class="@classes" data-form-internal="@isInternal.ToString().ToLowerInvariant()">
     @if (!string.IsNullOrWhiteSpace(title))
     {
         <h2 class="syn-form__title">@title</h2>
