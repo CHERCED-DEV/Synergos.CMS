@@ -136,9 +136,20 @@ public class StubProductCatalogProviderTests
         var rating = result.Facets.Single(f => f.Field == "minRating");
         Assert.Equal("Threshold", rating.Kind);
         Assert.Equal("4 estrellas o más", rating.Values.Single(v => v.Value == "4").Label);
+    }
 
-        // Y la categoría es de selección única, no múltiple: la UI pinta radios.
-        Assert.Equal("SingleSelect", result.Facets.Single(f => f.Field == "category").Kind);
+    [Fact] // El mismo bug de multi-valor, en el eje de categoría. Verificado en vivo: 2+2=0.
+    public async Task Search_DosCategorias_DevuelveLaUnion_NoCero()
+    {
+        var svc = Make();
+
+        var hogar = await svc.SearchAsync(WithFacet("category", "Hogar"));
+        var deportes = await svc.SearchAsync(WithFacet("category", "Deportes"));
+        var ambas = await svc.SearchAsync(WithFacet("category", "Hogar", "Deportes"));
+
+        Assert.NotEmpty(hogar.Products);
+        Assert.NotEmpty(deportes.Products);
+        Assert.Equal(hogar.Total + deportes.Total, ambas.Total);
     }
 
     [Fact] // Total = los que pasan el filtro, NO los de la página: la UI cuenta páginas con esto.

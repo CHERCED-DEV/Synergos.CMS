@@ -63,7 +63,12 @@ public sealed class StubProductCatalogProvider : IProductCatalogProvider
         defaultOrder: products => products.OrderByDescending(p => p.Rating).ThenBy(p => p.Name, StringComparer.Ordinal),
         filters: new CatalogFilter<CatalogProduct>[]
         {
-            new CatalogTermFilter<CatalogProduct>("category", "Categoría", p => new[] { p.Category }, CatalogFacetKind.SingleSelect),
+            // MultiSelect y no SingleSelect: el discovery-shell IGNORA el kind y pinta toda
+            // faceta como checkbox, así que el usuario PUEDE marcar dos categorías — y debe
+            // ver la unión, no cero. Declarar SingleSelect aquí era decorativo: describía un
+            // comportamiento que nadie hacía cumplir. Si algún día el shell honra el kind
+            // (el wire ya lo lleva), esto se revisa con su vertical.
+            new CatalogTermFilter<CatalogProduct>("category", "Categoría", p => new[] { p.Category }),
             new CatalogTermFilter<CatalogProduct>("brand", "Marca", p => new[] { p.Brand }),
             new CatalogThresholdFilter<CatalogProduct>("minRating", "Calificación", p => p.Rating, new[]
             {

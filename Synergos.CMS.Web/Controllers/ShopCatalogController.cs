@@ -132,6 +132,11 @@ public sealed class ShopCatalogController : ControllerBase
         CancellationToken cancellationToken)
     {
         var facets = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        // category va por AQUÍ y no por el parámetro suelto de abajo: la UI la manda dentro
+        // de criteria.facets (storefront.ts fija category:'' siempre), o sea CSV como las
+        // demás. Dejarla fuera de AddFacet resucitaba el mismo bug de multi-valor en el eje
+        // de categoría: ?category=Hogar,Deportes devolvía CERO teniendo 2 y 2.
+        AddFacet(facets, "category", category);
         AddFacet(facets, "brand", brand);
         AddFacet(facets, "minRating", minRating);
 
@@ -140,13 +145,17 @@ public sealed class ShopCatalogController : ControllerBase
         var pageSize = take is > 0 ? take.Value : DefaultPageSize;
         var pageNumber = page is > 0 ? page.Value : 1;
 
+        // La multiplicación se hace en long y se capa: (page-1)*pageSize con un ?page= grande
+        // DESBORDA int y sale NEGATIVO, y un Skip negativo el motor lo trata como 0 — o sea
+        // que ?page=1431655766 devolvería la PÁGINA 1 como si nada, en vez de vacío.
+        var skip = (int)Math.Min((long)(pageNumber - 1) * pageSize, int.MaxValue);
+
         var result = await _catalog.SearchAsync(
             new ProductQuery(
                 Text: q,
-                Category: category,
                 Facets: facets.Count > 0 ? facets : null,
                 Sort: sort,
-                Skip: (pageNumber - 1) * pageSize,
+                Skip: skip,
                 Take: pageSize),
             cancellationToken);
 
