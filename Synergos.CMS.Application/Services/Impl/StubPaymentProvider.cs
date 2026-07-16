@@ -1,4 +1,4 @@
-using System.Text.Encodings.Web;
+﻿using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
@@ -14,7 +14,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// <remarks>
 /// Lógica pura en <c>Synergos.CMS.Application</c> — cero dependencia de
 /// Umbraco/AspNetCore (ADR 0002). <b>T3 (doc 25):</b> el estado ya NO vive en un
-/// diccionario del proceso sino detrás del seam <see cref="IPaymentSessionStore"/> —
+/// diccionario del proceso sino detrás del seam <see cref="IJsonEntityStore"/> —
 /// con un adapter FileSystem la sesión de pago SOBREVIVE un reinicio, cerrando la
 /// brecha por la que un checkout hecho antes del reinicio no se podía capturar.
 /// Además expone knobs de simulación (<see cref="PaymentsSettings.DeclineTriggerSku"/>,
@@ -30,7 +30,10 @@ public sealed class StubPaymentProvider : IPaymentProvider
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    private readonly IPaymentSessionStore _store;
+    /// <summary>Familia de entidades de este provider en el store genérico (→ App_Data/syn-payments/).</summary>
+    private const string ResourceType = "payments";
+
+    private readonly IJsonEntityStore _store;
     private readonly PaymentsSettings _settings;
     // Serializa el read-modify-write de Capture/Refund (single-instance). No se puede
     // usar lock{} porque el cuerpo hace await; SemaphoreSlim es el equivalente async.
@@ -42,9 +45,9 @@ public sealed class StubPaymentProvider : IPaymentProvider
     /// defaults (auto-autoriza, sin knobs). El composer inyecta el store durable +
     /// settings reales (Ola A).
     /// </summary>
-    public StubPaymentProvider(IPaymentSessionStore? store = null, PaymentsSettings? settings = null)
+    public StubPaymentProvider(IJsonEntityStore? store = null, PaymentsSettings? settings = null)
     {
-        _store = store ?? new InMemoryPaymentSessionStore();
+        _store = store ?? new InMemoryJsonEntityStore();
         _settings = settings ?? new PaymentsSettings();
     }
 
@@ -159,7 +162,7 @@ public sealed class StubPaymentProvider : IPaymentProvider
 
     private async Task<PersistedSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken)
     {
-        var json = await _store.ReadAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        var json = await _store.ReadAsync(ResourceType, sessionId, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(json))
         {
             return null;
@@ -169,7 +172,7 @@ public sealed class StubPaymentProvider : IPaymentProvider
     }
 
     private Task WriteSessionAsync(string sessionId, PersistedSession session, CancellationToken cancellationToken)
-        => _store.WriteAsync(sessionId, JsonSerializer.Serialize(session, _json), cancellationToken);
+        => _store.WriteAsync(ResourceType, sessionId, JsonSerializer.Serialize(session, _json), cancellationToken);
 
     private static PaymentOutcome NotFound(string? sessionId)
         => new(sessionId ?? string.Empty, PaymentStatus.Failed, 0m, "Sesión de pago no encontrada.");

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -143,24 +143,22 @@ public class TravelCartServiceTests
            // stores (orden de viaje + reserva + pago) — proxy de reinicio del CMS.
     public async Task ConfirmAfterServiceReplacement_ViaSharedStores_Succeeds()
     {
-        // Los TRES estados que ConfirmAsync toca deben ser durables: la orden de viaje
-        // (ITravelOrderStore), las reservas (IReservationStore) y la sesión de pago
-        // (IPaymentSessionStore). Se comparten entre las dos instancias del servicio.
-        var travelStore = new InMemoryTravelOrderStore();
-        var reservationStore = new InMemoryReservationStore();
-        var paymentStore = new InMemoryPaymentSessionStore();
+        // Los TRES estados que ConfirmAsync toca deben ser durables: la orden de viaje,
+        // las reservas y la sesión de pago. Con el store GENÉRICO basta UNA instancia
+        // para las tres familias — el resourceType las aísla entre sí.
+        var store = new InMemoryJsonEntityStore();
 
         var beforeRestart = new TravelCartService(
-            new StubReservationService(StubReservationService.DefaultHoldWindow, null, reservationStore),
-            new StubPaymentProvider(paymentStore),
-            null, null, travelStore);
+            new StubReservationService(StubReservationService.DefaultHoldWindow, null, store),
+            new StubPaymentProvider(store),
+            null, null, store);
         var checkout = await beforeRestart.CheckoutAsync(new[] { Hotel(), Flight() }, Guest());
 
         // "Reinicio": instancias NUEVAS del servicio + motores sobre los MISMOS stores.
         var afterRestart = new TravelCartService(
-            new StubReservationService(StubReservationService.DefaultHoldWindow, null, reservationStore),
-            new StubPaymentProvider(paymentStore),
-            null, null, travelStore);
+            new StubReservationService(StubReservationService.DefaultHoldWindow, null, store),
+            new StubPaymentProvider(store),
+            null, null, store);
         var confirmation = await afterRestart.ConfirmAsync(checkout.OrderRef);
 
         Assert.Equal(ReservationStatus.Confirmed.ToString(), confirmation.Status);

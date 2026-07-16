@@ -1,4 +1,4 @@
-using System.Text.Encodings.Web;
+﻿using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
@@ -20,7 +20,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// NUNCA se confía al cliente: se resuelve desde el catálogo en checkout
 /// (anti-tampering). <b>T1 (doc 25):</b> el estado (orderRef → superset
 /// <see cref="PersistedOrder"/>) ya NO vive en un diccionario del proceso sino
-/// detrás del seam <see cref="IShopOrderStore"/> — con un adapter FileSystem la
+/// detrás del seam <see cref="IJsonEntityStore"/> — con un adapter FileSystem la
 /// orden SOBREVIVE un reinicio. <see cref="ConfirmAsync"/> es idempotente:
 /// re-confirmar el mismo orderRef devuelve el mismo resultado sin doble captura.
 /// ADR 0075.
@@ -33,18 +33,21 @@ public sealed class StubShopOrderService : IShopOrderService
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,   // acentos es-CO legibles en disco
     };
 
+    /// <summary>Familia de entidades de este motor en el store genérico (→ App_Data/syn-orders/).</summary>
+    private const string ResourceType = "orders";
+
     private readonly IProductCatalogProvider _catalog;
     private readonly IReservationService _reservations;
     private readonly IPaymentProvider _payments;
     private readonly IOrderTrackingService? _tracking;
-    private readonly IShopOrderStore _store;
+    private readonly IJsonEntityStore _store;
     private readonly Func<DateTimeOffset> _now;
 
     public StubShopOrderService(
         IProductCatalogProvider catalog,
         IReservationService reservations,
         IPaymentProvider payments)
-        : this(catalog, reservations, payments, null, new InMemoryShopOrderStore(), null)
+        : this(catalog, reservations, payments, null, new InMemoryJsonEntityStore(), null)
     {
     }
 
@@ -57,7 +60,7 @@ public sealed class StubShopOrderService : IShopOrderService
         IReservationService reservations,
         IPaymentProvider payments,
         Func<DateTimeOffset>? now)
-        : this(catalog, reservations, payments, null, new InMemoryShopOrderStore(), now)
+        : this(catalog, reservations, payments, null, new InMemoryJsonEntityStore(), now)
     {
     }
 
@@ -70,7 +73,7 @@ public sealed class StubShopOrderService : IShopOrderService
         IPaymentProvider payments,
         IOrderTrackingService? tracking,
         Func<DateTimeOffset>? now)
-        : this(catalog, reservations, payments, tracking, new InMemoryShopOrderStore(), now)
+        : this(catalog, reservations, payments, tracking, new InMemoryJsonEntityStore(), now)
     {
     }
 
@@ -84,7 +87,7 @@ public sealed class StubShopOrderService : IShopOrderService
         IReservationService reservations,
         IPaymentProvider payments,
         IOrderTrackingService? tracking,
-        IShopOrderStore store,
+        IJsonEntityStore store,
         Func<DateTimeOffset>? now)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -222,7 +225,7 @@ public sealed class StubShopOrderService : IShopOrderService
             // T2: el dueño viene de la sesión (server-trusted) o null si es invitado.
             OwnerMemberKey: customer.MemberKey);
 
-        await _store.WriteAsync(orderRef, JsonSerializer.Serialize(order, _json), cancellationToken);
+        await _store.WriteAsync(ResourceType, orderRef, JsonSerializer.Serialize(order, _json), cancellationToken);
 
         return new ShopCheckoutResult(orderRef, session.SessionId, total, currency!);
     }
@@ -258,7 +261,7 @@ public sealed class StubShopOrderService : IShopOrderService
         }
 
         var paid = order with { Status = OrderStatus.Paid };
-        await _store.WriteAsync(orderRef, JsonSerializer.Serialize(paid, _json), cancellationToken);
+        await _store.WriteAsync(ResourceType, orderRef, JsonSerializer.Serialize(paid, _json), cancellationToken);
 
         // 3) La orden pagada alimenta su timeline de tracking (seam genérico
         //    IOrderTrackingService): etapa inicial "paid" del pipeline
@@ -319,7 +322,7 @@ public sealed class StubShopOrderService : IShopOrderService
         {
             return null;
         }
-        var json = await _store.ReadAsync(orderRef.Trim(), cancellationToken);
+        var json = await _store.ReadAsync(ResourceType, orderRef.Trim(), cancellationToken);
         if (string.IsNullOrWhiteSpace(json))
         {
             return null;
@@ -330,7 +333,7 @@ public sealed class StubShopOrderService : IShopOrderService
 
     private async Task<List<PersistedOrder>> LoadAllAsync(CancellationToken cancellationToken)
     {
-        var raws = await _store.ListAsync(cancellationToken);
+        var raws = await _store.ListAsync(ResourceType, cancellationToken);
         var orders = new List<PersistedOrder>(raws.Count);
         foreach (var json in raws)
         {

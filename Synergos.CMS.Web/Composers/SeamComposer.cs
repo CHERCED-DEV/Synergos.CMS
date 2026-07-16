@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Proxies.Impl;
 using Synergos.CMS.Application.Services.Impl;
@@ -149,14 +149,18 @@ public sealed class SeamComposer : IComposer
         // Motor de pago (PSP) — seam IPaymentProvider, stub-first (doc 16/17).
         // T3 (doc 25): DOS ejes ortogonales.
         // (1) DURABILIDAD: el estado de las sesiones de pago pasa de memoria a disco
-        //     tras el seam IPaymentSessionStore + el ledger de idempotencia del webhook
-        //     (IPaymentEventStore). Registro INCONDICIONAL → hasta el stub queda
+        //     tras el seam GENÉRICO IJsonEntityStore + el ledger de idempotencia del
+        //     webhook (IPaymentEventStore). Registro INCONDICIONAL → hasta el stub queda
         //     durable y una sesión sobrevive un reinicio (cierra el confirm-tras-reinicio).
         // (2) SELECCIÓN de proveedor: config-gated por Synergos:Payments:Provider,
         //     calcando el gating de BundleRegistry.Mode. Ola A: solo "Stub" durable
         //     está vivo; "Wompi" es Ola B (adapter HTTP real con llaves de sandbox) —
         //     sin adapter construido cae al stub durable (la demo nunca se bloquea).
-        services.AddSingleton<IPaymentSessionStore, FileSystemPaymentSessionStore>();
+        // Store JSON durable GENÉRICO — la ÚNICA impl de persistencia del proyecto.
+        // Sirve a TODAS las familias por resourceType (orders/payments/reservations/
+        // travel-orders → App_Data/syn-{resourceType}/). Colapsa los 4 stores dedicados
+        // que T1/T3/Booking habían duplicado (regla de oro doc 25).
+        services.AddSingleton<IJsonEntityStore, FileSystemJsonEntityStore>();
         services.AddSingleton<IPaymentEventStore, FileSystemPaymentEventStore>();
 
         var paymentProvider = builder.Config["Synergos:Payments:Provider"] ?? "Stub";
@@ -168,7 +172,7 @@ public sealed class SeamComposer : IComposer
             default:
                 services.AddSingleton<IPaymentProvider>(sp =>
                     new StubPaymentProvider(
-                        sp.GetRequiredService<IPaymentSessionStore>(),
+                        sp.GetRequiredService<IJsonEntityStore>(),
                         sp.GetRequiredService<IOptions<PaymentsSettings>>().Value));
                 break;
         }
@@ -186,15 +190,14 @@ public sealed class SeamComposer : IComposer
         //     determinista (non-refundable → total; refundable → 0 si a tiempo).
         services.AddSingleton<IRoomAvailabilityProvider, StubRoomAvailabilityProvider>();
         // T3 (doc 25): el hold de reservas pasa de memoria a disco tras el seam
-        // IReservationStore (durable). Necesario para cerrar el restart-gap e2e —
+        // IJsonEntityStore (durable, resourceType 'reservations'). Necesario para cerrar el restart-gap e2e —
         // confirmar una orden tras un reinicio confirma sus reservas, que antes se
         // perdían con el proceso ("Reserva no encontrada"). Reusable por Booking/Eventos.
-        services.AddSingleton<IReservationStore, FileSystemReservationStore>();
         services.AddSingleton<IReservationService>(sp =>
             new StubReservationService(
                 StubReservationService.DefaultHoldWindow,
                 now: null,
-                sp.GetRequiredService<IReservationStore>()));
+                sp.GetRequiredService<IJsonEntityStore>()));
         services.AddSingleton<ICancellationPolicyEvaluator, StubCancellationPolicyEvaluator>();
 
         // Auto-cancel de holds vencidos (aprendizaje NS.Booking, doc 17): barre
@@ -236,16 +239,15 @@ public sealed class SeamComposer : IComposer
         // travel (paid→confirmed→upcoming→completed) — NO reusa el singleton de
         // Tienda, cuyo pipeline es pago→preparación→envío→entrega.
         // Fan-out de T1 (doc 25): el estado del carrito de viaje pasa de memoria a disco
-        // tras el seam ITravelOrderStore (durable). Con esto un carrito confirmado
+        // tras el seam genérico IJsonEntityStore (durable, resourceType 'travel-orders'). Con esto un carrito confirmado
         // sobrevive un reinicio — las reservas y el pago ya lo hacían por T3.
-        services.AddSingleton<ITravelOrderStore, FileSystemTravelOrderStore>();
         services.AddSingleton<ITravelCartService>(sp =>
             new TravelCartService(
                 sp.GetRequiredService<IReservationService>(),
                 sp.GetRequiredService<IPaymentProvider>(),
                 new StubOrderTrackingService(TravelCartService.TravelPipeline, null),
                 null,
-                sp.GetRequiredService<ITravelOrderStore>()));
+                sp.GetRequiredService<IJsonEntityStore>()));
 
         // OLA 2 Booking — ficha de estadía rica (galería/amenities/specs/geo/
         // reviews) separada de la disponibilidad (IRoomAvailabilityProvider
@@ -297,17 +299,16 @@ public sealed class SeamComposer : IComposer
         //     duplicados. v1 simple; SH-7 v2/v3 (DM/In Basket) agregan encima.
         services.AddSingleton<IUserCollection, StubUserCollection>();
         services.AddSingleton<IOrderTrackingService, StubOrderTrackingService>();
-        // T1 (doc 25) — persistencia durable de órdenes tras el seam IShopOrderStore.
+        // T1 (doc 25) — persistencia durable de órdenes tras el seam genérico IJsonEntityStore.
         // El motor no cambia; solo su backing store pasa de memoria a disco (JSON por
         // orderRef, App_Data/syn-orders/). Una orden confirmada sobrevive un reinicio.
-        services.AddSingleton<IShopOrderStore, FileSystemShopOrderStore>();
         services.AddSingleton<IShopOrderService>(sp =>
             new StubShopOrderService(
                 sp.GetRequiredService<IProductCatalogProvider>(),
                 sp.GetRequiredService<IReservationService>(),
                 sp.GetRequiredService<IPaymentProvider>(),
                 sp.GetRequiredService<IOrderTrackingService>(),
-                sp.GetRequiredService<IShopOrderStore>(),
+                sp.GetRequiredService<IJsonEntityStore>(),
                 now: null));
         services.AddSingleton<IReturnService>(sp =>
             new StubReturnService(

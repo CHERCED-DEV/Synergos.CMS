@@ -1,4 +1,4 @@
-using System.Text.Encodings.Web;
+﻿using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
@@ -18,7 +18,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// (aditivo): usa la vía polimórfica <see cref="IReservationService.HoldItemAsync"/>.
 /// <b>Fan-out de T1 (doc 25):</b> el estado del carrito (orderRef → líneas + sesión de
 /// pago + guest) ya NO vive en un diccionario del proceso sino detrás del seam
-/// <see cref="ITravelOrderStore"/> — con un adapter FileSystem un carrito confirmado
+/// <see cref="IJsonEntityStore"/> — con un adapter FileSystem un carrito confirmado
 /// SOBREVIVE un reinicio (las reservas y el pago ya lo hacían por T3).
 /// <see cref="ConfirmAsync"/> es idempotente: re-confirmar el mismo orderRef devuelve el
 /// mismo resultado sin doble captura ni doble efecto. ADR 0075 (seam con tests).
@@ -55,7 +55,10 @@ public sealed class TravelCartService : ITravelCartService
     private readonly IReservationService _reservations;
     private readonly IPaymentProvider _payments;
     private readonly IOrderTrackingService? _tracking;
-    private readonly ITravelOrderStore _store;
+    /// <summary>Familia de entidades de este motor en el store genérico (→ App_Data/syn-travel-orders/).</summary>
+    private const string ResourceType = "travel-orders";
+
+    private readonly IJsonEntityStore _store;
     private readonly Func<DateTimeOffset> _now;
 
     public TravelCartService(IReservationService reservations, IPaymentProvider payments)
@@ -88,12 +91,12 @@ public sealed class TravelCartService : ITravelCartService
         IPaymentProvider payments,
         IOrderTrackingService? tracking,
         Func<DateTimeOffset>? now,
-        ITravelOrderStore? store)
+        IJsonEntityStore? store)
     {
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _tracking = tracking;
-        _store = store ?? new InMemoryTravelOrderStore();
+        _store = store ?? new InMemoryJsonEntityStore();
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -378,7 +381,7 @@ public sealed class TravelCartService : ITravelCartService
         {
             return null;
         }
-        var json = await _store.ReadAsync(orderRef.Trim(), cancellationToken).ConfigureAwait(false);
+        var json = await _store.ReadAsync(ResourceType, orderRef.Trim(), cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(json))
         {
             return null;
@@ -389,7 +392,7 @@ public sealed class TravelCartService : ITravelCartService
 
     private async Task<List<CartOrder>> LoadAllAsync(CancellationToken cancellationToken)
     {
-        var raws = await _store.ListAsync(cancellationToken).ConfigureAwait(false);
+        var raws = await _store.ListAsync(ResourceType, cancellationToken).ConfigureAwait(false);
         var orders = new List<CartOrder>(raws.Count);
         foreach (var json in raws)
         {
@@ -403,7 +406,7 @@ public sealed class TravelCartService : ITravelCartService
     }
 
     private Task WriteAsync(CartOrder order, CancellationToken cancellationToken)
-        => _store.WriteAsync(order.OrderRef, JsonSerializer.Serialize(order, _json), cancellationToken);
+        => _store.WriteAsync(ResourceType, order.OrderRef, JsonSerializer.Serialize(order, _json), cancellationToken);
 
     // Código de confirmación human-facing derivado determinísticamente del
     // orderRef (idempotente: re-confirmar el mismo orderRef da el mismo código).

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
@@ -122,7 +122,7 @@ public class StubReservationServiceTests
     [Fact] // durabilidad: el hold sobrevive al REEMPLAZO del servicio (proxy de reinicio)
     public async Task Hold_SurvivesServiceReplacement_ViaSharedStore()
     {
-        var store = new InMemoryReservationStore();
+        var store = new InMemoryJsonEntityStore();
         var beforeRestart = new StubReservationService(StubReservationService.DefaultHoldWindow, null, store);
         var held = await beforeRestart.HoldAsync(Req());
 

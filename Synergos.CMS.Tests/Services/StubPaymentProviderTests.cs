@@ -1,4 +1,4 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
@@ -73,7 +73,7 @@ public class StubPaymentProviderTests
     [Fact] // durabilidad: el estado sobrevive al REEMPLAZO del provider (proxy de reinicio)
     public async Task State_SurvivesProviderReplacement_ViaSharedStore()
     {
-        var store = new InMemoryPaymentSessionStore();
+        var store = new InMemoryJsonEntityStore();
         var beforeRestart = new StubPaymentProvider(store);
         var session = await beforeRestart.CreateSessionAsync(Req());
 
@@ -90,7 +90,7 @@ public class StubPaymentProviderTests
     public async Task DeclineTriggerSku_YieldsFailedSession()
     {
         var psp = new StubPaymentProvider(
-            new InMemoryPaymentSessionStore(),
+            new InMemoryJsonEntityStore(),
             new PaymentsSettings { DeclineTriggerSku = "ROOM-DLX" });   // el SKU de Req()
 
         var session = await psp.CreateSessionAsync(Req());
@@ -104,7 +104,7 @@ public class StubPaymentProviderTests
     public async Task SimulateRequiresAction_YieldsRedirect()
     {
         var psp = new StubPaymentProvider(
-            new InMemoryPaymentSessionStore(),
+            new InMemoryJsonEntityStore(),
             new PaymentsSettings { SimulateRequiresAction = true });
 
         var session = await psp.CreateSessionAsync(Req());

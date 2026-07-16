@@ -7,8 +7,9 @@ namespace Synergos.CMS.Interfaces;
 /// <b>create-exclusiva atómica</b> keyed por <c>(provider, eventId)</c>.
 /// </summary>
 /// <remarks>
-/// A diferencia de <see cref="IPaymentSessionStore"/>/<see cref="IShopOrderStore"/>
-/// (que usan write-overwrite), la idempotencia exige un candado atómico anti-TOCTOU:
+/// A diferencia de <see cref="IJsonEntityStore"/> (que usa write-overwrite), la
+/// idempotencia exige un candado atómico anti-TOCTOU — por eso NO se colapsó en el store
+/// genérico: su primitiva es distinta (create-exclusivo, no upsert). El adapter
 /// el adapter FileSystem lo implementa con <c>FileMode.CreateNew</c> (el SO garantiza
 /// que solo un llamado crea el archivo). NO es read-then-write (reintroduciría la
 /// carrera que se busca evitar).

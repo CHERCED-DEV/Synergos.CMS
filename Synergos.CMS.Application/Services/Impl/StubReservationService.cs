@@ -1,4 +1,4 @@
-using System.Text.Encodings.Web;
+﻿using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
@@ -13,7 +13,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// <remarks>
 /// Lógica pura en <c>Synergos.CMS.Application</c> — cero dependencia de
 /// Umbraco/AspNetCore (ADR 0002). <b>T3 (doc 25):</b> el estado ya NO vive en un
-/// diccionario del proceso sino detrás del seam <see cref="IReservationStore"/> — con
+/// diccionario del proceso sino detrás del seam <see cref="IJsonEntityStore"/> — con
 /// un adapter FileSystem el hold SOBREVIVE un reinicio. Esto es necesario para cerrar
 /// la brecha de restart end-to-end: <c>ConfirmAsync</c> de una orden confirma sus
 /// reservas de stock; si el hold viviera solo en memoria, tras un reinicio la
@@ -35,7 +35,10 @@ public sealed class StubReservationService : IReservationService
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    private readonly IReservationStore _store;
+    /// <summary>Familia de entidades de este motor en el store genérico (→ App_Data/syn-reservations/).</summary>
+    private const string ResourceType = "reservations";
+
+    private readonly IJsonEntityStore _store;
     private readonly TimeSpan _holdWindow;
     private readonly Func<DateTimeOffset> _now;
     // Serializa el read-modify-write de Confirm/Cancel/Expire (single-instance): sin
@@ -56,11 +59,11 @@ public sealed class StubReservationService : IReservationService
     /// determinismo en tests, y <paramref name="store"/> (null → en memoria) es el
     /// backing store — el composer inyecta el durable (FileSystem) en Web.
     /// </summary>
-    public StubReservationService(TimeSpan holdWindow, Func<DateTimeOffset>? now, IReservationStore? store = null)
+    public StubReservationService(TimeSpan holdWindow, Func<DateTimeOffset>? now, IJsonEntityStore? store = null)
     {
         _holdWindow = holdWindow > TimeSpan.Zero ? holdWindow : DefaultHoldWindow;
         _now = now ?? (() => DateTimeOffset.UtcNow);
-        _store = store ?? new InMemoryReservationStore();
+        _store = store ?? new InMemoryJsonEntityStore();
     }
 
     public async Task<Reservation> HoldAsync(ReservationRequest request, CancellationToken cancellationToken = default)
@@ -225,7 +228,7 @@ public sealed class StubReservationService : IReservationService
         {
             var now = _now();
             var expired = 0;
-            foreach (var raw in await _store.ListAsync(cancellationToken).ConfigureAwait(false))
+            foreach (var raw in await _store.ListAsync(ResourceType, cancellationToken).ConfigureAwait(false))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var current = Deserialize(raw);
@@ -253,7 +256,7 @@ public sealed class StubReservationService : IReservationService
         {
             return null;
         }
-        return Deserialize(await _store.ReadAsync(reservationId, cancellationToken).ConfigureAwait(false));
+        return Deserialize(await _store.ReadAsync(ResourceType, reservationId, cancellationToken).ConfigureAwait(false));
     }
 
     private static Reservation? Deserialize(string? json)
@@ -267,5 +270,5 @@ public sealed class StubReservationService : IReservationService
     }
 
     private Task WriteAsync(Reservation reservation, CancellationToken cancellationToken)
-        => _store.WriteAsync(reservation.Id, JsonSerializer.Serialize(reservation, _json), cancellationToken);
+        => _store.WriteAsync(ResourceType, reservation.Id, JsonSerializer.Serialize(reservation, _json), cancellationToken);
 }

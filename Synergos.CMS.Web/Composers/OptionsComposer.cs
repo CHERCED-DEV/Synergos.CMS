@@ -1,4 +1,4 @@
-using Synergos.CMS.Application.Configuration;
+﻿using Synergos.CMS.Application.Configuration;
 using Umbraco.Cms.Core.Composing;
 
 namespace Synergos.CMS.Web.Composers;
@@ -66,24 +66,15 @@ public sealed class OptionsComposer : IComposer
         builder.Services.Configure<CommentsSettings>(
             builder.Config.GetSection("Synergos:Comments"));
 
-        // T1 (doc 25) — persistencia durable de órdenes de Tienda.
-        builder.Services.Configure<ShopOrdersSettings>(
-            builder.Config.GetSection("Synergos:ShopOrders"));
+        // Persistencia durable genérica (doc 25 — T1/T3/Booking): UN store para todas
+        // las familias de entidades JSON (órdenes, pagos, reservas, viajes). Reemplaza a
+        // los 4 POCOs dedicados que cada store tenía.
+        builder.Services.Configure<JsonEntityStoreSettings>(
+            builder.Config.GetSection("Synergos:JsonEntityStore"));
 
-        // T3 (doc 25) — pagos: persistencia durable de sesiones de pago + reservas
-        // (cierran el restart-gap e2e) + selección/gating de proveedor + webhook.
-        builder.Services.Configure<PaymentSessionsSettings>(
-            builder.Config.GetSection("Synergos:PaymentSessions"));
-
-        builder.Services.Configure<ReservationsSettings>(
-            builder.Config.GetSection("Synergos:Reservations"));
-
+        // T3 (doc 25) — selección/gating del proveedor de pago + secreto del webhook.
         builder.Services.Configure<PaymentsSettings>(
             builder.Config.GetSection("Synergos:Payments"));
-
-        // Fan-out de T1 (doc 25) — persistencia durable del estado de órdenes de viaje (Booking).
-        builder.Services.Configure<TravelOrdersSettings>(
-            builder.Config.GetSection("Synergos:TravelOrders"));
 
         builder.Services.Configure<AdminSettings>(
             builder.Config.GetSection("Synergos:Admin"));
