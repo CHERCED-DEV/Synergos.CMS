@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -32,27 +33,51 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
     // Contador monotónico para el id de eventos publicados por organizadores.
     private static int _publishedCounter;
 
+    private readonly ICatalogIndex<EventSummary> _index;
+
+    /// <summary>Ctor por defecto: el motor con los ajustes de siempre.</summary>
+    public StubEventCatalogProvider()
+        : this(new InMemoryCatalogIndex<EventSummary>(Descriptor, new CatalogSettings()))
+    {
+    }
+
+    internal StubEventCatalogProvider(ICatalogIndex<EventSummary> index)
+        => _index = index ?? throw new ArgumentNullException(nameof(index));
+
+    /// <summary>
+    /// Lo que Eventos DECLARA sobre su catálogo. Cero lógica.
+    /// </summary>
+    internal static CatalogDescriptor<EventSummary> Descriptor { get; } = new(
+        idOf: s => s.Id,
+        searchFields: new[]
+        {
+            new CatalogSearchField<EventSummary>(5, s => s.Title),
+            // La ciudad discrimina de verdad en un catálogo de eventos ("¿qué hay en
+            // Bogotá?" es LA pregunta), así que pesa más que la categoría.
+            new CatalogSearchField<EventSummary>(3, s => s.City),
+            new CatalogSearchField<EventSummary>(3, s => s.Venue),
+            new CatalogSearchField<EventSummary>(2, s => s.Category),
+        },
+        // El orden histórico: por fecha de inicio. En una agenda, lo próximo va primero.
+        defaultOrder: events => events.OrderBy(s => s.StartUtc),
+        filters: new CatalogFilter<EventSummary>[]
+        {
+            new CatalogTermFilter<EventSummary>("category", "Categoría", s => new[] { s.Category }),
+            new CatalogTermFilter<EventSummary>("city", "Ciudad", s => new[] { s.City }),
+        });
+
     public Task<IReadOnlyList<EventSummary>> SearchAsync(string? query, CancellationToken cancellationToken = default)
     {
-        IEnumerable<EventDetail> source = Catalog.Values;
+        // Catalog.Values se lee FRESCO en cada búsqueda, y de ahí sale gratis el
+        // read-your-writes que este vertical necesita: el organizador publica y lo ve en la
+        // misma pantalla. El motor es una función pura sin caché (lo dice su contrato), así
+        // que no hay nada que invalidar — justamente lo que un índice asíncrono rompería.
+        var results = _index.Search(
+            Catalog.Values.Select(e => e.Summary).ToList(),
+            // Take explícito: esta seam promete TODA la agenda, no una página.
+            new CatalogQuery(Text: query, Take: int.MaxValue));
 
-        if (!string.IsNullOrWhiteSpace(query))
-        {
-            var q = query.Trim();
-            // Ignora mayúsculas Y tildes: "bogota" debe encontrar "Bogotá".
-            source = source.Where(e =>
-                CatalogText.Contains(e.Summary.Title, q)
-                || CatalogText.Contains(e.Summary.Category, q)
-                || CatalogText.Contains(e.Summary.City, q)
-                || CatalogText.Contains(e.Summary.Venue, q));
-        }
-
-        var results = source
-            .Select(e => e.Summary)
-            .OrderBy(s => s.StartUtc)
-            .ToList();
-
-        return Task.FromResult<IReadOnlyList<EventSummary>>(results);
+        return Task.FromResult(results.Items);
     }
 
     public Task<EventDetail?> GetEventAsync(string eventId, CancellationToken cancellationToken = default)

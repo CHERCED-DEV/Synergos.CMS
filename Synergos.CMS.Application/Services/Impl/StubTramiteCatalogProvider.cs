@@ -1,3 +1,4 @@
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -23,18 +24,58 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
     private const string Cop = "COP";
 
     private readonly IReadOnlyList<TramiteDetail> _catalog = Seed();
+    private readonly ICatalogIndex<TramiteSummary> _index;
+
+    /// <summary>Ctor por defecto: el motor con los ajustes de siempre.</summary>
+    public StubTramiteCatalogProvider()
+        : this(new InMemoryCatalogIndex<TramiteSummary>(Descriptor, new CatalogSettings()))
+    {
+    }
+
+    internal StubTramiteCatalogProvider(ICatalogIndex<TramiteSummary> index)
+        => _index = index ?? throw new ArgumentNullException(nameof(index));
+
+    /// <summary>
+    /// Lo que Trámites DECLARA sobre su catálogo. Cero lógica.
+    /// </summary>
+    /// <remarks>
+    /// Los pesos ordenan lo que antes era un OR plano entre cuatro campos: el nombre del
+    /// trámite manda, la entidad que lo presta va después, y el resumen —prosa larga que casa
+    /// por accidente— pesa lo mínimo para no desplazar nunca a un nombre.
+    /// </remarks>
+    internal static CatalogDescriptor<TramiteSummary> Descriptor { get; } = new(
+        idOf: t => t.Id,
+        searchFields: new[]
+        {
+            new CatalogSearchField<TramiteSummary>(5, t => t.Name),
+            new CatalogSearchField<TramiteSummary>(3, t => t.Agency),
+            new CatalogSearchField<TramiteSummary>(2, t => t.Category),
+            new CatalogSearchField<TramiteSummary>(1, t => t.Summary),
+        },
+        // El orden histórico: alfabético por nombre. Se preserva para que la demo no cambie
+        // de aspecto salvo que se escriba texto (ahí manda la relevancia).
+        defaultOrder: tramites => tramites.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase),
+        filters: new CatalogFilter<TramiteSummary>[]
+        {
+            new CatalogTermFilter<TramiteSummary>("category", "Categoría", t => new[] { t.Category }),
+        });
 
     public Task<IReadOnlyList<TramiteSummary>> SearchAsync(string? query, string? category, CancellationToken cancellationToken = default)
     {
-        var matches = _catalog
-            .Select(d => d.Summary)
-            .Where(t => MatchesText(t, query))
-            .Where(t => string.IsNullOrWhiteSpace(category)
-                || string.Equals(t.Category, category, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var filters = string.IsNullOrWhiteSpace(category)
+            ? null
+            : new Dictionary<string, IReadOnlyList<string>> { ["category"] = new[] { category.Trim() } };
 
-        return Task.FromResult<IReadOnlyList<TramiteSummary>>(matches);
+        // Take explícito: esta seam promete TODAS las coincidencias, no una página, y el
+        // default del motor (24) las truncaría en silencio si el catálogo creciera. El motor
+        // sigue capando a CatalogSettings.MaxTake (96) como defensa del wire, así que un
+        // catálogo de más de 96 trámites exigiría paginar de verdad — hoy son 7, y el umbral
+        // de reapertura del ADR 0107 está muy por encima.
+        var result = _index.Search(
+            _catalog.Select(d => d.Summary).ToList(),
+            new CatalogQuery(Text: query, Filters: filters, Take: int.MaxValue));
+
+        return Task.FromResult(result.Items);
     }
 
     public Task<TramiteDetail?> GetAsync(string tramiteId, CancellationToken cancellationToken = default)
@@ -50,20 +91,6 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
             || string.Equals(d.Summary.Slug, id, StringComparison.OrdinalIgnoreCase));
 
         return Task.FromResult(detail);
-    }
-
-    private static bool MatchesText(TramiteSummary t, string? query)
-    {
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            return true;
-        }
-        var q = query.Trim();
-        // Ignora mayúsculas Y tildes: "registraduria" debe encontrar "Registraduría".
-        return CatalogText.Contains(t.Name, q)
-            || CatalogText.Contains(t.Agency, q)
-            || CatalogText.Contains(t.Category, q)
-            || CatalogText.Contains(t.Summary, q);
     }
 
     // Helpers de composición del seed (menos ruido por trámite).

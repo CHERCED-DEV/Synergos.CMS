@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -30,33 +31,104 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
     // Contador monotónico para el id de inmuebles publicados por agentes.
     private static int _publishedCounter;
 
+    private readonly ICatalogIndex<PropertyListing> _index;
+
+    /// <summary>Ctor por defecto: el motor con los ajustes de siempre.</summary>
+    public StubPropertyCatalogProvider()
+        : this(new InMemoryCatalogIndex<PropertyListing>(Descriptor, new CatalogSettings()))
+    {
+    }
+
+    internal StubPropertyCatalogProvider(ICatalogIndex<PropertyListing> index)
+        => _index = index ?? throw new ArgumentNullException(nameof(index));
+
+    /// <summary>
+    /// Lo que Propiedades DECLARA sobre su catálogo. Cero lógica.
+    /// </summary>
+    /// <remarks>
+    /// <b>El barrio pesa tanto como la ciudad, a propósito:</b> en Colombia se busca por
+    /// barrio ("Chicó", "Laureles", "El Poblado") tanto como por ciudad, y el código anterior
+    /// los trataba igual en un OR plano — no hay evidencia para desempatarlos, así que
+    /// inventar una jerarquía aquí sería añadir una opinión que nadie tomó.
+    /// </remarks>
+    internal static CatalogDescriptor<PropertyListing> Descriptor { get; } = new(
+        idOf: l => l.Id,
+        searchFields: new[]
+        {
+            new CatalogSearchField<PropertyListing>(5, l => l.Title),
+            new CatalogSearchField<PropertyListing>(3, l => l.Neighborhood),
+            new CatalogSearchField<PropertyListing>(3, l => l.City),
+            // El tipo casa con media grilla ("apartamento" = 4 de 8): un match aquí vale poco.
+            new CatalogSearchField<PropertyListing>(2, l => l.Type),
+        },
+        // El orden histórico: destacados primero, luego precio ascendente.
+        defaultOrder: listings => listings.OrderByDescending(l => l.Featured).ThenBy(l => l.Price),
+        filters: new CatalogFilter<PropertyListing>[]
+        {
+            new CatalogTermFilter<PropertyListing>("type", "Tipo", l => new[] { l.Type }),
+            new CatalogTermFilter<PropertyListing>("operation", "Operación", l => new[] { l.Operation }),
+            new CatalogTermFilter<PropertyListing>("city", "Ciudad", l => new[] { l.City }),
+            // Threshold y NO valores exactos: el filtro siempre fue `l.Beds >= query.Beds`
+            // ("3 habitaciones o más" es lo que pide quien busca casa), pero la faceta contaba
+            // EXACTOS — o sea que el chip MENTÍA: decía "3 (2)" y al pulsarlo devolvía 4
+            // (los de 3 y los de 4). Declarar los tramos alinea el chip con lo que el filtro
+            // hace. Se cae el chip "0", que como umbral no significa nada (Beds >= 0 = todo).
+            new CatalogThresholdFilter<PropertyListing>("beds", "Habitaciones", l => l.Beds, new[]
+            {
+                new CatalogThresholdBucket(4, "4+ habitaciones"),
+                new CatalogThresholdBucket(3, "3+ habitaciones"),
+                new CatalogThresholdBucket(2, "2+ habitaciones"),
+                new CatalogThresholdBucket(1, "1+ habitación"),
+            }),
+        });
+
     public Task<PropertySearchResult> SearchAsync(PropertyQuery query, CancellationToken cancellationToken = default)
     {
         query ??= new PropertyQuery();
 
-        var matches = Catalog.Values
+        // El precio se filtra AQUÍ y no en el descriptor: minPrice/maxPrice son un rango
+        // CONTINUO que el usuario teclea, no los tramos declarados que CatalogRangeFilter
+        // espera — no son la misma cosa y forzarlos sería deformar el motor para acomodar un
+        // vertical. Acotar QUÉ ÍTEMS EXISTEN es trabajo del llamador (lo dice el contrato de
+        // ICatalogIndex), y hacerlo antes es correcto también para las facetas: el rango
+        // reduce el universo, y los chips de tipo/ciudad/habitaciones cuentan dentro de él.
+        //
+        // Location va por aquí por la MISMA razón, y NO como la faceta `city`: busca por
+        // SUBSTRING sobre ciudad O barrio ("laureles" es un barrio, "medell" media ciudad),
+        // mientras una faceta casa por igualdad exacta sobre un campo. Doblarlo en el filtro
+        // de `city` habría hecho dos daños: buscar un barrio devolvería CERO, y los barrios
+        // saldrían como chips en la columna Ciudad.
+        var universe = Catalog.Values
             .Select(d => d.Summary)
-            .Where(l => MatchesText(l, query.Text))
-            .Where(l => query.Type is null || string.Equals(l.Type, query.Type, StringComparison.OrdinalIgnoreCase))
             .Where(l => query.MinPrice is null || l.Price >= query.MinPrice.Value)
             .Where(l => query.MaxPrice is null || l.Price <= query.MaxPrice.Value)
-            .Where(l => query.Beds is null || l.Beds >= query.Beds.Value)
             .Where(l => MatchesLocation(l, query.Location))
-            // Destacados primero, luego precio ascendente — orden estable de la grilla.
-            .OrderByDescending(l => l.Featured)
-            .ThenBy(l => l.Price)
             .ToList();
 
-        var facets = new List<PropertyFacet>
+        var filters = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(query.Type))
         {
-            BuildFacet("type", matches.Select(l => l.Type)),
-            BuildFacet("operation", matches.Select(l => l.Operation)),
-            BuildFacet("city", matches.Select(l => l.City)),
-            BuildFacet("beds", matches.Select(l => l.Beds.ToString())),
-        };
+            filters["type"] = new[] { query.Type.Trim() };
+        }
+        if (query.Beds is > 0)
+        {
+            filters["beds"] = new[] { query.Beds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) };
+        }
 
-        return Task.FromResult(new PropertySearchResult(matches, facets));
+        // Take explícito: esta seam promete TODAS las coincidencias, no una página.
+        var result = _index.Search(universe, new CatalogQuery(
+            Text: query.Text,
+            Filters: filters.Count > 0 ? filters : null,
+            Take: int.MaxValue));
+
+        return Task.FromResult(new PropertySearchResult(
+            Listings: result.Items,
+            Facets: result.Facets.Select(ToPropertyFacet).ToList()));
     }
+
+    /// <summary><see cref="CatalogFacet"/> → <see cref="PropertyFacet"/>, que no tiene Label ni Kind.</summary>
+    private static PropertyFacet ToPropertyFacet(CatalogFacet f)
+        => new(f.Field, f.Values.Select(v => new PropertyFacetValue(v.Value, v.Count)).ToList());
 
     public Task<PropertyDetail?> GetListingAsync(string listingId, CancellationToken cancellationToken = default)
     {
@@ -148,20 +220,6 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
         return slug.Trim('-');
     }
 
-    private static bool MatchesText(PropertyListing l, string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return true;
-        }
-        var t = text.Trim();
-        // Ignora mayúsculas Y tildes: "medellin" debe encontrar "Medellín".
-        return CatalogText.Contains(l.Title, t)
-            || CatalogText.Contains(l.City, t)
-            || CatalogText.Contains(l.Neighborhood, t)
-            || CatalogText.Contains(l.Type, t);
-    }
-
     private static bool MatchesLocation(PropertyListing l, string? location)
     {
         if (string.IsNullOrWhiteSpace(location))
@@ -173,17 +231,6 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
             || CatalogText.Contains(l.Neighborhood, loc);
     }
 
-    private static PropertyFacet BuildFacet(string name, IEnumerable<string> values)
-    {
-        var counts = values
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .GroupBy(v => v, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new PropertyFacetValue(g.Key, g.Count()))
-            .OrderByDescending(fv => fv.Count)
-            .ThenBy(fv => fv.Value, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        return new PropertyFacet(name, counts);
-    }
 
     // ── Catálogo sembrado (memoria, determinista) ───────────────────────
     // Varias ciudades CO × tipos. Geo real (lat/lng) para que el mapa pinte

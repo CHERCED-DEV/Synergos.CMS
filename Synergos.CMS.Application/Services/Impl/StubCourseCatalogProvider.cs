@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -56,54 +57,89 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     // Contador monotónico para el id de cursos publicados por instructores.
     private static int _publishedCounter;
 
+    private readonly ICatalogIndex<AcademyDemoSeed.SeedCourse> _index;
+
+    /// <summary>
+    /// Ctor de 1 argumento. <b>Se conserva tal cual a propósito:</b> lo usa la factory
+    /// EXPLÍCITA del composer, que a su vez es lo que permite la property injection de
+    /// <see cref="EnrollmentMetrics"/> sobre ESA MISMA instancia. Añadir aquí un ctor más
+    /// goloso sin conservar éste haría que el DI eligiera otro y la inyección aterrizara en
+    /// una instancia distinta → el panel del instructor mostraría 0 alumnos y $0, en
+    /// silencio y con los tests en verde (los tests cablean la inyección ellos mismos).
+    /// </summary>
     public StubCourseCatalogProvider(IContentStream contentStream)
+        : this(contentStream, new InMemoryCatalogIndex<AcademyDemoSeed.SeedCourse>(Descriptor, new CatalogSettings()))
+    {
+    }
+
+    internal StubCourseCatalogProvider(IContentStream contentStream, ICatalogIndex<AcademyDemoSeed.SeedCourse> index)
     {
         _contentStream = contentStream ?? throw new ArgumentNullException(nameof(contentStream));
+        _index = index ?? throw new ArgumentNullException(nameof(index));
     }
 
     // Vista unificada del catálogo: cursos sembrados + publicados en runtime.
     private IEnumerable<AcademyDemoSeed.SeedCourse> AllCourses()
         => AcademyDemoSeed.Courses.Concat(_published.Values);
 
+    /// <summary>
+    /// Lo que Educación DECLARA sobre su catálogo. Cero lógica.
+    /// </summary>
+    /// <remarks>
+    /// <b>El instructor entra como un campo buscable más</b>, resuelto con un lambda: el
+    /// motor no sabe que existen instructores, solo que hay un campo con peso 3. Buscar
+    /// "Elena" y encontrar sus cursos es intención real y hay que preservarla — el nombre
+    /// del instructor no aparece en ningún título ni resumen.
+    ///
+    /// <para>El resumen pesa lo mínimo: es prosa larga que casa por accidente y no debe
+    /// desplazar nunca a un título.</para>
+    /// </remarks>
+    internal static CatalogDescriptor<AcademyDemoSeed.SeedCourse> Descriptor { get; } = new(
+        idOf: c => c.Id,
+        searchFields: new[]
+        {
+            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(5, c => c.Title),
+            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(3, c => AcademyDemoSeed.InstructorById(c.InstructorId).Name),
+            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(2, c => c.Category),
+            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(1, c => c.Summary),
+        },
+        // El orden histórico: mejor calificados primero.
+        defaultOrder: courses => courses.OrderByDescending(c => c.Rating).ThenBy(c => c.Title, StringComparer.Ordinal),
+        filters: new CatalogFilter<AcademyDemoSeed.SeedCourse>[]
+        {
+            new CatalogTermFilter<AcademyDemoSeed.SeedCourse>("category", "Escuela", c => new[] { c.Category }),
+            new CatalogTermFilter<AcademyDemoSeed.SeedCourse>("level", "Nivel", c => new[] { c.Level }),
+        });
+
     public async Task<CourseSearchResult> SearchAsync(CourseQuery query, CancellationToken cancellationToken = default)
     {
+        // La siembra se queda AQUÍ, como primer await y fuera del motor: es un efecto
+        // lateral async (crea el item del feed de Blogs por cada lección) y el motor es
+        // síncrono y declarado función PURA. Meterla dentro sembraría en cada búsqueda o
+        // —peor— dejaría de sembrarse en los caminos que no pasan por el catálogo, y el
+        // course-player mostraría lecciones sin cuerpo.
         await EnsureLessonsSeededAsync(cancellationToken);
         query ??= new CourseQuery();
 
-        IEnumerable<AcademyDemoSeed.SeedCourse> filtered = AllCourses();
-
-        // 1) Filtro de texto (título / resumen / categoría / instructor) — ignora mayúsculas Y tildes.
-        if (!string.IsNullOrWhiteSpace(query.Text))
-        {
-            var text = query.Text.Trim();
-            filtered = filtered.Where(c =>
-                CatalogText.Contains(c.Title, text)
-                || CatalogText.Contains(c.Summary, text)
-                || CatalogText.Contains(c.Category, text)
-                || CatalogText.Contains(AcademyDemoSeed.InstructorById(c.InstructorId).Name, text));
-        }
-
-        // 2) Filtro de categoría exacta (case-insensitive).
+        var filters = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(query.Category))
         {
-            var category = query.Category.Trim();
-            filtered = filtered.Where(c => string.Equals(c.Category, category, StringComparison.OrdinalIgnoreCase));
+            filters["category"] = new[] { query.Category.Trim() };
         }
-
-        // 3) Filtro de nivel exacto (case-insensitive).
         if (!string.IsNullOrWhiteSpace(query.Level))
         {
-            var level = query.Level.Trim();
-            filtered = filtered.Where(c => string.Equals(c.Level, level, StringComparison.OrdinalIgnoreCase));
+            filters["level"] = new[] { query.Level.Trim() };
         }
 
-        var matched = filtered
-            .OrderByDescending(c => c.Rating)
-            .ThenBy(c => c.Title, StringComparer.Ordinal)
-            .Select(ToSummary)
-            .ToList();
+        // AllCourses() = seed + publicados en runtime, leído fresco: es el read-your-writes
+        // del instructor que acaba de publicar. Take explícito porque esta seam promete
+        // TODOS los cursos que casan, no una página.
+        var result = _index.Search(
+            AllCourses().ToList(),
+            new CatalogQuery(Text: query.Text, Filters: filters.Count > 0 ? filters : null, Take: int.MaxValue));
 
-        return new CourseSearchResult(matched, matched.Count);
+        var matched = result.Items.Select(ToSummary).ToList();
+        return new CourseSearchResult(matched, result.Total);
     }
 
     public async Task<CourseDetail?> GetCourseAsync(string courseId, CancellationToken cancellationToken = default)
