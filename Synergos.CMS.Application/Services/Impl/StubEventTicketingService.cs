@@ -65,6 +65,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
     private readonly IOrderTrackingService? _tracking;
     private readonly IAuditTrailWriter? _audit;
     private readonly IJsonEntityStore _store;
+    private readonly ITransactionalNotifier? _notifier;
     private readonly Func<DateTimeOffset> _now;
 
     public StubEventTicketingService(
@@ -111,6 +112,8 @@ public sealed class StubEventTicketingService : IEventTicketingService
     /// Ctor completo (T1 durabilidad, ADR 0105): <paramref name="store"/> es el backing
     /// store de la orden (FileSystem en Web → sobrevive un reinicio; InMemory en tests).
     /// Null ≡ <see cref="InMemoryJsonEntityStore"/> (comportamiento previo, aditivo).
+    /// <paramref name="notifier"/> opcional (T4): si viene, la compra confirmada le avisa
+    /// al COMPRADOR (un solo email con todas las entradas). Null ≡ no notificar.
     /// </summary>
     public StubEventTicketingService(
         IEventCatalogProvider catalog,
@@ -119,7 +122,8 @@ public sealed class StubEventTicketingService : IEventTicketingService
         IOrderTrackingService? tracking,
         IAuditTrailWriter? audit,
         IJsonEntityStore? store,
-        Func<DateTimeOffset>? now)
+        Func<DateTimeOffset>? now,
+        ITransactionalNotifier? notifier = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
@@ -127,6 +131,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
         _tracking = tracking;
         _audit = audit;
         _store = store ?? new InMemoryJsonEntityStore();
+        _notifier = notifier;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -287,6 +292,10 @@ public sealed class StubEventTicketingService : IEventTicketingService
         // volver a capturar ni re-emitir.
         if (order.Status == EventOrderStatus.Confirmed)
         {
+            // Re-emite: el ledger del dispatcher deduplica (un hecho → un aviso), así que
+            // es inofensivo, y rescata el caso en que el primer confirm no llegó a
+            // notificar (notificaciones apagadas entonces, destinatario inválido, etc.).
+            await EmitConfirmedAsync(order, cancellationToken);
             return ToConfirmation(order);
         }
 
@@ -320,7 +329,64 @@ public sealed class StubEventTicketingService : IEventTicketingService
                 cancellationToken);
         }
 
+        // 4) Avisarle al COMPRADOR que sus entradas quedaron confirmadas (T4). Best-effort:
+        //    un email caído JAMÁS puede tumbar una compra ya pagada y persistida.
+        await EmitConfirmedAsync(confirmed, cancellationToken);
+
         return ToConfirmation(confirmed);
+    }
+
+    /// <summary>
+    /// Emite el hecho "entradas confirmadas" (T4) — UN SOLO email al COMPRADOR con TODAS
+    /// las entradas, nunca uno por asistente.
+    /// </summary>
+    /// <remarks>
+    /// Razón dura: el motor solo VALIDA el email del comprador (attendees[0] en
+    /// <see cref="CheckoutAsync"/>); a los demás asistentes apenas les hace Trim(), así que
+    /// notificar por-asistente dispararía contra strings vacíos. El comprador es la unidad
+    /// original (<c>AttendeeEmail</c>, no <c>HolderEmail</c>: transferir un ticket cambia el
+    /// portador, no a quién le confirmamos la compra). Si el destinatario persistido no es
+    /// usable, NO se emite basura — el dispatcher filtra inválidos, pero no le inventamos
+    /// un placeholder.
+    /// </remarks>
+    private Task EmitConfirmedAsync(PersistedEventOrder order, CancellationToken cancellationToken)
+    {
+        var notification = BuildConfirmedNotification(order);
+        return notification is null
+            ? Task.CompletedTask
+            : NotificationEmission.SafeDispatchAsync(_notifier, notification, cancellationToken);
+    }
+
+    /// <summary>El hecho "entradas confirmadas". DedupeKey default = events.tickets.confirmed:{orderRef}
+    /// — el orderRef identifica el hecho, así que no hace falta override.</summary>
+    private NotificationEvent? BuildConfirmedNotification(PersistedEventOrder order)
+    {
+        var buyer = order.Units.Count > 0 ? order.Units[0] : null;
+        if (buyer is null
+            || string.IsNullOrWhiteSpace(buyer.AttendeeEmail)
+            || string.IsNullOrWhiteSpace(buyer.AttendeeName))
+        {
+            return null;   // sin destinatario usable no se emite (nada de placeholders)
+        }
+
+        return new NotificationEvent(
+            Type: NotificationTypes.EventTicketsConfirmed,
+            SubjectId: order.OrderRef,
+            ToEmail: buyer.AttendeeEmail,
+            ToName: buyer.AttendeeName,
+            Code: BuildOrderNumber(order.OrderRef),
+            OccurredAt: _now(),
+            Amount: order.Total,
+            Currency: order.Currency,
+            Lines: order.Units
+                .Select(u => new NotificationLine(
+                    Label: u.Seat is null ? u.TierName : $"{u.TierName} (asiento {u.Seat})",
+                    Quantity: 1,
+                    Amount: u.Price,
+                    Currency: u.Currency,
+                    Detail: u.Seat ?? TicketId(u.ReservationId)))
+                .ToList(),
+            ActionPath: $"/eventos/entradas/{order.OrderRef}");
     }
 
     public async Task<IReadOnlyList<EventTicket>> GetTicketsAsync(string holderEmail, CancellationToken cancellationToken = default)
@@ -609,6 +675,15 @@ public sealed class StubEventTicketingService : IEventTicketingService
             StringComparer.OrdinalIgnoreCase.GetHashCode(holderEmail ?? string.Empty))
             .ToString("X8");
         return $"SYN-TKT-{eventId}-{ticketId}-v{qrVersion}-{holderTag}";
+    }
+
+    // Número de orden human-facing derivado determinísticamente del orderRef (calcando
+    // StubShopOrderService): re-confirmar el mismo orderRef da el mismo número, así que
+    // el código que el asistente guarda es estable entre confirmaciones y reinicios.
+    private static string BuildOrderNumber(string orderRef)
+    {
+        var raw = orderRef.Replace("evord_", string.Empty, StringComparison.Ordinal);
+        return "SYN-EVT-" + (raw.Length >= 8 ? raw[..8] : raw).ToUpperInvariant();
     }
 
     /// <summary>Unidad de ticket EFÍMERA del cálculo de checkout — no se persiste.</summary>

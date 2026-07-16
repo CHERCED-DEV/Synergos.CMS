@@ -254,7 +254,8 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IPaymentProvider>(),
                 new StubOrderTrackingService(TravelCartService.TravelPipeline, null),
                 null,
-                sp.GetRequiredService<IJsonEntityStore>()));
+                sp.GetRequiredService<IJsonEntityStore>(),
+                notifier: sp.GetRequiredService<ITransactionalNotifier>()));
 
         // OLA 2 Booking — ficha de estadía rica (galería/amenities/specs/geo/
         // reviews) separada de la disponibilidad (IRoomAvailabilityProvider
@@ -420,7 +421,8 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IPaymentProvider>(),
                 new StubOrderTrackingService(StubEnrollmentService.AcademyPipeline, null),
                 sp.GetRequiredService<IJsonEntityStore>(),
-                null);
+                null,
+                notifier: sp.GetRequiredService<ITransactionalNotifier>());
             // Enchufa la cara de lectura en el catálogo (DIP) para el panel del
             // instructor — se resuelve tras construir ambos singletons.
             sp.GetRequiredService<StubCourseCatalogProvider>().EnrollmentMetrics = enrollment;
@@ -742,7 +744,8 @@ public sealed class SeamComposer : IComposer
                 new StubOrderTrackingService(StubEventTicketingService.EventPipeline, null),
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 sp.GetRequiredService<IJsonEntityStore>(),
-                null));
+                null,
+                notifier: sp.GetRequiredService<ITransactionalNotifier>()));
         services.AddSingleton<IEventTicketingService>(sp => sp.GetRequiredService<StubEventTicketingService>());
         services.AddSingleton<IEventManagementService>(sp =>
             new StubEventManagementService(
@@ -840,13 +843,15 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IPaymentProvider>(),
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 null,
-                sp.GetRequiredService<IJsonEntityStore>()));
+                sp.GetRequiredService<IJsonEntityStore>(),
+                notifier: sp.GetRequiredService<ITransactionalNotifier>()));
         services.AddSingleton<IApplicationService>(sp => sp.GetRequiredService<StubApplicationService>());
         services.AddSingleton<ICaseWorkflowService>(sp =>
             new StubCaseWorkflowService(
                 sp.GetRequiredService<StubApplicationService>(),
                 sp.GetRequiredService<IAuditTrailWriter>(),
-                null));
+                null,
+                notifier: sp.GetRequiredService<ITransactionalNotifier>()));
         services.AddSingleton<ICaseTrackingProvider>(sp =>
             new StubCaseTrackingProvider(sp.GetRequiredService<StubApplicationService>()));
         services.AddSingleton<IDocumentUploadService>(sp =>

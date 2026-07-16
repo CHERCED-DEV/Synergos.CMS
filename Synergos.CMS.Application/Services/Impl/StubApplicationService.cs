@@ -72,6 +72,7 @@ public sealed class StubApplicationService : IApplicationService
     private readonly IPaymentProvider _payments;
     private readonly IAuditTrailWriter? _audit;
     private readonly IJsonEntityStore _store;
+    private readonly ITransactionalNotifier? _notifier;
     private readonly Func<DateTimeOffset> _now;
     private int _radicadoSequence = SeedSequenceFloor;
 
@@ -101,6 +102,8 @@ public sealed class StubApplicationService : IApplicationService
     /// Ctor completo (T3): <paramref name="store"/> es el backing store durable
     /// (FileSystem en Web, InMemory en tests). Null = <see cref="InMemoryJsonEntityStore"/>
     /// → los ctors de arriba conservan EXACTO el comportamiento efímero de siempre.
+    /// <paramref name="notifier"/> (T4) es opcional y va ÚLTIMO: null = no notificar
+    /// (comportamiento pre-T4), así que los ctors de arriba quedan intactos.
     /// </summary>
     public StubApplicationService(
         ITramiteCatalogProvider catalog,
@@ -108,13 +111,15 @@ public sealed class StubApplicationService : IApplicationService
         IPaymentProvider payments,
         IAuditTrailWriter? audit,
         Func<DateTimeOffset>? now,
-        IJsonEntityStore? store)
+        IJsonEntityStore? store,
+        ITransactionalNotifier? notifier = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _fees = fees ?? throw new ArgumentNullException(nameof(fees));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _audit = audit;
         _store = store ?? new InMemoryJsonEntityStore();
+        _notifier = notifier;
         _now = now ?? (() => DateTimeOffset.UtcNow);
         Seed();
     }
@@ -225,7 +230,41 @@ public sealed class StubApplicationService : IApplicationService
                 cancellationToken);
         }
 
+        // Avisarle al ciudadano que su trámite quedó radicado, con el radicado que debe
+        // guardar (T4). Best-effort: un email caído JAMÁS puede tumbar un expediente ya
+        // radicado y persistido.
+        await NotificationEmission.SafeDispatchAsync(
+            _notifier, BuildFiledNotification(state, quote), cancellationToken);
+
         return new RadicarResult(ToDetail(state, occurred), paymentSessionId);
+    }
+
+    /// <summary>
+    /// El hecho "trámite radicado" para T4. DedupeKey default = gov.case.filed:{caseId} —
+    /// el caseId identifica el hecho (una radicación = un expediente nuevo), así que no
+    /// hace falta override. El destinatario es el ciudadano resuelto del formulario; su
+    /// email es obligatorio en <see cref="RadicarAsync"/> (se valida arriba), así que aquí
+    /// nunca es placeholder.
+    /// </summary>
+    private static NotificationEvent BuildFiledNotification(CaseState state, GovFeeQuote quote)
+    {
+        var cobra = !quote.Exempt && quote.Amount > 0m;
+        return new NotificationEvent(
+            Type: NotificationTypes.GovCaseFiled,
+            SubjectId: state.CaseId,
+            ToEmail: state.Citizen.Email,
+            ToName: state.Citizen.Name,
+            Code: state.Radicado,                      // el comprobante que el ciudadano guarda
+            OccurredAt: state.RadicadoAt,
+            Amount: cobra ? quote.Amount : null,
+            Currency: cobra ? quote.Currency : null,
+            Data: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Trámite"] = state.TramiteName,
+                ["Entidad"] = state.Agency,
+                ["Estado"] = StageLabels[state.Status],
+            },
+            ActionPath: $"/gobierno/tramites/{state.Radicado}");
     }
 
     // ── Superficie de composición (DIP) para tracking / workflow / documentos ──

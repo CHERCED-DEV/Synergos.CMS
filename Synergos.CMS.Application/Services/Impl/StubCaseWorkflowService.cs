@@ -40,6 +40,7 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
 
     private readonly StubApplicationService _cases;
     private readonly IAuditTrailWriter? _audit;
+    private readonly ITransactionalNotifier? _notifier;
     private readonly Func<DateTimeOffset> _now;
 
     public StubCaseWorkflowService(StubApplicationService cases)
@@ -49,12 +50,18 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
 
     /// <summary>
     /// Ctor configurable: audit opcional (null = no-op, tests aislados) + time source
-    /// inyectable para determinismo en tests (ADR 0002).
+    /// inyectable para determinismo en tests (ADR 0002) + notifier opcional (T4) ÚLTIMO:
+    /// null = no notificar (comportamiento pre-T4), cero call-sites rotos.
     /// </summary>
-    public StubCaseWorkflowService(StubApplicationService cases, IAuditTrailWriter? audit, Func<DateTimeOffset>? now)
+    public StubCaseWorkflowService(
+        StubApplicationService cases,
+        IAuditTrailWriter? audit,
+        Func<DateTimeOffset>? now,
+        ITransactionalNotifier? notifier = null)
     {
         _cases = cases ?? throw new ArgumentNullException(nameof(cases));
         _audit = audit;
+        _notifier = notifier;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -81,6 +88,10 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
         // re-auditar ni tocar el historial (núcleo anti-doble-efecto del dominio).
         if (current.Status == rule.To)
         {
+            // Re-emite: el ledger del dispatcher deduplica por (caso, transición), así que
+            // es inofensivo, y rescata el caso en que la primera decisión no llegó a
+            // notificar (notificaciones apagadas entonces, destinatario inválido, etc.).
+            await EmitDecidedAsync(current, rule.To, _now(), cancellationToken);
             return current;
         }
 
@@ -117,7 +128,55 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
                 cancellationToken);
         }
 
+        // Avisarle al ciudadano el resultado de la decisión (T4). Best-effort: un email
+        // caído JAMÁS puede tumbar una decisión ya aplicada y persistida.
+        await EmitDecidedAsync(updated, rule.To, occurred, cancellationToken);
+
         return updated;
+    }
+
+    /// <summary>
+    /// El hecho "expediente decidido" para T4.
+    /// <para>
+    /// <b>DedupeKey con la transición</b> (<c>gov.case.decided:{radicado}:{statusSlug}</c>):
+    /// el SubjectId NO identifica el hecho — un mismo expediente pasa por varias
+    /// transiciones (revisión → subsanación → aprobado) y CADA una merece su aviso. Con el
+    /// default (<c>{Type}:{SubjectId}</c>) el ciudadano solo se enteraría de la primera.
+    /// </para>
+    /// <para>
+    /// <b>Destinatario ausente:</b> el ciudadano se resuelve de las respuestas del
+    /// formulario y su email puede venir vacío. En ese caso NO se emite (ni se inventa un
+    /// placeholder): un evento sin destinatario real solo ensuciaría el ledger del
+    /// dispatcher con una clave de hecho ya "vista", tapando un reintento legítimo.
+    /// </para>
+    /// </summary>
+    private Task EmitDecidedAsync(
+        CaseDetail @case,
+        CaseStatus to,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(@case.Citizen?.Email))
+        {
+            return Task.CompletedTask;
+        }
+
+        var notification = new NotificationEvent(
+            Type: NotificationTypes.GovCaseDecided,
+            SubjectId: @case.CaseId,
+            ToEmail: @case.Citizen.Email,
+            ToName: @case.Citizen.Name,
+            Code: @case.Radicado,                      // el radicado es el comprobante que guarda
+            OccurredAt: occurredAt,
+            Data: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Trámite"] = @case.TramiteName,
+                ["Estado"] = @case.CurrentStage,
+            },
+            ActionPath: $"/gobierno/tramites/{@case.Radicado}",
+            DedupeKey: $"{NotificationTypes.GovCaseDecided}:{@case.Radicado}:{GovStatusSlugs.ToSlug(to)}");
+
+        return NotificationEmission.SafeDispatchAsync(_notifier, notification, cancellationToken);
     }
 
     private static string DefaultNote(CaseStatus to) => to switch

@@ -59,6 +59,7 @@ public sealed class TravelCartService : ITravelCartService
     private const string ResourceType = "travel-orders";
 
     private readonly IJsonEntityStore _store;
+    private readonly ITransactionalNotifier? _notifier;
     private readonly Func<DateTimeOffset> _now;
 
     public TravelCartService(IReservationService reservations, IPaymentProvider payments)
@@ -84,19 +85,23 @@ public sealed class TravelCartService : ITravelCartService
     /// <summary>
     /// Ctor completo (fan-out T1): <paramref name="store"/> es el backing store durable
     /// (FileSystem en Web, InMemory en tests). Los ctors previos delegan con el default
-    /// InMemory → cero call-sites rotos.
+    /// InMemory → cero call-sites rotos. <paramref name="notifier"/> (T4) es el seam
+    /// opcional que avisa al viajero; va ÚLTIMO para no re-ligar los args posicionales
+    /// de los factories del composer.
     /// </summary>
     public TravelCartService(
         IReservationService reservations,
         IPaymentProvider payments,
         IOrderTrackingService? tracking,
         Func<DateTimeOffset>? now,
-        IJsonEntityStore? store)
+        IJsonEntityStore? store,
+        ITransactionalNotifier? notifier = null)
     {
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _tracking = tracking;
         _store = store ?? new InMemoryJsonEntityStore();
+        _notifier = notifier;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -234,12 +239,13 @@ public sealed class TravelCartService : ITravelCartService
         // 3) Sella el estado agregado en la orden (para "Mis viajes"/MMB) y
         //    alimenta el timeline de viaje (paid→confirmed, monotónico; el
         //    AdvanceAsync es idempotente así que el re-confirm no duplica).
-        await WriteAsync(order with
+        var confirmedOrder = order with
         {
             Status = status,
             ConfirmationCode = confirmationCode,
             UpdatedAt = _now(),
-        }, cancellationToken);
+        };
+        await WriteAsync(confirmedOrder, cancellationToken);
         if (_tracking is not null && allConfirmed)
         {
             await _tracking.AdvanceAsync(
@@ -249,12 +255,47 @@ public sealed class TravelCartService : ITravelCartService
                 cancellationToken);
         }
 
+        // 4) Avisarle al viajero (T4). A diferencia del tracking, esto va FUERA del gate
+        //    allConfirmed: si el viaje quedó 'Partial' el viajero DEBE enterarse —
+        //    callarse justo cuando quedó a medias es lo peor que puede hacer el sistema.
+        //    Best-effort: un email caído JAMÁS puede tumbar un viaje ya pagado y sellado.
+        await NotificationEmission.SafeDispatchAsync(
+            _notifier, BuildConfirmedNotification(confirmedOrder, confirmedItems), cancellationToken);
+
         return new TravelConfirmationResult(
             OrderRef: order.OrderRef,
             Status: status,
             ConfirmationCode: confirmationCode,
             Items: confirmedItems);
     }
+
+    /// <summary>
+    /// El hecho "viaje confirmado" para T4.
+    /// </summary>
+    /// <remarks>
+    /// <b>El DedupeKey lleva el Status a propósito.</b> Con la clave default
+    /// (<c>travel.order.confirmed:{orderRef}</c>) un viaje que notificó 'Partial' y luego
+    /// terminó 'Confirmed' quedaría suprimido para siempre — y el segundo aviso es el que
+    /// el viajero más necesita. Partial y Confirmed son hechos DISTINTOS del mismo viaje,
+    /// así que cada uno lleva su propia clave; el re-confirm del mismo estado sí dedupea.
+    /// </remarks>
+    private NotificationEvent BuildConfirmedNotification(
+        CartOrder order,
+        IReadOnlyList<TravelOrderItem> items) => new(
+        Type: NotificationTypes.TravelOrderConfirmed,
+        SubjectId: order.OrderRef,
+        ToEmail: order.GuestEmail,
+        ToName: order.GuestName,
+        Code: order.ConfirmationCode ?? BuildConfirmationCode(order.OrderRef),
+        OccurredAt: _now(),
+        Amount: order.Total,
+        Currency: order.Currency,
+        Lines: items
+            .Select(i => new NotificationLine(i.Label, 1, i.Price, i.Currency, i.Product.ToString()))
+            .ToList(),
+        Data: new Dictionary<string, string> { ["Estado"] = order.Status },
+        ActionPath: $"/booking/viajes/{order.OrderRef}",
+        DedupeKey: $"{NotificationTypes.TravelOrderConfirmed}:{order.OrderRef}:{order.Status}");
 
     public async Task<IReadOnlyList<TravelOrder>> GetTripsAsync(string travelerEmail, CancellationToken cancellationToken = default)
     {

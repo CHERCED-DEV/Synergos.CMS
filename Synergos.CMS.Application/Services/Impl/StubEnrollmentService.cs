@@ -68,6 +68,7 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
     private readonly IPaymentProvider _payments;
     private readonly IOrderTrackingService? _tracking;
     private readonly IJsonEntityStore _store;
+    private readonly ITransactionalNotifier? _notifier;
     private readonly Func<DateTimeOffset> _now;
 
     public StubEnrollmentService(ICourseCatalogProvider catalog, IPaymentProvider payments)
@@ -104,19 +105,24 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
     /// Ctor completo (durabilidad): <paramref name="store"/> es el backing store
     /// de matrículas + progreso (FileSystem en Web → sobrevive reinicio; InMemory
     /// en tests). Null = <see cref="InMemoryJsonEntityStore"/> (comportamiento
-    /// idéntico al de los diccionarios que reemplazó).
+    /// idéntico al de los diccionarios que reemplazó). <paramref name="notifier"/> (T4)
+    /// es el seam opcional que avisa al alumno cuando su matrícula queda activa; null =
+    /// sin notificaciones (comportamiento pre-T4). Va ÚLTIMO y opcional a propósito: los
+    /// factories del composer pasan args posicionales.
     /// </summary>
     public StubEnrollmentService(
         ICourseCatalogProvider catalog,
         IPaymentProvider payments,
         IOrderTrackingService? tracking,
         IJsonEntityStore? store,
-        Func<DateTimeOffset>? now)
+        Func<DateTimeOffset>? now,
+        ITransactionalNotifier? notifier = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _tracking = tracking;
         _store = store ?? new InMemoryJsonEntityStore();
+        _notifier = notifier;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -148,6 +154,9 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
             await WriteEnrollmentAsync(freeEnrollment, cancellationToken);
             // Alimenta el timeline de aprendizaje: matrícula activa → "enrolled".
             await AdvanceTrackingAsync(freeEnrollment.EnrollmentId, StageEnrolled, cancellationToken);
+            // T4: la rama gratis activa la matrícula AQUÍ y nunca pasa por ConfirmAsync
+            // — si no se emitiera aquí, ningún alumno de curso gratis recibiría aviso.
+            await NotifyActiveAsync(freeEnrollment, course.Title, cancellationToken);
             return new CourseEnrollmentResult(
                 Enrolled: true,
                 EnrollmentId: freeEnrollment.EnrollmentId,
@@ -202,6 +211,10 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         // Idempotente: si ya está activa, devolver la matrícula sin recapturar.
         if (enrollment.Status == EnrollmentStatus.Active)
         {
+            // Re-emite: el ledger del dispatcher deduplica (un hecho → un aviso), así que
+            // es inofensivo, y rescata el caso en que el primer confirm no llegó a notificar
+            // (notificaciones apagadas entonces, destinatario inválido, etc.).
+            await NotifyActiveAsync(enrollment, await ResolveCourseTitleAsync(enrollment.CourseId, cancellationToken), cancellationToken);
             return ToConfirmation(enrollment);
         }
 
@@ -217,6 +230,9 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         await WriteEnrollmentAsync(active, cancellationToken);
         // Alimenta el timeline de aprendizaje al confirmar el pago → "enrolled".
         await AdvanceTrackingAsync(active.EnrollmentId, StageEnrolled, cancellationToken);
+        // T4: avisarle al alumno que su matrícula quedó activa. Best-effort: un email
+        // caído JAMÁS puede tumbar una matrícula ya pagada y persistida.
+        await NotifyActiveAsync(active, await ResolveCourseTitleAsync(active.CourseId, cancellationToken), cancellationToken);
         return ToConfirmation(active);
     }
 
@@ -383,6 +399,60 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
 
     private Task WriteProgressAsync(string storeKey, PersistedProgress progress, CancellationToken cancellationToken)
         => _store.WriteAsync(ProgressResourceType, storeKey, JsonSerializer.Serialize(progress, _json), cancellationToken);
+
+    // ── Notificación del hecho "matrícula activa" (T4) ─────────────────
+
+    // Emite el hecho por AMBAS ramas (gratis en EnrollAsync · paga en ConfirmAsync y su
+    // short-circuit). El seam es opcional y la emisión best-effort (SafeDispatchAsync):
+    // una matrícula ya persistida nunca se cae por un email.
+    private Task NotifyActiveAsync(PersistedEnrollment enrollment, string? courseTitle, CancellationToken cancellationToken)
+    {
+        // Sin destinatario no se emite basura (el dispatcher ya filtra, pero no se le
+        // inventa un placeholder). El motor valida email en EnrollAsync, así que esto
+        // solo blinda contra una matrícula legacy/corrupta leída del store.
+        if (string.IsNullOrWhiteSpace(enrollment.StudentEmail))
+        {
+            return Task.CompletedTask;
+        }
+        return NotificationEmission.SafeDispatchAsync(
+            _notifier, BuildActiveNotification(enrollment, courseTitle), cancellationToken);
+    }
+
+    /// <summary>
+    /// El hecho "matrícula activa" para T4. <b>DedupeKey explícito</b>: el
+    /// <see cref="PersistedEnrollment.EnrollmentId"/> es un Guid fresco por llamada, así que
+    /// la clave default ({Type}:{SubjectId}) NO identifica "este alumno en este curso" y el
+    /// dedupe no serviría de nada. Consecuencia aceptada: si un alumno cancela y se
+    /// re-matricula al mismo curso, no recibe un segundo aviso.
+    /// </summary>
+    private NotificationEvent BuildActiveNotification(PersistedEnrollment e, string? courseTitle)
+    {
+        var data = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (!string.IsNullOrWhiteSpace(courseTitle))
+        {
+            data["Curso"] = courseTitle!;
+        }
+
+        return new NotificationEvent(
+            Type: NotificationTypes.EnrollmentActive,
+            SubjectId: e.EnrollmentId,
+            ToEmail: e.StudentEmail,
+            ToName: e.StudentName,
+            Code: e.EnrollmentId,
+            OccurredAt: _now(),
+            // Rama gratis: Total = 0 → se omite el monto en vez de pintar "$ 0".
+            Amount: e.Total > 0m ? e.Total : null,
+            Currency: e.Total > 0m ? e.Currency : null,
+            Data: data.Count > 0 ? data : null,
+            ActionPath: $"/educacion/cursos/{e.CourseId}",
+            DedupeKey: $"{NotificationTypes.EnrollmentActive}:{e.CourseId}:{e.StudentEmail.Trim().ToLowerInvariant()}");
+    }
+
+    private async Task<string?> ResolveCourseTitleAsync(string courseId, CancellationToken cancellationToken)
+    {
+        var detail = await _catalog.GetCourseAsync(courseId, cancellationToken);
+        return detail?.Course.Title;
+    }
 
     // ── Helpers ────────────────────────────────────────────────────────
 
