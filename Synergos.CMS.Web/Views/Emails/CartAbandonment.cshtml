@@ -1,10 +1,10 @@
-@*
+﻿@*
     Email template — cart abandonment alert (Ola 102).
     Modelo: Synergos.CMS.Web.Services.CartAbandonmentEmailModel
 *@
 @model Synergos.CMS.Web.Services.CartAbandonmentEmailModel
 @{
-    Layout = "_Layout";
+    Layout = "~/Views/Emails/_Layout.cshtml";   // ruta EXPLÍCITA: "_Layout" resolvía al layout del SITIO
     ViewBag.Title = "Carrito abandonado";
     ViewBag.SiteName = Model.SiteName;
     ViewBag.PreheaderText = $"Un visitante dejó {Model.ItemCount} ítem(s) en su carrito hace {Model.MinutesSinceActivity} min.";

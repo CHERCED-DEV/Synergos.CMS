@@ -54,6 +54,25 @@ public sealed class DefaultEmailService : IEmailService
             body: message.BodyHtml,
             isBodyHtml: true);
 
+        // VERACIDAD (T4): sin transporte configurado, el IEmailSender de Umbraco hace
+        // LogDebug + return SILENCIOSO — no lanza. Sin este pre-check el catch de abajo
+        // jamás corre y se loguea "Email sent" afirmando un envío QUE NUNCA OCURRIÓ: un
+        // grep de los logs daría por buena una entrega inexistente. El log debe decir la
+        // verdad o no sirve para verificar nada.
+        if (!_umbracoEmailSender.CanSendRequiredEmail())
+        {
+            if (settings.WarnOnMissingSmtp)
+            {
+                _logger.LogWarning(
+                    "Email NO enviado — no hay transporte configurado: to={To} subject={Subject}. " +
+                    "Configura Umbraco:CMS:Global:Smtp (Host, o DeliveryMethod=SpecifiedPickupDirectory " +
+                    "+ PickupDirectoryLocation para escribir .eml a disco sin SMTP).",
+                    message.To,
+                    message.Subject);
+            }
+            return;
+        }
+
         try
         {
             await _umbracoEmailSender.SendAsync(umbracoMessage, "synergos");

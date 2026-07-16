@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.Razor;
@@ -28,16 +28,16 @@ public sealed class RazorEmailTemplateRenderer : IEmailTemplateRenderer
 
     private readonly IRazorViewEngine _viewEngine;
     private readonly ITempDataProvider _tempDataProvider;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public RazorEmailTemplateRenderer(
         IRazorViewEngine viewEngine,
         ITempDataProvider tempDataProvider,
-        IServiceProvider serviceProvider)
+        IServiceScopeFactory scopeFactory)
     {
         _viewEngine = viewEngine;
         _tempDataProvider = tempDataProvider;
-        _serviceProvider = serviceProvider;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task<string> RenderAsync<TModel>(
@@ -47,7 +47,14 @@ public sealed class RazorEmailTemplateRenderer : IEmailTemplateRenderer
     {
         var viewPath = $"{ViewsPrefix}{viewName}{ViewExtension}";
 
-        var httpContext = new DefaultHttpContext { RequestServices = _serviceProvider };
+        // Este renderer es Singleton, así que un IServiceProvider inyectado sería el ROOT.
+        // Razor necesita servicios SCOPED (IViewBufferScope) y resolverlos del root lanza
+        // "Cannot resolve scoped service from root provider" en cuanto la validación de
+        // scopes está activa (Development la activa por defecto) — dejando el render de
+        // TODOS los emails roto, y en silencio porque los callers lo envuelven en catch.
+        // Con un scope propio funciona igual desde un request que desde un hosted service.
+        using var scope = _scopeFactory.CreateScope();
+        var httpContext = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
         var actionContext = new ActionContext(
             httpContext,
             new RouteData(),

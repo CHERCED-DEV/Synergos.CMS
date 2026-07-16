@@ -1,10 +1,10 @@
-@*
+﻿@*
     Email template — comment pending moderation notification (Ola 89).
     Modelo: Synergos.CMS.Web.Services.CommentPendingModerationEmailModel
 *@
 @model Synergos.CMS.Web.Services.CommentPendingModerationEmailModel
 @{
-    Layout = "_Layout";
+    Layout = "~/Views/Emails/_Layout.cshtml";   // ruta EXPLÍCITA: "_Layout" resolvía al layout del SITIO
     ViewBag.Title = "Comentario pendiente de moderación";
     ViewBag.SiteName = Model.SiteName;
     ViewBag.PreheaderText = $"Comentario nuevo de {Model.AuthorName} esperando aprobación.";

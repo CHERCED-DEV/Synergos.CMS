@@ -1,4 +1,4 @@
-namespace Synergos.CMS.Web.Services;
+﻿namespace Synergos.CMS.Web.Services;
 
 /// <summary>
 /// View models para los email templates Razor (Ola 82).
@@ -40,3 +40,36 @@ public sealed record CartAbandonmentEmailModel(
     DateTime LastActivityUtc,
     int MinutesSinceActivity,
     string SiteName);
+
+// ── T4 (doc 25) — email transaccional data-driven ──────────────────
+// UN modelo para los 6 hechos (compra, viaje, entradas, matrícula, radicado, decisión):
+// la plantilla Transactional.cshtml lo renderiza sin conocer el dominio. Es lo que evita
+// una plantilla por vertical (regla de oro doc 25).
+
+/// <summary>Una línea del detalle (ítem comprado, entrada, ...).</summary>
+public sealed record TransactionalEmailLine(
+    string Label,
+    int Quantity,
+    decimal Amount,
+    string Currency,
+    string? Detail);
+
+/// <summary>Un dato extra etiquetado (ej. "Estado" → "Aprobado").</summary>
+public sealed record TransactionalEmailRow(string Label, string Value);
+
+/// <summary>Modelo de <c>Views/Emails/Transactional.cshtml</c>.</summary>
+public sealed record TransactionalEmailModel(
+    string SiteName,
+    string Title,
+    string Preheader,
+    string Heading,
+    string Intro,
+    string ToName,
+    string Code,
+    string CodeLabel,
+    IReadOnlyList<TransactionalEmailLine> Lines,
+    IReadOnlyList<TransactionalEmailRow> Rows,
+    decimal? Total,
+    string? Currency,
+    string? ActionUrl,
+    string? ActionLabel);

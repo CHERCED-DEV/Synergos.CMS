@@ -76,6 +76,11 @@ public sealed class OptionsComposer : IComposer
         builder.Services.Configure<PaymentsSettings>(
             builder.Config.GetSection("Synergos:Payments"));
 
+        // T4 (doc 25) — notificaciones de hechos transaccionales (recibo, viaje,
+        // entradas, matrícula, radicado, decisión). Enabled=false por default: opt-in.
+        builder.Services.Configure<NotificationsSettings>(
+            builder.Config.GetSection("Synergos:Notifications"));
+
         builder.Services.Configure<AdminSettings>(
             builder.Config.GetSection("Synergos:Admin"));
 

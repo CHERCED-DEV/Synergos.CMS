@@ -1,10 +1,10 @@
-@*
+﻿@*
     Email template — form submission notification.
     Modelo: Synergos.CMS.Web.Services.FormNotificationEmailModel
 *@
 @model Synergos.CMS.Web.Services.FormNotificationEmailModel
 @{
-    Layout = "_Layout";
+    Layout = "~/Views/Emails/_Layout.cshtml";   // ruta EXPLÍCITA: "_Layout" resolvía al layout del SITIO
     ViewBag.Title = $"Nueva submission: {Model.FormKey}";
     ViewBag.SiteName = Model.SiteName;
     ViewBag.PreheaderText = $"Recibiste una nueva submission del formulario {Model.FormKey}.";

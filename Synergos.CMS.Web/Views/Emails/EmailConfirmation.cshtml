@@ -1,10 +1,10 @@
-@*
+﻿@*
     Email template — registration confirmation (Ola 83).
     Modelo: Synergos.CMS.Web.Services.EmailConfirmationEmailModel
 *@
 @model Synergos.CMS.Web.Services.EmailConfirmationEmailModel
 @{
-    Layout = "_Layout";
+    Layout = "~/Views/Emails/_Layout.cshtml";   // ruta EXPLÍCITA: "_Layout" resolvía al layout del SITIO
     ViewBag.Title = "Confirma tu email";
     ViewBag.SiteName = Model.SiteName;
     ViewBag.PreheaderText = "Activa tu cuenta haciendo click en el siguiente enlace.";

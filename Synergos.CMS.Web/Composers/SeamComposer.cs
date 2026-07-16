@@ -163,6 +163,13 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IJsonEntityStore, FileSystemJsonEntityStore>();
         services.AddSingleton<IIdempotencyLedger, FileSystemIdempotencyLedger>();
 
+        // T4 (doc 25) — notificaciones transaccionales: UN dispatcher transversal para los
+        // 6 hechos de los 5 verticales (regla de oro: no un notifier por dominio). Los
+        // CANALES se registran primero y el composite AL FINAL (calca IAlertNotifier
+        // :527-536). SMS/push = un AddSingleton más, sin tocar motores.
+        services.AddSingleton<ITransactionalNotifierChannel, EmailTransactionalNotifier>();
+        services.AddSingleton<ITransactionalNotifier, CompositeTransactionalNotifier>();
+
         var paymentProvider = builder.Config["Synergos:Payments:Provider"] ?? "Stub";
         switch (paymentProvider.ToLowerInvariant())
         {
@@ -309,7 +316,8 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IPaymentProvider>(),
                 sp.GetRequiredService<IOrderTrackingService>(),
                 sp.GetRequiredService<IJsonEntityStore>(),
-                now: null));
+                now: null,
+                notifier: sp.GetRequiredService<ITransactionalNotifier>()));
         services.AddSingleton<IReturnService>(sp =>
             new StubReturnService(
                 sp.GetRequiredService<IShopOrderService>(),

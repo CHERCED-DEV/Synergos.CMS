@@ -41,6 +41,7 @@ public sealed class StubShopOrderService : IShopOrderService
     private readonly IPaymentProvider _payments;
     private readonly IOrderTrackingService? _tracking;
     private readonly IJsonEntityStore _store;
+    private readonly ITransactionalNotifier? _notifier;
     private readonly Func<DateTimeOffset> _now;
 
     public StubShopOrderService(
@@ -88,13 +89,15 @@ public sealed class StubShopOrderService : IShopOrderService
         IPaymentProvider payments,
         IOrderTrackingService? tracking,
         IJsonEntityStore store,
-        Func<DateTimeOffset>? now)
+        Func<DateTimeOffset>? now,
+        ITransactionalNotifier? notifier = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _tracking = tracking;
         _store = store ?? throw new ArgumentNullException(nameof(store));
+        _notifier = notifier;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -241,6 +244,10 @@ public sealed class StubShopOrderService : IShopOrderService
         // Idempotente: si ya está pagada, devolver el resumen sin volver a capturar.
         if (order.Status == OrderStatus.Paid)
         {
+            // Re-emite: el ledger del dispatcher deduplica (un hecho → un aviso), así que
+            // es inofensivo, y rescata el caso en que el primer confirm no llegó a
+            // notificar (notificaciones apagadas entonces, destinatario inválido, etc.).
+            await NotificationEmission.SafeDispatchAsync(_notifier, BuildPaidNotification(order), cancellationToken);
             return ToConfirmation(order);
         }
 
@@ -275,8 +282,28 @@ public sealed class StubShopOrderService : IShopOrderService
                 cancellationToken);
         }
 
+        // 4) Avisarle al comprador que su compra quedó confirmada (T4). Best-effort: un
+        //    email caído JAMÁS puede tumbar una orden ya pagada y persistida.
+        await NotificationEmission.SafeDispatchAsync(_notifier, BuildPaidNotification(paid), cancellationToken);
+
         return ToConfirmation(paid);
     }
+
+    /// <summary>El hecho "compra pagada" para T4. DedupeKey default = shop.order.paid:{orderRef}
+    /// — el orderRef identifica el hecho, así que no hace falta override.</summary>
+    private NotificationEvent BuildPaidNotification(PersistedOrder order) => new(
+        Type: NotificationTypes.ShopOrderPaid,
+        SubjectId: order.OrderRef,
+        ToEmail: order.CustomerEmail,
+        ToName: order.CustomerName,
+        Code: order.OrderNumber,
+        OccurredAt: _now(),
+        Amount: order.Total,
+        Currency: order.Currency,
+        Lines: order.Lines
+            .Select(l => new NotificationLine(l.ProductName, l.Quantity, l.LineTotal, l.Currency))
+            .ToList(),
+        ActionPath: $"/tienda/ordenes/{order.OrderRef}");
 
     public async Task<IReadOnlyList<ShopOrder>> GetOrdersAsync(string customerEmail, CancellationToken cancellationToken = default)
     {
