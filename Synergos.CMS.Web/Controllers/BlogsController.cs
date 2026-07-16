@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -392,7 +393,8 @@ public sealed class BlogsController : ControllerBase
         var hashtag = NormalizeTag(tag);
         if (!string.IsNullOrWhiteSpace(query))
         {
-            matches = matches.Where(i => i.Body.Contains(query, StringComparison.OrdinalIgnoreCase));
+            // Ignora mayúsculas Y tildes (mismo plegado que los 5 catálogos, una sola impl).
+            matches = matches.Where(i => CatalogText.Contains(i.Body, query));
         }
         if (!string.IsNullOrWhiteSpace(hashtag))
         {

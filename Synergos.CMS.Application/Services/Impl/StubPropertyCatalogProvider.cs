@@ -155,10 +155,11 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
             return true;
         }
         var t = text.Trim();
-        return l.Title.Contains(t, StringComparison.OrdinalIgnoreCase)
-            || l.City.Contains(t, StringComparison.OrdinalIgnoreCase)
-            || l.Neighborhood.Contains(t, StringComparison.OrdinalIgnoreCase)
-            || l.Type.Contains(t, StringComparison.OrdinalIgnoreCase);
+        // Ignora mayúsculas Y tildes: "medellin" debe encontrar "Medellín".
+        return CatalogText.Contains(l.Title, t)
+            || CatalogText.Contains(l.City, t)
+            || CatalogText.Contains(l.Neighborhood, t)
+            || CatalogText.Contains(l.Type, t);
     }
 
     private static bool MatchesLocation(PropertyListing l, string? location)
@@ -168,8 +169,8 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
             return true;
         }
         var loc = location.Trim();
-        return l.City.Contains(loc, StringComparison.OrdinalIgnoreCase)
-            || l.Neighborhood.Contains(loc, StringComparison.OrdinalIgnoreCase);
+        return CatalogText.Contains(l.City, loc)
+            || CatalogText.Contains(l.Neighborhood, loc);
     }
 
     private static PropertyFacet BuildFacet(string name, IEnumerable<string> values)

@@ -39,11 +39,12 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
         if (!string.IsNullOrWhiteSpace(query))
         {
             var q = query.Trim();
+            // Ignora mayúsculas Y tildes: "bogota" debe encontrar "Bogotá".
             source = source.Where(e =>
-                e.Summary.Title.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || e.Summary.Category.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || e.Summary.City.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || e.Summary.Venue.Contains(q, StringComparison.OrdinalIgnoreCase));
+                CatalogText.Contains(e.Summary.Title, q)
+                || CatalogText.Contains(e.Summary.Category, q)
+                || CatalogText.Contains(e.Summary.City, q)
+                || CatalogText.Contains(e.Summary.Venue, q));
         }
 
         var results = source

@@ -72,15 +72,15 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
 
         IEnumerable<AcademyDemoSeed.SeedCourse> filtered = AllCourses();
 
-        // 1) Filtro de texto (título / resumen / categoría / instructor).
+        // 1) Filtro de texto (título / resumen / categoría / instructor) — ignora mayúsculas Y tildes.
         if (!string.IsNullOrWhiteSpace(query.Text))
         {
             var text = query.Text.Trim();
             filtered = filtered.Where(c =>
-                c.Title.Contains(text, StringComparison.OrdinalIgnoreCase)
-                || c.Summary.Contains(text, StringComparison.OrdinalIgnoreCase)
-                || c.Category.Contains(text, StringComparison.OrdinalIgnoreCase)
-                || AcademyDemoSeed.InstructorById(c.InstructorId).Name.Contains(text, StringComparison.OrdinalIgnoreCase));
+                CatalogText.Contains(c.Title, text)
+                || CatalogText.Contains(c.Summary, text)
+                || CatalogText.Contains(c.Category, text)
+                || CatalogText.Contains(AcademyDemoSeed.InstructorById(c.InstructorId).Name, text));
         }
 
         // 2) Filtro de categoría exacta (case-insensitive).

@@ -59,10 +59,11 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
             return true;
         }
         var q = query.Trim();
-        return t.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
-            || t.Agency.Contains(q, StringComparison.OrdinalIgnoreCase)
-            || t.Category.Contains(q, StringComparison.OrdinalIgnoreCase)
-            || t.Summary.Contains(q, StringComparison.OrdinalIgnoreCase);
+        // Ignora mayúsculas Y tildes: "registraduria" debe encontrar "Registraduría".
+        return CatalogText.Contains(t.Name, q)
+            || CatalogText.Contains(t.Agency, q)
+            || CatalogText.Contains(t.Category, q)
+            || CatalogText.Contains(t.Summary, q);
     }
 
     // Helpers de composición del seed (menos ruido por trámite).

@@ -166,22 +166,22 @@ public sealed class StubProductCatalogProvider : IProductCatalogProvider
     {
         query ??= new ProductQuery();
 
-        // 1) Filtro de texto (nombre/marca/categoría) — case-insensitive.
+        // 1) Filtro de texto (nombre/marca/categoría) — ignora mayúsculas Y tildes.
         IEnumerable<CatalogProduct> filtered = Catalog;
         if (!string.IsNullOrWhiteSpace(query.Text))
         {
             var text = query.Text.Trim();
             filtered = filtered.Where(p =>
-                p.Name.Contains(text, StringComparison.OrdinalIgnoreCase)
-                || p.Brand.Contains(text, StringComparison.OrdinalIgnoreCase)
-                || p.Category.Contains(text, StringComparison.OrdinalIgnoreCase));
+                CatalogText.Contains(p.Name, text)
+                || CatalogText.Contains(p.Brand, text)
+                || CatalogText.Contains(p.Category, text));
         }
 
-        // 2) Filtro de categoría exacta (case-insensitive).
+        // 2) Filtro de categoría exacta (ignora mayúsculas Y tildes).
         if (!string.IsNullOrWhiteSpace(query.Category))
         {
             var category = query.Category.Trim();
-            filtered = filtered.Where(p => string.Equals(p.Category, category, StringComparison.OrdinalIgnoreCase));
+            filtered = filtered.Where(p => CatalogText.AreEqual(p.Category, category));
         }
 
         // 3) Filtro por facetas seleccionadas (brand / minRating). Las claves

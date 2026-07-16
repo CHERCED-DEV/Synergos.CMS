@@ -33,11 +33,13 @@ public sealed class StubPatientRegistry : IPatientRegistry
         }
 
         var q = query.Trim();
+        // Ignora mayúsculas Y tildes: buscar "jose garcia" debe encontrar a "José García"
+        // — un clínico apurado no escribe tildes, y aquí no encontrar al paciente es grave.
         var matches = all
             .Where(p =>
-                p.FullName.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || p.DocumentId.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || p.Email.Contains(q, StringComparison.OrdinalIgnoreCase))
+                CatalogText.Contains(p.FullName, q)
+                || CatalogText.Contains(p.DocumentId, q)
+                || CatalogText.Contains(p.Email, q))
             .ToList();
 
         return Task.FromResult<IReadOnlyList<EhrPatient>>(matches);
