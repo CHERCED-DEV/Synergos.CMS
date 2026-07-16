@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -20,7 +20,7 @@ namespace Synergos.CMS.Web.Controllers;
 /// deserializar (el HMAC es sobre bytes exactos); (3) verifica la firma
 /// (<see cref="PaymentWebhookVerifier"/>); (4) ANTI-TAMPERING: nunca confía el estado del
 /// payload, re-consulta <see cref="IPaymentProvider.GetStatusAsync"/>; (5) IDEMPOTENCIA:
-/// candado atómico <see cref="IPaymentEventStore"/> por (provider,eventId); (6) despacha
+/// candado atómico <see cref="IIdempotencyLedger"/> por (provider,eventId); (6) despacha
 /// a <see cref="IShopOrderService.ConfirmAsync"/> (idempotente). La confirmación de la
 /// orden es Tienda-específica por ahora (único vertical durable); cuando otro vertical se
 /// durabilice se extrae un despacho domain-neutral. 200 corta el retry del PSP.
@@ -30,23 +30,26 @@ namespace Synergos.CMS.Web.Controllers;
 public sealed class PaymentWebhookController : ControllerBase
 {
     private static readonly JsonSerializerOptions _json = new() { PropertyNameCaseInsensitive = true };
+    /// <summary>Familia de claves del ledger — preserva la ruta de T3 (App_Data/syn-payment-events/).</summary>
+    private const string LedgerScope = "payment-events";
+
     private static readonly HashSet<string> KnownProviders = new(StringComparer.OrdinalIgnoreCase) { "stub" };
 
     private readonly IPaymentProvider _payments;
-    private readonly IPaymentEventStore _events;
+    private readonly IIdempotencyLedger _ledger;
     private readonly IShopOrderService _orders;
     private readonly PaymentsSettings _settings;
     private readonly ILogger<PaymentWebhookController> _logger;
 
     public PaymentWebhookController(
         IPaymentProvider payments,
-        IPaymentEventStore events,
+        IIdempotencyLedger ledger,
         IShopOrderService orders,
         IOptions<PaymentsSettings> settings,
         ILogger<PaymentWebhookController> logger)
     {
         _payments = payments;
-        _events = events;
+        _ledger = ledger;
         _orders = orders;
         _settings = settings.Value;
         _logger = logger;
@@ -140,7 +143,7 @@ public sealed class PaymentWebhookController : ControllerBase
             var result = await _orders.ConfirmAsync(payload.OrderRef, cancellationToken);
             // Marca DESPUÉS del éxito: corta retries futuros. Un duplicado concurrente que
             // ya confirmó devuelve false aquí (ambos confirmaron idempotente, sin doble cobro).
-            var firstTime = await _events.TryMarkProcessedAsync(provider, payload.EventId, cancellationToken);
+            var firstTime = await _ledger.TryClaimAsync(LedgerScope, $"{provider}-{payload.EventId}", cancellationToken);
             return Ok(new { processed = firstTime, duplicate = !firstTime, orderNumber = result.OrderNumber, status = result.Status });
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -151,7 +154,7 @@ public sealed class PaymentWebhookController : ControllerBase
             // re-ejecuta idempotente.
             _logger.LogWarning(ex, "Webhook {Provider}/{EventId}: confirmación de {OrderRef} no procedió (rechazo terminal).",
                 provider, payload.EventId, payload.OrderRef);
-            await _events.TryMarkProcessedAsync(provider, payload.EventId, cancellationToken);
+            await _ledger.TryClaimAsync(LedgerScope, $"{provider}-{payload.EventId}", cancellationToken);
             return Ok(new { processed = false, reason = ex.Message });
         }
     }

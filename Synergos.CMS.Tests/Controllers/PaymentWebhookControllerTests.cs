@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,7 +21,7 @@ namespace Synergos.CMS.Tests.Controllers;
 public sealed class PaymentWebhookControllerTests
 {
     private readonly IPaymentProvider _payments = Substitute.For<IPaymentProvider>();
-    private readonly IPaymentEventStore _events = Substitute.For<IPaymentEventStore>();
+    private readonly IIdempotencyLedger _ledger = Substitute.For<IIdempotencyLedger>();
     private readonly IShopOrderService _orders = Substitute.For<IShopOrderService>();
 
     private static byte[] Payload(string eventId = "ev1", string sessionId = "stub_s", string orderRef = "ord_1")
@@ -30,7 +30,7 @@ public sealed class PaymentWebhookControllerTests
     private PaymentWebhookController BuildSut(PaymentsSettings settings, byte[] body, string? ts = null, string? sig = null)
     {
         var ctrl = new PaymentWebhookController(
-            _payments, _events, _orders, Options.Create(settings), NullLogger<PaymentWebhookController>.Instance);
+            _payments, _ledger, _orders, Options.Create(settings), NullLogger<PaymentWebhookController>.Instance);
         var http = new DefaultHttpContext();
         http.Request.Body = new MemoryStream(body);
         if (ts is not null) http.Request.Headers[WebhookSigner.TimestampHeaderName] = ts;
@@ -80,7 +80,7 @@ public sealed class PaymentWebhookControllerTests
     public async Task Happy_UnsignedDemo_ConfirmsOrder()
     {
         ArrangeGoodSessionAndOrder();
-        _events.TryMarkProcessedAsync("stub", "ev1", Arg.Any<CancellationToken>()).Returns(true);
+        _ledger.TryClaimAsync("payment-events", "stub-ev1", Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await BuildSut(new PaymentsSettings(), Payload()).Receive("stub", default);
 
@@ -92,7 +92,7 @@ public sealed class PaymentWebhookControllerTests
     public async Task Happy_Signed_ConfirmsOrder()
     {
         ArrangeGoodSessionAndOrder();
-        _events.TryMarkProcessedAsync("stub", "ev1", Arg.Any<CancellationToken>()).Returns(true);
+        _ledger.TryClaimAsync("payment-events", "stub-ev1", Arg.Any<CancellationToken>()).Returns(true);
         var body = Payload();
         var signed = WebhookSigner.ComputeSignedHeaders("shh", body)!.Value;
 
@@ -109,7 +109,7 @@ public sealed class PaymentWebhookControllerTests
     public async Task Duplicate_Returns200_ConfirmIsIdempotent()
     {
         ArrangeGoodSessionAndOrder();
-        _events.TryMarkProcessedAsync("stub", "ev1", Arg.Any<CancellationToken>()).Returns(false);   // ya procesado
+        _ledger.TryClaimAsync("payment-events", "stub-ev1", Arg.Any<CancellationToken>()).Returns(false);   // ya procesado
 
         var result = await BuildSut(new PaymentsSettings(), Payload()).Receive("stub", default);
 

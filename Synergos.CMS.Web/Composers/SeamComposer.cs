@@ -149,8 +149,8 @@ public sealed class SeamComposer : IComposer
         // Motor de pago (PSP) — seam IPaymentProvider, stub-first (doc 16/17).
         // T3 (doc 25): DOS ejes ortogonales.
         // (1) DURABILIDAD: el estado de las sesiones de pago pasa de memoria a disco
-        //     tras el seam GENÉRICO IJsonEntityStore + el ledger de idempotencia del
-        //     webhook (IPaymentEventStore). Registro INCONDICIONAL → hasta el stub queda
+        //     tras el seam GENÉRICO IJsonEntityStore + el ledger de idempotencia GENÉRICO
+        //     (IIdempotencyLedger, tambien usado por T4 notificaciones). Registro INCONDICIONAL → hasta el stub queda
         //     durable y una sesión sobrevive un reinicio (cierra el confirm-tras-reinicio).
         // (2) SELECCIÓN de proveedor: config-gated por Synergos:Payments:Provider,
         //     calcando el gating de BundleRegistry.Mode. Ola A: solo "Stub" durable
@@ -161,7 +161,7 @@ public sealed class SeamComposer : IComposer
         // travel-orders → App_Data/syn-{resourceType}/). Colapsa los 4 stores dedicados
         // que T1/T3/Booking habían duplicado (regla de oro doc 25).
         services.AddSingleton<IJsonEntityStore, FileSystemJsonEntityStore>();
-        services.AddSingleton<IPaymentEventStore, FileSystemPaymentEventStore>();
+        services.AddSingleton<IIdempotencyLedger, FileSystemIdempotencyLedger>();
 
         var paymentProvider = builder.Config["Synergos:Payments:Provider"] ?? "Stub";
         switch (paymentProvider.ToLowerInvariant())
