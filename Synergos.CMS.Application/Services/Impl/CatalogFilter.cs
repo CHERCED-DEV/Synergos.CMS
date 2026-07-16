@@ -192,12 +192,18 @@ public sealed class CatalogThresholdFilter<T> : CatalogFilter<T>
         return lowest;
     }
 
+    /// <remarks>
+    /// Los tramos sin ningún ítem se OMITEN. Un tramo de término nunca sale a cero porque se
+    /// deriva del dato, pero éstos están declarados, así que sin esta guarda saldría un chip
+    /// "4.5 estrellas o más (0)" que al pulsarse vacía el listado — una promesa vacía.
+    /// </remarks>
     public override IReadOnlyList<CatalogFacetValue> Facets(IReadOnlyList<T> universe)
         => _buckets
             .Select(b => new CatalogFacetValue(
                 b.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 b.Label,
                 universe.Count(i => _numberOf(i) >= b.Value)))
+            .Where(v => v.Count > 0)
             .ToList();
 }
 
