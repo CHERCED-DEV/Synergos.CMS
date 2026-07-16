@@ -205,17 +205,21 @@ public class InMemoryCatalogIndexTests
     [Fact] // Con texto manda la relevancia: el nombre (peso 5) gana a la marca (peso 3).
     public void Texto_OrdenaPorRelevancia_ElCampoDeMasPesoPrimero()
     {
+        // Los ids están elegidos para que el test NO pueda pasar por accidente: el ganador
+        // por relevancia es "z" y el perdedor "a". Si el ranking se rompiera, el desempate
+        // por id (ordinal) pondría "a" primero y el assert fallaría. Con los ids al revés,
+        // este test pasaba con el ranking COMPLETAMENTE roto — era tautológico.
         var items = new[]
         {
-            new Item("a", "Cafetera Aurora", "Genérica", "Hogar", 1.0, 100m),   // casa en Name (5)
-            new Item("b", "Tostadora", "Aurora", "Hogar", 5.0, 100m),           // casa en Brand (3)
+            new Item("z", "Cafetera Aurora", "Genérica", "Hogar", 1.0, 100m),   // casa en Name (5)
+            new Item("a", "Tostadora", "Aurora", "Hogar", 5.0, 100m),           // casa en Brand (3)
         };
 
         var result = Make().Search(items, new CatalogQuery(Text: "aurora"));
 
         Assert.Equal(2, result.Total);
-        // Gana el del nombre pese a tener PEOR rating: con texto, manda la relevancia.
-        Assert.Equal("a", result.Items[0].Id);
+        // Gana el del nombre pese a tener PEOR rating Y peor id: con texto manda la relevancia.
+        Assert.Equal("z", result.Items[0].Id);
     }
 
     [Fact] // La puntuación no debe partir "pro-14" de "pro 14".
@@ -344,5 +348,148 @@ public class InMemoryCatalogIndexTests
 
         Assert.Equal(first.Items.Select(i => i.Id), second.Items.Select(i => i.Id));
         Assert.Equal(first.Total, second.Total);
+    }
+
+    // ── Los huecos que destapó la revisión adversarial ─────────────────────────────
+
+    [Fact] // El bug ALTA: el chip contaba 1 y al pulsarlo devolvía 0.
+    public void Faceta_ConEspaciosEnElDato_ElChipYElFiltroConcuerdan()
+    {
+        // Un espacio colgante es lo NORMAL en un campo de texto autorado en CMS.
+        var sucios = new[]
+        {
+            new Item("p1", "Uno", "Aurora ", "C", 4.0, 1m),
+            new Item("p2", "Dos", " Aurora", "C", 4.0, 1m),
+            new Item("p3", "Tres", "Aurora", "C", 4.0, 1m),
+        };
+
+        var sinFiltro = Make().Search(sucios, new CatalogQuery());
+        var brand = sinFiltro.Facets.Single(f => f.Field == "brand");
+
+        // Un solo chip, no tres: las tres grafías son la misma marca.
+        Assert.Single(brand.Values);
+        var chip = brand.Values[0];
+        Assert.Equal(3, chip.Count);
+
+        // Y lo que el chip promete es lo que el filtro entrega: ESA es la coherencia que
+        // faltaba (el chip decía "Aurora (1)" y al pulsarlo salían 0 resultados).
+        var alPulsar = Make().Search(sucios, WithFilter("brand", chip.Value));
+        Assert.Equal(chip.Count, alPulsar.Total);
+    }
+
+    [Fact] // Un ítem cuenta UNA vez por chip, aunque repita el valor plegado.
+    public void Faceta_UnItemConValoresQuePlieganIgual_CuentaUnaVez()
+    {
+        var index = new InMemoryCatalogIndex<Item>(
+            new CatalogDescriptor<Item>(
+                idOf: i => i.Id,
+                searchFields: new[] { new CatalogSearchField<Item>(1, i => i.Name) },
+                defaultOrder: items => items.OrderBy(i => i.Id),
+                filters: new CatalogFilter<Item>[]
+                {
+                    // Un campo multi-valor de verdad (tags), donde el dato repite grafías.
+                    new CatalogTermFilter<Item>("city", "Ciudad", _ => new[] { "Bogotá", "bogota", "BOGOTA" }),
+                }),
+            new CatalogSettings());
+
+        var result = index.Search(new[] { Laptop }, new CatalogQuery());
+
+        var city = result.Facets.Single(f => f.Field == "city");
+        Assert.Single(city.Values);
+        Assert.Equal(1, city.Values[0].Count);   // 1 ítem, no 3 ocurrencias
+    }
+
+    [Fact] // NumberStyles.Float PARSEA "NaN": sin guarda, pasaba por umbral válido y vaciaba.
+    public void Threshold_NaNEInfinity_NoVacianElListado()
+    {
+        Assert.Equal(4, Make().Search(Catalog, WithFilter("minRating", "NaN")).Total);
+        Assert.Equal(4, Make().Search(Catalog, WithFilter("minRating", "Infinity")).Total);
+    }
+
+    [Fact] // UTF-16 malformado: Normalize lanza y el contrato dice "nunca lanza".
+    public void Texto_ConSurrogateSuelto_NoLanza()
+    {
+        // Un emoji cortado por la mitad (p.ej. por un truncado a N chars aguas arriba).
+        var roto = "ab" + (char)0xD83D + "cd";
+
+        var result = Make().Search(Catalog, new CatalogQuery(Text: roto));
+
+        Assert.Equal(0, result.Total);   // no casa con nada, que es lo honesto
+    }
+
+    [Fact] // Un tope absurdo de config no debe tumbar la búsqueda de los 5 verticales.
+    public void Settings_MaxTakeInvalido_CaeAlDefault_NoLanza()
+    {
+        var result = new InMemoryCatalogIndex<Item>(Descriptor(), new CatalogSettings { MaxTake = 0 })
+            .Search(Catalog, new CatalogQuery());
+
+        Assert.Equal(4, result.Items.Count);
+    }
+
+    // ── Range: el único Kind que no tenía NI UN test ────────────────────────────────
+
+    private static InMemoryCatalogIndex<Item> MakeWithRange() => new(
+        new CatalogDescriptor<Item>(
+            idOf: i => i.Id,
+            searchFields: new[] { new CatalogSearchField<Item>(1, i => i.Name) },
+            defaultOrder: items => items.OrderBy(i => i.Id),
+            filters: new CatalogFilter<Item>[]
+            {
+                new CatalogRangeFilter<Item>("price", "Precio", i => (double)i.Price, new[]
+                {
+                    new CatalogRangeBucket("0-500000", "Hasta $500.000"),
+                    new CatalogRangeBucket("500000-1000000", "Entre $500.000 y $1.000.000"),
+                    new CatalogRangeBucket("1000000-", "Más de $1.000.000"),
+                }),
+            }),
+        new CatalogSettings());
+
+    [Fact]
+    public void Range_FiltraPorElTramo()
+    {
+        var result = MakeWithRange().Search(Catalog, WithFilter("price", "0-500000"));
+
+        Assert.Equal(2, result.Total);   // Audífonos 450k + Zapatos 320k
+    }
+
+    [Fact] // Dos tramos = la unión. La intersección sería SIEMPRE vacía.
+    public void Range_DosTramos_DevuelveLaUnion()
+    {
+        var result = MakeWithRange().Search(Catalog, WithFilter("price", "0-500000", "1000000-"));
+
+        Assert.Equal(3, result.Total);   // los 2 baratos + la laptop de 5.2M
+        Assert.DoesNotContain(result.Items, i => i.Id == "p2");   // la cafetera de 890k, no
+    }
+
+    [Fact] // Extremo abierto: "1000000-" = de ahí en adelante.
+    public void Range_ConExtremoAbierto_Funciona()
+        => Assert.Equal(1, MakeWithRange().Search(Catalog, WithFilter("price", "1000000-")).Total);
+
+    [Theory]
+    [InlineData("basura")]        // ni siquiera tiene guion
+    [InlineData("1000")]          // un número suelto no es un rango
+    [InlineData("-")]             // guion pelado
+    [InlineData("5000-1000")]     // invertido: es un error, no "todo"
+    [InlineData("NaN-5000")]
+    public void Range_ValorNoParseable_NoFiltra(string basura)
+        => Assert.Equal(4, MakeWithRange().Search(Catalog, WithFilter("price", basura)).Total);
+
+    [Fact] // Mezcla: si ALGO parsea, ese algo manda; la basura se ignora.
+    public void Range_MezclaDeValidoYBasura_AplicaElValido()
+    {
+        var result = MakeWithRange().Search(Catalog, WithFilter("price", "0-500000", "basura"));
+
+        Assert.Equal(2, result.Total);
+    }
+
+    [Fact]
+    public void Range_LosChipsTraenSuConteoYSuLabel()
+    {
+        var price = MakeWithRange().Search(Catalog, new CatalogQuery()).Facets.Single(f => f.Field == "price");
+
+        Assert.Equal(CatalogFacetKind.Range, price.Kind);
+        Assert.Equal(2, price.Values.Single(v => v.Value == "0-500000").Count);
+        Assert.Equal("Hasta $500.000", price.Values.Single(v => v.Value == "0-500000").Label);
+        Assert.Equal(1, price.Values.Single(v => v.Value == "1000000-").Count);
     }
 }

@@ -24,12 +24,21 @@ namespace Synergos.CMS.Application.Services.Impl;
 public sealed class InMemoryCatalogIndex<T> : ICatalogIndex<T>
 {
     private readonly CatalogDescriptor<T> _descriptor;
-    private readonly CatalogSettings _settings;
+    private readonly int _maxTake;
+    private readonly int _facetUniverseHardCap;
 
     public InMemoryCatalogIndex(CatalogDescriptor<T> descriptor, CatalogSettings settings)
     {
         _descriptor = descriptor ?? throw new ArgumentNullException(nameof(descriptor));
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        ArgumentNullException.ThrowIfNull(settings);
+
+        // Los topes se sanean UNA vez, aquí, en vez de confiar en el appsettings: un
+        // MaxTake de 0 haría que Math.Clamp(take, 1, 0) lanzara en CADA búsqueda de los 5
+        // verticales, y un FacetUniverseHardCap de 0 vaciaría todas las facetas en silencio.
+        // Un tope absurdo es un error de config, y degradar al default es mejor que tumbar
+        // la búsqueda del sitio entero.
+        _maxTake = settings.MaxTake > 0 ? settings.MaxTake : 96;
+        _facetUniverseHardCap = settings.FacetUniverseHardCap > 0 ? settings.FacetUniverseHardCap : 5_000;
     }
 
     public CatalogResult<T> Search(IReadOnlyList<T> items, CatalogQuery query)
@@ -39,9 +48,7 @@ public sealed class InMemoryCatalogIndex<T> : ICatalogIndex<T>
 
         var selections = Normalize(query.Filters);
 
-        // 1) Filtrar por facetas. El texto NO entra aquí: se aplica después, porque el
-        //    ranking necesita la puntuación y las facetas no deben contar sobre el texto...
-        //    salvo que sí. Ver el comentario de FacetUniverse.
+        // 1) Filtrar por facetas.
         var filtered = items.Where(i => PassesAll(i, selections, skipField: null)).ToList();
 
         // 2) Texto libre: filtra Y puntúa en la misma pasada.
@@ -58,7 +65,7 @@ public sealed class InMemoryCatalogIndex<T> : ICatalogIndex<T>
         // 4) Paginar. Los topes se capan, no se rechazan: un ?take=1000000 es un cliente
         //    torpe, no un ataque, y responder la página máxima es mejor que un 400.
         var skip = Math.Max(0, query.Skip);
-        var take = Math.Clamp(query.Take, 1, _settings.MaxTake);
+        var take = Math.Clamp(query.Take, 1, _maxTake);
         var page = ordered.Skip(skip).Take(take).ToList();
 
         // 5) Facetas: sobre el universo filtrado COMPLETO, nunca sobre la página.
@@ -80,6 +87,11 @@ public sealed class InMemoryCatalogIndex<T> : ICatalogIndex<T>
     /// <para><b>(b) Sobre el universo filtrado, no sobre la página:</b> los conteos
     /// describen cuántos hay en total, no cuántos caben en 24. Con 30 ítems y take=5, el
     /// chip debe decir 30. Esto es exactamente lo que Lucene no da sin materializar todo.</para>
+    ///
+    /// <para><b>Salvo por encima de <c>FacetUniverseHardCap</c>:</b> ahí se trunca y los
+    /// conteos pasan a ser un "al menos N". Es un régimen que hoy no se alcanza —el tope son
+    /// 5.000 ítems y los verticales tienen ~24—, y de alcanzarse, el ADR 0107 ya manda
+    /// reabrir la discusión del motor en ese mismo umbral.</para>
     /// </remarks>
     private IReadOnlyList<CatalogFacet> BuildFacets(
         IReadOnlyList<T> all,
@@ -103,7 +115,7 @@ public sealed class InMemoryCatalogIndex<T> : ICatalogIndex<T>
                 universe = universe.Where(i => Matches(i, text));
             }
 
-            var capped = universe.Take(_settings.FacetUniverseHardCap).ToList();
+            var capped = universe.Take(_facetUniverseHardCap).ToList();
             facets.Add(new CatalogFacet(filter.Field, filter.Label, filter.Kind, filter.Facets(capped)));
         }
 

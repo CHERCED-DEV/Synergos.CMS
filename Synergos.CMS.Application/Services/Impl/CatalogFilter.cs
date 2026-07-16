@@ -94,6 +94,11 @@ public sealed class CatalogTermFilter<T> : CatalogFilter<T>
 
         foreach (var item in universe)
         {
+            // Un ítem cuenta UNA vez por chip, aunque tenga dos valores que plieguen igual
+            // (tags ["Bogotá","bogota"]). Contar ocurrencias haría que el chip prometiera
+            // más ítems de los que el filtro devuelve al pulsarlo.
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
             foreach (var raw in _valuesOf(item))
             {
                 if (string.IsNullOrWhiteSpace(raw))
@@ -101,6 +106,10 @@ public sealed class CatalogTermFilter<T> : CatalogFilter<T>
                     continue;   // un valor vacío no es una faceta, es un dato que falta
                 }
                 var key = CatalogText.Fold(raw);
+                if (!seen.Add(key))
+                {
+                    continue;
+                }
                 if (groups.TryGetValue(key, out var existing))
                 {
                     groups[key] = (existing.Display, existing.Count + 1);
@@ -160,6 +169,12 @@ public sealed class CatalogThresholdFilter<T> : CatalogFilter<T>
     /// El umbral MENOS restrictivo de los seleccionados, o null si ninguno parsea (y
     /// entonces el filtro no aplica: un valor basura no debe vaciar el listado).
     /// </summary>
+    /// <remarks>
+    /// <c>NaN</c> e <c>Infinity</c> se descartan explícitamente: <c>NumberStyles.Float</c>
+    /// los PARSEA, así que sin esta guarda <c>?minRating=NaN</c> pasaría por "umbral válido"
+    /// y vaciaría el listado —cualquier comparación con NaN es false—, que es justo lo que
+    /// esta función promete que la basura no haga.
+    /// </remarks>
     private static double? LowestOf(IReadOnlyList<string> selected)
     {
         double? lowest = null;
@@ -167,6 +182,8 @@ public sealed class CatalogThresholdFilter<T> : CatalogFilter<T>
         {
             if (double.TryParse(raw, System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+                && !double.IsNaN(parsed)
+                && !double.IsInfinity(parsed)
                 && (lowest is null || parsed < lowest))
             {
                 lowest = parsed;
@@ -256,9 +273,12 @@ public sealed class CatalogRangeFilter<T> : CatalogFilter<T>
         var culture = System.Globalization.CultureInfo.InvariantCulture;
         var style = System.Globalization.NumberStyles.Float;
 
+        // NaN/Infinity los parsea NumberStyles.Float: se rechazan aquí o un "NaN-5000"
+        // pasaría por rango válido y descartaría todo en silencio.
         if (!string.IsNullOrWhiteSpace(parts[0]))
         {
-            if (!double.TryParse(parts[0], style, culture, out var parsedMin))
+            if (!double.TryParse(parts[0], style, culture, out var parsedMin)
+                || double.IsNaN(parsedMin) || double.IsInfinity(parsedMin))
             {
                 return false;
             }
@@ -266,7 +286,8 @@ public sealed class CatalogRangeFilter<T> : CatalogFilter<T>
         }
         if (!string.IsNullOrWhiteSpace(parts[1]))
         {
-            if (!double.TryParse(parts[1], style, culture, out var parsedMax))
+            if (!double.TryParse(parts[1], style, culture, out var parsedMax)
+                || double.IsNaN(parsedMax) || double.IsInfinity(parsedMax))
             {
                 return false;
             }

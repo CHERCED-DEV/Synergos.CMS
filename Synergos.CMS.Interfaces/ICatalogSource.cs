@@ -16,6 +16,14 @@ namespace Synergos.CMS.Interfaces;
 /// flag <c>Synergos:Catalog:Sources:*</c> (default <c>demo</c>), calcando el gating de
 /// proveedor de T3/ADR 0104: rollback = una línea de config, sin redeploy. Son el fallback y
 /// la red de la demo verificada e2e.</para>
+///
+/// <para><b>Sin <c>Version</c> ni caché, y de ahí sale gratis el read-your-writes:</b> cada
+/// búsqueda pide los ítems de nuevo, así que un <c>Publish*</c> se ve en la siguiente
+/// pantalla sin más. Es una de las razones por las que el motor es en memoria: un índice
+/// Lucene indexa asíncrono, y el organizador publicaría un evento que su propia búsqueda no
+/// devuelve — regresión visible en demo que ningún build verde atrapa. Si algún día una
+/// fuente cara obliga a cachear, el invalidador se añade JUNTO con su consumidor; declararlo
+/// antes solo documenta una caché que no existe.</para>
 /// </remarks>
 /// <typeparam name="T">El tipo de ítem del catálogo.</typeparam>
 public interface ICatalogSource<T>
@@ -29,18 +37,4 @@ public interface ICatalogSource<T>
     /// </param>
     /// <param name="cancellationToken">Cancelación del request en curso.</param>
     Task<IReadOnlyList<T>> GetAllAsync(string? scope = null, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Cambia cada vez que el contenido del catálogo cambia. El motor cachea por ítem el
-    /// texto ya plegado y tokenizado; esto es lo que le dice cuándo tirar la caché.
-    /// </summary>
-    /// <remarks>
-    /// <b>Esto es lo que da read-your-writes,</b> y es una de las razones por las que el
-    /// motor es en memoria: tres verticales tienen <c>Publish*</c> (un organizador publica
-    /// un evento y espera verlo en la misma pantalla), y un índice Lucene indexa asíncrono
-    /// — publicaría y la búsqueda no lo devolvería. Una regresión visible en demo que ningún
-    /// build verde atrapa. Aquí el <c>Publish</c> incrementa esto y el siguiente
-    /// <c>Search</c> ya lo ve.
-    /// </remarks>
-    long Version { get; }
 }

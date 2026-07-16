@@ -32,14 +32,21 @@ namespace Synergos.CMS.Application.Services.Impl;
 public static class CatalogText
 {
     /// <summary>
-    /// Sustituto privado (Unicode Private Use Area) que protege la <c>ñ</c> del plegado.
-    /// PUA: ningún dato real lo contiene, así que no puede colisionar con el texto.
+    /// U+E000 (Private Use Area). Aparta la <c>ñ</c> mientras se pliega el resto.
     /// </summary>
+    /// <remarks>
+    /// <b>No es "imposible" en el dato</b> —U+E000 es justo donde las fuentes de iconos
+    /// (Font Awesome, Material, Nerd Fonts) mapean sus glifos, y donde caen algunas
+    /// conversiones desde encodings legacy—, solo es improbable en el texto de un catálogo.
+    /// Si apareciera, se plegaría como una <c>ñ</c>: un chip con un glifo mal escrito, nunca
+    /// una excepción ni un resultado que se pierde. Se acepta ese coste a cambio de que el
+    /// plegado no dependa de tabla de sustituciones alguna.
+    /// </remarks>
     private const char EnyeSentinel = (char)0xE000;
 
     /// <summary>
-    /// Pliega para comparar: quita las tildes y baja a minúsculas invariantes.
-    /// <c>"Bogotá"</c> → <c>"bogota"</c>, <c>"Tecnología"</c> → <c>"tecnologia"</c>.
+    /// Pliega para comparar: recorta, quita las tildes y baja a minúsculas invariantes.
+    /// <c>"Bogotá"</c> → <c>"bogota"</c>, <c>"  Tecnología "</c> → <c>"tecnologia"</c>.
     /// <b>La <c>ñ</c> se preserva</b> (<c>"Diseño"</c> → <c>"diseño"</c>).
     /// </summary>
     /// <remarks>
@@ -52,21 +59,28 @@ public static class CatalogText
     /// </remarks>
     public static string Fold(string? value)
     {
-        if (string.IsNullOrEmpty(value))
+        if (string.IsNullOrWhiteSpace(value))
         {
             return string.Empty;
         }
 
+        // Recortar aquí y no en el llamador: el plegado es LA forma canónica con la que se
+        // compara y se agrupa, así que si no recorta, "Aurora " y "Aurora" son dos cosas
+        // distintas. Eso fue un bug real: el motor recortaba el valor SELECCIONADO pero no
+        // el del DATO, así que un brand con un espacio colgante —lo normal en un campo
+        // autorado en CMS— pintaba su chip "Aurora (1)" y al pulsarlo devolvía CERO.
+        var trimmed = value.Trim();
+
         // FormC primero: el dato puede traer la ñ YA descompuesta (n + U+0303) según su
         // fuente, y entonces el Replace de abajo no la vería y el filtro se comería su
         // tilde, degradando "año" a "ano". Componer la vuelve un solo char reconocible.
-        var composed = value.Normalize(NormalizationForm.FormC);
+        var composed = SafeNormalize(trimmed, NormalizationForm.FormC);
 
         // Se aparta la ñ ANTES de descomponer: si no, FormD la parte en n + U+0303 y el
         // filtro de abajo se come la tilde igual.
         var protectedValue = composed.Replace('ñ', EnyeSentinel).Replace('Ñ', EnyeSentinel);
 
-        var decomposed = protectedValue.Normalize(NormalizationForm.FormD);
+        var decomposed = SafeNormalize(protectedValue, NormalizationForm.FormD);
         var sb = new StringBuilder(decomposed.Length);
         foreach (var c in decomposed)
         {
@@ -77,10 +91,33 @@ public static class CatalogText
             }
         }
 
-        return sb.ToString()
-            .Normalize(NormalizationForm.FormC)
+        return SafeNormalize(sb.ToString(), NormalizationForm.FormC)
             .Replace(EnyeSentinel, 'ñ')   // el resultado se compara plegado-contra-plegado
             .ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// <see cref="string.Normalize(NormalizationForm)"/> que no lanza con UTF-16 malformado:
+    /// devuelve el texto sin normalizar en vez de reventar.
+    /// </summary>
+    /// <remarks>
+    /// <c>Normalize</c> lanza <see cref="ArgumentException"/> ante un surrogate suelto (un
+    /// emoji cortado a la mitad por un truncado a N chars en algún punto del camino). Un
+    /// buscador NO puede tumbar la página porque alguien pegue basura en la caja: el
+    /// contrato de <c>ICatalogIndex.Search</c> dice "nunca lanza", y esto lo sostiene.
+    /// Degradar es correcto aquí: un texto que no se puede normalizar simplemente no casará
+    /// con nada, que es el resultado honesto.
+    /// </remarks>
+    private static string SafeNormalize(string value, NormalizationForm form)
+    {
+        try
+        {
+            return value.Normalize(form);
+        }
+        catch (ArgumentException)
+        {
+            return value;
+        }
     }
 
     /// <summary>

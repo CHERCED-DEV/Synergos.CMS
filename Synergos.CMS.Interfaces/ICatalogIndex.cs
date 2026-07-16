@@ -37,7 +37,9 @@ public interface ICatalogIndex<TSummary>
     /// <summary>
     /// Aplica <paramref name="query"/> sobre <paramref name="items"/> y devuelve la página
     /// pedida + las facetas + el total. Nunca lanza por filtro vacío ni por catálogo vacío:
-    /// devuelve <c>Items = []</c>, <c>Facets = []</c>, <c>Total = 0</c>.
+    /// devuelve <c>Items = []</c> y <c>Total = 0</c>. <b>Las facetas declaradas siguen
+    /// llegando</b>, cada una con su lista de valores vacía — la UI necesita saber que la
+    /// columna existe para pintar su título aunque no haya nada que contar.
     /// </summary>
     /// <remarks>
     /// Los ítems entran como parámetro (y no se leen del source aquí dentro) para que el
@@ -66,18 +68,23 @@ public interface ICatalogIndex<TSummary>
 /// <param name="Sort">Clave de orden declarada por el descriptor. Null = el orden por defecto del vertical.</param>
 /// <param name="Skip">Ítems a saltar. Se capa a rango válido; negativo = 0.</param>
 /// <param name="Take">Tamaño de página. Se capa a <c>CatalogSettings.MaxTake</c>.</param>
-/// <param name="Scope">
-/// El siteRoot al que pertenece el catálogo, resuelto por <see cref="ICatalogScopeResolver"/>.
-/// Null = sin acotar. Existe porque <c>productPage</c> lo comparten tres verticales y sin
-/// esto <c>/api/shop/search</c> puede servir apartamentos.
-/// </param>
+/// <remarks>
+/// <b>Aquí NO hay <c>Scope</c>, y es deliberado.</b> Acotar por siteRoot es decidir QUÉ ÍTEMS
+/// existen, y eso es trabajo de <see cref="ICatalogSource{T}.GetAllAsync"/>, que ya recibe el
+/// scope. El motor es puro sobre los ítems que le entregan: si además tuviera un
+/// <c>Scope</c>, habría dos sitios donde acotar y un implementador podría creer que rellenar
+/// este basta — pasaría el scope aquí, el motor lo ignoraría por no tener de dónde leer el
+/// siteRoot de un <c>T</c> cualquiera, y <c>/api/shop/search</c> seguiría sirviendo
+/// apartamentos EN SILENCIO. Un campo que promete aislamiento y no lo da es peor que no
+/// tenerlo. El scope viaja: controller → <see cref="ICatalogScopeResolver"/> →
+/// <c>GetAllAsync(scope)</c>.
+/// </remarks>
 public sealed record CatalogQuery(
     string? Text = null,
     IReadOnlyDictionary<string, IReadOnlyList<string>>? Filters = null,
     string? Sort = null,
     int Skip = 0,
-    int Take = 24,
-    string? Scope = null);
+    int Take = 24);
 
 /// <summary>
 /// El resultado de <see cref="ICatalogIndex{T}.Search"/>: la página + las facetas con
