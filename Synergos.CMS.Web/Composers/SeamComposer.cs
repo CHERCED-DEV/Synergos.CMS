@@ -405,10 +405,13 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<ICourseCatalogProvider>(sp => sp.GetRequiredService<StubCourseCatalogProvider>());
         services.AddSingleton<StubEnrollmentService>(sp =>
         {
+            // Durabilidad (doc 25): el estado de matrículas + progreso vive tras el store
+            // genérico (resourceTypes "enrollments"/"course-progress") → sobrevive un reinicio.
             var enrollment = new StubEnrollmentService(
                 sp.GetRequiredService<ICourseCatalogProvider>(),
                 sp.GetRequiredService<IPaymentProvider>(),
                 new StubOrderTrackingService(StubEnrollmentService.AcademyPipeline, null),
+                sp.GetRequiredService<IJsonEntityStore>(),
                 null);
             // Enchufa la cara de lectura en el catálogo (DIP) para el panel del
             // instructor — se resuelve tras construir ambos singletons.
@@ -721,6 +724,8 @@ public sealed class SeamComposer : IComposer
         // envío) y AUDITA las transferencias (IAuditTrailWriter, ADR 0037). El
         // management publica los eventos creados vía IEventCatalogProvider (DIP).
         services.AddSingleton<IEventCatalogProvider, StubEventCatalogProvider>();
+        // Durabilidad (doc 25): las órdenes de tickets viven tras el store genérico
+        // (resourceType "event-orders") → una compra confirmada sobrevive un reinicio.
         services.AddSingleton<StubEventTicketingService>(sp =>
             new StubEventTicketingService(
                 sp.GetRequiredService<IEventCatalogProvider>(),
@@ -728,6 +733,7 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IPaymentProvider>(),
                 new StubOrderTrackingService(StubEventTicketingService.EventPipeline, null),
                 sp.GetRequiredService<IAuditTrailWriter>(),
+                sp.GetRequiredService<IJsonEntityStore>(),
                 null));
         services.AddSingleton<IEventTicketingService>(sp => sp.GetRequiredService<StubEventTicketingService>());
         services.AddSingleton<IEventManagementService>(sp =>
@@ -816,13 +822,17 @@ public sealed class SeamComposer : IComposer
         // el resto de stubs del motor.
         services.AddSingleton<ITramiteCatalogProvider, StubTramiteCatalogProvider>();
         services.AddSingleton<IGovFeeCalculator, StubGovFeeCalculator>();
+        // Durabilidad (doc 25): los expedientes viven tras el store genérico
+        // (resourceType "gov-cases") → un trámite radicado y sus decisiones sobreviven un
+        // reinicio. El seed es seed-if-absent para no pisar las mutaciones reales.
         services.AddSingleton<StubApplicationService>(sp =>
             new StubApplicationService(
                 sp.GetRequiredService<ITramiteCatalogProvider>(),
                 sp.GetRequiredService<IGovFeeCalculator>(),
                 sp.GetRequiredService<IPaymentProvider>(),
                 sp.GetRequiredService<IAuditTrailWriter>(),
-                null));
+                null,
+                sp.GetRequiredService<IJsonEntityStore>()));
         services.AddSingleton<IApplicationService>(sp => sp.GetRequiredService<StubApplicationService>());
         services.AddSingleton<ICaseWorkflowService>(sp =>
             new StubCaseWorkflowService(

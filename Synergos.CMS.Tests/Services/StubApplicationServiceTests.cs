@@ -22,13 +22,14 @@ public class StubApplicationServiceTests
 {
     private static readonly DateTimeOffset Clock = new(2026, 7, 1, 12, 0, 0, TimeSpan.Zero);
 
-    private static StubApplicationService Make(IAuditTrailWriter? audit = null)
+    private static StubApplicationService Make(IAuditTrailWriter? audit = null, IJsonEntityStore? store = null)
         => new(
             new StubTramiteCatalogProvider(),
             new StubGovFeeCalculator(),
             new StubPaymentProvider(),
             audit,
-            () => Clock);
+            () => Clock,
+            store);
 
     private static GovCitizen Citizen() => new("Ana Torres", "ana.torres@correo.co", "1030567890", "+57 300 555 1234");
 
@@ -146,5 +147,43 @@ public class StubApplicationServiceTests
         Assert.NotNull(svc.FindCase("SG-2026-001003"));
         Assert.Equal(svc.FindCase("case-1003")!.CaseId, svc.FindCase("SG-2026-001003")!.CaseId);
         await Task.CompletedTask;
+    }
+
+    [Fact] // durabilidad (T3): el expediente radicado sobrevive el reinicio del proceso
+    public async Task Case_SurvivesServiceReplacement_ViaSharedStore()
+    {
+        // Un store compartido entre dos instancias del motor es el proxy de un reinicio del
+        // CMS: la instancia nueva arranca sin nada en memoria y solo tiene el store.
+        var store = new InMemoryJsonEntityStore();
+
+        var radicado = await Make(store: store)
+            .RadicarAsync("trm-pasaporte", PasaporteForm(), Citizen());
+
+        // ── REINICIO ──
+        var restarted = Make(store: store);
+
+        // El expediente se resuelve por caseId Y por radicado en la instancia nueva…
+        var byId = restarted.FindCase(radicado.Case.CaseId);
+        Assert.NotNull(byId);
+        Assert.Equal(radicado.Case.Radicado, byId!.Radicado);
+        Assert.Equal(CaseStatus.Radicado, byId.Status);
+        Assert.Equal(189_000m, byId.FeeMinor);
+        Assert.NotNull(restarted.FindCase(radicado.Case.Radicado));
+
+        // …el lookup sigue siendo case-insensitive tras el round-trip por el store…
+        Assert.NotNull(restarted.FindCase(radicado.Case.CaseId.ToUpperInvariant()));
+
+        // …y la operación siguiente (decidir) funciona sobre el estado rehidratado.
+        restarted.ApplyDecision(
+            radicado.Case.CaseId, CaseStatus.EnRevision, "funcionario@entidad.gov.co", "Asignado.", Clock, null);
+        Assert.Equal(CaseStatus.EnRevision, restarted.FindCase(radicado.Case.CaseId)!.Status);
+
+        // El seed NO pisa el expediente sembrado que ya fue mutado (re-seed idempotente).
+        var reseeded = Make(store: store);
+        Assert.Equal(CaseStatus.EnRevision, reseeded.FindCase(radicado.Case.CaseId)!.Status);
+
+        // Y la secuencia del radicado NO reinicia: el radicado siguiente no colisiona.
+        var next = await reseeded.RadicarAsync("trm-pasaporte", PasaporteForm(), Citizen());
+        Assert.NotEqual(radicado.Case.Radicado, next.Case.Radicado);
     }
 }

@@ -218,4 +218,45 @@ public class StubEventTicketingServiceTests
         Assert.NotNull(timeline);
         Assert.Equal("confirmed", timeline!.CurrentStage);
     }
+
+    // ── T1 durabilidad (ADR 0105) ───────────────────────────────────────
+
+    [Fact] // durable: la compra sobrevive un "reinicio" del CMS (instancias nuevas, mismo store)
+    public async Task ConfirmAfterServiceReplacement_ViaSharedStore_Succeeds()
+    {
+        // Los TRES estados que ConfirmAsync toca deben ser durables: la orden de
+        // tickets, las reservas de aforo y la sesión de pago. Con el store GENÉRICO
+        // basta UNA instancia para las tres familias — el resourceType las aísla.
+        var store = new InMemoryJsonEntityStore();
+
+        var beforeRestart = new StubEventTicketingService(
+            new StubEventCatalogProvider(),
+            new StubReservationService(StubReservationService.DefaultHoldWindow, null, store),
+            new StubPaymentProvider(store),
+            null, null, store, null);
+        var checkout = await beforeRestart.CheckoutAsync(
+            "evt-festival-estereo",
+            new[] { new EventCheckoutItem("GEN", null, 2) },
+            new[] { Attendee("1"), Attendee("2") });
+
+        // "Reinicio": instancias NUEVAS del motor + seams sobre los MISMOS stores.
+        var afterRestart = new StubEventTicketingService(
+            new StubEventCatalogProvider(),
+            new StubReservationService(StubReservationService.DefaultHoldWindow, null, store),
+            new StubPaymentProvider(store),
+            null, null, store, null);
+
+        var confirmation = await afterRestart.ConfirmAsync(checkout.OrderRef);
+        Assert.Equal("Confirmed", confirmation.Status);
+        Assert.Equal(2, confirmation.Tickets.Count);
+
+        // "Mis tickets" y la cara de organizador también resuelven tras el reinicio.
+        Assert.Single(await afterRestart.GetTicketsAsync("asistente1@synergos.co"));
+        Assert.Equal(2, (await afterRestart.GetConfirmedTicketsAsync("evt-festival-estereo")).Count);
+
+        // El check-in sigue siendo idempotente cruzando el "reinicio".
+        var ticketId = confirmation.Tickets.First().Id;
+        Assert.Equal("valid", afterRestart.MarkCheckedIn(ticketId));
+        Assert.Equal("already-used", afterRestart.MarkCheckedIn(ticketId));
+    }
 }

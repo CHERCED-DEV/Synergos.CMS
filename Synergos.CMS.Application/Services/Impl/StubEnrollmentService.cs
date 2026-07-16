@@ -1,4 +1,5 @@
-using System.Collections.Concurrent;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -18,12 +19,34 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// Umbraco/AspNetCore (ADR 0002). El precio NUNCA se confía al cliente: se
 /// resuelve desde el catálogo en enroll. La rama de pago abre UNA sesión
 /// (<see cref="IPaymentProvider"/>); la rama gratis crea la matrícula Active de
-/// inmediato. Estado (orderRef → matrícula; (alumno,curso) → progreso) en memoria
-/// del proceso, suficiente para demo; un adapter real delega a DB. ConfirmAsync y
-/// MarkLessonAsync son idempotentes. ADR 0075 (seam con tests canónicos).
+/// inmediato. ConfirmAsync y MarkLessonAsync son idempotentes. ADR 0075.
+/// <para>
+/// <b>Durabilidad (doc 25 · ADR 0105):</b> el estado ya NO vive en diccionarios
+/// del proceso sino detrás del seam <see cref="IJsonEntityStore"/> — con un
+/// adapter FileSystem la matrícula y el progreso SOBREVIVEN un reinicio del CMS.
+/// Dos familias: <c>"enrollments"</c> (una entrada por matrícula, keyed por
+/// <see cref="PersistedEnrollment.EnrollmentId"/> — SIEMPRE presente, también en
+/// la rama gratis donde no hay orderRef; el lookup por orderRef filtra sobre
+/// <c>ListAsync</c>, O(n) aceptable al volumen del motor y sin DUPLICAR el estado
+/// en dos índices que se desincronizarían) y <c>"course-progress"</c> (una entrada
+/// por (alumno,curso), keyed por la MISMA clave compuesta determinista que usaba
+/// el índice en memoria, saneada para el sistema de archivos).
+/// </para>
 /// </remarks>
 public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetrics
 {
+    private static readonly JsonSerializerOptions _json = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,   // acentos es-CO legibles en disco
+    };
+
+    /// <summary>Familia de matrículas en el store genérico (→ App_Data/syn-enrollments/).</summary>
+    private const string EnrollmentResourceType = "enrollments";
+
+    /// <summary>Familia de progreso por (alumno,curso) (→ App_Data/syn-course-progress/).</summary>
+    private const string ProgressResourceType = "course-progress";
+
     /// <summary>Etapa inicial del pipeline de aprendizaje — se siembra al activar la matrícula.</summary>
     public const string StageEnrolled = "enrolled";
 
@@ -44,17 +67,11 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
     private readonly ICourseCatalogProvider _catalog;
     private readonly IPaymentProvider _payments;
     private readonly IOrderTrackingService? _tracking;
+    private readonly IJsonEntityStore _store;
     private readonly Func<DateTimeOffset> _now;
 
-    // Matrículas por orderRef (rama de pago) y por enrollmentId (acceso directo).
-    private readonly ConcurrentDictionary<string, EnrollmentState> _byOrderRef = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, EnrollmentState> _byEnrollmentId = new(StringComparer.Ordinal);
-
-    // Progreso por clave (alumno|curso) → set de lecciones completadas + última.
-    private readonly ConcurrentDictionary<string, ProgressState> _progress = new(StringComparer.Ordinal);
-
     public StubEnrollmentService(ICourseCatalogProvider catalog, IPaymentProvider payments)
-        : this(catalog, payments, null, null)
+        : this(catalog, payments, null, null, null)
     {
     }
 
@@ -63,25 +80,43 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
     /// determinismo en tests (ADR 0002). Null = reloj real.
     /// </summary>
     public StubEnrollmentService(ICourseCatalogProvider catalog, IPaymentProvider payments, Func<DateTimeOffset>? now)
-        : this(catalog, payments, null, now)
+        : this(catalog, payments, null, null, now)
     {
     }
 
     /// <summary>
-    /// Ctor completo: además del catálogo y el pago, recibe el
+    /// Ctor con tracking: además del catálogo y el pago, recibe el
     /// <see cref="IOrderTrackingService"/> del pipeline de aprendizaje
     /// (<see cref="AcademyPipeline"/>) que la matrícula ALIMENTA (enrolled →
     /// in-progress → completed). Null = sin tracking (el motor sigue funcionando).
+    /// Persistencia en memoria por default.
     /// </summary>
     public StubEnrollmentService(
         ICourseCatalogProvider catalog,
         IPaymentProvider payments,
         IOrderTrackingService? tracking,
         Func<DateTimeOffset>? now)
+        : this(catalog, payments, tracking, null, now)
+    {
+    }
+
+    /// <summary>
+    /// Ctor completo (durabilidad): <paramref name="store"/> es el backing store
+    /// de matrículas + progreso (FileSystem en Web → sobrevive reinicio; InMemory
+    /// en tests). Null = <see cref="InMemoryJsonEntityStore"/> (comportamiento
+    /// idéntico al de los diccionarios que reemplazó).
+    /// </summary>
+    public StubEnrollmentService(
+        ICourseCatalogProvider catalog,
+        IPaymentProvider payments,
+        IOrderTrackingService? tracking,
+        IJsonEntityStore? store,
+        Func<DateTimeOffset>? now)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _tracking = tracking;
+        _store = store ?? new InMemoryJsonEntityStore();
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -110,7 +145,7 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
             var freeEnrollment = CreateEnrollment(
                 course.Id, studentName, studentEmail, EnrollmentStatus.Active,
                 orderRef: null, paymentSessionId: null, total: 0m, currency: course.Currency);
-            _byEnrollmentId[freeEnrollment.EnrollmentId] = freeEnrollment;
+            await WriteEnrollmentAsync(freeEnrollment, cancellationToken);
             // Alimenta el timeline de aprendizaje: matrícula activa → "enrolled".
             await AdvanceTrackingAsync(freeEnrollment.EnrollmentId, StageEnrolled, cancellationToken);
             return new CourseEnrollmentResult(
@@ -145,8 +180,7 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         var pending = CreateEnrollment(
             course.Id, studentName, studentEmail, EnrollmentStatus.PendingPayment,
             orderRef: orderRef, paymentSessionId: session.SessionId, total: course.Price, currency: course.Currency);
-        _byOrderRef[orderRef] = pending;
-        _byEnrollmentId[pending.EnrollmentId] = pending;
+        await WriteEnrollmentAsync(pending, cancellationToken);
 
         return new CourseEnrollmentResult(
             Enrolled: false,
@@ -159,7 +193,8 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
 
     public async Task<EnrollmentConfirmation> ConfirmAsync(string orderRef, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(orderRef) || !_byOrderRef.TryGetValue(orderRef, out var enrollment))
+        var enrollment = await LoadByOrderRefAsync(orderRef, cancellationToken);
+        if (enrollment is null)
         {
             throw new ArgumentException("Inscripción no encontrada.", nameof(orderRef));
         }
@@ -179,8 +214,7 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         }
 
         var active = enrollment with { Status = EnrollmentStatus.Active };
-        _byOrderRef[orderRef] = active;
-        _byEnrollmentId[active.EnrollmentId] = active;
+        await WriteEnrollmentAsync(active, cancellationToken);
         // Alimenta el timeline de aprendizaje al confirmar el pago → "enrolled".
         await AdvanceTrackingAsync(active.EnrollmentId, StageEnrolled, cancellationToken);
         return ToConfirmation(active);
@@ -194,7 +228,7 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         }
 
         var totalLessons = await ResolveTotalLessonsAsync(courseId, cancellationToken);
-        return BuildProgress(courseId, student, totalLessons);
+        return await BuildProgressAsync(courseId, student, totalLessons, cancellationToken);
     }
 
     public async Task<CourseProgress> MarkLessonAsync(string courseId, string lessonId, string student, CancellationToken cancellationToken = default)
@@ -216,28 +250,24 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
             throw new ArgumentException($"Lección '{lessonId}' no encontrada en el curso '{courseId}'.", nameof(lessonId));
         }
 
-        var key = ProgressKey(courseId, student);
-        // Idempotente: AddOrUpdate con HashSet — marcar dos veces no duplica.
-        _progress.AddOrUpdate(
-            key,
-            _ =>
-            {
-                var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { lessonId };
-                return new ProgressState(set, lessonId);
-            },
-            (_, existing) =>
-            {
-                existing.Completed.Add(lessonId);
-                return existing with { LastLessonId = lessonId };
-            });
+        // Idempotente: el set de completadas es un HashSet OrdinalIgnoreCase —
+        // marcar dos veces no duplica ni infla el %. Persiste como lista (round-trip
+        // limpio con System.Text.Json) y se rehidrata al HashSet al leer.
+        var storeKey = ProgressStoreKey(courseId, student);
+        var existing = await LoadProgressAsync(storeKey, cancellationToken);
+        var completed = existing is null
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(existing.Completed, StringComparer.OrdinalIgnoreCase);
+        completed.Add(lessonId);
+        await WriteProgressAsync(storeKey, new PersistedProgress(completed.ToList(), lessonId), cancellationToken);
 
-        var progress = BuildProgress(courseId, student, allLessons.Count);
+        var progress = await BuildProgressAsync(courseId, student, allLessons.Count, cancellationToken);
 
         // Alimenta el timeline de aprendizaje según el avance (monotónico/idempotente
         // en el tracker): cualquier lección marcada → "in-progress"; el 100% →
         // "completed". Resuelve el enrollmentId del alumno para este curso (el mismo
         // ref que la matrícula sembró al activarse).
-        var enrollmentId = ResolveEnrollmentId(courseId, student);
+        var enrollmentId = await ResolveEnrollmentIdAsync(courseId, student, cancellationToken);
         if (enrollmentId is not null)
         {
             var stage = progress.Percent >= 100 ? "completed" : "in-progress";
@@ -261,7 +291,7 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         }
 
         var totalLessons = detail.Modules.Sum(m => m.Lessons.Count);
-        var progress = BuildProgress(courseId, student, totalLessons);
+        var progress = await BuildProgressAsync(courseId, student, totalLessons, cancellationToken);
         if (progress.Percent < 100)
         {
             return null; // El certificado solo se emite al 100%.
@@ -271,7 +301,7 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         // certificado (idempotente). El nombre del alumno sale del progreso si
         // hay matrícula; si no, del propio identificador.
         var certId = "cert-" + StableHash($"{courseId}|{student}");
-        var studentName = ResolveStudentName(student);
+        var studentName = await ResolveStudentNameAsync(student, cancellationToken);
 
         return new Certificate(
             Id: certId,
@@ -283,24 +313,76 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
 
     // ── IEnrollmentMetrics (cara de lectura para el panel del instructor) ──
 
-    public Task<CourseEnrollmentStats> GetCourseStatsAsync(string courseId, CancellationToken cancellationToken = default)
+    public async Task<CourseEnrollmentStats> GetCourseStatsAsync(string courseId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(courseId))
         {
-            return Task.FromResult(new CourseEnrollmentStats(0, 0m));
+            return new CourseEnrollmentStats(0, 0m);
         }
 
         var id = courseId.Trim();
         // Alumnos = matrículas activas del curso; ingreso = suma de sus totales
-        // (los gratuitos suman 0). Cuenta sobre _byEnrollmentId (fuente única de
-        // cada matrícula, sin doblar la del índice por orderRef).
-        var active = _byEnrollmentId.Values
+        // (los gratuitos suman 0). Cuenta sobre el store, donde cada matrícula
+        // existe UNA sola vez (una entrada por enrollmentId) → sin doble conteo.
+        var active = (await LoadAllEnrollmentsAsync(cancellationToken))
             .Where(e => e.Status == EnrollmentStatus.Active
                         && string.Equals(e.CourseId, id, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        return Task.FromResult(new CourseEnrollmentStats(active.Count, active.Sum(e => e.Total)));
+        return new CourseEnrollmentStats(active.Count, active.Sum(e => e.Total));
     }
+
+    // ── Persistencia (deserialización defensiva) ───────────────────────
+
+    private Task WriteEnrollmentAsync(PersistedEnrollment enrollment, CancellationToken cancellationToken)
+        => _store.WriteAsync(
+            EnrollmentResourceType,
+            enrollment.EnrollmentId,
+            JsonSerializer.Serialize(enrollment, _json),
+            cancellationToken);
+
+    private async Task<List<PersistedEnrollment>> LoadAllEnrollmentsAsync(CancellationToken cancellationToken)
+    {
+        var raws = await _store.ListAsync(EnrollmentResourceType, cancellationToken);
+        var enrollments = new List<PersistedEnrollment>(raws.Count);
+        foreach (var json in raws)
+        {
+            if (string.IsNullOrWhiteSpace(json)) continue;
+            PersistedEnrollment? enrollment;
+            try { enrollment = JsonSerializer.Deserialize<PersistedEnrollment>(json, _json); }
+            catch (JsonException) { continue; }   // archivo corrupto → se salta
+            if (enrollment is not null) enrollments.Add(enrollment);
+        }
+        return enrollments;
+    }
+
+    // Lookup por orderRef: la matrícula se persiste UNA vez (keyed por enrollmentId,
+    // que también existe en la rama gratis), así que el índice por orderRef se
+    // resuelve filtrando. O(n) aceptable al volumen del motor y sin el riesgo de
+    // desincronizar dos copias del mismo estado.
+    private async Task<PersistedEnrollment?> LoadByOrderRefAsync(string? orderRef, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(orderRef))
+        {
+            return null;
+        }
+        var all = await LoadAllEnrollmentsAsync(cancellationToken);
+        return all.FirstOrDefault(e => string.Equals(e.OrderRef, orderRef, StringComparison.Ordinal));
+    }
+
+    private async Task<PersistedProgress?> LoadProgressAsync(string storeKey, CancellationToken cancellationToken)
+    {
+        var json = await _store.ReadAsync(ProgressResourceType, storeKey, cancellationToken);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+        try { return JsonSerializer.Deserialize<PersistedProgress>(json, _json); }
+        catch (JsonException) { return null; }   // archivo corrupto → como si no existiera
+    }
+
+    private Task WriteProgressAsync(string storeKey, PersistedProgress progress, CancellationToken cancellationToken)
+        => _store.WriteAsync(ProgressResourceType, storeKey, JsonSerializer.Serialize(progress, _json), cancellationToken);
 
     // ── Helpers ────────────────────────────────────────────────────────
 
@@ -318,16 +400,17 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
     // Resuelve el enrollmentId de la matrícula activa de un alumno en un curso
     // (por email + courseId). Null si el alumno no está matriculado — el progreso
     // se registra igual, pero sin timeline hasta que exista la matrícula.
-    private string? ResolveEnrollmentId(string courseId, string student)
+    private async Task<string?> ResolveEnrollmentIdAsync(string courseId, string student, CancellationToken cancellationToken)
     {
-        var match = _byEnrollmentId.Values.FirstOrDefault(e =>
+        var all = await LoadAllEnrollmentsAsync(cancellationToken);
+        var match = all.FirstOrDefault(e =>
             string.Equals(e.CourseId, courseId, StringComparison.OrdinalIgnoreCase)
             && (string.Equals(e.StudentEmail, student, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(e.StudentName, student, StringComparison.OrdinalIgnoreCase)));
         return match?.EnrollmentId;
     }
 
-    private EnrollmentState CreateEnrollment(
+    private PersistedEnrollment CreateEnrollment(
         string courseId, string studentName, string studentEmail, EnrollmentStatus status,
         string? orderRef, string? paymentSessionId, decimal total, string currency)
         => new(
@@ -348,9 +431,10 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         return detail?.Modules.Sum(m => m.Lessons.Count) ?? 0;
     }
 
-    private CourseProgress BuildProgress(string courseId, string student, int totalLessons)
+    private async Task<CourseProgress> BuildProgressAsync(string courseId, string student, int totalLessons, CancellationToken cancellationToken)
     {
-        if (!_progress.TryGetValue(ProgressKey(courseId, student), out var state) || state.Completed.Count == 0)
+        var state = await LoadProgressAsync(ProgressStoreKey(courseId, student), cancellationToken);
+        if (state is null || state.Completed.Count == 0)
         {
             return new CourseProgress(courseId, Array.Empty<string>(), 0);
         }
@@ -365,19 +449,39 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         return new CourseProgress(courseId, completed, percent, state.LastLessonId);
     }
 
-    private string ResolveStudentName(string student)
+    private async Task<string> ResolveStudentNameAsync(string student, CancellationToken cancellationToken)
     {
         // Si alguna matrícula del alumno (por email) tiene nombre, úsalo.
-        var match = _byEnrollmentId.Values.FirstOrDefault(e =>
+        var all = await LoadAllEnrollmentsAsync(cancellationToken);
+        var match = all.FirstOrDefault(e =>
             string.Equals(e.StudentEmail, student, StringComparison.OrdinalIgnoreCase));
         return match?.StudentName ?? student;
     }
 
-    private static EnrollmentConfirmation ToConfirmation(EnrollmentState e)
+    private static EnrollmentConfirmation ToConfirmation(PersistedEnrollment e)
         => new(e.Status.ToString(), e.EnrollmentId, e.CourseId);
 
+    // Clave lógica del progreso — IDÉNTICA a la que usaba el índice en memoria
+    // ({alumno}|{curso}, case-insensitive por normalización a minúsculas).
     private static string ProgressKey(string courseId, string student)
         => $"{student.Trim().ToLowerInvariant()}|{courseId.Trim().ToLowerInvariant()}";
+
+    // La clave lógica saneada para servir de key del store (que en el adapter
+    // FileSystem es un nombre de archivo): determinista y estable entre reinicios.
+    // El separador '|' no es válido como nombre de archivo → "__".
+    private static string ProgressStoreKey(string courseId, string student)
+    {
+        var logical = ProgressKey(courseId, student).Replace("|", "__", StringComparison.Ordinal);
+        var chars = logical.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            var c = chars[i];
+            var safe = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+                       || c == '-' || c == '_' || c == '.' || c == '@';
+            if (!safe) chars[i] = '-';
+        }
+        return new string(chars);
+    }
 
     // FNV-1a 32-bit (forzado positivo) → id de certificado estable y determinista.
     private static string StableHash(string value)
@@ -392,18 +496,35 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         }
         return (hash & 0x7FFFFFFF).ToString("x8");
     }
-
-    private sealed record EnrollmentState(
-        string EnrollmentId,
-        string CourseId,
-        string StudentName,
-        string StudentEmail,
-        EnrollmentStatus Status,
-        string? OrderRef,
-        string? PaymentSessionId,
-        decimal Total,
-        string Currency,
-        DateTimeOffset CreatedAt);
-
-    private sealed record ProgressState(HashSet<string> Completed, string? LastLessonId);
 }
+
+/// <summary>
+/// La forma SERIALIZADA de una matrícula (el antiguo <c>EnrollmentState</c> anidado
+/// de <see cref="StubEnrollmentService"/>, promovido a top-level para round-trip
+/// limpio con System.Text.Json — records posicionales deserializan por ctor).
+/// Se persiste UNA sola vez por matrícula bajo la familia <c>"enrollments"</c>,
+/// keyed por <see cref="EnrollmentId"/>: es el único identificador presente en
+/// AMBAS ramas (<see cref="OrderRef"/> es null en la rama gratis).
+/// </summary>
+internal sealed record PersistedEnrollment(
+    string EnrollmentId,
+    string CourseId,
+    string StudentName,
+    string StudentEmail,
+    EnrollmentStatus Status,
+    string? OrderRef,
+    string? PaymentSessionId,
+    decimal Total,
+    string Currency,
+    DateTimeOffset CreatedAt);
+
+/// <summary>
+/// La forma SERIALIZADA del progreso de un alumno en un curso (el antiguo
+/// <c>ProgressState</c> anidado). <see cref="Completed"/> se persiste como LISTA,
+/// no como <c>HashSet</c>: System.Text.Json round-trippea la colección pero PERDERÍA
+/// el comparador <c>OrdinalIgnoreCase</c> del set original — el motor rehidrata el
+/// HashSet con su comparador al leer, preservando la idempotencia de MarkLessonAsync.
+/// </summary>
+internal sealed record PersistedProgress(
+    IReadOnlyList<string> Completed,
+    string? LastLessonId);

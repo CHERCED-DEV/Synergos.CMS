@@ -1,4 +1,5 @@
-using System.Collections.Concurrent;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -24,8 +25,13 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// idempotente por diseño (cada radicación crea un expediente nuevo, como una orden);
 /// la idempotencia vive en las decisiones (<c>StubCaseWorkflowService</c>). Siembra
 /// expedientes en varios estados para que la demo muestre el ciclo de vida completo
-/// (bandeja ciudadano + cola funcionario) sin radicar primero. Estado en memoria del
-/// proceso (Singleton). ADR 0075.
+/// (bandeja ciudadano + cola funcionario) sin radicar primero.
+/// <para>
+/// <b>T3 (doc 25 / ADR 0105):</b> el estado (caseId → <see cref="CaseState"/>) ya NO vive
+/// en un diccionario del proceso sino detrás del seam <see cref="IJsonEntityStore"/> — con
+/// el adapter FileSystem el expediente SOBREVIVE un reinicio del CMS. Cambio de BACKING
+/// STORE, no de comportamiento.
+/// </para>
 /// </remarks>
 public sealed class StubApplicationService : IApplicationService
 {
@@ -49,19 +55,31 @@ public sealed class StubApplicationService : IApplicationService
         CaseStatus.Resuelto,
     };
 
+    private static readonly JsonSerializerOptions _json = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,   // acentos es-CO legibles en disco
+    };
+
+    /// <summary>Familia de entidades de este motor en el store genérico (→ App_Data/syn-gov-cases/).</summary>
+    private const string ResourceType = "gov-cases";
+
+    /// <summary>Primer radicado de la secuencia (los seeds ocupan 001001..001006).</summary>
+    private const int SeedSequenceFloor = 1006;
+
     private readonly ITramiteCatalogProvider _catalog;
     private readonly IGovFeeCalculator _fees;
     private readonly IPaymentProvider _payments;
     private readonly IAuditTrailWriter? _audit;
+    private readonly IJsonEntityStore _store;
     private readonly Func<DateTimeOffset> _now;
-    private readonly ConcurrentDictionary<string, CaseState> _cases = new(StringComparer.OrdinalIgnoreCase);
-    private int _radicadoSequence = 1006;
+    private int _radicadoSequence = SeedSequenceFloor;
 
     public StubApplicationService(
         ITramiteCatalogProvider catalog,
         IGovFeeCalculator fees,
         IPaymentProvider payments)
-        : this(catalog, fees, payments, null, null)
+        : this(catalog, fees, payments, null, null, null)
     {
     }
 
@@ -75,11 +93,28 @@ public sealed class StubApplicationService : IApplicationService
         IPaymentProvider payments,
         IAuditTrailWriter? audit,
         Func<DateTimeOffset>? now)
+        : this(catalog, fees, payments, audit, now, null)
+    {
+    }
+
+    /// <summary>
+    /// Ctor completo (T3): <paramref name="store"/> es el backing store durable
+    /// (FileSystem en Web, InMemory en tests). Null = <see cref="InMemoryJsonEntityStore"/>
+    /// → los ctors de arriba conservan EXACTO el comportamiento efímero de siempre.
+    /// </summary>
+    public StubApplicationService(
+        ITramiteCatalogProvider catalog,
+        IGovFeeCalculator fees,
+        IPaymentProvider payments,
+        IAuditTrailWriter? audit,
+        Func<DateTimeOffset>? now,
+        IJsonEntityStore? store)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _fees = fees ?? throw new ArgumentNullException(nameof(fees));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _audit = audit;
+        _store = store ?? new InMemoryJsonEntityStore();
         _now = now ?? (() => DateTimeOffset.UtcNow);
         Seed();
     }
@@ -172,7 +207,7 @@ public sealed class StubApplicationService : IApplicationService
                 new HistoryEntry(CaseStatus.Radicado, occurred, cleanCitizen.Email, "Solicitud radicada en línea."),
             },
             Decision: null);
-        _cases[caseId] = state;
+        await WriteAsync(state, cancellationToken);
 
         // Rastro forense append-only del primer estado del expediente (ADR 0037).
         if (_audit is not null)
@@ -211,7 +246,7 @@ public sealed class StubApplicationService : IApplicationService
     public IReadOnlyList<CaseDetail> ListCases()
     {
         var now = _now();
-        return _cases.Values.Select(s => ToDetail(s, now)).ToList();
+        return Block(LoadAllAsync()).Select(s => ToDetail(s, now)).ToList();
     }
 
     /// <summary>
@@ -222,7 +257,7 @@ public sealed class StubApplicationService : IApplicationService
     public IReadOnlyList<(CaseDetail Case, string Agency)> ListCasesWithAgency()
     {
         var now = _now();
-        return _cases.Values.Select(s => (ToDetail(s, now), s.Agency)).ToList();
+        return Block(LoadAllAsync()).Select(s => (ToDetail(s, now), s.Agency)).ToList();
     }
 
     /// <summary>
@@ -246,7 +281,7 @@ public sealed class StubApplicationService : IApplicationService
         var history = state.History.ToList();
         history.Add(new HistoryEntry(to, occurredAt, actor, note));
         var updated = state with { Status = to, History = history, Decision = decision ?? state.Decision };
-        _cases[state.CaseId] = updated;
+        Block(WriteAsync(updated));
         return ToDetail(updated, occurredAt);
     }
 
@@ -261,8 +296,65 @@ public sealed class StubApplicationService : IApplicationService
 
         var docs = state.Documents.ToList();
         docs.Add(document);
-        _cases[state.CaseId] = state with { Documents = docs };
+        Block(WriteAsync(state with { Documents = docs }));
     }
+
+    // ── Acceso al store (deserialización defensiva) ─────────────────────
+    //
+    // NORMALIZACIÓN DE CLAVE — decisión deliberada. El diccionario que este motor tenía
+    // antes usaba StringComparer.OrdinalIgnoreCase, o sea el lookup del expediente SIEMPRE
+    // fue case-insensitive. El seam IJsonEntityStore, en cambio, es case-SENSITIVE en
+    // InMemoryJsonEntityStore (ConcurrentDictionary Ordinal) pero case-INsensitive de facto
+    // en FileSystemJsonEntityStore (la clave es un nombre de archivo y NTFS no distingue
+    // mayúsculas) — es decir, las dos impls divergirían. Canonizar la clave a
+    // ToUpperInvariant en el ÚNICO punto que toca el store (StoreKey) restaura el
+    // comportamiento OrdinalIgnoreCase original y lo hace idéntico en ambas impls.
+    // El casing original del CaseId se conserva intacto DENTRO del JSON (CaseState.CaseId);
+    // solo se canoniza la clave de direccionamiento.
+    private static string StoreKey(string caseId) => caseId.Trim().ToUpperInvariant();
+
+    private async Task<CaseState?> LoadAsync(string? caseId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(caseId))
+        {
+            return null;
+        }
+        var json = await _store.ReadAsync(ResourceType, StoreKey(caseId), cancellationToken);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+        try { return JsonSerializer.Deserialize<CaseState>(json, _json); }
+        catch (JsonException) { return null; }   // archivo corrupto → como si no existiera
+    }
+
+    private async Task<List<CaseState>> LoadAllAsync(CancellationToken cancellationToken = default)
+    {
+        var raws = await _store.ListAsync(ResourceType, cancellationToken);
+        var cases = new List<CaseState>(raws.Count);
+        foreach (var json in raws)
+        {
+            if (string.IsNullOrWhiteSpace(json)) continue;
+            CaseState? state;
+            try { state = JsonSerializer.Deserialize<CaseState>(json, _json); }
+            catch (JsonException) { continue; }
+            if (state is not null) cases.Add(state);
+        }
+        return cases;
+    }
+
+    private Task WriteAsync(CaseState state, CancellationToken cancellationToken = default)
+        => _store.WriteAsync(ResourceType, StoreKey(state.CaseId), JsonSerializer.Serialize(state, _json), cancellationToken);
+
+    // El store es async-only pero la superficie de composición de este agregado (FindCase /
+    // ListCases / ApplyDecision / AttachDocument) es SÍNCRONA y la consumen tres stubs
+    // hermanos (tracking / workflow / documentos) que están fuera del alcance de este
+    // cambio. Bloquear aquí preserva esos call-sites intactos: es seguro porque no hay
+    // SynchronizationContext en ASP.NET Core (cero riesgo de deadlock) y ambos adapters
+    // resuelven en microsegundos (InMemory completa síncrono; FileSystem lee un archivo).
+    private static T Block<T>(Task<T> task) => task.GetAwaiter().GetResult();
+
+    private static void Block(Task task) => task.GetAwaiter().GetResult();
 
     private CaseState? Resolve(string caseIdOrRadicado)
     {
@@ -271,11 +363,12 @@ public sealed class StubApplicationService : IApplicationService
             return null;
         }
         var key = caseIdOrRadicado.Trim();
-        if (_cases.TryGetValue(key, out var byId))
+        var byId = Block(LoadAsync(key));
+        if (byId is not null)
         {
             return byId;
         }
-        return _cases.Values.FirstOrDefault(c =>
+        return Block(LoadAllAsync()).FirstOrDefault(c =>
             string.Equals(c.Radicado, key, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -399,6 +492,28 @@ public sealed class StubApplicationService : IApplicationService
 
     private string NextRadicado(DateTimeOffset occurredAt)
         => $"SG-{occurredAt.Year}-{Interlocked.Increment(ref _radicadoSequence):D6}";
+
+    // Secuencia del radicado. Con el estado en memoria reiniciaba en SeedSequenceFloor
+    // cada boot — inofensivo porque el estado moría con el proceso. Ahora que el
+    // expediente SOBREVIVE el reinicio, reiniciarla emitiría un radicado DUPLICADO (y el
+    // radicado es clave de búsqueda pública), así que la secuencia se rehidrata del máximo
+    // ya persistido. Sobre un store vacío/InMemory el máximo son los seeds (…001006) =
+    // SeedSequenceFloor ⇒ comportamiento IDÉNTICO al de antes.
+    private void RestoreSequence()
+    {
+        var max = SeedSequenceFloor;
+        foreach (var state in Block(LoadAllAsync()))
+        {
+            var tail = state.Radicado.LastIndexOf('-');
+            if (tail >= 0
+                && int.TryParse(state.Radicado.AsSpan(tail + 1), out var seq)
+                && seq > max)
+            {
+                max = seq;
+            }
+        }
+        _radicadoSequence = max;
+    }
 
     // ── Seed: expedientes en varios estados con prioridad/SLA (demo del ciclo) ──
 
@@ -578,6 +693,8 @@ public sealed class StubApplicationService : IApplicationService
                 new HistoryEntry(CaseStatus.Radicado, baseDate.AddDays(7), "diego.martinez@correo.co", "Solicitud radicada en línea."),
             },
             decision: null);
+
+        RestoreSequence();
     }
 
     private void SeedCase(
@@ -596,7 +713,18 @@ public sealed class StubApplicationService : IApplicationService
         CaseDecision? decision,
         IReadOnlyList<CitizenDocumentRef>? documents = null)
     {
-        _cases[caseId] = new CaseState(
+        // Sembrar SOLO si el expediente no existe ya en el store. Con el estado en memoria
+        // el seed siempre partía de cero; ahora, sobre un store durable, re-sembrar en cada
+        // boot PISARÍA las mutaciones reales del expediente sembrado (una decisión del
+        // funcionario sobre case-1001 volvería a "Radicado" tras un reinicio) — justo la
+        // durabilidad que este cambio persigue. Sobre un store vacío/InMemory siembra los
+        // 6 igual que siempre ⇒ comportamiento IDÉNTICO al de antes.
+        if (Block(LoadAsync(caseId)) is not null)
+        {
+            return;
+        }
+
+        Block(WriteAsync(new CaseState(
             CaseId: caseId,
             Radicado: radicado,
             TramiteId: tramiteId,
@@ -612,27 +740,36 @@ public sealed class StubApplicationService : IApplicationService
             Currency: "COP",
             RadicadoAt: radicadoAt,
             History: history,
-            Decision: decision);
+            Decision: decision)));
     }
-
-    /// <summary>Una transición cruda del historial interno (fuente del timeline proyectado).</summary>
-    private sealed record HistoryEntry(CaseStatus Status, DateTimeOffset OccurredAt, string Actor, string Note);
-
-    private sealed record CaseState(
-        string CaseId,
-        string Radicado,
-        string TramiteId,
-        string TramiteName,
-        string Agency,
-        GovCitizen Citizen,
-        IReadOnlyDictionary<string, string> FormData,
-        IReadOnlyList<CitizenDocumentRef> Documents,
-        CaseStatus Status,
-        CasePriority Priority,
-        int SlaDays,
-        decimal FeeMinor,
-        string Currency,
-        DateTimeOffset RadicadoAt,
-        IReadOnlyList<HistoryEntry> History,
-        CaseDecision? Decision);
 }
+
+/// <summary>Una transición cruda del historial interno (fuente del timeline proyectado).</summary>
+/// <remarks>
+/// Top-level (no anidado) para round-trip limpio con System.Text.Json — records
+/// posicionales deserializan por ctor. Mismo patrón que <c>PersistedOrder</c> (T1).
+/// </remarks>
+internal sealed record HistoryEntry(CaseStatus Status, DateTimeOffset OccurredAt, string Actor, string Note);
+
+/// <summary>
+/// La forma SERIALIZADA del expediente (el estado interno del agregado tras T3). Guarda
+/// MÁS que el <see cref="CaseDetail"/> público: <see cref="Agency"/> y <see cref="SlaDays"/>
+/// no viajan en la proyección pero son necesarios para reconstruirla tras un reinicio.
+/// </summary>
+internal sealed record CaseState(
+    string CaseId,
+    string Radicado,
+    string TramiteId,
+    string TramiteName,
+    string Agency,
+    GovCitizen Citizen,
+    IReadOnlyDictionary<string, string> FormData,
+    IReadOnlyList<CitizenDocumentRef> Documents,
+    CaseStatus Status,
+    CasePriority Priority,
+    int SlaDays,
+    decimal FeeMinor,
+    string Currency,
+    DateTimeOffset RadicadoAt,
+    IReadOnlyList<HistoryEntry> History,
+    CaseDecision? Decision);

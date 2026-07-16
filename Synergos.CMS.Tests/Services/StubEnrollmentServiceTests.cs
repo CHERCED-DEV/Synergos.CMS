@@ -214,4 +214,44 @@ public class StubEnrollmentServiceTests
         var again = await svc.GetCertificateAsync(PaidCourse, "juan@synergos.co");
         Assert.Equal(cert.Id, again!.Id);
     }
+
+    // ── Durabilidad (doc 25 · ADR 0105) ────────────────────────────────
+
+    [Fact] // durable: matrícula + progreso sobreviven el reemplazo del servicio
+    public async Task State_SurvivesServiceReplacement_ViaSharedStore()
+    {
+        // Los estados que el motor toca deben ser durables: la matrícula
+        // ("enrollments"), el progreso ("course-progress") y la sesión de pago que
+        // ConfirmAsync captura. Con el store GENÉRICO basta UNA instancia para las
+        // tres familias — el resourceType las aísla entre sí.
+        var store = new InMemoryJsonEntityStore();
+        var catalog = Catalog();
+        var beforeRestart = new StubEnrollmentService(catalog, new StubPaymentProvider(store), null, store, null);
+
+        var enroll = await beforeRestart.EnrollAsync(PaidCourse, StudentJuan());
+        var lessons = (await catalog.GetCourseAsync(PaidCourse))!.Modules.SelectMany(m => m.Lessons).ToList();
+        await beforeRestart.MarkLessonAsync(PaidCourse, lessons[0].Id, "juan@synergos.co");
+
+        // "Reinicio": instancia NUEVA del servicio + del PSP sobre el MISMO store.
+        var afterRestart = new StubEnrollmentService(catalog, new StubPaymentProvider(store), null, store, null);
+
+        // 1) La matrícula pendiente se resuelve por orderRef y confirma tras el reinicio.
+        var confirm = await afterRestart.ConfirmAsync(enroll.OrderRef!);
+        Assert.Equal(EnrollmentStatus.Active.ToString(), confirm.Status);
+        Assert.Equal(enroll.EnrollmentId, confirm.EnrollmentId);
+
+        // 2) El progreso (HashSet rehidratado desde la lista persistida) sobrevive.
+        var progress = await afterRestart.GetProgressAsync(PaidCourse, "juan@synergos.co");
+        Assert.Contains(lessons[0].Id, progress.CompletedLessonIds);
+        Assert.Equal(lessons[0].Id, progress.LastLessonId);
+
+        // 3) Marcar la MISMA lección tras el reinicio sigue siendo idempotente.
+        var remark = await afterRestart.MarkLessonAsync(PaidCourse, lessons[0].Id, "juan@synergos.co");
+        Assert.Single(remark.CompletedLessonIds);
+
+        // 4) Las métricas del panel cuentan la matrícula persistida UNA sola vez.
+        var stats = await afterRestart.GetCourseStatsAsync(PaidCourse);
+        Assert.Equal(1, stats.Students);
+        Assert.Equal(320_000m, stats.Revenue);
+    }
 }
