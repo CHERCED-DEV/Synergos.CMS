@@ -81,6 +81,10 @@ public sealed class OptionsComposer : IComposer
         builder.Services.Configure<PaymentsSettings>(
             builder.Config.GetSection("Synergos:Payments"));
 
+        // Fan-out de T1 (doc 25) — persistencia durable del estado de órdenes de viaje (Booking).
+        builder.Services.Configure<TravelOrdersSettings>(
+            builder.Config.GetSection("Synergos:TravelOrders"));
+
         builder.Services.Configure<AdminSettings>(
             builder.Config.GetSection("Synergos:Admin"));
 

@@ -235,12 +235,17 @@ public sealed class SeamComposer : IComposer
         // instancia PROPIA del seam genérico IOrderTrackingService con el pipeline
         // travel (paid→confirmed→upcoming→completed) — NO reusa el singleton de
         // Tienda, cuyo pipeline es pago→preparación→envío→entrega.
+        // Fan-out de T1 (doc 25): el estado del carrito de viaje pasa de memoria a disco
+        // tras el seam ITravelOrderStore (durable). Con esto un carrito confirmado
+        // sobrevive un reinicio — las reservas y el pago ya lo hacían por T3.
+        services.AddSingleton<ITravelOrderStore, FileSystemTravelOrderStore>();
         services.AddSingleton<ITravelCartService>(sp =>
             new TravelCartService(
                 sp.GetRequiredService<IReservationService>(),
                 sp.GetRequiredService<IPaymentProvider>(),
                 new StubOrderTrackingService(TravelCartService.TravelPipeline, null),
-                null));
+                null,
+                sp.GetRequiredService<ITravelOrderStore>()));
 
         // OLA 2 Booking — ficha de estadía rica (galería/amenities/specs/geo/
         // reviews) separada de la disponibilidad (IRoomAvailabilityProvider

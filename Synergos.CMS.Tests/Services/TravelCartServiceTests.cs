@@ -136,4 +136,38 @@ public class TravelCartServiceTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => cart.ConfirmAsync(checkout.OrderRef));
     }
+
+    // ── Fan-out T1 (doc 25) — durabilidad e2e del carrito de viaje ──
+
+    [Fact] // durabilidad: checkout con un servicio, confirm con OTRO sobre los MISMOS
+           // stores (orden de viaje + reserva + pago) — proxy de reinicio del CMS.
+    public async Task ConfirmAfterServiceReplacement_ViaSharedStores_Succeeds()
+    {
+        // Los TRES estados que ConfirmAsync toca deben ser durables: la orden de viaje
+        // (ITravelOrderStore), las reservas (IReservationStore) y la sesión de pago
+        // (IPaymentSessionStore). Se comparten entre las dos instancias del servicio.
+        var travelStore = new InMemoryTravelOrderStore();
+        var reservationStore = new InMemoryReservationStore();
+        var paymentStore = new InMemoryPaymentSessionStore();
+
+        var beforeRestart = new TravelCartService(
+            new StubReservationService(StubReservationService.DefaultHoldWindow, null, reservationStore),
+            new StubPaymentProvider(paymentStore),
+            null, null, travelStore);
+        var checkout = await beforeRestart.CheckoutAsync(new[] { Hotel(), Flight() }, Guest());
+
+        // "Reinicio": instancias NUEVAS del servicio + motores sobre los MISMOS stores.
+        var afterRestart = new TravelCartService(
+            new StubReservationService(StubReservationService.DefaultHoldWindow, null, reservationStore),
+            new StubPaymentProvider(paymentStore),
+            null, null, travelStore);
+        var confirmation = await afterRestart.ConfirmAsync(checkout.OrderRef);
+
+        Assert.Equal(ReservationStatus.Confirmed.ToString(), confirmation.Status);
+        Assert.False(string.IsNullOrWhiteSpace(confirmation.ConfirmationCode));
+        Assert.Equal(2, confirmation.Items.Count);
+        // "Mis viajes" también resuelve la orden persistida tras el reinicio.
+        var trips = await afterRestart.GetTripsAsync("ada@synergos.test");
+        Assert.Single(trips);
+    }
 }
