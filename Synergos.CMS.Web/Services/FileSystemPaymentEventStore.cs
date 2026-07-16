@@ -30,23 +30,40 @@ public sealed class FileSystemPaymentEventStore : IPaymentEventStore
         Directory.CreateDirectory(dir);   // lazy, nada en boot (ADR 0013)
         var path = Path.Combine(dir, Sanitize($"{provider}-{eventId}") + ".txt");
 
+        // CRÍTICO: el `catch when File.Exists` debe envolver SOLO el CreateNew. Si
+        // también cubriera el Write, un write parcial fallido (disco lleno) tras un
+        // CreateNew exitoso vería File.Exists==true y se clasificaría como "duplicado"
+        // — invirtiendo el fail-safe y deduplicando permanentemente una orden sin
+        // confirmar. Por eso el CreateNew va en su propio try.
+        FileStream fs;
         try
         {
             // CreateNew = candado atómico: lanza IOException si el archivo YA existe.
-            using var fs = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            var stamp = Encoding.UTF8.GetBytes(DateTimeOffset.UtcNow.ToString("O"));
-            fs.Write(stamp, 0, stamp.Length);
-            return Task.FromResult(true);   // ESTE llamado lo marcó → procesar side-effects
+            // Aquí File.Exists==true implica inequívocamente preexistencia (duplicado).
+            fs = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
         }
         catch (IOException) when (File.Exists(path))
         {
             return Task.FromResult(false);  // ya existía → duplicado, no re-ejecutar
         }
+
+        // A partir de aquí NOSOTROS creamos el archivo: ningún fallo puede ser "duplicado".
+        try
+        {
+            var stamp = Encoding.UTF8.GetBytes(DateTimeOffset.UtcNow.ToString("O"));
+            fs.Write(stamp, 0, stamp.Length);
+            fs.Flush();
+            fs.Dispose();
+            return Task.FromResult(true);   // ESTE llamado lo marcó → procesar side-effects
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // I/O real (disco lleno/permiso): NO se pudo marcar. Propaga para que el
-            // receptor devuelva 5xx y el PSP reintente — jamás silenciar como duplicado.
-            _logger.LogWarning(ex, "FileSystemPaymentEventStore: no se pudo marcar {Provider}/{EventId}", provider, eventId);
+            // I/O real tras crear el marcador: borra el parcial de 0 bytes y propaga
+            // para que el receptor devuelva 5xx y el PSP reintente limpio — jamás
+            // silenciar como duplicado.
+            _logger.LogWarning(ex, "FileSystemPaymentEventStore: fallo al escribir el marcador {Provider}/{EventId}", provider, eventId);
+            try { fs.Dispose(); } catch (IOException) { /* best-effort */ }
+            try { File.Delete(path); } catch (IOException) { /* best-effort */ }
             throw;
         }
     }

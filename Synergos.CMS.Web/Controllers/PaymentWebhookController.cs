@@ -70,12 +70,16 @@ public sealed class PaymentWebhookController : ControllerBase
             body = ms.ToArray();
         }
 
-        // 2) Verificar la firma (esquema stub = espejo de WebhookSigner).
+        // 2) Verificar la firma. Con un PSP real (provider != stub) la firma es
+        //    OBLIGATORIA: sin secret configurado es una misconfiguración → 500 (no se
+        //    acepta a ciegas). El stub en demo puede correr sin firma.
+        var requireSignature = !string.Equals(provider, "stub", StringComparison.OrdinalIgnoreCase);
         var verdict = PaymentWebhookVerifier.Verify(
             _settings.WebhookSecret,
             Request.Headers[WebhookSigner.TimestampHeaderName],
             Request.Headers[WebhookSigner.SignatureHeaderName],
-            body);
+            body,
+            requireSignature);
         switch (verdict)
         {
             case PaymentWebhookVerifier.Result.MissingHeaders:
@@ -83,53 +87,71 @@ public sealed class PaymentWebhookController : ControllerBase
             case PaymentWebhookVerifier.Result.InvalidSignature:
             case PaymentWebhookVerifier.Result.Expired:
                 return Unauthorized(new { error = "Firma del webhook inválida o vencida." });
+            case PaymentWebhookVerifier.Result.MisconfiguredSecret:
+                _logger.LogError("Webhook {Provider}: se exige firma pero falta Synergos:Payments:WebhookSecret.", provider);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Verificación de firma no configurada." });
         }
 
         // 3) Parsear el payload.
         StubWebhookPayload? payload;
         try { payload = JsonSerializer.Deserialize<StubWebhookPayload>(body, _json); }
         catch (JsonException) { return BadRequest(new { error = "Payload del webhook ilegible." }); }
-        if (payload is null || string.IsNullOrWhiteSpace(payload.EventId) || string.IsNullOrWhiteSpace(payload.SessionId))
+        if (payload is null
+            || string.IsNullOrWhiteSpace(payload.EventId)
+            || string.IsNullOrWhiteSpace(payload.SessionId)
+            || string.IsNullOrWhiteSpace(payload.OrderRef))
         {
-            return BadRequest(new { error = "eventId y sessionId son requeridos." });
+            return BadRequest(new { error = "eventId, sessionId y orderRef son requeridos." });
         }
 
-        // 4) ANTI-TAMPERING: re-consultar el estado REAL de la sesión (no confiar el
-        //    payload). Solo una sesión autorizada/capturada dispara la confirmación.
-        var status = await _payments.GetStatusAsync(payload.SessionId, cancellationToken);
-        if (status.Status is not (PaymentStatus.Authorized or PaymentStatus.Captured))
-        {
-            _logger.LogInformation("Webhook {Provider}/{EventId}: sesión {SessionId} en estado {Status} — nada que confirmar.",
-                provider, payload.EventId, payload.SessionId, status.Status);
-            return Ok(new { ignored = $"estado {status.Status}" });
-        }
-
-        // 5) Resolver la orden (Tienda). Sin orderRef o sin orden → ack sin efecto.
-        if (string.IsNullOrWhiteSpace(payload.OrderRef) || await _orders.GetOrderAsync(payload.OrderRef, cancellationToken) is null)
+        // 4) Resolver la orden PRIMERO (Tienda). Sin orden → ack sin efecto.
+        var order = await _orders.GetOrderAsync(payload.OrderRef, cancellationToken);
+        if (order is null)
         {
             _logger.LogInformation("Webhook {Provider}/{EventId}: orden {OrderRef} no encontrada — ack sin efecto.",
                 provider, payload.EventId, payload.OrderRef);
             return Ok(new { ignored = "orden no encontrada" });
         }
 
-        // 6) IDEMPOTENCIA: candado atómico. Duplicado → 200 sin re-ejecutar.
-        if (!await _events.TryMarkProcessedAsync(provider, payload.EventId, cancellationToken))
+        // 5) LIGAR la sesión a la orden: la sesión del payload debe ser la de ESTA orden.
+        //    Evita confirmar una orden usando el estado autorizado de una sesión ajena.
+        if (!string.Equals(payload.SessionId, order.PaymentSessionId, StringComparison.Ordinal))
         {
-            return Ok(new { duplicate = true });
+            _logger.LogWarning("Webhook {Provider}/{EventId}: sessionId {SessionId} no corresponde a la orden {OrderRef}.",
+                provider, payload.EventId, payload.SessionId, payload.OrderRef);
+            return Ok(new { ignored = "la sesión no corresponde a la orden" });
         }
 
-        // 7) Confirmar la orden (idempotente: si ya está Paid, short-circuit).
+        // 6) ANTI-TAMPERING: re-consultar el estado REAL de la sesión DE LA ORDEN (no del
+        //    payload). Solo una sesión autorizada/capturada dispara la confirmación.
+        var status = await _payments.GetStatusAsync(order.PaymentSessionId!, cancellationToken);
+        if (status.Status is not (PaymentStatus.Authorized or PaymentStatus.Captured))
+        {
+            _logger.LogInformation("Webhook {Provider}/{EventId}: sesión {SessionId} en estado {Status} — nada que confirmar.",
+                provider, payload.EventId, order.PaymentSessionId, status.Status);
+            return Ok(new { ignored = $"estado {status.Status}" });
+        }
+
+        // 7) CONFIRMAR y LUEGO marcar (ConfirmAsync es idempotente). Marcar ANTES sería
+        //    peligroso: un fallo transitorio tras el marcado dejaría la orden
+        //    cobrada-sin-confirmar y el retry del PSP quedaría deduped para siempre.
         try
         {
             var result = await _orders.ConfirmAsync(payload.OrderRef, cancellationToken);
-            return Ok(new { processed = true, orderNumber = result.OrderNumber, status = result.Status });
+            // Marca DESPUÉS del éxito: corta retries futuros. Un duplicado concurrente que
+            // ya confirmó devuelve false aquí (ambos confirmaron idempotente, sin doble cobro).
+            var firstTime = await _events.TryMarkProcessedAsync(provider, payload.EventId, cancellationToken);
+            return Ok(new { processed = firstTime, duplicate = !firstTime, orderNumber = result.OrderNumber, status = result.Status });
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            // La orden existía pero la confirmación no procede (hold vencido, etc.). Ack
-            // 200 para no reintentar en bucle; el estado real vive en la orden persistida.
-            _logger.LogWarning(ex, "Webhook {Provider}/{EventId}: confirmación de {OrderRef} no procedió.",
+            // Rechazo de negocio PERMANENTE (hold vencido, etc.): marcar para cortar el
+            // bucle de reintentos del PSP y ack 200. Una IOException transitoria NO cae
+            // aquí → propaga como 500 SIN marcar → el PSP reintenta y ConfirmAsync se
+            // re-ejecuta idempotente.
+            _logger.LogWarning(ex, "Webhook {Provider}/{EventId}: confirmación de {OrderRef} no procedió (rechazo terminal).",
                 provider, payload.EventId, payload.OrderRef);
+            await _events.TryMarkProcessedAsync(provider, payload.EventId, cancellationToken);
             return Ok(new { processed = false, reason = ex.Message });
         }
     }

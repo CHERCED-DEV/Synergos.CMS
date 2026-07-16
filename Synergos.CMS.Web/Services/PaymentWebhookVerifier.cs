@@ -32,24 +32,31 @@ public static class PaymentWebhookVerifier
         InvalidSignature,
         /// <summary>Timestamp fuera de la ventana de replay → 401.</summary>
         Expired,
+        /// <summary>Se exige firma (PSP real) pero no hay secret configurado → 500 (misconfig del operador).</summary>
+        MisconfiguredSecret,
     }
 
     /// <summary>
     /// Verifica la firma del webhook. <paramref name="secret"/> vacío = no se exige firma
-    /// (demo): devuelve <see cref="Result.Ok"/>. Con secret, exige y valida los headers.
-    /// El <paramref name="body"/> son los bytes RAW del request (el HMAC es sobre bytes
-    /// exactos — deserializar/reserializar rompería la firma).
+    /// (demo): devuelve <see cref="Result.Ok"/> SALVO que <paramref name="requireSignature"/>
+    /// sea true (PSP real), en cuyo caso la ausencia de secret es una misconfiguración del
+    /// operador (<see cref="Result.MisconfiguredSecret"/>) — no se acepta a ciegas. Con
+    /// secret, exige y valida los headers. El <paramref name="body"/> son los bytes RAW del
+    /// request (el HMAC es sobre bytes exactos — deserializar/reserializar rompería la firma).
     /// </summary>
     public static Result Verify(
         string? secret,
         string? timestampHeader,
         string? signatureHeader,
         ReadOnlySpan<byte> body,
+        bool requireSignature = false,
         TimeSpan? tolerance = null)
     {
         if (string.IsNullOrWhiteSpace(secret))
         {
-            return Result.Ok;   // demo: sin secret configurado no se exige firma
+            // Sin secret: OK solo si NO se exige firma (demo). Si se exige (PSP real) es
+            // una misconfiguración → jamás aceptar sin verificar (fail-closed).
+            return requireSignature ? Result.MisconfiguredSecret : Result.Ok;
         }
         if (string.IsNullOrWhiteSpace(timestampHeader) || string.IsNullOrWhiteSpace(signatureHeader))
         {

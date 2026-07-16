@@ -103,8 +103,10 @@ public sealed class PaymentWebhookControllerTests
         await _orders.Received(1).ConfirmAsync("ord_1", Arg.Any<CancellationToken>());
     }
 
-    [Fact] // idempotente: evento duplicado (ledger dice ya procesado) → 200 sin re-confirmar
-    public async Task Duplicate_DoesNotReconfirm()
+    [Fact] // idempotente: evento duplicado (ledger dice ya procesado) → 200; ConfirmAsync
+           // se re-ejecuta idempotente (mark-after: marcar antes dejaría la orden
+           // cobrada-sin-confirmar si Confirm fallara transitoriamente).
+    public async Task Duplicate_Returns200_ConfirmIsIdempotent()
     {
         ArrangeGoodSessionAndOrder();
         _events.TryMarkProcessedAsync("stub", "ev1", Arg.Any<CancellationToken>()).Returns(false);   // ya procesado
@@ -112,12 +114,14 @@ public sealed class PaymentWebhookControllerTests
         var result = await BuildSut(new PaymentsSettings(), Payload()).Receive("stub", default);
 
         Assert.IsType<OkObjectResult>(result);
-        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _orders.Received(1).ConfirmAsync("ord_1", Arg.Any<CancellationToken>());   // idempotente
+        // NO se re-marca tras un duplicado (TryMark ya devolvió false, no se llama de nuevo).
     }
 
-    [Fact] // anti-tampering: sesión NO autorizada (declinada) → no confirma, 200 ignorado
+    [Fact] // anti-tampering: sesión de la orden NO autorizada (declinada) → no confirma, 200
     public async Task UnauthorizedSession_DoesNotConfirm()
     {
+        _orders.GetOrderAsync("ord_1", Arg.Any<CancellationToken>()).Returns(Order());   // PaymentSessionId=stub_s
         _payments.GetStatusAsync("stub_s", Arg.Any<CancellationToken>())
             .Returns(new PaymentOutcome("stub_s", PaymentStatus.Failed, 0m));
 
@@ -125,5 +129,19 @@ public sealed class PaymentWebhookControllerTests
 
         Assert.IsType<OkObjectResult>(result);
         await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // ligadura: la sesión del payload no es la de la orden → 200 ignorado, no confirma
+    public async Task SessionMismatch_DoesNotConfirm()
+    {
+        _orders.GetOrderAsync("ord_1", Arg.Any<CancellationToken>()).Returns(Order());   // PaymentSessionId=stub_s
+        // payload trae otra sessionId (stub_OTHER) que NO corresponde a la orden.
+        var body = Payload(sessionId: "stub_OTHER");
+
+        var result = await BuildSut(new PaymentsSettings(), body).Receive("stub", default);
+
+        Assert.IsType<OkObjectResult>(result);
+        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _payments.DidNotReceive().GetStatusAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }
