@@ -110,8 +110,10 @@ public sealed class StubEventManagementService : IEventManagementService
                 MaxPerOrder: Math.Min(t.Capacity, DefaultMaxPerOrder)));
         }
 
-        // Id/slug estables asignados por el catálogo. Modo derivado del seat-map.
-        var eventId = StubEventCatalogProvider.NextPublishedId();
+        // El id lo asigna el catálogo al publicar (se envía vacío y se lee del retorno):
+        // pedírselo al static de la clase concreta ataba esta cara de organizador al stub,
+        // de modo que registrar otro IEventCatalogProvider dejaba el swap a medias.
+        // Modo derivado del seat-map.
         var name = draft.Name.Trim();
         var slug = Slugify(name);
         var mode = draft.SeatMap is not null ? "reserved" : "general";
@@ -119,7 +121,7 @@ public sealed class StubEventManagementService : IEventManagementService
 
         var detail = new EventDetail(
             Summary: new EventSummary(
-                Id: eventId,
+                Id: string.Empty,   // lo asigna PublishEventAsync
                 Slug: slug,
                 Title: name,
                 Category: string.IsNullOrWhiteSpace(draft.Category) ? "Evento" : draft.Category!.Trim(),

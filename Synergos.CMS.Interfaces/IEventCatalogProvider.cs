@@ -138,10 +138,22 @@ public interface IEventCatalogProvider
     /// Publica un evento nuevo (creado por un organizador) en el catálogo:
     /// desde ese momento aparece en <see cref="SearchAsync"/> y su ficha se
     /// resuelve en <see cref="GetEventAsync"/>. Devuelve el detalle publicado
-    /// (con su id/slug ya asignados). El adapter real persiste en el índice/CMS;
+    /// (con su id ya asignado). El adapter real persiste en el índice/CMS;
     /// el stub lo agrega al catálogo en memoria. Es la seam que consume
     /// <see cref="IEventManagementService.CreateEventAsync"/> — la cara de
     /// organizador NO conoce el almacenamiento del catálogo (DIP).
     /// </summary>
+    /// <param name="draft">
+    /// El evento a publicar. <b>Con <c>Summary.Id</c> vacío, la implementación asigna
+    /// uno nuevo</b> (alta); con un id existente, reemplaza (re-publicar es idempotente).
+    /// </param>
+    /// <remarks>
+    /// <b>El id lo asigna QUIEN ALMACENA, y por eso vive detrás de esta seam.</b> Antes el
+    /// contrato exigía un id ya puesto pero no ofrecía forma de obtenerlo, así que el único
+    /// llamador se lo pedía al <c>static</c> de la clase concreta del stub. Eso volvía la
+    /// seam mentirosa: registrar otro <see cref="IEventCatalogProvider"/> NO desconectaba el
+    /// stub —los ids seguían saliendo de su contador— y el swap quedaba parcial y en
+    /// silencio. Un adapter CMS/índice devuelve aquí SU id nativo.
+    /// </remarks>
     Task<EventDetail> PublishEventAsync(EventDetail draft, CancellationToken cancellationToken = default);
 }

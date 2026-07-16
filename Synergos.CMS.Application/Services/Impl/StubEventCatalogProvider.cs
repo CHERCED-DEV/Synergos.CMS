@@ -73,21 +73,28 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
     public Task<EventDetail> PublishEventAsync(EventDetail draft, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(draft);
-        if (string.IsNullOrWhiteSpace(draft.Summary.Id))
-        {
-            throw new ArgumentException("El evento publicado requiere un id.", nameof(draft));
-        }
-        // Aditivo idempotente: mismo id → reemplaza (re-publicar es no-op efectivo).
-        Catalog[draft.Summary.Id] = draft;
-        return Task.FromResult(draft);
+
+        // Id vacío = alta: lo asigna el catálogo, que es quien almacena. Id presente =
+        // re-publicación: se respeta y reemplaza (idempotente).
+        var published = string.IsNullOrWhiteSpace(draft.Summary.Id)
+            ? draft with { Summary = draft.Summary with { Id = NextPublishedId() } }
+            : draft;
+
+        Catalog[published.Summary.Id] = published;
+        return Task.FromResult(published);
     }
 
     /// <summary>
-    /// Reserva el siguiente id estable para un evento publicado por un organizador
-    /// (<c>evt-org-N</c>). Determinista dentro del proceso; el adapter real usa el
-    /// id del CMS/índice.
+    /// El siguiente id estable para un evento publicado por un organizador
+    /// (<c>evt-org-N</c>). Determinista dentro del proceso; el adapter real devuelve el
+    /// id del CMS/índice en su lugar.
     /// </summary>
-    public static string NextPublishedId()
+    /// <remarks>
+    /// Privado a propósito: era <c>public static</c> y el management service se lo llamaba
+    /// a la CLASE CONCRETA, saltándose la seam. Ahora nadie fuera de este stub puede
+    /// acuñar ids del stub.
+    /// </remarks>
+    private static string NextPublishedId()
         => $"evt-org-{Interlocked.Increment(ref _publishedCounter)}";
 
     private static ConcurrentDictionary<string, EventDetail> BuildCatalog()

@@ -97,18 +97,54 @@ public class StubEventCatalogProviderTests
     public async Task Publish_MakesEventDiscoverable()
     {
         var svc = Make();
-        var id = StubEventCatalogProvider.NextPublishedId();
-        var detail = new EventDetail(
-            Summary: new EventSummary(
-                id, "evento-de-prueba", "Evento de Prueba", "Evento", "Bogotá", "Venue X",
-                DateTimeOffset.UtcNow.AddDays(30), "", 50_000m, "COP", "general", null),
-            Description: "", Organizer: "Org",
-            Tiers: new[] { new EventTier("GEN", "General", 50_000m, "COP", 100, 100, 10) },
-            SeatMap: null);
 
-        await svc.PublishEventAsync(detail);
+        // Id vacío: lo asigna el catálogo, que es quien almacena. El llamador lo LEE del
+        // retorno en vez de acuñarlo por su cuenta.
+        var published = await svc.PublishEventAsync(Draft(id: string.Empty));
+        var id = published.Summary.Id;
 
+        Assert.False(string.IsNullOrWhiteSpace(id));
         Assert.NotNull(await svc.GetEventAsync(id));
         Assert.Contains(await svc.SearchAsync("Prueba"), e => e.Id == id);
     }
+
+    [Fact] // el alta asigna ids distintos a dos eventos distintos
+    public async Task Publish_SinId_AsignaIdsUnicos()
+    {
+        var svc = Make();
+
+        var first = await svc.PublishEventAsync(Draft(id: string.Empty));
+        var second = await svc.PublishEventAsync(Draft(id: string.Empty));
+
+        Assert.NotEqual(first.Summary.Id, second.Summary.Id);
+        // Y ambos quedan: el segundo no pisó al primero.
+        Assert.NotNull(await svc.GetEventAsync(first.Summary.Id));
+        Assert.NotNull(await svc.GetEventAsync(second.Summary.Id));
+    }
+
+    [Fact] // re-publicar con un id existente respeta el id y reemplaza (idempotente)
+    public async Task Publish_ConIdExistente_RespetaElIdYReemplaza()
+    {
+        var svc = Make();
+        var original = await svc.PublishEventAsync(Draft(id: string.Empty));
+        var id = original.Summary.Id;
+
+        var edited = original with
+        {
+            Summary = original.Summary with { Title = "Evento de Prueba Editado" },
+        };
+        var republished = await svc.PublishEventAsync(edited);
+
+        Assert.Equal(id, republished.Summary.Id);   // no se acuñó un id nuevo
+        var fetched = await svc.GetEventAsync(id);
+        Assert.Equal("Evento de Prueba Editado", fetched!.Summary.Title);
+    }
+
+    private static EventDetail Draft(string id) => new(
+        Summary: new EventSummary(
+            id, "evento-de-prueba", "Evento de Prueba", "Evento", "Bogotá", "Venue X",
+            DateTimeOffset.UtcNow.AddDays(30), "", 50_000m, "COP", "general", null),
+        Description: "", Organizer: "Org",
+        Tiers: new[] { new EventTier("GEN", "General", 50_000m, "COP", 100, 100, 10) },
+        SeatMap: null);
 }
