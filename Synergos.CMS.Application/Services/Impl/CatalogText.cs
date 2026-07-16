@@ -107,4 +107,70 @@ public static class CatalogText
     /// </remarks>
     public static bool AreEqual(string? a, string? b)
         => string.Equals(Fold(a), Fold(b), StringComparison.Ordinal);
+
+    /// <summary>
+    /// Parte una consulta en tokens plegados: <c>"Laptop  Pro-14"</c> →
+    /// <c>["laptop", "pro", "14"]</c>. Vacío si no queda nada buscable.
+    /// </summary>
+    /// <remarks>
+    /// Se corta por todo lo que no sea letra o dígito, así que la puntuación y los guiones
+    /// no parten la búsqueda: quien escribe "pro-14" y quien escribe "pro 14" busca lo mismo.
+    /// </remarks>
+    public static IReadOnlyList<string> Tokenize(string? value)
+    {
+        var folded = Fold(value);
+        if (folded.Length == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var tokens = new List<string>();
+        var start = -1;
+        for (var i = 0; i <= folded.Length; i++)
+        {
+            var isWordChar = i < folded.Length && char.IsLetterOrDigit(folded[i]);
+            if (isWordChar && start < 0)
+            {
+                start = i;
+            }
+            else if (!isWordChar && start >= 0)
+            {
+                tokens.Add(folded[start..i]);
+                start = -1;
+            }
+        }
+        return tokens;
+    }
+
+    /// <summary>
+    /// Cuánto casa <paramref name="token"/> (ya plegado) dentro de <paramref name="text"/>:
+    /// <b>3</b> = alguna palabra es exactamente el token, <b>1</b> = alguna palabra empieza
+    /// por él, <b>0</b> = no casa.
+    /// </summary>
+    /// <remarks>
+    /// El prefijo es lo que hace que "zapa" encuentre "zapatos" — ni un <c>.Contains</c> ni
+    /// el <c>GroupedOr</c> de Examine lo dan. Se compara por PALABRA y no por substring
+    /// suelto para que "ola" no encuentre "chocolate".
+    /// </remarks>
+    public static int ScoreToken(string? text, string token)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return 0;
+        }
+
+        var best = 0;
+        foreach (var word in Tokenize(text))
+        {
+            if (string.Equals(word, token, StringComparison.Ordinal))
+            {
+                return 3;   // exacto: no hay nada mejor, se corta aquí
+            }
+            if (word.StartsWith(token, StringComparison.Ordinal))
+            {
+                best = 1;
+            }
+        }
+        return best;
+    }
 }

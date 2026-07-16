@@ -147,6 +147,7 @@ public interface IEventCatalogProvider
     /// El evento a publicar. <b>Con <c>Summary.Id</c> vacío, la implementación asigna
     /// uno nuevo</b> (alta); con un id existente, reemplaza (re-publicar es idempotente).
     /// </param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
     /// <remarks>
     /// <b>El id lo asigna QUIEN ALMACENA, y por eso vive detrás de esta seam.</b> Antes el
     /// contrato exigía un id ya puesto pero no ofrecía forma de obtenerlo, así que el único
