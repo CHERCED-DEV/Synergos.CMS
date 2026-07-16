@@ -26,9 +26,9 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
     private readonly IReadOnlyList<TramiteDetail> _catalog = Seed();
     private readonly ICatalogIndex<TramiteSummary> _index;
 
-    /// <summary>Ctor por defecto: el motor con los ajustes de siempre.</summary>
+    /// <summary>Ctor por defecto: el motor, sin tope de página (esta seam devuelve todo).</summary>
     public StubTramiteCatalogProvider()
-        : this(new InMemoryCatalogIndex<TramiteSummary>(Descriptor, new CatalogSettings()))
+        : this(new InMemoryCatalogIndex<TramiteSummary>(Descriptor, CatalogSettings.Unpaged))
     {
     }
 
@@ -66,11 +66,8 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
             ? null
             : new Dictionary<string, IReadOnlyList<string>> { ["category"] = new[] { category.Trim() } };
 
-        // Take explícito: esta seam promete TODAS las coincidencias, no una página, y el
-        // default del motor (24) las truncaría en silencio si el catálogo creciera. El motor
-        // sigue capando a CatalogSettings.MaxTake (96) como defensa del wire, así que un
-        // catálogo de más de 96 trámites exigiría paginar de verdad — hoy son 7, y el umbral
-        // de reapertura del ADR 0107 está muy por encima.
+        // Take explícito + CatalogSettings.Unpaged en el ctor: esta seam promete TODAS las
+        // coincidencias, y el default del motor (24) las truncaría en silencio.
         var result = _index.Search(
             _catalog.Select(d => d.Summary).ToList(),
             new CatalogQuery(Text: query, Filters: filters, Take: int.MaxValue));

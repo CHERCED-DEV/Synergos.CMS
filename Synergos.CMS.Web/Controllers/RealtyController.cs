@@ -413,7 +413,7 @@ public sealed class RealtyController : ControllerBase
         Name: f.Name,
         // La UI lee `facets[].key` + `values[].label`; se conservan Name/Value legacy.
         Key: f.Name,
-        Values: f.Values.Select(v => new FacetValueDto(v.Value, v.Value, v.Count)).ToList());
+        Values: f.Values.Select(v => new FacetValueDto(v.Value, v.Label ?? v.Value, v.Count)).ToList());
 
     // ── Helpers de reshape (vocabulario + derivaciones para la UI) ──────
 

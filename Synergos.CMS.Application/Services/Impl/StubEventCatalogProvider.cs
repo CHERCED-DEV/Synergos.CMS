@@ -35,9 +35,9 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
 
     private readonly ICatalogIndex<EventSummary> _index;
 
-    /// <summary>Ctor por defecto: el motor con los ajustes de siempre.</summary>
+    /// <summary>Ctor por defecto: el motor, sin tope de página (esta seam devuelve todo).</summary>
     public StubEventCatalogProvider()
-        : this(new InMemoryCatalogIndex<EventSummary>(Descriptor, new CatalogSettings()))
+        : this(new InMemoryCatalogIndex<EventSummary>(Descriptor, CatalogSettings.Unpaged))
     {
     }
 
@@ -74,7 +74,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
         // que no hay nada que invalidar — justamente lo que un índice asíncrono rompería.
         var results = _index.Search(
             Catalog.Values.Select(e => e.Summary).ToList(),
-            // Take explícito: esta seam promete TODA la agenda, no una página.
+            // Take explícito + Unpaged en el ctor: esta seam promete TODA la agenda.
             new CatalogQuery(Text: query, Take: int.MaxValue));
 
         return Task.FromResult(results.Items);

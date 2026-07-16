@@ -23,6 +23,24 @@ public sealed class CatalogSettings
     public int FacetUniverseHardCap { get; init; } = 5_000;
 
     /// <summary>
+    /// Ajustes para una seam que <b>NO pagina</b> y promete TODAS las coincidencias.
+    /// </summary>
+    /// <remarks>
+    /// <b>Por qué existe:</b> <see cref="MaxTake"/> protege del WIRE — que un
+    /// <c>?take=1000000</c> no materialice el catálogo entero por petición. Pero cuatro de
+    /// los cinco catálogos (Trámites, Propiedades, Eventos, Educación) tienen seams que
+    /// devuelven la lista completa por contrato y no están expuestas a un <c>?take=</c>: para
+    /// ellas, materializar todo ES el contrato. Con el tope por defecto, un catálogo de más
+    /// de 96 ítems perdería el resto EN SILENCIO — y tres de esos verticales tienen
+    /// <c>Publish*</c>, así que sus catálogos crecen en runtime.
+    ///
+    /// <para>El tope se quita por CONFIGURACIÓN de esa instancia del motor, no tocando el
+    /// motor: la regla sigue siendo que si hay que tocarlo para acomodar un vertical, el
+    /// descriptor está mal modelado.</para>
+    /// </remarks>
+    public static CatalogSettings Unpaged { get; } = new() { MaxTake = int.MaxValue };
+
+    /// <summary>
     /// De qué fuente sale el catálogo de cada vertical: <c>demo</c> (el seed en memoria de
     /// siempre) o <c>cms</c> (el contenido que autoró el editor). Clave = el vertical
     /// (<c>Shop</c>, <c>Events</c>…).

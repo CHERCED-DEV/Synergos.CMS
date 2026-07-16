@@ -68,7 +68,7 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     /// silencio y con los tests en verde (los tests cablean la inyección ellos mismos).
     /// </summary>
     public StubCourseCatalogProvider(IContentStream contentStream)
-        : this(contentStream, new InMemoryCatalogIndex<AcademyDemoSeed.SeedCourse>(Descriptor, new CatalogSettings()))
+        : this(contentStream, new InMemoryCatalogIndex<AcademyDemoSeed.SeedCourse>(Descriptor, CatalogSettings.Unpaged))
     {
     }
 
@@ -132,8 +132,8 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
         }
 
         // AllCourses() = seed + publicados en runtime, leído fresco: es el read-your-writes
-        // del instructor que acaba de publicar. Take explícito porque esta seam promete
-        // TODOS los cursos que casan, no una página.
+        // del instructor que acaba de publicar. Take explícito + Unpaged en el ctor porque
+        // esta seam promete TODOS los cursos que casan, no una página.
         var result = _index.Search(
             AllCourses().ToList(),
             new CatalogQuery(Text: query.Text, Filters: filters.Count > 0 ? filters : null, Take: int.MaxValue));

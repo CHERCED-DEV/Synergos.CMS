@@ -1,3 +1,4 @@
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using NSubstitute;
@@ -31,6 +32,22 @@ public class CatalogEngineReplicationTests
         var alPulsar = await svc.SearchAsync(new PropertyQuery(Beds: 3));
         Assert.Equal(chip3!.Count, alPulsar.Listings.Count);
         Assert.All(alPulsar.Listings, l => Assert.True(l.Beds >= 3));
+    }
+
+    [Fact] // Sin el LABEL, el conteo deja de mentir y la etiqueta empieza: "1" con 6 inmuebles
+           // cuando el catálogo no tiene NINGUNO de 1 habitación. El umbral hay que LEERLO.
+    public async Task Realty_ChipDeHabitaciones_SeLeeComoUmbral_NoComoNumeroPelado()
+    {
+        var beds = (await Realty().SearchAsync(new PropertyQuery())).Facets.Single(f => f.Name == "beds");
+
+        Assert.All(beds.Values, v => Assert.False(
+            string.IsNullOrWhiteSpace(v.Label),
+            $"El chip {v.Value} viaja sin label: se pintaría como un número exacto."));
+        Assert.Equal("1+ habitación", beds.Values.Single(v => v.Value == "1").Label);
+        Assert.Equal("3+ habitaciones", beds.Values.Single(v => v.Value == "3").Label);
+
+        // Y ascendente, como los lee cualquiera.
+        Assert.Equal(new[] { "1", "2", "3", "4" }, beds.Values.Select(v => v.Value));
     }
 
     [Fact] // El orden histórico: destacados primero, luego precio ascendente.
@@ -112,6 +129,37 @@ public class CatalogEngineReplicationTests
             porCategoria.AddRange(await Gov().SearchAsync(null, cat));
         }
         Assert.Equal(todos.Count, porCategoria.Count);
+    }
+
+    // ── El truncado silencioso: lo que estas 4 seams NO pueden permitirse ───────────
+
+    [Fact]
+    public void SeamsSinPaginacion_NoTienenTopeDePagina()
+    {
+        // Los 4 verticales cuya seam devuelve la lista COMPLETA usan CatalogSettings.Unpaged.
+        // Con el MaxTake por defecto (96), Math.Clamp(int.MaxValue, 1, 96) = 96 y un catálogo
+        // de más de 96 ítems perdería el resto EN SILENCIO — y Eventos, Propiedades y
+        // Educación tienen Publish*, así que crecen en runtime.
+        Assert.Equal(int.MaxValue, CatalogSettings.Unpaged.MaxTake);
+        Assert.Equal(96, new CatalogSettings().MaxTake);   // el default sigue protegiendo el wire
+    }
+
+    [Fact] // La prueba de verdad: 150 ítems (por encima del tope de 96) y no se pierde ninguno.
+    public void MotorSinTope_DevuelveMasDe96Items()
+    {
+        var muchos = Enumerable.Range(0, 150)
+            .Select(n => new TramiteSummary($"t{n:000}", $"slug-{n}", $"Trámite {n}", "x", "Cat", "Entidad", "web", 1, 0m, "COP"))
+            .ToList();
+
+        var conTope = new InMemoryCatalogIndex<TramiteSummary>(
+            StubTramiteCatalogProvider.Descriptor, new CatalogSettings());
+        var sinTope = new InMemoryCatalogIndex<TramiteSummary>(
+            StubTramiteCatalogProvider.Descriptor, CatalogSettings.Unpaged);
+
+        var query = new CatalogQuery(Take: int.MaxValue);
+
+        Assert.Equal(96, conTope.Search(muchos, query).Items.Count);    // el truncado que había
+        Assert.Equal(150, sinTope.Search(muchos, query).Items.Count);   // lo que la seam promete
     }
 
     [Fact]
@@ -234,8 +282,12 @@ public class CatalogEngineReplicationTests
     [Fact]
     public async Task Academy_SinTildes_Encuentra()
     {
-        var conTilde = await Academy().SearchAsync(new CourseQuery(Text: "Diseño"));
-        var sinTilde = await Academy().SearchAsync(new CourseQuery(Text: "diseño"));
+        // "Sofía" y NO "Diseño": la ñ se PRESERVA a propósito, así que "Diseño" vs "diseño"
+        // solo se diferencian en la mayúscula y no probarían el plegado de tildes en
+        // absoluto — daban falsa confianza. Sofía es una instructora, así que además ejercita
+        // el campo del descriptor que resuelve el JOIN por lambda.
+        var conTilde = await Academy().SearchAsync(new CourseQuery(Text: "Sofía"));
+        var sinTilde = await Academy().SearchAsync(new CourseQuery(Text: "sofia"));
 
         Assert.NotEmpty(conTilde.Courses);
         Assert.Equal(conTilde.Courses.Select(c => c.Id), sinTilde.Courses.Select(c => c.Id));

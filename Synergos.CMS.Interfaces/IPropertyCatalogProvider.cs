@@ -47,7 +47,13 @@ public sealed record PropertyListing(
 public sealed record PropertyFacet(string Name, IReadOnlyList<PropertyFacetValue> Values);
 
 /// <summary>Un valor de faceta con su conteo (e.g. <c>"apartamento" → 12</c>).</summary>
-public sealed record PropertyFacetValue(string Value, int Count);
+/// <param name="Label">
+/// Cómo se le muestra al usuario. Null = usar <paramref name="Value"/>. Existe porque no
+/// siempre coinciden: el chip de habitaciones vale <c>"3"</c> pero significa —y debe leerse—
+/// <c>"3+ habitaciones"</c>, ya que el filtro es un umbral. Sin este campo el chip decía "1"
+/// con 6 inmuebles cuando el catálogo no tiene NINGUNO de 1 habitación.
+/// </param>
+public sealed record PropertyFacetValue(string Value, int Count, string? Label = null);
 
 /// <summary>
 /// Resultado del search: los listados que matchean + las facetas derivadas

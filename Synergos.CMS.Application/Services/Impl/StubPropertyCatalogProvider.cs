@@ -33,9 +33,9 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
 
     private readonly ICatalogIndex<PropertyListing> _index;
 
-    /// <summary>Ctor por defecto: el motor con los ajustes de siempre.</summary>
+    /// <summary>Ctor por defecto: el motor, sin tope de página (esta seam devuelve todo).</summary>
     public StubPropertyCatalogProvider()
-        : this(new InMemoryCatalogIndex<PropertyListing>(Descriptor, new CatalogSettings()))
+        : this(new InMemoryCatalogIndex<PropertyListing>(Descriptor, CatalogSettings.Unpaged))
     {
     }
 
@@ -73,12 +73,14 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
             // EXACTOS — o sea que el chip MENTÍA: decía "3 (2)" y al pulsarlo devolvía 4
             // (los de 3 y los de 4). Declarar los tramos alinea el chip con lo que el filtro
             // hace. Se cae el chip "0", que como umbral no significa nada (Beds >= 0 = todo).
+            // Ascendente: los chips se emiten en el orden declarado, y "1+, 2+, 3+, 4+" es
+            // como los lee cualquiera (y como los pinta la UI cuando deriva los suyos).
             new CatalogThresholdFilter<PropertyListing>("beds", "Habitaciones", l => l.Beds, new[]
             {
-                new CatalogThresholdBucket(4, "4+ habitaciones"),
-                new CatalogThresholdBucket(3, "3+ habitaciones"),
-                new CatalogThresholdBucket(2, "2+ habitaciones"),
                 new CatalogThresholdBucket(1, "1+ habitación"),
+                new CatalogThresholdBucket(2, "2+ habitaciones"),
+                new CatalogThresholdBucket(3, "3+ habitaciones"),
+                new CatalogThresholdBucket(4, "4+ habitaciones"),
             }),
         });
 
@@ -115,7 +117,8 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
             filters["beds"] = new[] { query.Beds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) };
         }
 
-        // Take explícito: esta seam promete TODAS las coincidencias, no una página.
+        // Take explícito + CatalogSettings.Unpaged en el ctor: esta seam promete TODAS las
+        // coincidencias, y el default del motor (24) las truncaría en silencio.
         var result = _index.Search(universe, new CatalogQuery(
             Text: query.Text,
             Filters: filters.Count > 0 ? filters : null,
@@ -126,9 +129,12 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
             Facets: result.Facets.Select(ToPropertyFacet).ToList()));
     }
 
-    /// <summary><see cref="CatalogFacet"/> → <see cref="PropertyFacet"/>, que no tiene Label ni Kind.</summary>
+    /// <summary>
+    /// <see cref="CatalogFacet"/> → <see cref="PropertyFacet"/>. El Label VIAJA: sin él, el
+    /// chip de habitaciones se pinta con el número pelado ("3") mientras significa "3 o más".
+    /// </summary>
     private static PropertyFacet ToPropertyFacet(CatalogFacet f)
-        => new(f.Field, f.Values.Select(v => new PropertyFacetValue(v.Value, v.Count)).ToList());
+        => new(f.Field, f.Values.Select(v => new PropertyFacetValue(v.Value, v.Count, v.Label)).ToList());
 
     public Task<PropertyDetail?> GetListingAsync(string listingId, CancellationToken cancellationToken = default)
     {
