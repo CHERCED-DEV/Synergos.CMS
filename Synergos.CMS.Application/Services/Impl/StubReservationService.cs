@@ -1,55 +1,69 @@
-using System.Collections.Concurrent;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
 /// <summary>
-/// Default <see cref="IReservationService"/> — servicio de reservas STUB para
-/// que el vertical Hoteles corra end-to-end en demo sin un PMS/DB real (mismo
-/// patrón stub-first que <c>StubPaymentProvider</c>). Aparta (Hold), confirma
-/// y cancela reservas en memoria.
+/// Default <see cref="IReservationService"/> — servicio de reservas STUB para que el
+/// vertical Hoteles corra end-to-end en demo sin un PMS/DB real (mismo patrón
+/// stub-first que <c>StubPaymentProvider</c>). Aparta (Hold), confirma y cancela
+/// reservas.
 /// </summary>
 /// <remarks>
 /// Lógica pura en <c>Synergos.CMS.Application</c> — cero dependencia de
-/// Umbraco/AspNetCore (ADR 0002). El estado vive en memoria (proceso),
-/// suficiente para demo; un adapter real delega el estado al PMS/DB.
-/// <see cref="ConfirmAsync"/> es idempotente: confirmar dos veces deja la
-/// reserva Confirmed sin doble efecto. El adapter real implementa la misma
-/// seam y se registra en su lugar vía el composer sin tocar el motor.
+/// Umbraco/AspNetCore (ADR 0002). <b>T3 (doc 25):</b> el estado ya NO vive en un
+/// diccionario del proceso sino detrás del seam <see cref="IReservationStore"/> — con
+/// un adapter FileSystem el hold SOBREVIVE un reinicio. Esto es necesario para cerrar
+/// la brecha de restart end-to-end: <c>ConfirmAsync</c> de una orden confirma sus
+/// reservas de stock; si el hold viviera solo en memoria, tras un reinicio la
+/// confirmación lanzaría "Reserva no encontrada" ANTES de marcar la orden pagada.
+/// <see cref="ConfirmAsync"/> es idempotente. El adapter real (PMS/DB) implementa la
+/// misma seam y se registra en su lugar vía el composer sin tocar el motor.
 /// </remarks>
 public sealed class StubReservationService : IReservationService
 {
     /// <summary>
-    /// Ventana de hold por defecto: 15 min para completar checkout/pago antes
-    /// de que el cupo se libere automáticamente. Aprendizaje de NS.Booking (doc 17).
+    /// Ventana de hold por defecto: 15 min para completar checkout/pago antes de que
+    /// el cupo se libere automáticamente. Aprendizaje de NS.Booking (doc 17).
     /// </summary>
     public static readonly TimeSpan DefaultHoldWindow = TimeSpan.FromMinutes(15);
 
-    private readonly ConcurrentDictionary<string, Reservation> _reservations = new(StringComparer.Ordinal);
+    private static readonly JsonSerializerOptions _json = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    private readonly IReservationStore _store;
     private readonly TimeSpan _holdWindow;
     private readonly Func<DateTimeOffset> _now;
+    // Serializa el read-modify-write de Confirm/Cancel/Expire (single-instance): sin
+    // lock{} porque el cuerpo hace await; SemaphoreSlim es el equivalente async.
+    private readonly SemaphoreSlim _mutate = new(1, 1);
 
     /// <summary>
-    /// Default ctor — hold window de 15 min y reloj real (<see cref="DateTimeOffset.UtcNow"/>).
+    /// Default ctor — hold window de 15 min, reloj real y backing store en memoria.
     /// </summary>
     public StubReservationService()
-        : this(DefaultHoldWindow, null)
+        : this(DefaultHoldWindow, null, null)
     {
     }
 
     /// <summary>
-    /// Ctor configurable: <paramref name="holdWindow"/> para ajustar la ventana
-    /// del hold (≤ 0 cae al default) y <paramref name="now"/> como time source
-    /// inyectable para determinismo en tests (ADR 0002: Application sin Umbraco,
-    /// time source simple en vez de un clock framework). Null = reloj real.
+    /// Ctor configurable: <paramref name="holdWindow"/> ajusta la ventana del hold (≤ 0
+    /// cae al default), <paramref name="now"/> es el time source inyectable para
+    /// determinismo en tests, y <paramref name="store"/> (null → en memoria) es el
+    /// backing store — el composer inyecta el durable (FileSystem) en Web.
     /// </summary>
-    public StubReservationService(TimeSpan holdWindow, Func<DateTimeOffset>? now)
+    public StubReservationService(TimeSpan holdWindow, Func<DateTimeOffset>? now, IReservationStore? store = null)
     {
         _holdWindow = holdWindow > TimeSpan.Zero ? holdWindow : DefaultHoldWindow;
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        _store = store ?? new InMemoryReservationStore();
     }
 
-    public Task<Reservation> HoldAsync(ReservationRequest request, CancellationToken cancellationToken = default)
+    public async Task<Reservation> HoldAsync(ReservationRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (request.CheckOut <= request.CheckIn)
@@ -83,11 +97,11 @@ public sealed class StubReservationService : IReservationService
             request.Currency,
             PaymentSessionId: null,
             ExpiresAt: _now() + _holdWindow);
-        _reservations[id] = reservation;
-        return Task.FromResult(reservation);
+        await WriteAsync(reservation, cancellationToken);
+        return reservation;
     }
 
-    public Task<Reservation> HoldItemAsync(TravelItemReservationRequest request, CancellationToken cancellationToken = default)
+    public async Task<Reservation> HoldItemAsync(TravelItemReservationRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.ProductRef))
@@ -126,88 +140,132 @@ public sealed class StubReservationService : IReservationService
             ProductType: request.ProductType,
             ProductRef: request.ProductRef,
             ProductLabel: request.ProductLabel);
-        _reservations[id] = reservation;
-        return Task.FromResult(reservation);
+        await WriteAsync(reservation, cancellationToken);
+        return reservation;
     }
 
-    public Task<Reservation> ConfirmAsync(string reservationId, string paymentSessionId, CancellationToken cancellationToken = default)
+    public async Task<Reservation> ConfirmAsync(string reservationId, string paymentSessionId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(reservationId) || !_reservations.TryGetValue(reservationId, out var current))
+        await _mutate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            throw new ArgumentException("Reserva no encontrada.", nameof(reservationId));
-        }
-        if (current.Status == ReservationStatus.Cancelled)
-        {
-            throw new InvalidOperationException("No se puede confirmar una reserva cancelada.");
-        }
-        if (current.Status == ReservationStatus.Expired)
-        {
-            throw new InvalidOperationException("No se puede confirmar una reserva con el hold vencido.");
-        }
-
-        // Idempotente: si ya está Confirmed, devuelve el mismo estado (sin
-        // sobreescribir el PaymentSessionId original ni duplicar efecto).
-        if (current.Status == ReservationStatus.Confirmed)
-        {
-            return Task.FromResult(current);
-        }
-
-        // Hold vencido (Held pero now > ExpiresAt): la confirmación llega tarde,
-        // el cupo ya no está garantizado. La marca Expired in-line para que un
-        // GetAsync posterior lo refleje, y rechaza la confirmación. El scanner
-        // de fondo también la habría barrido, pero no dependemos de su timing.
-        if (current.ExpiresAt is { } expiresAt && _now() > expiresAt)
-        {
-            _reservations[reservationId] = current with { Status = ReservationStatus.Expired };
-            throw new InvalidOperationException("El hold de la reserva venció antes de confirmar.");
-        }
-
-        var confirmed = current with { Status = ReservationStatus.Confirmed, PaymentSessionId = paymentSessionId };
-        _reservations[reservationId] = confirmed;
-        return Task.FromResult(confirmed);
-    }
-
-    public Task<Reservation> CancelAsync(string reservationId, string reason, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrEmpty(reservationId) || !_reservations.TryGetValue(reservationId, out var current))
-        {
-            throw new ArgumentException("Reserva no encontrada.", nameof(reservationId));
-        }
-
-        // Idempotente: cancelar una reserva ya cancelada deja el mismo estado.
-        if (current.Status == ReservationStatus.Cancelled)
-        {
-            return Task.FromResult(current);
-        }
-
-        var cancelled = current with { Status = ReservationStatus.Cancelled };
-        _reservations[reservationId] = cancelled;
-        return Task.FromResult(cancelled);
-    }
-
-    public Task<Reservation?> GetAsync(string reservationId, CancellationToken cancellationToken = default)
-        => Task.FromResult(_reservations.TryGetValue(reservationId ?? string.Empty, out var r) ? r : null);
-
-    public Task<int> ExpireStaleHoldsAsync(CancellationToken cancellationToken = default)
-    {
-        var now = _now();
-        var expired = 0;
-        foreach (var kvp in _reservations)
-        {
-            var current = kvp.Value;
-            if (current.Status != ReservationStatus.Held
-                || current.ExpiresAt is not { } expiresAt
-                || now <= expiresAt)
+            var current = await LoadAsync(reservationId, cancellationToken);
+            if (current is null)
             {
-                continue;
+                throw new ArgumentException("Reserva no encontrada.", nameof(reservationId));
             }
-            // TryUpdate: solo transiciona si sigue siendo el mismo Held (evita
-            // pisar una confirmación/cancelación que entró en paralelo). Idempotente.
-            if (_reservations.TryUpdate(kvp.Key, current with { Status = ReservationStatus.Expired }, current))
+            if (current.Status == ReservationStatus.Cancelled)
             {
+                throw new InvalidOperationException("No se puede confirmar una reserva cancelada.");
+            }
+            if (current.Status == ReservationStatus.Expired)
+            {
+                throw new InvalidOperationException("No se puede confirmar una reserva con el hold vencido.");
+            }
+
+            // Idempotente: si ya está Confirmed, devuelve el mismo estado (sin
+            // sobreescribir el PaymentSessionId original ni duplicar efecto).
+            if (current.Status == ReservationStatus.Confirmed)
+            {
+                return current;
+            }
+
+            // Hold vencido (Held pero now > ExpiresAt): la confirmación llega tarde. La
+            // marca Expired in-line para que un GetAsync posterior lo refleje, y rechaza.
+            if (current.ExpiresAt is { } expiresAt && _now() > expiresAt)
+            {
+                await WriteAsync(current with { Status = ReservationStatus.Expired }, cancellationToken);
+                throw new InvalidOperationException("El hold de la reserva venció antes de confirmar.");
+            }
+
+            var confirmed = current with { Status = ReservationStatus.Confirmed, PaymentSessionId = paymentSessionId };
+            await WriteAsync(confirmed, cancellationToken);
+            return confirmed;
+        }
+        finally
+        {
+            _mutate.Release();
+        }
+    }
+
+    public async Task<Reservation> CancelAsync(string reservationId, string reason, CancellationToken cancellationToken = default)
+    {
+        await _mutate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var current = await LoadAsync(reservationId, cancellationToken);
+            if (current is null)
+            {
+                throw new ArgumentException("Reserva no encontrada.", nameof(reservationId));
+            }
+
+            // Idempotente: cancelar una reserva ya cancelada deja el mismo estado.
+            if (current.Status == ReservationStatus.Cancelled)
+            {
+                return current;
+            }
+
+            var cancelled = current with { Status = ReservationStatus.Cancelled };
+            await WriteAsync(cancelled, cancellationToken);
+            return cancelled;
+        }
+        finally
+        {
+            _mutate.Release();
+        }
+    }
+
+    public async Task<Reservation?> GetAsync(string reservationId, CancellationToken cancellationToken = default)
+        => await LoadAsync(reservationId, cancellationToken);
+
+    public async Task<int> ExpireStaleHoldsAsync(CancellationToken cancellationToken = default)
+    {
+        await _mutate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var now = _now();
+            var expired = 0;
+            foreach (var raw in await _store.ListAsync(cancellationToken).ConfigureAwait(false))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var current = Deserialize(raw);
+                if (current is null
+                    || current.Status != ReservationStatus.Held
+                    || current.ExpiresAt is not { } expiresAt
+                    || now <= expiresAt)
+                {
+                    continue;
+                }
+                await WriteAsync(current with { Status = ReservationStatus.Expired }, cancellationToken);
                 expired++;
             }
+            return expired;
         }
-        return Task.FromResult(expired);
+        finally
+        {
+            _mutate.Release();
+        }
     }
+
+    private async Task<Reservation?> LoadAsync(string? reservationId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(reservationId))
+        {
+            return null;
+        }
+        return Deserialize(await _store.ReadAsync(reservationId, cancellationToken).ConfigureAwait(false));
+    }
+
+    private static Reservation? Deserialize(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+        try { return JsonSerializer.Deserialize<Reservation>(json, _json); }
+        catch (JsonException) { return null; }   // corrupto → como si no existiera
+    }
+
+    private Task WriteAsync(Reservation reservation, CancellationToken cancellationToken)
+        => _store.WriteAsync(reservation.Id, JsonSerializer.Serialize(reservation, _json), cancellationToken);
 }

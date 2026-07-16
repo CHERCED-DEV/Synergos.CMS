@@ -147,11 +147,31 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IOptions<CartSettings>>().Value));
 
         // Motor de pago (PSP) — seam IPaymentProvider, stub-first (doc 16/17).
-        // Hoy ICheckoutRecorder solo REGISTRA la orden; faltaba procesar el cobro.
-        // StubPaymentProvider (Application, puro) auto-autoriza para que el checkout
-        // corra end-to-end en demo; swap por adapter real (Stripe/Wompi/PayU CO)
-        // sin tocar el motor. Singleton — el stub mantiene estado en memoria.
-        services.AddSingleton<IPaymentProvider, StubPaymentProvider>();
+        // T3 (doc 25): DOS ejes ortogonales.
+        // (1) DURABILIDAD: el estado de las sesiones de pago pasa de memoria a disco
+        //     tras el seam IPaymentSessionStore + el ledger de idempotencia del webhook
+        //     (IPaymentEventStore). Registro INCONDICIONAL → hasta el stub queda
+        //     durable y una sesión sobrevive un reinicio (cierra el confirm-tras-reinicio).
+        // (2) SELECCIÓN de proveedor: config-gated por Synergos:Payments:Provider,
+        //     calcando el gating de BundleRegistry.Mode. Ola A: solo "Stub" durable
+        //     está vivo; "Wompi" es Ola B (adapter HTTP real con llaves de sandbox) —
+        //     sin adapter construido cae al stub durable (la demo nunca se bloquea).
+        services.AddSingleton<IPaymentSessionStore, FileSystemPaymentSessionStore>();
+        services.AddSingleton<IPaymentEventStore, FileSystemPaymentEventStore>();
+
+        var paymentProvider = builder.Config["Synergos:Payments:Provider"] ?? "Stub";
+        switch (paymentProvider.ToLowerInvariant())
+        {
+            // case "wompi":  // Ola B (gated): requiere WompiPaymentProvider + llaves.
+            //     services.AddSingleton<IPaymentProvider, WompiPaymentProvider>();
+            //     break;
+            default:
+                services.AddSingleton<IPaymentProvider>(sp =>
+                    new StubPaymentProvider(
+                        sp.GetRequiredService<IPaymentSessionStore>(),
+                        sp.GetRequiredService<IOptions<PaymentsSettings>>().Value));
+                break;
+        }
 
         // Motor de reservas (vertical Hoteles) — 3 seams stub-first (doc 17),
         // calcando IPaymentProvider. Hoy sirven la demo end-to-end en memoria;
@@ -165,7 +185,16 @@ public sealed class SeamComposer : IComposer
         //   - ICancellationPolicyEvaluator: penalidad por fecha. Stub puro/
         //     determinista (non-refundable → total; refundable → 0 si a tiempo).
         services.AddSingleton<IRoomAvailabilityProvider, StubRoomAvailabilityProvider>();
-        services.AddSingleton<IReservationService, StubReservationService>();
+        // T3 (doc 25): el hold de reservas pasa de memoria a disco tras el seam
+        // IReservationStore (durable). Necesario para cerrar el restart-gap e2e —
+        // confirmar una orden tras un reinicio confirma sus reservas, que antes se
+        // perdían con el proceso ("Reserva no encontrada"). Reusable por Booking/Eventos.
+        services.AddSingleton<IReservationStore, FileSystemReservationStore>();
+        services.AddSingleton<IReservationService>(sp =>
+            new StubReservationService(
+                StubReservationService.DefaultHoldWindow,
+                now: null,
+                sp.GetRequiredService<IReservationStore>()));
         services.AddSingleton<ICancellationPolicyEvaluator, StubCancellationPolicyEvaluator>();
 
         // Auto-cancel de holds vencidos (aprendizaje NS.Booking, doc 17): barre

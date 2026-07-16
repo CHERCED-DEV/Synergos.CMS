@@ -116,4 +116,23 @@ public class StubReservationServiceTests
         Assert.Equal(ReservationStatus.Confirmed, (await svc.GetAsync(confirmed.Id))!.Status);
         Assert.Equal(ReservationStatus.Held, (await svc.GetAsync(fresh.Id))!.Status);
     }
+
+    // ── T3 (doc 25) — durabilidad del hold ─────────────────────────
+
+    [Fact] // durabilidad: el hold sobrevive al REEMPLAZO del servicio (proxy de reinicio)
+    public async Task Hold_SurvivesServiceReplacement_ViaSharedStore()
+    {
+        var store = new InMemoryReservationStore();
+        var beforeRestart = new StubReservationService(StubReservationService.DefaultHoldWindow, null, store);
+        var held = await beforeRestart.HoldAsync(Req());
+
+        // "Reinicio": un servicio NUEVO sobre el MISMO store confirma el hold creado
+        // antes. Es la prueba que fallaría ("Reserva no encontrada") con el hold en un
+        // dict del proceso — el defecto que cerraba el restart-gap e2e.
+        var afterRestart = new StubReservationService(StubReservationService.DefaultHoldWindow, null, store);
+        var confirmed = await afterRestart.ConfirmAsync(held.Id, "stub_session_1");
+
+        Assert.Equal(ReservationStatus.Confirmed, confirmed.Status);
+        Assert.Equal("stub_session_1", confirmed.PaymentSessionId);
+    }
 }

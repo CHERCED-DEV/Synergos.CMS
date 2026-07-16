@@ -1,29 +1,56 @@
-using System.Collections.Concurrent;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
 /// <summary>
-/// Default <see cref="IPaymentProvider"/> — pasarela STUB para que el motor
-/// de checkout corra end-to-end en demo sin un PSP real (mismo patrón
-/// stub-first que <c>StubBundleRegistryClient</c>). Auto-autoriza al crear
-/// la sesión y captura de forma idempotente, en memoria.
+/// Default <see cref="IPaymentProvider"/> — pasarela STUB para que el motor de
+/// checkout corra end-to-end en demo sin un PSP real (mismo patrón stub-first que
+/// <c>StubBundleRegistryClient</c>). Auto-autoriza al crear la sesión y captura de
+/// forma idempotente.
 /// </summary>
 /// <remarks>
 /// Lógica pura en <c>Synergos.CMS.Application</c> — cero dependencia de
-/// Umbraco/AspNetCore (ADR 0002). Los adapters reales (Stripe / Wompi /
-/// PayU CO) implementan la misma seam y se registran en su lugar vía el
-/// composer cuando el arquitecto elija el PSP — sin tocar el motor.
-/// El estado vive en memoria (proceso), suficiente para demo; un adapter
-/// real delega el estado al PSP.
+/// Umbraco/AspNetCore (ADR 0002). <b>T3 (doc 25):</b> el estado ya NO vive en un
+/// diccionario del proceso sino detrás del seam <see cref="IPaymentSessionStore"/> —
+/// con un adapter FileSystem la sesión de pago SOBREVIVE un reinicio, cerrando la
+/// brecha por la que un checkout hecho antes del reinicio no se podía capturar.
+/// Además expone knobs de simulación (<see cref="PaymentsSettings.DeclineTriggerSku"/>,
+/// <see cref="PaymentsSettings.SimulateRequiresAction"/>) para demostrar rechazo/3DS
+/// sin un PSP real. Los adapters reales (Wompi/PayU/Mercado Pago) implementan la misma
+/// seam y se registran en su lugar vía el composer (Ola B) sin tocar el motor.
 /// </remarks>
 public sealed class StubPaymentProvider : IPaymentProvider
 {
-    private readonly ConcurrentDictionary<string, Session> _sessions = new(StringComparer.Ordinal);
+    private static readonly JsonSerializerOptions _json = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    private readonly IPaymentSessionStore _store;
+    private readonly PaymentsSettings _settings;
+    // Serializa el read-modify-write de Capture/Refund (single-instance). No se puede
+    // usar lock{} porque el cuerpo hace await; SemaphoreSlim es el equivalente async.
+    private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <summary>
+    /// Ctor con dependencias OPCIONALES: <paramref name="store"/> null → backing store
+    /// en memoria (default de tests/efímeros); <paramref name="settings"/> null →
+    /// defaults (auto-autoriza, sin knobs). El composer inyecta el store durable +
+    /// settings reales (Ola A).
+    /// </summary>
+    public StubPaymentProvider(IPaymentSessionStore? store = null, PaymentsSettings? settings = null)
+    {
+        _store = store ?? new InMemoryPaymentSessionStore();
+        _settings = settings ?? new PaymentsSettings();
+    }
 
     public string ProviderKey => "stub";
 
-    public Task<PaymentSession> CreateSessionAsync(PaymentSessionRequest request, CancellationToken cancellationToken = default)
+    public async Task<PaymentSession> CreateSessionAsync(PaymentSessionRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (request.Amount <= 0m)
@@ -40,49 +67,113 @@ public sealed class StubPaymentProvider : IPaymentProvider
         }
 
         var sessionId = $"stub_{Guid.NewGuid():N}";
-        // El stub auto-autoriza (fondos "reservados"); un PSP real podría
-        // devolver RequiresAction con RedirectUrl para 3DS.
-        _sessions[sessionId] = new Session(PaymentStatus.Authorized, request.Amount, 0m);
-        return Task.FromResult(new PaymentSession(sessionId, PaymentStatus.Authorized, RedirectUrl: null, ClientSecret: null, ProviderKey));
+
+        // Knob de simulación: un SKU "veneno" declina la sesión (rechazo limpio, demo).
+        if (!string.IsNullOrWhiteSpace(_settings.DeclineTriggerSku)
+            && request.Items.Any(i => string.Equals(i.Sku, _settings.DeclineTriggerSku, StringComparison.OrdinalIgnoreCase)))
+        {
+            await WriteSessionAsync(sessionId, new PersistedSession(PaymentStatus.Failed, request.Amount, 0m, request.OrderReference, null), cancellationToken);
+            return new PaymentSession(sessionId, PaymentStatus.Failed, RedirectUrl: null, ClientSecret: null, ProviderKey);
+        }
+
+        // Knob de simulación: RequiresAction + RedirectUrl sintética (simula 3DS/redirect
+        // a hosted checkout). El cliente "vuelve" y el webhook confirma (Ola B lo cablea
+        // al front; en Ola A demuestra que el stub modela el estado).
+        if (_settings.SimulateRequiresAction)
+        {
+            var redirect = $"/checkout/simulated-3ds/{sessionId}";
+            await WriteSessionAsync(sessionId, new PersistedSession(PaymentStatus.RequiresAction, request.Amount, 0m, request.OrderReference, redirect), cancellationToken);
+            return new PaymentSession(sessionId, PaymentStatus.RequiresAction, RedirectUrl: redirect, ClientSecret: null, ProviderKey);
+        }
+
+        // Default: auto-autoriza (fondos "reservados"); un PSP real podría nacer PENDING.
+        await WriteSessionAsync(sessionId, new PersistedSession(PaymentStatus.Authorized, request.Amount, 0m, request.OrderReference, null), cancellationToken);
+        return new PaymentSession(sessionId, PaymentStatus.Authorized, RedirectUrl: null, ClientSecret: null, ProviderKey);
     }
 
-    public Task<PaymentOutcome> GetStatusAsync(string sessionId, CancellationToken cancellationToken = default)
-        => Task.FromResult(_sessions.TryGetValue(sessionId ?? string.Empty, out var s)
-            ? new PaymentOutcome(sessionId!, s.Status, s.Captured)
-            : NotFound(sessionId));
-
-    public Task<PaymentOutcome> CaptureAsync(string sessionId, CancellationToken cancellationToken = default)
+    public async Task<PaymentOutcome> GetStatusAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(sessionId) || !_sessions.TryGetValue(sessionId, out var s))
-        {
-            return Task.FromResult(NotFound(sessionId));
-        }
-        // Idempotente: capturar dos veces deja el mismo estado/monto, sin doble cobro.
-        if (s.Status is PaymentStatus.Authorized or PaymentStatus.Captured)
-        {
-            var captured = new Session(PaymentStatus.Captured, s.Amount, s.Amount);
-            _sessions[sessionId] = captured;
-            return Task.FromResult(new PaymentOutcome(sessionId, PaymentStatus.Captured, captured.Captured));
-        }
-        return Task.FromResult(new PaymentOutcome(sessionId, s.Status, s.Captured, $"No se puede capturar en estado {s.Status}."));
+        var s = await LoadSessionAsync(sessionId, cancellationToken);
+        return s is null
+            ? NotFound(sessionId)
+            : new PaymentOutcome(sessionId, s.Status, s.Captured);
     }
 
-    public Task<PaymentOutcome> RefundAsync(string sessionId, decimal? amount = null, CancellationToken cancellationToken = default)
+    public async Task<PaymentOutcome> CaptureAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(sessionId) || !_sessions.TryGetValue(sessionId, out var s))
+        if (string.IsNullOrEmpty(sessionId))
         {
-            return Task.FromResult(NotFound(sessionId));
+            return NotFound(sessionId);
         }
-        if (s.Status != PaymentStatus.Captured)
+
+        await _mutate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            return Task.FromResult(new PaymentOutcome(sessionId, s.Status, s.Captured, $"Solo se reembolsa lo capturado (estado actual {s.Status})."));
+            var s = await LoadSessionAsync(sessionId, cancellationToken);
+            if (s is null)
+            {
+                return NotFound(sessionId);
+            }
+            // Idempotente: capturar dos veces deja el mismo estado/monto, sin doble cobro.
+            if (s.Status is PaymentStatus.Authorized or PaymentStatus.Captured)
+            {
+                var captured = s with { Status = PaymentStatus.Captured, Captured = s.Amount };
+                await WriteSessionAsync(sessionId, captured, cancellationToken);
+                return new PaymentOutcome(sessionId, PaymentStatus.Captured, captured.Captured);
+            }
+            return new PaymentOutcome(sessionId, s.Status, s.Captured, $"No se puede capturar en estado {s.Status}.");
         }
-        _sessions[sessionId] = new Session(PaymentStatus.Refunded, s.Amount, s.Captured);
-        return Task.FromResult(new PaymentOutcome(sessionId, PaymentStatus.Refunded, s.Captured));
+        finally
+        {
+            _mutate.Release();
+        }
     }
+
+    public async Task<PaymentOutcome> RefundAsync(string sessionId, decimal? amount = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(sessionId))
+        {
+            return NotFound(sessionId);
+        }
+
+        await _mutate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var s = await LoadSessionAsync(sessionId, cancellationToken);
+            if (s is null)
+            {
+                return NotFound(sessionId);
+            }
+            if (s.Status != PaymentStatus.Captured)
+            {
+                return new PaymentOutcome(sessionId, s.Status, s.Captured, $"Solo se reembolsa lo capturado (estado actual {s.Status}).");
+            }
+            await WriteSessionAsync(sessionId, s with { Status = PaymentStatus.Refunded }, cancellationToken);
+            return new PaymentOutcome(sessionId, PaymentStatus.Refunded, s.Captured);
+        }
+        finally
+        {
+            _mutate.Release();
+        }
+    }
+
+    private async Task<PersistedSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken)
+    {
+        var json = await _store.ReadAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+        try { return JsonSerializer.Deserialize<PersistedSession>(json, _json); }
+        catch (JsonException) { return null; }   // corrupto → como si no existiera
+    }
+
+    private Task WriteSessionAsync(string sessionId, PersistedSession session, CancellationToken cancellationToken)
+        => _store.WriteAsync(sessionId, JsonSerializer.Serialize(session, _json), cancellationToken);
 
     private static PaymentOutcome NotFound(string? sessionId)
         => new(sessionId ?? string.Empty, PaymentStatus.Failed, 0m, "Sesión de pago no encontrada.");
 
-    private readonly record struct Session(PaymentStatus Status, decimal Amount, decimal Captured);
+    /// <summary>Estado serializado de la sesión: monto/estado/capturado + la orden asociada.</summary>
+    private sealed record PersistedSession(PaymentStatus Status, decimal Amount, decimal Captured, string? OrderRef, string? RedirectUrl);
 }

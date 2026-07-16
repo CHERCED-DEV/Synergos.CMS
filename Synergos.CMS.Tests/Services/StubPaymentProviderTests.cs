@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Xunit;
@@ -65,5 +66,50 @@ public class StubPaymentProviderTests
         Assert.Equal(PaymentStatus.Captured, first.Status);
         Assert.Equal(PaymentStatus.Captured, second.Status);
         Assert.Equal(250_000m, second.AmountCaptured); // mismo monto, no 500.000
+    }
+
+    // ── T3 (doc 25) — durabilidad del estado + knobs de simulación ──
+
+    [Fact] // durabilidad: el estado sobrevive al REEMPLAZO del provider (proxy de reinicio)
+    public async Task State_SurvivesProviderReplacement_ViaSharedStore()
+    {
+        var store = new InMemoryPaymentSessionStore();
+        var beforeRestart = new StubPaymentProvider(store);
+        var session = await beforeRestart.CreateSessionAsync(Req());
+
+        // "Reinicio": un provider NUEVO sobre el MISMO store captura la sesión creada
+        // antes. Es la prueba que fallaría con el estado en un dict del proceso.
+        var afterRestart = new StubPaymentProvider(store);
+        var outcome = await afterRestart.CaptureAsync(session.SessionId);
+
+        Assert.Equal(PaymentStatus.Captured, outcome.Status);
+        Assert.Equal(250_000m, outcome.AmountCaptured);
+    }
+
+    [Fact] // knob: un SKU "veneno" declina la sesión (rechazo limpio, sin excepción)
+    public async Task DeclineTriggerSku_YieldsFailedSession()
+    {
+        var psp = new StubPaymentProvider(
+            new InMemoryPaymentSessionStore(),
+            new PaymentsSettings { DeclineTriggerSku = "ROOM-DLX" });   // el SKU de Req()
+
+        var session = await psp.CreateSessionAsync(Req());
+
+        Assert.Equal(PaymentStatus.Failed, session.Status);
+        // una sesión fallida no se puede capturar
+        Assert.Equal(PaymentStatus.Failed, (await psp.CaptureAsync(session.SessionId)).Status);
+    }
+
+    [Fact] // knob: simula 3DS/redirect (RequiresAction + RedirectUrl sintética)
+    public async Task SimulateRequiresAction_YieldsRedirect()
+    {
+        var psp = new StubPaymentProvider(
+            new InMemoryPaymentSessionStore(),
+            new PaymentsSettings { SimulateRequiresAction = true });
+
+        var session = await psp.CreateSessionAsync(Req());
+
+        Assert.Equal(PaymentStatus.RequiresAction, session.Status);
+        Assert.False(string.IsNullOrEmpty(session.RedirectUrl));
     }
 }

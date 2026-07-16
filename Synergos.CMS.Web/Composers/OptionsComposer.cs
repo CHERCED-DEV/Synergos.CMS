@@ -70,6 +70,17 @@ public sealed class OptionsComposer : IComposer
         builder.Services.Configure<ShopOrdersSettings>(
             builder.Config.GetSection("Synergos:ShopOrders"));
 
+        // T3 (doc 25) — pagos: persistencia durable de sesiones de pago + reservas
+        // (cierran el restart-gap e2e) + selección/gating de proveedor + webhook.
+        builder.Services.Configure<PaymentSessionsSettings>(
+            builder.Config.GetSection("Synergos:PaymentSessions"));
+
+        builder.Services.Configure<ReservationsSettings>(
+            builder.Config.GetSection("Synergos:Reservations"));
+
+        builder.Services.Configure<PaymentsSettings>(
+            builder.Config.GetSection("Synergos:Payments"));
+
         builder.Services.Configure<AdminSettings>(
             builder.Config.GetSection("Synergos:Admin"));
 
