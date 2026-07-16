@@ -1,4 +1,4 @@
-using Synergos.CMS.Interfaces;
+﻿using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
@@ -31,18 +31,9 @@ internal static class NotificationEmission
             return;   // seam opcional no inyectado → no notificar (comportamiento pre-T4)
         }
 
-        try
-        {
-            await notifier.DispatchAsync(notification, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;    // la cancelación SÍ sube
-        }
-        catch (Exception)
-        {
-            // Best-effort: la transacción manda. El hecho de negocio ya ocurrió y está
-            // persistido; no avisar es degradado, tumbarlo sería un bug.
-        }
+        // La guarda vive en BestEffort (una sola impl para tracking/audit/notificación).
+        await BestEffort.RunAsync(
+            () => notifier.DispatchAsync(notification, cancellationToken),
+            cancellationToken);
     }
 }

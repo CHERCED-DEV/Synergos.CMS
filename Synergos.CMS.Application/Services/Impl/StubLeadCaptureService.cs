@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using Synergos.CMS.Interfaces;
@@ -94,17 +94,18 @@ public sealed class StubLeadCaptureService : ILeadCaptureService
         // Audit append-only (forense) — opcional.
         if (_audit is not null)
         {
-            await _audit.WriteAsync(
-                new AuditEvent(
-                    Id: leadId,
-                    OccurredAtUtc: occurred.UtcDateTime,
-                    ActorEmail: contact.Email.Trim(),
-                    ActorName: contact.Name.Trim(),
-                    Action: "realty.lead-captured",
-                    Resource: listing,
-                    Outcome: "success",
-                    Detail: $"Lead generado para el listado {listing}."),
-                cancellationToken);
+            // best-effort: el lead YA está persistido.
+            await BestEffort.RunAsync(() => _audit.WriteAsync(
+                    new AuditEvent(
+                        Id: leadId,
+                        OccurredAtUtc: occurred.UtcDateTime,
+                        ActorEmail: contact.Email.Trim(),
+                        ActorName: contact.Name.Trim(),
+                        Action: "realty.lead-captured",
+                        Resource: listing,
+                        Outcome: "success",
+                        Detail: $"Lead generado para el listado {listing}."),
+                    cancellationToken), cancellationToken);
         }
 
         // Evento de negocio (KPI del marketplace) — opcional, fire-and-forget.
@@ -159,17 +160,18 @@ public sealed class StubLeadCaptureService : ILeadCaptureService
 
         if (_audit is not null)
         {
-            await _audit.WriteAsync(
-                new AuditEvent(
-                    Id: $"{id}:advance:{status}",
-                    OccurredAtUtc: _now().UtcDateTime,
-                    ActorEmail: string.Empty,
-                    ActorName: current.AgentId,
-                    Action: "realty.lead-advanced",
-                    Resource: id,
-                    Outcome: "success",
-                    Detail: $"Lead {id} avanzó de {current.Status} a {status}."),
-                cancellationToken);
+            // best-effort: el lead YA está persistido.
+            await BestEffort.RunAsync(() => _audit.WriteAsync(
+                    new AuditEvent(
+                        Id: $"{id}:advance:{status}",
+                        OccurredAtUtc: _now().UtcDateTime,
+                        ActorEmail: string.Empty,
+                        ActorName: current.AgentId,
+                        Action: "realty.lead-advanced",
+                        Resource: id,
+                        Outcome: "success",
+                        Detail: $"Lead {id} avanzó de {current.Status} a {status}."),
+                    cancellationToken), cancellationToken);
         }
 
         return new LeadAdvanceResult(id, status);

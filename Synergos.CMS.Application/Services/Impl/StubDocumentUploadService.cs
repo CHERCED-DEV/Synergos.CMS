@@ -1,4 +1,4 @@
-using Synergos.CMS.Interfaces;
+﻿using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
@@ -70,17 +70,18 @@ public sealed class StubDocumentUploadService : IDocumentUploadService
         // Rastro forense append-only de la subida (ADR 0037).
         if (_audit is not null)
         {
-            await _audit.WriteAsync(
-                new AuditEvent(
-                    Id: doc.Id,
-                    OccurredAtUtc: uploadedAt.UtcDateTime,
-                    ActorEmail: detail.Citizen.Email,
-                    ActorName: detail.Citizen.Name,
-                    Action: "gov.document-upload",
-                    Resource: detail.Radicado,
-                    Outcome: "success",
-                    Detail: $"Documento adjuntado: {doc.Name}."),
-                cancellationToken);
+            // best-effort: el documento YA está adjunto y persistido.
+            await BestEffort.RunAsync(() => _audit.WriteAsync(
+                    new AuditEvent(
+                        Id: doc.Id,
+                        OccurredAtUtc: uploadedAt.UtcDateTime,
+                        ActorEmail: detail.Citizen.Email,
+                        ActorName: detail.Citizen.Name,
+                        Action: "gov.document-upload",
+                        Resource: detail.Radicado,
+                        Outcome: "success",
+                        Detail: $"Documento adjuntado: {doc.Name}."),
+                    cancellationToken), cancellationToken);
         }
 
         return doc;

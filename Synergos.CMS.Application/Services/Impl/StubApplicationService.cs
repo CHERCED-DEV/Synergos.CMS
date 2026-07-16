@@ -1,4 +1,4 @@
-using System.Text.Encodings.Web;
+﻿using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
@@ -217,17 +217,18 @@ public sealed class StubApplicationService : IApplicationService
         // Rastro forense append-only del primer estado del expediente (ADR 0037).
         if (_audit is not null)
         {
-            await _audit.WriteAsync(
-                new AuditEvent(
-                    Id: caseId,
-                    OccurredAtUtc: occurred.UtcDateTime,
-                    ActorEmail: cleanCitizen.Email,
-                    ActorName: cleanCitizen.Name,
-                    Action: "gov.case-radicado",
-                    Resource: radicado,
-                    Outcome: "success",
-                    Detail: $"Expediente radicado para el trámite {summary.Id} (tasa {quote.Amount} {quote.Currency})."),
-                cancellationToken);
+            // best-effort: el expediente YA está radicado y persistido.
+            await BestEffort.RunAsync(() => _audit.WriteAsync(
+                    new AuditEvent(
+                        Id: caseId,
+                        OccurredAtUtc: occurred.UtcDateTime,
+                        ActorEmail: cleanCitizen.Email,
+                        ActorName: cleanCitizen.Name,
+                        Action: "gov.case-radicado",
+                        Resource: radicado,
+                        Outcome: "success",
+                        Detail: $"Expediente radicado para el trámite {summary.Id} (tasa {quote.Amount} {quote.Currency})."),
+                    cancellationToken), cancellationToken);
         }
 
         // Avisarle al ciudadano que su trámite quedó radicado, con el radicado que debe

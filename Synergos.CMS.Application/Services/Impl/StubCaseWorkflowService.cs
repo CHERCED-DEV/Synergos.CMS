@@ -1,4 +1,4 @@
-using Synergos.CMS.Interfaces;
+﻿using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
@@ -115,17 +115,18 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
         // (case, destino) mantiene el dedupe del writer sin colisionar entre pasos.
         if (_audit is not null)
         {
-            await _audit.WriteAsync(
-                new AuditEvent(
-                    Id: $"{current.CaseId}:{rule.To}",
-                    OccurredAtUtc: occurred.UtcDateTime,
-                    ActorEmail: OfficerActor,
-                    ActorName: OfficerName,
-                    Action: "gov.case-decision",
-                    Resource: current.Radicado,
-                    Outcome: "success",
-                    Detail: $"{GovStatusSlugs.ToSlug(current.Status)} → {GovStatusSlugs.ToSlug(rule.To)} ({outcome.Trim()}): {cleanNote}"),
-                cancellationToken);
+            // best-effort: la decisión YA está aplicada y persistida.
+            await BestEffort.RunAsync(() => _audit.WriteAsync(
+                    new AuditEvent(
+                        Id: $"{current.CaseId}:{rule.To}",
+                        OccurredAtUtc: occurred.UtcDateTime,
+                        ActorEmail: OfficerActor,
+                        ActorName: OfficerName,
+                        Action: "gov.case-decision",
+                        Resource: current.Radicado,
+                        Outcome: "success",
+                        Detail: $"{GovStatusSlugs.ToSlug(current.Status)} → {GovStatusSlugs.ToSlug(rule.To)} ({outcome.Trim()}): {cleanNote}"),
+                    cancellationToken), cancellationToken);
         }
 
         // Avisarle al ciudadano el resultado de la decisión (T4). Best-effort: un email

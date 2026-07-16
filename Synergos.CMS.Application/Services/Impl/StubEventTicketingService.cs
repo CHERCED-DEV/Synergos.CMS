@@ -1,4 +1,4 @@
-using System.Text.Encodings.Web;
+﻿using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
@@ -322,11 +322,12 @@ public sealed class StubEventTicketingService : IEventTicketingService
         //    AdvanceAsync es idempotente → un doble confirm no duplica la etapa.
         if (_tracking is not null)
         {
-            await _tracking.AdvanceAsync(
+            // best-effort: la compra YA está confirmada y persistida.
+            await BestEffort.RunAsync(() => _tracking.AdvanceAsync(
                 order.OrderRef,
                 StageConfirmed,
                 $"Compra confirmada — {confirmed.Units.Count} ticket(s).",
-                cancellationToken);
+                cancellationToken), cancellationToken);
         }
 
         // 4) Avisarle al COMPRADOR que sus entradas quedaron confirmadas (T4). Best-effort:
@@ -471,17 +472,18 @@ public sealed class StubEventTicketingService : IEventTicketingService
                 // Auditar la transferencia (append-only, ADR 0037).
                 if (_audit is not null)
                 {
-                    await _audit.WriteAsync(
-                        new AuditEvent(
-                            Id: Guid.NewGuid().ToString("N"),
-                            OccurredAtUtc: _now().UtcDateTime,
-                            ActorEmail: unit.HolderEmail,
-                            ActorName: unit.HolderName,
-                            Action: "event.ticket.transfer",
-                            Resource: $"{order.EventId}/{id}",
-                            Outcome: "success",
-                            Detail: $"Ticket transferido de '{unit.HolderEmail}' a '{newEmail}'; QR rotado a v{updatedUnit.QrVersion}."),
-                        cancellationToken);
+                    // best-effort: el ticket YA fue transferido y persistido.
+                    await BestEffort.RunAsync(() => _audit.WriteAsync(
+                            new AuditEvent(
+                                Id: Guid.NewGuid().ToString("N"),
+                                OccurredAtUtc: _now().UtcDateTime,
+                                ActorEmail: unit.HolderEmail,
+                                ActorName: unit.HolderName,
+                                Action: "event.ticket.transfer",
+                                Resource: $"{order.EventId}/{id}",
+                                Outcome: "success",
+                                Detail: $"Ticket transferido de '{unit.HolderEmail}' a '{newEmail}'; QR rotado a v{updatedUnit.QrVersion}."),
+                            cancellationToken), cancellationToken);
                 }
 
                 return new EventTicketTransferResult(ticket, ticket.Qr);

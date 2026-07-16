@@ -248,11 +248,12 @@ public sealed class TravelCartService : ITravelCartService
         await WriteAsync(confirmedOrder, cancellationToken);
         if (_tracking is not null && allConfirmed)
         {
-            await _tracking.AdvanceAsync(
+            // best-effort: el viaje YA está confirmado y persistido.
+            await BestEffort.RunAsync(() => _tracking.AdvanceAsync(
                 order.OrderRef,
                 StageConfirmed,
                 $"Viaje confirmado — código {confirmationCode}.",
-                cancellationToken);
+                cancellationToken), cancellationToken);
         }
 
         // 4) Avisarle al viajero (T4). A diferencia del tracking, esto va FUERA del gate

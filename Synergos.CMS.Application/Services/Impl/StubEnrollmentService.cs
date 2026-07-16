@@ -1,4 +1,4 @@
-using System.Text.Encodings.Web;
+﻿using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
@@ -464,7 +464,10 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         {
             return;
         }
-        await _tracking.AdvanceAsync(enrollmentId, stage, note: null, cancellationToken);
+        // best-effort: la matrícula YA está activa y persistida.
+        await BestEffort.RunAsync(
+            () => _tracking.AdvanceAsync(enrollmentId, stage, note: null, cancellationToken),
+            cancellationToken);
     }
 
     // Resuelve el enrollmentId de la matrícula activa de un alumno en un curso

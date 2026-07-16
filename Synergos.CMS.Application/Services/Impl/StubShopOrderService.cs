@@ -275,11 +275,13 @@ public sealed class StubShopOrderService : IShopOrderService
         //    pago→preparación→envío→entrega. AdvanceAsync es idempotente.
         if (_tracking is not null)
         {
-            await _tracking.AdvanceAsync(
+            // best-effort: la orden YA está pagada y persistida — un tracking caído no
+            // puede convertir una compra exitosa en un error para el comprador.
+            await BestEffort.RunAsync(() => _tracking.AdvanceAsync(
                 orderRef,
                 StubOrderTrackingService.StagePaid,
                 $"Pago capturado — orden {paid.OrderNumber}.",
-                cancellationToken);
+                cancellationToken), cancellationToken);
         }
 
         // 4) Avisarle al comprador que su compra quedó confirmada (T4). Best-effort: un

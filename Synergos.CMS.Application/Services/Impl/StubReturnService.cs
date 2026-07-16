@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -240,16 +240,17 @@ public sealed class StubReturnService : IReturnService
         {
             return;
         }
-        await _audit.WriteAsync(
-            new AuditEvent(
-                Id: id,
-                OccurredAtUtc: _now().UtcDateTime,
-                ActorEmail: actorEmail,
-                ActorName: actorName,
-                Action: action,
-                Resource: resource,
-                Outcome: "success",
-                Detail: detail),
-            cancellationToken);
+        // best-effort: el RMA YA está persistido.
+        await BestEffort.RunAsync(() => _audit.WriteAsync(
+                new AuditEvent(
+                    Id: id,
+                    OccurredAtUtc: _now().UtcDateTime,
+                    ActorEmail: actorEmail,
+                    ActorName: actorName,
+                    Action: action,
+                    Resource: resource,
+                    Outcome: "success",
+                    Detail: detail),
+                cancellationToken), cancellationToken);
     }
 }
