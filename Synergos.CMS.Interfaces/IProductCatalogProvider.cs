@@ -47,16 +47,42 @@ public interface IProductCatalogProvider
 /// <c>condition=new</c>). Vacío = todo el catálogo. <see cref="Sort"/> ordena el
 /// resultado ("relevance"|"price-asc"|"price-desc"|"rating"|"newest").
 /// </summary>
+/// <param name="Facets">
+/// Facetas seleccionadas, <b>con una LISTA de valores por clave</b>: OR dentro de la misma
+/// clave, AND entre claves distintas.
+/// </param>
+/// <param name="Skip">Ítems a saltar (paginación). Se capa a rango válido.</param>
+/// <param name="Take">Tamaño de página. Se capa a <c>CatalogSettings.MaxTake</c>.</param>
+/// <param name="Scope">
+/// El siteRoot del catálogo, para acotar la FUENTE. Null = sin acotar.
+/// </param>
+/// <remarks>
+/// <b><see cref="Facets"/> lleva una lista, y ése era el bug.</b> Era
+/// <c>IReadOnlyDictionary&lt;string, string&gt;</c> —un valor por clave— así que el tipo NO
+/// PODÍA expresar "brand IN (Aurora, Barista)" y el multi-select se perdía en la frontera,
+/// en silencio: verificado en vivo, <c>?brand=Aurora</c> → 1, <c>?brand=Barista</c> → 1,
+/// <c>?brand=Aurora,Barista</c> → <b>0</b>. Filtrar por dos marcas devolvía menos que por
+/// una. La UI siempre mandó una lista (<c>DiscoveryCriteria.facets</c> es
+/// <c>Record&lt;string, readonly string[]&gt;</c>); era el backend quien la estrechaba.
+/// </remarks>
 public sealed record ProductQuery(
     string? Text = null,
     string? Category = null,
-    IReadOnlyDictionary<string, string>? Facets = null,
-    string? Sort = null);
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? Facets = null,
+    string? Sort = null,
+    int Skip = 0,
+    int Take = 24,
+    string? Scope = null);
 
 /// <summary>
 /// Resultado de <see cref="IProductCatalogProvider.SearchAsync"/>: los productos
 /// que pasan el filtro + las facetas derivadas (con conteos) para refinar la PLP.
 /// </summary>
+/// <param name="Products">Los productos de ESTA página.</param>
+/// <param name="Total">
+/// Cuántos productos pasan el filtro <b>en total</b>, no cuántos trae esta página: es el
+/// número con el que la UI calcula cuántas páginas hay.
+/// </param>
 public sealed record ProductSearchResult(
     IReadOnlyList<CatalogProductSummary> Products,
     IReadOnlyList<ProductFacet> Facets,
@@ -87,13 +113,24 @@ public sealed record CatalogProductSummary(
 /// vuelta en <see cref="ProductQuery.Facets"/>; <see cref="Values"/> son los
 /// valores posibles con su conteo de productos.
 /// </summary>
+/// <param name="Kind">
+/// Cómo se comporta el filtro (<c>MultiSelect</c>|<c>SingleSelect</c>|<c>Threshold</c>|
+/// <c>Range</c>), para que la UI sepa si pintar checkboxes o radios. String y no enum: es un
+/// valor de wire, y un Kind nuevo no debe romper un cliente viejo.
+/// </param>
 public sealed record ProductFacet(
     string Field,
     string Label,
-    IReadOnlyList<ProductFacetValue> Values);
+    IReadOnlyList<ProductFacetValue> Values,
+    string Kind = "MultiSelect");
 
 /// <summary>Un valor de faceta + cuántos productos lo tienen (post-filtro de texto/categoría).</summary>
-public sealed record ProductFacetValue(string Value, int Count);
+/// <param name="Label">
+/// Cómo se le muestra al usuario. Null = usar <paramref name="Value"/>. Existe porque no
+/// siempre coinciden: <c>minRating</c> vale <c>"4"</c> y se lee "4 estrellas o más" — sin
+/// esto el chip se pintaba con el número crudo.
+/// </param>
+public sealed record ProductFacetValue(string Value, int Count, string? Label = null);
 
 /// <summary>
 /// Detalle completo de un producto (PDP): el producto + variantes + reviews +

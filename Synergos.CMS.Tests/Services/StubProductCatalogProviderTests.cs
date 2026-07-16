@@ -18,14 +18,19 @@ public class StubProductCatalogProviderTests
 {
     private static IProductCatalogProvider Make() => new StubProductCatalogProvider();
 
-    [Fact] // empty: una categoría inexistente no matchea nada (sin productos ni facetas)
+    [Fact] // empty: una categoría inexistente no matchea ningún producto
     public async Task Search_UnknownCategory_ReturnsEmpty()
     {
         var result = await Make().SearchAsync(new ProductQuery(Category: "NoExiste"));
 
         Assert.Empty(result.Products);
-        Assert.Empty(result.Facets);
         Assert.Equal(0, result.Total);
+
+        // Las facetas SIGUEN llegando aunque no haya productos, y es deliberado (cambió con
+        // el motor transversal): la UI necesita saber que la columna existe para pintar su
+        // título y sus chips. Antes devolvía [] y el usuario que filtraba a cero se quedaba
+        // sin filtros con los que salir del callejón.
+        Assert.Contains(result.Facets, f => f.Field == "category");
     }
 
     [Fact] // happy: query vacía devuelve todo el catálogo + facetas derivadas
@@ -53,10 +58,26 @@ public class StubProductCatalogProviderTests
 
         Assert.NotEmpty(result.Products);
         Assert.All(result.Products, p => Assert.Equal("Tecnología", p.Category));
-        // La faceta de categoría reporta solo la categoría filtrada.
+    }
+
+    [Fact] // La faceta seleccionada NO se filtra a sí misma (drill-down).
+    public async Task Search_ByCategory_LaFacetaDeCategoriaSigueMostrandoLasHermanas()
+    {
+        var result = await Make().SearchAsync(new ProductQuery(Category: "Tecnología"));
+
         var categoryFacet = result.Facets.Single(f => f.Field == "category");
-        Assert.Single(categoryFacet.Values);
-        Assert.Equal("Tecnología", categoryFacet.Values[0].Value);
+
+        // Cambió con el motor transversal, y a mejor: antes la faceta se filtraba a sí misma
+        // y reportaba SOLO "Tecnología", así que el usuario no podía cambiar de categoría sin
+        // limpiar el filtro — veía un único chip, el que ya tenía puesto. Ahora ve las
+        // hermanas con su conteo real, que es como se comporta cualquier PLP de verdad.
+        Assert.True(categoryFacet.Values.Count > 1);
+        Assert.Contains(categoryFacet.Values, v => v.Value == "Tecnología");
+        Assert.Contains(categoryFacet.Values, v => v.Value == "Hogar");
+
+        // Pero las OTRAS facetas sí se acotan a la categoría elegida.
+        var brands = result.Facets.Single(f => f.Field == "brand").Values.Sum(v => v.Count);
+        Assert.Equal(result.Total, brands);
     }
 
     [Fact] // filter: por texto — matchea nombre/marca case-insensitive
@@ -69,11 +90,13 @@ public class StubProductCatalogProviderTests
             Assert.Contains("laptop", p.Name, StringComparison.OrdinalIgnoreCase));
     }
 
+    private static ProductQuery WithFacet(string field, params string[] values)
+        => new(Facets: new Dictionary<string, IReadOnlyList<string>> { [field] = values });
+
     [Fact] // filter: por faceta de marca — solo esa marca
     public async Task Search_ByBrandFacet_FiltersToBrand()
     {
-        var facets = new Dictionary<string, string> { ["brand"] = "Aurora" };
-        var result = await Make().SearchAsync(new ProductQuery(Facets: facets));
+        var result = await Make().SearchAsync(WithFacet("brand", "Aurora"));
 
         Assert.NotEmpty(result.Products);
         Assert.All(result.Products, p => Assert.Equal("Aurora", p.Brand));
@@ -82,10 +105,80 @@ public class StubProductCatalogProviderTests
     [Fact] // filter: minRating descarta los de rating bajo
     public async Task Search_ByMinRating_FiltersLowRated()
     {
-        var facets = new Dictionary<string, string> { ["minRating"] = "4.5" };
-        var result = await Make().SearchAsync(new ProductQuery(Facets: facets));
+        var result = await Make().SearchAsync(WithFacet("minRating", "4.5"));
 
         Assert.All(result.Products, p => Assert.True(p.Rating >= 4.5));
+    }
+
+    // ── El bug que cierra la fachada, sobre el catálogo REAL de la Tienda ──────────
+
+    [Fact] // Verificado en vivo antes del fix: Aurora→1, Barista→1, "Aurora,Barista"→0.
+    public async Task Search_DosMarcas_DevuelveLaUnion_NoCero()
+    {
+        var svc = Make();
+
+        var aurora = await svc.SearchAsync(WithFacet("brand", "Aurora"));
+        var barista = await svc.SearchAsync(WithFacet("brand", "Barista"));
+        var ambas = await svc.SearchAsync(WithFacet("brand", "Aurora", "Barista"));
+
+        Assert.NotEmpty(aurora.Products);
+        Assert.NotEmpty(barista.Products);
+        // Filtrar por dos marcas ya no devuelve MENOS que por una.
+        Assert.Equal(aurora.Total + barista.Total, ambas.Total);
+        Assert.All(ambas.Products, p => Assert.Contains(p.Brand, new[] { "Aurora", "Barista" }));
+    }
+
+    [Fact] // El chip de rating decía literalmente "4.0" porque el label no viajaba.
+    public async Task Search_FacetaDeRating_TraeLabelLegibleYSuKind()
+    {
+        var result = await Make().SearchAsync(new ProductQuery());
+
+        var rating = result.Facets.Single(f => f.Field == "minRating");
+        Assert.Equal("Threshold", rating.Kind);
+        Assert.Equal("4 estrellas o más", rating.Values.Single(v => v.Value == "4").Label);
+
+        // Y la categoría es de selección única, no múltiple: la UI pinta radios.
+        Assert.Equal("SingleSelect", result.Facets.Single(f => f.Field == "category").Kind);
+    }
+
+    [Fact] // Total = los que pasan el filtro, NO los de la página: la UI cuenta páginas con esto.
+    public async Task Search_Paginada_TotalEsElDelFiltro_NoElDeLaPagina()
+    {
+        var svc = Make();
+
+        var todo = await svc.SearchAsync(new ProductQuery());
+        var page1 = await svc.SearchAsync(new ProductQuery(Skip: 0, Take: 2));
+        var page2 = await svc.SearchAsync(new ProductQuery(Skip: 2, Take: 2));
+
+        Assert.Equal(2, page1.Products.Count);
+        Assert.Equal(todo.Total, page1.Total);      // el total no encoge al paginar
+        Assert.Equal(todo.Total, page2.Total);
+        Assert.Empty(page1.Products.Select(p => p.Id).Intersect(page2.Products.Select(p => p.Id)));
+    }
+
+    [Fact] // El bug de tildes, a través de la fachada y con el seed real.
+    public async Task Search_SinTildes_EncuentraLoAcentuado()
+    {
+        var conTilde = await Make().SearchAsync(new ProductQuery(Text: "Tecnología"));
+        var sinTilde = await Make().SearchAsync(new ProductQuery(Text: "tecnologia"));
+
+        Assert.NotEmpty(conTilde.Products);
+        Assert.Equal(conTilde.Products.Select(p => p.Id), sinTilde.Products.Select(p => p.Id));
+    }
+
+    [Fact] // Las facetas cuentan sobre el universo filtrado, no sobre la página.
+    public async Task Search_Paginada_LasFacetasNoEncogen()
+    {
+        var svc = Make();
+
+        var todo = await svc.SearchAsync(new ProductQuery());
+        var page = await svc.SearchAsync(new ProductQuery(Take: 1));
+
+        var marcaTodo = todo.Facets.Single(f => f.Field == "brand").Values.Sum(v => v.Count);
+        var marcaPage = page.Facets.Single(f => f.Field == "brand").Values.Sum(v => v.Count);
+
+        Assert.Single(page.Products);
+        Assert.Equal(marcaTodo, marcaPage);   // 1 producto en pantalla, los conteos intactos
     }
 
     [Fact] // sort: price-asc ordena por precio ascendente

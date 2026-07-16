@@ -38,6 +38,12 @@ public sealed class ShopCatalogController : ControllerBase
 {
     private const string DefaultCollection = "wishlist";
 
+    /// <summary>
+    /// Productos por página de la PLP. El tope duro lo pone <c>CatalogSettings.MaxTake</c>
+    /// en el motor: aquí solo está el default cuando el cliente no pide tamaño.
+    /// </summary>
+    private const int DefaultPageSize = 12;
+
     private readonly IProductCatalogProvider _catalog;
     private readonly IShopOrderService _orders;
     private readonly IPriceFormatter _priceFormatter;
@@ -121,24 +127,27 @@ public sealed class ShopCatalogController : ControllerBase
         [FromQuery] string? brand,
         [FromQuery] string? minRating,
         [FromQuery] string? sort,
+        [FromQuery] int? page,
+        [FromQuery] int? take,
         CancellationToken cancellationToken)
     {
-        var facets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(brand))
-        {
-            facets["brand"] = brand.Trim();
-        }
-        if (!string.IsNullOrWhiteSpace(minRating))
-        {
-            facets["minRating"] = minRating.Trim();
-        }
+        var facets = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        AddFacet(facets, "brand", brand);
+        AddFacet(facets, "minRating", minRating);
+
+        // page es 1-based en la UI (shop-api.client.ts:307 manda ?page=N solo si N>1); Skip
+        // es 0-based. Una page<1 se trata como la 1: un enlace roto no merece un 400.
+        var pageSize = take is > 0 ? take.Value : DefaultPageSize;
+        var pageNumber = page is > 0 ? page.Value : 1;
 
         var result = await _catalog.SearchAsync(
             new ProductQuery(
                 Text: q,
                 Category: category,
                 Facets: facets.Count > 0 ? facets : null,
-                Sort: sort),
+                Sort: sort,
+                Skip: (pageNumber - 1) * pageSize,
+                Take: pageSize),
             cancellationToken);
 
         var products = result.Products.Select(ToProductDto).ToList();
@@ -148,9 +157,38 @@ public sealed class ShopCatalogController : ControllerBase
         var facetDtos = result.Facets.Select(f => new FacetDto(
             Key: f.Field,
             Label: f.Label,
-            Values: f.Values.Select(v => new FacetValueDto(v.Value, v.Count)).ToList())).ToList();
+            Kind: f.Kind,
+            // La UI ya leía v['label'] (normalizeFacets:430) y caía al valor crudo cuando
+            // faltaba — por eso el chip de rating se pintaba "4.0" en vez de "4 estrellas o
+            // más". El label existía en el motor y se perdía aquí.
+            Values: f.Values.Select(v => new FacetValueDto(v.Value, v.Count, v.Label ?? v.Value)).ToList())).ToList();
 
         return Ok(new SearchResponse(Products: products, Facets: facetDtos, Total: result.Total));
+    }
+
+    /// <summary>
+    /// Añade una faceta partiendo el CSV del wire. <b>La UI manda los multi-valor como
+    /// <c>?brand=Aurora,Barista</c></b> (<c>shop-api.client.ts:311</c>,
+    /// <c>values.join(',')</c>), así que ésta es la convención, no una invención.
+    /// </summary>
+    /// <remarks>
+    /// Antes el valor entraba entero como UN string y se comparaba por igualdad exacta
+    /// contra la marca, así que "Aurora,Barista" no casaba con nada y el filtro devolvía
+    /// CERO — filtrar por dos marcas daba menos que por una, sin error.
+    /// </remarks>
+    private static void AddFacet(IDictionary<string, IReadOnlyList<string>> facets, string field, string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return;
+        }
+        var values = raw
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        if (values.Count > 0)
+        {
+            facets[field] = values;
+        }
     }
 
     // ── 2. Product detail (PDP) ────────────────────────────────────
@@ -725,9 +763,9 @@ public sealed class ShopCatalogController : ControllerBase
         IReadOnlyList<string>? ImageUrls,
         IReadOnlyList<string> Images);
 
-    public sealed record FacetDto(string Key, string Label, IReadOnlyList<FacetValueDto> Values);
+    public sealed record FacetDto(string Key, string Label, IReadOnlyList<FacetValueDto> Values, string Kind = "MultiSelect");
 
-    public sealed record FacetValueDto(string Value, int Count);
+    public sealed record FacetValueDto(string Value, int Count, string? Label = null);
 
     public sealed record SearchResponse(
         IReadOnlyList<ProductDto> Products,
