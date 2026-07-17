@@ -1,0 +1,20 @@
+﻿@*
+    SynHost renderer — <synergos-rating-stars>. Star rating indicator.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["valueNow"] = Model.Value<string>("valueNow"),
+        ["maxStars"] = Model.Value<string>("maxStars"),
+        ["ariaLabel"] = Model.Value<string>("ariaLabel"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "rating-stars",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

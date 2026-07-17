@@ -1,0 +1,99 @@
+@*
+    Emite JSON-LD page-specific (Article / Product / etc.) que extiende
+    los singletons de site-level (Organization + WebSite) emitidos por
+    _SeoHead. Invocado desde _Layout.cshtml después del _SeoHead, una
+    vez por request, automáticamente despachado por ContentType.Alias.
+
+    Schema.org coverage:
+    - postPage  → Article (headline + datePublished + dateModified +
+                  image + author + publisher).
+    - productPage → Product (name + sku + image + offers con price +
+                    priceCurrency + availability).
+    - default → no-op (los templates sin schema específico solo
+                  emiten Organization + WebSite via _SeoHead).
+
+    Ola 136. Sin dependencia nueva — JsonSerializer escapa values.
+*@
+@using System.Globalization
+@using Umbraco.Cms.Core.Models.PublishedContent
+@using Umbraco.Extensions
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent?>
+@{
+    var page = Model;
+    if (page is null) { return; }
+
+    var siteRoot = page.AncestorOrSelf("siteRoot") ?? page.Root();
+    var siteName = siteRoot?.Value<string>("siteDisplayName") ?? "Synergos";
+    var canonicalHost = siteRoot?.Value<string>("canonicalHostname");
+    var siteUrl = !string.IsNullOrWhiteSpace(canonicalHost) ? $"https://{canonicalHost}" : null;
+
+    string Json(object? value) => System.Text.Json.JsonSerializer.Serialize(value);
+    string AbsoluteUrl(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        if (path.StartsWith("http://", StringComparison.Ordinal) || path.StartsWith("https://", StringComparison.Ordinal)) return path;
+        return siteUrl is not null ? $"{siteUrl}{path}" : path;
+    }
+}
+@switch (page.ContentType.Alias)
+{
+    case "postPage":
+        {
+            var headline = page.Name;
+            var excerpt = page.Value<string>("excerpt");
+            var heroImage = page.Value<IPublishedContent>("heroImage");
+            var heroUrl = heroImage?.Url(mode: UrlMode.Absolute);
+            DateTime? publishDate = DateTime.TryParse(page.Value<string>("publishDate"), out var pd) ? pd : page.CreateDate;
+            var modifiedDate = page.UpdateDate;
+            var pageUrl = AbsoluteUrl(page.Url());
+            var sb = new System.Text.StringBuilder();
+            sb.Append("{\"@context\":\"https://schema.org\",\"@type\":\"Article\",");
+            sb.Append($"\"headline\":{Json(headline)}");
+            if (!string.IsNullOrWhiteSpace(excerpt)) sb.Append($",\"description\":{Json(excerpt)}");
+            if (!string.IsNullOrWhiteSpace(heroUrl)) sb.Append($",\"image\":{Json(heroUrl)}");
+            if (publishDate.HasValue) sb.Append($",\"datePublished\":{Json(publishDate.Value.ToString("yyyy-MM-ddTHH:mm:ssK", CultureInfo.InvariantCulture))}");
+            sb.Append($",\"dateModified\":{Json(modifiedDate.ToString("yyyy-MM-ddTHH:mm:ssK", CultureInfo.InvariantCulture))}");
+            if (!string.IsNullOrWhiteSpace(pageUrl)) sb.Append($",\"mainEntityOfPage\":{Json(pageUrl)}");
+            sb.Append($",\"author\":{{\"@type\":\"Organization\",\"name\":{Json(siteName)}}}");
+            sb.Append($",\"publisher\":{{\"@type\":\"Organization\",\"name\":{Json(siteName)}}}");
+            sb.Append("}");
+            <script type="application/ld+json">@Html.Raw(sb.ToString())</script>
+        }
+        break;
+
+    case "productPage":
+        {
+            var name = page.Value<string>("productName") ?? page.Name;
+            var sku = page.Value<string>("productSku");
+            var description = page.Value<string>("productDescription");
+            var priceRaw = page.Value<string>("productPriceBase");
+            var price = decimal.TryParse(priceRaw, NumberStyles.Number, CultureInfo.InvariantCulture, out var pp) ? pp : 0m;
+            var currency = page.Value<string>("productCurrency");
+            if (string.IsNullOrWhiteSpace(currency)) currency = "USD";
+            var inStock = page.Value<bool>("productInStock");
+            var images = page.Value<IEnumerable<IPublishedContent>>("productImages")?.ToArray() ?? Array.Empty<IPublishedContent>();
+            var primaryImg = images.FirstOrDefault()?.Url(mode: UrlMode.Absolute);
+            var pageUrl = AbsoluteUrl(page.Url());
+            var sb = new System.Text.StringBuilder();
+            sb.Append("{\"@context\":\"https://schema.org\",\"@type\":\"Product\",");
+            sb.Append($"\"name\":{Json(name)}");
+            if (!string.IsNullOrWhiteSpace(sku)) sb.Append($",\"sku\":{Json(sku)}");
+            if (!string.IsNullOrWhiteSpace(description)) sb.Append($",\"description\":{Json(description)}");
+            if (!string.IsNullOrWhiteSpace(primaryImg)) sb.Append($",\"image\":{Json(primaryImg)}");
+            if (price > 0)
+            {
+                var availability = inStock
+                    ? "https://schema.org/InStock"
+                    : "https://schema.org/OutOfStock";
+                sb.Append(",\"offers\":{\"@type\":\"Offer\"");
+                sb.Append($",\"price\":{Json(price.ToString("0.##", CultureInfo.InvariantCulture))}");
+                sb.Append($",\"priceCurrency\":{Json(currency)}");
+                sb.Append($",\"availability\":{Json(availability)}");
+                if (!string.IsNullOrWhiteSpace(pageUrl)) sb.Append($",\"url\":{Json(pageUrl)}");
+                sb.Append("}");
+            }
+            sb.Append("}");
+            <script type="application/ld+json">@Html.Raw(sb.ToString())</script>
+        }
+        break;
+}

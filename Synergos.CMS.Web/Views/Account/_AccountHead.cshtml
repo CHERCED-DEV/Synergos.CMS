@@ -1,0 +1,27 @@
+@*
+    Partial reusable para los <head> de Account/* views (Layout=null).
+
+    Inyecta el MISMO bundle de CSS que PlatformRoot.cshtml (el landing
+    "launcher / PS3") para que el frame del login sea idéntico en línea
+    de diseño: tokens + base + utilities + primitives + pages
+    (.syn-launcher*) + account (la tarjeta). + Manrope + favicon.
+
+    Razón: estos views son Layout=null (los renderiza AccountController,
+    fuera del pipeline de Umbraco) → el <link> de tokens NO se inyecta
+    solo. Cargar el bundle completo garantiza el look del launcher sin
+    FOUC. Cada view aporta su propio <title> tras llamar a este partial,
+    y pone data-theme="dark" en su <html>.
+*@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<link rel="icon" type="image/svg+xml" href="~/img/synergoslabs-isotipo.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@@300;400;500;600;700&display=swap" />
+<link rel="stylesheet" href="~/css/syn-tokens.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/syn-base.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/syn-utilities.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/syn-primitives.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/syn-pages.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/syn-account.css" asp-append-version="true" />

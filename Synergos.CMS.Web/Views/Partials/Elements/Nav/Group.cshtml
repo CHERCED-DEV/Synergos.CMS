@@ -1,0 +1,32 @@
+@*
+    elementNavGroup renderer (Ola 24). SSR-native container.
+    <nav> semántico + heading opcional + <ul> de NavItems. ADR 0019 Nav.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var items = Model.Value<BlockListModel>("navItems");
+    if (items == null || !items.Any()) { return; }
+    var heading = Model.Value<string>("navHeading");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-nav",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-nav--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var ariaLabel = string.IsNullOrWhiteSpace(heading) ? "Navegación" : heading;
+}
+<nav class="@classes" aria-label="@ariaLabel">
+    @if (!string.IsNullOrWhiteSpace(heading))
+    {
+        <h3 class="syn-nav__heading">@heading</h3>
+    }
+    <ul class="syn-nav__list">
+        @foreach (var item in items)
+        {
+            @await Html.PartialAsync("Elements/Nav/Item", item.Content)
+        }
+    </ul>
+</nav>

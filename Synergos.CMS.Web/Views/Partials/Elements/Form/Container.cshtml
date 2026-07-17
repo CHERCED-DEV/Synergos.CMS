@@ -1,0 +1,117 @@
+@*
+    elementFormContainer renderer (Ola 23 schema + Ola 60 internal path).
+
+    Itera fields BlockList (elementFormField) + emite <form> POST.
+    Action:
+      - Si formInternalKey está seteado → /api/forms/{key}/submit
+        (manejado por FormSubmissionsController, ADR 0030).
+      - Sino, formEndpoint externo (Formspree/Netlify/etc., ADR 0018).
+      - Si ambos vacíos → no se renderiza (defensivo).
+
+    Path interno emite además:
+      - Hidden input honeypot (FormsSettings.HoneypotFieldName) fuera
+        de la viewport.
+      - Bloque success/error leyendo el query del request actual
+        (?submitted=1 o ?form-error={code}).
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
+@using Umbraco.Cms.Core.Models.Blocks
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.FormsSettings> FormsOptions
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@{
+    var endpoint = Model.Value<string>("formEndpoint");
+    var internalKey = Model.Value<string>("formInternalKey");
+    var fields = Model.Value<BlockListModel>("fields");
+    if (fields == null || !fields.Any()) { return; }
+
+    var settings = FormsOptions.Value;
+    string? action = null;
+    var isInternal = false;
+    if (!string.IsNullOrWhiteSpace(internalKey))
+    {
+        action = $"/api/forms/{internalKey}/submit";
+        isInternal = true;
+    }
+    else if (!string.IsNullOrWhiteSpace(endpoint))
+    {
+        action = endpoint;
+    }
+    if (string.IsNullOrWhiteSpace(action)) { return; }
+
+    var title = Model.Value<string>("formTitle");
+    var submitLabel = Model.Value<string>("submitLabel");
+    if (string.IsNullOrWhiteSpace(submitLabel)) { submitLabel = "Enviar"; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    // Ancla in-page: id derivado de la key interna compuesta (p.ej. formInternalKey
+    // "contacto" → id="form-contacto"), para que un CTA pueda hacer scroll al formulario.
+    var anchorId = !string.IsNullOrWhiteSpace(internalKey) ? $"form-{internalKey}" : null;
+    var classes = string.Join(" ", new[]
+    {
+        "syn-form",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-form--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    string? feedbackKind = null;
+    string? feedbackMessage = null;
+    if (isInternal)
+    {
+        var query = HttpContextAccessor.HttpContext?.Request.Query;
+        if (query is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(query[settings.SuccessQueryParam]))
+            {
+                feedbackKind = "success";
+                feedbackMessage = Umbraco.GetDictionaryValue("Form.Messages.Success",
+                    "¡Gracias! Tu mensaje ha sido enviado.");
+            }
+            else if (!string.IsNullOrWhiteSpace(query[settings.ErrorQueryParam]))
+            {
+                feedbackKind = "error";
+                feedbackMessage = Umbraco.GetDictionaryValue("Form.Messages.Error",
+                    "Ocurrió un error. Por favor inténtalo de nuevo.");
+            }
+        }
+    }
+}
+<section id="@anchorId" class="@classes" data-form-internal="@isInternal.ToString().ToLowerInvariant()">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-form__title">@title</h2>
+    }
+
+    @if (feedbackKind is not null)
+    {
+        <div class="syn-form__feedback syn-form__feedback--@feedbackKind"
+             role="@(feedbackKind == "error" ? "alert" : "status")"
+             aria-live="polite">
+            @feedbackMessage
+        </div>
+    }
+
+    <form class="syn-form__form" action="@action" method="post" novalidate>
+        <div class="syn-form__fields">
+            @foreach (var field in fields)
+            {
+                @await Html.PartialAsync("Elements/Form/Field", field.Content)
+            }
+        </div>
+
+        @if (isInternal)
+        {
+            <div class="syn-form__honeypot" aria-hidden="true"
+                 style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;">
+                <label>
+                    No completes este campo
+                    <input type="text"
+                           name="@settings.HoneypotFieldName"
+                           tabindex="-1"
+                           autocomplete="off" />
+                </label>
+            </div>
+        }
+
+        <button type="submit" class="syn-form__submit">@submitLabel</button>
+    </form>
+</section>

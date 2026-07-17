@@ -1,0 +1,24 @@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    // apps: JSON array de dominios. Se DESERIALIZA a JsonElement (como FeatureGrid
+    // con itemsJson) para que el emitter lo serialice como array anidado en config
+    // — el componente Angular (normalizeApps) requiere un array, no un string.
+    object? apps = null;
+    var appsJson = Model.Value<string>("apps");
+    if (!string.IsNullOrWhiteSpace(appsJson))
+    {
+        try { apps = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(appsJson); }
+        catch (System.Text.Json.JsonException) { apps = null; }
+    }
+
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["apps"] = apps,
+        ["heading"] = Model.Value<string>("heading"),
+        ["subheading"] = Model.Value<string>("subheading"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("app-launcher", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

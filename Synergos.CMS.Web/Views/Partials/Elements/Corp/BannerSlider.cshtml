@@ -1,0 +1,39 @@
+@*
+    elementCorpBannerSlider renderer (Ola 21). SSR-native container.
+    Itera slides BlockList (elementMediaImage) y emite todos inline +
+    data-autoplay attr. JS del design system hidrata como carousel.
+    Emite slide 0 con aria-current (a11y + no-JS fallback).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var slides = Model.Value<BlockListModel>("slides");
+    if (slides == null || !slides.Any()) { return; }
+    var autoplay = Model.Value<bool>("autoplay");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-banner-slider",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-banner-slider--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes"
+         role="region"
+         aria-roledescription="carrusel"
+         data-autoplay="@(autoplay ? "true" : "false")">
+    <div class="syn-banner-slider__track">
+        @{ var idx = 0; }
+        @foreach (var slide in slides)
+        {
+            <div class="syn-banner-slider__slide"
+                 role="group"
+                 aria-roledescription="slide"
+                 aria-current="@(idx == 0 ? "true" : "false")">
+                @await Html.PartialAsync("Elements/Media/Image", slide.Content)
+            </div>
+            idx++;
+        }
+    </div>
+</section>

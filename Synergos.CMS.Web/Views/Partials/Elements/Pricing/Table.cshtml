@@ -1,0 +1,34 @@
+@*
+    elementPricingTable renderer (SSR). Encabezado + grilla de elementPricingPlan.
+    Genérico/composable: el editor define heading, subheading y los planes.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@using Synergos.CMS.Web.Services
+@{
+    var plans = Model.Value<BlockListModel>("plans");
+    if (plans == null || !plans.Any()) { return; }
+    var heading = Model.Value<string>("tableHeading");
+    var subheading = Model.Value<string>("tableSubheading");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-pricing",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Concat(LayoutCssBuilder.Build(Model)).Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @if (!string.IsNullOrWhiteSpace(heading) || !string.IsNullOrWhiteSpace(subheading))
+    {
+        <header class="syn-pricing__header">
+            @if (!string.IsNullOrWhiteSpace(heading)) { <h2 class="syn-pricing__title">@heading</h2> }
+            @if (!string.IsNullOrWhiteSpace(subheading)) { <p class="syn-pricing__subtitle">@subheading</p> }
+        </header>
+    }
+    <div class="syn-pricing__grid">
+        @foreach (var plan in plans)
+        {
+            @await Html.PartialAsync("Elements/Pricing/Plan", plan.Content)
+        }
+    </div>
+</section>

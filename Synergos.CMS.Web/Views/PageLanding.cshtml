@@ -1,0 +1,46 @@
+﻿@*
+    Template del Document Type `pageLanding`. Página de conversión.
+    Renderiza:
+    - <h1> con el heading (o el nombre del nodo) si showTitle activo
+    - sections (Layout Composer)
+
+    Sin sectionsAfterBody (Landing es lineal: abre fuerte y cierra
+    con CTA dentro del mismo cuerpo). El hero, copy y media se arman
+    como bloques arrastrables.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    Layout = "_Layout";
+    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var sections = currentContent?.Value<BlockGridModel>("sections");
+    var renderCtx = PageRenderContextResolver.Resolve();
+    var heading = currentContent?.Value<string>("heading");
+    if (string.IsNullOrWhiteSpace(heading)) { heading = currentContent?.Name; }
+    // Eyebrow: campo dedicado si existe, si no la sección contenedora (parent).
+    var eyebrow = currentContent?.Value<string>("eyebrow");
+    if (string.IsNullOrWhiteSpace(eyebrow))
+    {
+        var parent = currentContent?.Parent;
+        eyebrow = parent is not null && parent.Level > 1 ? parent.Name : null;
+    }
+}
+<article class="syn-page syn-page-landing">
+    @if (renderCtx.ShowTitle && !string.IsNullOrWhiteSpace(heading))
+    {
+        <header class="syn-page__header">
+            @if (!string.IsNullOrWhiteSpace(eyebrow))
+            {
+                <span class="syn-page__eyebrow">@eyebrow</span>
+            }
+            <h1 class="syn-page__title">@heading</h1>
+        </header>
+    }
+    @if (sections != null && sections.Any())
+    {
+        <div class="syn-page__body">
+            @await Html.GetBlockGridHtmlAsync(sections)
+        </div>
+    }
+</article>

@@ -1,0 +1,22 @@
+﻿@*
+    Template del Document Type `pageBasic` (perfil Canvas tras Ola 49).
+    Layout Composer puro: ningún heading/intro/featured automáticos. El
+    primer Section del editor trae todo el cromo visual interno.
+
+    El chrome (header/footer/Alex/breadcrumbs) lo aplica _Layout vía
+    IPageRenderContextResolver — el editor sigue pudiendo configurar
+    chromeMode/headerMode etc. desde la pestaña Orquestación.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBasicResponse>
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    Layout = "_Layout";
+    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var sections = currentContent?.Value<BlockGridModel>("sections");
+}
+<article class="syn-page syn-page-canvas">
+    @if (sections != null && sections.Any())
+    {
+        @await Html.GetBlockGridHtmlAsync(sections)
+    }
+</article>

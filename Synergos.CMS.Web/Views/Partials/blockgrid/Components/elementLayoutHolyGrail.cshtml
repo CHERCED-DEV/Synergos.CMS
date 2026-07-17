@@ -1,0 +1,51 @@
+﻿@*
+    elementLayoutHolyGrail renderer (Ola 42.7 + semantic HTML).
+    3 areas nav + main + aside (2+8+2). Cada area emite el tag
+    HTML5 semántico apropiado: nav → <nav>, main → <main>,
+    aside → <aside>. Wrapper externo <section>.
+    Backoffice preview: App_Plugins/LayoutComposer/views/block-layout-holy-grail.html
+*@
+@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
+@using Synergos.CMS.Web.Services
+@{
+    var element = Model.Content;
+    var variant = element.Value<string>("variantKey");
+    var cssClass = element.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-layout",
+        "syn-layout--holy-grail",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-layout--v-{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Concat(LayoutCssBuilder.Build(element)).Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @foreach (var area in Model.Areas)
+    {
+        var areaClasses = $"syn-layout__area syn-layout__area--{area.Alias}";
+        if (area.Alias == "nav")
+        {
+            <nav class="@areaClasses">
+                @await Html.GetBlockGridItemsHtmlAsync(area)
+            </nav>
+        }
+        else if (area.Alias == "main")
+        {
+            <main class="@areaClasses">
+                @await Html.GetBlockGridItemsHtmlAsync(area)
+            </main>
+        }
+        else if (area.Alias == "aside")
+        {
+            <aside class="@areaClasses">
+                @await Html.GetBlockGridItemsHtmlAsync(area)
+            </aside>
+        }
+        else
+        {
+            <div class="@areaClasses">
+                @await Html.GetBlockGridItemsHtmlAsync(area)
+            </div>
+        }
+    }
+</section>

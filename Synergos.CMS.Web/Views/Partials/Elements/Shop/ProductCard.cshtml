@@ -1,0 +1,100 @@
+@*
+    elementShopProductCard renderer.
+
+    Ola 59 — usa IShopQuery.GetProductBySku como seam (sin query inline
+    al árbol Umbraco). El productUrlTemplate (configOverride o prop
+    directa) sigue overrideando la URL canónica del productPage cuando
+    está presente, conservando compatibilidad con catálogos hosted en
+    rutas externas.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.IShopQuery ShopQuery
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
+@{
+    var sku = Model.Value<string>("productSku");
+    if (string.IsNullOrWhiteSpace(sku)) { return; }
+    var showPrice = Model.Value<bool>("showPrice");
+    var showAddToCart = Model.Value<bool>("showAddToCart");
+    var layout = Model.Value<string>("cardLayout") ?? "standard";
+    var productUrlTemplate = Model.Value<string>("productUrlTemplate");
+    if (string.IsNullOrWhiteSpace(productUrlTemplate))
+    {
+        var configOverrideJson = Model.Value<string>("configOverride");
+        if (!string.IsNullOrWhiteSpace(configOverrideJson))
+        {
+            try
+            {
+                using var configOverride = System.Text.Json.JsonDocument.Parse(configOverrideJson);
+                if (configOverride.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                    configOverride.RootElement.TryGetProperty("productUrlTemplate", out var productUrlTemplateElement) &&
+                    productUrlTemplateElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    productUrlTemplate = productUrlTemplateElement.GetString();
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+            }
+        }
+    }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-product-card",
+        $"syn-product-card--{layout}",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-product-card--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    var product = ShopQuery.GetProductBySku(sku);
+    var productUrl = product?.Url;
+    if (!string.IsNullOrWhiteSpace(productUrlTemplate))
+    {
+        productUrl = productUrlTemplate.Replace("{sku}", Uri.EscapeDataString(sku));
+    }
+    var coCulture = System.Globalization.CultureInfo.GetCultureInfo("es-CO");
+}
+<article class="@classes"
+         data-sku="@sku"
+         data-show-price="@showPrice"
+         data-show-add-to-cart="@showAddToCart"
+         @if (!string.IsNullOrWhiteSpace(productUrlTemplate))
+         {
+             @:data-product-url-template="@productUrlTemplate"
+         }>
+    @if (product is null)
+    {
+        <p class="syn-product-card__empty">@Umbraco.GetDictionaryValue("Shop.Filter.NoResults") <code>@sku</code></p>
+    }
+    else
+    {
+        <a class="syn-product-card__link" href="@productUrl">
+            @if (!string.IsNullOrWhiteSpace(product.ImageUrl))
+            {
+                <img class="syn-product-card__image" src="@product.ImageUrl" alt="@product.Name" loading="lazy" />
+            }
+            <h3 class="syn-product-card__name">@product.Name</h3>
+            @if (showPrice)
+            {
+                <span class="syn-product-card__price">
+                    @PriceFormatter.Format(product.Price, product.Currency)
+                </span>
+            }
+            @if (!product.InStock)
+            {
+                <span class="syn-product-card__out-of-stock">@Umbraco.GetDictionaryValue("Shop.Product.OutOfStock")</span>
+            }
+        </a>
+        @if (showAddToCart && product.InStock)
+        {
+            <button type="button"
+                    class="syn-product-card__add-to-cart"
+                    data-action="add-to-cart"
+                    data-sku="@sku"
+                    data-price="@product.Price.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+                @Umbraco.GetDictionaryValue("Shop.Product.AddToCart")
+            </button>
+        }
+    }
+</article>

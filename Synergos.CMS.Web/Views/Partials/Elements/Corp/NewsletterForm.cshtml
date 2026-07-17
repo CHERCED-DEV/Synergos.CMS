@@ -1,0 +1,45 @@
+@*
+    elementCorpNewsletterForm renderer (Ola 21). SSR-native.
+    Form POST a formEndpoint externo. Título/subtítulo/placeholder/submit
+    son Culture-variant. formEndpoint es Nothing (técnico).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var endpoint = Model.Value<string>("formEndpoint");
+    if (string.IsNullOrWhiteSpace(endpoint)) { return; }
+    var title = Model.Value<string>("formTitle");
+    var subtitle = Model.Value<string>("formSubtitle");
+    var placeholder = Model.Value<string>("placeholderText");
+    if (string.IsNullOrWhiteSpace(placeholder)) { placeholder = "Tu email"; }
+    var submitLabel = Model.Value<string>("submitLabel");
+    if (string.IsNullOrWhiteSpace(submitLabel)) { submitLabel = "Suscribirme"; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-newsletter",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-newsletter--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-newsletter__title">@title</h2>
+    }
+    @if (!string.IsNullOrWhiteSpace(subtitle))
+    {
+        <p class="syn-newsletter__subtitle">@subtitle</p>
+    }
+    <form class="syn-newsletter__form" action="@endpoint" method="post">
+        <label class="syn-newsletter__label" for="syn-newsletter-email-@Model.Key">@placeholder</label>
+        <input id="syn-newsletter-email-@Model.Key"
+               class="syn-newsletter__input"
+               type="email"
+               name="email"
+               placeholder="@placeholder"
+               required
+               autocomplete="email" />
+        <button type="submit" class="syn-newsletter__submit">@submitLabel</button>
+    </form>
+</section>

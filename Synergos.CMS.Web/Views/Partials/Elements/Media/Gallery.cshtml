@@ -1,0 +1,37 @@
+@*
+    elementMediaGallery renderer (Ola 19 schema + Ola 42 layout).
+    Grid/flex-wrap de imágenes con data-syn-gallery-lightbox attr
+    en cada child (via GalleryItem.cshtml) para hidratación futura.
+    Display/flex/grid modifiers resueltos por LayoutCssBuilder.
+    gridColumns (TextBox Nothing) sobrevive como fallback cuando
+    compDomGrid.gridTemplate está vacío.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@using Synergos.CMS.Web.Services
+@{
+    var items = Model.Value<BlockListModel>("galleryItems");
+    if (items == null || !items.Any()) { return; }
+    var gridColumns = Model.Value<string>("gridColumns");
+    if (string.IsNullOrWhiteSpace(gridColumns)) { gridColumns = "3"; }
+    var gridTemplate = Model.Value<string>("gridTemplate");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-gallery",
+        string.IsNullOrWhiteSpace(gridTemplate) ? $"syn-gallery--cols-{gridColumns}" : null,
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-gallery--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Concat(LayoutCssBuilder.Build(Model)).Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    <ul class="syn-gallery__grid" role="list">
+        @foreach (var item in items)
+        {
+            <li class="syn-gallery__cell">
+                @await Html.PartialAsync("Elements/Media/GalleryItem", item.Content)
+            </li>
+        }
+    </ul>
+</section>

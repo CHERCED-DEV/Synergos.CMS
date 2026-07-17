@@ -1,0 +1,42 @@
+name: uSync schema audit
+
+# Cap-270 Batch C (Ola 277).
+# Corre tools/usync-audit.mjs en cada PR/push que toque el schema
+# uSync o el script audit. Bloquea el merge si hay errores
+# (GUID collisions, missing composition refs, iconos inválidos,
+# Dictionary alias mal formado). Warnings (orphan compositions sin
+# marker) NO bloquean — quedan visibles en el log para review.
+
+on:
+  pull_request:
+    paths:
+      - 'Synergos.CMS.Web/uSync/v9/**'
+      - 'tools/usync-audit.mjs'
+      - 'tools/umbraco13-icons-stock.txt'
+      - '.github/workflows/usync-audit.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'Synergos.CMS.Web/uSync/v9/**'
+      - 'tools/usync-audit.mjs'
+      - 'tools/umbraco13-icons-stock.txt'
+      - '.github/workflows/usync-audit.yml'
+
+jobs:
+  audit:
+    name: tools/usync-audit.mjs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run uSync audit
+        run: node tools/usync-audit.mjs

@@ -1,0 +1,83 @@
+# ───────────────────────── .NET build output ─────────────────────────
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+[Ll]og/
+[Ll]ogs/
+
+# ───────────────────────── Visual Studio / Rider ─────────────────────
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.ncrunchsolution
+*.ncrunchproject
+
+# ───────────────────────── NuGet / tooling caches ────────────────────
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ───────────────────────── Umbraco runtime state ─────────────────────
+# These are runtime data, NOT source of truth (schema lives in uSync/v9/).
+Synergos.CMS.Web/umbraco/Data/
+Synergos.CMS.Web/umbraco/Logs/
+Synergos.CMS.Web/umbraco/mediacache/
+Synergos.CMS.Web/App_Data/
+Synergos.CMS.Web/wwwroot/media/
+
+# ───────────────────────── ModelsBuilder generated code ──────────────
+# SourceCodeAuto regenera estos archivos cada vez que cambia el schema.
+# Son OUTPUT del schema XML uSync, no SOURCE — el agente nunca los
+# edita a mano. Versionarlos crearia conflictos cuando dos devs tienen
+# schemas diferentes. Local-only.
+Synergos.CMS.Web/umbraco/models/*.generated.cs
+Synergos.CMS.Web/umbraco/models/all.generated.cs
+Synergos.CMS.Web/umbraco/models/models.generated.hash
+
+# uSync state/history (transient — the v9/ authoritative XMLs are kept)
+Synergos.CMS.Web/uSync/uSync.History/
+Synergos.CMS.Web/uSync/uSync.Logs/
+
+# uSync auto-exports content + media from DB; el agente NO es dueño
+# de Content/Media (memoria feedback_schema_ownership_agent). Test
+# content del seeder tampoco se commitea — se regenera con
+# DevTestContentSeeder. MediaTypes (schema) sí está en uSync/v9/MediaTypes/.
+Synergos.CMS.Web/uSync/v9/Content/
+Synergos.CMS.Web/uSync/v9/Media/
+
+# Umbraco-generated appsettings schema references (regenerated on build)
+Synergos.CMS.Web/appsettings-schema.json
+Synergos.CMS.Web/appsettings-schema.Umbraco.Cms.json
+Synergos.CMS.Web/appsettings-schema.usync.json
+
+# ───────────────────────── Local secrets / env ───────────────────────
+*.local.json
+appsettings.Local.json
+secrets.json
+.env
+.env.*
+!.env.example
+
+# ───────────────────────── Test results ──────────────────────────────
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# ───────────────────────── Editor/OS junk ────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ───────────────────────── Claude Code harness ───────────────────────
+.claude/

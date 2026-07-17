@@ -1,0 +1,160 @@
+@*
+    _ProductDetailCore — núcleo visual ÚNICO de la PDP (Product Detail Page).
+
+    Fuente de verdad compartida del render de un producto: la usan
+    `Views/ProductPage.cshtml` (template canónico) y
+    `Views/Partials/Elements/Shop/ProductDetail.cshtml` (bloque editor-drop),
+    de modo que ambos emiten la MISMA estructura `.syn-product`
+    (__gallery / __info / __header / __pricing / __price / __stock /
+    __variants / __add-to-cart / __trust) con el mismo IPriceFormatter y la
+    misma moneda (CartSettings.Currency). Una sola PDP, dos hosts.
+
+    Model: el IPublishedContent del nodo `productPage`.
+
+    ViewData opcional:
+      - "ShowCategory" (bool, default true): eyebrow link a la categoría padre.
+
+    i18n: claves reales del schema (alias PascalCase) — Shop.Product.*,
+    Shop.Product.Trust.*. Cero hardcode.
+
+    Trust signals: lista alimentada por Dictionary Shop.Product.Trust.*.
+    Urgencia / descuento: el markup queda preparado pero condicionado a
+    campos de schema que HOY no existen (stock numérico, precio compare-at)
+    — ver nota de seguimiento al pie y syn-shop.css.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>
+@using System.Globalization
+@using Umbraco.Cms.Core.Models.PublishedContent
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CartSettings> CartSettingsOpt
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
+@{
+    var product = Model;
+    if (product is null) { return; }
+
+    var showCategory = ViewData["ShowCategory"] is not bool sc || sc;
+
+    var sku = product.Value<string>("productSku") ?? string.Empty;
+    var name = product.Value<string>("productName") ?? product.Name ?? sku;
+    var priceRaw = product.Value<string>("productPriceBase");
+    var price = decimal.TryParse(priceRaw, NumberStyles.Number, CultureInfo.InvariantCulture, out var p) ? p : 0m;
+    var inStock = product.Value<bool>("productInStock");
+    var images = product.Value<IEnumerable<IPublishedContent>>("productImages")?.ToArray() ?? Array.Empty<IPublishedContent>();
+    var variantsJson = product.Value<string>("productVariantsJson");
+
+    var currency = CartSettingsOpt.Value.Currency;
+    var category = product.Parent;
+    var categoryName = showCategory && category is { } c && string.Equals(c.ContentType.Alias, "productCategoryPage", StringComparison.Ordinal)
+        ? (c.Value<string>("categoryName") ?? c.Name)
+        : null;
+
+    // Trust signals — texto 100% desde Dictionary (Shop.Product.Trust.*).
+    // Si una clave está vacía (no traducida), se omite la fila.
+    var trustItems = new[]
+    {
+        Umbraco.GetDictionaryValue("Shop.Product.Trust.Shipping"),
+        Umbraco.GetDictionaryValue("Shop.Product.Trust.Returns"),
+        Umbraco.GetDictionaryValue("Shop.Product.Trust.Warranty"),
+    }.Where(t => !string.IsNullOrWhiteSpace(t)).ToArray();
+}
+@if (images.Length > 0)
+{
+    <div class="syn-product__gallery">
+        <figure class="syn-product__gallery-stage">
+            <img class="syn-product__image" src="@images[0].Url()" alt="@name"
+                 data-main-image loading="eager" />
+        </figure>
+        @if (images.Length > 1)
+        {
+            <ul class="syn-product__thumbs" role="list">
+                @for (var i = 0; i < images.Length; i++)
+                {
+                    var img = images[i];
+                    <li class="syn-product__thumb-item">
+                        <button type="button"
+                                class="syn-product__thumb@(i == 0 ? " syn-product__thumb--active" : "")"
+                                data-thumb
+                                data-thumb-src="@img.Url()"
+                                aria-pressed="@(i == 0 ? "true" : "false")"
+                                aria-label="@string.Format(Umbraco.GetDictionaryValue("Shop.Product.ViewImage"), i + 1)">
+                            <img class="syn-product__thumb-image" src="@img.Url()" alt="" loading="lazy" />
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+<div class="syn-product__info">
+    <header class="syn-product__header">
+        @if (!string.IsNullOrWhiteSpace(categoryName))
+        {
+            <a class="syn-product__category" href="@category!.Url()">@categoryName</a>
+        }
+        <h1 class="syn-product__name">@name</h1>
+        @if (!string.IsNullOrWhiteSpace(sku))
+        {
+            <p class="syn-product__sku">@Umbraco.GetDictionaryValue("Shop.Product.Sku"): @sku</p>
+        }
+    </header>
+
+    <section class="syn-product__pricing">
+        <p class="syn-product__price" data-price="@price.ToString(CultureInfo.InvariantCulture)">
+            @PriceFormatter.Format(price, currency)
+        </p>
+        @*
+            Badge de descuento (precio tachado): REQUIERE un campo de schema
+            `productPriceCompareAt` que NO existe hoy. Markup intencionalmente
+            omitido para no inventar dato. El estilo `.syn-product__discount`
+            queda listo en syn-shop.css. SEGUIMIENTO uSync (ver nota al pie).
+        *@
+        @if (inStock)
+        {
+            <p class="syn-product__stock syn-product__stock--in">@Umbraco.GetDictionaryValue("Shop.Product.InStock")</p>
+        }
+        else
+        {
+            <p class="syn-product__stock syn-product__stock--out">@Umbraco.GetDictionaryValue("Shop.Product.OutOfStock")</p>
+        }
+    </section>
+
+    @*
+        Urgencia de stock ("Solo quedan N"): REQUIERE un campo numérico de
+        stock que NO existe en `productPage` (sólo el booleano
+        productInStock). Sin dato → no se renderiza (no se inventa cifra).
+        Cuando el schema exponga el contador, alimentar
+        Umbraco.GetDictionaryValue("Shop.Product.LowStock") (alias ya vivo)
+        y emitir `.syn-product__stock-urgency` (estilo listo en syn-shop.css).
+        SEGUIMIENTO uSync (ver nota al pie).
+    *@
+
+    @if (!string.IsNullOrWhiteSpace(variantsJson))
+    {
+        <section class="syn-product__variants" data-variants="@variantsJson"
+                 aria-label="@Umbraco.GetDictionaryValue("Shop.Product.SelectVariant")">
+            @* El design system frontend hidrata el selector según data-variants. *@
+        </section>
+    }
+
+    @if (inStock)
+    {
+        <button type="button" class="syn-product__add-to-cart" data-action="add-to-cart" data-sku="@sku">
+            @Umbraco.GetDictionaryValue("Shop.Product.AddToCart")
+        </button>
+    }
+
+    @if (trustItems.Length > 0)
+    {
+        <ul class="syn-product__trust" role="list">
+            @foreach (var item in trustItems)
+            {
+                <li class="syn-product__trust-item">
+                    <svg class="syn-product__trust-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                        <path d="M7.5 13.5 4 10l-1.2 1.2 4.7 4.7L17 5.4 15.8 4.2z" fill="currentColor" />
+                    </svg>
+                    <span class="syn-product__trust-text">@item</span>
+                </li>
+            }
+        </ul>
+    }
+</div>

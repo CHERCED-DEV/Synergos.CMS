@@ -1,0 +1,56 @@
+@*
+    Layout shared por todos los email templates Razor (Ola 82). Aplica
+    branding mínimo consistente: header con siteDisplayName + footer
+    legal. Layout=null por diseño — emails NO heredan de _Layout del
+    sitio (HTML estructurado para email clients, no para browser).
+
+    Variables esperadas:
+    - ViewBag.SiteName (string) — nombre visible del sitio. Si null,
+      usa "Synergos".
+    - ViewBag.PreheaderText (string) — texto invisible para preview de
+      email client. Opcional.
+*@
+@{
+    Layout = null;
+    var siteName = ViewBag.SiteName as string ?? "Synergos";
+    var preheaderText = ViewBag.PreheaderText as string;
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@(ViewBag.Title ?? siteName)</title>
+</head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:Manrope,'Segoe UI',system-ui,Helvetica,Arial,sans-serif;color:#0f172a;">
+    @if (!string.IsNullOrWhiteSpace(preheaderText))
+    {
+        <div style="display:none;font-size:1px;color:#f1f5f9;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+            @preheaderText
+        </div>
+    }
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#f1f5f9;">
+        <tr>
+            <td align="center" style="padding:24px 16px;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                    <tr>
+                        <td style="padding:24px 32px;border-bottom:1px solid #e2e8f0;">
+                            <strong style="font-size:18px;color:#0f172a;">@siteName</strong>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:32px;">
+                            @RenderBody()
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:16px 32px;border-top:1px solid #e2e8f0;font-size:12px;color:#475569;text-align:center;">
+                            &copy; @DateTime.UtcNow.Year @siteName
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

@@ -1,0 +1,53 @@
+@*
+    Confirmation page tras enrollment exitoso. Muestra los recovery
+    codes UNA VEZ — el member debe copiarlos a un lugar seguro.
+    Frame "launcher / PS3".
+*@
+@{
+    Layout = null;
+    var recoveryCodes = ViewData["RecoveryCodes"] as IReadOnlyList<string>
+        ?? Array.Empty<string>();
+    var title = Umbraco.GetDictionaryValue("Account.TwoFactor.ConfirmedTitle", "2FA activado");
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">
+<head>
+    @await Html.PartialAsync("_AccountHead")
+    <title>@title</title>
+</head>
+<body class="syn-account syn-launcher">
+    <main class="syn-launcher__main">
+        @await Html.PartialAsync("_AccountHero", (object)title)
+
+        <div class="syn-account__card">
+            <p class="syn-account__feedback syn-account__feedback--success" role="status">
+                Tu cuenta ahora requiere un código TOTP en cada login. Guarda
+                los recovery codes a continuación — son single-use y te
+                permiten loguear si pierdes el dispositivo.
+            </p>
+
+            <section class="syn-account__info">
+                <h2>Recovery codes</h2>
+                <p>
+                    <strong>Esta es la única vez que verás estos códigos.</strong>
+                    Cópialos a un password manager o imprímelos. Cada uno solo
+                    puede usarse <strong>una sola vez</strong>.
+                </p>
+                <ol class="syn-account__recovery-list">
+                    @foreach (var code in recoveryCodes)
+                    {
+                        <li><code>@code</code></li>
+                    }
+                </ol>
+                <p class="syn-account__hint">
+                    Si los perdés, el admin puede hacer reset de tu 2FA — tendrás
+                    que re-enroll desde cero.
+                </p>
+            </section>
+
+            <a href="/account/profile" class="syn-account__submit">Volver al perfil</a>
+        </div>
+    </main>
+    <script src="~/js/platform-root.js" asp-append-version="true" defer></script>
+</body>
+</html>

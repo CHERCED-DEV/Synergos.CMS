@@ -1,0 +1,44 @@
+﻿@*
+    elementLayoutSidebarMain renderer (Ola 42.7 + semantic HTML).
+    2 areas sidebar (4) + main (8). Inverso del MainSidebar.
+    Sidebar emite <aside>; main emite <main>.
+    Backoffice preview: App_Plugins/LayoutComposer/views/block-layout-sidebar-main.html
+*@
+@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
+@using Synergos.CMS.Web.Services
+@{
+    var element = Model.Content;
+    var variant = element.Value<string>("variantKey");
+    var cssClass = element.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-layout",
+        "syn-layout--sidebar-main",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-layout--v-{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Concat(LayoutCssBuilder.Build(element)).Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">
+    @foreach (var area in Model.Areas)
+    {
+        var areaClasses = $"syn-layout__area syn-layout__area--{area.Alias}";
+        if (area.Alias == "main")
+        {
+            <main class="@areaClasses">
+                @await Html.GetBlockGridItemsHtmlAsync(area)
+            </main>
+        }
+        else if (area.Alias == "sidebar")
+        {
+            <aside class="@areaClasses">
+                @await Html.GetBlockGridItemsHtmlAsync(area)
+            </aside>
+        }
+        else
+        {
+            <div class="@areaClasses">
+                @await Html.GetBlockGridItemsHtmlAsync(area)
+            </div>
+        }
+    }
+</div>

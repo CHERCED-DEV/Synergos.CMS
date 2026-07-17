@@ -1,0 +1,61 @@
+@*
+    elementCompMediaTextSplit renderer (Ola 22). SSR-native composite 50/50.
+    Media a la izquierda (default) o a la derecha (mediaOnRight=true).
+    Column order controlado via clase CSS --media-right.
+*@
+@using Umbraco.Cms.Core.Models
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("headingTitle");
+    var body = Model.Value<string>("textBody");
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(body) && mediaRef == null) { return; }
+    var subtitle = Model.Value<string>("headingSubtitle");
+    var mediaAlt = Model.Value<string>("mediaAlt") ?? "";
+    var mediaCaption = Model.Value<string>("mediaCaption");
+    var ctaLabel = Model.Value<string>("ctaLabel");
+    var ctaLink = Model.Value<Link>("ctaLink");
+    var ctaUrl = ctaLink?.Url;
+    var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab") || string.Equals(ctaLink?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
+    var mediaOnRight = Model.Value<bool>("mediaOnRight");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-media-text-split",
+        mediaOnRight ? "syn-media-text-split--media-right" : "syn-media-text-split--media-left",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-media-text-split--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var hasCta = !string.IsNullOrWhiteSpace(ctaLabel) && !string.IsNullOrWhiteSpace(ctaUrl);
+}
+<section class="@classes">
+    @if (mediaRef != null)
+    {
+        <figure class="syn-media-text-split__media">
+            <img src="@mediaRef.Url()" alt="@mediaAlt" loading="lazy" />
+            @if (!string.IsNullOrWhiteSpace(mediaCaption))
+            {
+                <figcaption class="syn-media-text-split__caption">@mediaCaption</figcaption>
+            }
+        </figure>
+    }
+    <div class="syn-media-text-split__text">
+        @if (!string.IsNullOrWhiteSpace(title))
+        {
+            <h2 class="syn-media-text-split__title">@title</h2>
+        }
+        @if (!string.IsNullOrWhiteSpace(subtitle))
+        {
+            <p class="syn-media-text-split__subtitle">@subtitle</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(body))
+        {
+            <div class="syn-media-text-split__body">@Html.Raw(body)</div>
+        }
+        @if (hasCta)
+        {
+            <a class="syn-media-text-split__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+        }
+    </div>
+</section>

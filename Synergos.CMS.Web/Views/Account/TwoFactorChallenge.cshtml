@@ -1,0 +1,62 @@
+@*
+    Vista del AccountController.TwoFactorChallenge (Olas 201-204).
+    Post-password challenge requesting TOTP code o recovery code.
+    El token vive 5 minutos en IMemoryCache (server-side).
+    Frame "launcher / PS3". Campos token/code sin cambios.
+*@
+@{
+    Layout = null;
+    var token = ViewData["Token"] as string ?? string.Empty;
+    var errorCode = ViewData["ErrorCode"] as string;
+    var title = Umbraco.GetDictionaryValue("Account.TwoFactor.ChallengeTitle", "Verificación en 2 pasos");
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">
+<head>
+    @await Html.PartialAsync("_AccountHead")
+    <title>@title</title>
+</head>
+<body class="syn-account syn-launcher">
+    <main class="syn-launcher__main">
+        @await Html.PartialAsync("_AccountHero", (object)title)
+
+        <div class="syn-account__card">
+            @if (errorCode == "invalid-code")
+            {
+                <p class="syn-account__feedback syn-account__feedback--error" role="alert">
+                    Código inválido. Verifica que tu app de autenticación esté
+                    en hora y vuelve a intentar. Si perdiste el dispositivo,
+                    usa uno de tus recovery codes.
+                </p>
+            }
+
+            <p class="syn-account__hint">
+                Ingresa el código de 6 dígitos de tu app de autenticación.
+                También aceptamos los recovery codes de 8 caracteres que
+                recibiste en el enrollment.
+            </p>
+
+            <form method="post" action="/account/2fa-challenge" class="syn-account__form">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="token" value="@token" />
+                <label class="syn-account__field">
+                    <span class="syn-account__field-label">Código TOTP o recovery</span>
+                    <input type="text" name="code"
+                           inputmode="numeric"
+                           autocomplete="one-time-code"
+                           required
+                           autofocus
+                           class="syn-account__field-input"
+                           maxlength="20" />
+                </label>
+                <button type="submit" class="syn-account__submit">Verificar</button>
+            </form>
+
+            <p class="syn-account__alt">
+                <a href="/account/login">← Volver al login</a>
+            </p>
+        </div>
+    </main>
+    <script src="~/js/platform-root.js" asp-append-version="true" defer></script>
+</body>
+</html>

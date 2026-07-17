@@ -1,0 +1,1836 @@
+/* ============================================================
+   Synergos CMS — Primitive components
+   ============================================================
+   Buttons, links, badges, cards, alerts, hero, cta-banner,
+   media-text-split, stats, features, testimonials, faq,
+   timeline, alert-bar, logo cloud, avatar, key-value,
+   social share, contact info, quotes.
+
+   Mirror del catálogo de componentes Synergos.UI con BEM y
+   tokens canónicos.
+   ------------------------------------------------------------ */
+
+/* ── Buttons (elementActionButton) ───────────────────────────── */
+
+.syn-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--syn-space-2);
+  min-height: var(--syn-control-h-md);   /* 40 (FIX 3) */
+  padding: var(--syn-space-2) var(--syn-space-5);
+  border-radius: var(--syn-radius-md);
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition: var(--syn-transition-colors), transform var(--syn-duration-fast) var(--syn-easing-out);
+  white-space: nowrap;
+}
+
+.syn-button:hover { text-decoration: none; }
+.syn-button:active { transform: translateY(0); }
+.syn-button:disabled,
+.syn-button[aria-disabled="true"] {
+  background: var(--syn-color-action-disabled-surface);
+  color: var(--syn-color-action-disabled-text);
+  border-color: var(--syn-color-action-disabled-border);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.syn-button--sm {
+  min-height: var(--syn-control-h-sm);   /* 32 (FIX 3) */
+  padding: var(--syn-space-1) var(--syn-space-3);
+  font-size: var(--syn-font-size-xs);
+}
+
+.syn-button--lg {
+  min-height: var(--syn-control-h-lg);   /* 48 (FIX 3) */
+  padding: var(--syn-space-3) var(--syn-space-6);
+  font-size: var(--syn-font-size-base);
+}
+
+/* Variants */
+
+.syn-button--primary {
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  border-color: var(--syn-color-action-primary);
+  box-shadow: var(--syn-shadow-action);
+}
+.syn-button--primary:hover {
+  background: var(--syn-color-action-primary-hover);
+  border-color: var(--syn-color-action-primary-hover);
+  box-shadow: var(--syn-shadow-action-hover);
+  transform: translateY(-1px);
+}
+
+.syn-button--secondary,
+.syn-button--outlined {
+  background: var(--syn-color-action-secondary-surface);
+  color: var(--syn-color-action-secondary-text);
+  border-color: var(--syn-color-action-secondary-border);
+}
+.syn-button--secondary:hover,
+.syn-button--outlined:hover {
+  background: var(--syn-color-action-secondary-surface-hover);
+  color: var(--syn-color-action-secondary-text-hover);
+  border-color: var(--syn-color-action-secondary-border-hover);
+}
+
+.syn-button--ghost {
+  background: var(--syn-color-action-ghost-surface);
+  color: var(--syn-color-action-ghost-text);
+  border-color: transparent;
+}
+.syn-button--ghost:hover {
+  background: var(--syn-color-action-ghost-surface-hover);
+  color: var(--syn-color-action-ghost-text-hover);
+}
+
+.syn-button--emphasis {
+  /* a11y — accent-500→600 subido a 600→700 (texto claro sobre accent-500 = 4.23 <AA). */
+  background: linear-gradient(135deg,
+    var(--syn-color-accent-600) 0%,
+    var(--syn-color-accent-700) 100%);
+  color: var(--syn-color-text-on-accent);
+  border-color: transparent;
+  box-shadow: var(--syn-shadow-accent-md);
+}
+.syn-button--emphasis:hover {
+  filter: brightness(1.05);
+  box-shadow: var(--syn-shadow-accent-md), 0 4px 16px 0 rgb(var(--syn-channel-accent) / 0.34);
+  transform: translateY(-1px);
+}
+
+.syn-button--danger {
+  background: var(--syn-color-action-danger);
+  color: var(--syn-color-action-danger-text);
+  border-color: var(--syn-color-action-danger);
+}
+.syn-button--danger:hover {
+  background: var(--syn-color-action-danger-hover);
+  border-color: var(--syn-color-action-danger-hover);
+}
+
+.syn-button--full {
+  display: flex;
+  width: 100%;
+}
+
+/* ── Links (elementActionLink) ───────────────────────────────── */
+
+.syn-link {
+  color: var(--syn-color-action-primary);
+  text-decoration: none;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-link:hover {
+  color: var(--syn-color-action-primary-hover);
+  text-decoration: underline;
+}
+
+.syn-link--primary {
+  color: var(--syn-color-action-primary);
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+.syn-link--ghost {
+  color: var(--syn-color-text-muted);
+  text-decoration: none;
+}
+
+.syn-link--ghost:hover {
+  color: var(--syn-color-text-primary);
+  text-decoration: none;
+}
+
+.syn-link--with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+}
+
+/* ── Badges (elementInfoBadge + compContentBadge) ────────────── */
+
+.syn-badge,
+.syn-info-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+  padding: var(--syn-space-1) var(--syn-space-3);
+  border-radius: var(--syn-radius-full);
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-semibold);
+  letter-spacing: var(--syn-letter-spacing-wide);
+  background: var(--syn-color-state-brand-surface);
+  color: var(--syn-color-state-brand-text);
+  border: 1px solid var(--syn-color-state-brand-border);
+}
+
+.syn-badge--neutral,
+.syn-info-badge--neutral {
+  background: var(--syn-color-surface-tertiary);
+  /* Ancla a un ink oscuro (su fondo es un chip claro OPACO que no se re-mapea en bandas) */
+  color: var(--syn-color-neutral-700);
+  border-color: var(--syn-color-border-subtle);
+}
+
+.syn-badge--primary,
+.syn-info-badge--primary {
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  border-color: transparent;
+}
+
+.syn-badge--success,
+.syn-info-badge--success {
+  background: var(--syn-color-state-success-surface);
+  color: var(--syn-color-state-success-text);
+  border-color: var(--syn-color-state-success-border);
+}
+
+.syn-badge--warning,
+.syn-info-badge--warning {
+  background: var(--syn-color-state-warning-surface);
+  color: var(--syn-color-state-warning-text);
+  border-color: var(--syn-color-state-warning-border);
+}
+
+.syn-badge--error,
+.syn-info-badge--error {
+  background: var(--syn-color-state-danger-surface);
+  color: var(--syn-color-state-danger-text);
+  border-color: var(--syn-color-state-danger-border);
+}
+
+.syn-badge--info,
+.syn-info-badge--info {
+  background: var(--syn-color-state-info-surface);
+  color: var(--syn-color-state-info-text);
+  border-color: var(--syn-color-state-info-border);
+}
+
+.syn-badge--emphasis,
+.syn-info-badge--emphasis {
+  /* a11y — accent-500→600 subido a 600→700 (texto claro sobre accent-500 = 4.23 <AA). */
+  background: linear-gradient(135deg,
+    var(--syn-color-accent-600) 0%,
+    var(--syn-color-accent-700) 100%);
+  color: var(--syn-color-text-on-accent);
+  border-color: transparent;
+}
+
+/* ── Card composite (elementCompCard) ────────────────────────── */
+
+.syn-card {
+  background: var(--syn-card-surface);
+  border: var(--syn-card-border);
+  border-radius: var(--syn-card-radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--syn-card-shadow);
+  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
+}
+
+.syn-card:hover {
+  border-color: var(--syn-card-border-hover);
+  box-shadow: var(--syn-card-shadow-hover);
+  transform: var(--syn-card-lift);
+}
+
+.syn-card__media {
+  position: relative;
+  background: var(--syn-color-surface-secondary);
+  overflow: hidden;
+}
+
+.syn-card__media img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+}
+
+.syn-card__header {
+  padding: var(--syn-space-md) var(--syn-space-md) 0;
+}
+
+.syn-card__title {
+  font-size: var(--syn-font-size-xl);
+  font-weight: var(--syn-font-weight-semibold);
+  margin: 0 0 var(--syn-space-2);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-card__subtitle {
+  color: var(--syn-color-text-muted);
+  margin: 0;
+  font-size: var(--syn-font-size-sm);
+}
+
+.syn-card__body {
+  padding: var(--syn-space-md);
+  flex: 1;
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-card__footer {
+  padding: var(--syn-space-md);
+  border-top: 1px solid var(--syn-color-border-subtle);
+  background: var(--syn-color-surface-secondary);
+}
+
+.syn-card__cta {
+  color: var(--syn-color-action-primary);
+  font-weight: var(--syn-font-weight-semibold);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+}
+
+/* Card variants — set mínimo coherente sobre tokens canónicos.
+   Cubre tanto los aliases del task (bordered/elevated/ghost/accent)
+   como los valores del enum DT.Select.VariantKey (outlined/neutral). */
+.syn-card--bordered,
+.syn-card--outlined {
+  border: 1px solid var(--syn-color-border-strong);
+  box-shadow: var(--syn-shadow-none);
+}
+
+.syn-card--elevated {
+  border-color: transparent;
+  box-shadow: var(--syn-shadow-md);
+}
+.syn-card--elevated:hover {
+  box-shadow: var(--syn-shadow-lg);
+}
+
+.syn-card--ghost,
+.syn-card--neutral {
+  background: var(--syn-color-surface-secondary);
+  border-color: var(--syn-color-border-subtle);
+  box-shadow: var(--syn-shadow-none);
+}
+
+.syn-card--accent {
+  background: var(--syn-color-surface-accent);
+  border-color: var(--syn-color-border-accent);
+  box-shadow: var(--syn-shadow-brand-sm);
+}
+.syn-card--accent:hover {
+  box-shadow: var(--syn-shadow-brand-md);
+}
+
+/* ── Hero (elementCompHero) ──────────────────────────────────── */
+
+.syn-hero {
+  position: relative;
+  padding: var(--syn-space-3xl) var(--syn-space-lg);
+  text-align: center;
+  border-radius: var(--syn-radius-2xl);
+  overflow: hidden;
+  box-shadow: var(--syn-shadow-md);
+  background: var(--syn-gradient-hero, linear-gradient(135deg,
+    var(--syn-color-surface-accent) 0%,
+    var(--syn-color-surface-primary) 56%,
+    var(--syn-color-surface-accent-soft) 100%));
+}
+
+.syn-hero__media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.syn-hero__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.syn-hero__media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg,
+    rgb(var(--syn-channel-ink) / 0.12) 0%,
+    rgb(var(--syn-channel-ink) / 0.58) 100%);
+  z-index: 1;
+}
+
+.syn-hero__content {
+  position: relative;
+  z-index: 2;
+  max-width: var(--syn-max-width-hero);
+  margin-inline: auto;
+}
+
+.syn-hero__eyebrow {
+  display: inline-block;
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  color: var(--syn-color-text-accent);
+  margin-bottom: var(--syn-space-2);
+}
+
+.syn-hero__title {
+  font-size: clamp(var(--syn-font-size-3xl), 4vw + 1rem, var(--syn-font-size-5xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-tight);
+  margin: 0 0 var(--syn-space-md);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-hero__subtitle {
+  font-size: var(--syn-font-size-lg);
+  color: var(--syn-color-text-secondary);
+  margin: 0 0 var(--syn-space-xl);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-hero__body {
+  margin: 0 auto var(--syn-space-xl);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-hero__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-sm);
+  margin-top: var(--syn-space-md);
+}
+
+/* Contenedor de los CTAs del hero (uno o varios botones/links). */
+.syn-hero__ctas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--syn-space-sm);
+  margin-top: var(--syn-space-xl);
+}
+/* Sobre el hero oscuro el CTA secundario va outline-claro (jerarquía sin romper contraste) */
+.syn-hero__ctas .syn-button--secondary {
+  background: transparent;
+  border-color: rgb(255 255 255 / 0.28);
+  color: var(--syn-color-neutral-0);
+}
+.syn-hero__ctas .syn-button--secondary:hover {
+  background: rgb(255 255 255 / 0.12);
+  border-color: rgb(255 255 255 / 0.5);
+  color: var(--syn-color-neutral-0);
+  transform: translateY(-2px);
+}
+
+/* Hero con imagen de fondo: el overlay (::after) es SIEMPRE oscuro
+   (basado en --syn-channel-ink), así que el texto va blanco fijo —
+   NO --syn-color-text-on-accent, que en el tema dark es #0f172a (su
+   accent es claro) y dejaba el título ilegible sobre el overlay. Igual
+   que el CTA secundario del hero, que ya usa #ffffff. */
+.syn-hero__media ~ .syn-hero__content .syn-hero__title {
+  color: var(--syn-color-neutral-0);
+}
+.syn-hero__media ~ .syn-hero__content .syn-hero__subtitle,
+.syn-hero__media ~ .syn-hero__content .syn-hero__body {
+  color: rgb(255 255 255 / 0.88);
+}
+
+/* ── CTA Banner (elementCompCtaBanner) ───────────────────────── */
+
+.syn-cta-banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+  padding: var(--syn-space-xl);
+  /* Gradiente de marca por-siteRoot (action-primary→emphasis) + scrim de tinta
+     theme-aware (channel-ink) que lo oscurece lo justo para que el texto blanco
+     (text-on-accent) pase AA en TODOS los temas — en dark el gradiente base es
+     claro (brand-400/accent-400) y el texto blanco caía a ~2.84:1. Conserva el
+     matiz de marca; profundidad por color, no por sombra apilada. */
+  background:
+    linear-gradient(0deg, rgb(var(--syn-channel-ink) / 0.42), rgb(var(--syn-channel-ink) / 0.42)),
+    linear-gradient(135deg,
+      var(--syn-color-action-primary) 0%,
+      var(--syn-color-action-emphasis-strong, var(--syn-color-action-emphasis, var(--syn-color-accent-500))) 100%);
+  color: var(--syn-color-text-on-accent);
+  border-radius: var(--syn-radius-xl);
+  box-shadow: var(--syn-shadow-action-hover);
+}
+
+@media (min-width: 768px) {
+  .syn-cta-banner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--syn-space-xl) var(--syn-space-2xl);
+  }
+}
+
+.syn-cta-banner__content { flex: 1; }
+
+.syn-cta-banner__title {
+  margin: 0;
+  font-size: var(--syn-font-size-2xl);
+  font-weight: var(--syn-font-weight-bold);
+  color: inherit;
+}
+
+.syn-cta-banner__subtitle {
+  margin: var(--syn-space-2) 0 0;
+  opacity: 0.92;
+  font-size: var(--syn-font-size-base);
+}
+
+/* Selector con 2 clases (0,2,0) para GANARLE a `.syn-preset--theme-dark a`
+   (0,1,1): la banda del CTA ahora es theme-dark y su regla de links pintaba el
+   chip en brand-300 (lavanda) sobre blanco = 1.99:1 ilegible. El chip es su
+   propio componente, no un link de contenido. */
+.syn-cta-banner .syn-cta-banner__cta {
+  /* Chip de acción CLARO brand-neutral (neutral-0 + tinta neutral-900): pop
+     garantizado sobre el gradiente de marca en CUALQUIER tema (en dark,
+     surface-primary caía a neutral-800 = botón oscuro recesado). El acento de la
+     superficie lo lleva la card; el botón es el chip neutro que resalta. */
+  background: var(--syn-color-neutral-0);
+  color: var(--syn-color-neutral-900);
+  padding: var(--syn-space-3) var(--syn-space-6);
+  border-radius: var(--syn-radius-md);
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: none;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+  box-shadow: var(--syn-shadow-sm);
+  transition: transform var(--syn-duration-fast) var(--syn-easing-out),
+              box-shadow var(--syn-duration-base) var(--syn-easing-default),
+              background-color var(--syn-duration-base) var(--syn-easing-default);
+}
+
+.syn-cta-banner .syn-cta-banner__cta:hover {
+  transform: translateY(-1px);
+  text-decoration: none;
+  background: var(--syn-color-neutral-0);
+  color: var(--syn-color-neutral-900);
+  box-shadow: var(--syn-shadow-md);
+}
+
+/* Dual-CTA: los dos botones juntos como un solo ítem flex (donde iba el chip único). */
+.syn-cta-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-3);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* CTA secundario = ghost sobre la banda de marca (borde + tinta claros, fondo transparente)
+   → jerarquía clara vs el chip primario sólido, legible en cualquier tema. */
+.syn-cta-banner .syn-cta-banner__cta--secondary {
+  background: transparent;
+  color: var(--syn-color-neutral-0);
+  border: 1px solid var(--syn-color-neutral-0);
+  box-shadow: none;
+}
+
+.syn-cta-banner .syn-cta-banner__cta--secondary:hover {
+  background: var(--syn-color-neutral-0);
+  color: var(--syn-color-neutral-900);
+  box-shadow: var(--syn-shadow-sm);
+}
+
+/* ── Media-text split (elementCompMediaTextSplit) ────────────── */
+
+.syn-media-text-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--syn-space-xl);
+  align-items: center;
+}
+
+@media (min-width: 768px) {
+  .syn-media-text-split {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--syn-space-2xl);
+  }
+
+  /* Sin media no forzar 2 columnas (evita la mitad vacía) — mismo patrón que .syn-mission */
+  .syn-media-text-split:not(:has(.syn-media-text-split__media)) {
+    grid-template-columns: 1fr;
+  }
+  .syn-media-text-split:not(:has(.syn-media-text-split__media)) .syn-media-text-split__body {
+    max-width: 68ch;
+  }
+}
+
+.syn-media-text-split--media-right .syn-media-text-split__media {
+  order: 2;
+}
+
+.syn-media-text-split__media img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--syn-radius-lg);
+  box-shadow: var(--syn-shadow-card);
+}
+
+.syn-media-text-split__caption {
+  margin-top: var(--syn-space-sm);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+}
+
+.syn-media-text-split__title {
+  font-size: var(--syn-font-size-3xl);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  margin: 0 0 var(--syn-space-sm);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-media-text-split__subtitle {
+  color: var(--syn-color-text-secondary);
+  margin: 0 0 var(--syn-space-md);
+  font-size: var(--syn-font-size-lg);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-media-text-split__text {
+  min-width: 0;
+}
+
+.syn-media-text-split__body {
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-media-text-split__body > * + * {
+  margin-top: var(--syn-space-md);
+}
+
+.syn-media-text-split__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+  margin-top: var(--syn-space-md);
+  color: var(--syn-color-text-accent);   /* hereda re-map de banda (era action-primary → invisible en banda brand) */
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+/* ── Text primitives ─────────────────────────────────────────── */
+
+.syn-heading-group__eyebrow {
+  display: block;
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  color: var(--syn-color-text-accent);
+  margin-bottom: var(--syn-space-2);
+}
+
+.syn-heading-group__title {
+  margin: 0 0 var(--syn-space-sm);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-heading-group__subtitle {
+  margin: 0;
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-lg);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-eyebrow {
+  display: inline-block;
+  font-size: var(--syn-font-size-xs);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  color: var(--syn-color-text-accent);
+  font-weight: var(--syn-font-weight-bold);
+}
+
+.syn-label {
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  font-weight: var(--syn-font-weight-medium);
+}
+
+.syn-paragraph {
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-quote {
+  border-inline-start: 4px solid var(--syn-color-border-accent);
+  padding: var(--syn-space-sm) var(--syn-space-lg);
+  font-style: italic;
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-lg);
+  line-height: var(--syn-line-height-relaxed);
+  margin: var(--syn-space-md) 0;
+}
+
+.syn-quote__body {
+  margin: 0;
+}
+
+.syn-quote__body > * + * {
+  margin-top: var(--syn-space-sm);
+}
+
+.syn-quote__attribution {
+  display: block;
+  margin-top: var(--syn-space-sm);
+  font-style: normal;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+.syn-richtext {
+  max-width: 68ch;   /* largo de línea legible (espeja .syn-mission__body) */
+  line-height: var(--syn-line-height-relaxed);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-richtext > * + * {
+  margin-top: var(--syn-space-md);
+}
+
+/* ── Alert Bar (elementCorpAlertBar) ─────────────────────────── */
+
+.syn-alert-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--syn-space-md);
+  padding: var(--syn-space-sm) var(--syn-space-lg);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  background: var(--syn-color-state-info-surface);
+  color: var(--syn-color-state-info-text);
+  border-bottom: 1px solid var(--syn-color-state-info-border);
+}
+
+.syn-alert-bar--info {
+  background: var(--syn-color-state-info-surface);
+  color: var(--syn-color-state-info-text);
+  border-color: var(--syn-color-state-info-border);
+}
+
+.syn-alert-bar--success {
+  background: var(--syn-color-state-success-surface);
+  color: var(--syn-color-state-success-text);
+  border-color: var(--syn-color-state-success-border);
+}
+
+.syn-alert-bar--warning {
+  background: var(--syn-color-state-warning-surface);
+  color: var(--syn-color-state-warning-text);
+  border-color: var(--syn-color-state-warning-border);
+}
+
+.syn-alert-bar--error,
+.syn-alert-bar--danger {
+  background: var(--syn-color-state-danger-surface);
+  color: var(--syn-color-state-danger-text);
+  border-color: var(--syn-color-state-danger-border);
+}
+
+.syn-alert-bar__message {
+  margin: 0;
+}
+
+.syn-alert-bar__action {
+  color: inherit;
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: underline;
+}
+
+.syn-alert-bar__close {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  cursor: pointer;
+  font-size: var(--syn-font-size-lg);
+  padding: var(--syn-space-1);
+  margin-inline-start: auto;
+  border-radius: var(--syn-radius-sm);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-alert-bar__close:hover {
+  background: var(--syn-color-overlay-subtle);
+}
+
+/* ── Nav primitives (elementNavGroup/Item) ───────────────────── */
+
+.syn-nav__list {
+  display: flex;
+  gap: var(--syn-space-md);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-wrap: wrap;
+}
+
+.syn-nav__item {
+  display: inline-block;
+}
+
+.syn-nav__link {
+  text-decoration: none;
+  color: var(--syn-color-text-secondary);
+  padding: var(--syn-space-2) var(--syn-space-3);
+  border-radius: var(--syn-radius-md);
+  font-weight: var(--syn-font-weight-medium);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-nav__link:hover {
+  color: var(--syn-color-action-primary);
+  background: var(--syn-color-overlay-subtle);
+  text-decoration: none;
+}
+
+.syn-nav--vertical .syn-nav__list {
+  flex-direction: column;
+  gap: var(--syn-space-1);
+}
+
+/* ── Breadcrumbs ─────────────────────────────────────────────── */
+
+.syn-breadcrumbs {
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  margin: 0 0 var(--syn-space-md);
+}
+
+.syn-breadcrumbs__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--syn-space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.syn-breadcrumbs__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-2);
+}
+
+.syn-breadcrumbs__item:not(:last-child)::after {
+  content: '/';
+  color: var(--syn-color-border-default);
+}
+
+.syn-breadcrumbs a {
+  color: var(--syn-color-text-secondary);
+  text-decoration: none;
+}
+
+.syn-breadcrumbs a:hover {
+  color: var(--syn-color-action-primary);
+}
+
+.syn-breadcrumbs [aria-current="page"] {
+  color: var(--syn-color-text-primary);
+  font-weight: var(--syn-font-weight-medium);
+}
+
+/* ── Media: image / video / logo / avatar ────────────────────── */
+
+.syn-image {
+  width: 100%;
+}
+
+.syn-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--syn-radius-md);
+}
+
+.syn-image__caption {
+  margin-top: var(--syn-space-sm);
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-normal);
+  color: var(--syn-color-text-muted);
+  text-align: center;
+}
+
+.syn-video video {
+  width: 100%;
+  border-radius: var(--syn-radius-md);
+}
+
+/* ── Gallery (elementMediaGallery + elementMediaGalleryItem) ──── */
+
+/* La columna se controla con --syn-gallery-cols; los modifiers
+   --cols-{N} solo setean esa var. El grid colapsa a 1 col en móvil. */
+.syn-gallery {
+  --syn-gallery-cols: 3;
+}
+
+.syn-gallery--cols-1 { --syn-gallery-cols: 1; }
+.syn-gallery--cols-2 { --syn-gallery-cols: 2; }
+.syn-gallery--cols-3 { --syn-gallery-cols: 3; }
+.syn-gallery--cols-4 { --syn-gallery-cols: 4; }
+.syn-gallery--cols-5 { --syn-gallery-cols: 5; }
+.syn-gallery--cols-6 { --syn-gallery-cols: 6; }
+
+.syn-gallery__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--syn-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .syn-gallery__grid {
+    grid-template-columns: repeat(var(--syn-gallery-cols, 3), 1fr);
+    gap: var(--syn-space-4);
+  }
+}
+
+.syn-gallery__cell {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.syn-gallery-item {
+  margin: 0;
+}
+
+.syn-gallery-item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--syn-radius-md);
+}
+
+.syn-gallery-item__caption {
+  margin-top: var(--syn-space-2);
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-normal);
+  color: var(--syn-color-text-muted);
+}
+
+/* Icono standalone (elementMediaIcon): tamaño controlado en grilla de 8. */
+.syn-icon {
+  width: var(--syn-space-8);
+  height: var(--syn-space-8);
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.syn-icon--sm { width: var(--syn-space-6); height: var(--syn-space-6); }
+.syn-icon--lg { width: var(--syn-space-12); height: var(--syn-space-12); }
+
+.syn-logo img {
+  max-height: 48px;
+  width: auto;
+  object-fit: contain;
+}
+
+.syn-logo-cloud__title {
+  text-align: center;
+  color: var(--syn-color-text-muted);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  margin-bottom: var(--syn-space-lg);
+}
+
+.syn-logo-cloud__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--syn-space-md);
+  align-items: stretch;
+  padding: 0;
+  list-style: none;
+}
+
+/* Cada celda es un chip sutil — lee como "logo de cliente" premium,
+   no como texto pelado. El wordmark vive dentro vía .syn-logo. */
+.syn-logo-cloud__cell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--syn-space-2) var(--syn-space-4);
+  min-height: var(--syn-space-12);
+  background: var(--syn-color-surface-secondary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-md);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-logo-cloud__cell:hover {
+  border-color: var(--syn-color-border-accent);
+  background: var(--syn-color-surface-accent-soft);
+}
+
+/* Wordmark de texto (sin logos reales) — sello de marca dentro del chip. */
+.syn-logo__wordmark {
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-semibold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  color: var(--syn-color-text-secondary);
+  white-space: nowrap;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-logo-cloud__cell:hover .syn-logo__wordmark {
+  color: var(--syn-color-text-accent);
+}
+
+.syn-avatar {
+  display: inline-block;
+}
+
+.syn-avatar img {
+  border-radius: 50%;
+  width: var(--syn-size-avatar-md);    /* 48 (FIX 3) */
+  height: var(--syn-size-avatar-md);
+  object-fit: cover;
+  display: block;
+}
+
+.syn-avatar--sm img { width: var(--syn-size-avatar-sm); height: var(--syn-size-avatar-sm); }  /* 32 (FIX 3) */
+.syn-avatar--lg img { width: var(--syn-size-avatar-xl); height: var(--syn-size-avatar-xl); }  /* 64 (FIX 3) */
+
+/* ── Info: stat / feature / testimonial / faq / timeline ─────── */
+
+/* Contenedor de stats (KPIs) — grilla responsive auto-fit, centrada. */
+.syn-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--syn-space-xl);
+  text-align: center;
+}
+
+.syn-stat {
+  text-align: center;
+  padding: var(--syn-space-lg);
+}
+
+.syn-stat__value {
+  font-size: var(--syn-font-size-5xl);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-display);
+  color: var(--syn-color-text-accent);
+  display: block;
+  line-height: 1;
+}
+
+.syn-stat__label {
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  font-weight: var(--syn-font-weight-semibold);
+  margin-top: var(--syn-space-2);
+  display: block;
+}
+
+.syn-feature {
+  padding: var(--syn-space-lg);
+}
+
+.syn-feature__icon {
+  font-size: var(--syn-font-size-3xl);
+  margin-bottom: var(--syn-space-sm);
+  color: var(--syn-color-text-accent);   /* hereda el re-map de banda (era action-primary → invisible en banda brand) */
+  display: block;
+}
+
+/* Si el icono es un <img> (Feature.cshtml), acotarlo a 48px on-grid — sin esto revienta al tamaño natural del asset. */
+img.syn-feature__icon {
+  width: var(--syn-space-12);
+  height: var(--syn-space-12);
+  object-fit: contain;
+}
+
+.syn-feature__title {
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-semibold);
+  margin: 0 0 var(--syn-space-2);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-feature__subtitle {
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  margin: 0 0 var(--syn-space-2);
+  line-height: var(--syn-line-height-normal);
+}
+
+.syn-feature__body {
+  color: var(--syn-color-text-secondary);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+/* Feature variants — paralelo a las card variants, mismos tokens. */
+.syn-feature--bordered,
+.syn-feature--outlined {
+  border: 1px solid var(--syn-color-border-strong);
+  border-radius: var(--syn-card-radius);
+  background: var(--syn-card-surface);
+}
+
+.syn-feature--elevated {
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-card-radius);
+  background: var(--syn-card-surface);
+  box-shadow: var(--syn-shadow-md);
+}
+
+.syn-feature--ghost,
+.syn-feature--neutral {
+  border-radius: var(--syn-card-radius);
+  background: var(--syn-color-surface-secondary);
+}
+
+.syn-feature--accent {
+  border: 1px solid var(--syn-color-border-accent);
+  border-radius: var(--syn-card-radius);
+  background: var(--syn-color-surface-accent);
+}
+
+.syn-feature-grid {
+  display: block;
+}
+
+.syn-feature-grid__header {
+  text-align: center;
+  max-width: var(--syn-max-width-reading);
+  margin: 0 auto var(--syn-space-2xl);
+}
+
+.syn-feature-grid__title {
+  font-size: clamp(var(--syn-font-size-2xl), 3vw + 0.5rem, var(--syn-font-size-4xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-tight);
+  text-align: center;
+  color: var(--syn-color-text-primary);
+  margin: 0 0 var(--syn-space-sm);
+}
+
+.syn-feature-grid__subtitle {
+  font-size: var(--syn-font-size-lg);
+  color: var(--syn-color-text-muted);
+  text-align: center;
+  line-height: var(--syn-line-height-relaxed);
+  margin: 0 0 var(--syn-space-lg);
+}
+
+.syn-feature-grid__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--syn-space-lg);
+}
+
+/* Carrusel SSR: las 3 tarjetas en grilla (1 col mobile, auto-fit ≥768). */
+.syn-testimonial-carousel {
+  display: block;
+}
+
+.syn-testimonial-carousel__track {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--syn-gutter-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 768px) {
+  .syn-testimonial-carousel__track {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+.syn-testimonial-carousel__slide {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.syn-testimonial {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: var(--syn-card-pad-lg);
+  padding-top: var(--syn-space-10);
+  background: var(--syn-card-surface);
+  border: var(--syn-card-border);
+  border-top: 2px solid transparent;
+  border-radius: var(--syn-card-radius);
+  box-shadow: var(--syn-card-shadow);
+  overflow: hidden;
+  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
+}
+
+/* Comilla editorial decorativa (glifo grande, baja opacidad, acento). */
+.syn-testimonial::before {
+  content: '\201C';
+  position: absolute;
+  top: calc(var(--syn-space-2) * -1);
+  inset-inline-start: var(--syn-space-5);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 6rem;
+  line-height: 1;
+  color: var(--syn-color-accent-500);
+  opacity: 0.14;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.syn-testimonial:hover {
+  transform: var(--syn-card-lift);
+  box-shadow: var(--syn-card-shadow-hover);
+  border-color: var(--syn-card-border-hover);
+  border-top-color: var(--syn-color-accent-500);
+}
+
+.syn-testimonial__quote {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  font-style: italic;
+  margin: 0 0 var(--syn-space-5);
+  font-size: var(--syn-font-size-lg);
+  color: var(--syn-color-text-primary);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-testimonial__author {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-sm);
+  margin: 0;
+  padding-top: var(--syn-space-5);
+  border-top: 1px solid var(--syn-color-border-subtle);
+  color: var(--syn-color-text-muted);
+  font-size: var(--syn-font-size-sm);
+}
+
+.syn-testimonial__identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-1);
+  min-width: 0;
+}
+
+/* FIX #1: el <cite> sale itálica+inline; lo forzamos bloque + normal + bold. */
+.syn-testimonial__name {
+  display: block;
+  font-style: normal;
+  font-weight: var(--syn-font-weight-bold);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-snug);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-testimonial__role {
+  display: block;
+  font-style: normal;
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-snug);
+  color: var(--syn-color-text-muted);
+}
+
+.syn-testimonial__avatar {
+  flex: 0 0 auto;
+  width: var(--syn-space-12);
+  height: var(--syn-space-12);
+  border-radius: var(--syn-radius-full);
+  object-fit: cover;
+  border: 1px solid var(--syn-color-border-subtle);
+}
+
+/* El título "Preguntas frecuentes" vive arriba (fuera del panel); el panel
+   elevado es .syn-faq-list__items. */
+.syn-faq-list {
+  display: block;
+}
+
+.syn-faq-list__title {
+  margin-bottom: var(--syn-space-lg);
+}
+
+.syn-faq-list__items {
+  border: var(--syn-card-border);
+  border-radius: var(--syn-card-radius);
+  overflow: hidden;
+  background: var(--syn-card-surface);
+  box-shadow: var(--syn-card-shadow);
+}
+
+.syn-faq-item {
+  border-top: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-faq-item:first-child {
+  border-top: 0;
+}
+
+.syn-faq-item summary {
+  padding: var(--syn-space-lg) var(--syn-space-xl);
+  cursor: pointer;
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-bold);
+  color: var(--syn-color-text-primary);
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--syn-space-md);
+  color: var(--syn-color-text-primary);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-faq-item summary:hover {
+  background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-text-accent);
+}
+
+/* Abierto: el título queda como "header" (fondo sutil + oscuro), claramente
+   distinto del contenido (cuerpo en blanco debajo). */
+.syn-faq-item[open] summary {
+  background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-text-primary);
+}
+
+/* Chevron dibujado en CSS (2px) que rota suave en lugar del salto +/×. */
+.syn-faq-item summary::after {
+  content: '';
+  flex: none;
+  width: var(--syn-space-sm);
+  height: var(--syn-space-sm);
+  margin-inline-start: var(--syn-space-md);
+  border-right: 2px solid var(--syn-color-text-accent);
+  border-bottom: 2px solid var(--syn-color-text-accent);
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform var(--syn-duration-base) var(--syn-easing-default);
+}
+
+.syn-faq-item[open] summary::after {
+  transform: translateY(2px) rotate(225deg);
+}
+
+.syn-faq-item summary::-webkit-details-marker { display: none; }
+
+/* Contenido (respuesta): cuerpo secundario, separado del título con aire arriba. */
+.syn-faq-item p {
+  padding: var(--syn-space-md) var(--syn-space-xl) var(--syn-space-lg);
+  margin: 0;
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-timeline-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-inline-start: 2px solid var(--syn-color-border-default);
+  padding-inline-start: var(--syn-space-lg);
+}
+
+.syn-timeline-item {
+  position: relative;
+  padding: var(--syn-space-md) 0;
+}
+
+.syn-timeline-item::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--syn-space-lg) * -1 - 6px);
+  top: var(--syn-space-md);
+  width: 12px;
+  height: 12px;
+  background: var(--syn-color-action-primary);
+  border: 2px solid var(--syn-color-surface-canvas);
+  border-radius: 50%;
+}
+
+.syn-timeline-item__date {
+  display: block;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  margin: 0 0 var(--syn-space-2);
+}
+
+.syn-timeline-item__date-label {
+  font-weight: var(--syn-font-weight-semibold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  margin-inline-end: var(--syn-space-2);
+}
+
+.syn-timeline-item__date-value {
+  color: var(--syn-color-text-accent);
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+.syn-timeline-item__title {
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-primary);
+  margin: 0 0 var(--syn-space-2);
+}
+
+.syn-timeline-item__subtitle {
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  margin: 0 0 var(--syn-space-2);
+}
+
+.syn-timeline-item__body {
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-timeline-item__body > * + * {
+  margin-top: var(--syn-space-2);
+}
+
+/* ── Key/Value + Social share + Contact info ─────────────────── */
+
+.syn-keyvalue {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--syn-space-sm) var(--syn-space-md);
+  padding: var(--syn-space-sm) 0;
+  border-bottom: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-keyvalue:last-child {
+  border-bottom: 0;
+}
+
+.syn-keyvalue__label {
+  color: var(--syn-color-text-muted);
+  font-weight: var(--syn-font-weight-semibold);
+  font-size: var(--syn-font-size-sm);
+}
+
+.syn-keyvalue__value {
+  color: var(--syn-color-text-primary);
+}
+
+.syn-social-share {
+  display: flex;
+  gap: var(--syn-space-2);
+  flex-wrap: wrap;
+}
+
+.syn-social-share__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-1);
+  padding: var(--syn-space-2) var(--syn-space-3);
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-md);
+  font-size: var(--syn-font-size-sm);
+  text-decoration: none;
+  color: var(--syn-color-text-secondary);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-social-share__link:hover {
+  background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-action-primary);
+  border-color: var(--syn-color-border-accent);
+  text-decoration: none;
+}
+
+.syn-contact-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-sm);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-contact-info__email,
+.syn-contact-info__phone,
+.syn-contact-info__address {
+  display: block;
+  color: var(--syn-color-text-secondary);
+  text-decoration: none;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-contact-info__email:hover,
+.syn-contact-info__phone:hover {
+  color: var(--syn-color-text-accent);
+  text-decoration: none;
+}
+
+.syn-contact-info__address {
+  font-style: normal;
+}
+
+/* ── Data table (elementCorpDataTable) ───────────────────────── */
+
+/* El wrapper hace scroll-x en móvil para no romper el layout. */
+.syn-data-table {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--syn-radius-md);
+  border: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-data-table__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-data-table__caption {
+  padding: var(--syn-space-2) var(--syn-space-3);
+  text-align: start;
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-semibold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+  color: var(--syn-color-text-muted);
+}
+
+.syn-data-table__table th,
+.syn-data-table__table td {
+  padding: var(--syn-space-2) var(--syn-space-3);
+  text-align: start;
+  border-bottom: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-data-table__table thead th {
+  background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-text-primary);
+  font-weight: var(--syn-font-weight-semibold);
+  white-space: nowrap;
+}
+
+.syn-data-table__table tbody tr:nth-child(even) {
+  background: var(--syn-color-surface-secondary);
+}
+
+.syn-data-table__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ── Forms (elementFormContainer + elementFormField) ─────────── */
+.syn-form {
+  max-width: var(--syn-max-width-article);
+  margin-inline: auto;
+}
+.syn-form__title {
+  margin: 0 0 var(--syn-space-lg);
+  text-align: center;
+  font-size: clamp(var(--syn-font-size-2xl), 3vw, var(--syn-font-size-3xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  color: var(--syn-color-text-primary);
+}
+.syn-form__feedback {
+  margin: 0 0 var(--syn-space-lg);
+  padding: var(--syn-space-3) var(--syn-space-4);
+  border-radius: var(--syn-radius-md);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+}
+.syn-form__feedback--success {
+  background: var(--syn-color-state-success-surface);
+  color: var(--syn-color-state-success-text);
+  border: 1px solid var(--syn-color-state-success-border);
+}
+.syn-form__feedback--error {
+  background: var(--syn-color-state-danger-surface);
+  color: var(--syn-color-state-danger-text);
+  border: 1px solid var(--syn-color-state-danger-border);
+}
+.syn-form__form {
+  padding: var(--syn-space-xl);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  box-shadow: var(--syn-shadow-sm);
+}
+.syn-form__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-lg);
+}
+.syn-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+}
+.syn-form-field__label {
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-primary);
+}
+.syn-form-field__required {
+  margin-left: 2px;
+  color: var(--syn-color-text-accent);
+}
+.syn-form-field__input {
+  width: 100%;
+  min-height: var(--syn-control-h-lg);
+  padding: var(--syn-space-3) var(--syn-space-4);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
+  color: var(--syn-color-text-primary);
+  background: var(--syn-color-surface-secondary);
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-field);
+  transition: var(--syn-transition-colors);
+}
+.syn-form-field__input::placeholder { color: var(--syn-color-text-muted); }
+/* a11y — :focus-visible (no dispara con mouse) + token de foco canónico
+   (antes usaba state-brand-surface = superficie wash, anillo de bajo contraste). */
+.syn-form-field__input:focus-visible {
+  outline: none;
+  background: var(--syn-color-surface-primary);
+  border-color: var(--syn-color-action-primary);
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+}
+textarea.syn-form-field__input { resize: vertical; min-height: 7rem; }
+.syn-form-field__help {
+  font-size: var(--syn-font-size-xs);
+  color: var(--syn-color-text-muted);
+}
+.syn-form__submit {
+  margin-top: var(--syn-space-lg);
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--syn-control-h-lg);   /* 48 (FIX 3) */
+  padding: var(--syn-space-3) var(--syn-space-6);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-action-primary-text);
+  background: var(--syn-color-action-primary);
+  border: 1px solid var(--syn-color-action-primary);
+  border-radius: var(--syn-radius-md);
+  box-shadow: var(--syn-shadow-action);
+  cursor: pointer;
+  transition: var(--syn-transition-colors), transform var(--syn-duration-fast) var(--syn-easing-out);
+}
+.syn-form__submit:hover {
+  background: var(--syn-color-action-primary-hover);
+  border-color: var(--syn-color-action-primary-hover);
+  box-shadow: var(--syn-shadow-action-hover);
+  transform: translateY(-1px);
+}
+
+/* ── Pricing (elementPricingTable + elementPricingPlan) ──────── */
+.syn-pricing__header {
+  text-align: center;
+  margin-bottom: var(--syn-space-2xl);
+}
+.syn-pricing__title {
+  margin: 0 0 var(--syn-space-3);
+  font-size: clamp(var(--syn-font-size-2xl), 3vw, var(--syn-font-size-4xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  color: var(--syn-color-text-primary);
+}
+.syn-pricing__subtitle {
+  margin: 0;
+  font-size: var(--syn-font-size-lg);
+  color: var(--syn-color-text-muted);
+}
+.syn-pricing__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--syn-space-lg);
+  align-items: stretch;
+}
+.syn-plan {
+  display: flex;
+  flex-direction: column;
+  padding: var(--syn-space-xl);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-card-radius);
+  box-shadow: var(--syn-shadow-card);
+  transition: var(--syn-transition-colors), transform var(--syn-duration-base) var(--syn-easing-default);
+}
+.syn-plan:hover {
+  box-shadow: var(--syn-shadow-card-hover);
+  transform: translateY(-2px);
+}
+.syn-plan--highlighted {
+  border-color: var(--syn-color-action-primary);
+  box-shadow: var(--syn-shadow-brand-md);
+}
+.syn-plan__tag {
+  align-self: flex-start;
+  margin-bottom: var(--syn-space-3);
+  padding: var(--syn-space-1) var(--syn-space-3);
+  border-radius: var(--syn-radius-full);
+  background: var(--syn-color-state-brand-surface);
+  color: var(--syn-color-state-brand-text);
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-semibold);
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+.syn-plan__name {
+  margin: 0 0 var(--syn-space-2);
+  font-size: var(--syn-font-size-xl);
+  font-weight: var(--syn-font-weight-bold);
+  color: var(--syn-color-text-primary);
+}
+.syn-plan__price {
+  margin: 0 0 var(--syn-space-lg);
+  font-size: var(--syn-font-size-3xl);
+  font-weight: var(--syn-font-weight-bold);
+  line-height: 1;
+  color: var(--syn-color-text-accent);
+}
+.syn-plan__period {
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  color: var(--syn-color-text-muted);
+}
+.syn-plan__features {
+  list-style: none;
+  margin: 0 0 var(--syn-space-xl);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-3);
+}
+.syn-plan__feature {
+  position: relative;
+  padding-left: var(--syn-space-6);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+}
+.syn-plan__feature::before {
+  content: "\2713";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--syn-color-action-primary);
+  font-weight: var(--syn-font-weight-bold);
+}
+.syn-plan__cta {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--syn-control-h-lg);   /* 48 — antes 44 off-grid (FIX 3) */
+  padding: var(--syn-space-2) var(--syn-space-5);
+  border-radius: var(--syn-radius-md);
+  border: 1px solid var(--syn-color-action-secondary-border);
+  background: var(--syn-color-action-secondary-surface);
+  color: var(--syn-color-action-secondary-text);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: none;
+  transition: var(--syn-transition-colors), transform var(--syn-duration-fast) var(--syn-easing-out);
+}
+.syn-plan__cta:hover {
+  transform: translateY(-1px);
+  border-color: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary);
+}
+.syn-plan__cta--primary {
+  background: var(--syn-color-action-primary);
+  border-color: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  box-shadow: var(--syn-shadow-action);
+}
+.syn-plan__cta--primary:hover {
+  background: var(--syn-color-action-primary-hover);
+  border-color: var(--syn-color-action-primary-hover);
+  color: var(--syn-color-action-primary-text);
+  box-shadow: var(--syn-shadow-action-hover);
+}
+
+/* ── Module mount (elementSynModuleMount, ADR 0096) ───────────── */
+
+/* Degradación sin JS: los módulos stateful son CSR-only. */
+.syn-module-noscript {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--syn-space-2);
+  padding: var(--syn-space-6);
+  text-align: center;
+  color: var(--syn-color-text-muted);
+  background: var(--syn-color-surface-secondary);
+  border: 1px dashed var(--syn-color-border-default);
+  border-radius: var(--syn-radius-2xl);
+}
+.syn-module-noscript__link {
+  font-weight: 600;
+  color: var(--syn-color-action-primary);
+}
+
+/* Fallback CDN-offline (emitido por el SynHost emitter): reserva alto
+   para evitar layout shift mientras el bundle del módulo hidrata. */
+.syn-cdn-offline-fallback[data-block-alias="hello-module"],
+.syn-cdn-offline-fallback[data-block-alias="dashboard"],
+.syn-cdn-offline-fallback[data-block-alias="healthcare"] {
+  display: block;
+  min-height: 320px;
+  border-radius: var(--syn-radius-2xl);
+  background: var(--syn-color-surface-secondary);
+}
+
+/* Embeds de iframe (elementFormEmbed / elementCorpMapEmbed) — antes sin CSS
+   (orphans atrapados por check-css-parity): el iframe traia height pero no
+   width -> ~300px. Ahora full-width responsive, altura del atributo height. */
+.syn-form-embed,
+.syn-map-embed {
+  width: 100%;
+  margin-block: var(--syn-space-lg);
+  border-radius: var(--syn-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--syn-shadow-card);
+}
+.syn-form-embed iframe,
+.syn-map-embed iframe {
+  display: block;
+  width: 100%;
+  border: 0;
+  min-height: 320px;
+}

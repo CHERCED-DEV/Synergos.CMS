@@ -1,0 +1,21 @@
+﻿@*
+    SynHost renderer — <synergos-map-pin>. Interactive map with custom pins.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["centerLat"] = Model.Value<string>("centerLat"),
+        ["centerLng"] = Model.Value<string>("centerLng"),
+        ["zoomLevel"] = Model.Value<string>("zoomLevel"),
+        ["pinsJson"] = Model.Value<string>("pinsJson"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "map-pin",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

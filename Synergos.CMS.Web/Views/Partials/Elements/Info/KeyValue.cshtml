@@ -1,0 +1,21 @@
+@*
+    elementInfoKeyValue renderer (Ola 15). Semantic <dl>/<dt>/<dd>.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var key = Model.Value<string>("keyLabel");
+    var value = Model.Value<string>("valueLabel");
+    if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-keyvalue",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-keyvalue--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<dl class="@classes">
+    <dt class="syn-keyvalue__label">@key</dt>
+    <dd class="syn-keyvalue__value">@value</dd>
+</dl>

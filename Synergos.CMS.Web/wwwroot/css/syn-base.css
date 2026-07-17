@@ -1,0 +1,339 @@
+/* ============================================================
+   Synergos CMS — Base reset + typography
+   ============================================================
+   Espejo de Synergos.UI/vitals/core-assets/src/scss/_global.scss.
+   Reset minimalista + tipografía base. Consume tokens de
+   syn-tokens.css. Carga DESPUÉS de tokens.
+   ------------------------------------------------------------ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  text-size-adjust: 100%;
+  background: var(--syn-color-surface-canvas);
+  color: var(--syn-color-text-primary);
+  font-family: var(--syn-font-family-body);
+  font-size: 16px;
+  line-height: var(--syn-line-height-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--syn-color-surface-canvas);
+  color: var(--syn-color-text-primary);
+  font-family: var(--syn-font-family-body);
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+/* ── Headings ────────────────────────────────────────────────── */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--syn-font-family-heading);
+  font-weight: var(--syn-font-weight-bold);
+  line-height: var(--syn-line-height-snug);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  color: var(--syn-color-text-primary);
+  overflow-wrap: break-word;
+}
+
+h1 {
+  font-size: clamp(var(--syn-font-size-3xl), 4vw + 1rem, var(--syn-font-size-5xl));
+  line-height: var(--syn-line-height-tight);
+  margin-bottom: var(--syn-space-md);
+}
+
+h2 {
+  font-size: clamp(var(--syn-font-size-2xl), 3vw + 0.5rem, var(--syn-font-size-4xl));
+  line-height: var(--syn-line-height-tight);
+  margin-bottom: var(--syn-space-md);
+}
+
+h3 {
+  font-size: var(--syn-font-size-2xl);
+  margin-bottom: var(--syn-space-sm);
+}
+
+h4 {
+  font-size: var(--syn-font-size-xl);
+  margin-bottom: var(--syn-space-sm);
+}
+
+h5 {
+  font-size: var(--syn-font-size-lg);
+  margin-bottom: var(--syn-space-xs);
+}
+
+h6 {
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-semibold);
+  margin-bottom: var(--syn-space-xs);
+}
+
+/* ── Body text ───────────────────────────────────────────────── */
+
+p {
+  margin-bottom: var(--syn-space-md);
+  overflow-wrap: break-word;
+}
+
+p:last-child {
+  margin-bottom: 0;
+}
+
+small {
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+}
+
+strong, b {
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+em, i {
+  font-style: italic;
+}
+
+code, kbd, samp, pre {
+  font-family: var(--syn-font-family-mono);
+  font-size: 0.95em;
+}
+
+code {
+  padding: 0.125em 0.375em;
+  background: var(--syn-color-surface-secondary);
+  border-radius: var(--syn-radius-sm);
+  color: var(--syn-color-text-accent);
+}
+
+pre {
+  padding: var(--syn-space-md);
+  background: var(--syn-color-surface-secondary);
+  border-radius: var(--syn-radius-md);
+  overflow-x: auto;
+  line-height: var(--syn-line-height-normal);
+  margin-bottom: var(--syn-space-md);
+}
+
+pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+blockquote {
+  margin: 0 0 var(--syn-space-md);
+  padding-left: var(--syn-space-md);
+  border-left: 4px solid var(--syn-color-border-accent);
+  font-style: italic;
+  color: var(--syn-color-text-secondary);
+}
+
+/* ── Links ───────────────────────────────────────────────────── */
+
+a {
+  color: var(--syn-color-action-primary);
+  text-decoration: none;
+  transition: var(--syn-transition-colors);
+}
+
+a:hover {
+  color: var(--syn-color-action-primary-hover);
+  text-decoration: underline;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--syn-color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--syn-radius-sm);
+}
+
+/* ── Lists ───────────────────────────────────────────────────── */
+
+ul, ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Cuando se necesita restaurar list semantics dentro de prose */
+.syn-prose ul,
+.syn-prose ol {
+  list-style: revert;
+  padding-inline-start: 1.5em;
+  margin-bottom: var(--syn-space-md);
+}
+
+.syn-prose li {
+  margin-bottom: var(--syn-space-xs);
+}
+
+/* ── Media ───────────────────────────────────────────────────── */
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+img {
+  height: auto;
+}
+
+/* ── Form base reset ─────────────────────────────────────────── */
+
+input, button, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* ── Tables ──────────────────────────────────────────────────── */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th, td {
+  text-align: left;
+  padding: var(--syn-space-sm) var(--syn-space-md);
+  border-bottom: 1px solid var(--syn-color-border-subtle);
+}
+
+th {
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+}
+
+/* ── HR ──────────────────────────────────────────────────────── */
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--syn-color-border-default);
+  margin: var(--syn-space-lg) 0;
+}
+
+/* ── Selection ───────────────────────────────────────────────── */
+
+::selection {
+  background: var(--syn-color-state-brand-surface);
+  color: var(--syn-color-text-primary);
+}
+
+/* ── Focus visible — applied to all interactive ──────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--syn-color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--syn-radius-sm);
+}
+
+/* ── Reduced motion ──────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Visually hidden / skip link helpers ─────────────────────── */
+
+.syn-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.syn-skip-link {
+  position: absolute;
+  top: -100px;
+  left: var(--syn-space-md);
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  padding: var(--syn-space-sm) var(--syn-space-md);
+  z-index: var(--syn-z-top);
+  text-decoration: none;
+  border-radius: 0 0 var(--syn-radius-md) var(--syn-radius-md);
+  font-weight: var(--syn-font-weight-semibold);
+  transition: top var(--syn-duration-base) var(--syn-easing-default);
+}
+
+.syn-skip-link:focus,
+.syn-skip-link:focus-visible {
+  top: 0;
+  outline: 2px solid var(--syn-color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* ── CDN-offline fallback (Cap-310) ──────────────────────────────
+   Default visual para el placeholder que DefaultSynHostEmitter
+   inserta dentro de <synergos-*> cuando el bundle registry no
+   resuelve (Cap-280 Batch D + Cap-300 Batch A). Sin este sheet,
+   el div es invisible (empty styleable). El host puede override
+   por block via [data-block-alias="hero"] selector si necesita
+   altura/ratio especifico. */
+
+[data-synergos-cdn-offline] .syn-cdn-offline-fallback {
+  display: block;
+  min-height: 4rem;
+  padding: var(--syn-space-md);
+  background: linear-gradient(
+    90deg,
+    var(--syn-color-surface-secondary) 0%,
+    var(--syn-color-surface-tertiary) 50%,
+    var(--syn-color-surface-secondary) 100%
+  );
+  background-size: 200% 100%;
+  border: 1px dashed var(--syn-color-border-subtle, var(--syn-color-surface-tertiary));
+  border-radius: var(--syn-radius-md);
+  animation: syn-cdn-offline-shimmer 2s ease-in-out infinite;
+}
+
+/* (P1-8) No exponer el alias del componente al usuario en prod: solo el
+   skeleton shimmer (sin texto). El data-block-alias sigue en el DOM para
+   diagnóstico/CSS, pero no se renderiza como contenido visible. */
+[data-synergos-cdn-offline] .syn-cdn-offline-fallback::after {
+  content: "";
+  display: block;
+  line-height: 4rem;
+}
+
+@keyframes syn-cdn-offline-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-synergos-cdn-offline] .syn-cdn-offline-fallback {
+    animation: none;
+    background: var(--syn-color-surface-secondary);
+  }
+}

@@ -1,0 +1,63 @@
+@*
+    elementCorpTabGroup renderer (Ola 24). SSR-native container.
+    Emite ARIA tablist + tabs + tabpanels. SSR fallback: todos los
+    paneles visibles apilados. JS del design system hidrata para tab
+    switching. aria-current="true" marca el primer tab activo.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var panels = Model.Value<BlockListModel>("tabs");
+    if (panels == null || !panels.Any()) { return; }
+    var title = Model.Value<string>("tabsTitle");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-tab-group",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-tab-group--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var groupId = $"syn-tabs-{Model.Key}";
+}
+<section class="@classes">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-tab-group__title">@title</h2>
+    }
+    <div class="syn-tab-group__tablist" role="tablist" aria-label="@(title ?? "Tabs")">
+        @{ var idx = 0; }
+        @foreach (var panel in panels)
+        {
+            var tabLabel = panel.Content.Value<string>("tabLabel");
+            var tabId = $"{groupId}-tab-{idx}";
+            var panelId = $"{groupId}-panel-{idx}";
+            var isFirst = idx == 0;
+            <button type="button"
+                    class="syn-tab-group__tab"
+                    role="tab"
+                    id="@tabId"
+                    aria-controls="@panelId"
+                    aria-selected="@(isFirst ? "true" : "false")"
+                    tabindex="@(isFirst ? "0" : "-1")">@tabLabel</button>
+            idx++;
+        }
+    </div>
+    <div class="syn-tab-group__panels">
+        @{ idx = 0; }
+        @foreach (var panel in panels)
+        {
+            var tabId = $"{groupId}-tab-{idx}";
+            var panelId = $"{groupId}-panel-{idx}";
+            var isFirst = idx == 0;
+            <div class="syn-tab-panel"
+                 role="tabpanel"
+                 id="@panelId"
+                 aria-labelledby="@tabId"
+                 hidden="@(isFirst ? null : "hidden")">
+                @await Html.PartialAsync("Elements/Corp/TabPanel", panel.Content)
+            </div>
+            idx++;
+        }
+    </div>
+</section>

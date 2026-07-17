@@ -1,0 +1,195 @@
+/* ============================================================
+   Synergos CMS — Error pages
+   ============================================================
+   Error.cshtml (Layout=null) — renderiza páginas de error custom
+   o fallback (404, 500, 503, etc.). Autocontenida.
+
+   La view debe cargar:
+     <link rel="stylesheet" href="~/css/syn-tokens.css" />
+     <link rel="stylesheet" href="~/css/syn-base.css" />
+     <link rel="stylesheet" href="~/css/syn-error.css" />
+   ------------------------------------------------------------ */
+
+.syn-error {
+  min-height: 100vh;
+  background: linear-gradient(135deg,
+    var(--syn-color-surface-canvas) 0%,
+    var(--syn-color-surface-secondary) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--syn-space-xl) var(--syn-space-md);
+  font-family: var(--syn-font-family-body);
+}
+
+.syn-error__main {
+  width: 100%;
+  max-width: 640px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--syn-space-lg);
+}
+
+/* ── Status code mega number ─────────────────────────────────── */
+
+.syn-error__code {
+  font-size: clamp(6rem, 22vw, 12rem);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-display);
+  line-height: 0.9;
+  margin: 0;
+  background: linear-gradient(135deg,
+    var(--syn-color-action-primary) 0%,
+    var(--syn-color-action-emphasis, var(--syn-color-accent-500)) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Variants per status — sutiles tweaks de gradient */
+
+.syn-error--404 .syn-error__code {
+  background: linear-gradient(135deg,
+    var(--syn-color-warning-500) 0%,
+    var(--syn-color-action-emphasis) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.syn-error--500 .syn-error__code,
+.syn-error--503 .syn-error__code {
+  background: linear-gradient(135deg,
+    var(--syn-color-action-danger) 0%,
+    var(--syn-color-action-emphasis) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* ── Title ───────────────────────────────────────────────────── */
+
+.syn-error__title {
+  font-size: clamp(var(--syn-font-size-2xl), 4vw + 1rem, var(--syn-font-size-4xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  color: var(--syn-color-text-primary);
+  margin: 0;
+}
+
+/* ── Body (HTML or BlockGrid) ────────────────────────────────── */
+
+.syn-error__body {
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-lg);
+  line-height: var(--syn-line-height-relaxed);
+  max-width: var(--syn-max-width-reading);
+}
+
+.syn-error__body--text > * + * {
+  margin-top: var(--syn-space-md);
+}
+
+.syn-error__body--blocks {
+  width: 100%;
+  text-align: start;
+}
+
+/* ── Search box ──────────────────────────────────────────────── */
+
+.syn-error__search {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-sm);
+  margin-top: var(--syn-space-md);
+}
+
+.syn-error__search-label {
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  color: var(--syn-color-text-secondary);
+  text-align: start;
+}
+
+.syn-error__search-input {
+  flex: 1;
+  min-height: 48px;
+  padding: var(--syn-space-3) var(--syn-space-4);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
+  color: var(--syn-color-text-primary);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-error__search-input:focus,
+.syn-error__search-input:focus-visible {
+  outline: none;
+  border-color: var(--syn-color-action-primary);
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+}
+
+.syn-error__search-submit {
+  min-height: 48px;
+  padding: var(--syn-space-3) var(--syn-space-6);
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  border: 1px solid transparent;
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-semibold);
+  cursor: pointer;
+  box-shadow: var(--syn-shadow-action);
+  transition: var(--syn-transition-colors), transform var(--syn-duration-fast) var(--syn-easing-out);
+}
+
+.syn-error__search-submit:hover {
+  background: var(--syn-color-action-primary-hover);
+  transform: translateY(-1px);
+}
+
+@media (min-width: 480px) {
+  .syn-error__search {
+    flex-direction: row;
+    align-items: end;
+  }
+  .syn-error__search-label {
+    width: 100%;
+    flex-basis: 100%;
+  }
+}
+
+/* ── Home link CTA ───────────────────────────────────────────── */
+
+.syn-error__home {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-2);
+  padding: var(--syn-space-3) var(--syn-space-6);
+  background: var(--syn-color-action-secondary-surface);
+  color: var(--syn-color-action-secondary-text);
+  border: 1px solid var(--syn-color-action-secondary-border);
+  border-radius: var(--syn-radius-md);
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: none;
+  margin-top: var(--syn-space-md);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-error__home:hover {
+  background: var(--syn-color-action-secondary-surface-hover);
+  color: var(--syn-color-action-secondary-text-hover);
+  border-color: var(--syn-color-action-secondary-border-hover);
+  text-decoration: none;
+}
+
+.syn-error__home::before {
+  content: '←';
+  font-size: var(--syn-font-size-lg);
+}

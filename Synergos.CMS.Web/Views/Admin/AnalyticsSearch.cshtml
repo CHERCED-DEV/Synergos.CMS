@@ -1,0 +1,127 @@
+@*
+    Vista del AdminController.AnalyticsSearch (Ola 109). Muestra top
+    queries + top no-result queries en una ventana de fechas.
+*@
+@using Synergos.CMS.Interfaces
+@{
+    Layout = null;
+    var fromUtc = (DateTime)(ViewData["FromUtc"] ?? DateTime.UtcNow.AddDays(-30));
+    var toUtc = (DateTime)(ViewData["ToUtc"] ?? DateTime.UtcNow);
+    var limit = (int)(ViewData["Limit"] ?? 20);
+    var topQueries = ViewData["TopQueries"] as IReadOnlyList<SearchQueryStat> ?? Array.Empty<SearchQueryStat>();
+    var topNoResults = ViewData["TopNoResults"] as IReadOnlyList<SearchQueryStat> ?? Array.Empty<SearchQueryStat>();
+    var moderatorName = ViewData["ModeratorName"] as string ?? "—";
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>Analytics búsqueda · Synergos</title>
+</head>
+<body class="syn-admin">
+    @await Html.PartialAsync("_AdminTopbar")
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">Analytics de búsqueda</h1>
+                <p class="syn-admin__page-subtitle">
+                    Qué buscan los visitantes y qué no encuentran. Datos
+                    agregados desde <code>@fromUtc.ToString("yyyy-MM-dd")</code>
+                    hasta <code>@toUtc.ToString("yyyy-MM-dd")</code> UTC.
+                </p>
+            </header>
+
+            <form class="syn-admin__filters" method="get" action="/admin/analytics/search">
+                <label class="syn-admin__filter-field">
+                    <span class="syn-admin__filter-label">Desde</span>
+                    <input type="date" name="from" value="@fromUtc.ToString("yyyy-MM-dd")" />
+                </label>
+                <label class="syn-admin__filter-field">
+                    <span class="syn-admin__filter-label">Hasta</span>
+                    <input type="date" name="to" value="@toUtc.ToString("yyyy-MM-dd")" />
+                </label>
+                <label class="syn-admin__filter-field">
+                    <span class="syn-admin__filter-label">Top N</span>
+                    <input type="number" name="limit" value="@limit" min="1" max="100" />
+                </label>
+                <button type="submit" class="syn-admin__filter-submit">Aplicar</button>
+            </form>
+
+            <div class="syn-admin__split">
+                <section class="syn-admin__panel">
+                    <header class="syn-admin__panel-header">
+                        <h2 class="syn-admin__panel-title">Top queries</h2>
+                        <span class="syn-admin__panel-count">@topQueries.Count</span>
+                    </header>
+                    @if (topQueries.Count == 0)
+                    {
+                        <p class="syn-admin__panel-empty">Sin datos en esta ventana.</p>
+                    }
+                    else
+                    {
+                        <table class="syn-admin__table">
+                            <thead>
+                                <tr>
+                                    <th>Query</th>
+                                    <th class="syn-admin__col-num">Veces</th>
+                                    <th class="syn-admin__col-num">Hits últimos</th>
+                                    <th>Última vez</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var stat in topQueries)
+                                {
+                                    <tr>
+                                        <td><code>@stat.Query</code></td>
+                                        <td class="syn-admin__col-num">@stat.Count</td>
+                                        <td class="syn-admin__col-num">@stat.LastResultCount</td>
+                                        <td>@stat.LastSeenUtc.ToString("yyyy-MM-dd HH:mm")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </section>
+
+                <section class="syn-admin__panel">
+                    <header class="syn-admin__panel-header">
+                        <h2 class="syn-admin__panel-title">Sin resultados</h2>
+                        <span class="syn-admin__panel-count syn-admin__panel-count--warning">@topNoResults.Count</span>
+                    </header>
+                    <p class="syn-admin__panel-hint">
+                        Los visitantes buscaron esto y NO encontraron nada — input
+                        directo para crear contenido o sinónimos.
+                    </p>
+                    @if (topNoResults.Count == 0)
+                    {
+                        <p class="syn-admin__panel-empty">Sin datos en esta ventana.</p>
+                    }
+                    else
+                    {
+                        <table class="syn-admin__table">
+                            <thead>
+                                <tr>
+                                    <th>Query</th>
+                                    <th class="syn-admin__col-num">Veces</th>
+                                    <th>Última vez</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var stat in topNoResults)
+                                {
+                                    <tr>
+                                        <td><code>@stat.Query</code></td>
+                                        <td class="syn-admin__col-num">@stat.Count</td>
+                                        <td>@stat.LastSeenUtc.ToString("yyyy-MM-dd HH:mm")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </section>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

@@ -1,0 +1,16 @@
+@*
+    _ViewImports folder-specific para Views/Account/*.
+
+    Hotfix runtime: los views Account/* son renderizados por
+    AccountController (MVC) sin pasar por el pipeline de Umbraco
+    PublishedRequest, por lo que NO heredan automáticamente de
+    UmbracoViewPage. El símbolo `Umbraco` (helper) queda undefined
+    en runtime → CS0234 al compilar Razor on-demand.
+
+    @inherits global aquí garantiza que TODOS los Account views tengan
+    Umbraco.GetDictionaryValue() / Members helpers / etc. disponibles
+    sin tener que agregar @inherits a cada view.
+
+    Memoria del agente: feedback_razor_inject_inherits_pattern (ADR 0059).
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage

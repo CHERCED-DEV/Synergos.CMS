@@ -1,0 +1,305 @@
+﻿@*
+    Master layout compartido por pageBase/pageBasic/pageLanding/siteRoot.
+    pageBare se mantiene Layout=null a propósito (chrome-less).
+
+    Ola 49: la decisión de mostrar header/footer/Alex y aplicar clases
+    de tema viene del IPageRenderContextResolver (cascada page →
+    siteRoot → defaults). Las plantillas no repiten string-matching.
+
+    Accesibilidad:
+    - skip-link al <main> al comienzo
+    - <nav aria-label="Main navigation">
+    - <html lang> con la cultura activa
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<dynamic>
+@using Umbraco.Cms.Core.Models.Blocks
+@using Umbraco.Extensions
+@using Microsoft.Extensions.Configuration
+@inject Synergos.CMS.Interfaces.IBrandingProvider Branding
+@inject Synergos.CMS.Interfaces.IBrandThemeProvider ThemeProvider
+@inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
+@inject Synergos.CMS.Interfaces.IGlobalComponentResolver GlobalComponentResolver
+@inject Synergos.CMS.Interfaces.ICartService CartService
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+@{
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+    var currentPage = UmbracoContext.PublishedRequest?.PublishedContent;
+    // El siteRoot real puede estar bajo el platformRoot (entry point), así que
+    // .Root() devolvería el platformRoot. Resolvemos el ancestro siteRoot.
+    var siteRoot = currentPage?.AncestorOrSelf("siteRoot") ?? currentPage?.Root();
+    var siteName = siteRoot?.Value<string>("siteDisplayName");
+    if (string.IsNullOrWhiteSpace(siteName)) { siteName = "Synergos"; }
+    var yearNow = DateTime.UtcNow.Year;
+    var navItems = siteRoot?.Children
+        .Where(c => c.IsVisible() && !c.Value<bool>("hideFromMainMenu"))
+        .ToList()
+        ?? new List<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>();
+
+    var brand = Branding.GetCurrent();
+    var theme = ThemeProvider.GetThemeForBrand(brand.Key);
+    // Carrito (SSR): se muestra en CUALQUIER vertical con catálogo de Shop —
+    // composable, sin hardcode de marca (ADR 0010): el botón aparece si el siteRoot
+    // tiene un productCategoryPage como hijo directo (Tienda, Propiedades, Booking).
+    // El carrito es global (cookie ICartService), así que todos comparten el mismo.
+    // Check barato: solo hijos directos del siteRoot (published cache, en memoria).
+    var isShop = siteRoot?.Children
+        .Any(c => c.ContentType.Alias == "productCategoryPage") ?? false;
+    var cartCount = isShop ? CartService.GetCart().ItemCount : 0;
+    // Logo: el del theme por marca si está configurado; si no, el isotipo de marca (brand asset).
+    var logoUrl = !string.IsNullOrWhiteSpace(theme?.LogoLightUrl) ? theme!.LogoLightUrl : Url.Content("~/img/synergoslabs-isotipo.png");
+    // El logo lleva al platformRoot (launcher/entry point), no al home del siteRoot.
+    var platformRootUrl = currentPage?.Root()?.Url() ?? "/";
+    var renderCtx = PageRenderContextResolver.Resolve();
+    var globalAlert = GlobalComponentResolver.GetActiveAlert();
+    var globalBanner = GlobalComponentResolver.GetActiveBanner();
+    var globalFooterNote = GlobalComponentResolver.GetActiveFooterNote();
+    var globalModal = GlobalComponentResolver.GetActiveModal();
+
+    var brandThemeModel = new Synergos.CMS.Application.Dto.Responses.BrandThemeStyleModel(theme, renderCtx.ThemeVariant);
+    // Banner "SYN DEV STUB" SOLO bajo un flag dedicado (default off). Antes colgaba de
+    // DevCss.Enabled → se mostraba siempre en dev aunque el CDN estuviera vivo, haciendo
+    // ver el sitio roto en demos. El CDN local ya publica bundles (ADR 0099).
+    var devStubEnabled = Configuration.GetValue<bool>("Synergos:DevStub:Enabled");
+
+    // Ola 69.4 + 71.6 — compSiteChrome triádico: si el siteRoot tiene
+    // bloques en siteHeaderBlocks/siteFooterBlocks/siteAsideBlocks, los
+    // renderizamos en lugar del chrome default. Vacíos = comportamiento
+    // previo idéntico (backward compat). El aside SOLO se renderiza si
+    // hay bloques Y la página no lo suprime.
+    var customHeaderBlocks = siteRoot?.Value<BlockGridModel>("siteHeaderBlocks");
+    var customFooterBlocks = siteRoot?.Value<BlockGridModel>("siteFooterBlocks");
+    var customAsideBlocks = siteRoot?.Value<BlockGridModel>("siteAsideBlocks");
+    var hasCustomHeader = customHeaderBlocks is not null && customHeaderBlocks.Any();
+    var hasCustomFooter = customFooterBlocks is not null && customFooterBlocks.Any();
+    var pageSuppressAside = currentPage?.Value<bool>("suppressAside") ?? false;
+    var showAside = !pageSuppressAside && customAsideBlocks is not null && customAsideBlocks.Any();
+}
+<!DOCTYPE html>
+<html lang="@culture" data-theme="@renderCtx.ThemeVariant" data-surface="@renderCtx.PageSurface" data-profile="@renderCtx.VisualProfile">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    @await Html.PartialAsync("_SeoHead", currentPage)
+    @await Html.PartialAsync("_SeoStructuredData", currentPage)
+    @await Html.PartialAsync("_SynergosBridge")
+    @await Html.PartialAsync("_SynHostRuntime")
+    @if (!string.IsNullOrWhiteSpace(theme?.FaviconUrl))
+    {
+        <link rel="icon" href="@theme.FaviconUrl" />
+    }
+    else
+    {
+        <link rel="icon" type="image/svg+xml" href="~/img/synergoslabs-isotipo.svg" />
+    }
+    @* P1-6/P2-7: fallback PNG (navegadores sin SVG) + apple-touch (iOS home screen).
+       El favicon real del kit reemplaza al .ico pre-rebrand para superficies modernas. *@
+    <link rel="icon" type="image/png" sizes="32x32" href="~/img/favicon-synergos.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="~/img/favicon-synergos.png" />
+    @* Ola 100 — Manrope font family canónica del design system (Synergos.UI).
+       Preconnect + display=swap para evitar FOUT bloqueante. Si el theme override
+       define otra Heading/Body Font Family, el _BrandThemeStyle gana. *@
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@@300;400;500;600;700&display=swap" />
+    @* Ola 92 — Modular CSS foundations alineados con Synergos.UI design system.
+       Orden de carga: tokens → base → utilities → layout → chrome → primitives
+       (los themes via _BrandThemeStyle se aplican después como overrides). *@
+    <link rel="stylesheet" href="~/css/syn-tokens.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-base.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-utilities.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-layout.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-chrome.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-primitives.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-pages.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-shop.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-search.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-comments.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-globals.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-flow.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-member.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/syn-blog.css" asp-append-version="true" />
+    @await Html.PartialAsync("_BrandThemeStyle", brandThemeModel)
+    @if (devStubEnabled)
+    {
+        @* Dev marker — banda fija mostrando que el CDN bundle real (ADR 0012) aún no está. *@
+        <link rel="stylesheet" href="~/css/syn-dev-stub.css" asp-append-version="true" />
+    }
+</head>
+<body class="syn-page syn-page--chrome-@renderCtx.ChromeMode syn-page--header-@renderCtx.HeaderMode syn-page--footer-@renderCtx.FooterMode">
+    <a class="syn-skip-link" href="#main-content">@Umbraco.GetDictionaryValue("common.aria.skiptocontent", "Skip to main content")</a>
+    @if (globalAlert is not null)
+    {
+        @await Html.PartialAsync("_GlobalAlert", globalAlert)
+    }
+    @if (globalBanner is not null && string.Equals(globalBanner.Placement, "top", StringComparison.OrdinalIgnoreCase))
+    {
+        @await Html.PartialAsync("_GlobalBanner", globalBanner)
+    }
+    @if (renderCtx.ShowHeader)
+    {
+        if (hasCustomHeader)
+        {
+            <header class="syn-site-header syn-site-header--custom syn-site-header--@renderCtx.HeaderMode">
+                @await Html.GetBlockGridHtmlAsync(customHeaderBlocks!)
+            </header>
+        }
+        else
+        {
+            <header class="syn-site-header syn-site-header--@renderCtx.HeaderMode">
+                <div class="syn-site-header__inner">
+                    @if (siteRoot != null)
+                    {
+                        <a class="syn-site-header__brand" href="@platformRootUrl" aria-label="Volver a la plataforma SynergosLabs">
+                            <img class="syn-site-header__logo" src="@logoUrl" alt="" width="34" height="34" loading="eager" />
+                            <span class="syn-site-header__brand-name">@siteName</span>
+                        </a>
+                    }
+                    else
+                    {
+                        <span class="syn-site-header__brand">
+                            <img class="syn-site-header__logo" src="@logoUrl" alt="" width="34" height="34" loading="eager" />
+                            <span class="syn-site-header__brand-name">@siteName</span>
+                        </span>
+                    }
+                    @if (navItems.Any())
+                    {
+                        @* P2-6: el toggle es el control real — operable por teclado/lector
+                           (sin aria-hidden), con nombre y aria-controls al nav que abre. *@
+                        <input type="checkbox" id="syn-nav-toggle" class="syn-nav-toggle" aria-controls="syn-site-nav" aria-label="Menú de navegación" />
+                        <label for="syn-nav-toggle" class="syn-nav-burger" aria-hidden="true">
+                            <span class="syn-nav-burger__bar"></span>
+                            <span class="syn-nav-burger__bar"></span>
+                            <span class="syn-nav-burger__bar"></span>
+                        </label>
+                        <nav id="syn-site-nav" class="syn-site-nav" aria-label="Navegación principal">
+                            <ul class="syn-site-nav__list">
+                                @foreach (var item in navItems)
+                                {
+                                    var isCurrent = currentPage != null && item.Id == currentPage.Id;
+                                    var navTitle = item.Value<string>("navigationTitle");
+                                    var label = string.IsNullOrWhiteSpace(navTitle) ? item.Name : navTitle;
+                                    <li class="syn-site-nav__item">
+                                        <a class="syn-site-nav__link@(isCurrent ? " syn-site-nav__link--current" : "")"
+                                           href="@item.Url()"
+                                           @(isCurrent ? Html.Raw("aria-current=\"page\"") : null)>@label</a>
+                                    </li>
+                                }
+                            </ul>
+                        </nav>
+                    }
+                    @if (isShop)
+                    {
+                        @* Fase 0 — botón de carrito: ícono + badge con ItemCount (SSR).
+                           El aria-label ya anuncia la cantidad → el badge es decorativo
+                           (aria-hidden). JS (syn-shop.js) actualiza data-cart-count en vivo. *@
+                        <a class="syn-cart-button" href="/tienda/carrito" data-cart-button aria-label="Carrito (@cartCount)">
+                            <svg class="syn-cart-button__icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                <circle cx="9" cy="21" r="1"></circle>
+                                <circle cx="20" cy="21" r="1"></circle>
+                                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                            </svg>
+                            <span class="syn-cart-badge@(cartCount == 0 ? " syn-cart-badge--empty" : "")" data-cart-count aria-hidden="true">@cartCount</span>
+                        </a>
+                    }
+                </div>
+            </header>
+        }
+    }
+    <div class="syn-site-body@(showAside ? " syn-site-body--with-aside" : "")">
+        <main id="main-content" class="syn-site-main syn-site-main--@renderCtx.ContainerType syn-site-main--spacing-@renderCtx.SpacingScale">
+            @if (renderCtx.ShowBreadcrumbs && currentPage != null)
+            {
+                @await Html.PartialAsync("_Breadcrumbs", currentPage)
+            }
+            @RenderBody()
+        </main>
+        @if (showAside)
+        {
+            <aside class="syn-site-aside" aria-label="@Umbraco.GetDictionaryValue("common.aria.sidebar", "Sidebar")">
+                @await Html.GetBlockGridHtmlAsync(customAsideBlocks!)
+            </aside>
+        }
+    </div>
+    @if (globalBanner is not null && string.Equals(globalBanner.Placement, "bottom", StringComparison.OrdinalIgnoreCase))
+    {
+        @await Html.PartialAsync("_GlobalBanner", globalBanner)
+    }
+    @if (renderCtx.ShowFooter)
+    {
+        if (hasCustomFooter)
+        {
+            <footer class="syn-site-footer syn-site-footer--custom syn-site-footer--@renderCtx.FooterMode">
+                @await Html.GetBlockGridHtmlAsync(customFooterBlocks!)
+                @if (globalFooterNote is not null)
+                {
+                    @await Html.PartialAsync("_GlobalFooterNote", globalFooterNote)
+                }
+            </footer>
+        }
+        else
+        {
+            <footer class="syn-site-footer syn-site-footer--@renderCtx.FooterMode">
+                <div class="syn-site-footer__inner">
+                    @{
+                        var footerNav = siteRoot?.Children
+                            .Where(c => c.IsVisible() && !c.Value<bool>("hideFromFooter"))
+                            .ToList();
+                        var showFooterNav = footerNav is { Count: > 0 }
+                            && !string.Equals(renderCtx.FooterMode, "minimal", StringComparison.OrdinalIgnoreCase);
+                    }
+                    @if (showFooterNav)
+                    {
+                        <div class="syn-site-footer__top">
+                            <div class="syn-site-footer__brand">
+                                <a class="syn-site-footer__brand-link" href="@platformRootUrl" aria-label="@siteName — volver a la plataforma">
+                                    <img class="syn-site-footer__logo" src="@logoUrl" alt="" width="36" height="36" loading="lazy" />
+                                    <span class="syn-site-footer__brand-name">@siteName</span>
+                                </a>
+                                <p class="syn-site-footer__tagline">Un código, un schema, infinitos productos.</p>
+                            </div>
+                            <nav class="syn-site-footer__nav" aria-label="Footer navigation">
+                                <p class="syn-site-footer__nav-title">Plataforma</p>
+                                <ul class="syn-site-footer__nav-list">
+                                    @foreach (var item in footerNav!)
+                                    {
+                                        var navTitle = item.Value<string>("navigationTitle");
+                                        var label = string.IsNullOrWhiteSpace(navTitle) ? item.Name : navTitle;
+                                        <li><a href="@item.Url()">@label</a></li>
+                                    }
+                                </ul>
+                            </nav>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="syn-site-footer__brand syn-site-footer__brand--solo">
+                            <a class="syn-site-footer__brand-link" href="@platformRootUrl" aria-label="@siteName — volver a la plataforma">
+                                <img class="syn-site-footer__logo" src="@logoUrl" alt="" width="36" height="36" loading="lazy" />
+                                <span class="syn-site-footer__brand-name">@siteName</span>
+                            </a>
+                        </div>
+                    }
+                    <div class="syn-site-footer__legal">
+                        <p class="syn-site-footer__copyright">&copy; @yearNow @siteName. Todos los derechos reservados.</p>
+                        <p class="syn-site-footer__legal-note">Hecho con SynergosLabs.</p>
+                    </div>
+                    @if (globalFooterNote is not null)
+                    {
+                        @await Html.PartialAsync("_GlobalFooterNote", globalFooterNote)
+                    }
+                </div>
+            </footer>
+        }
+    }
+    @if (globalModal is not null)
+    {
+        @await Html.PartialAsync("_GlobalModal", globalModal)
+    }
+    @if (isShop)
+    {
+        @* Fase 0 — interacción del carrito: add-to-cart (PDP) + qty +/- → fetch a
+           /api/shop/cart/*, actualiza el badge y muestra un toast. *@
+        <script src="~/js/syn-shop.js" asp-append-version="true" defer></script>
+    }
+</body>
+</html>

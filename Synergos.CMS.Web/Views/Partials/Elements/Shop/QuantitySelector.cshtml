@@ -1,0 +1,27 @@
+@*
+    elementShopQuantitySelector renderer (Ola 33). SSR nativo.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var label = Model.Value<string>("label");
+    var min = Model.Value<string>("minQty") ?? "1";
+    var max = Model.Value<string>("maxQty") ?? "99";
+    var initial = Model.Value<string>("initialQty") ?? "1";
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-qty-selector",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-qty-selector--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var inputId = $"syn-qty-{Model.Key}";
+}
+<div class="@classes">
+    <label for="@inputId" class="syn-qty-selector__label">@label</label>
+    <div class="syn-qty-selector__controls">
+        <button type="button" class="syn-qty-selector__btn syn-qty-selector__btn--dec" aria-label="Disminuir">−</button>
+        <input id="@inputId" type="number" class="syn-qty-selector__input" min="@min" max="@max" value="@initial" />
+        <button type="button" class="syn-qty-selector__btn syn-qty-selector__btn--inc" aria-label="Aumentar">+</button>
+    </div>
+</div>

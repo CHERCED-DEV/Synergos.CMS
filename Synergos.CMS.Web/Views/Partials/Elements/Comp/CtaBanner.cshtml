@@ -1,0 +1,49 @@
+@*
+    elementCompCtaBanner renderer (Ola 22). SSR-native composite compacto.
+    Heading + CTA prominente. Sin props propias.
+*@
+@using Umbraco.Cms.Core.Models
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("headingTitle");
+    var ctaLabel = Model.Value<string>("ctaLabel");
+    var ctaLink = Model.Value<Link>("ctaLink");
+    var ctaUrl = ctaLink?.Url;
+    if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(ctaLabel) || string.IsNullOrWhiteSpace(ctaUrl)) { return; }
+    var subtitle = Model.Value<string>("headingSubtitle");
+    var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab") || string.Equals(ctaLink?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
+    // CTA secundario opcional (ghost) — dual-CTA cuando el copy ofrece dos caminos.
+    var cta2Label = Model.Value<string>("ctaSecondaryLabel");
+    var cta2Link = Model.Value<Link>("ctaSecondaryLink");
+    var cta2Url = cta2Link?.Url;
+    var hasCta2 = !string.IsNullOrWhiteSpace(cta2Label) && !string.IsNullOrWhiteSpace(cta2Url);
+    var cta2NewTab = string.Equals(cta2Link?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-cta-banner",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-cta-banner--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<aside class="@classes">
+    <div class="syn-cta-banner__content">
+        <h2 class="syn-cta-banner__title">@title</h2>
+        @if (!string.IsNullOrWhiteSpace(subtitle))
+        {
+            <p class="syn-cta-banner__subtitle">@subtitle</p>
+        }
+    </div>
+    @if (hasCta2)
+    {
+        <div class="syn-cta-banner__actions">
+            <a class="syn-cta-banner__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+            <a class="syn-cta-banner__cta syn-cta-banner__cta--secondary" href="@cta2Url"@(cta2NewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@cta2Label</a>
+        </div>
+    }
+    else
+    {
+        <a class="syn-cta-banner__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+    }
+</aside>

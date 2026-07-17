@@ -1,0 +1,49 @@
+@*
+    Emite el <script type="importmap"> del runtime Angular para los Web Components
+    de la CDN (SynHost / elementSyn*). Sin esto, los <script type="module"> de los
+    componentes no resuelven los bare specifiers (@@angular/*, @@synergos/*, rxjs) y
+    el custom element nunca se registra (no hidrata).
+
+    Lee el import-map.json real del CDN local y reescribe el host de prod
+    (https://synergos-static-local/...) por la base pública servida (/cdn-bundles).
+    Debe ir en el <head>, ANTES de cualquier <script type="module">.
+*@
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
+@{
+    var localPath = Configuration["Synergos:BundleRegistry:LocalPath"];
+    var ns = Configuration["Synergos:BundleRegistry:BundlesNamespace"] ?? "synergos";
+    var publicBase = (Configuration["Synergos:BundleRegistry:PublicBaseUrl"] ?? "/cdn-bundles").TrimEnd('/');
+    string? importMapJson = null;
+    if (!string.IsNullOrWhiteSpace(localPath))
+    {
+        var mapPath = System.IO.Path.Combine(localPath, ns, "runtime", "angular", "latest", "import-map.json");
+        if (System.IO.File.Exists(mapPath))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(mapPath));
+                if (doc.RootElement.TryGetProperty("imports", out var imports))
+                {
+                    var sb = new System.Text.StringBuilder("{\"imports\":{");
+                    var first = true;
+                    foreach (var prop in imports.EnumerateObject())
+                    {
+                        var url = System.Text.RegularExpressions.Regex.Replace(
+                            prop.Value.GetString() ?? string.Empty, "^https?://[^/]+", publicBase);
+                        if (!first) { sb.Append(','); }
+                        sb.Append('"').Append(prop.Name).Append("\":\"").Append(url).Append('"');
+                        first = false;
+                    }
+                    sb.Append("}}");
+                    importMapJson = sb.ToString();
+                }
+            }
+            catch { importMapJson = null; }
+        }
+    }
+}
+@if (!string.IsNullOrWhiteSpace(importMapJson))
+{
+    <script type="importmap">@Html.Raw(importMapJson)</script>
+}

@@ -1,0 +1,20 @@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    // apiBase: default /api/booking si el editor no lo setea (NO mandatory).
+    var apiBase = Model.Value<string>("apiBase");
+    if (string.IsNullOrWhiteSpace(apiBase)) { apiBase = "/api/booking"; }
+    // currency: default COP (código ISO).
+    var currency = Model.Value<string>("currency");
+    if (string.IsNullOrWhiteSpace(currency)) { currency = "COP"; }
+
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["apiBase"] = apiBase,
+        ["destinationLabel"] = Model.Value<string>("destinationLabel"),
+        ["currency"] = currency,
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("booking-wizard", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

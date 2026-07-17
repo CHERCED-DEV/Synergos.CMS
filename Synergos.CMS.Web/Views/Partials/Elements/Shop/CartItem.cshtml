@@ -1,0 +1,45 @@
+@*
+    elementShopCartItem renderer.
+
+    Block "static cart line preview" — emite una línea con datos
+    inline (SKU + cantidad + precio) que el editor configura
+    manualmente en el composer. NO consume ICartService — para vista
+    real del cart usar elementShopCartSummary, que renderiza todas
+    las líneas vivas desde el cookie firmado del visitante.
+
+    Caso de uso: previews de cart en mockups/landings, demos
+    estáticos. Si no aparece en composer real, es candidato a
+    deprecación en futura ola.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
+@{
+    var sku = Model.Value<string>("productSku");
+    var qty = Model.Value<string>("quantity") ?? "1";
+    var unitPrice = Model.Value<string>("unitPrice");
+    var updateEndpoint = Model.Value<string>("updateEndpoint");
+    if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(unitPrice) || string.IsNullOrWhiteSpace(updateEndpoint)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-cart-item",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-cart-item--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    // unitPrice es un string editor-facing: si es un decimal crudo lo formateamos
+    // es-CO vía IPriceFormatter; si ya viene con formato, se muestra tal cual.
+    var unitPriceDisplay = decimal.TryParse(unitPrice, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var unitPriceVal)
+        ? PriceFormatter.Format(unitPriceVal)
+        : unitPrice;
+}
+<article class="@classes"
+         data-sku="@sku"
+         data-qty="@qty"
+         data-unit-price="@unitPrice"
+         data-update-endpoint="@updateEndpoint">
+    <span class="syn-cart-item__sku">@sku</span>
+    <span class="syn-cart-item__qty">×@qty</span>
+    <span class="syn-cart-item__price">@unitPriceDisplay</span>
+    <button type="button" class="syn-cart-item__remove" aria-label="@Umbraco.GetDictionaryValue("Shop.Cart.Remove")">×</button>
+</article>

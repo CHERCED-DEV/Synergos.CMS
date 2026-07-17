@@ -1,0 +1,29 @@
+@*
+    elementLayoutSection renderer (Ola 42.5). Semantic <section> wrapper
+    con 1 area "sectionContent" (12 cols). Es el preset raíz de una
+    página — allowInAreas=false en el schema.
+
+    Backoffice preview: App_Plugins/LayoutComposer/views/block-section.html
+*@
+@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
+@using Synergos.CMS.Web.Services
+@{
+    var element = Model.Content;
+    var variant = element.Value<string>("variantKey");
+    var cssClass = element.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-layout",
+        "syn-layout--section",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-layout--v-{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Concat(LayoutCssBuilder.Build(element)).Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @foreach (var area in Model.Areas)
+    {
+        <div class="syn-layout__area syn-layout__area--@area.Alias">
+            @await Html.GetBlockGridItemsHtmlAsync(area)
+        </div>
+    }
+</section>

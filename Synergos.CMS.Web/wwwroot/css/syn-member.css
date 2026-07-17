@@ -1,0 +1,208 @@
+/* ============================================================
+   Synergos CMS — Member runtime blocks
+   ============================================================
+   elementMemberGate / elementMemberLogin / elementMemberLogout /
+   elementMemberProfile (Ola 52.C — runtime Members in-page).
+   Cargado siempre via _Layout.
+   ------------------------------------------------------------ */
+
+/* ── Member Gate (in-page gating block) ──────────────────────── */
+
+.syn-member-gate {
+  display: block;
+}
+
+.syn-member-gate__prompt {
+  padding: var(--syn-space-xl);
+  background: var(--syn-color-state-info-surface);
+  color: var(--syn-color-state-info-text);
+  border: 1px solid var(--syn-color-state-info-border);
+  border-radius: var(--syn-radius-lg);
+  text-align: center;
+  font-size: var(--syn-font-size-base);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-member-gate__prompt a {
+  color: inherit;
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.syn-member-gate__content {
+  display: block;
+}
+
+/* ── Member Login (inline block, distinct del Account/Login full page) ── */
+
+.syn-member-login {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+  padding: var(--syn-space-lg);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-lg);
+  box-shadow: var(--syn-shadow-card);
+  max-width: 420px;
+}
+
+/* Campo: wrapper label↔input. Mismo modelo que .syn-account__field y
+   .syn-comment-thread__field (gap único, sin margin-bottom). El markup
+   debe envolver cada par <label>+<input> en <div class="syn-member-login__field">. */
+.syn-member-login__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-form-label-gap);
+}
+
+.syn-member-login__label {
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  color: var(--syn-color-text-secondary);
+  display: block;
+}
+
+.syn-member-login input[type="email"],
+.syn-member-login input[type="password"] {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--syn-space-2) var(--syn-space-4);
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
+  color: var(--syn-color-text-primary);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-member-login input:hover {
+  border-color: var(--syn-color-brand-400);
+}
+
+.syn-member-login input:focus,
+.syn-member-login input:focus-visible {
+  outline: none;
+  border-color: var(--syn-color-action-primary);
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+}
+
+.syn-member-login__submit {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--syn-space-2) var(--syn-space-6);
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  border: 1px solid transparent;
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-semibold);
+  cursor: pointer;
+  box-shadow: var(--syn-shadow-action);
+  transition: var(--syn-transition-colors), transform var(--syn-duration-fast) var(--syn-easing-out);
+}
+
+.syn-member-login__submit:hover {
+  background: var(--syn-color-action-primary-hover);
+  box-shadow: var(--syn-shadow-action-hover);
+  transform: translateY(-1px);
+}
+
+/* ── Member Logout button block ──────────────────────────────── */
+
+.syn-member-logout {
+  display: inline-block;
+}
+
+.syn-member-logout__form {
+  margin: 0;
+}
+
+.syn-member-logout__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-2);
+  padding: var(--syn-space-2) var(--syn-space-4);
+  background: transparent;
+  color: var(--syn-color-action-danger);
+  border: 1px solid var(--syn-color-action-danger);
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  cursor: pointer;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-member-logout__button:hover {
+  background: var(--syn-color-action-danger);
+  color: var(--syn-color-action-danger-text);
+}
+
+/* ── Member Profile (inline block) ───────────────────────────── */
+
+.syn-member-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-md);
+  padding: var(--syn-space-md);
+  background: var(--syn-color-surface-secondary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-md);
+}
+
+.syn-member-profile__avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--syn-color-state-brand-surface);
+  color: var(--syn-color-state-brand-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-bold);
+  flex-shrink: 0;
+}
+
+.syn-member-profile__avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.syn-member-profile__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.syn-member-profile__name {
+  margin: 0;
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-member-profile__bio {
+  margin: 0;
+  color: var(--syn-color-text-muted);
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-normal);
+}
+
+.syn-member-profile__email {
+  font-size: var(--syn-font-size-xs);
+  color: var(--syn-color-text-muted);
+  font-family: var(--syn-font-family-mono);
+}

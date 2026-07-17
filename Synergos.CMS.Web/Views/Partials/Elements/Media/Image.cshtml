@@ -1,0 +1,26 @@
+@*
+    elementMediaImage renderer (Ola 14). SSR-native. Editorial image
+    with optional caption.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    if (mediaRef == null) { return; }
+    var alt = Model.Value<string>("mediaAlt") ?? "";
+    var caption = Model.Value<string>("mediaCaption");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-image",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-image--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<figure class="@classes">
+    <img src="@mediaRef.Url()" alt="@alt" loading="lazy" />
+    @if (!string.IsNullOrWhiteSpace(caption))
+    {
+        <figcaption class="syn-image__caption">@caption</figcaption>
+    }
+</figure>

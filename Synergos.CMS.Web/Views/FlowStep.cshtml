@@ -1,0 +1,108 @@
+﻿@*
+    Template del Document Type `flowStep`. Renderiza un paso individual
+    dentro de un flow: progress (X de N) + label + contenido richtext +
+    botones Next / Cancel.
+
+    Next y Cancel son forms POST a FlowController. Cookie `syn-flow-{flowKey}`
+    rastrea el índice; cuando el step actual es `isTerminal` o es el último,
+    Next limpia cookies y redirige al returnUrl.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.FlowStep>
+@using Synergos.CMS.Web.PublishedModels
+@inject Synergos.CMS.Web.Services.FlowResolver FlowResolver
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@{
+    Layout = "_Layout";
+    if (Model is null) { return; }
+
+    var parent = Model.Parent as FlowDefinition;
+    var flowKey = parent?.FlowKey;
+
+    var stepLabel = !string.IsNullOrWhiteSpace(Model.StepLabel) ? Model.StepLabel : Model.Name;
+    var stepContent = Model.Value<Microsoft.AspNetCore.Html.IHtmlContent>("stepContent");
+    var isTerminal = Model.IsTerminal;
+
+    var descriptor = !string.IsNullOrWhiteSpace(flowKey)
+        ? FlowResolver.Resolve(flowKey)
+        : null;
+    var totalSteps = descriptor?.Steps.Count ?? 0;
+
+    int currentIndex = 0;
+    if (descriptor is not null)
+    {
+        for (var i = 0; i < descriptor.Steps.Count; i++)
+        {
+            if (descriptor.Steps[i].Id == Model.Id)
+            {
+                currentIndex = i;
+                break;
+            }
+        }
+    }
+    var displayStep = totalSteps > 0 ? currentIndex + 1 : 0;
+    var percent = totalSteps > 0 ? (int)Math.Round(100d * displayStep / totalSteps) : 0;
+
+    var nextAction = !string.IsNullOrWhiteSpace(flowKey)
+        ? $"/flow/{flowKey}/next"
+        : null;
+    var cancelAction = !string.IsNullOrWhiteSpace(flowKey)
+        ? $"/flow/{flowKey}/cancel"
+        : null;
+}
+<section class="syn-flow-step" data-flow-key="@flowKey" data-step-index="@currentIndex">
+    @if (totalSteps > 0)
+    {
+        <div class="syn-flow-step__progress"
+             role="progressbar"
+             aria-valuenow="@percent"
+             aria-valuemin="0"
+             aria-valuemax="100">
+            <span class="syn-flow-step__progress-label">
+                @Umbraco.GetDictionaryValue("flow.progress.step", "Paso") @displayStep
+                @Umbraco.GetDictionaryValue("flow.progress.of", "de") @totalSteps
+            </span>
+        </div>
+    }
+
+    <header class="syn-flow-step__header">
+        <h1 class="syn-flow-step__label">@stepLabel</h1>
+    </header>
+
+    @if (stepContent is not null)
+    {
+        <div class="syn-flow-step__content">
+            @stepContent
+        </div>
+    }
+
+    <footer class="syn-flow-step__actions">
+        @if (!string.IsNullOrWhiteSpace(nextAction))
+        {
+            <form method="post" action="@nextAction" class="syn-flow-step__next-form">
+                <button type="submit"
+                        class="syn-flow-step__next"
+                        data-action="flow-next">
+                    @if (isTerminal || (totalSteps > 0 && currentIndex >= totalSteps - 1))
+                    {
+                        @Umbraco.GetDictionaryValue("flow.finish", "Finalizar")
+                    }
+                    else
+                    {
+                        @Umbraco.GetDictionaryValue("flow.next", "Siguiente")
+                    }
+                </button>
+            </form>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(cancelAction) && !isTerminal)
+        {
+            <form method="post" action="@cancelAction" class="syn-flow-step__cancel-form">
+                <button type="submit"
+                        class="syn-flow-step__cancel"
+                        data-action="flow-cancel">
+                    @Umbraco.GetDictionaryValue("flow.cancel", "Cancelar")
+                </button>
+            </form>
+        }
+    </footer>
+</section>

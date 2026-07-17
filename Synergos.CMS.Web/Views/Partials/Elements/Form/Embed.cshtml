@@ -1,0 +1,29 @@
+@*
+    elementFormEmbed renderer (Ola 23). SSR-native.
+    <iframe> hacia form externo (Typeform, Umbraco.Forms render endpoint,
+    Jotform, etc.). ADR 0018 Forms bridge path.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var url = Model.Value<string>("embedUrl");
+    var title = Model.Value<string>("embedTitle");
+    if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(title)) { return; }
+    var heightRaw = Model.Value<string>("embedHeight");
+    if (string.IsNullOrWhiteSpace(heightRaw) || !int.TryParse(heightRaw, out var height) || height < 1) { height = 600; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-form-embed",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-form-embed--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">
+    <iframe src="@url"
+            title="@title"
+            aria-label="@title"
+            height="@height"
+            loading="lazy"
+            sandbox="allow-scripts allow-forms allow-same-origin"></iframe>
+</div>

@@ -1,0 +1,18 @@
+﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["totalItems"] = Model.Value<string>("totalItems"),
+        ["itemsPerPage"] = Model.Value<string>("itemsPerPage"),
+        ["currentPage"] = Model.Value<string>("currentPage"),
+        ["urlTemplate"] = Model.Value<string>("urlTemplate"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "pagination",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

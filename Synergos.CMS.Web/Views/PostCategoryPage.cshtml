@@ -1,0 +1,105 @@
+﻿@*
+    Template del Document Type `postCategoryPage`. Renderiza la
+    landing de una categoría de blog: nombre + descripción + listado
+    paginado de posts hijos.
+
+    Consume IBlogQuery con el filtro CategoryAliasOrName=Name del
+    nodo actual. La paginación se controla via querystring `?page=N`
+    (default 1). Page size hardcoded 12 — puede ir a IOptions en
+    futura ola si el sitio crece.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.PostCategoryPage>
+@inject Synergos.CMS.Interfaces.IBlogQuery BlogQuery
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.BlogSettings> BlogOptions
+@using Umbraco.Extensions
+@{
+    Layout = "_Layout";
+    if (Model is null) { return; }
+
+    var pageSize = BlogOptions.Value.CategoryPageSize > 0 ? BlogOptions.Value.CategoryPageSize : 12;
+    var pageRaw = HttpContextAccessor.HttpContext?.Request?.Query["page"].ToString();
+    var pageNumber = int.TryParse(pageRaw, out var p) && p > 0 ? p : 1;
+    var skip = (pageNumber - 1) * pageSize;
+
+    var categoryName = !string.IsNullOrWhiteSpace(Model.CategoryName) ? Model.CategoryName : Model.Name;
+    var description = Model.Description;
+
+    // Fetch one extra to detect if there's a next page
+    var posts = BlogQuery.GetPosts(new Synergos.CMS.Interfaces.BlogQueryRequest(
+        MaxItems: pageSize + 1,
+        Skip: skip,
+        CategoryAliasOrName: Model.Name));
+
+    var hasNext = posts.Count > pageSize;
+    var visible = hasNext ? posts.Take(pageSize).ToArray() : posts;
+    var hasPrev = pageNumber > 1;
+
+    var baseUrl = Model.Url();
+}
+<section class="syn-post-category">
+    <header class="syn-post-category__header">
+        <h1 class="syn-post-category__title">@categoryName</h1>
+        @if (!string.IsNullOrWhiteSpace(description))
+        {
+            <p class="syn-post-category__description">@description</p>
+        }
+    </header>
+
+    @if (visible.Count == 0)
+    {
+        <p class="syn-post-category__empty">@Umbraco.GetDictionaryValue("blog.empty", "Aún no hay artículos.")</p>
+    }
+    else
+    {
+        <ul class="syn-post-category__items">
+            @foreach (var post in visible)
+            {
+                <li class="syn-post-category__item">
+                    <a class="syn-post-category__link" href="@post.Url">
+                        @if (!string.IsNullOrWhiteSpace(post.HeroImageUrl))
+                        {
+                            <img class="syn-post-category__image" src="@post.HeroImageUrl" alt="" loading="lazy" />
+                        }
+                        <h2 class="syn-post-category__item-title">@post.Title</h2>
+                        @if (!string.IsNullOrWhiteSpace(post.Excerpt))
+                        {
+                            <p class="syn-post-category__excerpt">@post.Excerpt</p>
+                        }
+                        <div class="syn-post-category__meta">
+                            @if (post.PublishDate.HasValue)
+                            {
+                                <time datetime="@post.PublishDate.Value.ToString("yyyy-MM-dd")">
+                                    @post.PublishDate.Value.ToString("dd MMM yyyy")
+                                </time>
+                            }
+                            @if (post.ReadTimeMinutes.HasValue)
+                            {
+                                <span>@post.ReadTimeMinutes min</span>
+                            }
+                        </div>
+                    </a>
+                </li>
+            }
+        </ul>
+
+        @if (hasPrev || hasNext)
+        {
+            <nav class="syn-post-category__pagination" aria-label="@Umbraco.GetDictionaryValue("blog.pagination", "Paginación")">
+                @if (hasPrev)
+                {
+                    <a class="syn-post-category__pagination-prev" href="@baseUrl?page=@(pageNumber - 1)" rel="prev">
+                        @Umbraco.GetDictionaryValue("blog.previous", "Anteriores")
+                    </a>
+                }
+                <span class="syn-post-category__pagination-current">@pageNumber</span>
+                @if (hasNext)
+                {
+                    <a class="syn-post-category__pagination-next" href="@baseUrl?page=@(pageNumber + 1)" rel="next">
+                        @Umbraco.GetDictionaryValue("blog.next", "Siguientes")
+                    </a>
+                }
+            </nav>
+        }
+    }
+</section>

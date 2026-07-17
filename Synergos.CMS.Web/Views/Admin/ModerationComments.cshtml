@@ -1,0 +1,284 @@
+@*
+    Vista del AdminController.ModerationComments (Olas 107 + 110).
+    Pagination + filter por nodo + bulk-select approve/reject + per-item
+    approve/reject. Forms POST con redirect (PRG).
+*@
+@using Synergos.CMS.Interfaces
+@{
+    Layout = null;
+    var pageData = ViewData["Page"] as PendingCommentsPage
+        ?? new PendingCommentsPage(Array.Empty<Comment>(), 1, 25, 0);
+    var nodeIdFilter = ViewData["NodeIdFilter"] as int?;
+    var messageCode = ViewData["MessageCode"] as string;
+    var moderatorName = ViewData["ModeratorName"] as string ?? "—";
+    string PageHref(int p) =>
+        nodeIdFilter.HasValue
+            ? $"/admin/moderation/comments?page={p}&pageSize={pageData.PageSize}&nodeId={nodeIdFilter}"
+            : $"/admin/moderation/comments?page={p}&pageSize={pageData.PageSize}";
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>Moderación de comentarios · Synergos</title>
+</head>
+<body class="syn-admin">
+    @await Html.PartialAsync("_AdminTopbar")
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">Moderación de comentarios</h1>
+                <p class="syn-admin__page-subtitle">
+                    @pageData.TotalCount pendiente(s) total. Página @pageData.Page de @Math.Max(pageData.TotalPages, 1).
+                </p>
+            </header>
+
+            @if (!string.IsNullOrWhiteSpace(messageCode))
+            {
+                @* Format: "{verb}-{count}" o "rejected-{count}-undo:{token}".
+                   El token se extrae con substring; el resto se splitea normal. *@
+                var verbCountPart = messageCode;
+                string? undoToken = null;
+                var undoIdx = messageCode.IndexOf("-undo:", StringComparison.Ordinal);
+                if (undoIdx > 0)
+                {
+                    verbCountPart = messageCode[..undoIdx];
+                    undoToken = messageCode[(undoIdx + "-undo:".Length)..];
+                }
+                var parts = verbCountPart.Split('-', 2);
+                var verb = parts[0];
+                var count = parts.Length > 1 ? parts[1] : "?";
+                <p class="syn-admin__flash" role="status" aria-live="polite">
+                    @if (verb == "approved")
+                    {
+                        <text>✓ @count comentario(s) aprobado(s).</text>
+                    }
+                    else if (verb == "rejected")
+                    {
+                        <text>✗ @count comentario(s) rechazado(s).</text>
+                        @if (!string.IsNullOrWhiteSpace(undoToken))
+                        {
+                            <form method="post"
+                                  action="/admin/moderation/comments/bulk-undo-reject/@undoToken"
+                                  class="syn-admin__flash-action">
+                                <button type="submit" class="syn-admin__flash-button">@Umbraco.GetDictionaryValue("admin.action.undo", "↶ Deshacer")</button>
+                            </form>
+                        }
+                    }
+                    else if (verb == "spam")
+                    {
+                        <text>🚫 @count comentario(s) marcado(s) como spam.</text>
+                    }
+                    else if (verb == "undone")
+                    {
+                        <text>↶ @count comentario(s) restaurado(s) a la cola.</text>
+                    }
+                    else if (verb == "undo")
+                    {
+                        <text>⏱ La ventana de undo expiró. Los comentarios siguen rechazados.</text>
+                    }
+                </p>
+            }
+
+            <form class="syn-admin__filters" method="get" action="/admin/moderation/comments">
+                <label class="syn-admin__filter-field">
+                    <span class="syn-admin__filter-label">Filtrar por nodo</span>
+                    <input type="number" name="nodeId" value="@nodeIdFilter" placeholder="Todos" min="1" />
+                </label>
+                <label class="syn-admin__filter-field">
+                    <span class="syn-admin__filter-label">Por página</span>
+                    <input type="number" name="pageSize" value="@pageData.PageSize" min="5" max="200" />
+                </label>
+                <button type="submit" class="syn-admin__filter-submit">Aplicar</button>
+                @if (nodeIdFilter.HasValue)
+                {
+                    <a href="/admin/moderation/comments" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar")</a>
+                }
+            </form>
+
+            @if (pageData.Items.Count == 0)
+            {
+                <div class="syn-admin__empty">
+                    <p class="syn-admin__empty-emoji" aria-hidden="true">✨</p>
+                    <h2 class="syn-admin__empty-title">Cola limpia</h2>
+                    <p class="syn-admin__empty-body">
+                        @if (nodeIdFilter.HasValue)
+                        {
+                            <text>No hay pendientes para el nodo #@nodeIdFilter.</text>
+                        }
+                        else
+                        {
+                            <text>No hay comentarios esperando moderación. Los nuevos aparecerán aquí cuando lleguen.</text>
+                        }
+                    </p>
+                </div>
+            }
+            else
+            {
+                <form id="bulk-form" method="post" class="syn-admin__bulk">
+                    <div class="syn-admin__bulk-toolbar">
+                        <label class="syn-admin__bulk-selectall">
+                            <input type="checkbox" id="select-all" />
+                            <span>Seleccionar todos en esta página</span>
+                        </label>
+                        <div class="syn-admin__bulk-actions">
+                            <button type="button"
+                                    data-bulk-action="approve"
+                                    class="syn-admin__action syn-admin__action--approve">
+                                ✓ @Umbraco.GetDictionaryValue("admin.action.bulkapprove", "Aprobar seleccionados")
+                            </button>
+                            <button type="button"
+                                    data-bulk-action="reject"
+                                    class="syn-admin__action syn-admin__action--reject">
+                                ✗ @Umbraco.GetDictionaryValue("admin.action.bulkreject", "Rechazar seleccionados")
+                            </button>
+                        </div>
+                    </div>
+
+                    <ul class="syn-admin__queue">
+                        @foreach (var comment in pageData.Items)
+                        {
+                            <li class="syn-admin__item">
+                                <header class="syn-admin__item-meta">
+                                    <label class="syn-admin__item-checkbox">
+                                        <input type="checkbox" name="targets" value="@comment.NodeId|@comment.Id" form="bulk-form" />
+                                    </label>
+                                    <span class="syn-admin__item-author">@comment.AuthorName</span>
+                                    <time class="syn-admin__item-date" datetime="@comment.CreatedAtUtc.ToString("O")">
+                                        @comment.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC
+                                    </time>
+                                    <a class="syn-admin__item-node" href="/admin/moderation/comments?nodeId=@comment.NodeId">
+                                        Nodo #@comment.NodeId
+                                    </a>
+                                    <code class="syn-admin__item-id">@comment.Id</code>
+                                </header>
+
+                                <p class="syn-admin__item-body">@comment.Body</p>
+
+                                <footer class="syn-admin__item-actions">
+                                    <form method="post"
+                                          action="/admin/moderation/comments/@comment.NodeId/@comment.Id/approve"
+                                          class="syn-admin__item-form">
+                                        <button type="submit" class="syn-admin__action syn-admin__action--approve">
+                                            ✓ @Umbraco.GetDictionaryValue("admin.action.approve", "Aprobar")
+                                        </button>
+                                    </form>
+                                    <form method="post"
+                                          action="/admin/moderation/comments/@comment.NodeId/@comment.Id/reject"
+                                          class="syn-admin__item-form">
+                                        <button type="submit" class="syn-admin__action syn-admin__action--reject">
+                                            ✗ @Umbraco.GetDictionaryValue("admin.action.reject", "Rechazar")
+                                        </button>
+                                    </form>
+                                    <form method="post"
+                                          action="/admin/moderation/comments/@comment.NodeId/@comment.Id/spam"
+                                          class="syn-admin__item-form">
+                                        <button type="submit" class="syn-admin__action syn-admin__action--spam"
+                                                title="Marcar como spam — elimina + entrena futuro filtro">
+                                            🚫 @Umbraco.GetDictionaryValue("admin.action.spam", "Spam")
+                                        </button>
+                                    </form>
+                                </footer>
+                            </li>
+                        }
+                    </ul>
+                </form>
+
+                @if (pageData.TotalPages > 1)
+                {
+                    <nav class="syn-admin__pagination" aria-label="Paginación">
+                        @if (pageData.HasPrev)
+                        {
+                            <a class="syn-admin__page-link" rel="prev" href="@PageHref(pageData.Page - 1)">← Anterior</a>
+                        }
+                        else
+                        {
+                            <span class="syn-admin__page-link syn-admin__page-link--disabled">← Anterior</span>
+                        }
+                        <span class="syn-admin__page-current">@pageData.Page / @pageData.TotalPages</span>
+                        @if (pageData.HasNext)
+                        {
+                            <a class="syn-admin__page-link" rel="next" href="@PageHref(pageData.Page + 1)">Siguiente →</a>
+                        }
+                        else
+                        {
+                            <span class="syn-admin__page-link syn-admin__page-link--disabled">Siguiente →</span>
+                        }
+                    </nav>
+                }
+            }
+        </div>
+    </main>
+
+    @* Confirm dialog (Ola 116) — bulk approve/reject pasan por aquí
+       primero. Pide confirmación con el count de items seleccionados
+       antes de submit el form. Cancela = cierra modal sin acción. *@
+    <dialog id="bulk-confirm" class="syn-admin__dialog">
+        <form method="dialog" class="syn-admin__dialog-form">
+            <h2 class="syn-admin__dialog-title" id="bulk-confirm-title">Confirmar acción</h2>
+            <p class="syn-admin__dialog-body" id="bulk-confirm-body">…</p>
+            <div class="syn-admin__dialog-actions">
+                <button type="submit" value="cancel" class="syn-admin__action syn-admin__action--ghost">
+                    Cancelar
+                </button>
+                <button type="submit" value="confirm" id="bulk-confirm-go" class="syn-admin__action">
+                    Continuar
+                </button>
+            </div>
+        </form>
+    </dialog>
+
+    <script>
+        // Select-all checkbox + confirm dialog para bulk actions (Ola 116).
+        (function () {
+            var sa = document.getElementById('select-all');
+            if (sa) {
+                sa.addEventListener('change', function () {
+                    document.querySelectorAll('input[name="targets"]').forEach(function (cb) {
+                        cb.checked = sa.checked;
+                    });
+                });
+            }
+
+            var dialog = document.getElementById('bulk-confirm');
+            var dialogTitle = document.getElementById('bulk-confirm-title');
+            var dialogBody = document.getElementById('bulk-confirm-body');
+            var dialogGo = document.getElementById('bulk-confirm-go');
+            var bulkForm = document.getElementById('bulk-form');
+            if (!dialog || !bulkForm) return;
+
+            document.querySelectorAll('button[data-bulk-action]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var action = btn.getAttribute('data-bulk-action');
+                    var checked = bulkForm.querySelectorAll('input[name="targets"]:checked').length;
+                    if (checked === 0) {
+                        alert('Selecciona al menos un comentario primero.');
+                        return;
+                    }
+                    var label = action === 'approve' ? 'aprobar' : 'rechazar';
+                    var verb = action === 'approve' ? 'Aprobar' : 'Rechazar';
+                    dialogTitle.textContent = verb + ' ' + checked + ' comentario(s)';
+                    dialogBody.textContent = '¿Confirmas que querés ' + label + ' ' + checked +
+                        ' comentario(s) seleccionado(s)? ' +
+                        (action === 'reject' ? 'Esta acción es irreversible — los items se eliminan del store.' : 'Los items quedarán visibles públicamente al siguiente render.');
+                    dialogGo.className = 'syn-admin__action syn-admin__action--' + action;
+                    dialogGo.textContent = (action === 'approve' ? '✓ ' : '✗ ') + verb;
+                    dialog.returnValue = '';
+
+                    // Cuando el form submita "confirm", disparamos el bulk-form al endpoint correcto.
+                    var onClose = function () {
+                        dialog.removeEventListener('close', onClose);
+                        if (dialog.returnValue === 'confirm') {
+                            bulkForm.action = '/admin/moderation/comments/bulk-' + action;
+                            bulkForm.submit();
+                        }
+                    };
+                    dialog.addEventListener('close', onClose);
+                    dialog.showModal();
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

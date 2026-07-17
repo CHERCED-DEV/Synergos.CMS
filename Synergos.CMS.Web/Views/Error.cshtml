@@ -1,0 +1,74 @@
+@*
+    View del ErrorController (Ola 76 + 79). Renderiza pagina de error
+    custom o fallback. Layout=null — error pages NO heredan chrome del
+    siteRoot para evitar cascadas que tambien fallen.
+
+    Body precedence: BodyBlocks (Layout Composer, prioridad si tiene
+    contenido) > BodyHtml (TinyMCE) > nada.
+*@
+@using Umbraco.Extensions
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.Controllers.ErrorPageViewModel>
+@{
+    Layout = null;
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+    var hasBlocks = Model.BodyBlocks is { Count: > 0 };
+}
+<!DOCTYPE html>
+<html lang="@culture">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@@300;400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="~/css/syn-tokens.css" />
+    <link rel="stylesheet" href="~/css/syn-base.css" />
+    <link rel="stylesheet" href="~/css/syn-error.css" />
+    <title>@Model.StatusCode — @Model.Title</title>
+</head>
+<body class="syn-error syn-error--@Model.StatusCode">
+    <main class="syn-error__main">
+        <p class="syn-error__code">@Model.StatusCode</p>
+        <h1 class="syn-error__title">@Model.Title</h1>
+
+        @if (hasBlocks)
+        {
+            <div class="syn-error__body syn-error__body--blocks">
+                @await Html.GetBlockGridHtmlAsync(Model.BodyBlocks!)
+            </div>
+        }
+        else if (Model.BodyHtml is not null)
+        {
+            <div class="syn-error__body syn-error__body--text">
+                @Model.BodyHtml
+            </div>
+        }
+
+        @if (Model.ShowSearchBox)
+        {
+            <form class="syn-error__search" action="/search" method="get" role="search">
+                <label for="syn-error-search-input" class="syn-error__search-label">
+                    @Umbraco.GetDictionaryValue("Error.SearchLabel", "¿Buscabas algo?")
+                </label>
+                <input id="syn-error-search-input"
+                       class="syn-error__search-input"
+                       type="search"
+                       name="q"
+                       placeholder="@Umbraco.GetDictionaryValue("Search.Placeholder", "Buscar…")"
+                       autocomplete="off" />
+                <button type="submit" class="syn-error__search-submit">
+                    @Umbraco.GetDictionaryValue("Search.Button", "Buscar")
+                </button>
+            </form>
+        }
+
+        @if (Model.ShowHomeLink)
+        {
+            <a class="syn-error__home" href="@Model.HomeUrl">
+                @Umbraco.GetDictionaryValue("Error.BackToHome", "Volver al inicio")
+            </a>
+        }
+    </main>
+</body>
+</html>

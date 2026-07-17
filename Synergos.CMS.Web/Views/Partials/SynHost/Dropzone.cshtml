@@ -1,0 +1,13 @@
+﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["label"] = Model.Value<string>("label"),
+        ["acceptedTypes"] = Model.Value<string>("acceptedTypes"),
+        ["uploadEndpoint"] = Model.Value<string>("uploadEndpoint"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("dropzone", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

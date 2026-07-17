@@ -1,0 +1,1462 @@
+/* ============================================================
+   Synergos CMS — Design Tokens
+   ============================================================
+   Espejo del design system Synergos.UI (vitals/core-assets/src/scss).
+   Todos los componentes Razor consumen estas custom properties
+   en lugar de hardcodear valores. Cuando el CDN team publique
+   los bundles reales (ADR 0012), seguirán siendo válidas — el
+   contrato visual está aquí, no en los componentes individuales.
+
+   Mantiene aliases legacy `--syn-c-*`, `--syn-sp-*`, `--syn-fs-*`
+   del dev-stub original para no romper renderers existentes
+   mientras migran al naming canónico `--syn-color-*`,
+   `--syn-space-*`, `--syn-font-size-*`.
+   ------------------------------------------------------------ */
+
+:root {
+
+  /* ── Color: Neutrals (gris puro 11 pasos) ─────────────────── */
+  --syn-color-neutral-0:   #ffffff;
+  --syn-color-neutral-50:  #f8fafc;
+  --syn-color-neutral-100: #f1f5f9;
+  --syn-color-neutral-200: #e2e8f0;
+  --syn-color-neutral-300: #cbd5e1;
+  --syn-color-neutral-400: #94a3b8;
+  --syn-color-neutral-500: #64748b;
+  --syn-color-neutral-600: #475569;
+  --syn-color-neutral-700: #334155;
+  --syn-color-neutral-800: #1e293b;
+  --syn-color-neutral-900: #0f172a;
+
+  /* ── Color: Brand (indigo-blue, 6 pasos) ──────────────────── */
+  /* BLINDAJE #4f6ef7 (Ola 0, doc 23) — está a UN PASO de Tailwind
+     indigo-500 = "olor a IA". Usar brand-500 SOLO como voltage puntual:
+     CTA primario · foco · link · borde-señal. PROHIBIDO en gradientes de
+     fondo y fills grandes; apoyarlo siempre en neutros ligeramente fríos
+     (un acento por superficie). La variedad va ENTRE bandas por-siteRoot. */
+  --syn-color-brand-100: #eef1ff;
+  --syn-color-brand-200: #d4dcff;
+  --syn-color-brand-300: #a5b4fc;
+  --syn-color-brand-400: #7b93fa;
+  --syn-color-brand-500: #4f6ef7;   /* voltage puntual — ver BLINDAJE arriba */
+  --syn-color-brand-600: #3854d8;
+  --syn-color-brand-700: #2a3fa8;   /* CTA activo/hover — extiende la rampa (blanco = 8.1 ✓) */
+
+  /* ── Color: Accent (violet premium) ───────────────────────── */
+  --syn-color-accent-100: #f3f0ff;
+  --syn-color-accent-200: #ede9fe;
+  --syn-color-accent-300: #c4b5fd;
+  --syn-color-accent-400: #a78bfa;
+  --syn-color-accent-500: #8b5cf6;
+  --syn-color-accent-600: #7c3aed;
+  /* a11y — piso oscuro del ramp accent para gradientes con texto claro:
+     blanco sobre accent-700 = 7.10:1 (accent-500 solo daba 4.23). */
+  --syn-color-accent-700: #6d28d9;
+
+  /* ── Color channels (RGB tripletes) — para componer glows/gradientes
+     theme-aware vía rgb(var(--syn-channel-brand) / 0.x). Espejan
+     brand-500 (#4f6ef7) y accent-500 (#8b5cf6). ─────────────────── */
+  --syn-channel-brand:  79 110 247;
+  --syn-channel-accent: 139 92 246;
+  --syn-channel-ink:    15 23 42;    /* neutral-900 — sombras/scrims/backdrops neutrales (P0-1) */
+
+  /* ── Color: Danger ────────────────────────────────────────── */
+  --syn-color-danger-100: #fff1f2;
+  --syn-color-danger-200: #fecdd3;
+  --syn-color-danger-300: #fda4af;
+  --syn-color-danger-400: #fb7185;
+  --syn-color-danger-500: #ef4444;
+  --syn-color-danger-600: #dc2626;
+
+  /* ── Color: Success ───────────────────────────────────────── */
+  --syn-color-success-100: #f0fdf4;
+  --syn-color-success-200: #bbf7d0;
+  --syn-color-success-300: #86efac;
+  --syn-color-success-400: #4ade80;
+  --syn-color-success-500: #22c55e;
+  --syn-color-success-600: #16a34a;
+
+  /* ── Color: Warning ───────────────────────────────────────── */
+  --syn-color-warning-100: #fffbeb;
+  --syn-color-warning-200: #fef3c7;
+  --syn-color-warning-300: #fde68a;
+  --syn-color-warning-400: #fcd34d;
+  --syn-color-warning-500: #f59e0b;
+  --syn-color-warning-600: #d97706;
+
+  /* ── Color: Info (sky/cyan — informativo neutro) ──────────────── */
+  --syn-color-info-100: #f0f9ff;
+  --syn-color-info-200: #bae6fd;
+  --syn-color-info-300: #7dd3fc;
+  --syn-color-info-400: #38bdf8;
+  --syn-color-info-500: #0ea5e9;
+  --syn-color-info-600: #0284c7;
+
+  /* ── Spacing: 8pt grid (4px = único micro-step para detalles) ── */
+  --syn-space-0:  0;
+  --syn-space-1:  0.25rem;   /* 4px — micro-step (bordes, gaps de icono) */
+  --syn-space-2:  0.5rem;    /* 8px  */
+  --syn-space-3:  1rem;      /* 16px — snapped a 8pt (era 12, off-grid) */
+  --syn-space-4:  1rem;      /* 16px */
+  --syn-space-5:  1.5rem;    /* 24px — snapped a 8pt (era 20, off-grid) */
+  --syn-space-6:  1.5rem;    /* 24px */
+  --syn-space-8:  2rem;      /* 32px */
+  --syn-space-10: 2.5rem;    /* 40px */
+  --syn-space-12: 3rem;      /* 48px */
+  --syn-space-16: 4rem;      /* 64px */
+  --syn-space-20: 5rem;      /* 80px */
+  --syn-space-24: 6rem;      /* 96px */
+
+  /* Spacing semantic aliases */
+  --syn-space-xxs: var(--syn-space-1);
+  --syn-space-xs:  var(--syn-space-2);
+  --syn-space-sm:  var(--syn-space-4);   /* 16px — on-grid (antes 12) */
+  --syn-space-md:  var(--syn-space-4);
+  --syn-space-lg:  var(--syn-space-6);
+  --syn-space-xl:  var(--syn-space-8);
+  --syn-space-2xl: var(--syn-space-12);
+  --syn-space-3xl: var(--syn-space-16);
+
+  /* Form rhythm: gap único label↔input para TODOS los *__field
+     (account / member-login / comment-thread). Fuente ÚNICA — así
+     los tres campos quedan idénticos y on-grid 8pt. */
+  --syn-form-label-gap: var(--syn-space-2);   /* 8px */
+
+  /* ── Layout widths ────────────────────────────────────────── */
+  --syn-max-width-content: 1200px;
+  --syn-max-width-normal:  1040px;  /* container/admin shell estándar (ancla el 1040/1024 hardcodeado) */
+  --syn-max-width-reading: 800px;
+  --syn-max-width-article: 680px;
+  --syn-max-width-hero:    720px;
+
+  /* ── Layout rhythm: gutter (horizontal) + section gap (vertical)
+     Fuente ÚNICA del margen lateral y del aire entre secciones.
+     Todo múltiplo de 8 (ley de 8). ───────────────────────────── */
+  --syn-gutter:         var(--syn-space-4);   /* 16px — gutter lateral base   */
+  --syn-gutter-lg:      var(--syn-space-6);   /* 24px — gutter lateral ≥768   */
+  --syn-section-gap:    var(--syn-space-16);  /* 64px — aire entre secciones  */
+  --syn-section-gap-lg: var(--syn-space-24);  /* 96px — aire entre secc. ≥768 */
+
+  /* ── Control heights + avatar sizes (FIX 3)
+     Alturas canónicas de controles interactivos (botones, CTAs,
+     submits) y tamaños de avatar. Todo on-grid 8pt — elimina los
+     off-grid 52/44/36px y los literales repetidos. Fuente ÚNICA. ── */
+  --syn-control-h-sm: 2rem;     /* 32px */
+  --syn-control-h-md: 2.5rem;   /* 40px */
+  --syn-control-h-lg: 3rem;     /* 48px */
+
+  --syn-size-avatar-sm:  2rem;    /* 32px */
+  --syn-size-avatar-md:  3rem;    /* 48px */
+  --syn-size-avatar-lg:  3.5rem;  /* 56px */
+  --syn-size-avatar-xl:  4rem;    /* 64px */
+  --syn-size-avatar-2xl: 6rem;    /* 96px */
+
+  /* ── Typography ───────────────────────────────────────────── */
+  --syn-font-family-sans: 'Manrope', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --syn-font-family-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+  --syn-font-family-body: var(--syn-font-family-sans);
+  --syn-font-family-heading: var(--syn-font-family-sans);
+
+  --syn-font-size-xs:  0.75rem;    /* 12px */
+  --syn-font-size-sm:  0.875rem;   /* 14px */
+  --syn-font-size-base: 1rem;       /* 16px */
+  --syn-font-size-lg:  1.125rem;   /* 18px */
+  --syn-font-size-xl:  1.25rem;    /* 20px */
+  --syn-font-size-2xl: 1.5rem;     /* 24px */
+  --syn-font-size-3xl: 1.875rem;   /* 30px */
+  --syn-font-size-4xl: 2.25rem;    /* 36px */
+  --syn-font-size-5xl: 3rem;       /* 48px */
+
+  --syn-font-weight-light:    300;
+  --syn-font-weight-regular:  400;
+  --syn-font-weight-medium:   500;
+  --syn-font-weight-semibold: 600;
+  --syn-font-weight-bold:     700;
+
+  --syn-line-height-tight:   1.25;  /* display headings (h1/h2) */
+  --syn-line-height-snug:    1.3;   /* small headings (h3-h6) */
+  --syn-line-height-normal:  1.5;
+  --syn-line-height-relaxed: 1.625; /* todo el texto corrido */
+
+  --syn-letter-spacing-display: -0.02em;
+  --syn-letter-spacing-tight:   -0.025em;
+  --syn-letter-spacing-normal:  0;
+  --syn-letter-spacing-wide:    0.025em;
+  --syn-letter-spacing-eyebrow: 0.08em;
+
+  /* ── Border radius ────────────────────────────────────────── */
+  --syn-radius-none: 0;
+  --syn-radius-sm:   0.375rem;   /* 6px  */
+  --syn-radius-md:   0.625rem;   /* 10px */
+  --syn-radius-lg:   0.875rem;   /* 14px */
+  --syn-radius-xl:   1.25rem;    /* 20px */
+  --syn-radius-2xl:  1.5rem;     /* 24px */
+  --syn-radius-full: 9999px;
+
+  /* ── Shadows: neutral elevation ───────────────────────────── */
+  --syn-shadow-none: none;
+  --syn-shadow-xs:   0 1px 2px 0 rgb(15 23 42 / 0.08);
+  --syn-shadow-sm:   0 2px 4px 0 rgb(15 23 42 / 0.10);
+  --syn-shadow-md:   0 6px 12px -2px rgb(15 23 42 / 0.14);
+  --syn-shadow-lg:   0 12px 24px -4px rgb(15 23 42 / 0.16);
+  --syn-shadow-xl:   0 20px 40px -6px rgb(15 23 42 / 0.20);
+  --syn-shadow-2xl:  0 30px 64px -12px rgb(15 23 42 / 0.24);
+
+  /* ── Shadows: brand glow (indigo) ─────────────────────────── */
+  --syn-shadow-brand-sm: 0 1px 2px  0 rgb(79 110 247 / 0.20);
+  --syn-shadow-brand-md: 0 2px 8px  0 rgb(79 110 247 / 0.28);
+  --syn-shadow-brand-lg: 0 4px 16px 0 rgb(79 110 247 / 0.32);
+
+  /* ── Shadows: accent glow (violet) ────────────────────────── */
+  --syn-shadow-accent-sm: 0 1px 4px  0 rgb(139 92 246 / 0.20);
+  --syn-shadow-accent-md: 0 2px 10px 0 rgb(139 92 246 / 0.28);
+
+  /* ── Motion: durations + easings ──────────────────────────── */
+  --syn-duration-fast:    120ms;
+  --syn-duration-base:    200ms;
+  --syn-duration-slow:    280ms;
+  --syn-duration-xslow:   400ms;   /* parallax / transforms lentos (P2-4) */
+  --syn-duration-loop:    750ms;
+  --syn-duration-shimmer: 1400ms;
+
+  --syn-easing-default: cubic-bezier(0.16, 1, 0.3, 1);
+  --syn-easing-smooth:  ease;
+  --syn-easing-in:      cubic-bezier(0.4, 0, 1, 1);
+  --syn-easing-out:     cubic-bezier(0, 0, 0.2, 1);
+
+  --syn-transition-colors:    background-color var(--syn-duration-fast) var(--syn-easing-smooth),
+                              border-color     var(--syn-duration-fast) var(--syn-easing-smooth),
+                              color            var(--syn-duration-fast) var(--syn-easing-smooth),
+                              box-shadow       var(--syn-duration-fast) var(--syn-easing-smooth),
+                              opacity          var(--syn-duration-fast) var(--syn-easing-smooth);
+  --syn-transition-transform: transform var(--syn-duration-base) var(--syn-easing-default);
+  --syn-transition-panel:     opacity   var(--syn-duration-base) var(--syn-easing-out),
+                              transform var(--syn-duration-base) var(--syn-easing-out);
+
+  /* ── Z-index scale ────────────────────────────────────────── */
+  --syn-z-base:     0;
+  --syn-z-raised:   10;
+  --syn-z-dropdown: 100;
+  --syn-z-sticky:   200;
+  --syn-z-overlay:  300;
+  --syn-z-modal:    400;
+  --syn-z-toast:    500;
+  --syn-z-tooltip:  600;
+  --syn-z-top:      9999;
+
+  /* ── Breakpoints (read-only references) ───────────────────── */
+  /* Used in @media queries; defined here for editor reference */
+  /* xs:0, sm:480, md:640, lg:768, xl:992, xxl:1248          */
+
+  /* ─────────────────────────────────────────────────────────── */
+  /* Light theme (default) — semantic surface/text/border       */
+  /* ─────────────────────────────────────────────────────────── */
+  color-scheme: light;
+
+  --syn-color-surface-canvas:    var(--syn-color-neutral-0);
+  --syn-color-surface-primary:   var(--syn-color-neutral-0);
+  --syn-color-surface-secondary: var(--syn-color-neutral-50);
+  --syn-color-surface-tertiary:  var(--syn-color-neutral-100);
+  --syn-color-surface-elevated:  var(--syn-color-neutral-50);
+  --syn-color-surface-inverse:   var(--syn-color-neutral-900);
+  --syn-color-surface-accent:        var(--syn-color-brand-100);
+  --syn-color-surface-accent-soft:   rgb(79 110 247 / 0.08);
+  --syn-color-surface-overlay:       rgb(255 255 255 / 0.88);
+  --syn-color-surface-strong:        var(--syn-color-neutral-800);
+
+  --syn-color-text-primary:    var(--syn-color-neutral-900);
+  --syn-color-text-secondary:  var(--syn-color-neutral-600);
+  /* Ola 191 — text-muted bumpeado de neutral-500 (4.83:1 borderline)
+     a neutral-600 (~7:1) para safety margin sobre off-white panel
+     backgrounds. WCAG 2.1 AA requires 4.5:1 mínimo. */
+  --syn-color-text-muted:      var(--syn-color-neutral-600);
+  --syn-color-text-disabled:   var(--syn-color-neutral-400);
+  --syn-color-text-inverse:    var(--syn-color-neutral-0);
+  --syn-color-text-accent:     var(--syn-color-brand-600);
+  --syn-color-text-on-accent:  var(--syn-color-neutral-0);
+
+  --syn-color-border-subtle:  var(--syn-color-neutral-100);
+  --syn-color-border-default: var(--syn-color-neutral-200);
+  --syn-color-border-strong:  var(--syn-color-neutral-300);
+  --syn-color-border-accent:  var(--syn-color-brand-300);
+  --syn-color-border-inverse: rgb(255 255 255 / 0.18);
+
+  --syn-color-overlay-subtle: rgb(15 23 42 / 0.06);
+  --syn-color-overlay-medium: rgb(15 23 42 / 0.14);
+  --syn-color-overlay-strong: rgb(15 23 42 / 0.22);
+
+  /* AA: blanco sobre brand-500 = 4.28 (falla texto normal) → brand-600 = 6.13 ✓ */
+  --syn-color-action-primary:        var(--syn-color-brand-600);
+  --syn-color-action-primary-hover:  var(--syn-color-brand-700);
+  --syn-color-action-primary-active: var(--syn-color-brand-700);
+  --syn-color-action-primary-text:   var(--syn-color-neutral-0);
+  --syn-color-action-emphasis:       var(--syn-color-accent-600);   /* AA: accent-500 4.23 → 600 5.70 */
+  /* a11y — stop OSCURO del gradiente CTA (primary→emphasis) para temas cuyo
+     emphasis metálico es demasiado claro para texto claro. Default = emphasis
+     (temas que ya pasan quedan idénticos); override AA sólo en los que fallan. */
+  --syn-color-action-emphasis-strong: var(--syn-color-action-emphasis);
+
+  --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
+  --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
+  --syn-color-action-secondary-text:           var(--syn-color-text-primary);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-action-primary);
+  --syn-color-action-secondary-border:         var(--syn-color-border-default);
+  --syn-color-action-secondary-border-hover:   var(--syn-color-border-accent);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  --syn-color-action-danger:       var(--syn-color-danger-600);   /* AA: danger-500 3.76 → 600 4.83 */
+  --syn-color-action-danger-hover: var(--syn-color-danger-600);
+  --syn-color-action-danger-text:  var(--syn-color-neutral-0);
+
+  --syn-color-action-disabled-surface: var(--syn-color-neutral-100);
+  --syn-color-action-disabled-border:  var(--syn-color-neutral-200);
+  --syn-color-action-disabled-text:    var(--syn-color-neutral-400);
+
+  --syn-color-focus-ring:        var(--syn-color-brand-500);   /* AA: brand-300 1.99 → brand-500 4.28 (foco visible en todo elemento) */
+  --syn-color-focus-ring-danger: var(--syn-color-danger-500);
+
+  --syn-color-state-brand-surface: rgb(79 110 247 / 0.12);
+  --syn-color-state-brand-border:  rgb(79 110 247 / 0.28);
+  --syn-color-state-brand-text:    var(--syn-color-brand-600);
+
+  --syn-color-state-info-surface: rgb(15 108 189 / 0.10);
+  --syn-color-state-info-border:  rgb(15 108 189 / 0.22);
+  --syn-color-state-info-text:    #0b4f8a;
+
+  /* ── State semantic aliases (paralelos a info) ──────────────────────────────
+     Vocabulario único de chips/badges componibles theme-aware. El paso -strong
+     (=600) es el texto enfatizado sobre la superficie -surface (=100). Las
+     variantes -surface/-border se REDECLARAN por-tema (dark / silverGold) más
+     abajo para dar contraste AA sobre canvas oscuro/cálido. Espejo exacto de
+     _semantic.scss (SCSS $color-*) en Synergos.UI. */
+  --syn-color-brand-strong:   var(--syn-color-brand-600);
+
+  /* Info semantic — para reemplazar hexes ad-hoc tipo #0ea5e9/#0284c7 */
+  --syn-color-info:         var(--syn-color-info-600);
+  --syn-color-info-surface: var(--syn-color-info-100);
+  --syn-color-info-border:  var(--syn-color-info-200);
+  --syn-color-info-text:    var(--syn-color-info-600);
+  --syn-color-info-strong:  var(--syn-color-info-600);
+
+  --syn-color-success:         var(--syn-color-success-600);
+  --syn-color-success-surface: var(--syn-color-success-100);
+  --syn-color-success-border:  var(--syn-color-success-200);
+  --syn-color-success-text:    var(--syn-color-success-600);
+  --syn-color-success-strong:  var(--syn-color-success-600);
+
+  --syn-color-warning:         var(--syn-color-warning-600);
+  --syn-color-warning-surface: var(--syn-color-warning-100);
+  --syn-color-warning-border:  var(--syn-color-warning-200);
+  --syn-color-warning-text:    var(--syn-color-warning-600);
+  --syn-color-warning-strong:  var(--syn-color-warning-600);
+
+  --syn-color-danger:          var(--syn-color-danger-600);
+  --syn-color-danger-surface:  var(--syn-color-danger-100);
+  --syn-color-danger-border:   var(--syn-color-danger-200);
+  --syn-color-danger-text:     var(--syn-color-danger-600);
+  --syn-color-danger-strong:   var(--syn-color-danger-600);
+
+  --syn-color-state-success-surface: rgb(22 163 74 / 0.10);
+  --syn-color-state-success-border:  rgb(22 163 74 / 0.22);
+  --syn-color-state-success-text:    #166534;
+
+  --syn-color-state-warning-surface: rgb(217 119 6 / 0.12);
+  --syn-color-state-warning-border:  rgb(217 119 6 / 0.24);
+  --syn-color-state-warning-text:    #9a5a04;
+
+  --syn-color-state-danger-surface: rgb(220 38 38 / 0.10);
+  --syn-color-state-danger-border:  rgb(220 38 38 / 0.22);
+  --syn-color-state-danger-text:    #b42318;
+
+  /* Degraded — rol "datos de ejemplo/demo" (banner persistente, no alerta).
+     Derivado de warning ~12% / 700. Espejo de $color-state-degraded-* en la UI
+     (_semantic.scss). Consumido por SynStatusBanner. */
+  --syn-color-state-degraded-surface: rgb(217 119 6 / 0.12);
+  --syn-color-state-degraded-border:  rgb(217 119 6 / 0.24);
+  --syn-color-state-degraded-text:    #9a5a04;
+
+  /* ── Soft aliases + on-brand ── 8 apps referencian --syn-color-state-*-soft y
+     --syn-color-text-on-brand (antes INEXISTENTES → caían al fallback Sass fijo, no
+     theme-aware → chips/badges de otro tema). Aliasados a los -surface theme-aware
+     (var() resuelve por-tema) + on-brand a la tinta on-accent. CSS-live, corrige 8 apps. */
+  --syn-color-state-brand-soft:   var(--syn-color-state-brand-surface);
+  --syn-color-state-info-soft:    var(--syn-color-state-info-surface);
+  --syn-color-state-success-soft: var(--syn-color-state-success-surface);
+  --syn-color-state-warning-soft: var(--syn-color-state-warning-surface);
+  --syn-color-state-danger-soft:  var(--syn-color-state-danger-surface);
+  --syn-color-text-on-brand:      var(--syn-color-text-on-accent);
+
+  /* ── Canonical CARD language — vocabulario único de toda superficie tipo card.
+     Un solo lugar para que las tarjetas no se desincronicen nunca más. ──────── */
+  --syn-card-surface:      var(--syn-color-surface-primary);
+  --syn-card-radius:       var(--syn-radius-lg);
+  --syn-card-border:       1px solid var(--syn-color-border-default);
+  --syn-card-border-hover: var(--syn-color-border-accent);
+  --syn-card-shadow:       var(--syn-shadow-card);
+  --syn-card-shadow-hover: var(--syn-shadow-card-hover);
+  --syn-card-pad:          var(--syn-space-lg);   /* 24 */
+  --syn-card-pad-lg:       var(--syn-space-xl);   /* 32 */
+  --syn-card-lift:         translateY(-2px);
+
+  /* Composed shadow aliases per use-case */
+  --syn-shadow-card:        var(--syn-shadow-xs);
+  --syn-shadow-card-hover:  var(--syn-shadow-lg);
+  --syn-shadow-panel:       var(--syn-shadow-sm);
+  --syn-shadow-floating:    var(--syn-shadow-xl);
+  --syn-shadow-action:      var(--syn-shadow-brand-sm);
+  --syn-shadow-action-hover: var(--syn-shadow-brand-md);
+
+  /* ── Gradients — fondos de marca compuestos (theme-aware vía channels) ──
+     Hero siempre oscuro por diseño: superficie dark neutral + glow brand.
+     Reemplaza gradientes con RGB crudo en los heros. ──────────────────── */
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-neutral-900) 0%,
+                         var(--syn-color-neutral-800) 50%,
+                         rgb(var(--syn-channel-brand) / 0.30) 100%);
+
+  /* ══════════════════════════════════════════════════════════════════════
+     OLA 0 — Cimientos de la línea premium (aditivo · doc 23 · ADR 0094).
+     Tokens --syn-* como defaults HEREDABLES: cada Ola de vertical los toma
+     por defecto → mata el drift de la auditoría 22 sin re-auditar. Aditivo
+     de bajo riesgo: NO cambia ningún valor de color existente (el rewrite
+     OKLCH de la rampa --syn-color-* es Ola 0b, pendiente). La mayoría son
+     alias sobre tokens ya theme-aware ⇒ heredan por-tema sin redeclarar.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* ── Bordes hairline — profundidad por GEOMETRÍA, no por sombras ─────────
+     Jerarquía barely→standard→prominent, REDECLARADA por-tema con valores
+     explícitos (tinta en claros / blanco sutil en oscuros) → hairline SIEMPRE
+     visible, nunca transparent. shadow-as-border = anillo `0 0 0 1px` SIN
+     offset/blur (patrón Vercel/Geist), para usar en box-shadow. PROHIBIDO
+     "drop-shadow soup": la elevación se comunica con hairline + escalera de
+     superficie, jamás apilando sombras difusas. */
+  --syn-border-1: 1px solid rgb(15 23 42 / 0.06);        /* barely    — tinta hairline */
+  --syn-border-2: 1px solid rgb(15 23 42 / 0.10);        /* standard  — borde crisp de panel */
+  --syn-border-3: 1px solid rgb(15 23 42 / 0.16);        /* prominent */
+  --syn-border-hairline: 0 0 0 1px rgb(15 23 42 / 0.10); /* box-shadow ring */
+
+  /* ── Escalera de superficie 1..4 (canvas→panel→raised→elevado) ──────────
+     MONOTÓNICA y REDECLARADA por-tema con valores explícitos: en oscuros el
+     canvas es el más oscuro y 2/3/4 suben en luz (pasos perceptibles ~6-10%);
+     en claros el canvas es el más claro y 2/3/4 bajan sutil. Un card en
+     surface-2 SIEMPRE despega del canvas. Profundidad por capas, no por sombra. */
+  --syn-surface-1: #ffffff;   /* canvas / base — el más claro (light default) */
+  --syn-surface-2: #f4f7fb;   /* panel  — 1 paso más oscuro (card despega) */
+  --syn-surface-3: #eaeff6;   /* raised */
+  --syn-surface-4: #dfe6f0;   /* elevado */
+
+  /* ── Tracking display + peso (Manrope big & LIGHT · Linear/Geist) ───────
+     Rampa de tracking negativo SOLO para display ≥48px; nunca en body.
+     Pesos display 300–510: grande y LIGERO, NUNCA grande y bold. */
+  --syn-tracking-tight:      -0.02em;   /* display ≥48px */
+  --syn-tracking-tighter:    -0.03em;   /* display ≥72px */
+  --syn-font-weight-display: 510;       /* headings display (rango 300–510) */
+
+  /* ── Mono — eyebrows / labels "console marker" (Supabase/Vercel/Resend) ─
+     12px uppercase tracking ~1.2px; conecta el marketing con el chrome del
+     producto. Lidera con ui-monospace (distinto de --syn-font-family-mono). */
+  --syn-font-mono: ui-monospace, 'JetBrains Mono', 'Cascadia Code', 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  /* ── Radios — jerarquía semántica, regla concéntrica hijo ≤ padre ───────
+     pill (9999) SOLO para el CTA primario / toggle track; md (6–10px) es el
+     workhorse del resto. Prohibido rounded uniforme en todo (lee barato). */
+  --syn-radius-pill: 9999px;
+
+  /* ── Focus ring (:focus-visible, contraste ≥3:1) ────────────────────────
+     Color theme-aware vía --syn-color-focus-ring. width/offset tokenizados
+     (los consume el mixin _focus.scss). --syn-focus-ring = anillo box-shadow
+     para elementos que no pueden usar outline. */
+  --syn-focus-ring-width:  2px;
+  --syn-focus-ring-offset: 2px;
+  --syn-focus-ring: 0 0 0 var(--syn-focus-ring-width) var(--syn-color-focus-ring);
+
+  /* ── Motion tokenizado (CSS-first; solo transform/opacity, nunca "all") ─
+     ease-out = lo que ENTRA; ease-emphasized = sheets/drawers (curva iOS).
+     Escala dur premium 150/220/320. motion-scale (0..1) override por-tema/
+     vertical (Gov=0 crisp · Blogs~1 · Tienda/Booking~0.7). Reduced-motion:
+     el bridge UI colapsa estas duraciones + motion-scale→0 (MISMA query que
+     --syn-duration-*, sin duplicar). */
+  --syn-ease-out:        cubic-bezier(0.22, 1, 0.36, 1);
+  --syn-ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
+  --syn-dur-fast: 150ms;
+  --syn-dur-base: 220ms;
+  --syn-dur-slow: 320ms;
+  --syn-motion-scale: 1;
+
+  /* ── Grano SVG (feTurbulence) — OFF por defecto ─────────────────────────
+     Knob del ruido opt-in. Se enciende vía tab Estilo (clase .syn-grain o
+     subiendo --syn-grain-opacity) SOLO en pisos de gradiente del hero para
+     matar banding. NUNCA global (mata performance y ensucia texto/cards).
+     La utilidad .syn-grain vive al final de este archivo. */
+  --syn-grain-opacity: 0;
+  --syn-grain-blend:   overlay;
+
+  /* ══════════════════════════════════════════════════════════════════════
+     OLA 1 — tokens de acabado (doc 24). ADITIVO: 0 consumidores rompibles.
+     control-h NO se toca (32/40/48 es decisión anti-off-grid deliberada).
+     shadow-card-hover se reconcilia en la ola de product-card, no aquí.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* Radios de control (regla concéntrica: hijo ≤ padre) */
+  --syn-radius-field: var(--syn-radius-md);                                /* 10px — alias semántico control multi-elemento */
+  --syn-radius-inner: calc(var(--syn-radius-field) - var(--syn-space-1));  /* 10−4 = 6px — radio hijo = externo − padding */
+
+  /* Micro-step off-grid intencional (gap label↔hint / chip pad). NO es space-3 (=16). */
+  --syn-space-3b: 0.75rem;                                                 /* 12px — excepción documentada fuera de la escala 8pt */
+
+  /* Numérico tabular (precios/contadores/tablas): font-variant-numeric: var(--syn-numeric) */
+  --syn-numeric: tabular-nums;
+
+  /* Motion micro — cuelga de la familia --syn-ease-*/--syn-dur-* (Ola 0), no del legacy */
+  --syn-ease-exit:      var(--syn-easing-in);                              /* = cubic-bezier(0.4,0,1,1) — no duplicar literal */
+  --syn-ease-standard:  cubic-bezier(0.2, 0, 0, 1);                        /* in-out estándar */
+  --syn-press-duration: 90ms;                                             /* active/press (transform:scale) — bajo fast */
+  --syn-skeleton-delay: 200ms;                                            /* no mostrar skeleton antes de 200ms */
+  --syn-skeleton-min:   400ms;                                            /* si aparece, sostener min 400ms */
+  --syn-stagger-step:   36ms;                                             /* delay incremental por item */
+
+  /* Iconografía */
+  --syn-icon-stroke:  2;                                                   /* stroke-width unitless @24 */
+  --syn-icon-size-sm: 1rem;                                                /* 16px */
+  --syn-icon-size-md: 1.25rem;                                             /* 20px */
+  --syn-icon-size-lg: 1.5rem;                                              /* 24px */
+
+  /* Avatar tints — paleta desaturada determinista (hash(nombre)%6). El monograma
+     usa --syn-avatar-tint-ink (≥7:1 sobre los 6 tints en los 7 temas). Distinto de
+     --syn-image-placeholder-* (ese = 1 plato neutro por tema para packshots sin foto). */
+  --syn-avatar-tint-1: #d9c8b0;   /* sand   */
+  --syn-avatar-tint-2: #c9d3c0;   /* sage   */
+  --syn-avatar-tint-3: #bcd0d6;   /* mist   */
+  --syn-avatar-tint-4: #cdc6dd;   /* lilac  */
+  --syn-avatar-tint-5: #ddc4c4;   /* clay   */
+  --syn-avatar-tint-6: #c6cddd;   /* slate-blue */
+  --syn-avatar-tint-ink: var(--syn-color-neutral-800);   /* #1e293b — ≥7:1 sobre cualquier tint */
+
+  /* ── Image-placeholder / scrim / highlight (valores LIGHT/base; los temas redeclaran) ── */
+  --syn-image-placeholder-surface: #e8ecf6;   /* plato brand-tinted sobre canvas blanco */
+  --syn-image-placeholder-ink:     #475569;   /* neutral-600 · 6.41:1 ✓ AA */
+  --syn-scrim: linear-gradient(to top,
+                 rgb(var(--syn-channel-ink) / 0.78) 0%,
+                 rgb(var(--syn-channel-ink) / 0.45) 30%,
+                 rgb(var(--syn-channel-ink) / 0)    68%);   /* theme-aware vía channel-ink (cada tema lo reevalúa) */
+  --syn-highlight-top: none;                                 /* base OFF — solo dark/eventsNight lo encienden */
+
+  /* ─────────────────────────────────────────────────────────── */
+  /* Legacy aliases — backwards compat con dev-stub previo       */
+  /* ─────────────────────────────────────────────────────────── */
+  /* (aliases legacy retirados 2026-06, P2-1: 0 consumidores verificados) */
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* Dark theme — selector-based override                       */
+/* ─────────────────────────────────────────────────────────── */
+:root[data-theme="dark"],
+[data-theme="dark"],
+.theme-dark {
+  color-scheme: dark;
+
+  --syn-channel-ink: 2 6 23;    /* neutral-950 — scrims/sombras más profundas en dark (P0-1) */
+
+  --syn-color-surface-canvas:    #020817;
+  --syn-color-surface-primary:   var(--syn-color-neutral-800);
+  --syn-color-surface-secondary: #132033;
+  --syn-color-surface-tertiary:  var(--syn-color-neutral-700);
+  --syn-color-surface-elevated:  #101a2a;
+  --syn-color-surface-inverse:   var(--syn-color-neutral-0);
+  --syn-color-surface-accent:        rgb(var(--syn-channel-brand) / 0.16);
+  --syn-color-surface-accent-soft:   rgb(var(--syn-channel-brand) / 0.12);
+  --syn-color-surface-overlay:       rgb(15 23 42 / 0.84);
+  --syn-color-surface-strong:        var(--syn-color-neutral-0);
+
+  --syn-color-text-primary:    var(--syn-color-neutral-0);
+  --syn-color-text-secondary:  var(--syn-color-neutral-300);
+  /* a11y — text-muted subido de neutral-400 (#94a3b8, ~4.2:1) a neutral-300
+     (#cbd5e1, ~5.3:1) sobre canvas dark. WCAG 2.1 AA (4.5:1). */
+  --syn-color-text-muted:      var(--syn-color-neutral-300);
+  --syn-color-text-disabled:   var(--syn-color-neutral-500);
+  --syn-color-text-inverse:    var(--syn-color-neutral-900);
+  --syn-color-text-accent:     var(--syn-color-brand-300);
+  /* text ON the saturated brand/accent gradient stays LIGHT even in dark theme
+     (los presets .syn-preset--theme-brand/-accent lo consumen; antes caía a
+     neutral-900 = texto oscuro sobre gradiente índigo, ilegible en /tienda). */
+  --syn-color-text-on-accent:  var(--syn-color-neutral-0);
+
+  --syn-color-border-subtle:  rgb(148 163 184 / 0.12);
+  --syn-color-border-default: var(--syn-color-neutral-700);
+  --syn-color-border-strong:  var(--syn-color-neutral-600);
+  --syn-color-border-accent:  rgb(165 180 252 / 0.5);
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  --syn-color-overlay-subtle: rgb(248 250 252 / 0.08);
+  --syn-color-overlay-medium: rgb(248 250 252 / 0.14);
+  --syn-color-overlay-strong: rgb(248 250 252 / 0.22);
+
+  --syn-color-action-primary:        var(--syn-color-brand-400);
+  --syn-color-action-primary-hover:  var(--syn-color-brand-300);
+  --syn-color-action-primary-active: var(--syn-color-brand-500);
+  --syn-color-action-primary-text:   var(--syn-color-neutral-900);
+  --syn-color-action-emphasis:       var(--syn-color-accent-400);
+
+  --syn-color-action-secondary-surface:        rgb(248 250 252 / 0.04);
+  --syn-color-action-secondary-surface-hover:  rgb(248 250 252 / 0.08);
+  --syn-color-action-secondary-text:           var(--syn-color-neutral-0);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-brand-200);
+  --syn-color-action-secondary-border:         rgb(148 163 184 / 0.26);
+  --syn-color-action-secondary-border-hover:   rgb(165 180 252 / 0.5);
+
+  --syn-color-action-ghost-text:       var(--syn-color-neutral-300);
+  --syn-color-action-ghost-text-hover: var(--syn-color-neutral-0);
+
+  --syn-color-action-danger:       var(--syn-color-danger-400);
+  --syn-color-action-danger-hover: var(--syn-color-danger-300);
+  --syn-color-action-danger-text:  var(--syn-color-neutral-900);
+
+  --syn-color-action-disabled-surface: rgb(148 163 184 / 0.08);
+  --syn-color-action-disabled-border:  rgb(148 163 184 / 0.16);
+  --syn-color-action-disabled-text:    var(--syn-color-neutral-500);
+
+  --syn-color-focus-ring:        rgb(165 180 252 / 0.88);
+  --syn-color-focus-ring-danger: rgb(253 164 175 / 0.88);
+
+  --syn-color-state-brand-surface: rgb(var(--syn-channel-brand) / 0.18);
+  --syn-color-state-brand-border:  rgb(165 180 252 / 0.34);
+  --syn-color-state-brand-text:    var(--syn-color-brand-200);
+
+  --syn-color-state-info-surface: rgb(56 189 248 / 0.16);
+  --syn-color-state-info-border:  rgb(56 189 248 / 0.28);
+  --syn-color-state-info-text:    #bae6fd;
+
+  --syn-color-info:         var(--syn-color-info-400);
+  --syn-color-info-surface: rgb(56 189 248 / 0.16);
+
+  /* State semantic — surface/border REDECLARADOS con tintes oscuros para
+     contraste AA sobre canvas dark (el default -100 casi-blanco fallaba).
+     Espejan el ramp --syn-color-state-*-{surface,border} de este tema. */
+  --syn-color-info-border:     rgb(56 189 248 / 0.28);
+  --syn-color-success-surface: rgb(34 197 94 / 0.16);
+  --syn-color-success-border:  rgb(74 222 128 / 0.28);
+  --syn-color-warning-surface: rgb(245 158 11 / 0.16);
+  --syn-color-warning-border:  rgb(252 211 77 / 0.30);
+  --syn-color-danger-surface:  rgb(239 68 68 / 0.16);
+  --syn-color-danger-border:   rgb(251 113 133 / 0.32);
+
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-surface-canvas) 0%,
+                         var(--syn-color-surface-elevated) 46%,
+                         rgb(var(--syn-channel-brand) / 0.22) 100%);
+
+  --syn-color-state-success-surface: rgb(34 197 94 / 0.16);
+  --syn-color-state-success-border:  rgb(74 222 128 / 0.28);
+  --syn-color-state-success-text:    #bbf7d0;
+
+  --syn-color-state-warning-surface: rgb(245 158 11 / 0.16);
+  --syn-color-state-warning-border:  rgb(252 211 77 / 0.30);
+  --syn-color-state-warning-text:    #fde68a;
+
+  --syn-color-state-danger-surface: rgb(239 68 68 / 0.16);
+  --syn-color-state-danger-border:  rgb(251 113 133 / 0.32);
+  --syn-color-state-danger-text:    #fecdd3;
+
+  /* Degraded — tinte cálido AA sobre canvas oscuro (espejo de warning dark). */
+  --syn-color-state-degraded-surface: rgb(245 158 11 / 0.16);
+  --syn-color-state-degraded-border:  rgb(252 211 77 / 0.30);
+  --syn-color-state-degraded-text:    #fde68a;
+
+  --syn-shadow-card:         0 10px 28px -18px rgb(2 6 23 / 0.78);
+  --syn-shadow-card-hover:   0 24px 56px -28px rgb(2 6 23 / 0.86);
+  --syn-shadow-panel:        0 8px 24px -18px rgb(2 6 23 / 0.74);
+  --syn-shadow-floating:     0 28px 72px -36px rgb(2 6 23 / 0.92);
+  --syn-shadow-action:       0 10px 22px -16px rgb(var(--syn-channel-brand) / 0.44);
+  --syn-shadow-action-hover: 0 18px 34px -18px rgb(var(--syn-channel-brand) / 0.54);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma dark). Canvas
+     #020817 → panel/raised/elevado progresivamente MÁS CLAROS (monotónico).
+     Hairline = blanco sutil → borde crisp tipo Linear/Raycast. */
+  --syn-surface-1: #020817;   /* canvas — el más oscuro */
+  --syn-surface-2: #202d45;   /* panel  — card despega (~1.45:1 vs canvas + hairline) */
+  --syn-surface-3: #2a3852;   /* raised */
+  --syn-surface-4: #354463;   /* elevado */
+  --syn-border-1: 1px solid rgb(255 255 255 / 0.06);        /* barely    */
+  --syn-border-2: 1px solid rgb(255 255 255 / 0.10);        /* standard  — hairline crisp */
+  --syn-border-3: 1px solid rgb(255 255 255 / 0.16);        /* prominent */
+  --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
+
+  /* Ola 1 — image-placeholder + highlight-top (dark) */
+  --syn-image-placeholder-surface: #293a5c;   /* raised dark tinte brand */
+  --syn-image-placeholder-ink:     #cbd5e1;   /* neutral-300 · 7.63:1 ✓ AA */
+  --syn-highlight-top: inset 0 1px 0 0 rgb(255 255 255 / 0.06);   /* top-light Linear/Raycast */
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* Silver-Gold theme — warm premium palette                    */
+/* ─────────────────────────────────────────────────────────── */
+/* CANÓNICO (SoT): `silverGold` (camelCase) — es el value que emiten
+   DTSelectPageThemeVariant.config, DropdownOptions.PageThemeVariant,
+   el contenido publicado (blogs.config) y el seeder, así que el runtime
+   pinta <html data-theme="silverGold">. El alias `silver-gold` (kebab) y
+   las clases `.theme-*` quedan como ALIASES DEPRECADOS: nada los emite,
+   se conservan para no romper referencias externas. Ver ADR 0101. */
+:root[data-theme="silverGold"],
+:root[data-theme="silver-gold"],   /* alias deprecado (kebab) */
+[data-theme="silverGold"],
+[data-theme="silver-gold"],         /* alias deprecado (kebab) */
+.theme-silverGold,
+.theme-silver-gold {                /* alias deprecado (kebab) */
+  color-scheme: light;
+
+  --syn-color-surface-canvas:    #f5f1e8;
+  --syn-color-surface-primary:   #fffbf4;
+  --syn-color-surface-secondary: #f2ebdf;
+  --syn-color-surface-tertiary:  #e9dec9;
+  --syn-color-surface-elevated:  #fff8ec;
+  --syn-color-surface-inverse:   #1f2631;
+  --syn-color-surface-accent:        #f3ead8;
+  --syn-color-surface-accent-soft:   rgb(181 150 89 / 0.12);
+  --syn-color-surface-overlay:       rgb(255 251 244 / 0.86);
+  --syn-color-surface-strong:        #2a3240;
+
+  --syn-color-text-primary:    #202734;
+  --syn-color-text-secondary:  #4f5864;
+  --syn-color-text-muted:      #6b6a63;
+  /* a11y — text-disabled oscurecido de #9a9487 (~2.6:1) a #736e64 (~4.4:1)
+     sobre el canvas cálido; queda apenas por encima de text-muted para no
+     invertir la jerarquía muted > disabled. */
+  --syn-color-text-disabled:   #736e64;
+  --syn-color-text-inverse:    #fcf7ee;
+  /* a11y — text-accent #8f7035 (4.11 canvas) → #87692f (4.55 canvas / 4.98 surface). */
+  --syn-color-text-accent:     #87692f;
+  --syn-color-text-on-accent:  #fffaf2;
+
+  --syn-color-border-subtle:  #eee5d6;
+  --syn-color-border-default: #d9d0c0;
+  --syn-color-border-strong:  #c4b28a;
+  /* a11y — border-accent #b59659 (2.49 canvas) → #96793a (3.66:1) para UI 3:1. */
+  --syn-color-border-accent:  #96793a;
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  /* C-2 — overlay scale (warm ink) faltante en silver-gold; espejo de la UI. */
+  --syn-color-overlay-subtle: rgb(32 39 52 / 0.06);
+  --syn-color-overlay-medium: rgb(32 39 52 / 0.14);
+  --syn-color-overlay-strong: rgb(32 39 52 / 0.24);
+
+  --syn-color-action-primary:        #2a3240;
+  --syn-color-action-primary-hover:  #1c2230;
+  --syn-color-action-primary-active: #3a4456;
+  --syn-color-action-primary-text:   #fffaf2;
+  --syn-color-action-primary-border: transparent;
+  --syn-color-action-emphasis:       #b59659;
+  --syn-color-action-emphasis-strong: #8a6b34;  /* a11y — stop AA-oscuro CTA (texto claro 5.0:1) */
+
+  /* C-2 — botones secondary/ghost/danger/disabled faltaban en el vertical
+     Blogs gold: chips y CTAs secundarios caían a defaults. Espejo de la UI. */
+  --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
+  --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
+  --syn-color-action-secondary-text:           var(--syn-color-text-primary);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-text-accent);
+  --syn-color-action-secondary-border:         var(--syn-color-border-default);
+  --syn-color-action-secondary-border-hover:   var(--syn-color-border-accent);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  --syn-color-action-danger:       var(--syn-color-danger-600);   /* AA: danger-500 3.76 → 600 4.83 */
+  --syn-color-action-danger-hover: var(--syn-color-danger-600);
+  --syn-color-action-danger-text:  var(--syn-color-neutral-0);
+
+  --syn-color-action-disabled-surface: #eee5d6;
+  --syn-color-action-disabled-border:  #e0d5c1;
+  --syn-color-action-disabled-text:    #a59a87;
+
+  /* a11y — focus-ring metálico (1.95:1 vs canvas) → oro profundo (5.44:1),
+     mantiene la identidad dorada y cumple WCAG 1.4.11 (3:1). */
+  --syn-color-focus-ring: rgb(111 87 31 / 0.95);
+  --syn-color-focus-ring-danger: rgb(239 68 68 / 0.52);
+
+  --syn-color-state-brand-surface: rgb(181 150 89 / 0.12);
+  --syn-color-state-brand-border:  rgb(181 150 89 / 0.28);
+  --syn-color-state-brand-text:    #8f7035;
+
+  /* C-2 — chips de estado info/success/warning/danger faltantes en silver-gold. */
+  --syn-color-state-info-surface: rgb(47 111 147 / 0.10);
+  --syn-color-state-info-border:  rgb(47 111 147 / 0.20);
+  --syn-color-state-info-text:    #1e536f;
+
+  --syn-color-state-success-surface: rgb(22 163 74 / 0.10);
+  --syn-color-state-success-border:  rgb(22 163 74 / 0.20);
+  --syn-color-state-success-text:    #166534;
+
+  --syn-color-state-warning-surface: rgb(217 119 6 / 0.12);
+  --syn-color-state-warning-border:  rgb(217 119 6 / 0.22);
+  /* a11y — warning-text #9a5a04 (4.31 sobre warning-surface cálida) → #8f5303 (4.86). */
+  --syn-color-state-warning-text:    #8f5303;
+
+  --syn-color-state-danger-surface: rgb(220 38 38 / 0.10);
+  --syn-color-state-danger-border:  rgb(220 38 38 / 0.22);
+  --syn-color-state-danger-text:    #b42318;
+
+  /* Degraded — tinte cálido sobre canvas gold (espejo de warning silverGold). */
+  --syn-color-state-degraded-surface: rgb(217 119 6 / 0.12);
+  --syn-color-state-degraded-border:  rgb(217 119 6 / 0.22);
+  --syn-color-state-degraded-text:    #8f5303;  /* a11y — espejo de warning-text */
+
+  /* State semantic — surface/border REDECLARADOS con tintes translúcidos que
+     componen sobre el canvas cálido (el default -100 opaco lo blanqueaba).
+     Espejan el ramp --syn-color-state-*-{surface,border} de este tema. */
+  --syn-color-info-border:     rgb(47 111 147 / 0.20);
+  --syn-color-success-surface: rgb(22 163 74 / 0.10);
+  --syn-color-success-border:  rgb(22 163 74 / 0.20);
+  --syn-color-warning-surface: rgb(217 119 6 / 0.12);
+  --syn-color-warning-border:  rgb(217 119 6 / 0.22);
+  --syn-color-danger-surface:  rgb(220 38 38 / 0.10);
+  --syn-color-danger-border:   rgb(220 38 38 / 0.22);
+  --syn-color-info-surface:    rgb(47 111 147 / 0.10);
+
+  --syn-shadow-card:         0 10px 28px -20px rgb(71 54 26 / 0.24);
+  --syn-shadow-card-hover:   0 24px 54px -32px rgb(71 54 26 / 0.28);
+  --syn-shadow-panel:        0 12px 30px -24px rgb(71 54 26 / 0.22);
+  --syn-shadow-floating:     0 28px 72px -38px rgb(50 40 22 / 0.32);
+  --syn-shadow-action:       0 12px 26px -18px rgb(181 150 89 / 0.34);
+  --syn-shadow-action-hover: 0 18px 36px -20px rgb(181 150 89 / 0.44);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma). Canvas cream
+     #f5f1e8 → panel/raised/elevado progresivamente más cálidos/oscuros
+     (monotónico). Hairline = tinta marrón cálida sutil → crisp sobre cream. */
+  --syn-surface-1: #f5f1e8;   /* canvas cream — el más claro */
+  --syn-surface-2: #efeade;   /* panel  — card despega del canvas */
+  --syn-surface-3: #e7e0d0;   /* raised */
+  --syn-surface-4: #ddd3bf;   /* elevado */
+  --syn-border-1: 1px solid rgb(71 54 26 / 0.08);
+  --syn-border-2: 1px solid rgb(71 54 26 / 0.14);
+  --syn-border-3: 1px solid rgb(71 54 26 / 0.22);
+  --syn-border-hairline: 0 0 0 1px rgb(71 54 26 / 0.14);
+
+  /* Ola 1 — channel-ink cálido (fix coherencia: scrim/sombras alineados con las
+     sombras cálidas existentes 71 54 26; sin esto heredaría el frío 15 23 42) */
+  --syn-channel-ink: 71 54 26;
+  --syn-image-placeholder-surface: #ece3d1;   /* champagne cálido */
+  --syn-image-placeholder-ink:     #5c513a;   /* marrón fuerte · 6.12:1 ✓ AA */
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* eventsNight theme — vertical Eventos "Electric Night"       */
+/* Registro PREMIUM dark: midnight azul-índigo profundo y       */
+/* sereno + violet/cyan como ACENTOS CONTROLADOS (vibrantes,    */
+/* no chillones). Energía de eventos contenida en superficies   */
+/* sobrias; contraste AA fuerte y jerarquía de texto clara.     */
+/* Registro propio (NO clon de dark). Paridad token-a-token con */
+/* meridian/eventsNight — 75 familias. color-scheme: dark.      */
+/* ─────────────────────────────────────────────────────────── */
+:root[data-theme="eventsNight"],
+[data-theme="eventsNight"],
+.theme-eventsNight {
+  color-scheme: dark;
+
+  /* Channels theme-aware — primary electric violet #7C5CFF (controlado),
+     accent cyan #2BC4DE (cyan refinado, menos eléctrico), ink midnight
+     más profundo para scrims premium. */
+  --syn-channel-brand:  124 92 255;
+  --syn-channel-accent: 43 196 222;
+  --syn-channel-ink:    8 12 26;
+
+  --syn-color-surface-canvas:    #080C1A;   /* midnight profundo (base elegante) */
+  --syn-color-surface-primary:   #11172B;   /* surface elevada sobre canvas */
+  --syn-color-surface-secondary: #161D34;
+  --syn-color-surface-tertiary:  #1F2842;
+  --syn-color-surface-elevated:  #141B32;
+  --syn-color-surface-inverse:   #F5F7FF;
+  --syn-color-surface-accent:        rgb(124 92 255 / 0.14);
+  --syn-color-surface-accent-soft:   rgb(124 92 255 / 0.09);
+  --syn-color-surface-overlay:       rgb(8 12 26 / 0.88);
+  --syn-color-surface-strong:        #F5F7FF;
+
+  --syn-color-text-primary:    #F5F7FF;   /* alto contraste sobre midnight */
+  --syn-color-text-secondary:  #C7CDEC;
+  --syn-color-text-muted:      #9AA2C8;
+  --syn-color-text-disabled:   #5E6690;
+  --syn-color-text-inverse:    #080C1A;
+  --syn-color-text-accent:     #B3A0FF;   /* violet claro AA sobre surface */
+  /* text ON el gradiente brand/accent saturado = claro (antes #080C1A oscuro,
+     ilegible sobre el índigo en /eventos). */
+  --syn-color-text-on-accent:  #F4F6FF;
+
+  --syn-color-border-subtle:  rgb(199 205 236 / 0.10);
+  --syn-color-border-default: rgb(124 92 255 / 0.20);
+  --syn-color-border-strong:  rgb(124 92 255 / 0.36);
+  --syn-color-border-accent:  rgb(43 196 222 / 0.46);
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  --syn-color-overlay-subtle: rgb(245 247 255 / 0.05);
+  --syn-color-overlay-medium: rgb(245 247 255 / 0.12);
+  --syn-color-overlay-strong: rgb(245 247 255 / 0.20);
+
+  /* a11y — violet aclarado #7C5CFF→#8064FF para que la tinta oscura del CTA
+     (#080C1A) alcance AA 4.81:1 (era 4.48). Conserva el registro eléctrico. */
+  --syn-color-action-primary:        #8064FF;   /* electric violet (acento controlado) */
+  --syn-color-action-primary-hover:  #8E73FF;
+  --syn-color-action-primary-active: #6A48F0;
+  --syn-color-action-primary-text:   #080C1A;
+  --syn-color-action-primary-border: transparent;
+  --syn-color-action-emphasis:       #2BC4DE;   /* accent cyan refinado */
+
+  --syn-color-action-secondary-surface:        rgb(245 247 255 / 0.04);
+  --syn-color-action-secondary-surface-hover:  rgb(245 247 255 / 0.08);
+  --syn-color-action-secondary-text:           #F5F7FF;
+  --syn-color-action-secondary-text-hover:     #CBBEFF;
+  --syn-color-action-secondary-border:         rgb(124 92 255 / 0.26);
+  --syn-color-action-secondary-border-hover:   rgb(43 196 222 / 0.46);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  --syn-color-action-danger:       var(--syn-color-danger-400);
+  --syn-color-action-danger-hover: var(--syn-color-danger-300);
+  --syn-color-action-danger-text:  #080C1A;
+
+  --syn-color-action-disabled-surface: rgb(154 162 200 / 0.09);
+  --syn-color-action-disabled-border:  rgb(154 162 200 / 0.16);
+  --syn-color-action-disabled-text:    #5E6690;
+
+  --syn-color-focus-ring:        rgb(43 196 222 / 0.80);
+  --syn-color-focus-ring-danger: rgb(253 164 175 / 0.82);
+
+  --syn-color-state-brand-surface: rgb(124 92 255 / 0.16);
+  --syn-color-state-brand-border:  rgb(124 92 255 / 0.32);
+  --syn-color-state-brand-text:    #CBBEFF;
+
+  --syn-color-state-info-surface: rgb(43 196 222 / 0.14);
+  --syn-color-state-info-border:  rgb(43 196 222 / 0.28);
+  --syn-color-state-info-text:    #9FE9F6;
+
+  --syn-color-info:         #2BC4DE;
+  --syn-color-info-surface: rgb(43 196 222 / 0.14);
+
+  /* success / early-bird #34D399 (verde menta sobrio) */
+  --syn-color-state-success-surface: rgb(52 211 153 / 0.15);
+  --syn-color-state-success-border:  rgb(52 211 153 / 0.28);
+  --syn-color-state-success-text:    #6EE7B7;
+
+  --syn-color-state-warning-surface: rgb(245 158 11 / 0.15);
+  --syn-color-state-warning-border:  rgb(252 211 77 / 0.28);
+  --syn-color-state-warning-text:    #fde68a;
+
+  --syn-color-state-danger-surface: rgb(239 68 68 / 0.15);
+  --syn-color-state-danger-border:  rgb(251 113 133 / 0.30);
+  --syn-color-state-danger-text:    #fecdd3;
+
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-surface-canvas) 0%,
+                         var(--syn-color-surface-elevated) 50%,
+                         rgb(var(--syn-channel-brand) / 0.24) 100%);
+
+  --syn-shadow-card:         0 10px 28px -18px rgb(8 12 26 / 0.82);
+  --syn-shadow-card-hover:   0 24px 56px -28px rgb(8 12 26 / 0.90);
+  --syn-shadow-panel:        0 8px 24px -18px rgb(8 12 26 / 0.78);
+  --syn-shadow-floating:     0 28px 72px -36px rgb(8 12 26 / 0.94);
+  --syn-shadow-action:       0 10px 22px -16px rgb(var(--syn-channel-brand) / 0.42);
+  --syn-shadow-action-hover: 0 18px 34px -18px rgb(var(--syn-channel-accent) / 0.40);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma). Canvas midnight
+     #080c1a → panel/raised/elevado progresivamente MÁS CLAROS (tinte violeta,
+     monotónico). Hairline = blanco sutil → borde crisp. */
+  --syn-surface-1: #080c1a;   /* canvas midnight — el más oscuro */
+  --syn-surface-2: #171d33;   /* panel  — card despega */
+  --syn-surface-3: #212843;   /* raised */
+  --syn-surface-4: #2c3455;   /* elevado */
+  --syn-border-1: 1px solid rgb(255 255 255 / 0.06);
+  --syn-border-2: 1px solid rgb(255 255 255 / 0.10);
+  --syn-border-3: 1px solid rgb(255 255 255 / 0.16);
+  --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
+
+  /* Ola 1 — image-placeholder + highlight-top (eventsNight) */
+  --syn-image-placeholder-surface: #22284a;   /* raised midnight tinte violet */
+  --syn-image-placeholder-ink:     #cdd2ef;   /* violet claro · 9.56:1 ✓ AA */
+  --syn-highlight-top: inset 0 1px 0 0 rgb(255 255 255 / 0.07);
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* terraLux theme — vertical Propiedades "Terra Lux"           */
+/* Registro INMOBILIARIO PREMIUM ARQUITECTÓNICO (revista de     */
+/* arquitectura): neutros fríos sofisticados (stone/greige/     */
+/* charcoal, NO marfil amarillento), verde profundo             */
+/* arquitectónico como CTA principal, y un metálico champagne/  */
+/* bronce SOBRIO y discreto sólo en rol emphasis (no            */
+/* protagonista). Lujo sereno y editorial, NO rústico-cozy.     */
+/* Paridad token-a-token con meridian — 75 familias.            */
+/* color-scheme: light.                                         */
+/* ─────────────────────────────────────────────────────────── */
+:root[data-theme="terraLux"],
+[data-theme="terraLux"],
+.theme-terraLux {
+  color-scheme: light;
+
+  /* Channels theme-aware — primary verde arquitectónico profundo
+     #2C4A40, accent champagne/bronce sobrio #A88A5E (discreto),
+     ink charcoal frío para scrims editoriales. */
+  --syn-channel-brand:  44 74 64;
+  --syn-channel-accent: 168 138 94;
+  --syn-channel-ink:    35 38 43;
+
+  --syn-color-surface-canvas:    #F4F2EE;   /* stone/greige frío (no marfil) */
+  --syn-color-surface-primary:   #FFFFFF;   /* surface blanco editorial */
+  --syn-color-surface-secondary: #ECEAE4;   /* stone secundario */
+  --syn-color-surface-tertiary:  #E1DED7;   /* greige terciario */
+  --syn-color-surface-elevated:  #FBFAF8;   /* elevada casi-blanca, neutra */
+  --syn-color-surface-inverse:   #23262B;   /* charcoal frío */
+  --syn-color-surface-accent:        #E9E5DC;   /* greige cálido muy sutil */
+  --syn-color-surface-accent-soft:   rgb(168 138 94 / 0.10);
+  --syn-color-surface-overlay:       rgb(255 255 255 / 0.90);
+  --syn-color-surface-strong:        #23262B;
+
+  --syn-color-text-primary:    #23262B;   /* charcoal frío sofisticado */
+  --syn-color-text-secondary:  #444851;   /* slate-grafito */
+  --syn-color-text-muted:      #6B6F77;   /* gris neutro frío */
+  --syn-color-text-disabled:   #A0A2A7;
+  --syn-color-text-inverse:    #F4F2EE;
+  --syn-color-text-accent:     #2C4A40;   /* verde arquitectónico para enlaces */
+  --syn-color-text-on-accent:  #FBFAF8;
+
+  --syn-color-border-subtle:  #E7E4DD;
+  --syn-color-border-default: #D6D2C9;
+  --syn-color-border-strong:  #B9B4A8;
+  --syn-color-border-accent:  #A88A5E;   /* champagne discreto en bordes */
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  --syn-color-overlay-subtle: rgb(35 38 43 / 0.06);
+  --syn-color-overlay-medium: rgb(35 38 43 / 0.14);
+  --syn-color-overlay-strong: rgb(35 38 43 / 0.24);
+
+  --syn-color-action-primary:        #2C4A40;   /* verde arquitectónico — CTA principal */
+  --syn-color-action-primary-hover:  #243D35;
+  --syn-color-action-primary-active: #35594D;
+  --syn-color-action-primary-text:   #FBFAF8;
+  --syn-color-action-primary-border: transparent;
+  --syn-color-action-emphasis:       #A88A5E;   /* champagne/bronce sobrio (sólo emphasis) */
+
+  --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
+  --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
+  --syn-color-action-secondary-text:           var(--syn-color-text-primary);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-text-accent);
+  --syn-color-action-secondary-border:         var(--syn-color-border-default);
+  --syn-color-action-secondary-border-hover:   var(--syn-color-border-accent);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  /* alert brick/clay arquitectónico #B4503C (frío, no terracotta cálida) */
+  --syn-color-action-danger:       #B4503C;
+  --syn-color-action-danger-hover: #9C4231;
+  --syn-color-action-danger-text:  #FBFAF8;
+
+  --syn-color-action-disabled-surface: #ECEAE4;
+  --syn-color-action-disabled-border:  #DEDAD2;
+  --syn-color-action-disabled-text:    #A6A39B;
+
+  --syn-color-focus-ring:        rgb(44 74 64 / 0.72);
+  --syn-color-focus-ring-danger: rgb(180 80 60 / 0.55);
+
+  --syn-color-state-brand-surface: rgb(44 74 64 / 0.08);
+  --syn-color-state-brand-border:  rgb(44 74 64 / 0.22);
+  --syn-color-state-brand-text:    #243D35;
+
+  --syn-color-state-info-surface: rgb(44 74 64 / 0.08);
+  --syn-color-state-info-border:  rgb(44 74 64 / 0.20);
+  --syn-color-state-info-text:    #1F352E;
+
+  --syn-color-info:         #2C4A40;
+  --syn-color-info-surface: rgb(44 74 64 / 0.08);
+
+  --syn-color-state-success-surface: rgb(44 74 64 / 0.10);
+  --syn-color-state-success-border:  rgb(44 74 64 / 0.22);
+  --syn-color-state-success-text:    #1F352E;
+
+  /* warning usa el champagne/bronce sobrio del tema */
+  --syn-color-state-warning-surface: rgb(168 138 94 / 0.14);
+  --syn-color-state-warning-border:  rgb(168 138 94 / 0.26);
+  --syn-color-state-warning-text:    #745B33;
+
+  /* danger usa el brick/clay arquitectónico (#B4503C) */
+  --syn-color-state-danger-surface: rgb(180 80 60 / 0.10);
+  --syn-color-state-danger-border:  rgb(180 80 60 / 0.22);
+  --syn-color-state-danger-text:    #8E3A2A;
+
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-surface-canvas) 0%,
+                         var(--syn-color-surface-secondary) 50%,
+                         rgb(var(--syn-channel-brand) / 0.12) 100%);
+
+  --syn-shadow-card:         0 10px 28px -20px rgb(35 38 43 / 0.16);
+  --syn-shadow-card-hover:   0 24px 54px -32px rgb(35 38 43 / 0.20);
+  --syn-shadow-panel:        0 12px 30px -24px rgb(35 38 43 / 0.14);
+  --syn-shadow-floating:     0 28px 72px -38px rgb(35 38 43 / 0.24);
+  --syn-shadow-action:       0 12px 26px -18px rgb(var(--syn-channel-brand) / 0.24);
+  --syn-shadow-action-hover: 0 18px 36px -20px rgb(var(--syn-channel-brand) / 0.32);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma). Canvas stone
+     #f4f2ee → panel/raised/elevado progresivamente más greige/oscuros
+     (monotónico). Hairline = tinta charcoal frío sutil → crisp editorial. */
+  --syn-surface-1: #f4f2ee;   /* canvas stone — el más claro */
+  --syn-surface-2: #ece9e3;   /* panel  — card despega del canvas */
+  --syn-surface-3: #e1ddd4;   /* raised */
+  --syn-surface-4: #d5cfc2;   /* elevado */
+  --syn-border-1: 1px solid rgb(35 38 43 / 0.07);
+  --syn-border-2: 1px solid rgb(35 38 43 / 0.12);
+  --syn-border-3: 1px solid rgb(35 38 43 / 0.18);
+  --syn-border-hairline: 0 0 0 1px rgb(35 38 43 / 0.12);
+
+  /* Ola 1 — image-placeholder (terraLux · ink = verde arquitectónico brand) */
+  --syn-image-placeholder-surface: #e5e1d7;   /* greige neutro */
+  --syn-image-placeholder-ink:     #2c4a40;   /* 7.44:1 ✓ AA · on-brand */
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* scholar theme — vertical Educación "Scholar" (OLA 4.6, ADR 0102) */
+/* Registro ENTERPRISE: base cool off-white + ink navy profundo  */
+/* + primary indigo-corporativo, accent gold SOBRIO y mínimo     */
+/* (solo emphasis). Académico-corporativo, restringido, confiable.*/
+/* Paridad token-a-token con eventsNight — 75 familias.          */
+/* color-scheme: light.                                          */
+/* ─────────────────────────────────────────────────────────── */
+:root[data-theme="scholar"],
+[data-theme="scholar"],
+.theme-scholar {
+  color-scheme: light;
+
+  /* Channels theme-aware — primary indigo-corporativo #2E5AAC,
+     accent gold sobrio #C99A2E (mínimo), ink navy para scrims. */
+  --syn-channel-brand:  46 90 172;
+  --syn-channel-accent: 201 154 46;
+  --syn-channel-ink:    27 42 74;
+
+  --syn-color-surface-canvas:    #F6F8FB;   /* cool off-white */
+  --syn-color-surface-primary:   #FFFFFF;   /* surface blanco */
+  --syn-color-surface-secondary: #EEF2F8;
+  --syn-color-surface-tertiary:  #E2E8F2;
+  --syn-color-surface-elevated:  #FFFFFF;
+  --syn-color-surface-inverse:   #1B2A4A;
+  --syn-color-surface-accent:        #E7EDF7;
+  --syn-color-surface-accent-soft:   rgb(46 90 172 / 0.08);
+  --syn-color-surface-overlay:       rgb(255 255 255 / 0.90);
+  --syn-color-surface-strong:        #1B2A4A;
+
+  --syn-color-text-primary:    #1B2A4A;   /* ink navy profundo */
+  --syn-color-text-secondary:  #2A3450;   /* slate */
+  --syn-color-text-muted:      #5A6480;
+  --syn-color-text-disabled:   #9AA2B6;
+  --syn-color-text-inverse:    #F6F8FB;
+  --syn-color-text-accent:     #2E5AAC;   /* indigo para texto enlazado */
+  --syn-color-text-on-accent:  #FFFFFF;
+
+  --syn-color-border-subtle:  #E6EBF3;
+  --syn-color-border-default: #D2DAE8;
+  --syn-color-border-strong:  #B4C0D6;
+  --syn-color-border-accent:  #2E5AAC;
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  --syn-color-overlay-subtle: rgb(27 42 74 / 0.06);
+  --syn-color-overlay-medium: rgb(27 42 74 / 0.14);
+  --syn-color-overlay-strong: rgb(27 42 74 / 0.24);
+
+  --syn-color-action-primary:        #2E5AAC;   /* indigo — CTA principal */
+  --syn-color-action-primary-hover:  #264C93;
+  --syn-color-action-primary-active: #356AC4;
+  --syn-color-action-primary-text:   #FFFFFF;
+  --syn-color-action-primary-border: transparent;
+  --syn-color-action-emphasis:       #C99A2E;   /* gold sobrio — solo emphasis */
+  --syn-color-action-emphasis-strong: #8a6a1d;  /* a11y — stop AA-oscuro CTA (texto claro) */
+
+  --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
+  --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
+  --syn-color-action-secondary-text:           var(--syn-color-text-primary);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-text-accent);
+  --syn-color-action-secondary-border:         var(--syn-color-border-default);
+  --syn-color-action-secondary-border-hover:   var(--syn-color-border-accent);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  --syn-color-action-danger:       #B23B30;
+  --syn-color-action-danger-hover: #973026;
+  --syn-color-action-danger-text:  #FFFFFF;
+
+  --syn-color-action-disabled-surface: #EDF1F7;
+  --syn-color-action-disabled-border:  #DDE4EF;
+  --syn-color-action-disabled-text:    #A2AABE;
+
+  --syn-color-focus-ring:        rgb(46 90 172 / 0.70);
+  --syn-color-focus-ring-danger: rgb(178 59 48 / 0.55);
+
+  --syn-color-state-brand-surface: rgb(46 90 172 / 0.08);
+  --syn-color-state-brand-border:  rgb(46 90 172 / 0.24);
+  --syn-color-state-brand-text:    #264C93;
+
+  --syn-color-state-info-surface: rgb(46 90 172 / 0.08);
+  --syn-color-state-info-border:  rgb(46 90 172 / 0.22);
+  --syn-color-state-info-text:    #264C93;
+
+  --syn-color-info:         #2E5AAC;
+  --syn-color-info-surface: rgb(46 90 172 / 0.08);
+
+  --syn-color-state-success-surface: rgb(31 122 90 / 0.10);
+  --syn-color-state-success-border:  rgb(31 122 90 / 0.24);
+  --syn-color-state-success-text:    #176046;
+
+  --syn-color-state-warning-surface: rgb(201 154 46 / 0.14);
+  --syn-color-state-warning-border:  rgb(201 154 46 / 0.28);
+  --syn-color-state-warning-text:    #856014;
+
+  --syn-color-state-danger-surface: rgb(178 59 48 / 0.10);
+  --syn-color-state-danger-border:  rgb(178 59 48 / 0.24);
+  --syn-color-state-danger-text:    #8C2C23;
+
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-surface-canvas) 0%,
+                         var(--syn-color-surface-secondary) 50%,
+                         rgb(var(--syn-channel-brand) / 0.14) 100%);
+
+  --syn-shadow-card:         0 10px 28px -20px rgb(27 42 74 / 0.18);
+  --syn-shadow-card-hover:   0 24px 54px -32px rgb(27 42 74 / 0.22);
+  --syn-shadow-panel:        0 12px 30px -24px rgb(27 42 74 / 0.16);
+  --syn-shadow-floating:     0 28px 72px -38px rgb(27 42 74 / 0.26);
+  --syn-shadow-action:       0 12px 26px -18px rgb(var(--syn-channel-brand) / 0.26);
+  --syn-shadow-action-hover: 0 18px 36px -20px rgb(var(--syn-channel-brand) / 0.34);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma). Canvas cool
+     off-white #f6f8fb → panel/raised/elevado progresivamente más azul-gris/
+     oscuros (monotónico). Hairline = tinta navy sutil → crisp corporativo. */
+  --syn-surface-1: #f6f8fb;   /* canvas cool off-white — el más claro */
+  --syn-surface-2: #eef2f8;   /* panel  — card despega del canvas */
+  --syn-surface-3: #e3e9f3;   /* raised */
+  --syn-surface-4: #d6e0ee;   /* elevado */
+  --syn-border-1: 1px solid rgb(27 42 74 / 0.07);
+  --syn-border-2: 1px solid rgb(27 42 74 / 0.12);
+  --syn-border-3: 1px solid rgb(27 42 74 / 0.18);
+  --syn-border-hairline: 0 0 0 1px rgb(27 42 74 / 0.12);
+
+  /* Ola 1 — image-placeholder (scholar · ink = indigo brand) */
+  --syn-image-placeholder-surface: #e4eaf4;   /* azul-gris frío */
+  --syn-image-placeholder-ink:     #264c93;   /* 6.85:1 ✓ AA · on-brand */
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* meridian theme — vertical Booking "Meridian" (OLA 4.6, ADR 0102) */
+/* Registro ENTERPRISE de scheduling/SaaS: base light slate +    */
+/* ink graphite + primary teal-azul profesional, accent azul más  */
+/* claro, confirm/success sobrio. Profesional, limpio, corporativo*/
+/* (distinto de scholar: teal vs indigo). Paridad token-a-token   */
+/* con eventsNight — 75 familias. color-scheme: light.            */
+/* ─────────────────────────────────────────────────────────── */
+:root[data-theme="meridian"],
+[data-theme="meridian"],
+.theme-meridian {
+  color-scheme: light;
+
+  /* Channels theme-aware — primary teal-azul #0F6E8C,
+     accent azul más claro #3A8DBE, ink graphite para scrims. */
+  --syn-channel-brand:  15 110 140;
+  --syn-channel-accent: 58 141 190;
+  --syn-channel-ink:    28 39 51;
+
+  --syn-color-surface-canvas:    #F4F7F9;   /* light slate */
+  --syn-color-surface-primary:   #FFFFFF;   /* surface blanco */
+  --syn-color-surface-secondary: #EAF0F4;
+  --syn-color-surface-tertiary:  #DCE6EC;
+  --syn-color-surface-elevated:  #FFFFFF;
+  --syn-color-surface-inverse:   #1C2733;
+  --syn-color-surface-accent:        #E2EEF3;
+  --syn-color-surface-accent-soft:   rgb(15 110 140 / 0.08);
+  --syn-color-surface-overlay:       rgb(255 255 255 / 0.90);
+  --syn-color-surface-strong:        #1C2733;
+
+  --syn-color-text-primary:    #1C2733;   /* ink graphite */
+  --syn-color-text-secondary:  #3A4856;
+  --syn-color-text-muted:      #64727F;
+  --syn-color-text-disabled:   #9AA6B0;
+  --syn-color-text-inverse:    #F4F7F9;
+  --syn-color-text-accent:     #0F6E8C;   /* teal-azul para texto enlazado */
+  --syn-color-text-on-accent:  #FFFFFF;
+
+  --syn-color-border-subtle:  #E4EBF0;
+  --syn-color-border-default: #CFDAE2;
+  --syn-color-border-strong:  #AFC0CB;
+  --syn-color-border-accent:  #0F6E8C;
+  --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+  --syn-color-overlay-subtle: rgb(28 39 51 / 0.06);
+  --syn-color-overlay-medium: rgb(28 39 51 / 0.14);
+  --syn-color-overlay-strong: rgb(28 39 51 / 0.24);
+
+  --syn-color-action-primary:        #0F6E8C;   /* teal-azul — CTA principal */
+  --syn-color-action-primary-hover:  #0C5B74;
+  --syn-color-action-primary-active: #1380A2;
+  --syn-color-action-primary-text:   #FFFFFF;
+  --syn-color-action-primary-border: transparent;
+  --syn-color-action-emphasis:       #3A8DBE;   /* azul más claro */
+  --syn-color-action-emphasis-strong: #2f6f96;  /* a11y — stop AA-oscuro CTA (texto claro 4.6:1) */
+
+  --syn-color-action-secondary-surface:        var(--syn-color-surface-primary);
+  --syn-color-action-secondary-surface-hover:  var(--syn-color-surface-secondary);
+  --syn-color-action-secondary-text:           var(--syn-color-text-primary);
+  --syn-color-action-secondary-text-hover:     var(--syn-color-text-accent);
+  --syn-color-action-secondary-border:         var(--syn-color-border-default);
+  --syn-color-action-secondary-border-hover:   var(--syn-color-border-accent);
+
+  --syn-color-action-ghost-surface:        transparent;
+  --syn-color-action-ghost-surface-hover:  var(--syn-color-overlay-subtle);
+  --syn-color-action-ghost-text:           var(--syn-color-text-secondary);
+  --syn-color-action-ghost-text-hover:     var(--syn-color-text-primary);
+
+  --syn-color-action-danger:       #B23B30;
+  --syn-color-action-danger-hover: #973026;
+  --syn-color-action-danger-text:  #FFFFFF;
+
+  --syn-color-action-disabled-surface: #EBF1F4;
+  --syn-color-action-disabled-border:  #DBE4EA;
+  --syn-color-action-disabled-text:    #A1ADB7;
+
+  --syn-color-focus-ring:        rgb(15 110 140 / 0.70);
+  --syn-color-focus-ring-danger: rgb(178 59 48 / 0.55);
+
+  --syn-color-state-brand-surface: rgb(15 110 140 / 0.08);
+  --syn-color-state-brand-border:  rgb(15 110 140 / 0.24);
+  --syn-color-state-brand-text:    #0C5B74;
+
+  --syn-color-state-info-surface: rgb(58 141 190 / 0.10);
+  --syn-color-state-info-border:  rgb(58 141 190 / 0.24);
+  --syn-color-state-info-text:    #2A6589;
+
+  --syn-color-info:         #3A8DBE;
+  --syn-color-info-surface: rgb(58 141 190 / 0.10);
+
+  /* confirm/success sobrio (verde-teal corporativo #1F7A5A) */
+  --syn-color-state-success-surface: rgb(31 122 90 / 0.10);
+  --syn-color-state-success-border:  rgb(31 122 90 / 0.24);
+  --syn-color-state-success-text:    #176046;
+
+  --syn-color-state-warning-surface: rgb(194 138 36 / 0.14);
+  --syn-color-state-warning-border:  rgb(194 138 36 / 0.28);
+  --syn-color-state-warning-text:    #7E5912;
+
+  --syn-color-state-danger-surface: rgb(178 59 48 / 0.10);
+  --syn-color-state-danger-border:  rgb(178 59 48 / 0.24);
+  --syn-color-state-danger-text:    #8C2C23;
+
+  --syn-gradient-hero: linear-gradient(135deg,
+                         var(--syn-color-surface-canvas) 0%,
+                         var(--syn-color-surface-secondary) 50%,
+                         rgb(var(--syn-channel-brand) / 0.14) 100%);
+
+  --syn-shadow-card:         0 10px 28px -20px rgb(28 39 51 / 0.18);
+  --syn-shadow-card-hover:   0 24px 54px -32px rgb(28 39 51 / 0.22);
+  --syn-shadow-panel:        0 12px 30px -24px rgb(28 39 51 / 0.16);
+  --syn-shadow-floating:     0 28px 72px -38px rgb(28 39 51 / 0.26);
+  --syn-shadow-action:       0 12px 26px -18px rgb(var(--syn-channel-brand) / 0.26);
+  --syn-shadow-action-hover: 0 18px 36px -20px rgb(var(--syn-channel-brand) / 0.34);
+
+  /* Escalera de superficie + hairlines (explícita · FIX forma). Canvas light
+     slate #f4f7f9 → panel/raised/elevado progresivamente más slate/oscuros
+     (monotónico). Hairline = tinta graphite sutil → crisp SaaS. */
+  --syn-surface-1: #f4f7f9;   /* canvas light slate — el más claro */
+  --syn-surface-2: #eaf0f4;   /* panel  — card despega del canvas */
+  --syn-surface-3: #dde7ee;   /* raised */
+  --syn-surface-4: #cfdce6;   /* elevado */
+  --syn-border-1: 1px solid rgb(28 39 51 / 0.07);
+  --syn-border-2: 1px solid rgb(28 39 51 / 0.12);
+  --syn-border-3: 1px solid rgb(28 39 51 / 0.18);
+  --syn-border-hairline: 0 0 0 1px rgb(28 39 51 / 0.12);
+
+  /* Ola 1 — image-placeholder (meridian · ink = teal-azul action) */
+  --syn-image-placeholder-surface: #e0eaf0;   /* slate frío */
+  --syn-image-placeholder-ink:     #0c5b74;   /* 6.22:1 ✓ AA · on-brand */
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* data-profile — carácter editorial por siteRoot (P1-3).       */
+/* institutional = defaults (sin override). Ortogonal a data-theme. */
+/* ─────────────────────────────────────────────────────────── */
+/* REGLA ÚNICA del section-gap por profile (FIX 2): el gap de
+   desktop = gap de móvil + 1 paso de la escala 8pt. Así el delta
+   móvil→desktop es uniforme y no hay saltos (p.ej. el viejo
+   commercial 48→96 doblaba el aire). Pares vigentes:
+     default     64→96  (space-16 → space-24, +1 paso)
+     editorial   80→96  (space-20 → space-24, +1 paso)
+     commercial  48→64  (space-12 → space-16, +1 paso)
+     premium     96→96  (space-24 → space-24, CAP — no hay token
+                         mayor a 96 en la escala; tope intencional) */
+[data-profile="editorial"] {
+  --syn-line-height-relaxed: 1.8;             /* más aire de lectura */
+  --syn-section-gap:    var(--syn-space-20);    /* 80 */
+  --syn-section-gap-lg: var(--syn-space-24);    /* 96 — +1 paso */
+  --syn-card-radius:    var(--syn-radius-md);  /* radios más sobrios */
+}
+[data-profile="commercial"] {
+  --syn-section-gap:    var(--syn-space-12);    /* 48 — más denso, CTAs a la vista */
+  --syn-section-gap-lg: var(--syn-space-16);    /* 64 — +1 paso (antes heredaba 96 → saltaba 48→96) */
+  --syn-card-shadow:    var(--syn-shadow-card-hover);  /* tarjetas prominentes */
+}
+[data-profile="premium"] {
+  --syn-section-gap:    var(--syn-space-24);    /* 96 — más respiración */
+  --syn-section-gap-lg: var(--syn-space-24);    /* 96 — CAP de escala (no hay token mayor) */
+  --syn-card-radius:    var(--syn-radius-2xl);  /* radios generosos */
+}
+[data-profile="minimal"] {
+  --syn-card-radius:    var(--syn-radius-sm);
+  --syn-card-shadow:    none;                   /* plano */
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* prefers-color-scheme dark fallback (cuando no hay theme set) */
+/* ─────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --syn-color-surface-canvas:    #020817;
+    --syn-color-surface-primary:   var(--syn-color-neutral-800);
+    --syn-color-text-primary:      var(--syn-color-neutral-0);
+    --syn-color-text-secondary:    var(--syn-color-neutral-300);
+    --syn-color-text-muted:        var(--syn-color-neutral-300);  /* a11y — ~5.3:1 (era neutral-400 ~4.2:1) */
+    --syn-color-border-default:    var(--syn-color-neutral-700);
+
+    /* Escalera + hairlines dark (espejo de [data-theme="dark"]) — sin esto el
+       ladder heredaría los valores light del :root en auto-dark. */
+    --syn-surface-1: #020817;
+    --syn-surface-2: #202d45;
+    --syn-surface-3: #2a3852;
+    --syn-surface-4: #354463;
+    --syn-border-1: 1px solid rgb(255 255 255 / 0.06);
+    --syn-border-2: 1px solid rgb(255 255 255 / 0.10);
+    --syn-border-3: 1px solid rgb(255 255 255 / 0.16);
+    --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* OLA 0 — Grano SVG opt-in (feTurbulence baseFrequency 0.65).  */
+/* NO global: sólo pinta ruido cuando el elemento lleva la clase */
+/* .syn-grain (encendible vía tab Estilo). Va en ::after con     */
+/* z-index -1 detrás del piso de gradiente del hero para matar   */
+/* banding, sin tocar texto ni cards. Opacidad/blend tokenizados */
+/* (--syn-grain-opacity / --syn-grain-blend) para tuning fino.   */
+/* ─────────────────────────────────────────────────────────── */
+.syn-grain { --syn-grain-opacity: 0.5; position: relative; isolation: isolate; }
+.syn-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--syn-grain-opacity);
+  mix-blend-mode: var(--syn-grain-blend, overlay);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='syn-grain-n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23syn-grain-n)'/%3E%3C/svg%3E");
+}

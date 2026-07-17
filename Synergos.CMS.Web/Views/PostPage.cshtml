@@ -1,0 +1,155 @@
+@*
+    Template del Document Type `postPage`. Renderiza un artículo
+    editorial individual: barra de progreso + hero opcional + título +
+    meta (fecha, lectura) + layout 2-col (TOC sticky | cuerpo) +
+    cuerpo (Layout Composer) + tags clicables + share fijo +
+    hilo de comentarios fijo (anidado, ADR 0100).
+
+    El chrome lo aplica _Layout.cshtml. compSeo + compTagging + compCoreBase
+    se consumen en _SeoHead, breadcrumbs y otras partials sin que este
+    template tenga que tocarlos. El TOC + scroll-spy + barra de progreso
+    los construye syn-reading.js (cargado al pie).
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.PostPage>
+@using Synergos.CMS.Web.PublishedModels
+@using Umbraco.Extensions
+@inject Synergos.CMS.Interfaces.IBlogQuery BlogQuery
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.BlogSettings> BlogOptions
+@{
+    Layout = "_Layout";
+    if (Model is null) { return; }
+
+    var title = Model.Name;
+    var excerpt = Model.Excerpt;
+    var heroImage = Model.HeroImage;
+    DateTime? publishDate = DateTime.TryParse(Model.PublishDate, out var pd) ? pd : null;
+    int? readTimeMinutes = int.TryParse(Model.ReadTimeMinutes, out var rt) ? rt : null;
+    var sections = Model.Sections;
+    var category = Model.Parent as PostCategoryPage;
+    var categoryName = !string.IsNullOrWhiteSpace(category?.CategoryName)
+        ? category.CategoryName
+        : category?.Name;
+    var categoryUrl = category?.Url();
+    var author = Model.AuthorRef as AuthorPage;
+    var authorName = !string.IsNullOrWhiteSpace(author?.AuthorName) ? author.AuthorName : author?.Name;
+    var tags = Model.Tags;
+}
+<div class="syn-reading-progress" role="progressbar" aria-label="@Umbraco.GetDictionaryValue("blog.readingprogress", "Progreso de lectura")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+    <div class="syn-reading-progress__bar"></div>
+</div>
+<div class="syn-post-layout">
+    <article class="syn-post">
+        <header class="syn-post__header">
+            @if (!string.IsNullOrWhiteSpace(categoryName) && !string.IsNullOrWhiteSpace(categoryUrl))
+            {
+                <a class="syn-post__category" href="@categoryUrl">@categoryName</a>
+            }
+            <h1 class="syn-post__title">@title</h1>
+            @if (!string.IsNullOrWhiteSpace(excerpt))
+            {
+                <p class="syn-post__excerpt">@excerpt</p>
+            }
+            <div class="syn-post__meta">
+                @if (publishDate.HasValue)
+                {
+                    <time class="syn-post__date" datetime="@publishDate.Value.ToString("yyyy-MM-dd")">
+                        @publishDate.Value.ToString("dd MMM yyyy")
+                    </time>
+                }
+                @if (readTimeMinutes.HasValue)
+                {
+                    <span class="syn-post__reading-time">
+                        <span class="syn-reading-time">@readTimeMinutes min</span>
+                    </span>
+                }
+            </div>
+            @if (author is not null)
+            {
+                <a class="syn-author" href="@author.Url()">
+                    <span class="syn-author__avatar">
+                        @if (author.AuthorAvatar is not null)
+                        {
+                            <img src="@author.AuthorAvatar.Url()" alt="@authorName" loading="lazy" />
+                        }
+                    </span>
+                    <span class="syn-author__info">
+                        <span class="syn-author__name">@authorName</span>
+                        @if (!string.IsNullOrWhiteSpace(author.AuthorRole))
+                        {
+                            <span class="syn-author__role">@author.AuthorRole</span>
+                        }
+                    </span>
+                </a>
+            }
+        </header>
+        @if (heroImage is not null)
+        {
+            <figure class="syn-post__hero">
+                <img src="@heroImage.Url()" alt="@title" loading="eager" />
+            </figure>
+        }
+        @if (sections is not null && sections.Any())
+        {
+            <div class="syn-post__body">
+                @await Html.GetBlockGridHtmlAsync(sections)
+            </div>
+        }
+        @if (tags is not null && tags.Any())
+        {
+            <ul class="syn-tag-list syn-post__tags">
+                @foreach (var tag in tags)
+                {
+                    <li><a class="syn-tag" href="/blog/tag/@Uri.EscapeDataString(tag)">@tag</a></li>
+                }
+            </ul>
+        }
+
+        @* Share social fijo (ADR 0021). El partial lee URL+título del nodo actual. *@
+        <div class="syn-post__share">
+            <span class="syn-post__share-label">@Umbraco.GetDictionaryValue("blog.share", "Compartir")</span>
+            @await Html.PartialAsync("Elements/Corp/SocialShare", Model)
+        </div>
+    </article>
+
+    <aside class="syn-post__sidebar">
+        <nav class="syn-post__toc" aria-label="@Umbraco.GetDictionaryValue("blog.onthispage", "En esta página")">
+            <p class="syn-post__toc-title">@Umbraco.GetDictionaryValue("blog.onthispage", "En esta página")</p>
+        </nav>
+    </aside>
+</div>
+@{
+    var related = BlogOptions.Value.RelatedPostsCount > 0
+        ? BlogQuery.GetRelated(Model.Key, BlogOptions.Value.RelatedPostsCount)
+        : System.Array.Empty<Synergos.CMS.Interfaces.PostSummary>();
+}
+@if (related.Count > 0)
+{
+    <aside class="syn-post__related">
+        <h2 class="syn-post__related-title">@Umbraco.GetDictionaryValue("blog.relatedposts", "Artículos relacionados")</h2>
+        <ul class="syn-post__related-items">
+            @foreach (var rel in related)
+            {
+                <li class="syn-post__related-item">
+                    <a class="syn-post__related-link" href="@rel.Url">
+                        @if (!string.IsNullOrWhiteSpace(rel.HeroImageUrl))
+                        {
+                            <img class="syn-post__related-image" src="@rel.HeroImageUrl" alt="" loading="lazy" />
+                        }
+                        <h3 class="syn-post__related-item-title">@rel.Title</h3>
+                    </a>
+                </li>
+            }
+        </ul>
+    </aside>
+}
+
+@* Hilo de comentarios fijo (ADR 0038 + 0100). Se auto-enlaza al nodo
+   actual. Renderizado como partial fijo además de su variante block,
+   para que todo post lo tenga sin que el editor lo dropee. *@
+<section class="syn-post__comments">
+    @await Html.PartialAsync("Elements/Engagement/CommentThread", (Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement)Model)
+</section>
+
+@* Reading experience: barra de progreso + TOC scroll-spy + reply toggles.
+   Scoped al PostPage (no global); _Layout no expone una sección Scripts. *@
+<script src="~/js/syn-reading.js" asp-append-version="true" defer></script>

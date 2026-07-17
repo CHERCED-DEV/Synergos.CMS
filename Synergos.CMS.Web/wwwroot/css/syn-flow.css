@@ -1,0 +1,295 @@
+/* ============================================================
+   Synergos CMS — Flow engine templates
+   ============================================================
+   FlowDefinition.cshtml + FlowStep.cshtml + Progress block.
+   Cargado siempre via _Layout.
+   ------------------------------------------------------------ */
+
+/* ── Flow Definition (landing) ───────────────────────────────── */
+
+.syn-flow-definition {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-xl);
+  max-width: var(--syn-max-width-reading);
+  margin-inline: auto;
+  padding: var(--syn-space-2xl) 0;
+}
+
+.syn-flow-definition__header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+  align-items: center;
+}
+
+.syn-flow-definition__title {
+  font-size: clamp(var(--syn-font-size-3xl), 4vw + 1rem, var(--syn-font-size-5xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  color: var(--syn-color-text-primary);
+  margin: 0;
+}
+
+.syn-flow-definition__description {
+  margin: 0;
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-lg);
+  line-height: var(--syn-line-height-relaxed);
+  max-width: var(--syn-max-width-hero);
+}
+
+.syn-flow-definition__start {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--syn-space-2);
+  min-height: 56px;
+  padding: var(--syn-space-3) var(--syn-space-10);
+  background: linear-gradient(135deg,
+    var(--syn-color-action-primary) 0%,
+    var(--syn-color-action-emphasis-strong, var(--syn-color-action-emphasis, var(--syn-color-accent-500))) 100%);
+  color: var(--syn-color-action-primary-text);
+  border-radius: var(--syn-radius-xl);
+  text-decoration: none;
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-semibold);
+  box-shadow: var(--syn-shadow-action-hover);
+  transition: transform var(--syn-duration-fast) var(--syn-easing-out), box-shadow var(--syn-duration-fast) var(--syn-easing-smooth);
+}
+
+.syn-flow-definition__start:hover {
+  transform: translateY(-2px);
+  text-decoration: none;
+  color: var(--syn-color-action-primary-text);
+  box-shadow: var(--syn-shadow-action-hover), 0 8px 24px 0 rgb(var(--syn-channel-brand) / 0.4);
+}
+
+.syn-flow-definition__start::after {
+  content: '→';
+  font-size: var(--syn-font-size-xl);
+}
+
+.syn-flow-definition__meta {
+  text-align: center;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+  margin: 0;
+}
+
+.syn-flow-definition__empty {
+  margin: 0;
+  padding: var(--syn-space-2xl);
+  background: var(--syn-color-state-warning-surface);
+  color: var(--syn-color-state-warning-text);
+  border: 1px solid var(--syn-color-state-warning-border);
+  border-radius: var(--syn-radius-md);
+  text-align: center;
+}
+
+/* ── Flow Step ───────────────────────────────────────────────── */
+
+.syn-flow-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-xl);
+  max-width: var(--syn-max-width-reading);
+  margin-inline: auto;
+  padding: var(--syn-space-xl) 0;
+}
+
+.syn-flow-step__progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+}
+
+.syn-flow-step__progress-label {
+  display: block;
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  color: var(--syn-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+}
+
+.syn-flow-step__header {
+  text-align: start;
+}
+
+.syn-flow-step__label {
+  font-size: clamp(var(--syn-font-size-2xl), 3vw + 0.5rem, var(--syn-font-size-4xl));
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  color: var(--syn-color-text-primary);
+  margin: 0;
+}
+
+.syn-flow-step__content {
+  background: var(--syn-color-surface-primary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  padding: var(--syn-space-xl);
+  color: var(--syn-color-text-secondary);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-flow-step__content > * + * {
+  margin-top: var(--syn-space-md);
+}
+
+.syn-flow-step__actions {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  gap: var(--syn-space-md);
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--syn-space-md);
+}
+
+.syn-flow-step__next-form {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.syn-flow-step__next {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--syn-space-2);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--syn-space-3) var(--syn-space-8);
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  border: 1px solid transparent;
+  border-radius: var(--syn-radius-md);
+  font-family: inherit;
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-semibold);
+  cursor: pointer;
+  box-shadow: var(--syn-shadow-action);
+  transition: var(--syn-transition-colors), transform var(--syn-duration-fast) var(--syn-easing-out);
+}
+
+@media (min-width: 480px) {
+  .syn-flow-step__next { width: auto; }
+}
+
+.syn-flow-step__next:hover {
+  background: var(--syn-color-action-primary-hover);
+  box-shadow: var(--syn-shadow-action-hover);
+  transform: translateY(-1px);
+}
+
+.syn-flow-step__next::after {
+  content: '→';
+  font-size: var(--syn-font-size-lg);
+}
+
+.syn-flow-step__cancel-form {
+  margin: 0;
+}
+
+.syn-flow-step__cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-2);
+  padding: var(--syn-space-2) var(--syn-space-4);
+  background: transparent;
+  color: var(--syn-color-text-muted);
+  border: 0;
+  font-family: inherit;
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-flow-step__cancel:hover {
+  color: var(--syn-color-action-danger);
+}
+
+/* ── Flow Progress block ─────────────────────────────────────── */
+
+.syn-flow-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+}
+
+.syn-flow-progress__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--syn-space-md);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-flow-progress__percent {
+  font-weight: var(--syn-font-weight-bold);
+  color: var(--syn-color-action-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.syn-flow-progress__unavailable {
+  color: var(--syn-color-text-muted);
+  font-style: italic;
+}
+
+/* Visual progress bar — implementación opcional via background gradient */
+.syn-flow-progress--bar {
+  position: relative;
+  height: 8px;
+  background: var(--syn-color-surface-tertiary);
+  border-radius: var(--syn-radius-full);
+  overflow: hidden;
+}
+
+.syn-flow-progress--bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: var(--syn-flow-progress, 0%);
+  background: linear-gradient(90deg,
+    var(--syn-color-action-primary),
+    var(--syn-color-action-emphasis, var(--syn-color-accent-500)));
+  border-radius: var(--syn-radius-full);
+  transition: width var(--syn-duration-slow) var(--syn-easing-default);
+}
+
+/* Flow trigger (elementFlowTrigger) — CTA <a> que dispara un flow.
+   Antes sin CSS (orphan atrapado por check-css-parity) -> link pelado.
+   Boton primario on-brand, paridad con .syn-flow-definition__start. */
+.syn-flow-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--syn-space-2);
+  min-height: var(--syn-control-h-lg);
+  padding: var(--syn-space-3) var(--syn-space-6);
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  border: 1px solid transparent;
+  border-radius: var(--syn-radius-md);
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: none;
+  cursor: pointer;
+  transition: var(--syn-transition-colors),
+              transform var(--syn-duration-fast) var(--syn-easing-out);
+}
+.syn-flow-trigger:hover {
+  background: var(--syn-color-action-primary-hover);
+  transform: translateY(-1px);
+}
+.syn-flow-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+}

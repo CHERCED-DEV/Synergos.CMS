@@ -1,0 +1,16 @@
+@*
+    elementNavItem renderer (Ola 24). SSR-native atomic.
+    Emite <li><a>. Invocado únicamente desde Group.cshtml.
+*@
+@using Umbraco.Cms.Core.Models
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var label = Model.Value<string>("navLabel");
+    var link = Model.Value<Link>("navLink");
+    var url = link?.Url;
+    if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(url)) { return; }
+    var openInNewTab = Model.Value<bool>("navOpenInNewTab") || string.Equals(link?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
+}
+<li class="syn-nav__item">
+    <a class="syn-nav__link" href="@url"@(openInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@label</a>
+</li>

@@ -1,0 +1,164 @@
+@*
+    Vista del AdminController.FormSubmissionDetail (Ola 118).
+    Muestra fields completos de la submission + metadata.
+*@
+@using Synergos.CMS.Interfaces
+@{
+    Layout = null;
+    var detail = ViewData["Detail"] as FormSubmissionDetail!;
+    var moderatorName = ViewData["ModeratorName"] as string ?? "—";
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>Submission @detail.StorageId · Synergos</title>
+</head>
+<body class="syn-admin">
+    @await Html.PartialAsync("_AdminTopbar")
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <nav class="syn-admin__breadcrumbs" aria-label="Breadcrumb">
+                <a href="/admin/forms">Forms</a>
+                <span class="syn-admin__breadcrumbs-sep" aria-hidden="true">/</span>
+                <a href="/admin/forms?formKey=@Uri.EscapeDataString(detail.FormKey)"><code>@detail.FormKey</code></a>
+                <span class="syn-admin__breadcrumbs-sep" aria-hidden="true">/</span>
+                <span class="syn-admin__breadcrumbs-current">Submission</span>
+            </nav>
+
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">Submission @detail.StorageId</h1>
+                <p class="syn-admin__page-subtitle">
+                    Form <code>@detail.FormKey</code> · @detail.Fields.Count campo(s) ·
+                    Recibido @detail.ReceivedAtUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC
+                </p>
+            </header>
+
+            <section class="syn-admin__panel" style="margin-bottom: var(--syn-space-lg);">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Metadata</h2>
+                </header>
+                <table class="syn-admin__table">
+                    <tbody>
+                        <tr>
+                            <th>Form key</th>
+                            <td><code>@detail.FormKey</code></td>
+                        </tr>
+                        <tr>
+                            <th>ID</th>
+                            <td><code>@detail.StorageId</code></td>
+                        </tr>
+                        <tr>
+                            <th>Recibido</th>
+                            <td>@detail.ReceivedAtUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC</td>
+                        </tr>
+                        <tr>
+                            <th>IP cliente</th>
+                            <td>@(detail.ClientIp ?? "—")</td>
+                        </tr>
+                        <tr>
+                            <th>User agent</th>
+                            <td>@(detail.UserAgent ?? "—")</td>
+                        </tr>
+                        <tr>
+                            <th>Referrer</th>
+                            <td>
+                                @if (string.IsNullOrWhiteSpace(detail.Referrer))
+                                {
+                                    <text>—</text>
+                                }
+                                else
+                                {
+                                    <a href="@detail.Referrer" rel="noopener noreferrer" target="_blank">@detail.Referrer</a>
+                                }
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="syn-admin__panel">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Campos del form</h2>
+                    <span class="syn-admin__panel-count">@detail.Fields.Count</span>
+                </header>
+                @if (detail.Fields.Count == 0)
+                {
+                    <p class="syn-admin__panel-empty">El form no contiene campos.</p>
+                }
+                else
+                {
+                    <table class="syn-admin__table">
+                        <thead>
+                            <tr>
+                                <th>Campo</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (key, value) in detail.Fields)
+                            {
+                                <tr>
+                                    <th><code>@key</code></th>
+                                    <td><pre class="syn-admin__field-value">@value</pre></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
+
+            <section class="syn-admin__panel syn-admin__panel--danger" style="margin-top: var(--syn-space-lg);">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Zona destructiva</h2>
+                </header>
+                <p class="syn-admin__panel-hint">
+                    Eliminar la submission borra el archivo del storage. La
+                    operación es irreversible — solo confirma si estás seguro
+                    de que no la necesitas para auditoría.
+                </p>
+                <form id="delete-form" method="post"
+                      action="/admin/forms/@Uri.EscapeDataString(detail.FormKey)/@Uri.EscapeDataString(detail.StorageId)/delete">
+                    <button type="button" id="delete-trigger" class="syn-admin__action syn-admin__action--reject">
+                        🗑 Eliminar submission
+                    </button>
+                </form>
+            </section>
+        </div>
+    </main>
+
+    @* Native <dialog> confirm reemplaza window.confirm() (Ola 124). *@
+    <dialog id="delete-confirm" class="syn-admin__dialog">
+        <form method="dialog" class="syn-admin__dialog-form">
+            <h2 class="syn-admin__dialog-title">Eliminar submission</h2>
+            <p class="syn-admin__dialog-body">
+                ¿Eliminar definitivamente la submission <code>@detail.StorageId</code>?
+                Esta acción es <strong>irreversible</strong> — el archivo se borra del storage.
+            </p>
+            <div class="syn-admin__dialog-actions">
+                <button type="submit" value="cancel" class="syn-admin__action syn-admin__action--ghost">@Umbraco.GetDictionaryValue("admin.action.cancel", "Cancelar")</button>
+                <button type="submit" value="confirm" class="syn-admin__action syn-admin__action--reject">🗑 @Umbraco.GetDictionaryValue("admin.action.delete", "Eliminar")</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script>
+        (function () {
+            var dialog = document.getElementById('delete-confirm');
+            var trigger = document.getElementById('delete-trigger');
+            var form = document.getElementById('delete-form');
+            if (!dialog || !trigger || !form) return;
+            trigger.addEventListener('click', function () {
+                dialog.returnValue = '';
+                var onClose = function () {
+                    dialog.removeEventListener('close', onClose);
+                    if (dialog.returnValue === 'confirm') form.submit();
+                };
+                dialog.addEventListener('close', onClose);
+                dialog.showModal();
+            });
+        })();
+    </script>
+</body>
+</html>

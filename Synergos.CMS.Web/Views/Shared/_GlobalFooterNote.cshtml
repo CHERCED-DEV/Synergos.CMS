@@ -1,0 +1,19 @@
+@*
+    Renderer del aviso global del footer. Se inserta dentro del
+    <footer> del sitio cuando el resolver lo entrega. Nota corta,
+    eg. "Los precios incluyen IVA" o un mensaje legal/regulatorio.
+*@
+@model Synergos.CMS.Interfaces.CfgFooterNote
+@{
+    if (Model is null) { return; }
+    var hasCta = !string.IsNullOrWhiteSpace(Model.CtaLabel) && !string.IsNullOrWhiteSpace(Model.CtaUrl);
+}
+<aside class="syn-global-footer-note" role="note">
+    <p class="syn-global-footer-note__text">@Model.Text</p>
+    @if (hasCta)
+    {
+        <a class="syn-global-footer-note__cta"
+           href="@Model.CtaUrl"
+           @(Model.CtaOpenInNewTab ? Html.Raw("target=\"_blank\" rel=\"noopener\"") : null)>@Model.CtaLabel</a>
+    }
+</aside>

@@ -1,0 +1,74 @@
+@*
+    elementCompBlogHighlight renderer. Consume IBlogQuery (Ola 56.2)
+    para mostrar los N posts más recientes en formato hero-style. El
+    primer post se renderiza con clase "primary" + image eager.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Synergos.CMS.Interfaces
+@inject IBlogQuery BlogQuery
+@{
+    var title = Model.Value<string>("highlightTitle");
+    var countRaw = Model.Value<string>("highlightCount");
+    var count = int.TryParse(countRaw, out var c) && c > 0 ? c : 3;
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-blog-highlight",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-blog-highlight--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    var posts = BlogQuery.GetPosts(new BlogQueryRequest(MaxItems: count));
+}
+<section class="@classes" data-count="@count">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-blog-highlight__title">@title</h2>
+    }
+    @if (posts.Count == 0)
+    {
+        <p class="syn-blog-highlight__empty">@("Aún no hay artículos.")</p>
+    }
+    else
+    {
+        <div class="syn-blog-highlight__items">
+            @{ var isFirst = true; }
+            @foreach (var post in posts)
+            {
+                var itemClass = isFirst
+                    ? "syn-blog-highlight__item syn-blog-highlight__item--primary"
+                    : "syn-blog-highlight__item";
+                <article class="@itemClass">
+                    <a class="syn-blog-highlight__link" href="@post.Url">
+                        @if (!string.IsNullOrWhiteSpace(post.HeroImageUrl))
+                        {
+                            <img class="syn-blog-highlight__image"
+                                 src="@post.HeroImageUrl"
+                                 alt=""
+                                 loading="@(isFirst ? "eager" : "lazy")" />
+                        }
+                        <h3 class="syn-blog-highlight__item-title">@post.Title</h3>
+                        @if (!string.IsNullOrWhiteSpace(post.Excerpt))
+                        {
+                            <p class="syn-blog-highlight__excerpt">@post.Excerpt</p>
+                        }
+                        <div class="syn-blog-highlight__meta">
+                            @if (post.PublishDate.HasValue)
+                            {
+                                <time class="syn-blog-highlight__date" datetime="@post.PublishDate.Value.ToString("yyyy-MM-dd")">
+                                    @post.PublishDate.Value.ToString("dd MMM yyyy")
+                                </time>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(post.CategoryName))
+                            {
+                                <span class="syn-blog-highlight__category">@post.CategoryName</span>
+                            }
+                        </div>
+                    </a>
+                </article>
+                isFirst = false;
+            }
+        </div>
+    }
+</section>

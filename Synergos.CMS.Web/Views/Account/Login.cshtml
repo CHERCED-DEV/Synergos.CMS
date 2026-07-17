@@ -1,0 +1,91 @@
+@*
+    Vista del AccountController.Login (Ola 64). Form POST nativo a
+    /account/login. Sin Layout para evitar dependencia de
+    PublishedRequest (controller MVC, no template Umbraco).
+
+    Frame "launcher / PS3": <body class="syn-account syn-launcher"> hereda
+    el fondo dark + el chrome animado que inyecta platform-root.js. El
+    hero (isotipo + eyebrow + título) reusa las clases .syn-launcher__*.
+    El form vive en una tarjeta premium .syn-account__card.
+    Los NOMBRES de campos (emailOrUsername/password/rememberMe/returnUrl)
+    y el action NO cambian — el AccountController bindea por nombre.
+*@
+@{
+    Layout = null;
+    var returnUrl = ViewData["ReturnUrl"] as string ?? "/";
+    var errorCode = ViewData["ErrorCode"] as string;
+    var title = Umbraco.GetDictionaryValue("Account.Login.Title", "Iniciar sesión");
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">
+<head>
+    @await Html.PartialAsync("_AccountHead")
+    <title>@title</title>
+</head>
+<body class="syn-account syn-launcher">
+    <main class="syn-launcher__main">
+        @await Html.PartialAsync("_AccountHero", (object)title)
+
+        <div class="syn-account__card">
+            @if (!string.IsNullOrWhiteSpace(errorCode))
+            {
+                var msg = errorCode switch
+                {
+                    "invalid-credentials" => Umbraco.GetDictionaryValue("Account.Login.Error.InvalidCredentials", "Email o contraseña incorrectos."),
+                    "locked-out" => Umbraco.GetDictionaryValue("Account.Login.Error.LockedOut", "Cuenta bloqueada temporalmente."),
+                    _ => Umbraco.GetDictionaryValue("Account.Login.Error.Unknown", "Ocurrió un error. Inténtalo de nuevo."),
+                };
+                <p class="syn-account__error" role="alert" aria-live="polite">@msg</p>
+            }
+
+            <form class="syn-account__form" action="/account/login" method="post" novalidate>
+                <input type="hidden" name="returnUrl" value="@returnUrl" />
+
+                <div class="syn-account__field">
+                    <label for="syn-login-email">@Umbraco.GetDictionaryValue("Account.Login.EmailLabel", "Email")</label>
+                    <input id="syn-login-email"
+                           type="email"
+                           name="emailOrUsername"
+                           autocomplete="email"
+                           required
+                           aria-required="true"
+                           aria-invalid="@(!string.IsNullOrEmpty(errorCode) ? "true" : null)" />
+                </div>
+
+                <div class="syn-account__field">
+                    <label for="syn-login-password">@Umbraco.GetDictionaryValue("Account.Login.PasswordLabel", "Contraseña")</label>
+                    <input id="syn-login-password"
+                           type="password"
+                           name="password"
+                           autocomplete="current-password"
+                           required
+                           aria-required="true"
+                           aria-invalid="@(!string.IsNullOrEmpty(errorCode) ? "true" : null)" />
+                </div>
+
+                <p class="syn-account__forgot-link">
+                    <a href="/account/forgot-password">@Umbraco.GetDictionaryValue("Account.Login.ForgotPassword", "¿Olvidaste tu contraseña?")</a>
+                </p>
+
+                <div class="syn-account__field syn-account__field--checkbox">
+                    <label>
+                        <input type="checkbox" name="rememberMe" value="true" />
+                        @Umbraco.GetDictionaryValue("Account.Login.RememberMe", "Recordar mi sesión")
+                    </label>
+                </div>
+
+                <button type="submit" class="syn-account__submit">
+                    @Umbraco.GetDictionaryValue("Account.Login.Submit", "Iniciar sesión")
+                </button>
+            </form>
+
+            <p class="syn-account__alt">
+                <a href="/account/register">
+                    @Umbraco.GetDictionaryValue("Account.Login.NeedAccount", "¿No tienes cuenta? Registrarse")
+                </a>
+            </p>
+        </div>
+    </main>
+    <script src="~/js/platform-root.js" asp-append-version="true" defer></script>
+</body>
+</html>

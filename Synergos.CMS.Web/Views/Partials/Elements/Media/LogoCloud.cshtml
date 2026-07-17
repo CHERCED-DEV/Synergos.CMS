@@ -1,0 +1,36 @@
+@*
+    elementMediaLogoCloud renderer (Ola 19 schema + Ola 42 layout).
+    Flex/grid responsive de logos delegando a LogoItem.cshtml.
+    Display/flex modifiers resueltos por LayoutCssBuilder a partir
+    de compDomDisplay + compDomFlex (Ola 42).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@using Synergos.CMS.Web.Services
+@{
+    var items = Model.Value<BlockListModel>("logoItems");
+    if (items == null || !items.Any()) { return; }
+    var title = Model.Value<string>("cloudTitle");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-logo-cloud",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-logo-cloud--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Concat(LayoutCssBuilder.Build(Model)).Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-logo-cloud__title">@title</h2>
+    }
+    <ul class="syn-logo-cloud__grid">
+        @foreach (var item in items)
+        {
+            <li class="syn-logo-cloud__cell">
+                @await Html.PartialAsync("Elements/Media/LogoItem", item.Content)
+            </li>
+        }
+    </ul>
+</section>

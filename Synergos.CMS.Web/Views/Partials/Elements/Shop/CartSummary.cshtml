@@ -1,0 +1,81 @@
+@*
+    elementShopCartSummary renderer.
+
+    Ola 59 — pasa de skeleton SSR + hidratación JS a render real
+    consumiendo ICartService.GetCart(). Emite la lista de líneas, el
+    subtotal y el total en SSR. checkoutEndpoint del block sigue siendo
+    el destino del form de checkout (placeholder hasta integración con
+    gateway de pagos en futura ola).
+
+    Si el cart está vacío, se muestra mensaje editor-facing y el form
+    de checkout se omite.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ICartService CartService
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
+@{
+    var title = Model.Value<string>("summaryTitle");
+    var showShipping = Model.Value<bool>("showShipping");
+    var showTax = Model.Value<bool>("showTax");
+    var checkoutEndpoint = Model.Value<string>("checkoutEndpoint");
+    if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(checkoutEndpoint)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-cart-summary",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-cart-summary--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    var cart = CartService.GetCart();
+    var coCulture = System.Globalization.CultureInfo.GetCultureInfo("es-CO");
+}
+<aside class="@classes"
+       data-checkout-endpoint="@checkoutEndpoint"
+       data-item-count="@cart.ItemCount">
+    <h3 class="syn-cart-summary__title">@title</h3>
+
+    @if (cart.Lines.Count == 0)
+    {
+        <p class="syn-cart-summary__empty">@Umbraco.GetDictionaryValue("Shop.Cart.Empty")</p>
+    }
+    else
+    {
+        <ul class="syn-cart-summary__lines-list">
+            @foreach (var line in cart.Lines)
+            {
+                <li class="syn-cart-summary__line"
+                    data-sku="@line.Sku"
+                    @(string.IsNullOrWhiteSpace(line.VariantSku) ? "" : $"data-variant-sku=\"{line.VariantSku}\"")>
+                    <a class="syn-cart-summary__line-name" href="@line.ProductUrl">@line.ProductName</a>
+                    <span class="syn-cart-summary__line-qty">×@line.Quantity</span>
+                    <span class="syn-cart-summary__line-total">
+                        @PriceFormatter.Format(line.LineTotal, cart.Currency)
+                    </span>
+                </li>
+            }
+        </ul>
+
+        <dl class="syn-cart-summary__lines">
+            <dt>@Umbraco.GetDictionaryValue("Shop.Cart.Subtotal")</dt>
+            <dd data-line="subtotal">@PriceFormatter.Format(cart.Subtotal, cart.Currency)</dd>
+            @if (showShipping)
+            {
+                <dt>@Umbraco.GetDictionaryValue("Shop.Cart.Shipping")</dt><dd data-line="shipping">—</dd>
+            }
+            @if (showTax)
+            {
+                <dt>@Umbraco.GetDictionaryValue("Shop.Cart.Tax")</dt><dd data-line="tax">—</dd>
+            }
+            <dt class="syn-cart-summary__total-label">@Umbraco.GetDictionaryValue("Shop.Cart.Total")</dt>
+            <dd data-line="total" class="syn-cart-summary__total-value">
+                @PriceFormatter.Format(cart.Subtotal, cart.Currency)
+            </dd>
+        </dl>
+
+        <form action="@checkoutEndpoint" method="post" class="syn-cart-summary__checkout-form">
+            <button type="submit" class="syn-cart-summary__checkout">@Umbraco.GetDictionaryValue("Shop.Cart.Checkout")</button>
+        </form>
+    }
+</aside>

@@ -1,0 +1,87 @@
+name: Design gates (anti-drift)
+
+# Gate G-4 — Ola 2 del roadmap maestro (refactor-docs/architecture/14-roadmap-maestro.md).
+#
+# Corre los gates anti-drift del design system en cada PR/push que toque
+# vistas Razor o el CSS. BLOQUEA el merge si un gate falla:
+#   - G-3 paridad clase↔CSS (tools/check-css-parity.mjs): toda clase
+#     `syn-*` emitida en Views/**/*.cshtml tiene regla CSS en
+#     wwwroot/css/*.css o está en la allowlist. Atrapa el patrón
+#     "clase emitida sin estilo" (A-P1-1/2/3 del audit).
+#
+# NOTA RUNNER (G-4): hoy NO hay runner CI conectado a este repo. Este
+# workflow queda LISTO para cuando se conecte el remote + runner
+# (GitHub-hosted ubuntu-latest o self-hosted). Hasta entonces el gate
+# corre como pre-commit / a mano: `node tools/check-css-parity.mjs`.
+#
+# CROSS-REPO (G-1/G-2): `sync:tokens:check` vive en el repo SIBLING
+# Synergos.UI y NO se puede correr aquí sin checkout de ese repo (es otro
+# git remote). Ver el job comentado `tokens-bridge-parity` abajo + el
+# workflow espejo en Synergos.UI/.github/workflows/design-gates-ui.yml.
+
+on:
+  pull_request:
+    paths:
+      - 'Synergos.CMS.Web/Views/**'
+      - 'Synergos.CMS.Web/wwwroot/css/**'
+      - 'tools/check-css-parity.mjs'
+      - 'tools/css-parity-allowlist.txt'
+      - '.github/workflows/design-gates.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'Synergos.CMS.Web/Views/**'
+      - 'Synergos.CMS.Web/wwwroot/css/**'
+      - 'tools/check-css-parity.mjs'
+      - 'tools/css-parity-allowlist.txt'
+      - '.github/workflows/design-gates.yml'
+
+jobs:
+  css-parity:
+    name: G-3 paridad clase↔CSS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run css-parity gate
+        run: node tools/check-css-parity.mjs
+
+  # ───────────────────────────────────────────────────────────────────
+  # G-1/G-2 cross-repo (token bridge parity).
+  #
+  # Requiere checkout del repo SIBLING Synergos.UI. Descomentar y ajustar
+  # `repository:` + un token con read access cuando exista el remote del
+  # UI. El check usa SYNERGOS_CMS_PATH para apuntar a la fuente de ESTE
+  # repo y compara contra el bridge commiteado en el UI.
+  # ───────────────────────────────────────────────────────────────────
+  # tokens-bridge-parity:
+  #   name: G-1 token bridge en sync (cross-repo)
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout CMS (este repo)
+  #       uses: actions/checkout@v4
+  #       with:
+  #         path: Synergos.CMS
+  #     - name: Checkout UI (sibling)
+  #       uses: actions/checkout@v4
+  #       with:
+  #         repository: <org>/Synergos.UI
+  #         path: Synergos.UI
+  #         token: ${{ secrets.UI_REPO_READ_TOKEN }}
+  #     - name: Setup Node
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20'
+  #     - name: Token bridge parity (G-1)
+  #       run: |
+  #         SYNERGOS_CMS_PATH="$GITHUB_WORKSPACE/Synergos.CMS" \
+  #           node Synergos.UI/platforms/angular/tools/sync-tokens.mjs --check

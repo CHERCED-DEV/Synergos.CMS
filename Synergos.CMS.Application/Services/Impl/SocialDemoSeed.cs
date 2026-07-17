@@ -1,0 +1,202 @@
+using Synergos.CMS.Interfaces;
+
+namespace Synergos.CMS.Application.Services.Impl;
+
+/// <summary>
+/// Semilla compartida de la demo de la red social (dominio Blogs — OLA 3). Centraliza
+/// los actores, posts, follows y reacciones sembrados para que los stubs
+/// (<see cref="StubContentStream"/>, <see cref="StubSocialGraphService"/>,
+/// <see cref="StubReactionService"/>, <see cref="StubSocialProfileProjection"/>)
+/// rindan un feed COHERENTE: el mismo autor aparece en su perfil, su feed, sus
+/// seguidores y sus reacciones. Datos puros/deterministas (ADR 0002) — el adapter
+/// real reemplaza cada seam por su store sin tocar esta semilla.
+/// </summary>
+internal static class SocialDemoSeed
+{
+    /// <summary>Marca temporal base de la demo (determinista, no <c>DateTime.Now</c>).</summary>
+    public static readonly DateTime Epoch = new(2026, 6, 20, 9, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>Perfiles sociales sembrados (actores de la demo).</summary>
+    public static readonly IReadOnlyList<SocialProfile> Profiles = new[]
+    {
+        new SocialProfile(
+            ActorId: "act-elena",
+            Handle: "elena.dev",
+            DisplayName: "Elena Restrepo",
+            Bio: "Arquitecta de software · me obsesiona el diseño de sistemas y el café bien hecho.",
+            AvatarUrl: "/media/blogs/avatars/elena.webp",
+            BannerUrl: "/media/blogs/banners/elena.webp",
+            Verified: true,
+            JoinedUtc: new DateTime(2025, 1, 14, 0, 0, 0, DateTimeKind.Utc)),
+        new SocialProfile(
+            ActorId: "act-mateo",
+            Handle: "mateo.design",
+            DisplayName: "Mateo Gil",
+            Bio: "Diseñador de producto. Atomic design, design systems y tipografía.",
+            AvatarUrl: "/media/blogs/avatars/mateo.webp",
+            BannerUrl: "/media/blogs/banners/mateo.webp",
+            Verified: false,
+            JoinedUtc: new DateTime(2025, 3, 2, 0, 0, 0, DateTimeKind.Utc)),
+        new SocialProfile(
+            ActorId: "act-sofia",
+            Handle: "sofia.data",
+            DisplayName: "Sofía Camargo",
+            Bio: "Data & ML. Cuento historias con datos. Bogotá ↔ remoto.",
+            AvatarUrl: "/media/blogs/avatars/sofia.webp",
+            BannerUrl: "/media/blogs/banners/sofia.webp",
+            Verified: true,
+            JoinedUtc: new DateTime(2025, 2, 20, 0, 0, 0, DateTimeKind.Utc)),
+        new SocialProfile(
+            ActorId: "act-andres",
+            Handle: "andres.cloud",
+            DisplayName: "Andrés Quintero",
+            Bio: "Infra y plataforma. Kubernetes, observabilidad y costos.",
+            AvatarUrl: "/media/blogs/avatars/andres.webp",
+            BannerUrl: null,
+            Verified: false,
+            JoinedUtc: new DateTime(2025, 4, 11, 0, 0, 0, DateTimeKind.Utc)),
+    };
+
+    /// <summary>Proyección liviana del perfil a <see cref="ContentAuthor"/> para el feed.</summary>
+    public static ContentAuthor ToAuthor(SocialProfile p) => new(
+        Id: p.ActorId,
+        Handle: p.Handle,
+        DisplayName: p.DisplayName,
+        AvatarUrl: p.AvatarUrl,
+        Verified: p.Verified);
+
+    /// <summary>Resuelve el autor sembrado por id, o un autor "desconocido" estable.</summary>
+    public static ContentAuthor AuthorById(string actorId)
+    {
+        var profile = Profiles.FirstOrDefault(p =>
+            string.Equals(p.ActorId, actorId, StringComparison.OrdinalIgnoreCase));
+        return profile is not null
+            ? ToAuthor(profile)
+            : new ContentAuthor(actorId, actorId, actorId, null, false);
+    }
+
+    /// <summary>
+    /// Posts sembrados (más reciente primero). Cada uno con autor, cuerpo, kind y
+    /// un offset en minutos respecto al <see cref="Epoch"/> para un orden estable.
+    /// </summary>
+    public static readonly IReadOnlyList<SeedPost> Posts = new[]
+    {
+        new SeedPost("post-001", "act-elena", "post", 0,
+            "Tres años después sigo convencido: la mejor arquitectura es la que te deja borrar código sin miedo. Acoplamiento bajo > cleverness.",
+            "/media/blogs/posts/clean-arch.jpg"),
+        new SeedPost("post-002", "act-mateo", "post", -35,
+            "Acabo de migrar todo el design system a tokens semánticos. Cambiar el brand entero es ahora un solo archivo. Atomic design pagando dividendos.",
+            null),
+        new SeedPost("post-003", "act-sofia", "article", -90,
+            "Escribí sobre por qué tus dashboards mienten: agregaciones que esconden la cola, promedios sin percentiles y el sesgo de supervivencia. Hilo 🧵",
+            "/media/blogs/posts/dashboards-lie.jpg"),
+        new SeedPost("post-004", "act-andres", "post", -150,
+            "PSA: revisar el costo de egress ANTES de elegir multi-región. Nos ahorramos un susto este mes mirando los data-transfer charges.",
+            null),
+        new SeedPost("post-005", "act-elena", "post", -240,
+            "El patrón stub-first es subestimado. Defines el seam, escribes el stub determinista, y el resto del equipo construye encima desde el día 1. Cero bloqueos.",
+            null),
+        new SeedPost("post-006", "act-mateo", "post", -310,
+            "Recordatorio de que la grilla de 8pt no es dogma, es disciplina. El ritmo vertical consistente es lo que separa un UI 'ok' de uno que se siente premium.",
+            "/media/blogs/posts/8pt-grid.jpg"),
+        new SeedPost("post-007", "act-sofia", "post", -420,
+            "Pasé el finde reproduciendo un paper de embeddings. El 80% del tiempo fue limpiar datos. El otro 20% también. Bienvenidos a ML real.",
+            null),
+        new SeedPost("post-008", "act-andres", "article", -540,
+            "Guía: cómo instrumentar trazas distribuidas sin volverte loco. OpenTelemetry, sampling con cabeza, y por qué el contexto de propagación lo es todo.",
+            "/media/blogs/posts/otel-tracing.jpg"),
+    };
+
+    /// <summary>
+    /// Grafo sembrado: <c>follower → [followees]</c>. Asimétrico (no recíproco).
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string[]> Follows =
+        new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            ["act-elena"] = new[] { "act-mateo", "act-sofia" },
+            ["act-mateo"] = new[] { "act-elena" },
+            ["act-sofia"] = new[] { "act-elena", "act-mateo", "act-andres" },
+            ["act-andres"] = new[] { "act-elena", "act-sofia" },
+        };
+
+    /// <summary>
+    /// Reacciones sembradas: <c>objectKey → (actorId → tipo)</c>. Da contadores
+    /// realistas y un estado-por-usuario inicial para el optimistic UI.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Reactions =
+        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
+        {
+            ["post-001"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["act-mateo"] = "like",
+                ["act-sofia"] = "love",
+                ["act-andres"] = "like",
+            },
+            ["post-002"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["act-elena"] = "celebrate",
+                ["act-sofia"] = "like",
+            },
+            ["post-003"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["act-elena"] = "love",
+                ["act-mateo"] = "like",
+                ["act-andres"] = "like",
+            },
+        };
+
+    /// <summary>
+    /// Hilos de DM sembrados (OLA 6 — SH-7 v2). Cada uno se INYECTA al
+    /// <see cref="IMessagingService"/> genérico con contexto <c>dm</c> para que la
+    /// bandeja de Blogs arranque poblada sin duplicar el store de mensajería.
+    /// Los participantes son actorId (mismos actores del feed). Cada mensaje trae
+    /// (from, body) en orden cronológico.
+    /// </summary>
+    public static readonly IReadOnlyList<SeedDmThread> DmThreads = new[]
+    {
+        new SeedDmThread(new[]
+        {
+            new SeedDm("act-mateo", "Vi tu post de arquitectura, brutal. ¿Tenés algo escrito más largo sobre el patrón stub-first?"),
+            new SeedDm("act-elena", "¡Gracias Mateo! Justo estoy armando un artículo. Te paso el borrador esta semana."),
+            new SeedDm("act-mateo", "Perfecto, quedo atento 🙌"),
+        }),
+        new SeedDmThread(new[]
+        {
+            new SeedDm("act-sofia", "Elena, ¿te sirve si armo un dashboard con percentiles para el ejemplo del hilo?"),
+            new SeedDm("act-elena", "Sí, total. Con p50/p95/p99 se ve clarísimo el punto."),
+        }),
+    };
+
+    /// <summary>
+    /// Ítems guardados sembrados por actor: <c>owner → [postId]</c>. Se INYECTAN a
+    /// la colección genérica <c>saved</c> del <see cref="IUserCollection"/> para
+    /// que la vista "Guardados" de Blogs arranque poblada.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string[]> Saved =
+        new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            ["act-elena"] = new[] { "post-003", "post-008" },
+            ["act-mateo"] = new[] { "post-001" },
+        };
+
+    /// <summary>Contexto opaco de los hilos de DM en el <see cref="IMessagingService"/>.</summary>
+    public const string DmContext = "dm";
+
+    /// <summary>Colección de guardados en el <see cref="IUserCollection"/>.</summary>
+    public const string SavedCollection = "saved";
+
+    /// <summary>Post sembrado (forma interna de la semilla).</summary>
+    public sealed record SeedPost(
+        string Id,
+        string AuthorId,
+        string Kind,
+        int OffsetMinutes,
+        string Body,
+        string? MediaUrl);
+
+    /// <summary>Hilo de DM sembrado: los mensajes en orden cronológico.</summary>
+    public sealed record SeedDmThread(IReadOnlyList<SeedDm> Messages);
+
+    /// <summary>Mensaje sembrado de un hilo de DM: quién lo mandó + qué dice.</summary>
+    public sealed record SeedDm(string From, string Body);
+}

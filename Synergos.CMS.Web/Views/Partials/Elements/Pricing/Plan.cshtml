@@ -1,0 +1,43 @@
+@*
+    elementPricingPlan renderer (SSR). Card de plan: tag, nombre, precio,
+    features (una por línea) y CTA. La variante destacada usa --highlighted.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models
+@{
+    var name = Model.Value<string>("planName");
+    if (string.IsNullOrWhiteSpace(name)) { return; }
+    var price = Model.Value<string>("planPrice");
+    var period = Model.Value<string>("planPeriod");
+    var tagline = Model.Value<string>("planTagline");
+    var featuresRaw = Model.Value<string>("planFeatures");
+    var highlighted = Model.Value<bool>("planHighlighted");
+    var ctaLabel = Model.Value<string>("planCtaLabel");
+    var ctaLink = Model.Value<Link>("planCtaLink");
+    var features = string.IsNullOrWhiteSpace(featuresRaw)
+        ? System.Array.Empty<string>()
+        : featuresRaw.Replace("\r\n", "\n").Split('\n', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries);
+    var classes = "syn-plan" + (highlighted ? " syn-plan--highlighted" : "");
+}
+<article class="@classes">
+    @if (!string.IsNullOrWhiteSpace(tagline))
+    {
+        <span class="syn-plan__tag">@tagline</span>
+    }
+    <h3 class="syn-plan__name">@name</h3>
+    <p class="syn-plan__price">@price@if (!string.IsNullOrWhiteSpace(period)) { <span class="syn-plan__period">@period</span> }</p>
+    @if (features.Length > 0)
+    {
+        <ul class="syn-plan__features">
+            @foreach (var f in features)
+            {
+                <li class="syn-plan__feature">@f</li>
+            }
+        </ul>
+    }
+    @if (!string.IsNullOrWhiteSpace(ctaLabel) && ctaLink?.Url is not null)
+    {
+        <a class="syn-plan__cta@(highlighted ? " syn-plan__cta--primary" : "")"
+           href="@ctaLink.Url"@(string.Equals(ctaLink.Target, "_blank", System.StringComparison.OrdinalIgnoreCase) ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+    }
+</article>

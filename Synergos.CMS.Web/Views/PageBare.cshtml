@@ -1,0 +1,40 @@
+﻿@*
+    Template del Document Type `pageBare`. Sin chrome compartido —
+    landings custom, modales, embeds. Contenido vía Layout Composer
+    (sections). Layout=null por diseño.
+
+    Aplica brand-aware theme inline (compartido con _Layout vía
+    _BrandThemeStyle partial) y data-theme/surface/profile en <html>
+    para que los blocks puedan reaccionar al tema sin requerir chrome
+    del sitio.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Application.Dto.Responses.PageBareResponse>
+@inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
+@inject Synergos.CMS.Interfaces.IBrandingProvider Branding
+@inject Synergos.CMS.Interfaces.IBrandThemeProvider ThemeProvider
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    Layout = null;
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var sections = currentContent?.Value<BlockGridModel>("sections");
+    var renderCtx = PageRenderContextResolver.Resolve();
+    var brand = Branding.GetCurrent();
+    var theme = ThemeProvider.GetThemeForBrand(brand.Key);
+    var brandThemeModel = new Synergos.CMS.Application.Dto.Responses.BrandThemeStyleModel(theme, renderCtx.ThemeVariant);
+}
+<!DOCTYPE html>
+<html lang="@culture" data-theme="@renderCtx.ThemeVariant" data-surface="@renderCtx.PageSurface" data-profile="@renderCtx.VisualProfile">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@Model.SeoTitle</title>
+    @await Html.PartialAsync("_BrandThemeStyle", brandThemeModel)
+</head>
+<body class="syn-page syn-page--bare">
+    @if (sections != null && sections.Any())
+    {
+        @await Html.GetBlockGridHtmlAsync(sections)
+    }
+</body>
+</html>

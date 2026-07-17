@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- BenchmarkDotNet recomienda Release explícito + ServerGC + Tiered JIT off para repeatable.
+         Aquí solo dejamos el harness; los flags se setean en Program.cs via [Config]. -->
+    <!-- CA1707: BenchmarkDotNet usa underscores convencionalmente en method
+         names para que se rendericen leibles en los reports (Sign_Small_200B
+         vs SignSmall200B). Suppress global para este project.
+         NU1608: BenchmarkDotNet 0.15.8 trae transitives Microsoft.CodeAnalysis.*
+         a 4.10.0 pero .NET SDK 10.0.202 resuelve 4.14.0. La 4.14.0 es
+         backward-compatible para los uses de BDN (compilación in-process
+         de benchmarks). El warning es ruido — no afecta ejecución de los
+         benchmarks ni runtime CMS. Re-evaluar cuando BDN release alinee. -->
+    <NoWarn>$(NoWarn);CA1707;NU1608</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+
+  <!-- Reference Web para acceder a WebhookSigner + bridge types via Interfaces transitive. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Synergos.CMS.Web\Synergos.CMS.Web.csproj" />
+  </ItemGroup>
+
+</Project>

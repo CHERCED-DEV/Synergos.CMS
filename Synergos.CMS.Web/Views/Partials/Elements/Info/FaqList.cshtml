@@ -1,0 +1,31 @@
+@*
+    elementInfoFaqList renderer (Ola 19). SSR container.
+    Itera faqItems BlockList y delega cada item a FaqItem.cshtml.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var items = Model.Value<BlockListModel>("faqItems");
+    if (items == null || !items.Any()) { return; }
+    var title = Model.Value<string>("faqTitle");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-faq-list",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-faq-list--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-faq-list__title">@title</h2>
+    }
+    <div class="syn-faq-list__items">
+        @foreach (var item in items)
+        {
+            @await Html.PartialAsync("Elements/Info/FaqItem", item.Content)
+        }
+    </div>
+</section>

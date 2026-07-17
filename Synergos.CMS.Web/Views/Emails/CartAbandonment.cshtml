@@ -1,0 +1,37 @@
+﻿@*
+    Email template — cart abandonment alert (Ola 102).
+    Modelo: Synergos.CMS.Web.Services.CartAbandonmentEmailModel
+*@
+@model Synergos.CMS.Web.Services.CartAbandonmentEmailModel
+@{
+    Layout = "~/Views/Emails/_Layout.cshtml";   // ruta EXPLÍCITA: "_Layout" resolvía al layout del SITIO
+    ViewBag.Title = "Carrito abandonado";
+    ViewBag.SiteName = Model.SiteName;
+    ViewBag.PreheaderText = $"Un visitante dejó {Model.ItemCount} ítem(s) en su carrito hace {Model.MinutesSinceActivity} min.";
+}
+<h2 style="font-size:20px;color:#0f172a;margin:0 0 16px;">
+    Carrito abandonado
+</h2>
+<p style="font-size:14px;line-height:1.5;color:#475569;margin:0 0 16px;">
+    Un visitante agregó productos al carrito y no completó el checkout
+    en la ventana esperada. Considera enviar un recovery email o
+    retargeting para recuperar la conversión.
+</p>
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#f8fafc;border-radius:6px;margin:0 0 24px;">
+    <tr>
+        <td style="padding:16px;font-size:13px;color:#475569;">
+            <div><strong>Cart ID:</strong> <code>@Model.CartId</code></div>
+            <div><strong>Items:</strong> @Model.ItemCount</div>
+            <div><strong>Subtotal:</strong> @Model.Subtotal.ToString("N2") @Model.Currency</div>
+            <div><strong>Última actividad:</strong> @Model.LastActivityUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC (hace @Model.MinutesSinceActivity min)</div>
+        </td>
+    </tr>
+</table>
+
+<p style="font-size:13px;color:#475569;margin:0;">
+    Este reporte se generó automáticamente por el scanner de cart
+    abandonment. Si no quieres recibir más reportes de este tipo,
+    desactiva <code>Synergos:CartAbandonment:NotifyEmailAddress</code>
+    en la configuración del sitio.
+</p>

@@ -1,0 +1,393 @@
+/* ============================================================
+   Synergos CMS — Site chrome
+   ============================================================
+   Header + Nav + Main + Aside + Footer del _Layout.cshtml.
+   Diseño moderno aligned con Synergos.UI: surface elevations,
+   hairline borders, soft shadows, smooth transitions.
+   ------------------------------------------------------------ */
+
+/* ── Site shell ──────────────────────────────────────────────── */
+
+.syn-site-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--syn-color-surface-canvas);
+  overflow-x: clip; /* guard full-bleed: absorbe el overshoot 100vw vs scrollbar; clip (no hidden) mantiene sticky + eje vertical */
+}
+
+.syn-site-main {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  /* Padding = 0: el main es autoridad de ancho, NO de espaciado. Cada sección
+     se auto-padea (arriba/abajo/lados) vía los knobs del Layout Composer
+     (spacingTop/Bottom/Inline → .syn-space--*). Fuente ÚNICA de padding. */
+  padding: 0;
+  min-height: 40vh;
+}
+
+/* ── Site header ─────────────────────────────────────────────── */
+
+.syn-site-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--syn-z-sticky);
+  background: var(--syn-color-surface-overlay);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--syn-color-border-subtle);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-site-header__inner {
+  position: relative;
+  width: 100%;
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  padding: var(--syn-space-md) var(--syn-gutter);
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-lg);
+}
+
+/* Hamburger (CSS-only, sin JS): checkbox oculto + label que togglea el nav en mobile */
+.syn-nav-toggle { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.syn-nav-burger { display: none; }
+
+@media (min-width: 768px) {
+  .syn-site-header__inner { padding: var(--syn-space-md) var(--syn-gutter-lg); }
+}
+
+.syn-site-header__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-sm);
+  font-weight: var(--syn-font-weight-bold);
+  font-size: var(--syn-font-size-lg);
+  text-decoration: none;
+  color: var(--syn-color-text-primary);
+  letter-spacing: var(--syn-letter-spacing-tight);
+}
+
+.syn-site-header__brand:hover {
+  color: var(--syn-color-action-primary);
+  text-decoration: none;
+}
+
+.syn-site-header__brand-mark {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
+.syn-site-header__logo {
+  height: 34px;
+  width: 34px;
+  object-fit: contain;
+  display: block;
+  flex: none;
+}
+
+/* ── Site nav (top-level navigation) ─────────────────────────── */
+
+.syn-site-nav {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  gap: var(--syn-space-md);
+}
+
+.syn-site-nav__list {
+  display: flex;
+  gap: var(--syn-space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-wrap: wrap;
+}
+
+.syn-site-nav__item { display: inline-block; }
+
+.syn-site-nav__link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--syn-color-text-secondary);
+  padding: var(--syn-space-2) var(--syn-space-3);
+  border-radius: var(--syn-radius-md);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-site-nav__link:hover {
+  color: var(--syn-color-text-primary);
+  background: var(--syn-color-overlay-subtle);
+  text-decoration: none;
+}
+
+.syn-site-nav__link--current {
+  color: var(--syn-color-action-primary);
+  background: var(--syn-color-state-brand-surface);
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+/* (P1-7) .syn-site-nav__link--cta retirado — CSS muerto, ninguna vista emitía
+   la clase. Si se quiere un CTA en el header, agregar el link + clase en _Layout. */
+
+/* ── Mobile nav (hamburger CSS-only, <768px) ─────────────────── */
+@media (max-width: 767px) {
+  .syn-nav-burger {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;   /* touch target WCAG 2.5.5 (≥44x44) */
+    border-radius: var(--syn-radius-md);
+    cursor: pointer;
+    transition: var(--syn-transition-colors);
+  }
+  .syn-nav-burger:hover { background: var(--syn-color-overlay-subtle); }
+  .syn-nav-burger__bar {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: var(--syn-color-text-primary);
+    border-radius: var(--syn-radius-full);
+    transition: transform var(--syn-duration-base) var(--syn-easing-default),
+                opacity var(--syn-duration-fast) var(--syn-easing-default);
+  }
+  .syn-site-nav {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: var(--syn-space-sm) var(--syn-gutter) var(--syn-space-md);
+    background: var(--syn-color-surface-primary);
+    border-bottom: 1px solid var(--syn-color-border-subtle);
+    box-shadow: var(--syn-shadow-lg);
+  }
+  .syn-nav-toggle:checked ~ .syn-site-nav { display: flex; }
+  .syn-site-nav__list {
+    flex-direction: column;
+    gap: var(--syn-space-1);
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+  .syn-site-nav__item { display: block; width: 100%; }
+  .syn-site-nav__link { width: 100%; padding: var(--syn-space-3); }
+  .syn-nav-toggle:checked ~ .syn-nav-burger .syn-nav-burger__bar:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .syn-nav-toggle:checked ~ .syn-nav-burger .syn-nav-burger__bar:nth-child(2) { opacity: 0; }
+  .syn-nav-toggle:checked ~ .syn-nav-burger .syn-nav-burger__bar:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+}
+
+/* ── Site aside (Ola 71 — chrome triádico) ───────────────────── */
+
+.syn-site-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--syn-space-lg);
+  width: 100%;
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  padding-inline: var(--syn-gutter);
+}
+
+@media (min-width: 992px) {
+  .syn-site-shell--with-aside {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    padding-inline: var(--syn-gutter-lg);
+  }
+}
+
+.syn-site-aside {
+  background: var(--syn-color-surface-secondary);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  padding: var(--syn-space-lg);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-site-aside h2,
+.syn-site-aside h3,
+.syn-site-aside h4 {
+  font-size: var(--syn-font-size-base);
+  text-transform: uppercase;
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  color: var(--syn-color-text-muted);
+  margin-bottom: var(--syn-space-sm);
+}
+
+/* ── Site footer ─────────────────────────────────────────────── */
+
+.syn-site-footer {
+  margin-top: var(--syn-space-3xl);
+  background: var(--syn-color-surface-secondary);
+  border-top: 1px solid var(--syn-color-border-subtle);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-site-footer__inner {
+  width: 100%;
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  padding: var(--syn-space-2xl) var(--syn-gutter) var(--syn-space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-xl);
+  font-size: var(--syn-font-size-sm);
+}
+
+@media (min-width: 768px) {
+  .syn-site-footer__inner { padding-inline: var(--syn-gutter-lg); }
+}
+
+/* Top row: brand block + nav columns (stacks on mobile, side-by-side ≥768) */
+.syn-site-footer__top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-xl);
+}
+
+@media (min-width: 768px) {
+  .syn-site-footer__top {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--syn-space-2xl);
+  }
+}
+
+/* ── Brand block ─────────────────────────────────────────────── */
+.syn-site-footer__brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-sm);
+  max-width: 320px;
+}
+
+.syn-site-footer__brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-sm);
+  text-decoration: none;
+  color: var(--syn-color-text-primary);
+  font-weight: var(--syn-font-weight-bold);
+  font-size: var(--syn-font-size-lg);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-site-footer__brand-link:hover {
+  color: var(--syn-color-action-primary);
+  text-decoration: none;
+}
+
+.syn-site-footer__logo {
+  height: 36px;
+  width: 36px;
+  object-fit: contain;
+  display: block;
+  flex: none;
+}
+
+.syn-site-footer__brand-name {
+  font-family: var(--syn-font-family-heading);
+}
+
+.syn-site-footer__tagline {
+  margin: 0;
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-relaxed);
+  color: var(--syn-color-text-muted);
+  max-width: 32ch;
+}
+
+/* ── Nav columns ─────────────────────────────────────────────── */
+.syn-site-footer__nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-sm);
+}
+
+.syn-site-footer__nav-title {
+  margin: 0;
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--syn-letter-spacing-eyebrow);
+  color: var(--syn-color-text-muted);
+}
+
+.syn-site-footer__nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-xs);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.syn-site-footer__nav-list a {
+  display: inline-block;
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-medium);
+  color: var(--syn-color-text-secondary);
+  text-decoration: none;
+  transition: var(--syn-transition-colors);
+}
+
+.syn-site-footer__nav-list a:hover {
+  color: var(--syn-color-action-primary);
+  text-decoration: none;
+}
+
+/* ── Legal row ───────────────────────────────────────────────── */
+.syn-site-footer__legal {
+  padding-top: var(--syn-space-lg);
+  border-top: 1px solid var(--syn-color-border-subtle);
+  font-size: var(--syn-font-size-xs);
+  color: var(--syn-color-text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--syn-space-sm);
+}
+
+.syn-site-footer__copyright,
+.syn-site-footer__legal-note {
+  margin: 0;
+}
+
+/* Móvil estrecho: la fila legal se apila (copyright sobre nota) en
+   vez de pelear el space-between con texto wrappeado. */
+@media (max-width: 480px) {
+  .syn-site-footer__legal {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--syn-space-2);
+  }
+}
+
+.syn-site-footer a {
+  color: var(--syn-color-text-secondary);
+  transition: var(--syn-transition-colors);
+}
+
+.syn-site-footer a:hover {
+  color: var(--syn-color-action-primary);
+}

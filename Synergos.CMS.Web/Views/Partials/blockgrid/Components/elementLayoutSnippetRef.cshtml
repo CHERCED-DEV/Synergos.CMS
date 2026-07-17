@@ -1,0 +1,68 @@
+﻿@*
+    elementLayoutSnippetRef renderer (Ola 42.10 — reusable section
+    snippets). Resuelve el reusableBlock referenciado por el editor
+    vía ContentPicker y renderiza sus sections (Layout Composer)
+    in-place, permitiendo que una sección armada una vez se use en
+    N páginas.
+
+    Validación defensiva:
+      1. snippet prop vacío                → HTML comment, no emite
+      2. snippet type != reusableBlock     → HTML comment + log warning
+      3. snippet no publicado              → HTML comment
+      4. reusableBlock sin sections        → wrapper vacío pero sin fallar
+      5. success                           → wrapper + GetBlockGridHtmlAsync
+
+    Wrapper emite cssClass + variantKey del elementLayoutSnippetRef
+    para que el editor pueda customizar un snippet in-situ sin tocar
+    el reusableBlock original.
+*@
+@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
+@using Umbraco.Cms.Core.Models.Blocks
+@using Umbraco.Cms.Core.Models.PublishedContent
+@using Umbraco.Extensions
+@inject ILoggerFactory LoggerFactory
+@{
+    const string ReusableBlockAlias = "reusableBlock";
+    var element = Model.Content;
+    var snippet = element.Value<IPublishedContent>("snippet");
+    var variant = element.Value<string>("variantKey");
+    var cssClass = element.Value<string>("cssClass");
+
+    string? skipReason = null;
+    BlockGridModel? inner = null;
+
+    if (snippet is null)
+    {
+        skipReason = "snippet picker vacío";
+    }
+    else if (!string.Equals(snippet.ContentType.Alias, ReusableBlockAlias, StringComparison.Ordinal))
+    {
+        skipReason = $"snippet referenciado es '{snippet.ContentType.Alias}', se esperaba '{ReusableBlockAlias}'";
+    }
+    else
+    {
+        inner = snippet.Value<BlockGridModel>("sections");
+    }
+
+    var classes = string.Join(" ", new[]
+    {
+        "syn-snippet-ref",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-snippet-ref--v-{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+@if (skipReason is not null)
+{
+    var log = LoggerFactory.CreateLogger("Synergos.LayoutComposer.SnippetRef");
+    log.LogWarning("elementLayoutSnippetRef bloqueó render: {Reason}", skipReason);
+    <!-- SnippetRef: bloque no renderizado -->
+}
+else
+{
+    <div class="@classes" data-snippet-key="@snippet!.Key">
+        @if (inner is not null && inner.Any())
+        {
+            @await Html.GetBlockGridHtmlAsync(inner)
+        }
+    </div>
+}

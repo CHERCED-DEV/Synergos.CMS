@@ -1,0 +1,126 @@
+@*
+    Vista del AdminController.AuditDetail (Ola 193). Drill-down de un
+    evento del audit trail + eventos cercanos del mismo actor.
+*@
+@using Synergos.CMS.Interfaces
+@{
+    Layout = null;
+    var evt = (AuditEvent)ViewData["Event"]!;
+    var nearby = ViewData["Nearby"] as IReadOnlyList<AuditEvent> ?? Array.Empty<AuditEvent>();
+    var jsonOpts = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+    var rawJson = System.Text.Json.JsonSerializer.Serialize(evt, jsonOpts);
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>Audit @evt.Id · Synergos</title>
+</head>
+<body class="syn-admin">
+    @await Html.PartialAsync("_AdminTopbar")
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">
+                    <a href="/admin/audit" class="syn-admin__back-link" aria-label="Volver al listing de auditoría">←</a>
+                    Audit detail · <code>@evt.Id</code>
+                </h1>
+                <p class="syn-admin__page-subtitle">
+                    Evento individual + ±5 minutos del mismo actor.
+                </p>
+            </header>
+
+            <section class="syn-admin__panel">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Evento</h2>
+                </header>
+                <table class="syn-admin__table">
+                    <tbody>
+                        <tr>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.when", "Cuándo") (UTC)</th>
+                            <td><time datetime="@evt.OccurredAtUtc.ToString("O")">@evt.OccurredAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</time></td>
+                        </tr>
+                        <tr>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.actor", "Actor")</th>
+                            <td>
+                                <div>@evt.ActorName</div>
+                                @if (!string.IsNullOrWhiteSpace(evt.ActorEmail))
+                                {
+                                    <div><code>@evt.ActorEmail</code></div>
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.action", "Acción")</th>
+                            <td><code>@evt.Action</code></td>
+                        </tr>
+                        <tr>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.resource", "Recurso")</th>
+                            <td><code>@evt.Resource</code></td>
+                        </tr>
+                        <tr>
+                            <th>@Umbraco.GetDictionaryValue("admin.col.outcome", "Resultado")</th>
+                            <td>
+                                @{
+                                    var oclass = evt.Outcome switch {
+                                        "success" => "syn-admin__status syn-admin__status--ok",
+                                        "failure" => "syn-admin__status syn-admin__status--danger",
+                                        "partial" => "syn-admin__status syn-admin__status--warn",
+                                        _ => "syn-admin__status",
+                                    };
+                                }
+                                <span class="@oclass">@evt.Outcome</span>
+                            </td>
+                        </tr>
+                        @if (!string.IsNullOrWhiteSpace(evt.Detail))
+                        {
+                            <tr>
+                                <th>Detail</th>
+                                <td><code>@evt.Detail</code></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <details class="syn-admin__details">
+                    <summary>Raw JSON</summary>
+                    <pre class="syn-admin__code-block"><code>@rawJson</code></pre>
+                </details>
+            </section>
+
+            @if (nearby.Count > 0)
+            {
+                <section class="syn-admin__panel" style="margin-top: var(--syn-space-xl);">
+                    <header class="syn-admin__panel-header">
+                        <h2 class="syn-admin__panel-title">Eventos cercanos del mismo actor (±5 min)</h2>
+                        <span class="syn-admin__panel-count">@nearby.Count</span>
+                    </header>
+                    <table class="syn-admin__table">
+                        <thead>
+                            <tr>
+                                <th>@Umbraco.GetDictionaryValue("admin.col.when", "Cuándo") (UTC)</th>
+                                <th>@Umbraco.GetDictionaryValue("admin.col.action", "Acción")</th>
+                                <th>@Umbraco.GetDictionaryValue("admin.col.resource", "Recurso")</th>
+                                <th>@Umbraco.GetDictionaryValue("admin.col.outcome", "Resultado")</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var n in nearby)
+                            {
+                                <tr>
+                                    <td><time datetime="@n.OccurredAtUtc.ToString("O")">@n.OccurredAtUtc.ToString("HH:mm:ss")</time></td>
+                                    <td><code>@n.Action</code></td>
+                                    <td><code>@n.Resource</code></td>
+                                    <td>@n.Outcome</td>
+                                    <td><a href="/admin/audit/@n.Id">→ ver</a></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+        </div>
+    </main>
+</body>
+</html>

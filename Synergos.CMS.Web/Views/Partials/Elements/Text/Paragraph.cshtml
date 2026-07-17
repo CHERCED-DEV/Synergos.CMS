@@ -1,0 +1,19 @@
+@*
+    elementTextParagraph renderer (Ola 12 Wave 2). SSR-native.
+    Plain-text paragraph; line breaks preserved as <br>.
+    For rich formatting use elementTextRichtext instead.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var text = Model.Value<string>("paragraphText");
+    if (string.IsNullOrWhiteSpace(text)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-paragraph",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-paragraph--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<p class="@classes">@Html.Raw(System.Net.WebUtility.HtmlEncode(text).Replace("\n", "<br />"))</p>

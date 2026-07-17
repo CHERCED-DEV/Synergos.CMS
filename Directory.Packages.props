@@ -1,0 +1,94 @@
+<Project>
+
+  <!--
+    Central Package Management (CPM) — single source of truth for NuGet versions.
+    Governance:
+      - Every PackageReference across all .csproj resolves versions here.
+      - Adding a new package requires: (1) entry here, (2) PackageReference (no Version attr) in .csproj, (3) CHANGELOG.md note.
+      - Version bumps must be intentional — no floating versions (no "13.*").
+    ADR: docs/adr/0004-central-package-management.md
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!-- Umbraco CMS (LTS — pinned, see ADR 0001) -->
+  <ItemGroup>
+    <PackageVersion Include="Umbraco.Cms" Version="13.13.1" />
+  </ItemGroup>
+
+  <!-- Globalization (ICU app-local, required by Umbraco for cross-platform) -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.ICU.ICU4C.Runtime" Version="72.1.0.3" />
+  </ItemGroup>
+
+  <!--
+    uSync — schema source-of-truth (ADR 0008).
+    Package defaults already aligned with ADR 0008:
+      RootFolder=uSync/v9/, ImportAtStartup=None, ExportAtStartup=None,
+      ExportOnSave=All (auto-writes XML on backoffice save — desired for SSoT hygiene).
+    No composer override needed; uSync self-registers via .AddComposers().
+    Latest stable 13.x verified on nuget.org (13.3.2).
+  -->
+  <ItemGroup>
+    <PackageVersion Include="uSync" Version="13.3.2" />
+  </ItemGroup>
+
+  <!-- Testing -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageVersion Include="xunit" Version="2.9.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.2" />
+    <!-- Olas 227-228 (cap-230, ADR 0084): stub library para Umbraco-heavy
+         interfaces (IMemberService + IMember) sin implementar manual los
+         50+ members. Solo en Tests project — no leak a runtime. -->
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+  </ItemGroup>
+
+  <!--
+    HTTP resilience (Ola 113) — Microsoft.Extensions.Http.Resilience.
+    Wraps los 15 named HttpClients (3 webhook + 3 Slack + 3 Discord +
+    3 Teams + 3 cart abandonment scanner) con retry policy estándar
+    (3 retries, exponential backoff, jitter). Cierra "Sin retry/backoff"
+    documentado como negativa en ADRs 0047/0049/0050.
+    Stable 8.x para .NET 8 verificado en nuget.org.
+    ADR 0052 documenta la justificación del package.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="8.10.0" />
+  </ItemGroup>
+
+  <!--
+    TOTP (Time-based One-Time Password, RFC 6238) — Otp.NET para 2FA Members
+    opt-in (Olas 177-180, ADR 0074). Provee TOTP generation/verification +
+    base32 encoding del shared secret + drift window configurable.
+    Stable 1.4.1 verificado en nuget.org.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="Otp.NET" Version="1.4.1" />
+  </ItemGroup>
+
+  <!--
+    QR Code rendering — QRCoder 1.8.0 (Olas 223-224, ADR 0084).
+    Genera SVG string del provisioning URI otpauth:// para que el Member
+    escanee con su app autenticadora en lugar de copiar/pegar manual.
+    Stable 1.8.0 verificado en nuget.org.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="QRCoder" Version="1.8.0" />
+  </ItemGroup>
+
+  <!--
+    Performance benchmarks — BenchmarkDotNet 0.15.8 (Olas 259-260,
+    ADR 0087). Ejecuta el harness via `dotnet run -c Release` desde
+    Synergos.CMS.Benchmarks/. Solo benchmarks-project — no leak a
+    runtime ni tests.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+</Project>
