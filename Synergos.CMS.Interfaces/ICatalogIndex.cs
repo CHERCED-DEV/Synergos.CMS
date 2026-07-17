@@ -37,10 +37,16 @@ public interface ICatalogIndex<TSummary>
     /// <summary>
     /// Aplica <paramref name="query"/> sobre <paramref name="items"/> y devuelve la página
     /// pedida + las facetas + el total. Nunca lanza por filtro vacío ni por catálogo vacío:
-    /// devuelve <c>Items = []</c> y <c>Total = 0</c>. <b>Las facetas declaradas siguen
-    /// llegando</b>, cada una con su lista de valores vacía — la UI necesita saber que la
-    /// columna existe para pintar su título aunque no haya nada que contar.
+    /// devuelve <c>Items = []</c>, <c>Facets = []</c>, <c>Total = 0</c>.
     /// </summary>
+    /// <remarks>
+    /// <b>Solo se emiten las facetas que TIENEN valores.</b> Una columna con título y ningún
+    /// chip no es información, es ruido — y ocurre de verdad: con el catálogo mudado a
+    /// contenido, el rating es UGC derivado y vale 0 en todo, así que "Calificación" salía
+    /// como una columna muerta. Esto no deja al usuario sin salida al filtrar a cero: quien
+    /// le da la salida es el drill-down (cada faceta se cuenta excluyéndose a sí misma), así
+    /// que la columna por la que filtró sigue trayendo sus hermanas con conteo.
+    /// </remarks>
     /// <remarks>
     /// Los ítems entran como parámetro (y no se leen del source aquí dentro) para que el
     /// motor sea una función PURA: mismos ítems + misma query = mismo resultado. Eso lo hace

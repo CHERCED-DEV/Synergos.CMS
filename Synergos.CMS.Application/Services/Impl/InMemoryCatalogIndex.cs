@@ -116,7 +116,21 @@ public sealed class InMemoryCatalogIndex<T> : ICatalogIndex<T>
             }
 
             var capped = universe.Take(_facetUniverseHardCap).ToList();
-            facets.Add(new CatalogFacet(filter.Field, filter.Label, filter.Kind, filter.Facets(capped)));
+            var values = filter.Facets(capped);
+
+            // Una faceta SIN valores no se emite: una columna con título y ningún chip no es
+            // información, es ruido. Pasa de verdad — al mudar la Tienda a contenido, el
+            // rating es UGC derivado y vale 0 en todo, así que "Calificación" salía como una
+            // columna muerta.
+            //
+            // Y NO deja al usuario sin salida cuando filtra a cero: lo que le da la salida es
+            // el DRILL-DOWN (cada faceta se cuenta excluyéndose a sí misma), así que la
+            // columna por la que filtró SIGUE trayendo sus hermanas con conteo. Si una faceta
+            // llega vacía es porque de verdad no hay nada que ofrecer en ella.
+            if (values.Count > 0)
+            {
+                facets.Add(new CatalogFacet(filter.Field, filter.Label, filter.Kind, values));
+            }
         }
 
         return facets;

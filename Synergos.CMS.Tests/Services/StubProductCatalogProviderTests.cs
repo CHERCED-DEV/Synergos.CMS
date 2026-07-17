@@ -26,11 +26,27 @@ public class StubProductCatalogProviderTests
         Assert.Empty(result.Products);
         Assert.Equal(0, result.Total);
 
-        // Las facetas SIGUEN llegando aunque no haya productos, y es deliberado (cambió con
-        // el motor transversal): la UI necesita saber que la columna existe para pintar su
-        // título y sus chips. Antes devolvía [] y el usuario que filtraba a cero se quedaba
-        // sin filtros con los que salir del callejón.
-        Assert.Contains(result.Facets, f => f.Field == "category");
+        // La faceta de categoría SIGUE llegando aunque no haya productos, y es deliberado: el
+        // drill-down la cuenta EXCLUYÉNDOSE a sí misma, así que trae las categorías reales y
+        // es la salida del callejón. Antes devolvía [] y el usuario que filtraba a cero se
+        // quedaba sin filtros.
+        var category = result.Facets.Single(f => f.Field == "category");
+        Assert.NotEmpty(category.Values);
+    }
+
+    [Fact] // Una columna con título y ningún chip no es información, es ruido.
+    public async Task Search_UnaFacetaSinValores_NoSeEmite()
+    {
+        // minRating es un umbral con tramos DECLARADOS. Si ningún producto los alcanza, sus
+        // chips se caen y la faceta queda sin nada que ofrecer → no se emite.
+        // Pasa de verdad: al mudar la Tienda a contenido, el rating es UGC derivado y vale 0
+        // en todo, así que "Calificación" salía como una columna muerta en la PLP.
+        var result = await Make().SearchAsync(WithFacet("minRating", "4.5"));
+
+        // El seed de demo SÍ tiene ratings, así que aquí minRating sigue viva…
+        Assert.Contains(result.Facets, f => f.Field == "minRating");
+        // …y ninguna faceta emitida llega vacía.
+        Assert.All(result.Facets, f => Assert.NotEmpty(f.Values));
     }
 
     [Fact] // happy: query vacía devuelve todo el catálogo + facetas derivadas
