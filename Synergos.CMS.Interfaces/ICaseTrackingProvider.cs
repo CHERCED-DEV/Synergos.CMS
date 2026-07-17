@@ -114,11 +114,19 @@ public interface ICaseTrackingProvider
     Task<CaseDetail?> GetCaseAsync(string caseId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Devuelve los expedientes cuyo solicitante es <paramref name="citizen"/> (email),
-    /// ordenados por fecha de radicación descendente. Vacía (no lanza) si no hay
-    /// coincidencias o el email viene vacío.
+    /// Devuelve los expedientes cuyo solicitante es el member <paramref name="memberKey"/>,
+    /// ordenados por fecha de radicación descendente. Vacía (no lanza) si no tiene ninguno.
     /// </summary>
-    Task<IReadOnlyList<CaseInboxItem>> ListForCitizenAsync(string citizen, CancellationToken cancellationToken = default);
+    /// <remarks>
+    /// <b>Por memberKey y NO por email, y ése es el punto.</b> Antes filtraba por
+    /// <c>Citizen.Email</c>, que lo teclea quien radica: cualquiera listaba los expedientes
+    /// de otro sabiendo su correo (<c>?citizen=…</c>). El memberKey lo sella el servidor
+    /// desde la sesión. Es el IDOR que ADR 0103 cerró en Tienda, cerrado aquí.
+    ///
+    /// <para>Los expedientes de INVITADO (<c>Citizen.MemberKey == null</c>) no entran nunca
+    /// — no tienen dueño a quien pertenecer. Mismo criterio que el historial de órdenes.</para>
+    /// </remarks>
+    Task<IReadOnlyList<CaseInboxItem>> ListForMemberAsync(Guid memberKey, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Devuelve la cola del funcionario filtrada por <paramref name="agency"/> (entidad,

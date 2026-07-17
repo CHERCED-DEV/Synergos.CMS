@@ -189,8 +189,16 @@ public sealed class StubApplicationService : IApplicationService
             paymentSessionId = session.SessionId;
         }
 
-        var cleanCitizen = new GovCitizen(
-            citizen.Name.Trim(), citizen.Email.Trim(), citizen.DocumentId?.Trim(), citizen.Phone?.Trim());
+        // `with` y NO `new GovCitizen(...)`: reconstruir por posición TIRA en silencio todo
+        // campo que no se liste — así se perdía el MemberKey (el dueño del expediente), y el
+        // saneo dejaba a todo el mundo sin bandeja. Con `with` solo se toca lo que se sanea.
+        var cleanCitizen = citizen with
+        {
+            Name = citizen.Name.Trim(),
+            Email = citizen.Email.Trim(),
+            DocumentId = citizen.DocumentId?.Trim(),
+            Phone = citizen.Phone?.Trim(),
+        };
 
         var state = new CaseState(
             CaseId: caseId,

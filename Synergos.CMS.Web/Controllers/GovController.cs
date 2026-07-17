@@ -46,6 +46,7 @@ public sealed class GovController : ControllerBase
     private readonly IMessagingService _messaging;
     private readonly IGovFeeCalculator _fees;
     private readonly IPriceFormatter _priceFormatter;
+    private readonly IMemberAccessGate _gate;
 
     public GovController(
         ITramiteCatalogProvider catalog,
@@ -55,7 +56,8 @@ public sealed class GovController : ControllerBase
         IDocumentUploadService documents,
         IMessagingService messaging,
         IGovFeeCalculator fees,
-        IPriceFormatter priceFormatter)
+        IPriceFormatter priceFormatter,
+        IMemberAccessGate gate)
     {
         _catalog = catalog;
         _applications = applications;
@@ -65,6 +67,47 @@ public sealed class GovController : ControllerBase
         _messaging = messaging;
         _fees = fees;
         _priceFormatter = priceFormatter;
+        _gate = gate;
+    }
+
+    // ── T2 Gobierno (ADR 0103, calcado de ShopCatalogController) ────────────
+    // La identidad del ciudadano sale del GATE (cookie de sesión), NUNCA del body ni del
+    // query. Antes salía del formulario: cualquiera radicaba a nombre de otro poniendo su
+    // correo, y cualquiera listaba los expedientes ajenos con ?citizen=<email>.
+
+    /// <summary>
+    /// Exige un Member autenticado. Devuelve (401, default) si es anónimo, o (null, actorKey)
+    /// con la key server-trusted si hay sesión. Molde de <c>ShopCatalogController</c>.
+    /// </summary>
+    private (IActionResult? denied, Guid actorKey) RequireMember()
+    {
+        if (!_gate.IsAuthenticated || _gate.CurrentMemberKey is not Guid actorKey)
+        {
+            return (Unauthorized(new { error = "Se requiere iniciar sesión." }), default);
+        }
+        return (null, actorKey);
+    }
+
+    /// <summary>
+    /// Guard de ownership del expediente.
+    /// </summary>
+    /// <remarks>
+    /// <b>Aquí NO hay excepción de invitado, al revés que en Tienda</b>, y la diferencia es
+    /// el id: el <c>orderRef</c> es <c>ord_{guid:N}</c> —inadivinable— así que funciona como
+    /// credencial bearer y el autoservicio de invitado es seguro. El radicado es
+    /// <c>SG-2026-000001</c>: <b>SECUENCIAL</b>. Sin dueño, o el expediente es de todos (se
+    /// enumera contando) o de nadie. Se elige de nadie.
+    ///
+    /// <para><c>StatusCode(403)</c> y NO <c>Forbid()</c>: con auth de members
+    /// <c>Forbid()</c> REDIRIGE al login en vez de denegar.</para>
+    /// </remarks>
+    private IActionResult? DenyIfForeignCase(CaseDetail detail, Guid actorKey)
+    {
+        if (detail.Citizen.MemberKey == actorKey || _gate.HasAnyRole("admin"))
+        {
+            return null;
+        }
+        return StatusCode(StatusCodes.Status403Forbidden, new { error = "El expediente no es suyo." });
     }
 
     // ══════════════════════ CIUDADANO ══════════════════════
@@ -157,10 +200,14 @@ public sealed class GovController : ControllerBase
 
     // ── 5. Mis solicitudes (carpeta del ciudadano) ─────────────────────
     // GET /api/gov/applications?citizen= → { applications:[...] }
+    // El ?citizen=<email> DESAPARECE: era el IDOR. La bandeja es la del member de la sesión.
     [HttpGet("applications")]
-    public async Task<IActionResult> Applications([FromQuery] string? citizen, CancellationToken cancellationToken)
+    public async Task<IActionResult> Applications(CancellationToken cancellationToken)
     {
-        var items = await _tracking.ListForCitizenAsync(citizen ?? string.Empty, cancellationToken);
+        var (denied, actorKey) = RequireMember();
+        if (denied is not null) { return denied; }
+
+        var items = await _tracking.ListForMemberAsync(actorKey, cancellationToken);
         return Ok(new ApplicationsResponse(items.Select(ToApplicationSummaryFromInbox).ToList()));
     }
 
@@ -169,11 +216,17 @@ public sealed class GovController : ControllerBase
     [HttpGet("application/{id}")]
     public async Task<IActionResult> Application(string id, CancellationToken cancellationToken)
     {
+        var (denied, actorKey) = RequireMember();
+        if (denied is not null) { return denied; }
+
         var detail = await _tracking.GetCaseAsync(id ?? string.Empty, cancellationToken);
         if (detail is null)
         {
             return NotFound(new { error = $"Solicitud '{id}' no encontrada." });
         }
+
+        var foreign = DenyIfForeignCase(detail, actorKey);
+        if (foreign is not null) { return foreign; }
 
         var messages = await LoadMessagesAsync(detail, cancellationToken);
         return Ok(new ApplicationDetailResponse(new ApplicationDetailDto(
@@ -196,10 +249,24 @@ public sealed class GovController : ControllerBase
         [FromBody] DocumentRequest? request,
         CancellationToken cancellationToken)
     {
+        // Autenticar ANTES de mirar el cuerpo: no se procesa input de un anónimo. Adjuntar es
+        // ESCRIBIR sobre el expediente, así que exige ser su dueño — sin esto cualquiera
+        // ensucia el expediente de otro contando radicados.
+        var (denied, actorKey) = RequireMember();
+        if (denied is not null) { return denied; }
+
         if (request is null || string.IsNullOrWhiteSpace(request.ApplicationId) || string.IsNullOrWhiteSpace(request.Name))
         {
             return BadRequest(new { error = "applicationId y name son requeridos." });
         }
+
+        var target = await _tracking.GetCaseAsync(request.ApplicationId.Trim(), cancellationToken);
+        if (target is null)
+        {
+            return NotFound(new { error = $"Expediente '{request.ApplicationId}' no encontrado." });
+        }
+        var foreign = DenyIfForeignCase(target, actorKey);
+        if (foreign is not null) { return foreign; }
 
         CitizenDocumentRef doc;
         try
@@ -381,17 +448,37 @@ public sealed class GovController : ControllerBase
 
     // Resuelve el ciudadano desde las respuestas del formulario (once-only lo prellena):
     // nombre + correo + documento + teléfono si el trámite los pidió.
-    private static GovCitizen ResolveCitizen(IReadOnlyDictionary<string, string> answers)
+    /// <summary>
+    /// El solicitante del expediente. <b>Con sesión, la identidad la sella el SERVIDOR</b>
+    /// (gate → cookie) y se ignoran el nombre/correo del formulario; sin sesión, invitado con
+    /// lo que se tecleó y sin dueño.
+    /// </summary>
+    /// <remarks>
+    /// Anti-tampering: si el correo saliera del formulario, cualquiera radicaría a nombre de
+    /// otro. Calco literal del checkout de Tienda (ADR 0103). La cédula y el teléfono SÍ
+    /// siguen viniendo del formulario: son datos del trámite, no identidad.
+    /// </remarks>
+    private GovCitizen ResolveCitizen(IReadOnlyDictionary<string, string> answers)
     {
         answers.TryGetValue("nombreCompleto", out var name);
         answers.TryGetValue("correo", out var email);
         answers.TryGetValue("cedula", out var doc);
         answers.TryGetValue("telefono", out var phone);
-        return new GovCitizen(
-            name ?? string.Empty,
-            email ?? string.Empty,
-            string.IsNullOrWhiteSpace(doc) ? null : doc,
-            string.IsNullOrWhiteSpace(phone) ? null : phone);
+
+        var documentId = string.IsNullOrWhiteSpace(doc) ? null : doc;
+        var phoneNumber = string.IsNullOrWhiteSpace(phone) ? null : phone;
+
+        if (_gate.IsAuthenticated && _gate.CurrentMemberKey is Guid memberKey)
+        {
+            return new GovCitizen(
+                Name: _gate.CurrentMemberDisplayName ?? name ?? string.Empty,
+                Email: _gate.CurrentMemberEmail ?? email ?? string.Empty,
+                DocumentId: documentId,
+                Phone: phoneNumber,
+                MemberKey: memberKey);
+        }
+
+        return new GovCitizen(name ?? string.Empty, email ?? string.Empty, documentId, phoneNumber);
     }
 
     // La correspondencia del expediente vive en IMessagingService (contexto 'gov',

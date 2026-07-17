@@ -32,11 +32,12 @@ public sealed class StubCaseTrackingProvider : ICaseTrackingProvider
     public Task<CaseDetail?> GetCaseAsync(string caseId, CancellationToken cancellationToken = default)
         => Task.FromResult(_cases.FindCase(caseId));
 
-    public Task<IReadOnlyList<CaseInboxItem>> ListForCitizenAsync(string citizen, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<CaseInboxItem>> ListForMemberAsync(Guid memberKey, CancellationToken cancellationToken = default)
     {
+        // Por MemberKey, no por email: el correo lo teclea quien radica y es enumerable.
+        // Los expedientes de invitado (MemberKey null) no entran — no tienen dueño.
         IReadOnlyList<CaseInboxItem> inbox = _cases.ListCasesWithAgency()
-            .Where(x => !string.IsNullOrWhiteSpace(citizen)
-                && string.Equals(x.Case.Citizen.Email, citizen.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Where(x => x.Case.Citizen.MemberKey == memberKey)
             .OrderByDescending(x => x.Case.RadicadoAt)
             .Select(x => ToInboxItem(x.Case))
             .ToList();

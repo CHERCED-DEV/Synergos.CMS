@@ -40,11 +40,11 @@ public class StubCaseTrackingProviderTests
         Assert.Null(await tracking.GetCaseAsync(string.Empty));
     }
 
-    [Fact] // empty: ciudadano sin expedientes ve carpeta vacía (no lanza)
-    public async Task ListForCitizen_Unknown_ReturnsEmpty()
+    [Fact] // empty: member sin expedientes ve carpeta vacía (no lanza)
+    public async Task ListForMember_Unknown_ReturnsEmpty()
     {
         var (tracking, _) = Make();
-        var inbox = await tracking.ListForCitizenAsync("nadie@correo.co");
+        var inbox = await tracking.ListForMemberAsync(Guid.NewGuid());
         Assert.Empty(inbox);
     }
 
@@ -77,16 +77,19 @@ public class StubCaseTrackingProviderTests
         Assert.Equal(byId!.CaseId, byRadicado!.CaseId);
     }
 
-    [Fact] // filter: el ciudadano ve SOLO sus expedientes (por email)
-    public async Task ListForCitizen_SeesOnlyTheirCases()
+    [Fact] // Los expedientes SEMBRADOS son de una ciudadana ficticia sin cuenta: no tienen
+           // dueño y no entran en la carpeta de nadie. Es correcto, y cambió con T2.
+    public async Task ListForMember_LosExpedientesSembrados_NoSonDeNadie()
     {
         var (tracking, _) = Make();
 
-        var inbox = await tracking.ListForCitizenAsync("maria.lopez@correo.co");
+        // Antes bastaba con teclear "maria.lopez@correo.co" para ver sus expedientes.
+        Assert.Empty(await tracking.ListForMemberAsync(Guid.NewGuid()));
 
-        var item = Assert.Single(inbox);
-        Assert.Equal("case-1001", item.CaseId);
-        Assert.Equal("María Fernanda López", item.CitizenName);
+        // Pero SIGUEN existiendo para la cola del funcionario, que es otra superficie y no
+        // filtra por ciudadano — el contenido de demo no se pierde.
+        var queue = await tracking.GetQueueAsync(null, null);
+        Assert.Contains(queue, i => i.CaseId == "case-1001");
     }
 
     [Fact] // filter: la cola completa del funcionario ordena por prioridad y SLA
@@ -120,27 +123,57 @@ public class StubCaseTrackingProviderTests
         Assert.All(approved, i => Assert.Equal(CaseStatus.Resuelto, i.Status));
     }
 
-    [Fact] // filter: los expedientes radicados nuevos aparecen en la carpeta del ciudadano
-    public async Task ListForCitizen_AfterRadicar_IncludesNewCase()
+    private static System.Collections.Generic.Dictionary<string, string> Answers(string email) => new()
+    {
+        ["nombreCompleto"] = "Ana Torres",
+        ["cedula"] = "1030567890",
+        ["direccion"] = "Cll 45 # 13-25",
+        ["correo"] = email,
+    };
+
+    [Fact] // filter: los expedientes radicados nuevos aparecen en la carpeta de SU member
+    public async Task ListForMember_AfterRadicar_IncludesNewCase()
     {
         var (tracking, cases) = Make();
-        var citizen = new GovCitizen("Ana Torres", "ana.torres@correo.co");
+        var ana = Guid.NewGuid();
         var result = await cases.RadicarAsync(
             "trm-certificado-residencia",
-            new System.Collections.Generic.Dictionary<string, string>
-            {
-                ["nombreCompleto"] = "Ana Torres",
-                ["cedula"] = "1030567890",
-                ["direccion"] = "Cll 45 # 13-25",
-                ["correo"] = "ana.torres@correo.co",
-            },
-            citizen);
+            Answers("ana.torres@correo.co"),
+            new GovCitizen("Ana Torres", "ana.torres@correo.co", MemberKey: ana));
 
-        var inbox = await tracking.ListForCitizenAsync("ana.torres@correo.co");
+        var inbox = await tracking.ListForMemberAsync(ana);
 
         var item = Assert.Single(inbox);
         Assert.Equal(result.Case.CaseId, item.CaseId);
         Assert.Equal(CaseStatus.Radicado, item.Status);
+    }
+
+    [Fact] // EL IDOR: saber el correo de alguien ya no da acceso a sus expedientes.
+    public async Task ListForMember_ConOtraIdentidad_NoVeLoAjeno()
+    {
+        var (tracking, cases) = Make();
+        var ana = Guid.NewGuid();
+        var beto = Guid.NewGuid();
+
+        await cases.RadicarAsync("trm-certificado-residencia", Answers("ana.torres@correo.co"),
+            new GovCitizen("Ana Torres", "ana.torres@correo.co", MemberKey: ana));
+
+        // Beto conoce el correo de Ana — antes bastaba con eso (?citizen=ana.torres@correo.co).
+        Assert.Empty(await tracking.ListForMemberAsync(beto));
+        Assert.Single(await tracking.ListForMemberAsync(ana));
+    }
+
+    [Fact] // Un expediente de INVITADO no tiene dueño: no entra en la carpeta de nadie.
+    public async Task ListForMember_ExpedienteDeInvitado_NoEntraEnNingunaCarpeta()
+    {
+        var (tracking, cases) = Make();
+
+        // Sin sesión → MemberKey null. El radicado (SG-2026-000001) es secuencial, así que
+        // no puede servir de credencial: sin dueño, el expediente no es de nadie.
+        await cases.RadicarAsync("trm-certificado-residencia", Answers("invitado@correo.co"),
+            new GovCitizen("Invitado", "invitado@correo.co"));
+
+        Assert.Empty(await tracking.ListForMemberAsync(Guid.NewGuid()));
     }
 
     [Fact] // idempotent: leer la cola dos veces devuelve lo mismo

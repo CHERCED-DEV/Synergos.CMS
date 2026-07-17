@@ -4,11 +4,28 @@ namespace Synergos.CMS.Interfaces;
 /// Identidad del ciudadano que radica un trámite (once-only: la UI prellena lo que el
 /// Estado ya conoce). Es el "solicitante" del expediente.
 /// </summary>
+/// <param name="MemberKey">
+/// La identidad SERVER-TRUSTED del solicitante, sellada desde la sesión y <b>nunca</b> del
+/// formulario. Es el dueño del expediente. Null = radicado sin sesión (invitado).
+/// </param>
+/// <remarks>
+/// <b>Por qué el <paramref name="MemberKey"/> y no basta el <paramref name="Email"/>:</b> el
+/// correo lo teclea quien radica, así que es enumerable y suplantable — cualquiera radica a
+/// nombre de otro poniendo su correo, y cualquiera lista los expedientes ajenos sabiéndolo.
+/// Es el mismo IDOR que ADR 0103 cerró en Tienda ("identidad server-trusted, no email
+/// enumerable"); <c>GovCitizen</c> es el análogo exacto de <c>ShopCustomer</c>.
+///
+/// <para><b>Y aquí el radicado NO rescata nada</b>, al revés que en Tienda: el
+/// <c>orderRef</c> es <c>ord_{guid:N}</c> —inadivinable— y por eso funciona como credencial
+/// bearer que sostiene el autoservicio de invitado. El radicado es <c>SG-2026-000001</c>:
+/// SECUENCIAL. Se enumera contando, así que no puede ser la llave de nada.</para>
+/// </remarks>
 public sealed record GovCitizen(
     string Name,
     string Email,
     string? DocumentId = null,
-    string? Phone = null);
+    string? Phone = null,
+    Guid? MemberKey = null);
 
 /// <summary>
 /// Resultado de radicar una solicitud: el expediente recién creado
