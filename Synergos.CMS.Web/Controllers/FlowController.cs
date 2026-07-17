@@ -142,13 +142,6 @@ public sealed class FlowController : ControllerBase
     private void ClearReturnUrlCookie(string flowKey) =>
         Response.Cookies.Delete(ReturnUrlCookieName(flowKey), new Microsoft.AspNetCore.Http.CookieOptions { Path = "/" });
 
-    private static string ResolveReturnUrl(string? returnUrl)
-    {
-        if (!string.IsNullOrWhiteSpace(returnUrl) &&
-            Uri.TryCreate(returnUrl, UriKind.Relative, out _))
-        {
-            return returnUrl;
-        }
-        return "/";
-    }
+    private static string ResolveReturnUrl(string? returnUrl) =>
+        LocalReturnUrl.Sanitize(returnUrl);
 }

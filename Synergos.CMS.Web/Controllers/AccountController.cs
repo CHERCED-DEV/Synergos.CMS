@@ -68,7 +68,7 @@ public sealed class AccountController : Controller
     public IActionResult Login([FromQuery] string? returnUrl = null,
         [FromQuery(Name = "error")] string? errorCode = null)
     {
-        ViewData["ReturnUrl"] = SafeReturnUrl(returnUrl);
+        ViewData["ReturnUrl"] = LocalReturnUrl.Sanitize(returnUrl);
         ViewData["ErrorCode"] = errorCode;
         return View();
     }
@@ -139,7 +139,7 @@ public sealed class AccountController : Controller
         }
 
         _analytics.Track("account.login");
-        return Redirect(SafeReturnUrl(returnUrl));
+        return Redirect(LocalReturnUrl.Sanitize(returnUrl));
     }
 
     /// <summary>
@@ -222,7 +222,7 @@ public sealed class AccountController : Controller
             ["method"] = verifyResult == VerificationResult.RecoveryConsumed ? "recovery" : "totp",
         });
 
-        return Redirect(SafeReturnUrl(pending.ReturnUrl));
+        return Redirect(LocalReturnUrl.Sanitize(pending.ReturnUrl));
     }
 
     [HttpGet("register")]
@@ -280,7 +280,7 @@ public sealed class AccountController : Controller
     {
         await _authService.LogoutAsync(cancellationToken);
         _analytics.Track("account.logout");
-        return Redirect(SafeReturnUrl(returnUrl));
+        return Redirect(LocalReturnUrl.Sanitize(returnUrl));
     }
 
     [HttpGet("profile")]
@@ -418,19 +418,6 @@ public sealed class AccountController : Controller
 
         _analytics.Track("account.password-reset-completed");
         return RedirectToAction(nameof(Login), new { msg = "password-reset-completed" });
-    }
-
-    private static string SafeReturnUrl(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return "/";
-        }
-        if (Uri.TryCreate(raw, UriKind.Relative, out _))
-        {
-            return raw;
-        }
-        return "/";
     }
 
     /// <summary>

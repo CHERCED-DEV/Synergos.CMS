@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Synergos.CMS.Web.Services;
 using Umbraco.Cms.Web.Common.Security;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -61,16 +62,9 @@ public sealed class MemberController : ControllerBase
         return Redirect(ResolveReturnUrl(returnUrl));
     }
 
-    private static string ResolveReturnUrl(string? returnUrl)
-    {
-        // Only accept local paths — protect against open redirect.
-        if (!string.IsNullOrWhiteSpace(returnUrl) &&
-            Uri.TryCreate(returnUrl, UriKind.Relative, out _))
-        {
-            return returnUrl;
-        }
-        return "/";
-    }
+    // Only accept local paths — protect against open redirect.
+    private static string ResolveReturnUrl(string? returnUrl) =>
+        LocalReturnUrl.Sanitize(returnUrl);
 
     private static string BuildFailureRedirect(string? returnUrl)
     {
