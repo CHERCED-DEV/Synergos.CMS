@@ -110,6 +110,37 @@ public sealed class GovController : ControllerBase
         return StatusCode(StatusCodes.Status403Forbidden, new { error = "El expediente no es suyo." });
     }
 
+    /// <summary>
+    /// Rol(es) que dan acceso a la consola del funcionario. <c>funcionario</c> es el rol de
+    /// dominio (member group de la entidad, patrón <c>doctor,nurse,reception</c> de Healthcare);
+    /// <c>admin</c> entra como superusuario, igual que en el override de ownership.
+    /// </summary>
+    private const string OfficerRolesCsv = "funcionario,admin";
+
+    /// <summary>
+    /// Exige un funcionario para la cola/expediente/decisión. 401 si es anónimo, 403 si está
+    /// autenticado pero SIN el rol. Molde de <c>DashboardApiController.Deny</c>.
+    /// </summary>
+    /// <remarks>
+    /// Estas 3 rutas exponen PII de OTROS ciudadanos (cédula, correo, teléfono en las
+    /// respuestas del formulario) y permiten decidir expedientes — al revés que la carpeta del
+    /// ciudadano, aquí NO basta con estar logueado: un ciudadano cualquiera no es funcionario.
+    /// <para><c>StatusCode(403)</c> y NO <c>Forbid()</c>: con auth de members <c>Forbid()</c>
+    /// REDIRIGE al login en vez de denegar (misma razón que <see cref="DenyIfForeignCase"/>).</para>
+    /// </remarks>
+    private IActionResult? RequireOfficer()
+    {
+        if (!_gate.IsAuthenticated)
+        {
+            return Unauthorized(new { error = "Inicie sesión como funcionario." });
+        }
+        if (!_gate.HasAnyRole(OfficerRolesCsv))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Su cuenta no tiene permiso de funcionario." });
+        }
+        return null;
+    }
+
     // ══════════════════════ CIUDADANO ══════════════════════
 
     // ── 1. Catálogo de trámites ─────────────────────────────────────────
@@ -284,22 +315,27 @@ public sealed class GovController : ControllerBase
     // ══════════════════════ FUNCIONARIO ══════════════════════
 
     // ── 8. Cola del funcionario ─────────────────────────────────────────
-    // GET /api/gov/queue?agency=&status= → { cases:[...] }
+    // GET /api/gov/queue?agency=&status= → { cases:[...] }   🔒 rol funcionario
     [HttpGet("queue")]
     public async Task<IActionResult> Queue(
         [FromQuery] string? agency,
         [FromQuery] string? status,
         CancellationToken cancellationToken)
     {
+        if (RequireOfficer() is { } denied) { return denied; }
+
         var cases = await _tracking.GetQueueAsync(agency, status, cancellationToken);
         return Ok(new QueueResponse(cases.Select(ToQueueDto).ToList()));
     }
 
     // ── 9. Detalle del expediente (funcionario) ─────────────────────────
     // GET /api/gov/case/{id} → { case:{ application, answers, documents, timeline, decision? } }
+    // 🔒 rol funcionario — expone PII (cédula/correo/teléfono) de OTROS ciudadanos.
     [HttpGet("case/{id}")]
     public async Task<IActionResult> Case(string id, CancellationToken cancellationToken)
     {
+        if (RequireOfficer() is { } denied) { return denied; }
+
         var detail = await _tracking.GetCaseAsync(id ?? string.Empty, cancellationToken);
         if (detail is null)
         {
@@ -310,12 +346,14 @@ public sealed class GovController : ControllerBase
     }
 
     // ── 10. Decisión del funcionario (máquina de estados auditada) ──────
-    // POST /api/gov/decision { caseId, outcome, note } → { case:{...} }
+    // POST /api/gov/decision { caseId, outcome, note } → { case:{...} }   🔒 rol funcionario
     [HttpPost("decision")]
     public async Task<IActionResult> Decision(
         [FromBody] DecisionRequest? request,
         CancellationToken cancellationToken)
     {
+        if (RequireOfficer() is { } denied) { return denied; }
+
         if (request is null || string.IsNullOrWhiteSpace(request.CaseId) || string.IsNullOrWhiteSpace(request.Outcome))
         {
             return BadRequest(new { error = "caseId y outcome (approve | reject | request-info) son requeridos." });
