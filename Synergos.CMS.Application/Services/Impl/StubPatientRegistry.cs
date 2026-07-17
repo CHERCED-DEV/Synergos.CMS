@@ -7,9 +7,17 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// Default <see cref="IPatientRegistry"/> — padrón de pacientes STUB del dashboard
 /// EHR-lite (OLA 5), calcando <c>StubCourseCatalogProvider</c>: sirve un padrón
 /// sembrado (<see cref="EhrDemoSeed"/>) en memoria para que la demo corra
-/// end-to-end sin DB. Lógica pura (ADR 0002) — el adapter real (HIS/DB) reemplaza
-/// el seam sin tocar el controller.
+/// end-to-end sin DB. Lógica pura (ADR 0002).
 /// </summary>
+/// <remarks>
+/// ⛔ <strong>Este seam NO admite un adapter HIS/DB real "sin tocar el controller".</strong>
+/// Su consumidor (<c>EhrController</c>, <c>/api/ehr</c>) es la capa de demo y sirve
+/// TODOS sus endpoints de forma anónima; eso solo es seguro mientras la data sea
+/// fabricada. Sustituir esta impl por un padrón real publicaría el censo entero a
+/// cualquier anónimo, con build verde y sin que el diff toque una sola línea del
+/// controller. El padrón de PRODUCCIÓN es <c>IPatientRepository</c> detrás de
+/// <c>/api/healthcare</c>, que gatea con <c>IPhiAccessGuard</c> (ADR 0098).
+/// </remarks>
 public sealed class StubPatientRegistry : IPatientRegistry
 {
     private readonly ConcurrentDictionary<string, EhrPatient> _patients;

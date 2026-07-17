@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Filters;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -12,6 +13,24 @@ namespace Synergos.CMS.Web.Controllers;
 /// (<c>/api/healthcare</c>, ADR 0098).
 /// </summary>
 /// <remarks>
+/// <strong>DEV-ONLY (<see cref="DevSeedOnlyAttribute"/>, ADR 0013).</strong> Estos
+/// endpoints son anónimos a propósito — la premisa del demo es entrar y caer en el
+/// panel sin login. Eso es aceptable SOLO porque la data es fabricada
+/// (<c>EhrDemoSeed</c>, 5 pacientes de mentira) y porque el flag los hace 404 fuera
+/// de dev. Las dos mitades de esa frase se sostienen mutuamente:
+/// <list type="bullet">
+/// <item><strong>PHI real NUNCA pasa por aquí.</strong> Va por <c>/api/healthcare</c>,
+///   que gatea con <see cref="IPhiAccessGuard"/> (rol + pertenencia + consentimiento,
+///   auditado, fail-closed). Enchufar un adapter HIS/DB real detrás de estos seams
+///   publicaría el censo entero a cualquier anónimo, con build verde y sin que nadie
+///   toque este archivo.</item>
+/// <item>Si algún día este dashboard debe servir pacientes reales, NO basta con pedir
+///   login: <c>patientId</c>/<c>patient</c>/<c>user</c>/<c>provider</c> los pone el
+///   caller, así que cualquier member autenticado leería historias ajenas (el mismo
+///   IDOR que T2 cerró en Tienda). Exige partir las dos superficies que hoy conviven
+///   aquí — la clínica (rol) y el portal del paciente (pertenencia) — y es una
+///   decisión de arquitectura, no un parche.</item>
+/// </list>
 /// La capa Web SOLO orquesta y mapea a DTOs JSON estables — toda la lógica vive en
 /// los seams (Application, sin Umbraco — ADR 0002):
 /// <list type="bullet">
@@ -28,6 +47,7 @@ namespace Synergos.CMS.Web.Controllers;
 /// </remarks>
 [ApiController]
 [Route("api/ehr")]
+[DevSeedOnly]
 public sealed class EhrController : ControllerBase
 {
     /// <summary>Contexto de los hilos de mensajería del In Basket clínico (SH-7 v3).</summary>
