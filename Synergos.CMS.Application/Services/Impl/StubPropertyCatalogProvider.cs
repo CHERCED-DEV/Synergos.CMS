@@ -132,9 +132,15 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
     /// <summary>
     /// <see cref="CatalogFacet"/> → <see cref="PropertyFacet"/>. El Label VIAJA: sin él, el
     /// chip de habitaciones se pinta con el número pelado ("3") mientras significa "3 o más".
+    /// El Kind VIAJA por la misma razón: `beds` es un umbral, y sin decírselo a la UI ésta
+    /// pintaba checkboxes — marcar "4+" y "1+" a la vez devolvía TODO (gana el menos
+    /// restrictivo) con los dos chips encendidos.
     /// </summary>
     private static PropertyFacet ToPropertyFacet(CatalogFacet f)
-        => new(f.Field, f.Values.Select(v => new PropertyFacetValue(v.Value, v.Count, v.Label)).ToList());
+        => new(
+            f.Field,
+            f.Values.Select(v => new PropertyFacetValue(v.Value, v.Count, v.Label)).ToList(),
+            f.Kind.ToString());
 
     public Task<PropertyDetail?> GetListingAsync(string listingId, CancellationToken cancellationToken = default)
     {

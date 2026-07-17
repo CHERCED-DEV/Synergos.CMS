@@ -44,7 +44,16 @@ public sealed record PropertyListing(
 /// filtros: cuántos listados hay por tipo / ciudad / barrio / nº de habitaciones).
 /// Se deriva del universo de listados que matchea el resto de los criterios.
 /// </summary>
-public sealed record PropertyFacet(string Name, IReadOnlyList<PropertyFacetValue> Values);
+/// <param name="Kind">
+/// Cómo se comporta el filtro (<c>MultiSelect</c>|<c>SingleSelect</c>|<c>Threshold</c>|
+/// <c>Range</c>), para que la UI sepa si pintar checkboxes o radios. String y no enum: es un
+/// valor de wire, y un Kind nuevo no debe romper un cliente viejo (igual que
+/// <see cref="ProductFacet.Kind"/>). Opcional para no tocar a los llamadores que no lo saben.
+/// </param>
+public sealed record PropertyFacet(
+    string Name,
+    IReadOnlyList<PropertyFacetValue> Values,
+    string Kind = "MultiSelect");
 
 /// <summary>Un valor de faceta con su conteo (e.g. <c>"apartamento" → 12</c>).</summary>
 /// <param name="Label">

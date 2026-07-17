@@ -413,7 +413,11 @@ public sealed class RealtyController : ControllerBase
         Name: f.Name,
         // La UI lee `facets[].key` + `values[].label`; se conservan Name/Value legacy.
         Key: f.Name,
-        Values: f.Values.Select(v => new FacetValueDto(v.Value, v.Label ?? v.Value, v.Count)).ToList());
+        Values: f.Values.Select(v => new FacetValueDto(v.Value, v.Label ?? v.Value, v.Count)).ToList(),
+        // La UI lee `facets[].kind` (realty-api.client.ts normalizeFacets) para saber si la
+        // faceta es de valor único. Sin esto, `beds` llegaba sin kind → checkbox → el usuario
+        // marcaba "4+ habitaciones" y "1+ habitación" y veía el catálogo entero.
+        Kind: f.Kind);
 
     // ── Helpers de reshape (vocabulario + derivaciones para la UI) ──────
 
@@ -569,7 +573,11 @@ public sealed class RealtyController : ControllerBase
 
     public sealed record FacetValueDto(string Value, string Label, int Count);
 
-    public sealed record FacetDto(string Name, string Key, IReadOnlyList<FacetValueDto> Values);
+    public sealed record FacetDto(
+        string Name,
+        string Key,
+        IReadOnlyList<FacetValueDto> Values,
+        string Kind = "MultiSelect");
 
     public sealed record ListingsResponse(
         IReadOnlyList<ListingDto> Listings,
