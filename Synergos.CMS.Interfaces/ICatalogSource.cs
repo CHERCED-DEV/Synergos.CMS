@@ -33,7 +33,11 @@ public interface ICatalogSource<T>
     /// Catálogo vacío devuelve <c>[]</c>, nunca null ni excepción.
     /// </summary>
     /// <param name="scope">
-    /// El siteRoot, resuelto por <see cref="ICatalogScopeResolver"/>. Null = sin acotar.
+    /// El siteRoot al que acotar, si el llamador lo conoce. <b>Una impl puede ignorarlo</b>
+    /// cuando su scope no es del request sino del deploy: <c>UmbracoProductCatalogSource</c>
+    /// lo lee de <c>Synergos:Catalog:Scopes</c>, porque "bajo qué siteRoot vive la tienda" no
+    /// cambia entre peticiones y tomarlo del parámetro obligaría a cada llamador a acertar —
+    /// y el que se equivoque sirve apartamentos entre los productos, en silencio.
     /// </param>
     /// <param name="cancellationToken">Cancelación del request en curso.</param>
     Task<IReadOnlyList<T>> GetAllAsync(string? scope = null, CancellationToken cancellationToken = default);

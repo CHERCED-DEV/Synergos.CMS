@@ -39,7 +39,20 @@ public sealed class StubProductCatalogProvider : IProductCatalogProvider
     /// seam se pueda construir sin cablear nada (tests y el registro por defecto).
     /// </summary>
     public StubProductCatalogProvider()
-        : this(new ShopDemoCatalogSource(), new InMemoryCatalogIndex<CatalogProduct>(Descriptor, new CatalogSettings()))
+        : this(new ShopDemoCatalogSource(), new CatalogSettings())
+    {
+    }
+
+    /// <summary>
+    /// Ctor de producción: el composer elige la FUENTE (demo o CMS) y pasa los ajustes; el
+    /// motor lo monta la fachada.
+    /// </summary>
+    /// <remarks>
+    /// El descriptor sigue siendo <c>internal</c> a propósito: es un detalle de esta fachada,
+    /// no algo que el composer deba conocer. Un composer que arma motores sabe demasiado.
+    /// </remarks>
+    public StubProductCatalogProvider(ICatalogSource<CatalogProduct> source, CatalogSettings settings)
+        : this(source, new InMemoryCatalogIndex<CatalogProduct>(Descriptor, settings))
     {
     }
 

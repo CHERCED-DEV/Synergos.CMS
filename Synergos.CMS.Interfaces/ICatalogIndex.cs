@@ -70,14 +70,12 @@ public interface ICatalogIndex<TSummary>
 /// <param name="Take">Tamaño de página. Se capa a <c>CatalogSettings.MaxTake</c>.</param>
 /// <remarks>
 /// <b>Aquí NO hay <c>Scope</c>, y es deliberado.</b> Acotar por siteRoot es decidir QUÉ ÍTEMS
-/// existen, y eso es trabajo de <see cref="ICatalogSource{T}.GetAllAsync"/>, que ya recibe el
-/// scope. El motor es puro sobre los ítems que le entregan: si además tuviera un
-/// <c>Scope</c>, habría dos sitios donde acotar y un implementador podría creer que rellenar
-/// este basta — pasaría el scope aquí, el motor lo ignoraría por no tener de dónde leer el
-/// siteRoot de un <c>T</c> cualquiera, y <c>/api/shop/search</c> seguiría sirviendo
-/// apartamentos EN SILENCIO. Un campo que promete aislamiento y no lo da es peor que no
-/// tenerlo. El scope viaja: controller → <see cref="ICatalogScopeResolver"/> →
-/// <c>GetAllAsync(scope)</c>.
+/// existen, y eso es trabajo de la <see cref="ICatalogSource{T}"/>. El motor es puro sobre
+/// los ítems que le entregan: si además tuviera un <c>Scope</c>, habría dos sitios donde
+/// acotar y un implementador podría creer que rellenar este basta — pasaría el scope aquí, el
+/// motor lo ignoraría por no tener de dónde leer el siteRoot de un <c>T</c> cualquiera, y
+/// <c>/api/shop/search</c> seguiría sirviendo apartamentos EN SILENCIO. Un campo que promete
+/// aislamiento y no lo da es peor que no tenerlo.
 /// </remarks>
 public sealed record CatalogQuery(
     string? Text = null,

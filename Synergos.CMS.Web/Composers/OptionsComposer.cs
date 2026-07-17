@@ -57,6 +57,11 @@ public sealed class OptionsComposer : IComposer
         builder.Services.Configure<SearchSettings>(
             builder.Config.GetSection("Synergos:Search"));
 
+        // T5 (ADR 0107) — motor de catálogo: topes de paginación, de qué fuente sale el
+        // catálogo de cada vertical (demo|cms) y bajo qué siteRoot vive (por brandKey).
+        builder.Services.Configure<CatalogSettings>(
+            builder.Config.GetSection("Synergos:Catalog"));
+
         builder.Services.Configure<EmailSettings>(
             builder.Config.GetSection("Synergos:Email"));
 

@@ -5,6 +5,7 @@ using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Catalog;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.Notifications;
 using Umbraco.Cms.Core.Web;
@@ -281,7 +282,31 @@ public sealed class SeamComposer : IComposer
         //     abre UNA sesión de pago (IPaymentProvider) por el total; Confirm
         //     captura y confirma. Idempotente. Singleton — el estado de las órdenes
         //     (orderRef → líneas + sesión) vive en memoria del proceso.
-        services.AddSingleton<IProductCatalogProvider, StubProductCatalogProvider>();
+        // T5 Ola A (ADR 0107) — de dónde salen los productos: el seed de demo o el CONTENIDO
+        // que autoró el editor. Es EL swap que T5 construyó: cambia la fuente, no el motor ni
+        // la fachada ni el controller. Rollback = `Synergos:Catalog:Sources:Shop = demo`, sin
+        // redeploy.
+        //
+        // Singleton, y NO Transient como se temía: UmbracoProductCatalogSource solo sostiene
+        // IUmbracoContextAccessor (un ACCESSOR, que resuelve el contexto por llamada — el
+        // proyecto ya tiene otro Singleton con él: UmbracoContentContextAccessor), más
+        // IOptionsMonitor e ILogger. Ninguno es Scoped, así que no se repite la trampa del
+        // gate Singleton que resolvía un servicio Scoped. Además StubShopOrderService es
+        // Singleton y captura IProductCatalogProvider por constructor: hacerlo Transient le
+        // daría una dependencia cautiva y no cambiaría nada.
+        services.AddSingleton<ICatalogSource<CatalogProduct>>(sp =>
+        {
+            var settings = sp.GetRequiredService<IOptionsMonitor<CatalogSettings>>().CurrentValue;
+            var source = settings.Sources.TryGetValue(UmbracoProductCatalogSource.Vertical, out var s) ? s : "demo";
+            return string.Equals(source, "cms", StringComparison.OrdinalIgnoreCase)
+                ? ActivatorUtilities.CreateInstance<UmbracoProductCatalogSource>(sp)
+                : new ShopDemoCatalogSource();
+        });
+
+        services.AddSingleton<IProductCatalogProvider>(sp =>
+            new StubProductCatalogProvider(
+                sp.GetRequiredService<ICatalogSource<CatalogProduct>>(),
+                sp.GetRequiredService<IOptionsMonitor<CatalogSettings>>().CurrentValue));
 
         // OLA 1 Tienda (entrega A, fase T0 del spec tienda.md) — seams de la cara
         // compradora post-venta + cuenta, stub-first y aditivos (ADR 0002 + 0075).

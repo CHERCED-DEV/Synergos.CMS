@@ -41,6 +41,30 @@ public sealed class CatalogSettings
     public static CatalogSettings Unpaged { get; } = new() { MaxTake = int.MaxValue };
 
     /// <summary>
+    /// Bajo qué siteRoot vive el catálogo de cada vertical, por <c>brandKey</c>. Clave = el
+    /// vertical (<c>Shop</c>…), valor = el brandKey (<c>ecommerce</c>).
+    /// </summary>
+    /// <remarks>
+    /// <b>Esto es lo que cierra LA MINA:</b> <c>productPage</c> lo comparten TRES verticales
+    /// —Tienda (<c>ecommerce</c>), Booking (<c>meridian</c>) y Propiedades
+    /// (<c>propiedades</c>)— así que una fuente que no acote sirve "Masaje terapéutico 60
+    /// min" y "Casa campestre en Los Lagos" entre los productos de la tienda.
+    ///
+    /// <para><b>Por qué por CONFIG y no por hostname</b> (que es lo que el diseño original
+    /// suponía): verificado contra el contenido real, <b>no hay Umbraco Domains</b>. El
+    /// filler guarda <c>canonicalHostname</c> como una PROPIEDAD DE CONTENIDO (metadato para
+    /// el canonical) y nunca llama a <c>IDomainService</c>, así que Umbraco no rutea por
+    /// hostname: los siteRoots se alcanzan por PATH (<c>/tienda</c>, <c>/gobierno</c>). Un
+    /// resolver hostname→Domain→siteRoot devolvería null siempre y la mina seguiría abierta.
+    /// El día que se configuren Domains, esto se puede complementar — no reemplazar: un
+    /// deploy sigue teniendo UN catálogo por vertical.</para>
+    ///
+    /// <para>Va en config y no como literal en el código por el principio de branding vía
+    /// provider: cero <c>if (brandKey == "ecommerce")</c> en el core (ADR 0010).</para>
+    /// </remarks>
+    public Dictionary<string, string> Scopes { get; init; } = new();
+
+    /// <summary>
     /// De qué fuente sale el catálogo de cada vertical: <c>demo</c> (el seed en memoria de
     /// siempre) o <c>cms</c> (el contenido que autoró el editor). Clave = el vertical
     /// (<c>Shop</c>, <c>Events</c>…).
