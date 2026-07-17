@@ -1794,35 +1794,105 @@ public sealed class DevContentFiller
 
         var ropa = SeedProductCategory(tienda.Id, "Ropa", "Prendas con la identidad de tu marca.", details);
         var accesorios = SeedProductCategory(tienda.Id, "Accesorios", "Complementos para tu colección.", details);
+        var escritorio = SeedProductCategory(tienda.Id, "Escritorio", "Papelería y orden para el día a día.", details);
+        var tecnologia = SeedProductCategory(tienda.Id, "Tecnología", "Accesorios para tus dispositivos.", details);
 
-        // Las marcas son POCAS y REPETIDAS a propósito: una faceta con una marca por producto
-        // no filtra nada — el chip que sale a 1 no es un filtro, es una etiqueta.
+        // 24 productos = 4 categorías × 6. El número no es capricho: con 12 por página, 24 son
+        // DOS páginas — es lo que hace que el paginador exista en pantalla (con 6 nunca se ve).
+        //
+        // Las marcas son POCAS y REPETIDAS a propósito, 4 para 24 productos: una faceta con una
+        // marca por producto no filtra nada — un chip que sale a 1 no es un filtro, es una
+        // etiqueta. Cada marca cruza varias categorías, así que el drill-down tiene algo que
+        // mostrar (filtrar por marca deja ver de qué categorías es).
+        //
+        // El stock varía y hay agotados (0) a propósito: es lo que ejercita el estado vacío de
+        // la tarjeta. Los precios cubren de 12k a 320k para que el orden por precio se note.
         if (ropa > 0)
         {
             SeedProduct(ropa, "TSHIRT-NEGRA-001", "Camiseta esencial negra", "Cordillera", "Algodón premium 180g · corte regular",
                 "89000", 42, "Algodón premium de 180g, corte regular. El básico que combina con todo y dura lavada tras lavada.",
                 new[] { "ropa", "camiseta" }, dFrom, dTo, "Producto Camiseta", BuildProductBody, details);
+            SeedProduct(ropa, "TSHIRT-OVER-002", "Camiseta oversize blanca", "Cordillera", "Corte amplio · algodón peinado",
+                "95000", 27, "Corte amplio y hombro caído en algodón peinado. La silueta que pide la calle.",
+                new[] { "ropa", "camiseta" }, dFrom, dTo, "Producto Camiseta Oversize", BuildProductBody, details);
             SeedProduct(ropa, "HOODIE-GRIS-001", "Hoodie gris premium", "Cordillera", "Felpa pesada · capucha forrada",
                 "189000", 18, "Felpa pesada con interior perchado y capucha forrada. Abriga sin sacrificar estilo.",
                 new[] { "ropa", "hoodie" }, dFrom, dTo, "Producto Hoodie", BuildProductBody, details);
+            SeedProduct(ropa, "BUZO-CIERRE-002", "Buzo con cierre", "Páramo", "Cierre completo · bolsillos laterales",
+                "165000", 9, "Cierre de extremo a extremo y bolsillos laterales. La capa intermedia que te salva el día.",
+                new[] { "ropa", "buzo" }, dFrom, dTo, "Producto Buzo", BuildProductBody, details);
             SeedProduct(ropa, "GORRA-001", "Gorra clásica", "Páramo", "Ajustable · bordado al frente",
                 "59000", 0, "Ajustable, bordado de marca al frente. Para todos los días.",
                 new[] { "ropa", "gorra" }, dFrom, dTo, "Producto Gorra", BuildProductBody, details);
+            SeedProduct(ropa, "CHAQUETA-VIENTO-001", "Chaqueta cortavientos", "Páramo", "Repelente al agua · plegable",
+                "245000", 6, "Tejido repelente al agua que se pliega en su propio bolsillo. Para el aguacero de las cuatro.",
+                new[] { "ropa", "chaqueta" }, dFrom, dTo, "Producto Chaqueta", BuildProductBody, details);
         }
         if (accesorios > 0)
         {
             SeedProduct(accesorios, "TOTE-001", "Tote bag de lona", "Páramo", "Lona resistente · asas reforzadas",
                 "49000", 65, "Lona resistente con asas reforzadas. Lleva todo con estilo y de forma sostenible.",
                 new[] { "accesorios", "bolso" }, dFrom, dTo, "Producto Tote", BuildProductBody, details);
+            SeedProduct(accesorios, "MORRAL-URB-002", "Morral urbano", "Páramo", "22L · compartimento para laptop 15\"",
+                "220000", 11, "22 litros con compartimento acolchado para laptop de 15 pulgadas y espalda ventilada.",
+                new[] { "accesorios", "morral" }, dFrom, dTo, "Producto Morral", BuildProductBody, details);
             SeedProduct(accesorios, "MUG-001", "Taza cerámica", "Cordillera", "350ml · apta para microondas",
                 "39000", 30, "Cerámica de 350ml, apta para microondas y lavavajillas. Tu café, tu marca.",
                 new[] { "accesorios", "taza" }, dFrom, dTo, "Producto Taza", BuildProductBody, details);
+            SeedProduct(accesorios, "BOTELLA-TERM-002", "Botella térmica", "Cordillera", "750ml · 12 h frío / 6 h caliente",
+                "115000", 24, "Acero inoxidable de doble pared: 750 ml que aguantan 12 horas frío y 6 caliente.",
+                new[] { "accesorios", "botella" }, dFrom, dTo, "Producto Botella", BuildProductBody, details);
             SeedProduct(accesorios, "STICKER-PACK-001", "Pack de stickers", "Páramo", "10 unidades · resistentes al agua",
                 "19000", 120, "10 stickers vinílicos resistentes al agua. Personalizá tu laptop, agenda o botella.",
                 new[] { "accesorios", "stickers" }, dFrom, dTo, "Producto Stickers", BuildProductBody, details);
+            SeedProduct(accesorios, "LLAVERO-CUERO-002", "Llavero de cuero", "Cordillera", "Cuero curtido · herraje macizo",
+                "32000", 88, "Cuero curtido al vegetal con herraje macizo. Un detalle que envejece bien.",
+                new[] { "accesorios", "llavero" }, dFrom, dTo, "Producto Llavero", BuildProductBody, details);
+        }
+        if (escritorio > 0)
+        {
+            SeedProduct(escritorio, "LIBRETA-DURA-001", "Libreta de tapa dura", "Bruma", "A5 · 160 páginas · papel 100g",
+                "45000", 54, "A5 de tapa dura con 160 páginas de papel de 100 gramos. Abre plana y no traspasa la tinta.",
+                new[] { "escritorio", "libreta" }, dFrom, dTo, "Producto Libreta", BuildProductBody, details);
+            SeedProduct(escritorio, "LIBRETA-PUNTOS-002", "Libreta de puntos", "Bruma", "A5 · dot grid 5mm",
+                "48000", 37, "Retícula de puntos cada 5 mm: la libreta que no te dice cómo usarla.",
+                new[] { "escritorio", "libreta" }, dFrom, dTo, "Producto Libreta Puntos", BuildProductBody, details);
+            SeedProduct(escritorio, "BOLIGRAFO-ALU-001", "Bolígrafo de aluminio", "Bruma", "Aluminio anodizado · recarga estándar",
+                "38000", 76, "Aluminio anodizado con peso equilibrado y recarga estándar. Escribe suave, dura años.",
+                new[] { "escritorio", "boligrafo" }, dFrom, dTo, "Producto Boligrafo", BuildProductBody, details);
+            SeedProduct(escritorio, "MOUSEPAD-TELA-001", "Mousepad de tela", "Bruma", "90×40 cm · base antideslizante",
+                "52000", 41, "90 × 40 cm de tela cosida en el borde, con base antideslizante. Cubre teclado y mouse.",
+                new[] { "escritorio", "mousepad" }, dFrom, dTo, "Producto Mousepad", BuildProductBody, details);
+            SeedProduct(escritorio, "ORGANIZADOR-001", "Organizador de escritorio", "Bruma", "Bambú · 5 compartimentos",
+                "78000", 0, "Bambú macizo con cinco compartimentos. Que el escritorio deje de ser un cajón abierto.",
+                new[] { "escritorio", "organizador" }, dFrom, dTo, "Producto Organizador", BuildProductBody, details);
+            SeedProduct(escritorio, "NOTAS-ADH-001", "Set de notas adhesivas", "Bruma", "5 blocs · adhesivo reposicionable",
+                "12000", 210, "Cinco blocs con adhesivo reposicionable que no deja residuo. Para pensar en voz alta.",
+                new[] { "escritorio", "notas" }, dFrom, dTo, "Producto Notas", BuildProductBody, details);
+        }
+        if (tecnologia > 0)
+        {
+            SeedProduct(tecnologia, "FUNDA-LAPTOP-001", "Funda para laptop", "Vértice", "14\" · interior afelpado",
+                "98000", 33, "Neopreno de 5 mm con interior afelpado para portátiles de 14 pulgadas. Cierre que no raya.",
+                new[] { "tecnologia", "funda" }, dFrom, dTo, "Producto Funda", BuildProductBody, details);
+            SeedProduct(tecnologia, "HUB-USBC-001", "Hub USB-C", "Vértice", "7 en 1 · HDMI 4K · carga passthrough",
+                "185000", 14, "Siete puertos en uno: HDMI 4K, tres USB-A, lector SD y carga passthrough de 100 W.",
+                new[] { "tecnologia", "hub" }, dFrom, dTo, "Producto Hub", BuildProductBody, details);
+            SeedProduct(tecnologia, "BASE-CEL-001", "Base para celular", "Vértice", "Aluminio · ángulo ajustable",
+                "54000", 62, "Aluminio con ángulo ajustable y base con peso. Tu teléfono deja de resbalarse.",
+                new[] { "tecnologia", "base" }, dFrom, dTo, "Producto Base Celular", BuildProductBody, details);
+            SeedProduct(tecnologia, "ORG-CABLES-001", "Organizador de cables", "Vértice", "Set de 6 · silicona",
+                "26000", 95, "Seis piezas de silicona que se pegan al escritorio. El cable vuelve solo a su sitio.",
+                new[] { "tecnologia", "cables" }, dFrom, dTo, "Producto Organizador Cables", BuildProductBody, details);
+            SeedProduct(tecnologia, "MOUSE-INAL-001", "Mouse inalámbrico", "Vértice", "Silencioso · 2.4 GHz y Bluetooth",
+                "135000", 21, "Clic silencioso y doble conexión: 2.4 GHz y Bluetooth. Cambia de equipo con un botón.",
+                new[] { "tecnologia", "mouse" }, dFrom, dTo, "Producto Mouse", BuildProductBody, details);
+            SeedProduct(tecnologia, "AUDIF-DIADEMA-001", "Audífonos de diadema", "Vértice", "Cancelación activa · 30 h",
+                "320000", 8, "Cancelación activa de ruido y 30 horas de batería. La oficina se apaga cuando quieres.",
+                new[] { "tecnologia", "audifonos" }, dFrom, dTo, "Producto Audifonos", BuildProductBody, details);
         }
 
-        details.Add($"Shop:seeded(ropa={ropa > 0},acc={accesorios > 0})");
+        details.Add($"Shop:seeded(ropa={ropa > 0},acc={accesorios > 0},esc={escritorio > 0},tec={tecnologia > 0})");
     }
 
     private int SeedProductCategory(int parentId, string name, string description, List<string> details)
