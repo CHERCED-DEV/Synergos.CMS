@@ -1795,23 +1795,31 @@ public sealed class DevContentFiller
         var ropa = SeedProductCategory(tienda.Id, "Ropa", "Prendas con la identidad de tu marca.", details);
         var accesorios = SeedProductCategory(tienda.Id, "Accesorios", "Complementos para tu colección.", details);
 
+        // Las marcas son POCAS y REPETIDAS a propósito: una faceta con una marca por producto
+        // no filtra nada — el chip que sale a 1 no es un filtro, es una etiqueta.
         if (ropa > 0)
         {
-            SeedProduct(ropa, "TSHIRT-NEGRA-001", "Camiseta esencial negra", "89000", new[] { "ropa", "camiseta" },
-                dFrom, dTo, BuildProductBody("<p>Algodón premium de 180g, corte regular. El básico que combina con todo y dura lavada tras lavada.</p>", "Producto Camiseta", dFrom, dTo), details);
-            SeedProduct(ropa, "HOODIE-GRIS-001", "Hoodie gris premium", "189000", new[] { "ropa", "hoodie" },
-                dFrom, dTo, BuildProductBody("<p>Felpa pesada con interior perchado y capucha forrada. Abriga sin sacrificar estilo.</p>", "Producto Hoodie", dFrom, dTo), details);
-            SeedProduct(ropa, "GORRA-001", "Gorra clásica", "59000", new[] { "ropa", "gorra" },
-                dFrom, dTo, BuildProductBody("<p>Ajustable, bordado de marca al frente. Para todos los días.</p>", "Producto Gorra", dFrom, dTo), details);
+            SeedProduct(ropa, "TSHIRT-NEGRA-001", "Camiseta esencial negra", "Cordillera", "Algodón premium 180g · corte regular",
+                "89000", 42, "Algodón premium de 180g, corte regular. El básico que combina con todo y dura lavada tras lavada.",
+                new[] { "ropa", "camiseta" }, dFrom, dTo, "Producto Camiseta", BuildProductBody, details);
+            SeedProduct(ropa, "HOODIE-GRIS-001", "Hoodie gris premium", "Cordillera", "Felpa pesada · capucha forrada",
+                "189000", 18, "Felpa pesada con interior perchado y capucha forrada. Abriga sin sacrificar estilo.",
+                new[] { "ropa", "hoodie" }, dFrom, dTo, "Producto Hoodie", BuildProductBody, details);
+            SeedProduct(ropa, "GORRA-001", "Gorra clásica", "Páramo", "Ajustable · bordado al frente",
+                "59000", 0, "Ajustable, bordado de marca al frente. Para todos los días.",
+                new[] { "ropa", "gorra" }, dFrom, dTo, "Producto Gorra", BuildProductBody, details);
         }
         if (accesorios > 0)
         {
-            SeedProduct(accesorios, "TOTE-001", "Tote bag de lona", "49000", new[] { "accesorios", "bolso" },
-                dFrom, dTo, BuildProductBody("<p>Lona resistente con asas reforzadas. Lleva todo con estilo y de forma sostenible.</p>", "Producto Tote", dFrom, dTo), details);
-            SeedProduct(accesorios, "MUG-001", "Taza cerámica", "39000", new[] { "accesorios", "taza" },
-                dFrom, dTo, BuildProductBody("<p>Cerámica de 350ml, apta para microondas y lavavajillas. Tu café, tu marca.</p>", "Producto Taza", dFrom, dTo), details);
-            SeedProduct(accesorios, "STICKER-PACK-001", "Pack de stickers", "19000", new[] { "accesorios", "stickers" },
-                dFrom, dTo, BuildProductBody("<p>10 stickers vinílicos resistentes al agua. Personalizá tu laptop, agenda o botella.</p>", "Producto Stickers", dFrom, dTo), details);
+            SeedProduct(accesorios, "TOTE-001", "Tote bag de lona", "Páramo", "Lona resistente · asas reforzadas",
+                "49000", 65, "Lona resistente con asas reforzadas. Lleva todo con estilo y de forma sostenible.",
+                new[] { "accesorios", "bolso" }, dFrom, dTo, "Producto Tote", BuildProductBody, details);
+            SeedProduct(accesorios, "MUG-001", "Taza cerámica", "Cordillera", "350ml · apta para microondas",
+                "39000", 30, "Cerámica de 350ml, apta para microondas y lavavajillas. Tu café, tu marca.",
+                new[] { "accesorios", "taza" }, dFrom, dTo, "Producto Taza", BuildProductBody, details);
+            SeedProduct(accesorios, "STICKER-PACK-001", "Pack de stickers", "Páramo", "10 unidades · resistentes al agua",
+                "19000", 120, "10 stickers vinílicos resistentes al agua. Personalizá tu laptop, agenda o botella.",
+                new[] { "accesorios", "stickers" }, dFrom, dTo, "Producto Stickers", BuildProductBody, details);
         }
 
         details.Add($"Shop:seeded(ropa={ropa > 0},acc={accesorios > 0})");
@@ -1832,23 +1840,49 @@ public sealed class DevContentFiller
         return save.Success ? cat.Id : 0;
     }
 
-    private void SeedProduct(int categoryId, string sku, string name, string priceBase, string[] tags,
-        string hexFrom, string hexTo, string sectionsJson, List<string> details)
+    /// <param name="description">
+    /// La descripción en TEXTO PLANO. Es la única fuente del copy: alimenta el campo
+    /// <c>productDescriptionText</c> (consultable/buscable) y, envuelta, el cuerpo compuesto.
+    /// Antes el call-site pasaba el HTML ya armado, así que sumar el campo habría duplicado
+    /// la misma frase en dos sitios que luego divergen.
+    /// </param>
+    /// <param name="brand">Marca. <c>null</c> para lo que no tiene marca (los servicios de Booking).</param>
+    /// <param name="stockQty">Unidades. <c>null</c> para lo que no se inventaría (un servicio no tiene stock: un 0 ahí significaría "agotado", que es mentira).</param>
+    /// <param name="buildBody">
+    /// Quién compone el cuerpo. Es un parámetro y no una llamada fija porque <c>productPage</c>
+    /// lo comparten Tienda (<c>BuildProductBody</c>) y Booking (<c>BuildServiceBody</c>): fijarlo
+    /// aquí le pondría a los servicios el cuerpo de un producto.
+    /// </param>
+    private void SeedProduct(int categoryId, string sku, string name, string? brand, string subtitle,
+        string priceBase, int? stockQty, string description, string[] tags,
+        string hexFrom, string hexTo, string mediaName,
+        Func<string, string, string, string, string> buildBody, List<string> details)
     {
+        // Por SKU, NO por nombre: renombrar un producto no puede duplicar su ficha y dejar
+        // la vieja publicada (y, desde la Ola A, comprable).
         var existing = _contentService.GetPagedChildren(categoryId, 0, 500, out _)
-            .FirstOrDefault(c => c.ContentType.Alias == "productPage" && Matches(c, name));
+            .FirstOrDefault(c => c.ContentType.Alias == "productPage" && MatchesSku(c, sku));
         var p = existing ?? _contentService.Create(name, categoryId, "productPage");
         p.SetCultureName(name, Culture);
         p.SetValue("productSku", sku);                               // Nothing, mandatory
         p.SetValue("productName", name, Culture);                    // Culture, mandatory
         p.SetValue("productPriceBase", priceBase);                   // Nothing, mandatory (numérico)
         if (p.HasProperty("productInStock")) { p.SetValue("productInStock", true); }
+
+        // Las 4 de la Ola A. Con guard HasProperty: el filler tiene que seguir corriendo
+        // aunque el Import del schema no se haya aplicado todavía (gating `schema-not-imported`).
+        // brand/stockQty solo se escriben si el ítem los tiene: un servicio no tiene marca, y
+        // un 0 en sus unidades diría "agotado".
+        if (brand is not null && p.HasProperty("productBrand")) { p.SetValue("productBrand", brand); }     // Nothing
+        if (stockQty is not null && p.HasProperty("productStockQty")) { p.SetValue("productStockQty", stockQty.Value); } // Nothing
+        if (p.HasProperty("productSubtitle")) { p.SetValue("productSubtitle", subtitle, Culture); }        // Culture
+        if (p.HasProperty("productDescriptionText")) { p.SetValue("productDescriptionText", description, Culture); } // Culture
         if (p.HasProperty("productImages"))
         {
             p.SetValue("productImages", _media.GetOrCreatePickerValue($"Producto {name}", name, hexFrom, hexTo, 800, 800), Culture);
         }
         if (p.HasProperty("tags")) { p.SetValue("tags", TagsJson(tags), Culture); }
-        p.SetValue(SectionsAlias, sectionsJson, Culture);
+        p.SetValue(SectionsAlias, buildBody($"<p>{description}</p>", mediaName, hexFrom, hexTo), Culture);
         if (p.HasProperty("seoTitle")) { p.SetValue("seoTitle", $"{name} — {BrandName}", Culture); }
         var save = _contentService.SaveAndPublish(p, new[] { Culture });
         var label = name.Length > 24 ? name[..24] : name;
@@ -2831,24 +2865,30 @@ public sealed class DevContentFiller
 
         if (consultoria > 0)
         {
-            SeedProduct(consultoria, "SVC-ASESORIA-30", "Asesoría express · 30 min", "90000", new[] { "consultoría", "30min" },
-                MeridianFrom, MeridianTo, BuildServiceBody("<p>Sesión 1:1 de 30 minutos con un especialista para resolver una duda puntual. Confirmación inmediata y enlace de videollamada.</p>", "Booking Asesoria Express", MeridianFrom, MeridianTo), details);
-            SeedProduct(consultoria, "SVC-ASESORIA-60", "Consultoría estratégica · 60 min", "160000", new[] { "consultoría", "60min" },
-                MeridianFrom, MeridianTo, BuildServiceBody("<p>Una hora de consultoría a profundidad con diagnóstico y plan de acción. Ideal para decisiones de negocio.</p>", "Booking Consultoria Estrategica", MeridianFrom, MeridianTo), details);
+            SeedProduct(consultoria, "SVC-ASESORIA-30", "Asesoría express · 30 min", brand: null, "30 minutos · videollamada 1:1",
+                "90000", stockQty: null, "Sesión 1:1 de 30 minutos con un especialista para resolver una duda puntual. Confirmación inmediata y enlace de videollamada.",
+                new[] { "consultoría", "30min" }, MeridianFrom, MeridianTo, "Booking Asesoria Express", BuildServiceBody, details);
+            SeedProduct(consultoria, "SVC-ASESORIA-60", "Consultoría estratégica · 60 min", brand: null, "60 minutos · diagnóstico y plan",
+                "160000", stockQty: null, "Una hora de consultoría a profundidad con diagnóstico y plan de acción. Ideal para decisiones de negocio.",
+                new[] { "consultoría", "60min" }, MeridianFrom, MeridianTo, "Booking Consultoria Estrategica", BuildServiceBody, details);
         }
         if (espacios > 0)
         {
-            SeedProduct(espacios, "SPC-SALA-REUNION", "Sala de reuniones · 2 h", "120000", new[] { "espacio", "sala" },
-                MeridianFrom, MeridianTo, BuildServiceBody("<p>Sala equipada para hasta 8 personas, con pantalla y conexión. Reserva por bloques de dos horas.</p>", "Booking Sala Reuniones", MeridianFrom, MeridianTo), details);
-            SeedProduct(espacios, "SPC-AUDITORIO", "Auditorio · jornada", "480000", new[] { "espacio", "evento" },
-                MeridianFrom, MeridianTo, BuildServiceBody("<p>Auditorio para hasta 60 asistentes con sonido y proyección. Disponible por media jornada o jornada completa.</p>", "Booking Auditorio", MeridianFrom, MeridianTo), details);
+            SeedProduct(espacios, "SPC-SALA-REUNION", "Sala de reuniones · 2 h", brand: null, "Hasta 8 personas · pantalla y conexión",
+                "120000", stockQty: null, "Sala equipada para hasta 8 personas, con pantalla y conexión. Reserva por bloques de dos horas.",
+                new[] { "espacio", "sala" }, MeridianFrom, MeridianTo, "Booking Sala Reuniones", BuildServiceBody, details);
+            SeedProduct(espacios, "SPC-AUDITORIO", "Auditorio · jornada", brand: null, "Hasta 60 asistentes · sonido y proyección",
+                "480000", stockQty: null, "Auditorio para hasta 60 asistentes con sonido y proyección. Disponible por media jornada o jornada completa.",
+                new[] { "espacio", "evento" }, MeridianFrom, MeridianTo, "Booking Auditorio", BuildServiceBody, details);
         }
         if (bienestar > 0)
         {
-            SeedProduct(bienestar, "WEL-MASAJE-60", "Masaje terapéutico · 60 min", "140000", new[] { "bienestar", "60min" },
-                MeridianFrom, MeridianTo, BuildServiceBody("<p>Sesión de masaje terapéutico de una hora con profesional certificado. Agenda tu horario preferido.</p>", "Booking Masaje", MeridianFrom, MeridianTo), details);
-            SeedProduct(bienestar, "WEL-NUTRICION", "Plan nutricional · valoración", "110000", new[] { "bienestar", "nutrición" },
-                MeridianFrom, MeridianTo, BuildServiceBody("<p>Valoración nutricional inicial con plan personalizado y seguimiento. Cupos limitados por día.</p>", "Booking Nutricion", MeridianFrom, MeridianTo), details);
+            SeedProduct(bienestar, "WEL-MASAJE-60", "Masaje terapéutico · 60 min", brand: null, "60 minutos · profesional certificado",
+                "140000", stockQty: null, "Sesión de masaje terapéutico de una hora con profesional certificado. Agenda tu horario preferido.",
+                new[] { "bienestar", "60min" }, MeridianFrom, MeridianTo, "Booking Masaje", BuildServiceBody, details);
+            SeedProduct(bienestar, "WEL-NUTRICION", "Plan nutricional · valoración", brand: null, "Valoración inicial · plan personalizado",
+                "110000", stockQty: null, "Valoración nutricional inicial con plan personalizado y seguimiento. Cupos limitados por día.",
+                new[] { "bienestar", "nutrición" }, MeridianFrom, MeridianTo, "Booking Nutricion", BuildServiceBody, details);
         }
 
         details.Add($"Booking:services-seeded(con={consultoria > 0},esp={espacios > 0},bie={bienestar > 0})");
@@ -3337,24 +3377,30 @@ public sealed class DevContentFiller
 
         if (apartamentos > 0)
         {
-            SeedProduct(apartamentos, "APT-CHICO-001", "Apartamento de lujo en Chicó", "1250000000", new[] { "apartamento", "chicó", "3 hab" },
-                TerraFrom, TerraTo, BuildPropertyBody("<p>Apartamento de 120 m² con acabados premium, tres habitaciones, balcón panorámico y dos parqueaderos. En el corazón de Chicó.</p>", "Propiedad Apartamento Chico", TerraFrom, TerraTo), details);
-            SeedProduct(apartamentos, "APT-CEDRITOS-002", "Apartamento familiar en Cedritos", "620000000", new[] { "apartamento", "cedritos", "2 hab" },
-                TerraFrom, TerraTo, BuildPropertyBody("<p>Acogedor apartamento de 78 m² con dos habitaciones, cocina integral y zona social iluminada. Conjunto con piscina y gimnasio.</p>", "Propiedad Apartamento Cedritos", TerraFrom, TerraTo), details);
+            SeedProduct(apartamentos, "APT-CHICO-001", "Apartamento de lujo en Chicó", brand: null, "120 m² · 3 hab · 2 parqueaderos",
+                "1250000000", stockQty: null, "Apartamento de 120 m² con acabados premium, tres habitaciones, balcón panorámico y dos parqueaderos. En el corazón de Chicó.",
+                new[] { "apartamento", "chicó", "3 hab" }, TerraFrom, TerraTo, "Propiedad Apartamento Chico", BuildPropertyBody, details);
+            SeedProduct(apartamentos, "APT-CEDRITOS-002", "Apartamento familiar en Cedritos", brand: null, "78 m² · 2 hab · piscina y gimnasio",
+                "620000000", stockQty: null, "Acogedor apartamento de 78 m² con dos habitaciones, cocina integral y zona social iluminada. Conjunto con piscina y gimnasio.",
+                new[] { "apartamento", "cedritos", "2 hab" }, TerraFrom, TerraTo, "Propiedad Apartamento Cedritos", BuildPropertyBody, details);
         }
         if (casas > 0)
         {
-            SeedProduct(casas, "CASA-USAQUEN-001", "Casa con jardín en Usaquén", "2100000000", new[] { "casa", "usaquén", "4 hab" },
-                TerraFrom, TerraTo, BuildPropertyBody("<p>Casa de 240 m² en dos niveles, cuatro habitaciones, estudio, jardín privado y garaje doble. Sector residencial exclusivo.</p>", "Propiedad Casa Usaquen", TerraFrom, TerraTo), details);
-            SeedProduct(casas, "CASA-LAGOS-002", "Casa campestre en Los Lagos", "1480000000", new[] { "casa", "campestre", "3 hab" },
-                TerraFrom, TerraTo, BuildPropertyBody("<p>Casa campestre de 180 m² con tres habitaciones, terraza, BBQ y amplio lote arborizado. Ideal para descanso y naturaleza.</p>", "Propiedad Casa Campestre", TerraFrom, TerraTo), details);
+            SeedProduct(casas, "CASA-USAQUEN-001", "Casa con jardín en Usaquén", brand: null, "240 m² · 4 hab · jardín privado",
+                "2100000000", stockQty: null, "Casa de 240 m² en dos niveles, cuatro habitaciones, estudio, jardín privado y garaje doble. Sector residencial exclusivo.",
+                new[] { "casa", "usaquén", "4 hab" }, TerraFrom, TerraTo, "Propiedad Casa Usaquen", BuildPropertyBody, details);
+            SeedProduct(casas, "CASA-LAGOS-002", "Casa campestre en Los Lagos", brand: null, "180 m² · 3 hab · lote arborizado",
+                "1480000000", stockQty: null, "Casa campestre de 180 m² con tres habitaciones, terraza, BBQ y amplio lote arborizado. Ideal para descanso y naturaleza.",
+                new[] { "casa", "campestre", "3 hab" }, TerraFrom, TerraTo, "Propiedad Casa Campestre", BuildPropertyBody, details);
         }
         if (comercial > 0)
         {
-            SeedProduct(comercial, "OFI-CENTRO-001", "Oficina en torre empresarial", "890000000", new[] { "oficina", "comercial", "centro" },
-                TerraFrom, TerraTo, BuildPropertyBody("<p>Oficina de 95 m² en torre AAA con recepción, dos salas de reunión y vista a la ciudad. Excelente conectividad y parqueaderos.</p>", "Propiedad Oficina", TerraFrom, TerraTo), details);
-            SeedProduct(comercial, "LOC-ZONA-T-002", "Local comercial en Zona T", "1650000000", new[] { "local", "comercial", "zona t" },
-                TerraFrom, TerraTo, BuildPropertyBody("<p>Local de 140 m² a pie de calle en la Zona T, con vitrina amplia y alto flujo peatonal. Ideal para retail o gastronomía.</p>", "Propiedad Local", TerraFrom, TerraTo), details);
+            SeedProduct(comercial, "OFI-CENTRO-001", "Oficina en torre empresarial", brand: null, "95 m² · torre AAA · 2 salas de reunión",
+                "890000000", stockQty: null, "Oficina de 95 m² en torre AAA con recepción, dos salas de reunión y vista a la ciudad. Excelente conectividad y parqueaderos.",
+                new[] { "oficina", "comercial", "centro" }, TerraFrom, TerraTo, "Propiedad Oficina", BuildPropertyBody, details);
+            SeedProduct(comercial, "LOC-ZONA-T-002", "Local comercial en Zona T", brand: null, "140 m² · a pie de calle · alto flujo",
+                "1650000000", stockQty: null, "Local de 140 m² a pie de calle en la Zona T, con vitrina amplia y alto flujo peatonal. Ideal para retail o gastronomía.",
+                new[] { "local", "comercial", "zona t" }, TerraFrom, TerraTo, "Propiedad Local", BuildPropertyBody, details);
         }
 
         details.Add($"Propiedades:properties-seeded(apt={apartamentos > 0},casa={casas > 0},com={comercial > 0})");
@@ -4173,6 +4219,22 @@ public sealed class DevContentFiller
 
     private static bool Matches(IContent content, string name)
         => string.Equals(content.GetCultureName(Culture) ?? content.Name, name, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Idempotencia de producto por <c>productSku</c>, que es su identidad estable.
+    /// </summary>
+    /// <remarks>
+    /// <b>Por qué no vale <see cref="Matches"/> aquí:</b> compara por NOMBRE, así que
+    /// renombrar un producto no encuentra su nodo, crea uno nuevo y <b>deja el viejo
+    /// publicado</b> — dos fichas del mismo producto en el catálogo. Con la Ola A eso deja de
+    /// ser cosmético: el nodo huérfano es MERCANCÍA COMPRABLE. El nombre es editorial y
+    /// cambia; el SKU es la identidad.
+    ///
+    /// <para>Se compara ignorando mayúsculas porque un SKU es un código, no prosa. El campo
+    /// es <c>Variations=Nothing</c>, así que se lee sin cultura.</para>
+    /// </remarks>
+    private static bool MatchesSku(IContent content, string sku)
+        => string.Equals(content.GetValue<string>("productSku"), sku, StringComparison.OrdinalIgnoreCase);
 
     public sealed record FillResult(bool Success, int PagesFilled, string Detail);
 }
