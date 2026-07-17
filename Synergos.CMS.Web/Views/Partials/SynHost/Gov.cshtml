@@ -10,17 +10,16 @@
     // el componente Angular resuelve sus defaults (degrada con grace).
     var config = Model.Value<string>("config");
 
-    // citizen: identidad demo del ciudadano (email — así lo indexa el backend). Igual
-    // que apiBase, es un DEFAULT overridable: si el editor autora `config.citizen` (o el
-    // prop), gana el suyo. Sin esto "mis solicitudes" sale vacío/degradado. Debe ser un
-    // email sembrado real (StubApplicationService) para pegarle al backend vivo.
-    var citizen = Model.Value<string>("citizen");
-    if (string.IsNullOrWhiteSpace(citizen)) { citizen = "carlos.perez@correo.co"; }
+    // Aquí NO se manda quién es el ciudadano, y es el punto entero de T2. Había un
+    // `citizen` (que además ni existía en el schema: se hardcodeaba un correo sembrado)
+    // y el cliente lo mandaba como `?citizen=<email>` — o sea, la identidad la ponía el
+    // navegador. Ahora la resuelve el servidor desde la cookie de sesión, que viaja sola
+    // porque la app se monta en esta misma página. Si no hay sesión, el API responde 401
+    // y la app ofrece iniciar sesión.
 
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["apiBase"] = apiBase,
-        ["citizen"] = citizen,
         ["heading"] = Model.Value<string>("heading"),
         ["subheading"] = Model.Value<string>("subheading"),
     };
