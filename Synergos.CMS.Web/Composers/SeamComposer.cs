@@ -666,6 +666,11 @@ public sealed class SeamComposer : IComposer
         // no hay, se genera una vez y se guarda CIFRADA en el almacén de arriba: así el
         // QR sobrevive un reinicio (el bug que T9 corrige era justo lo contrario) sin
         // meter ningún secreto en el repo.
+        // T7 — realtime por SSE (ADR 0111). UN hub transversal: los verticales publican
+        // en canales y no saben del transporte. Fan-out EN PROCESO (un deploy = un origen).
+        services.AddSingleton<SseRealtimeHub>();
+        services.AddSingleton<IRealtimeNotifier>(sp => sp.GetRequiredService<SseRealtimeHub>());
+
         services.AddSingleton<TicketSigningKeyProvider>();
         services.AddSingleton<ITicketSigner, LazyTicketSigner>();
 

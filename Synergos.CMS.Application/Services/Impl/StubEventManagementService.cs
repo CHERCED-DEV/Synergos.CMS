@@ -55,11 +55,13 @@ public sealed class StubEventManagementService : IEventManagementService
             Sold: sold);
     }
 
+    /// <remarks>
+    /// Se usa la variante DETALLADA (T7): además del estado devuelve de qué evento y
+    /// asistente se trataba, que es lo que el aviso en vivo necesita para elegir el canal
+    /// y nombrar a quien acaba de entrar.
+    /// </remarks>
     public Task<EventCheckInResult> CheckInAsync(string ticketId, CancellationToken cancellationToken = default)
-    {
-        var status = _ticketing.MarkCheckedIn(ticketId);
-        return Task.FromResult(new EventCheckInResult(status));
-    }
+        => _ticketing.MarkCheckedInDetailedAsync(ticketId, cancellationToken);
 
     public async Task<EventCreateResult> CreateEventAsync(EventDraft draft, CancellationToken cancellationToken = default)
     {

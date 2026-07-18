@@ -576,12 +576,27 @@ public sealed class StubEventTicketingService : IEventTicketingService
     /// transferir la entrada el QR rota, y el del dueño anterior debe morir (anti-reventa).</para>
     /// </remarks>
     public async Task<string> MarkCheckedInAsync(string ticketId, CancellationToken cancellationToken = default)
+        => (await MarkCheckedInDetailedAsync(ticketId, cancellationToken)).Status;
+
+    /// <summary>
+    /// Igual que <see cref="MarkCheckedInAsync"/> pero devuelve además DE QUÉ entrada se
+    /// trataba (T7): el aviso en vivo necesita el evento para elegir el canal y el
+    /// asistente para poder nombrarlo en la consola.
+    /// </summary>
+    /// <remarks>
+    /// Cuando el token no verifica se devuelve <c>invalid</c> <b>sin</b> datos: no hay
+    /// entrada de la que hablar, y rellenar el evento con lo que el escáner afirmó sería
+    /// dar por cierto lo que justamente no se pudo comprobar.
+    /// </remarks>
+    public async Task<EventCheckInResult> MarkCheckedInDetailedAsync(
+        string ticketId,
+        CancellationToken cancellationToken = default)
     {
         var token = _signer?.Verify(ticketId);
         if (token is null)
         {
             // Sin firma válida no hay entrada. Incluye el id suelto y el QR de otro evento.
-            return "invalid";
+            return new EventCheckInResult("invalid");
         }
 
         var all = await LoadAllAsync(cancellationToken);
@@ -602,20 +617,27 @@ public sealed class StubEventTicketingService : IEventTicketingService
                 {
                     // QR de una versión anterior: la entrada se transfirió y esta copia
                     // ya no vale. Es el caso de la reventa del mismo QR.
-                    return "invalid";
+                    return new EventCheckInResult("invalid");
                 }
+
+                var found = new EventCheckInResult(
+                    Status: unit.CheckedIn ? "already-used" : "valid",
+                    EventId: order.EventId,
+                    TicketId: token.TicketId,
+                    AttendeeName: unit.AttendeeName);
+
                 if (unit.CheckedIn)
                 {
-                    return "already-used";
+                    return found;
                 }
                 // Mutar la unidad in-place (record mutable via copy en la lista).
                 var updatedUnits = order.Units.ToList();
                 updatedUnits[i] = unit with { CheckedIn = true };
                 await WriteAsync(order with { Units = updatedUnits }, cancellationToken);
-                return "valid";
+                return found;
             }
         }
-        return "invalid";
+        return new EventCheckInResult("invalid");
     }
 
     // ── Carga/escritura del store (deserialización defensiva) ───────────
