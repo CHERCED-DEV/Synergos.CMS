@@ -38,11 +38,33 @@ public sealed class GovController : ControllerBase
     private const string OfficerParticipant = GovCorrespondenceSeeder.OfficerParticipant;
     private const string MessagingContext = GovCorrespondenceSeeder.Context;
 
+    /// <summary>Carpeta lógica del almacén privado donde viven los adjuntos de Gobierno.</summary>
+    private const string GovDocumentScope = "gov-documents";
+
+    /// <summary>
+    /// Tope de subida (10 MB). Se declara como const para poder usarlo en
+    /// <see cref="RequestSizeLimitAttribute"/>, que exige constante en tiempo de
+    /// compilación — por eso no sale de la configuración.
+    /// </summary>
+    private const long MaxUploadBytes = 10 * 1024 * 1024;
+
+    /// <summary>
+    /// Tipos aceptados. Es un allowlist a propósito (no una lista de prohibidos): lo que
+    /// no está, no entra. Coincide con el <c>accept</c> que ofrece la UI.
+    /// </summary>
+    private static readonly HashSet<string> AllowedUploadContentTypes = new(StringComparer.Ordinal)
+    {
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+    };
+
     private readonly ITramiteCatalogProvider _catalog;
     private readonly IApplicationService _applications;
     private readonly ICaseWorkflowService _workflow;
     private readonly ICaseTrackingProvider _tracking;
     private readonly IDocumentUploadService _documents;
+    private readonly IPrivateFileStore _files;
     private readonly IMessagingService _messaging;
     private readonly IGovFeeCalculator _fees;
     private readonly IPriceFormatter _priceFormatter;
@@ -54,6 +76,7 @@ public sealed class GovController : ControllerBase
         ICaseWorkflowService workflow,
         ICaseTrackingProvider tracking,
         IDocumentUploadService documents,
+        IPrivateFileStore files,
         IMessagingService messaging,
         IGovFeeCalculator fees,
         IPriceFormatter priceFormatter,
@@ -64,10 +87,22 @@ public sealed class GovController : ControllerBase
         _workflow = workflow;
         _tracking = tracking;
         _documents = documents;
+        _files = files;
         _messaging = messaging;
         _fees = fees;
         _priceFormatter = priceFormatter;
         _gate = gate;
+    }
+
+    /// <summary>
+    /// Se queda solo con el nombre del fichero que mandó el navegador, sin ruta. Un
+    /// cliente puede enviar <c>../../algo.pdf</c> en el multipart; el nombre se guarda y
+    /// se devuelve al descargar, así que nunca debe llevar separadores.
+    /// </summary>
+    private static string SafeFileName(string? rawName)
+    {
+        var name = Path.GetFileName((rawName ?? string.Empty).Trim());
+        return string.IsNullOrWhiteSpace(name) ? "documento" : name;
     }
 
     // ── T2 Gobierno (ADR 0103, calcado de ShopCatalogController) ────────────
@@ -273,36 +308,66 @@ public sealed class GovController : ControllerBase
             Messages: messages)));
     }
 
-    // ── 7. Adjuntar un documento al expediente ──────────────────────────
-    // POST /api/gov/document { applicationId, name } → { document:{...} }
+    // ── 7. Adjuntar un documento al expediente (T6 — bytes de verdad) ───
+    // POST /api/gov/document  multipart: file + applicationId → { document:{...} }
+    //
+    // Es el PRIMER endpoint del proyecto que recibe un binario. Antes aceptaba
+    // `{applicationId, name}` en JSON y respondía `accepted` sin que existiera fichero
+    // alguno: el ciudadano adjuntaba el escaneo de su cédula y no se guardaba nada.
     [HttpPost("document")]
+    [RequestSizeLimit(MaxUploadBytes)]
     public async Task<IActionResult> Document(
-        [FromBody] DocumentRequest? request,
+        [FromForm] IFormFile? file,
+        [FromForm] string? applicationId,
         CancellationToken cancellationToken)
     {
-        // Autenticar ANTES de mirar el cuerpo: no se procesa input de un anónimo. Adjuntar es
-        // ESCRIBIR sobre el expediente, así que exige ser su dueño — sin esto cualquiera
-        // ensucia el expediente de otro contando radicados.
+        // Autenticar ANTES de leer el fichero: no se procesa —ni se sube a memoria— el
+        // input de un anónimo. Adjuntar es ESCRIBIR sobre el expediente, así que exige
+        // ser su dueño; sin esto cualquiera ensucia el expediente de otro.
         var (denied, actorKey) = RequireMember();
         if (denied is not null) { return denied; }
 
-        if (request is null || string.IsNullOrWhiteSpace(request.ApplicationId) || string.IsNullOrWhiteSpace(request.Name))
+        if (file is null || file.Length == 0 || string.IsNullOrWhiteSpace(applicationId))
         {
-            return BadRequest(new { error = "applicationId y name son requeridos." });
+            return BadRequest(new { error = "applicationId y file son requeridos." });
+        }
+        if (file.Length > MaxUploadBytes)
+        {
+            return BadRequest(new { error = $"El documento supera el máximo de {MaxUploadBytes / (1024 * 1024)} MB." });
         }
 
-        var target = await _tracking.GetCaseAsync(request.ApplicationId.Trim(), cancellationToken);
+        var contentType = (file.ContentType ?? string.Empty).Trim().ToLowerInvariant();
+        if (!AllowedUploadContentTypes.Contains(contentType))
+        {
+            return BadRequest(new { error = "Solo se aceptan documentos PDF, JPG o PNG." });
+        }
+
+        var target = await _tracking.GetCaseAsync(applicationId.Trim(), cancellationToken);
         if (target is null)
         {
-            return NotFound(new { error = $"Expediente '{request.ApplicationId}' no encontrado." });
+            return NotFound(new { error = $"Expediente '{applicationId}' no encontrado." });
         }
         var foreign = DenyIfForeignCase(target, actorKey);
         if (foreign is not null) { return foreign; }
 
+        // Se lee a memoria solo DESPUÉS de pasar auth + ownership + límites.
+        byte[] content;
+        await using (var stream = file.OpenReadStream())
+        using (var buffer = new MemoryStream())
+        {
+            await stream.CopyToAsync(buffer, cancellationToken);
+            content = buffer.ToArray();
+        }
+
         CitizenDocumentRef doc;
         try
         {
-            doc = await _documents.UploadAsync(request.ApplicationId.Trim(), request.Name.Trim(), cancellationToken);
+            doc = await _documents.UploadAsync(
+                applicationId.Trim(),
+                SafeFileName(file.FileName),
+                contentType,
+                content,
+                cancellationToken);
         }
         catch (ArgumentException ex)
         {
@@ -310,6 +375,54 @@ public sealed class GovController : ControllerBase
         }
 
         return Ok(new DocumentResponse(ToDocumentDto(doc)));
+    }
+
+    // ── 7b. Descargar un documento del expediente (T6) ───────────────────
+    // GET /api/gov/document/{caseId}/{docId} → el binario
+    //
+    // El id del fichero es opaco, pero eso NO es la autorización: se comprueba permiso
+    // en CADA descarga. Lo puede bajar el DUEÑO del expediente o un FUNCIONARIO (que
+    // necesita ver los adjuntos para decidir) — nadie más.
+    [HttpGet("document/{caseId}/{docId}")]
+    public async Task<IActionResult> DownloadDocument(
+        string caseId,
+        string docId,
+        CancellationToken cancellationToken)
+    {
+        var (denied, actorKey) = RequireMember();
+        if (denied is not null) { return denied; }
+
+        var target = await _tracking.GetCaseAsync(caseId ?? string.Empty, cancellationToken);
+        if (target is null)
+        {
+            return NotFound(new { error = $"Expediente '{caseId}' no encontrado." });
+        }
+
+        var isOwner = target.Citizen.MemberKey == actorKey;
+        if (!isOwner && !_gate.HasAnyRole(OfficerRolesCsv))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "El documento no es suyo." });
+        }
+
+        var doc = target.Documents.FirstOrDefault(d =>
+            string.Equals(d.Id, docId, StringComparison.Ordinal));
+        if (doc is null || string.IsNullOrWhiteSpace(doc.FileId))
+        {
+            // Sin FileId = documento previo a T6 (metadata sin binario). No es un error
+            // del servidor: sencillamente no hay nada que descargar.
+            return NotFound(new { error = "El documento no tiene un archivo asociado." });
+        }
+
+        var stored = await _files.ReadAsync(GovDocumentScope, doc.FileId, cancellationToken);
+        if (stored is null)
+        {
+            return NotFound(new { error = "El archivo no está disponible." });
+        }
+
+        // `attachment` + nosniff: el navegador lo descarga, nunca lo interpreta como
+        // documento activo en el origen del sitio (un SVG/HTML disfrazado no ejecuta).
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(stored.Content, stored.ContentType, stored.FileName);
     }
 
     // ══════════════════════ FUNCIONARIO ══════════════════════
@@ -471,11 +584,19 @@ public sealed class GovController : ControllerBase
             .ToDictionary(g => g.Key, g => g.First().Label);
     }
 
+    // `downloadUrl` solo viaja si hay binario detrás: así la UI sabe cuándo ofrecer
+    // descarga sin adivinar. Los documentos previos a T6 (sin FileId) salen con null y
+    // la UI los pinta como texto, igual que antes.
     private static DocumentDto ToDocumentDto(CitizenDocumentRef d) => new(
         Id: d.Id,
         Name: d.Name,
         Status: d.Status,
-        UploadedAt: d.UploadedAt);
+        UploadedAt: d.UploadedAt,
+        ContentType: d.ContentType,
+        SizeBytes: d.SizeBytes,
+        DownloadUrl: string.IsNullOrWhiteSpace(d.FileId)
+            ? null
+            : $"/api/gov/document/{Uri.EscapeDataString(d.CaseId)}/{Uri.EscapeDataString(d.Id)}");
 
     private static TimelineDto ToTimelineDto(CaseTimelineEntry e) => new(
         Id: e.Id,
@@ -559,7 +680,8 @@ public sealed class GovController : ControllerBase
 
     public sealed record CreateApplicationRequest(string ServiceId, Dictionary<string, string>? Answers);
 
-    public sealed record DocumentRequest(string ApplicationId, string Name);
+    // (El antiguo `DocumentRequest(ApplicationId, Name)` murió con T6: adjuntar ya no es
+    //  un JSON con un nombre, es un multipart con el fichero.)
 
     public sealed record DecisionRequest(string CaseId, string Outcome, string? Note);
 
@@ -625,7 +747,14 @@ public sealed class GovController : ControllerBase
 
     public sealed record TimelineDto(string Id, string Label, DateTimeOffset Date, string State, string Note);
 
-    public sealed record DocumentDto(string Id, string Name, string Status, DateTimeOffset UploadedAt);
+    public sealed record DocumentDto(
+        string Id,
+        string Name,
+        string Status,
+        DateTimeOffset UploadedAt,
+        string? ContentType = null,
+        long SizeBytes = 0,
+        string? DownloadUrl = null);
 
     public sealed record MessageDto(string Id, string Author, string Body, DateTimeOffset CreatedAtUtc, bool Outgoing);
 

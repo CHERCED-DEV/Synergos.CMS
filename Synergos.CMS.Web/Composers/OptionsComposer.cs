@@ -77,6 +77,13 @@ public sealed class OptionsComposer : IComposer
         builder.Services.Configure<JsonEntityStoreSettings>(
             builder.Config.GetSection("Synergos:JsonEntityStore"));
 
+        // T6 (doc 25) — almacén de ficheros privados: raíz de almacenamiento + límites.
+        // El default de StorageRoot ("App_Data/") es lo que mantiene los documentos
+        // FUERA del alcance de los ficheros estáticos; apuntarlo a wwwroot los haría
+        // públicos a todos.
+        builder.Services.Configure<PrivateFileStoreSettings>(
+            builder.Config.GetSection("Synergos:PrivateFileStore"));
+
         // T3 (doc 25) — selección/gating del proveedor de pago + secreto del webhook.
         builder.Services.Configure<PaymentsSettings>(
             builder.Config.GetSection("Synergos:Payments"));
