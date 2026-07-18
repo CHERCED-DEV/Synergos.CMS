@@ -30,7 +30,11 @@ public sealed class EventosControllerTests
     private readonly IPriceFormatter _priceFormatter = Substitute.For<IPriceFormatter>();
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
 
-    private EventosController BuildSut() => new(_catalog, _ticketing, _management, _priceFormatter, _gate);
+    private readonly IRealtimeNotifier _realtime = Substitute.For<IRealtimeNotifier>();
+
+    private EventosController BuildSut() => new(
+        _catalog, _ticketing, _management, _priceFormatter, _gate, _realtime,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<EventosController>.Instance);
 
     private void Anonymous() => _gate.IsAuthenticated.Returns(false);
 

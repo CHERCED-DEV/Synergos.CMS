@@ -35,19 +35,25 @@ public sealed class EventosController : ControllerBase
     private readonly IEventManagementService _management;
     private readonly IPriceFormatter _priceFormatter;
     private readonly IMemberAccessGate _gate;
+    private readonly IRealtimeNotifier _realtime;
+    private readonly ILogger<EventosController> _logger;
 
     public EventosController(
         IEventCatalogProvider catalog,
         IEventTicketingService ticketing,
         IEventManagementService management,
         IPriceFormatter priceFormatter,
-        IMemberAccessGate gate)
+        IMemberAccessGate gate,
+        IRealtimeNotifier realtime,
+        ILogger<EventosController> logger)
     {
         _catalog = catalog;
         _ticketing = ticketing;
         _management = management;
         _priceFormatter = priceFormatter;
         _gate = gate;
+        _realtime = realtime;
+        _logger = logger;
     }
 
     // ── T9 — identidad server-trusted (molde de GovController/ShopCatalogController) ──
@@ -99,6 +105,31 @@ public sealed class EventosController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "Su cuenta no tiene permiso de organizador." });
         }
         return null;
+    }
+
+    /// <summary>
+    /// Publica el check-in en el canal del evento (T7). Best-effort: la entrada YA quedó
+    /// validada y persistida, así que un fallo del aviso no puede devolver un error sobre
+    /// una operación que sí ocurrió (misma regla que ADR 0037/0106).
+    /// </summary>
+    private async Task BestEffortPublishAsync(EventCheckInResult result, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var channel = RealtimeController.EventosCheckinPrefix + (result.EventId ?? string.Empty);
+            var payload = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                status = result.Status,
+                ticketId = result.TicketId,
+                attendee = result.AttendeeName,
+                at = DateTimeOffset.UtcNow,
+            });
+            await _realtime.PublishAsync(channel, "checkin", payload, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Realtime: no se pudo avisar del check-in (la entrada SÍ quedó validada).");
+        }
     }
 
     // ── 1. Catálogo / agenda ───────────────────────────────────────────
@@ -254,6 +285,15 @@ public sealed class EventosController : ControllerBase
         }
 
         var result = await _management.CheckInAsync(request.TicketId.Trim(), cancellationToken);
+
+        // T7 — avisar EN VIVO a la consola: con varias puertas, cada operador ve entrar a
+        // la gente sin recargar. Va DESPUÉS de que el check-in ya ocurrió y es
+        // best-effort: si nadie escucha o falla el aviso, la entrada sigue validada.
+        if (result.Status is "valid" or "already-used")
+        {
+            await BestEffortPublishAsync(result, cancellationToken);
+        }
+
         return Ok(new CheckInResponse(result.Status));
     }
 

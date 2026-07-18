@@ -29,7 +29,16 @@ public sealed record EventManageView(
 /// invalid. <c>valid</c> en el primer check-in exitoso; <c>already-used</c> si el
 /// ticket ya estaba marcado; <c>invalid</c> si el ticket no existe.
 /// </summary>
-public sealed record EventCheckInResult(string Status);
+/// <param name="EventId">
+/// De qué evento era la entrada. Opcional (aditivo, T7): lo necesita el aviso EN VIVO
+/// para elegir el canal — sin él no se sabe a qué consola avisar. Viene vacío cuando el
+/// token no se pudo verificar (no hay evento del que hablar).
+/// </param>
+public sealed record EventCheckInResult(
+    string Status,
+    string? EventId = null,
+    string? TicketId = null,
+    string? AttendeeName = null);
 
 /// <summary>
 /// Un tier del borrador de evento del organizador: nombre visible + precio +
