@@ -70,6 +70,37 @@ public sealed class EventosController : ControllerBase
         return (null, email);
     }
 
+    /// <summary>
+    /// Rol(es) que dan acceso a la consola del ORGANIZADOR. <c>organizador</c> es el rol
+    /// de dominio (member group), <c>admin</c> entra como superusuario — mismo criterio
+    /// que <c>funcionario,admin</c> en Gobierno y <c>doctor,nurse,reception</c> en Healthcare.
+    /// </summary>
+    private const string OrganizerRolesCsv = "organizador,admin";
+
+    /// <summary>
+    /// Exige un ORGANIZADOR para la consola del evento. 401 si es anónimo, 403 si está
+    /// autenticado pero sin el rol. Molde de <c>DashboardApiController.Deny</c>.
+    /// </summary>
+    /// <remarks>
+    /// Estas rutas exponen la lista de asistentes con sus datos, mueven el aforo y
+    /// publican al catálogo: al revés que comprar una entrada, aquí NO basta con estar
+    /// logueado — un asistente cualquiera no es el organizador del evento.
+    /// <para><c>StatusCode(403)</c> y NO <c>Forbid()</c>: con auth de members
+    /// <c>Forbid()</c> REDIRIGE al login en vez de denegar.</para>
+    /// </remarks>
+    private IActionResult? RequireOrganizer()
+    {
+        if (!_gate.IsAuthenticated)
+        {
+            return Unauthorized(new { error = "Inicie sesión como organizador." });
+        }
+        if (!_gate.HasAnyRole(OrganizerRolesCsv))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Su cuenta no tiene permiso de organizador." });
+        }
+        return null;
+    }
+
     // ── 1. Catálogo / agenda ───────────────────────────────────────────
     // GET /api/eventos/events?q= → { events:[...] }
     [HttpGet("events")]
@@ -173,10 +204,15 @@ public sealed class EventosController : ControllerBase
     }
 
     // ── 5. Manage (dashboard de organizador) ────────────────────────────
-    // GET /api/eventos/manage/{eventId} → { attendees:[...], capacity, sold }
+    // GET /api/eventos/manage/{eventId} → { attendees:[...], capacity, sold }   🔒 organizador
+    //
+    // Devuelve la lista de ASISTENTES con sus datos. Era anónima: cualquiera veía quién
+    // va a un evento y cuánto se vendió.
     [HttpGet("manage/{eventId}")]
     public async Task<IActionResult> Manage(string eventId, CancellationToken cancellationToken)
     {
+        if (RequireOrganizer() is { } denied) { return denied; }
+
         if (string.IsNullOrWhiteSpace(eventId))
         {
             return BadRequest(new { error = "eventId es requerido." });
@@ -207,10 +243,10 @@ public sealed class EventosController : ControllerBase
     [HttpPost("checkin")]
     public async Task<IActionResult> CheckIn([FromBody] CheckInRequest? request, CancellationToken cancellationToken)
     {
-        // Quemar una entrada es irreversible para su dueño: al menos exige sesión, para
-        // que no lo haga un anónimo de internet. El rol de organizador es T2-Eventos.
-        var (denied, _) = RequireMemberEmail();
-        if (denied is not null) { return denied; }
+        // Quemar una entrada es irreversible para su dueño, y quien lo hace es el staff
+        // de la puerta: exige ROL de organizador, no solo estar logueado (T9 lo dejó en
+        // "cualquier member" para no inventar un rol sin sembrar; ahora ya existe).
+        if (RequireOrganizer() is { } denied) { return denied; }
 
         if (request is null || string.IsNullOrWhiteSpace(request.TicketId))
         {
@@ -285,6 +321,9 @@ public sealed class EventosController : ControllerBase
     [HttpPost("event")]
     public async Task<IActionResult> CreateEvent([FromBody] EventDraftRequest? request, CancellationToken cancellationToken)
     {
+        // Publicar al catálogo era ANÓNIMO: cualquiera colgaba un evento en el sitio.
+        if (RequireOrganizer() is { } denied) { return denied; }
+
         if (request is null || string.IsNullOrWhiteSpace(request.Name))
         {
             return BadRequest(new { error = "name es requerido." });
