@@ -662,6 +662,13 @@ public sealed class SeamComposer : IComposer
         // comprueba permiso en cada descarga (el id opaco no es la autorización).
         services.AddSingleton<IPrivateFileStore, FileSystemPrivateFileStore>();
 
+        // T9 — firma del QR de las entradas. La llave sale del secreto configurado o, si
+        // no hay, se genera una vez y se guarda CIFRADA en el almacén de arriba: así el
+        // QR sobrevive un reinicio (el bug que T9 corrige era justo lo contrario) sin
+        // meter ningún secreto en el repo.
+        services.AddSingleton<TicketSigningKeyProvider>();
+        services.AddSingleton<ITicketSigner, LazyTicketSigner>();
+
         // ADR 0098 H2 — repositorio de historia clínica (versionado, sobre el PHI store).
         services.AddSingleton<IPatientRepository, FileSystemPatientRepository>();
 
@@ -777,7 +784,9 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 sp.GetRequiredService<IJsonEntityStore>(),
                 null,
-                notifier: sp.GetRequiredService<ITransactionalNotifier>()));
+                notifier: sp.GetRequiredService<ITransactionalNotifier>(),
+                // T9: sin firmante no se emite QR ni se valida en la puerta (fail-closed).
+                signer: sp.GetRequiredService<ITicketSigner>()));
         services.AddSingleton<IEventTicketingService>(sp => sp.GetRequiredService<StubEventTicketingService>());
         services.AddSingleton<IEventManagementService>(sp =>
             new StubEventManagementService(

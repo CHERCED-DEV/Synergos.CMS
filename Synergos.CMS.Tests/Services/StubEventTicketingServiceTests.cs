@@ -17,13 +17,26 @@ namespace Synergos.CMS.Tests.Services;
 /// </summary>
 public class StubEventTicketingServiceTests
 {
+    /// <summary>
+    /// Firmante de tickets con llave fija (T9). Los tests usan uno REAL: con
+    /// <c>signer: null</c> el servicio es fail-closed y no emite QR, así que un test que
+    /// no lo pase estaría probando el modo "sin firma", no el camino real.
+    /// </summary>
+    private static readonly ITicketSigner Signer =
+        new HmacTicketSigner(System.Text.Encoding.UTF8.GetBytes("llave-de-tests-t9"));
+
     private static StubEventTicketingService Make(
         IReservationService? reservations = null,
         IPaymentProvider? payments = null)
         => new StubEventTicketingService(
             new StubEventCatalogProvider(),
             reservations ?? new StubReservationService(),
-            payments ?? new StubPaymentProvider());
+            payments ?? new StubPaymentProvider(),
+            null,
+            null,
+            null,
+            null,
+            signer: Signer);
 
     private static EventAttendeeInfo Attendee(string suffix = "1")
         => new($"Asistente {suffix}", $"asistente{suffix}@synergos.co", $"100{suffix}");
@@ -52,6 +65,15 @@ public class StubEventTicketingServiceTests
         Assert.Equal(2, confirmation.Tickets.Count);
         Assert.All(confirmation.Tickets, t => Assert.StartsWith("SYN-TKT-evt-festival-estereo-", t.Qr));
         Assert.All(confirmation.Tickets, t => Assert.Equal("GEN", t.Tier));
+        // T9: el QR no solo tiene forma de token — está FIRMADO y verifica contra el
+        // ticket que dice ser. Antes era un string derivable por cualquiera.
+        Assert.All(confirmation.Tickets, t =>
+        {
+            var token = Signer.Verify(t.Qr);
+            Assert.NotNull(token);
+            Assert.Equal(t.Id, token!.TicketId);
+            Assert.Equal("evt-festival-estereo", token.EventId);
+        });
     }
 
     [Fact] // happy: reserved → cada asiento es una unidad con su Seat en el ticket
@@ -166,10 +188,16 @@ public class StubEventTicketingServiceTests
 
         var transfer = await svc.TransferTicketAsync(ticket.Id, "nuevo.duenio@synergos.co");
 
-        Assert.NotEqual(oldQr, transfer.NewQr);        // QR viejo invalidado
+        Assert.NotEqual(oldQr, transfer.NewQr);
         Assert.Equal(transfer.NewQr, transfer.Ticket.Qr);
         Assert.Equal("nuevo.duenio@synergos.co", transfer.Ticket.HolderEmail);
         Assert.Equal("transferred", transfer.Ticket.Status);
+
+        // T9 — "QR viejo invalidado" ahora SE COMPRUEBA, no se afirma de palabra: el
+        // código del dueño anterior ya no abre la puerta (anti-reventa), y el nuevo sí.
+        // Antes esto no se podía verificar porque el check-in ni miraba el QR.
+        Assert.Equal("invalid", await svc.MarkCheckedInAsync(oldQr));
+        Assert.Equal("valid", await svc.MarkCheckedInAsync(transfer.NewQr));
 
         // El ticket ya no aparece para el holder original; sí para el nuevo.
         Assert.Empty(await svc.GetTicketsAsync("asistente1@synergos.co"));
@@ -233,7 +261,7 @@ public class StubEventTicketingServiceTests
             new StubEventCatalogProvider(),
             new StubReservationService(StubReservationService.DefaultHoldWindow, null, store),
             new StubPaymentProvider(store),
-            null, null, store, null);
+            null, null, store, null, signer: Signer);
         var checkout = await beforeRestart.CheckoutAsync(
             "evt-festival-estereo",
             new[] { new EventCheckoutItem("GEN", null, 2) },
@@ -244,7 +272,7 @@ public class StubEventTicketingServiceTests
             new StubEventCatalogProvider(),
             new StubReservationService(StubReservationService.DefaultHoldWindow, null, store),
             new StubPaymentProvider(store),
-            null, null, store, null);
+            null, null, store, null, signer: Signer);
 
         var confirmation = await afterRestart.ConfirmAsync(checkout.OrderRef);
         Assert.Equal("Confirmed", confirmation.Status);
@@ -254,9 +282,13 @@ public class StubEventTicketingServiceTests
         Assert.Single(await afterRestart.GetTicketsAsync("asistente1@synergos.co"));
         Assert.Equal(2, (await afterRestart.GetConfirmedTicketsAsync("evt-festival-estereo")).Count);
 
-        // El check-in sigue siendo idempotente cruzando el "reinicio".
-        var ticketId = confirmation.Tickets.First().Id;
-        Assert.Equal("valid", afterRestart.MarkCheckedIn(ticketId));
-        Assert.Equal("already-used", afterRestart.MarkCheckedIn(ticketId));
+        // El check-in sigue siendo idempotente cruzando el "reinicio" — y desde T9 se
+        // entra con el TOKEN FIRMADO, no con el id. Que el QR emitido por una instancia
+        // valga en otra es justo lo que el generador anterior NO cumplía: derivaba de
+        // String.GetHashCode(), randomizado por proceso.
+        var ticket = confirmation.Tickets.First();
+        Assert.Equal("invalid", afterRestart.MarkCheckedIn(ticket.Id)); // el id no es credencial
+        Assert.Equal("valid", afterRestart.MarkCheckedIn(ticket.Qr));
+        Assert.Equal("already-used", afterRestart.MarkCheckedIn(ticket.Qr));
     }
 }
