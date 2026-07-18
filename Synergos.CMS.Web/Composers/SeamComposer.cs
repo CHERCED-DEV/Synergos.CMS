@@ -655,6 +655,13 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IConsentLedger, FileSystemConsentLedger>();
         services.AddScoped<IPhiAccessGuard, DefaultPhiAccessGuard>();
 
+        // T6 — almacén de ficheros PRIVADOS (bytes subidos por usuarios): cifrado
+        // at-rest y bajo App_Data/, donde NINGÚN middleware de estáticos llega. Es el
+        // contrapeso de wwwroot/media, que es público por construcción: ahí van las
+        // fotos de producto, aquí la cédula del ciudadano. Quien sirva estos bytes
+        // comprueba permiso en cada descarga (el id opaco no es la autorización).
+        services.AddSingleton<IPrivateFileStore, FileSystemPrivateFileStore>();
+
         // ADR 0098 H2 — repositorio de historia clínica (versionado, sobre el PHI store).
         services.AddSingleton<IPatientRepository, FileSystemPatientRepository>();
 
@@ -852,8 +859,10 @@ public sealed class SeamComposer : IComposer
         //     → gov.case-transition append-only.
         //   - ICaseTrackingProvider: expediente+timeline + bandeja por rol (ciudadano
         //     ve los suyos por email / funcionario ve la cola). Solo LEE el agregado.
-        //   - IDocumentUploadService: valida tipo (PDF/JPG/PNG) + peso (≤10 MB), crea
-        //     refs accepted/rejected, adjunta solo las aceptadas + audita la subida.
+        //   - IDocumentUploadService: T6 — guarda los BYTES en IPrivateFileStore (cifrado,
+        //     fuera de wwwroot) y adjunta la metadata con el puntero + audita la subida.
+        //     El tipo (PDF/JPG/PNG) y el peso (≤10 MB) los valida el controller, que es
+        //     quien ve el multipart.
         // Singletons — el estado (expedientes) vive en memoria del proceso, igual que
         // el resto de stubs del motor.
         services.AddSingleton<ITramiteCatalogProvider, StubTramiteCatalogProvider>();
@@ -882,6 +891,7 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IDocumentUploadService>(sp =>
             new StubDocumentUploadService(
                 sp.GetRequiredService<StubApplicationService>(),
+                sp.GetRequiredService<IPrivateFileStore>(),
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 null));
         // OLA 8 Gobierno — correspondencia del expediente sobre el seam GENÉRICO
