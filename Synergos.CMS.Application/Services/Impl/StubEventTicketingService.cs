@@ -66,6 +66,8 @@ public sealed class StubEventTicketingService : IEventTicketingService
     private readonly IAuditTrailWriter? _audit;
     private readonly IJsonEntityStore _store;
     private readonly ITransactionalNotifier? _notifier;
+    /// <summary>T9 — firma el QR y lo verifica en la puerta. Null = fail-closed.</summary>
+    private readonly ITicketSigner? _signer;
     private readonly Func<DateTimeOffset> _now;
 
     public StubEventTicketingService(
@@ -123,7 +125,8 @@ public sealed class StubEventTicketingService : IEventTicketingService
         IAuditTrailWriter? audit,
         IJsonEntityStore? store,
         Func<DateTimeOffset>? now,
-        ITransactionalNotifier? notifier = null)
+        ITransactionalNotifier? notifier = null,
+        ITicketSigner? signer = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
@@ -132,6 +135,9 @@ public sealed class StubEventTicketingService : IEventTicketingService
         _audit = audit;
         _store = store ?? new InMemoryJsonEntityStore();
         _notifier = notifier;
+        // T9: sin firmante NO se emite QR ni se valida nada (fail-closed). Un QR sin
+        // firma sería falsificable y —peor— parecería seguro. En Web siempre se cablea.
+        _signer = signer;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -560,14 +566,24 @@ public sealed class StubEventTicketingService : IEventTicketingService
         => MarkCheckedInAsync(ticketId).GetAwaiter().GetResult();
 
     /// <inheritdoc cref="MarkCheckedIn"/>
+    /// <remarks>
+    /// <b>T9 — se admite ÚNICAMENTE un token firmado.</b> Antes esto comparaba el input
+    /// contra el <c>ticketId</c> y no miraba el QR: escanear devolvía <c>invalid</c> y lo
+    /// único que funcionaba era teclear el id… que la UI imprime bajo el propio código.
+    /// O sea, una foto de la entrada ajena servía para entrar en su lugar. Ahora el token
+    /// es la credencial: sin firma válida no se abre la puerta.
+    /// <para>Se verifica además que la <c>QrVersion</c> del token sea la vigente: al
+    /// transferir la entrada el QR rota, y el del dueño anterior debe morir (anti-reventa).</para>
+    /// </remarks>
     public async Task<string> MarkCheckedInAsync(string ticketId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(ticketId))
+        var token = _signer?.Verify(ticketId);
+        if (token is null)
         {
+            // Sin firma válida no hay entrada. Incluye el id suelto y el QR de otro evento.
             return "invalid";
         }
 
-        var id = ticketId.Trim();
         var all = await LoadAllAsync(cancellationToken);
         foreach (var order in all.OrderBy(o => o.CreatedAt))
         {
@@ -578,9 +594,15 @@ public sealed class StubEventTicketingService : IEventTicketingService
             for (var i = 0; i < order.Units.Count; i++)
             {
                 var unit = order.Units[i];
-                if (!string.Equals(TicketId(unit.ReservationId), id, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(TicketId(unit.ReservationId), token.TicketId, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
+                }
+                if (unit.QrVersion != token.QrVersion)
+                {
+                    // QR de una versión anterior: la entrada se transfirió y esta copia
+                    // ya no vale. Es el caso de la reventa del mismo QR.
+                    return "invalid";
                 }
                 if (unit.CheckedIn)
                 {
@@ -630,19 +652,20 @@ public sealed class StubEventTicketingService : IEventTicketingService
     private Task WriteAsync(PersistedEventOrder order, CancellationToken cancellationToken)
         => _store.WriteAsync(ResourceType, order.OrderRef, JsonSerializer.Serialize(order, _json), cancellationToken);
 
-    private static EventConfirmationResult ToConfirmation(PersistedEventOrder order)
+    private EventConfirmationResult ToConfirmation(PersistedEventOrder order)
     {
         var tickets = order.Units.Select(u => ToTicket(order.EventId, u)).ToList();
         return new EventConfirmationResult(order.Status.ToString(), tickets);
     }
 
     // Proyecta una unidad confirmada a su e-ticket (con QR rotativo + holder + estado).
-    private static EventTicket ToTicket(string eventId, PersistedEventUnit u)
+    // De instancia desde T9: el QR se FIRMA, y la llave vive en el firmante inyectado.
+    private EventTicket ToTicket(string eventId, PersistedEventUnit u)
     {
         var ticketId = TicketId(u.ReservationId);
         return new EventTicket(
             Id: ticketId,
-            Qr: BuildQr(eventId, ticketId, u.HolderEmail, u.QrVersion),
+            Qr: BuildQr(eventId, ticketId, u.QrVersion),
             EventId: eventId,
             AttendeeName: u.HolderName,
             Tier: u.TierCode,
@@ -667,17 +690,17 @@ public sealed class StubEventTicketingService : IEventTicketingService
     private static string TicketId(string reservationId)
         => "tkt_" + reservationId.Replace("resv_", string.Empty, StringComparison.Ordinal);
 
-    // Payload QR ROTATIVO determinista por ticket (SafeTix-like): incluye el holder
-    // + la versión, así que transferir (bump de versión) INVALIDA el QR viejo y
-    // emite uno nuevo. Hoy un string estable no-secreto; el adapter real lo firma
-    // con HMAC server-side (spec §8 — anti-fraude/anti-reventa).
-    private static string BuildQr(string eventId, string ticketId, string holderEmail, int qrVersion)
-    {
-        var holderTag = Math.Abs(
-            StringComparer.OrdinalIgnoreCase.GetHashCode(holderEmail ?? string.Empty))
-            .ToString("X8");
-        return $"SYN-TKT-{eventId}-{ticketId}-v{qrVersion}-{holderTag}";
-    }
+    // Payload QR ROTATIVO por ticket (SafeTix-like), FIRMADO desde T9: incluye la
+    // versión, así que transferir (bump de versión) INVALIDA el QR viejo y emite uno
+    // nuevo — y la firma impide fabricarlo.
+    //
+    // Antes el sufijo era `String.GetHashCode()` del email: no criptográfico y, en .NET
+    // Core, RANDOMIZADO POR PROCESO — el mismo ticket daba un QR distinto tras cada
+    // reinicio. Nadie lo notó porque nada verificaba el QR.
+    // Sin firmante devuelve vacío en vez de un token falsificable: la UI no pinta QR y
+    // la puerta no valida nada. Es preferible una entrada sin código a una que finge.
+    private string BuildQr(string eventId, string ticketId, int qrVersion)
+        => _signer is null ? string.Empty : _signer.Sign(new TicketToken(eventId, ticketId, qrVersion));
 
     // Número de orden human-facing derivado determinísticamente del orderRef (calcando
     // StubShopOrderService): re-confirmar el mismo orderRef da el mismo número, así que

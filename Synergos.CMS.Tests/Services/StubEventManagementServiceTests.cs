@@ -16,11 +16,16 @@ namespace Synergos.CMS.Tests.Services;
 /// </summary>
 public class StubEventManagementServiceTests
 {
+    /// <summary>Firmante real (T9): sin él el servicio es fail-closed y no emite QR.</summary>
+    private static readonly ITicketSigner Signer =
+        new HmacTicketSigner(System.Text.Encoding.UTF8.GetBytes("llave-de-tests-t9"));
+
     private static (IEventManagementService Mgmt, StubEventTicketingService Ticketing) Make()
     {
         var catalog = new StubEventCatalogProvider();
         var ticketing = new StubEventTicketingService(
-            catalog, new StubReservationService(), new StubPaymentProvider());
+            catalog, new StubReservationService(), new StubPaymentProvider(),
+            null, null, null, null, signer: Signer);
         var mgmt = new StubEventManagementService(ticketing, catalog);
         return (mgmt, ticketing);
     }
@@ -72,16 +77,38 @@ public class StubEventManagementServiceTests
         var (mgmt, ticketing) = Make();
         var checkout = await ticketing.CheckoutAsync("evt-festival-estereo",
             new[] { new EventCheckoutItem("GEN", null, 1) }, new[] { Attendee() });
-        await ticketing.ConfirmAsync(checkout.OrderRef);
+        var confirmation = await ticketing.ConfirmAsync(checkout.OrderRef);
 
-        var ticketId = (await mgmt.GetManageAsync("evt-festival-estereo")).Attendees.Single().TicketId;
+        // T9: se entra con el TOKEN FIRMADO del QR, que es la credencial.
+        var qr = confirmation.Tickets.Single().Qr;
 
-        Assert.Equal("valid", (await mgmt.CheckInAsync(ticketId)).Status);
-        Assert.Equal("already-used", (await mgmt.CheckInAsync(ticketId)).Status);
+        Assert.Equal("valid", (await mgmt.CheckInAsync(qr)).Status);
+        Assert.Equal("already-used", (await mgmt.CheckInAsync(qr)).Status);
 
         // el dashboard refleja la marca de asistencia
         var attendee = (await mgmt.GetManageAsync("evt-festival-estereo")).Attendees.Single();
         Assert.True(attendee.CheckedIn);
+    }
+
+    [Fact] // T9 — EL AGUJERO QUE SE CIERRA: el ticketId suelto ya no abre la puerta.
+           // La UI imprime ese id bajo el QR, así que antes bastaba una foto del ticket
+           // ajeno para entrar en su lugar (el check-in ni miraba el QR).
+    public async Task CheckIn_WithBareTicketId_IsRejected()
+    {
+        var (mgmt, ticketing) = Make();
+        var checkout = await ticketing.CheckoutAsync("evt-festival-estereo",
+            new[] { new EventCheckoutItem("GEN", null, 1) }, new[] { Attendee() });
+        var confirmation = await ticketing.ConfirmAsync(checkout.OrderRef);
+        var ticket = confirmation.Tickets.Single();
+
+        // El id que la UI muestra en claro: rechazado.
+        Assert.Equal("invalid", (await mgmt.CheckInAsync(ticket.Id)).Status);
+        // Un token inventado con el formato correcto pero sin firma válida: rechazado.
+        Assert.Equal("invalid", (await mgmt.CheckInAsync(
+            $"SYN-TKT-evt-festival-estereo-{ticket.Id}-v0.deadbeef")).Status);
+
+        // Control: la entrada sigue siendo válida con su token real (no la quemamos).
+        Assert.Equal("valid", (await mgmt.CheckInAsync(ticket.Qr)).Status);
     }
 
     // ── OLA 3 — Crear evento (organizador) ──────────────────────────────

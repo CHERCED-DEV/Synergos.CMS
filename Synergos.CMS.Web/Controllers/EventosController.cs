@@ -34,17 +34,40 @@ public sealed class EventosController : ControllerBase
     private readonly IEventTicketingService _ticketing;
     private readonly IEventManagementService _management;
     private readonly IPriceFormatter _priceFormatter;
+    private readonly IMemberAccessGate _gate;
 
     public EventosController(
         IEventCatalogProvider catalog,
         IEventTicketingService ticketing,
         IEventManagementService management,
-        IPriceFormatter priceFormatter)
+        IPriceFormatter priceFormatter,
+        IMemberAccessGate gate)
     {
         _catalog = catalog;
         _ticketing = ticketing;
         _management = management;
         _priceFormatter = priceFormatter;
+        _gate = gate;
+    }
+
+    // ── T9 — identidad server-trusted (molde de GovController/ShopCatalogController) ──
+    //
+    // Firmar el QR no sirve de nada si el token se puede pedir: `?holder=<email>` listaba
+    // las entradas de CUALQUIERA, y con ellas su token. Cerrar esa fuga es parte de T9,
+    // no un extra.
+
+    /// <summary>
+    /// Exige un Member autenticado y devuelve su correo <b>server-trusted</b> (el que
+    /// indexa las entradas). 401 si es anónimo.
+    /// </summary>
+    private (IActionResult? denied, string email) RequireMemberEmail()
+    {
+        var email = _gate.CurrentMemberEmail;
+        if (!_gate.IsAuthenticated || string.IsNullOrWhiteSpace(email))
+        {
+            return (Unauthorized(new { error = "Se requiere iniciar sesión." }), string.Empty);
+        }
+        return (null, email);
     }
 
     // ── 1. Catálogo / agenda ───────────────────────────────────────────
@@ -176,10 +199,19 @@ public sealed class EventosController : ControllerBase
     }
 
     // ── 6. Check-in (validar + marcar asistencia, idempotente) ──────────
-    // POST /api/eventos/checkin { ticketId } → { status }
+    // POST /api/eventos/checkin { ticketId } → { status }   🔒 sesión
+    //
+    // El cuerpo se sigue llamando `ticketId` por compatibilidad de contrato, pero desde
+    // T9 lo que se espera es el TOKEN FIRMADO del QR: el id suelto ya no abre la puerta
+    // (la UI lo imprime bajo el código, así que valía una foto ajena).
     [HttpPost("checkin")]
     public async Task<IActionResult> CheckIn([FromBody] CheckInRequest? request, CancellationToken cancellationToken)
     {
+        // Quemar una entrada es irreversible para su dueño: al menos exige sesión, para
+        // que no lo haga un anónimo de internet. El rol de organizador es T2-Eventos.
+        var (denied, _) = RequireMemberEmail();
+        if (denied is not null) { return denied; }
+
         if (request is null || string.IsNullOrWhiteSpace(request.TicketId))
         {
             return BadRequest(new { error = "ticketId es requerido." });
@@ -190,27 +222,33 @@ public sealed class EventosController : ControllerBase
     }
 
     // ── 7. Mis tickets (cara de asistente) ──────────────────────────────
-    // GET /api/eventos/tickets?holder= → { tickets:[...] }
+    // GET /api/eventos/tickets → { tickets:[...] }   🔒 sesión
+    //
+    // El `?holder=<email>` DESAPARECE: era el IDOR, y además filtraba el token del QR de
+    // cualquiera. La bandeja es la del member de la sesión.
     [HttpGet("tickets")]
-    public async Task<IActionResult> Tickets([FromQuery] string? holder, CancellationToken cancellationToken)
+    public async Task<IActionResult> Tickets(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(holder))
-        {
-            return BadRequest(new { error = "holder es requerido." });
-        }
+        var (denied, email) = RequireMemberEmail();
+        if (denied is not null) { return denied; }
 
-        var tickets = await _ticketing.GetTicketsAsync(holder.Trim(), cancellationToken);
+        var tickets = await _ticketing.GetTicketsAsync(email, cancellationToken);
         return Ok(new TicketsResponse(tickets.Select(ToTicketDto).ToList()));
     }
 
     // ── 8. Transferir ticket (reasigna holder + rota QR + auditado) ─────
-    // POST /api/eventos/ticket/{id}/transfer { toEmail } → { ticket, newQr }
+    // POST /api/eventos/ticket/{id}/transfer { toEmail } → { ticket, newQr }   🔒 dueño
     [HttpPost("ticket/{id}/transfer")]
     public async Task<IActionResult> TransferTicket(
         string id,
         [FromBody] TransferRequest? request,
         CancellationToken cancellationToken)
     {
+        // Transferir es REGALAR la entrada: sin esta guarda, conocer el id bastaba para
+        // quitársela a su dueño (y de paso rotarle el QR, dejándolo fuera del evento).
+        var (denied, email) = RequireMemberEmail();
+        if (denied is not null) { return denied; }
+
         if (string.IsNullOrWhiteSpace(id))
         {
             return BadRequest(new { error = "El id del ticket es requerido." });
@@ -218,6 +256,15 @@ public sealed class EventosController : ControllerBase
         if (request is null || string.IsNullOrWhiteSpace(request.ToEmail))
         {
             return BadRequest(new { error = "toEmail es requerido." });
+        }
+
+        // Ownership: solo se transfiere lo propio. Se comprueba contra la bandeja del
+        // member de la sesión, que ya es la lista autorizada.
+        var own = await _ticketing.GetTicketsAsync(email, cancellationToken);
+        if (!own.Any(t => string.Equals(t.Id, id.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            // 403 y NO Forbid(): con auth de members Forbid REDIRIGE al login.
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "La entrada no es suya." });
         }
 
         EventTicketTransferResult result;

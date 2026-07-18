@@ -84,6 +84,11 @@ public sealed class OptionsComposer : IComposer
         builder.Services.Configure<PrivateFileStoreSettings>(
             builder.Config.GetSection("Synergos:PrivateFileStore"));
 
+        // T9 (doc 25) — secreto con el que se firma el QR de las entradas. Vacío NO es
+        // "no firmar": el host genera y persiste una llave (ver TicketSigningKeyProvider).
+        builder.Services.Configure<EventsSettings>(
+            builder.Config.GetSection("Synergos:Events"));
+
         // T3 (doc 25) — selección/gating del proveedor de pago + secreto del webhook.
         builder.Services.Configure<PaymentsSettings>(
             builder.Config.GetSection("Synergos:Payments"));
