@@ -1512,18 +1512,39 @@
    Al ser variable Sass, compila a un valor fijo y es INMUNE a esto. Ese residuo
    necesita un `@media` propio en el componente.
 
-   ── Y lo que deliberadamente NO se neutraliza ────────────────────────────
-   Los spinners de carga no deben desaparecer: quitarles el giro elimina el
-   feedback de "esto está trabajando" y deja al usuario sin saber si la app está
-   viva. `prefers-reduced-motion` pide REDUCIR el movimiento superfluo, no borrar
-   la información de estado. Por eso `--syn-duration-loop` y `--syn-duration-shimmer`
-   NO se tocan aquí: se dejan a su valor normal a propósito.
+   ── Por qué también loop y shimmer, que dudé en incluir ──────────────────
+   Mi primer instinto fue dejarlos fuera: colapsar el giro de un spinner borra el
+   feedback de "esto está trabajando". Pero `tools/sync-tokens.mjs` YA colapsaba
+   la lista completa desde antes, con su razón escrita — o sea que ya había una
+   decisión tomada, y mantener dos criterios habría dado DOS CONDUCTAS: los
+   spinners girando en el sitio real y quietos en standalone. Se alinea con lo
+   que ya estaba decidido.
+
+   ⚠️ Consecuencia que hay que cubrir en el COMPONENTE, no aquí: con la
+   preferencia activada un spinner queda estático, y un spinner estático se lee
+   como "colgado", no como "trabajando". Todo indicador de carga necesita una
+   alternativa NO basada en movimiento (un texto "Cargando…", un cambio de
+   opacidad). El token colapsa la animación; decir que algo está en curso sigue
+   siendo responsabilidad de quien lo pinta.
+
+   ── Dónde vive esto y por qué aquí ───────────────────────────────────────
+   En este fichero, que es el SSOT, y NO en el trailer de `sync-tokens.mjs`. El
+   generador lo inyectaba a mano en el bridge; eso dejaba al CMS —lo único que
+   el navegador ve de verdad— SIN la media query, porque el bridge solo aplica
+   en standalone. Al ponerlo en la fuente fluye a los dos, y se quitó el trailer
+   para no duplicarlo (el propio comentario del generador pedía "UNA sola query").
 */
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --syn-duration-fast:  0.01ms;
-    --syn-duration-base:  0.01ms;
-    --syn-duration-slow:  0.01ms;
-    --syn-duration-xslow: 0.01ms;
+    --syn-duration-fast:    0.01ms;
+    --syn-duration-base:    0.01ms;
+    --syn-duration-slow:    0.01ms;
+    --syn-duration-xslow:   0.01ms;
+    --syn-duration-loop:    0.01ms;
+    --syn-duration-shimmer: 0.01ms;
+    --syn-dur-fast:         0.01ms;
+    --syn-dur-base:         0.01ms;
+    --syn-dur-slow:         0.01ms;
+    --syn-motion-scale:     0;
   }
 }
