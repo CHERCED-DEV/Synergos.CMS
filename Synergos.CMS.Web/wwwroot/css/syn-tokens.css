@@ -463,6 +463,17 @@
   --syn-border-3: 1px solid rgb(15 23 42 / 0.16);        /* prominent */
   --syn-border-hairline: 0 0 0 1px rgb(15 23 42 / 0.10); /* box-shadow ring */
 
+  /* Anillo de HOVER de una superficie elevada (tarjetas). Por defecto es el
+     hairline, que en los temas claros ya se lee bien.
+     Existe como token propio porque en los OSCUROS el hairline NO sirve, y eso
+     se midió: la sombra proyectada de una tarjeta es negra sobre lienzo oscuro
+     (1.01:1 en dark, y en eventsNight el color de la sombra ES el lienzo — 1.00:1,
+     o sea que no se pinta), así que el anillo es la ÚNICA señal que queda. Al 10%
+     da 1.32 contra la superficie mientras el borde en reposo ya está en 1.22: el
+     hover se leía como el borde difuminándose, no como un cambio de estado.
+     Los bloques dark/eventsNight lo suben. */
+  --syn-ring-hover: var(--syn-border-hairline);
+
   /* ── Escalera de superficie 1..4 (canvas→panel→raised→elevado) ──────────
      MONOTÓNICA y REDECLARADA por-tema con valores explícitos: en oscuros el
      canvas es el más oscuro y 2/3/4 suben en luz (pasos perceptibles ~6-10%);
@@ -703,6 +714,12 @@
   --syn-border-2: 1px solid rgb(255 255 255 / 0.10);        /* standard  — hairline crisp */
   --syn-border-3: 1px solid rgb(255 255 255 / 0.16);        /* prominent */
   --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
+  /* a11y — anillo de hover al 24%: 2.18:1 contra la superficie de la tarjeta,
+     x1.78 el borde en reposo (1.22). Al 10% daba 1.32 y no se leía. */
+  --syn-ring-hover: 0 0 0 1px rgb(255 255 255 / 0.24);
+  /* a11y — anillo de hover al 24%: 2.18:1 contra la superficie de la tarjeta,
+     x1.78 el borde en reposo (1.22). Al 10% daba 1.32 y no se leía. */
+  --syn-ring-hover: 0 0 0 1px rgb(255 255 255 / 0.24);
 
   /* Ola 1 — image-placeholder + highlight-top (dark) */
   --syn-image-placeholder-surface: #293a5c;   /* raised dark tinte brand */
