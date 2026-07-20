@@ -42,6 +42,8 @@ public sealed class BlogsController : ControllerBase
     private readonly IUserCollection _collections;
     private readonly INotificationFeed _notifications;
 
+    private readonly IMemberAccessGate _gate;
+
     public BlogsController(
         IContentStream stream,
         ISocialGraphService graph,
@@ -50,7 +52,8 @@ public sealed class BlogsController : ControllerBase
         ICommentRepository comments,
         IMessagingService messaging,
         IUserCollection collections,
-        INotificationFeed notifications)
+        INotificationFeed notifications,
+        IMemberAccessGate gate)
     {
         _stream = stream;
         _graph = graph;
@@ -60,6 +63,27 @@ public sealed class BlogsController : ControllerBase
         _messaging = messaging;
         _collections = collections;
         _notifications = notifications;
+        _gate = gate;
+    }
+
+
+    // ── Identidad server-trusted (molde de Gov/Eventos: ADR 0103) ───────────────
+    //
+    // Estas rutas tomaban al usuario de un `?user=`/`?author=` o del body. Con DMs eso
+    // significa LEER LA BANDEJA DE CUALQUIERA sabiendo su id, y ESCRIBIR haciéndose pasar
+    // por otro. Es el mismo patrón que ya se cerró en Tienda, Gobierno y Eventos.
+
+    /// <summary>
+    /// Exige sesión y devuelve el id de actor server-trusted. 401 si es anónimo.
+    /// </summary>
+    private (IActionResult? denied, string actorId) RequireActor()
+    {
+        var email = _gate.CurrentMemberEmail;
+        if (!_gate.IsAuthenticated || string.IsNullOrWhiteSpace(email))
+        {
+            return (Unauthorized(new { error = "Se requiere iniciar sesión." }), string.Empty);
+        }
+        return (null, email);
     }
 
     // ── 1. Feed ────────────────────────────────────────────────────
@@ -286,9 +310,11 @@ public sealed class BlogsController : ControllerBase
     // ── 8. DMs (mensajería directa — SH-7 v2) ──────────────────────
     // GET /api/blogs/messages?user= → inbox { threads:[...] }
     [HttpGet("messages")]
-    public async Task<IActionResult> Messages([FromQuery] string? user, CancellationToken cancellationToken)
+    public async Task<IActionResult> Messages(CancellationToken cancellationToken)
     {
-        var who = string.IsNullOrWhiteSpace(user) ? DemoCurrentActor : user.Trim();
+        var (denied, who) = RequireActor();
+        if (denied is not null) { return denied; }
+
         var inbox = await _messaging.GetInboxAsync(who, cancellationToken);
 
         var threads = new List<DmThreadSummaryDto>(inbox.Count);
@@ -309,6 +335,9 @@ public sealed class BlogsController : ControllerBase
     [HttpGet("thread/{id}")]
     public async Task<IActionResult> Thread(string id, CancellationToken cancellationToken)
     {
+        var (denied, actorId) = RequireActor();
+        if (denied is not null) { return denied; }
+
         if (string.IsNullOrWhiteSpace(id))
         {
             return BadRequest(new { error = "El id del hilo es requerido." });
@@ -318,6 +347,14 @@ public sealed class BlogsController : ControllerBase
         if (thread is null)
         {
             return NotFound(new { error = $"Hilo '{id}' no encontrado." });
+        }
+
+        // OWNERSHIP: una conversación privada solo la lee quien participa en ella. Sin
+        // esto, conocer (o adivinar) el id del hilo bastaba para leer los mensajes de
+        // otros dos. `StatusCode(403)` y NO `Forbid()`: con auth de members redirige.
+        if (!thread.Participants.Any(p => string.Equals(p, actorId, StringComparison.OrdinalIgnoreCase)))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "La conversación no es suya." });
         }
 
         return Ok(new ThreadResponse(Thread: await ToDmThreadDto(thread, cancellationToken)));
@@ -330,12 +367,17 @@ public sealed class BlogsController : ControllerBase
     [HttpPost("message")]
     public async Task<IActionResult> Message([FromBody] SendMessageRequest? request, CancellationToken cancellationToken)
     {
+        // Autenticar ANTES de mirar el cuerpo: no se procesa input de un anónimo.
+        var (denied, from) = RequireActor();
+        if (denied is not null) { return denied; }
+
         if (request is null || string.IsNullOrWhiteSpace(request.To) || string.IsNullOrWhiteSpace(request.Body))
         {
             return BadRequest(new { error = "El mensaje requiere destinatario y cuerpo." });
         }
 
-        var from = string.IsNullOrWhiteSpace(request.From) ? DemoCurrentActor : request.From.Trim();
+        // El remitente sale del GATE y se IGNORA `request.From`: antes cualquiera
+        // escribía haciéndose pasar por otro con solo poner su id en el body.
 
         MessageThread thread;
         try
@@ -355,9 +397,11 @@ public sealed class BlogsController : ControllerBase
     // GET /api/blogs/notifications?user= → { notifications:[...] }
     // Eventos dirigidos (follow/reacción/mención) derivados del grafo + reacciones.
     [HttpGet("notifications")]
-    public async Task<IActionResult> Notifications([FromQuery] string? user, CancellationToken cancellationToken)
+    public async Task<IActionResult> Notifications(CancellationToken cancellationToken)
     {
-        var who = string.IsNullOrWhiteSpace(user) ? DemoCurrentActor : user.Trim();
+        var (denied, who) = RequireActor();
+        if (denied is not null) { return denied; }
+
         var events = await _notifications.GetForAsync(who, cancellationToken: cancellationToken);
 
         var dtos = events.Select(n => new NotificationDto(
@@ -413,9 +457,11 @@ public sealed class BlogsController : ControllerBase
     // ── 11. Guardados ──────────────────────────────────────────────
     // GET /api/blogs/saved?user= → { posts:[...] }
     [HttpGet("saved")]
-    public async Task<IActionResult> Saved([FromQuery] string? user, CancellationToken cancellationToken)
+    public async Task<IActionResult> Saved(CancellationToken cancellationToken)
     {
-        var who = string.IsNullOrWhiteSpace(user) ? DemoCurrentActor : user.Trim();
+        var (denied, who) = RequireActor();
+        if (denied is not null) { return denied; }
+
         var items = await _collections.GetAsync(who, SavedCollection, cancellationToken);
 
         var posts = new List<PostDto>();
@@ -448,16 +494,17 @@ public sealed class BlogsController : ControllerBase
     // DELETE /api/blogs/saved?user=&postId= → { saved:false }
     [HttpDelete("saved")]
     public async Task<IActionResult> Unsave(
-        [FromQuery] string? user,
         [FromQuery] string? postId,
         CancellationToken cancellationToken)
     {
+        var (denied, who) = RequireActor();
+        if (denied is not null) { return denied; }
+
         if (string.IsNullOrWhiteSpace(postId))
         {
             return BadRequest(new { error = "El postId es requerido." });
         }
 
-        var who = string.IsNullOrWhiteSpace(user) ? DemoCurrentActor : user.Trim();
         await _collections.RemoveAsync(who, SavedCollection, postId.Trim(), cancellationToken);
         return Ok(new SavedStateResponse(Saved: false, PostId: postId.Trim()));
     }
@@ -467,9 +514,11 @@ public sealed class BlogsController : ControllerBase
     // Métricas del creador: seguidores (grafo), alcance (reacciones+comentarios
     // acumulados de sus posts) y engagement (alcance / posts).
     [HttpGet("studio")]
-    public async Task<IActionResult> Studio([FromQuery] string? author, CancellationToken cancellationToken)
+    public async Task<IActionResult> Studio(CancellationToken cancellationToken)
     {
-        var authorId = string.IsNullOrWhiteSpace(author) ? DemoCurrentActor : author.Trim();
+        var (denied, authorId) = RequireActor();
+        if (denied is not null) { return denied; }
+
         var profile = await _profiles.GetByActorIdAsync(authorId, cancellationToken);
 
         var page = await _stream.GetFeedAsync(
