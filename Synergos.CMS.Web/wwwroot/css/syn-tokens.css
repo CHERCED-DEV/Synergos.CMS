@@ -1570,8 +1570,18 @@
     --syn-duration-base:    0.01ms;
     --syn-duration-slow:    0.01ms;
     --syn-duration-xslow:   0.01ms;
-    --syn-duration-loop:    0.01ms;
-    --syn-duration-shimmer: 0.01ms;
+
+    /* ⚠️ `loop` y `shimmer` NO entran aquí, y esto se midió después de haberlo
+       hecho MAL una vez. Son las duraciones de animaciones `infinite` (spinners,
+       shimmer de esqueletos), y sobre un bucle infinito 0.01ms NO apaga nada:
+       son ~100.000 vueltas por segundo, o sea un ESTROBO. Le entrega el efecto
+       más agresivo de la app justo a quien pidió MENOS movimiento, y es riesgo
+       de WCAG 2.3.1 (destellos).
+       Consumidores reales con `infinite` sobre estos tokens: autocomplete,
+       avatar-upload, product-card, product-detail, product-grid.
+       Quien quiera DETENER un bucle lo hace con `animation: none` en su propio
+       `@media`, que es lo que ya hacen el primitivo skeleton y los esqueletos de
+       blogs/ehr/comments. Colapsar la duración no es una forma de parar. */
     --syn-dur-fast:         0.01ms;
     --syn-dur-base:         0.01ms;
     --syn-dur-slow:         0.01ms;
