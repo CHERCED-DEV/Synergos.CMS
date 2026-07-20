@@ -155,7 +155,10 @@ public sealed class BlogsController : ControllerBase
             return BadRequest(new { error = "El post requiere cuerpo o media." });
         }
 
-        var authorId = string.IsNullOrWhiteSpace(request.AuthorId) ? DemoCurrentActor : request.AuthorId.Trim();
+        // Identidad del GATE. Antes salia del cliente, asi que se podia publicar,
+        // reaccionar o seguir A NOMBRE DE OTRO: suplantacion, no solo lectura ajena.
+        var (denied, authorId) = RequireActor();
+        if (denied is not null) { return denied; }
 
         ContentStreamItem created;
         try
@@ -191,7 +194,11 @@ public sealed class BlogsController : ControllerBase
             return BadRequest(new { error = "El id del post es requerido." });
         }
 
-        var actor = string.IsNullOrWhiteSpace(actorId) ? DemoCurrentActor : actorId.Trim();
+        // Identidad del GATE. Antes salia del cliente, asi que se podia publicar,
+        // reaccionar o seguir A NOMBRE DE OTRO: suplantacion, no solo lectura ajena.
+        var (denied, actor) = RequireActor();
+        if (denied is not null) { return denied; }
+
         var type = string.IsNullOrWhiteSpace(request?.Type) ? "like" : request!.Type.Trim();
 
         ReactionState state;
@@ -220,7 +227,11 @@ public sealed class BlogsController : ControllerBase
             return BadRequest(new { error = "El authorId es requerido." });
         }
 
-        var follower = string.IsNullOrWhiteSpace(followerId) ? DemoCurrentActor : followerId.Trim();
+        // Identidad del GATE. Antes salia del cliente, asi que se podia publicar,
+        // reaccionar o seguir A NOMBRE DE OTRO: suplantacion, no solo lectura ajena.
+        var (denied, follower) = RequireActor();
+        if (denied is not null) { return denied; }
+
 
         // Toggle: si ya sigue → unfollow; si no → follow. Idempotente en ambas vías.
         var alreadyFollowing = await _graph.IsFollowingAsync(follower, authorId, cancellationToken);
@@ -288,7 +299,11 @@ public sealed class BlogsController : ControllerBase
             return BadRequest(new { error = "El artículo requiere título y cuerpo." });
         }
 
-        var authorId = string.IsNullOrWhiteSpace(request.Author) ? DemoCurrentActor : request.Author.Trim();
+        // Identidad del GATE. Antes salia del cliente, asi que se podia publicar,
+        // reaccionar o seguir A NOMBRE DE OTRO: suplantacion, no solo lectura ajena.
+        var (denied, authorId) = RequireActor();
+        if (denied is not null) { return denied; }
+
         var body = ComposeArticleBody(request.Title.Trim(), request.Body.Trim(), request.Tags);
 
         ContentStreamItem created;
@@ -477,16 +492,23 @@ public sealed class BlogsController : ControllerBase
         return Ok(new FeedResponse(Posts: posts, NextCursor: null));
     }
 
-    // POST /api/blogs/saved { user?, postId } → { saved:true }
+    // POST /api/blogs/saved { postId } → { saved:true }
     [HttpPost("saved")]
     public async Task<IActionResult> Save([FromBody] SaveRequest? request, CancellationToken cancellationToken)
     {
+        // Se me escapó en el barrido T2-Blogs, y era el mismo IDOR de escritura: tomaba
+        // `request.User` del body con fallback a un actor de demo, así que cualquiera
+        // añadía un post a la colección de OTRO. Su gemelo `DELETE /saved` sí exigía
+        // sesión desde entonces — una asimetría que no tenía justificación: si borrar de
+        // la lista de alguien necesita ser ese alguien, añadir también.
+        var (denied, who) = RequireActor();
+        if (denied is not null) { return denied; }
+
         if (request is null || string.IsNullOrWhiteSpace(request.PostId))
         {
             return BadRequest(new { error = "El postId es requerido." });
         }
 
-        var who = string.IsNullOrWhiteSpace(request.User) ? DemoCurrentActor : request.User.Trim();
         await _collections.AddAsync(who, SavedCollection, request.PostId.Trim(), cancellationToken);
         return Ok(new SavedStateResponse(Saved: true, PostId: request.PostId.Trim()));
     }
