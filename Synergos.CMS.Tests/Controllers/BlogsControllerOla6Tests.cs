@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
+using NSubstitute;
+using Synergos.CMS.Interfaces;
 using Xunit;
 
 namespace Synergos.CMS.Tests.Controllers;
@@ -34,8 +36,14 @@ public sealed class BlogsControllerOla6Tests
 
         await BlogsDemoSeeder.SeedAsync(messaging, collections);
 
+        // El actor sale del GATE, no de un ?user= (T2-Blogs): se simula a "act-elena"
+        // autenticada, que es de quien está sembrada la bandeja.
+        var gate = Substitute.For<IMemberAccessGate>();
+        gate.IsAuthenticated.Returns(true);
+        gate.CurrentMemberEmail.Returns("act-elena");
+
         return new BlogsController(
-            stream, graph, reactions, profiles, comments, messaging, collections, notifications);
+            stream, graph, reactions, profiles, comments, messaging, collections, notifications, gate);
     }
 
     private static T Body<T>(IActionResult result)
@@ -50,7 +58,7 @@ public sealed class BlogsControllerOla6Tests
         var c = await BuildAsync();
 
         var inbox = Body<BlogsController.MessagesResponse>(
-            await c.Messages("act-elena", CancellationToken.None));
+            await c.Messages(CancellationToken.None));
         Assert.NotEmpty(inbox.Threads);
 
         var threadId = inbox.Threads[0].ThreadId;
@@ -92,7 +100,7 @@ public sealed class BlogsControllerOla6Tests
         var c = await BuildAsync();
 
         var res = Body<BlogsController.NotificationsResponse>(
-            await c.Notifications("act-elena", CancellationToken.None));
+            await c.Notifications(CancellationToken.None));
 
         Assert.NotEmpty(res.Notifications);
         Assert.All(res.Notifications, n => Assert.False(string.IsNullOrWhiteSpace(n.Text)));
@@ -165,21 +173,21 @@ public sealed class BlogsControllerOla6Tests
         var c = await BuildAsync();
 
         var seeded = Body<BlogsController.FeedResponse>(
-            await c.Saved("act-elena", CancellationToken.None));
+            await c.Saved(CancellationToken.None));
         Assert.NotEmpty(seeded.Posts);
 
         // Guardar post-002 (no estaba) y verificar que aparece.
         Body<BlogsController.SavedStateResponse>(
             await c.Save(new BlogsController.SaveRequest("act-elena", "post-002"), CancellationToken.None));
         var afterSave = Body<BlogsController.FeedResponse>(
-            await c.Saved("act-elena", CancellationToken.None));
+            await c.Saved(CancellationToken.None));
         Assert.Contains(afterSave.Posts, p => p.Id == "post-002");
 
         // Quitarlo y verificar que desaparece.
         Body<BlogsController.SavedStateResponse>(
-            await c.Unsave("act-elena", "post-002", CancellationToken.None));
+            await c.Unsave("post-002", CancellationToken.None));
         var afterRemove = Body<BlogsController.FeedResponse>(
-            await c.Saved("act-elena", CancellationToken.None));
+            await c.Saved(CancellationToken.None));
         Assert.DoesNotContain(afterRemove.Posts, p => p.Id == "post-002");
     }
 
@@ -189,7 +197,7 @@ public sealed class BlogsControllerOla6Tests
         var c = await BuildAsync();
 
         var res = Body<BlogsController.StudioResponse>(
-            await c.Studio("act-elena", CancellationToken.None));
+            await c.Studio(CancellationToken.None));
 
         Assert.True(res.Metrics.Followers >= 0);
         Assert.True(res.Metrics.Posts > 0);        // elena tiene posts sembrados
