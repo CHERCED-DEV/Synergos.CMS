@@ -79,9 +79,16 @@ public sealed class DefaultSynHostEmitter : ISynHostEmitter
         // boundary, etc.). Sin texto literal — el server queda
         // framework/i18n-agnostic; CSS o el bundle deciden el copy.
         var offlineAttr = descriptor is null ? " data-synergos-cdn-offline=\"true\"" : string.Empty;
-        var fallbackContent = descriptor is null
-            ? BuildOfflineFallback(request.BlockAlias, customTag)
-            : string.Empty;
+
+        // Caller-supplied light-DOM fallback wins over the empty placeholder:
+        // it is real content (a working link, a real button), so it serves both
+        // the offline case and — more importantly — the pre-upgrade window on
+        // every page load. Emitted verbatim; escaping is the caller's job.
+        var fallbackContent = !string.IsNullOrWhiteSpace(request.FallbackHtml)
+            ? request.FallbackHtml
+            : descriptor is null
+                ? BuildOfflineFallback(request.BlockAlias, customTag)
+                : string.Empty;
         var elementHtml = $"<{customTag}{offlineAttr} config='{EncodeAttributeSingleQuoted(configJson)}'>{fallbackContent}</{customTag}>";
 
         return new SynHostEmitResult(scriptHtml, elementHtml, descriptor is not null);

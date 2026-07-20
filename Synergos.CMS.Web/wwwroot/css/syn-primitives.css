@@ -1834,3 +1834,24 @@ textarea.syn-form-field__input { resize: vertical; min-height: 7rem; }
   border: 0;
   min-height: 320px;
 }
+
+/* ── synergos-button-container: mejora progresiva ─────────────────────────
+   El bloque emite el <a>/<button> SSR DENTRO del custom element. Antes de que
+   el bundle registre el tag, :not(:defined) saca al host del layout con
+   display:contents, así que el respaldo maqueta como si fuera hijo directo y
+   la página se ve igual que antes de hidratar. Sin JS —o si el CDN no
+   resuelve— el respaldo se queda: enlace real, rastreable y clickeable.
+
+   Quién borra el respaldo al hidratar: Angular, no este CSS. El componente no
+   tiene <ng-content>, así que el contenido de luz que no proyecta se descarta
+   al actualizar el elemento (verificado en vivo: queda sólo lo que renderiza
+   Angular, sin duplicados). La regla de abajo cubre únicamente la ventana
+   entre customElements.define() y el primer render —donde :defined ya es
+   true y el respaldo sigue en el DOM— y sirve de red si algún día el
+   componente proyecta contenido. */
+synergos-button-container:not(:defined) {
+  display: contents;
+}
+synergos-button-container:defined .syn-button--ssr {
+  display: none;
+}
