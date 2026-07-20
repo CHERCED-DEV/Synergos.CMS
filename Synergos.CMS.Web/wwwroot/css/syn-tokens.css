@@ -1488,3 +1488,42 @@
   mix-blend-mode: var(--syn-grain-blend, overlay);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='syn-grain-n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23syn-grain-n)'/%3E%3C/svg%3E");
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   a11y — prefers-reduced-motion: swap GLOBAL de duraciones (WCAG 2.3.3)
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Por qué esto y no un mixin en cada componente. La cobertura medida ya era del
+   72% (103 de 143 ficheros que animan respetan la preferencia a mano), y los 40
+   restantes animan casi todos vía `var(--syn-duration-*)`. Redefinir esos tokens
+   aquí, bajo la media query, neutraliza a la gran mayoría de los 40 SIN TOCAR NI
+   UN COMPONENTE. Un mixin habría exigido 40 ediciones para el mismo efecto.
+
+   ── Por qué 0.01ms y NO 0s ───────────────────────────────────────────────
+   Con `0s` el navegador puede no disparar `transitionend`/`animationend`. Un
+   componente que encadene lógica a ese evento se quedaría colgado para siempre,
+   y solo para el usuario que pidió menos movimiento — que es exactamente a quien
+   no se le puede romper la app. 0.01ms es imperceptible y sí dispara el evento.
+
+   ── Lo que este swap NO alcanza, escrito para que no se dé por cubierto ──
+   Las animaciones en bucle que consumen un LITERAL de Sass en vez de una CSS var:
+   el caso conocido es `_button.scss:122`
+       animation: syn-button-spin motion.$duration-loop linear infinite;
+   Al ser variable Sass, compila a un valor fijo y es INMUNE a esto. Ese residuo
+   necesita un `@media` propio en el componente.
+
+   ── Y lo que deliberadamente NO se neutraliza ────────────────────────────
+   Los spinners de carga no deben desaparecer: quitarles el giro elimina el
+   feedback de "esto está trabajando" y deja al usuario sin saber si la app está
+   viva. `prefers-reduced-motion` pide REDUCIR el movimiento superfluo, no borrar
+   la información de estado. Por eso `--syn-duration-loop` y `--syn-duration-shimmer`
+   NO se tocan aquí: se dejan a su valor normal a propósito.
+*/
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --syn-duration-fast:  0.01ms;
+    --syn-duration-base:  0.01ms;
+    --syn-duration-slow:  0.01ms;
+    --syn-duration-xslow: 0.01ms;
+  }
+}
