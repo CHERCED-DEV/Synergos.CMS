@@ -33,13 +33,16 @@ public sealed class TravelController : ControllerBase
     private readonly IStayContentProvider _stays;
     private readonly IPriceFormatter _priceFormatter;
 
+    private readonly IMemberAccessGate _gate;
+
     public TravelController(
         IRoomAvailabilityProvider hotels,
         IFlightAvailabilityProvider flights,
         ICarRentalProvider cars,
         ITravelCartService cart,
         IStayContentProvider stays,
-        IPriceFormatter priceFormatter)
+        IPriceFormatter priceFormatter,
+        IMemberAccessGate gate)
     {
         _hotels = hotels;
         _flights = flights;
@@ -47,6 +50,30 @@ public sealed class TravelController : ControllerBase
         _cart = cart;
         _stays = stays;
         _priceFormatter = priceFormatter;
+        _gate = gate;
+    }
+
+
+    // ── Identidad server-trusted (molde de los otros cinco verticales) ──────────
+    //
+    // "Mis viajes" salía de `?traveler=<email>`: escribiendo el correo de alguien se
+    // obtenía su itinerario —con fechas—, que además dice cuándo no está en su casa.
+    //
+    // Lo que NO se toca, a propósito: `order/{orderRef}` y su cancelación. Ese ref es
+    // `trip_{Guid.NewGuid():N}` (128 bits): TENERLO es la autorización. Es el patrón de
+    // URL-capacidad, y es lo que permite que quien compró como invitado —sin cuenta—
+    // pueda volver a ver y cancelar su reserva. Pedirle sesión rompería la compra de
+    // invitado sin cerrar nada.
+
+    /// <summary>Exige sesión; devuelve el correo server-trusted. 401 si es anónimo.</summary>
+    private (IActionResult? denied, string travelerId) RequireTraveler()
+    {
+        var email = _gate.CurrentMemberEmail;
+        if (!_gate.IsAuthenticated || string.IsNullOrWhiteSpace(email))
+        {
+            return (Unauthorized(new { error = "Se requiere iniciar sesión." }), string.Empty);
+        }
+        return (null, email);
     }
 
     // ── 1. Search hotel ────────────────────────────────────────────
@@ -305,16 +332,12 @@ public sealed class TravelController : ControllerBase
     // ── 6. Trips ("Mis viajes") ────────────────────────────────────
     // GET /api/travel/trips?traveler=<email> → { trips:[...] }
     [HttpGet("trips")]
-    public async Task<IActionResult> Trips(
-        [FromQuery] string? traveler,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> Trips(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(traveler))
-        {
-            return BadRequest(new { error = "El parámetro 'traveler' (email) es requerido." });
-        }
+        var (denied, traveler) = RequireTraveler();
+        if (denied is not null) { return denied; }
 
-        var trips = await _cart.GetTripsAsync(traveler.Trim(), cancellationToken);
+        var trips = await _cart.GetTripsAsync(traveler, cancellationToken);
         return Ok(new TripsResponse(trips.Select(ToTripDto).ToList()));
     }
 

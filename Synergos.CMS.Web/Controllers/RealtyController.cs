@@ -88,18 +88,18 @@ public sealed class RealtyController : ControllerBase
     /// Exige rol de AGENTE. 401 anónimo, 403 sin rol. Los leads son datos de contacto de
     /// personas: no basta con estar logueado.
     /// </summary>
-    private IActionResult? RequireAgent()
+    private (IActionResult? denied, string agentId) RequireAgent()
     {
         if (!_gate.IsAuthenticated)
         {
-            return Unauthorized(new { error = "Inicie sesión como agente." });
+            return (Unauthorized(new { error = "Inicie sesión como agente." }), string.Empty);
         }
         if (!_gate.HasAnyRole(AgentRolesCsv))
         {
             // StatusCode(403) y NO Forbid(): con auth de members Forbid redirige al login.
-            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Su cuenta no tiene permiso de agente." });
+            return (StatusCode(StatusCodes.Status403Forbidden, new { error = "Su cuenta no tiene permiso de agente." }), string.Empty);
         }
-        return null;
+        return (null, _gate.CurrentMemberEmail ?? string.Empty);
     }
 
     // ── 1. Search facetado (home del dominio: lista + mapa) ─────────────
@@ -286,7 +286,7 @@ public sealed class RealtyController : ControllerBase
         // los favoritos y búsquedas de otro con solo poner su id.
         var (denied, actorId) = RequireUser();
         if (denied is not null) { return denied; }
-        if (request is null || string.IsNullOrWhiteSpace(request.User))
+        if (request is null)
         {
             return BadRequest(new { error = "user es requerido." });
         }
@@ -296,7 +296,7 @@ public sealed class RealtyController : ControllerBase
         SavedSearch saved;
         try
         {
-            saved = await _savedSearches.SaveAsync(request.User.Trim(), criteria, request.Label, cancellationToken);
+            saved = await _savedSearches.SaveAsync(actorId, criteria, request.Label, cancellationToken);
         }
         catch (ArgumentException ex)
         {
@@ -342,13 +342,13 @@ public sealed class RealtyController : ControllerBase
         // los favoritos y búsquedas de otro con solo poner su id.
         var (denied, actorId) = RequireUser();
         if (denied is not null) { return denied; }
-        if (request is null || string.IsNullOrWhiteSpace(request.User) || string.IsNullOrWhiteSpace(request.ListingId))
+        if (request is null || string.IsNullOrWhiteSpace(request.ListingId))
         {
             return BadRequest(new { error = "user y listingId son requeridos." });
         }
 
-        await _collections.AddAsync(request.User.Trim(), FavoritesCollection, request.ListingId.Trim(), cancellationToken);
-        var favorites = await _collections.GetAsync(request.User.Trim(), FavoritesCollection, cancellationToken);
+        await _collections.AddAsync(actorId, FavoritesCollection, request.ListingId.Trim(), cancellationToken);
+        var favorites = await _collections.GetAsync(actorId, FavoritesCollection, cancellationToken);
         return Ok(new FavoritesResponse(favorites.Select(f => f.ItemRef).ToList()));
     }
 
@@ -360,28 +360,31 @@ public sealed class RealtyController : ControllerBase
         // los favoritos y búsquedas de otro con solo poner su id.
         var (denied, actorId) = RequireUser();
         if (denied is not null) { return denied; }
-        if (request is null || string.IsNullOrWhiteSpace(request.User) || string.IsNullOrWhiteSpace(request.ListingId))
+        if (request is null || string.IsNullOrWhiteSpace(request.ListingId))
         {
             return BadRequest(new { error = "user y listingId son requeridos." });
         }
 
-        await _collections.RemoveAsync(request.User.Trim(), FavoritesCollection, request.ListingId.Trim(), cancellationToken);
-        var favorites = await _collections.GetAsync(request.User.Trim(), FavoritesCollection, cancellationToken);
+        await _collections.RemoveAsync(actorId, FavoritesCollection, request.ListingId.Trim(), cancellationToken);
+        var favorites = await _collections.GetAsync(actorId, FavoritesCollection, cancellationToken);
         return Ok(new FavoritesResponse(favorites.Select(f => f.ItemRef).ToList()));
     }
 
     // ── 10. Consola del agente: mini-CRM de leads (doc §6) ──────────────
     // GET /api/realty/agent/leads?agent= → { leads:[...] }
     [HttpGet("agent/leads")]
-    public async Task<IActionResult> AgentLeads([FromQuery] string? agent, CancellationToken cancellationToken)
+    public async Task<IActionResult> AgentLeads(CancellationToken cancellationToken)
     {
-        if (RequireAgent() is { } denied) { return denied; }
+        // El agente ve SUS leads. Con `?agent=` un agente logueado leía la cartera de
+        // otro — tener el rol no es tener derecho a los contactos del colega.
+        var (denied, agent) = RequireAgent();
+        if (denied is not null) { return denied; }
         if (string.IsNullOrWhiteSpace(agent))
         {
             return BadRequest(new { error = "El parámetro agent es requerido." });
         }
 
-        var leads = await _leads.GetForAgentAsync(agent.Trim(), cancellationToken);
+        var leads = await _leads.GetForAgentAsync(agent, cancellationToken);
         return Ok(new AgentLeadsResponse(leads.Select(ToAgentLeadDto).ToList()));
     }
 
@@ -389,7 +392,8 @@ public sealed class RealtyController : ControllerBase
     [HttpPost("lead/{id}/advance")]
     public async Task<IActionResult> AdvanceLead(string id, [FromBody] AdvanceLeadRequest? request, CancellationToken cancellationToken)
     {
-        if (RequireAgent() is { } denied) { return denied; }
+        var (denied, _) = RequireAgent();
+        if (denied is not null) { return denied; }
         if (string.IsNullOrWhiteSpace(id))
         {
             return BadRequest(new { error = "El id del lead es requerido." });
@@ -419,7 +423,8 @@ public sealed class RealtyController : ControllerBase
     public async Task<IActionResult> PublishListing([FromBody] PublishListingRequest? request, CancellationToken cancellationToken)
     {
         // Publicar al catálogo era anónimo: cualquiera colgaba un inmueble en el sitio.
-        if (RequireAgent() is { } denied) { return denied; }
+        var (denied, _) = RequireAgent();
+        if (denied is not null) { return denied; }
         if (request is null)
         {
             return BadRequest(new { error = "El borrador del inmueble es requerido." });
