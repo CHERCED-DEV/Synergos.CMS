@@ -1507,10 +1507,23 @@
 
    ── Lo que este swap NO alcanza, escrito para que no se dé por cubierto ──
    Las animaciones en bucle que consumen un LITERAL de Sass en vez de una CSS var:
-   el caso conocido es `_button.scss:122`
+   el caso conocido era `_button.scss:122`
        animation: syn-button-spin motion.$duration-loop linear infinite;
-   Al ser variable Sass, compila a un valor fijo y es INMUNE a esto. Ese residuo
-   necesita un `@media` propio en el componente.
+   Al ser variable Sass, compila a un valor fijo y es INMUNE a esto.
+   RESUELTO (Ola press+reduced-motion): el mixin `button-loading` pasó a la var y
+   además lleva su propia media query de reduced-motion que anula la animación.
+   ⚠️ NO escribir llaves dentro de estos comentarios: `sync-tokens.mjs` busca el
+   selector retrocediendo hasta la llave de cierre anterior SIN saltar comentarios,
+   así que una llave suelta aquí parte el bridge generado y el script igual dice OK.
+   ⚠️ Y el porqué del @media, que es la parte contraintuitiva: para un `infinite`
+   NO basta con consumir la var. 0.01ms está razonado abajo para transitions y
+   animaciones FINITAS; aplicado a un bucle son ~100.000 vueltas/segundo, o sea un
+   ESTROBO — peor que el giro original y un riesgo de destellos (WCAG 2.3.1).
+   Regla general: `infinite` + reduced-motion ⇒ cortar con `animation: none`,
+   nunca colapsar la duración.
+   Los shorthands Sass (`$transition-colors/-transform/-panel` en _motion.scss) y
+   `_focus.scss` tenían el mismo residuo; ahora consumen `var(--syn-*, fallback)`,
+   lo que neutralizó de una vez a sus ~16 consumidores sin editar componentes.
 
    ── Por qué también loop y shimmer, que dudé en incluir ──────────────────
    Mi primer instinto fue dejarlos fuera: colapsar el giro de un spinner borra el
@@ -1545,6 +1558,11 @@
     --syn-dur-fast:         0.01ms;
     --syn-dur-base:         0.01ms;
     --syn-dur-slow:         0.01ms;
+    /* press entra a la lista al ganar su primer consumidor (el :active de
+       button-base). Anima transform, que es movimiento de verdad; y dejarlo
+       fuera daba las DOS CONDUCTAS que este bloque justamente evita: hover
+       instantáneo y press de 90ms para quien pidió menos movimiento. */
+    --syn-press-duration:   0.01ms;
     --syn-motion-scale:     0;
   }
 }
