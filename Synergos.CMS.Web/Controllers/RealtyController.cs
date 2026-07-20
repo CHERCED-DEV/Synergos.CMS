@@ -41,6 +41,8 @@ public sealed class RealtyController : ControllerBase
     private readonly ISavedSearchService _savedSearches;
     private readonly IPriceFormatter _priceFormatter;
 
+    private readonly IMemberAccessGate _gate;
+
     public RealtyController(
         IPropertyCatalogProvider catalog,
         IVisitSchedulingService visits,
@@ -48,7 +50,8 @@ public sealed class RealtyController : ControllerBase
         ILeadCaptureService leads,
         IUserCollection collections,
         ISavedSearchService savedSearches,
-        IPriceFormatter priceFormatter)
+        IPriceFormatter priceFormatter,
+        IMemberAccessGate gate)
     {
         _catalog = catalog;
         _visits = visits;
@@ -56,7 +59,47 @@ public sealed class RealtyController : ControllerBase
         _leads = leads;
         _collections = collections;
         _savedSearches = savedSearches;
+        _gate = gate;
         _priceFormatter = priceFormatter;
+    }
+
+
+    // ── Identidad server-trusted y rol de agente (molde de Gov/Eventos/Blogs) ────
+    //
+    // Los favoritos y las búsquedas guardadas tomaban al usuario de un `?user=` o del
+    // BODY: cualquiera leía y MUTABA las de otro. Y la consola del agente —con los leads,
+    // que son nombres y teléfonos de personas reales— estaba abierta a cualquiera.
+
+    /// <summary>Rol(es) con acceso a la consola del agente inmobiliario.</summary>
+    private const string AgentRolesCsv = "agente,admin";
+
+    /// <summary>Exige sesión; devuelve el correo server-trusted. 401 si es anónimo.</summary>
+    private (IActionResult? denied, string userId) RequireUser()
+    {
+        var email = _gate.CurrentMemberEmail;
+        if (!_gate.IsAuthenticated || string.IsNullOrWhiteSpace(email))
+        {
+            return (Unauthorized(new { error = "Se requiere iniciar sesión." }), string.Empty);
+        }
+        return (null, email);
+    }
+
+    /// <summary>
+    /// Exige rol de AGENTE. 401 anónimo, 403 sin rol. Los leads son datos de contacto de
+    /// personas: no basta con estar logueado.
+    /// </summary>
+    private IActionResult? RequireAgent()
+    {
+        if (!_gate.IsAuthenticated)
+        {
+            return Unauthorized(new { error = "Inicie sesión como agente." });
+        }
+        if (!_gate.HasAnyRole(AgentRolesCsv))
+        {
+            // StatusCode(403) y NO Forbid(): con auth de members Forbid redirige al login.
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Su cuenta no tiene permiso de agente." });
+        }
+        return null;
     }
 
     // ── 1. Search facetado (home del dominio: lista + mapa) ─────────────
@@ -216,8 +259,10 @@ public sealed class RealtyController : ControllerBase
     // ── 6. Cuenta: favoritos + búsquedas guardadas (doc §4) ─────────────
     // GET /api/realty/saved?user= → { favorites:[...], searches:[...] }
     [HttpGet("saved")]
-    public async Task<IActionResult> Saved([FromQuery] string? user, CancellationToken cancellationToken)
+    public async Task<IActionResult> Saved(CancellationToken cancellationToken)
     {
+        var (denied, user) = RequireUser();
+        if (denied is not null) { return denied; }
         if (string.IsNullOrWhiteSpace(user))
         {
             return BadRequest(new { error = "El parámetro user es requerido." });
@@ -237,6 +282,10 @@ public sealed class RealtyController : ControllerBase
     [HttpPost("saved-search")]
     public async Task<IActionResult> SaveSearch([FromBody] SaveSearchRequest? request, CancellationToken cancellationToken)
     {
+        // Identidad del GATE: se IGNORA el `User` del body, que permitía operar sobre
+        // los favoritos y búsquedas de otro con solo poner su id.
+        var (denied, actorId) = RequireUser();
+        if (denied is not null) { return denied; }
         if (request is null || string.IsNullOrWhiteSpace(request.User))
         {
             return BadRequest(new { error = "user es requerido." });
@@ -262,6 +311,8 @@ public sealed class RealtyController : ControllerBase
     [HttpGet("saved/{id}/matches")]
     public async Task<IActionResult> SavedMatches(string id, CancellationToken cancellationToken)
     {
+        var (denied, _) = RequireUser();
+        if (denied is not null) { return denied; }
         if (string.IsNullOrWhiteSpace(id))
         {
             return BadRequest(new { error = "El id de la búsqueda es requerido." });
@@ -287,6 +338,10 @@ public sealed class RealtyController : ControllerBase
     [HttpPost("favorite")]
     public async Task<IActionResult> AddFavorite([FromBody] FavoriteRequest? request, CancellationToken cancellationToken)
     {
+        // Identidad del GATE: se IGNORA el `User` del body, que permitía operar sobre
+        // los favoritos y búsquedas de otro con solo poner su id.
+        var (denied, actorId) = RequireUser();
+        if (denied is not null) { return denied; }
         if (request is null || string.IsNullOrWhiteSpace(request.User) || string.IsNullOrWhiteSpace(request.ListingId))
         {
             return BadRequest(new { error = "user y listingId son requeridos." });
@@ -301,6 +356,10 @@ public sealed class RealtyController : ControllerBase
     [HttpDelete("favorite")]
     public async Task<IActionResult> RemoveFavorite([FromBody] FavoriteRequest? request, CancellationToken cancellationToken)
     {
+        // Identidad del GATE: se IGNORA el `User` del body, que permitía operar sobre
+        // los favoritos y búsquedas de otro con solo poner su id.
+        var (denied, actorId) = RequireUser();
+        if (denied is not null) { return denied; }
         if (request is null || string.IsNullOrWhiteSpace(request.User) || string.IsNullOrWhiteSpace(request.ListingId))
         {
             return BadRequest(new { error = "user y listingId son requeridos." });
@@ -316,6 +375,7 @@ public sealed class RealtyController : ControllerBase
     [HttpGet("agent/leads")]
     public async Task<IActionResult> AgentLeads([FromQuery] string? agent, CancellationToken cancellationToken)
     {
+        if (RequireAgent() is { } denied) { return denied; }
         if (string.IsNullOrWhiteSpace(agent))
         {
             return BadRequest(new { error = "El parámetro agent es requerido." });
@@ -329,6 +389,7 @@ public sealed class RealtyController : ControllerBase
     [HttpPost("lead/{id}/advance")]
     public async Task<IActionResult> AdvanceLead(string id, [FromBody] AdvanceLeadRequest? request, CancellationToken cancellationToken)
     {
+        if (RequireAgent() is { } denied) { return denied; }
         if (string.IsNullOrWhiteSpace(id))
         {
             return BadRequest(new { error = "El id del lead es requerido." });
@@ -357,6 +418,8 @@ public sealed class RealtyController : ControllerBase
     [HttpPost("listing")]
     public async Task<IActionResult> PublishListing([FromBody] PublishListingRequest? request, CancellationToken cancellationToken)
     {
+        // Publicar al catálogo era anónimo: cualquiera colgaba un inmueble en el sitio.
+        if (RequireAgent() is { } denied) { return denied; }
         if (request is null)
         {
             return BadRequest(new { error = "El borrador del inmueble es requerido." });
