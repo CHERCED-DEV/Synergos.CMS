@@ -15,8 +15,14 @@ public class DefaultSynHostEmitterTests
         string alias = "avatar",
         IReadOnlyDictionary<string, object?>? props = null,
         string? configOverride = null,
-        CultureInfo? culture = null) =>
-        new(alias, props, configOverride, culture ?? CultureInfo.GetCultureInfo("es-CO"));
+        CultureInfo? culture = null,
+        string? fallbackHtml = null) =>
+        new(alias, props, configOverride, culture ?? CultureInfo.GetCultureInfo("es-CO"), fallbackHtml);
+
+    private static BundleDescriptor ResolvedDescriptor() =>
+        new(MainEntryUri: new Uri("https://cdn.example.com/synergos/avatar/latest/main.js"),
+            Dependencies: Array.Empty<Uri>(),
+            Version: "0.1.0");
 
     [Fact]
     public async Task EmitAsync_ResolvedRegistry_ProducesBothScriptAndElement()
@@ -34,6 +40,48 @@ public class DefaultSynHostEmitterTests
         Assert.Contains("cdn.example.com/synergos/avatar/latest/main.js", result.ScriptHtml);
         Assert.Contains("<synergos-avatar", result.ElementHtml);
         Assert.Contains("</synergos-avatar>", result.ElementHtml);
+    }
+
+    [Fact]
+    public async Task EmitAsync_WithFallbackHtml_NestsItInsideTheElementEvenWhenResolved()
+    {
+        // Progressive enhancement: the SSR markup has to be in the DOM on every
+        // page load, not only when the CDN is down — that pre-upgrade window is
+        // the whole point. A :defined CSS rule hides it once the bundle lands.
+        var sut = BuildSut(new FakeBundleRegistryClient(ResolvedDescriptor()));
+
+        var result = await sut.EmitAsync(
+            Request(fallbackHtml: "<a class=\"syn-button syn-button--ssr\" href=\"/x\">Ir</a>"));
+
+        Assert.True(result.RegistryResolved);
+        Assert.Contains("<a class=\"syn-button syn-button--ssr\" href=\"/x\">Ir</a>", result.ElementHtml);
+        Assert.DoesNotContain("syn-cdn-offline-fallback", result.ElementHtml);
+    }
+
+    [Fact]
+    public async Task EmitAsync_WithFallbackHtml_PrefersItOverTheEmptyOfflinePlaceholder()
+    {
+        var sut = BuildSut(new FakeBundleRegistryClient());
+
+        var result = await sut.EmitAsync(
+            Request("badge", fallbackHtml: "<button type=\"button\">Guardar</button>"));
+
+        Assert.False(result.RegistryResolved);
+        // Real content beats the empty styleable div when the caller supplied it.
+        Assert.Contains("<button type=\"button\">Guardar</button>", result.ElementHtml);
+        Assert.DoesNotContain("syn-cdn-offline-fallback", result.ElementHtml);
+        Assert.Contains("data-synergos-cdn-offline=\"true\"", result.ElementHtml);
+    }
+
+    [Fact]
+    public async Task EmitAsync_WithoutFallbackHtml_KeepsThePreviousEmptyElementBehaviour()
+    {
+        var sut = BuildSut(new FakeBundleRegistryClient(ResolvedDescriptor()));
+
+        var result = await sut.EmitAsync(Request());
+
+        Assert.Contains("<synergos-avatar", result.ElementHtml);
+        Assert.EndsWith("></synergos-avatar>", result.ElementHtml);
     }
 
     [Fact]

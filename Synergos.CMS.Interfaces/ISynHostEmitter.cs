@@ -45,11 +45,21 @@ public interface ISynHostEmitter
 /// a warning is logged.</param>
 /// <param name="Culture">Culture used to stamp the config JSON so
 /// the bundle can pick its translations / locale-specific assets.</param>
+/// <param name="FallbackHtml">Optional server-rendered markup placed
+/// inside the custom element as light-DOM fallback. Custom Elements
+/// render their children until the bundle upgrades them, so this is how
+/// a block stays crawlable and usable without JavaScript: emit the SSR
+/// equivalent here and hide it with a <c>:defined</c> CSS rule once the
+/// element hydrates. When omitted, an unresolved bundle still gets the
+/// empty styleable placeholder as before.
+/// <para><b>Not encoded.</b> This is injected verbatim, so the caller
+/// owns escaping every editor-supplied value it interpolates.</para></param>
 public sealed record SynHostEmitRequest(
     string BlockAlias,
     IReadOnlyDictionary<string, object?>? Props,
     string? ConfigOverrideJson,
-    CultureInfo Culture);
+    CultureInfo Culture,
+    string? FallbackHtml = null);
 
 /// <summary>
 /// Output of an emit call. Razor partials render both fragments with
