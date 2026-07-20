@@ -988,6 +988,10 @@ public sealed class SeamComposer : IComposer
         services.AddTransient<SchemaBlockDefaults>();
         services.AddTransient<DevMediaFactory>();
         services.AddTransient<DevContentFiller>();
+        // Tooling dev-only: crea los member groups de dominio (funcionario/organizador/
+        // doctor…) y los asigna. Sin esto, las consolas que T2-Gov/T2-Eventos/T9/T7
+        // cerraron por rol quedan correctas pero IMPOSIBLES de demostrar.
+        services.AddTransient<DevMemberRoleSeeder>();
 
         // Health probes. Each registers as an ISchemaHealthProbe; the
         // HealthController resolves them as IEnumerable<ISchemaHealthProbe>.
