@@ -40,6 +40,7 @@ public sealed class DevMemberRoleSeeder
         "funcionario",  // Gobierno — cola/expediente/decisión (T2-Gobierno)
         "organizador",  // Eventos — consola, crear evento, check-in, feed en vivo (T2-Eventos, T7)
         "agente",       // Propiedades — leads (PII) + publicar al catálogo (T2-Realty)
+        "instructor",   // Educación — panel de autoría + métricas de matrícula (T2-Academy)
         "doctor",       // Healthcare — PHI (ADR 0098)
         "nurse",
         "reception",

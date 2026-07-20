@@ -34,17 +34,61 @@ public sealed class AcademyController : ControllerBase
     private readonly IEnrollmentService _enrollments;
     private readonly ICertificateService _certificates;
     private readonly IPriceFormatter _priceFormatter;
+    private readonly IMemberAccessGate _gate;
 
     public AcademyController(
         ICourseCatalogProvider catalog,
         IEnrollmentService enrollments,
         ICertificateService certificates,
-        IPriceFormatter priceFormatter)
+        IPriceFormatter priceFormatter,
+        IMemberAccessGate gate)
     {
         _catalog = catalog;
         _enrollments = enrollments;
         _certificates = certificates;
         _priceFormatter = priceFormatter;
+        _gate = gate;
+    }
+
+
+    // ── Identidad server-trusted (molde de Tienda/Gobierno/Eventos/Blogs/Propiedades) ──
+    //
+    // El expediente académico del alumno se tomaba de un `?student=` / `request.Student`.
+    // Leer el progreso ajeno ya era un IDOR; ESCRIBIRLO era peor: `POST /progress` marcaba
+    // lecciones como completadas en el expediente de otro. Un registro académico que
+    // cualquiera puede escribir no registra nada.
+
+    /// <summary>Rol(es) del panel de autoría de cursos.</summary>
+    private const string InstructorRolesCsv = "instructor,admin";
+
+    /// <summary>Exige sesión; devuelve el id server-trusted del alumno. 401 si es anónimo.</summary>
+    private (IActionResult? denied, string studentId) RequireStudent()
+    {
+        var email = _gate.CurrentMemberEmail;
+        if (!_gate.IsAuthenticated || string.IsNullOrWhiteSpace(email))
+        {
+            return (Unauthorized(new { error = "Se requiere iniciar sesión." }), string.Empty);
+        }
+        return (null, email);
+    }
+
+    /// <summary>
+    /// Exige rol de INSTRUCTOR. 401 anónimo, 403 sin rol. Publicar un curso al catálogo del
+    /// sitio y ver las métricas de matrícula no son cosas de cualquier alumno logueado.
+    /// </summary>
+    private (IActionResult? denied, string instructorId) RequireInstructor()
+    {
+        if (!_gate.IsAuthenticated)
+        {
+            return (Unauthorized(new { error = "Inicie sesión como instructor." }), string.Empty);
+        }
+        if (!_gate.HasAnyRole(InstructorRolesCsv))
+        {
+            // StatusCode(403), NO Forbid(): con auth de members Forbid redirige al login.
+            return (StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "Su cuenta no tiene permiso de instructor." }), string.Empty);
+        }
+        return (null, _gate.CurrentMemberEmail ?? string.Empty);
     }
 
     // ── 1. Courses (catálogo buscable) ─────────────────────────────────
@@ -214,15 +258,17 @@ public sealed class AcademyController : ControllerBase
     // que aún consume el módulo course-player — sin romper la UI existente.
     [HttpGet("progress")]
     public async Task<IActionResult> GetProgress(
-        [FromQuery] string? student,
         [FromQuery] string? course,
         [FromQuery] string? courseId,
         CancellationToken cancellationToken)
     {
+        var (denied, student) = RequireStudent();
+        if (denied is not null) { return denied; }
+
         var courseKey = FirstNonEmpty(course, courseId);
-        if (string.IsNullOrWhiteSpace(courseKey) || string.IsNullOrWhiteSpace(student))
+        if (string.IsNullOrWhiteSpace(courseKey))
         {
-            return BadRequest(new { error = "student y course son requeridos." });
+            return BadRequest(new { error = "course es requerido." });
         }
 
         var progress = await _enrollments.GetProgressAsync(courseKey.Trim(), student.Trim(), cancellationToken);
@@ -244,11 +290,16 @@ public sealed class AcademyController : ControllerBase
         var lessonKey = request is null ? null : FirstNonEmpty(request.Lesson, request.LessonId);
         if (request is null
             || string.IsNullOrWhiteSpace(courseKey)
-            || string.IsNullOrWhiteSpace(lessonKey)
-            || string.IsNullOrWhiteSpace(request.Student))
+            || string.IsNullOrWhiteSpace(lessonKey))
         {
-            return BadRequest(new { error = "student, course y lesson son requeridos." });
+            return BadRequest(new { error = "course y lesson son requeridos." });
         }
+
+        // El alumno sale del GATE: se IGNORA `request.Student`, que permitía marcar
+        // lecciones completadas en el expediente de otro. El campo se deja en el DTO
+        // por compatibilidad del cliente, pero ya no decide nada.
+        var (denied, student) = RequireStudent();
+        if (denied is not null) { return denied; }
 
         CourseProgress progress;
         try
@@ -256,7 +307,7 @@ public sealed class AcademyController : ControllerBase
             progress = await _enrollments.MarkLessonAsync(
                 courseKey.Trim(),
                 lessonKey.Trim(),
-                request.Student.Trim(),
+                student,
                 cancellationToken);
         }
         catch (ArgumentException ex)
@@ -265,7 +316,7 @@ public sealed class AcademyController : ControllerBase
         }
 
         var certificate = progress.Percent >= 100
-            ? await _certificates.GetAsync(request.Student.Trim(), courseKey.Trim(), cancellationToken)
+            ? await _certificates.GetAsync(student, courseKey.Trim(), cancellationToken)
             : null;
 
         return Ok(ToProgressDto(progress, certificate));
@@ -275,16 +326,25 @@ public sealed class AcademyController : ControllerBase
     // GET /api/academy/certificate?student=&course= → { certificate | null }
     [HttpGet("certificate")]
     public async Task<IActionResult> GetCertificate(
-        [FromQuery] string? student,
         [FromQuery] string? course,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(student) || string.IsNullOrWhiteSpace(course))
+        // Devuelve el certificado DEL ALUMNO LOGUEADO. Con `?student=` esto era un
+        // padrón enumerable de quién estudió qué.
+        //
+        // Ojo con lo que este endpoint NO es: la verificación por un tercero (un
+        // empleador). Esa es la promesa de `VerifyUrl`, y hoy NO existe ninguna ruta
+        // que la cumpla. Cuando se construya, va por el ID de la credencial —que es
+        // una capacidad, como el `orderRef` de travel—, nunca por el id del alumno.
+        var (denied, student) = RequireStudent();
+        if (denied is not null) { return denied; }
+
+        if (string.IsNullOrWhiteSpace(course))
         {
-            return BadRequest(new { error = "student y course son requeridos." });
+            return BadRequest(new { error = "course es requerido." });
         }
 
-        var certificate = await _certificates.GetAsync(student.Trim(), course.Trim(), cancellationToken);
+        var certificate = await _certificates.GetAsync(student, course.Trim(), cancellationToken);
         return Ok(new CertificateResponse(
             Certificate: certificate is null
                 ? null
@@ -294,16 +354,12 @@ public sealed class AcademyController : ControllerBase
     // ── 8. Instructor: sus cursos + métricas (panel de autor) ───────────
     // GET /api/academy/instructor/courses?instructor= → { courses:[...] }
     [HttpGet("instructor/courses")]
-    public async Task<IActionResult> InstructorCourses(
-        [FromQuery] string? instructor,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> InstructorCourses(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(instructor))
-        {
-            return BadRequest(new { error = "instructor es requerido." });
-        }
+        var (denied, instructor) = RequireInstructor();
+        if (denied is not null) { return denied; }
 
-        var result = await _catalog.GetForInstructorAsync(instructor.Trim(), cancellationToken);
+        var result = await _catalog.GetForInstructorAsync(instructor, cancellationToken);
 
         var courses = result.Courses.Select(ic => new InstructorCourseDto(
             // studentCount real desde las métricas del panel (la card lo lee en course.studentCount).
@@ -328,6 +384,10 @@ public sealed class AcademyController : ControllerBase
         [FromBody] CourseDraftRequest? request,
         CancellationToken cancellationToken)
     {
+        // Publicar al catálogo del sitio era anónimo.
+        var (denied, _) = RequireInstructor();
+        if (denied is not null) { return denied; }
+
         if (request is null || string.IsNullOrWhiteSpace(request.Title))
         {
             return BadRequest(new { error = "El título del curso es requerido." });
