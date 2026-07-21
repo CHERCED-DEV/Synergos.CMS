@@ -21,8 +21,14 @@
     {
         ["apiBase"] = apiBase,
         ["patient"] = patient,
-        ["heading"] = Model.Value<string>("heading"),
-        ["subheading"] = Model.Value<string>("subheading"),
+        // Ni `heading` ni `subheading` se mandan: el portal del paciente no tiene hero de
+        // app — cada vista trae su propio <h1> ("Hola, {nombre}", "Agendar una cita",
+        // "Resultados de laboratorio"), así que el documento ya tiene nivel superior y no
+        // hay hueco donde pintar un título global. Se mandaban y el sanitizer del
+        // componente los descartaba en silencio; el Set() era decorativo en los dos casos.
+        // Darles destino exigiría inventar un encabezado que el diseño no contempla.
+        // ⚠️ Las dos propiedades siguen en el ElementType y el editor las ve: es schema y
+        // lo posee el arquitecto (ADR 0008).
     };
     // BlockAlias DEBE ser el name kebab del registry = "ehr" (el emitter resuelve
     // el bundle por ese alias; camelCase no matchearía y no hidrataría).

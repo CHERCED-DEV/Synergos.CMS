@@ -7,7 +7,13 @@
 @{
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["label"] = Model.Value<string>("label"),
+        // La clave del componente es `text`, NO `label` (badge.ts: sanitizeBadgeElementConfig
+        // sólo conserva `text`). Mandando `label` no se perdía sólo el texto: el default es
+        // '' y la plantilla hace `@if (text())`, así que el badge no renderizaba NADA.
+        // Hoy nadie siembra elementSynBadge, así que no había síntoma visible — es una
+        // trampa dormida que se dispararía en cuanto alguien lo compusiera.
+        // El alias del ElementType sigue siendo `label` (schema, ADR 0008).
+        ["text"] = Model.Value<string>("label"),
     };
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "badge",

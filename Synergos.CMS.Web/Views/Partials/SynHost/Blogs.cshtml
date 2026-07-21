@@ -13,8 +13,15 @@
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["apiBase"] = apiBase,
+        // `heading` titula la vista `feed` (blogs.ts lo lista en sanitizeConfig y lo pinta
+        // en su <h1>). Antes se mandaba y el sanitizer del componente lo descartaba en
+        // silencio, así que /blogs cargaba sin un solo <h1>.
         ["heading"] = Model.Value<string>("heading"),
-        ["subheading"] = Model.Value<string>("subheading"),
+        // `subheading` NO se manda: ninguna de las 6 vistas de blogs tiene subtítulo, y
+        // las cinco hermanas del feed titulan con una sola línea. Añadir uno sería
+        // inventar UI para dar destino al prop. Se retira el Set() muerto.
+        // ⚠️ La propiedad sigue en el ElementType y el editor la ve: es schema y lo posee
+        // el arquitecto (ADR 0008).
     };
     // BlockAlias DEBE ser el name kebab del registry = "blogs" (el emitter resuelve
     // el bundle por ese alias; camelCase no matchearía y no hidrataría).
