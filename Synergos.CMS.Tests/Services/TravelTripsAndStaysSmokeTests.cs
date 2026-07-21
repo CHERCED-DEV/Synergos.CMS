@@ -129,7 +129,16 @@ public class TravelTripsAndStaysSmokeTests
         Assert.Equal("Cartagena", byId!.City);
         Assert.NotEqual(0d, byId.Geo.Lat);
         Assert.NotEqual(0d, byId.Geo.Lng);
-        Assert.True(byId.Gallery.Count >= 3);
+        // La galería es UNA portada por estadía, no una tira de fotos: `GalleryFor`
+        // emite `/media/booking/{stayId}.jpg` y en `wwwroot/media/booking/` hay
+        // exactamente 6 ficheros, uno por estadía. Nació así (88cf6b7); el `>= 3`
+        // era un umbral inventado que el stub NUNCA cumplió, sin gemelo en el
+        // resto de la suite —el test hermano de propiedades afirma `NotEmpty`— y
+        // sin nadie que lo lea: ninguna vista de travel-shell consume `gallery`.
+        // Se afirma lo que el contrato garantiza de verdad (hay portada) con el
+        // idioma del repo. Si algún día la ficha pinta miniaturas, lo que falta
+        // son IMÁGENES en disco, no un número más alto aquí.
+        Assert.NotEmpty(byId.Gallery);
         Assert.NotEmpty(byId.Amenities);
         Assert.NotEmpty(byId.Specs);
         Assert.False(string.IsNullOrWhiteSpace(byId.Description));
