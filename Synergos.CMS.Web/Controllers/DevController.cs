@@ -94,6 +94,39 @@ public sealed class DevController : ControllerBase
     /// demostrar</b> sin crear los grupos a mano en el backoffice. NO crea members ni
     /// toca contraseñas: solo reparte permisos de demo sobre identidades que ya existen.
     /// </remarks>
+    /// <summary>
+    /// Coloca UNA tarjeta de producto (<c>elementShopProductCard</c>) en el BlockGrid
+    /// <c>sections</c> de una página. <c>POST /dev/place-product-card?pageId=&amp;sku=</c>
+    /// </summary>
+    /// <remarks>
+    /// Existe porque el renderer del elemento (<c>Elements/Shop/ProductCard.cshtml</c>) no
+    /// se podía ejercitar: ningún contenido colocaba el elemento en un BlockGrid, así que
+    /// esa rama no la pintaba ninguna página y no había forma de verla en vivo.
+    ///
+    /// Es DESTRUCTIVO por naturaleza (escribe la propiedad <c>sections</c>), así que por
+    /// defecto se NIEGA a pisar una página que ya tenga secciones: hay que pasar
+    /// <c>force=true</c> a propósito. Sin ese freno, un pageId mal tecleado borraría el
+    /// contenido de una página real.
+    /// </remarks>
+    [HttpPost("place-product-card")]
+    public IActionResult PlaceProductCard(
+        [FromQuery] int pageId,
+        [FromQuery] string? sku,
+        [FromQuery] bool force = false,
+        [FromQuery] int parentId = 0,
+        [FromQuery] string? name = null)
+    {
+        if (!_settings.Enabled) return NotFound();
+        if (string.IsNullOrWhiteSpace(sku) || (pageId <= 0 && parentId <= 0))
+        {
+            return BadRequest(new { error = "sku es requerido, y pageId (existente) o parentId (crear)." });
+        }
+
+        _logger.LogInformation("Dev endpoint place-product-card invocado (pageId={PageId}, parentId={ParentId}, sku={Sku}).", pageId, parentId, sku);
+        var result = _filler.PlaceProductCard(pageId, sku!, force, parentId, name);
+        return result.Success ? Ok(result) : Conflict(result);
+    }
+
     [HttpPost("seed-member-roles")]
     public IActionResult SeedMemberRoles([FromQuery] string? email, [FromQuery] string? roles)
     {

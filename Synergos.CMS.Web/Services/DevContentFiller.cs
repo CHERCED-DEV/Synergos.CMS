@@ -4306,5 +4306,95 @@ public sealed class DevContentFiller
     private static bool MatchesSku(IContent content, string sku)
         => string.Equals(content.GetValue<string>("productSku"), sku, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Coloca UNA tarjeta de producto (<c>elementShopProductCard</c>) en el BlockGrid
+    /// <c>sections</c> de una página, para poder ejercitar su renderer en vivo.
+    /// </summary>
+    /// <remarks>
+    /// Nació de un hueco de verificación: `Elements/Shop/ProductCard.cshtml` existe desde
+    /// hace olas, pero NINGÚN contenido colocaba el elemento en un BlockGrid, así que esa
+    /// rama no la pintaba ninguna página y no se podía mirar en el navegador.
+    ///
+    /// Pisa la propiedad <c>sections</c> entera, así que se NIEGA por defecto si la página
+    /// ya tiene bloques: hay que pasar <paramref name="force"/> a propósito. Un pageId mal
+    /// tecleado sin ese freno vaciaría una página real.
+    /// </remarks>
+    public FillResult PlaceProductCard(int pageId, string sku, bool force, int parentId = 0, string? newPageName = null)
+    {
+        IContent? page;
+        var created = false;
+
+        if (pageId > 0)
+        {
+            page = _contentService.GetById(pageId);
+            if (page is null)
+            {
+                return new FillResult(false, 0, $"page-not-found:{pageId}");
+            }
+        }
+        else
+        {
+            // Página de PRUEBAS: crearla es aditivo y se borra sin tocar nada existente.
+            // Resultó ser el único camino no destructivo — de las 95 páginas, ninguna con
+            // propiedad `sections` la tenía vacía salvo la portada, y las de categoría ni
+            // siquiera tienen esa propiedad.
+            if (parentId <= 0)
+            {
+                return new FillResult(false, 0, "necesita pageId, o parentId para crear la página");
+            }
+            var parent = _contentService.GetById(parentId);
+            if (parent is null)
+            {
+                return new FillResult(false, 0, $"parent-not-found:{parentId}");
+            }
+            var pageName = string.IsNullOrWhiteSpace(newPageName) ? "Dev · Product Card" : newPageName!;
+            page = _contentService.Create(pageName, parentId, "pageBase");
+            // El contenido VARÍA POR CULTURA: sin SetCultureName el nombre invariante queda
+            // vacío y SaveAndPublish tira "Cannot save content with an empty name".
+            page.SetCultureName(pageName, Culture);
+            created = true;
+        }
+        if (!page.HasProperty(SectionsAlias))
+        {
+            return new FillResult(false, 0, $"page-has-no-sections:{page.ContentType.Alias}");
+        }
+
+        var current = page.GetValue<string>(SectionsAlias, Culture);
+        var hasBlocks = !string.IsNullOrWhiteSpace(current)
+            && current!.Contains("\"contentData\":[{", StringComparison.Ordinal);
+        if (hasBlocks && !force)
+        {
+            return new FillResult(false, 0,
+                $"page-already-has-sections:'{page.Name}' (pasa force=true para pisarlas)");
+        }
+
+        var cardType = _contentTypeService.Get("elementShopProductCard");
+        if (cardType is null)
+        {
+            return new FillResult(false, 0, "element-type-missing:elementShopProductCard");
+        }
+
+        var b = new BlockGridJsonBuilder();
+        b.AddTopLevelBlock(cardType.Key, columnSpan: 4)
+            .Set("productSku", sku)
+            .Set("showPrice", true)
+            .Set("showAddToCart", true)
+            // cardLayout es Umbraco.DropDown.Flexible: guarda un ARRAY JSON, no la cadena
+            // suelta. Con "standard" a pelo el value converter revienta al leerlo
+            // ("Unexpected character encountered while parsing value: s").
+            .Set("cardLayout", "[\"standard\"]");
+
+        if (created)
+        {
+            // pageBase espera un título; sin él la página publica pero sale sin encabezado.
+            if (page.HasProperty("heading")) { page.SetValue("heading", page.Name, Culture); }
+        }
+        page.SetValue(SectionsAlias, b.Build(), Culture);
+        var save = _contentService.SaveAndPublish(page, new[] { Culture });
+        return save.Success
+            ? new FillResult(true, 1, $"placed:{sku} en '{page.Name}' (id {page.Id}, {(created ? "creada" : "existente")})")
+            : new FillResult(false, 0, $"save-failed:{save.Result}");
+    }
+
     public sealed record FillResult(bool Success, int PagesFilled, string Detail);
 }

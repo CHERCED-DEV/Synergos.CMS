@@ -11,7 +11,11 @@
     estáticos. Si no aparece en composer real, es candidato a
     deprecación en futura ola.
 *@
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@* `@inherits`, NO `@model`: con `@model` la vista no hereda de UmbracoViewPage y
+   `Umbraco.GetDictionaryValue` peta con CS0234 al renderizar (ADR 0059). Mismo defecto
+   latente que tenía ProductCard.cshtml — invisible porque ningún contenido coloca el
+   elemento en un BlockGrid, así que revienta solo cuando alguien lo use. *@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @{
     var sku = Model.Value<string>("productSku");

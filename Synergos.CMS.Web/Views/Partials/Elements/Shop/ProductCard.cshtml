@@ -7,7 +7,12 @@
     está presente, conservando compatibilidad con catálogos hosted en
     rutas externas.
 *@
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@* `@inherits`, NO `@model`: con `@model` la vista no hereda de UmbracoViewPage y entonces
+   `Umbraco` resuelve al NAMESPACE, así que `Umbraco.GetDictionaryValue` peta con CS0234
+   (ADR 0059). Esta vista lo tenía mal desde siempre y nadie lo vio porque NINGÚN contenido
+   colocaba el elemento en un BlockGrid: reventaba solo al usarse. Molde correcto:
+   `Partials/Elements/Form/Container.cshtml`. *@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @* El formateo de precio vive en el core (que inyecta su propio IPriceFormatter). *@
 @inject Synergos.CMS.Interfaces.IShopQuery ShopQuery
 @{
