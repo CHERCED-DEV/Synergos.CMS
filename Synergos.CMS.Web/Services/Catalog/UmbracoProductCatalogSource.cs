@@ -2,10 +2,8 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
-using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Web;
-using Umbraco.Extensions;
 
 namespace Synergos.CMS.Web.Services.Catalog;
 
@@ -129,7 +127,10 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
             return null;
         }
 
-        var images = ReadImages(product);
+        // El lector de MediaPicker3 vive en MediaPickerReader: el fallo silencioso que dejaba
+        // los 24 productos sin foto estaba calcado en 4 sitios (aquí, DefaultShopQuery,
+        // DefaultCartService y 2 vistas). Un solo lugar donde acertar.
+        var images = MediaPickerReader.ReadMediaUrls(product, "productImages");
         var category = product.Parent;
         var categoryName = category is not null
             && string.Equals(category.ContentType.Alias, ProductCategoryPageAlias, StringComparison.Ordinal)
@@ -154,54 +155,6 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
         {
             Stock = product.Value<int>("productStockQty"),
         };
-    }
-
-    /// <summary>
-    /// Las URLs de las imágenes del producto. Tolera las CUATRO formas en que un
-    /// MediaPicker3 puede devolver su valor.
-    /// </summary>
-    /// <remarks>
-    /// <b>Esto no es paranoia: era un bug VIVO y silencioso.</b> El DataType
-    /// <c>Media Picker</c> está configurado con <c>"Multiple": false</c>, así que el
-    /// converter devuelve UN ítem, no una colección — y pedirlo como
-    /// <c>IEnumerable&lt;IPublishedContent&gt;</c> da <b>null</b>. Resultado: los 24
-    /// productos del editor salían SIN IMAGEN, sin un solo error.
-    ///
-    /// <para><c>DefaultShopQuery.Project</c> tiene el MISMO fallo (el diseño de T5 mandaba
-    /// calcarlo porque "ya resuelve lo difícil"), así que las imágenes de producto del CMS
-    /// no han funcionado nunca. Se arregla aquí; el de allá queda anotado.</para>
-    ///
-    /// <para>Se prueban las 4 formas porque dependen de la config del DataType y de la
-    /// versión: single/múltiple × <c>MediaWithCrops</c> (lo que MediaPicker3 devuelve cuando
-    /// hay crops o focal point) / <c>IPublishedContent</c>. Cambiar <c>Multiple</c> en el
-    /// backoffice no puede volver a dejar la tienda sin fotos.</para>
-    /// </remarks>
-    private static IReadOnlyList<string> ReadImages(IPublishedContent product)
-    {
-        const string Alias = "productImages";
-
-        var many = product.Value<IEnumerable<MediaWithCrops>>(Alias);
-        if (many is not null)
-        {
-            return many.Select(m => m.Url()).Where(u => !string.IsNullOrEmpty(u)).ToList();
-        }
-
-        var one = product.Value<MediaWithCrops>(Alias);
-        if (one is not null)
-        {
-            return new[] { one.Url() }.Where(u => !string.IsNullOrEmpty(u)).ToList();
-        }
-
-        var manyPlain = product.Value<IEnumerable<IPublishedContent>>(Alias);
-        if (manyPlain is not null)
-        {
-            return manyPlain.Select(m => m.Url()).Where(u => !string.IsNullOrEmpty(u)).ToList();
-        }
-
-        var onePlain = product.Value<IPublishedContent>(Alias);
-        return onePlain is not null
-            ? new[] { onePlain.Url() }.Where(u => !string.IsNullOrEmpty(u)).ToList()
-            : Array.Empty<string>();
     }
 
     /// <summary>

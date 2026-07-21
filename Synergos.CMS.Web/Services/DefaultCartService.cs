@@ -5,7 +5,6 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
-using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Services;
@@ -282,8 +281,7 @@ public sealed class DefaultCartService : ICartService
             var lineTotal = unitPrice * item.Quantity;
             subtotal += lineTotal;
             itemCount += item.Quantity;
-            var images = product.Value<IEnumerable<IPublishedContent>>("productImages");
-            var imageUrl = images?.FirstOrDefault()?.Url();
+            var imageUrl = MediaPickerReader.ReadFirstMediaUrl(product, "productImages");
 
             lines.Add(new CartLine(
                 Sku: item.Sku,

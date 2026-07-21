@@ -119,8 +119,7 @@ public sealed class DefaultShopQuery : IShopQuery
     {
         var sku = product.Value<string>("productSku") ?? string.Empty;
         var name = product.Value<string>("productName") ?? product.Name ?? sku;
-        var images = product.Value<IEnumerable<IPublishedContent>>("productImages");
-        var imageUrl = images?.FirstOrDefault()?.Url();
+        var imageUrl = MediaPickerReader.ReadFirstMediaUrl(product, "productImages");
         var inStock = product.Value<bool>("productInStock");
         var category = product.Parent;
         var categoryName = category is { } c && string.Equals(c.ContentType.Alias, ProductCategoryPageAlias, StringComparison.Ordinal)
