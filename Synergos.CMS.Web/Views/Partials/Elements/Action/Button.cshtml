@@ -35,18 +35,6 @@
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
-    // El vocabulario del CMS (primary | secondary | ghost | outlined | neutral |
-    // emphasis) es MÁS ANCHO que el del elemento (solid | outline | ghost), que
-    // colapsa a "solid" todo lo que no reconoce. Mapeamos lo mapeable — ojo con
-    // outlined/outline, que difieren por una letra — y el resto cae a solid, que
-    // es exactamente lo que el respaldo SSR muestra como --primary.
-    var elementVariant = variant switch
-    {
-        "outlined" => "outline",
-        "ghost" => "ghost",
-        _ => "solid",
-    };
-
     // Respaldo SSR. Va crudo dentro del custom element, así que TODO valor del
     // editor se escapa aquí — el emisor no lo toca.
     var enc = HtmlEncoder.Default;
@@ -65,7 +53,11 @@
         // `loading` sí aplica. No mandar "" explícito: null lo omite del config.
         ["href"] = hasUrl ? url : null,
         ["target"] = hasUrl ? (openInNewTab ? "_blank" : "_self") : null,
-        ["variant"] = elementVariant,
+        // Sin traducir: el elemento acepta el vocabulario del CMS (primary |
+        // secondary | outlined | ghost | neutral | emphasis) y lo normaliza él
+        // mismo. Mapearlo aquí duplicaba el vocabulario en dos repos y era la
+        // razón de que `secondary` se aplanara a solid al hidratar.
+        ["variant"] = string.IsNullOrWhiteSpace(variant) ? null : variant,
     };
 
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
