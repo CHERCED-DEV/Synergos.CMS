@@ -32,15 +32,18 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
     private readonly IOptionsMonitor<CatalogSettings> _settings;
+    private readonly ICatalogSocialProof _socialProof;
     private readonly ILogger<UmbracoProductCatalogSource> _logger;
 
     public UmbracoProductCatalogSource(
         IUmbracoContextAccessor umbracoContextAccessor,
         IOptionsMonitor<CatalogSettings> settings,
+        ICatalogSocialProof socialProof,
         ILogger<UmbracoProductCatalogSource> logger)
     {
         _umbracoContextAccessor = umbracoContextAccessor;
         _settings = settings;
+        _socialProof = socialProof;
         _logger = logger;
     }
 
@@ -58,14 +61,14 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
     /// esto se complementa; hoy no los hay (verificado: el filler guarda
     /// <c>canonicalHostname</c> como contenido y nunca llama a <c>IDomainService</c>).
     /// </remarks>
-    public Task<IReadOnlyList<CatalogProduct>> GetAllAsync(string? scope = null, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<CatalogProduct>> GetAllAsync(string? scope = null, CancellationToken cancellationToken = default)
     {
         if (!_umbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext) || umbracoContext.Content is null)
         {
             // Fuera de un contexto de Umbraco no hay contenido que servir. Catálogo vacío y
             // no una excepción: la PLP se degrada, no revienta.
             _logger.LogWarning("UmbracoProductCatalogSource: sin UmbracoContext; se sirve catálogo vacío.");
-            return Task.FromResult<IReadOnlyList<CatalogProduct>>(Array.Empty<CatalogProduct>());
+            return Array.Empty<CatalogProduct>();
         }
 
         var brandKey = ResolveBrandKey();
@@ -78,7 +81,7 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
             _logger.LogError(
                 "UmbracoProductCatalogSource: falta Synergos:Catalog:Scopes:{Vertical}. NO se sirve catálogo: " +
                 "sin acotar, productPage lo comparten Tienda, Booking y Propiedades.", Vertical);
-            return Task.FromResult<IReadOnlyList<CatalogProduct>>(Array.Empty<CatalogProduct>());
+            return Array.Empty<CatalogProduct>();
         }
 
         var siteRoot = umbracoContext.Content.GetAtRoot()
@@ -89,7 +92,7 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
         if (siteRoot is null)
         {
             _logger.LogError("UmbracoProductCatalogSource: no existe un siteRoot con brandKey '{BrandKey}'.", brandKey);
-            return Task.FromResult<IReadOnlyList<CatalogProduct>>(Array.Empty<CatalogProduct>());
+            return Array.Empty<CatalogProduct>();
         }
 
         var products = siteRoot
@@ -99,7 +102,63 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
             .Select(p => p!)
             .ToList();
 
-        return Task.FromResult<IReadOnlyList<CatalogProduct>>(products);
+        return await WithSocialProofAsync(products, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Pega la prueba social (T10, ADR 0114) a los productos ya proyectados del contenido.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Se hace AQUÍ, en la fuente, y no al emitir el DTO — y la diferencia importa.</b>
+    /// El motor de catálogo deriva las facetas, el filtro <c>minRating</c> y el orden por
+    /// rating de estos mismos objetos. Enriquecer más arriba pintaría la nota bien y dejaría
+    /// FILTRANDO SOBRE CEROS: la faceta "Calificación" seguiría muerta y "4 estrellas o más"
+    /// no devolvería nada, con la nota correcta a la vista. Un arreglo a medias que se ve
+    /// entero es peor que no arreglarlo.
+    /// </para>
+    /// <para>
+    /// Se reconstruye con <c>with</c> y NUNCA por posición: <c>new CatalogProduct(a, b, …)</c>
+    /// tira en silencio lo que no se liste y el compilador calla (mordió en T2-Gobierno).
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<CatalogProduct>> WithSocialProofAsync(
+        IReadOnlyList<CatalogProduct> products,
+        CancellationToken cancellationToken)
+    {
+        if (products.Count == 0)
+        {
+            return products;
+        }
+
+        // En paralelo: son N lecturas independientes de disco y encadenarlas haría la PLP
+        // tan lenta como la suma de todas.
+        var proofs = await Task.WhenAll(products.Select(async p =>
+        {
+            var reviews = await _socialProof.GetReviewsAsync(p.Id, cancellationToken).ConfigureAwait(false);
+            return (p.Id, Reviews: reviews);
+        })).ConfigureAwait(false);
+
+        var bySku = proofs.ToDictionary(x => x.Id, x => x.Reviews, StringComparer.OrdinalIgnoreCase);
+
+        return products.Select(p =>
+        {
+            if (!bySku.TryGetValue(p.Id, out var reviews) || reviews.Count == 0)
+            {
+                // Sin reseñas se queda como estaba: Rating 0 y Reviews vacío. Aquí el 0 NO
+                // se pinta como nota — el motor solo emite facetas CON valores, y el DTO de
+                // la tarjeta traduce "sin reseñas" a ausencia (ADR 0112).
+                return p;
+            }
+
+            return p with
+            {
+                Rating = Math.Round(reviews.Average(r => (double)r.Rating), 1, MidpointRounding.AwayFromZero),
+                Reviews = reviews
+                    .Select(r => new CatalogReview(r.AuthorName, r.Rating, r.Title, r.Body, r.Date))
+                    .ToList(),
+            };
+        }).ToList();
     }
 
     private string? ResolveBrandKey()
