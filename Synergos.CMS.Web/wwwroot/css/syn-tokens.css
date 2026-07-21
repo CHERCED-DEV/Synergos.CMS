@@ -474,6 +474,28 @@
      Los bloques dark/eventsNight lo suben. */
   --syn-ring-hover: var(--syn-border-hairline);
 
+  /* ── Hueso de skeleton (color) — familia --syn-skeleton-* ────────────────
+     Completa la familia que ya existía en TIEMPO (--syn-skeleton-delay/-min).
+     Existe como token propio porque el hueso se pintaba con surface-secondary
+     (base) y surface-tertiary (brillo), y eso NO funciona: son PELDAÑOS DE
+     SUPERFICIE, diseñados para ser sutiles ENTRE SÍ. Medido en vivo en
+     silverGold sobre el canvas real #f5f1e8: 1.051 borde izq / 1.114 centro /
+     1.182 borde der — invisible. Y el techo del barrido en movimiento era ESE
+     MISMO 1.182, así que tocar solo la animación no arreglaba nada.
+     Se miden CONGELADOS (`prefers-reduced-motion` → background-position: 0%,
+     que muestra la mitad izquierda del degradado: rampa base→sheen). Ese es el
+     peor caso y el que sufre quien pidió menos movimiento.
+     Objetivo: base ≥1.50:1 contra el fondo PEOR de cada tema (ΔL* 12.7–15.5,
+     perceptualmente uniforme en los 7); sheen ≈1.90:1. No aplica WCAG 4.5 —
+     el hueso es decorativo y aria-hidden — pero 1.05 no comunica nada y ≥3.0
+     se lee como bloque RELLENO, que es peor que invisible.
+     Invariante verificado en los 7: el hueso queda ENTRE la superficie y el
+     texto, nunca más extremo que el texto (si no, al cargar el contenido la
+     pantalla daría un salto de luz).
+     Default = light. Los otros 6 temas lo redeclaran. */
+  --syn-skeleton-base:  #d1d3d5;   /* 1.50:1 vs canvas #ffffff (ΔL* 15.5) */
+  --syn-skeleton-sheen: #bbbcbe;   /* 1.90:1 vs canvas #ffffff */
+
   /* ── Escalera de superficie 1..4 (canvas→panel→raised→elevado) ──────────
      MONOTÓNICA y REDECLARADA por-tema con valores explícitos: en oscuros el
      canvas es el más oscuro y 2/3/4 suben en luz (pasos perceptibles ~6-10%);
@@ -715,11 +737,19 @@
   --syn-border-3: 1px solid rgb(255 255 255 / 0.16);        /* prominent */
   --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
   /* a11y — anillo de hover al 24%: 2.18:1 contra la superficie de la tarjeta,
-     x1.78 el borde en reposo (1.22). Al 10% daba 1.32 y no se leía. */
+     x1.78 el borde en reposo (1.22). Al 10% daba 1.32 y no se leia. */
   --syn-ring-hover: 0 0 0 1px rgb(255 255 255 / 0.24);
-  /* a11y — anillo de hover al 24%: 2.18:1 contra la superficie de la tarjeta,
-     x1.78 el borde en reposo (1.22). Al 10% daba 1.32 y no se leía. */
-  --syn-ring-hover: 0 0 0 1px rgb(255 255 255 / 0.24);
+
+  /* a11y — hueso de skeleton. OSCURO: el hueso va MÁS CLARO que la superficie.
+     Fondo peor = surface-primary #1e293b (el más CLARO de los dos posibles;
+     en oscuros el panel, no el canvas, es el que menos separa).
+     Congelado vs #1e293b: 1.514 izq / 1.716 ctr / 1.917 der (ΔL* base 12.7).
+     Sobre el canvas #020817 sube a 2.07/2.35/2.62 — es el precio de garantizar
+     el piso contra el peor, y los dos fondos distan ΔL* 14.2 entre sí.
+     Techo OK: hueso L* 29.1→35.5 muy por debajo del texto (L* 84.9), así que
+     al cargar el contenido la pantalla NO se oscurece. */
+  --syn-skeleton-base:  #39455a;
+  --syn-skeleton-sheen: #48546a;
 
   /* Ola 1 — image-placeholder + highlight-top (dark) */
   --syn-image-placeholder-surface: #293a5c;   /* raised dark tinte brand */
@@ -748,6 +778,14 @@
   --syn-color-surface-primary:   #fffbf4;
   --syn-color-surface-secondary: #f2ebdf;
   --syn-color-surface-tertiary:  #e9dec9;
+
+  /* a11y — hueso de skeleton. Este es el tema donde se MIDIÓ el fallo en vivo:
+     el hueso caía sobre el canvas #f5f1e8 (fila transparente, no tarjeta) a
+     1.051/1.114/1.182 → invisible. Fondo peor = canvas.
+     Congelado vs #f5f1e8: 1.503 izq / 1.689 ctr / 1.907 der (ΔL* base 15.1).
+     Conserva el tinte crema del tema (a/b de Lab de su propio surface-secondary). */
+  --syn-skeleton-base:  #cdc6bb;
+  --syn-skeleton-sheen: #b7b0a5;
   --syn-color-surface-elevated:  #fff8ec;
   --syn-color-surface-inverse:   #1f2631;
   --syn-color-surface-accent:        #f3ead8;
@@ -908,6 +946,15 @@
   --syn-color-surface-primary:   #11172B;   /* surface elevada sobre canvas */
   --syn-color-surface-secondary: #161D34;
   --syn-color-surface-tertiary:  #1F2842;
+
+  /* a11y — hueso de skeleton. OSCURO: el hueso va MÁS CLARO que la superficie.
+     Era el peor de todos los temas contra su panel (1.066 izq — casi 1.00).
+     Fondo peor = surface-primary #11172b.
+     Congelado vs #11172b: 1.502 izq / 1.696 ctr / 1.916 der (ΔL* base 15.1).
+     Sobre el canvas #080c1a queda 1.65/1.86/2.10.
+     Techo OK: hueso L* 23.2→30.2 muy por debajo del texto (L* 82.8). */
+  --syn-skeleton-base:  #313650;
+  --syn-skeleton-sheen: #404660;
   --syn-color-surface-elevated:  #141B32;
   --syn-color-surface-inverse:   #F5F7FF;
   --syn-color-surface-accent:        rgb(124 92 255 / 0.14);
@@ -1015,6 +1062,12 @@
   --syn-border-2: 1px solid rgb(255 255 255 / 0.10);
   --syn-border-3: 1px solid rgb(255 255 255 / 0.16);
   --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
+  /* a11y — mismo caso que dark, y este se habia QUEDADO SIN el override: un bucle
+     de sustitucion insertó el token dos veces en dark y ninguna aqui, asi que
+     eventsNight seguia cayendo al :root (blanco 10% = 1.32, invisible). Es el tema
+     donde la sombra de tarjeta ni siquiera se pinta (su color ES el lienzo, 1.00:1),
+     o sea donde el anillo es la UNICA senal de hover que queda. */
+  --syn-ring-hover: 0 0 0 1px rgb(255 255 255 / 0.24);
 
   /* Ola 1 — image-placeholder + highlight-top (eventsNight) */
   --syn-image-placeholder-surface: #22284a;   /* raised midnight tinte violet */
@@ -1049,6 +1102,12 @@
   --syn-color-surface-primary:   #FFFFFF;   /* surface blanco editorial */
   --syn-color-surface-secondary: #ECEAE4;   /* stone secundario */
   --syn-color-surface-tertiary:  #E1DED7;   /* greige terciario */
+
+  /* a11y — hueso de skeleton. Fondo peor = canvas #f4f2ee (surface-primary es
+     blanco puro y separa más). Congelado vs #f4f2ee: 1.511 izq / 1.684 ctr /
+     1.901 der (ΔL* base 15.3). Conserva el greige del tema. */
+  --syn-skeleton-base:  #c9c7c2;
+  --syn-skeleton-sheen: #b3b2ac;
   --syn-color-surface-elevated:  #FBFAF8;   /* elevada casi-blanca, neutra */
   --syn-color-surface-inverse:   #23262B;   /* charcoal frío */
   --syn-color-surface-accent:        #E9E5DC;   /* greige cálido muy sutil */
@@ -1188,6 +1247,12 @@
   --syn-color-surface-primary:   #FFFFFF;   /* surface blanco */
   --syn-color-surface-secondary: #EEF2F8;
   --syn-color-surface-tertiary:  #E2E8F2;
+
+  /* a11y — hueso de skeleton. Fondo peor = canvas #f6f8fb.
+     Congelado vs #f6f8fb: 1.500 izq / 1.681 ctr / 1.910 der (ΔL* base 15.2).
+     Conserva el frío azulado del tema. */
+  --syn-skeleton-base:  #c9cdd3;
+  --syn-skeleton-sheen: #b3b6bc;
   --syn-color-surface-elevated:  #FFFFFF;
   --syn-color-surface-inverse:   #1B2A4A;
   --syn-color-surface-accent:        #E7EDF7;
@@ -1316,6 +1381,12 @@
   --syn-color-surface-primary:   #FFFFFF;   /* surface blanco */
   --syn-color-surface-secondary: #EAF0F4;
   --syn-color-surface-tertiary:  #DCE6EC;
+
+  /* a11y — hueso de skeleton. Fondo peor = canvas #f4f7f9.
+     Congelado vs #f4f7f9: 1.504 izq / 1.687 ctr / 1.901 der (ΔL* base 15.3).
+     Conserva el slate del tema. */
+  --syn-skeleton-base:  #c7ccd0;
+  --syn-skeleton-sheen: #b1b6ba;
   --syn-color-surface-elevated:  #FFFFFF;
   --syn-color-surface-inverse:   #1C2733;
   --syn-color-surface-accent:        #E2EEF3;
@@ -1483,6 +1554,18 @@
     --syn-border-2: 1px solid rgb(255 255 255 / 0.10);
     --syn-border-3: 1px solid rgb(255 255 255 / 0.16);
     --syn-border-hairline: 0 0 0 1px rgb(255 255 255 / 0.10);
+    --syn-ring-hover: 0 0 0 1px rgb(255 255 255 / 0.24);
+
+    /* Hueso de skeleton — espejo de [data-theme="dark"], y sin esto pasaba algo
+       PEOR que el defecto que se vino a arreglar: el hueso heredaba el default
+       CLARO (#d1d3d5) sobre superficie oscura y daba 9.7:1 contra el panel, una
+       losa brillante a la misma luminancia que el texto (L* 84.5 vs 84.9). O sea
+       que se leia como contenido YA CARGADO — exactamente el fallo que el
+       comentario del token de :root argumenta evitar.
+       Esta es la OCTAVA ruta de render: los 7 data-theme mas auto-dark. Quien
+       toque un token de superficie aqui tiene que espejarlo tambien. */
+    --syn-skeleton-base:  #39455a;
+    --syn-skeleton-sheen: #48546a;
   }
 }
 
