@@ -304,10 +304,12 @@ public sealed class ShopCatalogController : ControllerBase
         // El catálogo identifica por SKU (los ids de `search` ya son códigos tipo
         // "AUDIF-DIADEMA-001"), y `ProductSummary` no expone otro identificador, así que
         // `id` y `sku` coinciden. Se emiten los dos porque la tarjeta lee ambos.
-        // T10 (ADR 0114): null cuando el producto no tiene reseñas. Se emite TAL CUAL —
-        // `rating` ausente en el JSON — porque el contrato de la UI lo declara opcional
-        // (`Product.rating?`) y la tarjeta degrada por AUSENCIA. Emitir un objeto con ceros
-        // pintaría "0,0" en todo el catálogo (ADR 0112).
+        // T10 (ADR 0114): null cuando el producto no tiene reseñas, y se emite TAL CUAL.
+        // Ojo con la letra pequeña, medida en vivo: el serializador NO omite la clave, manda
+        // `"rating": null`. La UI queda igual de bien (su guarda es `count > 0`, y
+        // `null?.count` no pasa), pero no es cierto que la propiedad desaparezca del JSON.
+        // Lo que importa es que NO sea `{average:0,count:0}`: eso sí pintaría "0,0" en todo
+        // el catálogo (ADR 0112).
         var proof = await _socialProof.GetAsync(product.Sku, cancellationToken).ConfigureAwait(false);
 
         return Ok(new ProductBySkuDto(
@@ -875,8 +877,9 @@ public sealed class ShopCatalogController : ControllerBase
     /// de <c>@synergos/contracts</c> — la UI es la fuente de verdad de la clave (ADR 0083).
     /// </summary>
     /// <remarks>
-    /// Es NULLABLE en <see cref="ProductBySkuDto"/> a propósito: sin reseñas la propiedad
-    /// desaparece del JSON y la tarjeta no pinta estrella. Un objeto con ceros sería un
+    /// Es NULLABLE en <see cref="ProductBySkuDto"/> a propósito: sin reseñas viaja como
+    /// <c>"rating": null</c> (el serializador no omite la clave — comprobado en vivo, no
+    /// asumido) y la tarjeta no pinta estrella. Lo prohibido es un objeto con ceros: sería un
     /// producto valorado con la peor nota (ADR 0112).
     /// </remarks>
     public sealed record ProductRatingDto(double Average, int Count);
