@@ -1,0 +1,63 @@
+@*
+    _ProductCardCore.cshtml — el markup de UNA tarjeta de producto. Fuente única.
+
+    Existía DUPLICADO: `Elements/Shop/ProductCard.cshtml` (el elemento de BlockGrid) y
+    `ProductCategoryPage.cshtml`, que lo copiaba inline con el comentario "paridad de
+    markup … para heredar de una sola fuente de estilo". Esa paridad se mantenía A MANO
+    y, como era de esperar, ya había divergido en tres cosas:
+
+      · Estructura — la copia envolvía en `__media`/`__body`; el partial emite `<img>`,
+        `<h3>` y `<span>` DIRECTOS en el `__link`. Manda el partial: `syn-shop.css` está
+        escrito para esa forma (lo dice su propio comentario en `.syn-product-card__link`)
+        y el sangrado de la imagen usa márgenes negativos que asumen al `<img>` como hijo
+        directo del link padded. Dentro de `__media` no puede funcionar.
+      · Precio — la copia hacía `Price.ToString("N0") + " " + Currency` ("320.000 COP");
+        el partial usa `IPriceFormatter` ("$ 320.000"). Dos precios distintos para el mismo
+        producto según la página. Manda `IPriceFormatter`: es el seam del proyecto.
+      · Nivel de encabezado — h2 en la copia, h3 en el partial. Se parametriza en vez de
+        elegir por el llamador: el CSS engancha por `.syn-product-card__name` (clase), así
+        que el nivel es libre y debe decidirlo el contexto del documento.
+
+    NO incluye el estado vacío (producto no encontrado): eso es del elemento, que es quien
+    resuelve un SKU que puede no existir. Aquí el producto ya viene resuelto.
+*@
+@using System.Globalization
+@model (Synergos.CMS.Interfaces.ProductSummary Product, string Classes, string? Url, bool ShowPrice, bool ShowAddToCart, string HeadingTag)
+@* Con un @model de TUPLA la vista no hereda de UmbracoViewPage, y entonces `Umbraco`
+   resuelve al NAMESPACE en vez de al helper: `Umbraco.GetDictionaryValue` peta con
+   CS0234 (ADR 0059). Los partials con @model de un tipo Umbraco no lo notan porque el
+   SDK les pone la base por defecto. Hay que declararla a mano. *@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<(Synergos.CMS.Interfaces.ProductSummary Product, string Classes, string? Url, bool ShowPrice, bool ShowAddToCart, string HeadingTag)>
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
+@{
+    var p = Model.Product;
+    var heading = string.IsNullOrWhiteSpace(Model.HeadingTag) ? "h3" : Model.HeadingTag;
+}
+<article class="@Model.Classes" data-sku="@p.Sku">
+    <a class="syn-product-card__link" href="@(Model.Url ?? p.Url)">
+        @if (!string.IsNullOrWhiteSpace(p.ImageUrl))
+        {
+            <img class="syn-product-card__image" src="@p.ImageUrl" alt="@p.Name" loading="lazy" />
+        }
+        @* El nivel del encabezado lo fija el llamador; la clase es lo que estiliza. *@
+        @Html.Raw($"<{heading} class=\"syn-product-card__name\">")@p.Name@Html.Raw($"</{heading}>")
+        @if (Model.ShowPrice)
+        {
+            <span class="syn-product-card__price">@PriceFormatter.Format(p.Price, p.Currency)</span>
+        }
+        @if (!p.InStock)
+        {
+            <span class="syn-product-card__out-of-stock">@Umbraco.GetDictionaryValue("Shop.Product.OutOfStock")</span>
+        }
+    </a>
+    @if (Model.ShowAddToCart && p.InStock)
+    {
+        <button type="button"
+                class="syn-product-card__add-to-cart"
+                data-action="add-to-cart"
+                data-sku="@p.Sku"
+                data-price="@p.Price.ToString(CultureInfo.InvariantCulture)">
+            @Umbraco.GetDictionaryValue("Shop.Product.AddToCart")
+        </button>
+    }
+</article>
