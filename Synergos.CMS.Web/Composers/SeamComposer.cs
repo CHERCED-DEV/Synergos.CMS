@@ -164,6 +164,13 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IJsonEntityStore, FileSystemJsonEntityStore>();
         services.AddSingleton<IIdempotencyLedger, FileSystemIdempotencyLedger>();
 
+        // T10 (doc 26) — prueba social del catálogo: las reseñas son UGC y el rating se
+        // DERIVA de ellas. Sobre el mismo store genérico (resourceType "reviews"), no un
+        // store dedicado (ADR 0105). Registrado, pero AÚN SIN CONSUMIRSE: el cableado
+        // (UmbracoProductCatalogSource → ProductSummary → ProductBySkuDto) es el paso
+        // siguiente, y hasta que ocurra el catálogo sigue emitiendo Rating: 0d.
+        services.AddSingleton<ICatalogSocialProof, FileSystemCatalogSocialProof>();
+
         // T4 (doc 25) — notificaciones transaccionales: UN dispatcher transversal para los
         // 6 hechos de los 5 verticales (regla de oro: no un notifier por dominio). Los
         // CANALES se registran primero y el composite AL FINAL (calca IAlertNotifier
