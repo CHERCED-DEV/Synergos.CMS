@@ -25,7 +25,13 @@ public sealed class DevContentFiller
     private const string SectionsAlias = "sections";
     private const string BrandName = "SynergosLabs";   // marca de la Entidad + umbrella (decisión del arquitecto)
     private const string ComponentCount = "120";       // cifra canónica de componentes (P1-9 — sin contradicciones entre páginas)
-    private const string VerticalCount = "8";          // cifra canónica de verticales vivas (= ShowcaseCatalog: Tienda/Booking/Eventos/Propiedades/Educación/Blogs/Healthcare/Gobierno)
+    // Cifra de verticales vivas. Se DERIVA de `Verticals` en vez de escribirse: era un
+    // const "8" comentado como "cifra canónica" mientras SeedVertical sembraba nueve, y esa
+    // cifra sale en cuatro sitios de copy visible. Una constante que hay que acordarse de
+    // subir es una constante que va a mentir. Propiedad, no campo: los inicializadores de
+    // campo estático corren en orden textual y `Verticals` se declara más abajo.
+    private static string VerticalCount =>
+        Verticals.Length.ToString(System.Globalization.CultureInfo.InvariantCulture);
     private static readonly Guid SectionContentAreaKey = new("3525d41c-ae84-47ac-9297-2148f6a4aae8");
     // Áreas de elementLayout3Col (de DTBlockGridSections) — col1/col2/col3.
     private static readonly Guid Col1AreaKey = new("b3141704-5e2d-4adf-9c83-654377a9717f");
@@ -529,11 +535,14 @@ public sealed class DevContentFiller
         // Las soluciones REALES son las verticales vivas: el launcher deep-linkea a la
         // página showcase de cada una (/synergos/apps/<slug>, arco preview→demo→app). Fuente
         // única = ShowcaseCatalog (cero hardcode). Fallback SSR (cards) si el launcher no está.
+        // El Icon ya no se re-deriva con un switch paralelo (que además discrepaba de
+        // DomainAppCatalog en propiedades/hoteles): sale de la misma fila que todo lo demás.
         var solApps = ShowcaseCatalog()
             .Where(d => !string.IsNullOrEmpty(d.AppUrl))
-            .Select(d => (Slug: d.Slug, Name: d.Name, Tagline: d.Blurb, Status: "live",
-                Url: $"/synergos/apps/{d.Slug}",
-                Icon: d.Slug switch { "tienda" => "bag", "eventos" or "educacion" or "blogs" => "document", _ => "grid" }))
+            .Join(Verticals, d => d.Slug, v => v.Slug, (d, v) =>
+                (Slug: d.Slug, Name: d.Name, Tagline: d.Blurb, Status: "live",
+                 Url: $"/synergos/apps/{d.Slug}", Icon: v.Icon,
+                 Industry: v.Industry, Persona: v.Persona, Capabilities: v.Capabilities))
             .ToArray();
         if (_contentTypeService.Get("elementSynAppLauncher")?.Key is not null)
         {
@@ -1246,38 +1255,121 @@ public sealed class DevContentFiller
         => $"[{{\"name\":\"{Esc(name)}\",\"url\":\"{Esc(url)}\",\"target\":\"\",\"udi\":null,\"icon\":null,\"queryString\":null}}]";
 
     /// <summary>
-    /// Catálogo de dominios del hub (fuente única de verdad). Cada entrada = una app real
-    /// que vive en su siteRoot; el hub la presenta y la lanza (deep-link). Reusado por el
-    /// launcher de la plataforma (cards + módulo Angular) y por el home del hub. El nombre
-    /// de la Entidad se inyecta (lee siteDisplayName) para no hardcodear la marca.
+    /// LOS VERTICALES — la única lista de membresía del producto.
+    ///
+    /// Antes había TRES y ninguna coincidía: <c>DomainAppCatalog</c> tenía Hoteles y le
+    /// faltaba Gobierno; <c>ShowcaseCatalog</c> tenía Gobierno y le faltaba Hoteles; y la
+    /// constante <c>VerticalCount</c> —comentada como "cifra canónica"— decía 8 mientras
+    /// <c>SeedVertical</c> sembraba NUEVE. La divergencia era simétrica, que es justo por lo
+    /// que nadie la vio: cada lista parecía completa desde donde se la mirara, y el producto
+    /// se contaba 8 en la portada y mostraba 9 en el catálogo.
+    ///
+    /// Ahora los tres consumidores PROYECTAN de aquí. Añadir un vertical es añadir una fila:
+    /// el hub, la vitrina y la cifra de marketing se enteran solos. Si alguien vuelve a
+    /// escribir una lista paralela, esta nota es la que hay que citarle.
     /// </summary>
-    private static (string Slug, string Name, string Tagline, string Status, string Url, string Icon)[] DomainAppCatalog(string entidadName) => new[]
+    private sealed record Vertical(
+        string Slug,
+        string Name,
+        /// Copy del hub (card del launcher).
+        string Tagline,
+        /// Copy de la vitrina — más corto y en clave de venta.
+        string Blurb,
+        /// Modificador CSS de la card SSR (`syn-launcher__card--{Icon}`). NO es el icono del
+        /// componente Angular: ese lo resuelve un @switch por `id` desde a70b6b3.
+        string Icon,
+        string Industry,
+        string Persona,
+        string[] Capabilities);
+
+    /// Orden = ola de profundidad (doc 21 §3), que es el que usa la vitrina.
+    private static readonly Vertical[] Verticals =
     {
-        ("entidad", entidadName, "Marca, identidad y páginas institucionales — el sitio editorial completo.", "live", "/synergos", "grid"),
-        // P2-8: los verticales Blogs/Tienda ya existen (P1-1) → cards "live" a su siteRoot.
-        ("blogs", "Blogs", "Publicaciones, artículos y contenido editorial sobre el mismo motor.", "live", "/blogs", "document"),
-        ("tienda", "Tienda", "Catálogo, productos y checkout sobre la misma plataforma.", "live", "/tienda", "bag"),
-        ("healthcare", "Healthcare", "Historia clínica, agenda y recetas — un vertical clínico completo sobre el mismo motor.", "live", "/healthcare", "grid"),
-        // OLA 4.6 — verticales #7/#8.
-        ("educacion", "Educación", "Cursos, catálogo y inscripciones — una academia completa sobre el mismo motor.", "live", "/educacion", "document"),
-        ("booking", "Booking", "Reservas y citas: catálogo de servicios, calendario y registro multipaso — una plataforma de reservas completa sobre el mismo motor.", "live", "/booking", "grid"),
-        // OLA 4.7 — verticales #9/#10.
-        ("eventos", "Eventos", "Registro premium de eventos: cartelera, cuenta regresiva, agenda y tickets — una plataforma de eventos completa sobre el mismo motor.", "live", "/eventos", "document"),
-        ("propiedades", "Propiedades", "Inmobiliario premium: listado filtrable, galería con lightbox y fichas de propiedad — un portal de propiedades completo sobre el mismo motor.", "live", "/propiedades", "grid"),
-        // OLA 4.8 — vertical #11 Hoteles.
-        ("hoteles", "Hoteles", "Reservas de alojamiento: catálogo de hoteles, galería y asistente de reserva multipaso — una plataforma de booking de hoteles completa sobre el mismo motor.", "live", "/hoteles", "grid"),
+        new("tienda", "Tienda",
+            "Catálogo, productos y checkout sobre la misma plataforma.",
+            "Del catálogo al checkout: e-commerce completo con precios es-CO reales.",
+            "bag", "Retail", "Comprador",
+            new[] { "Catálogo", "Carrito", "Checkout", "Pagos", "Envíos" }),
+        new("booking", "Booking",
+            "Reservas y citas: catálogo de servicios, calendario y registro multipaso — una plataforma de reservas completa sobre el mismo motor.",
+            "Reservas y citas con disponibilidad en tiempo real sobre el motor transaccional.",
+            "grid", "Turismo", "Viajero",
+            new[] { "Reservas", "Disponibilidad", "Pagos", "Itinerarios" }),
+        new("eventos", "Eventos",
+            "Registro premium de eventos: cartelera, cuenta regresiva, agenda y tickets — una plataforma de eventos completa sobre el mismo motor.",
+            "Cartelera, tickets con retención de cupo y agenda viva del evento.",
+            "document", "Entretenimiento", "Asistente",
+            new[] { "Cartelera", "Tickets", "Check-in", "QR firmado" }),
+        new("propiedades", "Propiedades",
+            "Inmobiliario premium: listado filtrable, galería con lightbox y fichas de propiedad — un portal de propiedades completo sobre el mismo motor.",
+            "Portal inmobiliario premium: fichas inmersivas y visitas sin paso de pago.",
+            "grid", "Inmobiliario", "Comprador",
+            new[] { "Listados", "Mapa", "Visitas", "Hipoteca" }),
+        new("educacion", "Educación",
+            "Cursos, catálogo y inscripciones — una academia completa sobre el mismo motor.",
+            "Una academia online: catálogo, temario interactivo e inscripciones.",
+            "document", "Educación", "Estudiante",
+            new[] { "Cursos", "Lecciones", "Inscripciones", "Certificados" }),
+        new("blogs", "Blogs",
+            "Publicaciones, artículos y contenido editorial sobre el mismo motor.",
+            "La cara social del motor: feed editorial, autores y comentarios en vivo.",
+            "document", "Medios", "Autor",
+            new[] { "Publicación", "Feed", "Suscripciones", "Comentarios" }),
+        new("healthcare", "Healthcare",
+            "Historia clínica, agenda y recetas — un vertical clínico completo sobre el mismo motor.",
+            "Historia clínica, agenda sin sobrecupos y acceso auditado por consentimiento.",
+            "grid", "Salud", "Paciente",
+            new[] { "Historia clínica", "Agenda", "Recetas", "Consentimiento" }),
+        new("hoteles", "Hoteles",
+            "Reservas de alojamiento: catálogo de hoteles, galería y asistente de reserva multipaso — una plataforma de booking de hoteles completa sobre el mismo motor.",
+            "Alojamiento de punta a punta: catálogo, tarifas y asistente de reserva.",
+            "grid", "Hotelería", "Huésped",
+            new[] { "Habitaciones", "Tarifas", "Reservas", "Check-in" }),
+        new("gobierno", "Gobierno",
+            "Trámites en lenguaje claro: radicación, carpeta ciudadana y seguimiento por etapas — un portal público completo sobre el mismo motor.",
+            "Trámites en lenguaje claro con carpeta ciudadana y seguimiento por etapas.",
+            "document", "Sector público", "Ciudadano",
+            new[] { "Trámites", "Radicación", "Expedientes", "Notificaciones" }),
     };
 
     /// <summary>
-    /// Serializa el catálogo de dominios al JSON que consume &lt;synergos-app-launcher&gt;
-    /// (apps[] de objetos {id, name, tagline, status, url, icon} — el shape que espera
-    /// normalizeApps del componente). Misma fuente que las cards estáticas → cero
-    /// duplicación, cero hardcode en el componente.
+    /// Catálogo de dominios del hub. Cada entrada = una app real que vive en su siteRoot; el
+    /// hub la presenta y la lanza (deep-link). El nombre de la Entidad se inyecta (lee
+    /// siteDisplayName) para no hardcodear la marca. La Entidad NO es un vertical: va aparte
+    /// y por eso no cuenta para <see cref="VerticalCount"/>.
+    /// </summary>
+    private static (string Slug, string Name, string Tagline, string Status, string Url, string Icon,
+        string Industry, string Persona, string[] Capabilities)[] DomainAppCatalog(string entidadName) =>
+        new[]
+        {
+            ("entidad", entidadName, "Marca, identidad y páginas institucionales — el sitio editorial completo.",
+                "live", "/synergos", "grid", "Corporativo", "Editor",
+                new[] { "Páginas", "Marca", "Navegación", "SEO" }),
+        }
+        .Concat(Verticals.Select(v => (v.Slug, v.Name, v.Tagline, "live", $"/{v.Slug}", v.Icon,
+            v.Industry, v.Persona, v.Capabilities)))
+        .ToArray();
+
+    /// <summary>
+    /// Serializa el catálogo al JSON que consume &lt;synergos-app-launcher&gt; — el shape que
+    /// espera <c>normalizeApps</c>.
+    ///
+    /// ⚠️ <c>industry</c>, <c>persona</c> y <c>capabilities</c> NO son decorativos: de ellos
+    /// derivan los tres <c>computed</c> de facetas del componente, y <c>hasFilters()</c> —que
+    /// gobierna el <c>@if</c> de la barra de filtros entera— es false si los tres salen
+    /// vacíos. Mientras este serializador no los emitió, los chips de capacidad y los TRES
+    /// selectores (Industria / Persona / Capacidad) no se renderizaron ni una sola vez, pese
+    /// a estar construidos enteros —template, CSS tokenizado y normalizador— en el bundle.
+    /// Quitar una de estas tres claves apaga el buscador facetado del Hub sin un solo error.
     /// </summary>
     private static string BuildAppsCatalogJson(
-        IEnumerable<(string Slug, string Name, string Tagline, string Status, string Url, string Icon)> apps)
+        IEnumerable<(string Slug, string Name, string Tagline, string Status, string Url, string Icon,
+            string Industry, string Persona, string[] Capabilities)> apps)
         => "[" + string.Join(",", apps.Select(a =>
-            $"{{\"id\":\"{Esc(a.Slug)}\",\"name\":\"{Esc(a.Name)}\",\"tagline\":\"{Esc(a.Tagline)}\",\"status\":\"{Esc(a.Status)}\",\"url\":\"{Esc(a.Url)}\",\"icon\":\"{Esc(a.Icon)}\"}}")) + "]";
+            $"{{\"id\":\"{Esc(a.Slug)}\",\"name\":\"{Esc(a.Name)}\",\"tagline\":\"{Esc(a.Tagline)}\"," +
+            $"\"status\":\"{Esc(a.Status)}\",\"url\":\"{Esc(a.Url)}\",\"icon\":\"{Esc(a.Icon)}\"," +
+            $"\"industry\":\"{Esc(a.Industry)}\",\"persona\":\"{Esc(a.Persona)}\"," +
+            $"\"capabilities\":[{string.Join(",", a.Capabilities.Select(c => $"\"{Esc(c)}\""))}]}}")) + "]";
 
     private static string Esc(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
@@ -3868,23 +3960,20 @@ public sealed class DevContentFiller
     private const string GovFrom = "#0B0C0C", GovTo = "#1D70B8";   // institucional (on-brand, NO define tema)
 
     /// <summary>
-    /// Catálogo de la vitrina (ordenado por la ola de profundidad del doc 21 §3). Slug =
-    /// segmento URL bajo /synergos/apps/; AppUrl = deep-link a la app real. Gobierno aún no
-    /// tiene siteRoot (baseline pendiente de F0): su AppUrl se resuelve en runtime — si el
-    /// vertical aparece, el re-fill idempotente activa el deep-link solo.
+    /// Catálogo de la vitrina — PROYECTA de <see cref="Verticals"/>, ya no es una lista
+    /// aparte. Slug = segmento URL bajo /synergos/apps/; AppUrl = deep-link a la app real.
+    ///
+    /// El AppUrl se resuelve en runtime contra el contenido sembrado: un vertical que aún no
+    /// tenga siteRoot sale con AppUrl vacío y el consumidor lo filtra, así que el re-fill
+    /// idempotente activa el deep-link solo cuando el sitio aparece. Antes ese guard estaba
+    /// escrito a mano sólo para Gobierno —que hace tiempo SÍ tiene siteRoot—; ahora aplica a
+    /// los nueve por igual y ninguno depende de que alguien se acuerde de quitarle la nota.
     /// </summary>
-    private (string Name, string Slug, string Blurb, string AppUrl)[] ShowcaseCatalog() => new[]
-    {
-        ("Tienda", "tienda", "Del catálogo al checkout: e-commerce completo con precios es-CO reales.", "/tienda"),
-        ("Booking", "booking", "Reservas y citas con disponibilidad en tiempo real sobre el motor transaccional.", "/booking"),
-        ("Eventos", "eventos", "Cartelera, tickets con retención de cupo y agenda viva del evento.", "/eventos"),
-        ("Propiedades", "propiedades", "Portal inmobiliario premium: fichas inmersivas y visitas sin paso de pago.", "/propiedades"),
-        ("Educación", "educacion", "Una academia online: catálogo, temario interactivo e inscripciones.", "/educacion"),
-        ("Blogs", "blogs", "La cara social del motor: feed editorial, autores y comentarios en vivo.", "/blogs"),
-        ("Healthcare", "healthcare", "Historia clínica, agenda sin sobrecupos y acceso auditado por consentimiento.", "/healthcare"),
-        ("Gobierno", "gobierno", "Trámites en lenguaje claro con carpeta ciudadana y seguimiento por etapas.",
-            FindVertical("gobierno") is not null ? "/gobierno" : ""),
-    };
+    private (string Name, string Slug, string Blurb, string AppUrl)[] ShowcaseCatalog() =>
+        Verticals
+            .Select(v => (v.Name, v.Slug, v.Blurb,
+                AppUrl: FindVertical(v.Slug) is not null ? $"/{v.Slug}" : string.Empty))
+            .ToArray();
 
     private void SeedAppsShowcase(List<string> details)
     {
