@@ -54,6 +54,14 @@ public sealed class ShopCatalogController : ControllerBase
     private readonly IMemberAccessGate _gate;
 
     /// <summary>
+    /// Prueba social (T10, ADR 0114). El rating se resuelve AQUÍ y no en
+    /// <see cref="IShopQuery"/> porque aquel seam es SÍNCRONO: bajarlo allí obligaría a un
+    /// sync-over-async, y además metería un agregado de UGC dentro de un tipo de dominio del
+    /// catálogo. La acción ya es el sitio donde se compone la respuesta.
+    /// </summary>
+    private readonly ICatalogSocialProof _socialProof;
+
+    /// <summary>
     /// Resolución por SKU para <c>GET products/sku/{sku}</c>. Es el MISMO seam que usa el
     /// renderer Razor <c>Elements/Shop/ProductCard.cshtml</c>: así el respaldo SSR y la
     /// tarjeta ya hidratada no pueden mostrar datos distintos del mismo producto.
@@ -69,8 +77,10 @@ public sealed class ShopCatalogController : ControllerBase
         IReturnService returns,
         IMessagingService messaging,
         IMemberAccessGate gate,
-        IShopQuery shopQuery)
+        IShopQuery shopQuery,
+        ICatalogSocialProof socialProof)
     {
+        _socialProof = socialProof;
         _catalog = catalog;
         _orders = orders;
         _priceFormatter = priceFormatter;
@@ -278,7 +288,7 @@ public sealed class ShopCatalogController : ControllerBase
     //     undefined y se pierde la imagen. No se toca `ProductDto` para no romper a
     //     search/PDP, que ya consumen el array de cadenas.
     [HttpGet("products/sku/{sku}")]
-    public IActionResult ProductBySku(string sku)
+    public async Task<IActionResult> ProductBySku(string sku, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(sku))
         {
@@ -294,6 +304,12 @@ public sealed class ShopCatalogController : ControllerBase
         // El catálogo identifica por SKU (los ids de `search` ya son códigos tipo
         // "AUDIF-DIADEMA-001"), y `ProductSummary` no expone otro identificador, así que
         // `id` y `sku` coinciden. Se emiten los dos porque la tarjeta lee ambos.
+        // T10 (ADR 0114): null cuando el producto no tiene reseñas. Se emite TAL CUAL —
+        // `rating` ausente en el JSON — porque el contrato de la UI lo declara opcional
+        // (`Product.rating?`) y la tarjeta degrada por AUSENCIA. Emitir un objeto con ceros
+        // pintaría "0,0" en todo el catálogo (ADR 0112).
+        var proof = await _socialProof.GetAsync(product.Sku, cancellationToken).ConfigureAwait(false);
+
         return Ok(new ProductBySkuDto(
             Id: product.Sku,
             Sku: product.Sku,
@@ -306,7 +322,8 @@ public sealed class ShopCatalogController : ControllerBase
             Category: product.CategoryName,
             Images: product.ImageUrl is null
                 ? System.Array.Empty<ProductImageDto>()
-                : new[] { new ProductImageDto(Src: product.ImageUrl, Alt: product.Name) }));
+                : new[] { new ProductImageDto(Src: product.ImageUrl, Alt: product.Name) },
+            Rating: proof is null ? null : new ProductRatingDto(proof.Average, proof.Count)));
     }
 
     // ── 3. Checkout ────────────────────────────────────────────────
@@ -847,10 +864,22 @@ public sealed class ShopCatalogController : ControllerBase
         bool InStock,
         string? Url,
         string? Category,
-        IReadOnlyList<ProductImageDto> Images);
+        IReadOnlyList<ProductImageDto> Images,
+        ProductRatingDto? Rating);
 
     /// <summary>Imagen del producto. La tarjeta lee <c>images[0].src</c> y <c>images[0].alt</c>.</summary>
     public sealed record ProductImageDto(string Src, string? Alt);
+
+    /// <summary>
+    /// Prueba social del producto (T10, ADR 0114). Calca <c>Product.rating?: {average, count}</c>
+    /// de <c>@synergos/contracts</c> — la UI es la fuente de verdad de la clave (ADR 0083).
+    /// </summary>
+    /// <remarks>
+    /// Es NULLABLE en <see cref="ProductBySkuDto"/> a propósito: sin reseñas la propiedad
+    /// desaparece del JSON y la tarjeta no pinta estrella. Un objeto con ceros sería un
+    /// producto valorado con la peor nota (ADR 0112).
+    /// </remarks>
+    public sealed record ProductRatingDto(double Average, int Count);
 
     public sealed record FacetDto(string Key, string Label, IReadOnlyList<FacetValueDto> Values, string Kind = "MultiSelect");
 

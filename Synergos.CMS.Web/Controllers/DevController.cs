@@ -21,6 +21,7 @@ public sealed class DevController : ControllerBase
     private readonly SynergosIdentitySeeder _identitySeeder;
     private readonly DevContentFiller _filler;
     private readonly DevMemberRoleSeeder _roleSeeder;
+    private readonly DevProductReviewSeeder _reviewSeeder;
     private readonly ILogger<DevController> _logger;
 
     public DevController(
@@ -29,6 +30,7 @@ public sealed class DevController : ControllerBase
         SynergosIdentitySeeder identitySeeder,
         DevContentFiller filler,
         DevMemberRoleSeeder roleSeeder,
+        DevProductReviewSeeder reviewSeeder,
         ILogger<DevController> logger)
     {
         _settings = settings.Value;
@@ -36,7 +38,31 @@ public sealed class DevController : ControllerBase
         _identitySeeder = identitySeeder;
         _filler = filler;
         _roleSeeder = roleSeeder;
+        _reviewSeeder = reviewSeeder;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Siembra reseñas de demo sobre el catálogo VIVO para que la prueba social de T10
+    /// (ADR 0114) tenga qué enseñar. Idempotente: re-ejecutar sustituye, no acumula.
+    /// </summary>
+    [HttpPost("seed-product-reviews")]
+    public async Task<IActionResult> SeedProductReviews(
+        [FromQuery] int maxProducts,
+        CancellationToken cancellationToken)
+    {
+        if (!_settings.Enabled) return NotFound();
+
+        _logger.LogInformation("DevSeed endpoint invocado (seed-product-reviews).");
+        var (products, reviews) = await _reviewSeeder
+            .SeedAsync(maxProducts <= 0 ? 50 : maxProducts, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Sin productos no hay siembra posible: se dice, en vez de devolver un OK vacío que
+        // parezca éxito.
+        return products == 0
+            ? Conflict(new { error = "El catálogo no devolvió productos; no se sembró nada." })
+            : Ok(new { products, reviews });
     }
 
     [HttpPost("seed-test-site")]
