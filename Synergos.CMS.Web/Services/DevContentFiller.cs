@@ -4396,5 +4396,38 @@ public sealed class DevContentFiller
             : new FillResult(false, 0, $"save-failed:{save.Result}");
     }
 
+    /// <summary>
+    /// Borra UNA página de dev por id, exigiendo que el llamador acierte su nombre.
+    /// </summary>
+    /// <remarks>
+    /// El <paramref name="expectedName"/> no es burocracia: es lo que convierte "borra el
+    /// id 1798" en "borra el id 1798 SI de verdad es la página que crees". Un id copiado
+    /// mal apunta a contenido real, y el borrado no tiene deshacer barato. Tampoco borra
+    /// subárboles: si tiene hijos, se niega.
+    /// </remarks>
+    public FillResult DeletePage(int pageId, string expectedName)
+    {
+        var page = _contentService.GetById(pageId);
+        if (page is null)
+        {
+            return new FillResult(false, 0, $"page-not-found:{pageId}");
+        }
+        if (!string.Equals(page.Name, expectedName, StringComparison.Ordinal))
+        {
+            return new FillResult(false, 0,
+                $"name-mismatch: el id {pageId} se llama '{page.Name}', no '{expectedName}' — no se borra nada");
+        }
+        if (_contentService.HasChildren(pageId))
+        {
+            return new FillResult(false, 0, $"page-has-children:'{page.Name}' — no se borran subárboles");
+        }
+
+        var name = page.Name;
+        var res = _contentService.Delete(page);
+        return res.Success
+            ? new FillResult(true, 1, $"deleted:'{name}' (id {pageId})")
+            : new FillResult(false, 0, $"delete-failed:{res.Result}");
+    }
+
     public sealed record FillResult(bool Success, int PagesFilled, string Detail);
 }
