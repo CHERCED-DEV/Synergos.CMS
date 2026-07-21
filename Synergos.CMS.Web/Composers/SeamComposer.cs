@@ -999,6 +999,9 @@ public sealed class SeamComposer : IComposer
         // doctor…) y los asigna. Sin esto, las consolas que T2-Gov/T2-Eventos/T9/T7
         // cerraron por rol quedan correctas pero IMPOSIBLES de demostrar.
         services.AddTransient<DevMemberRoleSeeder>();
+        // T10 (ADR 0114): siembra de reseñas de demo. Tooling dev — el endpoint que lo usa
+        // devuelve 404 sin el flag; nada corre en boot (ADR 0013).
+        services.AddTransient<DevProductReviewSeeder>();
 
         // Health probes. Each registers as an ISchemaHealthProbe; the
         // HealthController resolves them as IEnumerable<ISchemaHealthProbe>.

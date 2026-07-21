@@ -47,7 +47,8 @@ public class ShopCatalogSearchTests
             Substitute.For<IReturnService>(),
             Substitute.For<IMessagingService>(),
             Substitute.For<IMemberAccessGate>(),
-            Substitute.For<IShopQuery>());
+            Substitute.For<IShopQuery>(),
+            Substitute.For<ICatalogSocialProof>());
 
         return (controller, captured);
     }
