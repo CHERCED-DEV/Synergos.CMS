@@ -1002,6 +1002,7 @@ public sealed class SeamComposer : IComposer
         // T10 (ADR 0114): siembra de reseñas de demo. Tooling dev — el endpoint que lo usa
         // devuelve 404 sin el flag; nada corre en boot (ADR 0013).
         services.AddTransient<DevProductReviewSeeder>();
+        services.AddTransient<DevPaidOrderSeeder>();
 
         // Health probes. Each registers as an ISchemaHealthProbe; the
         // HealthController resolves them as IEnumerable<ISchemaHealthProbe>.
