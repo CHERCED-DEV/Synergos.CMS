@@ -1603,6 +1603,37 @@
        toque un token de superficie aqui tiene que espejarlo tambien. */
     --syn-skeleton-base:  #39455a;
     --syn-skeleton-sheen: #48546a;
+
+    /* Superficies y estados — ESPEJO de [data-theme="dark"].
+       Sin esto auto-dark heredaba las superficies CLARAS de :root sobre un
+       lienzo oscuro: `text-primary` sobre `surface-secondary` daba 1.046:1,
+       o sea texto blanco sobre fondo casi blanco. Lo destapó
+       `tools/audit-themes.mjs`, que mide esta OCTAVA ruta de render — la que
+       se olvida siempre porque no tiene `data-theme` y no sale en los barridos
+       que buscan los 7 temas. */
+    --syn-color-surface-secondary: #132033;
+    --syn-color-surface-tertiary: var(--syn-color-neutral-700);
+    --syn-color-surface-elevated: #101a2a;
+    --syn-color-surface-inverse: var(--syn-color-neutral-0);
+    --syn-color-surface-accent: rgb(var(--syn-channel-brand) / 0.16);
+    --syn-color-surface-accent-soft: rgb(var(--syn-channel-brand) / 0.12);
+    --syn-color-surface-overlay: rgb(15 23 42 / 0.84);
+    --syn-color-surface-strong: var(--syn-color-neutral-0);
+    --syn-color-state-brand-surface: rgb(var(--syn-channel-brand) / 0.18);
+    --syn-color-state-brand-border: rgb(165 180 252 / 0.34);
+    --syn-color-state-brand-text: var(--syn-color-brand-200);
+    --syn-color-state-info-surface: rgb(56 189 248 / 0.16);
+    --syn-color-state-info-border: rgb(56 189 248 / 0.28);
+    --syn-color-state-info-text: #bae6fd;
+    --syn-color-state-success-surface: rgb(34 197 94 / 0.16);
+    --syn-color-state-success-border: rgb(74 222 128 / 0.28);
+    --syn-color-state-success-text: #bbf7d0;
+    --syn-color-state-warning-surface: rgb(245 158 11 / 0.16);
+    --syn-color-state-warning-border: rgb(252 211 77 / 0.30);
+    --syn-color-state-warning-text: #fde68a;
+    --syn-color-state-danger-surface: rgb(239 68 68 / 0.16);
+    --syn-color-state-danger-border: rgb(251 113 133 / 0.32);
+    --syn-color-state-danger-text: #fecdd3;
   }
 }
 
