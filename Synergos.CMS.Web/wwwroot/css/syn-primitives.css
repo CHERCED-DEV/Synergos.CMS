@@ -433,6 +433,24 @@
   color: var(--syn-color-neutral-0);
   transform: translateY(-2px);
 }
+/* Mismo trato para el botón YA HIDRATADO. El respaldo SSR trae la clase del
+   vocabulario del CMS (--secondary), pero al hidratar el elemento normaliza a
+   la del design system (--outline), así que la regla de arriba deja de aplicar
+   y el CTA saltaría de outline-claro a superficie clara sobre el hero oscuro.
+   Se incluye el tag en el selector a propósito: los estilos del bundle se
+   inyectan DESPUÉS del <link> del CMS, y con la misma especificidad ganaría el
+   bundle — (0,3,0) contra (0,2,0) gana sin depender del orden. */
+.syn-hero__ctas synergos-button-container .syn-button--outline {
+  background: transparent;
+  border-color: rgb(255 255 255 / 0.28);
+  color: var(--syn-color-neutral-0);
+}
+.syn-hero__ctas synergos-button-container .syn-button--outline:hover {
+  background: rgb(255 255 255 / 0.12);
+  border-color: rgb(255 255 255 / 0.5);
+  color: var(--syn-color-neutral-0);
+  transform: translateY(-2px);
+}
 
 /* Hero con imagen de fondo: el overlay (::after) es SIEMPRE oscuro
    (basado en --syn-channel-ink), así que el texto va blanco fijo —
