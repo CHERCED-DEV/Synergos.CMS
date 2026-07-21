@@ -10,7 +10,11 @@
     Si el cart está vacío, se muestra mensaje editor-facing y el form
     de checkout se omite.
 *@
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@* `@inherits`, NO `@model`: con `@model` la vista no hereda de UmbracoViewPage y
+   `Umbraco.GetDictionaryValue` peta con CS0234 al renderizar (ADR 0059). Aquí son SEIS
+   llamadas. Mismo defecto latente que ProductCard.cshtml, invisible por la misma razón:
+   ningún contenido coloca el elemento en un BlockGrid. *@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Synergos.CMS.Interfaces.ICartService CartService
 @inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @{
