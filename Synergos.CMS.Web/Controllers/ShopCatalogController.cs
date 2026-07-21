@@ -262,11 +262,20 @@ public sealed class ShopCatalogController : ControllerBase
             Answered: qa.Answer is not null,
             Date: qa.Date)).ToList();
 
+        // T10 Ola B: ¿este visitante puede reseñar? Lo decide el SERVIDOR, con el mismo gate
+        // que aplica el POST — la UI no puede deducirlo y adivinarlo sería inventar.
+        // Se emite el HECHO (puede o no puede), no el motivo: por qué no puede es cosa suya
+        // y de nadie más. Sin sesión ni siquiera se miran las órdenes.
+        var canReview = _gate.IsAuthenticated
+            && _gate.CurrentMemberKey is Guid reviewerKey
+            && await HasPurchasedAsync(reviewerKey, detail.Product.Id, cancellationToken).ConfigureAwait(false);
+
         return Ok(new ProductDetailResponse(
             Product: product,
             Variants: variants,
             Reviews: reviews,
-            Questions: questions));
+            Questions: questions,
+            CanReview: canReview));
     }
 
     // ── 2b. Product by SKU (tarjeta de producto) ───────────────────
@@ -1009,11 +1018,19 @@ public sealed class ShopCatalogController : ControllerBase
     // La UI lee `author` (sin fallback a asker) → sin él la Q&A muestra "Comprador".
     public sealed record QuestionDto(string Asker, string Author, string Question, string? Answer, bool Answered, DateOnly Date);
 
+    /// <param name="CanReview">
+    /// Si este visitante puede dejar una reseña (T10 Ola B): autenticado Y con una orden
+    /// pagada de este producto. Lo decide el servidor con el MISMO gate que aplica el POST,
+    /// así que la UI no tiene que adivinarlo ni ofrecer un formulario que va a rebotar.
+    /// Es el HECHO, no el motivo: por qué alguien no puede reseñar es asunto suyo, y detallarlo
+    /// convertiría este campo en un oráculo de qué ha comprado quién.
+    /// </param>
     public sealed record ProductDetailResponse(
         ProductDto Product,
         IReadOnlyList<VariantDto> Variants,
         IReadOnlyList<ReviewDto> Reviews,
-        IReadOnlyList<QuestionDto> Questions);
+        IReadOnlyList<QuestionDto> Questions,
+        bool CanReview);
 
     public sealed record CheckoutResponse(
         string OrderRef,
