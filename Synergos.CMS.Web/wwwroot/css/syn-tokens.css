@@ -524,9 +524,36 @@
   --syn-radius-pill: 9999px;
 
   /* ── Focus ring (:focus-visible, contraste ≥3:1) ────────────────────────
-     Color theme-aware vía --syn-color-focus-ring. width/offset tokenizados
-     (los consume el mixin _focus.scss). --syn-focus-ring = anillo box-shadow
-     para elementos que no pueden usar outline. */
+     Color theme-aware vía --syn-color-focus-ring. width/offset tokenizados:
+     los consumen el mixin _focus.scss (Angular) Y el CSS del CMS. Una sola
+     fuente para las dos mitades del producto.
+
+     ── FORMA CANÓNICA = `outline`, NO box-shadow ──────────────────────────
+     El CMS tenía las dos formas a la vez (13 sitios con box-shadow 0 0 0 3px
+     y 7 con outline 2px, más este global), así que un formulario del CMS que
+     montara inputs Angular enseñaba DOS focos distintos en la misma pantalla.
+     Ganó `outline` por tres razones medidas, no por gusto:
+       1. forced-colors (Windows High Contrast): el box-shadow se DESCARTA por
+          completo y el anillo desaparece; el outline sobrevive y el SO lo
+          recolorea. No hay ni un bloque @media (forced-colors) en todo el
+          repo, así que los 13 sitios de box-shadow eran focos invisibles para
+          ese usuario. Éste es el argumento decisivo.
+       2. box-shadow ocupa la MISMA propiedad que la elevación, así que cada
+          regla de foco tiene que re-declarar la sombra del elemento o la
+          destruye en silencio (syn-account.css:234 ya pagaba ese impuesto a
+          mano). El outline es una propiedad aparte: no puede colisionar.
+       3. `outline` sigue el border-radius en todos los navegadores objetivo
+          (Chrome 94+, Firefox 88+, Safari 16.4+ — el último llegó en 2023),
+          o sea que la razón histórica para preferir box-shadow ya no aplica.
+     Contra-argumento honesto y por qué no cambia el veredicto: el outline se
+     extiende 4px (2 de offset + 2 de grosor) contra los 3px del box-shadow, o
+     sea que se recorta ANTES bajo un ancestro con overflow:hidden. Se aceptó:
+     el recorte es parcial y degrada la visibilidad, mientras que forced-colors
+     la elimina del todo.
+
+     --syn-focus-ring queda como escape hatch tokenizado para el elemento que
+     de verdad no pueda usar outline. Hoy no lo consume nadie: si vas a pintar
+     un anillo, usa outline con los tokens de abajo. */
   --syn-focus-ring-width:  2px;
   --syn-focus-ring-offset: 2px;
   --syn-focus-ring: 0 0 0 var(--syn-focus-ring-width) var(--syn-color-focus-ring);
@@ -1306,7 +1333,11 @@
   --syn-color-action-disabled-border:  #DDE4EF;
   --syn-color-action-disabled-text:    #A2AABE;
 
-  --syn-color-focus-ring:        rgb(46 90 172 / 0.70);
+  /* a11y (WCAG 2.4.11) — mismo defecto que meridian: el alfa 0.70 dejaba el
+     anillo en 3.17:1 sobre surface-secondary (#EEF2F8), 3.30 sobre canvas y 3.38
+     sobre primary — pasaba, pero al filo y dependiente del backdrop. Mismo RGB
+     sin alfa: 6.62 / 5.89 / 6.22. Hue intacto. */
+  --syn-color-focus-ring:        #2e5aac;
   --syn-color-focus-ring-danger: rgb(178 59 48 / 0.55);
 
   --syn-color-state-brand-surface: rgb(46 90 172 / 0.08);
@@ -1444,7 +1475,13 @@
   --syn-color-action-disabled-border:  #DBE4EA;
   --syn-color-action-disabled-text:    #A1ADB7;
 
-  --syn-color-focus-ring:        rgb(15 110 140 / 0.70);
+  /* a11y (WCAG 2.4.11) — el alfa 0.70 era el defecto: al componerse contra la
+     superficie, el contraste EFECTIVO dependía del fondo y caía a 2.93:1 sobre
+     surface-secondary (#EAF0F4), por debajo del 3:1 exigido; 3.05 sobre canvas y
+     3.16 sobre primary, o sea al filo en las tres. Mismo RGB, SIN alfa: el anillo
+     deja de depender del backdrop y mide 5.79 / 5.03 / 5.38 (primary/secondary/
+     canvas). No se cambió el hue — solo se quitó la transparencia. */
+  --syn-color-focus-ring:        #0f6e8c;
   --syn-color-focus-ring-danger: rgb(178 59 48 / 0.55);
 
   --syn-color-state-brand-surface: rgb(15 110 140 / 0.08);

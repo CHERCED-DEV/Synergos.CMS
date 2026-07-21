@@ -1640,10 +1640,10 @@ img.syn-feature__icon {
 /* a11y — :focus-visible (no dispara con mouse) + token de foco canónico
    (antes usaba state-brand-surface = superficie wash, anillo de bajo contraste). */
 .syn-form-field__input:focus-visible {
-  outline: none;
   background: var(--syn-color-surface-primary);
   border-color: var(--syn-color-action-primary);
-  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
 }
 textarea.syn-form-field__input { resize: vertical; min-height: 7rem; }
 .syn-form-field__help {

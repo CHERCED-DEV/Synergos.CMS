@@ -140,9 +140,9 @@
 .syn-account__field input:focus-visible,
 .syn-account__field-input:focus,
 .syn-account__field-input:focus-visible {
-  outline: none;
   border-color: var(--syn-color-action-primary);
-  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
 }
 
 /* a11y — estado inválido por-campo (borde + anillo danger) para que un lector
@@ -229,10 +229,13 @@ label.syn-account__field {
   transform: translateY(-1px);
 }
 
+/* El anillo salió del box-shadow: al compartir propiedad con la elevación,
+   esta regla tenía que RE-DECLARAR la sombra a mano o la borraba. Con outline
+   son propiedades distintas y la elevación ya no depende del anillo. */
 .syn-account__submit:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--syn-color-focus-ring),
-              0 12px 30px -14px rgb(var(--syn-channel-brand) / 0.7);
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
+  box-shadow: 0 12px 30px -14px rgb(var(--syn-channel-brand) / 0.7);
 }
 
 .syn-account__submit:active {
@@ -364,8 +367,8 @@ label.syn-account__field {
 
 .syn-account__alt a:focus-visible,
 .syn-account__card a:not(.syn-account__submit):focus-visible {
-  outline: 2px solid var(--syn-color-focus-ring);
-  outline-offset: 2px;
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
   border-radius: var(--syn-radius-sm);
 }
 
@@ -467,8 +470,8 @@ label.syn-account__field {
 }
 
 .syn-account__logout-button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--syn-color-focus-ring-danger);
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring-danger);
+  outline-offset: var(--syn-focus-ring-offset);
 }
 
 /* ── Reduced motion: la tarjeta no entra animada ────────────── */

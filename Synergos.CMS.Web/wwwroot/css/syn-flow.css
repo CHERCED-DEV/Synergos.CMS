@@ -290,6 +290,6 @@
   transform: translateY(-1px);
 }
 .syn-flow-trigger:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
 }

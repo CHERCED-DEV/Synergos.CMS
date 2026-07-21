@@ -129,9 +129,9 @@
 
 .syn-error__search-input:focus,
 .syn-error__search-input:focus-visible {
-  outline: none;
   border-color: var(--syn-color-action-primary);
-  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
 }
 
 .syn-error__search-submit {
