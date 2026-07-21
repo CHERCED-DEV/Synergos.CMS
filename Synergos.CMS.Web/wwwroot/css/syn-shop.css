@@ -534,8 +534,8 @@
 }
 
 .syn-variant-picker input[type="radio"]:focus-visible + .syn-variant-picker__option {
-  outline: 2px solid var(--syn-color-focus-ring);
-  outline-offset: 2px;
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
 }
 
 /* ── Quantity selector ───────────────────────────────────────── */
@@ -616,9 +616,14 @@
   margin: 0;
 }
 
+/* a11y (WCAG 2.4.11) — este `outline: none` mataba el anillo global y dejaba
+   como ÚNICO indicador de foco el cambio de fondo, que mide entre 1.05:1 y
+   1.20:1 en los 7 temas (transparent -> surface-secondary): invisible. El input
+   de cantidad del carrito quedaba sin foco perceptible para teclado. Se quita
+   el `outline: none` y hereda el anillo canónico; el fondo se queda como
+   refuerzo, no como indicador. */
 .syn-qty-selector__input:focus,
 .syn-qty-selector__input:focus-visible {
-  outline: none;
   background: var(--syn-color-surface-secondary);
 }
 
@@ -963,8 +968,8 @@
 }
 
 .syn-product__thumb:focus-visible {
-  outline: 2px solid var(--syn-color-focus-ring);
-  outline-offset: 2px;
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
 }
 
 .syn-product__thumb--active {
@@ -1449,8 +1454,8 @@
 }
 
 .syn-cart-button:focus-visible {
-  outline: 2px solid var(--syn-color-focus-ring);
-  outline-offset: 2px;
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
 }
 
 .syn-cart-button__icon {

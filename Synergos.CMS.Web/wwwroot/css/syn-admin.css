@@ -423,9 +423,9 @@
 .syn-admin__filter :is(input, select, textarea):focus-visible,
 .syn-admin__filter-select:focus,
 .syn-admin__filter-select:focus-visible {
-  outline: none;
   border-color: var(--syn-color-action-primary);
-  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
 }
 
 .syn-admin__filter-submit {

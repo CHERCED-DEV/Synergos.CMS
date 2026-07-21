@@ -146,8 +146,8 @@
 
 .syn-comment-thread__like:focus-visible,
 .syn-comment-thread__reply-toggle:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
 }
 
 /* ── Nested replies (2-level thread, ADR 0100) ───────────────── */
@@ -241,9 +241,9 @@
 .syn-comment-thread__field input:focus-visible,
 .syn-comment-thread__field textarea:focus,
 .syn-comment-thread__field textarea:focus-visible {
-  outline: none;
   border-color: var(--syn-color-action-primary);
-  box-shadow: 0 0 0 3px var(--syn-color-focus-ring);
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
 }
 
 .syn-comment-thread__submit {

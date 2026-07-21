@@ -150,8 +150,8 @@ a:hover {
 }
 
 a:focus-visible {
-  outline: 2px solid var(--syn-color-focus-ring);
-  outline-offset: 2px;
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
   border-radius: var(--syn-radius-sm);
 }
 
@@ -239,11 +239,16 @@ hr {
   color: var(--syn-color-text-primary);
 }
 
-/* ── Focus visible — applied to all interactive ──────────────── */
+/* ── Focus visible — applied to all interactive ────────────────
+   Forma canónica del anillo en TODO el producto (ver syn-tokens.css §Focus
+   ring): `outline` + los tokens --syn-focus-ring-*, que son los MISMOS que
+   consume el mixin focus-visible() de Angular (_focus.scss). Un solo par de
+   valores para las dos mitades: si cambia el grosor, cambia en el SSOT y baja
+   a las dos a la vez. */
 
 :focus-visible {
-  outline: 2px solid var(--syn-color-focus-ring);
-  outline-offset: 2px;
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
   border-radius: var(--syn-radius-sm);
 }
 
@@ -289,8 +294,8 @@ hr {
 .syn-skip-link:focus,
 .syn-skip-link:focus-visible {
   top: 0;
-  outline: 2px solid var(--syn-color-focus-ring);
-  outline-offset: 2px;
+  outline: var(--syn-focus-ring-width) solid var(--syn-color-focus-ring);
+  outline-offset: var(--syn-focus-ring-offset);
 }
 
 /* ── CDN-offline fallback (Cap-310) ──────────────────────────────
