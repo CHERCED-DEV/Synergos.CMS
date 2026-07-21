@@ -328,6 +328,96 @@ public sealed class ShopCatalogController : ControllerBase
             Rating: proof is null ? null : new ProductRatingDto(proof.Average, proof.Count)));
     }
 
+    // ── 2b. Reseñas (T10 Ola B, ADR 0114) ──────────────────────────
+    //
+    // POST /api/shop/products/{sku}/reviews  { rating, title, body }
+    //
+    // Solo COMPRADOR VERIFICADO: hay que estar autenticado Y tener una orden PAGADA
+    // que contenga ese SKU. Es la decisión del arquitecto al abrir T10, frente a
+    // "cualquier miembro autenticado" (que da más volumen a cambio de reseñas de quien
+    // no compró, y spam con solo registrarse).
+    //
+    // La identidad NUNCA sale del cuerpo: ni autor, ni memberKey, ni nombre. El body
+    // trae SOLO la opinión. Un actorKey que viaja en el body es un IDOR con otro
+    // nombre — la lección de T2, donde 8 guards daban 401 y los cuerpos seguían
+    // leyendo `request.User`.
+    //
+    // NO hay cola de moderación, y es deliberado: sin una UI de moderador que la
+    // vacíe sería capacidad sin consumidor — el defecto que esta misma ola documentó
+    // en el botón y en el propio rating. El gate de compra es hoy la única barrera.
+    // Criterio de reapertura: el día que las reseñas sean públicas y anónimas al
+    // navegante, o que aparezca el primer abuso real.
+    [HttpPost("products/{sku}/reviews")]
+    public async Task<IActionResult> SubmitReview(
+        string sku,
+        [FromBody] SubmitReviewRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var (denied, actorKey) = RequireMember();
+        if (denied is not null)
+        {
+            return denied;
+        }
+
+        if (string.IsNullOrWhiteSpace(sku))
+        {
+            return BadRequest(new { error = "El SKU del producto es requerido." });
+        }
+        if (request is null)
+        {
+            return BadRequest(new { error = "Cuerpo de la solicitud requerido." });
+        }
+        if (request.Rating is < 1 or > 5)
+        {
+            // Se valida AQUÍ además de en el seam: el seam lanza (es un fallo de
+            // programación), pero un cliente mandando 7 merece un 400, no un 500.
+            return BadRequest(new { error = "El rating va de 1 a 5." });
+        }
+        if (string.IsNullOrWhiteSpace(request.Body))
+        {
+            return BadRequest(new { error = "La reseña requiere un texto." });
+        }
+
+        var product = _shopQuery.GetProductBySku(sku);
+        if (product is null)
+        {
+            return NotFound(new { error = $"Producto con SKU '{sku}' no encontrado." });
+        }
+
+        if (!await HasPurchasedAsync(actorKey, product.Sku, cancellationToken).ConfigureAwait(false))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "Solo quien compró este producto puede reseñarlo." });
+        }
+
+        await _socialProof.UpsertReviewAsync(
+            new CustomerReview(
+                Sku: product.Sku,
+                // Del GATE, no del body. Es además la clave de idempotencia: reenviar
+                // EDITA la reseña de este comprador en vez de añadir otra.
+                AuthorKey: actorKey,
+                AuthorName: _gate.CurrentMemberDisplayName ?? "Comprador verificado",
+                Rating: request.Rating,
+                Title: (request.Title ?? string.Empty).Trim(),
+                Body: request.Body.Trim(),
+                Date: DateOnly.FromDateTime(DateTime.UtcNow)),
+            cancellationToken).ConfigureAwait(false);
+
+        var proof = await _socialProof.GetAsync(product.Sku, cancellationToken).ConfigureAwait(false);
+        return Ok(new { sku = product.Sku, rating = proof is null ? null : new ProductRatingDto(proof.Average, proof.Count) });
+    }
+
+    /// <summary>
+    /// ¿Este miembro compró este SKU? Se exige orden <see cref="OrderStatus.Paid"/>: una
+    /// Pending es un carrito a medio pagar, y con ella valdría reseñar sin haber pagado.
+    /// </summary>
+    private async Task<bool> HasPurchasedAsync(Guid memberKey, string sku, CancellationToken cancellationToken)
+    {
+        var orders = await _orders.GetOrdersByMemberAsync(memberKey, cancellationToken).ConfigureAwait(false);
+        return orders.Any(o => o.Status == OrderStatus.Paid
+            && o.Lines.Any(l => string.Equals(l.ProductId, sku, StringComparison.OrdinalIgnoreCase)));
+    }
+
     // ── 3. Checkout ────────────────────────────────────────────────
     // POST /api/shop/checkout { items:[{productId,variantId,qty}], customer:{name,email} }
     //   → { orderRef, paymentSessionId, amount, currency }
@@ -883,6 +973,17 @@ public sealed class ShopCatalogController : ControllerBase
     /// producto valorado con la peor nota (ADR 0112).
     /// </remarks>
     public sealed record ProductRatingDto(double Average, int Count);
+
+    /// <summary>
+    /// Cuerpo de <c>POST products/{sku}/reviews</c>: SOLO la opinión.
+    /// </summary>
+    /// <remarks>
+    /// <b>No lleva autor, ni memberKey, ni nombre — y no es un olvido.</b> La identidad sale
+    /// del gate de miembros; si viajara aquí, cualquiera podría reseñar a nombre de otro. Es
+    /// el mismo criterio con el que el checkout ignora el name/email del body cuando hay
+    /// sesión (T2).
+    /// </remarks>
+    public sealed record SubmitReviewRequest(int Rating, string? Title, string Body);
 
     public sealed record FacetDto(string Key, string Label, IReadOnlyList<FacetValueDto> Values, string Kind = "MultiSelect");
 
