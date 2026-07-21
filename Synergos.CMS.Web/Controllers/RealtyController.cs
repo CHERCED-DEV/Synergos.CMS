@@ -567,9 +567,22 @@ public sealed class RealtyController : ControllerBase
             new(q.Text, q.Type, q.MinPrice, q.MaxPrice, q.Beds, q.Location);
     }
 
-    public sealed record SaveSearchRequest(string User, SearchCriteria? Criteria, string? Label);
+    /// <summary>
+    /// El <c>User</c> es NULABLE a propósito, y ya no decide nada: la identidad sale del
+    /// gate desde el barrido T2. Se conserva el campo solo por compatibilidad con clientes
+    /// viejos que aún lo manden — el controller lo IGNORA.
+    ///
+    /// Que sea nulable no es cosmético. Con <c>[ApiController]</c> y tipos de referencia no
+    /// anulables, un <c>string</c> obligatorio hace que la validación automática rechace con
+    /// 400 cualquier cuerpo que no lo traiga… y el cliente correcto —el que dejó de mandar
+    /// la identidad justamente para no revivir el IDOR— es exactamente ese. Medido en vivo:
+    /// POST y DELETE de favorito devolvían 400 con el cuerpo bien formado, así que la
+    /// función entera estaba rota mientras el build y 31 tests seguían verdes.
+    /// </summary>
+    public sealed record SaveSearchRequest(string? User, SearchCriteria? Criteria, string? Label);
 
-    public sealed record FavoriteRequest(string User, string ListingId);
+    /// <summary>Mismo caso que <see cref="SaveSearchRequest"/>: <c>User</c> nulable e ignorado.</summary>
+    public sealed record FavoriteRequest(string? User, string ListingId);
 
     public sealed record AdvanceLeadRequest(string Status);
 
