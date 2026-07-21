@@ -8,7 +8,6 @@
     Paginación via querystring `?page=N`.
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.ProductCategoryPage>
-@using System.Globalization
 @using Umbraco.Extensions
 @inject Synergos.CMS.Interfaces.IShopQuery ShopQuery
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
@@ -37,7 +36,6 @@
     var visible = hasNext ? products.Take(PageSize).ToArray() : products;
     var hasPrev = pageNumber > 1;
     var baseUrl = Model.Url();
-    var coCulture = CultureInfo.GetCultureInfo("es-CO");
 }
 <section class="syn-product-category">
     <header class="syn-product-category__header">
@@ -64,42 +62,20 @@
         <ul class="syn-product-category__items">
             @foreach (var product in visible)
             {
-                @* Card rica (paridad de markup con ProductCard.cshtml /
-                   elementShopProductCard) para heredar de una sola fuente
-                   de estilo .syn-product-card*. *@
+                @* La tarjeta ya NO se copia aquí: la emite `_ProductCardCore`, la misma
+                   que usa el elemento `elementShopProductCard`. La copia que había se
+                   mantenía "en paridad" a mano y ya había divergido (wrappers
+                   __media/__body que el CSS ya no espera, y el precio formateado a mano
+                   en vez de con IPriceFormatter). `h2` porque aquí la tarjeta cuelga del
+                   <h1> de la categoría. *@
                 <li class="syn-product-category__item-cell">
-                    <article class="syn-product-card syn-product-card--standard" data-sku="@product.Sku">
-                        <a class="syn-product-card__link" href="@product.Url">
-                            <div class="syn-product-card__media">
-                                @if (!string.IsNullOrWhiteSpace(product.ImageUrl))
-                                {
-                                    <img class="syn-product-card__image" src="@product.ImageUrl" alt="@product.Name" loading="lazy" />
-                                }
-                            </div>
-                            <div class="syn-product-card__body">
-                                <h2 class="syn-product-card__name">@product.Name</h2>
-                                <span class="syn-product-card__price">
-                                    @product.Price.ToString("N0", coCulture) @product.Currency
-                                </span>
-                                @if (!product.InStock)
-                                {
-                                    <span class="syn-product-card__out-of-stock">@Umbraco.GetDictionaryValue("Shop.Product.OutOfStock")</span>
-                                }
-                            </div>
-                        </a>
-                        @if (product.InStock)
-                        {
-                            <div class="syn-product-card__body syn-product-card__actions">
-                                <button type="button"
-                                        class="syn-product-card__add-to-cart"
-                                        data-action="add-to-cart"
-                                        data-sku="@product.Sku"
-                                        data-price="@product.Price.ToString(CultureInfo.InvariantCulture)">
-                                    @Umbraco.GetDictionaryValue("Shop.Product.AddToCart")
-                                </button>
-                            </div>
-                        }
-                    </article>
+                    @await Html.PartialAsync("Elements/Shop/_ProductCardCore",
+                        (Product: product,
+                         Classes: "syn-product-card syn-product-card--standard",
+                         Url: product.Url,
+                         ShowPrice: true,
+                         ShowAddToCart: true,
+                         HeadingTag: "h2"))
                 </li>
             }
         </ul>
