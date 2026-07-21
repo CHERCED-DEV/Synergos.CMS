@@ -38,7 +38,7 @@
     var priceRaw = product.Value<string>("productPriceBase");
     var price = decimal.TryParse(priceRaw, NumberStyles.Number, CultureInfo.InvariantCulture, out var p) ? p : 0m;
     var inStock = product.Value<bool>("productInStock");
-    var images = product.Value<IEnumerable<IPublishedContent>>("productImages")?.ToArray() ?? Array.Empty<IPublishedContent>();
+    var images = Synergos.CMS.Web.Services.MediaPickerReader.ReadMedia(product, "productImages");
     var variantsJson = product.Value<string>("productVariantsJson");
 
     var currency = CartSettingsOpt.Value.Currency;
@@ -56,17 +56,17 @@
         Umbraco.GetDictionaryValue("Shop.Product.Trust.Warranty"),
     }.Where(t => !string.IsNullOrWhiteSpace(t)).ToArray();
 }
-@if (images.Length > 0)
+@if (images.Count > 0)
 {
     <div class="syn-product__gallery">
         <figure class="syn-product__gallery-stage">
             <img class="syn-product__image" src="@images[0].Url()" alt="@name"
                  data-main-image loading="eager" />
         </figure>
-        @if (images.Length > 1)
+        @if (images.Count > 1)
         {
             <ul class="syn-product__thumbs" role="list">
-                @for (var i = 0; i < images.Length; i++)
+                @for (var i = 0; i < images.Count; i++)
                 {
                     var img = images[i];
                     <li class="syn-product__thumb-item">

@@ -71,8 +71,8 @@
             var currency = page.Value<string>("productCurrency");
             if (string.IsNullOrWhiteSpace(currency)) currency = "USD";
             var inStock = page.Value<bool>("productInStock");
-            var images = page.Value<IEnumerable<IPublishedContent>>("productImages")?.ToArray() ?? Array.Empty<IPublishedContent>();
-            var primaryImg = images.FirstOrDefault()?.Url(mode: UrlMode.Absolute);
+            var primaryImg = Synergos.CMS.Web.Services.MediaPickerReader.ReadFirstMediaUrl(
+                page, "productImages", UrlMode.Absolute);
             var pageUrl = AbsoluteUrl(page.Url());
             var sb = new System.Text.StringBuilder();
             sb.Append("{\"@context\":\"https://schema.org\",\"@type\":\"Product\",");
