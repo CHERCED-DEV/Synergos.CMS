@@ -53,6 +53,13 @@ public sealed class ShopCatalogController : ControllerBase
     private readonly IMessagingService _messaging;
     private readonly IMemberAccessGate _gate;
 
+    /// <summary>
+    /// Resolución por SKU para <c>GET products/sku/{sku}</c>. Es el MISMO seam que usa el
+    /// renderer Razor <c>Elements/Shop/ProductCard.cshtml</c>: así el respaldo SSR y la
+    /// tarjeta ya hidratada no pueden mostrar datos distintos del mismo producto.
+    /// </summary>
+    private readonly IShopQuery _shopQuery;
+
     public ShopCatalogController(
         IProductCatalogProvider catalog,
         IShopOrderService orders,
@@ -61,7 +68,8 @@ public sealed class ShopCatalogController : ControllerBase
         IOrderTrackingService tracking,
         IReturnService returns,
         IMessagingService messaging,
-        IMemberAccessGate gate)
+        IMemberAccessGate gate,
+        IShopQuery shopQuery)
     {
         _catalog = catalog;
         _orders = orders;
@@ -71,6 +79,7 @@ public sealed class ShopCatalogController : ControllerBase
         _returns = returns;
         _messaging = messaging;
         _gate = gate;
+        _shopQuery = shopQuery;
     }
 
     // ── T2 (doc 25) — identidad de confianza-servidor ──────────────
@@ -248,6 +257,56 @@ public sealed class ShopCatalogController : ControllerBase
             Variants: variants,
             Reviews: reviews,
             Questions: questions));
+    }
+
+    // ── 2b. Product by SKU (tarjeta de producto) ───────────────────
+    // GET /api/shop/products/sku/{sku} → Product (plano, NO envuelto)
+    //
+    // Existe porque el elemento Angular `product-card` pide EXACTAMENTE esta ruta
+    // (product-card.ts: `/api/shop/products/sku/${sku}`) y no existía: cada tarjeta
+    // montada disparaba un 404. No se reusa `product/{id}` porque aquel devuelve el
+    // sobre `{product, variants, reviews, questions}` de la PDP y la tarjeta espera
+    // un Product plano.
+    //
+    // Forma: la del contrato `Product` de `@synergos/contracts`, que es lo que la UI
+    // lee (ADR 0083 — la UI es la fuente de verdad). Dos diferencias deliberadas
+    // frente a `ProductDto`, y por eso NO se reusa aquel:
+    //   · `sku` — `ProductDto` no lo tiene, y la tarjeta lo emite en el evento
+    //     `sg:product:addToCart`.
+    //   · `images` como OBJETOS `{src, alt}` — `ProductDto` los emite como `string[]`,
+    //     y la tarjeta lee `images[0].src`/`images[0].alt`; con cadenas, `.src` es
+    //     undefined y se pierde la imagen. No se toca `ProductDto` para no romper a
+    //     search/PDP, que ya consumen el array de cadenas.
+    [HttpGet("products/sku/{sku}")]
+    public IActionResult ProductBySku(string sku)
+    {
+        if (string.IsNullOrWhiteSpace(sku))
+        {
+            return BadRequest(new { error = "El SKU del producto es requerido." });
+        }
+
+        var product = _shopQuery.GetProductBySku(sku);
+        if (product is null)
+        {
+            return NotFound(new { error = $"Producto con SKU '{sku}' no encontrado." });
+        }
+
+        // El catálogo identifica por SKU (los ids de `search` ya son códigos tipo
+        // "AUDIF-DIADEMA-001"), y `ProductSummary` no expone otro identificador, así que
+        // `id` y `sku` coinciden. Se emiten los dos porque la tarjeta lee ambos.
+        return Ok(new ProductBySkuDto(
+            Id: product.Sku,
+            Sku: product.Sku,
+            Name: product.Name,
+            Price: product.Price,
+            PriceFormatted: _priceFormatter.Format(product.Price, product.Currency),
+            Currency: product.Currency,
+            InStock: product.InStock,
+            Url: product.Url,
+            Category: product.CategoryName,
+            Images: product.ImageUrl is null
+                ? System.Array.Empty<ProductImageDto>()
+                : new[] { new ProductImageDto(Src: product.ImageUrl, Alt: product.Name) }));
     }
 
     // ── 3. Checkout ────────────────────────────────────────────────
@@ -771,6 +830,27 @@ public sealed class ShopCatalogController : ControllerBase
         string? Description,
         IReadOnlyList<string>? ImageUrls,
         IReadOnlyList<string> Images);
+
+    /// <summary>
+    /// Producto PLANO para <c>GET products/sku/{sku}</c>, con la forma del contrato
+    /// <c>Product</c> de <c>@synergos/contracts</c> que lee el elemento
+    /// <c>product-card</c>. Deliberadamente distinto de <see cref="ProductDto"/>:
+    /// aquel no lleva <c>sku</c> y emite <c>images</c> como <c>string[]</c>.
+    /// </summary>
+    public sealed record ProductBySkuDto(
+        string Id,
+        string Sku,
+        string Name,
+        decimal Price,
+        string PriceFormatted,
+        string Currency,
+        bool InStock,
+        string? Url,
+        string? Category,
+        IReadOnlyList<ProductImageDto> Images);
+
+    /// <summary>Imagen del producto. La tarjeta lee <c>images[0].src</c> y <c>images[0].alt</c>.</summary>
+    public sealed record ProductImageDto(string Src, string? Alt);
 
     public sealed record FacetDto(string Key, string Label, IReadOnlyList<FacetValueDto> Values, string Kind = "MultiSelect");
 
