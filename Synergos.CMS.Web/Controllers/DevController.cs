@@ -127,6 +127,28 @@ public sealed class DevController : ControllerBase
         return result.Success ? Ok(result) : Conflict(result);
     }
 
+    /// <summary>
+    /// Borra una página de dev. <c>POST /dev/delete-page?pageId=&amp;expectedName=</c>
+    /// </summary>
+    /// <remarks>
+    /// Contrapartida de <c>place-product-card</c>: lo que se crea para probar hay que
+    /// poder quitarlo. Exige el nombre esperado a propósito — borrar no tiene deshacer
+    /// barato y un id mal copiado apunta a contenido real.
+    /// </remarks>
+    [HttpPost("delete-page")]
+    public IActionResult DeletePage([FromQuery] int pageId, [FromQuery] string? expectedName)
+    {
+        if (!_settings.Enabled) return NotFound();
+        if (pageId <= 0 || string.IsNullOrWhiteSpace(expectedName))
+        {
+            return BadRequest(new { error = "pageId y expectedName son requeridos." });
+        }
+
+        _logger.LogInformation("Dev endpoint delete-page invocado (pageId={PageId}).", pageId);
+        var result = _filler.DeletePage(pageId, expectedName!);
+        return result.Success ? Ok(result) : Conflict(result);
+    }
+
     [HttpPost("seed-member-roles")]
     public IActionResult SeedMemberRoles([FromQuery] string? email, [FromQuery] string? roles)
     {
