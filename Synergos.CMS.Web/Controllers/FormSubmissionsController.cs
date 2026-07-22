@@ -36,6 +36,8 @@ public sealed class FormSubmissionsController : ControllerBase
     private readonly ILogger<FormSubmissionsController> _logger;
     private readonly IAnalyticsTracker _analytics;
     private readonly IFormSubmissionNotifier _notifier;
+    /// <summary>Qué campos declaró el autor. Sin esto el servidor no puede exigir los obligatorios.</summary>
+    private readonly IFormDefinitionReader _definitions;
 
     public FormSubmissionsController(
         IFormSubmissionHandler handler,
@@ -43,7 +45,8 @@ public sealed class FormSubmissionsController : ControllerBase
         IOptions<FormsSettings> options,
         ILogger<FormSubmissionsController> logger,
         IAnalyticsTracker analytics,
-        IFormSubmissionNotifier notifier)
+        IFormSubmissionNotifier notifier,
+        IFormDefinitionReader definitions)
     {
         _handler = handler;
         _rateLimiter = rateLimiter;
@@ -51,6 +54,7 @@ public sealed class FormSubmissionsController : ControllerBase
         _logger = logger;
         _analytics = analytics;
         _notifier = notifier;
+        _definitions = definitions;
     }
 
     [HttpPost("{formKey}/submit")]
@@ -105,6 +109,42 @@ public sealed class FormSubmissionsController : ControllerBase
         if (fields.Count > settings.MaxFieldsPerSubmission)
         {
             return RedirectWithQuery(referrer, settings.ErrorQueryParam, "too-many-fields");
+        }
+
+        // Los campos OBLIGATORIOS se exigen aquí, contra la definición publicada. Antes no lo
+        // hacía nadie: el navegador tenía `novalidate`, no hay JS de validación, y este
+        // endpoint solo miraba abuso (honeypot/rate-limit/nº de campos). Un formulario entero
+        // vacío se persistía y disparaba la notificación por email.
+        //
+        // La lista sale del CONTENIDO, no del POST: una lista enviada por el cliente la
+        // controla quien envía, y este backstop existe justo para el POST que se salta el
+        // navegador. Si la definición no se encuentra (formKey huérfano tras despublicar) NO se
+        // rechaza: se registra y se deja pasar — el envío ya pasó honeypot y rate-limit, y
+        // tirarlo perdería datos de un usuario real por un problema de contenido.
+        var definition = _definitions.GetByKey(formKey);
+        if (definition is null)
+        {
+            _logger.LogWarning(
+                "Form definition not found for formKey={FormKey}; required-field check skipped.",
+                formKey);
+        }
+        else
+        {
+            var missing = definition.Fields
+                .Where(f => f.Required)
+                .Where(f => !fields.TryGetValue(f.Name, out var v) || string.IsNullOrWhiteSpace(v))
+                .Select(f => f.Name)
+                .ToArray();
+
+            if (missing.Length > 0)
+            {
+                _analytics.Track("form.missing-required", new Dictionary<string, object?>
+                {
+                    ["formKey"] = formKey,
+                    ["missingCount"] = missing.Length,
+                });
+                return RedirectWithQuery(referrer, settings.ErrorQueryParam, "missing-required");
+            }
         }
 
         var request = new FormSubmissionRequest(

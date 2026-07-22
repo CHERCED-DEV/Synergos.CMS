@@ -492,6 +492,11 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<IFormSubmissionReader>(sp => sp.GetRequiredService<FileSystemFormSubmissionHandler>());
         services.AddSingleton<InMemoryFormRateLimiter>();
 
+        // Definición del formulario (qué campos declaró el autor), para que el endpoint de
+        // envío pueda EXIGIR los obligatorios. Singleton como el resto: no guarda estado, lee
+        // el published cache en cada llamada vía IUmbracoContextAccessor.
+        services.AddSingleton<IFormDefinitionReader, UmbracoFormDefinitionReader>();
+
         // Ola 61 — Search infrastructure (ADR 0031). ExamineSearchProvider
         // usa el ExternalIndex out-of-the-box de Umbraco (Examine 3.1.0)
         // y reproyecta los hits cruzando con el published cache para
