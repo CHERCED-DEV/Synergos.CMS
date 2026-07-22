@@ -38,12 +38,12 @@
     @if (hasCta2)
     {
         <div class="syn-cta-banner__actions">
-            <a class="syn-cta-banner__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
-            <a class="syn-cta-banner__cta syn-cta-banner__cta--secondary" href="@cta2Url"@(cta2NewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@cta2Label</a>
+            <a class="syn-cta-banner__cta" href="@ctaUrl" target="@(ctaOpenInNewTab ? "_blank" : null)" rel="@(ctaOpenInNewTab ? "noopener noreferrer" : null)">@ctaLabel</a>
+            <a class="syn-cta-banner__cta syn-cta-banner__cta--secondary" href="@cta2Url" target="@(cta2NewTab ? "_blank" : null)" rel="@(cta2NewTab ? "noopener noreferrer" : null)">@cta2Label</a>
         </div>
     }
     else
     {
-        <a class="syn-cta-banner__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+        <a class="syn-cta-banner__cta" href="@ctaUrl" target="@(ctaOpenInNewTab ? "_blank" : null)" rel="@(ctaOpenInNewTab ? "noopener noreferrer" : null)">@ctaLabel</a>
     }
 </aside>

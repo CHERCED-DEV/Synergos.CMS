@@ -12,5 +12,5 @@
     var openInNewTab = Model.Value<bool>("navOpenInNewTab") || string.Equals(link?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
 }
 <li class="syn-nav__item">
-    <a class="syn-nav__link" href="@url"@(openInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@label</a>
+    <a class="syn-nav__link" href="@url" target="@(openInNewTab ? "_blank" : null)" rel="@(openInNewTab ? "noopener noreferrer" : null)">@label</a>
 </li>

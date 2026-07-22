@@ -21,4 +21,4 @@
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 }
-<a class="@classes" href="@url"@(string.IsNullOrWhiteSpace(ariaLabel) ? "" : $" aria-label=\"{ariaLabel}\"")@(openInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@label</a>
+<a class="@classes" href="@url" aria-label="@(string.IsNullOrWhiteSpace(ariaLabel) ? null : ariaLabel)" target="@(openInNewTab ? "_blank" : null)" rel="@(openInNewTab ? "noopener noreferrer" : null)">@label</a>

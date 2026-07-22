@@ -17,4 +17,4 @@
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 }
-<img class="@classes" src="@mediaRef.Url()" alt="@alt"@(isDecorative ? " aria-hidden=\"true\"" : "") loading="lazy" />
+<img class="@classes" src="@mediaRef.Url()" alt="@alt" aria-hidden="@(isDecorative ? "true" : null)" loading="lazy" />
