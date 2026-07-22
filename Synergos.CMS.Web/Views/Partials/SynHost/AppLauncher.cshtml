@@ -24,11 +24,17 @@
         // El alias del ElementType sigue siendo `heading` (schema, ADR 0008): la
         // traducción de nombre vive aquí, que es la frontera CMS↔componente.
         ["title"] = Model.Value<string>("heading"),
-        // `subheading` NO se manda: el header del Hub es <syn-heading> + contador y no
-        // tiene subtítulo donde pintarlo. Añadir uno sería inventar UI que el diseño no
-        // contempla sólo para tener destino del prop. Se retira el Set() muerto.
-        // ⚠️ El ElementType conserva la propiedad `subheading` y el editor la ve: es
-        // schema y lo posee el arquitecto (ADR 0008). Queda anotado para él.
+        // `subtitle` ← alias `subheading` del ElementType. Misma traducción de nombre que
+        // arriba y por la misma razón: el schema lo posee el arquitecto (ADR 0008), así
+        // que la frontera CMS↔componente es este diccionario, no el uSync.
+        //
+        // Nota de historial: en un commit anterior de esta misma sesión se retiró este
+        // Set() por no haber dónde pintarlo. Era cierto entonces y ya no: el header del
+        // Hub tiene ahora su slot. El caso NO era el de blogs/ehr —que no tienen header
+        // de app y habrían necesitado inventarlo entero—; aquí sólo faltaba una línea
+        // bajo un <syn-heading> que ya existía, y era el único de los nueve verticales
+        // sin subtítulo mientras el CMS le componía uno.
+        ["subtitle"] = Model.Value<string>("subheading"),
     };
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("app-launcher", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
     var result = await Emitter.EmitAsync(request);
