@@ -147,6 +147,31 @@ public sealed class DevController : ControllerBase
     }
 
     /// <summary>
+    /// Siembra un formulario de prueba (1 campo obligatorio + 1 opcional) en una página nueva.
+    /// <c>POST /dev/seed-test-form?parentId=&amp;formKey=</c>
+    /// </summary>
+    /// <remarks>
+    /// Existe para poder EJERCITAR la validación de obligatorios del servidor: sin un
+    /// `formInternalKey` publicado, esa rama no la recorre nadie y no se sabe si funciona.
+    /// </remarks>
+    [HttpPost("seed-test-form")]
+    public IActionResult SeedTestForm(
+        [FromQuery] int parentId,
+        [FromQuery] string? formKey,
+        [FromQuery] string? name = null)
+    {
+        if (!_settings.Enabled) return NotFound();
+        if (parentId <= 0 || string.IsNullOrWhiteSpace(formKey))
+        {
+            return BadRequest(new { error = "parentId y formKey son requeridos." });
+        }
+
+        _logger.LogInformation("Dev endpoint seed-test-form invocado (parentId={ParentId}, formKey={FormKey}).", parentId, formKey);
+        var result = _filler.SeedTestForm(parentId, formKey!, name);
+        return result.Success ? Ok(result) : Conflict(result);
+    }
+
+    /// <summary>
     /// Borra una página de dev. <c>POST /dev/delete-page?pageId=&amp;expectedName=</c>
     /// </summary>
     /// <remarks>

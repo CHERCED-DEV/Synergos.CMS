@@ -4486,6 +4486,65 @@ public sealed class DevContentFiller
     }
 
     /// <summary>
+    /// Siembra un formulario de PRUEBA (contenedor + 2 campos, uno obligatorio) en una página
+    /// nueva, para poder ejercitar la validación de obligatorios del servidor.
+    /// </summary>
+    /// <remarks>
+    /// Nació del mismo hueco que `PlaceProductCard`: la rama que exige los campos obligatorios
+    /// (<c>FormSubmissionsController</c> + <c>IFormDefinitionReader</c>) no la ejercitaba NADIE,
+    /// porque el sitio no tiene ni un `formInternalKey` publicado. Código que no se puede mirar
+    /// es código que no se sabe si funciona — esta ola ya encontró tres renderers así.
+    /// </remarks>
+    public FillResult SeedTestForm(int parentId, string formKey, string? newPageName = null)
+    {
+        if (parentId <= 0 || string.IsNullOrWhiteSpace(formKey))
+        {
+            return new FillResult(false, 0, "parentId y formKey son requeridos");
+        }
+        var parent = _contentService.GetById(parentId);
+        if (parent is null) { return new FillResult(false, 0, $"parent-not-found:{parentId}"); }
+
+        var containerType = _contentTypeService.Get("elementFormContainer");
+        var fieldType = _contentTypeService.Get("elementFormField");
+        if (containerType is null || fieldType is null)
+        {
+            return new FillResult(false, 0, "element-types-missing:elementFormContainer/elementFormField");
+        }
+
+        // Los campos van en un BlockList ANIDADO dentro del bloque contenedor, igual que
+        // ctaItems/features en el hero.
+        var fields = new BlockListJsonBuilder();
+        fields.AddBlock(fieldType.Key)
+            .Set("fieldLabel", "Nombre")
+            .Set("fieldName", "nombre")
+            .Set("fieldType", "text")
+            .Set("fieldRequired", true);      // ← el que debe hacer fallar el envío vacío
+        fields.AddBlock(fieldType.Key)
+            .Set("fieldLabel", "Comentario")
+            .Set("fieldName", "comentario")
+            .Set("fieldType", "text")
+            .Set("fieldRequired", false);     // ← control: opcional, no debe bloquear
+
+        var b = new BlockGridJsonBuilder();
+        b.AddTopLevelBlock(containerType.Key, columnSpan: 12)
+            .Set("formTitle", "Formulario de prueba (dev)")
+            .Set("formInternalKey", formKey)
+            .Set("submitLabel", "Enviar")
+            .Set("fields", fields.Build());
+
+        var pageName = string.IsNullOrWhiteSpace(newPageName) ? "Dev · Form" : newPageName!;
+        var page = _contentService.Create(pageName, parentId, "pageBase");
+        page.SetCultureName(pageName, Culture);   // varía por cultura: sin esto, "empty name"
+        if (page.HasProperty("heading")) { page.SetValue("heading", pageName, Culture); }
+        page.SetValue(SectionsAlias, b.Build(), Culture);
+
+        var save = _contentService.SaveAndPublish(page, new[] { Culture });
+        return save.Success
+            ? new FillResult(true, 1, $"seeded:formKey={formKey} en '{page.Name}' (id {page.Id})")
+            : new FillResult(false, 0, $"save-failed:{save.Result}");
+    }
+
+    /// <summary>
     /// Borra UNA página de dev por id, exigiendo que el llamador acierte su nombre.
     /// </summary>
     /// <remarks>

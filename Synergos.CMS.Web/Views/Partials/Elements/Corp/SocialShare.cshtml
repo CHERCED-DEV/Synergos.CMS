@@ -50,7 +50,7 @@
         <a class="syn-social-share__link syn-social-share__link--@platform"
            href="@href"
            aria-label="@("Compartir") @platform"
-           @(isMail ? "" : "target=\"_blank\"")
-           @(isMail ? "" : "rel=\"noopener noreferrer\"")>@platform</a>
+           target="@(isMail ? null : "_blank")"
+           rel="@(isMail ? null : "noopener noreferrer")">@platform</a>
     }
 </nav>

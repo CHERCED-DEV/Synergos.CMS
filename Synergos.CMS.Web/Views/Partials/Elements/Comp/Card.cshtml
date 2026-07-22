@@ -47,7 +47,7 @@
     @if (hasCta)
     {
         <footer class="syn-card__footer">
-            <a class="syn-card__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+            <a class="syn-card__cta" href="@ctaUrl" target="@(ctaOpenInNewTab ? "_blank" : null)" rel="@(ctaOpenInNewTab ? "noopener noreferrer" : null)">@ctaLabel</a>
         </footer>
     }
 </article>

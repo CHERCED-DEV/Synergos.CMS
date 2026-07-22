@@ -28,9 +28,9 @@
                   name="@name"
                   rows="4"
                   placeholder="@(placeholder ?? "")"
-                  @(required ? "required" : "")
-                  @(required ? "aria-required=\"true\"" : "")
-                  @(helpId != null ? $"aria-describedby=\"{helpId}\"" : "")></textarea>
+                  required="@(required ? "required" : null)"
+                  aria-required="@(required ? "true" : null)"
+                  aria-describedby="@helpId"></textarea>
     }
     else
     {
@@ -39,9 +39,9 @@
                type="@type"
                name="@name"
                placeholder="@(placeholder ?? "")"
-               @(required ? "required" : "")
-               @(required ? "aria-required=\"true\"" : "")
-               @(helpId != null ? $"aria-describedby=\"{helpId}\"" : "") />
+               required="@(required ? "required" : null)"
+               aria-required="@(required ? "true" : null)"
+               aria-describedby="@helpId" />
     }
     @if (!string.IsNullOrWhiteSpace(helpText))
     {

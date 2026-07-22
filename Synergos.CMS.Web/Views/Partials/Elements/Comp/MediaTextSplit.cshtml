@@ -55,7 +55,7 @@
         }
         @if (hasCta)
         {
-            <a class="syn-media-text-split__cta" href="@ctaUrl"@(ctaOpenInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "")>@ctaLabel</a>
+            <a class="syn-media-text-split__cta" href="@ctaUrl" target="@(ctaOpenInNewTab ? "_blank" : null)" rel="@(ctaOpenInNewTab ? "noopener noreferrer" : null)">@ctaLabel</a>
         }
     </div>
 </section>
