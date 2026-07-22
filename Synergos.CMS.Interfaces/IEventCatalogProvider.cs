@@ -29,6 +29,10 @@ public sealed record EventSummary(
 /// Es la unidad de selección en modo <c>general</c> (cantidad por tier) y la
 /// referencia de precio por zona en modo <c>reserved</c>. <see cref="Remaining"/>
 /// es el aforo restante del tier (alimenta el "quedan N").
+/// <see cref="Description"/>, <see cref="Perks"/>, <see cref="SaleWindow"/> y
+/// <see cref="Featured"/> son la CARA EDITORIAL de la tarjeta de tier: qué incluye,
+/// sus inclusiones en viñetas, hasta cuándo se vende y cuál es el recomendado.
+/// Opcionales — sin ellos la tarjeta sigue funcionando (precio + aforo), solo sale pobre.
 /// </summary>
 public sealed record EventTier(
     string Code,
@@ -38,7 +42,17 @@ public sealed record EventTier(
     int Capacity,
     int Remaining,
     int MaxPerOrder,
-    string? ZoneId = null);
+    string? ZoneId = null,
+    // Una línea concreta de qué da este tier (cuerpo de la tarjeta).
+    string Description = "",
+    // Inclusiones en viñetas (2-4). Null/vacío oculta la lista.
+    IReadOnlyList<string>? Perks = null,
+    // Cierre de la ventana de venta YA FORMATEADO en es-CO ("Hasta el 12 de julio").
+    // Es un texto de presentación, no una fecha: quien conoce el calendario comercial
+    // del evento es quien publica el catálogo, no la UI.
+    string SaleWindow = "",
+    // Marca el tier recomendado. Se espera UNO por evento.
+    bool Featured = false);
 
 /// <summary>
 /// Un asiento individual del mapa de zona. <see cref="Status"/>: free | hold |
@@ -104,7 +118,48 @@ public sealed record EventDetail(
     EventSeatMap? SeatMap,
     EventArtist? Artist = null,
     IReadOnlyList<string>? Highlights = null,
-    IReadOnlyList<EventSession>? Sessions = null);
+    IReadOnlyList<EventSession>? Sessions = null)
+{
+    /// <summary>
+    /// Porcentaje del aforo total ya vendido (0..100), para el "¡Últimas localidades!"
+    /// y el orden por popularidad del catálogo. <b>Derivado, NO almacenado</b>: sale de
+    /// sumar <see cref="EventTier.Capacity"/> y <see cref="EventTier.Remaining"/> de los
+    /// <see cref="Tiers"/>, que son la única fuente del aforo. Guardarlo como campo
+    /// significaría escribirlo a mano y quedaría mintiendo en cuanto se venda o se
+    /// amplíe una entrada — la clase de dato que se desincroniza el primer día.
+    /// </summary>
+    /// <remarks>
+    /// Un evento sin aforo declarado (capacidad 0, p.ej. tiers vacíos o de cupo
+    /// ilimitado) devuelve 0 en vez de dividir por cero. El resultado se clampea a
+    /// 0..100 para que un <c>Remaining</c> inconsistente (mayor que la capacidad, o
+    /// negativo por un sobrecupo) no saque un porcentaje absurdo a la pantalla.
+    /// El redondeo es <see cref="MidpointRounding.AwayFromZero"/>: el .5 sube, que es
+    /// lo que un lector espera de "redondeado" (el default de .NET es bancario y
+    /// dejaría 12,5% en 12% pero 47,5% en 48%, sin criterio visible).
+    /// </remarks>
+    public int SoldPercent
+    {
+        get
+        {
+            var tiers = Tiers;
+            if (tiers is null || tiers.Count == 0)
+            {
+                return 0;
+            }
+
+            var capacity = tiers.Sum(t => (long)t.Capacity);
+            if (capacity <= 0)
+            {
+                return 0;
+            }
+
+            var remaining = tiers.Sum(t => (long)t.Remaining);
+            var sold = capacity - remaining;
+            var percent = (int)Math.Round(sold * 100d / capacity, MidpointRounding.AwayFromZero);
+            return Math.Clamp(percent, 0, 100);
+        }
+    }
+}
 
 /// <summary>
 /// Catálogo de eventos del vertical Eventos. Es la pieza del MOTOR que resuelve

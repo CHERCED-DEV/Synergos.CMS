@@ -200,6 +200,17 @@ public sealed class EventosControllerTests
         _catalog.SearchAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<EventSummary>());
 
-        Assert.IsType<OkObjectResult>(await BuildSut().Events(null, default));
+        // Argumentos NOMBRADOS a propósito: la acción ganó `category`/`city`/`sort`
+        // y la llamada posicional `Events(null, default)` reasignó en silencio el
+        // `default` de CancellationToken al nuevo `category`. Aquí falló ruidosamente
+        // (a `city` no le quedaba default), pero con un parámetro opcional de por medio
+        // habría compilado verde pasando basura. Nombrados, un parámetro nuevo no
+        // desplaza a ninguno de éstos.
+        Assert.IsType<OkObjectResult>(await BuildSut().Events(
+            q: null,
+            category: null,
+            city: null,
+            sort: null,
+            cancellationToken: default));
     }
 }
