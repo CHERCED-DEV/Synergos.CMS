@@ -90,7 +90,16 @@
         </div>
     }
 
-    <form class="syn-form__form" action="@action" method="post" novalidate>
+    @* SIN `novalidate`. Lo llevaba desde la ola 23 sin comentario que lo justificara, y
+       apagaba la validación nativa del navegador SIN que nada la sustituyera: no hay JS
+       que valide este formulario (cero `checkValidity`) y el servidor solo limita abuso
+       (honeypot, rate-limit, nº de campos y longitud), no contenido. El resultado es que
+       el `required` que este mismo renderer emite —y que el lector de pantalla anuncia
+       como obligatorio vía `aria-required`— NO lo hacía cumplir ninguna capa: se podía
+       enviar el formulario entero vacío. Quitarlo devuelve gratis el cumplimiento de lo
+       que ya se declara (`required`, `type="email"`). El backstop de servidor, para el
+       POST directo que se salta el navegador, es harina de otro costal. *@
+    <form class="syn-form__form" action="@action" method="post">
         <div class="syn-form__fields">
             @foreach (var field in fields)
             {
