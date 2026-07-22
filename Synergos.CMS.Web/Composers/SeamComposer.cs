@@ -790,6 +790,29 @@ public sealed class SeamComposer : IComposer
         // envío) y AUDITA las transferencias (IAuditTrailWriter, ADR 0037). El
         // management publica los eventos creados vía IEventCatalogProvider (DIP).
         services.AddSingleton<IEventCatalogProvider, StubEventCatalogProvider>();
+
+        // T5 Ola A (ADR 0107) — de dónde salen los eventos: el seed de demo o el CONTENIDO que
+        // autoró el editor (eventPage). Calco del registro de ICatalogSource<CatalogProduct>
+        // de Tienda (:304): mismo flag, mismo rollback de una línea sin redeploy.
+        //
+        // Singleton por la misma razón que la fuente de Tienda: UmbracoEventCatalogSource solo
+        // sostiene IUmbracoContextAccessor (un ACCESSOR, que resuelve el contexto por llamada),
+        // IOptionsMonitor e ILogger. Ninguno es Scoped, así que no hay dependencia cautiva.
+        //
+        // ⚠️ REGISTRADA PERO AÚN SIN CONSUMIRSE, y por eso el flag nace en "demo": ningún
+        // servicio resuelve todavía ICatalogSource<EventSummary>. StubEventCatalogProvider lee
+        // su catálogo interno porque su seam devuelve EventDetail (tiers + seat-map) y eventPage
+        // solo modela el RESUMEN — cablearlo hoy daría una agenda del CMS cuyas fichas no se
+        // pueden comprar. Modelar tiers/aforo como contenido es la rebanada siguiente; hasta
+        // entonces poner el flag en "cms" construye esta fuente pero no cambia lo que se ve.
+        services.AddSingleton<ICatalogSource<EventSummary>>(sp =>
+        {
+            var settings = sp.GetRequiredService<IOptionsMonitor<CatalogSettings>>().CurrentValue;
+            var source = settings.Sources.TryGetValue(UmbracoEventCatalogSource.Vertical, out var s) ? s : "demo";
+            return string.Equals(source, "cms", StringComparison.OrdinalIgnoreCase)
+                ? ActivatorUtilities.CreateInstance<UmbracoEventCatalogSource>(sp)
+                : new EventsDemoCatalogSource(sp.GetRequiredService<IEventCatalogProvider>());
+        });
         // Durabilidad (doc 25): las órdenes de tickets viven tras el store genérico
         // (resourceType "event-orders") → una compra confirmada sobrevive un reinicio.
         services.AddSingleton<StubEventTicketingService>(sp =>

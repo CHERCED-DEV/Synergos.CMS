@@ -437,3 +437,30 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
         return new EventRow(rowLabel, seats);
     }
 }
+
+/// <summary>
+/// La fuente de demo de Eventos: sirve los resúmenes del catálogo sembrado de
+/// <see cref="StubEventCatalogProvider"/>. Es lo que la Ola A sustituye por el contenido del
+/// editor cambiando <c>Synergos:Catalog:Sources:Events</c> a <c>cms</c>.
+/// </summary>
+/// <remarks>
+/// <para>Calca <c>ShopDemoCatalogSource</c>, con una diferencia: Tienda tiene su seed en una
+/// clase aparte (<c>ShopDemoSeed</c>) y aquí el catálogo es privado del stub, así que esta
+/// fuente lo pide por la SEAM (<see cref="IEventCatalogProvider.SearchAsync"/>) en vez de
+/// abrirle un miembro público al stub solo para esto. No hay ciclo:
+/// <see cref="StubEventCatalogProvider"/> no depende de <see cref="ICatalogSource{T}"/>.</para>
+///
+/// <para>Ignora el <c>scope</c>: el seed es un solo catálogo, sin siteRoots. La fuente
+/// Umbraco-backed SÍ lo honra, leyéndolo de <c>Synergos:Catalog:Scopes:Events</c>.</para>
+/// </remarks>
+public sealed class EventsDemoCatalogSource : ICatalogSource<EventSummary>
+{
+    private readonly IEventCatalogProvider _catalog;
+
+    public EventsDemoCatalogSource(IEventCatalogProvider catalog)
+        => _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+
+    public Task<IReadOnlyList<EventSummary>> GetAllAsync(string? scope = null, CancellationToken cancellationToken = default)
+        // Query nula = toda la agenda, que es justo lo que esta seam promete.
+        => _catalog.SearchAsync(null, cancellationToken);
+}
