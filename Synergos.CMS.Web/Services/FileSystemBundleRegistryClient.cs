@@ -140,7 +140,7 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
 
         var descriptor = new BundleDescriptor(
             MainEntryUri: new Uri(mainEntryUrl, UriKind.RelativeOrAbsolute),
-            Dependencies: Array.Empty<Uri>(),
+            Dependencies: ResolveDependencyUris(element, snap, s),
             Version: version,
             Tag: element.Tag,
             Alias: element.Alias,
@@ -158,6 +158,108 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
         // Fallback: primer framework disponible (orden no garantizado pero
         // determinista por StringComparer del dict construido).
         return element.Implementations.Keys.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Traduce los nombres de <see cref="RegistryElement.Dependencies"/> a las URLs de sus
+    /// bundles, en orden de carga. El emitter las escribe como &lt;script&gt; ANTES del
+    /// principal (<c>BuildScriptTags</c>), que es lo que hace que un custom element escrito
+    /// crudo en la plantilla de otra app llegue registrado al navegador.
+    ///
+    /// Era el eslabón que faltaba: el descriptor ya llevaba <c>Dependencies</c> y el emitter
+    /// ya las recorría, pero aquí se pasaba <c>Array.Empty&lt;Uri&gt;()</c> fijo. Capacidad
+    /// completa y sin rellenar nunca — el bundle existía publicado y nadie lo cargaba.
+    ///
+    /// Degrada en silencio y a propósito: una dependencia que no resuelva (nombre mal escrito,
+    /// bundle sin publicar, manifiesto ausente) se OMITE con un warning en vez de tumbar el
+    /// elemento anfitrión. Perder el contador es malo; perder la ficha entera por el contador
+    /// es peor.
+    /// </summary>
+    private IReadOnlyList<Uri> ResolveDependencyUris(
+        RegistryElement element, RegistrySnapshot snap, BundleRegistrySettings s)
+    {
+        if (element.Dependencies is null || element.Dependencies.Count == 0)
+        {
+            return Array.Empty<Uri>();
+        }
+
+        var uris = new List<Uri>(element.Dependencies.Count);
+        foreach (var depName in element.Dependencies)
+        {
+            if (string.IsNullOrWhiteSpace(depName))
+            {
+                continue;
+            }
+
+            // Sin recursión: una dependencia se resuelve a su bundle, no a su árbol. Así el
+            // ciclo A→B→A no puede colgar el render, y una cadena de 3 niveles se declara
+            // explícita en quien la necesita en vez de aparecer por herencia invisible.
+            if (string.Equals(depName, element.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Bundle {Name}: se declara dependencia de sí mismo, se omite", element.Name);
+                continue;
+            }
+
+            if (!snap.ByName.TryGetValue(depName, out var dep))
+            {
+                _logger.LogWarning(
+                    "Bundle {Name}: la dependencia '{Dep}' no está en el registry, se omite",
+                    element.Name, depName);
+                continue;
+            }
+
+            var url = TryBuildMainEntryUrl(dep, snap, s);
+            if (url is null)
+            {
+                _logger.LogWarning(
+                    "Bundle {Name}: la dependencia '{Dep}' está en el registry pero su bundle no resuelve, se omite",
+                    element.Name, depName);
+                continue;
+            }
+
+            uris.Add(new Uri(url, UriKind.RelativeOrAbsolute));
+        }
+
+        return uris;
+    }
+
+    /// <summary>
+    /// La URL pública del bundle de un elemento, o null si no resuelve. Misma cascada de
+    /// framework/slot/manifiesto que usa la resolución principal.
+    /// </summary>
+    private string? TryBuildMainEntryUrl(
+        RegistryElement element, RegistrySnapshot snap, BundleRegistrySettings s)
+    {
+        var framework = ChooseFramework(element, s.DefaultFramework);
+        if (framework is null)
+        {
+            return null;
+        }
+
+        var slot = s.DefaultSlot;
+        if (!element.Implementations![framework].TryGetValue(slot, out var version))
+        {
+            if (slot == "latest" || !element.Implementations![framework].TryGetValue("latest", out version))
+            {
+                return null;
+            }
+        }
+
+        var folderName = ResolveFolderName(element.Name, element.Tag, s.StripFolderPrefix);
+        var manifest = LoadManifestCached(
+            Path.Combine(snap.BundlesRootPath, folderName, framework, slot, "manifest.json"));
+        if (manifest is null)
+        {
+            return null;
+        }
+
+        var entryScript = string.IsNullOrWhiteSpace(manifest.EntryScript) ? "main.js" : manifest.EntryScript;
+        var urlSlot = System.Text.RegularExpressions.Regex.IsMatch(version, @"^\d+\.\d+\.\d+")
+            ? version
+            : slot;
+
+        return BuildPublicUrl(s.PublicBaseUrl, s.BundlesNamespace, folderName, framework, urlSlot, entryScript);
     }
 
     private static string ResolveFolderName(string name, string tag, bool stripPrefix)
@@ -389,6 +491,20 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
         public string Tag { get; set; } = string.Empty;
         public string Tier { get; set; } = string.Empty;
         public Dictionary<string, Dictionary<string, string>>? Implementations { get; set; }
+
+        /// <summary>
+        /// Otros elementos cuyo bundle hay que cargar ANTES que éste, por nombre de
+        /// registro. Existe para los custom elements que una app escribe CRUDOS en su
+        /// plantilla (p.ej. <c>eventos</c> pinta <c>&lt;synergos-countdown-clock&gt;</c>):
+        /// esos tags no los compone el editor, así que no pasan por el SynHost y nadie
+        /// emitía su script — el elemento quedaba en el DOM sin registrar y sin hidratar,
+        /// dejando en pantalla el rótulo que lo acompaña y un hueco detrás.
+        ///
+        /// ⚠️ NO se usa para componentes Angular importados: ésos ya viajan dentro del
+        /// bundle. Es sólo para elementos PUBLICADOS que otro elemento consume por tag
+        /// (un elemento publicado es una app y no se importa — ADR 0113).
+        /// </summary>
+        public List<string>? Dependencies { get; set; }
     }
 
     private sealed class ElementManifest
