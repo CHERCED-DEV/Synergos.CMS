@@ -133,13 +133,73 @@ public sealed class EventosController : ControllerBase
     }
 
     // ── 1. Catálogo / agenda ───────────────────────────────────────────
-    // GET /api/eventos/events?q= → { events:[...] }
+    // GET /api/eventos/events?q=&category=&city=&sort= → { events:[...] }
+    //
+    // Los CUATRO parámetros los manda el cliente (`toCatalogQuery`), pero la acción
+    // solo declaraba `q`: `category`, `city` y `sort` entraban y se perdían en
+    // silencio — un [FromQuery] ausente no falla, devuelve TODO. Resultado: elegir
+    // "Más populares" o una ciudad no cambiaba nada, y el cliente NO reordena la
+    // respuesta real (su sort/filtro solo corre en el camino mock). Emitir
+    // `soldPercent` sin honrar `sort=popular` habría dejado el orden igual de muerto.
     [HttpGet("events")]
-    public async Task<IActionResult> Events([FromQuery] string? q, CancellationToken cancellationToken)
+    public async Task<IActionResult> Events(
+        [FromQuery] string? q,
+        [FromQuery] string? category,
+        [FromQuery] string? city,
+        [FromQuery] string? sort,
+        CancellationToken cancellationToken)
     {
         var events = await _catalog.SearchAsync(q, cancellationToken);
-        return Ok(new EventsResponse(events.Select(ToSummaryDto).ToList()));
+
+        // Facetas: igualdad exacta case-insensitive (misma semántica que el filtro
+        // del cliente). Se filtra ANTES de resolver fichas para no pagar detalles
+        // que se van a descartar.
+        events = ApplyFacet(events, category, static e => e.Category);
+        events = ApplyFacet(events, city, static e => e.City);
+
+        // El aforo NO viaja en EventSummary — lo derivan los tiers de la ficha. Sin
+        // resolverla aquí, `soldPercent` saldría 0 en la LISTA y el "¡Últimas
+        // localidades!" de la tarjeta nunca se pintaría (que es exactamente lo que
+        // pasaba). Se resuelve por evento contra la misma seam; un adapter que no
+        // quiera pagar N fichas siempre puede cachear detrás de GetEventAsync.
+        var dtos = new List<EventSummaryDto>(events.Count);
+        foreach (var summary in events)
+        {
+            var detail = await _catalog.GetEventAsync(summary.Id, cancellationToken);
+            dtos.Add(ToSummaryDto(summary, detail?.SoldPercent ?? 0));
+        }
+
+        return Ok(new EventsResponse(SortSummaries(dtos, sort)));
     }
+
+    // Filtro de faceta. Vacío/null = sin filtro (no colapsar el catálogo a cero por
+    // un parámetro que el cliente manda vacío).
+    private static IReadOnlyList<EventSummary> ApplyFacet(
+        IReadOnlyList<EventSummary> events,
+        string? value,
+        Func<EventSummary, string> selector)
+        => string.IsNullOrWhiteSpace(value)
+            ? events
+            : events.Where(e => string.Equals(selector(e)?.Trim(), value.Trim(), StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+    /// <summary>
+    /// Ordena el catálogo según el vocabulario que declara la UI
+    /// (<c>EventosSortKey</c>: relevance | date-asc | price-asc | price-desc | popular),
+    /// documentado allí como "Maps 1:1 to the API `sort` query param".
+    /// <c>popular</c> usa <c>soldPercent</c> — por eso se ordena DESPUÉS de resolver
+    /// el aforo, no antes. Una clave desconocida (o <c>relevance</c>) conserva el orden
+    /// del proveedor, que ya es fecha ascendente: degradar por AUSENCIA, nunca vaciar.
+    /// </summary>
+    private static IReadOnlyList<EventSummaryDto> SortSummaries(List<EventSummaryDto> dtos, string? sort)
+        => (sort ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "date-asc" => dtos.OrderBy(d => d.StartUtc).ToList(),
+            "price-asc" => dtos.OrderBy(d => d.PriceFrom).ToList(),
+            "price-desc" => dtos.OrderByDescending(d => d.PriceFrom).ToList(),
+            "popular" => dtos.OrderByDescending(d => d.SoldPercent).ToList(),
+            _ => dtos,
+        };
 
     // ── 2. Ficha de evento ─────────────────────────────────────────────
     // GET /api/eventos/event/{id} → { event, tiers:[...], seatmap }
@@ -158,7 +218,9 @@ public sealed class EventosController : ControllerBase
         }
 
         return Ok(new EventDetailResponse(
-            Event: ToSummaryDto(detail.Summary),
+            // Mismo `soldPercent` que en la lista: la ficha embebe el resumen, y si la
+            // clave no saliera también aquí el aviso de aforo moriría en la ficha.
+            Event: ToSummaryDto(detail.Summary, detail.SoldPercent),
             Description: detail.Description,
             Highlights: detail.Highlights ?? Array.Empty<string>(),
             Sessions: (detail.Sessions ?? Array.Empty<EventSession>()).Select(ToSessionDto).ToList(),
@@ -401,7 +463,13 @@ public sealed class EventosController : ControllerBase
 
     // ── Mappers a DTOs JSON estables ────────────────────────────────────
 
-    private EventSummaryDto ToSummaryDto(EventSummary s) => new(
+    /// <summary>
+    /// Proyecta el resumen al DTO JSON. <paramref name="soldPercent"/> se pasa aparte
+    /// porque el aforo NO vive en <see cref="EventSummary"/>: lo derivan los tiers de la
+    /// ficha (<see cref="EventDetail.SoldPercent"/>). Sin fuente, 0 — que la UI lee como
+    /// "sin dato de aforo" y simplemente no pinta el aviso de últimas localidades.
+    /// </summary>
+    private EventSummaryDto ToSummaryDto(EventSummary s, int soldPercent) => new(
         Id: s.Id,
         Slug: s.Slug,
         Title: s.Title,
@@ -420,7 +488,8 @@ public sealed class EventosController : ControllerBase
         Geo: s.Geo is null ? null : new EventGeoDto(s.Geo.Lat, s.Geo.Lng),
         Subtitle: string.IsNullOrWhiteSpace(s.Venue) ? s.City : $"{s.Venue} · {s.City}",
         Status: DeriveEventStatus(s.StartUtc),
-        Badges: DeriveEventBadges(s.Mode));
+        Badges: DeriveEventBadges(s.Mode),
+        SoldPercent: soldPercent);
 
     // Estado de ciclo de vida para la UI (EventStatus = upcoming|on-sale|sold-out|
     // past). El summary solo conoce la dimensión temporal (el aforo no vive en
@@ -457,7 +526,14 @@ public sealed class EventosController : ControllerBase
         Capacity: t.Capacity,
         Remaining: t.Remaining,
         MaxPerOrder: t.MaxPerOrder,
-        ZoneId: t.ZoneId);
+        ZoneId: t.ZoneId,
+        // Cara editorial de la tarjeta de tier. Se emite SIEMPRE la clave, con el
+        // vacío colapsado (ADR 0083): el contrato JSON tiene que ser auto-descriptivo,
+        // no depender de que el normalizador cliente adivine la ausencia.
+        Description: t.Description ?? string.Empty,
+        Perks: t.Perks ?? Array.Empty<string>(),
+        SaleWindow: t.SaleWindow ?? string.Empty,
+        Featured: t.Featured);
 
     private EventSeatMapDto? ToSeatMapDto(EventSeatMap? map)
     {
@@ -483,20 +559,39 @@ public sealed class EventosController : ControllerBase
 
     // Proyecta el venue con la forma anidada que lee la ficha v2 (EventVenue →
     // VenueZone → SeatMapPayload): venue.zones[].seatmap.rows[].seats[]. Reusa el
-    // seat-map del dominio; solo presente en eventos modo reserved (SeatMap != null).
-    // La dirección de calle no existe en el dominio → cadena vacía; la ciudad viene
-    // del summary. `type` del asiento = tier de la zona (price-level).
-    private static EventVenueDto? ToVenueDto(EventDetail detail)
+    // seat-map del dominio.
+    //
+    // Devolvía null en cuanto SeatMap era null, o sea en TODO evento modo general — y
+    // como 3 de los 4 del catálogo lo son, la ficha se quedaba sin recinto en la
+    // mayoría de casos. Pero un recinto EXISTE aunque sus asientos no estén numerados:
+    // el nombre y la ciudad ya viven en el summary. Modo general → mismo venue, con
+    // `zones` vacío (que es justo lo que la UI lee para decidir si hay seat-map).
+    //
+    // La dirección de calle no existe en el dominio → cadena vacía en ambos modos. No
+    // se inventa: el contrato manda emitir la clave, no rellenarla.
+    // `type` del asiento = tier de la zona (price-level).
+    private static EventVenueDto ToVenueDto(EventDetail detail)
     {
+        var geo = detail.Summary.Geo is null
+            ? null
+            : new EventGeoDto(detail.Summary.Geo.Lat, detail.Summary.Geo.Lng);
+
         var map = detail.SeatMap;
         if (map is null)
         {
-            return null;
+            return new EventVenueDto(
+                Name: detail.Summary.Venue ?? string.Empty,
+                Address: string.Empty,
+                City: detail.Summary.City ?? string.Empty,
+                Zones: Array.Empty<EventVenueZoneDto>(),
+                Geo: geo);
         }
+
         return new EventVenueDto(
             Name: map.VenueName,
             Address: string.Empty,
-            City: detail.Summary.City,
+            City: detail.Summary.City ?? string.Empty,
+            Geo: geo,
             Zones: map.Zones.Select(z => new EventVenueZoneDto(
                 Id: z.Id,
                 Name: z.Name,
@@ -575,7 +670,12 @@ public sealed class EventosController : ControllerBase
         // ciclo de vida derivado de la fecha, y chips freeform derivados del modo.
         string Subtitle,
         string Status,
-        IReadOnlyList<string> Badges);
+        IReadOnlyList<string> Badges,
+        // Contrato UI (EventSummary.soldPercent): 0..100 del aforo vendido. La tarjeta
+        // pinta "¡Últimas localidades!" con >= 80 y el catálogo ordena por popularidad
+        // con esta clave. Viene de EventDetail.SoldPercent (derivado de los tiers), NO
+        // de EventSummary: el aforo vive en la ficha, no en el resumen.
+        int SoldPercent);
 
     public sealed record EventsResponse(IReadOnlyList<EventSummaryDto> Events);
 
@@ -596,7 +696,15 @@ public sealed class EventosController : ControllerBase
         int Capacity,
         int Remaining,
         int MaxPerOrder,
-        string? ZoneId);
+        string? ZoneId,
+        // Contrato UI (TicketTier): la tarjeta de tier lee `description` (qué incluye),
+        // `perks` (viñetas de inclusiones), `saleWindow` (cierre de venta YA formateado
+        // en es-CO) y `featured` (resalta el tier recomendado). Sin estos cuatro la
+        // tarjeta solo mostraba precio y aforo.
+        string Description,
+        IReadOnlyList<string> Perks,
+        string SaleWindow,
+        bool Featured);
 
     public sealed record EventSeatDto(string Id, string Label, string Status);
 
@@ -653,7 +761,10 @@ public sealed class EventosController : ControllerBase
         string Name,
         string Address,
         string City,
-        IReadOnlyList<EventVenueZoneDto> Zones);
+        IReadOnlyList<EventVenueZoneDto> Zones,
+        // Coordenada del recinto (la misma del summary), para el mapa de la ficha.
+        // null si el evento no está geocodificado.
+        [property: JsonPropertyName("geo")] EventGeoDto? Geo);
 
     public sealed record EventDetailResponse(
         EventSummaryDto Event,
@@ -672,10 +783,12 @@ public sealed class EventosController : ControllerBase
         // modo general. El default camelCase daría "seatMap"; lo fijamos al contrato.
         // Se conserva para consumers previos; la ficha v2 lee la forma anidada `venue`.
         [property: JsonPropertyName("seatmap")] EventSeatMapDto? SeatMap,
-        // Contrato UI (EventVenue): la ficha lee `venue.zones[]` con la forma anidada
+        // Contrato UI (EventVenue): la ficha lee `venue.{name,address,city}` SIEMPRE y
+        // `venue.zones[]` con la forma anidada
         // {id,name,amount,seatmap:{rows:[{rowNumber,seats:[{id,type,available,price}]}]}}.
-        // null en eventos modo general (sin asientos numerados).
-        [property: JsonPropertyName("venue")] EventVenueDto? Venue);
+        // En modo general el recinto SÍ va (nombre + ciudad) y `zones` sale vacío: lo que
+        // falta son los asientos numerados, no el lugar.
+        [property: JsonPropertyName("venue")] EventVenueDto Venue);
 
     public sealed record CheckoutResponse(
         string OrderRef,
