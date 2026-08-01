@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -31,9 +32,6 @@ public sealed class SynergosBridgeController : Controller
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    private const string FailureFallbackJson =
-        "{\"version\":\"1.0.0\",\"i18n\":{\"culture\":\"es-CO\",\"defaultCulture\":\"es-CO\",\"keys\":{}},\"theme\":{\"variant\":\"light\",\"available\":[\"light\",\"dark\",\"silvergold\"]},\"brand\":{\"key\":\"default\",\"displayName\":\"Synergos\"},\"member\":null,\"page\":{\"id\":0,\"docType\":\"\",\"canonicalUrl\":\"\",\"cultures\":[]}}";
-
     private readonly IHostBridgeContextBuilder _bridge;
     private readonly ILogger<SynergosBridgeController> _logger;
 
@@ -59,7 +57,7 @@ public sealed class SynergosBridgeController : Controller
         {
             _logger.LogWarning(ex,
                 "Synergos bridge build failed; serving minimal fallback payload");
-            json = FailureFallbackJson;
+            json = HostBridgeFallback.Json;
         }
 
         var sb = new StringBuilder(json.Length + 256);

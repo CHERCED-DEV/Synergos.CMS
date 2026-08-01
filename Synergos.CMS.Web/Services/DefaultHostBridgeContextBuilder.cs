@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Constants;
 using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Core.Web;
@@ -131,10 +132,20 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
     private HostBridgeTheme BuildTheme()
     {
         var ctx = _renderCtx.Resolve();
-        var variant = string.IsNullOrWhiteSpace(ctx.ThemeVariant) ? "light" : ctx.ThemeVariant;
+        var variant = string.IsNullOrWhiteSpace(ctx.ThemeVariant)
+            ? DropdownOptions.PageThemeVariant.Light
+            : ctx.ThemeVariant;
+
+        // La lista sale del mirror canónico, no de un literal. El literal
+        // anterior decía ["light","dark","silvergold"]: tres variantes de las
+        // ocho vigentes, y "silvergold" todo-minúscula — una ortografía que no
+        // emite NADIE. `_Layout` escribe data-theme verbatim desde el editor,
+        // o sea "silverGold" (ADR 0101 §2), así que un consumidor que hiciera
+        // `available.includes(variant)` obtenía false para el tema activo, y
+        // los cinco temas de los verticales no existían para la UI.
         return new HostBridgeTheme(
             Variant: variant,
-            Available: new[] { "light", "dark", "silvergold" });
+            Available: DropdownOptions.PageThemeVariant.All);
     }
 
     private HostBridgeBrand BuildBrand()

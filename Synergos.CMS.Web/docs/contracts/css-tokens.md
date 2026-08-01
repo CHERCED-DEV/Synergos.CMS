@@ -1,6 +1,8 @@
 # CSS tokens contract — `--syn-*` custom properties
 
-- **Contract version:** v1
+- **Contract version:** v1.1 — *minor, aditivo.* Documenta las 8 variantes de
+  tema vigentes y fija el casing canónico. v1 listaba tres y escribía
+  `silvergold` todo-minúscula, que no la emite nadie.
 - **Owner:** CMS host (source of truth via `wwwroot/css/syn-tokens.css`)
 - **Consumer:** UI components (Angular Web Components)
 
@@ -78,13 +80,47 @@ sans-serif).
 CMS emite themes vía `data-theme` attribute en `<html>`:
 
 ```css
-:root              { /* light tokens */ }
-[data-theme="dark"]        { /* dark overrides */ }
-[data-theme="silvergold"]  { /* silverGold overrides */ }
+:root                          { /* light tokens — el base */ }
+[data-theme="dark"]            { /* dark overrides */ }
+[data-theme="silverGold"]      { /* silverGold overrides */ }
 ```
 
 Los components UI no necesitan saber el theme — solo consumen los
 tokens y se adaptan automáticamente.
+
+### El casing es literal — `silverGold`, no `silvergold`
+
+**El value que elige el editor ES el `data-theme` ES el nombre del bloque
+CSS**, el mismo string sin ninguna transformación (ADR 0101 §1).
+`_Layout.cshtml` escribe el atributo verbatim. Por tanto el canónico es
+**`silverGold` en camelCase**.
+
+`[data-theme="silver-gold"]` (kebab) sobrevive en el CSS como **alias
+deprecado**; no lo emite nadie. `silvergold` (todo-minúscula) **no existe** en
+ninguna capa — era un error de este documento en v1, propagado al
+`host-bridge.contract.ts` del UI. Si tu código ramifica por string, usá
+camelCase.
+
+### Las 8 variantes vigentes
+
+| `data-theme` | Origen | Bloque en `syn-tokens.css` |
+|---|---|---|
+| `light` | default (`:root`) | — es el base |
+| `dark` | genérico | ✅ |
+| `silverGold` | genérico / vertical Blogs | ✅ |
+| `brand` | refuerza el primary de la marca | emitido en runtime por `_BrandThemeStyle.cshtml` |
+| `eventsNight` | vertical Eventos (ADR 0101) | ✅ |
+| `terraLux` | vertical Propiedades (ADR 0101) | ✅ |
+| `scholar` | vertical Educación (ADR 0102) | ✅ |
+| `meridian` | vertical Booking (ADR 0102) | ✅ |
+
+La lista canónica en código es `DropdownOptions.PageThemeVariant.All`, y es la
+que el host bridge publica en `window.synergos.theme.available`. `inherit`
+**no** aparece: es el centinela del resolver, no un tema.
+
+Agregar un tema = una entrada en esa constante + su bloque en
+`syn-tokens.css`. `HostBridgeThemeContractTests` verifica en ambas direcciones
+que ninguna de las dos listas se adelante a la otra.
 
 ## Fallback strategy (UI standalone)
 

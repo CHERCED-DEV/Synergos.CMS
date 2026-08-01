@@ -1,6 +1,7 @@
 # Host bridge contract — full picture CMS ↔ UI
 
-- **Contract version:** v1
+- **Contract version:** v1.1 — *minor, aditivo.* Fija el casing literal de
+  `theme.variant` y sube `theme.available` de 3 a las 8 variantes reales.
 - **Owner:** Joint (CMS emite, UI consume) — both sides must implement.
 
 ## Big picture
@@ -48,9 +49,11 @@ declare global {
 }
 
 interface SynergosTheme {
-  /** "light" | "dark" | "silvergold" — current. */
+  /** El `data-theme` activo del <html>, verbatim. Casing literal:
+   *  "light" | "dark" | "silverGold" | "brand" | "eventsNight"
+   *  | "terraLux" | "scholar" | "meridian".  Ver css-tokens.md. */
   readonly variant: string;
-  /** All available variants. */
+  /** Las 8 variantes publicadas. `variant` SIEMPRE está dentro. */
   readonly available: readonly string[];
 }
 
