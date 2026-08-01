@@ -118,6 +118,9 @@
     <link rel="stylesheet" href="~/css/syn-flow.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/syn-member.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/syn-blog.css" asp-append-version="true" />
+    @* SSR fallback de los blocks elementSyn* CDN-hosted: light DOM dentro del
+       <synergos-*>, visible hasta que el bundle upgrade el custom element. *@
+    <link rel="stylesheet" href="~/css/syn-ssr-fallback.css" asp-append-version="true" />
     @await Html.PartialAsync("_BrandThemeStyle", brandThemeModel)
     @if (devStubEnabled)
     {

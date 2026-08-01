@@ -1,22 +1,49 @@
-﻿@*
+@*
     SynHost renderer — <synergos-kpi-card>. KPI card with trend indicator.
+
+    SSR fallback (light DOM). SynHostFallbackBuilder renders label/value as a
+    real <dl> plus a readable trend line *inside* the custom element, so the
+    block stays visible and indexable before the bundle upgrades the tag — and
+    in every deploy without a CDN, where the registry never resolves
+    (ADR 0012). The trend wording is the only generated copy and comes from
+    the uSync Dictionary (Synhost.Kpi.Trend.*): a bare arrow says nothing to a
+    screen reader.
+
+    Contract with the bundle: it removes or replaces [data-syn-ssr-fallback]
+    on upgrade. Until it does, syn-ssr-fallback.css hides the node once the
+    tag is :defined, so nothing double-renders.
 *@
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Synergos.CMS.Web.Services
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+    var kpiLabel = Model.Value<string>("kpiLabel");
+    var kpiValue = Model.Value<string>("kpiValue");
+    var kpiTrend = Model.Value<string>("kpiTrend");
+    var kpiDelta = Model.Value<string>("kpiDelta");
+    var kpiPeriod = Model.Value<string>("kpiPeriod");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["kpiLabel"] = Model.Value<string>("kpiLabel"),
-        ["kpiValue"] = Model.Value<string>("kpiValue"),
-        ["kpiTrend"] = Model.Value<string>("kpiTrend"),
-        ["kpiDelta"] = Model.Value<string>("kpiDelta"),
-        ["kpiPeriod"] = Model.Value<string>("kpiPeriod"),
+        ["kpiLabel"] = kpiLabel,
+        ["kpiValue"] = kpiValue,
+        ["kpiTrend"] = kpiTrend,
+        ["kpiDelta"] = kpiDelta,
+        ["kpiPeriod"] = kpiPeriod,
+    };
+    var trendLabel = SynHostFallbackBuilder.TrendKey(kpiTrend) switch
+    {
+        "up" => Umbraco.GetDictionaryValue("Synhost.Kpi.Trend.Up", "Tendencia al alza"),
+        "down" => Umbraco.GetDictionaryValue("Synhost.Kpi.Trend.Down", "Tendencia a la baja"),
+        "flat" => Umbraco.GetDictionaryValue("Synhost.Kpi.Trend.Flat", "Tendencia estable"),
+        _ => null,
     };
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "kpi-card",
         Props: props,
         ConfigOverrideJson: Model.Value<string>("configOverride"),
-        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+        Culture: System.Globalization.CultureInfo.CurrentUICulture,
+        FallbackHtml: SynHostFallbackBuilder.KpiCard(
+            kpiLabel, kpiValue, kpiTrend, kpiDelta, kpiPeriod, trendLabel));
     var result = await Emitter.EmitAsync(request);
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

@@ -1,13 +1,36 @@
-﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@*
+    SynHost renderer — <synergos-quote-animated>.
+
+    SSR fallback (light DOM). The animation belongs to the bundle; the quote
+    belongs to the page. SynHostFallbackBuilder renders a real
+    <figure>/<blockquote> *inside* the custom element, so the block stays
+    visible and indexable before the bundle upgrades the tag — and in every
+    deploy without a CDN, where the registry never resolves (ADR 0012).
+    No generated copy here: quote and attribution are editor-authored, so no
+    Dictionary key is needed.
+
+    Contract with the bundle: it removes or replaces [data-syn-ssr-fallback]
+    on upgrade. Until it does, syn-ssr-fallback.css hides the node once the
+    tag is :defined, so nothing double-renders.
+*@
+@using Synergos.CMS.Web.Services
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+    var quote = Model.Value<string>("quote");
+    var attribution = Model.Value<string>("attribution");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["quote"] = Model.Value<string>("quote"),
-        ["attribution"] = Model.Value<string>("attribution"),
+        ["quote"] = quote,
+        ["attribution"] = attribution,
         ["animationMode"] = Model.Value<string>("animationMode"),
     };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("quote-animated", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "quote-animated",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture,
+        FallbackHtml: SynHostFallbackBuilder.QuoteAnimated(quote, attribution));
     var result = await Emitter.EmitAsync(request);
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
