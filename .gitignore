@@ -80,7 +80,10 @@ Thumbs.db
 *~
 
 # ───────────────────────── Claude Code harness ───────────────────────
-.claude/
+# .claude local sigue ignorado (settings, worktrees), MENOS las skills:
+# compartidas al remoto para que las sesiones desde la tablet las tengan.
+.claude/*
+!.claude/skills/
 
 # ───────────────────────── Harness de verificación (Fase 4) ──────────
 # El código del harness se versiona; sus salidas no. La evidencia de cada
