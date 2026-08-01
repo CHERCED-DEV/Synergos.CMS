@@ -166,12 +166,48 @@ describe('getBridge() — degradación graceful', () => {
 });
 
 describe('Theme', () => {
+    // Las ocho variantes que el CMS publica, en su casing literal
+    // (DropdownOptions.PageThemeVariant.All + los bloques [data-theme] de
+    // syn-tokens.css). El value del editor ES el data-theme ES el nombre del
+    // bloque CSS: mismo string, sin transformación (ADR 0101 §1).
+    const VARIANTS = [
+        'light', 'dark', 'silverGold', 'brand',
+        'eventsNight', 'terraLux', 'scholar', 'meridian',
+    ] as const;
+
     it('variant + available están alineados', () => {
         window.synergos = buildBridge({
-            theme: { variant: 'dark', available: ['light', 'dark', 'silvergold'] },
+            theme: { variant: 'dark', available: [...VARIANTS] },
         });
         expect(getTheme()).toBe('dark');
         expect(getBridge()!.theme.available).toContain('dark');
+    });
+
+    // La invariante que faltaba. La versión anterior de este test montaba
+    // available: ['light','dark','silvergold'] y sólo comprobaba que 'dark'
+    // estuviera dentro — o sea, pasaba en verde con el listado rancio. Ése
+    // fue justo el agujero por el que el CMS publicó durante meses tres
+    // variantes de ocho, con 'silvergold' todo-minúscula, que no emite nadie.
+    it.each(VARIANTS)('available SIEMPRE contiene el variant activo (%s)', (variant) => {
+        window.synergos = buildBridge({
+            theme: { variant, available: [...VARIANTS] },
+        });
+        const theme = getBridge()!.theme;
+        expect(theme.available).toContain(theme.variant);
+    });
+
+    it('silverGold es camelCase — comparar en minúsculas NO casa con el DOM', () => {
+        // _Layout.cshtml escribe data-theme verbatim, así que el DOM real es
+        // <html data-theme="silverGold">. Un componente que compare contra
+        // 'silvergold' no entra nunca en la rama.
+        expect(VARIANTS).toContain('silverGold');
+        expect(VARIANTS as readonly string[]).not.toContain('silvergold');
+    });
+
+    it('"inherit" no es una variante publicable', () => {
+        // Es el centinela del resolver del CMS ("usá el default"), no un tema:
+        // no existe como bloque [data-theme="inherit"] en syn-tokens.css.
+        expect(VARIANTS as readonly string[]).not.toContain('inherit');
     });
 });
 
