@@ -44,6 +44,32 @@ public static class DropdownOptions
 
         /// <summary>Vertical Booking "Meridian" enterprise (OLA 4.6, ADR 0102).</summary>
         public const string Meridian = "meridian";
+
+        /// <summary>
+        /// Las variantes RENDERIZABLES, en el casing canónico que ADR 0101
+        /// ratifica: el value del editor ES el <c>data-theme</c> del
+        /// <c>&lt;html&gt;</c> ES el nombre del bloque en
+        /// <c>syn-tokens.css</c>, verbatim y sin transformación.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="Inherit"/> queda FUERA a propósito: no es un tema, es
+        /// el centinela que le dice al resolver "usá el default". Publicarlo
+        /// como disponible haría que la UI ofreciera un tema que no existe.
+        /// <para>Esta es la lista que el host bridge publica en
+        /// <c>window.synergos.theme.available</c>. Un tema nuevo se agrega
+        /// aquí y en <c>syn-tokens.css</c> — en ningún otro lado.</para>
+        /// </remarks>
+        public static readonly IReadOnlyList<string> All = new[]
+        {
+            Light,
+            Dark,
+            SilverGold,
+            Brand,
+            EventsNight,
+            TerraLux,
+            Scholar,
+            Meridian,
+        };
     }
 
     /// <summary>Mirror de <c>DTSelectPageSurface</c>.</summary>
