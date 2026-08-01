@@ -1,4 +1,17 @@
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@*
+    SynHost renderer — <synergos-media-text>.
+
+    SSR fallback (light DOM). SynHostFallbackBuilder renders a real <figure> +
+    prose *inside* the custom element, so the block stays visible and indexable
+    before the bundle upgrades the tag — and in every deploy without a CDN,
+    where the registry never resolves (ADR 0012).
+
+    Contract with the bundle: it removes or replaces [data-syn-ssr-fallback]
+    on upgrade. Until it does, syn-ssr-fallback.css hides the node once the
+    tag is :defined, so nothing double-renders.
+*@
+@using Synergos.CMS.Web.Services
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
     // El componente Angular media-text espera imageSrc (URL) + body (texto plano).
@@ -10,20 +23,31 @@
     }
     var pos = Model.Value<string>("mediaPosition");
     var theme = Model.Value<string>("theme");
+    var mediaAlt = Model.Value<string>("mediaAlt");
+    var headingText = Model.Value<string>("headingText");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["imageSrc"] = mediaRef?.Url(),
-        ["imageAlt"] = Model.Value<string>("mediaAlt"),
-        ["headingText"] = Model.Value<string>("headingText"),
+        ["imageAlt"] = mediaAlt,
+        ["headingText"] = headingText,
         ["body"] = body,
         ["mediaPosition"] = string.IsNullOrWhiteSpace(pos) ? null : pos,
         ["theme"] = string.IsNullOrWhiteSpace(theme) ? null : theme,
     };
+    var fallbackHtml = SynHostFallbackBuilder.MediaText(
+        heading: headingText,
+        body: body,
+        imageUrl: mediaRef?.Url(),
+        imageAlt: string.IsNullOrWhiteSpace(mediaAlt) ? mediaRef?.Value<string>("altDefault") : mediaAlt,
+        mediaPosition: pos,
+        theme: theme,
+        ariaLabel: Umbraco.GetDictionaryValue("Synhost.MediaText.Aria", "Contenido con imagen"));
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "media-text",
         Props: props,
         ConfigOverrideJson: Model.Value<string>("configOverride"),
-        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+        Culture: System.Globalization.CultureInfo.CurrentUICulture,
+        FallbackHtml: fallbackHtml);
     var result = await Emitter.EmitAsync(request);
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
