@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
 
@@ -333,9 +334,9 @@ public sealed class AcademyController : ControllerBase
         // padrón enumerable de quién estudió qué.
         //
         // Ojo con lo que este endpoint NO es: la verificación por un tercero (un
-        // empleador). Esa es la promesa de `VerifyUrl`, y hoy NO existe ninguna ruta
-        // que la cumpla. Cuando se construya, va por el ID de la credencial —que es
-        // una capacidad, como el `orderRef` de travel—, nunca por el id del alumno.
+        // empleador). Esa es la promesa de `VerifyUrl`, y la cumple `VerifyCertificate`
+        // más abajo — por el ID de la credencial, que es una capacidad (como el
+        // `orderRef` de travel), nunca por el id del alumno.
         var (denied, student) = RequireStudent();
         if (denied is not null) { return denied; }
 
@@ -350,6 +351,82 @@ public sealed class AcademyController : ControllerBase
                 ? null
                 : new CertificateDto(certificate.Id, certificate.StudentName, certificate.IssuedAt, certificate.VerifyUrl)));
     }
+
+    // ── 7b. Verificación PÚBLICA de la credencial ───────────────────────
+    // GET /academy/verify/{certificateId}      ← la URL que imprime el QR
+    // GET /api/academy/verify/{certificateId}  ← la misma, en la forma del resto de la API
+    //   → 200 { valid:true, certificate:{...} } | 404 { valid:false, certificate:null }
+
+    /// <summary>
+    /// La respuesta ÚNICA para todo lo que no es una credencial válida. Es una constante a
+    /// propósito: mientras haya un solo objeto, no hay forma de que dos ramas de fallo
+    /// diverjan con el tiempo y le cuenten al verificador cuál de los dos casos ocurrió.
+    /// </summary>
+    private static readonly VerifyCertificateResponse NotAValidCredential = new(Valid: false, Certificate: null);
+
+    /// <summary>
+    /// Verifica una credencial por su id. <b>Anónimo a propósito</b>: eso es lo que
+    /// significa "verificable" — un empleador con el diploma en la mano no tiene cuenta
+    /// aquí, y exigirle una convertiría la verificación en otra cosa.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>No enumera y no filtra.</b> Id malformado, id desconocido, id falsificado y
+    /// credencial que ya no vale devuelven todos el MISMO 404 con el MISMO cuerpo. Quien
+    /// pregunta no aprende si el curso existe, si el alumno existe, ni cuál de los cuatro
+    /// casos ocurrió. Lo que sostiene esto no es el 404: es que el id sea infalsificable
+    /// (ADR 0124). Con el id anterior —FNV-1a de 31 bits sin secreto— este endpoint habría
+    /// sido un padrón consultable de quién estudió qué, por muy uniforme que fuera la
+    /// respuesta de error.</para>
+    ///
+    /// <para><b>Qué ve el público.</b> Lo que una verificación SIGNIFICA: qué curso, quién
+    /// lo completó y cuándo. No sale el identificador de la cuenta del alumno (su correo):
+    /// el nombre solo se publica si es un nombre; si lo único que el motor tiene es el
+    /// correo —el <c>fallback</c> de <c>ResolveStudentName</c>— se responde
+    /// <c>studentName: null</c> antes que publicar el correo de alguien en un endpoint
+    /// anónimo. Tampoco sale el progreso, ni la matrícula, ni el pago, ni nada que permita
+    /// ir del certificado a los OTROS cursos del titular.</para>
+    ///
+    /// <para><b>Sin caché.</b> Una credencial puede dejar de valer (el seam re-comprueba el
+    /// progreso en cada verificación); un intermediario que cachee la respuesta afirmativa
+    /// seguiría diciendo que sí después.</para>
+    /// </remarks>
+    [AllowAnonymous]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [HttpGet("verify/{certificateId}")]
+    [HttpGet("/academy/verify/{certificateId}")]
+    public async Task<IActionResult> VerifyCertificate(string? certificateId, CancellationToken cancellationToken)
+    {
+        var certificate = await _certificates.VerifyAsync(certificateId ?? string.Empty, cancellationToken);
+        if (certificate is null)
+        {
+            return NotFound(NotAValidCredential);
+        }
+
+        // El título del curso se resuelve DESPUÉS de que la credencial ya valió: es
+        // información sobre lo que el certificado acredita, no una vía para preguntarle al
+        // catálogo (para eso está `GET /course/{id}`, que es público por su cuenta).
+        var detail = await _catalog.GetCourseAsync(certificate.CourseId, cancellationToken);
+
+        return Ok(new VerifyCertificateResponse(
+            Valid: true,
+            Certificate: new PublicCertificateDto(
+                Id: certificate.Id,
+                CourseId: certificate.CourseId,
+                CourseTitle: detail?.Course.Title,
+                StudentName: PublicHolderName(certificate.StudentName),
+                IssuedAt: certificate.IssuedAt)));
+    }
+
+    /// <summary>
+    /// El nombre del titular, o <c>null</c> si lo único disponible es su identificador de
+    /// cuenta. Publicar el nombre es el punto de una verificación; publicar el correo del
+    /// alumno en un endpoint anónimo no lo es, y es justo lo que pasaría por el fallback
+    /// del motor (<c>StudentName = student</c>) para quien nunca se matriculó con nombre.
+    /// </summary>
+    private static string? PublicHolderName(string? studentName)
+        => string.IsNullOrWhiteSpace(studentName) || studentName.Contains('@', StringComparison.Ordinal)
+            ? null
+            : studentName.Trim();
 
     // ── 8. Instructor: sus cursos + métricas (panel de autor) ───────────
     // GET /api/academy/instructor/courses?instructor= → { courses:[...] }
@@ -629,6 +706,26 @@ public sealed class AcademyController : ControllerBase
 
     /// <summary>GET /api/academy/certificate — { certificate | null }.</summary>
     public sealed record CertificateResponse(CertificateDto? Certificate);
+
+    /// <summary>
+    /// La cara PÚBLICA de la credencial: lo que un tercero sin cuenta puede ver de ella.
+    /// Es un DTO aparte de <see cref="CertificateDto"/> a propósito — no una proyección
+    /// "casi igual"— para que añadir un campo al certificado privado no lo publique de
+    /// paso. <see cref="StudentName"/> es nullable: ver <c>PublicHolderName</c>.
+    /// </summary>
+    public sealed record PublicCertificateDto(
+        string Id,
+        string CourseId,
+        string? CourseTitle,
+        string? StudentName,
+        DateTimeOffset IssuedAt);
+
+    /// <summary>
+    /// GET /academy/verify/{id} — <c>{ valid, certificate }</c>. Con <c>valid:false</c>
+    /// el certificado es SIEMPRE null y no hay campo de motivo: el verificador no debe
+    /// poder distinguir "no existe" de "está falsificado".
+    /// </summary>
+    public sealed record VerifyCertificateResponse(bool Valid, PublicCertificateDto? Certificate);
 
     /// <summary>Una fila del panel del instructor: el curso + sus métricas (alumnos/ingresos/rating).</summary>
     public sealed record InstructorCourseDto(

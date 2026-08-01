@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
@@ -36,7 +37,10 @@ public class AcademyOla5SmokeTests
         var tracking = new StubOrderTrackingService(StubEnrollmentService.AcademyPipeline, null);
         var enroll = new StubEnrollmentService(catalog, new StubPaymentProvider(), tracking, null);
         catalog.EnrollmentMetrics = enroll; // property injection, como el composer
-        var cert = new StubCertificateService(catalog, enroll);
+        // El firmante del id es OBLIGATORIO desde ADR 0124 — no hay forma de construir el
+        // seam sin él, que es el punto: un certificado con id derivable no es una credencial.
+        var cert = new StubCertificateService(
+            catalog, enroll, new HmacCertificateIdSigner(Encoding.UTF8.GetBytes("llave-de-prueba")));
         return (catalog, enroll, cert, tracking);
     }
 
