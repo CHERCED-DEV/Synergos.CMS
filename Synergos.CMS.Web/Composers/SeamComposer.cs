@@ -350,7 +350,11 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IOrderTrackingService>(),
                 sp.GetRequiredService<IJsonEntityStore>(),
                 now: null,
-                notifier: sp.GetRequiredService<ITransactionalNotifier>()));
+                notifier: sp.GetRequiredService<ITransactionalNotifier>(),
+                // El read-model del dashboard se alimenta acá: es el único punto
+                // por el que una orden llega a Paid. Sin esto el panel de ventas
+                // quedaba en $0 con órdenes reales en disco.
+                checkoutRecorder: sp.GetRequiredService<ICheckoutRecorder>()));
         services.AddSingleton<IReturnService>(sp =>
             new StubReturnService(
                 sp.GetRequiredService<IShopOrderService>(),
