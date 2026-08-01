@@ -8,6 +8,12 @@
   seguridad y las tres más citadas se re-verificaron una por una.
 - **Detalle por dominio:** `inventario/*.md` (7 ficheros, ~1.650 líneas).
 
+> **Estado del barrido.** Este documento describe lo que el barrido encontró
+> **antes** de la tanda de olas que salió de él. Lo que ya se cerró va marcado
+> ✅ con su ADR; lo tachado dejó de ser cierto. Los anexos de `inventario/`
+> **no** se actualizaron y siguen describiendo el estado original — léelos como
+> el diagnóstico, no como el estado de hoy.
+
 ---
 
 ## Cómo leer esto
@@ -146,13 +152,13 @@ auditoría de contraste propia. **Un solo fichero** con hex hardcodeado en todo
 |---|---|---|
 | **Tienda** | Catálogo real → carrito → checkout → orden durable → devolución con reembolso → reseña verificada | PSP real; que el dashboard vea las ventas; mover el pedido más allá de "pagado" |
 | **Contenido / Blog** | Blog editorial, comentarios con hilos y moderación, búsqueda (Examine), SEO con JSON-LD, formularios | — (es el más completo) |
-| **Eventos** | Checkout → e-ticket con **QR firmado** → check-in verificado, durable y auditado | El catálogo no sale del CMS: el flag es **inerte** porque `eventpage` no modela tiers ni aforo |
+| **Eventos** | Checkout → e-ticket con **QR firmado** → check-in verificado, durable y auditado. ✅ El catálogo **sale del CMS**: `eventPage` modela localidades, aforo, agenda y zonas (ADR 0117) | El "quedan N" arranca lleno: el contenido declara cuánto hay, no cuánto queda |
 | **Educación** | Matrícula → pago → progreso, durable | La verificación **pública** del certificado es un enlace muerto |
 | **Gobierno** | Radicar → revisar → decidir, durable, con ownership real | Catálogo de trámites sembrado |
-| **Salud** | API PHI con cifrado real, escritura atómica, RTBF | **No hay portal del paciente** (ver §3.2) |
+| **Salud** | API PHI con cifrado real, escritura atómica, RTBF. ✅ **Portal del paciente abierto** con `GET /api/healthcare/me` (ADR 0120). ✅ La auditoría de acceso ya no se purga a los 90 días (ADR 0121) | Un paciente no puede corregir sus propios datos — necesita su propio flujo |
 | **Viajes** | Checkout / confirm / cancel durables | Catálogos sembrados; cancelación por URL-capacidad |
-| **Inmobiliaria** | Catálogo, visitas, leads, favoritos | **Nada persiste**: todo en memoria |
-| **Social** | 17 endpoints: feed, follow, reacciones, perfiles, DM, notificaciones | **Nada persiste** |
+| **Inmobiliaria** | ✅ Catálogo **desde el CMS** con `propertyListing` (ADR 0118). ✅ Visitas, leads y alertas **durables** (ADR 0105) | — |
+| **Social** | 17 endpoints: feed, follow, reacciones, perfiles, DM, notificaciones. ✅ **Todo persiste** (ADR 0105) | Sin caché: el feed relee dos espacios por página |
 | **Booking (hoteles)** | Demo puro | Sin rebanada CMS y **el único controller sin tests** |
 
 ---
@@ -172,6 +178,20 @@ de certificados, y los eventos/cursos publicados en caliente.
 Todos guardan en `ConcurrentDictionary` de proceso. Es trabajo mecánico y
 acotado, no un rediseño.
 
+> ✅ **Cerrado casi entero.** Devoluciones y tracking de envío primero; después
+> los 8 seams sociales (incluido `IUserCollection`, que no era "social": lo
+> comparten la wishlist de Tienda, los favoritos de Propiedades y los guardados
+> de Blogs — un reinicio borraba las tres listas de un golpe) e Inmobiliaria
+> completa. Dos hallazgos que el barrido no vio: `INotificationFeed` y
+> `ISocialProfileProjection` **no necesitan store** —se derivan de los otros
+> seams, y hacerlos durables los hizo durables por composición—, y
+> `BlogsDemoSeeder` habría re-añadido los mismos DM en **cada** reinicio en
+> cuanto la mensajería se volvió durable, porque `StartThreadAsync` es
+> idempotente en el hilo pero no en el mensaje.
+>
+> **Sigue pendiente:** el índice de certificados y los cursos publicados en
+> caliente.
+
 ### 3.2 El guard está bien escrito; el call site no lo usa
 
 **Dos casos, en direcciones opuestas — y por eso es un patrón, no dos accidentes.**
@@ -189,6 +209,16 @@ acotado, no un rediseño.
   paciente puede leer su propio expediente**.
 
 En ambos casos el guard existe y está bien. El defecto vive en cómo lo llaman.
+
+> ✅ **Los dos cerrados.** El de Tienda pasó a exigir ownership; el de Salud lo
+> resuelve ahora el propio guard, acotado a `read` —sin eso, un paciente podría
+> reescribir sus propias notas clínicas.
+>
+> Y el de Salud tenía **una segunda mitad que este barrido no vio**: con el
+> guard arreglado el portal seguía sin existir, porque todos los endpoints se
+> direccionan por `patientKey`, que es distinta del `MemberKey` a propósito y
+> que nadie le dice al paciente. El permiso estaba concedido y era inalcanzable.
+> Lo cierra `GET /api/healthcare/me` (ADR 0120).
 
 ### 3.3 Seams registrados sin consumidor
 
@@ -212,6 +242,11 @@ Cada fila es una decisión pendiente: cablear o quitar.
 - Retención: `HealthcareRetentionPolicy.cs:11` promete auditoría PHI indefinida
   "por obligación legal"; `AuditRetentionPolicy.cs:34` la purga a los 90 días.
   **Gana la segunda.**
+  ✅ Cerrado (ADR 0121) — y era bastante más que un desfase de documentación:
+  el registro de quién miró qué historia clínica desaparecía a los 90 días, en
+  silencio y sin que nada fallara. Ahora los eventos `phi.*` viven en su propia
+  familia de archivos con su propia retención, que por defecto **no purga
+  nunca**. Queda una acción manual: lo ya escrito sigue mezclado.
 
 ---
 
@@ -229,6 +264,15 @@ expedientes durables.
 
 **Todavía no:** Inmobiliaria y Social (nada persiste), Booking (demo sin tests),
 y el portal del paciente en Salud (bloqueado por §3.2).
+
+> ✅ **Se movieron cinco.** Eventos ya no espera al CMS (ADR 0117). Inmobiliaria
+> pasó de "todavía no" a vendible: tiene su DocType y todo persiste (ADR 0118).
+> Social persiste entero. El portal del paciente existe (ADR 0120). El PSP de
+> Tienda sigue siendo el bloqueo real de esa fila, y sigue esperando
+> credenciales de sandbox.
+>
+> **Lo que sigue en "todavía no":** Booking, la verificación pública del
+> certificado en Educación, y los catálogos sembrados de Viajes y Gobierno.
 
 **Transversal a todo:** los 87 bloques CDN emiten placeholder fuera de la
 máquina con `C:\LOCAL_CDN` — `HttpBundleRegistryClient` no existe.
