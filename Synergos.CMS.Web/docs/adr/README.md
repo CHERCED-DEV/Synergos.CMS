@@ -123,6 +123,15 @@ choose between options that a future reader would otherwise second-guess.
 | [0114](0114-product-rating-is-derived-ugc-behind-a-social-proof-seam.md) | El rating de un producto es UGC DERIVADO tras un seam de prueba social: se calcula de las reseñas, nunca se almacena, y su ausencia no es un cero | Accepted |
 | [0115](0115-gates-that-fail-closed-and-one-source-for-the-theme-list.md) | Un gate que no encuentra su entrada FALLA; y la lista de temas tiene una sola fuente | Accepted |
 | [0116](0116-payment-engine-as-a-transversal-polymorphic-seam.md) | El motor de pagos es una seam TRANSVERSAL y polimórfica: router que es el mismo contrato, tres formas de "requiere acción", y despacho de eventos que no es de Tienda | Accepted (parcial) |
+| [0117](0117-el-aforo-de-un-evento-es-contenido-y-los-asientos-se-generan.md) | El aforo de un evento es contenido, y los asientos se generan de filas × butacas en vez de autorarse | Accepted |
+| [0118](0118-el-inmueble-es-contenido-y-sus-caracteristicas-se-derivan.md) | El inmueble es contenido, sus características se derivan de campos tipados, y (0,0) significa «sin pin» | Accepted |
+| [0119](0119-la-estadia-es-contenido-y-su-reputacion-no-se-inventa.md) | La estadía es contenido y su reputación no se inventa | Accepted |
+| [0120](0120-el-portal-del-paciente-no-estaba-bloqueado-por-permiso-sino-por-direccionamiento.md) | El portal del paciente no estaba bloqueado por permiso sino por direccionamiento: PatientKey ≠ MemberKey y nadie se la decía | Accepted |
+| [0121](0121-la-auditoria-de-acceso-a-phi-tiene-su-propia-retencion.md) | La auditoría de acceso a PHI tiene su propia retención: se borraba a los 90 días mientras la documentación prometía lo contrario | Accepted |
+| [0122](0122-el-cupo-se-verifica-primero-la-caja-se-abre-despues.md) | El cupo se verifica primero, la caja se abre después: doble reembolso y captura sobre un hold vencido | Accepted |
+| [0123](0123-el-tramite-es-contenido-y-el-portal-no-lo-esconde.md) | El trámite es contenido y el portal no lo esconde: tasa 0 solo es gratis cuando alguien lo afirma | Accepted |
+| [0124](0124-el-id-de-un-certificado-era-calculable-por-cualquiera.md) | El id de un certificado era calculable por cualquiera: FNV-1a de 31 bits sin secreto, ahora HMAC firmado | Accepted |
+| [0125](0125-la-credencial-por-url-se-conserva-pero-deja-rastro.md) | La credencial por URL se conserva, pero deja rastro: la cancelación anónima se audita en Viajes y Booking | Accepted |
 
 ## Rules
 
