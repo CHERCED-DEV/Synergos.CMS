@@ -17,6 +17,77 @@ public sealed class FileSystemPatientRepositoryTests
         new(key, Guid.NewGuid(), name, new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             "motivo", "hallazgos", "valoración", default, doctor, 0, deleted);
 
+    private static PatientRecord PatientOf(Guid memberKey, string name, bool deleted = false, DateTime created = default) =>
+        new(Guid.Empty, memberKey, name, new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            "motivo", "hallazgos", "valoración", created, Guid.NewGuid(), 0, deleted);
+
+    // ── Resolución miembro → clave clínica (portal del paciente, ADR 0120) ──
+    //
+    // Es lo que permite que un paciente llegue a su propio expediente: el permiso ya existía
+    // en el guard, pero los endpoints se direccionan por PatientKey, que es DISTINTA del
+    // MemberKey a propósito y que nadie le dice al paciente.
+
+    [Fact]
+    public async Task FindKeyByMember_DevuelveLaClaveDelExpedienteVinculado()
+    {
+        var sut = BuildSut();
+        var memberKey = Guid.NewGuid();
+        var key = await sut.UpsertAsync(PatientOf(memberKey, "Camila"), CancellationToken.None);
+        await sut.UpsertAsync(PatientOf(Guid.NewGuid(), "Otro paciente"), CancellationToken.None);
+
+        Assert.Equal(key, await sut.FindKeyByMemberAsync(memberKey, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindKeyByMember_SinExpediente_DevuelveNull()
+    {
+        var sut = BuildSut();
+        await sut.UpsertAsync(PatientOf(Guid.NewGuid(), "Ajeno"), CancellationToken.None);
+
+        Assert.Null(await sut.FindKeyByMemberAsync(Guid.NewGuid(), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindKeyByMember_GuidEmpty_NuncaCasaConNada()
+    {
+        // Guid.Empty es "sin miembro", no un miembro. Sin el corte, cualquier expediente
+        // creado sin vincular casaría con él y una sesión mal manejada se llevaría una
+        // historia clínica ajena.
+        var sut = BuildSut();
+        await sut.UpsertAsync(PatientOf(Guid.Empty, "Sin vincular"), CancellationToken.None);
+
+        Assert.Null(await sut.FindKeyByMemberAsync(Guid.Empty, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindKeyByMember_IgnoraLosBorrados()
+    {
+        // Un expediente archivado no le devuelve el portal a nadie.
+        var sut = BuildSut();
+        var memberKey = Guid.NewGuid();
+        await sut.UpsertAsync(PatientOf(memberKey, "Archivado", deleted: true), CancellationToken.None);
+
+        Assert.Null(await sut.FindKeyByMemberAsync(memberKey, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindKeyByMember_ConDosVigentes_DevuelveElMasReciente()
+    {
+        // Dos expedientes vigentes por miembro es dato corrupto, no un caso de negocio. Se
+        // sirve el más nuevo en vez de fallar: negarle el portal a un paciente por una
+        // inconsistencia del almacén es peor.
+        var sut = BuildSut();
+        var memberKey = Guid.NewGuid();
+        await sut.UpsertAsync(
+            PatientOf(memberKey, "Viejo", created: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            CancellationToken.None);
+        var nuevo = await sut.UpsertAsync(
+            PatientOf(memberKey, "Nuevo", created: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            CancellationToken.None);
+
+        Assert.Equal(nuevo, await sut.FindKeyByMemberAsync(memberKey, CancellationToken.None));
+    }
+
     [Fact]
     public async Task Upsert_New_AssignsKey_And_Get_RoundTrips()
     {

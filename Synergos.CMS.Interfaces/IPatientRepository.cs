@@ -24,6 +24,31 @@ public interface IPatientRepository
 
     /// <summary>Resúmenes (sin PHI clínica) de los pacientes vigentes, filtrables.</summary>
     Task<IReadOnlyList<PatientSummary>> ListAsync(PatientQuery query, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// La clave CLÍNICA del paciente vinculado a <paramref name="memberKey"/>, o null si ese
+    /// miembro no tiene expediente.
+    /// </summary>
+    /// <remarks>
+    /// <b>Es la pieza que faltaba para que el portal del paciente exista.</b> El auto-acceso
+    /// de <see cref="IPhiAccessGuard"/> ya deja que un paciente LEA lo suyo, pero todos los
+    /// endpoints se direccionan por <c>PatientKey</c> — y <c>PatientKey ≠ MemberKey</c> a
+    /// propósito, para que el RTBF de un Member no deje PHI huérfana. El resultado es que el
+    /// permiso existía y era inalcanzable: un paciente tendría que adivinar un GUID que nadie
+    /// le dice.
+    ///
+    /// <para><b>Devuelve SOLO la clave, nunca el expediente.</b> Es lo que la hace segura de
+    /// llamar antes de autorizar: el llamador la usa para poder nombrar el recurso sobre el
+    /// que va a pedir permiso, y cualquier dato clínico sigue pasando por el guard. Una
+    /// versión que devolviera el <see cref="PatientRecord"/> convertiría este método en una
+    /// puerta trasera al lado del guard.</para>
+    ///
+    /// <para>Un miembro tiene como mucho UN expediente vigente. Si hubiera más de uno —dato
+    /// corrupto, no un caso de negocio— la implementación devuelve el más reciente y no
+    /// falla: negarle el portal a un paciente por una inconsistencia del almacén es peor que
+    /// servirle su expediente más nuevo.</para>
+    /// </remarks>
+    Task<Guid?> FindKeyByMemberAsync(Guid memberKey, CancellationToken cancellationToken);
 }
 
 /// <summary>

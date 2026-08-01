@@ -23,19 +23,70 @@ public sealed class HealthcareApiController : ControllerBase
     private readonly IAppointmentScheduler _appointments;
     private readonly IPrescriptionService _prescriptions;
     private readonly IConsentLedger _consent;
+    private readonly IMemberAccessGate _gate;
 
     public HealthcareApiController(
         IPhiAccessGuard guard,
         IPatientRepository patients,
         IAppointmentScheduler appointments,
         IPrescriptionService prescriptions,
-        IConsentLedger consent)
+        IConsentLedger consent,
+        IMemberAccessGate gate)
     {
         _guard = guard;
         _patients = patients;
         _appointments = appointments;
         _prescriptions = prescriptions;
         _consent = consent;
+        _gate = gate;
+    }
+
+    /// <summary>
+    /// El expediente del paciente que está pidiendo. Es la puerta del portal del paciente.
+    /// </summary>
+    /// <remarks>
+    /// <b>Sin este endpoint el portal no podía existir</b>, y no por falta de permiso: el
+    /// auto-acceso del guard ya deja que un paciente lea lo suyo, pero cada endpoint se
+    /// direcciona por <c>patientKey</c>, que es una clave clínica DISTINTA del
+    /// <c>MemberKey</c> —así lo exige el RTBF— y que nadie le dice al paciente. El permiso
+    /// estaba concedido y era inalcanzable: había que adivinar un GUID.
+    ///
+    /// <para><b>El orden de las tres operaciones es la parte de seguridad.</b>
+    /// (1) Se corta al anónimo ANTES de tocar el repositorio, que es la propiedad que
+    /// <c>GetPatient_Anonymous_Returns401</c> ya fija para el resto del controller.
+    /// (2) Se resuelve la clave a partir del miembro de la sesión —nunca de un parámetro—,
+    /// así que no hay forma de preguntar por el expediente de otro: no existe entrada donde
+    /// escribir un ajeno.
+    /// (3) Y aun así se pasa por el guard, que es quien AUDITA. Saltárselo porque "es su
+    /// propio expediente" dejaría el único acceso sin rastro, justo el que más lo necesita.</para>
+    ///
+    /// <para>Un miembro sin expediente recibe 404 y no un cuerpo vacío: es la respuesta
+    /// honesta, y no distingue "no tienes" de "no existe" para nadie más, porque solo se
+    /// puede preguntar por uno mismo.</para>
+    /// </remarks>
+    [HttpGet("me")]
+    public async Task<IActionResult> Me(CancellationToken ct)
+    {
+        if (!_gate.IsAuthenticated || _gate.CurrentMemberKey is not Guid memberKey)
+        {
+            return Unauthorized();
+        }
+
+        // Solo la CLAVE, nunca el expediente: es lo que hace segura esta lectura antes del
+        // guard. Sin ella no se puede nombrar el recurso sobre el que se pide permiso.
+        var patientKey = await _patients.FindKeyByMemberAsync(memberKey, ct);
+        if (patientKey is null)
+        {
+            return NotFound();
+        }
+
+        if (await DenyAsync("patient-record", "read", patientKey, ct) is { } denied)
+        {
+            return denied;
+        }
+
+        var record = await _patients.GetAsync(patientKey.Value, ct);
+        return record is null ? NotFound() : Ok(record);
     }
 
     // ── Pacientes ──────────────────────────────────────────────
