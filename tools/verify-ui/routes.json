@@ -1,0 +1,22 @@
+{
+  "_comment": "Inventario de rutas de la Fase 4. Los `path` dependen del contenido sembrado en la Fase 3 — ajustalos a los slugs reales antes de correr. Un 404 se reporta como NO-SEMBRADO, no como verde.",
+  "routes": [
+    { "name": "SiteRoot",           "path": "/",                      "landmarks": ["main"],                "seo": true,  "critical": true },
+    { "name": "PlatformRoot",       "path": "/platform",              "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "PageBase",           "path": "/pagina-base",           "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "PageBasic",          "path": "/pagina-basica",         "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "PageBare",           "path": "/pagina-bare",           "landmarks": [],                      "seo": true,  "critical": false },
+    { "name": "PageLanding",        "path": "/landing",               "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "PostPage",           "path": "/blog/primer-post",      "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "PostCategoryPage",   "path": "/blog",                  "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "AuthorPage",         "path": "/blog/autores/admin",    "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "ProductPage",        "path": "/shop/producto-demo",    "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "ProductCategoryPage","path": "/shop",                  "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "SearchPage",         "path": "/buscar?q=synergos",     "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "FlowDefinition",     "path": "/flujo-demo",            "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "FlowStep",           "path": "/flujo-demo/paso-1",     "landmarks": ["main"],                "seo": true,  "critical": false },
+    { "name": "Error404",           "path": "/esta-ruta-no-existe",   "landmarks": [],                      "seo": false, "critical": true, "expectStatus": 404 },
+    { "name": "Health",             "path": "/_health",               "landmarks": [],                      "seo": false, "critical": true, "expectAnyStatus": true, "endpoint": true },
+    { "name": "BackofficeLogin",    "path": "/umbraco",               "landmarks": [],                      "seo": false, "critical": true, "expectAnyStatus": true }
+  ]
+}
