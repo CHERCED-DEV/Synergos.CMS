@@ -108,7 +108,7 @@ public class StubReactionServiceTests
         await svc.ReactAsync("act-1", "obj-7", "like");
         await svc.ReactAsync("act-2", "obj-7", "love");
 
-        Assert.Equal(2, svc.CountFor("obj-7"));
-        Assert.Equal(0, svc.CountFor("obj-vacio"));
+        Assert.Equal(2, await svc.CountForAsync("obj-7"));
+        Assert.Equal(0, await svc.CountForAsync("obj-vacio"));
     }
 }
