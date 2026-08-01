@@ -418,7 +418,14 @@ public sealed class SeamComposer : IComposer
         //   - IMessagingService (P7 v1, GENÉRICO): hilos 1:1 comprador↔vendedor
         //     (post-venta). ThreadId determinista por (contexto+par) — sin hilos
         //     duplicados. v1 simple; SH-7 v2/v3 (DM/In Basket) agregan encima.
-        services.AddSingleton<IUserCollection, StubUserCollection>();
+        // Durabilidad (ADR 0105) — el seam de MAYOR impacto de esta tanda: lo comparten la
+        // wishlist de Tienda, los favoritos de Propiedades y los guardados de Blogs. Un
+        // reinicio borraba las tres listas de un solo golpe, en tres verticales distintos.
+        services.AddSingleton<IUserCollection>(sp =>
+            new StubUserCollection(
+                null,
+                sp.GetRequiredService<IJsonEntityStore>(),
+                StubUserCollection.DefaultResourceType));
         // ADR 0116 fase 6 — el timeline pasa a disco. Cada dominio con su
         // ESPACIO propio: los cuatro pipelines tienen distinta longitud y el
         // estado guarda el índice de etapa, así que compartir espacio haría que
@@ -453,7 +460,13 @@ public sealed class SeamComposer : IComposer
                 // órdenes y pagos ya estaban persistidos: un reinicio borraba
                 // la devolución que un comprador ya había pedido.
                 sp.GetRequiredService<IJsonEntityStore>()));
-        services.AddSingleton<IMessagingService, StubMessagingService>();
+        // Durabilidad (ADR 0105): un mensaje directo que alguien ya envió sobrevive el
+        // reinicio, que es lo mínimo que un usuario espera de un buzón.
+        services.AddSingleton<IMessagingService>(sp =>
+            new StubMessagingService(
+                null,
+                sp.GetRequiredService<IJsonEntityStore>(),
+                StubMessagingService.DefaultResourceType));
 
         // OLA 3 Blogs — red social (doc blogs-app-spec). Seams stub-first, aditivos
         // (no tocan Booking/Travel/Shop). ADR 0002 (Application pura, sin Umbraco) +
@@ -471,17 +484,35 @@ public sealed class SeamComposer : IComposer
         //     (actor,objeto), conteos por tipo + estado-por-usuario). Estado en memoria.
         //   - ISocialProfileProjection: Member → perfil social (handle/bio/banner) para
         //     el header del perfil. Stub sobre el catálogo sembrado.
-        // Singletons — el estado social (grafo/reacciones/posts creados) vive en el
-        // proceso, igual que StubReactionService de healthcare/reservas. El stub de
-        // ContentStream pide el StubReactionService concreto para leer conteos O(1):
-        // registramos el concreto y lo exponemos bajo la interfaz (composición manual).
-        services.AddSingleton<StubReactionService>();
+        // Durabilidad (ADR 0105): el grafo, las reacciones y los posts creados viven tras el
+        // store con namespace propio. El stub de ContentStream pide el StubReactionService
+        // concreto para leer conteos en UNA pasada: registramos el concreto y lo exponemos
+        // bajo la interfaz (composición manual).
+        //
+        // La siembra NO se escribe en boot (ADR 0013): un documento ausente cae al seed, y la
+        // primera mutación escribe uno que desde entonces GANA sobre él. Es lo que hace que
+        // dejar de seguir a alguien sembrado sobreviva un reinicio en vez de re-sembrarse.
+        //
+        // INotificationFeed y ISocialProfileProjection siguen igual a propósito: ninguno
+        // guarda estado propio. El feed de notificaciones se DERIVA del grafo y de las
+        // reacciones, así que hacer durables esos dos lo hizo durable por composición; darle
+        // store propio duplicaría justo el estado que existe para no duplicar.
+        services.AddSingleton(sp =>
+            new StubReactionService(
+                sp.GetRequiredService<IJsonEntityStore>(),
+                StubReactionService.DefaultResourceType));
         services.AddSingleton<IReactionService>(sp => sp.GetRequiredService<StubReactionService>());
-        services.AddSingleton<ISocialGraphService, StubSocialGraphService>();
+        services.AddSingleton<ISocialGraphService>(sp =>
+            new StubSocialGraphService(
+                sp.GetRequiredService<IJsonEntityStore>(),
+                StubSocialGraphService.DefaultResourceType));
         services.AddSingleton<IContentStream>(sp =>
             new StubContentStream(
                 sp.GetRequiredService<ISocialGraphService>(),
-                sp.GetRequiredService<StubReactionService>()));
+                sp.GetRequiredService<StubReactionService>(),
+                null,
+                sp.GetRequiredService<IJsonEntityStore>(),
+                StubContentStream.DefaultResourceType));
         services.AddSingleton<ISocialProfileProjection, StubSocialProfileProjection>();
 
         // OLA 6 Blogs (doc 21 §2.3) — app social completa sobre el motor social ya

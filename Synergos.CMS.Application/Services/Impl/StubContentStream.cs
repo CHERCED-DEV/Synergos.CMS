@@ -1,16 +1,16 @@
-using System.Collections.Concurrent;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
 /// <summary>
 /// Default <see cref="IContentStream"/> — feed/contenido (dominio Blogs — red
-/// social) STUB con un feed sembrado en memoria del proceso. Implementa el
-/// stream paginado por cursor (Para ti / Siguiendo / perfil), el detalle de un
-/// item y la creación de items nuevos (optimistic insert al top). Compone
-/// <see cref="ISocialGraphService"/> (para derivar el feed "Siguiendo") e
-/// <see cref="IReactionService"/> (para las métricas de reacciones), reusando
-/// los otros seams sin duplicar estado (DIP, ADR 0002).
+/// social). Implementa el stream paginado por cursor (Para ti / Siguiendo /
+/// perfil), el detalle de un item y la creación de items nuevos (optimistic
+/// insert al top). Compone <see cref="ISocialGraphService"/> (para derivar el
+/// feed "Siguiendo") e <see cref="IReactionService"/> (para las métricas de
+/// reacciones), reusando los otros seams sin duplicar estado (DIP, ADR 0002).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -23,20 +23,41 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// <para>
 /// Lógica pura en <c>Synergos.CMS.Application</c> — cero Umbraco/AspNetCore (ADR
 /// 0002). Cursor opaco = índice de offset codificado; estable y determinista.
-/// ADR 0075 (seam con tests). Singleton — los items creados viven en el proceso.
+/// ADR 0075 (seam con tests).
 /// </para>
+///
+/// <para><b>Durabilidad.</b> Los items creados viven detrás de
+/// <see cref="IJsonEntityStore"/> (ADR 0105) y ya no en un diccionario del
+/// proceso: un reinicio borraba todo lo que alguien hubiera publicado, dejando
+/// solo la semilla de la demo. La semilla NO se persiste — es contenido de
+/// código (<see cref="SocialDemoSeed.Posts"/>), no del usuario.</para>
+///
+/// <para><b>Costo de lectura.</b> Una página de feed recorre DOS espacios
+/// completos: los items creados (para unirlos a la semilla y poder ordenar y
+/// filtrar sobre el conjunto) y los totales de reacciones —este último con UNA
+/// sola llamada (<see cref="StubReactionService.CountsForAllAsync"/>), no una
+/// lectura por item. El detalle de un item, en cambio, son dos lecturas
+/// puntuales. No se cachea a propósito: en este repo una caché se entrega junto
+/// con su invalidador y su consumidor, nunca antes.</para>
 /// </remarks>
 public sealed class StubContentStream : IContentStream
 {
     private const string CursorPrefix = "off:";
 
+    /// <summary>Familia de entidades en el store genérico (→ App_Data/syn-social-stream/).</summary>
+    public const string DefaultResourceType = "social-stream";
+
+    private static readonly JsonSerializerOptions _json = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     private readonly ISocialGraphService _graph;
     private readonly StubReactionService _reactions;
     private readonly Func<DateTime> _utcNow;
-
-    // Items creados en runtime (más reciente primero se logra por CreatedUtc).
-    private readonly ConcurrentDictionary<string, ContentStreamItem> _created =
-        new(StringComparer.Ordinal);
+    private readonly IJsonEntityStore _store;
+    private readonly string _resourceType;
 
     public StubContentStream(ISocialGraphService graph, IReactionService reactions)
         : this(graph, reactions, null)
@@ -46,10 +67,31 @@ public sealed class StubContentStream : IContentStream
     /// <summary>
     /// Ctor con time source inyectable (<paramref name="utcNow"/>) para
     /// determinismo en tests. El stub depende del <see cref="StubReactionService"/>
-    /// concreto para leer los conteos de reacción O(1) (las métricas del feed son
-    /// una proyección de las reacciones — no se duplican).
+    /// concreto para leer los conteos de reacción en bloque (las métricas del feed
+    /// son una proyección de las reacciones — no se duplican).
     /// </summary>
     public StubContentStream(ISocialGraphService graph, IReactionService reactions, Func<DateTime>? utcNow)
+        : this(graph, reactions, utcNow, null, null)
+    {
+    }
+
+    /// <summary>
+    /// Ctor completo: <paramref name="store"/> es el backing store durable
+    /// (FileSystem en Web, InMemory en tests) y <paramref name="storeNamespace"/>
+    /// separa el stream de las otras familias sociales.
+    /// </summary>
+    /// <param name="graph">Grafo social — deriva el feed "Siguiendo".</param>
+    /// <param name="reactions">El <see cref="StubReactionService"/> concreto.</param>
+    /// <param name="utcNow">Reloj inyectable para los tests. Null usa el del sistema.</param>
+    /// <param name="store">Backing store durable. Null deja los items en memoria.</param>
+    /// <param name="storeNamespace">Familia de entidades. Null usa
+    ///   <see cref="DefaultResourceType"/>.</param>
+    public StubContentStream(
+        ISocialGraphService graph,
+        IReactionService reactions,
+        Func<DateTime>? utcNow,
+        IJsonEntityStore? store,
+        string? storeNamespace)
     {
         _graph = graph ?? throw new ArgumentNullException(nameof(graph));
         _reactions = reactions as StubReactionService
@@ -57,6 +99,8 @@ public sealed class StubContentStream : IContentStream
                 "StubContentStream espera el StubReactionService concreto para proyectar métricas.",
                 nameof(reactions));
         _utcNow = utcNow ?? (() => DateTime.UtcNow);
+        _store = store ?? new InMemoryJsonEntityStore();
+        _resourceType = string.IsNullOrWhiteSpace(storeNamespace) ? DefaultResourceType : storeNamespace;
     }
 
     public async Task<ContentStreamPage> GetFeedAsync(FeedQuery query, CancellationToken cancellationToken = default)
@@ -65,7 +109,7 @@ public sealed class StubContentStream : IContentStream
         var pageSize = query.PageSize <= 0 ? 20 : query.PageSize;
 
         // 1) Conjunto base de items (semilla + creados), más reciente primero.
-        IEnumerable<ContentStreamItem> items = AllItems();
+        IEnumerable<ContentStreamItem> items = await AllItemsAsync(cancellationToken).ConfigureAwait(false);
 
         // 2) Filtro por kind (clave del polimorfismo: Educación pasa "lesson").
         if (!string.IsNullOrWhiteSpace(query.Kind))
@@ -112,19 +156,33 @@ public sealed class StubContentStream : IContentStream
         return new ContentStreamPage(pageItems, nextCursor);
     }
 
-    public Task<ContentStreamItem?> GetItemAsync(string id, CancellationToken cancellationToken = default)
+    public async Task<ContentStreamItem?> GetItemAsync(string id, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(id))
         {
-            return Task.FromResult<ContentStreamItem?>(null);
+            return null;
         }
 
-        var item = AllItems().FirstOrDefault(i =>
-            string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
-        return Task.FromResult(item);
+        // Camino rápido: lectura puntual del store + la semilla, que vive en memoria.
+        var item = TryParse(await _store.ReadAsync(_resourceType, id, cancellationToken).ConfigureAwait(false))
+            ?? SeededItems().FirstOrDefault(i =>
+                string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
+
+        // El contrato matchea el id case-INsensitive y la clave del store no, así
+        // que un id con otro casing todavía debe resolver: recorrido de respaldo.
+        item ??= (await LoadCreatedAsync(cancellationToken).ConfigureAwait(false))
+            .FirstOrDefault(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
+
+        if (item is null)
+        {
+            return null;
+        }
+
+        var count = await _reactions.CountForAsync(item.Id, cancellationToken).ConfigureAwait(false);
+        return WithReactions(item, count);
     }
 
-    public Task<ContentStreamItem> CreateAsync(NewContentItem item, CancellationToken cancellationToken = default)
+    public async Task<ContentStreamItem> CreateAsync(NewContentItem item, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);
         if (string.IsNullOrWhiteSpace(item.AuthorId))
@@ -146,14 +204,29 @@ public sealed class StubContentStream : IContentStream
             CreatedUtc: _utcNow(),
             Metrics: new ContentMetrics(0, 0, 0));
 
-        _created[id] = created;
-        return Task.FromResult(created);
+        await _store.WriteAsync(_resourceType, id, JsonSerializer.Serialize(created, _json), cancellationToken)
+            .ConfigureAwait(false);
+        return created;
     }
 
     // Semilla + creados, más reciente primero, con métricas frescas de reacciones.
-    private IEnumerable<ContentStreamItem> AllItems()
+    private async Task<List<ContentStreamItem>> AllItemsAsync(CancellationToken cancellationToken)
     {
-        var seeded = SocialDemoSeed.Posts.Select(p => new ContentStreamItem(
+        var created = await LoadCreatedAsync(cancellationToken).ConfigureAwait(false);
+        // UN recorrido del espacio de reacciones para TODO el feed — no una
+        // lectura puntual por item.
+        var counts = await _reactions.CountsForAllAsync(cancellationToken).ConfigureAwait(false);
+
+        return SeededItems()
+            .Concat(created)
+            .OrderByDescending(i => i.CreatedUtc)
+            .ThenBy(i => i.Id, StringComparer.Ordinal)
+            .Select(i => WithReactions(i, counts.TryGetValue(i.Id, out var c) ? c : 0))
+            .ToList();
+    }
+
+    private static IEnumerable<ContentStreamItem> SeededItems()
+        => SocialDemoSeed.Posts.Select(p => new ContentStreamItem(
             Id: p.Id,
             Kind: p.Kind,
             Author: SocialDemoSeed.AuthorById(p.AuthorId),
@@ -162,17 +235,46 @@ public sealed class StubContentStream : IContentStream
             CreatedUtc: SocialDemoSeed.Epoch.AddMinutes(p.OffsetMinutes),
             Metrics: new ContentMetrics()));
 
-        return seeded
-            .Concat(_created.Values)
-            .OrderByDescending(i => i.CreatedUtc)
-            .ThenBy(i => i.Id, StringComparer.Ordinal)
-            .Select(WithLiveMetrics);
+    /// <summary>
+    /// Los items publicados por usuarios. Un documento ilegible se SALTA — un
+    /// post corrupto no puede tumbar el feed entero.
+    /// </summary>
+    private async Task<List<ContentStreamItem>> LoadCreatedAsync(CancellationToken cancellationToken)
+    {
+        var raws = await _store.ListAsync(_resourceType, cancellationToken).ConfigureAwait(false);
+        var items = new List<ContentStreamItem>(raws.Count);
+        foreach (var json in raws)
+        {
+            var item = TryParse(json);
+            if (item is not null)
+            {
+                items.Add(item);
+            }
+        }
+        return items;
+    }
+
+    private static ContentStreamItem? TryParse(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+        try
+        {
+            var item = JsonSerializer.Deserialize<ContentStreamItem>(json, _json);
+            return item is null || string.IsNullOrWhiteSpace(item.Id) ? null : item;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     // Las métricas de reacción se proyectan en vivo desde el IReactionService —
     // no se duplica el contador en el item (single source of truth).
-    private ContentStreamItem WithLiveMetrics(ContentStreamItem item)
-        => item with { Metrics = item.Metrics with { Reactions = _reactions.CountFor(item.Id) } };
+    private static ContentStreamItem WithReactions(ContentStreamItem item, int reactions)
+        => item with { Metrics = item.Metrics with { Reactions = reactions } };
 
     private static string EncodeCursor(int offset) => $"{CursorPrefix}{offset}";
 

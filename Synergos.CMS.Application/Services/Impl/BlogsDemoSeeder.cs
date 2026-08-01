@@ -11,11 +11,16 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// invoca desde un hosted service al boot.
 /// </summary>
 /// <remarks>
-/// Idempotente: <see cref="IMessagingService.StartThreadAsync"/> es idempotente
-/// por (contexto + par) y <see cref="IUserCollection.AddAsync"/> por (owner +
-/// colección + ítem). Re-ejecutar no duplica. No siembra schema/DB de Umbraco —
-/// solo hidrata stubs in-memory de demo (mismo espíritu que
-/// <see cref="StubSocialGraphService"/> sembrando el grafo en su ctor).
+/// <para>Idempotente. <see cref="IUserCollection.AddAsync"/> lo es por (owner +
+/// colección + ítem), así que los guardados se re-siembran sin duplicar.
+/// <see cref="IMessagingService.StartThreadAsync"/>, en cambio, es idempotente
+/// en el HILO pero NO en el MENSAJE: siempre agrega el cuerpo que recibe.
+/// Mientras la mensajería vivía en memoria eso daba igual —cada arranque partía
+/// de cero—, pero con el store durable (ADR 0105) re-sembrar volvería a
+/// APPENDear los mismos mensajes en cada reinicio, creciendo sin límite. Por eso
+/// la siembra de DMs verifica antes si el hilo ya existe con mensajes.</para>
+/// <para>No siembra schema/DB de Umbraco — solo hidrata la data de demo de los
+/// seams genéricos.</para>
 /// </remarks>
 public static class BlogsDemoSeeder
 {
@@ -56,6 +61,17 @@ public static class BlogsDemoSeeder
             var first = thread.Messages[0];
             var to = participants.First(p =>
                 !string.Equals(p, first.From, StringComparison.OrdinalIgnoreCase));
+
+            // Con la mensajería durable, el hilo sobrevive el reinicio: volver a
+            // sembrarlo APPENDearía los mismos mensajes otra vez (StartThreadAsync
+            // agrega, no deduplica). Si ya está sembrado, no se re-siembra.
+            var inbox = await messaging.GetInboxAsync(first.From, cancellationToken);
+            if (inbox.Any(t =>
+                    string.Equals(t.ContextRef, SocialDemoSeed.DmContext, StringComparison.Ordinal)
+                    && t.Participants.Any(p => string.Equals(p, to, StringComparison.OrdinalIgnoreCase))))
+            {
+                continue;
+            }
 
             var state = await messaging.StartThreadAsync(
                 SocialDemoSeed.DmContext, first.From, to, first.Body, cancellationToken);
