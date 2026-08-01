@@ -38,3 +38,11 @@ syn-cta-group
 # se estilan solas. El wrapper no tiene identidad visual propia.
 # (Views/Partials/blockgrid/Components/elementLayoutSnippetRef.cshtml)
 syn-snippet-ref
+
+# Hook de identidad de página, sin pinta propia por diseño. La tag page del
+# blog REUSA el post-card canónico de la categoría para paridad visual con
+# PostCategoryPage: toda la pinta la pone `.syn-post-category*`, que sí está
+# estilado (syn-pages.css:998+). `syn-blog-tag` va al lado solo para poder
+# distinguir la página en un override futuro sin tener que tocar el markup.
+# (Views/Shared/BlogTag.cshtml — Ola 230, ADR 0100)
+syn-blog-tag
