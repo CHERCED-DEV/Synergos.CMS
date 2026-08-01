@@ -178,18 +178,51 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<ITransactionalNotifierChannel, EmailTransactionalNotifier>();
         services.AddSingleton<ITransactionalNotifier, CompositeTransactionalNotifier>();
 
+        // ADR 0116 — el motor de pago admite N proveedores detrás del MISMO
+        // contrato. Los adapters concretos se registran siempre que tengan
+        // llaves; quién cobra cada petición lo decide el router.
+        //
+        // Con Routing:Enabled=false (default) se registra un proveedor único y
+        // el comportamiento es idéntico al de antes: el router es capacidad
+        // nueva, no un peaje obligatorio.
         var paymentProvider = builder.Config["Synergos:Payments:Provider"] ?? "Stub";
-        switch (paymentProvider.ToLowerInvariant())
+        var routingEnabled = builder.Config.GetValue<bool>("Synergos:Payments:Routing:Enabled");
+
+        if (routingEnabled)
         {
-            // case "wompi":  // Ola B (gated): requiere WompiPaymentProvider + llaves.
-            //     services.AddSingleton<IPaymentProvider, WompiPaymentProvider>();
-            //     break;
-            default:
-                services.AddSingleton<IPaymentProvider>(sp =>
-                    new StubPaymentProvider(
-                        sp.GetRequiredService<IJsonEntityStore>(),
-                        sp.GetRequiredService<IOptions<PaymentsSettings>>().Value));
-                break;
+            services.AddSingleton<IPaymentProvider>(sp =>
+            {
+                var settings = sp.GetRequiredService<IOptions<PaymentsSettings>>().Value;
+                var store = sp.GetRequiredService<IJsonEntityStore>();
+
+                // El stub siempre está disponible: es el destino de rollback si
+                // un adapter real se cae o si una regla lo manda a "stub".
+                var members = new List<IPaymentProvider> { new StubPaymentProvider(store, settings) };
+
+                var rules = settings.Routing.Rules
+                    .Where(r => !string.IsNullOrWhiteSpace(r.ProviderKey))
+                    .Select(r => new PaymentRoutingRule(
+                        r.ProviderKey, r.Vertical, r.CountryCode, r.Currency, r.Method))
+                    .ToList();
+
+                return new RoutingPaymentProvider(
+                    members, rules, settings.Routing.DefaultProviderKey);
+            });
+        }
+        else
+        {
+            switch (paymentProvider.ToLowerInvariant())
+            {
+                // case "wompi":  // requiere WompiPaymentProvider + llaves (fase 3).
+                //     services.AddSingleton<IPaymentProvider, WompiPaymentProvider>();
+                //     break;
+                default:
+                    services.AddSingleton<IPaymentProvider>(sp =>
+                        new StubPaymentProvider(
+                            sp.GetRequiredService<IJsonEntityStore>(),
+                            sp.GetRequiredService<IOptions<PaymentsSettings>>().Value));
+                    break;
+            }
         }
 
         // Motor de reservas (vertical Hoteles) — 3 seams stub-first (doc 17),
