@@ -1,6 +1,6 @@
 # ADR 0116 — El motor de pagos es una seam TRANSVERSAL y polimórfica: un router que es el mismo contrato, tres formas de "requiere acción", y un despacho de eventos que no es de Tienda
 
-- **Status:** **Accepted — parcialmente construido.** El arquitecto respondió las tres preguntas abiertas: Wompi como primer adaptador, la forma se rompe ahora, y se trabaja todo. Fases 1-4 completas y fase 5 casi (5 de 6 defectos reales); fase 6 pendiente. Ver §Estado de construcción.
+- **Status:** **Accepted — parcialmente construido.** El arquitecto respondió las tres preguntas abiertas: Wompi como primer adaptador, la forma se rompe ahora, y se trabaja todo. Fases 1-4 y 6 completas; fase 5 en 5 de 6 defectos reales. Sólo queda `DeliveredAt` + operar el pipeline post-pago. Ver §Estado de construcción.
 - **Date:** 2026-08-01
 - **Deciders:** Arquitecto (encargo textual: *"como todas van a tener pagos, hacer bien payment, que se pueda reinstanciar o reutilizar o polimorfizar, es muy ganador"*) + agente.
 - **Investigación:** cuatro barridos paralelos, dos sobre código y dos con búsqueda web autorizada. Anexos en `docs/product/investigacion-pagos/` (871 líneas, con URLs y fechas).
