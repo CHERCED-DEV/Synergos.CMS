@@ -1,6 +1,11 @@
 # ADR 0126 — Un elemento que otro bundle embebe no lleva DocType
 
-- **Estado:** Aceptado
+- **Estado:** Aceptado — **enmendado por el [ADR 0127](0127-el-cms-configura-el-mapa-de-asientos-y-un-proveedor-exogeno-lo-llena.md)**
+- **Enmienda:** `elementSynSeatMap` SÍ lleva DocType, para CONFIGURACIÓN (qué cabina, cuántas
+  butacas, qué moneda) — nunca para inventario. El test que este ADR propone —«¿otro bundle
+  embebe su tag?»— resultó **necesario pero no suficiente**: una pieza puede estar embebida
+  por `eventos` y además ser un bloque colocable con su propia configuración. `pax-selector`
+  sigue siendo el caso puro y sigue sin DocType. Lee el 0127 antes de aplicar la regla de abajo.
 - **Fecha:** 2026-08-01
 - **Complementa:** ADR 0012 (contrato CDN consumido), ADR 0015 (SynHost framework-agnóstico),
   ADR 0083 (la UI es la fuente de verdad de las claves), ADR 0117 (aforo y asientos como

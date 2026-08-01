@@ -133,6 +133,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0124](0124-el-id-de-un-certificado-era-calculable-por-cualquiera.md) | El id de un certificado era calculable por cualquiera: FNV-1a de 31 bits sin secreto, ahora HMAC firmado | Accepted |
 | [0125](0125-la-credencial-por-url-se-conserva-pero-deja-rastro.md) | La credencial por URL se conserva, pero deja rastro: la cancelación anónima se audita en Viajes y Booking | Accepted |
 | [0126](0126-un-elemento-que-otro-bundle-embebe-no-lleva-doctype.md) | Un elemento que otro bundle embebe no lleva DocType: seat-map y pax-selector no eran deuda sino piezas de composición | Accepted |
+| [0127](0127-el-cms-configura-el-mapa-de-asientos-y-un-proveedor-exogeno-lo-llena.md) | El CMS configura el mapa de asientos y un proveedor exógeno lo llena — enmienda el 0126 | Accepted |
 
 ## Rules
 
