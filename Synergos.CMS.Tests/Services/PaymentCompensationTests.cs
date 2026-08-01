@@ -161,4 +161,102 @@ public sealed class PaymentCompensationTests
         await reservations.Received(1)
             .ConfirmAsync("hold_1", "sess_1", Arg.Any<CancellationToken>());
     }
+
+    // ── Viajes: lo que no se entrega, se devuelve ────────────────────────
+
+    [Fact]
+    public async Task Viajes_lo_que_NO_se_pudo_confirmar_se_REEMBOLSA()
+    {
+        // Antes: el carrito quedaba en "Partial" y el dinero de lo no entregado
+        // se quedaba acá. El cliente pagó vuelo + hotel, recibió sólo el vuelo,
+        // y nadie le devolvió el hotel.
+        var reservations = Substitute.For<IReservationService>();
+        var psp = Substitute.For<IPaymentProvider>();
+        psp.ProviderKey.Returns("test");
+        psp.CreateSessionAsync(Arg.Any<PaymentSessionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new PaymentSession("sess_1", PaymentStatus.Authorized, null, "test"));
+        psp.CaptureAsync(Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<CancellationToken>())
+            .Returns(new PaymentOutcome("sess_1", PaymentStatus.Captured, 300_000m));
+        psp.RefundAsync(Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<CancellationToken>())
+            .Returns(new PaymentOutcome("sess_1", PaymentStatus.Refunded, 100_000m));
+
+        var held = 0;
+        reservations.HoldItemAsync(Arg.Any<TravelItemReservationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                held++;
+                return new Reservation($"res_{held}", ReservationStatus.Held, "x", "y",
+                    DateOnly.FromDateTime(DateTime.UtcNow), DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+                    "Ana", "ana@x.co", held == 1 ? 200_000m : 100_000m, "COP");
+            });
+
+        // El primer ítem confirma; el SEGUNDO tiene el hold vencido.
+        reservations.ConfirmAsync("res_1", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new Reservation("res_1", ReservationStatus.Confirmed, "x", "y",
+                DateOnly.FromDateTime(DateTime.UtcNow), DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+                "Ana", "ana@x.co", 200_000m, "COP"));
+        reservations.ConfirmAsync("res_2", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<Reservation>(_ => throw new InvalidOperationException("hold vencido"));
+
+        var cart = new TravelCartService(reservations, psp);
+        var checkout = await cart.CheckoutAsync(
+            new[]
+            {
+                new TravelCartItem(TravelProductType.Flight, "of_1", "Vuelo BOG-MDE", 200_000m, "COP"),
+                new TravelCartItem(TravelProductType.Hotel, "of_2", "Hotel 1 noche", 100_000m, "COP"),
+            },
+            new TravelGuest("Ana Torres", "ana@x.co"));
+
+        var result = await cart.ConfirmAsync(checkout.OrderRef);
+
+        Assert.Equal("Partial", result.Status);
+        // Se devuelve EXACTAMENTE lo no entregado, no el total.
+        await psp.Received(1).RefundAsync("sess_1", 100_000m, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Viajes_un_item_caido_NO_tumba_los_que_SI_confirmaron()
+    {
+        // Cancelar todo sería peor servicio y más plata moviéndose sin
+        // necesidad: el cliente se queda con su vuelo.
+        var reservations = Substitute.For<IReservationService>();
+        var psp = Substitute.For<IPaymentProvider>();
+        psp.ProviderKey.Returns("test");
+        psp.CreateSessionAsync(Arg.Any<PaymentSessionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new PaymentSession("sess_1", PaymentStatus.Authorized, null, "test"));
+        psp.CaptureAsync(Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<CancellationToken>())
+            .Returns(new PaymentOutcome("sess_1", PaymentStatus.Captured, 300_000m));
+        psp.RefundAsync(Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<CancellationToken>())
+            .Returns(new PaymentOutcome("sess_1", PaymentStatus.Refunded, 100_000m));
+
+        var held = 0;
+        reservations.HoldItemAsync(Arg.Any<TravelItemReservationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                held++;
+                return new Reservation($"res_{held}", ReservationStatus.Held, "x", "y",
+                    DateOnly.FromDateTime(DateTime.UtcNow), DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+                    "Ana", "ana@x.co", held == 1 ? 200_000m : 100_000m, "COP");
+            });
+        reservations.ConfirmAsync("res_1", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new Reservation("res_1", ReservationStatus.Confirmed, "x", "y",
+                DateOnly.FromDateTime(DateTime.UtcNow), DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+                "Ana", "ana@x.co", 200_000m, "COP"));
+        reservations.ConfirmAsync("res_2", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<Reservation>(_ => throw new InvalidOperationException("hold vencido"));
+
+        var cart = new TravelCartService(reservations, psp);
+        var checkout = await cart.CheckoutAsync(
+            new[]
+            {
+                new TravelCartItem(TravelProductType.Flight, "of_1", "Vuelo BOG-MDE", 200_000m, "COP"),
+                new TravelCartItem(TravelProductType.Hotel, "of_2", "Hotel 1 noche", 100_000m, "COP"),
+            },
+            new TravelGuest("Ana Torres", "ana@x.co"));
+
+        var result = await cart.ConfirmAsync(checkout.OrderRef);
+
+        Assert.Contains(result.Items, i =>
+            string.Equals(i.Status, ReservationStatus.Confirmed.ToString(), StringComparison.Ordinal));
+    }
 }
