@@ -1,0 +1,46 @@
+# Contexto de build para el Dockerfile. Todo lo que no entre acá no viaja
+# al daemon — importante porque el repo tiene 825 XMLs de uSync y el
+# árbol de docs completo, y el contexto se sube entero en cada build.
+
+# Build output — se regenera dentro de la imagen, y copiarlo desde el host
+# rompe el build (obj/ trae rutas absolutas de Windows en los .props).
+**/bin/
+**/obj/
+artifacts/
+
+# Estado de runtime — NUNCA hornear la DB ni los datos del arquitecto
+# dentro de la imagen. Van por volumen (ver docker-compose.yml).
+Synergos.CMS.Web/umbraco/Data/
+Synergos.CMS.Web/umbraco/Logs/
+Synergos.CMS.Web/umbraco/mediacache/
+Synergos.CMS.Web/umbraco/models/
+Synergos.CMS.Web/App_Data/
+Synergos.CMS.Web/wwwroot/media/
+Synergos.CMS.Web/uSync/uSync.History/
+Synergos.CMS.Web/uSync/uSync.Logs/
+Synergos.CMS.Web/uSync/v9/Content/
+Synergos.CMS.Web/uSync/v9/Media/
+
+# Secretos locales — no deben quedar en una capa de la imagen.
+**/appsettings.Local.json
+**/*.local.json
+**/secrets.json
+.env
+.env.*
+
+# Proyectos que el host web no necesita.
+Synergos.CMS.Tests/
+Synergos.CMS.Benchmarks/
+
+# Ruido de repo / editor / CI.
+.git/
+.github/
+.husky/
+.vs/
+.idea/
+.claude/
+**/node_modules/
+**/TestResults/
+Dockerfile
+.dockerignore
+docker-compose.yml
