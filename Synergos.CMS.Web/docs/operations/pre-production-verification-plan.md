@@ -248,6 +248,26 @@ Búsqueda, carrito (agregar/quitar), envío de formulario con honeypot,
 login/registro de member, comentarios, y los `<synergos-*>` — que sin CDN
 montada deben emitir el **placeholder HTML comment**, no romper.
 
+### Ejecución — harness automatizado
+
+```powershell
+cd tools\verify-ui
+npm ci; npx playwright install chromium     # una vez por máquina
+$env:SYNERGOS_BASE_URL = 'https://synergos.local:5001'
+npm run verify
+npm run report > "$ev\VEREDICTO-ui.md"
+```
+
+Ajustar antes los slugs de `routes.json` a los que haya sembrado la Fase 3.
+El harness clasifica en **tres** cubetas —OK / ROTO / NO-SEMBRADO— y sale
+con exit 1 sólo si hay ROTO, igual que los demás gates del repo. Detalle en
+su [README](../../../tools/verify-ui/README.md).
+
+⚠️ Verificado empíricamente: con la base sin contenido **Umbraco responde
+HTTP 200 en todas las rutas** con su página "No published content". El
+harness la detecta y la marca NO-SEMBRADO; sin eso, el informe acusaría 15
+templates rotos por falta de `<main>` cuando lo que falta es contenido.
+
 **Criterio concluyente:** 15/15 templates con status 2xx y **cero errores
 de consola**. Cualquier template que no se pueda alcanzar por falta de
 contenido se marca **explícitamente como no verificado** — no se cuenta
@@ -293,24 +313,21 @@ Se produce un informe en `$ev\VEREDICTO.md` con:
 
 ---
 
-## 9. Decisiones que necesito de vos antes de ejecutar
+## 9. Decisiones tomadas
 
-Tres, y las tres cambian el plan:
+Las tres quedaron resueltas antes de ejecutar:
 
-1. **¿El agente tiene autorización para ejecutar el uSync Import?**
-   CLAUDE.md §7 dice que el import lo corrés vos manualmente y que el
-   agente no toca la DB. Pilotear la máquina desde Cowork difumina esa
-   línea. Si la regla sigue en pie, las fases 2.b y 2.c son tuyas y el
-   agente sólo verifica antes y después.
-2. **¿Se automatiza Chrome con Playwright?** Da resultados repetibles y
-   screenshots consistentes, que es lo que "concluyente" exige. Pero suma
-   tooling: un `package.json` propio bajo `tools/`, aislado de los
-   proyectos .NET. La alternativa es manual con checklist — más lento y
-   menos reproducible. Es tu llamada.
-3. **¿Sobre qué base se corre?** Empezar de una DB pristina (§4.a) es lo
-   que prueba de verdad el import, pero descarta el estado actual de tu
-   entorno. Si querés conservarlo, el backup de Fase 0 alcanza para
-   volver — pero conviene decidirlo antes, no a mitad.
+1. **El uSync Import lo corre el arquitecto.** Se mantiene CLAUDE.md §7:
+   el agente no toca la DB. El agente prepara la base pristina, ejecuta el
+   Report, avisa, y verifica conteos y drift **antes y después** del clic.
+   Las fases 2.b y 2.c son del arquitecto.
+2. **Chrome se automatiza con Playwright.** Harness en
+   [`tools/verify-ui/`](../../../tools/verify-ui/README.md), con su propio
+   `package.json`, fuera de `Synergos.CMS.sln`. Ya está construido y
+   smoke-tested; baja la Fase 4 de ~90 a ~30 min y queda como regresión
+   reutilizable.
+3. **Se arranca de una DB pristina.** Es lo único que prueba el import de
+   verdad. El backup de la Fase 0 permite volver al estado actual.
 
 ## 10. Estimación
 
@@ -320,7 +337,7 @@ Tres, y las tres cambian el plan:
 | 1 — Verificación estática | 15–20 min |
 | 2 — Arranque + import ⚠️ | 30–45 min |
 | 3 — Contenido de prueba | 20 min |
-| 4 — Chrome, 15 templates | 60–90 min (manual) / 30 min (automatizado) |
+| 4 — Chrome, 15 templates | 30 min (harness automatizado) |
 | 5 — Backoffice | 45–60 min |
 | 6 — Cierre e informe | 30 min |
 | **Total** | **3,5–5 horas** |

@@ -1,0 +1,14 @@
+{
+  "name": "synergos-verify-ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Harness de verificación funcional (Fase 4 del plan pre-producción). Aislado de los proyectos .NET a propósito.",
+  "scripts": {
+    "verify": "playwright test",
+    "report": "node summarize.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  }
+}

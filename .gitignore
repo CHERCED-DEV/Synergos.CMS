@@ -81,3 +81,12 @@ Thumbs.db
 
 # ───────────────────────── Claude Code harness ───────────────────────
 .claude/
+
+# ───────────────────────── Harness de verificación (Fase 4) ──────────
+# El código del harness se versiona; sus salidas no. La evidencia de cada
+# corrida va a synergos-backups\verify-{ts}\ (feedback_backups_external_to_repo).
+tools/verify-ui/node_modules/
+tools/verify-ui/results/
+tools/verify-ui/.pw-artifacts/
+tools/verify-ui/.pw-report/
+tools/verify-ui/VEREDICTO-ui.md
