@@ -373,6 +373,17 @@ public sealed class SeamComposer : IComposer
                 ? new CatalogStayContentProvider(sp.GetRequiredService<ICatalogSource<StayDetail>>())
                 : new StubStayContentProvider());
 
+        // Mapa de asientos (ADR 0127) — proveedor EXÓGENO. El CMS configura QUÉ mapa se
+        // muestra y cómo se ve; el inventario de butacas —cuáles existen, cuáles están libres,
+        // a qué precio— lo publica quien lo conoce. Autorar butacas en un backoffice no es un
+        // modelo de contenido: es una hoja de cálculo que se desincroniza en el primer vuelo.
+        //
+        // El default emula una cabina real (fila 13 ausente, columna I ausente, pasillo donde
+        // lo dicta la distribución, secciones por clase, filas de salida, butacas bloqueadas) y
+        // es DETERMINISTA: la misma referencia da siempre el mismo mapa, para que una demo se
+        // pueda grabar y un test no sea intermitente. Singleton — sin estado, catálogo fijo.
+        services.AddSingleton<ISeatMapProvider, StubCabinSeatMapProvider>();
+
         // OLA 2 Tienda — motor del marketplace e-commerce (doc tienda-app-spec).
         // Dos seams stub-first, aditivos (no tocan Booking/Travel ni el carrito
         // cookie IShopQuery/ICartService de los bloques Razor del CMS). ADR 0002
