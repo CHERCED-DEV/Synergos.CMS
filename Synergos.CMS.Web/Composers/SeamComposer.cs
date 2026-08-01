@@ -986,30 +986,45 @@ public sealed class SeamComposer : IComposer
                     sp.GetRequiredService<ICatalogSource<PropertyDetail>>(),
                     sp.GetRequiredService<IJsonEntityStore>())
                 : new StubPropertyCatalogProvider());
+        // Durabilidad (ADR 0105): los slots apartados viven tras el store genérico, así que
+        // una visita que un comprador ya agendó sobrevive un reinicio. Namespace propio —
+        // compartirlo haría que el estado de un dominio se leyera contra la forma de otro.
         services.AddSingleton<IVisitSchedulingService>(sp =>
-            new StubVisitSchedulingService(sp.GetRequiredService<IReservationService>()));
+            new StubVisitSchedulingService(
+                sp.GetRequiredService<IReservationService>(),
+                null,
+                sp.GetRequiredService<IJsonEntityStore>(),
+                "realty-visits"));
         services.AddSingleton<IMortgageCalculator, StubMortgageCalculator>();
         // OLA 4 Propiedades (doc 21 §2.7) — cara completa: la captura de leads ahora
         // compone el catálogo para resolver el agente dueño del inmueble y alimentar el
         // mini-CRM del agente (kanban Nuevo→Contactado→Visita→Cerrado, avance auditado
         // vía IAuditTrailWriter). El itemRef del lead sigue siendo forense.
+        // Durabilidad (ADR 0105): el lead que un agente está trabajando ya no se pierde en
+        // un reinicio, que era justo el dato que más dolía perder de este vertical.
         services.AddSingleton<ILeadCaptureService>(sp =>
             new StubLeadCaptureService(
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 sp.GetRequiredService<IAnalyticsTracker>(),
                 sp.GetRequiredService<IPropertyCatalogProvider>(),
-                null));
+                null,
+                sp.GetRequiredService<IJsonEntityStore>(),
+                "realty-leads"));
         // OLA 4 Propiedades — búsquedas guardadas + alertas: da SEMÁNTICA a las
         // saved-searches sobre el seam GENÉRICO IUserCollection (colección
         // "saved-searches") + re-ejecuta los criterios contra IPropertyCatalogProvider
         // para contar nuevos matches (la alerta). Los favoritos van directo sobre
-        // IUserCollection (colección "favorites") desde el RealtyController. Singleton —
-        // el índice id→criterios vive en el proceso, igual que el resto de stubs.
+        // IUserCollection (colección "favorites") desde el RealtyController.
+        // Durabilidad (ADR 0105): el índice id→criterios —lo que resuelve la alerta— vive
+        // tras el store. La LISTA de qué búsquedas tiene cada usuario no está aquí: vive en
+        // IUserCollection, y sobrevive por la durabilidad de ESE seam.
         services.AddSingleton<ISavedSearchService>(sp =>
             new StubSavedSearchService(
                 sp.GetRequiredService<IUserCollection>(),
                 sp.GetRequiredService<IPropertyCatalogProvider>(),
-                null));
+                null,
+                sp.GetRequiredService<IJsonEntityStore>(),
+                "realty-saved-searches"));
 
         // +1 GOBIERNO — portal de trámites (doc gobierno-app-spec; rescate D7 doc 21).
         // Seis seams stub-first, aditivos (no tocan los otros verticales). ADR 0002

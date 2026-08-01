@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -16,8 +15,8 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// </summary>
 /// <remarks>
 /// Lógica pura en <c>Synergos.CMS.Application</c> — cero dependencia de
-/// Umbraco/AspNetCore (ADR 0002). NO duplica el almacenamiento: COMPONE (DIP)
-/// <see cref="IUserCollection"/> (persistencia por usuario) +
+/// Umbraco/AspNetCore (ADR 0002). NO duplica el almacenamiento por usuario: COMPONE
+/// (DIP) <see cref="IUserCollection"/> (qué búsquedas tiene cada quien) +
 /// <see cref="IPropertyCatalogProvider"/> (universo a matchear). El id de la búsqueda
 /// es DETERMINISTA por (owner, criterios) → <see cref="SaveAsync"/> es idempotente:
 /// guardar la misma búsqueda dos veces devuelve la misma (el itemRef ya está, el
@@ -25,17 +24,35 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// para reconstruir el registro completo desde la colección genérica sin un store
 /// paralelo. En la demo, "nuevos matches" se SIMULA marcando los destacados como
 /// novedad. ADR 0075.
+///
+/// <para><b>Durabilidad.</b> El índice <c>id → criterios</c> que resuelve la ALERTA
+/// vive detrás de <see cref="IJsonEntityStore"/> (ADR 0105) y ya no en un
+/// diccionario del proceso: un reinicio dejaba a
+/// <see cref="GetMatchesAsync"/> lanzando "búsqueda no encontrada" para búsquedas
+/// que el usuario seguía viendo en su lista — la alerta guardada dejaba de
+/// existir sin que nada lo dijera. Se guarda SOLO el <c>queryJson</c>: es lo único
+/// que se lee de vuelta, y un campo que nadie consume miente sobre lo que promete.</para>
+///
+/// <para>La familia de entidades es PROPIA de este seam
+/// (<c>realty-saved-searches</c>): compartir espacio con visitas o leads haría que
+/// un documento se leyera contra la forma de otro dominio, y una deserialización
+/// que "casi" encaja no falla — devuelve otra cosa en silencio.</para>
 /// </remarks>
 public sealed class StubSavedSearchService : ISavedSearchService
 {
     /// <summary>Nombre de la colección genérica donde viven las búsquedas guardadas.</summary>
     public const string CollectionName = "saved-searches";
 
+    /// <summary>Familia de entidades en el store genérico (→ App_Data/syn-realty-saved-searches/).</summary>
+    private const string DefaultResourceType = "realty-saved-searches";
+
     private const char Sep = '|';
 
     private readonly IUserCollection _collection;
     private readonly IPropertyCatalogProvider _catalog;
     private readonly Func<DateTimeOffset> _now;
+    private readonly IJsonEntityStore _store;
+    private readonly string _resourceType;
 
     public StubSavedSearchService(IUserCollection collection, IPropertyCatalogProvider catalog)
         : this(collection, catalog, null)
@@ -44,10 +61,33 @@ public sealed class StubSavedSearchService : ISavedSearchService
 
     /// <summary>Ctor con time source inyectable para determinismo en tests. Null = reloj real.</summary>
     public StubSavedSearchService(IUserCollection collection, IPropertyCatalogProvider catalog, Func<DateTimeOffset>? now)
+        : this(collection, catalog, now, null, null)
+    {
+    }
+
+    /// <summary>
+    /// Ctor completo: <paramref name="store"/> es el backing store durable
+    /// (FileSystem en Web, InMemory en tests) y <paramref name="storeNamespace"/>
+    /// separa las búsquedas guardadas de las demás familias del portal.
+    /// </summary>
+    /// <param name="collection">Colección genérica por usuario (qué búsquedas tiene cada quien).</param>
+    /// <param name="catalog">Universo contra el que se re-ejecutan los criterios.</param>
+    /// <param name="now">Reloj inyectable para los tests. Null usa el del sistema.</param>
+    /// <param name="store">Backing store durable. Null deja el índice en memoria.</param>
+    /// <param name="storeNamespace">Familia de entidades de ESTA instancia.
+    ///   Null usa <c>realty-saved-searches</c>. Cambiarlo re-ubica los datos.</param>
+    public StubSavedSearchService(
+        IUserCollection collection,
+        IPropertyCatalogProvider catalog,
+        Func<DateTimeOffset>? now,
+        IJsonEntityStore? store,
+        string? storeNamespace)
     {
         _collection = collection ?? throw new ArgumentNullException(nameof(collection));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        _store = store ?? new InMemoryJsonEntityStore();
+        _resourceType = string.IsNullOrWhiteSpace(storeNamespace) ? DefaultResourceType : storeNamespace;
     }
 
     public async Task<SavedSearch> SaveAsync(string owner, PropertyQuery criteria, string? label = null, CancellationToken cancellationToken = default)
@@ -68,7 +108,9 @@ public sealed class StubSavedSearchService : ISavedSearchService
         var itemRef = string.Join(Sep, id, Encode(friendly), Encode(queryJson));
 
         await _collection.AddAsync(ownerKey, CollectionName, itemRef, cancellationToken);
-        _index[id] = criteria; // que GetMatchesAsync resuelva sin re-leer la colección primero
+        // Índice durable id → criterios: que GetMatchesAsync resuelva sin re-leer la
+        // colección primero, y que siga resolviendo tras un reinicio del proceso.
+        await _store.WriteAsync(_resourceType, id, queryJson, cancellationToken).ConfigureAwait(false);
 
         return new SavedSearch(id, ownerKey, friendly, criteria, _now());
     }
@@ -84,10 +126,16 @@ public sealed class StubSavedSearchService : ISavedSearchService
         var list = new List<SavedSearch>(items.Count);
         foreach (var item in items)
         {
-            if (TryParse(item.Owner, item.ItemRef, item.AddedAt, out var saved))
+            if (!TryParse(item.Owner, item.ItemRef, item.AddedAt, out var saved, out var queryJson))
             {
-                list.Add(saved);
+                continue;
             }
+
+            // Re-indexa lo que la colección conoce y el índice no (e.g. un store
+            // recién estrenado sobre datos previos). Escribe solo si falta: leer
+            // no debe generar I/O de escritura en cada consulta.
+            await IndexIfMissingAsync(saved.Id, queryJson, cancellationToken).ConfigureAwait(false);
+            list.Add(saved);
         }
         return list;
     }
@@ -100,9 +148,8 @@ public sealed class StubSavedSearchService : ISavedSearchService
         }
 
         var id = searchId.Trim();
-        var found = _index.TryGetValue(id, out var criteria)
-            ? criteria
-            : throw new ArgumentException($"Búsqueda '{id}' no encontrada.", nameof(searchId));
+        var found = await LoadCriteriaAsync(id, cancellationToken).ConfigureAwait(false)
+            ?? throw new ArgumentException($"Búsqueda '{id}' no encontrada.", nameof(searchId));
 
         var result = await _catalog.SearchAsync(found, cancellationToken);
         // Alerta simulada: los destacados cuentan como "novedad" que cumple la búsqueda;
@@ -113,17 +160,47 @@ public sealed class StubSavedSearchService : ISavedSearchService
         return new SavedSearchMatches(id, listings.Count, listings);
     }
 
-    // Índice id → criterios para resolver GetMatchesAsync sin re-leer la colección de
-    // TODOS los usuarios (el UserCollection no indexa por itemRef). Se puebla en SaveAsync;
-    // en un adapter real vive junto al store de la búsqueda.
-    private readonly ConcurrentDictionary<string, PropertyQuery> _index = new(StringComparer.Ordinal);
+    // ── Índice durable id → criterios ───────────────────────────────────────
+
+    /// <summary>
+    /// Lee los criterios indexados. Un documento corrupto se trata como ausente
+    /// (→ la búsqueda "no existe", mismo camino que un id desconocido): una
+    /// alerta ilegible no puede reventar la consulta con una excepción distinta
+    /// a la que el contrato promete.
+    /// </summary>
+    private async Task<PropertyQuery?> LoadCriteriaAsync(string id, CancellationToken cancellationToken)
+    {
+        var json = await _store.ReadAsync(_resourceType, id, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+        try
+        {
+            return JsonSerializer.Deserialize<PropertyQuery>(json, QueryJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private async Task IndexIfMissingAsync(string id, string queryJson, CancellationToken cancellationToken)
+    {
+        var existing = await _store.ReadAsync(_resourceType, id, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(existing))
+        {
+            await _store.WriteAsync(_resourceType, id, queryJson, cancellationToken).ConfigureAwait(false);
+        }
+    }
 
     private static string SerializeQuery(PropertyQuery q)
         => JsonSerializer.Serialize(q, QueryJsonOptions);
 
-    private bool TryParse(string owner, string itemRef, DateTimeOffset savedAt, out SavedSearch saved)
+    private static bool TryParse(string owner, string itemRef, DateTimeOffset savedAt, out SavedSearch saved, out string queryJson)
     {
         saved = default!;
+        queryJson = string.Empty;
         if (string.IsNullOrWhiteSpace(itemRef))
         {
             return false;
@@ -137,12 +214,12 @@ public sealed class StubSavedSearchService : ISavedSearchService
 
         var id = parts[0];
         var label = Decode(parts[1]);
-        var queryJson = Decode(parts[2]);
+        var json = Decode(parts[2]);
 
         PropertyQuery? criteria;
         try
         {
-            criteria = JsonSerializer.Deserialize<PropertyQuery>(queryJson, QueryJsonOptions);
+            criteria = JsonSerializer.Deserialize<PropertyQuery>(json, QueryJsonOptions);
         }
         catch (JsonException)
         {
@@ -153,7 +230,7 @@ public sealed class StubSavedSearchService : ISavedSearchService
             return false;
         }
 
-        _index[id] = criteria;
+        queryJson = json;
         saved = new SavedSearch(id, owner, label, criteria, savedAt);
         return true;
     }
