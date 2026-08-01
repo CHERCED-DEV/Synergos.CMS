@@ -207,6 +207,35 @@ public sealed class BookingController : ControllerBase
                 FailureReason: "La reserva está cancelada; no se puede cobrar."));
         }
 
+        // El hold vencido se corta ANTES de abrir la sesión de pago.
+        //
+        // Las dos guardas de arriba cubren Confirmed y Cancelled, y un hold vencido no es
+        // ninguna de las dos: caía derecho a CreateSessionAsync + CaptureAsync —dinero
+        // capturado— y solo entonces ConfirmAsync lanzaba porque el hold ya no valía. Nadie
+        // atrapaba esa excepción: HTTP 500, el huésped cobrado, sin reserva, y sin Void ni
+        // Refund que compensara. También se alcanza cuando el escáner de vencimientos voltea
+        // el hold entre el hold y el pago, que es una carrera de minutos, no de milisegundos.
+        //
+        // Cobrar y después descubrir que no se puede confirmar es el orden equivocado: el
+        // cupo se verifica primero, la caja se abre después. 409 y no 400 porque no es una
+        // petición mal formada: es un conflicto con el estado actual del recurso.
+        if (reservation.Status == ReservationStatus.Expired
+            || (reservation.Status == ReservationStatus.Held && reservation.ExpiresAt <= DateTimeOffset.UtcNow))
+        {
+            _logger.LogWarning(
+                "Reserva {ReservationId}: intento de cobro sobre un hold vencido ({ExpiresAt:o}); no se abre sesión de pago.",
+                reservation.Id, reservation.ExpiresAt);
+
+            return Conflict(new PayResponse(
+                ReservationId: reservation.Id,
+                Status: ReservationStatus.Expired.ToString(),
+                PaymentStatus: PaymentStatus.Cancelled.ToString(),
+                PaymentSessionId: null,
+                AmountCaptured: 0m,
+                AmountFormatted: _priceFormatter.Format(0m, reservation.Currency),
+                FailureReason: "El hold de la reserva venció; vuelve a apartar el cupo antes de pagar."));
+        }
+
         var session = await _payments.CreateSessionAsync(
             new PaymentSessionRequest(
                 OrderReference: reservation.Id,
@@ -278,8 +307,42 @@ public sealed class BookingController : ControllerBase
             return NotFound(new { error = $"Reserva '{request.ReservationId}' no encontrada." });
         }
 
-        var reason = string.IsNullOrWhiteSpace(request.Reason) ? "guest-requested" : request.Reason.Trim();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // Cancelar dos veces NO reembolsa dos veces.
+        //
+        // La guarda de abajo mira la política y la sesión de pago, nunca el ESTADO. Y
+        // CancelAsync es idempotente pero no limpia el PaymentSessionId, así que una segunda
+        // llamada con el mismo id volvía a evaluar la política y a llamar a RefundAsync por
+        // el mismo monto. Hoy no se duplica la plata solo porque el proveedor stub reembolsa
+        // únicamente sesiones capturadas y en la segunda pasada encuentra Refunded: el PSP
+        // salva al controller, el controller no se salva solo. Un gateway real que acepte
+        // reembolsos parciales sucesivos —el caso normal cuando hay penalidad, porque quedan
+        // pesos sin reembolsar en la sesión— paga dos veces.
+        //
+        // RefundAsync es además el ÚNICO método mutador de IPaymentProvider cuyo contrato no
+        // promete idempotencia; CaptureAsync y VoidAsync sí la prometen explícitamente. Así
+        // que la garantía tiene que ponerla quien llama.
+        //
+        // Se devuelve 200 y no un error porque cancelar lo ya cancelado es el resultado que
+        // el huésped pidió: reintentar tras un timeout de red no puede parecer un fallo.
+        if (reservation.Status == ReservationStatus.Cancelled)
+        {
+            var settled = _cancellationPolicy.Evaluate(reservation.RatePlanCode, reservation.CheckIn, today);
+            return Ok(new CancelResponse(
+                ReservationId: reservation.Id,
+                Status: reservation.Status.ToString(),
+                Refundable: settled.Refundable,
+                PenaltyAmount: settled.PenaltyAmount,
+                PenaltyFormatted: _priceFormatter.Format(settled.PenaltyAmount, reservation.Currency),
+                PolicyDescription: settled.Description,
+                // Null y no "Refunded": esta pasada no movió dinero, y afirmar un reembolso
+                // que no ocurrió aquí es la clase de dato con cara de verdad que ya costó
+                // una vez en este mismo endpoint.
+                RefundStatus: null));
+        }
+
+        var reason = string.IsNullOrWhiteSpace(request.Reason) ? "guest-requested" : request.Reason.Trim();
         var outcome = _cancellationPolicy.Evaluate(reservation.RatePlanCode, reservation.CheckIn, today);
 
         var cancelled = await _reservations.CancelAsync(reservation.Id, reason, cancellationToken);
