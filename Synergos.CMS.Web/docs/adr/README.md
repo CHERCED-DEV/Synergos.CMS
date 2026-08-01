@@ -122,6 +122,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0113](0113-published-elements-are-apps-shared-components-live-in-a-lib.md) | Un elemento publicado es una *app* y NO puede importarse: el componente compartido vive en una lib y la app queda como bootstrap fino (Tienda) | Accepted |
 | [0114](0114-product-rating-is-derived-ugc-behind-a-social-proof-seam.md) | El rating de un producto es UGC DERIVADO tras un seam de prueba social: se calcula de las reseñas, nunca se almacena, y su ausencia no es un cero | Accepted |
 | [0115](0115-gates-that-fail-closed-and-one-source-for-the-theme-list.md) | Un gate que no encuentra su entrada FALLA; y la lista de temas tiene una sola fuente | Accepted |
+| [0116](0116-payment-engine-as-a-transversal-polymorphic-seam.md) | El motor de pagos es una seam TRANSVERSAL y polimórfica: router que es el mismo contrato, tres formas de "requiere acción", y despacho de eventos que no es de Tienda | Accepted (parcial) |
 
 ## Rules
 

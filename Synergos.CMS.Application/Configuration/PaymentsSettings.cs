@@ -56,4 +56,70 @@ public sealed class PaymentsSettings
 
     /// <summary>Secreto de eventos Wompi (test_events_/prod_events_) — firma del webhook. Ola B.</summary>
     public string WompiEventsSecret { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Base del API de Wompi. Vacío = sandbox.
+    /// </summary>
+    /// <remarks>
+    /// Sandbox y producción se distinguen sólo por esta URL, pero las llaves
+    /// llevan su propio prefijo (<c>pub_test_</c> / <c>pub_prod_</c>): apuntar a
+    /// producción con llaves de prueba falla en Wompi, no en silencio.
+    /// </remarks>
+    public string WompiApiBaseUrl { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Enrutamiento multi-proveedor (ADR 0116). Vacío = un solo proveedor, el de
+    /// <see cref="Provider"/>, y el router no se registra.
+    /// </summary>
+    public PaymentRoutingSettings Routing { get; init; } = new();
+}
+
+/// <summary>
+/// Reglas para decidir QUÉ proveedor cobra cada petición. Se bindea de
+/// <c>Synergos:Payments:Routing</c>.
+/// </summary>
+/// <remarks>
+/// Ejemplo: enviar PSE por Wompi y dejar el resto en el stub mientras se prueba,
+/// sin recompilar y sin tocar a los ocho consumidores.
+/// <code>
+/// "Routing": {
+///   "Enabled": true,
+///   "DefaultProviderKey": "stub",
+///   "Rules": [ { "ProviderKey": "wompi", "Method": "pse" } ]
+/// }
+/// </code>
+/// </remarks>
+public sealed class PaymentRoutingSettings
+{
+    /// <summary>
+    /// Si está apagado, se registra el proveedor único de <see cref="PaymentsSettings.Provider"/>
+    /// tal cual — cero cambio de comportamiento. Default apagado a propósito: el
+    /// router es capacidad nueva y se enciende cuando hay más de un proveedor.
+    /// </summary>
+    public bool Enabled { get; init; }
+
+    /// <summary>A quién cobrar cuando ninguna regla encaja.</summary>
+    public string DefaultProviderKey { get; init; } = "stub";
+
+    /// <summary>
+    /// Reglas EN ORDEN; la primera que encaja gana. Los criterios vacíos son
+    /// comodines.
+    /// </summary>
+    public IReadOnlyList<PaymentRoutingRuleSettings> Rules { get; init; } =
+        Array.Empty<PaymentRoutingRuleSettings>();
+}
+
+/// <summary>Una regla, en forma bindeable desde configuración.</summary>
+/// <remarks>
+/// Existe como clase mutable aparte del record <c>PaymentRoutingRule</c> de
+/// <c>Interfaces</c> porque el binder de configuración necesita setters y un
+/// ctor sin parámetros. La conversión vive en el composer.
+/// </remarks>
+public sealed class PaymentRoutingRuleSettings
+{
+    public string ProviderKey { get; init; } = string.Empty;
+    public string? Vertical { get; init; }
+    public string? CountryCode { get; init; }
+    public string? Currency { get; init; }
+    public string? Method { get; init; }
 }

@@ -42,6 +42,7 @@ public sealed class StubShopOrderService : IShopOrderService
     private readonly IOrderTrackingService? _tracking;
     private readonly IJsonEntityStore _store;
     private readonly ITransactionalNotifier? _notifier;
+    private readonly ICheckoutRecorder? _checkoutRecorder;
     private readonly Func<DateTimeOffset> _now;
 
     public StubShopOrderService(
@@ -90,7 +91,8 @@ public sealed class StubShopOrderService : IShopOrderService
         IOrderTrackingService? tracking,
         IJsonEntityStore store,
         Func<DateTimeOffset>? now,
-        ITransactionalNotifier? notifier = null)
+        ITransactionalNotifier? notifier = null,
+        ICheckoutRecorder? checkoutRecorder = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
@@ -98,6 +100,7 @@ public sealed class StubShopOrderService : IShopOrderService
         _tracking = tracking;
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _notifier = notifier;
+        _checkoutRecorder = checkoutRecorder;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -252,7 +255,7 @@ public sealed class StubShopOrderService : IShopOrderService
         }
 
         // 1) Capturar el pago de la orden completa (idempotente en el PSP).
-        var capture = await _payments.CaptureAsync(order.PaymentSessionId, cancellationToken);
+        var capture = await _payments.CaptureAsync(order.PaymentSessionId, cancellationToken: cancellationToken);
         if (capture.Status != PaymentStatus.Captured)
         {
             throw new InvalidOperationException(
@@ -287,6 +290,41 @@ public sealed class StubShopOrderService : IShopOrderService
         // 4) Avisarle al comprador que su compra quedó confirmada (T4). Best-effort: un
         //    email caído JAMÁS puede tumbar una orden ya pagada y persistida.
         await NotificationEmission.SafeDispatchAsync(_notifier, BuildPaidNotification(paid), cancellationToken);
+
+        // 5) Proyectar la venta al read-model del dashboard (ICheckoutRecorder).
+        //    Este paso FALTABA: DefaultDashboardReadModel leía GetCheckouts() y
+        //    nadie escribía nunca, así que el panel de ventas mostraba $0 por
+        //    muchas órdenes pagadas que hubiera en disco. El seam estaba
+        //    registrado en DI y no lo invocaba nadie.
+        //
+        //    Va acá y no en el controller a propósito: éste es el único punto
+        //    por el que una orden pasa a Paid, así que también cubre la
+        //    confirmación asíncrona por webhook de pago. Y va DESPUÉS de
+        //    persistir: si el registro falla, la venta ya está a salvo.
+        //
+        //    Best-effort por lo mismo que el tracking y el email: una métrica
+        //    caída no puede convertir una compra buena en un error. Record() es
+        //    idempotente por OrderId (dedupe), así que un reintento no duplica.
+        if (_checkoutRecorder is not null)
+        {
+            await BestEffort.RunAsync(() =>
+            {
+                _checkoutRecorder.Record(new CheckoutCompleted(
+                    OrderId: paid.OrderRef,
+                    LineItems: paid.Lines
+                        .Select(l => new CheckoutLineItem(
+                            // El SKU real es la variante cuando la hay: dos tallas
+                            // del mismo producto son dos SKU distintos para ventas.
+                            Sku: l.VariantId ?? l.ProductId,
+                            Quantity: l.Quantity,
+                            UnitPrice: l.UnitPrice))
+                        .ToList(),
+                    Subtotal: paid.Total,
+                    Currency: paid.Currency,
+                    OccurredUtc: _now().UtcDateTime));
+                return Task.CompletedTask;
+            }, cancellationToken);
+        }
 
         return ToConfirmation(paid);
     }
