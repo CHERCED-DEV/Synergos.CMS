@@ -1,9 +1,10 @@
 # ADR 0127 — El CMS configura el mapa de asientos y un proveedor exógeno lo llena
 
-- **Estado:** Aceptado — **actualizado el mismo día**: los ejes *servicio* y *categorías* ya
-  no son huecos. El contrato del componente se extendió en el repo UI y la proyección se
-  adaptó; ver «[Lo que se midió](#lo-que-se-midió-y-es-peor-de-lo-que-parecía)» y la sección
-  que la sigue. *Forma de construcción* sigue abierto y ahora es el único hueco duro.
+- **Estado:** Aceptado — **actualizado el mismo día**: los tres huecos que la medición encontró
+  (*servicio*, *categorías* y *forma de construcción*) están cerrados. El contrato del
+  componente se extendió en el repo UI y la proyección se adaptó; ver
+  «[Lo que se midió](#lo-que-se-midió-y-es-peor-de-lo-que-parecía)» y las dos secciones que la
+  siguen. Queda abierto solo *apariencia*, que es el que menos duele.
 - **Fecha:** 2026-08-01
 - **Enmienda:** ADR 0126 (un elemento que otro bundle embebe no lleva DocType)
 - **Complementa:** ADR 0117 (aforo y asientos de un evento como contenido), ADR 0083 (la UI es
@@ -103,13 +104,12 @@ original**; los dos ejes tachados se cerraron el mismo día en la sección sigui
 |---|---|---|
 | **Apariencia** | Parcial, y **nada por el componente** | El bundle no expone ni un input de apariencia. Lo que funciona viene del host: `compDom*` aterriza en el envoltorio y el SCSS del bundle está tokenizado, así que el tema del siteRoot ya manda el color. Es el exterior de la caja; el interior no se configura |
 | ~~**Servicio**~~ | ~~**Nada**~~ → **cerrado** | `ServiceClass` no tenía clave en la carga. El 787 sembrado son 43 filas en tres cabinas y se dibujaba como una sola grilla indiferenciada: un pasajero no veía dónde termina ejecutiva |
-| **Forma de construcción** | Parcial — **y ahora es el único hueco duro** | `aisleAfterColumns` es **un solo entero**, así que solo se puede dibujar **un** pasillo. Todo widebody sale mal hoy: el `3-3-3` dibuja el pasillo tras la C y **no dibuja nada entre F y G**; el bloque derecho se suelda al central. El `1-2-1` igual |
+| ~~**Forma de construcción**~~ | ~~Parcial — el peor hueco~~ → **cerrado** | `aisleAfterColumns` era **un solo entero**, así que solo se podía dibujar **un** pasillo. Todo widebody salía mal: el `3-3-3` dibujaba el pasillo tras la C y **nada entre F y G**; el bloque derecho se soldaba al central. El `1-2-1` igual |
 | ~~**Categorías**~~ | ~~Parcial~~ → **cerrado** | El enum `type` mezclaba dos ideas ortogonales —tres posiciones más un rasgo de confort—, así que `extra-legroom` **sobrescribía** la posición cuando ambas eran ciertas. `Features` e `IsExitRow` se descartaban |
 
 ### Lo que el contrato de la UI necesitaría, por prioridad
 
-1. **`aisleAfterColumns` → arreglo.** El cambio más pequeño y el de mayor retorno: sin él, toda
-   cabina de doble pasillo se dibuja mal, y el stub ya trae dos. **Sigue pendiente.**
+1. ~~**`aisleAfterColumns` → arreglo.**~~ **Hecho.**
 2. ~~**`rows[].serviceClass`** más un encabezado de sección en la plantilla.~~ **Hecho.**
 3. ~~**`seats[].features: string[]`**, aditivo.~~ **Hecho.**
 4. **Entradas de apariencia** (`density`, `showLegend`, `showPrices`). Solo vale la pena después
@@ -153,6 +153,42 @@ Tres decisiones dentro de esto:
   salida se marca con **borde**: si compartieran el relleno, una taparía a la otra justo en el
   caso normal.
 
+### Y una pérdida silenciosa que apareció al cerrarlo
+
+El módulo `eventos` **descartaba** `serviceClass` y `features` al traducir la carga del CMS. Ese
+módulo no dibuja el mapa: se lo pasa a `<synergos-seat-map>`. Lo que su parser no copie no llega
+a la pantalla, y **no hay error en ninguna parte** — ni en el CMS, que emitió bien, ni en el
+componente, que nunca vio la clave.
+
+O sea que servicio y categorías funcionaban por el bloque suelto y **no** por la ruta
+`CMS → eventos → seat-map`, que es la que usa una ficha de evento real. Está corregido, y el
+paso a través quedó con prueba propia campo por campo.
+
+La regla que deja: **un módulo que reenvía una carga es parte del contrato.** Extenderlo sin
+tocar sus traductores deja el dato a mitad de camino sin que nada se queje.
+
+## Forma de construcción: `aisleAfterColumns` es una lista
+
+Era el hueco #1 de la lista de prioridades y el único que producía un plano **incorrecto** en
+vez de uno incompleto.
+
+`aisleAfterColumns` acepta ahora un arreglo de índices de columna 1-based: `[3, 6]` para un
+`3-3-3`, `[1, 3]` para un `1-2-1`. El stub ya lo sabía calcular sin ayuda —son las sumas
+acumuladas de los bloques de la fórmula, **menos la última**— y estaba tirando toda esa
+información salvo el primer número.
+
+Tres decisiones:
+
+- **El número suelto sigue valiendo**, normalizado a `[n]`. `eventos` y `travel-shell` arman su
+  carga con un entero y hay cargas grabadas de demos; ninguna podía romperse por admitir el
+  arreglo.
+- **Nunca se dibuja un pasillo después de la última butaca de la fila.** Ahí el hueco no separa
+  nada y descuadra la fila respecto de las demás. Empieza a importar justo ahora: con varios
+  pasillos, una fila corta —una sección de suites al frente de una cabina `3-3-3`— alcanza la
+  posición del segundo pasillo justo en su último asiento.
+- **Las posiciones se sanean y se ordenan** en las dos mitades. El orden no es cosmético: el
+  componente las compara mientras recorre la fila de izquierda a derecha.
+
 ## Consecuencias
 
 ### Lo que se gana
@@ -163,20 +199,28 @@ Tres decisiones dentro de esto:
   comportamiento que ese adapter tendrá que reproducir.
 - Queda medido y escrito **qué de los cuatro ejes se puede hoy y qué no**, con el orden en que
   conviene cerrarlo.
-- **Servicio y categorías llegan hasta la pantalla.** El 787 sembrado ya se lee como tres
-  cabinas y no como una grilla; una butaca de ventana con espacio extra sigue siendo de
-  ventana; y una fila de salida se distingue de una con espacio extra, que es lo que un rasgo
-  con consecuencias regulatorias necesita.
+- **Servicio y categorías llegan hasta la pantalla**, por las dos rutas: el bloque suelto y la
+  ficha de evento. El 787 sembrado ya se lee como tres cabinas y no como una grilla; una butaca
+  de ventana con espacio extra sigue siendo de ventana; y una fila de salida se distingue de una
+  con espacio extra, que es lo que un rasgo con consecuencias regulatorias necesita.
+- **Las tres cabinas sembradas se dibujan bien.** Dos son de doble pasillo y hasta ahora salían
+  con uno.
 
 ### Lo que se acepta
 
-- **Las cabinas de doble pasillo se siguen dibujando mal.** Dos de las tres sembradas lo son. El
-  dato del proveedor llega intacto —los tests lo fijan— pero el componente solo sabe dibujar un
-  pasillo. Es lo que queda por arreglar en el repo UI, y ahora es el único hueco de los cuatro
-  ejes que produce un plano incorrecto en vez de uno incompleto.
+- **Una cabina con dos fórmulas sigue sin poder expresarse.** Los pasillos son del MAPA, no de
+  la fila: un avión cuya ejecutiva es `1-2-1` y su turista `3-3-3` declara una sola geometría y
+  una de las dos secciones sale corrida. Se aceptó por dos razones: el proveedor tampoco lo
+  modela —una `CabinSpec` tiene una fórmula— y la supresión del pasillo final evita que la fila
+  corta quede con un hueco colgando. Cerrarlo sería `rows[].aisleAfterColumns` con respaldo al
+  del mapa, y toca las dos mitades otra vez.
 - **El vocabulario abierto no se valida en ninguna de las dos mitades.** Un proveedor que mande
   `xtra-legroom` verá esa cadena rotulada tal cual en la leyenda, sin error en ningún gate. Es
   el precio de no exigir un despliegue del CMS por cada rasgo nuevo, y se aceptó a sabiendas.
+- **La apariencia sigue sin configurarse desde el bloque.** Es el único de los cuatro ejes que
+  queda, y el que menos duele: el tema del siteRoot ya manda el color por el envoltorio.
+  `density` y `showPrices` serían lo siguiente; `showLegend` perdió parte de su motivo, porque
+  la leyenda ahora se deriva del contenido y un mapa sin rasgos ya no dibuja ninguna.
 - **Sin diccionario y sin respaldo SSR.** El servidor no emite copy: la proyección emite ids,
   enums, booleanos y números; todo el texto visible vive en el bundle. Un respaldo SSR sería lo
   primero que necesitaría claves de diccionario, y una grilla de butacas renderizada en el

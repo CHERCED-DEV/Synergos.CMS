@@ -40,8 +40,12 @@ public sealed class SeatMapProjectionTests
     private static SeatMapRow Row(string label, params SeatMapSeat[] seats)
         => new(label, "economy", seats);
 
+    /// <summary>Una cabina de un solo pasillo, que es el caso de casi todas las pruebas.</summary>
     private static SeatMapLayout Layout(int aisleAfterColumns, params SeatMapRow[] rows)
-        => new("A320-BOGMDE", "Airbus A320 · BOG → MDE", "COP", aisleAfterColumns, rows);
+        => Cabin(aisleAfterColumns > 0 ? new[] { aisleAfterColumns } : Array.Empty<int>(), rows);
+
+    private static SeatMapLayout Cabin(IReadOnlyList<int> aisles, params SeatMapRow[] rows)
+        => new("A320-BOGMDE", "Airbus A320 · BOG → MDE", "COP", aisles, rows);
 
     /// <summary>Una fila 3-3 completa: A B C | D E F.</summary>
     private static SeatMapRow FilaTresTres(string label) => Row(
@@ -56,6 +60,20 @@ public sealed class SeatMapProjectionTests
     // ── El pasillo ───────────────────────────────────────────────────────────
 
     /// <summary>
+    /// Una fila <c>2-4-2</c>: A B | C D E F | G H.
+    /// </summary>
+    private static SeatMapRow FilaDosCuatroDos(string label) => Row(
+        label,
+        Seat($"{label}A", "A", position: "window"),
+        Seat($"{label}B", "B", position: "aisle"),
+        Seat($"{label}C", "C", position: "aisle"),
+        Seat($"{label}D", "D"),
+        Seat($"{label}E", "E"),
+        Seat($"{label}F", "F", position: "aisle"),
+        Seat($"{label}G", "G", position: "aisle"),
+        Seat($"{label}H", "H", position: "window"));
+
+    /// <summary>
     /// Protege <c>aisleAfterColumns</c> en una cabina <b>2-4-2</b>. Es el caso que revienta:
     /// el bundle, cuando no recibe el dato, parte la fila más ancha por la mitad
     /// (<c>ceil(8/2) = 4</c>) y dibuja el pasillo entre los dos asientos del centro. El
@@ -64,29 +82,46 @@ public sealed class SeatMapProjectionTests
     [Fact]
     public void El_pasillo_de_una_cabina_2_4_2_llega_donde_lo_puso_el_proveedor()
     {
-        var fila = Row(
-            "20",
-            Seat("20A", "A", position: "window"),
-            Seat("20B", "B", position: "aisle"),
-            Seat("20C", "C", position: "aisle"),
-            Seat("20D", "D"),
-            Seat("20E", "E"),
-            Seat("20F", "F", position: "aisle"),
-            Seat("20G", "G", position: "aisle"),
-            Seat("20H", "H", position: "window"));
-
-        var payload = SeatMapProjection.Project(Layout(2, fila));
+        var payload = SeatMapProjection.Project(Layout(2, FilaDosCuatroDos("20")));
 
         Assert.NotNull(payload);
-        Assert.Equal(2, payload!.AisleAfterColumns);
+        Assert.Equal(new[] { 2 }, payload!.AisleAfterColumns);
         // Y NO el 4 que el bundle calcularía solo si la clave no llegara.
-        Assert.NotEqual(payload.Rows[0].Seats.Count / 2, payload.AisleAfterColumns);
+        Assert.DoesNotContain(payload.Rows[0].Seats.Count / 2, payload.AisleAfterColumns);
     }
 
     /// <summary>
-    /// Protege el paso a través del <c>0</c>: cuando el proveedor no conoce la geometría, la
-    /// proyección no inventa una — emite 0 y deja que el bundle aplique su propio default.
-    /// Inventar aquí sería peor que no saber.
+    /// Protege los <b>DOS</b> pasillos de un widebody, que es el defecto que este arreglo cierra.
+    /// Con un solo entero, un <c>2-4-2</c> dibujaba el pasillo tras la B y <b>nada entre F y
+    /// G</b>: el bloque derecho se soldaba al central y la cabina se leía como un <c>2-6</c> que
+    /// no existe en ningún avión.
+    /// </summary>
+    [Fact]
+    public void Un_widebody_emite_sus_DOS_pasillos()
+    {
+        var payload = SeatMapProjection.Project(Cabin(new[] { 2, 6 }, FilaDosCuatroDos("20")));
+
+        Assert.Equal(new[] { 2, 6 }, payload!.AisleAfterColumns);
+    }
+
+    /// <summary>
+    /// Protege el saneado de la geometría, que llega de un proveedor externo: fuera los no
+    /// positivos, fuera los repetidos, y en orden ascendente. El orden no es cosmético — el
+    /// componente los compara mientras recorre la fila de izquierda a derecha.
+    /// </summary>
+    [Fact]
+    public void Las_posiciones_de_pasillo_se_sanean_y_se_ordenan()
+    {
+        var payload = SeatMapProjection.Project(
+            Cabin(new[] { 6, 3, 6, 0, -2 }, FilaTresTres("12")));
+
+        Assert.Equal(new[] { 3, 6 }, payload!.AisleAfterColumns);
+    }
+
+    /// <summary>
+    /// Protege el vacío: cuando el proveedor no conoce la geometría, la proyección no inventa
+    /// una — emite una lista vacía y deja que el bundle aplique su propio default. Inventar aquí
+    /// sería peor que no saber.
     /// </summary>
     [Fact]
     public void Sin_geometria_declarada_la_proyeccion_no_inventa_un_pasillo()
@@ -94,7 +129,7 @@ public sealed class SeatMapProjectionTests
         var payload = SeatMapProjection.Project(Layout(0, FilaTresTres("12")));
 
         Assert.NotNull(payload);
-        Assert.Equal(0, payload!.AisleAfterColumns);
+        Assert.Empty(payload!.AisleAfterColumns);
     }
 
     // ── El tipo de asiento ───────────────────────────────────────────────────
@@ -434,7 +469,7 @@ public sealed class SeatMapProjectionTests
         Assert.Equal("COP", SeatMapProjection.BuildProps(layout, "   ", null)["currency"] as string);
         Assert.Equal("COP", SeatMapProjection.BuildProps(layout, null, null)["currency"] as string);
 
-        var sinMoneda = new SeatMapLayout("r", "n", "  ", 3, new[] { FilaTresTres("12") });
+        var sinMoneda = new SeatMapLayout("r", "n", "  ", new[] { 3 }, new[] { FilaTresTres("12") });
         Assert.False(SeatMapProjection.BuildProps(sinMoneda, null, null).ContainsKey("currency"));
     }
 
@@ -487,7 +522,9 @@ public sealed class SeatMapProjectionTests
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        Assert.Equal(3, root.GetProperty("aisleAfterColumns").GetInt32());
+        Assert.Equal(
+            new[] { 3 },
+            root.GetProperty("aisleAfterColumns").EnumerateArray().Select(a => a.GetInt32()).ToArray());
         var row = root.GetProperty("rows")[0];
         Assert.Equal("12", row.GetProperty("rowNumber").GetString());
         Assert.Equal("economy", row.GetProperty("serviceClass").GetString());
