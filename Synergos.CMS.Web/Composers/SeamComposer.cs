@@ -188,6 +188,26 @@ public sealed class SeamComposer : IComposer
         var paymentProvider = builder.Config["Synergos:Payments:Provider"] ?? "Stub";
         var routingEnabled = builder.Config.GetValue<bool>("Synergos:Payments:Routing:Enabled");
 
+        // Named client de Wompi. Sandbox y producción se distinguen SÓLO por la
+        // base: las llaves ya vienen con su prefijo (pub_test_ / pub_prod_), así
+        // que apuntar a producción con llaves de prueba falla en Wompi y no en
+        // silencio. Hereda la resiliencia que el repo ya aplica a sus 12
+        // clientes (ADR 0064/0069).
+        services.AddHttpClient("wompi", (sp, http) =>
+        {
+            var settings = sp.GetRequiredService<IOptions<PaymentsSettings>>().Value;
+            http.BaseAddress = new Uri(
+                string.IsNullOrWhiteSpace(settings.WompiApiBaseUrl)
+                    ? "https://sandbox.wompi.co/v1/"
+                    : settings.WompiApiBaseUrl);
+            if (!string.IsNullOrWhiteSpace(settings.WompiPrivateKey))
+            {
+                http.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue(
+                        "Bearer", settings.WompiPrivateKey);
+            }
+        });
+
         if (routingEnabled)
         {
             services.AddSingleton<IPaymentProvider>(sp =>
@@ -198,6 +218,18 @@ public sealed class SeamComposer : IComposer
                 // El stub siempre está disponible: es el destino de rollback si
                 // un adapter real se cae o si una regla lo manda a "stub".
                 var members = new List<IPaymentProvider> { new StubPaymentProvider(store, settings) };
+
+                // Wompi entra sólo si TIENE llaves. Registrarlo sin ellas
+                // dejaría que una regla lo eligiera y reventara a mitad del
+                // checkout; así, una config a medias degrada al stub en vez de
+                // romper la compra.
+                if (!string.IsNullOrWhiteSpace(settings.WompiPublicKey)
+                    && !string.IsNullOrWhiteSpace(settings.WompiIntegritySecret))
+                {
+                    members.Add(new WompiPaymentProvider(
+                        sp.GetRequiredService<IHttpClientFactory>().CreateClient("wompi"),
+                        settings));
+                }
 
                 var rules = settings.Routing.Rules
                     .Where(r => !string.IsNullOrWhiteSpace(r.ProviderKey))

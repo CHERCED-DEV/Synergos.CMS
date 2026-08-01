@@ -58,6 +58,16 @@ public sealed class PaymentsSettings
     public string WompiEventsSecret { get; init; } = string.Empty;
 
     /// <summary>
+    /// Base del API de Wompi. Vacío = sandbox.
+    /// </summary>
+    /// <remarks>
+    /// Sandbox y producción se distinguen sólo por esta URL, pero las llaves
+    /// llevan su propio prefijo (<c>pub_test_</c> / <c>pub_prod_</c>): apuntar a
+    /// producción con llaves de prueba falla en Wompi, no en silencio.
+    /// </remarks>
+    public string WompiApiBaseUrl { get; init; } = string.Empty;
+
+    /// <summary>
     /// Enrutamiento multi-proveedor (ADR 0116). Vacío = un solo proveedor, el de
     /// <see cref="Provider"/>, y el router no se registra.
     /// </summary>

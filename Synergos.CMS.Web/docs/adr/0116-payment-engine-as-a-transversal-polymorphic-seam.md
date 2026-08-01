@@ -1,6 +1,6 @@
 # ADR 0116 — El motor de pagos es una seam TRANSVERSAL y polimórfica: un router que es el mismo contrato, tres formas de "requiere acción", y un despacho de eventos que no es de Tienda
 
-- **Status:** Proposed — diseño listo, sin construir. Requiere la firma del arquitecto sobre las tres preguntas abiertas del final.
+- **Status:** **Accepted — parcialmente construido.** El arquitecto respondió las tres preguntas abiertas: Wompi como primer adaptador, la forma se rompe ahora, y se trabaja todo. Fases 1-3 en el repo y verificadas; fases 4-6 pendientes (ver §Estado de construcción al final).
 - **Date:** 2026-08-01
 - **Deciders:** Arquitecto (encargo textual: *"como todas van a tener pagos, hacer bien payment, que se pueda reinstanciar o reutilizar o polimorfizar, es muy ganador"*) + agente.
 - **Investigación:** cuatro barridos paralelos, dos sobre código y dos con búsqueda web autorizada. Anexos en `docs/product/investigacion-pagos/` (871 líneas, con URLs y fechas).
@@ -189,16 +189,55 @@ dimensionaron con Wompi/PSE/Nequi a la vista.
 - **Modelar el contracargo como reembolso.** Más barato hoy, y hace que la
   contabilidad mienta.
 
-## Preguntas abiertas — requieren decisión del arquitecto
+## Preguntas abiertas — RESUELTAS por el arquitecto
 
-1. **¿Wompi como primer adaptador?** La investigación lo recomienda por
-   documentación, sandbox y por traer Nequi y Botón Bancolombia nativos. Es una
-   decisión comercial, no técnica.
-2. **¿Se rompe la forma ahora o se difiere?** El ADR argumenta que ahora es el
-   momento más barato. Es reversible sólo hasta que exista el primer adaptador
-   real.
-3. **¿Los siete usos defectuosos se corrigen en la misma ola o después?**
-   Habilitarlos sin corregirlos deja el sistema igual de roto, con mejor forma.
+1. **¿Wompi como primer adaptador?** → **Sí.**
+2. **¿Se rompe la forma ahora?** → **Sí**, en una sola ronda.
+3. **¿Los siete usos defectuosos se corrigen en la misma ola?** → **Sí**, se
+   trabaja todo. Pendiente en fase 5.
+
+## Decisión adicional tomada al construir: Web Checkout, no API directa
+
+`WompiPaymentProvider` usa el **checkout hospedado**, no la API de
+tokenización. No es una limitación: cubre tarjeta, PSE, Nequi, Bancolombia y
+efectivo con **un solo flujo**, y deja los datos de tarjeta fuera de nuestros
+servidores — la carga de PCI se queda en Wompi. La API directa da más control
+sobre la experiencia a cambio de tokenizar cada método y asumir ese alcance; es
+la evolución natural, no el punto de partida.
+
+**Consecuencia honesta:** con Web Checkout el adaptador devuelve siempre
+`Redirect`, porque el checkout resuelve internamente el reto 3DS y la espera de
+Nequi. Las otras dos formas de `PaymentAction` **siguen justificadas** —las
+necesita la API directa, y otros PSPs las exponen— pero hoy sólo las ejercita
+el stub. Quien lea el código no debe concluir que sobran.
+
+Y con Web Checkout **no hay autorización nuestra que capturar**: Wompi cobra al
+aprobar. Por eso `CaptureAsync` en este adaptador *constata* en vez de cobrar, e
+**ignora el monto parcial diciéndolo**, en lugar de fingir que lo honró. La
+captura parcial exige el flujo de autorización diferida de la API directa.
+
+## Estado de construcción
+
+| Fase | Qué | Estado |
+|---|---|---|
+| 1 | Forma del seam: `PaymentAction` ×3, captura parcial, `VoidAsync`, `Disputed`/`ChargedBack` | ✅ construida |
+| 2 | `RoutingPaymentProvider` — misma seam, N proveedores | ✅ construida |
+| 3 | Firmas de Wompi + adaptador Web Checkout + cableado | ✅ construida |
+| 4 | `IPaymentEventSink` — despacho de eventos a los 8 verticales | ⬜ pendiente |
+| 5 | Corregir los 7 usos defectuosos | ⬜ pendiente |
+| 6 | Persistir tracking y RMA + `DeliveredAt` | ⬜ pendiente |
+
+**Verificado:** `dotnet build` 0 errores · `dotnet test` **1076/1076**.
+
+**La fase 4 es la que falta para que Wompi sirva de verdad.** Hoy
+`PaymentWebhookController` sólo enruta a Tienda, y con Web Checkout el estado
+final de PSE llega *sólo* por evento. Sin ese despacho, siete verticales no se
+enteran de que les pagaron. `GetStatusAsync` es el respaldo, no el mecanismo.
+
+**⚠️ Nada de Wompi está verificado contra su sandbox**: no hay llaves en el
+entorno de desarrollo del agente. Los 28 tests garantizan que el algoritmo de
+firma y el mapeo de estados hacen lo que la documentación describe — no que
+Wompi los acepte.
 
 ## Advertencias sobre la investigación
 
