@@ -16,6 +16,7 @@
 @using System.Text.Json
 @using Microsoft.Extensions.Options
 @using Synergos.CMS.Application.Configuration
+@using Synergos.CMS.Web.Services
 @inject Synergos.CMS.Interfaces.IHostBridgeContextBuilder Bridge
 @inject IOptionsMonitor<HostBridgeSettings> BridgeSettings
 @{
@@ -38,7 +39,7 @@ else
     }
     catch (Exception)
     {
-        json = "{\"version\":\"1.0.0\",\"i18n\":{\"culture\":\"es-CO\",\"defaultCulture\":\"es-CO\",\"keys\":{}},\"theme\":{\"variant\":\"light\",\"available\":[\"light\",\"dark\",\"silvergold\"]},\"brand\":{\"key\":\"default\",\"displayName\":\"SynergosLabs\"},\"member\":null,\"page\":{\"id\":0,\"docType\":\"\",\"canonicalUrl\":\"\",\"cultures\":[]}}";
+        json = HostBridgeFallback.Json;
     }
     <script>
     window.synergos = @Html.Raw(json);
