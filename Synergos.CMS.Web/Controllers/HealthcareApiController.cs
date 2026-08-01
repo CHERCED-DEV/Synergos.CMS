@@ -132,6 +132,15 @@ public sealed class HealthcareApiController : ControllerBase
     // si no autenticado, 403 si denegado) o null si pasa.
     private async Task<IActionResult?> DenyAsync(string resourceType, string action, Guid? targetPatientKey, CancellationToken ct)
     {
+        // El dueño NO se resuelve acá. Este controller mantiene la propiedad
+        // "guard primero, sin tocar PHI antes de autorizar" — que el test
+        // GetPatient_Anonymous_Returns401 verifica exigiendo que el repositorio
+        // no reciba ni una llamada cuando el llamante es anónimo.
+        //
+        // Quien decide es el guard, así que es el guard el que resuelve el
+        // Member dueño del paciente, y sólo DESPUÉS de comprobar que hay sesión
+        // (DefaultPhiAccessGuard.EvaluateAsync). Un anónimo sigue sin provocar
+        // una sola lectura.
         var decision = await _guard.CheckAccessAsync(
             new AccessCheckRequest(resourceType, action, targetPatientKey), ct);
         if (decision.IsAllowed) return null;
