@@ -159,7 +159,7 @@ auditoría de contraste propia. **Un solo fichero** con hex hardcodeado en todo
 | **Viajes** | Checkout / confirm / cancel durables | Catálogos sembrados; cancelación por URL-capacidad |
 | **Inmobiliaria** | ✅ Catálogo **desde el CMS** con `propertyListing` (ADR 0118). ✅ Visitas, leads y alertas **durables** (ADR 0105) | — |
 | **Social** | 17 endpoints: feed, follow, reacciones, perfiles, DM, notificaciones. ✅ **Todo persiste** (ADR 0105) | Sin caché: el feed relee dos espacios por página |
-| **Booking (hoteles)** | Demo puro | Sin rebanada CMS y **el único controller sin tests** |
+| **Booking (hoteles)** | ✅ Ficha **desde el CMS** con `stayListing` (ADR 0119). ✅ 57 tests, y la cobertura destapó **dos defectos que movían dinero**, ya corregidos (ADR 0122) | `cancel` es anónimo, destructivo y sin auditoría; `pay` devuelve dos DTOs distintos |
 
 ---
 
@@ -271,8 +271,14 @@ y el portal del paciente en Salud (bloqueado por §3.2).
 > Tienda sigue siendo el bloqueo real de esa fila, y sigue esperando
 > credenciales de sandbox.
 >
-> **Lo que sigue en "todavía no":** Booking, la verificación pública del
-> certificado en Educación, y los catálogos sembrados de Viajes y Gobierno.
+> **Lo que sigue en "todavía no":** la verificación pública del certificado en
+> Educación, y los catálogos sembrados de Viajes y Gobierno. Booking salió de
+> esa fila: tiene su DocType y su cobertura.
+>
+> Y una lección que el barrido no podía dar: **escribir los tests del único
+> controller sin cobertura encontró dos defectos que movían dinero**, ninguno
+> de los cuales rompía nada visible. Uno estaba tapado por una casualidad del
+> proveedor stub.
 
 **Transversal a todo:** los 87 bloques CDN emiten placeholder fuera de la
 máquina con `C:\LOCAL_CDN` — `HttpBundleRegistryClient` no existe.
