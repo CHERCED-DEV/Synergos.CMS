@@ -353,7 +353,20 @@ public sealed class SeamComposer : IComposer
         // disponibilidad para que el search de hotel emita lat/lng por oferta
         // (mapa SH-8). Adapter real: contenido CMS / channel-manager. Singleton —
         // stateless, catálogo estático.
-        services.AddSingleton<IStayContentProvider, StubStayContentProvider>();
+        // Rebanada de contenido (ADR 0119) — Booking era el último vertical con catálogo y sin
+        // ninguna superficie CMS: cuatro estadías sembradas en C# y ningún sitio donde un
+        // hotelero publicara la quinta. Con Synergos:Catalog:Sources:Booking = cms la ficha
+        // sale de los stayListing que autoró el editor; el rollback es esa línea a 'demo'.
+        //
+        // Esta seam es de SOLO LECTURA (GetStayAsync y nada más), así que —a diferencia de
+        // Eventos e Inmobiliaria— no lleva capa durable encima: no hay nada que publicar desde
+        // la app que haya que persistir aparte.
+        services.AddSingleton<ICatalogSource<StayDetail>>(sp =>
+            ActivatorUtilities.CreateInstance<UmbracoStayContentSource>(sp));
+        services.AddSingleton<IStayContentProvider>(sp =>
+            IsCmsSource(sp, UmbracoStayContentSource.Vertical)
+                ? new CatalogStayContentProvider(sp.GetRequiredService<ICatalogSource<StayDetail>>())
+                : new StubStayContentProvider());
 
         // OLA 2 Tienda — motor del marketplace e-commerce (doc tienda-app-spec).
         // Dos seams stub-first, aditivos (no tocan Booking/Travel ni el carrito
