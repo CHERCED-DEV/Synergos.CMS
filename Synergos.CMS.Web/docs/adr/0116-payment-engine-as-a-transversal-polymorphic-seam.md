@@ -232,9 +232,30 @@ captura parcial exige el flujo de autorización diferida de la API directa.
 | 3 | Firmas de Wompi + adaptador Web Checkout + cableado | ✅ construida |
 | 4 | `IPaymentEventSink` — despacho de eventos por vertical | ✅ construida |
 | 5 | Corregir los usos defectuosos | 🟡 5 de 6 reales (ver abajo) |
-| 6 | Persistir tracking y RMA + `DeliveredAt` | ⬜ pendiente |
+| 6 | Persistir tracking y RMA | ✅ construida · `DeliveredAt` ⬜ |
 
-**Verificado:** `dotnet build` 0 errores · `dotnet test` **1086/1086**.
+**Verificado:** `dotnet build` 0 errores · `dotnet test` **1093/1093**.
+
+### Fase 6 — durabilidad
+
+`IOrderTrackingService` y `IReturnService` pasan a `IJsonEntityStore`. Vivían en
+un diccionario del proceso mientras órdenes, pagos y reservas ya estaban en
+disco: un reinicio borraba el timeline de envío de órdenes que seguían `Paid`, y
+las devoluciones que un comprador ya había pedido.
+
+**Cada instancia de tracking necesita su propio espacio.** Hay cuatro —Tienda,
+Viajes, Educación, Eventos— con pipelines de distinta longitud, y el estado
+guarda el ÍNDICE de etapa. Compartir espacio haría que el índice de un dominio
+se leyera contra el pipeline de otro: "enviado" convertido en otra cosa sin que
+nada falle. De ahí el parámetro `storeNamespace`.
+
+El `lock` no sobrevive un `await`, así que se sustituye por `SemaphoreSlim` —
+mismo criterio que `StubPaymentProvider` ya aplicaba.
+
+**Falta `DeliveredAt`**, que es la base legal del retracto (5 días hábiles) y de
+la garantía (1 año) del Estatuto del Consumidor. Va con la etapa `delivered` del
+pipeline, y hoy nadie la avanza: el pedido nunca pasa de "pagado". Las dos cosas
+son la misma tarea y son la siguiente.
 
 ### Fase 5 — lo corregido y lo que falta
 

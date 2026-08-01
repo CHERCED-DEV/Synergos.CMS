@@ -340,7 +340,8 @@ public sealed class SeamComposer : IComposer
             new TravelCartService(
                 sp.GetRequiredService<IReservationService>(),
                 sp.GetRequiredService<IPaymentProvider>(),
-                new StubOrderTrackingService(TravelCartService.TravelPipeline, null),
+                new StubOrderTrackingService(TravelCartService.TravelPipeline, null,
+                    sp.GetRequiredService<IJsonEntityStore>(), "tracking-travel"),
                 null,
                 sp.GetRequiredService<IJsonEntityStore>(),
                 notifier: sp.GetRequiredService<ITransactionalNotifier>()));
@@ -418,7 +419,14 @@ public sealed class SeamComposer : IComposer
         //     (post-venta). ThreadId determinista por (contexto+par) — sin hilos
         //     duplicados. v1 simple; SH-7 v2/v3 (DM/In Basket) agregan encima.
         services.AddSingleton<IUserCollection, StubUserCollection>();
-        services.AddSingleton<IOrderTrackingService, StubOrderTrackingService>();
+        // ADR 0116 fase 6 — el timeline pasa a disco. Cada dominio con su
+        // ESPACIO propio: los cuatro pipelines tienen distinta longitud y el
+        // estado guarda el índice de etapa, así que compartir espacio haría que
+        // "enviado" se leyera como "matriculado" sin que nada fallara.
+        services.AddSingleton<IOrderTrackingService>(sp =>
+            new StubOrderTrackingService(
+                StubOrderTrackingService.ShopPipeline, null,
+                sp.GetRequiredService<IJsonEntityStore>(), "tracking-shop"));
         // T1 (doc 25) — persistencia durable de órdenes tras el seam genérico IJsonEntityStore.
         // El motor no cambia; solo su backing store pasa de memoria a disco (JSON por
         // orderRef, App_Data/syn-orders/). Una orden confirmada sobrevive un reinicio.
@@ -440,7 +448,11 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IShopOrderService>(),
                 sp.GetRequiredService<IPaymentProvider>(),
                 sp.GetRequiredService<IAuditTrailWriter>(),
-                null));
+                null,
+                // ADR 0116 fase 6 — los RMA a disco. Vivían en memoria mientras
+                // órdenes y pagos ya estaban persistidos: un reinicio borraba
+                // la devolución que un comprador ya había pedido.
+                sp.GetRequiredService<IJsonEntityStore>()));
         services.AddSingleton<IMessagingService, StubMessagingService>();
 
         // OLA 3 Blogs — red social (doc blogs-app-spec). Seams stub-first, aditivos
@@ -535,7 +547,8 @@ public sealed class SeamComposer : IComposer
             var enrollment = new StubEnrollmentService(
                 sp.GetRequiredService<ICourseCatalogProvider>(),
                 sp.GetRequiredService<IPaymentProvider>(),
-                new StubOrderTrackingService(StubEnrollmentService.AcademyPipeline, null),
+                new StubOrderTrackingService(StubEnrollmentService.AcademyPipeline, null,
+                    sp.GetRequiredService<IJsonEntityStore>(), "tracking-academy"),
                 sp.GetRequiredService<IJsonEntityStore>(),
                 null,
                 notifier: sp.GetRequiredService<ITransactionalNotifier>());
@@ -904,7 +917,8 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IEventCatalogProvider>(),
                 sp.GetRequiredService<IReservationService>(),
                 sp.GetRequiredService<IPaymentProvider>(),
-                new StubOrderTrackingService(StubEventTicketingService.EventPipeline, null),
+                new StubOrderTrackingService(StubEventTicketingService.EventPipeline, null,
+                    sp.GetRequiredService<IJsonEntityStore>(), "tracking-events"),
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 sp.GetRequiredService<IJsonEntityStore>(),
                 null,

@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using System.Text.Encodings.Web;
+using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
@@ -40,8 +41,19 @@ public sealed class StubReturnService : IReturnService
     private readonly IPaymentProvider _payments;
     private readonly IAuditTrailWriter? _audit;
     private readonly Func<DateTimeOffset> _now;
-    private readonly ConcurrentDictionary<string, ShopReturnCase> _cases = new(StringComparer.Ordinal);
-    private readonly object _gate = new();
+    private static readonly JsonSerializerOptions _json = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    /// <summary>Familia de entidades en el store genérico (→ App_Data/syn-returns/).</summary>
+    private const string ResourceType = "returns";
+
+    private readonly IJsonEntityStore _store;
+
+    // Serializa el read-modify-write. lock{} no sirve: el cuerpo hace await.
+    private readonly SemaphoreSlim _mutate = new(1, 1);
 
     public StubReturnService(IShopOrderService orders, IPaymentProvider payments)
         : this(orders, payments, null, null)
@@ -57,12 +69,62 @@ public sealed class StubReturnService : IReturnService
         IPaymentProvider payments,
         IAuditTrailWriter? audit,
         Func<DateTimeOffset>? now)
+        : this(orders, payments, audit, now, null)
+    {
+    }
+
+    /// <summary>
+    /// Ctor completo (ADR 0116 fase 6): <paramref name="store"/> es el backing
+    /// store durable.
+    /// </summary>
+    /// <remarks>
+    /// El estado vivía en un diccionario del proceso mientras órdenes y pagos ya
+    /// estaban en disco. Un reinicio borraba los RMA abiertos de órdenes que
+    /// seguían "Paid": el comprador había pedido su devolución y para el sistema
+    /// no había pasado nada.
+    /// </remarks>
+    public StubReturnService(
+        IShopOrderService orders,
+        IPaymentProvider payments,
+        IAuditTrailWriter? audit,
+        Func<DateTimeOffset>? now,
+        IJsonEntityStore? store)
     {
         _orders = orders ?? throw new ArgumentNullException(nameof(orders));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _audit = audit;
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        _store = store ?? new InMemoryJsonEntityStore();
     }
+
+    /// <summary>Lee TODOS los RMA del store, saltando lo corrupto.</summary>
+    private async Task<List<ShopReturnCase>> LoadAllAsync(CancellationToken cancellationToken)
+    {
+        var raws = await _store.ListAsync(ResourceType, cancellationToken).ConfigureAwait(false);
+        var cases = new List<ShopReturnCase>(raws.Count);
+        foreach (var json in raws)
+        {
+            if (string.IsNullOrWhiteSpace(json)) continue;
+            try
+            {
+                var rma = JsonSerializer.Deserialize<ShopReturnCase>(json, _json);
+                if (rma is not null) cases.Add(rma);
+            }
+            catch (JsonException) { /* un RMA corrupto no puede tumbar la lista */ }
+        }
+        return cases;
+    }
+
+    private async Task<ShopReturnCase?> LoadAsync(string rmaId, CancellationToken cancellationToken)
+    {
+        var json = await _store.ReadAsync(ResourceType, rmaId, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JsonSerializer.Deserialize<ShopReturnCase>(json, _json); }
+        catch (JsonException) { return null; }
+    }
+
+    private Task SaveAsync(ShopReturnCase rma, CancellationToken cancellationToken)
+        => _store.WriteAsync(ResourceType, rma.RmaId, JsonSerializer.Serialize(rma, _json), cancellationToken);
 
     public async Task<ShopReturnCase> RequestAsync(
         string orderRef,
@@ -99,11 +161,13 @@ public sealed class StubReturnService : IReturnService
             : $"{line.ProductId}/{line.VariantId}";
 
         ShopReturnCase rma;
-        lock (_gate)
+        await _mutate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
             // Idempotente por (orden + línea): un caso NO rechazado ya abierto
             // se devuelve tal cual — no se duplican RMAs de la misma línea.
-            var existing = _cases.Values.FirstOrDefault(c =>
+            var all = await LoadAllAsync(cancellationToken).ConfigureAwait(false);
+            var existing = all.FirstOrDefault(c =>
                 string.Equals(c.OrderRef, order.OrderRef, StringComparison.Ordinal)
                 && string.Equals(c.LineRef, lineRef, StringComparison.OrdinalIgnoreCase)
                 && c.Status != ShopReturnStatus.Rejected);
@@ -126,7 +190,11 @@ public sealed class StubReturnService : IReturnService
                 RequestedAt: at,
                 UpdatedAt: at,
                 Note: null);
-            _cases[rma.RmaId] = rma;
+            await SaveAsync(rma, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _mutate.Release();
         }
 
         await AuditAsync(
@@ -147,7 +215,10 @@ public sealed class StubReturnService : IReturnService
         string? note = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(rmaId) || !_cases.TryGetValue(rmaId.Trim(), out var rma))
+        var rma = string.IsNullOrWhiteSpace(rmaId)
+            ? null
+            : await LoadAsync(rmaId.Trim(), cancellationToken).ConfigureAwait(false);
+        if (rma is null)
         {
             throw new ArgumentException("RMA no encontrado.", nameof(rmaId));
         }
@@ -188,7 +259,7 @@ public sealed class StubReturnService : IReturnService
             UpdatedAt = _now(),
             Note = string.IsNullOrWhiteSpace(note) ? rma.Note : note.Trim(),
         };
-        _cases[advanced.RmaId] = advanced;
+        await SaveAsync(advanced, cancellationToken).ConfigureAwait(false);
 
         await AuditAsync(
             id: $"{advanced.RmaId}:{target}".ToLowerInvariant(),
@@ -203,22 +274,22 @@ public sealed class StubReturnService : IReturnService
         return advanced;
     }
 
-    public Task<IReadOnlyList<ShopReturnCase>> GetForOrderAsync(
+    public async Task<IReadOnlyList<ShopReturnCase>> GetForOrderAsync(
         string orderRef,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(orderRef))
         {
-            return Task.FromResult<IReadOnlyList<ShopReturnCase>>(Array.Empty<ShopReturnCase>());
+            return Array.Empty<ShopReturnCase>();
         }
 
         var key = orderRef.Trim();
-        var cases = _cases.Values
+        var all = await LoadAllAsync(cancellationToken).ConfigureAwait(false);
+        return all
             .Where(c => string.Equals(c.OrderRef, key, StringComparison.Ordinal))
             .OrderByDescending(c => c.RequestedAt)
             .ThenBy(c => c.RmaId, StringComparer.Ordinal)
             .ToList();
-        return Task.FromResult<IReadOnlyList<ShopReturnCase>>(cases);
     }
 
     private static ShopOrderLine? ResolveLine(ShopOrder order, string lineId)
