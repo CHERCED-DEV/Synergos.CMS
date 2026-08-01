@@ -344,7 +344,12 @@ public sealed class SeamComposer : IComposer
                     sp.GetRequiredService<IJsonEntityStore>(), "tracking-travel"),
                 null,
                 sp.GetRequiredService<IJsonEntityStore>(),
-                notifier: sp.GetRequiredService<ITransactionalNotifier>()));
+                notifier: sp.GetRequiredService<ITransactionalNotifier>(),
+                // ADR 0125: la cancelación es anónima —el orderRef es la credencial— y a la
+                // vez destructiva y con movimiento de plata. El rastro es lo que permite
+                // responder "¿quién canceló este viaje y cuándo?" sin romper la compra de
+                // invitado: no pide sesión, solo deja constancia.
+                audit: sp.GetRequiredService<IAuditTrailWriter>()));
 
         // OLA 2 Booking — ficha de estadía rica (galería/amenities/specs/geo/
         // reviews) separada de la disponibilidad (IRoomAvailabilityProvider

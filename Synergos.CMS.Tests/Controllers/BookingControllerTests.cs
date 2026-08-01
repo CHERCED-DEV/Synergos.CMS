@@ -54,6 +54,7 @@ public sealed class BookingControllerTests
     private readonly IPaymentProvider _payments = Substitute.For<IPaymentProvider>();
     private readonly ICancellationPolicyEvaluator _policy = Substitute.For<ICancellationPolicyEvaluator>();
     private readonly IPriceFormatter _priceFormatter = Substitute.For<IPriceFormatter>();
+    private readonly IAuditTrailWriter _audit = Substitute.For<IAuditTrailWriter>();
 
     /// <summary>El estado que el motor de reservas guarda entre pasos del wizard.</summary>
     private Reservation? _estado;
@@ -122,7 +123,8 @@ public sealed class BookingControllerTests
 
     private BookingController BuildSut() => new(
         _availability, _reservations, _payments, _policy, _priceFormatter,
-        Microsoft.Extensions.Logging.Abstractions.NullLogger<BookingController>.Instance);
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<BookingController>.Instance,
+        _audit);
 
     /// <summary>El estado vigente, o revienta: un test que llega aquí sin reserva miente.</summary>
     private Reservation Actual() => _estado ?? throw new InvalidOperationException("Sin reserva en el motor.");
@@ -677,6 +679,55 @@ public sealed class BookingControllerTests
 
         await _reservations.Received(1).CancelAsync(
             ReservaId, Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Cancelar_deja_rastro_de_auditoria()
+    {
+        // El endpoint es anónimo —el reservationId ES la credencial— y a la vez destructivo
+        // y con movimiento de plata. Sin rastro no hay forma de responder "¿quién canceló
+        // esta estadía y cuándo?", que es la pregunta que llega cuando alguien reenvía un
+        // correo de confirmación. Auditarlo no rompe la compra de invitado.
+        ReservaPagada();
+
+        await BuildSut().Cancel(new BookingController.CancelRequest(ReservaId, "cambio de planes"), default);
+
+        await _audit.Received(1).WriteAsync(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == "booking.reservation.cancelled"
+                && e.Resource == ReservaId
+                && e.Detail.Contains("cambio de planes")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Si_la_auditoria_falla_la_cancelacion_NO_se_deshace()
+    {
+        // La reserva ya quedó cancelada y el reembolso ya salió: desandar eso porque no se
+        // pudo escribir una línea de log sería el remedio peor que la enfermedad.
+        ReservaPagada();
+        _audit.WriteAsync(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>())
+            .Returns<Task>(_ => throw new IOException("disco lleno"));
+
+        var body = Body<BookingController.CancelResponse>(
+            await BuildSut().Cancel(new BookingController.CancelRequest(ReservaId, null), default));
+
+        Assert.Equal(nameof(ReservationStatus.Cancelled), body.Status);
+        await _payments.Received(1).RefundAsync(SesionPago, Total - Penalidad, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task La_segunda_cancelacion_no_vuelve_a_auditar()
+    {
+        // Un rastro por cancelación real. Repetir la entrada en cada reintento de red
+        // convertiría la auditoría en ruido y haría parecer que se canceló dos veces.
+        ReservaPagada();
+        var sut = BuildSut();
+
+        await sut.Cancel(new BookingController.CancelRequest(ReservaId, null), default);
+        await sut.Cancel(new BookingController.CancelRequest(ReservaId, null), default);
+
+        await _audit.Received(1).WriteAsync(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
