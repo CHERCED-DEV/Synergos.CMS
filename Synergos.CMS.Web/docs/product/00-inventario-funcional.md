@@ -153,10 +153,10 @@ auditoría de contraste propia. **Un solo fichero** con hex hardcodeado en todo
 | **Tienda** | Catálogo real → carrito → checkout → orden durable → devolución con reembolso → reseña verificada | PSP real; que el dashboard vea las ventas; mover el pedido más allá de "pagado" |
 | **Contenido / Blog** | Blog editorial, comentarios con hilos y moderación, búsqueda (Examine), SEO con JSON-LD, formularios | — (es el más completo) |
 | **Eventos** | Checkout → e-ticket con **QR firmado** → check-in verificado, durable y auditado. ✅ El catálogo **sale del CMS**: `eventPage` modela localidades, aforo, agenda y zonas (ADR 0117) | El "quedan N" arranca lleno: el contenido declara cuánto hay, no cuánto queda |
-| **Educación** | Matrícula → pago → progreso, durable | La verificación **pública** del certificado es un enlace muerto |
-| **Gobierno** | Radicar → revisar → decidir, durable, con ownership real | Catálogo de trámites sembrado |
+| **Educación** | Matrícula → pago → progreso, durable. ✅ Verificación **pública** del certificado, con el id firmado por HMAC y el índice durable (ADR 0124) | Los certificados emitidos bajo el id viejo hay que re-emitirlos |
+| **Gobierno** | Radicar → revisar → decidir, durable, con ownership real. ✅ Catálogo **desde el CMS** con `tramitePage`, formulario incluido (ADR 0123) | `TramiteSummary.Channel` se autora y el controller no lo emite |
 | **Salud** | API PHI con cifrado real, escritura atómica, RTBF. ✅ **Portal del paciente abierto** con `GET /api/healthcare/me` (ADR 0120). ✅ La auditoría de acceso ya no se purga a los 90 días (ADR 0121) | Un paciente no puede corregir sus propios datos — necesita su propio flujo |
-| **Viajes** | Checkout / confirm / cancel durables | Catálogos sembrados; cancelación por URL-capacidad |
+| **Viajes** | Checkout / confirm / cancel durables. ✅ La ficha de estadía sale del CMS (heredado de Booking, ADR 0119). ✅ La cancelación por URL **deja rastro** (ADR 0125) | La política de cancelación del carrito reembolsa el total — decisión de producto |
 | **Inmobiliaria** | ✅ Catálogo **desde el CMS** con `propertyListing` (ADR 0118). ✅ Visitas, leads y alertas **durables** (ADR 0105) | — |
 | **Social** | 17 endpoints: feed, follow, reacciones, perfiles, DM, notificaciones. ✅ **Todo persiste** (ADR 0105) | Sin caché: el feed relee dos espacios por página |
 | **Booking (hoteles)** | ✅ Ficha **desde el CMS** con `stayListing` (ADR 0119). ✅ 57 tests, y la cobertura destapó **dos defectos que movían dinero**, ya corregidos (ADR 0122) | `cancel` es anónimo, destructivo y sin auditoría; `pay` devuelve dos DTOs distintos |
@@ -271,9 +271,13 @@ y el portal del paciente en Salud (bloqueado por §3.2).
 > Tienda sigue siendo el bloqueo real de esa fila, y sigue esperando
 > credenciales de sandbox.
 >
-> **Lo que sigue en "todavía no":** la verificación pública del certificado en
-> Educación, y los catálogos sembrados de Viajes y Gobierno. Booking salió de
-> esa fila: tiene su DocType y su cobertura.
+> **Lo que sigue en "todavía no": nada de esta lista.** Los nueve verticales
+> cerraron. El PSP real de Tienda sigue siendo el único bloqueo de producto, y
+> espera credenciales de sandbox.
+>
+> Los tres proveedores de disponibilidad de Viajes (habitación, vuelo, auto)
+> **no** van al CMS y eso es una decisión, no deuda: no sirven catálogo, sirven
+> disponibilidad y precio por rango de fechas (ADR 0125).
 >
 > Y una lección que el barrido no podía dar: **escribir los tests del único
 > controller sin cobertura encontró dos defectos que movían dinero**, ninguno
