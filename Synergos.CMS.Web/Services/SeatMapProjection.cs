@@ -75,6 +75,16 @@ public static class SeatMapProjection
     /// <summary>The only <see cref="SeatMapSeat.Status"/> the passenger can actually pick.</summary>
     public const string FreeStatus = "free";
 
+    /// <summary>Densidad cómoda — la del componente cuando no se le dice nada.</summary>
+    public const string ComfortableDensity = "comfortable";
+
+    /// <summary>
+    /// Densidad compacta. Achica butaca, huecos y pasillo; <b>no quita ninguna butaca</b>. Una
+    /// cabina de 44 filas mide más de mil píxeles de alto y en un móvil deja el resumen y el
+    /// botón de compra fuera de la pantalla.
+    /// </summary>
+    public const string CompactDensity = "compact";
+
     /// <summary>
     /// 1-based rank of <paramref name="column"/> in <see cref="ColumnAlphabet"/>, or <c>0</c>
     /// when the provider used a column the bundle cannot letter (including a literal
@@ -140,10 +150,22 @@ public static class SeatMapProjection
     /// <param name="maxSelectable">
     /// How many seats one passenger may pick. <c>null</c> or below 1 leaves the key out.
     /// </param>
+    /// <param name="density">
+    /// <c>comfortable</c> | <c>compact</c>. Cualquier otra cosa —incluido el blanco— deja la
+    /// clave fuera y el componente aplica <c>comfortable</c>.
+    /// </param>
+    /// <param name="hidePrices">
+    /// Lo que el editor marcó para <b>quitar</b> los precios. Se emite como <c>showPrices:
+    /// false</c>; si no lo marcó, la clave no va y el componente los muestra.
+    /// </param>
+    /// <param name="hideLegend">Igual, para la leyenda.</param>
     public static IReadOnlyDictionary<string, object?> BuildProps(
         SeatMapLayout? layout,
         string? currencyOverride,
-        int? maxSelectable)
+        int? maxSelectable,
+        string? density = null,
+        bool hidePrices = false,
+        bool hideLegend = false)
     {
         var props = new Dictionary<string, object?>(StringComparer.Ordinal);
 
@@ -166,8 +188,41 @@ public static class SeatMapProjection
             props["maxSelectable"] = maxSelectable.Value;
         }
 
+        var resolvedDensity = Density(density);
+        if (resolvedDensity is not null)
+        {
+            props["density"] = resolvedDensity;
+        }
+
+        // Solo se emite el APAGADO. El componente ya enciende por defecto, y mandar
+        // "showPrices": true en cada bloque sería repetir su propio default.
+        if (hidePrices)
+        {
+            props["showPrices"] = false;
+        }
+
+        if (hideLegend)
+        {
+            props["showLegend"] = false;
+        }
+
         return props;
     }
+
+    /// <summary>
+    /// La densidad, o <c>null</c> cuando el editor no eligió una que el componente entienda.
+    /// </summary>
+    /// <remarks>
+    /// Omitir vale más que emitir <c>comfortable</c>: si algún día el componente cambia su
+    /// default, un bloque que nunca eligió nada debe seguirlo, no quedar clavado al de hoy.
+    /// </remarks>
+    private static string? Density(string? density)
+        => density?.Trim().ToLowerInvariant() switch
+        {
+            ComfortableDensity => ComfortableDensity,
+            CompactDensity => CompactDensity,
+            _ => null,
+        };
 
     /// <summary>
     /// Las posiciones de pasillo, saneadas: enteros positivos, sin repetidos y en orden

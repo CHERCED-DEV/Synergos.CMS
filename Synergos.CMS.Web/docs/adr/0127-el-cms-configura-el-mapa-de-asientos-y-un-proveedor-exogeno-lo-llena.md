@@ -1,10 +1,9 @@
 # ADR 0127 — El CMS configura el mapa de asientos y un proveedor exógeno lo llena
 
-- **Estado:** Aceptado — **actualizado el mismo día**: los tres huecos que la medición encontró
-  (*servicio*, *categorías* y *forma de construcción*) están cerrados. El contrato del
-  componente se extendió en el repo UI y la proyección se adaptó; ver
-  «[Lo que se midió](#lo-que-se-midió-y-es-peor-de-lo-que-parecía)» y las dos secciones que la
-  siguen. Queda abierto solo *apariencia*, que es el que menos duele.
+- **Estado:** Aceptado — **actualizado el mismo día**: los **cuatro** ejes que la medición
+  evaluó están cerrados. El contrato del componente se extendió en el repo UI y el CMS se
+  adaptó después, en ese orden; ver «[Lo que se midió](#lo-que-se-midió-y-es-peor-de-lo-que-parecía)»
+  y las tres secciones que la siguen.
 - **Fecha:** 2026-08-01
 - **Enmienda:** ADR 0126 (un elemento que otro bundle embebe no lleva DocType)
 - **Complementa:** ADR 0117 (aforo y asientos de un evento como contenido), ADR 0083 (la UI es
@@ -64,8 +63,9 @@ cambia en cada refresco no se puede grabar para una demo y un test sobre él ser
 
 ### 2. El CMS aporta configuración, nunca inventario
 
-`elementSynSeatMap` tiene **tres propiedades**: qué mapa cargar, cuántas butacas se pueden
-elegir y en qué moneda. Ni filas, ni butacas, ni precios.
+`elementSynSeatMap` tiene **seis propiedades**: qué mapa cargar, cuántas butacas se pueden
+elegir y en qué moneda (Integración), más densidad, ocultar precios y ocultar leyenda (Estilo).
+Ni filas, ni butacas, ni precios de butaca.
 
 ### 3. El host resuelve en el SERVIDOR
 
@@ -84,16 +84,17 @@ endpoint del proveedor al navegador junto con lo que haga falta para autenticars
 bloque inservible sin CDN, mientras que resolver en el servidor deja al menos la configuración
 en pie.
 
-### Por qué el DocType no expone apariencia, servicio ni categorías
+### Por qué el DocType no expuso apariencia, servicio ni categorías de entrada
 
-Porque **el componente no las lee como entradas del editor**. Sus entradas son exactamente
-cuatro —`config`, `seatmap`, `currency`, `maxSelectable`— y agregar propiedades para claves que
-nadie consume es precisamente la deriva que el ADR 0083 y el gate de contratos existen para
-frenar: schema que se ve completo y no hace nada.
+Porque **el componente no las leía**. Agregar propiedades para claves que nadie consume es
+precisamente la deriva que el ADR 0083 y el gate de contratos existen para frenar: schema que se
+ve completo y no hace nada. El orden correcto era enseñarle al componente primero, y eso es lo
+que se hizo después (ver las tres secciones tras la medición).
 
-Servicio y categorías **no son configuración editorial**: son atributos de la cabina que el
-proveedor conoce y el editor no. Su sitio es la carga, no el DocType — y ahí es donde se
-resolvieron (ver abajo).
+Servicio y categorías, además, **no son configuración editorial**: son atributos de la cabina
+que el proveedor conoce y el editor no. Su sitio es la carga, no el DocType. La apariencia es al
+revés — no la sabe el proveedor, la decide quien coloca el bloque— y por eso sí terminó en el
+DocType.
 
 ## Lo que se midió, y es peor de lo que parecía
 
@@ -102,7 +103,7 @@ original**; los dos ejes tachados se cerraron el mismo día en la sección sigui
 
 | Eje | Estado | Detalle |
 |---|---|---|
-| **Apariencia** | Parcial, y **nada por el componente** | El bundle no expone ni un input de apariencia. Lo que funciona viene del host: `compDom*` aterriza en el envoltorio y el SCSS del bundle está tokenizado, así que el tema del siteRoot ya manda el color. Es el exterior de la caja; el interior no se configura |
+| ~~**Apariencia**~~ | ~~Parcial, y **nada por el componente**~~ → **cerrado** | El bundle no exponía ni un input de apariencia. Lo que funcionaba venía del host: `compDom*` aterriza en el envoltorio y el SCSS del bundle está tokenizado, así que el tema del siteRoot ya mandaba el color. Era el exterior de la caja; el interior no se configuraba |
 | ~~**Servicio**~~ | ~~**Nada**~~ → **cerrado** | `ServiceClass` no tenía clave en la carga. El 787 sembrado son 43 filas en tres cabinas y se dibujaba como una sola grilla indiferenciada: un pasajero no veía dónde termina ejecutiva |
 | ~~**Forma de construcción**~~ | ~~Parcial — el peor hueco~~ → **cerrado** | `aisleAfterColumns` era **un solo entero**, así que solo se podía dibujar **un** pasillo. Todo widebody salía mal: el `3-3-3` dibujaba el pasillo tras la C y **nada entre F y G**; el bloque derecho se soldaba al central. El `1-2-1` igual |
 | ~~**Categorías**~~ | ~~Parcial~~ → **cerrado** | El enum `type` mezclaba dos ideas ortogonales —tres posiciones más un rasgo de confort—, así que `extra-legroom` **sobrescribía** la posición cuando ambas eran ciertas. `Features` e `IsExitRow` se descartaban |
@@ -112,9 +113,7 @@ original**; los dos ejes tachados se cerraron el mismo día en la sección sigui
 1. ~~**`aisleAfterColumns` → arreglo.**~~ **Hecho.**
 2. ~~**`rows[].serviceClass`** más un encabezado de sección en la plantilla.~~ **Hecho.**
 3. ~~**`seats[].features: string[]`**, aditivo.~~ **Hecho.**
-4. **Entradas de apariencia** (`density`, `showLegend`, `showPrices`). Solo vale la pena después
-   de lo anterior. **Sigue pendiente** — y `showLegend` perdió parte de su motivo: la leyenda
-   ahora se deriva del contenido, así que un mapa sin rasgos ya no dibuja ninguna.
+4. ~~**Entradas de apariencia** (`density`, `showLegend`, `showPrices`).~~ **Hecho.**
 
 ## Servicio y categorías: cómo se cerraron
 
@@ -189,6 +188,47 @@ Tres decisiones:
 - **Las posiciones se sanean y se ordenan** en las dos mitades. El orden no es cosmético: el
   componente las compara mientras recorre la fila de izquierda a derecha.
 
+## Apariencia: tres controles que no tocan una butaca
+
+Era el último eje, y el que obligó a revisar una premisa de este mismo ADR. Arriba se dijo que
+el DocType no expone apariencia **porque el componente no la lee**. Eso era una constatación,
+no una decisión: la respuesta correcta era enseñarle a leerla, no dejar el eje sin cerrar.
+
+El componente recibe tres entradas nuevas —`density`, `showPrices`, `showLegend`— y el bloque
+tres propiedades en la pestaña **Estilo**, que ya existe por `compDom*`.
+
+- **`density`** (`comfortable` | `compact`) no es cosmética. Una cabina de 44 filas mide más de
+  mil píxeles de alto: en un móvil deja el resumen y el botón de compra fuera de la pantalla.
+  `compact` **encoge** butaca, huecos y pasillo; **no quita nada**, y por eso el objetivo táctil
+  se mantiene por encima del mínimo accesible. Un valor que el componente no conoce cae en
+  `comfortable` en vez de dejar el mapa sin estilo.
+- **`showPrices`** se apaga donde el precio no distingue nada —un recinto con una zona a precio
+  único—: trescientas etiquetas idénticas no informan, tapan el mapa. Apagarlo **no esconde el
+  costo**: el total sigue en el resumen y el precio sigue en el `aria-label` de cada butaca,
+  porque quien navega con lector de pantalla no tiene el resumen a la vista para compensarlo.
+- **`showLegend`** vale menos desde que la leyenda se deriva del contenido, pero sigue teniendo
+  un caso: el mapa embebido en un paso de compra donde el visitante ya vio las convenciones.
+
+### Por qué el CMS las autora en NEGATIVO
+
+Las dos propiedades del bloque se llaman **«Ocultar precios»** y **«Ocultar leyenda»**, no
+«Mostrar».
+
+`Umbraco.TrueFalse` guarda `false` cuando el editor nunca tocó el interruptor, y el componente
+enciende las dos por defecto. Con un «Mostrar precios», ese `false` heredado se emitiría como
+`showPrices: false` y **todo bloque ya colocado —y todo bloque nuevo sin tocar— se quedaría sin
+precios sin que nadie lo pidiera**. Con «Ocultar», el estado apagado —el que cada bloque tiene
+por defecto— significa exactamente lo que el componente ya hace.
+
+Se descartaron dos alternativas: un `DataType` propio con `"Default": true` no arregla el
+contenido que ya existe, y distinguir «nunca autorado» de «apagado a mano» depende de cómo
+Umbraco trata el `0` en `HasValue`, que es justo la clase de sutileza que no debe sostener un
+default visible.
+
+Va en la misma dirección la regla de emisión: **solo se emite el apagado**. Un bloque que no
+eligió apariencia no emite ninguna de las tres claves, así que si el componente cambia su
+default algún día, lo sigue en vez de quedar clavado al de hoy.
+
 ## Consecuencias
 
 ### Lo que se gana
@@ -205,6 +245,8 @@ Tres decisiones:
   con espacio extra, que es lo que un rasgo con consecuencias regulatorias necesita.
 - **Las tres cabinas sembradas se dibujan bien.** Dos son de doble pasillo y hasta ahora salían
   con uno.
+- **El editor decide cuánto ocupa el mapa y cuánto explica**, sin tocar código y sin que ninguna
+  de esas decisiones pueda alterar una butaca, un precio o una disponibilidad.
 
 ### Lo que se acepta
 
@@ -217,10 +259,13 @@ Tres decisiones:
 - **El vocabulario abierto no se valida en ninguna de las dos mitades.** Un proveedor que mande
   `xtra-legroom` verá esa cadena rotulada tal cual en la leyenda, sin error en ningún gate. Es
   el precio de no exigir un despliegue del CMS por cada rasgo nuevo, y se aceptó a sabiendas.
-- **La apariencia sigue sin configurarse desde el bloque.** Es el único de los cuatro ejes que
-  queda, y el que menos duele: el tema del siteRoot ya manda el color por el envoltorio.
-  `density` y `showPrices` serían lo siguiente; `showLegend` perdió parte de su motivo, porque
-  la leyenda ahora se deriva del contenido y un mapa sin rasgos ya no dibuja ninguna.
+- **La apariencia llega hasta donde llega el componente.** Se configura cuánto ocupa el mapa y
+  cuánto explica, no cómo se ve por dentro: el color de una butaca sigue viniendo del tema del
+  siteRoot por el envoltorio, no de una propiedad del bloque. Cambiar eso sería exponer tokens
+  al editor, que es otra decisión y de otro tamaño.
+- **Las dos propiedades negadas se leen peor que las afirmadas.** «Ocultar precios» apagado
+  significa que se ven, y eso obliga a una doble negación mental cada vez. Se aceptó porque la
+  alternativa no era un nombre más lindo: era un default que se rompe solo.
 - **Sin diccionario y sin respaldo SSR.** El servidor no emite copy: la proyección emite ids,
   enums, booleanos y números; todo el texto visible vive en el bundle. Un respaldo SSR sería lo
   primero que necesitaría claves de diccionario, y una grilla de butacas renderizada en el

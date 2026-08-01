@@ -35,10 +35,18 @@
     // 0 y negativos se tratan igual (el componente aplica su default de 1).
     var maxSelectable = Model.Value<int>("maxSelectable");
 
+    // Apariencia. Los dos booleanos se autoran en NEGATIVO —"Ocultar precios",
+    // "Ocultar leyenda"— a propósito: Umbraco.TrueFalse guarda false cuando el editor
+    // nunca tocó el interruptor, y el componente enciende las dos por defecto. Con
+    // "Mostrar precios", un bloque ya colocado (o uno nuevo sin tocar) se quedaría sin
+    // precios sin que nadie lo pidiera.
     var props = SeatMapProjection.BuildProps(
         layout,
         Model.Value<string>("currency"),
-        maxSelectable > 0 ? maxSelectable : null);
+        maxSelectable > 0 ? maxSelectable : null,
+        Model.Value<string>("density"),
+        Model.Value<bool>("hidePrices"),
+        Model.Value<bool>("hideLegend"));
 
     // BlockAlias DEBE ser el name kebab del registry = "seat-map" (el emitter resuelve
     // el bundle por ese alias; camelCase no matchearía y no hidrataría).
