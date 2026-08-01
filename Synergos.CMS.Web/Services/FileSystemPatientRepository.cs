@@ -66,6 +66,53 @@ public sealed class FileSystemPatientRepository : IPatientRepository
         return result.OrderBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase).Take(limit).ToList();
     }
 
+    /// <summary>
+    /// La clave clínica vinculada a un miembro, o null. Barre el espacio vigente.
+    /// </summary>
+    /// <remarks>
+    /// <b>Un barrido y no un índice</b>, a propósito. Un índice <c>memberKey → patientKey</c>
+    /// sería un segundo lugar donde vive el vínculo, y de los dos el archivo del paciente es
+    /// el que manda: un índice desincronizado le mostraría a alguien el expediente de otro, y
+    /// esa es la peor falla posible de este vertical. El barrido lee de la única fuente y no
+    /// puede mentir. Si algún día el volumen lo exige, el índice se añade JUNTO con su
+    /// invalidador — la misma regla que el resto del repo aplica a las cachés.
+    ///
+    /// <para>Los borrados lógicos se saltan: un expediente archivado no le devuelve el portal
+    /// a nadie.</para>
+    /// </remarks>
+    public async Task<Guid?> FindKeyByMemberAsync(Guid memberKey, CancellationToken cancellationToken)
+    {
+        if (memberKey == Guid.Empty)
+        {
+            // Guid.Empty es "sin miembro", no un miembro. Sin este corte, cualquier expediente
+            // creado sin vincular casaría con él y el primer anónimo mal manejado se llevaría
+            // una historia clínica ajena.
+            return null;
+        }
+
+        var raw = await _store.ListAsync(Current, cancellationToken).ConfigureAwait(false);
+
+        PatientRecord? best = null;
+        foreach (var json in raw)
+        {
+            var record = Deserialize(json);
+            if (record is null || record.IsDeleted || record.MemberKey != memberKey)
+            {
+                continue;
+            }
+
+            // Más de un expediente vigente por miembro es dato corrupto, no un caso de
+            // negocio. Se sirve el más reciente en vez de fallar: negarle el portal a un
+            // paciente por una inconsistencia del almacén es peor que darle el más nuevo.
+            if (best is null || record.CreatedAtUtc > best.CreatedAtUtc)
+            {
+                best = record;
+            }
+        }
+
+        return best?.PatientKey;
+    }
+
     private static int AgeYears(DateTime dateOfBirth)
     {
         var today = DateTime.UtcNow.Date;

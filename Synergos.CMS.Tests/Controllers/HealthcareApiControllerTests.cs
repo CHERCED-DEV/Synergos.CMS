@@ -18,9 +18,10 @@ public sealed class HealthcareApiControllerTests
     private readonly IAppointmentScheduler _appointments = Substitute.For<IAppointmentScheduler>();
     private readonly IPrescriptionService _prescriptions = Substitute.For<IPrescriptionService>();
     private readonly IConsentLedger _consent = Substitute.For<IConsentLedger>();
+    private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
 
     private HealthcareApiController BuildSut() =>
-        new(_guard, _patients, _appointments, _prescriptions, _consent);
+        new(_guard, _patients, _appointments, _prescriptions, _consent, _gate);
 
     private void GuardReturns(bool allowed, string? reason) =>
         _guard.CheckAccessAsync(Arg.Any<AccessCheckRequest>(), Arg.Any<CancellationToken>())
