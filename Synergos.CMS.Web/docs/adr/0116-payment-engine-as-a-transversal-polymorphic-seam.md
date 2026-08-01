@@ -1,6 +1,6 @@
 # ADR 0116 — El motor de pagos es una seam TRANSVERSAL y polimórfica: un router que es el mismo contrato, tres formas de "requiere acción", y un despacho de eventos que no es de Tienda
 
-- **Status:** **Accepted — parcialmente construido.** El arquitecto respondió las tres preguntas abiertas: Wompi como primer adaptador, la forma se rompe ahora, y se trabaja todo. Fases 1-4 en el repo y verificadas; fases 5-6 pendientes (ver §Estado de construcción al final).
+- **Status:** **Accepted — parcialmente construido.** El arquitecto respondió las tres preguntas abiertas: Wompi como primer adaptador, la forma se rompe ahora, y se trabaja todo. Fases 1-4 completas y fase 5 casi (5 de 6 defectos reales); fase 6 pendiente. Ver §Estado de construcción.
 - **Date:** 2026-08-01
 - **Deciders:** Arquitecto (encargo textual: *"como todas van a tener pagos, hacer bien payment, que se pueda reinstanciar o reutilizar o polimorfizar, es muy ganador"*) + agente.
 - **Investigación:** cuatro barridos paralelos, dos sobre código y dos con búsqueda web autorizada. Anexos en `docs/product/investigacion-pagos/` (871 líneas, con URLs y fechas).
@@ -231,10 +231,10 @@ captura parcial exige el flujo de autorización diferida de la API directa.
 | 2 | `RoutingPaymentProvider` — misma seam, N proveedores | ✅ construida |
 | 3 | Firmas de Wompi + adaptador Web Checkout + cableado | ✅ construida |
 | 4 | `IPaymentEventSink` — despacho de eventos por vertical | ✅ construida |
-| 5 | Corregir los 7 usos defectuosos | 🟡 3 de 7 (Salud, Gobierno, Booking) |
+| 5 | Corregir los usos defectuosos | 🟡 5 de 6 reales (ver abajo) |
 | 6 | Persistir tracking y RMA + `DeliveredAt` | ⬜ pendiente |
 
-**Verificado:** `dotnet build` 0 errores · `dotnet test` **1084/1084**.
+**Verificado:** `dotnet build` 0 errores · `dotnet test` **1086/1086**.
 
 ### Fase 5 — lo corregido y lo que falta
 
@@ -243,9 +243,36 @@ captura parcial exige el flujo de autorización diferida de la API directa.
 | **Salud** | Confirmaba el cupo sin mirar si capturó | Si no captura: `VoidAsync` + libera el hold + no agenda |
 | **Gobierno** | Abría sesión, nunca capturaba ni la persistía | Captura y guarda `PaymentSessionId` + `PaymentStatus` en `CaseState` |
 | **Booking** | Calculaba el reembolso y no lo ejecutaba | Llama `RefundAsync` por total menos penalidad |
-| Viajes | Queda en `Partial` sin revertir el cobro | ⬜ |
-| Eventos | Sin reembolso | ⬜ |
-| Educación | Sin reembolso | ⬜ |
+| **Viajes** | Quedaba en `Partial` sin revertir el cobro | Reembolso parcial de lo no entregado; si NADA confirma, devuelve todo y falla |
+| **Eventos** | No liberaba los asientos si el pago fallaba | `VoidAsync` + libera cada asiento |
+| Educación | — | **Ya era correcto**: lanza y no activa. Ver corrección abajo |
+
+### Corrección al informe de investigación
+
+La investigación reportó *"Eventos y Educación: sin reembolso, en absoluto"*. Al
+ir al código, eso mezcla dos cosas distintas:
+
+- **No manejar el fallo de captura** es un defecto. Eventos lo tenía a medias
+  (no activaba la compra, pero dejaba los asientos apartados hasta que venciera
+  el hold — entradas que nadie más podía comprar por un pago que no ocurrió).
+  Corregido.
+- **No tener cancelación con reembolso** es una capacidad que falta, no un bug.
+  `IEventTicketingService` e `IEnrollmentService` no exponen `CancelAsync`, y
+  añadirla exige decidir la política: ¿hasta cuándo se devuelve una entrada?
+  ¿un curso ya empezado se reembolsa completo? Eso es decisión de producto y no
+  se inventa desde acá.
+
+Así que los defectos reales eran **6, no 7**, y quedan **5 corregidos**.
+
+### Sinks registrados
+
+Tienda y **Viajes**. Viajes importa especialmente porque su carrito se paga a
+menudo por PSE, y con PSE el resultado sólo llega por evento.
+
+Eventos y Educación **no pueden tener sink todavía**: sus seams no exponen
+búsqueda por referencia de orden, así que un sink no podría ni decir si el pago
+es suyo. Añadir ese método es lo siguiente, y es útil de todos modos (lo pide
+cualquier pantalla de "mis entradas").
 
 **Gobierno no aborta el trámite si la tasa no captura**, y es deliberado: en un
 servicio público, perder la radicación de un ciudadano porque su banco tardó es

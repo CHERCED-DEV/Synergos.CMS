@@ -261,11 +261,16 @@ public sealed class SeamComposer : IComposer
         // asíncrono. Cada sink dice si la referencia es suya; agregar un
         // vertical es una línea más acá y nada en el receptor.
         //
-        // Hoy sólo Tienda: es el único vertical durable con confirmación
-        // idempotente. Los otros siete entran cuando se corrijan sus usos del
-        // motor (fase 5) — registrarlos antes sería darles un evento que no
-        // saben procesar.
+        // Tienda y Viajes: los dos verticales durables con confirmación
+        // idempotente y compensación ya corregida (fase 5). Viajes importa
+        // especialmente porque su carrito se paga a menudo por PSE, y con PSE el
+        // resultado sólo llega por evento.
+        //
+        // Eventos y Educación quedan fuera todavía: sus seams no tienen búsqueda
+        // por referencia de orden, así que un sink no podría siquiera decir si el
+        // pago es suyo. Añadir ese método es lo siguiente.
         services.AddSingleton<IPaymentEventSink, ShopPaymentEventSink>();
+        services.AddSingleton<IPaymentEventSink, TravelPaymentEventSink>();
 
         // Motor de reservas (vertical Hoteles) — 3 seams stub-first (doc 17),
         // calcando IPaymentProvider. Hoy sirven la demo end-to-end en memoria;
