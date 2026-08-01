@@ -19,19 +19,26 @@ namespace Synergos.CMS.Web.Services;
 /// <para>
 /// <b>The UI is the source of truth (ADR 0083).</b> The bundle reads exactly four inputs —
 /// <c>config</c>, <c>seatmap</c>, <c>currency</c>, <c>maxSelectable</c> — and its
-/// <c>seatmap</c> parser only looks at <c>rows[].rowNumber</c>, <c>rows[].seats[]</c>
-/// (<c>id</c>, <c>type</c>, <c>available</c>, <c>price</c>) and <c>aisleAfterColumns</c>.
-/// Nothing else is emitted. Keys are pinned with <see cref="JsonPropertyNameAttribute"/> so
-/// they survive whatever naming policy the emitter is configured with.
+/// <c>seatmap</c> parser looks at <c>rows[].rowNumber</c>, <c>rows[].serviceClass</c>,
+/// <c>rows[].seats[]</c> (<c>id</c>, <c>type</c>, <c>available</c>, <c>price</c>,
+/// <c>features[]</c>) and <c>aisleAfterColumns</c>. Nothing else is emitted. Keys are pinned
+/// with <see cref="JsonPropertyNameAttribute"/> so they survive whatever naming policy the
+/// emitter is configured with.
 /// </para>
 /// <para>
-/// <b>What the projection deliberately drops</b>, because the published contract has nowhere
-/// to put it: <see cref="SeatMapRow.ServiceClass"/> (there is no per-row class key),
-/// <see cref="SeatMapRow.IsExitRow"/> (an exit row is not a seat <c>type</c>, and folding it
-/// into <c>extra-legroom</c> would erase the regulatory meaning), and every
-/// <see cref="SeatMapSeat.Features"/> value other than <c>extra-legroom</c> — the one feature
-/// the bundle's <c>type</c> enum can name. Extending the contract is a UI-repo decision;
-/// emitting keys nobody reads would be exactly the drift this repo fights.
+/// <b>Servicio y categorías ya viajan.</b> El contrato del componente se extendió primero en el
+/// repo UI y esta proyección se adaptó después, que es la dirección que fija el ADR 0083.
+/// <see cref="SeatMapRow.ServiceClass"/> sale como <c>rows[].serviceClass</c> y el componente
+/// dibuja un encabezado cuando la clase cambia; <see cref="SeatMapSeat.Features"/> sale como
+/// <c>seats[].features</c> con vocabulario ABIERTO, y <see cref="SeatMapRow.IsExitRow"/> se
+/// reparte ahí como <c>exit-row</c> — separado de <c>extra-legroom</c> aunque casi siempre
+/// coincidan, porque una fila de salida conlleva requisitos regulatorios que "más espacio" no
+/// tiene. <c>type</c> vuelve a ser solo la posición.
+/// </para>
+/// <para>
+/// <b>Lo único que la proyección sigue sin poder decir</b> es la geometría de un widebody:
+/// <c>aisleAfterColumns</c> es un solo entero en el contrato, así que una cabina de doble
+/// pasillo se dibuja con uno. Es el siguiente cambio UI-first (ADR 0127).
 /// </para>
 /// <para>
 /// <b>Degrades, never throws.</b> A null layout, a layout with no rows, or rows whose seats
@@ -53,8 +60,17 @@ public static class SeatMapProjection
     /// <summary>The seat <c>type</c> the bundle falls back to for anything it cannot name.</summary>
     public const string DefaultSeatType = "middle";
 
-    /// <summary>The one <see cref="SeatMapSeat.Features"/> value the bundle's <c>type</c> can express.</summary>
+    /// <summary>
+    /// El rasgo de confort. Vive en <c>features</c>, no en <c>type</c>: una butaca de ventana
+    /// con espacio extra sigue siendo de ventana.
+    /// </summary>
     public const string ExtraLegroomFeature = "extra-legroom";
+
+    /// <summary>
+    /// La marca de fila de salida. Es de la FILA en el dominio y se reparte a cada butaca,
+    /// porque el contrato del componente lleva los rasgos por butaca.
+    /// </summary>
+    public const string ExitRowFeature = "exit-row";
 
     /// <summary>The only <see cref="SeatMapSeat.Status"/> the passenger can actually pick.</summary>
     public const string FreeStatus = "free";
@@ -168,7 +184,7 @@ public static class SeatMapProjection
             .Where(seat => seat is not null && !string.IsNullOrWhiteSpace(seat.Id))
             // OrderBy is stable, so unknown columns keep the provider's order among themselves.
             .OrderBy(SortKey)
-            .Select(ProjectSeat)
+            .Select(seat => ProjectSeat(seat, row.IsExitRow))
             .ToList();
 
         if (seats.Count == 0)
@@ -177,7 +193,11 @@ public static class SeatMapProjection
         }
 
         var label = string.IsNullOrWhiteSpace(row.Label) ? string.Empty : row.Label.Trim();
-        return new SeatMapPayloadRow(label, seats);
+        var serviceClass = string.IsNullOrWhiteSpace(row.ServiceClass)
+            ? null
+            : row.ServiceClass.Trim().ToLowerInvariant();
+
+        return new SeatMapPayloadRow(label, seats, serviceClass);
     }
 
     /// <summary>Unknown columns sort last instead of first, so they never displace a lettered seat.</summary>
@@ -187,34 +207,67 @@ public static class SeatMapProjection
         return rank == 0 ? int.MaxValue : rank;
     }
 
-    private static SeatMapPayloadSeat ProjectSeat(SeatMapSeat seat) => new(
+    private static SeatMapPayloadSeat ProjectSeat(SeatMapSeat seat, bool isExitRow) => new(
         seat.Id.Trim(),
         SeatType(seat),
         // Anything that is not `free` is unavailable to this visitor: `sold` and `blocked`
         // never come back, and a `held` seat belongs to someone else's checkout right now.
         string.Equals(seat.Status?.Trim(), FreeStatus, StringComparison.OrdinalIgnoreCase),
-        seat.Price > 0m ? seat.Price : 0m);
+        seat.Price > 0m ? seat.Price : 0m,
+        Features(seat, isExitRow));
 
+    /// <summary>
+    /// La POSICIÓN de la butaca. Ya no se pisa con el confort.
+    /// </summary>
+    /// <remarks>
+    /// Antes, una butaca con <c>extra-legroom</c> se emitía con ese valor en <c>type</c> y
+    /// perdía su posición: una de ventana con espacio extra dejaba de ser de ventana. El
+    /// contrato del componente ya separa las dos cosas (ADR 0127), así que aquí solo va la
+    /// posición y el confort viaja en <c>features</c>.
+    /// </remarks>
     private static string SeatType(SeatMapSeat seat)
-    {
-        if (seat.Features is not null)
-        {
-            foreach (var feature in seat.Features)
-            {
-                if (string.Equals(feature?.Trim(), ExtraLegroomFeature, StringComparison.OrdinalIgnoreCase))
-                {
-                    return ExtraLegroomFeature;
-                }
-            }
-        }
-
-        return seat.Position?.Trim().ToLowerInvariant() switch
+        => seat.Position?.Trim().ToLowerInvariant() switch
         {
             "window" => "window",
             "aisle" => "aisle",
             "middle" => "middle",
             _ => DefaultSeatType,
         };
+
+    /// <summary>
+    /// Los rasgos de la butaca, normalizados y sin repetidos.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>IsExitRow</c> es de la FILA y se reparte a cada butaca</b>, porque el contrato del
+    /// componente lleva los rasgos por butaca. No se pliega dentro de <c>extra-legroom</c>
+    /// aunque casi siempre coincidan: una fila de salida conlleva requisitos regulatorios
+    /// —edad mínima, nada en el piso— que "más espacio" no tiene, y confundirlos borraría del
+    /// mapa la única marca que los comunica.
+    ///
+    /// <para>El vocabulario es ABIERTO: lo que el proveedor mande pasa tal cual. Filtrar contra
+    /// una lista conocida haría que un rasgo nuevo exigiera desplegar el CMS.</para>
+    /// </remarks>
+    private static IReadOnlyList<string>? Features(SeatMapSeat seat, bool isExitRow)
+    {
+        var features = new List<string>(2);
+
+        if (isExitRow)
+        {
+            features.Add(ExitRowFeature);
+        }
+
+        foreach (var raw in seat.Features ?? Array.Empty<string>())
+        {
+            var feature = raw?.Trim().ToLowerInvariant();
+            if (!string.IsNullOrEmpty(feature) && !features.Contains(feature, StringComparer.Ordinal))
+            {
+                features.Add(feature);
+            }
+        }
+
+        // Null en vez de lista vacía: el emisor omite los nulos, y una carga con
+        // "features":[] en cada butaca es ruido en cada request de la ficha.
+        return features.Count > 0 ? features : null;
     }
 }
 
@@ -228,14 +281,19 @@ public sealed record SeatMapPayload(
 /// <summary>One row of the payload. <c>rowNumber</c> stays a string — real rows skip 13.</summary>
 public sealed record SeatMapPayloadRow(
     [property: JsonPropertyName("rowNumber")] string RowNumber,
-    [property: JsonPropertyName("seats")] IReadOnlyList<SeatMapPayloadSeat> Seats);
+    [property: JsonPropertyName("seats")] IReadOnlyList<SeatMapPayloadSeat> Seats,
+    // Sección de cabina. Null se omite del JSON, y un mapa sin clases se ve
+    // exactamente como antes de que el contrato las admitiera.
+    [property: JsonPropertyName("serviceClass")] string? ServiceClass = null);
 
 /// <summary>
-/// One seat of the payload. <c>type</c> is the bundle's four-value enum
-/// (<c>window|aisle|middle|extra-legroom</c>), not the provider's richer position + features.
+/// One seat of the payload. <c>type</c> es SOLO la posición (<c>window|aisle|middle</c>); el
+/// confort y la marca de salida viajan en <c>features</c>, que es vocabulario abierto.
 /// </summary>
 public sealed record SeatMapPayloadSeat(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("available")] bool Available,
-    [property: JsonPropertyName("price")] decimal Price);
+    [property: JsonPropertyName("price")] decimal Price,
+    // Rasgos de la butaca. Null se omite del JSON.
+    [property: JsonPropertyName("features")] IReadOnlyList<string>? Features = null);
