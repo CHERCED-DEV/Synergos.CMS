@@ -31,19 +31,22 @@ public sealed class BookingController : ControllerBase
     private readonly IPaymentProvider _payments;
     private readonly ICancellationPolicyEvaluator _cancellationPolicy;
     private readonly IPriceFormatter _priceFormatter;
+    private readonly ILogger<BookingController> _logger;
 
     public BookingController(
         IRoomAvailabilityProvider availability,
         IReservationService reservations,
         IPaymentProvider payments,
         ICancellationPolicyEvaluator cancellationPolicy,
-        IPriceFormatter priceFormatter)
+        IPriceFormatter priceFormatter,
+        ILogger<BookingController> logger)
     {
         _availability = availability;
         _reservations = reservations;
         _payments = payments;
         _cancellationPolicy = cancellationPolicy;
         _priceFormatter = priceFormatter;
+        _logger = logger;
     }
 
     // ── 1. Search ──────────────────────────────────────────────────
@@ -281,13 +284,44 @@ public sealed class BookingController : ControllerBase
 
         var cancelled = await _reservations.CancelAsync(reservation.Id, reason, cancellationToken);
 
+        // DEVOLVER LA PLATA, no sólo calcular cuánta. Antes esto evaluaba la
+        // política, informaba el monto reembolsable, cancelaba la reserva y
+        // NUNCA llamaba al motor de pago: la cifra era decorativa y el huésped
+        // se quedaba sin su dinero y con un mensaje diciéndole que se lo
+        // devolvíamos.
+        //
+        // Lo que se devuelve es el total MENOS la penalidad. Si no hay sesión
+        // de pago —una reserva que nunca se cobró— no hay nada que devolver.
+        string? refundState = null;
+        if (outcome.Refundable && !string.IsNullOrWhiteSpace(reservation.PaymentSessionId))
+        {
+            var refundable = reservation.TotalPrice - outcome.PenaltyAmount;
+            if (refundable > 0m)
+            {
+                var refund = await _payments.RefundAsync(
+                    reservation.PaymentSessionId, refundable, cancellationToken);
+                refundState = refund.Status.ToString();
+
+                if (refund.Status != PaymentStatus.Refunded)
+                {
+                    // La reserva YA quedó cancelada y eso no se deshace: el cupo
+                    // volvió al inventario. Pero el reembolso falló, y callarlo
+                    // reproduciría exactamente el defecto que este cambio cierra.
+                    _logger.LogError(
+                        "Reserva {ReservationId}: cancelada pero el reembolso de {Amount} quedó en {Status}. {Reason}",
+                        cancelled.Id, refundable, refund.Status, refund.FailureReason);
+                }
+            }
+        }
+
         return Ok(new CancelResponse(
             ReservationId: cancelled.Id,
             Status: cancelled.Status.ToString(),
             Refundable: outcome.Refundable,
             PenaltyAmount: outcome.PenaltyAmount,
             PenaltyFormatted: _priceFormatter.Format(outcome.PenaltyAmount, cancelled.Currency),
-            PolicyDescription: outcome.Description));
+            PolicyDescription: outcome.Description,
+            RefundStatus: refundState));
     }
 
     // ── 5. Get ─────────────────────────────────────────────────────
@@ -410,11 +444,17 @@ public sealed class BookingController : ControllerBase
         string AmountFormatted,
         string? FailureReason);
 
+    /// <param name="RefundStatus">Qué pasó con la devolución del dinero.
+    ///   <c>null</c> cuando no había nada que devolver (reserva no cobrada, o
+    ///   penalidad igual al total). Se expone a propósito: antes esta respuesta
+    ///   informaba un monto reembolsable que nadie devolvía, y el huésped no
+    ///   tenía forma de notar la diferencia.</param>
     public sealed record CancelResponse(
         string ReservationId,
         string Status,
         bool Refundable,
         decimal PenaltyAmount,
         string PenaltyFormatted,
-        string PolicyDescription);
+        string PolicyDescription,
+        string? RefundStatus = null);
 }

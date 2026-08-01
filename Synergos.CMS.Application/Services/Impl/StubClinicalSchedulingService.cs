@@ -124,11 +124,33 @@ public sealed class StubClinicalSchedulingService : IClinicalSchedulingService
             cancellationToken);
         var capture = await _payments.CaptureAsync(session.SessionId, cancellationToken: cancellationToken);
 
-        // 3) Confirma la reserva ligándola a la sesión (máquina de estados reusada).
+        // 3) Si el copago NO capturó, se SUELTA el cupo y no se agenda.
+        //
+        //    Antes se llamaba a ConfirmAsync incondicionalmente y el resultado
+        //    del pago sólo teñía la etiqueta ("booked" vs "pending"): el slot
+        //    quedaba tomado igual. Con un PSP que auto-aprueba no se notaba;
+        //    con Wompi es un cupo regalado por cada pago rechazado, y en una
+        //    agenda médica un cupo regalado es una cita que otro paciente no
+        //    pudo pedir.
+        //
+        //    VoidAsync (ADR 0116) es lo que faltaba para poder soltarlo: no es
+        //    un reembolso —no hubo cobro— sino liberar la retención.
+        if (capture.Status != PaymentStatus.Captured)
+        {
+            await BestEffort.RunAsync(
+                () => _payments.VoidAsync(session.SessionId, cancellationToken),
+                cancellationToken);
+            await BestEffort.RunAsync(
+                () => _reservations.CancelAsync(hold.Id, "copago no capturado", cancellationToken),
+                cancellationToken);
+
+            throw new InvalidOperationException(
+                $"El copago no se pudo capturar ({capture.Status}). La cita no quedó agendada.");
+        }
+
+        // 4) Confirma la reserva ligándola a la sesión (máquina de estados reusada).
         var confirmed = await _reservations.ConfirmAsync(hold.Id, session.SessionId, cancellationToken);
-        var status = capture.Status == PaymentStatus.Captured && confirmed.Status == ReservationStatus.Confirmed
-            ? "booked"
-            : "pending";
+        var status = confirmed.Status == ReservationStatus.Confirmed ? "booked" : "pending";
 
         var appointment = new ClinicalAppointment(
             Id: $"appt_{Guid.NewGuid():N}",
