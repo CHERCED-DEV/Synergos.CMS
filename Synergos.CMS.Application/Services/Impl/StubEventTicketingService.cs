@@ -306,9 +306,24 @@ public sealed class StubEventTicketingService : IEventTicketingService
         }
 
         // 1) Capturar el pago de la orden completa (idempotente en el PSP).
-        var capture = await _payments.CaptureAsync(order.PaymentSessionId, cancellationToken);
+        var capture = await _payments.CaptureAsync(order.PaymentSessionId, cancellationToken: cancellationToken);
         if (capture.Status != PaymentStatus.Captured)
         {
+            // No activar la compra ya estaba bien. Lo que faltaba era SOLTAR los
+            // asientos: se quedaban apartados hasta que venciera el hold, y en
+            // un evento con aforo eso son entradas que nadie más pudo comprar
+            // por un pago que nunca ocurrió. Void libera además la retención de
+            // fondos (ADR 0116 fase 1).
+            await BestEffort.RunAsync(
+                () => _payments.VoidAsync(order.PaymentSessionId, cancellationToken),
+                cancellationToken);
+            foreach (var unit in order.Units)
+            {
+                await BestEffort.RunAsync(
+                    () => _reservations.CancelAsync(unit.ReservationId, "pago no capturado", cancellationToken),
+                    cancellationToken);
+            }
+
             throw new InvalidOperationException(
                 capture.FailureReason ?? $"No se pudo capturar el pago de la orden (estado {capture.Status}).");
         }

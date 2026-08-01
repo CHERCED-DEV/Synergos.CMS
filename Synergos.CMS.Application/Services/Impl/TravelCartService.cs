@@ -206,7 +206,7 @@ public sealed class TravelCartService : ITravelCartService
         }
 
         // 1) Capturar el pago del carrito completo (idempotente en el PSP).
-        var capture = await _payments.CaptureAsync(order.PaymentSessionId, cancellationToken);
+        var capture = await _payments.CaptureAsync(order.PaymentSessionId, cancellationToken: cancellationToken);
         if (capture.Status != PaymentStatus.Captured)
         {
             throw new InvalidOperationException(
@@ -214,25 +214,84 @@ public sealed class TravelCartService : ITravelCartService
         }
 
         // 2) Confirmar TODAS las reservas del carrito (ConfirmAsync es idempotente
-        //    por reserva: re-confirmar deja Confirmed sin doble efecto). Si el hold
-        //    de un ítem venció, ConfirmAsync lanza InvalidOperationException →
-        //    burbujea como política de compensación a futuro (rollback/reembolso).
+        //    por reserva: re-confirmar deja Confirmed sin doble efecto).
+        //
+        //    Un hold vencido hacía que ConfirmAsync lanzara y el comentario
+        //    original lo dejaba "burbujear como política de compensación a
+        //    futuro". Ese futuro es ahora: si un ítem no se pudo honrar, el
+        //    cliente YA pagó el carrito entero y hay que devolverle esa parte.
+        //    Sin esto, la orden quedaba en "Partial" y el dinero de lo no
+        //    entregado se quedaba acá.
         var confirmedItems = new List<TravelOrderItem>(order.Lines.Count);
+        var unfulfilledAmount = 0m;
         foreach (var line in order.Lines)
         {
-            var confirmed = await _reservations.ConfirmAsync(line.ReservationId, order.PaymentSessionId, cancellationToken);
+            string lineStatus;
+            string reservationId = line.ReservationId;
+            try
+            {
+                var confirmed = await _reservations.ConfirmAsync(
+                    line.ReservationId, order.PaymentSessionId, cancellationToken);
+                lineStatus = confirmed.Status.ToString();
+                reservationId = confirmed.Id;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                // Un ítem que no se pudo confirmar NO tumba los que sí: el
+                // cliente se queda con el vuelo aunque el hotel se haya caído,
+                // y se le devuelve lo del hotel. Cancelar todo sería peor
+                // servicio y más plata moviéndose sin necesidad.
+                lineStatus = ReservationStatus.Cancelled.ToString();
+            }
+
+            if (!string.Equals(lineStatus, ReservationStatus.Confirmed.ToString(), StringComparison.Ordinal))
+            {
+                unfulfilledAmount += line.Price;
+            }
+
             confirmedItems.Add(new TravelOrderItem(
                 Product: line.Product,
                 OfferId: line.OfferId,
                 Label: line.Label,
-                ReservationId: confirmed.Id,
-                Status: confirmed.Status.ToString(),
+                ReservationId: reservationId,
+                Status: lineStatus,
                 Price: line.Price,
                 Currency: line.Currency));
         }
 
-        var allConfirmed = confirmedItems.All(i =>
-            string.Equals(i.Status, ReservationStatus.Confirmed.ToString(), StringComparison.Ordinal));
+        var allConfirmed = unfulfilledAmount == 0m;
+        var noneConfirmed = confirmedItems.Count > 0 && unfulfilledAmount >= order.Total;
+
+        // 3) Devolver lo que no se pudo entregar. Reembolso PARCIAL por el monto
+        //    de las líneas caídas — para eso RefundAsync acepta monto.
+        //    Best-effort: lo que SÍ salió ya está confirmado, y un reembolso
+        //    caído no puede deshacer un viaje confirmado. Pero se intenta
+        //    siempre, porque no intentarlo es el defecto que esto cierra.
+        if (unfulfilledAmount > 0m && !string.IsNullOrWhiteSpace(order.PaymentSessionId))
+        {
+            await BestEffort.RunAsync(
+                () => _payments.RefundAsync(order.PaymentSessionId, unfulfilledAmount, cancellationToken),
+                cancellationToken);
+        }
+
+        // 4) Si NADA se pudo confirmar, el confirm falló: se devuelve todo y se
+        //    lanza. Un carrito donde no sobrevivió ni un ítem no es un viaje
+        //    "parcial", es un viaje que no existe, y el llamante tiene que
+        //    enterarse. El caso PARCIAL —parte confirmada, parte devuelta— sí
+        //    es un resultado legítimo y se reporta como tal.
+        if (noneConfirmed)
+        {
+            var cancelled = order with
+            {
+                Status = StatusCancelled,
+                UpdatedAt = _now(),
+            };
+            await WriteAsync(cancelled, cancellationToken);
+
+            throw new InvalidOperationException(
+                "Ningún ítem del carrito se pudo confirmar; el pago fue devuelto en su totalidad.");
+        }
+
         var status = allConfirmed ? ReservationStatus.Confirmed.ToString() : "Partial";
         var confirmationCode = BuildConfirmationCode(order.OrderRef);
 
@@ -413,7 +472,8 @@ public sealed class TravelCartService : ITravelCartService
             Currency: order.Currency,
             CreatedAt: order.CreatedAt,
             UpdatedAt: order.UpdatedAt,
-            CurrentStage: currentStage);
+            CurrentStage: currentStage,
+            PaymentSessionId: order.PaymentSessionId);
     }
 
     // ── Carga/escritura desde el store (deserialización defensiva) ──────

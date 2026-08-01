@@ -1,4 +1,3 @@
-﻿using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -9,48 +8,57 @@ using Synergos.CMS.Web.Services;
 namespace Synergos.CMS.Web.Controllers;
 
 /// <summary>
-/// Receptor de webhooks de pago ENTRANTES (T3, doc 25) — el PRIMER webhook entrante del
-/// repo (los demás son salientes: Discord/Email). Es cómo un PSP confirma el cobro de
-/// forma ASÍNCRONA (server-to-server, sin cookie de member → la FIRMA es la
-/// autorización, no <see cref="IMemberAccessGate"/>). Domain-neutral en la ruta
-/// (<c>{provider}</c>); en Ola A solo el esquema <c>stub</c> está vivo (Wompi = Ola B).
+/// Receptor de webhooks de pago ENTRANTES. Es cómo un PSP confirma un cobro de
+/// forma ASÍNCRONA: server-to-server, sin cookie de member, así que <b>la firma
+/// es la autorización</b> y no <see cref="IMemberAccessGate"/>.
 /// </summary>
 /// <remarks>
-/// Flujo endurecido: (1) valida el provider; (2) lee el body RAW a bytes ANTES de
-/// deserializar (el HMAC es sobre bytes exactos); (3) verifica la firma
-/// (<see cref="PaymentWebhookVerifier"/>); (4) ANTI-TAMPERING: nunca confía el estado del
-/// payload, re-consulta <see cref="IPaymentProvider.GetStatusAsync"/>; (5) IDEMPOTENCIA:
-/// candado atómico <see cref="IIdempotencyLedger"/> por (provider,eventId); (6) despacha
-/// a <see cref="IShopOrderService.ConfirmAsync"/> (idempotente). La confirmación de la
-/// orden es Tienda-específica por ahora (único vertical durable); cuando otro vertical se
-/// durabilice se extrae un despacho domain-neutral. 200 corta el retry del PSP.
+/// <para>Flujo endurecido, en este orden: (1) valida el proveedor; (2) lee el
+/// body RAW a bytes ANTES de deserializar, porque la firma es sobre los bytes
+/// exactos; (3) normaliza el payload del PSP; (4) verifica la firma;
+/// (5) <b>anti-tampering</b>: nunca confía el estado del payload, lo re-consulta
+/// al proveedor; (6) despacha al vertical dueño; (7) deduplica por
+/// <c>(proveedor, evento)</c> DESPUÉS de procesar. Un 200 corta el reintento.</para>
+///
+/// <para><b>Lo que cambió en la fase 4 del ADR 0116:</b> antes despachaba
+/// siempre a <c>IShopOrderService</c>. Ahora recorre los
+/// <see cref="IPaymentEventSink"/> registrados y cada uno dice si la referencia
+/// es suya. Con PSE —que confirma por evento y no en el retorno— los otros
+/// siete verticales estaban sordos: cobraban y nunca se enteraban.</para>
+///
+/// <para><b>Sobre eventos viejos que llegan tarde.</b> La investigación de PSPs
+/// advierte que pueden llegar fuera de orden y pisar un estado más nuevo. Acá no
+/// hace falta maquinaria de versiones: el paso (5) re-consulta el estado REAL al
+/// proveedor, así que un evento rancio termina actuando sobre la verdad actual y
+/// no sobre la que traía. Es la misma propiedad que ya daba el anti-tampering,
+/// aprovechada para otra cosa.</para>
 /// </remarks>
 [ApiController]
 [Route("api/payments/webhook")]
 public sealed class PaymentWebhookController : ControllerBase
 {
-    private static readonly JsonSerializerOptions _json = new() { PropertyNameCaseInsensitive = true };
-    /// <summary>Familia de claves del ledger — preserva la ruta de T3 (App_Data/syn-payment-events/).</summary>
+    /// <summary>Familia de claves del ledger (→ App_Data/syn-payment-events/).</summary>
     private const string LedgerScope = "payment-events";
 
-    private static readonly HashSet<string> KnownProviders = new(StringComparer.OrdinalIgnoreCase) { "stub" };
+    private static readonly HashSet<string> KnownProviders =
+        new(StringComparer.OrdinalIgnoreCase) { "stub", "wompi" };
 
     private readonly IPaymentProvider _payments;
     private readonly IIdempotencyLedger _ledger;
-    private readonly IShopOrderService _orders;
+    private readonly IEnumerable<IPaymentEventSink> _sinks;
     private readonly PaymentsSettings _settings;
     private readonly ILogger<PaymentWebhookController> _logger;
 
     public PaymentWebhookController(
         IPaymentProvider payments,
         IIdempotencyLedger ledger,
-        IShopOrderService orders,
+        IEnumerable<IPaymentEventSink> sinks,
         IOptions<PaymentsSettings> settings,
         ILogger<PaymentWebhookController> logger)
     {
         _payments = payments;
         _ledger = ledger;
-        _orders = orders;
+        _sinks = sinks;
         _settings = settings.Value;
         _logger = logger;
     }
@@ -65,7 +73,7 @@ public sealed class PaymentWebhookController : ControllerBase
             return NotFound(new { error = $"Proveedor de pago '{provider}' desconocido." });
         }
 
-        // 1) Body RAW a bytes ANTES de deserializar (el HMAC es sobre los bytes exactos).
+        // 1) Body RAW a bytes ANTES de deserializar: la firma es sobre los bytes.
         byte[] body;
         using (var ms = new MemoryStream())
         {
@@ -73,9 +81,116 @@ public sealed class PaymentWebhookController : ControllerBase
             body = ms.ToArray();
         }
 
-        // 2) Verificar la firma. Con un PSP real (provider != stub) la firma es
-        //    OBLIGATORIA: sin secret configurado es una misconfiguración → 500 (no se
-        //    acepta a ciegas). El stub en demo puede correr sin firma.
+        // 2) Normalizar el payload del PSP a una forma común.
+        var payload = PaymentWebhookPayloadReader.Read(provider, body);
+        if (payload is null)
+        {
+            return BadRequest(new { error = "Payload del webhook ilegible o incompleto." });
+        }
+
+        // 3) Verificar autenticidad. Cada esquema firma a su manera.
+        if (VerifySignature(provider, body, payload) is { } rejection)
+        {
+            return rejection;
+        }
+
+        // 4) ¿De quién es? Se pregunta ANTES de consultar al PSP: si no es
+        //    nuestra, consultar no aporta nada y le regala a cualquiera un
+        //    amplificador contra el proveedor a costa nuestra.
+        IPaymentEventSink? owner = null;
+        foreach (var sink in _sinks)
+        {
+            if (await sink.OwnsAsync(payload.OrderReference, cancellationToken).ConfigureAwait(false))
+            {
+                owner = sink;
+                break;
+            }
+        }
+
+        if (owner is null)
+        {
+            // Se ack igual: reintentar no va a cambiar nada, y un no-200 haría
+            // que el PSP insista durante 24 horas por una referencia ajena.
+            _logger.LogInformation(
+                "Webhook {Provider}/{EventId}: ningún vertical reclamó la referencia {OrderRef}.",
+                provider, payload.EventId, payload.OrderReference);
+            return Ok(new { ignored = "ningún vertical reclamó la referencia" });
+        }
+
+        // 5) ANTI-TAMPERING: el estado sale del PROVEEDOR, nunca del payload.
+        var verified = await _payments
+            .GetStatusAsync(payload.SessionId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var paymentEvent = new PaymentEvent(
+            ProviderKey: provider,
+            EventId: payload.EventId,
+            OrderReference: payload.OrderReference,
+            SessionId: payload.SessionId,
+            // Un adapter que devuelva null viola el contrato, pero acá eso no
+            // puede tumbar el receptor: un 500 haría que el PSP reintente
+            // durante 24 horas contra un endpoint que ya sabemos que revienta.
+            // Sin estado conocido se degrada a Pending, que no confirma nada.
+            VerifiedStatus: verified?.Status ?? PaymentStatus.Pending,
+            OccurredUtc: payload.OccurredUtc);
+
+        // 6) Atender. Un sink que revienta NO puede tragarse el evento: propaga
+        //    como 500 SIN marcar, así el PSP reintenta. Silenciarlo perdería el
+        //    pago, que es el peor final posible acá.
+        var outcome = await owner.HandleAsync(paymentEvent, cancellationToken).ConfigureAwait(false);
+
+        if (!outcome.Handled)
+        {
+            // Lo reclamó y después se desdijo — la orden desapareció entre una
+            // llamada y otra. Raro, pero no es motivo para insistir.
+            return Ok(new { ignored = "el vertical soltó la referencia" });
+        }
+
+        // 7) Marca DESPUÉS del éxito: marcar antes dejaría un pago
+        //    cobrado-sin-procesar con su reintento deduplicado para siempre.
+        var firstTime = await _ledger
+            .TryClaimAsync(LedgerScope, $"{provider}-{payload.EventId}", cancellationToken)
+            .ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Webhook {Provider}/{EventId} → {Vertical}: {Detail}",
+            provider, payload.EventId, owner.Vertical, outcome.Detail ?? "procesado");
+
+        return Ok(new
+        {
+            processed = firstTime,
+            duplicate = !firstTime,
+            vertical = owner.Vertical,
+            detail = outcome.Detail,
+        });
+    }
+
+    /// <summary>
+    /// Verifica la firma según el esquema del proveedor. Devuelve el rechazo, o
+    /// <c>null</c> si pasa.
+    /// </summary>
+    private IActionResult? VerifySignature(string provider, byte[] body, PaymentWebhookPayload payload)
+    {
+        if (string.Equals(provider, "wompi", StringComparison.OrdinalIgnoreCase))
+        {
+            // Wompi firma con SHA256 sobre las propiedades que él mismo declara.
+            // Sin secreto configurado es una misconfiguración, no una excusa
+            // para aceptar a ciegas.
+            if (string.IsNullOrWhiteSpace(_settings.WompiEventsSecret))
+            {
+                _logger.LogError("Webhook wompi: falta Synergos:Payments:WompiEventsSecret.");
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new { error = "Verificación de firma no configurada." });
+            }
+            if (!PaymentWebhookPayloadReader.WompiChecksumValid(payload, _settings.WompiEventsSecret))
+            {
+                return Unauthorized(new { error = "Checksum del evento inválido." });
+            }
+            return null;
+        }
+
+        // Esquema propio (stub): HMAC sobre los bytes con ventana anti-replay.
+        // El stub en demo puede correr sin firma; un PSP real nunca.
         var requireSignature = !string.Equals(provider, "stub", StringComparison.OrdinalIgnoreCase);
         var verdict = PaymentWebhookVerifier.Verify(
             _settings.WebhookSecret,
@@ -83,82 +198,17 @@ public sealed class PaymentWebhookController : ControllerBase
             Request.Headers[WebhookSigner.SignatureHeaderName],
             body,
             requireSignature);
-        switch (verdict)
-        {
-            case PaymentWebhookVerifier.Result.MissingHeaders:
-                return BadRequest(new { error = "Faltan los headers de firma." });
-            case PaymentWebhookVerifier.Result.InvalidSignature:
-            case PaymentWebhookVerifier.Result.Expired:
-                return Unauthorized(new { error = "Firma del webhook inválida o vencida." });
-            case PaymentWebhookVerifier.Result.MisconfiguredSecret:
-                _logger.LogError("Webhook {Provider}: se exige firma pero falta Synergos:Payments:WebhookSecret.", provider);
-                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Verificación de firma no configurada." });
-        }
 
-        // 3) Parsear el payload.
-        StubWebhookPayload? payload;
-        try { payload = JsonSerializer.Deserialize<StubWebhookPayload>(body, _json); }
-        catch (JsonException) { return BadRequest(new { error = "Payload del webhook ilegible." }); }
-        if (payload is null
-            || string.IsNullOrWhiteSpace(payload.EventId)
-            || string.IsNullOrWhiteSpace(payload.SessionId)
-            || string.IsNullOrWhiteSpace(payload.OrderRef))
+        return verdict switch
         {
-            return BadRequest(new { error = "eventId, sessionId y orderRef son requeridos." });
-        }
-
-        // 4) Resolver la orden PRIMERO (Tienda). Sin orden → ack sin efecto.
-        var order = await _orders.GetOrderAsync(payload.OrderRef, cancellationToken);
-        if (order is null)
-        {
-            _logger.LogInformation("Webhook {Provider}/{EventId}: orden {OrderRef} no encontrada — ack sin efecto.",
-                provider, payload.EventId, payload.OrderRef);
-            return Ok(new { ignored = "orden no encontrada" });
-        }
-
-        // 5) LIGAR la sesión a la orden: la sesión del payload debe ser la de ESTA orden.
-        //    Evita confirmar una orden usando el estado autorizado de una sesión ajena.
-        if (!string.Equals(payload.SessionId, order.PaymentSessionId, StringComparison.Ordinal))
-        {
-            _logger.LogWarning("Webhook {Provider}/{EventId}: sessionId {SessionId} no corresponde a la orden {OrderRef}.",
-                provider, payload.EventId, payload.SessionId, payload.OrderRef);
-            return Ok(new { ignored = "la sesión no corresponde a la orden" });
-        }
-
-        // 6) ANTI-TAMPERING: re-consultar el estado REAL de la sesión DE LA ORDEN (no del
-        //    payload). Solo una sesión autorizada/capturada dispara la confirmación.
-        var status = await _payments.GetStatusAsync(order.PaymentSessionId!, cancellationToken);
-        if (status.Status is not (PaymentStatus.Authorized or PaymentStatus.Captured))
-        {
-            _logger.LogInformation("Webhook {Provider}/{EventId}: sesión {SessionId} en estado {Status} — nada que confirmar.",
-                provider, payload.EventId, order.PaymentSessionId, status.Status);
-            return Ok(new { ignored = $"estado {status.Status}" });
-        }
-
-        // 7) CONFIRMAR y LUEGO marcar (ConfirmAsync es idempotente). Marcar ANTES sería
-        //    peligroso: un fallo transitorio tras el marcado dejaría la orden
-        //    cobrada-sin-confirmar y el retry del PSP quedaría deduped para siempre.
-        try
-        {
-            var result = await _orders.ConfirmAsync(payload.OrderRef, cancellationToken);
-            // Marca DESPUÉS del éxito: corta retries futuros. Un duplicado concurrente que
-            // ya confirmó devuelve false aquí (ambos confirmaron idempotente, sin doble cobro).
-            var firstTime = await _ledger.TryClaimAsync(LedgerScope, $"{provider}-{payload.EventId}", cancellationToken);
-            return Ok(new { processed = firstTime, duplicate = !firstTime, orderNumber = result.OrderNumber, status = result.Status });
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-        {
-            // Rechazo de negocio PERMANENTE (hold vencido, etc.): marcar para cortar el
-            // bucle de reintentos del PSP y ack 200. Una IOException transitoria NO cae
-            // aquí → propaga como 500 SIN marcar → el PSP reintenta y ConfirmAsync se
-            // re-ejecuta idempotente.
-            _logger.LogWarning(ex, "Webhook {Provider}/{EventId}: confirmación de {OrderRef} no procedió (rechazo terminal).",
-                provider, payload.EventId, payload.OrderRef);
-            await _ledger.TryClaimAsync(LedgerScope, $"{provider}-{payload.EventId}", cancellationToken);
-            return Ok(new { processed = false, reason = ex.Message });
-        }
+            PaymentWebhookVerifier.Result.MissingHeaders =>
+                BadRequest(new { error = "Faltan los headers de firma." }),
+            PaymentWebhookVerifier.Result.InvalidSignature or PaymentWebhookVerifier.Result.Expired =>
+                Unauthorized(new { error = "Firma del webhook inválida o vencida." }),
+            PaymentWebhookVerifier.Result.MisconfiguredSecret =>
+                StatusCode(StatusCodes.Status500InternalServerError,
+                    new { error = "Verificación de firma no configurada." }),
+            _ => null,
+        };
     }
-
-    /// <summary>Payload del webhook (esquema stub). Un PSP real trae su propia forma (Ola B).</summary>
-    public sealed record StubWebhookPayload(string? EventId, string? SessionId, string? OrderRef, string? Status);
 }
