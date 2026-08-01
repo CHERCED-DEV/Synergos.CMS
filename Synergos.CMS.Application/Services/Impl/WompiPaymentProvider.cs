@@ -59,6 +59,8 @@ public sealed class WompiPaymentProvider : IPaymentProvider
     /// <param name="http">Cliente con <c>BaseAddress</c> apuntando al API de
     ///   Wompi (<c>https://sandbox.wompi.co/v1/</c> o producción) y la
     ///   resiliencia ya aplicada por el composer.</param>
+    /// <param name="settings">Llaves y URLs de Wompi (pública, de integridad,
+    ///   de eventos y la de redirección post-pago).</param>
     public WompiPaymentProvider(HttpClient http, PaymentsSettings settings)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
