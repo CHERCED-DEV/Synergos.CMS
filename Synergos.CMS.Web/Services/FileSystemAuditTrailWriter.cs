@@ -34,7 +34,7 @@ public sealed class FileSystemAuditTrailWriter : IAuditTrailWriter
     {
         try
         {
-            var path = ResolvePath(evt.OccurredAtUtc);
+            var path = ResolvePath(evt.OccurredAtUtc, evt.Action);
             var line = JsonSerializer.Serialize(evt) + Environment.NewLine;
             var bytes = Encoding.UTF8.GetBytes(line);
 
@@ -184,9 +184,41 @@ public sealed class FileSystemAuditTrailWriter : IAuditTrailWriter
         return results;
     }
 
-    private string ResolvePath(DateTime occurredAtUtc)
+    /// <summary>
+    /// El archivo del día, separando la auditoría de acceso a PHI de la administrativa.
+    /// </summary>
+    /// <remarks>
+    /// <b>Dos familias de archivo porque tienen dos retenciones distintas</b>, y la purga
+    /// borra archivos enteros. Mientras todo caía en <c>{fecha}.jsonl</c>, la auditoría de
+    /// quién miró una historia clínica se iba a los 90 días con la administrativa — aunque el
+    /// XML-doc de <c>HealthcareRetentionPolicy</c> afirmara que era indefinida. Ver ADR 0121.
+    ///
+    /// <para>El discriminador es el prefijo <c>phi.</c> del <see cref="AuditEvent.Action"/>,
+    /// que ya existía y lo escribe <c>DefaultPhiAccessGuard</c>. No hace falta un campo nuevo
+    /// en el evento.</para>
+    ///
+    /// <para><b>Los lectores no se enteran:</b> el visor de administración lista
+    /// <c>*.jsonl</c>, y <c>{fecha}.phi.jsonl</c> también casa con ese patrón. Separar el
+    /// archivo cambia qué se PURGA, no qué se ve.</para>
+    /// </remarks>
+    internal static string ResolveFileName(DateTime occurredAtUtc, string? action)
     {
-        var fileName = occurredAtUtc.ToString("yyyy-MM-dd") + ".jsonl";
+        var day = occurredAtUtc.ToString("yyyy-MM-dd");
+        return IsPhiAudit(action) ? day + PhiSuffix : day + ".jsonl";
+    }
+
+    /// <summary>Sufijo de los archivos de auditoría PHI, con su propia retención.</summary>
+    internal const string PhiSuffix = ".phi.jsonl";
+
+    /// <summary>
+    /// Si el evento es un acceso a PHI. El prefijo <c>phi.</c> lo pone el guard clínico.
+    /// </summary>
+    internal static bool IsPhiAudit(string? action)
+        => action is not null && action.StartsWith("phi.", StringComparison.OrdinalIgnoreCase);
+
+    private string ResolvePath(DateTime occurredAtUtc, string? action)
+    {
+        var fileName = ResolveFileName(occurredAtUtc, action);
         return Path.Combine(
             _hostEnvironment.ContentRootPath,
             "App_Data",
