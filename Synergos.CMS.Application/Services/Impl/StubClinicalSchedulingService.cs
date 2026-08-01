@@ -122,7 +122,7 @@ public sealed class StubClinicalSchedulingService : IClinicalSchedulingService
                 Items: new[] { new PaymentLineItem(doctor.Id, $"Copago consulta {doctor.Specialty}", ConsultationFee, 1) },
                 CustomerEmail: patient.Email),
             cancellationToken);
-        var capture = await _payments.CaptureAsync(session.SessionId, cancellationToken);
+        var capture = await _payments.CaptureAsync(session.SessionId, cancellationToken: cancellationToken);
 
         // 3) Confirma la reserva ligándola a la sesión (máquina de estados reusada).
         var confirmed = await _reservations.ConfirmAsync(hold.Id, session.SessionId, cancellationToken);

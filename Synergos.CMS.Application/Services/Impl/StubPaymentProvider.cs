@@ -76,7 +76,7 @@ public sealed class StubPaymentProvider : IPaymentProvider
             && request.Items.Any(i => string.Equals(i.Sku, _settings.DeclineTriggerSku, StringComparison.OrdinalIgnoreCase)))
         {
             await WriteSessionAsync(sessionId, new PersistedSession(PaymentStatus.Failed, request.Amount, 0m, request.OrderReference, null), cancellationToken);
-            return new PaymentSession(sessionId, PaymentStatus.Failed, RedirectUrl: null, ClientSecret: null, ProviderKey);
+            return new PaymentSession(sessionId, PaymentStatus.Failed, Action: null, ProviderKey);
         }
 
         // Knob de simulación: RequiresAction + RedirectUrl sintética (simula 3DS/redirect
@@ -84,14 +84,23 @@ public sealed class StubPaymentProvider : IPaymentProvider
         // al front; en Ola A demuestra que el stub modela el estado).
         if (_settings.SimulateRequiresAction)
         {
+            // Simula la forma de acción que le tocaría al riel pedido, para que
+            // el front se pueda construir contra los TRES modos antes de que
+            // exista Wompi. Sin esto solo se podía probar el redirect.
             var redirect = $"/checkout/simulated-3ds/{sessionId}";
+            var action = (request.PreferredMethod ?? "card").ToLowerInvariant() switch
+            {
+                "pse" or "bancolombia" => PaymentAction.Redirect(new Uri(redirect, UriKind.Relative)),
+                "nequi" => PaymentAction.AwaitApproval("Aprobá la compra en tu app Nequi."),
+                _ => PaymentAction.Challenge($"<!doctype html><p>Reto 3DS simulado para {sessionId}</p>"),
+            };
             await WriteSessionAsync(sessionId, new PersistedSession(PaymentStatus.RequiresAction, request.Amount, 0m, request.OrderReference, redirect), cancellationToken);
-            return new PaymentSession(sessionId, PaymentStatus.RequiresAction, RedirectUrl: redirect, ClientSecret: null, ProviderKey);
+            return new PaymentSession(sessionId, PaymentStatus.RequiresAction, action, ProviderKey);
         }
 
         // Default: auto-autoriza (fondos "reservados"); un PSP real podría nacer PENDING.
         await WriteSessionAsync(sessionId, new PersistedSession(PaymentStatus.Authorized, request.Amount, 0m, request.OrderReference, null), cancellationToken);
-        return new PaymentSession(sessionId, PaymentStatus.Authorized, RedirectUrl: null, ClientSecret: null, ProviderKey);
+        return new PaymentSession(sessionId, PaymentStatus.Authorized, Action: null, ProviderKey);
     }
 
     public async Task<PaymentOutcome> GetStatusAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -102,7 +111,7 @@ public sealed class StubPaymentProvider : IPaymentProvider
             : new PaymentOutcome(sessionId, s.Status, s.Captured);
     }
 
-    public async Task<PaymentOutcome> CaptureAsync(string sessionId, CancellationToken cancellationToken = default)
+    public async Task<PaymentOutcome> CaptureAsync(string sessionId, decimal? amount = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(sessionId))
         {
@@ -120,11 +129,52 @@ public sealed class StubPaymentProvider : IPaymentProvider
             // Idempotente: capturar dos veces deja el mismo estado/monto, sin doble cobro.
             if (s.Status is PaymentStatus.Authorized or PaymentStatus.Captured)
             {
-                var captured = s with { Status = PaymentStatus.Captured, Captured = s.Amount };
+                // Captura parcial: nunca por encima de lo autorizado, y la
+                // segunda llamada no vuelve a sumar (idempotente por diseño —
+                // un reintento del webhook no puede cobrar dos veces).
+                var target = amount is decimal a && a > 0m ? Math.Min(a, s.Amount) : s.Amount;
+                var captured = s with { Status = PaymentStatus.Captured, Captured = target };
                 await WriteSessionAsync(sessionId, captured, cancellationToken);
                 return new PaymentOutcome(sessionId, PaymentStatus.Captured, captured.Captured);
             }
             return new PaymentOutcome(sessionId, s.Status, s.Captured, $"No se puede capturar en estado {s.Status}.");
+        }
+        finally
+        {
+            _mutate.Release();
+        }
+    }
+
+    public async Task<PaymentOutcome> VoidAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(sessionId))
+        {
+            return NotFound(sessionId);
+        }
+
+        await _mutate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var s = await LoadSessionAsync(sessionId, cancellationToken);
+            if (s is null)
+            {
+                return NotFound(sessionId);
+            }
+            // Idempotente: anular lo ya anulado no es un error.
+            if (s.Status == PaymentStatus.Cancelled)
+            {
+                return new PaymentOutcome(sessionId, PaymentStatus.Cancelled, 0m);
+            }
+            // Solo se anula lo que NO se cobró. Lo capturado se devuelve con
+            // RefundAsync — son hechos distintos y confundirlos deja el libro
+            // contable sin forma de saber si hubo cobro.
+            if (s.Status is not (PaymentStatus.Authorized or PaymentStatus.Pending or PaymentStatus.RequiresAction))
+            {
+                return new PaymentOutcome(sessionId, s.Status, s.Captured,
+                    $"Solo se anula lo no capturado (estado actual {s.Status}).");
+            }
+            await WriteSessionAsync(sessionId, s with { Status = PaymentStatus.Cancelled, Captured = 0m }, cancellationToken);
+            return new PaymentOutcome(sessionId, PaymentStatus.Cancelled, 0m);
         }
         finally
         {

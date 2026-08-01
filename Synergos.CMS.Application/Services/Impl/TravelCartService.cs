@@ -206,7 +206,7 @@ public sealed class TravelCartService : ITravelCartService
         }
 
         // 1) Capturar el pago del carrito completo (idempotente en el PSP).
-        var capture = await _payments.CaptureAsync(order.PaymentSessionId, cancellationToken);
+        var capture = await _payments.CaptureAsync(order.PaymentSessionId, cancellationToken: cancellationToken);
         if (capture.Status != PaymentStatus.Captured)
         {
             throw new InvalidOperationException(
