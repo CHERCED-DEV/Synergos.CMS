@@ -60,6 +60,7 @@ public sealed class TravelCartService : ITravelCartService
 
     private readonly IJsonEntityStore _store;
     private readonly ITransactionalNotifier? _notifier;
+    private readonly IAuditTrailWriter? _audit;
     private readonly Func<DateTimeOffset> _now;
 
     public TravelCartService(IReservationService reservations, IPaymentProvider payments)
@@ -83,25 +84,39 @@ public sealed class TravelCartService : ITravelCartService
     }
 
     /// <summary>
-    /// Ctor completo (fan-out T1): <paramref name="store"/> es el backing store durable
-    /// (FileSystem en Web, InMemory en tests). Los ctors previos delegan con el default
-    /// InMemory → cero call-sites rotos. <paramref name="notifier"/> (T4) es el seam
-    /// opcional que avisa al viajero; va ÚLTIMO para no re-ligar los args posicionales
-    /// de los factories del composer.
+    /// Ctor completo (fan-out T1). Los seams opcionales van al final y con default, para no
+    /// re-ligar los args posicionales de los factories del composer cada vez que aparece uno.
     /// </summary>
+    /// <param name="reservations">Motor de reservas: aparta y libera cada línea del carrito.</param>
+    /// <param name="payments">Motor de pagos: una sesión por carrito, un total.</param>
+    /// <param name="tracking">
+    /// Timeline del viaje. Si viene, la orden lo alimenta al confirmar.
+    /// </param>
+    /// <param name="now">Reloj inyectable para los tests. Null usa el del sistema.</param>
+    /// <param name="store">
+    /// Backing store durable (FileSystem en Web, InMemory en tests). Null deja el carrito en
+    /// memoria, que es lo que hacen los ctors previos.
+    /// </param>
+    /// <param name="notifier">Aviso transaccional al viajero (T4). Opcional.</param>
+    /// <param name="audit">
+    /// Rastro de la cancelación (ADR 0037). Sin él la cancelación sigue funcionando y no queda
+    /// registrada — que es exactamente el hueco que este parámetro cierra.
+    /// </param>
     public TravelCartService(
         IReservationService reservations,
         IPaymentProvider payments,
         IOrderTrackingService? tracking,
         Func<DateTimeOffset>? now,
         IJsonEntityStore? store,
-        ITransactionalNotifier? notifier = null)
+        ITransactionalNotifier? notifier = null,
+        IAuditTrailWriter? audit = null)
     {
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _tracking = tracking;
         _store = store ?? new InMemoryJsonEntityStore();
         _notifier = notifier;
+        _audit = audit;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -433,8 +448,54 @@ public sealed class TravelCartService : ITravelCartService
         };
         await WriteAsync(cancelled, cancellationToken);
 
+        // El rastro va DESPUÉS de sellar la cancelación y es best-effort: si el registro
+        // falla, la cancelación ya ocurrió y desandarla sería peor. Mismo criterio que la
+        // transferencia de tickets de Eventos.
+        //
+        // Que exista es lo que importa. Este endpoint es ANÓNIMO —el orderRef es la
+        // credencial, decisión deliberada para que quien compró como invitado vuelva a su
+        // reserva— y a la vez DESTRUCTIVO y con movimiento de plata. Sin rastro no había forma
+        // de responder "¿quién canceló este viaje y cuándo?", que es justo la pregunta que
+        // llega cuando alguien reenvía un correo de confirmación o comparte un navegador.
+        // Auditarlo no rompe la compra de invitado: no pide sesión, solo deja constancia.
+        await BestEffort.RunAsync(() => AuditCancellationAsync(cancelled, cancellationToken), cancellationToken);
+
         return new TravelCancellationResult(
             cancelled.OrderRef, cancelled.Status, cancelled.Refunded, cancelled.RefundAmount, cancelled.Currency);
+    }
+
+    /// <summary>
+    /// Deja constancia de la cancelación: quién figuraba como viajero, qué se reembolsó y
+    /// cuántas líneas se soltaron.
+    /// </summary>
+    /// <remarks>
+    /// El actor es el viajero de la orden, no quien hizo la petición: el endpoint es anónimo y
+    /// no hay sesión que consultar. Es una limitación honesta del modelo de credencial-por-URL
+    /// y queda dicha aquí para que nadie lea este registro como una identificación del
+    /// solicitante.
+    /// </remarks>
+    private Task AuditCancellationAsync(CartOrder cancelled, CancellationToken cancellationToken)
+    {
+        if (_audit is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var detalleReembolso = cancelled.Refunded
+            ? $"reembolso {cancelled.RefundAmount} {cancelled.Currency}"
+            : "sin reembolso";
+
+        return _audit.WriteAsync(
+            new AuditEvent(
+                Id: Guid.NewGuid().ToString("N"),
+                OccurredAtUtc: _now().UtcDateTime,
+                ActorEmail: cancelled.GuestEmail,
+                ActorName: cancelled.GuestName,
+                Action: "travel.order.cancelled",
+                Resource: cancelled.OrderRef,
+                Outcome: "success",
+                Detail: $"Viaje cancelado por URL-credencial; {cancelled.Lines.Count} línea(s) liberada(s); {detalleReembolso}."),
+            cancellationToken);
     }
 
     // Proyecta la orden interna a TravelOrder leyendo el estado de cada ítem
