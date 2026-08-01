@@ -67,16 +67,23 @@ public sealed record SeatMapRow(
 /// <param name="Name">Cómo se le muestra al pasajero. Ej: <c>Airbus A320 · BOG → MDE</c>.</param>
 /// <param name="Currency">Moneda de los precios. ISO 4217.</param>
 /// <param name="AisleAfterColumns">
-/// Después de cuántas columnas va el pasillo, en base 1. En un <c>3-3</c> vale 3. Es el único
-/// dato de geometría que el componente publicado consume hoy, y sin él dibuja el pasillo a la
-/// mitad de la fila — que en un <c>2-4-2</c> queda en el sitio equivocado.
+/// Después de qué columnas van los pasillos, en base 1 y en orden ascendente. Un <c>3-3</c>
+/// trae <c>[3]</c>; un <c>3-3-3</c> trae <c>[3, 6]</c>; un <c>1-2-1</c> trae <c>[1, 3]</c>.
+///
+/// <para><b>Es una LISTA porque un widebody tiene dos pasillos.</b> Con un solo valor, un
+/// <c>3-3-3</c> se dibujaba con el pasillo tras la C y nada entre F y G: el bloque derecho se
+/// soldaba al central y la cabina se leía como un <c>3-6</c> que no existe en ningún avión.</para>
+///
+/// <para>Vacía, el componente parte la fila más ancha por la mitad — que acierta en un
+/// narrowbody y en nada más. Dónde termina un bloque no se deduce de la cuenta de butacas, así
+/// que un proveedor que conozca la cabina debería declararlo siempre.</para>
 /// </param>
 /// <param name="Rows">Las filas, en orden de proa a popa.</param>
 public sealed record SeatMapLayout(
     string Ref,
     string Name,
     string Currency,
-    int AisleAfterColumns,
+    IReadOnlyList<int> AisleAfterColumns,
     IReadOnlyList<SeatMapRow> Rows);
 
 /// <summary>

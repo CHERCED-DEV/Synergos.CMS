@@ -99,7 +99,7 @@ public sealed class StubCabinSeatMapProvider : ISeatMapProvider
     {
         var blocks = ParseFormula(spec.Formula);
         var columns = BuildColumns(blocks);
-        var aisleAfter = blocks.Count > 0 ? blocks[0] : columns.Count;
+        var aisles = ResolveAisles(blocks);
         var exitRows = new HashSet<int>(spec.ExitRows ?? Array.Empty<int>());
         var blocked = new HashSet<string>(spec.BlockedSeats ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
 
@@ -149,7 +149,28 @@ public sealed class StubCabinSeatMapProvider : ISeatMapProvider
             }
         }
 
-        return new SeatMapLayout(spec.Ref, spec.Name, Currency, aisleAfter, rows);
+        return new SeatMapLayout(spec.Ref, spec.Name, Currency, aisles, rows);
+    }
+
+    /// <summary>
+    /// Dónde caen los pasillos de una distribución: en los bordes ENTRE bloques.
+    /// <c>[3,3,3]</c> → <c>[3, 6]</c>; <c>[1,2,1]</c> → <c>[1, 3]</c>; <c>[3,3]</c> → <c>[3]</c>.
+    /// </summary>
+    /// <remarks>
+    /// Son las sumas acumuladas <b>menos la última</b>: un pasillo después de la última columna
+    /// no separa nada, quedaría colgando del borde de la cabina.
+    /// </remarks>
+    internal static IReadOnlyList<int> ResolveAisles(IReadOnlyList<int> blocks)
+    {
+        var aisles = new List<int>(Math.Max(blocks.Count - 1, 0));
+        var running = 0;
+        for (var i = 0; i < blocks.Count - 1; i++)
+        {
+            running += blocks[i];
+            aisles.Add(running);
+        }
+
+        return aisles;
     }
 
     /// <summary>
