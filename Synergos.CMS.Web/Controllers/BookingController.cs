@@ -32,6 +32,7 @@ public sealed class BookingController : ControllerBase
     private readonly ICancellationPolicyEvaluator _cancellationPolicy;
     private readonly IPriceFormatter _priceFormatter;
     private readonly ILogger<BookingController> _logger;
+    private readonly IAuditTrailWriter _audit;
 
     public BookingController(
         IRoomAvailabilityProvider availability,
@@ -39,7 +40,8 @@ public sealed class BookingController : ControllerBase
         IPaymentProvider payments,
         ICancellationPolicyEvaluator cancellationPolicy,
         IPriceFormatter priceFormatter,
-        ILogger<BookingController> logger)
+        ILogger<BookingController> logger,
+        IAuditTrailWriter audit)
     {
         _availability = availability;
         _reservations = reservations;
@@ -47,6 +49,7 @@ public sealed class BookingController : ControllerBase
         _cancellationPolicy = cancellationPolicy;
         _priceFormatter = priceFormatter;
         _logger = logger;
+        _audit = audit;
     }
 
     // ── 1. Search ──────────────────────────────────────────────────
@@ -375,6 +378,41 @@ public sealed class BookingController : ControllerBase
                         cancelled.Id, refundable, refund.Status, refund.FailureReason);
                 }
             }
+        }
+
+        // Rastro de la cancelación (ADR 0037), best-effort y después de que ya ocurrió: si
+        // el registro falla, desandar una cancelación ya sellada sería peor.
+        //
+        // Este endpoint es ANÓNIMO —el reservationId es la credencial, decisión deliberada
+        // para que quien compró como invitado vuelva a su reserva— y a la vez DESTRUCTIVO y
+        // con movimiento de plata. Sin rastro no había forma de responder "¿quién canceló
+        // esta estadía y cuándo?", que es justo la pregunta que llega cuando alguien reenvía
+        // un correo de confirmación o comparte un navegador. Auditarlo no rompe la compra de
+        // invitado: no pide sesión, solo deja constancia.
+        //
+        // El actor es el huésped de la reserva, NO quien hizo la petición: no hay sesión que
+        // consultar. Es una limitación honesta del modelo de credencial-por-URL, y queda
+        // dicha aquí para que nadie lea este registro como una identificación del solicitante.
+        try
+        {
+            await _audit.WriteAsync(
+                new AuditEvent(
+                    Id: Guid.NewGuid().ToString("N"),
+                    OccurredAtUtc: DateTime.UtcNow,
+                    ActorEmail: cancelled.GuestEmail,
+                    ActorName: cancelled.GuestName,
+                    Action: "booking.reservation.cancelled",
+                    Resource: cancelled.Id,
+                    Outcome: "success",
+                    Detail: $"Cancelada por URL-credencial; motivo '{reason}'; penalidad " +
+                        $"{outcome.PenaltyAmount} {cancelled.Currency}; reembolso {refundState ?? "no aplica"}."),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Reserva {ReservationId}: cancelada pero no se pudo dejar el rastro de auditoría.",
+                cancelled.Id);
         }
 
         return Ok(new CancelResponse(
