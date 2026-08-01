@@ -488,6 +488,79 @@ public sealed class SeatMapProjectionTests
         Assert.False(SeatMapProjection.BuildProps(layout, null, null).ContainsKey("maxSelectable"));
     }
 
+    // ── Apariencia ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Protege el default: un bloque que no eligió apariencia no emite <b>ninguna</b> de las
+    /// tres claves. Emitir <c>comfortable</c> o <c>showPrices: true</c> sería repetir el default
+    /// del componente y dejar el bloque clavado al de hoy si algún día cambia.
+    /// </summary>
+    [Fact]
+    public void Un_bloque_sin_apariencia_elegida_no_emite_ninguna_de_las_tres_claves()
+    {
+        var props = SeatMapProjection.BuildProps(Layout(3, FilaTresTres("12")), null, null);
+
+        Assert.False(props.ContainsKey("density"));
+        Assert.False(props.ContainsKey("showPrices"));
+        Assert.False(props.ContainsKey("showLegend"));
+    }
+
+    /// <summary>
+    /// Protege la densidad: se normaliza y solo pasan los dos valores que el componente sabe
+    /// leer. Uno inventado se omite en vez de emitirse — el componente caería igual en
+    /// <c>comfortable</c>, pero una clave con basura adentro esconde el error del editor.
+    /// </summary>
+    [Fact]
+    public void La_densidad_se_normaliza_y_una_inventada_no_viaja()
+    {
+        var layout = Layout(3, FilaTresTres("12"));
+
+        Assert.Equal("compact", SeatMapProjection.BuildProps(layout, null, null, " COMPACT ")["density"]);
+        Assert.Equal("comfortable", SeatMapProjection.BuildProps(layout, null, null, "comfortable")["density"]);
+        Assert.False(SeatMapProjection.BuildProps(layout, null, null, "espaciosisima").ContainsKey("density"));
+        Assert.False(SeatMapProjection.BuildProps(layout, null, null, "   ").ContainsKey("density"));
+        Assert.False(SeatMapProjection.BuildProps(layout, null, null, null).ContainsKey("density"));
+    }
+
+    /// <summary>
+    /// Protege la razón de que las dos propiedades se autoren en NEGATIVO.
+    /// </summary>
+    /// <remarks>
+    /// <c>Umbraco.TrueFalse</c> guarda <c>false</c> cuando el editor nunca tocó el interruptor,
+    /// y el componente enciende precios y leyenda por defecto. Con un "Mostrar precios", ese
+    /// <c>false</c> heredado se emitiría como <c>showPrices: false</c> y un bloque ya colocado
+    /// se quedaría sin precios sin que nadie lo pidiera. Con "Ocultar", el estado apagado —el
+    /// que todo bloque tiene por defecto— significa exactamente lo que el componente ya hace.
+    /// </remarks>
+    [Fact]
+    public void El_interruptor_apagado_NO_emite_nada_y_el_encendido_apaga_la_clave()
+    {
+        var layout = Layout(3, FilaTresTres("12"));
+
+        var intacto = SeatMapProjection.BuildProps(layout, null, null, null, hidePrices: false, hideLegend: false);
+        Assert.False(intacto.ContainsKey("showPrices"));
+        Assert.False(intacto.ContainsKey("showLegend"));
+
+        var ocultos = SeatMapProjection.BuildProps(layout, null, null, null, hidePrices: true, hideLegend: true);
+        Assert.Equal(false, ocultos["showPrices"]);
+        Assert.Equal(false, ocultos["showLegend"]);
+    }
+
+    /// <summary>
+    /// Protege que la apariencia sea INDEPENDIENTE del inventario: sin mapa resuelto se emite
+    /// igual. Un bloque cuyo proveedor está caído conserva la configuración del editor, y el
+    /// componente pinta su estado vacío con el aspecto que le tocaba.
+    /// </summary>
+    [Fact]
+    public void La_apariencia_viaja_aunque_el_proveedor_no_haya_resuelto_el_mapa()
+    {
+        var props = SeatMapProjection.BuildProps(null, null, null, "compact", hideLegend: true);
+
+        Assert.False(props.ContainsKey("seatmap"));
+        Assert.Equal("compact", props["density"]);
+        Assert.Equal(false, props["showLegend"]);
+    }
+
     // ── El contrato de claves (ADR 0083) ─────────────────────────────────────
 
     /// <summary>
