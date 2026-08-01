@@ -132,6 +132,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0123](0123-el-tramite-es-contenido-y-el-portal-no-lo-esconde.md) | El trámite es contenido y el portal no lo esconde: tasa 0 solo es gratis cuando alguien lo afirma | Accepted |
 | [0124](0124-el-id-de-un-certificado-era-calculable-por-cualquiera.md) | El id de un certificado era calculable por cualquiera: FNV-1a de 31 bits sin secreto, ahora HMAC firmado | Accepted |
 | [0125](0125-la-credencial-por-url-se-conserva-pero-deja-rastro.md) | La credencial por URL se conserva, pero deja rastro: la cancelación anónima se audita en Viajes y Booking | Accepted |
+| [0126](0126-un-elemento-que-otro-bundle-embebe-no-lleva-doctype.md) | Un elemento que otro bundle embebe no lleva DocType: seat-map y pax-selector no eran deuda sino piezas de composición | Accepted |
 
 ## Rules
 
