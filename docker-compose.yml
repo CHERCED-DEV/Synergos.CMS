@@ -1,0 +1,71 @@
+# Synergos.CMS en Docker — pensado para correr en la PC del arquitecto y
+# consumirse desde otro dispositivo de la misma LAN (tablet, teléfono).
+#
+#   docker compose up --build        # primer arranque: compila + instala Umbraco
+#   docker compose logs -f cms       # seguir el boot (el primero tarda)
+#   docker compose down              # parar (los volúmenes sobreviven)
+#   docker compose down -v           # parar Y borrar la DB/media/App_Data
+#
+# Desde la tablet: http://<IP-LAN-de-la-PC>:8080
+# Backoffice:      http://<IP-LAN-de-la-PC>:8080/umbraco
+#
+# El puerto se publica en 0.0.0.0, así que el firewall de Windows va a
+# pedir permiso la primera vez — hay que aceptarlo para redes privadas.
+
+services:
+  cms:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: synergos-cms:local
+    container_name: synergos-cms
+    restart: unless-stopped
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+
+      # ─── Lo único que hay que tocar sí o sí ───────────────────────
+      # Poné acá la IP LAN de la PC (ipconfig → "Dirección IPv4"). Umbraco
+      # la usa para construir URLs absolutas: sin esto, el backoffice y los
+      # links de notificación apuntan a localhost, que desde la tablet es
+      # la tablet misma y no resuelve nada.
+      Umbraco__CMS__Global__UmbracoApplicationUrl: "http://192.168.1.50:8080/"
+      Synergos__Notifications__PublicBaseUrl: "http://192.168.1.50:8080"
+
+      # Firma de la cookie del carrito. El default de CartSettings dispara
+      # un log Critical en boot fuera de Development (ADR 0028); cualquier
+      # string propio lo silencia. No es un secreto de producción.
+      Synergos__Cart__SecretKey: "synergos-docker-local-change-me"
+
+    volumes:
+      # Schema uSync como bind, no como volumen: es el source of truth del
+      # repo (ADR 0008) y uSync tiene ExportOnSave=All, así que lo que el
+      # arquitecto guarde en el backoffice se escribe de vuelta en el árbol
+      # versionado en vez de quedar atrapado en el contenedor.
+      - ./Synergos.CMS.Web/uSync/v9:/app/uSync/v9
+
+      # Estado de runtime — volúmenes nombrados. Sobreviven a `up --build`,
+      # así que la DB no se pierde al recompilar la imagen.
+      - synergos-db:/app/umbraco/Data
+      - synergos-logs:/app/umbraco/Logs
+      - synergos-appdata:/app/App_Data
+      - synergos-media:/app/wwwroot/media
+
+      # Claves de DataProtection. Sin esto, recompilar la imagen desloguea
+      # el backoffice y rompe los secretos TOTP guardados.
+      - synergos-dpkeys:/root/.aspnet/DataProtection-Keys
+
+      # CDN local (ADR 0089). Descomentá y apuntá a tu C:\LOCAL_CDN para
+      # que los 71 elementSyn* resuelvan bundles reales en vez de emitir
+      # el placeholder del StubBundleRegistryClient.
+      # - C:\LOCAL_CDN:/cdn:ro
+
+volumes:
+  synergos-db:
+  synergos-logs:
+  synergos-appdata:
+  synergos-media:
+  synergos-dpkeys:
