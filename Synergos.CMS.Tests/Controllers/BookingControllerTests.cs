@@ -24,12 +24,11 @@ namespace Synergos.CMS.Tests.Controllers;
 /// <see cref="ShopReturnAuthTests"/>: un cuerpo que dice "reembolsado" sale idéntico con el
 /// defecto abierto.</para>
 ///
-/// <para>Dos tests documentan comportamiento que hoy es <b>defecto pendiente</b>, no contrato
-/// deseado. Llevan <c>DEFECTO</c> en el nombre y explican en el cuerpo qué debería pasar; están
-/// para que el día que se arregle el controller fallen ruidosamente y se borren, no para
-/// bendecir lo que hacen. Son
-/// <c>Cancel_dos_veces_reembolsa_DOS_veces_DEFECTO</c> y
-/// <c>Pay_sobre_un_hold_vencido_cobra_y_revienta_DEFECTO</c>.</para>
+/// <para><b>Esta cobertura encontró dos defectos que movían dinero</b>, y los dos quedaron
+/// arreglados en el mismo empujón (ADR 0122): cancelar dos veces reembolsaba dos veces, y
+/// pagar sobre un hold vencido capturaba la plata y después reventaba con un 500. Se
+/// documentaron primero como <c>_DEFECTO</c> —describiendo lo que el controller hacía, no lo
+/// que debía hacer— y los tests que quedan son ya el contrato correcto.</para>
 ///
 /// <para>El motor se sustituye con NSubstitute, pero <see cref="IReservationService"/> se
 /// cablea como una máquina de estados real sobre <c>_estado</c> (espejo fiel de
@@ -151,11 +150,21 @@ public sealed class BookingControllerTests
             "Ana Restrepo", "ana@correo.co", Total, "COP", PaymentSessionId: SesionPago);
 
     /// <summary>Deja el motor con una reserva apartada y SIN cobrar.</summary>
-    private void ReservaApartadaSinPagar(ReservationStatus status = ReservationStatus.Held)
+    /// <summary>
+    /// Un hold VIGENTE por defecto. <paramref name="expiresAt"/> lo vence a propósito.
+    /// </summary>
+    /// <remarks>
+    /// El default estaba en el pasado y ningún test lo notaba, porque el controller no miraba
+    /// el vencimiento antes de cobrar — que era justo el defecto. Al cerrarlo, un hold vencido
+    /// por defecto habría hecho que todos los pagos respondieran 409.
+    /// </remarks>
+    private void ReservaApartadaSinPagar(
+        ReservationStatus status = ReservationStatus.Held,
+        DateTimeOffset? expiresAt = null)
         => _estado = new Reservation(
             ReservaId, status, "DBL", Tarifa, CheckIn, CheckOut,
             "Ana Restrepo", "ana@correo.co", Total, "COP", PaymentSessionId: null,
-            ExpiresAt: DateTimeOffset.UtcNow.AddMinutes(-1));
+            ExpiresAt: expiresAt ?? DateTimeOffset.UtcNow.AddMinutes(15));
 
     private static T Body<T>(IActionResult result)
     {
@@ -462,28 +471,49 @@ public sealed class BookingControllerTests
         await _reservations.DidNotReceive().GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact] // ⚠ DEFECTO PENDIENTE — ver el <remarks> de la clase
-    public async Task Pay_sobre_un_hold_vencido_cobra_y_revienta_DEFECTO()
+    [Theory]
+    [InlineData(ReservationStatus.Held)]     // vigente en el papel, vencido en el reloj
+    [InlineData(ReservationStatus.Expired)]  // ya marcado por el escáner de vencimientos
+    public async Task Pay_sobre_un_hold_vencido_es_409_y_NO_abre_la_caja(ReservationStatus status)
     {
-        // Un hold vence a los 15 min. El motor rechaza confirmar después de eso
-        // (StubReservationService.ConfirmAsync → InvalidOperationException), pero el
-        // controller ya CAPTURÓ el dinero antes de llegar ahí, y no atrapa nada.
+        // Antes: las guardas cubrían Confirmed y Cancelled, y un hold vencido no es ninguna
+        // de las dos. Caía derecho a CreateSession + Capture —dinero capturado— y solo
+        // entonces ConfirmAsync lanzaba porque el hold ya no valía. Nadie atrapaba eso: 500,
+        // huésped cobrado, sin reserva y sin compensación.
         //
-        // Lo que debería pasar: detectar el vencimiento antes de cobrar, o compensar
-        // con VoidAsync/RefundAsync y responder un 409 explicando que el cupo se soltó.
-        // Lo que pasa hoy: el huésped queda cobrado, sin reserva y con un 500.
+        // El cupo se verifica primero, la caja se abre después.
+        ReservaApartadaSinPagar(status, expiresAt: DateTimeOffset.UtcNow.AddMinutes(-1));
+
+        var result = await BuildSut().Pay(new BookingController.PayRequest(ReservaId), default);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        var body = Assert.IsType<BookingController.PayResponse>(conflict.Value);
+        Assert.Equal(nameof(ReservationStatus.Expired), body.Status);
+        Assert.Equal(0m, body.AmountCaptured);
+        Assert.False(string.IsNullOrWhiteSpace(body.FailureReason));
+
+        // Lo que importa: NO se abrió sesión ni se capturó nada.
+        await _payments.DidNotReceive().CreateSessionAsync(
+            Arg.Any<PaymentSessionRequest>(), Arg.Any<CancellationToken>());
+        await _payments.DidNotReceive().CaptureAsync(
+            Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<CancellationToken>());
+        await _reservations.DidNotReceive().ConfirmAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Un_hold_SIN_vencimiento_declarado_no_se_trata_como_vencido()
+    {
+        // ExpiresAt es nullable. Sin fecha no hay vencimiento que comprobar, y tratarlo como
+        // vencido cerraría el cobro de toda reserva que no declare ventana.
         ReservaApartadaSinPagar();
-        _reservations.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns<Reservation>(_ => throw new InvalidOperationException(
-                "El hold de la reserva venció antes de confirmar."));
+        _estado = _estado! with { ExpiresAt = null };
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => BuildSut().Pay(new BookingController.PayRequest(ReservaId), default));
+        var result = await BuildSut().Pay(new BookingController.PayRequest(ReservaId), default);
 
-        // La plata SÍ salió del bolsillo del huésped, y nadie la devolvió.
-        await _payments.Received(1).CaptureAsync(SesionPago, Arg.Any<decimal?>(), Arg.Any<CancellationToken>());
-        await _payments.DidNotReceive().RefundAsync(Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<CancellationToken>());
-        await _payments.DidNotReceive().VoidAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        Assert.IsNotType<ConflictObjectResult>(result);
+        await _payments.Received(1).CreateSessionAsync(
+            Arg.Any<PaymentSessionRequest>(), Arg.Any<CancellationToken>());
     }
 
     // ══════════════════════ 4. CANCEL ══════════════════════
@@ -596,29 +626,57 @@ public sealed class BookingControllerTests
         Assert.Equal(nameof(ReservationStatus.Cancelled), body.Status);
     }
 
-    [Fact] // ⚠ DEFECTO PENDIENTE — ver el <remarks> de la clase
-    public async Task Cancel_dos_veces_reembolsa_DOS_veces_DEFECTO()
+    [Fact]
+    public async Task Cancelar_dos_veces_reembolsa_UNA_sola_vez()
     {
-        // El controller no mira el estado de la reserva antes de reembolsar: solo mira
-        // la política y el PaymentSessionId, y cancelar NO borra ese id. La segunda
-        // llamada vuelve a pedirle al PSP la misma devolución.
+        // Antes: la guarda del reembolso miraba la política y el PaymentSessionId, nunca el
+        // ESTADO — y CancelAsync es idempotente pero no borra ese id, así que la segunda
+        // llamada volvía a pedirle al PSP la misma devolución.
         //
-        // Hoy no se duplica plata de verdad porque StubPaymentProvider solo reembolsa
-        // sesiones en estado Captured y la segunda cae en Refunded — es el PSP quien
-        // salva, no el controller. Una pasarela que acepte reembolsos parciales
-        // sucesivos (el caso normal con penalidad: quedan pesos sin devolver) sí paga
-        // dos veces.
-        //
-        // Lo que debería pasar: si la reserva ya está Cancelled, responder el estado
-        // actual sin volver a llamar a RefundAsync — la misma guarda idempotente que
-        // Pay ya tiene para Confirmed.
+        // No se duplicaba plata de verdad solo porque el proveedor stub reembolsa únicamente
+        // sesiones capturadas y en la segunda pasada encuentra Refunded: el PSP salvaba al
+        // controller. Una pasarela que acepte reembolsos parciales sucesivos —el caso normal
+        // con penalidad, porque quedan pesos sin devolver en la sesión— sí paga dos veces.
         ReservaPagada();
         var sut = BuildSut();
 
         await sut.Cancel(new BookingController.CancelRequest(ReservaId, null), default);
         await sut.Cancel(new BookingController.CancelRequest(ReservaId, null), default);
 
-        await _payments.Received(2).RefundAsync(SesionPago, Total - Penalidad, Arg.Any<CancellationToken>());
+        await _payments.Received(1).RefundAsync(SesionPago, Total - Penalidad, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task La_segunda_cancelacion_responde_200_y_no_declara_un_reembolso_que_no_hizo()
+    {
+        // 200 y no error: cancelar lo ya cancelado es el resultado que el huésped pidió, y
+        // reintentar tras un timeout de red no puede parecer un fallo. Pero el RefundStatus
+        // va en null, porque esta pasada no movió dinero — afirmar un reembolso que no
+        // ocurrió aquí es la clase de dato con cara de verdad que ya costó una vez en este
+        // mismo endpoint.
+        ReservaPagada();
+        var sut = BuildSut();
+
+        await sut.Cancel(new BookingController.CancelRequest(ReservaId, null), default);
+        var segunda = Body<BookingController.CancelResponse>(
+            await sut.Cancel(new BookingController.CancelRequest(ReservaId, null), default));
+
+        Assert.Equal(nameof(ReservationStatus.Cancelled), segunda.Status);
+        Assert.Null(segunda.RefundStatus);
+        Assert.Equal(Penalidad, segunda.PenaltyAmount);
+    }
+
+    [Fact]
+    public async Task La_segunda_cancelacion_tampoco_vuelve_a_cancelar_en_el_motor()
+    {
+        ReservaPagada();
+        var sut = BuildSut();
+
+        await sut.Cancel(new BookingController.CancelRequest(ReservaId, null), default);
+        await sut.Cancel(new BookingController.CancelRequest(ReservaId, null), default);
+
+        await _reservations.Received(1).CancelAsync(
+            ReservaId, Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
