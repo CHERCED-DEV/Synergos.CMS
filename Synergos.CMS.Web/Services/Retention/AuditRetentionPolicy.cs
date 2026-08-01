@@ -51,6 +51,17 @@ public sealed class AuditRetentionPolicy : IRetentionPolicy
         foreach (var file in Directory.EnumerateFiles(dir, "*.jsonl"))
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // La auditoría de acceso a PHI vive en {fecha}.phi.jsonl y la purga
+            // HealthcareRetentionPolicy, con su propia retención (ADR 0121). El salto es
+            // EXPLÍCITO y no un efecto del parseo de la fecha: sin esta línea, alguien que
+            // "arregle" el TryParseExact para aceptar sufijos empezaría a borrar auditoría
+            // clínica sin que nada falle.
+            if (file.EndsWith(FileSystemAuditTrailWriter.PhiSuffix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var name = Path.GetFileNameWithoutExtension(file);
             if (!DateTime.TryParseExact(name, "yyyy-MM-dd", null,
                 System.Globalization.DateTimeStyles.None, out var fileDate))

@@ -33,4 +33,20 @@ public sealed class HealthcareSettings
 
     /// <summary>Si true, los roles de staff (doctor/nurse/reception) requieren 2FA. Default true.</summary>
     public bool RequireTwoFactorStaff { get; init; } = true;
+
+    /// <summary>
+    /// Retención de la AUDITORÍA de acceso a PHI, en días. Default 0 = nunca purgar.
+    /// </summary>
+    /// <remarks>
+    /// <b>El default es "nunca" y es deliberado</b>, al revés que el resto de las retenciones
+    /// del repo. La auditoría de quién miró una historia clínica es el registro que se pide
+    /// cuando algo salió mal, a veces años después; borrarla es irreversible y su coste en
+    /// disco es una línea JSON por acceso. Quien tenga una obligación legal concreta con un
+    /// número, lo pone aquí — pero el sistema no lo elige por él.
+    ///
+    /// <para>Antes de existir este ajuste, esa auditoría se purgaba a los <b>90 días</b> junto
+    /// con la administrativa, mientras el XML-doc de la policy clínica afirmaba que era
+    /// indefinida. Ver ADR 0121.</para>
+    /// </remarks>
+    public int AccessAuditRetentionDays { get; init; } = 0;
 }
