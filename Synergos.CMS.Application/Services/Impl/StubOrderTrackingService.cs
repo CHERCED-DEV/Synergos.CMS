@@ -84,6 +84,10 @@ public sealed class StubOrderTrackingService : IOrderTrackingService
     /// store durable (FileSystem en Web, InMemory en tests) y
     /// <paramref name="storeNamespace"/> lo separa del de los otros dominios.
     /// </summary>
+    /// <param name="pipeline">Las etapas de ESTE dominio, en orden. Null usa
+    ///   el pipeline de envío de Tienda.</param>
+    /// <param name="now">Reloj inyectable para los tests. Null usa el del sistema.</param>
+    /// <param name="store">Backing store durable. Null deja el timeline en memoria.</param>
     /// <param name="storeNamespace">Familia de entidades de ESTA instancia.
     ///   OBLIGATORIO en la práctica cuando hay store compartido: el estado
     ///   guarda el índice de etapa, y leerlo contra otro pipeline convierte
