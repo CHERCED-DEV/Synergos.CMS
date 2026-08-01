@@ -1,0 +1,69 @@
+name: Build + tests (.NET)
+
+# El repo tenía tres workflows —uSync, paridad CSS y contratos— y ninguno
+# compilaba la solución ni corría los 976 tests. O sea: el gate más básico
+# faltaba, y los tres que existían sólo disparan por `paths`, así que un
+# cambio puramente C# no encendía nada.
+#
+# Este corre SIEMPRE (sin filtro de paths): si algo no compila, se ve acá.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+# Un push encima cancela el run anterior de la misma rama — no tiene sentido
+# gastar minutos verificando un commit que ya quedó atrás.
+concurrency:
+  group: build-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: dotnet build + test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # global.json pinea SDK 10.x (rollForward latestFeature) mientras los
+      # proyectos targetean net8.0. Instalamos los dos: el 10 porque lo exige
+      # global.json, el 8 para tener el targeting pack sin ir a buscarlo.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore Synergos.CMS.sln
+
+      - name: Build
+        run: dotnet build Synergos.CMS.sln --no-restore --configuration Release
+
+      - name: Test
+        run: >-
+          dotnet test Synergos.CMS.sln
+          --no-build
+          --configuration Release
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ./TestResults
+          if-no-files-found: warn
