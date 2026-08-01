@@ -1,6 +1,9 @@
 # ADR 0127 — El CMS configura el mapa de asientos y un proveedor exógeno lo llena
 
-- **Estado:** Aceptado
+- **Estado:** Aceptado — **actualizado el mismo día**: los ejes *servicio* y *categorías* ya
+  no son huecos. El contrato del componente se extendió en el repo UI y la proyección se
+  adaptó; ver «[Lo que se midió](#lo-que-se-midió-y-es-peor-de-lo-que-parecía)» y la sección
+  que la sigue. *Forma de construcción* sigue abierto y ahora es el único hueco duro.
 - **Fecha:** 2026-08-01
 - **Enmienda:** ADR 0126 (un elemento que otro bundle embebe no lleva DocType)
 - **Complementa:** ADR 0117 (aforo y asientos de un evento como contenido), ADR 0083 (la UI es
@@ -82,39 +85,73 @@ en pie.
 
 ### Por qué el DocType no expone apariencia, servicio ni categorías
 
-Porque **el componente no las lee**. Sus entradas son exactamente cuatro —`config`, `seatmap`,
-`currency`, `maxSelectable`— y su parser mira ocho claves de la carga. Agregar propiedades para
-claves que nadie consume es precisamente la deriva que el ADR 0083 y el gate de contratos
-existen para frenar: schema que se ve completo y no hace nada.
+Porque **el componente no las lee como entradas del editor**. Sus entradas son exactamente
+cuatro —`config`, `seatmap`, `currency`, `maxSelectable`— y agregar propiedades para claves que
+nadie consume es precisamente la deriva que el ADR 0083 y el gate de contratos existen para
+frenar: schema que se ve completo y no hace nada.
 
-La seam **sí** modela `ServiceClass` y `Features`, porque el dominio los tiene. La proyección
-los descarta hoy, a la espera de que el contrato los admita.
+Servicio y categorías **no son configuración editorial**: son atributos de la cabina que el
+proveedor conoce y el editor no. Su sitio es la carga, no el DocType — y ahí es donde se
+resolvieron (ver abajo).
 
 ## Lo que se midió, y es peor de lo que parecía
 
-Contrastando los cuatro ejes del arquitecto contra el contrato real:
+Contrastando los cuatro ejes del arquitecto contra el contrato real. **Esta es la medición
+original**; los dos ejes tachados se cerraron el mismo día en la sección siguiente:
 
 | Eje | Estado | Detalle |
 |---|---|---|
 | **Apariencia** | Parcial, y **nada por el componente** | El bundle no expone ni un input de apariencia. Lo que funciona viene del host: `compDom*` aterriza en el envoltorio y el SCSS del bundle está tokenizado, así que el tema del siteRoot ya manda el color. Es el exterior de la caja; el interior no se configura |
-| **Servicio** | **Nada** | `ServiceClass` no tiene clave en la carga. El 787 sembrado son 43 filas en tres cabinas y se dibuja como una sola grilla indiferenciada: un pasajero no ve dónde termina ejecutiva |
-| **Forma de construcción** | Parcial — **y es el peor hueco** | `aisleAfterColumns` es **un solo entero**, así que solo se puede dibujar **un** pasillo. Todo widebody sale mal hoy: el `3-3-3` dibuja el pasillo tras la C y **no dibuja nada entre F y G**; el bloque derecho se suelda al central. El `1-2-1` igual |
-| **Categorías** | Parcial | El enum `type` mezcla dos ideas ortogonales —tres posiciones más un rasgo de confort—, así que `extra-legroom` **sobrescribe** la posición cuando ambas son ciertas. `Features` e `IsExitRow` se descartan; **no se plegó `IsExitRow` dentro de `extra-legroom`** a propósito, porque una fila de salida tiene consecuencias regulatorias (edad mínima, nada en el piso) que "más espacio" no tiene |
+| ~~**Servicio**~~ | ~~**Nada**~~ → **cerrado** | `ServiceClass` no tenía clave en la carga. El 787 sembrado son 43 filas en tres cabinas y se dibujaba como una sola grilla indiferenciada: un pasajero no veía dónde termina ejecutiva |
+| **Forma de construcción** | Parcial — **y ahora es el único hueco duro** | `aisleAfterColumns` es **un solo entero**, así que solo se puede dibujar **un** pasillo. Todo widebody sale mal hoy: el `3-3-3` dibuja el pasillo tras la C y **no dibuja nada entre F y G**; el bloque derecho se suelda al central. El `1-2-1` igual |
+| ~~**Categorías**~~ | ~~Parcial~~ → **cerrado** | El enum `type` mezclaba dos ideas ortogonales —tres posiciones más un rasgo de confort—, así que `extra-legroom` **sobrescribía** la posición cuando ambas eran ciertas. `Features` e `IsExitRow` se descartaban |
 
 ### Lo que el contrato de la UI necesitaría, por prioridad
 
 1. **`aisleAfterColumns` → arreglo.** El cambio más pequeño y el de mayor retorno: sin él, toda
-   cabina de doble pasillo se dibuja mal, y el stub ya trae dos.
-2. **`rows[].serviceClass`** más un encabezado de sección en la plantilla. Habilita *servicio*.
-3. **`seats[].features: string[]`**, aditivo: `type` se queda con la posición y los rasgos se
-   mudan a `features`, con leyenda. Habilita *categorías* y la marca de fila de salida sin
-   romper `type`.
+   cabina de doble pasillo se dibuja mal, y el stub ya trae dos. **Sigue pendiente.**
+2. ~~**`rows[].serviceClass`** más un encabezado de sección en la plantilla.~~ **Hecho.**
+3. ~~**`seats[].features: string[]`**, aditivo.~~ **Hecho.**
 4. **Entradas de apariencia** (`density`, `showLegend`, `showPrices`). Solo vale la pena después
-   de lo anterior.
+   de lo anterior. **Sigue pendiente** — y `showLegend` perdió parte de su motivo: la leyenda
+   ahora se deriva del contenido, así que un mapa sin rasgos ya no dibuja ninguna.
 
-Es trabajo del repo UI y **no se hizo aquí**: cambiar el contrato del componente es UI-first por
-definición (ADR 0083), y hacerlo desde el CMS habría invertido justamente la dirección que ese
-ADR fija.
+## Servicio y categorías: cómo se cerraron
+
+Se hizo **UI-first**, que es lo que el ADR 0083 obliga y lo que la medición de arriba dejaba
+como trabajo del otro repo. Primero se extendió el componente publicado; después la proyección
+del CMS se adaptó a lo que el componente ya sabía leer. En ningún momento el CMS emitió una
+clave que el bundle no consumiera.
+
+### Servicio — `rows[].serviceClass`
+
+El componente agrupa filas contiguas y dibuja un encabezado **solo cuando la clase cambia**, no
+en cada fila: repetir "Económica" 30 veces sería ruido. Un mapa sin clases se ve exactamente
+igual que antes, porque sin la clave no hay encabezados que dibujar.
+
+El vocabulario es **abierto** con etiquetas conocidas para las cuatro cabinas habituales
+(`first` / `business` / `premium` / `economy`); lo que no está en el mapa se rotula con su
+propio valor en vez de desaparecer. La proyección normaliza a minúsculas porque ahí es donde el
+componente busca la etiqueta.
+
+### Categorías — `seats[].features[]`, y `type` recupera su significado
+
+`type` vuelve a ser **solo la posición**. Los rasgos se mudaron a un arreglo aparte, también de
+vocabulario abierto, y la leyenda se deriva de lo que la carga trae.
+
+Tres decisiones dentro de esto:
+
+- **La compatibilidad hacia atrás se preservó en el componente, no en el CMS.** Un
+  `type: "extra-legroom"` de una carga vieja se pliega solo: posición `middle` más el rasgo.
+  Las cinco pruebas que ya existían del componente pasan sin tocarse, que es la evidencia de
+  que ninguna carga previa se rompió.
+- **`IsExitRow` es de la fila y se reparte a cada butaca**, porque el contrato lleva los rasgos
+  por butaca.
+- **`exit-row` NO se plegó dentro de `extra-legroom`** aunque casi siempre coincidan. Una fila
+  de salida conlleva requisitos regulatorios —edad mínima, nada en el piso— que "más espacio"
+  no comunica. Como casi siempre coinciden, el relleno se lo queda `extra-legroom` y la fila de
+  salida se marca con **borde**: si compartieran el relleno, una taparía a la otra justo en el
+  caso normal.
 
 ## Consecuencias
 
@@ -126,12 +163,20 @@ ADR fija.
   comportamiento que ese adapter tendrá que reproducir.
 - Queda medido y escrito **qué de los cuatro ejes se puede hoy y qué no**, con el orden en que
   conviene cerrarlo.
+- **Servicio y categorías llegan hasta la pantalla.** El 787 sembrado ya se lee como tres
+  cabinas y no como una grilla; una butaca de ventana con espacio extra sigue siendo de
+  ventana; y una fila de salida se distingue de una con espacio extra, que es lo que un rasgo
+  con consecuencias regulatorias necesita.
 
 ### Lo que se acepta
 
-- **Las cabinas de doble pasillo se dibujan mal.** Dos de las tres sembradas lo son. El dato del
-  proveedor llega intacto —los tests lo fijan— pero el componente solo sabe dibujar un pasillo.
-  Es la primera cosa que arreglar en el repo UI.
+- **Las cabinas de doble pasillo se siguen dibujando mal.** Dos de las tres sembradas lo son. El
+  dato del proveedor llega intacto —los tests lo fijan— pero el componente solo sabe dibujar un
+  pasillo. Es lo que queda por arreglar en el repo UI, y ahora es el único hueco de los cuatro
+  ejes que produce un plano incorrecto en vez de uno incompleto.
+- **El vocabulario abierto no se valida en ninguna de las dos mitades.** Un proveedor que mande
+  `xtra-legroom` verá esa cadena rotulada tal cual en la leyenda, sin error en ningún gate. Es
+  el precio de no exigir un despliegue del CMS por cada rasgo nuevo, y se aceptó a sabiendas.
 - **Sin diccionario y sin respaldo SSR.** El servidor no emite copy: la proyección emite ids,
   enums, booleanos y números; todo el texto visible vive en el bundle. Un respaldo SSR sería lo
   primero que necesitaría claves de diccionario, y una grilla de butacas renderizada en el
