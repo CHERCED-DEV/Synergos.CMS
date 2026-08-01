@@ -231,10 +231,27 @@ captura parcial exige el flujo de autorización diferida de la API directa.
 | 2 | `RoutingPaymentProvider` — misma seam, N proveedores | ✅ construida |
 | 3 | Firmas de Wompi + adaptador Web Checkout + cableado | ✅ construida |
 | 4 | `IPaymentEventSink` — despacho de eventos por vertical | ✅ construida |
-| 5 | Corregir los 7 usos defectuosos | ⬜ pendiente |
+| 5 | Corregir los 7 usos defectuosos | 🟡 3 de 7 (Salud, Gobierno, Booking) |
 | 6 | Persistir tracking y RMA + `DeliveredAt` | ⬜ pendiente |
 
-**Verificado:** `dotnet build` 0 errores · `dotnet test` **1080/1080**.
+**Verificado:** `dotnet build` 0 errores · `dotnet test` **1084/1084**.
+
+### Fase 5 — lo corregido y lo que falta
+
+| Vertical | Antes | Ahora |
+|---|---|---|
+| **Salud** | Confirmaba el cupo sin mirar si capturó | Si no captura: `VoidAsync` + libera el hold + no agenda |
+| **Gobierno** | Abría sesión, nunca capturaba ni la persistía | Captura y guarda `PaymentSessionId` + `PaymentStatus` en `CaseState` |
+| **Booking** | Calculaba el reembolso y no lo ejecutaba | Llama `RefundAsync` por total menos penalidad |
+| Viajes | Queda en `Partial` sin revertir el cobro | ⬜ |
+| Eventos | Sin reembolso | ⬜ |
+| Educación | Sin reembolso | ⬜ |
+
+**Gobierno no aborta el trámite si la tasa no captura**, y es deliberado: en un
+servicio público, perder la radicación de un ciudadano porque su banco tardó es
+peor que arrastrar una tasa pendiente. Se registra el estado y el expediente
+queda marcado — que es justo lo que antes era imposible, porque el id de sesión
+no se guardaba en ninguna parte.
 
 ### Cómo se enruta un evento a su vertical (fase 4)
 
