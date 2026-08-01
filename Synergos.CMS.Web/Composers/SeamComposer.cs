@@ -892,7 +892,7 @@ public sealed class SeamComposer : IComposer
         // por CatalogEventCatalogProvider sobre UmbracoEventCatalogSource. El rollback sigue
         // siendo esa línea de config, sin redeploy.
         services.AddSingleton<IEventCatalogProvider>(sp =>
-            IsCmsEventCatalog(sp)
+            IsCmsSource(sp, UmbracoEventCatalogSource.Vertical)
                 ? new CatalogEventCatalogProvider(
                     sp.GetRequiredService<ICatalogSource<EventDetail>>(),
                     sp.GetRequiredService<IJsonEntityStore>())
@@ -914,7 +914,7 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<UmbracoEventCatalogSource>(sp =>
             ActivatorUtilities.CreateInstance<UmbracoEventCatalogSource>(sp));
         services.AddSingleton<ICatalogSource<EventSummary>>(sp =>
-            IsCmsEventCatalog(sp)
+            IsCmsSource(sp, UmbracoEventCatalogSource.Vertical)
                 ? sp.GetRequiredService<UmbracoEventCatalogSource>()
                 : new EventsDemoCatalogSource(sp.GetRequiredService<IEventCatalogProvider>()));
 
@@ -925,12 +925,6 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<ICatalogSource<EventDetail>>(sp =>
             sp.GetRequiredService<UmbracoEventCatalogSource>());
 
-        static bool IsCmsEventCatalog(IServiceProvider sp)
-        {
-            var settings = sp.GetRequiredService<IOptionsMonitor<CatalogSettings>>().CurrentValue;
-            var source = settings.Sources.TryGetValue(UmbracoEventCatalogSource.Vertical, out var s) ? s : "demo";
-            return string.Equals(source, "cms", StringComparison.OrdinalIgnoreCase);
-        }
         // Durabilidad (doc 25): las órdenes de tickets viven tras el store genérico
         // (resourceType "event-orders") → una compra confirmada sobrevive un reinicio.
         services.AddSingleton<StubEventTicketingService>(sp =>
@@ -974,7 +968,24 @@ public sealed class SeamComposer : IComposer
         //   - ILeadCaptureService: captura el lead (contactar agente). REUSA
         //     IAuditTrailWriter (ADR 0037) + IAnalyticsTracker (ADR 0067) — no crea
         //     seams nuevos. Singleton — el estado de leads vive en el proceso.
-        services.AddSingleton<IPropertyCatalogProvider, StubPropertyCatalogProvider>();
+        //
+        // Rebanada de contenido (ADR 0118) — de dónde sale el inventario. Inmobiliaria era el
+        // único vertical con catálogo SIN ninguna superficie CMS: no existía propertyListing,
+        // así que un editor no podía publicar un inmueble ni con el flag puesto. Ahora
+        // Synergos:Catalog:Sources:Realty = cms sirve lo que el editor autoró, y el rollback
+        // es esa misma línea a 'demo' sin redespliegue.
+        //
+        // Singleton por lo mismo que las otras dos fuentes: UmbracoPropertyCatalogSource solo
+        // sostiene accessors, IOptionsMonitor, la factory del diccionario y el logger. Ninguno
+        // es Scoped, así que no hay dependencia cautiva.
+        services.AddSingleton<ICatalogSource<PropertyDetail>>(sp =>
+            ActivatorUtilities.CreateInstance<UmbracoPropertyCatalogSource>(sp));
+        services.AddSingleton<IPropertyCatalogProvider>(sp =>
+            IsCmsSource(sp, UmbracoPropertyCatalogSource.Vertical)
+                ? new CatalogPropertyCatalogProvider(
+                    sp.GetRequiredService<ICatalogSource<PropertyDetail>>(),
+                    sp.GetRequiredService<IJsonEntityStore>())
+                : new StubPropertyCatalogProvider());
         services.AddSingleton<IVisitSchedulingService>(sp =>
             new StubVisitSchedulingService(sp.GetRequiredService<IReservationService>()));
         services.AddSingleton<IMortgageCalculator, StubMortgageCalculator>();
@@ -1203,5 +1214,20 @@ public sealed class SeamComposer : IComposer
         builder.AddNotificationHandler<
             RoutingRequestNotification,
             MemberGatingHandler>();
+    }
+
+    /// <summary>
+    /// Si el catálogo de un vertical se sirve del CONTENIDO del CMS o del seed de demo.
+    /// </summary>
+    /// <remarks>
+    /// Una sola lectura del flag para los tres verticales que ya tienen fuente Umbraco-backed
+    /// (Tienda, Eventos, Inmobiliaria). El default es <c>demo</c> — un vertical al que se le
+    /// olvide la clave sirve la demo, no un catálogo vacío.
+    /// </remarks>
+    private static bool IsCmsSource(IServiceProvider sp, string vertical)
+    {
+        var settings = sp.GetRequiredService<IOptionsMonitor<CatalogSettings>>().CurrentValue;
+        var source = settings.Sources.TryGetValue(vertical, out var s) ? s : "demo";
+        return string.Equals(source, "cms", StringComparison.OrdinalIgnoreCase);
     }
 }
