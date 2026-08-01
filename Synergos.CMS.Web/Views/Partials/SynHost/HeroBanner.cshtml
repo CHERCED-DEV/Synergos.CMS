@@ -1,25 +1,47 @@
-﻿@*
+@*
     SynHost renderer — <synergos-hero-banner>. Rich hero with media + CTA.
+
+    SSR fallback (light DOM). SynHostFallbackBuilder renders the hero as real
+    HTML *inside* the custom element, so the block stays visible and indexable
+    before the bundle upgrades the tag — and in every deploy without a CDN,
+    where the registry never resolves (ADR 0012).
+
+    Contract with the bundle: it removes or replaces [data-syn-ssr-fallback]
+    on upgrade. Until it does, syn-ssr-fallback.css hides the node once the
+    tag is :defined, so nothing double-renders.
 *@
 @using Umbraco.Cms.Core.Models
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Synergos.CMS.Web.Services
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
     var media = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("media");
     var ctaLink = Model.Value<Link>("ctaLink");
+    var title = Model.Value<string>("title");
+    var subtitle = Model.Value<string>("subtitle");
+    var ctaLabel = Model.Value<string>("ctaLabel");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["title"] = Model.Value<string>("title"),
-        ["subtitle"] = Model.Value<string>("subtitle"),
+        ["title"] = title,
+        ["subtitle"] = subtitle,
         ["mediaUrl"] = media?.Url(mode: UrlMode.Absolute),
-        ["ctaLabel"] = Model.Value<string>("ctaLabel"),
+        ["ctaLabel"] = ctaLabel,
         ["ctaUrl"] = ctaLink?.Url,
     };
+    var fallbackHtml = SynHostFallbackBuilder.HeroBanner(
+        title: title,
+        subtitle: subtitle,
+        imageUrl: media?.Url(),
+        imageAlt: media?.Value<string>("altDefault"),
+        ctaLabel: string.IsNullOrWhiteSpace(ctaLabel) ? ctaLink?.Name : ctaLabel,
+        ctaUrl: ctaLink?.Url,
+        ariaLabel: Umbraco.GetDictionaryValue("Synhost.Hero.Aria", "Sección destacada"));
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "hero-banner",
         Props: props,
         ConfigOverrideJson: Model.Value<string>("configOverride"),
-        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+        Culture: System.Globalization.CultureInfo.CurrentUICulture,
+        FallbackHtml: fallbackHtml);
     var result = await Emitter.EmitAsync(request);
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

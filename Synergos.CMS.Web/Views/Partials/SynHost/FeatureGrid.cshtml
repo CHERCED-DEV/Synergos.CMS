@@ -1,4 +1,19 @@
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@*
+    SynHost renderer — <synergos-feature-grid>.
+
+    SSR fallback (light DOM). SynHostFallbackBuilder renders the features as a
+    real heading + list *inside* the custom element, so the block stays visible
+    and indexable before the bundle upgrades the tag — and in every deploy
+    without a CDN, where the registry never resolves (ADR 0012). itemsJson is
+    editor-authored free text: malformed JSON yields no fallback section
+    instead of an exception.
+
+    Contract with the bundle: it removes or replaces [data-syn-ssr-fallback]
+    on upgrade. Until it does, syn-ssr-fallback.css hides the node once the
+    tag is :defined, so nothing double-renders.
+*@
+@using Synergos.CMS.Web.Services
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
     object? items = null;
@@ -10,18 +25,26 @@
     }
     var theme = Model.Value<string>("theme");
     var cols = Model.Value<int>("columns");
+    var headingText = Model.Value<string>("headingText");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["headingText"] = Model.Value<string>("headingText"),
+        ["headingText"] = headingText,
         ["items"] = items,
         ["columns"] = cols > 0 ? cols : (object?)null,
         ["theme"] = string.IsNullOrWhiteSpace(theme) ? null : theme,
     };
+    var fallbackHtml = SynHostFallbackBuilder.FeatureGrid(
+        heading: headingText,
+        itemsJson: itemsJson,
+        columns: cols > 0 ? cols.ToString(System.Globalization.CultureInfo.InvariantCulture) : null,
+        theme: theme,
+        ariaLabel: Umbraco.GetDictionaryValue("Synhost.Features.Aria", "Características"));
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "feature-grid",
         Props: props,
         ConfigOverrideJson: Model.Value<string>("configOverride"),
-        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+        Culture: System.Globalization.CultureInfo.CurrentUICulture,
+        FallbackHtml: fallbackHtml);
     var result = await Emitter.EmitAsync(request);
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

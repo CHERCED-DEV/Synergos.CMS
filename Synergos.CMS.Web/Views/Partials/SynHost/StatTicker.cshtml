@@ -1,21 +1,39 @@
-﻿@*
+@*
     SynHost renderer — <synergos-stat-ticker>. Count-up animated stat.
+
+    SSR fallback (light DOM). The count-up belongs to the bundle; the figure
+    belongs to the page. SynHostFallbackBuilder renders a real
+    <figure>/<figcaption> *inside* the custom element, so the block stays
+    visible and indexable before the bundle upgrades the tag — and in every
+    deploy without a CDN, where the registry never resolves (ADR 0012).
+    No generated copy here: value, label and affixes are editor-authored, so
+    no Dictionary key is needed.
+
+    Contract with the bundle: it removes or replaces [data-syn-ssr-fallback]
+    on upgrade. Until it does, syn-ssr-fallback.css hides the node once the
+    tag is :defined, so nothing double-renders.
 *@
+@using Synergos.CMS.Web.Services
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+    var statValue = Model.Value<string>("statValue");
+    var statLabel = Model.Value<string>("statLabel");
+    var statPrefix = Model.Value<string>("statPrefix");
+    var statSuffix = Model.Value<string>("statSuffix");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["statValue"] = Model.Value<string>("statValue"),
-        ["statLabel"] = Model.Value<string>("statLabel"),
-        ["statPrefix"] = Model.Value<string>("statPrefix"),
-        ["statSuffix"] = Model.Value<string>("statSuffix"),
+        ["statValue"] = statValue,
+        ["statLabel"] = statLabel,
+        ["statPrefix"] = statPrefix,
+        ["statSuffix"] = statSuffix,
     };
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "stat-ticker",
         Props: props,
         ConfigOverrideJson: Model.Value<string>("configOverride"),
-        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+        Culture: System.Globalization.CultureInfo.CurrentUICulture,
+        FallbackHtml: SynHostFallbackBuilder.StatTicker(statValue, statLabel, statPrefix, statSuffix));
     var result = await Emitter.EmitAsync(request);
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
