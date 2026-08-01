@@ -255,7 +255,7 @@ public sealed class StubShopOrderService : IShopOrderService
         }
 
         // 1) Capturar el pago de la orden completa (idempotente en el PSP).
-        var capture = await _payments.CaptureAsync(order.PaymentSessionId, cancellationToken);
+        var capture = await _payments.CaptureAsync(order.PaymentSessionId, cancellationToken: cancellationToken);
         if (capture.Status != PaymentStatus.Captured)
         {
             throw new InvalidOperationException(

@@ -222,14 +222,16 @@ public sealed class BookingController : ControllerBase
                 Metadata: null),
             cancellationToken);
 
-        var capture = await _payments.CaptureAsync(session.SessionId, cancellationToken);
+        var capture = await _payments.CaptureAsync(session.SessionId, cancellationToken: cancellationToken);
 
         if (capture.Status != PaymentStatus.Captured)
         {
             // El cobro no se completó (RequiresAction / Failed / etc.). No se
-            // confirma la reserva; el cliente reintenta o sigue el redirect.
+            // confirma la reserva; el cliente reintenta o sigue la acción que
+            // le pida su riel: redirect en PSE, reto embebido en 3DS, o
+            // aprobación en el celular con Nequi (ADR 0116).
             var failureReason = capture.FailureReason
-                ?? (session.RedirectUrl is not null
+                ?? (session.Action is { Kind: not PaymentActionKind.None }
                     ? "El pago requiere una acción adicional del cliente."
                     : null);
             return Ok(new PayResponse(
