@@ -119,6 +119,35 @@ public sealed class ShopCatalogController : ControllerBase
     /// tocarla; admin overridea. Cierra el acceso cruzado entre members sin
     /// gatear el flujo de invitado.
     /// </summary>
+    /// <summary>
+    /// Exige personal de tienda. Las transiciones de un RMA
+    /// (aprobar/rechazar/recibir/reembolsar) son decisiones del COMERCIANTE, no
+    /// del comprador: la máquina de estados de <see cref="IReturnService"/> no
+    /// tiene ni una transición que le corresponda al cliente. El cliente ABRE el
+    /// RMA (<c>POST order/{orderRef}/return</c>, que sí es suyo y va gateado por
+    /// <see cref="DenyIfForeignMember"/>); de ahí en adelante decide la tienda.
+    /// </summary>
+    /// <remarks>
+    /// Gatea con <c>admin</c> porque es el único rol de staff que hoy existe
+    /// sembrado y el que este mismo controller ya usa como override de
+    /// ownership. Un rol propio de vendedor (y hacerlo configurable, como
+    /// <c>SearchSettings.AnalyticsAdminRolesCsv</c>) es decisión de producto y
+    /// entra con el rediseño del motor de pagos — no se inventa acá.
+    /// </remarks>
+    private IActionResult? RequireShopStaff()
+    {
+        if (!_gate.IsAuthenticated)
+        {
+            return Unauthorized(new { error = "Se requiere iniciar sesión." });
+        }
+        if (!_gate.HasAnyRole("admin"))
+        {
+            // 403 directo y no Forbid(), por lo mismo que DenyIfForeignMember.
+            return StatusCode(StatusCodes.Status403Forbidden);
+        }
+        return null;
+    }
+
     private IActionResult? DenyIfForeignMember(ShopOrder order)
     {
         if (order.OwnerMemberKey is Guid owner
@@ -723,6 +752,16 @@ public sealed class ShopCatalogController : ControllerBase
         [FromBody] ReturnAdvanceBody? request,
         CancellationToken cancellationToken)
     {
+        // Guard PRIMERO, antes de mirar el body: llegar a `refunded` dispara
+        // IPaymentProvider.RefundAsync (StubReturnService:167). Este endpoint
+        // no comprobaba NADA — ni sesión, ni rol, ni dueño — mientras sus dos
+        // vecinos sí llaman DenyIfForeignMember. Con sólo el rmaId, un anónimo
+        // podía llevar la devolución hasta el reembolso.
+        if (RequireShopStaff() is { } notStaff)
+        {
+            return notStaff;
+        }
+
         if (request is null || string.IsNullOrWhiteSpace(request.Status))
         {
             return BadRequest(new { error = "status es requerido (approved|rejected|received|refunded)." });

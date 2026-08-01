@@ -178,19 +178,99 @@ public sealed class SeamComposer : IComposer
         services.AddSingleton<ITransactionalNotifierChannel, EmailTransactionalNotifier>();
         services.AddSingleton<ITransactionalNotifier, CompositeTransactionalNotifier>();
 
+        // ADR 0116 — el motor de pago admite N proveedores detrás del MISMO
+        // contrato. Los adapters concretos se registran siempre que tengan
+        // llaves; quién cobra cada petición lo decide el router.
+        //
+        // Con Routing:Enabled=false (default) se registra un proveedor único y
+        // el comportamiento es idéntico al de antes: el router es capacidad
+        // nueva, no un peaje obligatorio.
         var paymentProvider = builder.Config["Synergos:Payments:Provider"] ?? "Stub";
-        switch (paymentProvider.ToLowerInvariant())
+        var routingEnabled = builder.Config.GetValue<bool>("Synergos:Payments:Routing:Enabled");
+
+        // Named client de Wompi. Sandbox y producción se distinguen SÓLO por la
+        // base: las llaves ya vienen con su prefijo (pub_test_ / pub_prod_), así
+        // que apuntar a producción con llaves de prueba falla en Wompi y no en
+        // silencio. Hereda la resiliencia que el repo ya aplica a sus 12
+        // clientes (ADR 0064/0069).
+        services.AddHttpClient("wompi", (sp, http) =>
         {
-            // case "wompi":  // Ola B (gated): requiere WompiPaymentProvider + llaves.
-            //     services.AddSingleton<IPaymentProvider, WompiPaymentProvider>();
-            //     break;
-            default:
-                services.AddSingleton<IPaymentProvider>(sp =>
-                    new StubPaymentProvider(
-                        sp.GetRequiredService<IJsonEntityStore>(),
-                        sp.GetRequiredService<IOptions<PaymentsSettings>>().Value));
-                break;
+            var settings = sp.GetRequiredService<IOptions<PaymentsSettings>>().Value;
+            http.BaseAddress = new Uri(
+                string.IsNullOrWhiteSpace(settings.WompiApiBaseUrl)
+                    ? "https://sandbox.wompi.co/v1/"
+                    : settings.WompiApiBaseUrl);
+            if (!string.IsNullOrWhiteSpace(settings.WompiPrivateKey))
+            {
+                http.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue(
+                        "Bearer", settings.WompiPrivateKey);
+            }
+        });
+
+        if (routingEnabled)
+        {
+            services.AddSingleton<IPaymentProvider>(sp =>
+            {
+                var settings = sp.GetRequiredService<IOptions<PaymentsSettings>>().Value;
+                var store = sp.GetRequiredService<IJsonEntityStore>();
+
+                // El stub siempre está disponible: es el destino de rollback si
+                // un adapter real se cae o si una regla lo manda a "stub".
+                var members = new List<IPaymentProvider> { new StubPaymentProvider(store, settings) };
+
+                // Wompi entra sólo si TIENE llaves. Registrarlo sin ellas
+                // dejaría que una regla lo eligiera y reventara a mitad del
+                // checkout; así, una config a medias degrada al stub en vez de
+                // romper la compra.
+                if (!string.IsNullOrWhiteSpace(settings.WompiPublicKey)
+                    && !string.IsNullOrWhiteSpace(settings.WompiIntegritySecret))
+                {
+                    members.Add(new WompiPaymentProvider(
+                        sp.GetRequiredService<IHttpClientFactory>().CreateClient("wompi"),
+                        settings));
+                }
+
+                var rules = settings.Routing.Rules
+                    .Where(r => !string.IsNullOrWhiteSpace(r.ProviderKey))
+                    .Select(r => new PaymentRoutingRule(
+                        r.ProviderKey, r.Vertical, r.CountryCode, r.Currency, r.Method))
+                    .ToList();
+
+                return new RoutingPaymentProvider(
+                    members, rules, settings.Routing.DefaultProviderKey);
+            });
         }
+        else
+        {
+            switch (paymentProvider.ToLowerInvariant())
+            {
+                // case "wompi":  // requiere WompiPaymentProvider + llaves (fase 3).
+                //     services.AddSingleton<IPaymentProvider, WompiPaymentProvider>();
+                //     break;
+                default:
+                    services.AddSingleton<IPaymentProvider>(sp =>
+                        new StubPaymentProvider(
+                            sp.GetRequiredService<IJsonEntityStore>(),
+                            sp.GetRequiredService<IOptions<PaymentsSettings>>().Value));
+                    break;
+            }
+        }
+
+        // ADR 0116 fase 4 — los verticales que quieren enterarse de un cobro
+        // asíncrono. Cada sink dice si la referencia es suya; agregar un
+        // vertical es una línea más acá y nada en el receptor.
+        //
+        // Tienda y Viajes: los dos verticales durables con confirmación
+        // idempotente y compensación ya corregida (fase 5). Viajes importa
+        // especialmente porque su carrito se paga a menudo por PSE, y con PSE el
+        // resultado sólo llega por evento.
+        //
+        // Eventos y Educación quedan fuera todavía: sus seams no tienen búsqueda
+        // por referencia de orden, así que un sink no podría siquiera decir si el
+        // pago es suyo. Añadir ese método es lo siguiente.
+        services.AddSingleton<IPaymentEventSink, ShopPaymentEventSink>();
+        services.AddSingleton<IPaymentEventSink, TravelPaymentEventSink>();
 
         // Motor de reservas (vertical Hoteles) — 3 seams stub-first (doc 17),
         // calcando IPaymentProvider. Hoy sirven la demo end-to-end en memoria;
@@ -260,7 +340,8 @@ public sealed class SeamComposer : IComposer
             new TravelCartService(
                 sp.GetRequiredService<IReservationService>(),
                 sp.GetRequiredService<IPaymentProvider>(),
-                new StubOrderTrackingService(TravelCartService.TravelPipeline, null),
+                new StubOrderTrackingService(TravelCartService.TravelPipeline, null,
+                    sp.GetRequiredService<IJsonEntityStore>(), "tracking-travel"),
                 null,
                 sp.GetRequiredService<IJsonEntityStore>(),
                 notifier: sp.GetRequiredService<ITransactionalNotifier>()));
@@ -338,7 +419,14 @@ public sealed class SeamComposer : IComposer
         //     (post-venta). ThreadId determinista por (contexto+par) — sin hilos
         //     duplicados. v1 simple; SH-7 v2/v3 (DM/In Basket) agregan encima.
         services.AddSingleton<IUserCollection, StubUserCollection>();
-        services.AddSingleton<IOrderTrackingService, StubOrderTrackingService>();
+        // ADR 0116 fase 6 — el timeline pasa a disco. Cada dominio con su
+        // ESPACIO propio: los cuatro pipelines tienen distinta longitud y el
+        // estado guarda el índice de etapa, así que compartir espacio haría que
+        // "enviado" se leyera como "matriculado" sin que nada fallara.
+        services.AddSingleton<IOrderTrackingService>(sp =>
+            new StubOrderTrackingService(
+                StubOrderTrackingService.ShopPipeline, null,
+                sp.GetRequiredService<IJsonEntityStore>(), "tracking-shop"));
         // T1 (doc 25) — persistencia durable de órdenes tras el seam genérico IJsonEntityStore.
         // El motor no cambia; solo su backing store pasa de memoria a disco (JSON por
         // orderRef, App_Data/syn-orders/). Una orden confirmada sobrevive un reinicio.
@@ -350,13 +438,21 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IOrderTrackingService>(),
                 sp.GetRequiredService<IJsonEntityStore>(),
                 now: null,
-                notifier: sp.GetRequiredService<ITransactionalNotifier>()));
+                notifier: sp.GetRequiredService<ITransactionalNotifier>(),
+                // El read-model del dashboard se alimenta acá: es el único punto
+                // por el que una orden llega a Paid. Sin esto el panel de ventas
+                // quedaba en $0 con órdenes reales en disco.
+                checkoutRecorder: sp.GetRequiredService<ICheckoutRecorder>()));
         services.AddSingleton<IReturnService>(sp =>
             new StubReturnService(
                 sp.GetRequiredService<IShopOrderService>(),
                 sp.GetRequiredService<IPaymentProvider>(),
                 sp.GetRequiredService<IAuditTrailWriter>(),
-                null));
+                null,
+                // ADR 0116 fase 6 — los RMA a disco. Vivían en memoria mientras
+                // órdenes y pagos ya estaban persistidos: un reinicio borraba
+                // la devolución que un comprador ya había pedido.
+                sp.GetRequiredService<IJsonEntityStore>()));
         services.AddSingleton<IMessagingService, StubMessagingService>();
 
         // OLA 3 Blogs — red social (doc blogs-app-spec). Seams stub-first, aditivos
@@ -451,7 +547,8 @@ public sealed class SeamComposer : IComposer
             var enrollment = new StubEnrollmentService(
                 sp.GetRequiredService<ICourseCatalogProvider>(),
                 sp.GetRequiredService<IPaymentProvider>(),
-                new StubOrderTrackingService(StubEnrollmentService.AcademyPipeline, null),
+                new StubOrderTrackingService(StubEnrollmentService.AcademyPipeline, null,
+                    sp.GetRequiredService<IJsonEntityStore>(), "tracking-academy"),
                 sp.GetRequiredService<IJsonEntityStore>(),
                 null,
                 notifier: sp.GetRequiredService<ITransactionalNotifier>());
@@ -820,7 +917,8 @@ public sealed class SeamComposer : IComposer
                 sp.GetRequiredService<IEventCatalogProvider>(),
                 sp.GetRequiredService<IReservationService>(),
                 sp.GetRequiredService<IPaymentProvider>(),
-                new StubOrderTrackingService(StubEventTicketingService.EventPipeline, null),
+                new StubOrderTrackingService(StubEventTicketingService.EventPipeline, null,
+                    sp.GetRequiredService<IJsonEntityStore>(), "tracking-events"),
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 sp.GetRequiredService<IJsonEntityStore>(),
                 null,

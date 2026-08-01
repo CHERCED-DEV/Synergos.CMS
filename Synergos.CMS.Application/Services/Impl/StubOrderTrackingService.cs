@@ -1,12 +1,12 @@
-using System.Collections.Concurrent;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
 /// <summary>
 /// Default <see cref="IOrderTrackingService"/> — timelines de estados de
-/// orden/expediente en memoria del proceso, sobre un pipeline de etapas
-/// configurable. Seam GENÉRICO del plan doc 21 §1.4 (P4): Order ≈ Booking ≈
+/// orden/expediente sobre un pipeline de etapas configurable. Seam GENÉRICO del plan doc 21 §1.4 (P4): Order ≈ Booking ≈
 /// Ticket ≈ Radicado — el mismo tracking-timeline para los 8 dominios.
 /// </summary>
 /// <remarks>
@@ -20,6 +20,17 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// destino). Agnóstico del dominio: NO valida que la orden exista — eso es
 /// del dominio dueño (<c>StubShopOrderService</c> alimenta este timeline al
 /// confirmar el pago). Time source inyectable para tests (ADR 0075).
+///
+/// <para><b>Durabilidad (ADR 0116 fase 6).</b> El estado vive detrás de
+/// <see cref="IJsonEntityStore"/> (ADR 0105) y ya no en un diccionario del
+/// proceso: un reinicio borraba el timeline de envío de órdenes que seguían
+/// pagadas en disco, y el comprador perdía el rastro de su compra.</para>
+///
+/// <para>Cada instancia necesita su propio <c>storeNamespace</c>: hay cuatro
+/// —Tienda, Viajes, Educación, Eventos— con pipelines DISTINTOS, y el estado
+/// guarda el índice de etapa. Compartir espacio haría que el índice de un
+/// dominio se leyera contra el pipeline de otro: "enviado" convertido en
+/// "matriculado" sin que nada falle.</para>
 /// </remarks>
 public sealed class StubOrderTrackingService : IOrderTrackingService
 {
@@ -35,10 +46,21 @@ public sealed class StubOrderTrackingService : IOrderTrackingService
         new OrderTrackingStageDefinition("delivered", "Entregado"),
     };
 
+    private static readonly JsonSerializerOptions _json = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     private readonly IReadOnlyList<OrderTrackingStageDefinition> _pipeline;
     private readonly Func<DateTimeOffset> _now;
-    private readonly ConcurrentDictionary<string, TimelineState> _timelines = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _gate = new();
+    private readonly IJsonEntityStore _store;
+    private readonly string _resourceType;
+
+    // Serializa el read-modify-write del avance. No se puede usar lock{} porque
+    // el cuerpo hace await; SemaphoreSlim es el equivalente async — mismo
+    // criterio que StubPaymentProvider.
+    private readonly SemaphoreSlim _mutate = new(1, 1);
 
     public StubOrderTrackingService()
         : this(null, null)
@@ -53,6 +75,24 @@ public sealed class StubOrderTrackingService : IOrderTrackingService
     public StubOrderTrackingService(
         IReadOnlyList<OrderTrackingStageDefinition>? pipeline,
         Func<DateTimeOffset>? now)
+        : this(pipeline, now, null, null)
+    {
+    }
+
+    /// <summary>
+    /// Ctor completo (ADR 0116 fase 6): <paramref name="store"/> es el backing
+    /// store durable (FileSystem en Web, InMemory en tests) y
+    /// <paramref name="storeNamespace"/> lo separa del de los otros dominios.
+    /// </summary>
+    /// <param name="storeNamespace">Familia de entidades de ESTA instancia.
+    ///   OBLIGATORIO en la práctica cuando hay store compartido: el estado
+    ///   guarda el índice de etapa, y leerlo contra otro pipeline convierte
+    ///   "enviado" en "matriculado" sin que nada falle.</param>
+    public StubOrderTrackingService(
+        IReadOnlyList<OrderTrackingStageDefinition>? pipeline,
+        Func<DateTimeOffset>? now,
+        IJsonEntityStore? store,
+        string? storeNamespace)
     {
         if (pipeline is not null && pipeline.Count == 0)
         {
@@ -60,19 +100,21 @@ public sealed class StubOrderTrackingService : IOrderTrackingService
         }
         _pipeline = pipeline ?? ShopPipeline;
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        _store = store ?? new InMemoryJsonEntityStore();
+        _resourceType = string.IsNullOrWhiteSpace(storeNamespace) ? "order-tracking" : storeNamespace;
     }
 
-    public Task<OrderTimeline?> GetTimelineAsync(string orderRef, CancellationToken cancellationToken = default)
+    public async Task<OrderTimeline?> GetTimelineAsync(string orderRef, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(orderRef)
-            || !_timelines.TryGetValue(orderRef.Trim(), out var state))
+        if (string.IsNullOrWhiteSpace(orderRef))
         {
-            return Task.FromResult<OrderTimeline?>(null);
+            return null;
         }
-        return Task.FromResult<OrderTimeline?>(ToTimeline(state));
+        var state = await LoadAsync(orderRef.Trim(), cancellationToken).ConfigureAwait(false);
+        return state is null ? null : ToTimeline(state);
     }
 
-    public Task<OrderTimeline> AdvanceAsync(
+    public async Task<OrderTimeline> AdvanceAsync(
         string orderRef,
         string stage,
         string? note = null,
@@ -96,16 +138,16 @@ public sealed class StubOrderTrackingService : IOrderTrackingService
         }
 
         var key = orderRef.Trim();
-        lock (_gate)
+        await _mutate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            var state = _timelines.TryGetValue(key, out var existing)
-                ? existing
-                : new TimelineState(key, -1, new DateTimeOffset?[_pipeline.Count], new string?[_pipeline.Count], _now());
+            var state = await LoadAsync(key, cancellationToken).ConfigureAwait(false)
+                ?? new TimelineState(key, -1, new DateTimeOffset?[_pipeline.Count], new string?[_pipeline.Count], _now());
 
             // Idempotente/monotónico: etapa ya alcanzada (o anterior) → sin cambios.
             if (targetIndex <= state.CurrentIndex)
             {
-                return Task.FromResult(ToTimeline(state));
+                return ToTimeline(state);
             }
 
             var at = _now();
@@ -122,8 +164,42 @@ public sealed class StubOrderTrackingService : IOrderTrackingService
             }
 
             var advanced = state with { CurrentIndex = targetIndex, ReachedAt = reachedAt, Notes = notes, UpdatedAt = at };
-            _timelines[key] = advanced;
-            return Task.FromResult(ToTimeline(advanced));
+            await _store.WriteAsync(_resourceType, key, JsonSerializer.Serialize(advanced, _json), cancellationToken)
+                .ConfigureAwait(false);
+            return ToTimeline(advanced);
+        }
+        finally
+        {
+            _mutate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Lee el timeline del store. Un estado corrupto o de un pipeline con otra
+    /// longitud se trata como inexistente en vez de reventar: el timeline es
+    /// informativo, y perderlo no puede tumbar la consulta de una compra.
+    /// </summary>
+    private async Task<TimelineState?> LoadAsync(string key, CancellationToken cancellationToken)
+    {
+        var json = await _store.ReadAsync(_resourceType, key, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+        try
+        {
+            var state = JsonSerializer.Deserialize<TimelineState>(json, _json);
+            if (state is null
+                || state.ReachedAt.Length != _pipeline.Count
+                || state.Notes.Length != _pipeline.Count)
+            {
+                return null;
+            }
+            return state;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

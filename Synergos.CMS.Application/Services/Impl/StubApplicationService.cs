@@ -169,6 +169,7 @@ public sealed class StubApplicationService : IApplicationService
 
         // Tasa OPCIONAL: solo abre sesión de pago si el trámite cobra (Fee > 0).
         string? paymentSessionId = null;
+        string? paymentStatus = null;
         if (!quote.Exempt && quote.Amount > 0m)
         {
             var session = await _payments.CreateSessionAsync(
@@ -184,9 +185,23 @@ public sealed class StubApplicationService : IApplicationService
                             UnitPrice: quote.Amount,
                             Quantity: 1),
                     },
-                    CustomerEmail: citizen.Email.Trim()),
+                    CustomerEmail: citizen.Email.Trim(),
+                    Vertical: "gov"),
                 cancellationToken);
             paymentSessionId = session.SessionId;
+
+            // Se CAPTURA la tasa. Antes se abría la sesión y no se volvía a
+            // hablar con el motor de pago nunca: ni captura, ni consulta, ni
+            // persistencia del id. El expediente se radicaba exista o no el
+            // cobro, y nadie podía saberlo después.
+            //
+            // No se aborta el trámite si la captura no sale: en un servicio
+            // público, perder la radicación de un ciudadano porque su banco
+            // tardó es peor que arrastrar una tasa pendiente. Se REGISTRA el
+            // estado y el expediente queda marcado.
+            var capture = await _payments.CaptureAsync(
+                session.SessionId, cancellationToken: cancellationToken);
+            paymentStatus = capture.Status.ToString();
         }
 
         // `with` y NO `new GovCitizen(...)`: reconstruir por posición TIRA en silencio todo
@@ -219,7 +234,9 @@ public sealed class StubApplicationService : IApplicationService
             {
                 new HistoryEntry(CaseStatus.Radicado, occurred, cleanCitizen.Email, "Solicitud radicada en línea."),
             },
-            Decision: null);
+            Decision: null,
+            PaymentSessionId: paymentSessionId,
+            PaymentStatus: paymentStatus);
         await WriteAsync(state, cancellationToken);
 
         // Rastro forense append-only del primer estado del expediente (ADR 0037).
@@ -820,4 +837,13 @@ internal sealed record CaseState(
     string Currency,
     DateTimeOffset RadicadoAt,
     IReadOnlyList<HistoryEntry> History,
-    CaseDecision? Decision);
+    CaseDecision? Decision,
+    // ADR 0116 fase 5 — la sesión de pago de la tasa. Antes el id se abría, se
+    // devolvía al ciudadano y NO se guardaba en ninguna parte: no quedaba forma
+    // de saber después si la tasa se había cobrado, ni de conciliar, ni de
+    // reembolsar si el trámite se caía. Nullable porque un trámite exento no
+    // abre sesión.
+    string? PaymentSessionId = null,
+    // Estado del cobro la última vez que se consultó. Un trámite con tasa que
+    // nunca capturó NO debería avanzar, y sin este campo nadie podía saberlo.
+    string? PaymentStatus = null);

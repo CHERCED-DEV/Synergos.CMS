@@ -219,7 +219,7 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         }
 
         // Captura el pago (idempotente en el PSP). Si no captura → no se activa.
-        var capture = await _payments.CaptureAsync(enrollment.PaymentSessionId!, cancellationToken);
+        var capture = await _payments.CaptureAsync(enrollment.PaymentSessionId!, cancellationToken: cancellationToken);
         if (capture.Status != PaymentStatus.Captured)
         {
             throw new InvalidOperationException(

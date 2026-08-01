@@ -110,6 +110,10 @@ public class StubPaymentProviderTests
         var session = await psp.CreateSessionAsync(Req());
 
         Assert.Equal(PaymentStatus.RequiresAction, session.Status);
-        Assert.False(string.IsNullOrEmpty(session.RedirectUrl));
+        // ADR 0116: la acción ya no es una URL suelta. Sin método preferido el
+        // stub asume tarjeta, cuyo modo es el reto embebido de 3DS2. El caso
+        // redirect (PSE/Bancolombia) lo cubre PaymentSeamShapeTests.
+        Assert.NotNull(session.Action);
+        Assert.Equal(PaymentActionKind.InlineChallenge, session.Action!.Kind);
     }
 }

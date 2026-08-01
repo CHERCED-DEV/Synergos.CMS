@@ -73,7 +73,12 @@ public sealed record TravelOrder(
     string Currency,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    string? CurrentStage);
+    string? CurrentStage,
+    // ADR 0116 — la sesión de pago del carrito. No es un dato secreto: ya viaja
+    // en TravelCheckoutResult porque la UI la necesita para ir al PSP. Se
+    // expone acá para que el receptor de webhooks pueda comprobar que el evento
+    // corresponde a ESTE carrito y no confirmar un viaje con la sesión de otro.
+    string? PaymentSessionId = null);
 
 /// <summary>
 /// Resultado de <see cref="ITravelCartService.CancelOrderAsync"/> (MMB v1 —

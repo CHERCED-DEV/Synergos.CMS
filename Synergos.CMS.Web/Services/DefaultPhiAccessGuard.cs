@@ -22,17 +22,24 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
     private readonly IConsentLedger _consent;
     private readonly IAuditTrailWriter _audit;
     private readonly ILogger<DefaultPhiAccessGuard> _logger;
+    private readonly IPatientRepository? _patients;
 
+    /// <param name="patients">Opcional. Resuelve el Member DUEÑO de un paciente
+    /// para la rama de auto-acceso. Nullable a propósito: sin él el guard sigue
+    /// funcionando exactamente como antes —decidiendo sólo por rol y
+    /// consentimiento— y los tests que lo construyen a mano no cambian.</param>
     public DefaultPhiAccessGuard(
         IMemberAccessGate gate,
         IConsentLedger consent,
         IAuditTrailWriter audit,
-        ILogger<DefaultPhiAccessGuard> logger)
+        ILogger<DefaultPhiAccessGuard> logger,
+        IPatientRepository? patients = null)
     {
         _gate = gate;
         _consent = consent;
         _audit = audit;
         _logger = logger;
+        _patients = patients;
     }
 
     public async Task<AccessDecision> CheckAccessAsync(AccessCheckRequest request, CancellationToken cancellationToken)
@@ -88,10 +95,44 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
             return (false, "not-authenticated");
         }
 
-        // Auto-acceso: el paciente sobre su propio recurso.
-        if (request.TargetOwnerMemberKey is Guid owner && owner == actorKey)
+        // ── Auto-acceso: el paciente sobre su propio recurso, y SÓLO PARA LEER.
+        //
+        // Este bloque estaba MUERTO. El único llamante (HealthcareApiController)
+        // construía el AccessCheckRequest con tres argumentos posicionales, así
+        // que TargetOwnerMemberKey era null siempre: ningún paciente podía leer
+        // su propio expediente, sus citas ni sus recetas — todo caía a la rama
+        // de roles y devolvía 403. El portal del paciente que ADR 0098 describe
+        // no existía. El test que cubría esta rama la probaba en aislamiento,
+        // nunca a través del controller.
+        //
+        // Ahora el dueño lo resuelve el GUARD, no el controller, por dos
+        // razones: (1) quien decide debe reunir lo que necesita para decidir, y
+        // (2) va DESPUÉS del chequeo de sesión de arriba, así que un anónimo no
+        // provoca ni una lectura del repositorio — la propiedad "no se toca PHI
+        // antes de autorizar" que verifica GetPatient_Anonymous_Returns401.
+        //
+        // El "read" es deliberado y NO estaba en el diseño original: sin él, un
+        // paciente podría reescribir su propia historia clínica — las notas de
+        // hallazgos y de valoración son campos de PatientRecord. Un paciente
+        // tiene derecho a VER lo suyo; el criterio clínico lo firma quien lo
+        // emite. Como la rama nunca se alcanzaba, estrecharla no le quita
+        // permiso a nadie que hoy lo tenga.
+        if (string.Equals(request.Action, "read", StringComparison.OrdinalIgnoreCase))
         {
-            return (true, null);
+            var owner = request.TargetOwnerMemberKey;
+
+            // PatientKey ≠ MemberKey (IPatientRepository.cs:34-35). Si el
+            // llamante no nos dio el dueño, lo resolvemos por la clave clínica.
+            if (owner is null && request.TargetPatientKey is Guid patientKey && _patients is not null)
+            {
+                var patient = await _patients.GetAsync(patientKey, ct);
+                owner = patient?.MemberKey;
+            }
+
+            if (owner is Guid ownerKey && ownerKey == actorKey)
+            {
+                return (true, null);
+            }
         }
 
         // Agenda: operación de staff (no requiere consentimiento clínico).
