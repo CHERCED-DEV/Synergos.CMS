@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
+using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Web;
 
@@ -23,13 +24,18 @@ namespace Synergos.CMS.Web.Services.Catalog;
 /// <para><b>Se activa con <c>Synergos:Catalog:Sources:Events = cms</c></b> y el rollback es esa
 /// misma línea a <c>demo</c>, sin redeploy.</para>
 ///
-/// <para><b>Esta fuente emite el RESUMEN, no la ficha.</b> <see cref="EventSummary"/> es lo que
-/// el catálogo lista; los tiers y el seat-map (<c>EventDetail</c>) NO están modelados en
-/// <c>eventPage</c> todavía y siguen saliendo del stub. Es la frontera deliberada de esta
-/// rebanada, no un olvido: modelar aforo y precio por tier como contenido es su propia
-/// decisión, y sembrarla a medias dejaría fichas sin nada que comprar.</para>
+/// <para><b>Emite las DOS caras del catálogo.</b> Como <see cref="ICatalogSource{T}"/> de
+/// <see cref="EventSummary"/> sirve la agenda que el buscador lista; como fuente de
+/// <see cref="EventDetail"/> sirve la ficha comprable — localidades, aforo y mapa de
+/// asientos. La segunda cara llegó con la rebanada que modeló los tiers como contenido
+/// (<c>elementEventTier</c> / <c>elementEventZone</c> / <c>elementEventSession</c>): hasta
+/// entonces el flag <c>cms</c> construía esta clase pero la ficha seguía saliendo del stub,
+/// así que ponerlo en <c>cms</c> no cambiaba nada de lo que el asistente veía.</para>
+///
+/// <para><b>Las dos caras se proyectan del MISMO recorrido</b> y con las mismas reglas de
+/// omisión, para que no exista un evento que salga en la búsqueda y cuya ficha sea 404.</para>
 /// </remarks>
-public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>
+public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, ICatalogSource<EventDetail>
 {
     internal const string Vertical = "Events";
     private const string EventPageAlias = "eventPage";
@@ -72,14 +78,55 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>
     /// de otro siteRoot en silencio.
     /// </param>
     /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    Task<IReadOnlyList<EventSummary>> ICatalogSource<EventSummary>.GetAllAsync(string? scope, CancellationToken cancellationToken)
+        => GetAllAsync(scope, cancellationToken);
+
+    /// <summary>
+    /// La agenda COMPRABLE: la misma lista, con localidades, agenda y mapa de asientos.
+    /// </summary>
+    /// <remarks>
+    /// Se apoya en el mismo recorrido y las mismas omisiones que el resumen, así que un evento
+    /// que aparece en la búsqueda siempre tiene ficha, y uno omitido no aparece en ninguna de
+    /// las dos.
+    /// </remarks>
+    Task<IReadOnlyList<EventDetail>> ICatalogSource<EventDetail>.GetAllAsync(string? scope, CancellationToken cancellationToken)
+    {
+        var nodes = ResolveNodes();
+        var details = nodes
+            .Select(ProjectDetail)
+            .Where(d => d is not null)
+            .Select(d => d!)
+            .ToList();
+
+        LogSkipped(nodes.Count, details.Count);
+        return Task.FromResult<IReadOnlyList<EventDetail>>(details);
+    }
+
     public Task<IReadOnlyList<EventSummary>> GetAllAsync(string? scope = null, CancellationToken cancellationToken = default)
+    {
+        var nodes = ResolveNodes();
+        var events = nodes
+            .Select(Project)
+            .Where(e => e is not null)
+            .Select(e => e!)
+            .ToList();
+
+        LogSkipped(nodes.Count, events.Count);
+        return Task.FromResult<IReadOnlyList<EventSummary>>(events);
+    }
+
+    /// <summary>
+    /// Los <c>eventPage</c> publicados bajo el siteRoot configurado, o vacío si falta el
+    /// contexto o el scope. Es el ÚNICO recorrido: las dos proyecciones parten de aquí.
+    /// </summary>
+    private IReadOnlyList<IPublishedContent> ResolveNodes()
     {
         if (!_umbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext) || umbracoContext.Content is null)
         {
             // Fuera de un contexto de Umbraco no hay contenido que servir. Agenda vacía y no
             // una excepción: la pantalla se degrada, no revienta.
             _logger.LogWarning("UmbracoEventCatalogSource: sin UmbracoContext; se sirve catálogo vacío.");
-            return Task.FromResult<IReadOnlyList<EventSummary>>(Array.Empty<EventSummary>());
+            return Array.Empty<IPublishedContent>();
         }
 
         var brandKey = ResolveBrandKey();
@@ -91,7 +138,7 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>
             _logger.LogError(
                 "UmbracoEventCatalogSource: falta Synergos:Catalog:Scopes:{Vertical}. NO se sirve catálogo.",
                 Vertical);
-            return Task.FromResult<IReadOnlyList<EventSummary>>(Array.Empty<EventSummary>());
+            return Array.Empty<IPublishedContent>();
         }
 
         var siteRoot = umbracoContext.Content.GetAtRoot()
@@ -102,29 +149,29 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>
         if (siteRoot is null)
         {
             _logger.LogError("UmbracoEventCatalogSource: no existe un siteRoot con brandKey '{BrandKey}'.", brandKey);
-            return Task.FromResult<IReadOnlyList<EventSummary>>(Array.Empty<EventSummary>());
+            return Array.Empty<IPublishedContent>();
         }
 
-        var candidates = siteRoot.DescendantsOfType(EventPageAlias).ToList();
+        return siteRoot.DescendantsOfType(EventPageAlias).ToList();
+    }
 
-        var events = candidates
-            .Select(Project)
-            .Where(e => e is not null)
-            .Select(e => e!)
-            .ToList();
-
-        var skipped = candidates.Count - events.Count;
+    /// <summary>
+    /// Una línea al final con cuántos nodos se omitieron, no una advertencia por nodo.
+    /// </summary>
+    /// <remarks>
+    /// "Se omitieron 7 de 24" es lo que hace ver que la siembra está mal; siete advertencias
+    /// sueltas entre el ruido del log, no. El detalle de POR QUÉ se omitió cada uno ya salió
+    /// en su propio log dentro de la proyección.
+    /// </remarks>
+    private void LogSkipped(int total, int served)
+    {
+        var skipped = total - served;
         if (skipped > 0)
         {
-            // El conteo va en UNA línea al final y no solo por nodo: "se omitieron 7 de 24"
-            // es lo que hace ver que la siembra está mal; siete advertencias sueltas entre
-            // el ruido del log, no.
             _logger.LogWarning(
                 "UmbracoEventCatalogSource: se omitieron {Skipped} de {Total} eventPage por datos incompletos.",
-                skipped, candidates.Count);
+                skipped, total);
         }
-
-        return Task.FromResult<IReadOnlyList<EventSummary>>(events);
     }
 
     private string? ResolveBrandKey()
@@ -306,5 +353,155 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>
             "con punto (ej. 4.6584 / -74.0936).",
             slug, rawLat, rawLng);
         return null;
+    }
+
+    // ── Ficha comprable ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// <c>eventPage</c> → <see cref="EventDetail"/>. Devuelve null exactamente cuando
+    /// <see cref="Project"/> devolvería null: la ficha y el resumen se omiten juntos.
+    /// </summary>
+    /// <remarks>
+    /// <b>Este método LEE; no decide.</b> Las reglas de qué localidad se vende, qué zona se
+    /// descarta y cómo se generan los asientos viven en <see cref="EventContentRules"/>, que es
+    /// pura y por eso testeable. Aquí solo se traduce contenido de Umbraco a los records planos
+    /// que esas reglas consumen, y se emiten al log los problemas que devuelven.
+    /// </remarks>
+    private EventDetail? ProjectDetail(IPublishedContent node)
+    {
+        var summary = Project(node);
+        if (summary is null)
+        {
+            return null;
+        }
+
+        var slug = summary.Slug;
+
+        var tiers = Report(EventContentRules.BuildTiers(slug, ReadTierDrafts(node), summary.Currency));
+
+        var venueName = node.Value<string>("eventVenueMapName")?.Trim();
+        if (string.IsNullOrEmpty(venueName))
+        {
+            // Cae al recinto del resumen antes que a una cadena vacía: el mapa siempre tiene
+            // encabezado, y el venue es el nombre que el asistente ya vio en la tarjeta.
+            venueName = summary.Venue;
+        }
+
+        var seatMap = Report(EventContentRules.BuildSeatMap(
+            slug, ReadZoneDrafts(node), tiers, summary.Currency, venueName));
+
+        var mode = Report(EventContentRules.ResolveMode(slug, summary.Mode, seatMap is not null));
+        if (!string.Equals(mode, summary.Mode, StringComparison.Ordinal))
+        {
+            summary = summary with { Mode = mode };
+        }
+
+        return new EventDetail(
+            Summary: summary,
+            Description: node.Value<string>("eventDescription")?.Trim() ?? string.Empty,
+            Organizer: node.Value<string>("eventOrganizer")?.Trim() ?? string.Empty,
+            Tiers: tiers,
+            SeatMap: seatMap,
+            Artist: EventContentRules.BuildArtist(
+                node.Value<string>("eventArtistName"),
+                node.Value<string>("eventArtistHeadline"),
+                node.Value<int>("eventArtistFollowers")),
+            Highlights: EventContentRules.CleanTextList(ReadTextList(node, "eventHighlights")),
+            Sessions: Report(EventContentRules.BuildSessions(slug, ReadSessionDrafts(node))));
+    }
+
+    /// <summary>
+    /// Emite al log los problemas que devolvieron las reglas y entrega lo proyectado.
+    /// </summary>
+    private T Report<T>(EventContentResult<T> result)
+    {
+        foreach (var issue in result.Issues)
+        {
+            if (issue.Level == EventContentIssueLevel.Error)
+            {
+                _logger.LogError("UmbracoEventCatalogSource: {Issue}", issue.Message);
+            }
+            else
+            {
+                _logger.LogWarning("UmbracoEventCatalogSource: {Issue}", issue.Message);
+            }
+        }
+
+        return result.Value;
+    }
+
+    private static IReadOnlyList<EventTierContent> ReadTierDrafts(IPublishedContent node)
+        => ReadBlocks(node, "eventTiers")
+            .Select(b => new EventTierContent(
+                Code: b.Value<string>("tierCode"),
+                Name: b.Value<string>("tierName"),
+                Price: b.Value<int>("tierPrice"),
+                Capacity: b.Value<int>("tierCapacity"),
+                MaxPerOrder: b.Value<int>("tierMaxPerOrder"),
+                ZoneId: b.Value<string>("tierZoneId"),
+                Description: b.Value<string>("tierDescription"),
+                Perks: ReadTextList(b, "tierPerks"),
+                SaleWindow: b.Value<string>("tierSaleWindow"),
+                Featured: b.Value<bool>("tierFeatured")))
+            .ToList();
+
+    private static IReadOnlyList<EventZoneContent> ReadZoneDrafts(IPublishedContent node)
+        => ReadBlocks(node, "eventZones")
+            .Select(b => new EventZoneContent(
+                Id: b.Value<string>("zoneId"),
+                Name: b.Value<string>("zoneName"),
+                TierCode: b.Value<string>("zoneTierCode"),
+                Price: b.Value<int>("zonePrice"),
+                RowLabels: ReadTextList(b, "zoneRowLabels"),
+                SeatsPerRow: b.Value<int>("zoneSeatsPerRow")))
+            .ToList();
+
+    private static IReadOnlyList<EventSessionContent> ReadSessionDrafts(IPublishedContent node)
+        => ReadBlocks(node, "eventSessions")
+            .Select(b => new EventSessionContent(
+                Time: b.Value<string>("sessionTime"),
+                Title: b.Value<string>("sessionTitle"),
+                Speaker: b.Value<string>("sessionSpeaker")))
+            .ToList();
+
+
+    /// <summary>
+    /// Los bloques de una propiedad BlockList, o vacío si la propiedad no está poblada.
+    /// </summary>
+    /// <remarks>
+    /// Un BlockList vacío llega como null, no como colección vacía, y ese null es la diferencia
+    /// entre "el editor no llenó localidades" y una <c>NullReferenceException</c> en cada
+    /// request de la ficha.
+    /// </remarks>
+    private static IReadOnlyList<IPublishedElement> ReadBlocks(IPublishedElement node, string alias)
+    {
+        var blocks = node.Value<BlockListModel>(alias);
+        if (blocks is null || blocks.Count == 0)
+        {
+            return Array.Empty<IPublishedElement>();
+        }
+
+        return blocks.Select(b => b.Content).ToList();
+    }
+
+    /// <summary>
+    /// Los renglones no vacíos de un campo de texto repetible, o vacío si no hay ninguno.
+    /// </summary>
+    /// <remarks>
+    /// Se recortan y se descartan los blancos porque un Enter de más en el backoffice se
+    /// convierte, si no, en una viñeta vacía en la tarjeta.
+    /// </remarks>
+    private static IReadOnlyList<string> ReadTextList(IPublishedElement node, string alias)
+    {
+        var raw = node.Value<IEnumerable<string>>(alias);
+        if (raw is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        return raw
+            .Select(v => v?.Trim() ?? string.Empty)
+            .Where(v => v.Length > 0)
+            .ToList();
     }
 }
