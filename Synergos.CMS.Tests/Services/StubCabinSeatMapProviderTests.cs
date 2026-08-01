@@ -76,13 +76,43 @@ public sealed class StubCabinSeatMapProviderTests
     }
 
     [Fact]
-    public void El_pasillo_va_donde_lo_dicta_la_distribucion_no_a_la_mitad()
+    public void Los_pasillos_van_donde_los_dicta_la_distribucion_no_a_la_mitad()
     {
-        // Es el único dato de geometría que el componente consume; sin él dibuja el pasillo a
-        // la mitad de la fila, que en un 2-4-2 queda en el sitio equivocado.
-        Assert.Equal(3, StubCabinSeatMapProvider.Build(Narrow with { Formula = "3-3" }).AisleAfterColumns);
-        Assert.Equal(2, StubCabinSeatMapProvider.Build(Narrow with { Formula = "2-4-2" }).AisleAfterColumns);
-        Assert.Equal(1, StubCabinSeatMapProvider.Build(Narrow with { Formula = "1-2-1" }).AisleAfterColumns);
+        // Es el único dato de geometría que el componente consume; sin él parte la fila más
+        // ancha por la mitad, que en un 2-4-2 queda entre las dos butacas del centro.
+        Assert.Equal(
+            new[] { 3 },
+            StubCabinSeatMapProvider.Build(Narrow with { Formula = "3-3" }).AisleAfterColumns);
+    }
+
+    [Fact]
+    public void Un_widebody_tiene_DOS_pasillos_uno_a_cada_lado_del_bloque_central()
+    {
+        // Un solo pasillo suelda el bloque derecho al central: la cabina se lee como un 2-6 (o
+        // un 3-6) que no existe en ningún avión.
+        Assert.Equal(
+            new[] { 2, 6 },
+            StubCabinSeatMapProvider.Build(Narrow with { Formula = "2-4-2" }).AisleAfterColumns);
+        Assert.Equal(
+            new[] { 3, 6 },
+            StubCabinSeatMapProvider.Build(Narrow with { Formula = "3-3-3" }).AisleAfterColumns);
+        Assert.Equal(
+            new[] { 1, 3 },
+            StubCabinSeatMapProvider.Build(Narrow with { Formula = "1-2-1" }).AisleAfterColumns);
+    }
+
+    [Fact]
+    public void NUNCA_hay_un_pasillo_despues_de_la_ultima_columna()
+    {
+        // Colgaría del borde de la cabina sin separar nada. Son las sumas acumuladas MENOS la
+        // última, y esa resta es justamente lo que lo impide.
+        foreach (var formula in new[] { "3-3", "2-4-2", "3-3-3", "1-2-1", "9" })
+        {
+            var map = StubCabinSeatMapProvider.Build(Narrow with { Formula = formula });
+            var columnas = map.Rows[0].Seats.Count;
+
+            Assert.All(map.AisleAfterColumns, a => Assert.InRange(a, 1, columnas - 1));
+        }
     }
 
     [Theory]
@@ -97,7 +127,7 @@ public sealed class StubCabinSeatMapProviderTests
         // desperfecto visible que se corrige; una excepción es una pantalla en blanco.
         var map = StubCabinSeatMapProvider.Build(Narrow with { Formula = formula });
 
-        Assert.Equal(3, map.AisleAfterColumns);
+        Assert.Equal(new[] { 3 }, map.AisleAfterColumns);
         Assert.Equal(6, Row(map, "10").Seats.Count);
     }
 

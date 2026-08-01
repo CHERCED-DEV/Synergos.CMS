@@ -36,9 +36,9 @@ namespace Synergos.CMS.Web.Services;
 /// tiene. <c>type</c> vuelve a ser solo la posición.
 /// </para>
 /// <para>
-/// <b>Lo único que la proyección sigue sin poder decir</b> es la geometría de un widebody:
-/// <c>aisleAfterColumns</c> es un solo entero en el contrato, así que una cabina de doble
-/// pasillo se dibuja con uno. Es el siguiente cambio UI-first (ADR 0127).
+/// <b>La geometría también.</b> <c>aisleAfterColumns</c> es una LISTA de índices de columna:
+/// un <c>3-3-3</c> emite <c>[3, 6]</c>. Era un solo entero, y con eso una cabina de doble
+/// pasillo se dibujaba con uno solo — el bloque derecho soldado al central.
 /// </para>
 /// <para>
 /// <b>Degrades, never throws.</b> A null layout, a layout with no rows, or rows whose seats
@@ -124,11 +124,7 @@ public static class SeatMapProjection
             return null;
         }
 
-        // The aisle position is passed through verbatim. It is the only geometry the bundle
-        // consumes, and without it the bundle splits the widest row in half — which on a
-        // 2-4-2 puts the aisle between the two middle seats instead of after column B.
-        var aisle = layout.AisleAfterColumns > 0 ? layout.AisleAfterColumns : 0;
-        return new SeatMapPayload(rows, aisle);
+        return new SeatMapPayload(rows, Aisles(layout.AisleAfterColumns));
     }
 
     /// <summary>
@@ -171,6 +167,26 @@ public static class SeatMapProjection
         }
 
         return props;
+    }
+
+    /// <summary>
+    /// Las posiciones de pasillo, saneadas: enteros positivos, sin repetidos y en orden
+    /// ascendente.
+    /// </summary>
+    /// <remarks>
+    /// El orden no es cosmético: el componente las compara mientras recorre la fila de
+    /// izquierda a derecha. Y la lista vacía se emite igual —no se omite— porque el componente
+    /// distingue "sin geometría" (parte la fila más ancha por la mitad) de "geometría conocida
+    /// sin pasillos", y un teatro de una sola grilla es lo segundo.
+    /// </remarks>
+    private static IReadOnlyList<int> Aisles(IReadOnlyList<int>? declared)
+    {
+        if (declared is null || declared.Count == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        return declared.Where(c => c > 0).Distinct().OrderBy(c => c).ToList();
     }
 
     private static SeatMapPayloadRow? ProjectRow(SeatMapRow? row)
@@ -276,7 +292,9 @@ public static class SeatMapProjection
 /// </summary>
 public sealed record SeatMapPayload(
     [property: JsonPropertyName("rows")] IReadOnlyList<SeatMapPayloadRow> Rows,
-    [property: JsonPropertyName("aisleAfterColumns")] int AisleAfterColumns);
+    // Los pasillos, por índice de columna 1-based. Es una LISTA porque un widebody tiene dos:
+    // con un solo valor, un 3-3-3 no dibujaba nada entre F y G.
+    [property: JsonPropertyName("aisleAfterColumns")] IReadOnlyList<int> AisleAfterColumns);
 
 /// <summary>One row of the payload. <c>rowNumber</c> stays a string — real rows skip 13.</summary>
 public sealed record SeatMapPayloadRow(
