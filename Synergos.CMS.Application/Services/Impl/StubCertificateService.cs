@@ -1,47 +1,91 @@
-using System.Collections.Concurrent;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
 /// <summary>
-/// Default <see cref="ICertificateService"/> — credencial verificable de
-/// finalización del LMS (dominio Educación). Seam DEDICADO, separado del motor de
-/// matrícula: compone el catálogo (<see cref="ICourseCatalogProvider"/>, total de
-/// lecciones + título) y el progreso (<see cref="IEnrollmentService"/>) para
-/// decidir si el alumno completó el curso al 100%, y deriva un id ESTABLE de
-/// (curso, alumno). Reusa el patrón de credencial del motor (id determinista +
-/// URL de verificación pública, como el e-ticket QR de Eventos).
+/// Default <see cref="ICertificateService"/> — credencial verificable de finalización
+/// del LMS (dominio Educación). Seam DEDICADO, separado del motor de matrícula:
+/// compone el catálogo (<see cref="ICourseCatalogProvider"/>) y el motor
+/// (<see cref="IEnrollmentService"/>) para decidir si el alumno completó el curso al
+/// 100% y con qué nombre, y deriva el id con <see cref="ICertificateIdSigner"/>.
 /// </summary>
 /// <remarks>
-/// Lógica pura en <c>Synergos.CMS.Application</c> — cero dependencia de
-/// Umbraco/AspNetCore (ADR 0002). <see cref="GetAsync"/> es idempotente: re-emitir
-/// devuelve el mismo id (derivado por hash estable de (curso,alumno)) y registra el
-/// certificado en un índice en memoria para que <see cref="VerifyAsync"/> lo
-/// resuelva por id sin identificar al solicitante (verificación PÚBLICA). El
-/// adapter real firma/registra la credencial (PKI/blockchain) sin tocar los
-/// consumidores. ADR 0075 (seam con tests canónicos).
+/// <para>Lógica pura en <c>Synergos.CMS.Application</c> — cero dependencia de
+/// Umbraco/AspNetCore (ADR 0002).</para>
+///
+/// <para><b>Qué cambió y por qué (ADR 0124).</b> El id era
+/// <c>"cert-" + FNV-1a-32(curso|alumno)</c>: sin secreto y de 31 bits, o sea calculable
+/// por cualquiera que supiera un id de curso (público) y adivinara un correo. El índice
+/// de emitidos vivía además en un <c>ConcurrentDictionary</c> del proceso, así que un
+/// reinicio dejaba sin verificar un diploma ya impreso. Ahora: el id lo firma
+/// <see cref="ICertificateIdSigner"/> (HMAC con llave del servidor) y el índice vive tras
+/// <see cref="IJsonEntityStore"/> (ADR 0105, familia <c>certificates</c>).</para>
+///
+/// <para><b>El índice NO es la autoridad; la llave sí.</b> <see cref="VerifyAsync"/> lee
+/// el registro guardado y RECALCULA el id desde el sujeto que ese registro afirma. Quien
+/// consiga escribir en el almacén puede inventar un fichero con el id que quiera y el
+/// nombre de quien quiera; no le sirve de nada, porque el id no cuadrará.</para>
+///
+/// <para><b>El firmante es obligatorio.</b> No hay ctor que construya este servicio sin
+/// él: un certificado con id derivable no es una credencial, y dejar esa puerta abierta
+/// "para tests" es exactamente cómo se cuela a producción.</para>
+///
+/// <para><b>Nota sobre <see cref="IJsonEntityStore.ListAsync"/>:</b> aquí no se usa, y es
+/// deliberado — devuelve los DOCUMENTOS, no las claves, y pasarle uno a
+/// <see cref="IJsonEntityStore.ReadAsync"/> devuelve <c>null</c> para siempre en silencio.
+/// La verificación va por clave directa (el id ES la clave), que además es lo correcto:
+/// no hay ninguna operación de este seam que necesite recorrer el padrón de emitidos.</para>
+///
+/// <para>ADR 0075 (seam con tests canónicos).</para>
 /// </remarks>
 public sealed class StubCertificateService : ICertificateService
 {
+    /// <summary>Familia de entidades en el store genérico (→ App_Data/syn-certificates/).</summary>
+    private const string ResourceType = "certificates";
+
+    private static readonly JsonSerializerOptions _json = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     private readonly ICourseCatalogProvider _catalog;
     private readonly IEnrollmentService _enrollments;
+    private readonly ICertificateIdSigner _signer;
+    private readonly IJsonEntityStore _store;
     private readonly Func<DateTimeOffset> _now;
 
-    // Índice de certificados emitidos (id → cert + curso/alumno origen) para la
-    // verificación pública por id. Poblado al emitir en GetAsync (al 100%).
-    private readonly ConcurrentDictionary<string, IssuedCertificate> _issued = new(StringComparer.Ordinal);
+    // Serializa el read-modify-write de la emisión. lock{} no sirve: el cuerpo hace await.
+    private readonly SemaphoreSlim _mutate = new(1, 1);
 
-    public StubCertificateService(ICourseCatalogProvider catalog, IEnrollmentService enrollments)
-        : this(catalog, enrollments, null)
+    public StubCertificateService(
+        ICourseCatalogProvider catalog,
+        IEnrollmentService enrollments,
+        ICertificateIdSigner signer)
+        : this(catalog, enrollments, signer, null, null)
     {
     }
 
-    /// <summary>Ctor con time source inyectable (<paramref name="now"/>) para determinismo en tests.</summary>
-    public StubCertificateService(ICourseCatalogProvider catalog, IEnrollmentService enrollments, Func<DateTimeOffset>? now)
+    /// <summary>
+    /// Ctor completo: <paramref name="now"/> es el time source inyectable (determinismo en
+    /// tests) y <paramref name="store"/> el backing store durable — null cae a
+    /// <see cref="InMemoryJsonEntityStore"/>, que es lo que quiere un test unitario y NO lo
+    /// que quiere un diploma.
+    /// </summary>
+    public StubCertificateService(
+        ICourseCatalogProvider catalog,
+        IEnrollmentService enrollments,
+        ICertificateIdSigner signer,
+        Func<DateTimeOffset>? now,
+        IJsonEntityStore? store)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _enrollments = enrollments ?? throw new ArgumentNullException(nameof(enrollments));
+        _signer = signer ?? throw new ArgumentNullException(nameof(signer));
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        _store = store ?? new InMemoryJsonEntityStore();
     }
 
     public async Task<Certificate?> GetAsync(string student, string courseId, CancellationToken cancellationToken = default)
@@ -51,70 +95,156 @@ public sealed class StubCertificateService : ICertificateService
             return null;
         }
 
-        var detail = await _catalog.GetCourseAsync(courseId, cancellationToken);
+        var course = courseId.Trim();
+        var who = student.Trim();
+
+        var detail = await _catalog.GetCourseAsync(course, cancellationToken);
         if (detail is null)
         {
             return null;
         }
 
-        // El certificado SOLO se emite al 100% (progreso resuelto del motor).
-        var progress = await _enrollments.GetProgressAsync(courseId, student, cancellationToken);
-        if (progress.Percent < 100)
+        // El certificado SOLO se emite al 100%. Se le pide al MOTOR, que es quien sabe si
+        // el alumno terminó Y con qué nombre está matriculado. De lo que devuelve se usan
+        // esas dos cosas; su id —que sigue derivándose sin firma ahí dentro— se DESCARTA:
+        // desde ADR 0124 el id de una credencial tiene exactamente una fuente, el firmante.
+        var completed = await _enrollments.GetCertificateAsync(course, who, cancellationToken);
+        if (completed is null)
         {
             return null;
         }
 
-        // Id estable derivado de (curso,alumno) → re-emitir es idempotente.
-        var certId = "cert-" + StableHash($"{courseId.Trim()}|{student.Trim()}");
-        var studentName = ResolveStudentName(student.Trim());
-        var cert = new Certificate(
-            Id: certId,
-            CourseId: courseId.Trim(),
-            StudentName: studentName,
-            IssuedAt: _now(),
-            VerifyUrl: $"/academy/verify/{certId}");
+        var subject = new CertificateSubject(course, who);
+        var certId = _signer.Sign(subject);
 
-        // Registra (idempotente: mismo id → mismo registro) para la verificación pública.
-        _issued.TryAdd(certId, new IssuedCertificate(cert, courseId.Trim(), student.Trim()));
-        return cert;
+        await _mutate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Idempotente de verdad: si ya se emitió, se devuelve el registro TAL CUAL —
+            // incluida su fecha de emisión. Re-emitir no puede mover la fecha impresa en
+            // un diploma que ya está en la pared de alguien.
+            var existing = await LoadAsync(certId, cancellationToken).ConfigureAwait(false);
+            if (existing is not null && _signer.Matches(certId, new CertificateSubject(existing.CourseId, existing.Student)))
+            {
+                return ToCertificate(existing);
+            }
+
+            var issued = new PersistedCertificate(
+                Id: certId,
+                CourseId: course,
+                Student: who,
+                StudentName: completed.StudentName,
+                IssuedAt: _now());
+            await _store.WriteAsync(ResourceType, certId, JsonSerializer.Serialize(issued, _json), cancellationToken)
+                .ConfigureAwait(false);
+            return ToCertificate(issued);
+        }
+        finally
+        {
+            _mutate.Release();
+        }
     }
 
     public async Task<Certificate?> VerifyAsync(string certificateId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(certificateId) || !_issued.TryGetValue(certificateId.Trim(), out var issued))
+        // Un id con otra forma no llega ni al almacén: además de ahorrar I/O, evita que un
+        // id inventado se convierta en una clave de fichero arbitraria.
+        if (!LooksLikeCertificateId(certificateId))
         {
             return null;
         }
 
-        // Re-verifica que la credencial siga siendo válida (el alumno completó el
-        // curso). Si el catálogo o el progreso cambiaron y ya no está al 100%, no
-        // valida — la credencial es un reflejo del estado actual, no un sello mudo.
-        var progress = await _enrollments.GetProgressAsync(issued.CourseId, issued.Student, cancellationToken);
-        return progress.Percent >= 100 ? issued.Certificate : null;
-    }
-
-    private string ResolveStudentName(string student)
-    {
-        // El motor conserva el nombre en la matrícula; si no hay o no es resoluble
-        // desde aquí, se usa el propio identificador (email) como fallback estable.
-        // (El nombre rico lo devuelve el certificado emitido por el propio motor.)
-        return student;
-    }
-
-    // FNV-1a 32-bit (forzado positivo) → id de certificado estable y determinista
-    // (mismo esquema que StubEnrollmentService para que ambos coincidan).
-    private static string StableHash(string value)
-    {
-        const uint fnvOffset = 2166136261;
-        const uint fnvPrime = 16777619;
-        var hash = fnvOffset;
-        foreach (var ch in value)
+        var id = certificateId.Trim();
+        var issued = await LoadAsync(id, cancellationToken).ConfigureAwait(false);
+        if (issued is null)
         {
-            hash ^= ch;
-            hash *= fnvPrime;
+            return null;
         }
-        return (hash & 0x7FFFFFFF).ToString("x8");
+
+        // El registro guardado NO es la autoridad: se recalcula el id desde el sujeto que
+        // afirma. Un registro fabricado (id elegido + nombre ajeno) no sobrevive a esto.
+        if (!_signer.Matches(id, new CertificateSubject(issued.CourseId, issued.Student)))
+        {
+            return null;
+        }
+
+        // Y la credencial sigue siendo un reflejo del estado actual, no un sello mudo: si
+        // el curso o el progreso cambiaron y ya no está al 100%, no valida.
+        var progress = await _enrollments.GetProgressAsync(issued.CourseId, issued.Student, cancellationToken);
+        return progress.Percent >= 100 ? ToCertificate(issued) : null;
     }
 
-    private sealed record IssuedCertificate(Certificate Certificate, string CourseId, string Student);
+    private async Task<PersistedCertificate?> LoadAsync(string certificateId, CancellationToken cancellationToken)
+    {
+        var json = await _store.ReadAsync(ResourceType, certificateId, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+        try
+        {
+            var stored = JsonSerializer.Deserialize<PersistedCertificate>(json, _json);
+            // Un registro sin sujeto no se puede re-verificar contra la llave → se ignora.
+            return stored is null
+                   || string.IsNullOrWhiteSpace(stored.CourseId)
+                   || string.IsNullOrWhiteSpace(stored.Student)
+                ? null
+                : stored;
+        }
+        catch (JsonException)
+        {
+            // Un certificado corrupto no puede tumbar la verificación de los demás.
+            return null;
+        }
+    }
+
+    private static Certificate ToCertificate(PersistedCertificate stored) => new(
+        Id: stored.Id,
+        CourseId: stored.CourseId,
+        StudentName: stored.StudentName,
+        IssuedAt: stored.IssuedAt,
+        VerifyUrl: $"/academy/verify/{stored.Id}");
+
+    /// <summary>
+    /// <c>cert-</c> + 32 hex minúscula, que es lo que produce el firmante. No es una
+    /// comprobación de seguridad (no valida la firma), es un filtro de forma.
+    /// </summary>
+    private static bool LooksLikeCertificateId(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return false;
+        }
+        var id = candidate.Trim();
+        const string prefix = "cert-";
+        if (id.Length != prefix.Length + 32 || !id.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        foreach (var c in id.AsSpan(prefix.Length))
+        {
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 }
+
+/// <summary>
+/// La forma SERIALIZADA de un certificado emitido. Top-level (no anidado) para round-trip
+/// limpio con System.Text.Json — los records posicionales deserializan por ctor.
+/// </summary>
+/// <remarks>
+/// Guarda el SUJETO (<see cref="CourseId"/> + <see cref="Student"/>) además del id, porque
+/// la verificación recalcula el id desde el sujeto: sin él, el fichero sería un sello que
+/// se cree a sí mismo. <see cref="Student"/> es el identificador de la cuenta y NUNCA sale
+/// en la respuesta pública — quien la sirve decide qué se publica.
+/// </remarks>
+public sealed record PersistedCertificate(
+    string Id,
+    string CourseId,
+    string Student,
+    string StudentName,
+    DateTimeOffset IssuedAt);

@@ -89,6 +89,13 @@ public sealed class OptionsComposer : IComposer
         builder.Services.Configure<EventsSettings>(
             builder.Config.GetSection("Synergos:Events"));
 
+        // ADR 0124 — secreto con el que se deriva el id de los certificados de Educación.
+        // Vacío NO es "no firmar": el host genera y persiste una llave cifrada (ver
+        // CertificateSigningKeyProvider). Sección propia y NO la de Eventos: rotar el
+        // secreto de las entradas no puede invalidar los diplomas.
+        builder.Services.Configure<AcademySettings>(
+            builder.Config.GetSection("Synergos:Academy"));
+
         // T3 (doc 25) — selección/gating del proveedor de pago + secreto del webhook.
         builder.Services.Configure<PaymentsSettings>(
             builder.Config.GetSection("Synergos:Payments"));

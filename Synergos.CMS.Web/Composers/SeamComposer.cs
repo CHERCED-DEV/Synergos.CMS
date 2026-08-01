@@ -608,11 +608,26 @@ public sealed class SeamComposer : IComposer
         });
         services.AddSingleton<IEnrollmentService>(sp => sp.GetRequiredService<StubEnrollmentService>());
         services.AddSingleton<IEnrollmentMetrics>(sp => sp.GetRequiredService<StubEnrollmentService>());
-        // Certificado verificable — seam dedicado, compone catálogo + progreso.
+        // Certificado verificable — seam dedicado, compone catálogo + motor.
+        //
+        // ADR 0124: el id lo FIRMA ICertificateIdSigner (HMAC-SHA256 con llave del servidor,
+        // persistida cifrada por CertificateSigningKeyProvider, calcando el firmante de los
+        // e-tickets). Antes era un FNV-1a de 31 bits SIN secreto sobre "curso|alumno": quien
+        // supiera un id de curso —que es público— y adivinara un correo calculaba el id del
+        // certificado de esa persona. Con la verificación abierta al público, eso no habría
+        // sido una credencial sino un padrón consultable de quién estudió qué.
+        //
+        // El índice de emitidos pasa además a IJsonEntityStore (familia "certificates") para
+        // que un QR impreso en un diploma siga verificando después de un reinicio.
+        services.AddSingleton<CertificateSigningKeyProvider>();
+        services.AddSingleton<ICertificateIdSigner, LazyCertificateIdSigner>();
         services.AddSingleton<ICertificateService>(sp =>
             new StubCertificateService(
                 sp.GetRequiredService<ICourseCatalogProvider>(),
-                sp.GetRequiredService<IEnrollmentService>()));
+                sp.GetRequiredService<IEnrollmentService>(),
+                sp.GetRequiredService<ICertificateIdSigner>(),
+                null,
+                sp.GetRequiredService<IJsonEntityStore>()));
 
         // Ola 59.1 — Boot-time guard: log Critical si CartSettings.SecretKey
         // sigue en su valor default bajo env != "Development". No detiene
@@ -1108,7 +1123,16 @@ public sealed class SeamComposer : IComposer
         //     quien ve el multipart.
         // Singletons — el estado (expedientes) vive en memoria del proceso, igual que
         // el resto de stubs del motor.
-        services.AddSingleton<ITramiteCatalogProvider, StubTramiteCatalogProvider>();
+        // Rebanada de contenido (ADR 0123) — el último catálogo que quedaba sembrado en C#.
+        // Con Synergos:Catalog:Sources:Gov = cms el portal sirve los tramitePage que autoró la
+        // entidad, y el rollback es esa misma línea a 'demo'. Sin capa durable: la seam es de
+        // solo lectura, así que no hay nada que publicar desde la app que persistir aparte.
+        services.AddSingleton<ICatalogSource<TramiteDetail>>(sp =>
+            ActivatorUtilities.CreateInstance<UmbracoTramiteCatalogSource>(sp));
+        services.AddSingleton<ITramiteCatalogProvider>(sp =>
+            IsCmsSource(sp, UmbracoTramiteCatalogSource.Vertical)
+                ? new CatalogTramiteCatalogProvider(sp.GetRequiredService<ICatalogSource<TramiteDetail>>())
+                : new StubTramiteCatalogProvider());
         services.AddSingleton<IGovFeeCalculator, StubGovFeeCalculator>();
         // Durabilidad (doc 25): los expedientes viven tras el store genérico
         // (resourceType "gov-cases") → un trámite radicado y sus decisiones sobreviven un
