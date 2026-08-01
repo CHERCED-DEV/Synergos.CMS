@@ -20,6 +20,17 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// UI pueda deduplicar/mostrar leído sin store.
 /// </para>
 /// <para>
+/// <b>Por eso NO tiene backing store propio</b> (ni <c>storeNamespace</c>): al
+/// hacer durables el grafo y las reacciones, estas notificaciones quedaron
+/// durables por composición — no hay un segundo estado que persistir. Darle un
+/// store sería duplicar el estado que esta clase existe para NO duplicar.
+/// </para>
+/// <para>
+/// <b>Costo de lectura</b>: los seguidores del destinatario son un índice inverso
+/// del grafo (un recorrido de ese espacio) más una lectura puntual de reacciones
+/// por cada post propio del destinatario.
+/// </para>
+/// <para>
 /// Lógica pura en <c>Synergos.CMS.Application</c> — cero Umbraco/AspNetCore (ADR
 /// 0002). El adapter real (store de eventos con fan-out) reemplaza la seam sin
 /// tocar el módulo Angular. ADR 0075 (seam con tests). Singleton — stateless.
@@ -86,7 +97,8 @@ public sealed class StubNotificationFeed : INotificationFeed
         foreach (var post in SocialDemoSeed.Posts.Where(p =>
                      string.Equals(p.AuthorId, recipient, StringComparison.OrdinalIgnoreCase)))
         {
-            foreach (var (reactorId, type) in _reactions.ReactionsFor(post.Id))
+            var reactionsOnPost = await _reactions.ReactionsForAsync(post.Id, cancellationToken);
+            foreach (var (reactorId, type) in reactionsOnPost)
             {
                 if (string.Equals(reactorId, recipient, StringComparison.OrdinalIgnoreCase))
                 {
