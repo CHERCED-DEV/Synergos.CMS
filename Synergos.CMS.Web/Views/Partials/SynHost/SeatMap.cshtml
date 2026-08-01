@@ -1,0 +1,52 @@
+@*
+    SynHost renderer — <synergos-seat-map>.
+
+    El bloque solo CONFIGURA el mapa (qué cabina, cuántos asientos, en qué moneda).
+    El inventario de butacas lo resuelve ISeatMapProvider en el SERVIDOR: así las
+    credenciales del proveedor no salen al navegador y el componente recibe la carga
+    ya resuelta, que es como el bundle publicado la espera.
+
+    Toda la decisión vive en SeatMapProjection (Web/Services) — las vistas compilan en
+    runtime, y una excepción en Razor se lleva la página entera.
+*@
+@using Synergos.CMS.Web.Services
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@inject Synergos.CMS.Interfaces.ISeatMapProvider SeatMaps
+@{
+    // mapRef: referencia que el proveedor resuelve. Vacía o desconocida => el bloque
+    // se emite sin carga y el componente pinta su estado vacío. Nunca tumba la página.
+    var mapRef = Model.Value<string>("mapRef");
+    Synergos.CMS.Interfaces.SeatMapLayout? layout = null;
+    if (!string.IsNullOrWhiteSpace(mapRef))
+    {
+        try
+        {
+            layout = await SeatMaps.GetLayoutAsync(mapRef.Trim());
+        }
+        catch (Exception)
+        {
+            // Un proveedor caído es una falla de integración, no de la página.
+            layout = null;
+        }
+    }
+
+    // maxSelectable: Umbraco.Integer devuelve 0 cuando el editor lo dejó en blanco;
+    // 0 y negativos se tratan igual (el componente aplica su default de 1).
+    var maxSelectable = Model.Value<int>("maxSelectable");
+
+    var props = SeatMapProjection.BuildProps(
+        layout,
+        Model.Value<string>("currency"),
+        maxSelectable > 0 ? maxSelectable : null);
+
+    // BlockAlias DEBE ser el name kebab del registry = "seat-map" (el emitter resuelve
+    // el bundle por ese alias; camelCase no matchearía y no hidrataría).
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "seat-map",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
