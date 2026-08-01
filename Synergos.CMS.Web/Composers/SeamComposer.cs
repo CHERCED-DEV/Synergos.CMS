@@ -257,6 +257,16 @@ public sealed class SeamComposer : IComposer
             }
         }
 
+        // ADR 0116 fase 4 — los verticales que quieren enterarse de un cobro
+        // asíncrono. Cada sink dice si la referencia es suya; agregar un
+        // vertical es una línea más acá y nada en el receptor.
+        //
+        // Hoy sólo Tienda: es el único vertical durable con confirmación
+        // idempotente. Los otros siete entran cuando se corrijan sus usos del
+        // motor (fase 5) — registrarlos antes sería darles un evento que no
+        // saben procesar.
+        services.AddSingleton<IPaymentEventSink, ShopPaymentEventSink>();
+
         // Motor de reservas (vertical Hoteles) — 3 seams stub-first (doc 17),
         // calcando IPaymentProvider. Hoy sirven la demo end-to-end en memoria;
         // se cambian por adapters reales (PMS / channel-manager) sin tocar el

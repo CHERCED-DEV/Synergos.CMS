@@ -1,6 +1,6 @@
 # ADR 0116 — El motor de pagos es una seam TRANSVERSAL y polimórfica: un router que es el mismo contrato, tres formas de "requiere acción", y un despacho de eventos que no es de Tienda
 
-- **Status:** **Accepted — parcialmente construido.** El arquitecto respondió las tres preguntas abiertas: Wompi como primer adaptador, la forma se rompe ahora, y se trabaja todo. Fases 1-3 en el repo y verificadas; fases 4-6 pendientes (ver §Estado de construcción al final).
+- **Status:** **Accepted — parcialmente construido.** El arquitecto respondió las tres preguntas abiertas: Wompi como primer adaptador, la forma se rompe ahora, y se trabaja todo. Fases 1-4 en el repo y verificadas; fases 5-6 pendientes (ver §Estado de construcción al final).
 - **Date:** 2026-08-01
 - **Deciders:** Arquitecto (encargo textual: *"como todas van a tener pagos, hacer bien payment, que se pueda reinstanciar o reutilizar o polimorfizar, es muy ganador"*) + agente.
 - **Investigación:** cuatro barridos paralelos, dos sobre código y dos con búsqueda web autorizada. Anexos en `docs/product/investigacion-pagos/` (871 líneas, con URLs y fechas).
@@ -131,13 +131,20 @@ puede revertirse. Modelarlo como `Refunded` haría que la contabilidad mintiera.
 
 ### 4. El despacho de eventos deja de ser de Tienda
 
-`IPaymentEventSink` — cada vertical registra el suyo, indexado por el prefijo de
-`OrderReference`. El controller deja de conocer `IShopOrderService`.
+`IPaymentEventSink` — cada vertical registra el suyo. El controller deja de
+conocer `IShopOrderService`.
 
-La deduplicación pasa a ser por **`(ProviderKey, EventId)`** y a descartar
-eventos **más viejos que el estado actual**: Wompi reintenta hasta 3 veces en
-24 h y PayU advierte de notificaciones fuera de orden. Hoy el ledger deduplica
-por orden, que no alcanza.
+**Corrección respecto al borrador de este ADR:** se propuso indexar por el
+prefijo de `OrderReference` y al construirlo se descartó. Las referencias del
+repo no comparten convención —`ord_`, `enr_`, un radicado, el id de una
+reserva— y una convención que hay que recordar es una convención que alguien va
+a romper. Cada sink responde `OwnsAsync` mirando si tiene el registro: el dueño
+del dato es la única autoridad fiable.
+
+La deduplicación es por **`(ProviderKey, EventId)`**. Para los eventos fuera de
+orden **no hizo falta** el descarte por antigüedad que este ADR anticipaba: el
+anti-tampering ya re-consulta el estado real al proveedor, así que un evento
+rancio actúa sobre la verdad actual y no sobre la que traía.
 
 ### 5. Tres máquinas de estado, y `DeliveredAt` persistido
 
@@ -223,11 +230,34 @@ captura parcial exige el flujo de autorización diferida de la API directa.
 | 1 | Forma del seam: `PaymentAction` ×3, captura parcial, `VoidAsync`, `Disputed`/`ChargedBack` | ✅ construida |
 | 2 | `RoutingPaymentProvider` — misma seam, N proveedores | ✅ construida |
 | 3 | Firmas de Wompi + adaptador Web Checkout + cableado | ✅ construida |
-| 4 | `IPaymentEventSink` — despacho de eventos a los 8 verticales | ⬜ pendiente |
+| 4 | `IPaymentEventSink` — despacho de eventos por vertical | ✅ construida |
 | 5 | Corregir los 7 usos defectuosos | ⬜ pendiente |
 | 6 | Persistir tracking y RMA + `DeliveredAt` | ⬜ pendiente |
 
-**Verificado:** `dotnet build` 0 errores · `dotnet test` **1076/1076**.
+**Verificado:** `dotnet build` 0 errores · `dotnet test` **1080/1080**.
+
+### Cómo se enruta un evento a su vertical (fase 4)
+
+No por prefijo del identificador: las referencias del repo no comparten
+convención — `ord_`, `enr_`, un radicado, el id de una reserva — y una
+convención que hay que recordar es una convención que alguien va a romper. Cada
+sink responde `OwnsAsync` mirando si tiene el registro: **el dueño del dato es
+la única autoridad fiable sobre de quién es**.
+
+`OwnsAsync` está separado de `HandleAsync` a propósito, y no es cosmético: el
+receptor pregunta de quién es ANTES de consultarle el estado al PSP. Al revés,
+cualquiera podría hacernos golpear a Wompi mandando referencias inventadas — un
+amplificador gratis a costa nuestra.
+
+**Sobre eventos que llegan fuera de orden**, que la investigación marcaba como
+riesgo: no hizo falta maquinaria de versiones. El anti-tampering ya re-consulta
+el estado real al proveedor, así que un evento rancio actúa sobre la verdad
+actual y no sobre la que traía. Es una propiedad que el diseño ya tenía,
+aprovechada para otra cosa.
+
+**Hoy sólo Tienda tiene sink.** Los otros siete entran en la fase 5, cuando se
+corrijan sus usos del motor: registrarlos antes sería entregarles un evento que
+no saben procesar.
 
 **La fase 4 es la que falta para que Wompi sirva de verdad.** Hoy
 `PaymentWebhookController` sólo enruta a Tienda, y con Web Checkout el estado
