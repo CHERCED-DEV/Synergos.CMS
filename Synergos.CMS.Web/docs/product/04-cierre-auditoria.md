@@ -44,9 +44,28 @@ El orden es por **daño si no se hace**, no por esfuerzo ni por lo feo que se ve
    `admin`: POST sin token → **400**, POST con token → **302** y el efecto aplicado (comentario
    aprobado, bulk de 2, member bloqueado); GET intactos. 3 tests, incluido el que cuenta tokens
    por form. **Los dos defectos que destapó están abajo.**
-3. **La semántica 401 vs 403 del dashboard.** Un autenticado SIN rol recibe hoy redirección al
-   login (bucle: ya inició sesión). Se preservó a propósito al refactorizar #1 —no mezclar
-   estructura con semántica— pero queda como corrección pendiente.
+3. ~~**La semántica 401 vs 403 del dashboard.**~~ **HECHO.** Y el diagnóstico que estaba escrito
+   aquí —"redirige al login, bucle para el que ya inició sesión"— **era optimista**. Al medirlo
+   contra la app, `Forbid()` emitía un 302 a `/Account/AccessDenied`, ruta que **no existe** en
+   este proyecto: caía al "No published content" de Umbraco y respondía **200 OK**. Ni login
+   para el anónimo, ni explicación para el autenticado, y un 200 sobre lo que era una
+   denegación.
+
+   Ahora el filtro distingue las dos preguntas: **anónimo → `Challenge`**, que el esquema de
+   cookies traduce a un redirect al login real con `returnUrl`; **autenticado sin el rol → 403
+   de verdad**, renderizando `Views/Shared/AccessDenied.cshtml` con la URL intacta y una salida
+   ("entrar con otra cuenta"), que es lo único que le faltaba al que quedaba encerrado.
+
+   | actor | antes | ahora |
+   |---|---|---|
+   | anónimo, GET | 302 → ruta inexistente → **200** | 302 → `/Account/Login?ReturnUrl=…` → login real |
+   | autenticado sin rol, GET | 302 → ruta inexistente → **200** | **403** + página que lo explica |
+   | con rol, GET | 200 | 200 |
+
+   Verificado end-to-end con tres actores reales y el round-trip completo del anónimo
+   (login → vuelve a `/admin/` → 200). En POST el antiforgery sigue corriendo antes, así que sin
+   token es 400 para todos y con token válido el que no tiene rol recibe 403.
+   4 Dictionary keys nuevas (es-CO + en-US) para la página; **requieren uSync Import**.
 
 ### Lo que destapó el antiforgery — dos defectos vivos, ya cerrados
 
@@ -72,6 +91,11 @@ llevaban olas rotos sin que ningún test los tocara:
 La lectura: la auditoría F2 midió los controllers y no vio ninguno de los dos, porque ambos
 viven en el HTML emitido y en el borde con la API de Umbraco — superficie que ni los tests ni
 la boleta tocaban. El backlog gana un item por eso (Medio #7).
+
+Y un tercero, del item #3: el 302 a una ruta inexistente que devolvía 200. Los tres comparten
+la misma forma —**el código estaba bien y el resultado no**— y ninguno se ve leyendo el
+controller. Solo aparecen cuando se ejerce la ruta de verdad. Es el argumento más fuerte que
+dejó esta auditoría a favor de la verificación end-to-end, por encima de sumar tests unitarios.
 
 ### Medio — deuda que crece con cada equipo nuevo
 3. ~~**`SeamComposer.cs` → partials por vertical.**~~ **HECHO.** Partido en 10 clases
@@ -114,7 +138,7 @@ la boleta tocaban. El backlog gana un item por eso (Medio #7).
 
 | Gate | Estado |
 |---|---|
-| `dotnet test` | **1616 passing** (0 fallos) |
+| `dotnet test` | **1618 passing** (0 fallos) |
 | `usync-audit` | 0 errores, 0 warnings |
 | `usync-rebuild` (ADR 0128) | 880/880 ítems, DB derivable |
 | `check-css-parity` | 0 orphans |
