@@ -60,7 +60,7 @@ public sealed class UmbracoMemberTwoFactorService : IMemberTwoFactorService
         return Task.FromResult(new TwoFactorEnrollmentChallenge(secretBase32, provisioningUri));
     }
 
-    public Task<EnrollmentResult> ConfirmEnrollmentAsync(
+    public Task<TwoFactorEnrollmentOutcome> ConfirmEnrollmentAsync(
         Guid memberKey,
         string secretBase32,
         string firstCode,
@@ -68,13 +68,13 @@ public sealed class UmbracoMemberTwoFactorService : IMemberTwoFactorService
     {
         if (_memberService.GetByKey(memberKey) is null)
         {
-            return Task.FromResult(EnrollmentResult.MemberNotFound);
+            return Outcome(EnrollmentResult.MemberNotFound);
         }
 
         var existing = _store.Read(memberKey);
         if (existing is { IsEnabled: true })
         {
-            return Task.FromResult(EnrollmentResult.AlreadyEnrolled);
+            return Outcome(EnrollmentResult.AlreadyEnrolled);
         }
 
         byte[] secretBytes;
@@ -84,14 +84,14 @@ public sealed class UmbracoMemberTwoFactorService : IMemberTwoFactorService
         }
         catch (Exception)
         {
-            return Task.FromResult(EnrollmentResult.InvalidCode);
+            return Outcome(EnrollmentResult.InvalidCode);
         }
 
         var totp = new Totp(secretBytes);
         var verified = totp.VerifyTotp(firstCode, out _, new VerificationWindow(VerificationStepWindow, VerificationStepWindow));
         if (!verified)
         {
-            return Task.FromResult(EnrollmentResult.InvalidCode);
+            return Outcome(EnrollmentResult.InvalidCode);
         }
 
         // Phase 2 — generar 8 recovery codes single-use, persistir
@@ -104,28 +104,13 @@ public sealed class UmbracoMemberTwoFactorService : IMemberTwoFactorService
             RecoveryCodes: recoveryHashes,
             EnrolledUtc: DateTime.UtcNow));
 
-        // Plaintext codes shown to the member ONCE — caller los obtiene
-        // para mostrar en la confirmación. Almacenados en TempData del
-        // AdminController flow.
-        _lastEnrollmentRecoveryCodes[memberKey] = plaintextCodes;
-        return Task.FromResult(EnrollmentResult.Confirmed);
+        // Los códigos plaintext se muestran UNA vez y viajan en el resultado — no se guardan en
+        // claro ni salen por un canal lateral. El caller los enseña en esta única respuesta.
+        return Task.FromResult(new TwoFactorEnrollmentOutcome(EnrollmentResult.Confirmed, plaintextCodes));
     }
 
-    /// <summary>
-    /// Devuelve los recovery codes plaintext generados en el enrollment
-    /// más reciente. Single-use — al leerlos se borran del cache. El
-    /// caller debe mostrarlos al member exactamente una vez.
-    /// </summary>
-    public IReadOnlyList<string>? ConsumeLastEnrollmentRecoveryCodes(Guid memberKey)
-    {
-        if (_lastEnrollmentRecoveryCodes.TryRemove(memberKey, out var codes))
-        {
-            return codes;
-        }
-        return null;
-    }
-
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, IReadOnlyList<string>> _lastEnrollmentRecoveryCodes = new();
+    private static Task<TwoFactorEnrollmentOutcome> Outcome(EnrollmentResult result) =>
+        Task.FromResult(new TwoFactorEnrollmentOutcome(result));
 
     private static IReadOnlyList<string> GenerateAndHashRecoveryCodes(out IReadOnlyList<string> plaintextCodes)
     {
