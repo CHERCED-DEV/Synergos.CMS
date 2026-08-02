@@ -5,6 +5,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Filters;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -19,15 +20,24 @@ namespace Synergos.CMS.Web.Controllers;
 /// es MVC puro, no template Umbraco). Cada view carga el bundle propio
 /// via partial <c>_AdminHead</c>.
 ///
-/// Auth gating: cada action verifica <see cref="IMemberAccessGate.HasAnyRole"/>
-/// con CSV <c>"admin,moderator,editor"</c> y devuelve <c>Forbid()</c> si
-/// falla. El visitante anónimo recibe 401 → redirige a login según
-/// pipeline Umbraco. Sin antiforgery — los forms POST son
-/// member-authenticated y el risk de CSRF es bajo en este flow
-/// editorial.
+/// <b>Auth gating: DECLARATIVO</b> vía <see cref="RequireRolesAttribute"/> con CSV
+/// <c>"admin,moderator,editor"</c> (<see cref="ModeratorRolesCsv"/>). Antes cada una de las 29
+/// actions repetía el mismo <c>if (!_gate.HasAnyRole(...)) return Forbid();</c>. Ninguna lo
+/// olvidaba, pero el default era abierto: una action nueva nacía pública si el autor no copiaba
+/// cuatro líneas. Ahora nace protegida, y abrirla exige un <c>[AllowAnonymous]</c> explícito
+/// EN EL MÉTODO — visible en el diff (auditoría F2).
+///
+/// <para>El <c>[AllowAnonymous]</c> de la CLASE se conserva y no contradice lo anterior: sirve
+/// para saltarse el pipeline de auth de Umbraco y que este controller resuelva el permiso él
+/// mismo. Por eso el filtro mira solo los atributos del método.</para>
+///
+/// <para>Sin antiforgery — los forms POST son member-authenticated y el riesgo de CSRF se
+/// consideró bajo en este flujo editorial. Es una decisión aparte, anotada en el backlog de la
+/// auditoría.</para>
 /// </remarks>
 [Route("admin")]
 [AllowAnonymous]
+[RequireRoles(ModeratorRolesCsv)]
 public sealed class AdminController : Controller
 {
     private const string ModeratorRolesCsv = "admin,moderator,editor";
@@ -107,11 +117,6 @@ public sealed class AdminController : Controller
     [HttpGet("")]
     public IActionResult Index()
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var pendingPage = _comments.GetPendingPage(page: 1, pageSize: 1);
         var formKeys = _formReader.ListFormKeys();
         var topQueries7d = _searchAnalytics.GetTopQueries(
@@ -166,11 +171,6 @@ public sealed class AdminController : Controller
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         if (pageSize <= 0) pageSize = DefaultPageSize;
         var fromUtc = from?.ToUniversalTime();
         var toUtc = to?.ToUniversalTime();
@@ -201,11 +201,6 @@ public sealed class AdminController : Controller
         [FromQuery] int limit = 500,
         CancellationToken cancellationToken = default)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var clamped = Math.Clamp(limit, 1, CsvExportHardCap);
         var fromUtc = from?.ToUniversalTime();
         var toUtc = to?.ToUniversalTime();
@@ -290,11 +285,6 @@ public sealed class AdminController : Controller
     [HttpGet("webhooks/test")]
     public IActionResult WebhookTestHarness([FromQuery(Name = "msg")] string? messageCode = null)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         SetTopbar("webhooks");
         ViewData["MessageCode"] = messageCode;
         return View();
@@ -305,11 +295,6 @@ public sealed class AdminController : Controller
         [FromServices] ICommentModerationNotifier notifier,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var fakeComment = new Comment(
             Id: $"test-{Guid.NewGuid().ToString("N")[..8]}",
             NodeId: 0,
@@ -333,11 +318,6 @@ public sealed class AdminController : Controller
         [FromServices] IFormSubmissionNotifier notifier,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var fakeRequest = new FormSubmissionRequest(
             FormKey: "synergos-webhook-test",
             Fields: new Dictionary<string, string>
@@ -366,11 +346,6 @@ public sealed class AdminController : Controller
         [FromServices] ICartAbandonmentNotifier notifier,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var fakeCart = new AbandonedCart(
             CartId: $"test-{Guid.NewGuid().ToString("N")[..8]}",
             ItemCount: 3,
@@ -390,11 +365,6 @@ public sealed class AdminController : Controller
     [HttpGet("health")]
     public IActionResult Health([FromServices] IWebhookTelemetryStore telemetryStore)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var process = System.Diagnostics.Process.GetCurrentProcess();
         var pendingPage = _comments.GetPendingPage(1, 1);
         var formKeys = _formReader.ListFormKeys();
@@ -435,11 +405,6 @@ public sealed class AdminController : Controller
         string storageId,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var ok = await _formReader.DeleteAsync(formKey, storageId, cancellationToken);
         if (ok)
         {
@@ -463,11 +428,6 @@ public sealed class AdminController : Controller
     [HttpGet("forms/{formKey}/{storageId}")]
     public IActionResult FormSubmissionDetail(string formKey, string storageId)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var detail = _formReader.GetSubmission(formKey, storageId);
         if (detail is null)
         {
@@ -486,11 +446,6 @@ public sealed class AdminController : Controller
         [FromQuery(Name = "nodeId")] int? nodeIdFilter = null,
         [FromQuery(Name = "msg")] string? messageCode = null)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         if (pageSize <= 0) pageSize = DefaultPageSize;
         var pageData = _comments.GetPendingPage(page, pageSize, nodeIdFilter);
         SetTopbar("moderation", pageData.TotalCount);
@@ -506,11 +461,6 @@ public sealed class AdminController : Controller
         string commentId,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var ok = await _comments.ApproveAsync(nodeId, commentId, cancellationToken);
         if (ok)
         {
@@ -538,11 +488,6 @@ public sealed class AdminController : Controller
         string commentId,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var ok = await _comments.RejectAsync(nodeId, commentId, cancellationToken);
         if (ok)
         {
@@ -578,11 +523,6 @@ public sealed class AdminController : Controller
         string commentId,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var ok = await _comments.RejectAsync(nodeId, commentId, cancellationToken);
         if (ok)
         {
@@ -610,11 +550,6 @@ public sealed class AdminController : Controller
         [FromForm] string[] targets,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var refs = ParseTargets(targets);
         var changed = await _comments.BulkApproveAsync(refs, cancellationToken);
 
@@ -643,11 +578,6 @@ public sealed class AdminController : Controller
         [FromForm] string[] targets,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var refs = ParseTargets(targets);
 
         // Ola 126 — snapshot ANTES del delete para soporte undo.
@@ -691,11 +621,6 @@ public sealed class AdminController : Controller
         string token,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         if (!_cache.TryGetValue(BulkUndoCacheKeyPrefix + token, out IReadOnlyList<Comment>? snapshot)
             || snapshot is null)
         {
@@ -750,11 +675,6 @@ public sealed class AdminController : Controller
         [FromQuery] DateTime? to,
         [FromQuery] int limit = 20)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var fromUtc = (from ?? DateTime.UtcNow.AddDays(-30)).ToUniversalTime();
         var toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
         var clampedLimit = Math.Clamp(limit, 1, 100);
@@ -786,11 +706,6 @@ public sealed class AdminController : Controller
         [FromQuery] DateTime? to = null,
         [FromQuery] int limit = 100)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var clampedLimit = Math.Clamp(limit, 1, 500);
         IReadOnlyList<AuditEvent> events;
         if (from.HasValue || to.HasValue)
@@ -821,11 +736,6 @@ public sealed class AdminController : Controller
     [HttpGet("audit/{id:length(8,64)}")]
     public IActionResult AuditDetail(string id)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var evt = _audit.GetById(id);
         if (evt is null)
         {
@@ -860,12 +770,6 @@ public sealed class AdminController : Controller
         [FromQuery] DateTime? to,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            Response.StatusCode = 403;
-            return;
-        }
-
         var fromUtc = (from ?? DateTime.UtcNow.AddDays(-30)).ToUniversalTime();
         var toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
         var events = _audit.GetByDateRange(fromUtc, toUtc, CsvExportHardCap, actorEmailFilter, actionFilter);
@@ -913,11 +817,6 @@ public sealed class AdminController : Controller
         [FromQuery(Name = "role")] string? roleFilter = null,
         CancellationToken cancellationToken = default)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var roster = _memberRoster.GetRosterPage(page, DefaultPageSize, roleFilter);
         var allRoles = _memberRoster.ListAllRoles();
 
@@ -942,11 +841,6 @@ public sealed class AdminController : Controller
     [HttpPost("members/{memberKey:guid}/lock")]
     public async Task<IActionResult> LockMember(Guid memberKey, CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var ok = await _memberRosterWriter.LockAsync(memberKey, cancellationToken);
         await EmitAuditAsync(
             "member.lock",
@@ -963,11 +857,6 @@ public sealed class AdminController : Controller
     [HttpPost("members/{memberKey:guid}/unlock")]
     public async Task<IActionResult> UnlockMember(Guid memberKey, CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var ok = await _memberRosterWriter.UnlockAsync(memberKey, cancellationToken);
         await EmitAuditAsync(
             "member.unlock",
@@ -986,11 +875,6 @@ public sealed class AdminController : Controller
     [HttpPost("members/{memberKey:guid}/2fa-reset")]
     public async Task<IActionResult> ResetMemberTwoFactor(Guid memberKey, CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var ok = await _memberTwoFactor.DisableAsync(memberKey, cancellationToken);
         await EmitAuditAsync(
             "member.2fa-reset",
@@ -1010,11 +894,6 @@ public sealed class AdminController : Controller
     [HttpPost("members/{memberKey:guid}/delete")]
     public async Task<IActionResult> DeleteMember(Guid memberKey, CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         // Self-delete guard: aunque la UI no exponga el botón sobre el
         // current member, validamos por defensa en depth.
         var currentEmail = _gate.CurrentMemberEmail;
@@ -1052,11 +931,6 @@ public sealed class AdminController : Controller
     [HttpPost("members/{memberKey:guid}/password-reset")]
     public async Task<IActionResult> SendMemberPasswordReset(Guid memberKey, CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var ok = await _memberRosterWriter.SendPasswordResetAsync(memberKey, cancellationToken);
         await EmitAuditAsync(
             "member.password-reset-sent",
@@ -1077,11 +951,6 @@ public sealed class AdminController : Controller
         [FromForm] string[] roles,
         CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var clean = (roles ?? Array.Empty<string>())
             .Where(r => !string.IsNullOrWhiteSpace(r))
             .Select(r => r.Trim())
@@ -1110,11 +979,6 @@ public sealed class AdminController : Controller
     [HttpPost("members/{memberKey:guid}/gdpr-erase")]
     public async Task<IActionResult> GdprEraseMember(Guid memberKey, CancellationToken cancellationToken)
     {
-        if (!_gate.HasAnyRole(ModeratorRolesCsv))
-        {
-            return Forbid();
-        }
-
         var actorEmail = _gate.CurrentMemberEmail ?? string.Empty;
 
         // Self-erase guard — mismo pattern que DeleteMember.
