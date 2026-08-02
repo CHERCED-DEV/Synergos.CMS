@@ -27,7 +27,17 @@ public sealed record CabinSpec(
 /// <param name="FirstRow">Primera fila del tramo, inclusive.</param>
 /// <param name="LastRow">Última fila del tramo, inclusive.</param>
 /// <param name="Price">Recargo por elegir butaca en este tramo. 0 = sin recargo.</param>
-public sealed record CabinSectionSpec(string ServiceClass, int FirstRow, int LastRow, decimal Price);
+/// <param name="Formula">
+/// La distribución de ESTE tramo, cuando no es la de la cabina. Un 787 lleva <c>1-2-1</c> en
+/// ejecutiva sobre <c>3-3-3</c> en turista: no es un caso raro, es cómo está hecho casi
+/// cualquier avión de largo radio. <c>null</c> usa la de la cabina.
+/// </param>
+public sealed record CabinSectionSpec(
+    string ServiceClass,
+    int FirstRow,
+    int LastRow,
+    decimal Price,
+    string? Formula = null);
 
 /// <summary>
 /// Proveedor de mapas de asientos que EMULA una cabina de avión. Es el default stub-first de
@@ -98,7 +108,6 @@ public sealed class StubCabinSeatMapProvider : ISeatMapProvider
     internal static SeatMapLayout Build(CabinSpec spec)
     {
         var blocks = ParseFormula(spec.Formula);
-        var columns = BuildColumns(blocks);
         var aisles = ResolveAisles(blocks);
         var exitRows = new HashSet<int>(spec.ExitRows ?? Array.Empty<int>());
         var blocked = new HashSet<string>(spec.BlockedSeats ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
@@ -106,6 +115,12 @@ public sealed class StubCabinSeatMapProvider : ISeatMapProvider
         var rows = new List<SeatMapRow>();
         foreach (var section in spec.Sections)
         {
+            // Un tramo con distribución propia trae su propia geometría Y su propio ancho de
+            // fila: la ejecutiva de un 787 tiene 4 butacas donde la turista tiene 9.
+            var sectionBlocks = section.Formula is null ? blocks : ParseFormula(section.Formula);
+            var columns = BuildColumns(sectionBlocks);
+            var sectionAisles = section.Formula is null ? null : ResolveAisles(sectionBlocks);
+
             for (var rowNumber = section.FirstRow; rowNumber <= section.LastRow; rowNumber++)
             {
                 if (rowNumber == SkippedRow)
@@ -136,7 +151,7 @@ public sealed class StubCabinSeatMapProvider : ISeatMapProvider
                         Status: blocked.Contains(id) ? "blocked"
                             : IsSold(spec.Ref, id) ? "sold"
                             : "free",
-                        Position: ResolvePosition(i, blocks),
+                        Position: ResolvePosition(i, sectionBlocks),
                         Price: section.Price,
                         Features: features.Count > 0 ? features : null));
                 }
@@ -145,7 +160,8 @@ public sealed class StubCabinSeatMapProvider : ISeatMapProvider
                     Label: rowNumber.ToString(),
                     ServiceClass: section.ServiceClass,
                     Seats: seats,
-                    IsExitRow: isExit));
+                    IsExitRow: isExit,
+                    AisleAfterColumns: sectionAisles));
             }
         }
 
@@ -292,15 +308,17 @@ public sealed class StubCabinSeatMapProvider : ISeatMapProvider
             ExitRows: new[] { 12, 14 },
             BlockedSeats: new[] { "30A", "30F" }),
 
-        // Widebody: el caso que rompe cualquier suposición de "el pasillo va a la mitad".
+        // Widebody: rompe dos suposiciones de golpe. Que el pasillo va a la mitad, y que una
+        // cabina tiene UNA distribución — este 787 lleva tres, que es como está hecho casi
+        // cualquier avión de largo radio.
         new CabinSpec(
             Ref: "b787-internacional",
             Name: "Boeing 787 · Cabina internacional",
             Formula: "3-3-3",
             Sections: new[]
             {
-                new CabinSectionSpec("business", 1, 6, 1_200_000m),
-                new CabinSectionSpec("premium", 7, 12, 420_000m),
+                new CabinSectionSpec("business", 1, 6, 1_200_000m, Formula: "1-2-1"),
+                new CabinSectionSpec("premium", 7, 12, 420_000m, Formula: "2-3-2"),
                 new CabinSectionSpec("economy", 14, 44, 0m),
             },
             ExitRows: new[] { 20, 21 },

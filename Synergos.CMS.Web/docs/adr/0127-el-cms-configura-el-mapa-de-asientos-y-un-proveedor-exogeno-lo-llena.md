@@ -188,6 +188,25 @@ Tres decisiones:
 - **Las posiciones se sanean y se ordenan** en las dos mitades. El orden no es cosmético: el
   componente las compara mientras recorre la fila de izquierda a derecha.
 
+### Y un segundo nivel, porque una cabina no tiene una sola distribución
+
+La primera versión puso los pasillos solo en el mapa, y eso dejaba fuera el caso que el propio
+stub tenía sembrado: la ejecutiva de un 787 es `1-2-1` y su turista `3-3-3`. Con una sola
+geometría, el pasillo del mapa cae **en medio del bloque central de las suites**. No es un caso
+raro que valga la pena diferir: es cómo está hecho casi cualquier avión de largo radio.
+
+`rows[].aisleAfterColumns` manda sobre el del mapa cuando la fila lo declara. Y el `787`
+sembrado pasó a tener **tres** distribuciones —`1-2-1`, `2-3-2`, `3-3-3`—, así que el caso se
+ejercita de verdad en vez de quedar como una capacidad sin usar.
+
+**La distinción que sostiene todo esto es `null` contra lista vacía.** `null` —la clave
+ausente— es «no digo nada, usa los del mapa», que es lo que hace toda cabina de una sola
+distribución, o sea casi todas. La lista **vacía** es «esta fila no tiene ningún pasillo».
+Colapsarlas dejaría sin forma de declarar una sección corrida dentro de una cabina que sí tiene
+pasillos — justo el caso que este nivel viene a cubrir. Por eso el traductor de `eventos` dejó
+de colapsar `[]` a `undefined`: ahí el paso a través habría borrado la diferencia antes de que
+el mapa la viera.
+
 ## Apariencia: tres controles que no tocan una butaca
 
 Era el último eje, y el que obligó a revisar una premisa de este mismo ADR. Arriba se dijo que
@@ -243,19 +262,13 @@ default algún día, lo sigue en vez de quedar clavado al de hoy.
   ficha de evento. El 787 sembrado ya se lee como tres cabinas y no como una grilla; una butaca
   de ventana con espacio extra sigue siendo de ventana; y una fila de salida se distingue de una
   con espacio extra, que es lo que un rasgo con consecuencias regulatorias necesita.
-- **Las tres cabinas sembradas se dibujan bien.** Dos son de doble pasillo y hasta ahora salían
-  con uno.
+- **Las tres cabinas sembradas se dibujan bien.** Dos son de doble pasillo y salían con uno; el
+  787 además tiene tres distribuciones y cada sección se dibuja con la suya.
 - **El editor decide cuánto ocupa el mapa y cuánto explica**, sin tocar código y sin que ninguna
   de esas decisiones pueda alterar una butaca, un precio o una disponibilidad.
 
 ### Lo que se acepta
 
-- **Una cabina con dos fórmulas sigue sin poder expresarse.** Los pasillos son del MAPA, no de
-  la fila: un avión cuya ejecutiva es `1-2-1` y su turista `3-3-3` declara una sola geometría y
-  una de las dos secciones sale corrida. Se aceptó por dos razones: el proveedor tampoco lo
-  modela —una `CabinSpec` tiene una fórmula— y la supresión del pasillo final evita que la fila
-  corta quede con un hueco colgando. Cerrarlo sería `rows[].aisleAfterColumns` con respaldo al
-  del mapa, y toca las dos mitades otra vez.
 - **El vocabulario abierto no se valida en ninguna de las dos mitades.** Un proveedor que mande
   `xtra-legroom` verá esa cadena rotulada tal cual en la leyenda, sin error en ningún gate. Es
   el precio de no exigir un despliegue del CMS por cada rasgo nuevo, y se aceptó a sabiendas.

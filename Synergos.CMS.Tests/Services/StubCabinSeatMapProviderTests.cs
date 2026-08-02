@@ -205,6 +205,55 @@ public sealed class StubCabinSeatMapProviderTests
     }
 
     [Fact]
+    public void Un_tramo_con_otra_distribucion_trae_su_propio_ancho_Y_sus_propios_pasillos()
+    {
+        // Casi cualquier avión de largo radio es así: la ejecutiva tiene 4 butacas por fila
+        // donde la turista tiene 9. Con una sola geometría, una de las dos secciones se dibuja
+        // corrida — el pasillo del mapa cae en medio del bloque central de las suites.
+        var map = StubCabinSeatMapProvider.Build(Narrow with
+        {
+            Formula = "3-3-3",
+            Sections = new[]
+            {
+                new CabinSectionSpec("business", 1, 2, 1_200_000m, Formula: "1-2-1"),
+                new CabinSectionSpec("economy", 3, 4, 0m),
+            },
+        });
+
+        var ejecutiva = Row(map, "1");
+        Assert.Equal(4, ejecutiva.Seats.Count);
+        Assert.Equal(new[] { 1, 3 }, ejecutiva.AisleAfterColumns);
+        Assert.Equal(new[] { "window", "aisle", "aisle", "window" }, ejecutiva.Seats.Select(s => s.Position));
+
+        var turista = Row(map, "3");
+        Assert.Equal(9, turista.Seats.Count);
+        // El tramo que no declara distribución NO lleva pasillos propios: usa los del mapa.
+        Assert.Null(turista.AisleAfterColumns);
+        Assert.Equal(new[] { 3, 6 }, map.AisleAfterColumns);
+    }
+
+    [Fact]
+    public void El_787_sembrado_tiene_TRES_distribuciones_como_el_de_verdad()
+    {
+        var map = StubCabinSeatMapProvider.Build(
+            Narrow with
+            {
+                Formula = "3-3-3",
+                Sections = new[]
+                {
+                    new CabinSectionSpec("business", 1, 1, 0m, Formula: "1-2-1"),
+                    new CabinSectionSpec("premium", 7, 7, 0m, Formula: "2-3-2"),
+                    new CabinSectionSpec("economy", 14, 14, 0m),
+                },
+            });
+
+        Assert.Equal(4, Row(map, "1").Seats.Count);
+        Assert.Equal(7, Row(map, "7").Seats.Count);
+        Assert.Equal(9, Row(map, "14").Seats.Count);
+        Assert.Equal(new[] { 2, 5 }, Row(map, "7").AisleAfterColumns);
+    }
+
+    [Fact]
     public void Una_butaca_bloqueada_NO_es_lo_mismo_que_una_vendida()
     {
         // Bloqueada existe físicamente y no se vende (tripulación, avería): no se libera sola y
