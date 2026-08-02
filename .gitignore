@@ -34,6 +34,14 @@ Synergos.CMS.Web/umbraco/mediacache/
 Synergos.CMS.Web/App_Data/
 Synergos.CMS.Web/wwwroot/media/
 
+# Los mismos, en la RAIZ del repo. Umbraco los crea relativos a su content
+# root, y arrancar el dll desde la raiz (en vez de desde Synergos.CMS.Web/)
+# deja ahi una DB, los logs y el App_Data con lo que hayan sembrado los
+# seeders de dev. Son el mismo estado transitorio en otro sitio; sin estas
+# lineas aparecen como untracked y alguien termina commiteandolos.
+/App_Data/
+/umbraco/
+
 # ───────────────────────── ModelsBuilder generated code ──────────────
 # SourceCodeAuto regenera estos archivos cada vez que cambia el schema.
 # Son OUTPUT del schema XML uSync, no SOURCE — el agente nunca los
