@@ -13,9 +13,8 @@ namespace Synergos.CMS.Web.Services;
 /// <c>Umbraco.Cms.Core.Services</c> (no se filtran a Application por
 /// ADR 0002).
 ///
-/// Pagination via <see cref="IMemberService.GetAll(long, int, out long, string, Umbraco.Cms.Core.Direction, string, string)"/>
-/// — el service maneja el offset internamente. Roles via
-/// <see cref="IMemberService.GetAllRoles(int)"/> por member.
+/// Pagination via <c>IMemberService.GetAll(...)</c> — el service maneja el offset
+/// internamente. Roles via <see cref="IMemberService.GetAllRoles(int)"/> por member.
 /// </remarks>
 public sealed class UmbracoMemberRosterReader : IMemberRosterReader
 {
@@ -36,13 +35,20 @@ public sealed class UmbracoMemberRosterReader : IMemberRosterReader
         if (pageSize < 1) pageSize = 25;
         var pageIndex = page - 1;
 
+        // memberTypeAlias NULL = "todos los tipos". Con string.Empty, Umbraco arma el predicado
+        // ContentTypeAlias == "" y el roster salía SIEMPRE vacío — la página /admin/members
+        // mostraba "Members · 0" con members registrados, dejando lock / unlock / reset 2FA /
+        // password-reset / roles / delete / GDPR-erase sin forma de alcanzarse desde la UI.
+        // Se usa la sobrecarga larga (la de orderBySystemField) porque es la única que declara
+        // el parámetro nullable; la corta pide string y obligaba a un null!.
         var allMembers = _memberService.GetAll(
             pageIndex,
             pageSize,
             out var totalRecords,
             orderBy: "CreateDate",
             orderDirection: Umbraco.Cms.Core.Direction.Descending,
-            memberTypeAlias: string.Empty,
+            orderBySystemField: true,
+            memberTypeAlias: null,
             filter: string.Empty);
 
         var items = new List<MemberRosterItem>();
