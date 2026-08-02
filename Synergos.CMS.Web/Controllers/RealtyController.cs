@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services.Catalog;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -470,9 +471,9 @@ public sealed class RealtyController : ControllerBase
         // (card + comparador). Los campos sin fuente en el resumen van en 0.
         Specs: new SpecsDto(l.Beds, l.Baths, l.AreaM2, 0, 0, l.Stratum, 0, 0),
         // Subtítulo de la card (línea de specs) que la UI lee como `listing.subtitle`.
-        Subtitle: BuildSubtitle(l),
+        Subtitle: PropertyContentRules.BuildSubtitle(l),
         // Chips string[] que la UI lee como `listing.badges` (Destacado/Estrato/estado).
-        Badges: BuildBadges(l),
+        Badges: PropertyContentRules.BuildBadges(l),
         ImageUrl: l.ImageUrl,
         Cover: l.ImageUrl,
         Featured: l.Featured);
@@ -497,33 +498,6 @@ public sealed class RealtyController : ControllerBase
             "arriendo" => "rent",
             _ => operation ?? string.Empty
         };
-
-    /// <summary>Línea de specs de la card (`listing.subtitle`) desde beds/baths/área/estrato.</summary>
-    private static string BuildSubtitle(PropertyListing l)
-    {
-        var parts = new List<string>(4);
-        if (l.Beds > 0) parts.Add($"{l.Beds} hab");
-        if (l.Baths > 0) parts.Add($"{l.Baths} {(l.Baths == 1 ? "baño" : "baños")}");
-        if (l.AreaM2 > 0) parts.Add($"{l.AreaM2} m²");
-        if (l.Stratum > 0) parts.Add($"Estrato {l.Stratum}");
-        return string.Join(" · ", parts);
-    }
-
-    /// <summary>Chips derivados (`listing.badges`) desde Featured/Estrato/operación.</summary>
-    private static IReadOnlyList<string> BuildBadges(PropertyListing l)
-    {
-        var badges = new List<string>(3);
-        if (l.Featured) badges.Add("Destacado");
-        if (l.Stratum > 0) badges.Add($"Estrato {l.Stratum}");
-        var status = (l.Operation ?? string.Empty).Trim().ToLowerInvariant() switch
-        {
-            "venta" => "En venta",
-            "arriendo" => "En arriendo",
-            _ => null
-        };
-        if (status is not null) badges.Add(status);
-        return badges;
-    }
 
     private static SavedSearchDto ToSavedSearchDto(SavedSearch s) => new(
         Id: s.Id,

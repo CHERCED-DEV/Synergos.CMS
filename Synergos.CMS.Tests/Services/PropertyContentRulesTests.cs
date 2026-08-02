@@ -278,4 +278,87 @@ public sealed class PropertyContentRulesTests
         Assert.Throws<ArgumentNullException>(() => PropertyContentRules.BuildListing(null!, Cop, Labels));
         Assert.Throws<ArgumentNullException>(() => PropertyContentRules.BuildListing(Content(), Cop, null!));
     }
+
+    // ── Copy derivado de la tarjeta (movido desde RealtyController, auditoría Medio #4) ──
+    //
+    // Vivía como helpers privados del controller y por eso no tenía un solo test. Son las dos
+    // cadenas que la UI lee como `listing.subtitle` y `listing.badges`.
+
+    private static PropertyListing Summary(
+        int beds = 0, int baths = 0, int areaM2 = 0, int stratum = 0,
+        string operation = "venta", bool featured = false) => new(
+            Id: "apto", Slug: "apto", Title: "Apto", Operation: operation, Type: "apartamento",
+            Price: 100m, Currency: Cop, City: "Bogotá", Neighborhood: "Chicó",
+            Beds: beds, Baths: baths, AreaM2: areaM2, Stratum: stratum,
+            Lat: 0d, Lng: 0d, ImageUrl: "", Featured: featured);
+
+    [Fact]
+    public void El_subtitulo_arma_la_linea_completa_en_orden()
+    {
+        var subtitle = PropertyContentRules.BuildSubtitle(
+            Summary(beds: 3, baths: 2, areaM2: 78, stratum: 4));
+
+        Assert.Equal("3 hab · 2 baños · 78 m² · Estrato 4", subtitle);
+    }
+
+    [Fact]
+    public void El_subtitulo_omite_los_campos_en_cero_sin_dejar_separador_colgante()
+    {
+        // El " · " colgante es el síntoma exacto que se corrigió al cablear la tarjeta.
+        var subtitle = PropertyContentRules.BuildSubtitle(Summary(beds: 2));
+
+        Assert.Equal("2 hab", subtitle);
+        Assert.DoesNotContain("·", subtitle, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Un_inmueble_sin_ningun_dato_de_specs_no_tiene_subtitulo()
+    {
+        Assert.Equal(string.Empty, PropertyContentRules.BuildSubtitle(Summary()));
+    }
+
+    [Theory]
+    [InlineData(1, "1 baño")]
+    [InlineData(2, "2 baños")]
+    public void El_bano_concuerda_en_numero(int baths, string expected)
+    {
+        Assert.Equal(expected, PropertyContentRules.BuildSubtitle(Summary(baths: baths)));
+    }
+
+    [Fact]
+    public void Los_chips_salen_en_orden_destacado_estrato_operacion()
+    {
+        var badges = PropertyContentRules.BuildBadges(
+            Summary(stratum: 5, operation: "arriendo", featured: true));
+
+        Assert.Equal(new[] { "Destacado", "Estrato 5", "En arriendo" }, badges);
+    }
+
+    [Fact]
+    public void Una_operacion_desconocida_no_emite_chip_en_vez_de_emitir_el_valor_crudo()
+    {
+        // "En xyz" en la tarjeta se ve peor que no tener chip.
+        var badges = PropertyContentRules.BuildBadges(Summary(operation: "permuta"));
+
+        Assert.Empty(badges);
+    }
+
+    [Fact]
+    public void La_operacion_se_reconoce_sin_importar_mayusculas_ni_espacios()
+    {
+        Assert.Equal(new[] { "En venta" }, PropertyContentRules.BuildBadges(Summary(operation: "  VENTA ")));
+    }
+
+    [Fact]
+    public void Un_inmueble_corriente_no_destacado_y_sin_estrato_solo_lleva_la_operacion()
+    {
+        Assert.Equal(new[] { "En venta" }, PropertyContentRules.BuildBadges(Summary()));
+    }
+
+    [Fact]
+    public void El_copy_derivado_tambien_rechaza_null()
+    {
+        Assert.Throws<ArgumentNullException>(() => PropertyContentRules.BuildSubtitle(null!));
+        Assert.Throws<ArgumentNullException>(() => PropertyContentRules.BuildBadges(null!));
+    }
 }
