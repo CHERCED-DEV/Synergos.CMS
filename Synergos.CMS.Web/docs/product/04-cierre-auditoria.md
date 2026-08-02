@@ -37,12 +37,41 @@ El orden es por **daño si no se hace**, no por esfuerzo ni por lo feo que se ve
    de abierto a cerrado. Verificado end-to-end: anónimo contra las 8 rutas reales de admin →
    las 8 deniegan. 9 tests, incluido el que clava que el `[AllowAnonymous]` de la CLASE no
    desactiva el filtro (el bug que casi se cuela: habría abierto las 29 con build verde).
-2. **Antiforgery en los POST destructivos de admin** (`gdpr-erase`, `members/{key}/delete`,
-   `bulk-*`). Hoy no lo llevan por decisión documentada, pero ahora que la auth es declarativa
-   es el siguiente eslabón del mismo flujo. **Nuevo, sale de #1.**
+2. ~~**Antiforgery en los POST destructivos de admin.**~~ **HECHO.**
+   `[AutoValidateAntiforgeryToken]` a nivel de clase —cubre los 4 verbos inseguros y los POST
+   que se agreguen mañana— más `@Html.AntiForgeryToken()` explícito en las 16 formas POST de
+   `Views/Admin/*`. Verificado end-to-end contra la app corriendo con un member real con rol
+   `admin`: POST sin token → **400**, POST con token → **302** y el efecto aplicado (comentario
+   aprobado, bulk de 2, member bloqueado); GET intactos. 3 tests, incluido el que cuenta tokens
+   por form. **Los dos defectos que destapó están abajo.**
 3. **La semántica 401 vs 403 del dashboard.** Un autenticado SIN rol recibe hoy redirección al
    login (bucle: ya inició sesión). Se preservó a propósito al refactorizar #1 —no mezclar
    estructura con semántica— pero queda como corrección pendiente.
+
+### Lo que destapó el antiforgery — dos defectos vivos, ya cerrados
+
+Ninguno se buscaba. Salieron de mirar en serio el HTML que emite el dashboard, y los dos
+llevaban olas rotos sin que ningún test los tocara:
+
+1. **La cola de moderación tenía forms anidados.** El `<ul>` de comentarios vivía DENTRO de
+   `#bulk-form`, y HTML no permite formularios anidados: el parser del navegador descarta el de
+   adentro. Confirmado en Chromium — con la estructura vieja el DOM tenía **1 solo form** y el
+   botón "Aprobar" de cada comentario pertenecía a `#bulk-form`, no al suyo. Es decir:
+   **Aprobar / Rechazar / Spam por comentario no funcionaban**; posteaban a
+   `/admin/moderation/comments`, que es GET-only. Arreglado sacando la lista del form (los
+   checkboxes ya se asociaban por `form="bulk-form"`, el mecanismo de HTML5 para exactamente
+   esto). El JS que contaba seleccionados pasó de `querySelectorAll` —solo ve descendientes— a
+   `form.elements`, que es la colección real de controles del form.
+2. **`/admin/members` mostraba siempre 0 Members.** `UmbracoMemberRosterReader` pasaba
+   `memberTypeAlias: string.Empty`; Umbraco lee `null` como "todos los tipos", pero con una
+   cadena arma el predicado `ContentTypeAlias == ""`, que no matchea nada. Con la tabla vacía,
+   **lock / unlock / reset 2FA / password-reset / roles / delete / GDPR-erase no se podían
+   alcanzar desde la UI**. Un carácter. Verificado contra la app: 0 filas antes, 1 después.
+   5 tests nuevos, con mutation check (revertir el fix pone el test en rojo).
+
+La lectura: la auditoría F2 midió los controllers y no vio ninguno de los dos, porque ambos
+viven en el HTML emitido y en el borde con la API de Umbraco — superficie que ni los tests ni
+la boleta tocaban. El backlog gana un item por eso (Medio #7).
 
 ### Medio — deuda que crece con cada equipo nuevo
 3. ~~**`SeamComposer.cs` → partials por vertical.**~~ **HECHO.** Partido en 10 clases
@@ -59,6 +88,11 @@ El orden es por **daño si no se hace**, no por esfuerzo ni por lo feo que se ve
    precedente `IMemberRosterReader`/`Writer` del propio repo.
 6. **El `switch` de selección de PSP en `SeamComposer:245`** → `AddPaymentEngine(...)`. Es
    política viviendo en el composer; agregar un proveedor lo toca (OCP).
+7. **Nada verifica el HTML que emiten las vistas SSR.** Los dos defectos de arriba —forms
+   anidados, roster vacío— vivían ahí y sobrevivieron a 1608 tests. `AdminAntiforgeryTests` ya
+   lee las vistas como texto, que es un primer escalón barato; el siguiente sería render + DOM
+   real para las páginas con interacción (moderación, members). No urge, pero es el hueco de
+   cobertura más grande que quedó identificado.
 
 ### Bajo — higiene, sin riesgo
 7. **Migración a carpetas por vertical** (`Services/Impl/Eventos/`, …). Prerequisito del
@@ -80,7 +114,7 @@ El orden es por **daño si no se hace**, no por esfuerzo ni por lo feo que se ve
 
 | Gate | Estado |
 |---|---|
-| `dotnet test` | **1608 passing** (0 fallos) |
+| `dotnet test` | **1616 passing** (0 fallos) |
 | `usync-audit` | 0 errores, 0 warnings |
 | `usync-rebuild` (ADR 0128) | 880/880 ítems, DB derivable |
 | `check-css-parity` | 0 orphans |
