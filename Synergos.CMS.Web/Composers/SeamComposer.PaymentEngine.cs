@@ -56,7 +56,9 @@ public sealed partial class SeamComposer
         // Con Routing:Enabled=false (default) se registra un proveedor único y
         // el comportamiento es idéntico al de antes: el router es capacidad
         // nueva, no un peaje obligatorio.
-        var paymentProvider = builder.Config["Synergos:Payments:Provider"] ?? "Stub";
+        // Solo el ROUTER decide la FORMA del registro, así que es lo único que hay que leer en
+        // tiempo de composición. Qué proveedor concreto se sirve se resuelve dentro de la
+        // fábrica, contra IOptions — misma sección, pero un valor y no dos fuentes.
         var routingEnabled = builder.Config.GetValue<bool>("Synergos:Payments:Routing:Enabled");
 
         // Named client de Wompi. Sandbox y producción se distinguen SÓLO por la
@@ -94,12 +96,10 @@ public sealed partial class SeamComposer
                 // dejaría que una regla lo eligiera y reventara a mitad del
                 // checkout; así, una config a medias degrada al stub en vez de
                 // romper la compra.
-                if (!string.IsNullOrWhiteSpace(settings.WompiPublicKey)
-                    && !string.IsNullOrWhiteSpace(settings.WompiIntegritySecret))
+                var wompi = TryBuildWompi(sp, settings);
+                if (wompi is not null)
                 {
-                    members.Add(new WompiPaymentProvider(
-                        sp.GetRequiredService<IHttpClientFactory>().CreateClient("wompi"),
-                        settings));
+                    members.Add(wompi);
                 }
 
                 var rules = settings.Routing.Rules
@@ -114,18 +114,15 @@ public sealed partial class SeamComposer
         }
         else
         {
-            switch (paymentProvider.ToLowerInvariant())
-            {
-                // case "wompi":  // requiere WompiPaymentProvider + llaves (fase 3).
-                //     services.AddSingleton<IPaymentProvider, WompiPaymentProvider>();
-                //     break;
-                default:
-                    services.AddSingleton<IPaymentProvider>(sp =>
-                        new StubPaymentProvider(
-                            sp.GetRequiredService<IJsonEntityStore>(),
-                            sp.GetRequiredService<IOptions<PaymentsSettings>>().Value));
-                    break;
-            }
+            // Proveedor ÚNICO, el que diga Synergos:Payments:Provider.
+            //
+            // Aquí había un switch con un solo brazo vivo —default → stub— y el caso "wompi"
+            // comentado. Es decir: Provider="Wompi" con el router apagado servía el STUB EN
+            // SILENCIO, contra lo que promete la documentación del propio ajuste ("Stub o
+            // Wompi, requiere llaves"). Un operador podía creerse en producción cobrando de
+            // verdad mientras el checkout devolvía pagos de mentira. La auditoría lo anotó
+            // como olor de OCP; medido, era una config que miente.
+            services.AddSingleton<IPaymentProvider>(SelectSingleProvider);
         }
 
         // ADR 0116 fase 4 — los verticales que quieren enterarse de un cobro
@@ -143,5 +140,67 @@ public sealed partial class SeamComposer
         services.AddSingleton<IPaymentEventSink, ShopPaymentEventSink>();
         services.AddSingleton<IPaymentEventSink, TravelPaymentEventSink>();
 
+    }
+
+    /// <summary>Clave del proveedor Wompi. Es la misma que devuelve su <c>ProviderKey</c>.</summary>
+    internal const string WompiProviderKey = "wompi";
+
+    /// <summary>
+    /// El proveedor único que sirve cuando el router está apagado, según
+    /// <see cref="PaymentsSettings.Provider"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Es un método con nombre y no el lambda del registro</b> para poder verificarlo: qué
+    /// proveedor termina cobrando es exactamente la decisión que estaba mal y no tenía test.
+    /// </remarks>
+    internal static IPaymentProvider SelectSingleProvider(IServiceProvider sp)
+    {
+        var settings = sp.GetRequiredService<IOptions<PaymentsSettings>>().Value;
+        var stub = new StubPaymentProvider(sp.GetRequiredService<IJsonEntityStore>(), settings);
+
+        if (!string.Equals(settings.Provider?.Trim(), WompiProviderKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return stub;
+        }
+
+        var wompi = TryBuildWompi(sp, settings);
+        if (wompi is not null)
+        {
+            return wompi;
+        }
+
+        // Degradar al stub sigue siendo lo correcto —romper el arranque dejaría la demo sin
+        // checkout por una llave que falta—, pero ahora se degrada A GRITOS. El silencio era
+        // el problema, no el fallback.
+        sp.GetRequiredService<ILogger<SeamComposer>>().LogWarning(
+            "Synergos:Payments:Provider={Provider} pero faltan WompiPublicKey y/o " +
+            "WompiIntegritySecret. Se sirve el stub durable: los pagos NO son reales.",
+            settings.Provider);
+        return stub;
+    }
+
+    /// <summary>
+    /// El adapter de Wompi, o <c>null</c> si le faltan llaves.
+    /// </summary>
+    /// <remarks>
+    /// <b>Una sola fábrica para las dos ramas</b> —con router y sin él— para que
+    /// <c>Provider=Wompi</c> signifique lo mismo en ambas. Estaban duplicadas y divergieron:
+    /// la del router construía Wompi de verdad y la otra caía al stub sin decir nada.
+    ///
+    /// <para>Las llaves que se exigen son las del CHECKOUT (pública + secreto de integridad),
+    /// que es lo que necesita firmar una transacción. La privada es opcional a propósito: solo
+    /// hace falta para consultar el API, y su ausencia degrada una consulta, no un cobro.</para>
+    /// </remarks>
+    private static IPaymentProvider? TryBuildWompi(IServiceProvider sp, PaymentsSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.WompiPublicKey)
+            || string.IsNullOrWhiteSpace(settings.WompiIntegritySecret))
+        {
+            return null;
+        }
+
+        return new WompiPaymentProvider(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("wompi"),
+            settings);
     }
 }
