@@ -84,10 +84,10 @@ Clean architecture además: dirección de dependencias (hecho), pureza del domin
 |---|---|---|
 | **F0. Línea base** | este documento, sección anterior | ✅ hecha |
 | **F1. Gate de capas** | ✅ hecha en la misma ola: `Tests/Architecture/LayerRuleTests.cs` — 4 tests sobre las referencias reales de los ensamblados compilados. La regla del ADR 0002 pasa de costumbre a invariante que corre con la suite | ✅ hecha |
-| **F2. Boleta SOLID** | rúbrica de arriba aplicada a los hotspots + una muestra aleatoria (no solo los grandes: los grandes ya se saben), con veredicto y evidencia por clase | doc + issues |
-| **F3. Mapa de segregación** | cada vertical (Eventos, Realty, Salud, Gov, Booking, Social, Shop, Academy) mapeado a sus archivos en las 4 capas. Hoy viven mezclados en carpetas planas (`Controllers/`, `Services/`, `Impl/`) — el mapa es el prerequisito de los handler sets, del CODEOWNERS y de cualquier "circuito propio" futuro | doc |
-| **F4. Refinar** | los refactors que F2 marque `VIOLA`, en PRs atómicos, cada uno con sus tests antes/después. Candidatos ya visibles: partir el registro del SeamComposer por vertical (colisión de merges), tests de autorización para EhrController (PHI sin test), extraer el reshape de los controllers-gordos al patrón de reglas puras que ya existe | N PRs |
-| **F5. Cierre** | boleta final + backlog priorizado por riesgo real (no por olor) | doc |
+| **F2. Boleta SOLID** | ✅ [`02-boleta-solid.md`](02-boleta-solid.md) — 7 hotspots + 3 controles, veredicto y evidencia archivo:línea | ✅ hecha |
+| **F3. Mapa de segregación** | ✅ [`03-mapa-segregacion.md`](03-mapa-segregacion.md) — 14 verticales mapeados, núcleo compartido y enredos identificados, CODEOWNERS borrador | ✅ hecha |
+| **F4. Refinar** | ✅ 2 defectos de SEGURIDAD cerrados (IDOR Shop, downcast 2FA), código muerto borrado (ContentTypeKeys 1158 LOC, deps muertas Gov), pared del demo EHR testeada. Cada uno commit atómico con tests | ✅ hecha |
+| **F5. Cierre** | ✅ [`04-cierre-auditoria.md`](04-cierre-auditoria.md) — boleta final, backlog por riesgo real, CODEOWNERS apéndice | ✅ hecha |
 
 ### Qué NO va a pasar en este plan
 
