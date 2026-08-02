@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Filters;
@@ -19,20 +22,29 @@ namespace Synergos.CMS.Web.Filters;
 /// diff. Es el mismo razonamiento —y el mismo molde— de <see cref="DevSeedOnlyAttribute"/>:
 /// <i>"un endpoint nuevo nace gateado por omisión, no porque alguien se acuerde"</i>.</para>
 ///
-/// <para><b>Preserva el comportamiento, no lo cambia.</b> Emite
-/// <see cref="ControllerBase.Forbid()"/>, que es exactamente lo que devuelven 28 de las 29
-/// actions hoy — incluido para el anónimo, a quien el pipeline de Umbraco lleva al login. Este
-/// refactor es estructural (declarativo en vez de repetido); mezclarlo con un cambio de
-/// semántica 401/403 haría imposible verificar ninguno de los dos. Si algún día se quiere
-/// distinguir "identifícate" de "no tienes permiso" —hoy ambos terminan en el login, que para
-/// un autenticado sin rol es un bucle— es un cambio aparte, anotado en el backlog.</para>
+/// <para><b>Distingue "identifícate" de "no te alcanza".</b> Son dos respuestas distintas a dos
+/// preguntas distintas, y colapsarlas deja al visitante sin salida:</para>
+/// <list type="bullet">
+///   <item><description><b>Anónimo</b> → <see cref="ChallengeResult"/>. El esquema de cookies lo
+///   manda al login con el <c>returnUrl</c> puesto, que es lo que un dashboard de navegador
+///   necesita (un 401 crudo en una pestaña no le sirve a nadie).</description></item>
+///   <item><description><b>Autenticado sin el rol</b> → <b>403</b> real, renderizando
+///   <c>Views/Shared/AccessDenied.cshtml</c>, con la URL intacta. Mandarlo al login sería
+///   pedirle que repita lo único que ya hizo bien.</description></item>
+/// </list>
 ///
-/// <para><b>La única action cuyo comportamiento SÍ cambia</b> es <c>AuditExportCsv</c>: devuelve
-/// <c>Task</c> (escribe el CSV directo en <c>Response.Body</c>), así que no podía usar
-/// <c>Forbid()</c> y hacía <c>Response.StatusCode = 403</c> a mano. Ahora recibe el mismo trato
-/// que las otras 28. Es una mejora, no una regresión: ese endpoint se alcanza como enlace de
-/// descarga desde la página de auditoría, y si la sesión expiró, mandar al login es más útil
-/// que un 403 crudo en una pestaña en blanco.</para>
+/// <para><b>Lo que había antes.</b> Ambos casos emitían <c>Forbid()</c>, y eso terminaba en un
+/// 302 a <c>/Account/AccessDenied</c> — una ruta que <b>no existe</b> en este proyecto. Se
+/// verificó contra la app: caía al "No published content" de Umbraco y devolvía <b>200 OK</b>.
+/// O sea: ni login para el anónimo, ni explicación para el autenticado, y un 200 sobre lo que
+/// era una denegación. El refactor de auth declarativa preservó ese comportamiento a propósito
+/// —no mezclar estructura con semántica— y lo dejó anotado; esto es ese cambio aparte.</para>
+///
+/// <para><b><c>AuditExportCsv</c></b> devuelve <c>Task</c> (escribe el CSV directo en
+/// <c>Response.Body</c>), así que nunca pudo usar <c>Forbid()</c> y hacía
+/// <c>Response.StatusCode = 403</c> a mano. Con el filtro recibe el mismo trato que las otras
+/// 28, y ahora ese 403 vuelve a ser un 403 — solo que con una página que lo explica en vez de
+/// una pestaña en blanco.</para>
 ///
 /// <para><b>Corta ANTES de la acción</b> (<see cref="IActionFilter.OnActionExecuting"/>): ningún
 /// dato se lee ni se escribe. Es también lo que permite proteger de forma uniforme actions que
@@ -57,14 +69,29 @@ public sealed class RequireRolesAttribute : TypeFilterAttribute
         Arguments = new object[] { rolesCsv };
     }
 
+    /// <summary>
+    /// Vista que se renderiza —con 403— cuando el visitante SÍ está autenticado pero le falta el
+    /// rol. Vive en <c>Views/Shared/</c> porque el motor de vistas cae ahí para cualquier
+    /// controller, así que el filtro se puede poner sobre cualquiera sin arrastrar una vista.
+    /// </summary>
+    internal const string AccessDeniedViewName = "AccessDenied";
+
     private sealed class RequireRolesFilter : IActionFilter
     {
         private readonly IMemberAccessGate _gate;
+        private readonly IModelMetadataProvider _modelMetadata;
+        private readonly ITempDataDictionaryFactory _tempDataFactory;
         private readonly string _rolesCsv;
 
-        public RequireRolesFilter(IMemberAccessGate gate, string rolesCsv)
+        public RequireRolesFilter(
+            IMemberAccessGate gate,
+            IModelMetadataProvider modelMetadata,
+            ITempDataDictionaryFactory tempDataFactory,
+            string rolesCsv)
         {
             _gate = gate;
+            _modelMetadata = modelMetadata;
+            _tempDataFactory = tempDataFactory;
             _rolesCsv = rolesCsv;
         }
 
@@ -82,11 +109,27 @@ public sealed class RequireRolesAttribute : TypeFilterAttribute
                 return;
             }
 
+            if (!_gate.IsAuthenticated)
+            {
+                // "No sé quién sos" — 401 en semántica. En un dashboard que se navega con el
+                // navegador, lo útil no es un 401 crudo sino el challenge del esquema de
+                // cookies, que lleva al login con el returnUrl puesto.
+                context.Result = new ChallengeResult();
+                return;
+            }
+
             if (!_gate.HasAnyRole(_rolesCsv))
             {
-                // Idéntico a lo que devolvían las 28 actions: el pipeline decide si eso es un
-                // redirect al login o un 403, y este refactor no cambia esa decisión.
-                context.Result = new ForbidResult();
+                // "Sé quién sos y no te alcanza" — 403 de verdad, con la URL intacta y una
+                // página que lo explica. Mandarlo al login sería pedirle que haga otra vez lo
+                // único que ya hizo bien.
+                context.Result = new ViewResult
+                {
+                    ViewName = AccessDeniedViewName,
+                    StatusCode = StatusCodes.Status403Forbidden,
+                    ViewData = new ViewDataDictionary(_modelMetadata, context.ModelState),
+                    TempData = _tempDataFactory.GetTempData(context.HttpContext),
+                };
             }
         }
 

@@ -1,0 +1,111 @@
+@*
+    Se renderiza con 403 cuando el visitante ESTÁ autenticado pero le falta el rol que exige
+    RequireRolesAttribute. El caso del anónimo NO llega aquí: ese va al login por challenge.
+
+    Vive en Views/Shared/ a propósito — el motor de vistas cae aquí para cualquier controller,
+    así que el filtro se puede poner sobre cualquiera sin arrastrar una vista consigo.
+
+    Autocontenida (sin _AdminHead ni layout, con su CSS inline): un partial de Views/Admin/ solo
+    resuelve si quien renderiza es AdminController, y esta página tiene que servir igual desde
+    cualquier otro. Es corta; no vale acoplarla a nada para ahorrar veinte líneas.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@{
+    Layout = null;
+    var lang = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+}
+<!DOCTYPE html>
+<html lang="@lang">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    @* Denegar no es contenido indexable. *@
+    <meta name="robots" content="noindex, nofollow" />
+    <title>@Umbraco.GetDictionaryValue("Admin.AccessDenied.Title", "Sin permiso") · Synergos</title>
+    <style>
+        :root { color-scheme: light dark; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 2rem 1.25rem;
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.55;
+            background: #f6f7f9;
+            color: #1d2125;
+        }
+        .denied {
+            max-width: 34rem;
+            width: 100%;
+            background: #fff;
+            border: 1px solid #e2e5e9;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+        }
+        .denied__badge {
+            display: inline-block;
+            font-size: .75rem;
+            font-weight: 700;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            color: #8a4b00;
+            background: #fdf0dd;
+            border-radius: 999px;
+            padding: .25rem .7rem;
+            margin-bottom: 1rem;
+        }
+        .denied__title { margin: 0 0 .6rem; font-size: 1.5rem; }
+        .denied__body { margin: 0 0 1.5rem; color: #4a5259; }
+        .denied__actions { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+        .denied__link,
+        .denied__logout button {
+            font: inherit;
+            display: inline-block;
+            padding: .55rem 1.1rem;
+            border-radius: 8px;
+            border: 1px solid #c9ced4;
+            background: #fff;
+            color: #1d2125;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .denied__link--primary { background: #1d2125; border-color: #1d2125; color: #fff; }
+        .denied__logout { margin: 0; }
+        @@media (prefers-color-scheme: dark) {
+            body { background: #14171a; color: #e8eaed; }
+            .denied { background: #1c2024; border-color: #2c3238; box-shadow: none; }
+            .denied__body { color: #a8b0b8; }
+            .denied__badge { color: #ffcf8f; background: #3a2a12; }
+            .denied__link,
+            .denied__logout button { background: #22272c; border-color: #39414a; color: #e8eaed; }
+            .denied__link--primary { background: #e8eaed; border-color: #e8eaed; color: #14171a; }
+        }
+    </style>
+</head>
+<body>
+    <main class="denied">
+        <p class="denied__badge">403</p>
+        <h1 class="denied__title">@Umbraco.GetDictionaryValue("Admin.AccessDenied.Title", "Sin permiso")</h1>
+        <p class="denied__body">
+            @Umbraco.GetDictionaryValue(
+                "Admin.AccessDenied.Body",
+                "Tu sesión está iniciada, pero esta cuenta no tiene permiso para esta sección. Si crees que debería tenerlo, pídelo a quien administre los roles.")
+        </p>
+        <div class="denied__actions">
+            <a class="denied__link denied__link--primary" href="/">
+                @Umbraco.GetDictionaryValue("Admin.AccessDenied.Home", "Volver al inicio")
+            </a>
+            @* La salida real del callejón: entrar con OTRA cuenta. Sin esto, a quien llegó aquí
+               solo le queda borrar cookies a mano. *@
+            <form class="denied__logout" method="post" action="/account/logout">
+                <button type="submit">
+                    @Umbraco.GetDictionaryValue("Admin.AccessDenied.SwitchAccount", "Entrar con otra cuenta")
+                </button>
+            </form>
+        </div>
+    </main>
+</body>
+</html>
