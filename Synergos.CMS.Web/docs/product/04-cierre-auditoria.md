@@ -105,18 +105,39 @@ dejó esta auditoría a favor de la verificación end-to-end, por encima de suma
    contenedor DI completo. El corte PERFECTO por vertical (sin dominios repartidos en dos
    archivos por el intercalado del original) queda pendiente — necesita reordenar registros,
    seguro solo con un gate de snapshot de registros.
-4. **Extraer derivación de copy UI a los `*ContentRules` que ya existen.** Realty
-   (`BuildSubtitle`/`BuildBadges` → `PropertyContentRules`), Eventos (`DeriveStatus`/`Badges` →
-   `EventContentRules`). Mecánico, les da los tests que hoy no tienen.
-5. **`ICommentRepository` (12 métodos) → split lectura/escritura/moderación**, siguiendo el
-   precedente `IMemberRosterReader`/`Writer` del propio repo.
-6. **El `switch` de selección de PSP en `SeamComposer:245`** → `AddPaymentEngine(...)`. Es
-   política viviendo en el composer; agregar un proveedor lo toca (OCP).
+4. ~~**Extraer derivación de copy UI a los `*ContentRules`.**~~ **HECHO.** `BuildSubtitle`/
+   `BuildBadges` (Realty) y `BuildStatus`/`BuildBadges`/`BuildSubtitle` (Eventos) viven junto a
+   las reglas de su vertical, con 16 tests. `BuildStatus` recibe el reloj por parámetro en vez
+   de leer `UtcNow` adentro — esa era la razón por la que no se podía testear el límite
+   past/upcoming. El subtítulo de eventos dejó de emitir separador colgante sin ciudad.
+5. ~~**`ICommentRepository` (12 métodos) → split lectura/escritura/moderación.**~~ **HECHO.**
+   El corte no se eligió por olfato: se midió quién usa qué y de los **cinco** consumidores
+   **ninguno** usaba las tres caras. Lo que gana no es orden estético — `ICommentReader` no
+   *puede* devolver un comentario sin aprobar ni borrar nada, así que el render público del
+   blog perdió por construcción una capacidad que tenía y nadie vigilaba. El doble de test de
+   blogs pasó de implementar 12 métodos (para usar 1) a implementar 1. Sin interfaz compuesta,
+   y 8 tests de arquitectura lo sostienen.
+6. ~~**El `switch` de selección de PSP.**~~ **HECHO, y era peor que un olor.** El `switch` tenía
+   un solo brazo vivo y el caso `wompi` comentado: con el router apagado —el default—
+   `Provider="Wompi"` **servía el stub en silencio**, contra lo que documenta el propio ajuste.
+   Un operador podía creerse cobrando de verdad mientras el checkout devolvía pagos de mentira.
+   Una sola fábrica para las dos ramas, fallback al stub conservado pero **con warning**, y 11
+   tests sobre la matriz de config.
 7. **Nada verifica el HTML que emiten las vistas SSR.** Los dos defectos de arriba —forms
    anidados, roster vacío— vivían ahí y sobrevivieron a 1608 tests. `AdminAntiforgeryTests` ya
    lee las vistas como texto, que es un primer escalón barato; el siguiente sería render + DOM
    real para las páginas con interacción (moderación, members). No urge, pero es el hueco de
    cobertura más grande que quedó identificado.
+8. **Un test intermitente en la suite: `CatalogEngineReplicationTests.Realty_SinTildes_Encuentra`.**
+   Falló **una vez** en ~16 corridas completas y no se pudo reproducir en 15 intentos
+   posteriores (ni aislando las dos clases sospechosas, 0/8). Mecanismo **plausible pero no
+   probado**: `StubPropertyCatalogProvider` guarda el catálogo en un `static` de proceso, así
+   que `new` por test no aísla nada, y `CatalogPropertyCatalogProviderTests` publica ahí —
+   incluida *"Casa en Laureles"*, que es Medellín, justo el texto que busca el test que falló.
+   Si un publish cae entre las dos búsquedas del test, las secuencias de ids divergen. **No se
+   tocó la infraestructura de tests sobre una hipótesis sin probar**; queda esta anotación para
+   quien lo vuelva a ver. Si reaparece, la vía corta es serializar en una misma
+   `[Collection]` las clases que tocan ese `static`.
 
 ### Bajo — higiene, sin riesgo
 7. **Migración a carpetas por vertical** (`Services/Impl/Eventos/`, …). Prerequisito del
@@ -138,7 +159,7 @@ dejó esta auditoría a favor de la verificación end-to-end, por encima de suma
 
 | Gate | Estado |
 |---|---|
-| `dotnet test` | **1618 passing** (0 fallos) |
+| `dotnet test` | **1660 passing** (0 fallos) |
 | `usync-audit` | 0 errores, 0 warnings |
 | `usync-rebuild` (ADR 0128) | 880/880 ítems, DB derivable |
 | `check-css-parity` | 0 orphans |
