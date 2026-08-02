@@ -1,0 +1,74 @@
+name: uSync rebuild (DB derivable)
+
+# ADR 0128 — el gate de RECONSTRUCCIÓN.
+#
+# usync-audit.yml valida la FORMA del XML (GUIDs, refs, iconos, mojibake).
+# Este valida algo que ningún análisis estático puede: que Umbraco ACEPTA
+# el árbol completo. Levanta la aplicación real contra una SQLite vacía,
+# deja que uSync importe todo uSync/v9/ en el arranque, y falla si el
+# import no aplica limpio (0 líneas ERR) y completo (ítems procesados >=
+# archivos trackeados — la medición de referencia es exacta: 880 = 880).
+#
+# La propiedad que protege: una DB vacía + el repo reproducen el entorno.
+# Mientras eso sea verde, la base de datos es DERIVABLE — perder trabajo
+# exigiría perder el repo, y el import manual del arquitecto deja de ser
+# un acto de fe: cada PR ya demostró que aplica.
+
+on:
+  pull_request:
+    paths:
+      - 'Synergos.CMS.Web/uSync/**'
+      - 'tools/usync-rebuild-check.mjs'
+      - '.github/workflows/usync-rebuild.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'Synergos.CMS.Web/uSync/**'
+      - 'tools/usync-rebuild-check.mjs'
+      - '.github/workflows/usync-rebuild.yml'
+  # Manual, para probar el gate sin tocar schema.
+  workflow_dispatch:
+
+concurrency:
+  group: usync-rebuild-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    name: DB vacía + XML del repo = entorno completo
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # global.json pinea SDK 10.x (rollForward latestFeature) y los
+      # proyectos targetean net8.0 — mismos dos SDK que build-test.yml.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # El script compila, arranca con DB temporal, importa y evalúa.
+      # El log completo va a un path del workspace para poder subirlo
+      # como artifact cuando algo falle.
+      - name: Reconstruir desde XML
+        run: node tools/usync-rebuild-check.mjs --log usync-rebuild.log
+
+      - name: Subir log del import
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: usync-rebuild-log
+          path: usync-rebuild.log
+          retention-days: 14
