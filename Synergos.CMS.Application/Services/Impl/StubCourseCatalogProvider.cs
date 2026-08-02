@@ -55,7 +55,9 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     private readonly ConcurrentDictionary<string, AcademyDemoSeed.SeedCourse> _published = new(StringComparer.OrdinalIgnoreCase);
 
     // Contador monotónico para el id de cursos publicados por instructores.
-    private static int _publishedCounter;
+    // De instancia por lo mismo que en los otros dos stubs: su catálogo ya lo era, y un
+    // contador compartido haría que los ids saltaran según qué otro test corrió antes.
+    private int _publishedCounter;
 
     private readonly ICatalogIndex<AcademyDemoSeed.SeedCourse> _index;
 
