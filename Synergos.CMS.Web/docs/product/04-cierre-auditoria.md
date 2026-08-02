@@ -32,12 +32,17 @@ ningún test cubría, ambos corregidos con pruebas que fijan la propiedad:
 El orden es por **daño si no se hace**, no por esfuerzo ni por lo feo que se ve.
 
 ### Alto — toca seguridad, datos o corrección
-1. **AdminController: 29 actions con auth repetida a mano sobre `[AllowAnonymous]`.** Hoy
-   ninguna falta el check, pero el default es abierto: una action nueva nace pública si el autor
-   olvida 4 líneas. El molde correcto (`DevSeedOnlyAttribute` a nivel de clase) ya existe en el
-   repo. **Riesgo: una regresión futura, silenciosa.** Fix: filtro de autorización declarativo.
-2. **AdminController: 12 controllers sin test que tocan superficie sensible** (GDPR-erase,
-   member-delete, moderación). El fix #1 los haría testeables de paso.
+1. ~~**AdminController: 29 actions con auth repetida a mano.**~~ **HECHO.**
+   `RequireRolesAttribute` a nivel de clase; los 29 checks manuales removidos. El default pasa
+   de abierto a cerrado. Verificado end-to-end: anónimo contra las 8 rutas reales de admin →
+   las 8 deniegan. 9 tests, incluido el que clava que el `[AllowAnonymous]` de la CLASE no
+   desactiva el filtro (el bug que casi se cuela: habría abierto las 29 con build verde).
+2. **Antiforgery en los POST destructivos de admin** (`gdpr-erase`, `members/{key}/delete`,
+   `bulk-*`). Hoy no lo llevan por decisión documentada, pero ahora que la auth es declarativa
+   es el siguiente eslabón del mismo flujo. **Nuevo, sale de #1.**
+3. **La semántica 401 vs 403 del dashboard.** Un autenticado SIN rol recibe hoy redirección al
+   login (bucle: ya inició sesión). Se preservó a propósito al refactorizar #1 —no mezclar
+   estructura con semántica— pero queda como corrección pendiente.
 
 ### Medio — deuda que crece con cada equipo nuevo
 3. ~~**`SeamComposer.cs` → partials por vertical.**~~ **HECHO.** Partido en 10 clases
@@ -75,7 +80,7 @@ El orden es por **daño si no se hace**, no por esfuerzo ni por lo feo que se ve
 
 | Gate | Estado |
 |---|---|
-| `dotnet test` | **1599 passing** (0 fallos) |
+| `dotnet test` | **1608 passing** (0 fallos) |
 | `usync-audit` | 0 errores, 0 warnings |
 | `usync-rebuild` (ADR 0128) | 880/880 ítems, DB derivable |
 | `check-css-parity` | 0 orphans |
