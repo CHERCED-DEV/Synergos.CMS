@@ -1,0 +1,94 @@
+name: HTML servido (SSR)
+
+# El gate que mira la PÁGINA, no el controller.
+#
+# Sale de una constatación de la auditoría de arquitectura: de los cuatro
+# defectos reales que aparecieron, TRES vivían en el HTML emitido y
+# sobrevivieron a 1608 tests unitarios — forms anidados que el navegador
+# descartaba, una página que respondía 200 con la tabla siempre vacía, y una
+# denegación que redirigía a una ruta inexistente y terminaba en 200. En los
+# tres el código estaba bien y el resultado no.
+#
+# build-test.yml corre los tests; usync-rebuild.yml prueba que Umbraco acepta
+# el schema. Este arranca la aplicación real contra una SQLite desechable,
+# se autentica como member con rol, y comprueba lo que llega al navegador:
+# estructura del marcado, un token de antiforgery por form POST, que los datos
+# sembrados SE VEAN, y que denegar sea denegar de verdad.
+
+on:
+  pull_request:
+    paths:
+      - 'Synergos.CMS.Web/Views/**'
+      - 'Synergos.CMS.Web/Controllers/**'
+      - 'Synergos.CMS.Web/Filters/**'
+      - 'Synergos.CMS.Web/Services/**'
+      - 'tools/ssr-dom-check.mjs'
+      - '.github/workflows/ssr-dom.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'Synergos.CMS.Web/Views/**'
+      - 'Synergos.CMS.Web/Controllers/**'
+      - 'Synergos.CMS.Web/Filters/**'
+      - 'Synergos.CMS.Web/Services/**'
+      - 'tools/ssr-dom-check.mjs'
+      - '.github/workflows/ssr-dom.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ssr-dom-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ssr-dom:
+    name: lo que recibe el navegador
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Mismos dos SDK que build-test.yml: global.json pinea 10.x y los
+      # proyectos targetean net8.0.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # El runner de GitHub trae Chromium preinstalado. Se le pasa la ruta
+      # explícita en vez de dejar que el gate lo busque, para que un runner
+      # sin navegador falle aquí —visible— y no degrade en silencio a la
+      # versión sin comprobaciones de DOM.
+      - name: Localizar Chromium
+        id: chromium
+        run: |
+          BIN="$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)"
+          if [ -z "$BIN" ]; then
+            echo "Sin Chromium en el runner: se corre sin las comprobaciones de DOM." >&2
+            echo "flags=--no-dom" >> "$GITHUB_OUTPUT"
+          else
+            echo "Chromium: $BIN"
+            echo "flags=" >> "$GITHUB_OUTPUT"
+            echo "CHROME_PATH=$BIN" >> "$GITHUB_ENV"
+          fi
+
+      - name: Verificar el HTML servido
+        run: node tools/ssr-dom-check.mjs ${{ steps.chromium.outputs.flags }} --log ssr-dom.log
+
+      - name: Subir log de la aplicación
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssr-dom-log
+          path: ssr-dom.log
+          retention-days: 14
