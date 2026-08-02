@@ -445,7 +445,7 @@ public sealed class BlogsController : ControllerBase
     {
         var page = await _stream.GetFeedAsync(new FeedQuery(Scope: FeedScope.ForYou, PageSize: 100), cancellationToken);
 
-        var trending = ComputeTrending(page.Items);
+        var trending = ComputeTrending(page.Items, await ResolveReactionWeightsAsync(page.Items, cancellationToken));
 
         IEnumerable<ContentStreamItem> matches = page.Items;
         var query = q?.Trim();
@@ -749,14 +749,56 @@ public sealed class BlogsController : ControllerBase
             SentAt: m.SentAt)).ToList(),
         LastMessageAt: thread.LastMessageAt);
 
-    // Hashtags trending: frecuencia de cada #tag en el feed, ponderada por las
-    // reacciones del post que lo contiene (un tag en un post muy reaccionado sube).
-    private IReadOnlyList<TrendingTagDto> ComputeTrending(IReadOnlyList<ContentStreamItem> items)
+    /// <summary>
+    /// El peso de reacciones de cada post del lote, resuelto de una vez.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Existe para sacar el <c>await</c> del ranking.</b> Antes el cálculo de trending
+    /// hacía <c>GetStateAsync(...).GetAwaiter().GetResult()</c> DENTRO de un bucle sobre hasta
+    /// 100 posts: bloquear un hilo del pool cien veces por request en el endpoint más público
+    /// del vertical, que es la receta conocida de inanición del pool bajo carga.</para>
+    ///
+    /// <para>Se resuelven en secuencia y no con <c>Task.WhenAll</c> a propósito: la impl viva
+    /// del seam lee de disco, y cien lecturas concurrentes cambiarían un problema de hilos por
+    /// uno de I/O. Si algún día el seam va contra algo que sí paraleliza, el cambio es local a
+    /// este método.</para>
+    /// </remarks>
+    private async Task<IReadOnlyDictionary<string, int>> ResolveReactionWeightsAsync(
+        IReadOnlyList<ContentStreamItem> items,
+        CancellationToken cancellationToken)
+    {
+        var weights = new Dictionary<string, int>(items.Count, StringComparer.Ordinal);
+        foreach (var item in items)
+        {
+            if (weights.ContainsKey(item.Id))
+            {
+                continue;
+            }
+            var state = await _reactions.GetStateAsync(item.Id, cancellationToken: cancellationToken);
+            weights[item.Id] = state.Total;
+        }
+        return weights;
+    }
+
+    /// <summary>
+    /// Hashtags trending: frecuencia de cada <c>#tag</c> en el feed, ponderada por las
+    /// reacciones del post que lo contiene.
+    /// </summary>
+    /// <remarks>
+    /// <b>Pura y con los pesos ya resueltos</b>, que es lo que la vuelve verificable: el ranking
+    /// —el peso base de 1, el desempate alfabético, el tope de 10— era lógica de producto
+    /// enterrada detrás de una llamada de I/O. Un post sin peso conocido cuenta como 0
+    /// reacciones y no desaparece del conteo: no aparecer sería peor que aparecer al fondo.
+    /// </remarks>
+    internal static IReadOnlyList<TrendingTagDto> ComputeTrending(
+        IReadOnlyList<ContentStreamItem> items,
+        IReadOnlyDictionary<string, int> reactionWeights)
     {
         var scores = new Dictionary<string, (int Posts, int Weight)>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in items)
         {
-            var weight = 1 + _reactions.GetStateAsync(item.Id).GetAwaiter().GetResult().Total;
+            // El +1 es el peso del post en sí: un tag en un post sin reacciones sigue contando.
+            var weight = 1 + (reactionWeights.TryGetValue(item.Id, out var total) ? total : 0);
             foreach (var tag in ExtractTags(item.Body).Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 var current = scores.TryGetValue(tag, out var s) ? s : (Posts: 0, Weight: 0);
