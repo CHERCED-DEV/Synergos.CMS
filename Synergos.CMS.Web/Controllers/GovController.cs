@@ -29,7 +29,6 @@ namespace Synergos.CMS.Web.Controllers;
 /// <item><see cref="IMessagingService"/> (contexto <c>gov</c>) — correspondencia del
 ///   expediente con la entidad.</item>
 /// </list>
-/// El precio se formatea es-CO vía <see cref="IPriceFormatter"/>.
 /// </remarks>
 [ApiController]
 [Route("api/gov")]
@@ -66,8 +65,6 @@ public sealed class GovController : ControllerBase
     private readonly IDocumentUploadService _documents;
     private readonly IPrivateFileStore _files;
     private readonly IMessagingService _messaging;
-    private readonly IGovFeeCalculator _fees;
-    private readonly IPriceFormatter _priceFormatter;
     private readonly IMemberAccessGate _gate;
 
     public GovController(
@@ -78,8 +75,6 @@ public sealed class GovController : ControllerBase
         IDocumentUploadService documents,
         IPrivateFileStore files,
         IMessagingService messaging,
-        IGovFeeCalculator fees,
-        IPriceFormatter priceFormatter,
         IMemberAccessGate gate)
     {
         _catalog = catalog;
@@ -89,8 +84,6 @@ public sealed class GovController : ControllerBase
         _documents = documents;
         _files = files;
         _messaging = messaging;
-        _fees = fees;
-        _priceFormatter = priceFormatter;
         _gate = gate;
     }
 

@@ -25,8 +25,6 @@ public sealed class GovControllerTests
     private readonly IDocumentUploadService _documents = Substitute.For<IDocumentUploadService>();
     private readonly IPrivateFileStore _files = Substitute.For<IPrivateFileStore>();
     private readonly IMessagingService _messaging = Substitute.For<IMessagingService>();
-    private readonly IGovFeeCalculator _fees = Substitute.For<IGovFeeCalculator>();
-    private readonly IPriceFormatter _priceFormatter = Substitute.For<IPriceFormatter>();
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
 
     /// <summary>
@@ -35,7 +33,7 @@ public sealed class GovControllerTests
     /// sin contexto eso revienta con NullReference y el test no vería el código real.
     /// </summary>
     private GovController BuildSut() => new(
-        _catalog, _applications, _workflow, _tracking, _documents, _files, _messaging, _fees, _priceFormatter, _gate)
+        _catalog, _applications, _workflow, _tracking, _documents, _files, _messaging, _gate)
     {
         ControllerContext = new ControllerContext
         {
