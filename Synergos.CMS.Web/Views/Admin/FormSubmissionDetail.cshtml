@@ -120,6 +120,7 @@
                 </p>
                 <form id="delete-form" method="post"
                       action="/admin/forms/@Uri.EscapeDataString(detail.FormKey)/@Uri.EscapeDataString(detail.StorageId)/delete">
+                    @Html.AntiForgeryToken()
                     <button type="button" id="delete-trigger" class="syn-admin__action syn-admin__action--reject">
                         🗑 Eliminar submission
                     </button>
@@ -130,7 +131,9 @@
 
     @* Native <dialog> confirm reemplaza window.confirm() (Ola 124). *@
     <dialog id="delete-confirm" class="syn-admin__dialog">
-        <form method="dialog" class="syn-admin__dialog-form">
+        @* method="dialog" cierra el <dialog> en el cliente; nunca viaja al servidor. Sin
+           asp-antiforgery="false" el tag helper le pondría un token inútil. *@
+        <form method="dialog" class="syn-admin__dialog-form" asp-antiforgery="false">
             <h2 class="syn-admin__dialog-title">Eliminar submission</h2>
             <p class="syn-admin__dialog-body">
                 ¿Eliminar definitivamente la submission <code>@detail.StorageId</code>?

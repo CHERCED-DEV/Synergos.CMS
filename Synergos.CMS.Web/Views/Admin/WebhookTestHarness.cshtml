@@ -58,6 +58,7 @@
                         email + webhook + Slack + Discord + Teams.
                     </p>
                     <form method="post" action="/admin/webhooks/test/comment">
+                        @Html.AntiForgeryToken()
                         <button type="submit" class="syn-admin__action syn-admin__action--approve">
                             🚀 @Umbraco.GetDictionaryValue("admin.action.test", "Disparar test")
                         </button>
@@ -73,6 +74,7 @@
                         formKey="synergos-webhook-test" + 3 fields de prueba.
                     </p>
                     <form method="post" action="/admin/webhooks/test/form">
+                        @Html.AntiForgeryToken()
                         <button type="submit" class="syn-admin__action syn-admin__action--approve">
                             🚀 @Umbraco.GetDictionaryValue("admin.action.test", "Disparar test")
                         </button>
@@ -88,6 +90,7 @@
                         prefixed "test-" + subtotal 187.500 COP + 3 items.
                     </p>
                     <form method="post" action="/admin/webhooks/test/cart">
+                        @Html.AntiForgeryToken()
                         <button type="submit" class="syn-admin__action syn-admin__action--approve">
                             🚀 @Umbraco.GetDictionaryValue("admin.action.test", "Disparar test")
                         </button>

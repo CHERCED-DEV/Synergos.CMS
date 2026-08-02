@@ -31,13 +31,24 @@ namespace Synergos.CMS.Web.Controllers;
 /// para saltarse el pipeline de auth de Umbraco y que este controller resuelva el permiso él
 /// mismo. Por eso el filtro mira solo los atributos del método.</para>
 ///
-/// <para>Sin antiforgery — los forms POST son member-authenticated y el riesgo de CSRF se
-/// consideró bajo en este flujo editorial. Es una decisión aparte, anotada en el backlog de la
-/// auditoría.</para>
+/// <para><b>Antiforgery: DECLARATIVO</b> vía <see cref="AutoValidateAntiforgeryTokenAttribute"/>,
+/// que cubre TODOS los verbos inseguros (POST/PUT/PATCH/DELETE) y deja los GET intactos. Se
+/// eligió la variante <c>Auto</c> —y no <c>[ValidateAntiForgeryToken]</c> action por action— por
+/// la misma razón que el gating de roles: un POST nuevo nace validado, no queda a que alguien se
+/// acuerde. Las 16 formas POST de <c>Views/Admin/*</c> emiten su token con
+/// <c>@@Html.AntiForgeryToken()</c> explícito; tres de ellas llevan además
+/// <c>asp-antiforgery="false"</c> porque, al no tener atributo <c>action</c>, el tag helper les
+/// pondría un token implícito y dos hidden con el mismo nombre hacen FALLAR la validación.</para>
+///
+/// <para>El filtro de antiforgery es de autorización, así que corre ANTES que
+/// <see cref="RequireRolesAttribute"/>: un POST sin token recibe 400 aunque además le falte el
+/// rol. No es regresión —quien no tiene rol sigue sin poder ejecutar nada— y filtra menos
+/// información que el redirect al login.</para>
 /// </remarks>
 [Route("admin")]
 [AllowAnonymous]
 [RequireRoles(ModeratorRolesCsv)]
+[AutoValidateAntiforgeryToken]
 public sealed class AdminController : Controller
 {
     private const string ModeratorRolesCsv = "admin,moderator,editor";

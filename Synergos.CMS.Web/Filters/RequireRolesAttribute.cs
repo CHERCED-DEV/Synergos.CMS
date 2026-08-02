@@ -38,8 +38,9 @@ namespace Synergos.CMS.Web.Filters;
 /// dato se lee ni se escribe. Es también lo que permite proteger de forma uniforme actions que
 /// devuelven tipos distintos (<c>IActionResult</c>, <c>Task</c>, <c>Task&lt;IActionResult&gt;</c>).</para>
 ///
-/// <para><b>Lo que este filtro NO hace:</b> antiforgery. Los POST destructivos del dashboard
-/// siguen sin <c>[ValidateAntiForgeryToken]</c> — decisión aparte, anotada en el backlog.</para>
+/// <para><b>Lo que este filtro NO hace:</b> antiforgery. Ese eslabón lo cubre
+/// <c>[AutoValidateAntiforgeryToken]</c> sobre <c>AdminController</c>, que al ser filtro de
+/// autorización corre ANTES que éste: un POST sin token nunca llega a evaluarse por rol.</para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
 public sealed class RequireRolesAttribute : TypeFilterAttribute
