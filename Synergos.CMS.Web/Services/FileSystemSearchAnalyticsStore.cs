@@ -27,8 +27,8 @@ namespace Synergos.CMS.Web.Services;
 /// <b>consultas escritas por visitantes</b>: pueden traer un nombre, una dirección, un número
 /// de caso. Antes eso vivía en memoria y moría con el proceso; ahora queda en disco. La
 /// contrapartida es que ahora <b>sí</b> caduca —<c>Synergos:Retention:SearchAnalyticsRetentionDays</c>,
-/// 90 días por defecto— y esa política pasa de decorativa a ser la que sostiene la promesa.
-/// Bajar ese número es la palanca si 90 días es mucho para este sitio.</para>
+/// 30 días por defecto (el arquitecto lo bajó de 90: un mes ya da la señal editorial)— y esa
+/// política pasa de decorativa a ser la que sostiene la promesa.</para>
 ///
 /// <para><b>Cuando llegue la API de sesión</b>, esta clase se reemplaza por un adapter contra
 /// ella sin tocar a nadie más: <see cref="ISearchAnalyticsStore"/> ya es la costura, y sus dos

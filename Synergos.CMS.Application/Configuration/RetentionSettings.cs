@@ -36,10 +36,14 @@ public sealed class RetentionSettings
 
     /// <summary>
     /// Días tras los cuales un JSONL diario de search analytics se
-    /// elimina. Default 90 días — search analytics solo aporta valor
+    /// elimina. Default 30 días — bajado de 90 cuando la analítica pasó
+    /// a persistirse a disco (ADR 0045, enmienda): lo que se guarda es
+    /// TEXTO ESCRITO POR VISITANTES (puede traer nombres, direcciones,
+    /// números de caso), y para "qué buscó la gente y no encontró" un
+    /// mes ya da la señal editorial. Search analytics aporta valor
     /// rolling, no histórico profundo.
     /// </summary>
-    public int SearchAnalyticsRetentionDays { get; init; } = 90;
+    public int SearchAnalyticsRetentionDays { get; init; } = 30;
 
     // NOTE: Cart abandonment NO tiene retention filesystem porque
     // InMemoryCartAbandonmentTracker es in-memory por diseño. Si en el
