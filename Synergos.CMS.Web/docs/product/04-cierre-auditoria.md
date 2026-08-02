@@ -85,8 +85,14 @@ llevaban olas rotos sin que ningún test los tocara:
    `memberTypeAlias: string.Empty`; Umbraco lee `null` como "todos los tipos", pero con una
    cadena arma el predicado `ContentTypeAlias == ""`, que no matchea nada. Con la tabla vacía,
    **lock / unlock / reset 2FA / password-reset / roles / delete / GDPR-erase no se podían
-   alcanzar desde la UI**. Un carácter. Verificado contra la app: 0 filas antes, 1 después.
-   5 tests nuevos, con mutation check (revertir el fix pone el test en rojo).
+   alcanzar desde la UI**. Un carácter. 5 tests nuevos, con mutation check.
+
+   *Precisión sobre la cifra:* al descubrirlo se anotó "0 filas antes, 1 después", que es lo que
+   se vio en la DB de desarrollo. Un A/B controlado posterior —misma DB nueva, tres members
+   registrados, cambiando SOLO ese argumento— midió **1 de 3 visibles con `string.Empty` y 3 de
+   3 con `null`**. El defecto es el mismo y está confirmado; cuántas filas sobreviven depende de
+   los datos, no es un 0 fijo. Importa porque el superviviente resultó ser **el primer member
+   registrado** — y eso es justo lo que hizo insuficiente la primera versión del gate #7.
 
 La lectura: la auditoría F2 midió los controllers y no vio ninguno de los dos, porque ambos
 viven en el HTML emitido y en el borde con la API de Umbraco — superficie que ni los tests ni
@@ -123,11 +129,32 @@ dejó esta auditoría a favor de la verificación end-to-end, por encima de suma
    Un operador podía creerse cobrando de verdad mientras el checkout devolvía pagos de mentira.
    Una sola fábrica para las dos ramas, fallback al stub conservado pero **con warning**, y 11
    tests sobre la matriz de config.
-7. **Nada verifica el HTML que emiten las vistas SSR.** Los dos defectos de arriba —forms
-   anidados, roster vacío— vivían ahí y sobrevivieron a 1608 tests. `AdminAntiforgeryTests` ya
-   lee las vistas como texto, que es un primer escalón barato; el siguiente sería render + DOM
-   real para las páginas con interacción (moderación, members). No urge, pero es el hueco de
-   cobertura más grande que quedó identificado.
+7. ~~**Nada verifica el HTML que emiten las vistas SSR.**~~ **HECHO** —
+   `tools/ssr-dom-check.mjs` + workflow `ssr-dom.yml`. Arranca la aplicación real contra una
+   SQLite desechable, se autentica como member con rol y mira lo que llega al navegador:
+   estructura del marcado, un token de antiforgery por form POST, que los datos sembrados **se
+   vean**, y que denegar sea denegar. Molde del gate de reconstrucción (ADR 0128): DB temporal,
+   puerto 0, nunca toca nada real. Sin import de uSync —el dashboard es MVC puro— así que corre
+   en ~90s.
+
+   **Se validó por mutación, que es lo único que distingue un gate de un adorno.** Los tres
+   defectos se reintrodujeron uno por uno:
+
+   | defecto reintroducido | veredicto |
+   |---|---|
+   | `<ul>` de vuelta dentro de `#bulk-form` | ✗ falla — 3 comprobaciones independientes |
+   | `memberTypeAlias: string.Empty` | ✗ falla — "oculta 2 de 3 members sembrados" |
+   | denegación de vuelta a `Forbid()` | ✗ falla — "aterriza en el placeholder de Umbraco" |
+
+   **La prueba de mutación encontró dos fallos en el propio gate**, y ese fue su mayor
+   rendimiento:
+   - La cola de moderación tiene dos ramas y con DB nueva salía la vacía, así que el gate
+     **nunca renderizaba** el marcado que tenía el bug. Se siembra la cola apuntando el store a
+     un temp, y se exige que la rama con items aparezca.
+   - La comprobación del roster pedía que apareciera *un* member — y con el defecto original
+     el que sobrevive es justo el primero registrado, que es con el que el gate se autentica.
+     Habría dado verde sobre el defecto que existe para atrapar. Ahora exige el conjunto
+     completo, con un member testigo que no es ni el primero ni el de la sesión.
 8. **Un test intermitente en la suite: `CatalogEngineReplicationTests.Realty_SinTildes_Encuentra`.**
    Falló **una vez** en ~16 corridas completas y no se pudo reproducir en 15 intentos
    posteriores (ni aislando las dos clases sospechosas, 0/8). Mecanismo **plausible pero no
@@ -200,6 +227,7 @@ el repo congelado, no intercalada con feature.
 | `usync-rebuild` (ADR 0128) | 880/880 ítems, DB derivable |
 | `check-css-parity` | 0 orphans |
 | `LayerRuleTests` (F1) | 4/4 — capas limpias vigiladas |
+| `ssr-dom` (Medio #7) | 8 páginas · estructura, antiforgery, datos y denegación |
 
 ## La lectura honesta de la boleta
 
