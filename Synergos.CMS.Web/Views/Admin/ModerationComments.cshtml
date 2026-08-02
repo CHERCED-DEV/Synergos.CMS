@@ -62,6 +62,7 @@
                             <form method="post"
                                   action="/admin/moderation/comments/bulk-undo-reject/@undoToken"
                                   class="syn-admin__flash-action">
+                                @Html.AntiForgeryToken()
                                 <button type="submit" class="syn-admin__flash-button">@Umbraco.GetDictionaryValue("admin.action.undo", "↶ Deshacer")</button>
                             </form>
                         }
@@ -116,7 +117,17 @@
             }
             else
             {
-                <form id="bulk-form" method="post" class="syn-admin__bulk">
+                @* El form de bulk envuelve SOLO la barra de acciones. La lista va FUERA a
+                   propósito: HTML no permite forms anidados —el parser del navegador descarta
+                   el de adentro— así que con la lista dentro, los botones Aprobar/Rechazar/Spam
+                   de cada comentario quedaban asociados a este form y no al suyo. Los checkboxes
+                   siguen llegando aquí por el atributo form="bulk-form", que es justo el
+                   mecanismo de HTML5 para asociar controles a un form que no los contiene.
+
+                   Sin action= el tag helper emitiría un token implícito; dos hidden con el mismo
+                   nombre rompen la validación. Se suprime para que el token lo declare la vista. *@
+                <form id="bulk-form" method="post" class="syn-admin__bulk" asp-antiforgery="false">
+                    @Html.AntiForgeryToken()
                     <div class="syn-admin__bulk-toolbar">
                         <label class="syn-admin__bulk-selectall">
                             <input type="checkbox" id="select-all" />
@@ -135,55 +146,58 @@
                             </button>
                         </div>
                     </div>
-
-                    <ul class="syn-admin__queue">
-                        @foreach (var comment in pageData.Items)
-                        {
-                            <li class="syn-admin__item">
-                                <header class="syn-admin__item-meta">
-                                    <label class="syn-admin__item-checkbox">
-                                        <input type="checkbox" name="targets" value="@comment.NodeId|@comment.Id" form="bulk-form" />
-                                    </label>
-                                    <span class="syn-admin__item-author">@comment.AuthorName</span>
-                                    <time class="syn-admin__item-date" datetime="@comment.CreatedAtUtc.ToString("O")">
-                                        @comment.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC
-                                    </time>
-                                    <a class="syn-admin__item-node" href="/admin/moderation/comments?nodeId=@comment.NodeId">
-                                        Nodo #@comment.NodeId
-                                    </a>
-                                    <code class="syn-admin__item-id">@comment.Id</code>
-                                </header>
-
-                                <p class="syn-admin__item-body">@comment.Body</p>
-
-                                <footer class="syn-admin__item-actions">
-                                    <form method="post"
-                                          action="/admin/moderation/comments/@comment.NodeId/@comment.Id/approve"
-                                          class="syn-admin__item-form">
-                                        <button type="submit" class="syn-admin__action syn-admin__action--approve">
-                                            ✓ @Umbraco.GetDictionaryValue("admin.action.approve", "Aprobar")
-                                        </button>
-                                    </form>
-                                    <form method="post"
-                                          action="/admin/moderation/comments/@comment.NodeId/@comment.Id/reject"
-                                          class="syn-admin__item-form">
-                                        <button type="submit" class="syn-admin__action syn-admin__action--reject">
-                                            ✗ @Umbraco.GetDictionaryValue("admin.action.reject", "Rechazar")
-                                        </button>
-                                    </form>
-                                    <form method="post"
-                                          action="/admin/moderation/comments/@comment.NodeId/@comment.Id/spam"
-                                          class="syn-admin__item-form">
-                                        <button type="submit" class="syn-admin__action syn-admin__action--spam"
-                                                title="Marcar como spam — elimina + entrena futuro filtro">
-                                            🚫 @Umbraco.GetDictionaryValue("admin.action.spam", "Spam")
-                                        </button>
-                                    </form>
-                                </footer>
-                            </li>
-                        }
-                    </ul>
                 </form>
+
+                <ul class="syn-admin__queue">
+                    @foreach (var comment in pageData.Items)
+                    {
+                        <li class="syn-admin__item">
+                            <header class="syn-admin__item-meta">
+                                <label class="syn-admin__item-checkbox">
+                                    <input type="checkbox" name="targets" value="@comment.NodeId|@comment.Id" form="bulk-form" />
+                                </label>
+                                <span class="syn-admin__item-author">@comment.AuthorName</span>
+                                <time class="syn-admin__item-date" datetime="@comment.CreatedAtUtc.ToString("O")">
+                                    @comment.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC
+                                </time>
+                                <a class="syn-admin__item-node" href="/admin/moderation/comments?nodeId=@comment.NodeId">
+                                    Nodo #@comment.NodeId
+                                </a>
+                                <code class="syn-admin__item-id">@comment.Id</code>
+                            </header>
+
+                            <p class="syn-admin__item-body">@comment.Body</p>
+
+                            <footer class="syn-admin__item-actions">
+                                <form method="post"
+                                      action="/admin/moderation/comments/@comment.NodeId/@comment.Id/approve"
+                                      class="syn-admin__item-form">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="syn-admin__action syn-admin__action--approve">
+                                        ✓ @Umbraco.GetDictionaryValue("admin.action.approve", "Aprobar")
+                                    </button>
+                                </form>
+                                <form method="post"
+                                      action="/admin/moderation/comments/@comment.NodeId/@comment.Id/reject"
+                                      class="syn-admin__item-form">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="syn-admin__action syn-admin__action--reject">
+                                        ✗ @Umbraco.GetDictionaryValue("admin.action.reject", "Rechazar")
+                                    </button>
+                                </form>
+                                <form method="post"
+                                      action="/admin/moderation/comments/@comment.NodeId/@comment.Id/spam"
+                                      class="syn-admin__item-form">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="syn-admin__action syn-admin__action--spam"
+                                            title="Marcar como spam — elimina + entrena futuro filtro">
+                                        🚫 @Umbraco.GetDictionaryValue("admin.action.spam", "Spam")
+                                    </button>
+                                </form>
+                            </footer>
+                        </li>
+                    }
+                </ul>
 
                 @if (pageData.TotalPages > 1)
                 {
@@ -215,7 +229,9 @@
        primero. Pide confirmación con el count de items seleccionados
        antes de submit el form. Cancela = cierra modal sin acción. *@
     <dialog id="bulk-confirm" class="syn-admin__dialog">
-        <form method="dialog" class="syn-admin__dialog-form">
+        @* method="dialog" cierra el <dialog> en el cliente; nunca viaja al servidor. Sin
+           asp-antiforgery="false" el tag helper le pondría un token inútil. *@
+        <form method="dialog" class="syn-admin__dialog-form" asp-antiforgery="false">
             <h2 class="syn-admin__dialog-title" id="bulk-confirm-title">Confirmar acción</h2>
             <p class="syn-admin__dialog-body" id="bulk-confirm-body">…</p>
             <div class="syn-admin__dialog-actions">
@@ -251,7 +267,14 @@
             document.querySelectorAll('button[data-bulk-action]').forEach(function (btn) {
                 btn.addEventListener('click', function () {
                     var action = btn.getAttribute('data-bulk-action');
-                    var checked = bulkForm.querySelectorAll('input[name="targets"]:checked').length;
+                    // .elements y no querySelectorAll: los checkboxes viven FUERA del form (la
+                    // lista no puede ir dentro, ver comentario del markup) y se asocian por el
+                    // atributo form="bulk-form". querySelectorAll solo mira descendientes y
+                    // devolvería 0 siempre; .elements es la colección de controles del form,
+                    // que es exactamente lo que se va a enviar.
+                    var checked = Array.prototype.filter.call(bulkForm.elements, function (el) {
+                        return el.name === 'targets' && el.checked;
+                    }).length;
                     if (checked === 0) {
                         alert('Selecciona al menos un comentario primero.');
                         return;
