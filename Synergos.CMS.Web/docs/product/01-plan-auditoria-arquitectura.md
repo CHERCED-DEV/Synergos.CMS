@@ -34,7 +34,7 @@ accidental compilaría si alguien agrega el paquete. Candidato a gate barato (F1
 | `Web/Controllers/ShopCatalogController.cs` | 1 216 | Controller-gordo: routing + reshape + reglas en un archivo |
 | `Application/Dto/Constants/ContentTypeKeys.cs` | 1 158 | Constantes generables — ¿por qué se mantiene a mano? |
 | `Web/Controllers/AdminController.cs` | 1 144 | Agrega métricas de N dominios: acoplamiento de lectura transversal |
-| `Web/Controllers/EhrController.cs` | 1 024 | PHI + 1k LOC + **sin test propio** = el hotspot más serio de la lista |
+| `Web/Controllers/EhrController.cs` | 1 024 | **Corregido en F2**: NO es el hotspot PHI que la primera lectura sugirió — es demo DEV-ONLY tras `[DevSeedOnly]` (404 fuera de dev, datos fabricados; el PHI real va por `HealthcareApiController`, que sí tiene tests). El riesgo real era que la PARED —el atributo— tenía cero tests; cerrado en F4 con `DevSeedOnlyAttributeTests` (filtro on/off, default fail-closed, y que el controller LLEVA el atributo) |
 
 Los 7 controllers más grandes suman **6 790 LOC** — más de la mitad de los 12 346 LOC de los
 37 controllers.
@@ -45,7 +45,7 @@ Los 7 controllers más grandes suman **6 790 LOC** — más de la mitad de los 1
 |---|---|
 | Services / seams (Application) | 118 archivos de test — es donde vive el patrón por-seam del ADR 0075, y se nota |
 | Reglas puras (`*ContentRules`) | 4 suites, patrón consolidado |
-| **Controllers** | **27 de 37 SIN test propio** — incluidos AdminController, EhrController, BlogsController |
+| **Controllers** | **21 de 37 sin NINGUNA referencia en tests** — incluidos AdminController, EhrController, SearchController. (Corregido: una primera medición dijo 27 buscando solo `<X>ControllerTests.cs`; el conteo real busca la clase referenciada en cualquier test — BlogsController y AcademyController SÍ tienen cobertura con otros nombres) |
 | Notifications / Composers | 0 |
 
 La lectura honesta: el proyecto testea **lo que la arquitectura hizo fácil de testear** (los
