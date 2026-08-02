@@ -26,10 +26,17 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
     // Catálogo sembrado + inmuebles publicados por agentes en runtime
     // (PublishListingAsync). ConcurrentDictionary keyed por id → el estado (listados
     // creados en la demo) vive en el proceso, igual que el resto de stubs del motor.
-    private static readonly ConcurrentDictionary<string, PropertyDetail> Catalog = BuildCatalog();
+    // Estado de INSTANCIA, no estático. En producción da igual —el composer registra este
+    // proveedor con AddSingleton, así que hay exactamente uno— pero en tests cada `new` es un
+    // catálogo limpio. Con el estático, una clase de test que publicaba se filtraba a las
+    // demás: un publish de un inmueble en Medellín aterrizando ENTRE las dos búsquedas de
+    // `Realty_SinTildes_Encuentra` hacía divergir las secuencias de ids. Fallaba ~1 de cada 16
+    // corridas completas, y solo entre las dos búsquedas —después el listado extra salía en
+    // ambas y la igualdad volvía a cumplirse—, que es justo por qué era tan esquivo.
+    private readonly ConcurrentDictionary<string, PropertyDetail> _catalog = BuildCatalog();
 
     // Contador monotónico para el id de inmuebles publicados por agentes.
-    private static int _publishedCounter;
+    private int _publishedCounter;
 
     private readonly ICatalogIndex<PropertyListing> _index;
 
@@ -100,7 +107,7 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
         // mientras una faceta casa por igualdad exacta sobre un campo. Doblarlo en el filtro
         // de `city` habría hecho dos daños: buscar un barrio devolvería CERO, y los barrios
         // saldrían como chips en la columna Ciudad.
-        var universe = Catalog.Values
+        var universe = _catalog.Values
             .Select(d => d.Summary)
             .Where(l => query.MinPrice is null || l.Price >= query.MinPrice.Value)
             .Where(l => query.MaxPrice is null || l.Price <= query.MaxPrice.Value)
@@ -150,7 +157,7 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
         }
 
         var id = listingId.Trim();
-        var detail = Catalog.Values.FirstOrDefault(d =>
+        var detail = _catalog.Values.FirstOrDefault(d =>
             string.Equals(d.Summary.Id, id, StringComparison.OrdinalIgnoreCase)
             || string.Equals(d.Summary.Slug, id, StringComparison.OrdinalIgnoreCase));
         return Task.FromResult(detail);
@@ -213,7 +220,7 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
             string.IsNullOrWhiteSpace(draft.AgentName) ? "Agente" : draft.AgentName!.Trim(),
             string.IsNullOrWhiteSpace(draft.AgentPhone) ? string.Empty : draft.AgentPhone!.Trim());
 
-        Catalog[id] = detail;
+        _catalog[id] = detail;
         return Task.FromResult(detail);
     }
 
