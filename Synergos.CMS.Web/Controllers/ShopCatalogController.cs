@@ -112,6 +112,28 @@ public sealed class ShopCatalogController : ControllerBase
     }
 
     /// <summary>
+    /// Igual que <see cref="RequireMember"/> pero devuelve el EMAIL server-trusted de la
+    /// sesión, para las superficies llaveadas por email (wishlist y mensajería usan
+    /// <c>IUserCollection</c>/<c>IMessagingService</c>, cuyo <c>owner</c>/<c>from</c> es un
+    /// email, no un <see cref="System.Guid"/>).
+    /// </summary>
+    /// <remarks>
+    /// La identidad la pone el SERVIDOR, nunca el cliente — mismo cierre que <c>Orders</c>
+    /// aplicó al IDOR del historial (el <c>?customer=</c> se ignora). Antes, wishlist y
+    /// bandeja tomaban el email de un parámetro enumerable: cualquiera leía y MUTABA la lista
+    /// de deseos ajena y leía hilos privados ajenos con solo conocer un correo. Un member sin
+    /// email en la sesión es un estado imposible del flujo autenticado — se trata como 401.
+    /// </remarks>
+    private (IActionResult? denied, string email) RequireMemberEmail()
+    {
+        if (!_gate.IsAuthenticated || string.IsNullOrWhiteSpace(_gate.CurrentMemberEmail))
+        {
+            return (Unauthorized(new { error = "Se requiere iniciar sesión." }), string.Empty);
+        }
+        return (null, _gate.CurrentMemberEmail.Trim());
+    }
+
+    /// <summary>
     /// Guard de ownership por-orden (defensa en profundidad). El orderRef ya es
     /// una credencial bearer inadivinable (ord_{guid:N}) — el self-service de
     /// invitado depende de ella y no se rompe. Pero si la orden TIENE dueño
@@ -583,42 +605,45 @@ public sealed class ShopCatalogController : ControllerBase
     }
 
     // ── 6. Wishlist / listas (IUserCollection, seam genérico P11) ──
-    // GET  /api/shop/wishlist?owner=<email>&collection=<nombre?>  → items
-    // GET  /api/shop/wishlist/collections?owner=<email>           → resumen de listas
-    // POST /api/shop/wishlist { owner, collection?, itemRef }     → agrega (idempotente)
-    // DELETE /api/shop/wishlist?owner=&collection=&itemRef=       → quita
+    // La lista de deseos es DATO PERSONAL: el dueño es SIEMPRE el member de la sesión,
+    // nunca un parámetro. El `owner`/`Owner` que el cliente mande se ignora — igual que
+    // `Orders` ignora `?customer=`. Anónimo → 401. (Cerró un IDOR: el email era enumerable
+    // y se podían leer y MUTAR listas ajenas.)
+    // GET  /api/shop/wishlist?collection=<nombre?>  → items de MI lista
+    // GET  /api/shop/wishlist/collections           → resumen de MIS listas
+    // POST /api/shop/wishlist { collection?, itemRef }  → agrega a MI lista (idempotente)
+    // DELETE /api/shop/wishlist?collection=&itemRef=    → quita de MI lista
     [HttpGet("wishlist")]
     public async Task<IActionResult> Wishlist(
-        [FromQuery] string? owner,
         [FromQuery] string? collection,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(owner))
+        var (denied, owner) = RequireMemberEmail();
+        if (denied is not null)
         {
-            return BadRequest(new { error = "El parámetro 'owner' (email) es requerido." });
+            return denied;
         }
 
         var name = string.IsNullOrWhiteSpace(collection) ? DefaultCollection : collection.Trim();
-        var items = await _collections.GetAsync(owner.Trim(), name, cancellationToken);
+        var items = await _collections.GetAsync(owner, name, cancellationToken);
         return Ok(new WishlistResponse(
-            Owner: owner.Trim(),
+            Owner: owner,
             Collection: name,
             Items: items.Select(ToCollectionItemDto).ToList()));
     }
 
     [HttpGet("wishlist/collections")]
-    public async Task<IActionResult> WishlistCollections(
-        [FromQuery] string? owner,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> WishlistCollections(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(owner))
+        var (denied, owner) = RequireMemberEmail();
+        if (denied is not null)
         {
-            return BadRequest(new { error = "El parámetro 'owner' (email) es requerido." });
+            return denied;
         }
 
-        var summaries = await _collections.GetCollectionsAsync(owner.Trim(), cancellationToken);
+        var summaries = await _collections.GetCollectionsAsync(owner, cancellationToken);
         return Ok(new CollectionsResponse(
-            Owner: owner.Trim(),
+            Owner: owner,
             Collections: summaries
                 .Select(s => new CollectionSummaryDto(s.Collection, s.Count, s.UpdatedAt))
                 .ToList()));
@@ -629,32 +654,41 @@ public sealed class ShopCatalogController : ControllerBase
         [FromBody] WishlistItemRequest? request,
         CancellationToken cancellationToken)
     {
-        if (request is null
-            || string.IsNullOrWhiteSpace(request.Owner)
-            || string.IsNullOrWhiteSpace(request.ItemRef))
+        var (denied, owner) = RequireMemberEmail();
+        if (denied is not null)
         {
-            return BadRequest(new { error = "owner e itemRef son requeridos." });
+            return denied;
+        }
+
+        if (request is null || string.IsNullOrWhiteSpace(request.ItemRef))
+        {
+            return BadRequest(new { error = "itemRef es requerido." });
         }
 
         var name = string.IsNullOrWhiteSpace(request.Collection) ? DefaultCollection : request.Collection.Trim();
-        var item = await _collections.AddAsync(request.Owner.Trim(), name, request.ItemRef.Trim(), cancellationToken);
+        var item = await _collections.AddAsync(owner, name, request.ItemRef.Trim(), cancellationToken);
         return Ok(ToCollectionItemDto(item));
     }
 
     [HttpDelete("wishlist")]
     public async Task<IActionResult> WishlistRemove(
-        [FromQuery] string? owner,
         [FromQuery] string? collection,
         [FromQuery] string? itemRef,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(itemRef))
+        var (denied, owner) = RequireMemberEmail();
+        if (denied is not null)
         {
-            return BadRequest(new { error = "owner e itemRef son requeridos." });
+            return denied;
+        }
+
+        if (string.IsNullOrWhiteSpace(itemRef))
+        {
+            return BadRequest(new { error = "itemRef es requerido." });
         }
 
         var name = string.IsNullOrWhiteSpace(collection) ? DefaultCollection : collection.Trim();
-        var removed = await _collections.RemoveAsync(owner.Trim(), name, itemRef.Trim(), cancellationToken);
+        var removed = await _collections.RemoveAsync(owner, name, itemRef.Trim(), cancellationToken);
         return Ok(new { removed });
     }
 
@@ -792,24 +826,34 @@ public sealed class ShopCatalogController : ControllerBase
     // POST /api/shop/messages/{threadId}/reply { from, body } → responde
     // GET  /api/shop/messages/{threadId}                      → hilo completo
     // GET  /api/shop/messages?participant=<email>             → bandeja
+    // Mensajería comprador↔vendedor. El REMITENTE es siempre el member de la sesión —
+    // `from`/`participant` del cliente se ignoran. Antes se tomaban del body/query, así que
+    // cualquiera podía ENVIAR como otro (suplantación) y LEER la bandeja y los hilos privados
+    // de otro con solo su email. Estos cambios sólo endurecen: no hay flujo anónimo legítimo
+    // para un hilo privado.
     [HttpPost("messages")]
     public async Task<IActionResult> StartThread(
         [FromBody] StartThreadRequest? request,
         CancellationToken cancellationToken)
     {
+        var (denied, from) = RequireMemberEmail();
+        if (denied is not null)
+        {
+            return denied;
+        }
+
         if (request is null
             || string.IsNullOrWhiteSpace(request.ContextRef)
-            || string.IsNullOrWhiteSpace(request.From)
             || string.IsNullOrWhiteSpace(request.To)
             || string.IsNullOrWhiteSpace(request.Body))
         {
-            return BadRequest(new { error = "contextRef, from, to y body son requeridos." });
+            return BadRequest(new { error = "contextRef, to y body son requeridos." });
         }
 
         try
         {
             var thread = await _messaging.StartThreadAsync(
-                request.ContextRef.Trim(), request.From.Trim(), request.To.Trim(), request.Body, cancellationToken);
+                request.ContextRef.Trim(), from, request.To.Trim(), request.Body, cancellationToken);
             return Ok(ToThreadDto(thread));
         }
         catch (ArgumentException ex)
@@ -824,14 +868,32 @@ public sealed class ShopCatalogController : ControllerBase
         [FromBody] ReplyRequest? request,
         CancellationToken cancellationToken)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.From) || string.IsNullOrWhiteSpace(request.Body))
+        var (denied, from) = RequireMemberEmail();
+        if (denied is not null)
         {
-            return BadRequest(new { error = "from y body son requeridos." });
+            return denied;
+        }
+
+        if (request is null || string.IsNullOrWhiteSpace(request.Body))
+        {
+            return BadRequest(new { error = "body es requerido." });
+        }
+
+        // Sólo un participante del hilo puede responderlo: sin esto, conocer un threadId
+        // bastaría para inyectar mensajes en una conversación ajena.
+        var existing = await _messaging.GetThreadAsync(threadId, cancellationToken);
+        if (existing is null)
+        {
+            return NotFound(new { error = "Hilo no encontrado." });
+        }
+        if (!IsParticipant(existing, from))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
         }
 
         try
         {
-            var thread = await _messaging.ReplyAsync(threadId, request.From.Trim(), request.Body, cancellationToken);
+            var thread = await _messaging.ReplyAsync(threadId, from, request.Body, cancellationToken);
             return Ok(ToThreadDto(thread));
         }
         catch (ArgumentException ex) when (string.Equals(ex.ParamName, "threadId", StringComparison.Ordinal))
@@ -847,8 +909,20 @@ public sealed class ShopCatalogController : ControllerBase
     [HttpGet("messages/{threadId}")]
     public async Task<IActionResult> GetThread(string threadId, CancellationToken cancellationToken)
     {
+        var (denied, me) = RequireMemberEmail();
+        if (denied is not null)
+        {
+            return denied;
+        }
+
         var thread = await _messaging.GetThreadAsync(threadId, cancellationToken);
         if (thread is null)
+        {
+            return NotFound(new { error = "Hilo no encontrado." });
+        }
+        // No basta con estar logueado: hay que ser PARTE del hilo. 404 (no 403) para no
+        // confirmarle a un tercero que el hilo existe.
+        if (!IsParticipant(thread, me))
         {
             return NotFound(new { error = "Hilo no encontrado." });
         }
@@ -856,16 +930,15 @@ public sealed class ShopCatalogController : ControllerBase
     }
 
     [HttpGet("messages")]
-    public async Task<IActionResult> Inbox(
-        [FromQuery] string? participant,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> Inbox(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(participant))
+        var (denied, participant) = RequireMemberEmail();
+        if (denied is not null)
         {
-            return BadRequest(new { error = "El parámetro 'participant' (email) es requerido." });
+            return denied;
         }
 
-        var threads = await _messaging.GetInboxAsync(participant.Trim(), cancellationToken);
+        var threads = await _messaging.GetInboxAsync(participant, cancellationToken);
         return Ok(new InboxResponse(Threads: threads
             .Select(t => new ThreadSummaryDto(
                 ThreadId: t.ThreadId,
@@ -929,6 +1002,13 @@ public sealed class ShopCatalogController : ControllerBase
         ShopReturnStatus.Refunded or ShopReturnStatus.Rejected => "resuelto",
         _ => "abierto",
     };
+
+    /// <summary>
+    /// Si <paramref name="email"/> es participante del hilo. Comparación case-insensitive
+    /// porque el email es la identidad y no distingue mayúsculas.
+    /// </summary>
+    private static bool IsParticipant(MessageThread thread, string email) =>
+        thread.Participants.Any(p => string.Equals(p, email, StringComparison.OrdinalIgnoreCase));
 
     private static ThreadDto ToThreadDto(MessageThread t) => new(
         ThreadId: t.ThreadId,
@@ -1124,7 +1204,9 @@ public sealed class ShopCatalogController : ControllerBase
     // ── OLA 1 Tienda T0 — wishlist / tracking / devoluciones / mensajes ──
 
     /// <summary>POST /api/shop/wishlist — agregar un ítem a una lista del usuario.</summary>
-    public sealed record WishlistItemRequest(string Owner, string? Collection, string ItemRef);
+    // Owner se conserva por compatibilidad del contrato UI pero el servidor lo IGNORA:
+    // el dueño es el member de la sesión (ver WishlistAdd). Mismo trato que Orders da a Customer.
+    public sealed record WishlistItemRequest(string? Owner, string? Collection, string ItemRef);
 
     public sealed record CollectionItemDto(
         string Owner,
@@ -1189,7 +1271,9 @@ public sealed class ShopCatalogController : ControllerBase
     public sealed record ReturnsResponse(IReadOnlyList<ReturnDto> Returns);
 
     /// <summary>POST /api/shop/messages — iniciar (o retomar) el hilo del contexto.</summary>
-    public sealed record StartThreadRequest(string ContextRef, string From, string To, string Body);
+    // From se conserva por compatibilidad pero el servidor lo IGNORA: el remitente es el member
+    // de la sesión (anti-suplantación). Ver StartThread.
+    public sealed record StartThreadRequest(string ContextRef, string? From, string To, string Body);
 
     /// <summary>POST /api/shop/messages/{threadId}/reply — responder en el hilo.</summary>
     public sealed record ReplyRequest(string From, string Body);
