@@ -7,7 +7,7 @@
   `App_Data/syn-search-analytics/`, que es justo el directorio que `SearchAnalyticsRetentionPolicy`
   ya barría sin encontrar nada. Cierra tres cosas de una: la analítica sobrevive al reinicio, el
   diccionario en memoria sin tope indexado por texto del visitante deja de existir, y ese texto
-  **caduca** a los 90 días por defecto. Lo que se acepta a cambio: las consultas de los
+  **caduca** a los 30 días por defecto (el arquitecto lo bajó de 90 al aprobar el cambio). Lo que se acepta a cambio: las consultas de los
   visitantes ahora quedan en disco, así que esa retención pasa de decorativa a load-bearing.
   Cuando exista la API de sesión, se enchufa otro adapter sobre el mismo seam.
 - **Date:** 2026-04-26
