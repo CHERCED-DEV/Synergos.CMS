@@ -155,16 +155,38 @@ dejó esta auditoría a favor de la verificación end-to-end, por encima de suma
      el que sobrevive es justo el primero registrado, que es con el que el gate se autentica.
      Habría dado verde sobre el defecto que existe para atrapar. Ahora exige el conjunto
      completo, con un member testigo que no es ni el primero ni el de la sesión.
-8. **Un test intermitente en la suite: `CatalogEngineReplicationTests.Realty_SinTildes_Encuentra`.**
-   Falló **una vez** en ~16 corridas completas y no se pudo reproducir en 15 intentos
-   posteriores (ni aislando las dos clases sospechosas, 0/8). Mecanismo **plausible pero no
-   probado**: `StubPropertyCatalogProvider` guarda el catálogo en un `static` de proceso, así
-   que `new` por test no aísla nada, y `CatalogPropertyCatalogProviderTests` publica ahí —
-   incluida *"Casa en Laureles"*, que es Medellín, justo el texto que busca el test que falló.
-   Si un publish cae entre las dos búsquedas del test, las secuencias de ids divergen. **No se
-   tocó la infraestructura de tests sobre una hipótesis sin probar**; queda esta anotación para
-   quien lo vuelva a ver. Si reaparece, la vía corta es serializar en una misma
-   `[Collection]` las clases que tocan ese `static`.
+8. ~~**Un test intermitente: `CatalogEngineReplicationTests.Realty_SinTildes_Encuentra`.**~~
+   **DIAGNOSTICADO Y CERRADO.**
+
+   La hipótesis que quedó anotada aquí —"`CatalogPropertyCatalogProviderTests` publica
+   *Casa en Laureles* al `static`"— **era falsa**: esa clase ejercita
+   `CatalogPropertyCatalogProvider`, otra implementación, y no toca el estático del stub. Sirve
+   de recordatorio de por qué no se tocó nada mientras la hipótesis no estuviera probada.
+
+   **La causa real.** El único mutador del `static` es
+   `StubPropertyCatalogProviderTests.Publish_Happy_AppearsInSearch`, que publica un inmueble con
+   `City: "Medellín"`. xUnit corre las clases en paralelo. El test que fallaba hace **dos**
+   búsquedas de "Medellín"/"medellin" y compara secuencias de ids: si el publish aterriza justo
+   **entre** ambas, la segunda trae un id de más.
+
+   **Por qué era tan esquivo** —y esto es lo que confirma el diagnóstico—: el estático no se
+   limpia nunca. Una vez publicado, el listado extra sale en las DOS búsquedas y la igualdad
+   vuelve a cumplirse. La ventana de fallo es solo el hueco entre las dos llamadas, lo que
+   predice exactamente la rareza observada (~1 de 16).
+
+   **Probado, no supuesto.** Se reprodujo de forma determinista intercalando un publish entre
+   las dos búsquedas: rojo.
+
+   **El arreglo es de raíz, no una serialización de tests.** El catálogo y el contador pasan a
+   estado de INSTANCIA en los tres stubs con esa forma —Propiedades, Eventos y Cursos—. En
+   producción no cambia nada: los tres se registran con `AddSingleton`, así que sigue habiendo
+   exactamente uno. En tests, cada `new` arranca limpio. `CatalogStubIsolationTests` (5) fija la
+   propiedad, incluido el caso contrario —un provider **sí** ve lo que él mismo publicó, que es
+   lo que de verdad importa en producción— y pasa el mutation check: reintroducir el `static`
+   pone 3 de los 5 en rojo.
+
+   `StubEventCatalogProvider` tenía la misma bomba sin haber estallado: mismo `static`, y
+   `CatalogEngineReplicationTests` también publica eventos.
 
 ### Bajo — higiene, sin riesgo
 7. **Migración a carpetas por vertical.** **MEDIDA Y DIFERIDA — decisión pendiente.** Ver abajo.
@@ -222,7 +244,7 @@ el repo congelado, no intercalada con feature.
 
 | Gate | Estado |
 |---|---|
-| `dotnet test` | **1669 passing** (0 fallos) |
+| `dotnet test` | **1674 passing** (0 fallos) |
 | `usync-audit` | 0 errores, 0 warnings |
 | `usync-rebuild` (ADR 0128) | 880/880 ítems, DB derivable |
 | `check-css-parity` | 0 orphans |
