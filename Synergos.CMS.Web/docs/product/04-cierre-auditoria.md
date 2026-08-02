@@ -40,10 +40,13 @@ El orden es por **daño si no se hace**, no por esfuerzo ni por lo feo que se ve
    member-delete, moderación). El fix #1 los haría testeables de paso.
 
 ### Medio — deuda que crece con cada equipo nuevo
-3. **`SeamComposer.cs` → partials por vertical.** 1323 LOC, punto único de colisión de merges
-   entre equipos. Verificado partible sin cambio de comportamiento (respetando el orden de
-   registro de los notificadores composite, `L173-179`). Prerequisito real de trabajar en
-   paralelo.
+3. ~~**`SeamComposer.cs` → partials por vertical.**~~ **HECHO.** Partido en 10 clases
+   parciales por dominio; el archivo principal quedó en 59 LOC (orquestador). Orden de
+   registro preservado exacto (por eso los notificadores composite siguen registrándose al
+   final). Verificado con huella de las 483 líneas + el gate de reconstrucción arrancando el
+   contenedor DI completo. El corte PERFECTO por vertical (sin dominios repartidos en dos
+   archivos por el intercalado del original) queda pendiente — necesita reordenar registros,
+   seguro solo con un gate de snapshot de registros.
 4. **Extraer derivación de copy UI a los `*ContentRules` que ya existen.** Realty
    (`BuildSubtitle`/`BuildBadges` → `PropertyContentRules`), Eventos (`DeriveStatus`/`Badges` →
    `EventContentRules`). Mecánico, les da los tests que hoy no tienen.
