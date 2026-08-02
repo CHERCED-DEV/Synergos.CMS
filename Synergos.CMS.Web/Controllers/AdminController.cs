@@ -12,7 +12,7 @@ namespace Synergos.CMS.Web.Controllers;
 /// <summary>
 /// Dashboard de operaciones SSR para los miembros con role
 /// <c>admin</c> / <c>moderator</c> / <c>editor</c>. Consume los seams
-/// de runtime (`ICommentRepository` + futuros) directamente — alternativa
+/// de runtime (`ICommentModeration` + futuros) directamente — alternativa
 /// al backoffice section AngularJS deferido (Ola 78).
 /// </summary>
 /// <remarks>
@@ -63,7 +63,7 @@ public sealed class AdminController : Controller
     private static readonly SearchValues<char> CsvSpecialChars =
         SearchValues.Create(",\"\n\r");
 
-    private readonly ICommentRepository _comments;
+    private readonly ICommentModeration _comments;
     private readonly IMemberAccessGate _gate;
     private readonly IAnalyticsTracker _analytics;
     private readonly ISearchAnalyticsStore _searchAnalytics;
@@ -77,7 +77,7 @@ public sealed class AdminController : Controller
     private readonly IOptionsMonitor<AdminSettings> _adminSettings;
 
     public AdminController(
-        ICommentRepository comments,
+        ICommentModeration comments,
         IMemberAccessGate gate,
         IAnalyticsTracker analytics,
         ISearchAnalyticsStore searchAnalytics,

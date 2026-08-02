@@ -44,7 +44,9 @@ public sealed class DevContentFiller
     private readonly IContentTypeService _contentTypeService;
     private readonly SchemaBlockDefaults _defaults;
     private readonly DevMediaFactory _media;
-    private readonly ICommentRepository _comments;
+    // Lee y escribe, pero NO modera: el tooling siembra un hilo de demo, no aprueba nada.
+    private readonly ICommentReader _commentReader;
+    private readonly ICommentWriter _commentWriter;
     private readonly ILogger<DevContentFiller> _logger;
 
     private Guid _sectionKey, _heroKey, _splitKey, _featureGridKey, _featureKey, _missionKey, _ctaKey, _buttonKey;
@@ -58,14 +60,16 @@ public sealed class DevContentFiller
         IContentTypeService contentTypeService,
         SchemaBlockDefaults defaults,
         DevMediaFactory media,
-        ICommentRepository comments,
+        ICommentReader commentReader,
+        ICommentWriter commentWriter,
         ILogger<DevContentFiller> logger)
     {
         _contentService = contentService;
         _contentTypeService = contentTypeService;
         _defaults = defaults;
         _media = media;
-        _comments = comments;
+        _commentReader = commentReader;
+        _commentWriter = commentWriter;
         _logger = logger;
     }
 
@@ -1715,33 +1719,33 @@ public sealed class DevContentFiller
     private void SeedComments(int nodeId, List<string> details)
     {
         if (nodeId <= 0) { return; }
-        if (_comments.GetApprovedForNode(nodeId).Count > 0)
+        if (_commentReader.GetApprovedForNode(nodeId).Count > 0)
         {
             details.Add($"Blog:comments:{nodeId}:exists");
             return;
         }
         try
         {
-            var parent = _comments.AddAsync(
+            var parent = _commentWriter.AddAsync(
                 new NewComment(nodeId, MemberKey: null, AuthorName: "Mariana Ríos",
                     Body: "Excelente explicación del grafo de dependencias. ¿Cómo manejan los DTOs entre Application y Web?"),
                 CancellationToken.None).GetAwaiter().GetResult();
 
             var parentGuid = Guid.ParseExact(parent.Id, "N");
-            _comments.AddAsync(
+            _commentWriter.AddAsync(
                 new NewComment(nodeId, null, "Equipo SynergosLabs",
                     Body: "Buena pregunta. Los DTOs viven en Application y Web sólo los proyecta — nunca al revés. Así la capa de aplicación sigue sin conocer ASP.NET.",
                     ParentId: parentGuid),
                 CancellationToken.None).GetAwaiter().GetResult();
 
-            _comments.AddAsync(
+            _commentWriter.AddAsync(
                 new NewComment(nodeId, null, "Diego Torres",
                     Body: "Me sirvió muchísimo para refactorizar un proyecto legacy. Gracias."),
                 CancellationToken.None).GetAwaiter().GetResult();
 
             // Un par de likes en el comentario top-level para mostrar la reacción.
-            _comments.LikeAsync(nodeId, parent.Id, CancellationToken.None).GetAwaiter().GetResult();
-            _comments.LikeAsync(nodeId, parent.Id, CancellationToken.None).GetAwaiter().GetResult();
+            _commentWriter.LikeAsync(nodeId, parent.Id, CancellationToken.None).GetAwaiter().GetResult();
+            _commentWriter.LikeAsync(nodeId, parent.Id, CancellationToken.None).GetAwaiter().GetResult();
 
             details.Add($"Blog:comments:{nodeId}:seeded(3+2likes)");
         }
