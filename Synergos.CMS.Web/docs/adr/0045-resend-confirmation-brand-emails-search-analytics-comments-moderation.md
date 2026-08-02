@@ -1,6 +1,15 @@
 # ADR 0045 — Resend confirmation + brand-aware emails + search analytics + comments moderation (Olas 84-87)
 
 - **Status:** Accepted
+- **Enmienda (2026-08-02):** el *deferred* de abajo —«search analytics in-memory only: pierde
+  datos en restart… swap por adapter persistente»— **se cumplió**. `InMemorySearchAnalyticsStore`
+  fue reemplazado por `FileSystemSearchAnalyticsStore`, JSONL append-only por día en
+  `App_Data/syn-search-analytics/`, que es justo el directorio que `SearchAnalyticsRetentionPolicy`
+  ya barría sin encontrar nada. Cierra tres cosas de una: la analítica sobrevive al reinicio, el
+  diccionario en memoria sin tope indexado por texto del visitante deja de existir, y ese texto
+  **caduca** a los 90 días por defecto. Lo que se acepta a cambio: las consultas de los
+  visitantes ahora quedan en disco, así que esa retención pasa de decorativa a load-bearing.
+  Cuando exista la API de sesión, se enchufa otro adapter sobre el mismo seam.
 - **Date:** 2026-04-26
 - **Deciders:** Arquitecto + agente, durante batch tras Ola 83 — *"continuemos"*.
 - **Consolida:** 4 olas en un único ADR.
@@ -153,8 +162,9 @@ Sin antiforgery — la UI futura es SPA cliente, gate de roles primario.
 
 **Negativas:**
 
-- **Search analytics in-memory only**: pierde datos en restart. Para
-  retención semanal/mensual swap por adapter persistente (deferred).
+- ~~**Search analytics in-memory only**: pierde datos en restart. Para
+  retención semanal/mensual swap por adapter persistente (deferred).~~
+  **Resuelto el 2026-08-02** — ver la enmienda de la cabecera.
 - **Comments moderation sin UI**: los 4 endpoints existen pero la
   consumiría una SPA o el backoffice section custom (deferred Ola 78).
   Por ahora se opera con curl o tooling editor-side.

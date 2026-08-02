@@ -10,19 +10,18 @@ namespace Synergos.CMS.Web.Services.Retention;
 /// parsing. Cap-270 Batch B (Ola 274).
 /// </summary>
 /// <remarks>
-/// <b>Hoy no barre nada, y eso NO la vuelve código muerto.</b> Nadie escribe ese directorio:
-/// el único productor de analítica de búsqueda es <c>InMemorySearchAnalyticsStore</c>, que
-/// guarda agregados en memoria y nunca toca disco. La política corre igual —el barrido la
-/// invoca cada 24h y sale en 0 porque el directorio no existe— y está cubierta por
-/// <c>RetentionPolicyTests</c>, que le fabrica el directorio.
+/// <b>Esta política es la que sostiene una promesa, no una limpieza cómoda.</b> Lo que hay en
+/// ese directorio son <b>consultas escritas por visitantes</b> —pueden traer un nombre, una
+/// dirección, un número de caso— y este barrido es lo único que hace que caduquen.
 ///
-/// <para>Se conserva a propósito. El día que la analítica se persista, lo que se acumula son
-/// <b>consultas escritas por visitantes</b> —nombres, direcciones, números de caso—: datos que
-/// no pueden quedarse indefinidamente. Borrar esta política dejaría ese caso sin red, y es
-/// exactamente la forma del defecto que ya apareció una vez con la auditoría PHI.</para>
+/// <para>Su productor es <c>FileSystemSearchAnalyticsStore</c>, que escribe una línea por
+/// búsqueda en el archivo del día. <b>Los dos tienen que apuntar al mismo directorio</b>: si se
+/// separan, se escribe en un sitio y se purga en otro, y nadie se entera hasta que el disco se
+/// llena.</para>
 ///
-/// <para>Si algún día se decide que la analítica NO se persistirá nunca, entonces sí: esta
-/// clase, <c>RetentionSettings.SearchAnalyticsRetentionDays</c> y su test se van juntos.</para>
+/// <para>Antes de que ese almacén existiera, esta clase barría un directorio que nadie escribía
+/// y parecía código muerto. No lo era, y borrarla entonces habría dejado la persistencia sin
+/// red — la misma forma del defecto que ya apareció con la auditoría PHI.</para>
 /// </remarks>
 public sealed class SearchAnalyticsRetentionPolicy : IRetentionPolicy
 {

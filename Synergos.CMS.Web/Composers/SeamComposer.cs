@@ -678,7 +678,7 @@ public sealed class SeamComposer : IComposer
         // Ola 86 — Search analytics store (ADR 0045). InMemory persiste
         // top queries + no-result queries en ConcurrentDictionary.
         // Singleton para compartir state entre requests del mismo proceso.
-        services.AddSingleton<ISearchAnalyticsStore, InMemorySearchAnalyticsStore>();
+        services.AddSingleton<ISearchAnalyticsStore, FileSystemSearchAnalyticsStore>();
 
         // Ola 64 — Member self-service (ADR 0034). DefaultMemberAuthService
         // wraps IMemberManager + IMemberSignInManager para Register/Login/
