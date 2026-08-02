@@ -97,5 +97,7 @@ revisión sobre `SeamComposer.cs` y `uSync/` sería el primer subconjunto seguro
   `Web/Config`, `Application/Extensions`): scaffolding intencional, no muerto. Se dejan.
 - `SeatMapProjection.cs` / `ISeatMapProvider`: su consumidor real es un partial Razor + el
   proveedor exógeno (ADR 0127), no otro `.cs`. No es huérfano; es la forma esperada.
-- `IPaymentRouting.cs`: nombre no coincide con su contenido (solo tiene `PaymentRoutingRule`, que
-  se usa). Renombrar es churn; anotado, no tocado.
+- ~~`IPaymentRouting.cs`: nombre no coincide con su contenido~~ — **corregido**: ahora se llama
+  `PaymentRoutingRule.cs`, como el único tipo que contiene. Se anotó como churn y se dejó
+  quieto; se hizo después, cuando ese prefijo `I-` llevó a clasificarlo como interfaz muerta y
+  a borrarlo, rompiendo el build. El churn salía más barato que la trampa.

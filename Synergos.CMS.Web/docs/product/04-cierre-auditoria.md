@@ -140,13 +140,49 @@ dejó esta auditoría a favor de la verificación end-to-end, por encima de suma
    `[Collection]` las clases que tocan ese `static`.
 
 ### Bajo — higiene, sin riesgo
-7. **Migración a carpetas por vertical** (`Services/Impl/Eventos/`, …). Prerequisito del
-   CODEOWNERS robusto y de los handler sets. Grande y mecánico.
-8. **`BlogsController`: `sync-over-async` en bucle** (`L759`) → recibir conteos ya resueltos al
-   extraer `ComputeTrending` (cae junto con #4).
-9. **`IPaymentRouting.cs`: renombrar** al tipo que contiene (`PaymentRoutingRule`).
-10. **`IDashboardReadModel`**: abstracción prematura documentada. Decisión del arquitecto —
-    dejar o colapsar contra su único consumidor.
+7. **Migración a carpetas por vertical.** **MEDIDA Y DIFERIDA — decisión pendiente.** Ver abajo.
+8. ~~**`BlogsController`: `sync-over-async` en bucle.**~~ **HECHO.** Bloqueaba un hilo del pool
+   hasta 100 veces por request en el endpoint más público del vertical. Partido en
+   `ResolveReactionWeightsAsync` (el I/O) + `ComputeTrending` puro. El efecto secundario es el
+   que más vale: la política de ranking —peso base 1, desempate alfabético, tope de 10,
+   contar-una-vez-por-post— estaba enterrada detrás de una llamada de I/O y ahora tiene 9 tests.
+9. ~~**`IPaymentRouting.cs`: renombrar.**~~ **HECHO.** El archivo no tenía ninguna interfaz. Ese
+   prefijo `I-` fue lo que llevó a clasificarlo como interfaz muerta y borrarlo, rompiendo el
+   build durante esta misma auditoría.
+10. ~~**`IDashboardReadModel`: abstracción prematura.**~~ **MEDIDO — recomendación: dejarla.** Y
+    apareció algo que no era la pregunta: la interfaz se justifica diciendo *"la consume tanto el
+    `/admin` SSR como la app Angular"*, y **el `/admin` SSR no la inyecta**. Un consumidor, no
+    dos; era el plan, no el estado. El comentario ya está corregido. Sobre colapsarla: no envuelve
+    una impl, **colapsa cinco seams en una dependencia** — el test del controller sustituye un
+    doble en vez de montar cinco. Borrarla no quitaría una capa, movería esas cinco dependencias
+    al controller y a su test. Decisión final del arquitecto.
+
+#### El #7, medido antes de hacerlo
+
+| capa | archivos planos |
+|---|---|
+| `Synergos.CMS.Interfaces/` | 113 |
+| `Synergos.CMS.Web/Services/` | 115 |
+| `Synergos.CMS.Application/Services/Impl/` | 80 |
+| **total** | **308** (+ 164 de tests que arrastran `using`) |
+
+En este repo las carpetas **sí** mapean a namespaces (`Services/Catalog/` →
+`…Web.Services.Catalog`), así que la migración no es mover archivos: es renombrar 308
+namespaces y arreglar los `using` de cada consumidor. Y su propósito declarado es habilitar un
+CODEOWNERS que **este mismo documento dice no activar todavía** ("cuando existan los equipos").
+
+**Recomendación: diferirla hasta que existan los equipos.** Tres razones concretas:
+
+1. **El primer CODEOWNERS no la necesita.** El subconjunto que el apéndice marca como seguro de
+   activar hoy —`@synergos/core` sobre `SeamComposer.cs` y `uSync/`— usa rutas que ya existen.
+2. **Un movimiento de 308 archivos rompe toda rama en vuelo** y hay que rehacerlo a mano en cada
+   una. El costo no es el diff, es el de los demás.
+3. **Cuesta el `git blame` de 308 archivos** justo cuando la auditoría demostró que la historia
+   es lo que permite entender por qué algo está como está.
+
+Lo que sí conviene decidir ya es **qué dispara la migración**: la propuesta es hacerla el día
+que se cree el primer equipo con dueño distinto de `@synergos/core`, y como una ola dedicada con
+el repo congelado, no intercalada con feature.
 
 ### Explícitamente NO en el backlog
 - **Reescribir `DevContentFiller` (4581 LOC).** Tooling tras flag; feo pero sin riesgo. No vale
@@ -159,7 +195,7 @@ dejó esta auditoría a favor de la verificación end-to-end, por encima de suma
 
 | Gate | Estado |
 |---|---|
-| `dotnet test` | **1660 passing** (0 fallos) |
+| `dotnet test` | **1669 passing** (0 fallos) |
 | `usync-audit` | 0 errores, 0 warnings |
 | `usync-rebuild` (ADR 0128) | 880/880 ítems, DB derivable |
 | `check-css-parity` | 0 orphans |
