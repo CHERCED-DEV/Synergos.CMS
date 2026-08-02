@@ -134,22 +134,26 @@
                                     @if (m.IsLockedOut)
                                     {
                                         <form method="post" action="/admin/members/@m.Key/unlock" class="syn-admin__item-form">
+                                            @Html.AntiForgeryToken()
                                             <button type="submit" class="syn-admin__action syn-admin__action--approve" aria-label="@($"{unlockLabel} {m.Email}")">🔓 @unlockLabel</button>
                                         </form>
                                     }
                                     else
                                     {
                                         <form method="post" action="/admin/members/@m.Key/lock" class="syn-admin__item-form">
+                                            @Html.AntiForgeryToken()
                                             <button type="submit" class="syn-admin__action syn-admin__action--reject" aria-label="@($"{lockLabel} {m.Email}")">🔒 @lockLabel</button>
                                         </form>
                                     }
                                     @if (twoFactorStatus.TryGetValue(m.Key, out var has2fa) && has2fa)
                                     {
                                         <form method="post" action="/admin/members/@m.Key/2fa-reset" class="syn-admin__item-form" style="margin-top:var(--syn-space-xs);">
+                                            @Html.AntiForgeryToken()
                                             <button type="submit" class="syn-admin__action syn-admin__action--ghost" title="Disable 2FA — Member tendrá que re-enroll" aria-label="@($"Reset 2FA {m.Email}")">🔑 Reset 2FA</button>
                                         </form>
                                     }
                                     <form method="post" action="/admin/members/@m.Key/password-reset" class="syn-admin__item-form" style="margin-top:var(--syn-space-xs);">
+                                        @Html.AntiForgeryToken()
                                         <button type="submit" class="syn-admin__action syn-admin__action--ghost" title="Send password reset email" aria-label="@($"Reset password {m.Email}")">📧 Reset password</button>
                                     </form>
                                     <button type="button" class="syn-admin__action syn-admin__action--reject" style="margin-top:var(--syn-space-xs);"
@@ -170,6 +174,7 @@
                                 <tr class="syn-admin__row-extra">
                                     <td colspan="7">
                                         <form method="post" action="/admin/members/@m.Key/roles" class="syn-admin__roles-form">
+                                            @Html.AntiForgeryToken()
                                             <span class="syn-admin__roles-label">Roles:</span>
                                             @foreach (var role in allRoles)
                                             {
@@ -217,7 +222,10 @@
 
     @* Native <dialog> confirm for hard-delete (irreversible). Olas 181-184. *@
     <dialog id="member-delete-confirm" class="syn-admin__dialog">
-        <form id="member-delete-form" method="post" class="syn-admin__dialog-form">
+        @* Sin action= el tag helper emitiría un token implícito; dos hidden con el mismo
+           nombre rompen la validación. Se suprime para que el token lo declare la vista. *@
+        <form id="member-delete-form" method="post" class="syn-admin__dialog-form" asp-antiforgery="false">
+            @Html.AntiForgeryToken()
             <h2 class="syn-admin__dialog-title">Eliminar Member <span class="syn-admin__danger">irreversible</span></h2>
             <p class="syn-admin__dialog-body">
                 Vas a eliminar el Member <code id="member-delete-email"></code> de forma <strong>irreversible</strong>.
@@ -233,7 +241,10 @@
 
     @* Native <dialog> confirm for GDPR RTBF (irreversible + cascading). Olas 233-235 + 241-242. *@
     <dialog id="member-gdpr-confirm" class="syn-admin__dialog">
-        <form id="member-gdpr-form" method="post" class="syn-admin__dialog-form">
+        @* Sin action= el tag helper emitiría un token implícito; dos hidden con el mismo
+           nombre rompen la validación. Se suprime para que el token lo declare la vista. *@
+        <form id="member-gdpr-form" method="post" class="syn-admin__dialog-form" asp-antiforgery="false">
+            @Html.AntiForgeryToken()
             <h2 class="syn-admin__dialog-title">GDPR Right to be Forgotten <span class="syn-admin__danger">irreversible + cascading</span></h2>
             <p class="syn-admin__dialog-body">
                 Vas a procesar una solicitud RTBF (GDPR Art. 17) para el Member
