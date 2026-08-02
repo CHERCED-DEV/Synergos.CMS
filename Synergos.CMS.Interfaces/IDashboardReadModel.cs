@@ -3,16 +3,28 @@ namespace Synergos.CMS.Interfaces;
 /// <summary>
 /// Fachada de lectura del Dashboard (ADR 0097). Compone las fuentes vivas
 /// (proyección de métricas + checkouts + búsqueda + roster + webhooks) en
-/// ViewModels listos para graficar. Una sola verdad: la consume tanto el
-/// <c>/admin</c> SSR como la app Angular <c>&lt;synergos-dashboard&gt;</c> vía
-/// <c>DashboardApiController</c>.
+/// ViewModels listos para graficar.
 /// </summary>
 /// <remarks>
-/// La implementación por defecto vive en
+/// <para>La implementación por defecto vive en
 /// <c>Synergos.CMS.Web.Services.DefaultDashboardReadModel</c>. Es solo-lectura
 /// y sin efectos secundarios — deliberadamente NO usa
 /// <c>ICartAbandonmentTracker.DetectAbandoned()</c> (que muta estado); el
-/// abandono se lee de la proyección del slug <c>cart.abandoned</c>.
+/// abandono se lee de la proyección del slug <c>cart.abandoned</c>.</para>
+///
+/// <para><b>Consumidor: uno.</b> <c>DashboardApiController</c>, que sirve la app Angular
+/// <c>&lt;synergos-dashboard&gt;</c>. Aquí decía que la consumía "tanto el <c>/admin</c> SSR
+/// como" esa app; se verificó y <b>es falso</b>: el dashboard SSR no la inyecta. Era el plan,
+/// no el estado. Se corrige porque una interfaz que declara dos consumidores para justificarse
+/// y tiene uno es justo lo que hace que nadie confíe en los comentarios.</para>
+///
+/// <para><b>Por qué sigue existiendo con un solo consumidor</b> (auditoría, backlog Bajo #10).
+/// El proyecto no crea interfaces con una sola implementación salvo que sean seam genuina. Ésta
+/// se gana el sitio por lo que ahorra en el borde: colapsa CINCO seams en una dependencia, así
+/// que el test del controller sustituye un doble en vez de montar cinco. Colapsarla contra su
+/// impl no quitaría una abstracción — movería esas cinco dependencias al controller y a su
+/// test. Queda como está; si algún día el <c>/admin</c> SSR la consume de verdad, el motivo
+/// original vuelve a ser cierto.</para>
 /// </remarks>
 public interface IDashboardReadModel
 {
