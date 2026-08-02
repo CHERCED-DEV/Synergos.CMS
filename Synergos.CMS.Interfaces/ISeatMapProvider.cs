@@ -54,11 +54,21 @@ public sealed record SeatMapSeat(
 /// es una propiedad de la FILA con consecuencias regulatorias (edad mínima, sin equipaje en el
 /// piso), no un rasgo cómodo de una butaca suelta.
 /// </param>
+/// <param name="AisleAfterColumns">
+/// Los pasillos de ESTA fila, cuando su sección tiene otra distribución que el resto de la
+/// cabina — la ejecutiva de un 787 es <c>1-2-1</c> y su turista <c>3-3-3</c>, y no hay un solo
+/// par de posiciones que sirva para las dos.
+///
+/// <para><c>null</c> y una lista vacía <b>no</b> son lo mismo: <c>null</c> es «esta fila no dice
+/// nada, usa los del mapa» —lo que hace toda cabina de una sola distribución, o sea casi
+/// todas— y la lista vacía es «esta fila no tiene ningún pasillo».</para>
+/// </param>
 public sealed record SeatMapRow(
     string Label,
     string ServiceClass,
     IReadOnlyList<SeatMapSeat> Seats,
-    bool IsExitRow = false);
+    bool IsExitRow = false,
+    IReadOnlyList<int>? AisleAfterColumns = null);
 
 /// <summary>
 /// El mapa de asientos completo que sirve un proveedor.
@@ -77,6 +87,9 @@ public sealed record SeatMapRow(
 /// <para>Vacía, el componente parte la fila más ancha por la mitad — que acierta en un
 /// narrowbody y en nada más. Dónde termina un bloque no se deduce de la cuenta de butacas, así
 /// que un proveedor que conozca la cabina debería declararlo siempre.</para>
+///
+/// <para>Es la geometría del MAPA. Una fila cuya sección tiene otra distribución declara la
+/// suya en <see cref="SeatMapRow.AisleAfterColumns"/>.</para>
 /// </param>
 /// <param name="Rows">Las filas, en orden de proa a popa.</param>
 public sealed record SeatMapLayout(

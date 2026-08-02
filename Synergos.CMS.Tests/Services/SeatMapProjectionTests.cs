@@ -132,6 +132,80 @@ public sealed class SeatMapProjectionTests
         Assert.Empty(payload!.AisleAfterColumns);
     }
 
+    /// <summary>
+    /// Protege los pasillos POR FILA, que es lo que hace dibujable una cabina con dos
+    /// distribuciones. Una fila que no los declara emite <c>null</c> —se omite del JSON y usa
+    /// los del mapa—, y la que sí los declara manda sobre él.
+    /// </summary>
+    [Fact]
+    public void Una_seccion_con_otra_distribucion_lleva_sus_propios_pasillos()
+    {
+        var suites = new SeatMapRow(
+            "1",
+            "business",
+            new[]
+            {
+                Seat("1A", "A", position: "window"),
+                Seat("1B", "B", position: "aisle"),
+                Seat("1C", "C", position: "aisle"),
+                Seat("1D", "D", position: "window"),
+            },
+            AisleAfterColumns: new[] { 1, 3 });
+
+        var payload = SeatMapProjection.Project(Cabin(new[] { 3, 6 }, suites, FilaTresTres("20")));
+
+        Assert.Equal(new[] { 1, 3 }, payload!.Rows[0].AisleAfterColumns);
+        // La fila que no declaró nada emite null y hereda la del mapa.
+        Assert.Null(payload.Rows[1].AisleAfterColumns);
+        Assert.Equal(new[] { 3, 6 }, payload.AisleAfterColumns);
+    }
+
+    /// <summary>
+    /// Protege la diferencia entre <c>null</c> y lista vacía en la fila. <c>null</c> es «no digo
+    /// nada, usa los del mapa»; vacía es «esta fila no tiene ningún pasillo». Colapsarlas dejaría
+    /// sin forma de declarar una sección corrida dentro de una cabina que sí tiene pasillos, que
+    /// es exactamente el caso que este nivel viene a cubrir.
+    /// </summary>
+    [Fact]
+    public void Una_fila_SIN_pasillos_no_es_lo_mismo_que_una_que_no_los_declara()
+    {
+        var sinPasillo = new SeatMapRow(
+            "1",
+            "first",
+            new[] { Seat("1A", "A"), Seat("1B", "B") },
+            AisleAfterColumns: Array.Empty<int>());
+
+        var payload = SeatMapProjection.Project(Cabin(new[] { 3 }, sinPasillo, FilaTresTres("20")));
+
+        Assert.NotNull(payload!.Rows[0].AisleAfterColumns);
+        Assert.Empty(payload.Rows[0].AisleAfterColumns!);
+        Assert.Null(payload.Rows[1].AisleAfterColumns);
+
+        // Y la vacía SÍ viaja en el JSON; la nula no.
+        var json = JsonSerializer.Serialize(
+            payload,
+            new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
+        Assert.Contains("\"aisleAfterColumns\":[]", json, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Protege que los pasillos de la fila se saneen igual que los del mapa. Vienen del mismo
+    /// proveedor externo y los consume el mismo recorrido de izquierda a derecha.
+    /// </summary>
+    [Fact]
+    public void Los_pasillos_de_la_fila_se_sanean_y_se_ordenan_igual_que_los_del_mapa()
+    {
+        var fila = new SeatMapRow(
+            "1",
+            "economy",
+            new[] { Seat("1A", "A"), Seat("1B", "B") },
+            AisleAfterColumns: new[] { 6, 3, 6, 0, -2 });
+
+        var payload = SeatMapProjection.Project(Cabin(new[] { 3 }, fila));
+
+        Assert.Equal(new[] { 3, 6 }, payload!.Rows[0].AisleAfterColumns);
+    }
+
     // ── El tipo de asiento ───────────────────────────────────────────────────
 
     /// <summary>

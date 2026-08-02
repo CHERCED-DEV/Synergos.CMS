@@ -38,7 +38,9 @@ namespace Synergos.CMS.Web.Services;
 /// <para>
 /// <b>La geometría también.</b> <c>aisleAfterColumns</c> es una LISTA de índices de columna:
 /// un <c>3-3-3</c> emite <c>[3, 6]</c>. Era un solo entero, y con eso una cabina de doble
-/// pasillo se dibujaba con uno solo — el bloque derecho soldado al central.
+/// pasillo se dibujaba con uno solo — el bloque derecho soldado al central. Y va en dos
+/// niveles: el del mapa, y el de la fila cuya sección tiene otra distribución — la ejecutiva
+/// de un 787 es <c>1-2-1</c> sobre una turista <c>3-3-3</c>.
 /// </para>
 /// <para>
 /// <b>Degrades, never throws.</b> A null layout, a layout with no rows, or rows whose seats
@@ -268,7 +270,12 @@ public static class SeatMapProjection
             ? null
             : row.ServiceClass.Trim().ToLowerInvariant();
 
-        return new SeatMapPayloadRow(label, seats, serviceClass);
+        // null se OMITE del JSON y significa "usa los del mapa"; una lista vacía SÍ viaja y
+        // significa "esta fila no tiene ningún pasillo". Colapsarlas dejaría la sección corta
+        // de un widebody dibujada con los pasillos de la larga.
+        var aisles = row.AisleAfterColumns is null ? null : Aisles(row.AisleAfterColumns);
+
+        return new SeatMapPayloadRow(label, seats, serviceClass, aisles);
     }
 
     /// <summary>Unknown columns sort last instead of first, so they never displace a lettered seat.</summary>
@@ -357,7 +364,10 @@ public sealed record SeatMapPayloadRow(
     [property: JsonPropertyName("seats")] IReadOnlyList<SeatMapPayloadSeat> Seats,
     // Sección de cabina. Null se omite del JSON, y un mapa sin clases se ve
     // exactamente como antes de que el contrato las admitiera.
-    [property: JsonPropertyName("serviceClass")] string? ServiceClass = null);
+    [property: JsonPropertyName("serviceClass")] string? ServiceClass = null,
+    // Los pasillos propios de la fila. Null se omite y la fila usa los del mapa;
+    // una lista VACÍA sí viaja y declara una fila sin ningún pasillo.
+    [property: JsonPropertyName("aisleAfterColumns")] IReadOnlyList<int>? AisleAfterColumns = null);
 
 /// <summary>
 /// One seat of the payload. <c>type</c> es SOLO la posición (<c>window|aisle|middle</c>); el
