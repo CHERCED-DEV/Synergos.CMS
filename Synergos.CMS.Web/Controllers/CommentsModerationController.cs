@@ -28,12 +28,12 @@ public sealed class CommentsModerationController : ControllerBase
 {
     private const string ModeratorRolesCsv = "admin,moderator,editor";
 
-    private readonly ICommentRepository _repository;
+    private readonly ICommentModeration _repository;
     private readonly IMemberAccessGate _gate;
     private readonly IAnalyticsTracker _analytics;
 
     public CommentsModerationController(
-        ICommentRepository repository,
+        ICommentModeration repository,
         IMemberAccessGate gate,
         IAnalyticsTracker analytics)
     {

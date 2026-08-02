@@ -11,7 +11,7 @@ namespace Synergos.CMS.Web.Controllers;
 /// reusa Educación por polimorfismo), el grafo follow a
 /// <see cref="ISocialGraphService"/>, las reacciones a <see cref="IReactionService"/>,
 /// el perfil a <see cref="ISocialProfileProjection"/>, y los comentarios del post
-/// al <see cref="ICommentRepository"/> EXISTENTE (no se crea otro — ya hace hilos
+/// al <see cref="ICommentReader"/> EXISTENTE (no se crea otro — ya hace hilos
 /// anidados + likes + moderación). Expone el contrato que el módulo Angular
 /// <c>&lt;synergos-blogs&gt;</c> consume.
 /// </summary>
@@ -24,7 +24,7 @@ namespace Synergos.CMS.Web.Controllers;
 /// Members (PS3) en una iteración — el contrato no cambia.
 ///
 /// <para><b>Mapeo post-id ↔ nodeId de comentarios.</b> Los posts tienen id string
-/// (<c>post-001</c>); <see cref="ICommentRepository"/> indexa por <c>int nodeId</c>.
+/// (<c>post-001</c>); <see cref="ICommentReader"/> indexa por <c>int nodeId</c>.
 /// Se deriva un nodeId estable y determinista del id del post (hash FNV-1a) para
 /// reusar el store de comentarios sin schema nuevo — la misma técnica que usaría
 /// cualquier objeto comentable que no sea un nodo Umbraco.</para>
@@ -37,7 +37,7 @@ public sealed class BlogsController : ControllerBase
     private readonly ISocialGraphService _graph;
     private readonly IReactionService _reactions;
     private readonly ISocialProfileProjection _profiles;
-    private readonly ICommentRepository _comments;
+    private readonly ICommentReader _comments;
     private readonly IMessagingService _messaging;
     private readonly IUserCollection _collections;
     private readonly INotificationFeed _notifications;
@@ -49,7 +49,7 @@ public sealed class BlogsController : ControllerBase
         ISocialGraphService graph,
         IReactionService reactions,
         ISocialProfileProjection profiles,
-        ICommentRepository comments,
+        ICommentReader comments,
         IMessagingService messaging,
         IUserCollection collections,
         INotificationFeed notifications,
@@ -804,7 +804,7 @@ public sealed class BlogsController : ControllerBase
         => new(Id: actorId, Handle: actorId, DisplayName: actorId, AvatarUrl: null, Verified: false);
 
     // nodeId determinista a partir del id string del post (FNV-1a 32-bit, forzado
-    // positivo) para reusar el ICommentRepository (indexado por int) sin schema nuevo.
+    // positivo) para reusar el ICommentReader (indexado por int) sin schema nuevo.
     private static int NodeIdFor(string postId)
     {
         const uint fnvOffset = 2166136261;

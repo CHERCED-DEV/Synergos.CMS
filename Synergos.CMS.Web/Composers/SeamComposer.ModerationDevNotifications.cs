@@ -23,7 +23,15 @@ public sealed partial class SeamComposer
         // Singleton — solo depende de IOptions + IHostEnvironment + ILogger.
         // Para concurrent-heavy o > 1000 comments por nodo, swap por adapter
         // sobre DB.
-        services.AddSingleton<ICommentRepository, FileSystemCommentRepository>();
+        // UNA instancia sirviendo las TRES caras (ICommentReader / ICommentWriter /
+        // ICommentModeration). El singleton se registra por su tipo concreto y las caras
+        // lo reenvían: si cada una se registrara con su propio AddSingleton<I, Impl>()
+        // habría TRES repositorios distintos sobre el mismo directorio, y el lock de
+        // escritura de cada uno no sabría de los otros dos.
+        services.AddSingleton<FileSystemCommentRepository>();
+        services.AddSingleton<ICommentReader>(sp => sp.GetRequiredService<FileSystemCommentRepository>());
+        services.AddSingleton<ICommentWriter>(sp => sp.GetRequiredService<FileSystemCommentRepository>());
+        services.AddSingleton<ICommentModeration>(sp => sp.GetRequiredService<FileSystemCommentRepository>());
 
         // Olas 89 + 90 — Comment moderation notifier composite.
         // El consumer (CommentsController) inyecta ICommentModerationNotifier;

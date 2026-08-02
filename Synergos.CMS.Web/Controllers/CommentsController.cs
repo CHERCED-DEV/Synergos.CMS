@@ -10,7 +10,7 @@ namespace Synergos.CMS.Web.Controllers;
 /// <summary>
 /// Endpoint POST para crear comentarios sobre nodos publicados (ADR 0038).
 /// GET de lectura no se expone — el renderer SSR del block
-/// elementCommentThread consume <see cref="ICommentRepository"/>
+/// elementCommentThread consume <see cref="ICommentWriter"/>
 /// directamente.
 /// </summary>
 /// <remarks>
@@ -30,7 +30,7 @@ namespace Synergos.CMS.Web.Controllers;
 [Route("api/comments")]
 public sealed class CommentsController : ControllerBase
 {
-    private readonly ICommentRepository _repository;
+    private readonly ICommentWriter _repository;
     private readonly IMemberAccessGate _gate;
     private readonly InMemoryFormRateLimiter _rateLimiter;
     private readonly IOptions<CommentsSettings> _options;
@@ -38,7 +38,7 @@ public sealed class CommentsController : ControllerBase
     private readonly ICommentModerationNotifier _moderationNotifier;
 
     public CommentsController(
-        ICommentRepository repository,
+        ICommentWriter repository,
         IMemberAccessGate gate,
         InMemoryFormRateLimiter rateLimiter,
         IOptions<CommentsSettings> options,
