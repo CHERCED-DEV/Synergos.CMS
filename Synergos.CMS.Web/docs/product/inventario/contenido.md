@@ -21,10 +21,10 @@ Trámites/Educación) y no toca el buscador de sitio — ADR 0031 sigue vigente 
 como dice el propio ADR 0107. Los 4 bloques CDN-hosted del dominio
 (`elementSynBlogs/CommentsWidget/SearchBox/FormStepper`) están bloqueados
 externamente (`StubBundleRegistryClient` siempre null) y emiten placeholder.
-El hueco más significativo no es funcional sino de higiene: `IDictionaryCache`
-está registrado, tiene invalidator wired a notificaciones de Umbraco, pero
-**nadie lo consume** — todas las 233 lecturas de diccionario en Views usan
-`@Umbraco.GetDictionaryValue` directo, sin pasar por el seam.
+El hueco de higiene que este inventario señalaba —`IDictionaryCache` registrado,
+con invalidator wired y cero consumidores— **se cerró borrando el seam** (enmienda
+al ADR 0009). Las 233 lecturas de diccionario en Views siguen usando
+`@Umbraco.GetDictionaryValue` directo, que es el mecanismo real y el único.
 
 ## Capacidades
 
@@ -114,17 +114,16 @@ está registrado, tiene invalidator wired a notificaciones de Umbraco, pero
 - **Huecos**: sin `[ValidateAntiForgeryToken]` (documentado como decisión consciente en el XML-doc, no un descuido) — `FormSubmissionsController.cs:20-23`. `UmbracoFormDefinitionReader.GetByKey` es O(páginas) por cada submit (barato con ~95 páginas, pero sin caché ni invalidación si el sitio crece) — `Synergos.CMS.Web/Services/UmbracoFormDefinitionReader.cs:44`.
 
 ### i18n / Dictionary
-- **Madurez**: SÓLO SEAM (la seam `IDictionaryCache` es código muerto en producción) / VIVO (el mecanismo real de i18n, que bypasea la seam)
-- **Seams**: `IDictionaryCache` — `Synergos.CMS.Interfaces/IDictionaryCache.cs`.
-- **Implementación real de i18n**: NO pasa por el seam. Las 394 vistas Razor usan `@Umbraco.GetDictionaryValue("Key", "fallback")` directo (233 ocurrencias contadas), el helper nativo de Umbraco que ya lee del published-dictionary-cache interno de Umbraco.
-- **Implementación del seam**: `DictionaryCache` — `Synergos.CMS.Application/Services/Impl/DictionaryCache.cs`. `ConcurrentDictionary` con `Get`/`Invalidate`; el método `Set` que lo poblaría NO forma parte de la interfaz pública y **no tiene ningún caller en todo el repo** (verificado por grep). `DictionaryCacheInvalidator` — `Synergos.CMS.Web/Notifications/DictionaryCacheInvalidator.cs` — escucha `DictionaryItemSavedNotification`/`DeletedNotification` y llama `Invalidate(key)`, pero invalida un cache que nunca tuvo ese key adentro.
+- **Madurez**: VIVO — un solo mecanismo, el nativo de Umbraco.
+- **Seams**: ninguno. `IDictionaryCache` **se eliminó** el 2026-08-02 (enmienda al ADR 0009) junto con `DictionaryCache`, `DictionaryCacheInvalidator`, sus dos suites de tests y los registros del composer. Nunca tuvo un lector, y por construcción no podía tenerlo: la interfaz no expone `Set`, así que el registro DI dejaba inalcanzable el `Set` de la clase concreta — era un cache que no podía guardar nada. **No re-crearlo sin un lector real.**
+- **Implementación**: las 394 vistas Razor usan `@Umbraco.GetDictionaryValue("Key", "fallback")` directo (233 ocurrencias contadas), el helper nativo que ya lee del published-dictionary-cache interno de Umbraco. Los catalog sources que resuelven etiquetas server-side (`UmbracoPropertyCatalogSource`, `UmbracoStayContentSource`, `UmbracoTramiteCatalogSource`) usan `ICultureDictionaryFactory` con respaldo es-CO.
 - **Persistencia**: 443 ficheros `.config` en `uSync/v9/Dictionary/` (es-CO + en-US) — esa es la fuente real que Umbraco lee directamente.
 - **Superficie HTTP**: ninguna.
 - **Schema CMS**: N/A (Dictionary no es DocType).
 - **UI/CDN**: N/A.
 - **Flags**: ninguno.
-- **Tests**: `DictionaryCacheTests.cs` (7), `DictionaryCacheInvalidatorTests.cs` (3) — ambos testean el seam aislado, ninguno prueba que algo en el pipeline de render realmente lo use (porque nada lo usa).
-- **Huecos**: **`IDictionaryCache` está 100% registrado y wired pero cero consumido** — `Synergos.CMS.Web/Composers/SeamComposer.cs:59` (registro) + `:1060,1063` (invalidator), sin ningún caller de `.Get()` en `Synergos.CMS.Web` o `Synergos.CMS.Application` fuera de los propios tests. Es infraestructura completa para una capacidad que el proyecto terminó resolviendo con el helper nativo de Umbraco.
+- **Tests**: ninguno propio. El comportamiento que importa —que una etiqueta ausente caiga al respaldo en vez de salir en blanco— lo cubren los tests de los catalog sources.
+- **Huecos**: ninguno conocido.
 
 ### Layout Composer
 Ver sección dedicada abajo.
@@ -242,12 +241,11 @@ seeding, no hay datos hardcodeados, no hay "vacío disfrazado de éxito".
    externamente hasta que el equipo CDN publique el contrato
    (`docs/umbraco/cdn-contract.md`) — no es un bug del CMS, es una
    dependencia externa documentada.
-3. **`IDictionaryCache`**: infraestructura completa (seam + impl + composer
-   registration + invalidator + tests) para una capacidad que el proyecto
-   terminó resolviendo de otra forma (`Umbraco.GetDictionaryValue` nativo).
-   Cero riesgo funcional (el i18n real funciona bien), pero es deuda de
-   claridad — un agente nuevo podría intentar "usar" el seam pensando que
-   hace algo.
+3. **`IDictionaryCache`** — **RESUELTO (2026-08-02)**: era infraestructura completa
+   (seam + impl + composer registration + invalidator + tests) para una capacidad
+   que el proyecto terminó resolviendo de otra forma (`Umbraco.GetDictionaryValue`
+   nativo). Se borró entera. El riesgo que se cierra es el de claridad, que era el
+   real: un agente nuevo podía intentar "usar" el seam pensando que hacía algo.
 4. **`ICompositionReader<TInput,TOutput>` / `IElementViewModelMapper<TInput,TOutput>`**:
    ambos son "resolvers" (`CompositionResolver.cs`, `ElementViewModelResolver.cs`)
    documentados explícitamente en su propio XML-doc como "not registered in
@@ -274,7 +272,7 @@ seeding, no hay datos hardcodeados, no hay "vacío disfrazado de éxito".
 | `elementSynFormStepper` | `ISynHostEmitter` | `DefaultSynHostEmitter` | — | `<synergos-form-stepper>` | INERTE (CDN bloqueado) |
 | `compSeo` (composition) | — (sin seam) | `_SeoHead.cshtml` directo | — | `<head>` | VIVO |
 | — | — | `SitemapController`/`NewsSitemapController`/`RobotsController` | `/sitemap.xml`, `/news-sitemap.xml`, `/robots.txt` | — | VIVO |
-| Dictionary (.config × 443) | `IDictionaryCache` | `DictionaryCache` + `DictionaryCacheInvalidator` | — | — | SÓLO SEAM (no consumido; i18n real bypasea vía `Umbraco.GetDictionaryValue`) |
+| Dictionary (.config × 443) | — (seam eliminado, ADR 0009 enmendado) | `Umbraco.GetDictionaryValue` nativo | — | — | VIVO (un solo mecanismo) |
 | `elementLayout*` (× 14) | — (sin seam propio) | `LayoutPresetDefaults` (notification) + 14 partials Razor | render directo (BlockGrid) | App_Plugins/LayoutComposer (backoffice) | VIVO |
 | — (mapeo genérico) | `ICompositionReader<,>` | `CompositionResolver` | — | — | SÓLO SEAM (no registrado en DI) |
 | — (mapeo genérico) | `IElementViewModelMapper<,>` | `ElementViewModelResolver` | — | — | SÓLO SEAM (no registrado en DI) |
