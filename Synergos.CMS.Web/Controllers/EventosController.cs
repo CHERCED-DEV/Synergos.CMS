@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services.Catalog;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -486,24 +487,10 @@ public sealed class EventosController : ControllerBase
         Currency: s.Currency,
         Mode: s.Mode,
         Geo: s.Geo is null ? null : new EventGeoDto(s.Geo.Lat, s.Geo.Lng),
-        Subtitle: string.IsNullOrWhiteSpace(s.Venue) ? s.City : $"{s.Venue} · {s.City}",
-        Status: DeriveEventStatus(s.StartUtc),
-        Badges: DeriveEventBadges(s.Mode),
+        Subtitle: EventContentRules.BuildSubtitle(s.Venue, s.City),
+        Status: EventContentRules.BuildStatus(s.StartUtc, DateTimeOffset.UtcNow),
+        Badges: EventContentRules.BuildBadges(s.Mode),
         SoldPercent: soldPercent);
-
-    // Estado de ciclo de vida para la UI (EventStatus = upcoming|on-sale|sold-out|
-    // past). El summary solo conoce la dimensión temporal (el aforo no vive en
-    // EventSummary), así que derivamos por fecha: `past` si ya arrancó, si no
-    // `upcoming`. on-sale/sold-out requieren aforo → no se emiten.
-    private static string DeriveEventStatus(DateTimeOffset startUtc)
-        => startUtc <= DateTimeOffset.UtcNow ? "past" : "upcoming";
-
-    // Chips freeform del summary derivados del único campo con fuente (el modo de
-    // venta): reserved → asientos numerados; general → entrada general.
-    private static IReadOnlyList<string> DeriveEventBadges(string mode)
-        => string.Equals(mode, "reserved", StringComparison.OrdinalIgnoreCase)
-            ? new[] { "Asientos numerados" }
-            : new[] { "Entrada general" };
 
     // Artista: null-safe. Si el evento no lo provee, cadena vacía → el normalizador
     // cliente cae a event.title (contrato UI: artist.name || event.title).

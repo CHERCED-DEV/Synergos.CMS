@@ -412,4 +412,81 @@ public sealed class EventContentRulesTests
         Assert.Equal(0, artist!.Followers);
         Assert.Equal(string.Empty, artist.Headline);
     }
+
+    // ── Copy derivado de la tarjeta (movido desde EventosController, auditoría Medio #4) ──
+
+    [Fact]
+    public void El_subtitulo_junta_sede_y_ciudad()
+    {
+        Assert.Equal("Movistar Arena · Bogotá", EventContentRules.BuildSubtitle("Movistar Arena", "Bogotá"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Un_evento_sin_sede_emite_solo_la_ciudad_sin_separador_colgante(string? venue)
+    {
+        // Es el caso NORMAL de un evento online, no una excepción rara.
+        var subtitle = EventContentRules.BuildSubtitle(venue, "Bogotá");
+
+        Assert.Equal("Bogotá", subtitle);
+        Assert.DoesNotContain("·", subtitle, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Sin_ciudad_queda_la_sede_sola()
+    {
+        Assert.Equal("Movistar Arena", EventContentRules.BuildSubtitle("Movistar Arena", null));
+    }
+
+    [Fact]
+    public void El_evento_que_ya_arranco_es_pasado_y_el_que_no_es_proximo()
+    {
+        var now = new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+
+        Assert.Equal("past", EventContentRules.BuildStatus(now.AddMinutes(-1), now));
+        Assert.Equal("upcoming", EventContentRules.BuildStatus(now.AddMinutes(1), now));
+    }
+
+    [Fact]
+    public void El_evento_que_arranca_JUSTO_ahora_ya_es_pasado()
+    {
+        // El límite exacto: con el reloj adentro este caso no se podía escribir. Se fija <= y
+        // no <, porque un evento que arranca en este instante ya no se vende.
+        var now = new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+
+        Assert.Equal("past", EventContentRules.BuildStatus(now, now));
+    }
+
+    [Fact]
+    public void El_modo_reserved_promete_asientos_numerados()
+    {
+        Assert.Equal(new[] { "Asientos numerados" }, EventContentRules.BuildBadges("reserved"));
+        Assert.Equal(new[] { "Asientos numerados" }, EventContentRules.BuildBadges("RESERVED"));
+    }
+
+    [Theory]
+    [InlineData("general")]
+    [InlineData("")]
+    [InlineData(null)]
+    [InlineData("cualquier-cosa")]
+    public void Todo_lo_demas_cae_a_entrada_general(string? mode)
+    {
+        // Incluido el modo desconocido: general es el default del vertical, y prometer
+        // "asientos numerados" sobre un evento que se vende por cantidad sería mentirle al
+        // comprador en la tarjeta.
+        Assert.Equal(new[] { "Entrada general" }, EventContentRules.BuildBadges(mode));
+    }
+
+    [Fact]
+    public void El_chip_y_el_modo_resuelto_hablan_el_mismo_vocabulario()
+    {
+        // Las dos caras de la misma decisión. Si divergen, la tarjeta promete asientos
+        // numerados sobre un evento que ResolveMode sirvió como general.
+        var resolved = EventContentRules.ResolveMode("slug", declaredMode: "general", hasSeatMap: true);
+
+        Assert.Equal(EventContentRules.ReservedMode, resolved.Value);
+        Assert.Equal(new[] { "Asientos numerados" }, EventContentRules.BuildBadges(resolved.Value));
+    }
 }
