@@ -28,10 +28,17 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
     // por organizadores en runtime (PublishEventAsync). ConcurrentDictionary
     // keyed por id → el estado (eventos creados en la demo) vive en el proceso,
     // igual que el resto de stubs del motor. Sembrado en el ctor estático.
-    private static readonly ConcurrentDictionary<string, EventDetail> Catalog = BuildCatalog();
+    // Estado de INSTANCIA, no estático. En producción da igual —el composer registra este
+    // proveedor con AddSingleton, así que hay exactamente uno— pero en tests cada `new` es un
+    // catálogo limpio. Con el estático, una clase de test que publicaba se filtraba a las
+    // demás: un publish de un item aterrizando ENTRE las dos búsquedas de
+    // los tests de catálogo hacía divergir las secuencias de ids. Fallaba ~1 de cada 16
+    // corridas completas, y solo entre las dos búsquedas —después el listado extra salía en
+    // ambas y la igualdad volvía a cumplirse—, que es justo por qué era tan esquivo.
+    private readonly ConcurrentDictionary<string, EventDetail> _catalog = BuildCatalog();
 
     // Contador monotónico para el id de eventos publicados por organizadores.
-    private static int _publishedCounter;
+    private int _publishedCounter;
 
     private readonly ICatalogIndex<EventSummary> _index;
 
@@ -68,12 +75,12 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
 
     public Task<IReadOnlyList<EventSummary>> SearchAsync(string? query, CancellationToken cancellationToken = default)
     {
-        // Catalog.Values se lee FRESCO en cada búsqueda, y de ahí sale gratis el
+        // _catalog.Values se lee FRESCO en cada búsqueda, y de ahí sale gratis el
         // read-your-writes que este vertical necesita: el organizador publica y lo ve en la
         // misma pantalla. El motor es una función pura sin caché (lo dice su contrato), así
         // que no hay nada que invalidar — justamente lo que un índice asíncrono rompería.
         var results = _index.Search(
-            Catalog.Values.Select(e => e.Summary).ToList(),
+            _catalog.Values.Select(e => e.Summary).ToList(),
             // Take explícito + Unpaged en el ctor: esta seam promete TODA la agenda.
             new CatalogQuery(Text: query, Take: int.MaxValue));
 
@@ -88,7 +95,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
         }
 
         var id = eventId.Trim();
-        var match = Catalog.Values.FirstOrDefault(e =>
+        var match = _catalog.Values.FirstOrDefault(e =>
             string.Equals(e.Summary.Id, id, StringComparison.OrdinalIgnoreCase)
             || string.Equals(e.Summary.Slug, id, StringComparison.OrdinalIgnoreCase));
 
@@ -105,7 +112,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
             ? draft with { Summary = draft.Summary with { Id = NextPublishedId() } }
             : draft;
 
-        Catalog[published.Summary.Id] = published;
+        _catalog[published.Summary.Id] = published;
         return Task.FromResult(published);
     }
 
@@ -119,7 +126,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
     /// a la CLASE CONCRETA, saltándose la seam. Ahora nadie fuera de este stub puede
     /// acuñar ids del stub.
     /// </remarks>
-    private static string NextPublishedId()
+    private string NextPublishedId()
         => $"evt-org-{Interlocked.Increment(ref _publishedCounter)}";
 
     private static ConcurrentDictionary<string, EventDetail> BuildCatalog()
