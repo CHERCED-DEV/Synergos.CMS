@@ -9,6 +9,21 @@ namespace Synergos.CMS.Web.Services.Retention;
 /// Misma shape que audit (filename = fecha) — purge por filename
 /// parsing. Cap-270 Batch B (Ola 274).
 /// </summary>
+/// <remarks>
+/// <b>Hoy no barre nada, y eso NO la vuelve código muerto.</b> Nadie escribe ese directorio:
+/// el único productor de analítica de búsqueda es <c>InMemorySearchAnalyticsStore</c>, que
+/// guarda agregados en memoria y nunca toca disco. La política corre igual —el barrido la
+/// invoca cada 24h y sale en 0 porque el directorio no existe— y está cubierta por
+/// <c>RetentionPolicyTests</c>, que le fabrica el directorio.
+///
+/// <para>Se conserva a propósito. El día que la analítica se persista, lo que se acumula son
+/// <b>consultas escritas por visitantes</b> —nombres, direcciones, números de caso—: datos que
+/// no pueden quedarse indefinidamente. Borrar esta política dejaría ese caso sin red, y es
+/// exactamente la forma del defecto que ya apareció una vez con la auditoría PHI.</para>
+///
+/// <para>Si algún día se decide que la analítica NO se persistirá nunca, entonces sí: esta
+/// clase, <c>RetentionSettings.SearchAnalyticsRetentionDays</c> y su test se van juntos.</para>
+/// </remarks>
 public sealed class SearchAnalyticsRetentionPolicy : IRetentionPolicy
 {
     private const string DirectoryName = "syn-search-analytics";

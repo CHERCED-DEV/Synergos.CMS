@@ -1,6 +1,16 @@
 # ADR 0009 — Extension seams son obligatorios
 
 - **Status:** Accepted
+- **Enmienda (2026-08-02):** `IDictionaryCache` **se eliminó**. La regla de este ADR sigue en
+  pie; lo que se cumplió fue su propio riesgo declarado abajo — *«abrir seams innecesarios para
+  consumidores imaginados»*. El seam nunca tuvo un solo lector, y por construcción no podía
+  tenerlo: `Get` es la única lectura y la interfaz **no tiene `Set`**, así que el registro DI
+  —tipado como la interfaz— dejaba inalcanzable el `Set` de la clase concreta. Era un cache que
+  no podía guardar nada. El i18n del proyecto se resolvió con el helper nativo de Umbraco, en
+  233 sitios. Se borraron la interfaz, `DictionaryCache`, `DictionaryCacheInvalidator`, sus dos
+  suites de tests y los registros del composer. **No re-crear el seam sin un lector real**: si
+  algún día se mide que las búsquedas de Dictionary cuestan, la decisión no es este contrato
+  sino si vale poner un cache propio delante del de Umbraco.
 - **Date:** 2026-04-18
 - **Deciders:** Project owner
 - **Source:** promoted from `refactor-docs/adr-drafts/0009-extension-seams-mandatory.md`
