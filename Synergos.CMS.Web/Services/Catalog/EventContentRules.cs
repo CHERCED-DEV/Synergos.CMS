@@ -71,6 +71,17 @@ public static class EventContentRules
     /// <summary>Tope de entradas por compra cuando el editor no lo declara.</summary>
     public const int DefaultMaxPerOrder = 10;
 
+    /// <summary>Modo de venta con asiento elegido en un mapa.</summary>
+    /// <remarks>
+    /// Nombrado y no literal porque el vocabulario ya se usa en dos reglas —resolver el modo y
+    /// derivar los chips— y son las dos caras de la misma decisión: si divergen, la tarjeta
+    /// promete "asientos numerados" sobre un evento que se vende por cantidad.
+    /// </remarks>
+    public const string ReservedMode = "reserved";
+
+    /// <summary>Modo de venta por cantidad, sin asiento asignado. Es el modo por defecto.</summary>
+    public const string GeneralMode = "general";
+
     /// <summary>
     /// Techo de asientos generados por evento.
     /// </summary>
@@ -380,7 +391,7 @@ public static class EventContentRules
     /// </remarks>
     public static EventContentResult<string> ResolveMode(string slug, string declaredMode, bool hasSeatMap)
     {
-        var actual = hasSeatMap ? "reserved" : "general";
+        var actual = hasSeatMap ? ReservedMode : GeneralMode;
         var issues = new List<EventContentIssue>();
 
         if (!string.Equals(declaredMode, actual, StringComparison.OrdinalIgnoreCase))
@@ -418,6 +429,55 @@ public static class EventContentRules
     /// Se recortan y se descartan los blancos: un Enter de más en el backoffice se convierte,
     /// si no, en una viñeta vacía en la tarjeta.
     /// </remarks>
+    /// <summary>
+    /// El subtítulo de la tarjeta (<c>event.subtitle</c>): sede y ciudad.
+    /// </summary>
+    /// <remarks>
+    /// Sin sede se emite solo la ciudad, y no <c>" · Bogotá"</c>: el separador colgante es el
+    /// mismo síntoma que ya se corrigió en la tarjeta de inmuebles, y sale en cuanto un evento
+    /// online no tiene venue — que es lo normal, no la excepción.
+    /// </remarks>
+    public static string BuildSubtitle(string? venue, string? city)
+    {
+        var v = venue?.Trim() ?? string.Empty;
+        var c = city?.Trim() ?? string.Empty;
+        if (v.Length == 0) return c;
+        if (c.Length == 0) return v;
+        return $"{v} · {c}";
+    }
+
+    /// <summary>
+    /// El estado de ciclo de vida del resumen (<c>event.status</c>): <c>past</c> o
+    /// <c>upcoming</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El contrato de la UI tiene cuatro valores</b> —upcoming, on-sale, sold-out,
+    /// past— y aquí solo se pueden emitir dos: <c>EventSummary</c> no lleva aforo, así que la
+    /// única dimensión con fuente es la temporal. Emitir <c>on-sale</c> sin saber si queda
+    /// cupo sería adivinar, y <c>sold-out</c> sería mentir. Los otros dos los emite la ficha,
+    /// que sí conoce el aforo.</para>
+    ///
+    /// <para><b>El reloj entra por parámetro</b> y no se lee de <c>UtcNow</c> adentro. Esa era
+    /// justamente la razón por la que esta regla no tenía test: el límite past/upcoming solo
+    /// se puede verificar si se puede parar el reloj encima de él.</para>
+    /// </remarks>
+    public static string BuildStatus(DateTimeOffset startUtc, DateTimeOffset now)
+        => startUtc <= now ? "past" : "upcoming";
+
+    /// <summary>
+    /// Los chips del resumen (<c>event.badges</c>), derivados del modo de venta.
+    /// </summary>
+    /// <remarks>
+    /// El modo es el ÚNICO campo del resumen con fuente para un chip, y describe algo que al
+    /// comprador le cambia la decisión: si escoge silla o entra por orden de llegada. Cualquier
+    /// valor que no sea <c>reserved</c> —incluido uno vacío o desconocido— cae a entrada
+    /// general, que es el modo por defecto del vertical.
+    /// </remarks>
+    public static IReadOnlyList<string> BuildBadges(string? mode)
+        => string.Equals(mode, ReservedMode, StringComparison.OrdinalIgnoreCase)
+            ? new[] { "Asientos numerados" }
+            : new[] { "Entrada general" };
+
     public static IReadOnlyList<string> CleanTextList(IReadOnlyList<string>? raw)
     {
         if (raw is null || raw.Count == 0)

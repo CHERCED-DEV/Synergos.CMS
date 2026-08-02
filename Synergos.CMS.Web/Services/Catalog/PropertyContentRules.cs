@@ -267,6 +267,59 @@ public static class PropertyContentRules
     }
 
     /// <summary>
+    /// La línea de specs de la tarjeta (<c>listing.subtitle</c>), desde los campos tipados.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Se deriva, no se autora.</b> Es el mismo argumento de
+    /// <see cref="BuildSpecs"/>: pedirle al editor que escriba "3 hab · 2 baños · 78 m²" a mano
+    /// garantiza que la mitad del catálogo diga "3 habitaciones" y la otra "3 Hab." — y ninguna
+    /// de las dos se puede filtrar. Los números ya están tipados; esto solo los redacta.</para>
+    ///
+    /// <para>Un campo en 0 <b>no aparece</b>: "0 baños" en un lote es ruido, y el separador
+    /// colgante (" · ") que dejaría era exactamente el síntoma que se corrigió al cablear la
+    /// tarjeta.</para>
+    /// </remarks>
+    public static string BuildSubtitle(PropertyListing listing)
+    {
+        ArgumentNullException.ThrowIfNull(listing);
+
+        var parts = new List<string>(4);
+        if (listing.Beds > 0) parts.Add($"{listing.Beds} hab");
+        if (listing.Baths > 0) parts.Add($"{listing.Baths} {(listing.Baths == 1 ? "baño" : "baños")}");
+        if (listing.AreaM2 > 0) parts.Add($"{listing.AreaM2} m²");
+        if (listing.Stratum > 0) parts.Add($"Estrato {listing.Stratum}");
+        return string.Join(" · ", parts);
+    }
+
+    /// <summary>
+    /// Los chips de la tarjeta (<c>listing.badges</c>): destacado, estrato y operación.
+    /// </summary>
+    /// <remarks>
+    /// El orden es deliberado y no alfabético: primero lo que hace que la tarjeta se mire
+    /// (Destacado), después lo que segmenta (Estrato) y al final lo que ya se deduce del precio
+    /// (En venta / En arriendo). Una operación que no es ninguna de las dos <b>no emite chip</b>
+    /// en vez de emitir el valor crudo: la tarjeta con "En xyz" se ve peor que sin chip.
+    /// </remarks>
+    public static IReadOnlyList<string> BuildBadges(PropertyListing listing)
+    {
+        ArgumentNullException.ThrowIfNull(listing);
+
+        var badges = new List<string>(3);
+        if (listing.Featured) badges.Add("Destacado");
+        if (listing.Stratum > 0) badges.Add($"Estrato {listing.Stratum}");
+
+        var status = Normalize(listing.Operation) switch
+        {
+            "venta" => "En venta",
+            "arriendo" => "En arriendo",
+            _ => null
+        };
+        if (status is not null) badges.Add(status);
+
+        return badges;
+    }
+
+    /// <summary>
     /// La coordenada del inmueble, o <c>(0, 0)</c> si no está completa o no es plausible.
     /// </summary>
     private static (double Lat, double Lng) ResolveGeo(
