@@ -7,13 +7,19 @@ namespace Synergos.CMS.Interfaces;
 /// </summary>
 /// <remarks>
 /// La implementación por defecto vive en
-/// <c>Synergos.CMS.Web.Services.InMemorySearchAnalyticsStore</c> —
-/// ConcurrentDictionary&lt;query, AggregateRecord&gt;. Para producción
-/// con retención larga, swap por adapter sobre TimescaleDB / Influx /
-/// CloudWatch.
+/// <c>Synergos.CMS.Web.Services.FileSystemSearchAnalyticsStore</c> — JSONL append-only por día
+/// en <c>App_Data/syn-search-analytics/</c>, con retención de 90 días. Sustituyó a un almacén
+/// en memoria que se perdía en cada reinicio y crecía sin tope.
 ///
-/// Sin async — el record write es fire-and-forget (similar a
-/// <see cref="IAnalyticsTracker"/>) y no debe bloquear al usuario.
+/// <para><b>Esta costura existe para ser reemplazada.</b> El destino previsto es un servicio de
+/// sesión propio —fuera del CMS— que respalde búsqueda y demás señales de comportamiento; ese
+/// día se registra otro adapter y ni <c>SearchController</c> ni <c>AdminController</c> se
+/// enteran, porque hablan solo con esta interfaz.</para>
+///
+/// <para>Sin async — el record write es fire-and-forget (similar a
+/// <see cref="IAnalyticsTracker"/>) y no debe bloquear al usuario. Por lo mismo, una
+/// implementación <b>no puede lanzar</b> desde <see cref="Record"/>: una búsqueda que funcionó
+/// no puede fallar porque su métrica no se pudo guardar.</para>
 /// </remarks>
 public interface ISearchAnalyticsStore
 {
