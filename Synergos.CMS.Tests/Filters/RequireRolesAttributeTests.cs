@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Routing;
 using NSubstitute;
 using Synergos.CMS.Interfaces;
@@ -51,7 +53,17 @@ public sealed class RequireRolesAttributeTests
         var filterType = typeof(RequireRolesAttribute)
             .GetNestedType("RequireRolesFilter", BindingFlags.NonPublic);
         Assert.NotNull(filterType); // si renombran el filtro interno, que falle aquí y no en silencio
-        return (IActionFilter)Activator.CreateInstance(filterType!, gate, Roles)!;
+
+        var tempDataFactory = Substitute.For<ITempDataDictionaryFactory>();
+        tempDataFactory.GetTempData(Arg.Any<HttpContext>())
+            .Returns(Substitute.For<ITempDataDictionary>());
+
+        return (IActionFilter)Activator.CreateInstance(
+            filterType!,
+            gate,
+            new EmptyModelMetadataProvider(),
+            tempDataFactory,
+            Roles)!;
     }
 
     private static ActionExecutingContext Context(string methodName)
@@ -101,17 +113,47 @@ public sealed class RequireRolesAttributeTests
 
         CreateFilter(Gate(authenticated: false, rolesHeld: null)).OnActionExecuting(context);
 
-        Assert.IsType<ForbidResult>(context.Result);
+        Assert.NotNull(context.Result);
+        Assert.IsNotType<ViewResult>(context.Result); // denegado, no la página de "sin permiso"
+    }
+
+    // ── Identifícate ≠ no te alcanza ──────────────────────────────────────────
+
+    [Fact]
+    public void Un_anonimo_va_al_login_no_a_la_pagina_de_sin_permiso()
+    {
+        // Challenge y no 403: al anónimo hay que darle la oportunidad de identificarse. El
+        // esquema de cookies traduce esto a un redirect al login con el returnUrl puesto.
+        var context = Context(nameof(ProtectedController.Protegida));
+
+        CreateFilter(Gate(authenticated: false, rolesHeld: null)).OnActionExecuting(context);
+
+        Assert.IsType<ChallengeResult>(context.Result);
     }
 
     [Fact]
-    public void Un_autenticado_SIN_el_rol_es_denegado()
+    public void Un_autenticado_SIN_el_rol_recibe_403_con_pagina_y_no_un_redirect()
     {
+        // El caso que motivó el cambio. Antes esto era un Forbid que terminaba en 302 a
+        // /Account/AccessDenied —ruta inexistente— y devolvía 200 sobre una denegación.
         var context = Context(nameof(ProtectedController.Protegida));
 
         CreateFilter(Gate(authenticated: true, rolesHeld: "member")).OnActionExecuting(context);
 
-        Assert.IsType<ForbidResult>(context.Result);
+        var result = Assert.IsType<ViewResult>(context.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, result.StatusCode);
+        Assert.Equal("AccessDenied", result.ViewName);
+    }
+
+    [Fact]
+    public void La_vista_de_sin_permiso_existe_en_Shared()
+    {
+        // El filtro se puede poner sobre cualquier controller, y el motor de vistas solo cae a
+        // Views/Shared/. Si alguien la mueve a Views/Admin/, el 403 revienta con
+        // InvalidOperationException en runtime para cualquier otro controller — y con build verde.
+        var view = Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Views", "Shared", "AccessDenied.cshtml");
+
+        Assert.True(File.Exists(view), $"Falta {view}");
     }
 
     [Theory]

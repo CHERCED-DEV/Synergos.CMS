@@ -31,6 +31,11 @@ namespace Synergos.CMS.Web.Controllers;
 /// para saltarse el pipeline de auth de Umbraco y que este controller resuelva el permiso él
 /// mismo. Por eso el filtro mira solo los atributos del método.</para>
 ///
+/// <para>Denegar no es una sola respuesta: al <b>anónimo</b> lo manda al login con
+/// <c>returnUrl</c> (no sabemos quién es, dejémoslo identificarse) y al <b>autenticado sin el
+/// rol</b> le devuelve un <b>403</b> con página, sin redirect. El detalle —y qué había antes—
+/// está en <see cref="RequireRolesAttribute"/>.</para>
+///
 /// <para><b>Antiforgery: DECLARATIVO</b> vía <see cref="AutoValidateAntiforgeryTokenAttribute"/>,
 /// que cubre TODOS los verbos inseguros (POST/PUT/PATCH/DELETE) y deja los GET intactos. Se
 /// eligió la variante <c>Auto</c> —y no <c>[ValidateAntiForgeryToken]</c> action por action— por
