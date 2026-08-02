@@ -47,7 +47,7 @@ public interface IMemberTwoFactorService
     /// persiste el secreto + genera 8 recovery codes. Idempotent — si
     /// ya está enrolled retorna AlreadyEnrolled sin sobreescribir.
     /// </summary>
-    Task<EnrollmentResult> ConfirmEnrollmentAsync(
+    Task<TwoFactorEnrollmentOutcome> ConfirmEnrollmentAsync(
         Guid memberKey,
         string secretBase32,
         string firstCode,
@@ -101,7 +101,7 @@ public sealed record TwoFactorEnrollmentChallenge(
 /// </summary>
 public enum EnrollmentResult
 {
-    /// <summary>Confirm OK; recovery codes returned.</summary>
+    /// <summary>Confirm OK; recovery codes en <see cref="TwoFactorEnrollmentOutcome.RecoveryCodes"/>.</summary>
     Confirmed,
 
     /// <summary>El primer código TOTP no matcheó el secreto.</summary>
@@ -113,6 +113,26 @@ public enum EnrollmentResult
     /// <summary>Member no existe.</summary>
     MemberNotFound,
 }
+
+/// <summary>
+/// Resultado del enrollment: el veredicto y, SOLO cuando fue
+/// <see cref="EnrollmentResult.Confirmed"/>, los recovery codes plaintext generados en ese
+/// momento.
+/// </summary>
+/// <remarks>
+/// <para>Los códigos viajan EN el resultado a propósito. Antes el método devolvía solo el enum
+/// y los códigos salían por un canal lateral de la implementación concreta, alcanzable únicamente
+/// con un downcast (<c>_twoFactor is UmbracoMemberTwoFactorService impl</c>): registrar otra
+/// implementación de <see cref="IMemberTwoFactorService"/> dejaba al usuario enrolado y <b>sin
+/// ver sus recovery codes, sin error</b> — se quedaba sin el único mecanismo de recuperación de
+/// su cuenta. Devolverlos aquí cierra ese fallo silencioso (DIP/LSP).</para>
+///
+/// <para>Se muestran UNA sola vez. La implementación no los persiste en claro; el caller es
+/// responsable de mostrarlos en esa única respuesta y no volver a pedirlos.</para>
+/// </remarks>
+public sealed record TwoFactorEnrollmentOutcome(
+    EnrollmentResult Result,
+    IReadOnlyList<string>? RecoveryCodes = null);
 
 /// <summary>
 /// Resultado de <see cref="IMemberTwoFactorService.VerifyAsync"/>.

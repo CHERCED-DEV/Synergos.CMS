@@ -537,15 +537,18 @@ public sealed class AccountController : Controller
         var memberKey = _gate.CurrentMemberKey;
         if (memberKey is null) return RedirectToAction(nameof(Login));
 
-        var result = await _twoFactor.ConfirmEnrollmentAsync(
+        var outcome = await _twoFactor.ConfirmEnrollmentAsync(
             memberKey.Value, secret, code ?? string.Empty, cancellationToken);
+        var result = outcome.Result;
 
         ViewData["EnrollmentResult"] = result.ToString();
 
-        if (result == EnrollmentResult.Confirmed && _twoFactor is UmbracoMemberTwoFactorService impl)
+        if (result == EnrollmentResult.Confirmed)
         {
-            var recoveryCodes = impl.ConsumeLastEnrollmentRecoveryCodes(memberKey.Value);
-            ViewData["RecoveryCodes"] = recoveryCodes;
+            // Los recovery codes vienen EN el resultado — sin downcast a la impl concreta, así
+            // que cambiar la implementación de IMemberTwoFactorService ya no deja al member sin
+            // ellos en silencio (auditoría F2).
+            ViewData["RecoveryCodes"] = outcome.RecoveryCodes;
             _analytics.Track("account.2fa-enrolled", new Dictionary<string, object?>
             {
                 ["memberKey"] = memberKey.Value.ToString("N"),
