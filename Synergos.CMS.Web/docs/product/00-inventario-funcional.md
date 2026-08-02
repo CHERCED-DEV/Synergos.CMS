@@ -225,7 +225,7 @@ En ambos casos el guard existe y está bien. El defecto vive en cómo lo llaman.
 | Seam | Estado |
 |---|---|
 | `ICheckoutRecorder` | En DI, nunca invocado → dashboard en $0 |
-| `IDictionaryCache` | Impl + invalidador + tests, **cero consumidores** (el i18n usa la API nativa en 233 sitios) |
+| ~~`IDictionaryCache`~~ | **Eliminado el 2026-08-02** (enmienda al ADR 0009). Tenía impl + invalidador + tests y cero consumidores; el i18n usa la API nativa en 233 sitios |
 | `ICatalogSource<EventSummary>` | Registrado condicionalmente, nadie lo inyecta |
 | `ICertificateService.VerifyAsync` | Sin controller que lo exponga |
 | `SearchAnalyticsRetentionPolicy` | Purga un directorio que nadie escribe |

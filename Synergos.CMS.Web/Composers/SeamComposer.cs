@@ -56,7 +56,6 @@ public sealed class SeamComposer : IComposer
             new AppsettingsFeatureGate(
                 sp.GetRequiredService<IOptions<FeatureFlagsSettings>>().Value));
 
-        services.AddSingleton<IDictionaryCache, DictionaryCache>();
 
         // Ola 8.5 + Cap-280 Batch B — SynHost stack (ADR 0015 + 0089).
         // El IBundleRegistryClient se registra condicionalmente por
@@ -1282,14 +1281,6 @@ public sealed class SeamComposer : IComposer
         // idempotent so calling it here is safe even if Umbraco already
         // registered MVC.
         services.AddControllers();
-
-        // Notification handler: dictionary invalidation.
-        builder.AddNotificationHandler<
-            DictionaryItemSavedNotification,
-            DictionaryCacheInvalidator>();
-        builder.AddNotificationHandler<
-            DictionaryItemDeletedNotification,
-            DictionaryCacheInvalidator>();
 
         // Ola 42.5 — pre-fill Layout Preset blocks with sensible
         // defaults on first save so the editor doesn't face empty
