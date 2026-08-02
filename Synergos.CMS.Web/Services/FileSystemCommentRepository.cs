@@ -6,7 +6,9 @@ using Synergos.CMS.Interfaces;
 namespace Synergos.CMS.Web.Services;
 
 /// <summary>
-/// Implementación por defecto de <see cref="ICommentRepository"/> que
+/// Implementación por defecto de las tres caras del repositorio de comentarios
+/// (<see cref="ICommentReader"/> / <see cref="ICommentWriter"/> /
+/// <see cref="ICommentModeration"/>) que
 /// persiste un JSON por nodo bajo
 /// <c>{ContentRoot}/{CommentsSettings.StorageRoot}/{nodeId}.json</c>.
 /// </summary>
@@ -22,7 +24,7 @@ namespace Synergos.CMS.Web.Services;
 /// otro). Aceptable para volumen bajo. Para concurrent-heavy, lock
 /// per-node.
 /// </remarks>
-public sealed class FileSystemCommentRepository : ICommentRepository
+public sealed class FileSystemCommentRepository : ICommentReader, ICommentWriter, ICommentModeration
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {

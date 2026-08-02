@@ -29,7 +29,7 @@ public sealed class BlogsControllerOla6Tests
         var reactions = new StubReactionService();
         var stream = new StubContentStream(graph, reactions);
         var profiles = new StubSocialProfileProjection();
-        var comments = new FakeCommentRepository();
+        var comments = new FakeCommentReader();
         var messaging = new StubMessagingService();
         var collections = new StubUserCollection();
         var notifications = new StubNotificationFeed(graph, reactions);
@@ -205,29 +205,12 @@ public sealed class BlogsControllerOla6Tests
         Assert.NotNull(res.TopPosts);
     }
 
-    // ICommentRepository mínimo — el contrato de OLA 6 no toca comentarios, pero
-    // el ctor del controller lo exige. Solo GetApprovedForNode se usa (post detail).
-    private sealed class FakeCommentRepository : ICommentRepository
+    // Antes de partir el repositorio (auditoría Medio #5) este doble tenía que implementar los
+    // DOCE métodos de ICommentRepository para usar UNO. Los otros once eran ruido que había que
+    // leer para descubrir que no hacían nada — y cada método nuevo del repositorio rompía este
+    // test sin tener nada que ver con blogs.
+    private sealed class FakeCommentReader : ICommentReader
     {
         public IReadOnlyList<Comment> GetApprovedForNode(int nodeId) => Array.Empty<Comment>();
-        public Task<Comment> AddAsync(NewComment comment, CancellationToken cancellationToken) =>
-            throw new NotImplementedException();
-        public Task<Comment?> LikeAsync(int nodeId, string commentId, CancellationToken cancellationToken) =>
-            Task.FromResult<Comment?>(null);
-        public IReadOnlyList<Comment> GetPendingForNode(int nodeId) => Array.Empty<Comment>();
-        public IReadOnlyList<Comment> GetAllPending(int limit) => Array.Empty<Comment>();
-        public Task<bool> ApproveAsync(int nodeId, string commentId, CancellationToken cancellationToken) =>
-            Task.FromResult(false);
-        public Task<bool> RejectAsync(int nodeId, string commentId, CancellationToken cancellationToken) =>
-            Task.FromResult(false);
-        public PendingCommentsPage GetPendingPage(int page, int pageSize, int? nodeIdFilter = null) =>
-            new(Array.Empty<Comment>(), page, pageSize, 0);
-        public Task<int> BulkApproveAsync(IReadOnlyList<CommentRef> refs, CancellationToken cancellationToken) =>
-            Task.FromResult(0);
-        public Task<int> BulkRejectAsync(IReadOnlyList<CommentRef> refs, CancellationToken cancellationToken) =>
-            Task.FromResult(0);
-        public IReadOnlyList<Comment> ReadByRefs(IReadOnlyList<CommentRef> refs) => Array.Empty<Comment>();
-        public Task<int> RestoreAsync(IReadOnlyList<Comment> items, CancellationToken cancellationToken) =>
-            Task.FromResult(0);
     }
 }
