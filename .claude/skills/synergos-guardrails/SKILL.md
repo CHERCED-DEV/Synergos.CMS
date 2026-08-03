@@ -1,6 +1,6 @@
 ---
 name: synergos-guardrails
-description: LÉEME PRIMERO. Onboarding y guardrails del proyecto Synergos — cómo trabajamos, cómo lo hacemos y qué NO hacer NUNCA. Es un proyecto delicado (Umbraco 13 CMS que compone vitrinas SSR + apps Angular custom-element vía CDN local + design system tokenizado, 7 temas por-siteRoot). Actívala al ENTRAR al proyecto o antes de proponer cualquier cambio, para no violar los principios inviolables. Consolida en un solo lugar los 10 principios (grafo de dependencias, schema solo uSync no code-first, cero seeders, branding vía provider, no multi-tenant, CDN consumido no owned, GUIDs cuádruple), la premisa capital COMPONER-NUNCA-HARDCODEAR (spacing vía Layout Composer, colores vía tokens --syn-*), la verificación real (build verde ≠ hecho; navegador + 7 temas), el rebuild del runtime compartido, la higiene de commits/DB, y el pin de Umbraco 13. Es el índice que remite a las 23 skills específicas y a los ADRs. Cubre los DOS árboles del repo: el del CMS (Umbraco/uSync/CDN) y el de servicios (20 capacidades agnósticas + orquestadores sobre Bff.Core), que tienen reglas distintas.
+description: LÉEME PRIMERO. Onboarding y guardrails del proyecto Synergos — cómo trabajamos, cómo lo hacemos y qué NO hacer NUNCA. Es un proyecto delicado (Umbraco 13 CMS que compone vitrinas SSR + apps Angular custom-element vía CDN local + design system tokenizado, 7 temas por-siteRoot). Actívala al ENTRAR al proyecto o antes de proponer cualquier cambio, para no violar los principios inviolables. Consolida en un solo lugar los 10 principios (grafo de dependencias, schema solo uSync no code-first, cero seeders, branding vía provider, no multi-tenant, CDN consumido no owned, GUIDs cuádruple), la premisa capital COMPONER-NUNCA-HARDCODEAR (spacing vía Layout Composer, colores vía tokens --syn-*), la verificación real (build verde ≠ hecho; navegador + 7 temas), el rebuild del runtime compartido, la higiene de commits/DB, y el pin de Umbraco 13. Es el índice que remite a las 24 skills específicas y a los ADRs. Cubre los DOS árboles del repo: el del CMS (Umbraco/uSync/CDN) y el de servicios (20 capacidades agnósticas + orquestadores sobre Bff.Core), que tienen reglas distintas.
 model: claude-opus-4-8
 ---
 
@@ -186,6 +186,7 @@ Luego **Ctrl+Shift+R** (el runtime es immutable/versionado; F5 sirve cache viejo
 | Tarea | Skill |
 |-------|-------|
 | Entender reglas / qué NO hacer | **synergos-guardrails** (esta) |
+| **Encontré un bug / voy a abrir un PR** | **`synergos-ticket-first`** — nada se codifica sin ticket |
 | Levantar el stack (CMS+CDN+dev) | `synergos-run-dev` · semáforo: `synergos-health-check` |
 | Escribir/editar schema uSync | `synergos-usync-author` → import: `synergos-usync-import` |
 | Auditar schema (orphans/drift) | `synergos-schema-audit` · mapa: `synergos-element-inventory` |

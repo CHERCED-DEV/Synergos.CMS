@@ -1,0 +1,54 @@
+name: 🐛 Defecto
+description: Algo se comporta distinto de lo que dice hacer
+title: "[Defecto] "
+labels: ["defecto"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > **La pregunta que más valor tiene acá no es «qué falla» sino «por qué no lo vimos».**
+        > Los defectos más caros de este repo los encontró un proceso vivo, no un test — porque
+        > los tests codificaban la misma suposición equivocada que el código.
+
+  - type: textarea
+    id: que-falla
+    attributes:
+      label: Qué falla
+      description: El comportamiento observado contra el esperado. Con evidencia — log, respuesta HTTP, estado en disco.
+      placeholder: |
+        Esperado: la compensación se rinde a los 8 intentos y deja de intentarlo.
+        Observado: sigue reintentando cada minuto para siempre.
+        Evidencia: startedAtUtc 16:39:33 → doneAtUtc 16:39:39 (seis segundos).
+    validations: { required: true }
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Cómo se reproduce
+      description: Pasos exactos. Si se descubrió con procesos reales, decí cuál mataste y en qué instante.
+    validations: { required: true }
+
+  - type: textarea
+    id: por-que-no-lo-vimos
+    attributes:
+      label: Por qué los tests no lo vieron
+      description: |
+        **Obligatorio, y es la parte que evita que vuelva a pasar.** ¿No había test? ¿Lo había y
+        probaba otra cosa? ¿Pasaba por accidente — como el de idempotencia que usaba capacidad 5?
+      placeholder: Ninguno ejercitaba la SELECCIÓN del barrido; todos llamaban a CompensateAsync directo.
+    validations: { required: true }
+
+  - type: input
+    id: mutacion
+    attributes:
+      label: La mutación que tiene que ponerlo en rojo
+      description: El cambio de una línea que reintroduce el defecto. Si no se puede escribir, el arreglo no está entendido.
+      placeholder: Quitar `c.IsStuck` del filtro de CompensateAsync.
+    validations: { required: true }
+
+  - type: dropdown
+    id: alcance
+    attributes:
+      label: Alcance
+      options: [Una capacidad, Un orquestador, Bff.Core o Shared, El CMS, Cruza servicios]
+    validations: { required: true }
