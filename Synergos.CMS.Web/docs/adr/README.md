@@ -137,6 +137,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0128](0128-la-base-de-datos-es-derivable-un-gate-reconstruye-el-entorno-desde-el-xml.md) | La base de datos es derivable: un gate reconstruye el entorno desde el XML en cada PR | Accepted |
 | [0129](0129-el-contenido-editorial-tambien-se-versiona-y-la-media-va-con-el.md) | El contenido editorial también se versiona, y la media va con él | Accepted |
 | [0130](0130-la-analitica-de-busqueda-sale-del-cms-a-un-servicio-de-sesion.md) | La analítica de búsqueda sale del CMS a un servicio de sesión | Accepted |
+| [0131](0131-el-borde-avisa-de-verdad-y-el-estado-de-un-envio-llega-despues.md) | El borde avisa de verdad (Resend detrás de `INotificationSender`) + `Queued→Accepted→Delivered→Bounced\|Complained` con avance que nunca retrocede + reserva del registro ANTES de la red + receptor de webhook con firma, antirrepetición e idempotencia por id del proveedor | Accepted |
 
 ## Rules
 

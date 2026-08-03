@@ -20,19 +20,32 @@ public sealed class NotificationServiceTests
         private DateTimeOffset _now;
         public RelojFalso(DateTimeOffset inicio) => _now = inicio;
         public override DateTimeOffset GetUtcNow() => _now;
-        public void Avanzar(TimeSpan d) => _now += d;
+        public async Task Avanzar(TimeSpan d) => _now += d;
     }
 
     /// <summary>Transporte que cuenta lo que sale y puede fallar a pedido.</summary>
     private sealed class TransporteEspia : INotificationSender
     {
-        public List<(Channel Canal, string Direccion, string Asunto, string Cuerpo)> Enviados { get; } = new();
-        public bool Falla { get; set; }
+        public List<(Channel Canal, string Direccion, string Asunto, string Cuerpo, string Llave)> Enviados { get; } = new();
 
-        public bool Send(Channel channel, string address, string subject, string body)
+        /// <summary>Si viene, se rechaza con esto en vez de aceptar.</summary>
+        public Rejection? Falla { get; set; }
+
+        /// <summary>Canales que este transporte de mentira dice saber hablar.</summary>
+        public HashSet<Channel> Canales { get; } = new() { Channel.Email, Channel.Sms, Channel.Push };
+
+        public int Contador;
+
+        public bool Supports(Channel channel) => Canales.Contains(channel);
+
+        public Task<Result<string>> SendAsync(
+            Channel channel, string address, string subject, string body,
+            string idempotencyKey, CancellationToken ct = default)
         {
-            Enviados.Add((channel, address, subject, body));
-            return !Falla;
+            Enviados.Add((channel, address, subject, body, idempotencyKey));
+            return Task.FromResult(Falla is null
+                ? Result.Ok($"prov-{++Contador}")
+                : Result.Rejected<string>(Falla));
         }
     }
 
@@ -48,6 +61,8 @@ public sealed class NotificationServiceTests
         public void Put(Template item) => _t[item.Id] = item;
 
         Delivery? IDeliveryStore.Find(string id) => _d.GetValueOrDefault(id);
+        public Delivery? FindByProviderMessageId(string providerMessageId)
+            => _d.Values.FirstOrDefault(x => x.ProviderMessageId == providerMessageId);
         public IReadOnlyList<Delivery> ForRecipient(Ref recipient) => _d.Values.Where(x => x.To == recipient).ToList();
         public void Put(Delivery delivery) => _d[delivery.Id] = delivery;
 
@@ -80,7 +95,7 @@ public sealed class NotificationServiceTests
     private static Dictionary<string, string> Datos => new() { ["nombre"] = "Ana", ["fecha"] = "5 de marzo" };
 
     [Fact]
-    public void Reintentar_con_la_misma_llave_NO_manda_el_correo_dos_veces()
+    public async Task Reintentar_con_la_misma_llave_NO_manda_el_correo_dos_veces()
     {
         // El defecto que más duele de esta capacidad: al reintento tras un timeout, la persona
         // le llega un segundo correo idéntico. Contar los envíos del transporte es la única
@@ -88,8 +103,8 @@ public sealed class NotificationServiceTests
         var (svc, store, transporte, _) = Nuevo();
         ConPlantilla(svc);
 
-        var a = svc.Send(Ana, Correo, "cita.recordatorio", Datos, Llave("misma"));
-        var b = svc.Send(Ana, Correo, "cita.recordatorio", Datos, Llave("misma"));
+        var a = await svc.SendAsync(Ana, Correo, "cita.recordatorio", Datos, Llave("misma"));
+        var b = await svc.SendAsync(Ana, Correo, "cita.recordatorio", Datos, Llave("misma"));
 
         Assert.Equal(a.Value.Id, b.Value.Id);
         Assert.Single(transporte.Enviados);
@@ -97,26 +112,26 @@ public sealed class NotificationServiceTests
     }
 
     [Fact]
-    public void Los_marcadores_se_rellenan_en_asunto_Y_cuerpo()
+    public async Task Los_marcadores_se_rellenan_en_asunto_Y_cuerpo()
     {
         var (svc, _, transporte, _) = Nuevo();
         ConPlantilla(svc);
 
-        svc.Send(Ana, Correo, "cita.recordatorio", Datos, Llave("k1"));
+        await svc.SendAsync(Ana, Correo, "cita.recordatorio", Datos, Llave("k1"));
 
         Assert.Equal("Tu cita del 5 de marzo", transporte.Enviados[0].Asunto);
         Assert.Equal("Hola Ana, te esperamos el 5 de marzo.", transporte.Enviados[0].Cuerpo);
     }
 
     [Fact]
-    public void Un_marcador_SIN_valor_no_manda_nada()
+    public async Task Un_marcador_SIN_valor_no_manda_nada()
     {
         // Rellenar a medias mandaría "Hola {nombre}" o "Hola ,". Lo que importa acá es que el
         // rechazo ocurre ANTES del transporte: nada sale, y no queda un envío registrado.
         var (svc, store, transporte, _) = Nuevo();
         ConPlantilla(svc);
 
-        var bad = svc.Send(Ana, Correo, "cita.recordatorio", new Dictionary<string, string> { ["nombre"] = "Ana" }, Llave("k1"));
+        var bad = await svc.SendAsync(Ana, Correo, "cita.recordatorio", new Dictionary<string, string> { ["nombre"] = "Ana" }, Llave("k1"));
 
         Assert.Equal("notifications.missing_placeholder", bad.Rejection!.Code);
         Assert.Empty(transporte.Enviados);
@@ -124,22 +139,26 @@ public sealed class NotificationServiceTests
     }
 
     [Fact]
-    public void Un_fallo_del_transporte_SI_deja_rastro()
+    public async Task Un_fallo_DEFINITIVO_del_transporte_deja_rastro_y_se_propaga()
     {
-        // Es la combinación peor: la persona no recibió nada y el sistema no sabe que le debe un
-        // aviso. Se registra como Failed, y no se propaga como error del llamador.
+        // Antes esto devolvía Ok con estado Failed: el llamador no se enteraba de que su aviso no
+        // había salido, y un orquestador seguía adelante como si nada. Ahora el rastro queda —la
+        // peor combinación sigue siendo "la persona no recibió nada y el sistema no lo sabe"—
+        // pero además se propaga, porque quien pidió el aviso tiene derecho a saberlo.
         var (svc, _, transporte, _) = Nuevo();
         ConPlantilla(svc);
-        transporte.Falla = true;
+        transporte.Falla = NotificationRules.TransportRejected("dirección inexistente");
 
-        var r = svc.Send(Ana, Correo, "cita.recordatorio", Datos, Llave("k1"));
+        var r = await svc.SendAsync(Ana, Correo, "cita.recordatorio", Datos, Llave("k1"));
 
-        Assert.True(r.IsOk);
-        Assert.Equal(DeliveryStatus.Failed, r.Value.Status);
+        Assert.False(r.IsOk);
+        Assert.Equal("notifications.transport_rejected", r.Rejection!.Code);
+        Assert.False(r.Rejection.IsTransient);
+        Assert.Equal(DeliveryStatus.Failed, svc.GetDelivery(transporte.Enviados[0].Llave).Value.Status);
     }
 
     [Fact]
-    public void El_tope_de_frecuencia_corta_y_se_LIBERA_al_pasar_la_ventana()
+    public async Task El_tope_de_frecuencia_corta_y_se_LIBERA_al_pasar_la_ventana()
     {
         // Sin tope, un lazo con un fallo manda mil correos. Pero un tope que no se libera deja a
         // la persona sin avisos para siempre — y eso también es un defecto.
@@ -147,58 +166,58 @@ public sealed class NotificationServiceTests
         ConPlantilla(svc);
         for (var i = 0; i < NotificationRules.MaxPerRecipient; i++)
         {
-            svc.Send(Ana, Correo, "cita.recordatorio", Datos, Llave($"k{i}"));
+            await svc.SendAsync(Ana, Correo, "cita.recordatorio", Datos, Llave($"k{i}"));
         }
 
-        var cortado = svc.Send(Ana, Correo, "cita.recordatorio", Datos, Llave("uno-mas"));
+        var cortado = await svc.SendAsync(Ana, Correo, "cita.recordatorio", Datos, Llave("uno-mas"));
         reloj.Avanzar(NotificationRules.RateWindow + TimeSpan.FromMinutes(1));
-        var despues = svc.Send(Ana, Correo, "cita.recordatorio", Datos, Llave("tras-la-ventana"));
+        var despues = await svc.SendAsync(Ana, Correo, "cita.recordatorio", Datos, Llave("tras-la-ventana"));
 
         Assert.Equal("notifications.rate_limited", cortado.Rejection!.Code);
         Assert.True(despues.IsOk, $"la ventana no liberó: {despues.Rejection}");
     }
 
     [Fact]
-    public void El_tope_es_POR_DESTINATARIO()
+    public async Task El_tope_es_POR_DESTINATARIO()
     {
         // Si fuera global, un envío masivo dejaría sin avisos a todo el mundo.
         var (svc, _, _, _) = Nuevo();
         ConPlantilla(svc);
         for (var i = 0; i < NotificationRules.MaxPerRecipient; i++)
         {
-            svc.Send(Ana, Correo, "cita.recordatorio", Datos, Llave($"k{i}"));
+            await svc.SendAsync(Ana, Correo, "cita.recordatorio", Datos, Llave($"k{i}"));
         }
 
-        var otra = svc.Send(Ref.Create("identity.member", "m-2"), "otro@ejemplo.co", "cita.recordatorio", Datos, Llave("otro"));
+        var otra = await svc.SendAsync(Ref.Create("identity.member", "m-2"), "otro@ejemplo.co", "cita.recordatorio", Datos, Llave("otro"));
 
         Assert.True(otra.IsOk);
     }
 
     [Fact]
-    public void Una_plantilla_INEXISTENTE_da_NotFound_y_no_manda_nada()
+    public async Task Una_plantilla_INEXISTENTE_da_NotFound_y_no_manda_nada()
     {
         var (svc, _, transporte, _) = Nuevo();
 
-        var bad = svc.Send(Ana, Correo, "no.existe", Datos, Llave("k1"));
+        var bad = await svc.SendAsync(Ana, Correo, "no.existe", Datos, Llave("k1"));
 
         Assert.Equal(RejectionKind.NotFound, bad.Rejection!.Kind);
         Assert.Empty(transporte.Enviados);
     }
 
     [Fact]
-    public void Una_direccion_del_canal_equivocado_no_manda_nada()
+    public async Task Una_direccion_del_canal_equivocado_no_manda_nada()
     {
         var (svc, _, transporte, _) = Nuevo();
         ConPlantilla(svc);
 
-        var bad = svc.Send(Ana, "3001234567", "cita.recordatorio", Datos, Llave("k1"));
+        var bad = await svc.SendAsync(Ana, "3001234567", "cita.recordatorio", Datos, Llave("k1"));
 
         Assert.Equal("notifications.address_channel_mismatch", bad.Rejection!.Code);
         Assert.Empty(transporte.Enviados);
     }
 
     [Fact]
-    public void Dos_plantillas_con_la_misma_clave_no_conviven()
+    public async Task Dos_plantillas_con_la_misma_clave_no_conviven()
     {
         // Con dos, pedir 'cita.recordatorio' devolvería una u otra según el orden del almacén —
         // y el texto que le llega a la persona cambiaría sin que nadie tocara nada.
@@ -211,7 +230,7 @@ public sealed class NotificationServiceTests
     }
 
     [Fact]
-    public void Reintentar_guardar_una_plantilla_devuelve_la_misma()
+    public async Task Reintentar_guardar_una_plantilla_devuelve_la_misma()
     {
         var (svc, _, _, _) = Nuevo();
 
@@ -222,7 +241,7 @@ public sealed class NotificationServiceTests
     }
 
     [Fact]
-    public void Listar_envios_SIN_destinatario_se_rechaza()
+    public async Task Listar_envios_SIN_destinatario_se_rechaza()
     {
         // Sin filtro sería un volcado del rastro de avisos de todo el mundo.
         var (svc, _, _, _) = Nuevo();
@@ -231,13 +250,13 @@ public sealed class NotificationServiceTests
     }
 
     [Fact]
-    public void Lo_mas_RECIENTE_sale_primero_en_el_rastro()
+    public async Task Lo_mas_RECIENTE_sale_primero_en_el_rastro()
     {
         var (svc, _, _, reloj) = Nuevo();
         ConPlantilla(svc, "simple", "Aviso {n}", "Cuerpo");
         foreach (var n in new[] { "una", "dos", "tres" })
         {
-            svc.Send(Ana, Correo, "simple", new Dictionary<string, string> { ["n"] = n }, Llave(n));
+            await svc.SendAsync(Ana, Correo, "simple", new Dictionary<string, string> { ["n"] = n }, Llave(n));
             reloj.Avanzar(TimeSpan.FromMinutes(1));
         }
 

@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **1991 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2038 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -97,7 +97,7 @@ Synergos.CMS/
 │   ├── Services/                Umbraco-dependent services (LayoutCssBuilder, FlowResolver, etc.)
 │   ├── Views/                   Razor templates + partials + blockgrid components
 │   ├── docs/
-│   │   ├── adr/                 129 ADRs (0001-0130, sin 0016) — SOURCE OF TRUTH
+│   │   ├── adr/                 130 ADRs (0001-0131, sin 0016) — SOURCE OF TRUTH
 │   │   ├── contracts/           los 5 contratos CMS↔UI + harness Vitest
 │   │   └── umbraco/             cdn-contract.md (externalmente bloqueado)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 1991 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2038 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   ├── Api/                     tests de reglas y servicio por capacidad
 │   └── Bff/                     la compensación cruzada (48)
@@ -352,7 +352,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (1991 tests):
+# Suite completa (2038 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -449,8 +449,8 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (128 endpoints, 180 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 1991 tests, gates de
+**Construido y verificado:** 20 capacidades (129 endpoints, 192 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2038 tests, gates de
 segregación y molde en verde.
 
 **Lo que NO está:**
@@ -458,6 +458,14 @@ segregación y molde en verde.
 - **Casi nada está conectado al producto.** El CMS consume UNA capacidad
   de veinte. Es la brecha más grande y no es técnica de fondo: es
   cableado. Sin esto, «tenemos 20 APIs» no es «tenemos un producto».
+- **El borde ya avisa, pero todavía no cobra.** `Api.Notifications` tiene
+  transporte real (Resend, ADR 0131) y le falta solo la credencial del
+  arquitecto; `Api.Payments` sigue sobre `LoggingPaymentProvider` y **no
+  cobra**. Mientras eso siga así, ningún demo de venta corre de punta a
+  punta. Es la HU 6a de la épica #2.
+- **Nada barre los envíos que quedaron en `Queued`.** Reintenta quien
+  llama. El barrido periódico es la máquina de `Bff.Core` y ponerlo dentro
+  de la capacidad duplicaría esa lógica.
 - **19 capacidades sobre fichero JSON** con `lock` de proceso. Una sola
   instancia por capacidad; dos réplicas se pisan. Está dicho de frente
   en `JsonCollectionStore` y es la primera razón para cambiar de almacén.

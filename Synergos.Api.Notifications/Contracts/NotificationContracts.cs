@@ -19,14 +19,35 @@ public sealed record TemplateResponse(string Id, string Key, string Channel, str
 }
 
 /// <summary>Cómo sale un envío.</summary>
+/// <param name="Status">
+/// En qué va. <b><c>Accepted</c> no es «llegó»</b>: es «el proveedor se hace cargo de
+/// intentarlo». Sale de aquella forma vieja que solo distinguía <c>Sent</c> de <c>Failed</c>.
+/// </param>
+/// <param name="ProviderMessageId">
+/// El id del proveedor, o <c>null</c> si todavía no aceptó. Es con lo que se correlaciona el
+/// webhook de vuelta.
+/// </param>
+/// <param name="StatusAtUtc">Cuándo cambió el estado por última vez — distinto de <c>AtUtc</c>.</param>
 public sealed record DeliveryResponse(
     string Id, string ToKind, string ToId, string Address, string Channel,
-    string TemplateKey, string Subject, string Status, DateTimeOffset AtUtc)
+    string TemplateKey, string Subject, string Status, DateTimeOffset AtUtc,
+    string? ProviderMessageId, DateTimeOffset? StatusAtUtc)
 {
     public static DeliveryResponse From(Delivery d) => new(
         d.Id, d.To.Kind, d.To.Id, d.Address, d.Channel.ToString(),
-        d.TemplateKey, d.Subject, d.Status.ToString(), d.AtUtc);
+        d.TemplateKey, d.Subject, d.Status.ToString(), d.AtUtc, d.ProviderMessageId, d.StatusAtUtc);
 }
+
+/// <summary>
+/// Lo que se le contesta a un proveedor cuando su evento es legítimo pero no cambia nada acá.
+/// </summary>
+/// <param name="Matched">Si el evento se pudo apuntar contra un envío de este despliegue.</param>
+/// <param name="Reason">Por qué no, en texto — para que se pueda ver sin abrir el log.</param>
+/// <remarks>
+/// Existe para poder decir «recibido, y no hice nada» <b>sin mentir y sin provocar reintentos</b>.
+/// Un 4xx haría que el proveedor insista durante días; un 200 a secas haría creer que se guardó.
+/// </remarks>
+public sealed record WebhookAck(bool Matched, string Reason);
 
 /// <summary>Una porción de una lista, con su total.</summary>
 public sealed record PageResponse<T>(IReadOnlyList<T> Items, int Total, int Offset, bool HasMore);

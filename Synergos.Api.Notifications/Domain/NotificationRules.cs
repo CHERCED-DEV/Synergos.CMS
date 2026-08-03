@@ -79,4 +79,66 @@ public static class NotificationRules
             : Rejection.Invalid($"{CodePrefix}.missing_placeholder",
                 $"La plantilla usa {{{faltante}}} y no vino ese valor.");
     }
+
+    // ── El avance del estado ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Cuánto ha avanzado un envío. <b>No es el valor del enum</b>, y esa distinción es el punto.
+    /// </summary>
+    /// <remarks>
+    /// Lo que se guarda es <i>qué tan lejos llegó</i>, no <i>qué evento llegó último</i>. Los
+    /// eventos del proveedor llegan por red y no vienen ordenados: <c>delivered</c> puede llegar
+    /// antes que <c>accepted</c>. Con «último gana», ese par deja el envío en «aceptado» para
+    /// siempre — un envío que sí llegó, marcado como que quizá no.
+    /// </remarks>
+    private static int Rank(DeliveryStatus s) => s switch
+    {
+        DeliveryStatus.Queued => 0,
+        DeliveryStatus.Accepted => 1,
+        // Los tres desenlaces del transporte empatan: son excluyentes entre sí, y al empatar,
+        // el primero que llegó es el que queda. Un rebote posterior a una entrega no existe.
+        DeliveryStatus.Delivered => 2,
+        DeliveryStatus.Bounced => 2,
+        DeliveryStatus.Failed => 2,
+        // La queja es lo único que sí ocurre DESPUÉS de haber llegado.
+        DeliveryStatus.Complained => 3,
+        _ => 0,
+    };
+
+    /// <summary>
+    /// A qué estado queda un envío cuando llega un evento del proveedor.
+    /// </summary>
+    /// <remarks>
+    /// <b>Nunca retrocede.</b> Devolver el actual cuando el evento no aporta es la respuesta
+    /// correcta y no un error: reintentar la entrega de un webhook es lo normal, y el proveedor
+    /// tiene que ver un 2xx o va a seguir insistiendo durante días.
+    /// </remarks>
+    public static DeliveryStatus Advance(DeliveryStatus actual, DeliveryStatus llega)
+        => Rank(llega) > Rank(actual) ? llega : actual;
+
+    // ── Lo que agrega un transporte de verdad ───────────────────────────────
+
+    /// <summary>El proveedor no respondió o falló por su lado. <b>Transitorio: se reintenta.</b></summary>
+    /// <remarks>
+    /// <c>Unavailable</c> y no <c>Conflict</c> a propósito: <see cref="Rejection.IsTransient"/> es
+    /// lo que ya decide en <c>Bff.Core</c> si algo se reintenta o se grita una vez. Clasificarlo
+    /// mal no produce un mensaje feo — produce un aviso que nunca sale, o una tormenta de
+    /// peticiones contra un proveedor que ya dijo que no.
+    /// </remarks>
+    public static Rejection TransportUnavailable(string detalle)
+        => Rejection.Unavailable($"{CodePrefix}.transport_unavailable", $"El proveedor no pudo atender el envío: {detalle}");
+
+    /// <summary>El proveedor rechazó la dirección o el contenido. No se reintenta.</summary>
+    public static Rejection TransportRejected(string detalle)
+        => Rejection.Invalid($"{CodePrefix}.transport_rejected", $"El proveedor rechazó el envío: {detalle}");
+
+    /// <summary>Falta la credencial del canal. Se grita una vez y no se reintenta.</summary>
+    public static Rejection TransportNotConfigured(Channel channel)
+        => Rejection.Invalid($"{CodePrefix}.transport_not_configured",
+            $"No hay credenciales configuradas para {channel}: el aviso NO salió y no va a salir hasta que se configuren.");
+
+    /// <summary>Este despliegue no tiene proveedor para ese canal.</summary>
+    public static Rejection ChannelUnsupported(Channel channel)
+        => Rejection.Invalid($"{CodePrefix}.channel_unsupported",
+            $"Este despliegue no tiene transporte para {channel}.");
 }

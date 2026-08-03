@@ -26,7 +26,7 @@ public static class SharedKeyAuth
     /// <summary>Cabecera con la llave compartida. Una sola para todos los servicios.</summary>
     public const string HeaderName = "X-Synergos-Key";
 
-    /// <summary>Rutas exentas: un chequeo de vida que exige credenciales no sirve de chequeo.</summary>
+    /// <summary>Rutas exentas siempre: un chequeo de vida que exige credenciales no sirve de chequeo.</summary>
     private static readonly string[] AlwaysOpen = { "/health" };
 
     /// <summary>
@@ -38,7 +38,14 @@ public static class SharedKeyAuth
     /// aviso: sin esto, un <c>dotnet run</c> recién clonado no levantaría, y eso empuja a poner
     /// la llave en el repo — que es peor que no tenerla. Pero queda dicho.
     /// </param>
-    public static IApplicationBuilder UseSharedKeyAuth(this IApplicationBuilder app, string? expectedKey)
+    /// <param name="alsoOpen">
+    /// Rutas adicionales que quedan fuera de la llave. <b>Se pasan una por una y a la vista</b>,
+    /// nunca por comodín: existen porque quien las llama es un tercero que no tiene la llave —el
+    /// webhook de un proveedor de correo o de pagos— y lo que las protege es su propia firma. Una
+    /// exención que no lleva verificación detrás es un endpoint abierto que escribe.
+    /// </param>
+    public static IApplicationBuilder UseSharedKeyAuth(
+        this IApplicationBuilder app, string? expectedKey, params string[] alsoOpen)
     {
         var logger = app.ApplicationServices
             .GetService(typeof(ILoggerFactory)) as ILoggerFactory;
@@ -51,9 +58,13 @@ public static class SharedKeyAuth
             return app;
         }
 
+        // Se resuelve una vez al montar, no por petición: la lista es de configuración y no
+        // cambia, y evaluarla en cada request es trabajo repetido sobre el camino caliente.
+        var abiertas = AlwaysOpen.Concat(alsoOpen ?? Array.Empty<string>()).ToArray();
+
         return app.Use(async (ctx, next) =>
         {
-            if (IsAlwaysOpen(ctx.Request.Path))
+            if (IsOpen(ctx.Request.Path, abiertas))
             {
                 await next();
                 return;
@@ -69,9 +80,23 @@ public static class SharedKeyAuth
         });
     }
 
-    /// <summary>Si la ruta está exenta de la llave.</summary>
-    public static bool IsAlwaysOpen(PathString path)
-        => AlwaysOpen.Any(open => path.StartsWithSegments(open));
+    /// <summary>Si la ruta está exenta de la llave sin que nadie lo haya pedido.</summary>
+    public static bool IsAlwaysOpen(PathString path) => IsOpen(path, AlwaysOpen);
+
+    /// <summary>Si la ruta está en una lista de exentas.</summary>
+    /// <remarks>
+    /// Compara por <b>segmentos</b> y no por prefijo de texto: con un prefijo suelto, exentar
+    /// <c>/v1/webhooks</c> abriría también <c>/v1/webhooksfalsos</c>. Es la clase de detalle que
+    /// no se nota hasta que alguien lo busca a propósito.
+    /// </remarks>
+    public static bool IsOpen(PathString path, IReadOnlyList<string> open)
+    {
+        for (var i = 0; i < open.Count; i++)
+        {
+            if (path.StartsWithSegments(open[i])) return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// Compara en tiempo constante. Una comparación normal filtra el prefijo correcto por
