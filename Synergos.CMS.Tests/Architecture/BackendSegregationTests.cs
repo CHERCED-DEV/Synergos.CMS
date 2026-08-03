@@ -86,23 +86,30 @@ public sealed class BackendSegregationTests
     // Un tipo que parece pertenecer a los dos NO existe: está mal cortado.
 
     [Fact]
-    public void Shared_no_referencia_ningun_otro_proyecto_del_repo()
+    public void Shared_solo_puede_referenciar_Core()
     {
-        // Ni Core, ni el CMS, ni una API. En el momento en que Shared dependa de algo de
-        // aquí deja de ser fontanería y empieza a ser el nudo que venía a deshacer.
+        // UNA flecha, no dos. La justifica RejectionResults: el mapeo Rejection→HTTP lo
+        // necesitan las dieciséis capacidades, y con la regla simétrica original había que
+        // copiarlo dieciséis veces o meter dominio en Shared. Cualquier OTRA referencia —el
+        // CMS, una API— sí convierte a Shared en el nudo que venía a deshacer.
         var shared = Named("Synergos.Shared").SingleOrDefault();
         if (shared is null) return;   // aún no existe: nada que vigilar
 
-        Assert.True(shared.ProjectRefs.Count == 0,
-            $"Synergos.Shared no puede referenciar proyectos del repo. Encontrado: " +
-            $"{string.Join(", ", shared.ProjectRefs)}.");
+        var extra = shared.ProjectRefs.Where(r => r != "Synergos.Core").ToList();
+
+        Assert.True(extra.Count == 0,
+            $"Synergos.Shared solo puede referenciar Synergos.Core. Encontrado además: " +
+            $"{string.Join(", ", extra)}.");
     }
 
     [Fact]
     public void Core_no_referencia_ningun_otro_proyecto_del_repo()
     {
+        // La flecha va en un solo sentido. Si Core referenciara Shared, el vocabulario del
+        // negocio pasaría a depender de ASP.NET por transitividad — y ahí se acabó la capa
+        // pura sin que ningún csproj lo delate a simple vista.
         var core = Named("Synergos.Core").SingleOrDefault();
-        if (core is null) return;   // llega con Api.Commerce; ver docs/product/06 §8
+        if (core is null) return;
 
         Assert.True(core.ProjectRefs.Count == 0,
             $"Synergos.Core no puede referenciar proyectos del repo. Encontrado: " +
@@ -115,11 +122,27 @@ public sealed class BackendSegregationTests
         var core = Named("Synergos.Core").SingleOrDefault();
         if (core is null) return;
 
-        var xml = File.ReadAllText(core.Path);
-        // Un FrameworkReference a Microsoft.AspNetCore.App es exactamente cómo una capa
-        // "pura" deja de serlo sin que ninguna referencia de paquete lo delate.
-        Assert.DoesNotContain("Microsoft.AspNetCore", xml, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Umbraco", xml, StringComparison.OrdinalIgnoreCase);
+        // Se miran las REFERENCIAS declaradas, no el texto del fichero. La primera versión
+        // buscaba las cadenas sueltas y se disparó con un comentario que explicaba justamente
+        // que esas referencias no debían estar: un gate que no distingue el código de la prosa
+        // que lo documenta castiga documentar.
+        //
+        // Un FrameworkReference a Microsoft.AspNetCore.App es exactamente cómo una capa "pura"
+        // deja de serlo sin que ninguna referencia de PAQUETE lo delate — por eso se miran los
+        // tres tipos de referencia y no solo PackageReference.
+        var referencias = XDocument.Load(core.Path)
+            .Descendants()
+            .Where(e => e.Name.LocalName is "PackageReference" or "FrameworkReference" or "Reference")
+            .Select(e => (string?)e.Attribute("Include") ?? string.Empty)
+            .ToList();
+
+        var prohibidas = referencias
+            .Where(r => r.Contains("AspNetCore", StringComparison.OrdinalIgnoreCase)
+                     || r.Contains("Umbraco", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        Assert.True(prohibidas.Count == 0,
+            $"Synergos.Core no puede conocer ASP.NET ni Umbraco. Encontrado: {string.Join(", ", prohibidas)}.");
     }
 
     /// <summary>
@@ -209,6 +232,54 @@ public sealed class BackendSegregationTests
 
         Assert.True(leaks.Count == 0,
             "Una capacidad no puede nombrar un negocio concreto: eso va en su Synergos.Domain.*. " +
+            $"Encontrado:{Environment.NewLine}{string.Join(Environment.NewLine, leaks)}");
+    }
+
+    [Fact]
+    public void Ninguna_capacidad_ramifica_sobre_Ref_Kind()
+    {
+        // LA regla que sostiene la agnosticidad (docs/product/07 §3). Una capacidad guarda y
+        // devuelve un Ref; no lo interpreta. El `if (kind == "salud.profesional")` entra un
+        // martes como atajo y para cuando se nota, el octavo dominio ya no puede reutilizar la
+        // capacidad y se copió el código — que es de donde veníamos.
+        //
+        // Es tosco: no atrapa a un adversario, atrapa el atajo. Es lo que hace falta.
+        var patrones = new[]
+        {
+            @"\.Kind\s*(==|!=)",          //  x.Kind == "..."
+            @"\.Kind\s+is\s",              //  x.Kind is "..."
+            @"switch\s*\(\s*\w+\.Kind",    //  switch (x.Kind)
+            @"\.Kind\.(StartsWith|Contains|EndsWith)",
+        };
+
+        var leaks = new List<string>();
+        foreach (var api in Named("Synergos.Api."))
+        {
+            var dir = Path.GetDirectoryName(api.Path)!;
+            foreach (var file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
+            {
+                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)) continue;
+
+                var n = 0;
+                foreach (var line in File.ReadLines(file))
+                {
+                    n++;
+                    // Los comentarios pueden hablar de Ref.Kind al explicar por qué NO se
+                    // ramifica sobre él — justamente lo que hace este archivo.
+                    var code = line.TrimStart();
+                    if (code.StartsWith("//", StringComparison.Ordinal) || code.StartsWith("///", StringComparison.Ordinal)) continue;
+
+                    if (patrones.Any(p => Regex.IsMatch(line, p)))
+                    {
+                        leaks.Add($"{api.Name}/{Path.GetFileName(file)}:{n} → {line.Trim()}");
+                    }
+                }
+            }
+        }
+
+        Assert.True(leaks.Count == 0,
+            "Una capacidad guarda y devuelve un Ref; NUNCA ramifica sobre su Kind — el día que " +
+            "lo haga deja de servirle al siguiente dominio. " +
             $"Encontrado:{Environment.NewLine}{string.Join(Environment.NewLine, leaks)}");
     }
 
