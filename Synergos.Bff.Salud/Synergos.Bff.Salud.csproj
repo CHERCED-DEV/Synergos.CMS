@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Orquestador. Habla con las capacidades por HTTP y NO referencia ninguna
+         Synergos.Api.*: si pudiera llamarlas en proceso, la capacidad sería una
+         carpeta con ínfulas. Ver docs/product/06 §4. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Synergos.Core\Synergos.Core.csproj" />
+    <ProjectReference Include="..\Synergos.Shared\Synergos.Shared.csproj" />
+  </ItemGroup>
+
+</Project>
