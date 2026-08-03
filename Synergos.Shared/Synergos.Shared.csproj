@@ -14,6 +14,11 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <!-- La ÚNICA referencia de proyecto permitida, y solo en esta dirección. La justifica
+         RejectionResults: el mapeo Rejection→HTTP lo necesitan las dieciséis capacidades, y
+         con la regla simétrica original había que copiarlo dieciséis veces o meter dominio
+         aquí. Core nunca referencia Shared. Ver docs/product/07 §3. -->
+    <ProjectReference Include="..\Synergos.Core\Synergos.Core.csproj" />
   </ItemGroup>
 
 </Project>
