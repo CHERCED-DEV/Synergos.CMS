@@ -9,10 +9,12 @@ Fontanería que **todo host de API repite**. Nada más.
 
 Y la frontera contra `Synergos.Core`, que es lo que impide que esto se convierta en un `Utils`:
 
-> `Core` no sabe qué es un host. `Shared` no sabe qué es un pedido. **Ninguno referencia al
-> otro.**
+> `Core` no sabe qué es un host. `Shared` no sabe qué es un pedido.
 
 Un tipo que parece pertenecer a los dos no existe: está mal cortado y hay que partirlo.
+
+`Shared` **sí** puede referenciar `Core` — una flecha, nunca al revés. La justifica
+`RejectionResults`: el mapeo `Rejection → HTTP` lo necesitan las dieciséis capacidades.
 
 ## Por qué existe, si CLAUDE.md §6 prohíbe los `Shared/`
 

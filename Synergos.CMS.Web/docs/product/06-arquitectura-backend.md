@@ -99,7 +99,7 @@ Reglas, todas verificables por test:
 | `Api.*` **no** referencia `Domain.*` | Una capacidad que conoce un dominio dejó de ser agnóstica. Es la flecha que se invierte sola si nadie mira. |
 | `Api.*` y `Domain.*` **no** referencian `Synergos.CMS.*`, ni al revés | Lo que hizo real la separación de `Synergos.Sessions` (ADR 0130): mudarla a su repo no tiene nada que desenredar. |
 | El CMS y Angular **no** llaman una capacidad directa | Si pudieran, la regla de dominio se reimplementaría en la vista — el mismo error de forma que el `if (brand.Key == "X")` que prohíbe el ADR 0010. |
-| `Shared` ⊥ `Core` | La frontera de §5. |
+| `Core` **no** referencia `Shared` (la inversa sí vale) | La frontera de §5. Si `Core` dependiera de `Shared`, el vocabulario del negocio heredaría ASP.NET por transitividad. |
 
 Esto **extiende** el ADR 0002, no lo reemplaza: `Interfaces ← Application ← Web ← Tests` sigue
 siendo el grafo interno del CMS. Al lado crece un segundo árbol, unido solo por HTTP.
@@ -123,13 +123,26 @@ Referencia `Microsoft.AspNetCore.*` sin culpa — es su oficio.
 
 **La frontera, en una frase:**
 
-> `Core` no sabe qué es un host. `Shared` no sabe qué es un pedido. **Ninguno referencia al
-> otro.**
+> `Core` no sabe qué es un host. `Shared` no sabe qué es un pedido.
 
 Un tipo que parece pertenecer a los dos no existe: está mal cortado y hay que partirlo. Ese es
 el caso que el test tiene que hacer doler, porque es el primer paso hacia el `Utils`.
 
+> **Corrección.** Esta sección decía además *"ninguno referencia al otro"*. Al bajar a los tipos
+> ([doc 07 §3](07-diseno-atomico-capacidades.md#3-los-tipados--synergoscore)) apareció el costo:
+> el mapeo `Rejection → ProblemDetails` es fontanería que necesitan las dieciséis capacidades, y
+> con la regla simétrica había que copiarlo dieciséis veces o meter dominio en `Shared`. Queda
+> **una flecha, no dos**: `Shared → Core`, nunca al revés. La simetría era más bonita en el
+> diagrama y peor en el código.
+
 ## 6. Las capacidades — seis, y por eso pocas
+
+> **Superado por [`07-diseno-atomico-capacidades.md`](07-diseno-atomico-capacidades.md) §2.** Al
+> aplicar los dos filtros de atomicidad —*puede decir NO sola* y *es dueña de su almacén*— estas
+> seis se abren en **dieciséis**: `Commerce` no era una capacidad sino cuatro (`Orders`,
+> `Payments`, `Pricing`, `Cart`), y aparecieron cortes que aquí no se veían (`Booking` vs
+> `Inventory`, `Messaging` vs `Notifications`, `Workflow`). Esta tabla se deja como el paso
+> intermedio que fue; el catálogo vigente es el del doc 07.
 
 Son el activo caro: se diseñan una vez, las usan todos, y equivocarse ahí se paga ocho veces.
 

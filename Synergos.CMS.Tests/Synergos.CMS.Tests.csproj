@@ -24,6 +24,7 @@
          gate CMS ⊥ API (BackendSegregationTests), porque probar la separación exige
          poder ver los dos lados. -->
     <ProjectReference Include="..\Synergos.Shared\Synergos.Shared.csproj" />
+    <ProjectReference Include="..\Synergos.Core\Synergos.Core.csproj" />
   </ItemGroup>
 
 </Project>
