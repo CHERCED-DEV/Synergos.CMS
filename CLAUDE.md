@@ -123,7 +123,11 @@ Synergos.CMS/
 - Mensaje con type prefix: `feat`, `fix`, `refactor`, `docs`, `chore`.
 - Subject bajo 70 chars.
 - Body explica WHY + cómo se aplicará.
-- Co-Authored-By al final si el agente debe aparecer.
+- **Sin firmas de agente.** Nada de `Co-Authored-By: Claude`, ni menciones a
+  Anthropic, ni enlaces de sesión. Los commits los firma
+  `Camilo Hernandez <hitmancodeme47@hotmail.com>` y nadie más.
+  (Referirse a este fichero por su nombre —`CLAUDE.md`— sí es legítimo:
+  es un fichero del repo, no una firma.)
 - Commits atómicos por fase. Nunca mezclar feature + refactor.
 
 ## 5. Memorias de agente — los guardrails no escritos en ADR
