@@ -1,8 +1,9 @@
 # Despiece de APIs — qué necesita cada dominio, y de qué
 
 > **Estado: LAS VEINTE CONSTRUIDAS.** El molde de §4 está construido y gateado, y las veinte lo
-> cumplen sin excepciones. Lo que queda del plan no son capacidades: son los **BFF**, y con ellos
-> el problema de la **compensación cruzada** (doc 07 §7), que sigue sin resolver.
+> cumplen sin excepciones. Y el **primer BFF** (`Synergos.Bff.Salud`) ya existe, con la
+> **compensación cruzada** resuelta y verificada matando una capacidad en mitad del flujo —
+> ver [`09-compensacion-cruzada.md`](09-compensacion-cruzada.md).
 >
 > Es el inventario que hay que acordar antes de escribir la
 > primera API. Deriva de los dos filtros de atomicidad del

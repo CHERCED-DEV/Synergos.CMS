@@ -76,10 +76,13 @@ public sealed class BackendSegregationTests
     /// Si el proyecto pertenece al árbol de servicios —capacidades y orquestadores— y no al
     /// del CMS. El prefijo dice la capa, y por eso el nombre importa: sin él, la regla habría
     /// que mantenerla a mano proyecto por proyecto.
+    ///
+    /// <c>Synergos.Bff.*</c> y no <c>Synergos.Domain.*</c>: el arquitecto llamó BFF a la capa
+    /// media, y el nombre del proyecto tiene que decir lo mismo que se dice al hablar.
     /// </summary>
     private static bool EsDelOtroArbol(string name) =>
         name.StartsWith("Synergos.Api.", StringComparison.Ordinal)
-        || name.StartsWith("Synergos.Domain.", StringComparison.Ordinal);
+        || name.StartsWith("Synergos.Bff.", StringComparison.Ordinal);
 
     // ── La frontera Core ⊥ Shared ───────────────────────────────────────────
     // "Core no sabe qué es un host. Shared no sabe qué es un pedido."
@@ -231,7 +234,7 @@ public sealed class BackendSegregationTests
             .ToList();
 
         Assert.True(leaks.Count == 0,
-            "Una capacidad no puede nombrar un negocio concreto: eso va en su Synergos.Domain.*. " +
+            "Una capacidad no puede nombrar un negocio concreto: eso va en su Synergos.Bff.*. " +
             $"Encontrado:{Environment.NewLine}{string.Join(Environment.NewLine, leaks)}");
     }
 
@@ -304,7 +307,7 @@ public sealed class BackendSegregationTests
         // capa: una capacidad que conoce un dominio ya no sirve al siguiente.
         var offenders = Named("Synergos.Api.")
             .Select(p => (p.Name, Bad: p.ProjectRefs
-                .Where(r => r.StartsWith("Synergos.Domain.", StringComparison.Ordinal)).ToList()))
+                .Where(r => r.StartsWith("Synergos.Bff.", StringComparison.Ordinal)).ToList()))
             .Where(x => x.Bad.Count > 0)
             .Select(x => $"{x.Name} → {string.Join(", ", x.Bad)}")
             .ToList();
