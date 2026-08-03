@@ -2,17 +2,10 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 
-namespace Synergos.Api.Sessions;
+using Synergos.Api.Sessions.Domain;
+using Synergos.Core;
 
-/// <summary>Una búsqueda ejecutada, tal como la reporta un origen.</summary>
-/// <param name="Query">Texto buscado. Se normaliza a minúsculas y sin espacios sobrantes.</param>
-/// <param name="ResultCount">Cuántos resultados devolvió.</param>
-/// <param name="ElapsedMs">Cuánto tardó, en milisegundos.</param>
-/// <param name="AtUtc">Cuándo ocurrió.</param>
-public sealed record SearchEvent(string Query, int ResultCount, long ElapsedMs, DateTime AtUtc);
-
-/// <summary>Un query agregado dentro de una ventana temporal.</summary>
-public sealed record QueryStat(string Query, int Count, int LastResultCount, DateTime LastSeenUtc);
+namespace Synergos.Api.Sessions.Storage;
 
 /// <summary>
 /// El almacén de búsquedas del servicio de sesión: JSONL append-only, un fichero por día.
@@ -93,8 +86,8 @@ public sealed class SearchEventStore
     }
 
     /// <summary>Top de queries por número de veces buscados en la ventana.</summary>
-    public IReadOnlyList<QueryStat> TopQueries(DateTime fromUtc, DateTime toUtc, int limit)
-        => Aggregate(fromUtc, toUtc, limit, noResultsOnly: false);
+    public IReadOnlyList<QueryStat> TopQueries(TimeWindow window, int limit)
+        => Aggregate(window, limit, noResultsOnly: false);
 
     /// <summary>
     /// Top de queries que terminaron SIN resultados.
@@ -104,12 +97,18 @@ public sealed class SearchEventStore
     /// algo, no lo encontró, y después se publicó el contenido, ese query ya no es un hueco
     /// del catálogo. Lo contrario dejaría en la lista cosas ya resueltas.
     /// </remarks>
-    public IReadOnlyList<QueryStat> TopNoResultQueries(DateTime fromUtc, DateTime toUtc, int limit)
-        => Aggregate(fromUtc, toUtc, limit, noResultsOnly: true);
+    public IReadOnlyList<QueryStat> TopNoResultQueries(TimeWindow window, int limit)
+        => Aggregate(window, limit, noResultsOnly: true);
 
-    private IReadOnlyList<QueryStat> Aggregate(DateTime fromUtc, DateTime toUtc, int limit, bool noResultsOnly)
+    private IReadOnlyList<QueryStat> Aggregate(TimeWindow window, int limit, bool noResultsOnly)
     {
-        if (limit <= 0 || toUtc < fromUtc) return Array.Empty<QueryStat>();
+        // La ventana llega como TimeWindow y no como dos fechas sueltas: el tipo ya garantiza
+        // que avanza. Antes, una ventana invertida devolvía lista vacía en silencio — y "no hay
+        // datos" es exactamente lo que NO había que contestarle a quien mandó el rango al revés.
+        if (limit <= 0) return Array.Empty<QueryStat>();
+
+        var fromUtc = window.Start.UtcDateTime;
+        var toUtc = window.End.UtcDateTime;
 
         var acc = new Dictionary<string, (int Count, int LastResultCount, DateTime LastSeen)>(StringComparer.Ordinal);
 

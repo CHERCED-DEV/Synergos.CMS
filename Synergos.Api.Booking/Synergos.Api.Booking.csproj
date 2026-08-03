@@ -4,14 +4,11 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Sin referencia a Synergos.CMS.*: el acople es el contrato HTTP, no un
-         ensamblado compartido. Si algún día este servicio se muda a su propio
-         repo, esto es lo único que hay que mover. -->
+    <!-- Capacidad agnóstica. NO referencia Synergos.CMS.* ni ningún Synergos.Bff.*:
+         el acople es el contrato HTTP. Ver docs/product/06 §4 y 08 §4. -->
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Fontanería de host sin dominio (llave compartida, ventanas de consulta).
-         Viaja con el servicio si algún día se muda de repo. -->
     <ProjectReference Include="..\Synergos.Core\Synergos.Core.csproj" />
     <ProjectReference Include="..\Synergos.Shared\Synergos.Shared.csproj" />
   </ItemGroup>
