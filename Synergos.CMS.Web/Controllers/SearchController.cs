@@ -98,10 +98,11 @@ public sealed class SearchController : ControllerBase
     /// </summary>
     [HttpGet("analytics")]
     [AllowAnonymous]
-    public ActionResult<SearchAnalyticsResponse> Analytics(
+    public async Task<ActionResult<SearchAnalyticsResponse>> Analytics(
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
-        [FromQuery] int limit = 20)
+        [FromQuery] int limit = 20,
+        CancellationToken cancellationToken = default)
     {
         // Ola 88 — Gate por roles configurados en SearchSettings.
         // Vacío/null = endpoint abierto (mantener para dev/staging).
@@ -115,8 +116,11 @@ public sealed class SearchController : ControllerBase
         var toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
         var clampedLimit = Math.Clamp(limit, 1, 100);
 
-        var topQueries = _analyticsStore.GetTopQueries(fromUtc, toUtc, clampedLimit);
-        var topNoResults = _analyticsStore.GetTopNoResultQueries(fromUtc, toUtc, clampedLimit);
+        // Async de verdad, no .Result: con el store detrás de la red (ADR 0130) bloquear un
+        // hilo del pool por request agota el pool bajo carga. Aquí pesa más que en otras rutas
+        // porque el endpoint es [AllowAnonymous] y su gate por rol sale de configuración.
+        var topQueries = await _analyticsStore.GetTopQueriesAsync(fromUtc, toUtc, clampedLimit, cancellationToken);
+        var topNoResults = await _analyticsStore.GetTopNoResultQueriesAsync(fromUtc, toUtc, clampedLimit, cancellationToken);
 
         return Ok(new SearchAnalyticsResponse(
             FromUtc: fromUtc,

@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.CMS.Tests", "Syner
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.CMS.Benchmarks", "Synergos.CMS.Benchmarks\Synergos.CMS.Benchmarks.csproj", "{968F9EA0-3D88-4912-84E9-91A3B18B83C3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Sessions", "Synergos.Sessions\Synergos.Sessions.csproj", "{F4857625-53E8-43F2-B94A-E0205184233E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -83,6 +85,18 @@ Global
 		{968F9EA0-3D88-4912-84E9-91A3B18B83C3}.Release|x64.Build.0 = Release|Any CPU
 		{968F9EA0-3D88-4912-84E9-91A3B18B83C3}.Release|x86.ActiveCfg = Release|Any CPU
 		{968F9EA0-3D88-4912-84E9-91A3B18B83C3}.Release|x86.Build.0 = Release|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Debug|x64.Build.0 = Debug|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Debug|x86.Build.0 = Debug|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Release|x64.ActiveCfg = Release|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Release|x64.Build.0 = Release|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Release|x86.ActiveCfg = Release|Any CPU
+		{F4857625-53E8-43F2-B94A-E0205184233E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

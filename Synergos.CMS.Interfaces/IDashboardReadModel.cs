@@ -37,8 +37,15 @@ public interface IDashboardReadModel
     /// <summary>Comportamiento: top de eventos por conteo en la ventana.</summary>
     BehaviorVm GetBehavior(DateTime fromUtc, DateTime toUtc, int topN);
 
-    /// <summary>Búsqueda: top queries y top queries sin resultados.</summary>
-    SearchInsightsVm GetSearchInsights(DateTime fromUtc, DateTime toUtc, int limit);
+    /// <summary>
+    /// Búsqueda: top queries y top queries sin resultados.
+    /// </summary>
+    /// <remarks>
+    /// Es la única cara async de esta fachada, y no por gusto: detrás puede haber un servicio
+    /// de sesión fuera del proceso (ADR 0130). Las otras cinco leen de almacenes locales.
+    /// </remarks>
+    Task<SearchInsightsVm> GetSearchInsightsAsync(
+        DateTime fromUtc, DateTime toUtc, int limit, CancellationToken cancellationToken = default);
 
     /// <summary>Salud de webhooks: stats por canal (latencias, éxito/fallo).</summary>
     WebhookHealthVm GetWebhookHealth();

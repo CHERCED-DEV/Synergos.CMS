@@ -136,6 +136,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0127](0127-el-cms-configura-el-mapa-de-asientos-y-un-proveedor-exogeno-lo-llena.md) | El CMS configura el mapa de asientos y un proveedor exógeno lo llena — enmienda el 0126 | Accepted |
 | [0128](0128-la-base-de-datos-es-derivable-un-gate-reconstruye-el-entorno-desde-el-xml.md) | La base de datos es derivable: un gate reconstruye el entorno desde el XML en cada PR | Accepted |
 | [0129](0129-el-contenido-editorial-tambien-se-versiona-y-la-media-va-con-el.md) | El contenido editorial también se versiona, y la media va con él | Accepted |
+| [0130](0130-la-analitica-de-busqueda-sale-del-cms-a-un-servicio-de-sesion.md) | La analítica de búsqueda sale del CMS a un servicio de sesión | Accepted |
 
 ## Rules
 

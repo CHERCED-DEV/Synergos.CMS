@@ -16,10 +16,18 @@ namespace Synergos.CMS.Interfaces;
 /// día se registra otro adapter y ni <c>SearchController</c> ni <c>AdminController</c> se
 /// enteran, porque hablan solo con esta interfaz.</para>
 ///
-/// <para>Sin async — el record write es fire-and-forget (similar a
+/// <para><b><see cref="Record"/> sigue sin async</b>: es fire-and-forget (similar a
 /// <see cref="IAnalyticsTracker"/>) y no debe bloquear al usuario. Por lo mismo, una
-/// implementación <b>no puede lanzar</b> desde <see cref="Record"/>: una búsqueda que funcionó
-/// no puede fallar porque su métrica no se pudo guardar.</para>
+/// implementación <b>no puede lanzar</b> desde ahí: una búsqueda que funcionó no puede fallar
+/// porque su métrica no se pudo guardar.</para>
+///
+/// <para><b>Las LECTURAS sí son async</b>, desde que existe un adapter que las sirve por red
+/// (ADR 0130). No es simetría estética: bloquear un hilo del pool esperando a otro proceso es
+/// lo que agota el pool bajo carga, y <c>/api/search/analytics</c> es
+/// <c>[AllowAnonymous]</c> con un gate por rol que sale de configuración —hoy
+/// <c>"admin,editor"</c>, pero vaciarlo es una línea— así que el peor caso es una ruta pública
+/// con una llamada de red bloqueante por request. La implementación de fichero devuelve tareas
+/// ya completadas y no paga nada por esto.</para>
 /// </remarks>
 public interface ISearchAnalyticsStore
 {
@@ -31,7 +39,8 @@ public interface ISearchAnalyticsStore
     /// <summary>
     /// Top N queries (ordenados por count desc) en la ventana indicada.
     /// </summary>
-    IReadOnlyList<SearchQueryStat> GetTopQueries(DateTime fromUtc, DateTime toUtc, int limit);
+    Task<IReadOnlyList<SearchQueryStat>> GetTopQueriesAsync(
+        DateTime fromUtc, DateTime toUtc, int limit, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Top N queries que devolvieron 0 resultados (ordenados por count
@@ -39,7 +48,8 @@ public interface ISearchAnalyticsStore
     /// "los visitantes buscaron X muchas veces y no encontraron nada —
     /// crear contenido / sinónimos".
     /// </summary>
-    IReadOnlyList<SearchQueryStat> GetTopNoResultQueries(DateTime fromUtc, DateTime toUtc, int limit);
+    Task<IReadOnlyList<SearchQueryStat>> GetTopNoResultQueriesAsync(
+        DateTime fromUtc, DateTime toUtc, int limit, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

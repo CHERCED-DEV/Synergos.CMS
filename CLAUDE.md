@@ -56,7 +56,7 @@ Synergos.CMS/
 │   ├── Services/                Umbraco-dependent services (LayoutCssBuilder, FlowResolver, etc.)
 │   ├── Views/                   Razor templates + partials + blockgrid components
 │   ├── docs/
-│   │   ├── adr/                 128 ADRs (0001-0129, sin 0016) — SOURCE OF TRUTH
+│   │   ├── adr/                 129 ADRs (0001-0130, sin 0016) — SOURCE OF TRUTH
 │   │   ├── contracts/           los 5 contratos CMS↔UI + harness Vitest
 │   │   └── umbraco/             cdn-contract.md (externalmente bloqueado)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
