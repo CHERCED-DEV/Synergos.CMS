@@ -135,6 +135,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0126](0126-un-elemento-que-otro-bundle-embebe-no-lleva-doctype.md) | Un elemento que otro bundle embebe no lleva DocType: seat-map y pax-selector no eran deuda sino piezas de composición | Accepted |
 | [0127](0127-el-cms-configura-el-mapa-de-asientos-y-un-proveedor-exogeno-lo-llena.md) | El CMS configura el mapa de asientos y un proveedor exógeno lo llena — enmienda el 0126 | Accepted |
 | [0128](0128-la-base-de-datos-es-derivable-un-gate-reconstruye-el-entorno-desde-el-xml.md) | La base de datos es derivable: un gate reconstruye el entorno desde el XML en cada PR | Accepted |
+| [0129](0129-el-contenido-editorial-tambien-se-versiona-y-la-media-va-con-el.md) | El contenido editorial también se versiona, y la media va con él | Accepted |
 
 ## Rules
 
