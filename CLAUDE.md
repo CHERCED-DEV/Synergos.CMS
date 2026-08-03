@@ -167,6 +167,12 @@ Synergos.CMS/
 > CI (`.github/workflows/ticket-first.yml`) que rechaza un PR sin issue referenciado — porque un
 > proceso escrito como prosa se olvida y uno que rompe el build se cumple.
 
+**Lo que el ticket garantiza es que la conversación pasó antes que el código. Nada más.**
+No es una autorización que hay que esperar por cada cosa que aparece, ni una unidad de
+trabajo que hay que respetar hasta el final: si al codificar la HU resulta ser otra cosa,
+eso se escribe en el ticket y se sigue. Ver «la regla que hace que esto no estorbe», abajo —
+está para leerse junto con esto, no como letra chica.
+
 **El umbral, para que el proceso sobreviva:**
 
 | | |
@@ -185,10 +191,26 @@ Cuatro tipos, en `.github/ISSUE_TEMPLATE/`. Cada uno obliga a contestar lo que a
 
 ### La regla que hace que esto no estorbe
 
-> **Si encontrás algo mientras hacés otra cosa: abrís un Hallazgo y SEGUÍS con lo que estabas.**
+> **Lo que encontrás haciendo otra cosa se ANOTA y se sigue. Por defecto en un comentario
+> del ticket que ya está abierto — no en uno nuevo.**
 
-Un hallazgo no puede comerse la tarea. Para eso existe ese tipo: para poder soltarlo sin
-perderlo. Los enlaces a los hallazgos abiertos van en la última sección del PR.
+El proceso existe para que las cosas se hablen antes de codificarlas, **no para partir el
+trabajo en pedazos que hay que esperar**. Un ticket nuevo es una espera nueva: alguien lo
+tiene que leer, refinar y aprobar. Eso vale la pena cuando es trabajo de verdad separado, y
+es puro peaje cuando no.
+
+**El umbral, y ante la duda es comentario:**
+
+| | |
+|---|---|
+| **Comentario en el ticket abierto** | una dificultad, una decisión que tomaste sobre la marcha, algo que no cumpliste y por qué, una duda que resolviste solo |
+| **Issue aparte** | otro puede tomarlo sin tocar lo tuyo · lo pide otra área del código · se decidió NO hacerlo ahora y hay que poder buscarlo dentro de seis meses |
+
+> **Y el trabajo se termina igual.** Encontrar algo no autoriza a entregar a medias: se sube
+> el PR completo, con lo hallado anotado. Si de verdad hace falta un issue, se abre — pero
+> **después de subir**, no en vez de.
+
+Los enlaces a lo que se anotó van en la última sección del PR.
 
 ### Y lo que hace que el proyecto aprenda
 

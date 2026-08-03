@@ -1,6 +1,6 @@
 ---
 name: synergos-ticket-first
-description: El proceso de trabajo de Synergos — nada se codifica sin ticket. Cubre los cuatro tipos (Defecto, Evolutivo, Mejora, Hallazgo), las cuatro preguntas del refinamiento, el umbral de qué bloquea y qué no, la regla anti-descarrilamiento (si encontrás algo haciendo otra cosa, abrís Hallazgo y SEGUÍS), y las dos escrituras que hacen que el proyecto aprenda. Aplica a los TRES árboles — CMS, capacidades/orquestadores y Synergos.UI. Invocar al encontrar un bug o una mejora, antes de abrir un PR, o al empezar cualquier trabajo que no tenga ticket.
+description: El proceso de trabajo de Synergos — nada se codifica sin ticket. Cubre los cuatro tipos (Defecto, Evolutivo, Mejora, Hallazgo), las cuatro preguntas del refinamiento, el umbral de qué bloquea y qué no, la regla anti-descarrilamiento (lo que encontrás haciendo otra cosa se anota como comentario del ticket abierto y se sigue; issue aparte solo si es trabajo separado de verdad), y las dos escrituras que hacen que el proyecto aprenda. Aplica a los TRES árboles — CMS, capacidades/orquestadores y Synergos.UI. Invocar al encontrar un bug o una mejora, antes de abrir un PR, o al empezar cualquier trabajo que no tenga ticket.
 ---
 
 # SYNERGOS Ticket-First — el ticket va antes que el código
@@ -28,12 +28,27 @@ Exigir ticket para *todo* es lo que hace que la gente abra issues basura para sa
 
 ## 1. La regla que hace que esto no estorbe
 
-> ### Si encontrás algo mientras hacés otra cosa: abrís un **Hallazgo** y **SEGUÍS con lo que estabas**.
+> ### Lo que encontrás haciendo otra cosa se **ANOTA** y se sigue. Por defecto en un **comentario del ticket que ya está abierto** — no en uno nuevo.
 
-Un hallazgo no puede comerse la tarea. Ese tipo de ticket existe precisamente para poder soltarlo
-sin perderlo. Los enlaces van en la última sección del PR: *«lo que encontré y NO arreglé acá»*.
+Un ticket nuevo es una espera nueva: alguien lo tiene que leer, refinar y aprobar. Eso vale la
+pena cuando hay trabajo de verdad separado, y es puro peaje cuando no.
 
-Sin esta regla pasan las dos cosas malas: o el hallazgo descarrila el trabajo, o se pierde.
+**El umbral, y ante la duda es comentario:**
+
+| | |
+|---|---|
+| **Comentario en el ticket abierto** | una dificultad · una decisión tomada sobre la marcha · algo que no cumpliste y por qué · una duda que resolviste solo |
+| **Issue aparte** | otro puede tomarlo sin tocar lo tuyo · vive en otra área del código · se decidió NO hacerlo ahora y hay que poder encontrarlo dentro de seis meses |
+
+> ### Y el trabajo se termina igual.
+>
+> Encontrar algo **no autoriza a entregar a medias**. Se sube el PR completo con lo hallado
+> anotado. Si de verdad hace falta un issue, se abre — pero **después de subir, no en vez de**.
+
+Sin esta regla pasan las tres cosas malas: el hallazgo descarrila el trabajo, se pierde, o —la
+más difícil de ver— **se convierte en un ticket que nadie pidió y que ahora hay que refinar**.
+
+Los enlaces van en la última sección del PR: *«lo que encontré y NO arreglé acá»*.
 
 ---
 
@@ -111,6 +126,12 @@ hallazgo/necesidad → ticket (tipo correcto) → refinamiento en comentarios
 **Una HU con preguntas abiertas queda `en-refinamiento` y no se codifica.** Ver #12 y #13 como
 ejemplo: en las dos el refinamiento cambió el alcance *antes* de escribir una línea — una resultó
 ser dos HU, y la otra destapó que `Message.ReadBy` no guarda el instante del acceso.
+
+**Pero el ticket no congela el alcance.** Si al codificar aparece que un criterio no se puede
+cumplir donde decía —le pasó a #13 con `Api.Audit`— eso se escribe en el ticket, se entrega lo
+demás completo, y recién ahí se decide si hace falta un issue. Lo que **no** se hace es parar y
+esperar: el ticket garantiza que la conversación pasó antes que el código, no que cada cosa que
+aparezca después tenga su propia cola.
 
 ---
 
