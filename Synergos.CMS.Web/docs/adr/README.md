@@ -138,6 +138,7 @@ choose between options that a future reader would otherwise second-guess.
 | [0129](0129-el-contenido-editorial-tambien-se-versiona-y-la-media-va-con-el.md) | El contenido editorial también se versiona, y la media va con él | Accepted |
 | [0130](0130-la-analitica-de-busqueda-sale-del-cms-a-un-servicio-de-sesion.md) | La analítica de búsqueda sale del CMS a un servicio de sesión | Accepted |
 | [0131](0131-el-borde-avisa-de-verdad-y-el-estado-de-un-envio-llega-despues.md) | El borde avisa de verdad (Resend detrás de `INotificationSender`) + `Queued→Accepted→Delivered→Bounced\|Complained` con avance que nunca retrocede + reserva del registro ANTES de la red + receptor de webhook con firma, antirrepetición e idempotencia por id del proveedor | Accepted |
+| [0132](0132-el-equipo-del-cdn-eramos-nosotros.md) | `HttpBundleRegistryClient` — el gemelo remoto del cliente de filesystem. Desbloquea ADR 0012: el «equipo del CDN» que había que esperar éramos nosotros, y el publicador ya existía (publicaba a una carpeta local). Sirve del último snapshot bueno si el CDN cae, emite siempre la ruta versionada, y cachea manifiestos por su URL inmutable | Accepted |
 
 ## Rules
 

@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2044 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2055 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -97,7 +97,7 @@ Synergos.CMS/
 │   ├── Services/                Umbraco-dependent services (LayoutCssBuilder, FlowResolver, etc.)
 │   ├── Views/                   Razor templates + partials + blockgrid components
 │   ├── docs/
-│   │   ├── adr/                 130 ADRs (0001-0131, sin 0016) — SOURCE OF TRUTH
+│   │   ├── adr/                 131 ADRs (0001-0132, sin 0016) — SOURCE OF TRUTH
 │   │   ├── contracts/           los 5 contratos CMS↔UI + harness Vitest
 │   │   └── umbraco/             cdn-contract.md (externalmente bloqueado)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2044 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2055 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6)
 │   ├── Api/                     tests de reglas y servicio por capacidad
@@ -353,7 +353,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2044 tests):
+# Suite completa (2055 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -423,12 +423,16 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 
 ## 9. Tareas bloqueadas externamente
 
-- **HttpBundleRegistryClient** — `docs/umbraco/cdn-contract.md` lista
-  los 5 puntos que el CDN team debe publicar. Hasta entonces,
-  `StubBundleRegistryClient` sigue activo (siempre retorna null, los
-  71 `elementSyn*` emiten placeholder HTML comment).
+- ~~**HttpBundleRegistryClient**~~ — **desbloqueado** (HU #20, ADR 0132).
+  Existe y se activa con `Synergos:BundleRegistry:Mode=Http`. El bloqueo
+  decía «esperando al equipo del CDN»: **el equipo del CDN éramos
+  nosotros**, y el pipeline que publica el registry ya existía en
+  `Synergos.UI` — publicaba a una carpeta local. Lo que faltaba era que
+  esa carpeta fuera alcanzable por HTTP. Los tres modos hoy:
+  `Stub` (default, siempre null) · `FileSystem` (CDN local) · `Http`.
 - **Experience CDN** (9 DocTypes) + `compBehaviorTracking` +
-  `compBehaviorInteraction` — mismo bloqueo.
+  `compBehaviorInteraction` — heredaban el bloqueo de arriba, que ya no
+  existe. Falta revisarlos: probablemente sea trabajo, no espera.
 
 ## 10. Cuando termines una tarea
 
@@ -451,7 +455,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (129 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2044 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2055 tests, gates de
 segregación y molde en verde.
 
 **Lo que NO está:**

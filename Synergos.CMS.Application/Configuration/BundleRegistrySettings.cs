@@ -97,6 +97,30 @@ public sealed class BundleRegistrySettings
     public int HotReloadDebounceMilliseconds { get; init; } = 500;
 
     /// <summary>
+    /// Cada cuánto se vuelve a leer el registry cuando <c>Mode=Http</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Nunca se busca en la red durante un render</b>: se sirve del último snapshot
+    /// bueno y este intervalo decide cada cuánto lo refresca alguien por detrás. Bajarlo mucho
+    /// no hace que los cambios aparezcan antes de lo que tarda el CDN en propagarlos; solo
+    /// multiplica las peticiones.</para>
+    ///
+    /// <para>Sesenta segundos es lo mismo que la caché del <c>registry.json</c> publicado, así
+    /// que pedirlo más seguido devolvería la misma copia del borde.</para>
+    /// </remarks>
+    public int RefreshSeconds { get; init; } = 60;
+
+    /// <summary>
+    /// Cuánto se espera al CDN antes de darlo por no disponible (<c>Mode=Http</c>).
+    /// </summary>
+    /// <remarks>
+    /// Corto a propósito. Este tiempo NO está en el camino de un render —el render usa el
+    /// snapshot que ya hay— pero sí retiene un hilo durante el refresco. Un CDN que tarda más de
+    /// unos segundos está caído para lo que a nosotros respecta.
+    /// </remarks>
+    public int TimeoutSeconds { get; init; } = 5;
+
+    /// <summary>
     /// Tag canónico que el <c>BundleRegistryProbe</c> intenta resolver
     /// para verdict de salud. Default <c>"synergos-column"</c> (primer
     /// primitive del catalog Synergos). Override útil para CDNs custom

@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Proxies.Impl;
 using Synergos.CMS.Application.Services.Impl;
@@ -50,11 +51,29 @@ public sealed partial class SeamComposer
         //   - FileSystem: lee registry.json + manifests del filesystem,
         //     hot-reload via FileSystemWatcher, SRI lazy compute.
         //     Útil con CDN local (e.g. C:\LOCAL_CDN).
-        //   - Http: GET al registry endpoint remoto (deferred).
+        //   - Http: GET al registry publicado en el CDN. Mismo mapeo que
+        //     FileSystem, distinto transporte; sirve del último snapshot
+        //     bueno y refresca por detrás (HU #20, ADR 0132).
+        // El reloj, inyectable. Lo pide HttpBundleRegistryClient para decidir si su snapshot
+        // venció, y sin esto el fallo sería en el ARRANQUE y no en la compilación — la clase de
+        // error que no se ve hasta que alguien cambia el Mode a Http en producción.
+        services.TryAddSingleton(TimeProvider.System);
+
         var bundleRegistryMode = builder.Config["Synergos:BundleRegistry:Mode"] ?? "Stub";
         if (string.Equals(bundleRegistryMode, "FileSystem", StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton<IBundleRegistryClient, FileSystemBundleRegistryClient>();
+        }
+        else if (string.Equals(bundleRegistryMode, "Http", StringComparison.OrdinalIgnoreCase))
+        {
+            // Cliente tipado: el HttpClient lo gestiona la fábrica (reuso de conexiones,
+            // reciclado de DNS). Un HttpClient a mano dentro de un singleton es el clásico que
+            // deja de ver un cambio de DNS del CDN hasta que se reinicia el proceso.
+            services.AddHttpClient<IBundleRegistryClient, HttpBundleRegistryClient>((sp, http) =>
+            {
+                var s = sp.GetRequiredService<IOptions<BundleRegistrySettings>>().Value;
+                http.Timeout = TimeSpan.FromSeconds(Math.Max(1, s.TimeoutSeconds));
+            });
         }
         else
         {

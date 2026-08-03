@@ -1,7 +1,18 @@
 # CDN contract — consumed, not owned
 
-- **Status:** BLOCKED externally — waiting for the CDN team to publish
-  the registry contract.
+- **Status:** ✅ **DESBLOQUEADO** (HU #20 · ADR 0132). `HttpBundleRegistryClient`
+  existe y se activa con `Synergos:BundleRegistry:Mode=Http`.
+
+> ### El bloqueo dejó de ser externo mucho antes de que alguien moviera la etiqueta.
+> Este fichero pidió durante meses que «el equipo del CDN publique los cinco
+> puntos». **El equipo del CDN somos nosotros** — y el pipeline que publica el
+> registry ya existía en `Synergos.UI`: publicaba a una carpeta local, que es
+> justo lo que `FileSystemBundleRegistryClient` lee. Lo que faltaba no era un
+> contrato ajeno: era que esa carpeta fuera alcanzable por HTTP.
+>
+> Los cinco puntos de abajo quedan **contestados por la propuesta de la Ola 171**,
+> que es la que se implementó. Se conservan porque explican POR QUÉ el adapter
+> tiene la forma que tiene.
 - **ADR:** [0012 CDN contract is consumed, not owned](../adr/0012-cdn-contract-consumed.md).
 - **Migration plan:** Ola 6 of [`refactor-docs/migration/04-migration-strategy-phase-plan.md`](../../../../refactor-docs/migration/04-migration-strategy-phase-plan.md).
 
