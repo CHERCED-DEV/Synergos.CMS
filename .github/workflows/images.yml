@@ -1,0 +1,192 @@
+name: Imágenes (GHCR)
+
+# HU #17 — construir las 23 imágenes con UNA sola forma, y publicarlas.
+#
+# La matriz NO se escribe acá. Se deriva de `tools/service-matrix.mjs`, que la
+# lee del disco: una lista a mano se desincroniza el día que nadie mira —
+# alguien añade Synergos.Api.Invoicing, el CI sigue verde construyendo las 22
+# de siempre, y la capacidad nueva no existe en producción. No falla: FALTA.
+# `ContainerBuildTests` vigila que el script y la realidad no se separen.
+#
+# El repo es público, así que GHCR y los minutos salen gratis y sin tope.
+#
+# Etiquetado por SHA, NUNCA `latest`: con `latest` no se puede saber qué está
+# corriendo ni volver atrás, y la vuelta atrás de la HU #19 depende de esto.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ── Quiénes son ───────────────────────────────────────────────────────────
+  matriz:
+    name: Descubrir servicios
+    runs-on: ubuntu-latest
+    outputs:
+      servicios: ${{ steps.leer.outputs.servicios }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: leer
+        run: |
+          SERVICIOS=$(node tools/service-matrix.mjs)
+          echo "servicios=$SERVICIOS" >> "$GITHUB_OUTPUT"
+          echo "### Servicios a construir" >> "$GITHUB_STEP_SUMMARY"
+          node tools/service-matrix.mjs --list | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Las 22 del árbol de servicios ─────────────────────────────────────────
+  servicios:
+    name: ${{ matrix.servicio }}
+    needs: matriz
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false          # que una rota no oculte el estado de las otras 21
+      matrix:
+        servicio: ${{ fromJson(needs.matriz.outputs.servicios) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # En un PR se construye para verificar y NO se publica: un fork no debería
+      # poder empujar imágenes al registro con el nombre de este repo.
+      - name: Entrar al registro
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # El nombre del paquete va en minúsculas: GHCR las exige y los proyectos
+      # son PascalCase. Sin esto falla al empujar, no al construir — o sea,
+      # tarde.
+      - id: nombre
+        run: echo "imagen=$(echo '${{ github.repository_owner }}/${{ matrix.servicio }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Construir y publicar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.service
+          build-args: PROJECT=${{ matrix.servicio }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.REGISTRY }}/${{ steps.nombre.outputs.imagen }}:${{ github.sha }}
+          # El caché es por servicio: 22 servicios compartiendo una entrada se
+          # pisarían y ninguno acertaría nunca.
+          cache-from: type=gha,scope=${{ matrix.servicio }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.servicio }}
+
+  # ── El CMS, que ya tenía su Dockerfile ────────────────────────────────────
+  cms:
+    name: Synergos.CMS.Web
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Entrar al registro
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: nombre
+        run: echo "imagen=$(echo '${{ github.repository_owner }}/synergos-cms' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Construir y publicar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.REGISTRY }}/${{ steps.nombre.outputs.imagen }}:${{ github.sha }}
+          cache-from: type=gha,scope=cms
+          cache-to: type=gha,mode=max,scope=cms
+
+  # ── Que arranquen de verdad ───────────────────────────────────────────────
+  # Construir no es arrancar. El ENTRYPOINT supone que el ensamblado se llama
+  # como la carpeta; `ContainerBuildTests` vigila el .csproj, pero sólo levantar
+  # el contenedor demuestra que la suposición aguanta.
+  #
+  # Se prueban DOS —una capacidad y un orquestador— y no las 22: son la misma
+  # imagen parametrizada, así que la 3ª no aporta información que la 2ª no diera.
+  arranca:
+    name: Arranca y contesta /health
+    needs: matriz
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        servicio: [Synergos.Api.Booking, Synergos.Bff.Tienda]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construir
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.service
+          build-args: PROJECT=${{ matrix.servicio }}
+          load: true
+          tags: prueba:local
+          cache-from: type=gha,scope=${{ matrix.servicio }}
+
+      - name: Levantar y preguntar
+        run: |
+          docker run --detach --name prueba --publish 8080:8080 prueba:local
+          for i in $(seq 1 30); do
+            if curl --silent --fail --output /dev/null http://localhost:8080/health; then
+              echo "✓ ${{ matrix.servicio }} contesta /health"
+              docker rm --force prueba
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "✗ ${{ matrix.servicio }} NO contestó /health en 60s"
+          docker logs prueba
+          docker rm --force prueba
+          exit 1
+
+      # El modo de fallo más caro de esta imagen es el más silencioso: sin
+      # volumen, cada despliegue borra los datos y nada avisa. Acá se comprueba
+      # que el directorio de estado sobrevive a que el contenedor desaparezca.
+      - name: El almacén sobrevive a que el contenedor no
+        run: |
+          docker volume create datos-prueba
+          docker run --detach --name p1 --volume datos-prueba:/app/data prueba:local
+          sleep 5
+          docker exec p1 sh -c 'echo sobrevivi > /app/data/marca.txt'
+          docker rm --force p1
+
+          docker run --detach --name p2 --volume datos-prueba:/app/data prueba:local
+          sleep 5
+          if docker exec p2 cat /app/data/marca.txt | grep --quiet sobrevivi; then
+            echo "✓ el almacén sobrevivió al reemplazo del contenedor"
+          else
+            echo "✗ el almacén NO sobrevivió — cada despliegue borraría los datos"
+            exit 1
+          fi
+          docker rm --force p2
