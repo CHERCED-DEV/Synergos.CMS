@@ -49,6 +49,12 @@ public static class SaludEndpoints
         app.MapPost("/v1/appointments/{id}/cancel", async (string id, AppointmentFlow flow, CancellationToken ct) =>
             (await flow.CancelAsync(id, ct)).Map(AppointmentResponse.From).ToHttp());
 
+        // Volver a intentar lo que se rindió. Es la puerta de la persona a la que se le avisó:
+        // sin ella, "se rinde a los ocho intentos" sería "se abandona", y arreglar una devolución
+        // colgada exigiría tocarla a mano en la capacidad, por fuera del rastro de la saga.
+        app.MapPost("/v1/appointments/{id}/retry", async (string id, AppointmentFlow flow, CancellationToken ct) =>
+            (await flow.RetryStuckAsync(id, ct)).Map(AppointmentResponse.From).ToHttp());
+
         // La vista de operación: qué quedó colgado. Sin ella, una compensación que se rindió
         // solo existe en una línea de log que nadie está mirando.
         app.MapGet("/v1/compensations", (int? offset, int? limit, AppointmentFlow flow) =>
@@ -56,7 +62,7 @@ public static class SaludEndpoints
             var todas = flow.PendingCompensations()
                 .SelectMany(s => s.Pending.Select(c => new PendingCompensationResponse(
                     s.Id, c.Kind.ToString(), c.Reason, c.Attempts, c.NextAttemptUtc, c.LastError,
-                    c.Attempts >= Compensator.MaxAttempts)))
+                    c.IsStuck, s.AlertedAtUtc)))
                 .ToList();
 
             var off = Math.Max(0, offset ?? 0);

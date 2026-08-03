@@ -33,16 +33,18 @@ public sealed class AppointmentFlow
     private readonly SaludCapabilities _caps;
     private readonly ISagaStore _sagas;
     private readonly Compensator _compensator;
+    private readonly CompensationAlert _alert;
     private readonly TimeProvider _clock;
     private readonly ILogger<AppointmentFlow> _log;
 
     public AppointmentFlow(
-        SaludCapabilities caps, ISagaStore sagas, Compensator compensator,
+        SaludCapabilities caps, ISagaStore sagas, Compensator compensator, CompensationAlert alert,
         TimeProvider clock, ILogger<AppointmentFlow> log)
     {
         _caps = caps;
         _sagas = sagas;
         _compensator = compensator;
+        _alert = alert;
         _clock = clock;
         _log = log;
     }
@@ -220,9 +222,12 @@ public sealed class AppointmentFlow
 
         foreach (var c in saga.Compensations)
         {
-            // Solo lo pendiente Y cuyo turno llegó: respetar el retroceso es lo que evita que un
-            // barrido cada minuto martillee una capacidad caída.
-            if (!c.IsPending || (c.NextAttemptUtc is { } cuando && ahora < cuando))
+            // Solo lo pendiente, lo que no se rindió, Y cuyo turno llegó. Las tres condiciones
+            // cuentan: respetar el retroceso evita que un barrido cada minuto martillee una
+            // capacidad caída, y saltarse lo rendido es lo que hace que rendirse SIGNIFIQUE algo
+            // — sin eso, una compensación agotada se reintentaría cada minuto para siempre,
+            // gritando el mismo error en el log y tapando los que sí se pueden atender.
+            if (!c.IsPending || c.IsStuck || (c.NextAttemptUtc is { } cuando && ahora < cuando))
             {
                 actualizadas.Add(c);
                 continue;
@@ -231,7 +236,7 @@ public sealed class AppointmentFlow
         }
 
         var quedan = actualizadas.Any(c => c.IsPending);
-        var colgadas = actualizadas.Any(c => c.IsPending && c.Attempts >= Compensator.MaxAttempts);
+        var colgadas = actualizadas.Any(c => c.IsStuck);
 
         saga = saga with
         {
@@ -240,8 +245,86 @@ public sealed class AppointmentFlow
                 : quedan ? SagaStatus.Compensating
                 : SagaStatus.Compensated,
         };
+
+        // El aviso sale UNA vez por vez que la saga cae en colgada, no una por vuelta del
+        // barrido. Sin esa guarda, la guardia recibiría el mismo correo cada minuto hasta que
+        // Api.Notifications lo cortara por tope de frecuencia — y ese corte se llevaría por
+        // delante los avisos de las demás citas.
+        if (saga.Status == SagaStatus.CompensationFailed && saga.AlertedAtUtc is null)
+        {
+            saga = await AvisarAsync(saga, ahora, ct);
+        }
+
         _sagas.Put(saga);
         return Result.Ok(saga);
+    }
+
+    /// <summary>
+    /// Vuelve a intentar lo que se había rendido. <b>Es la puerta de la persona.</b>
+    /// </summary>
+    /// <remarks>
+    /// Rendirse a los ocho intentos es correcto mientras haya una forma de decir «ya arreglé la
+    /// causa, probá otra vez». Sin ella, «se rinde» sería «se abandona», y la única salida a una
+    /// devolución colgada sería tocarla a mano en la capacidad — por fuera del rastro de la saga.
+    /// </remarks>
+    public async Task<Result<AppointmentSaga>> RetryStuckAsync(string sagaId, CancellationToken ct)
+    {
+        var saga = _sagas.Find(sagaId);
+        if (saga is null)
+        {
+            return Rejection.NotFound("salud.appointment_not_found", $"No existe la cita {sagaId}.");
+        }
+        if (saga.Stuck.Count == 0)
+        {
+            return Rejection.Conflict("salud.nothing_stuck",
+                "Esta cita no tiene compensaciones rendidas. Las que están en curso las reintenta el barrido sola.");
+        }
+
+        _log.LogInformation("Reintento manual de las compensaciones rendidas de la cita {Saga}.", saga.Id);
+
+        saga = saga with
+        {
+            Compensations = saga.Compensations
+                .Select(c => c.IsStuck ? c with { Attempts = 0, NextAttemptUtc = null } : c)
+                .ToList(),
+            // Se rearma el aviso: si vuelve a colgarse tras el arreglo, la guardia tiene que
+            // enterarse otra vez. La llave lleva AlertsSent, así que el segundo aviso no lo
+            // confunde Notifications con el primero.
+            AlertedAtUtc = null,
+        };
+        _sagas.Put(saga);
+
+        return await CompensateAsync(sagaId, "reintento pedido por una persona", ct);
+    }
+
+    /// <summary>Manda el aviso y deja anotado en la saga qué pasó con él.</summary>
+    private async Task<AppointmentSaga> AvisarAsync(AppointmentSaga saga, DateTimeOffset ahora, CancellationToken ct)
+    {
+        var motivo = await _alert.RaiseAsync(saga, ct);
+
+        if (motivo is null)
+        {
+            _log.LogError("COMPENSACIÓN COLGADA en la cita {Saga}: avisado a la guardia.", saga.Id);
+            return saga with { AlertedAtUtc = ahora, AlertsSent = saga.AlertsSent + 1 };
+        }
+
+        if (motivo.IsTransient)
+        {
+            // Notifications caída es lo mismo que cualquier otra capacidad caída: se reintenta al
+            // siguiente barrido. NO se marca como avisada, que es justo lo que permite el
+            // reintento.
+            _log.LogWarning("No se pudo avisar de la cita {Saga} ({Error}); se reintenta en el barrido.",
+                saga.Id, motivo);
+            return saga;
+        }
+
+        // Falta la plantilla, o no hay a quién avisar. Eso no lo arregla reintentar: lo arregla
+        // una persona tocando la configuración o autorando la plantilla, y repetirlo cada minuto
+        // solo llenaría el log del mismo error tapando el que importa. Se grita una vez.
+        _log.LogError(
+            "COMPENSACIÓN COLGADA en la cita {Saga} y NO SE PUDO AVISAR A NADIE ({Error}). Revisa Salud:Alerts y la plantilla '{Plantilla}'.",
+            saga.Id, motivo, _alert.TemplateKey);
+        return saga with { AlertedAtUtc = ahora };
     }
 
     public Result<AppointmentSaga> Get(string id)

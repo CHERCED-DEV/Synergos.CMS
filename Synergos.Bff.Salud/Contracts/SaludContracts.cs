@@ -31,9 +31,18 @@ public sealed record AppointmentResponse(
 }
 
 /// <summary>Una compensación pendiente, para quien vigila.</summary>
+/// <param name="AppointmentId">La cita a la que pertenece.</param>
+/// <param name="Kind">Qué hay que deshacer.</param>
+/// <param name="Reason">Por qué.</param>
+/// <param name="Attempts">Cuántas veces se intentó.</param>
+/// <param name="NextAttemptUtc">Cuándo toca el próximo intento.</param>
+/// <param name="LastError">Qué dijo el último fallo.</param>
+/// <param name="Stuck">Se rindió: el barrido ya no la toca hasta que una persona pida reintento.</param>
+/// <param name="AlertedAtUtc">Cuándo se avisó a la guardia. <b>Nulo con <c>Stuck</c> en cierto
+/// significa que se rindió y nadie fue avisado</b> — la fila más urgente de esta lista.</param>
 public sealed record PendingCompensationResponse(
     string AppointmentId, string Kind, string Reason, int Attempts,
-    DateTimeOffset? NextAttemptUtc, string? LastError, bool Stuck);
+    DateTimeOffset? NextAttemptUtc, string? LastError, bool Stuck, DateTimeOffset? AlertedAtUtc);
 
 /// <summary>Una porción de una lista, con su total.</summary>
 public sealed record PageResponse<T>(IReadOnlyList<T> Items, int Total, int Offset, bool HasMore);

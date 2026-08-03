@@ -1,8 +1,10 @@
 # La compensación cruzada — cómo se deshace lo que ya se hizo
 
 > **Estado: construido y verificado con procesos reales.** `Synergos.Bff.Salud` es el primer
-> orquestador; el flujo *agendar una cita con copago* cruza cuatro capacidades y es el caso
-> canónico. Cierra la pregunta que el [doc 07 §7](07-diseno-atomico-capacidades.md) dejó abierta.
+> orquestador; el flujo *agendar una cita con copago* cruza **cinco** capacidades —Consent,
+> Booking, Pricing, Payments y Notifications— y es el caso canónico. Cierra la pregunta que el
+> [doc 07 §7](07-diseno-atomico-capacidades.md) dejó abierta, y con el aviso a una persona (§4.1)
+> cierra también la última que quedaba abierta acá.
 
 ## 1. El problema, en una frase
 
@@ -65,6 +67,28 @@ de devolver: si es cero, la compensación cumplió. Cubre el reintento donde la 
 salido pero no llegó a anotarse — y ese caso la llave sola no lo cubre, porque un barrido de otra
 vida del proceso podría traer otra llave.
 
+**ARMADA no es PENDIENTE, y confundirlas cancelaba todas las citas.** Es el defecto más caro que
+salió de aquí, y lo destapó un proceso real en seis segundos. Una cita sana esperando confirmación
+lleva sus compensaciones anotadas —el cupo que soltar, el cobro que liberar— porque se arman en el
+instante en que existe lo que habría que deshacer. La selección del barrido era «toda saga con
+alguna compensación pendiente», y eso describe a **todas** las citas sanas. Resultado medido:
+
+```
+startedAtUtc 16:39:33  →  doneAtUtc 16:39:39
+```
+
+Seis segundos después de agendar, el barrido soltó el cupo y liberó el cobro de una cita que no
+tenía ningún problema. Ningún test lo vio porque todos llamaban a `CompensateAsync` directo y
+ninguno ejercitaba la *selección*. Hoy `AppointmentSaga.IsUnwinding` es la guarda —solo
+`Compensating` y `CompensationFailed` son trabajo— y la misma regla filtra la vista de operación,
+que si no listaría todas las citas del día como si fueran problemas. **Una compensación solo es
+trabajo cuando algo YA falló.**
+
+**«Se rinde a los ocho intentos» tampoco era verdad.** Agotados los intentos, la compensación
+seguía pendiente y sin `NextAttemptUtc`, así que el barrido la reintentaba *cada minuto para
+siempre*, gritando el mismo error y tapando en el log los que sí se podían atender. Rendirse tiene
+que ser un **estado** (`Compensation.IsStuck`), no una línea de log.
+
 ## 4. Cuando la compensación también falla
 
 Es el caso que de verdad importa, porque la causa habitual de que un paso falle es que la
@@ -74,10 +98,30 @@ capacidad está caída — **y entonces compensar en línea falla también**.
   no la levanta; solo alarga la caída.
 - **Barrido de fondo** cada minuto, y cada compensación decide sola si le llegó el turno. Barre
   también al arrancar: un proceso que estuvo caído una hora despierta con una hora de atraso.
-- **Tras 8 intentos se rinde a gritos** y la saga pasa a `CompensationFailed`, visible en
-  `GET /v1/compensations` y en el log con nivel *error*. **Nunca se marca como hecha.** Una
-  compensación que se da por buena sin ejecutarse es plata cobrada sin servicio, y nadie se
-  entera.
+- **Tras 8 intentos se rinde de verdad** —`IsStuck`— y el barrido la deja quieta. La saga pasa a
+  `CompensationFailed`, sigue visible en `GET /v1/compensations` y **nunca se marca como hecha**:
+  una compensación que se da por buena sin ejecutarse es plata cobrada sin servicio.
+
+### 4.1 Y entonces se le avisa a una persona
+
+Es lo que cierra el lazo. Un log en rojo solo sirve si alguien está mirando ese minuto.
+
+| Decisión | Por qué |
+|---|---|
+| El destinatario se **configura** (`Salud:Alerts:{ToKind,ToId,Address}`) | Cablear una dirección es la primera grieta de un BFF que hay que desplegar en otra clínica con otra guardia. Sin configuración **no se inventa nadie**: se grita una vez cuál es la clave que falta. |
+| Se manda la **clave de plantilla**, no el texto | Es la línea que mantiene `Api.Notifications` agnóstica. El texto lo escribe el dominio y vive del otro lado. |
+| El aviso **no lleva datos del paciente** | Sale por correo o SMS a una guardia operativa. El identificador de la cita basta para entrar al sistema y mirar. |
+| Llave `{sagaId}:alert:{n}` | Un reintento tras un timeout no manda un segundo correo idéntico; un reintento **pedido a mano** sí manda uno nuevo. |
+| Fallo **transitorio** reintenta, fallo **no transitorio** se grita una vez | Notifications caída es una capacidad caída como cualquier otra. Que falte la plantilla o la guardia no lo arregla reintentar — lo arregla una persona, y repetirlo cada minuto taparía en el log lo que importa. |
+
+**Y una puerta de vuelta:** `POST /v1/appointments/{id}/retry` rearma los intentos de lo rendido y
+el aviso. Sin ella, «se rinde» sería «se abandona», y arreglar una devolución colgada exigiría
+tocarla a mano en la capacidad, por fuera del rastro de la saga.
+
+> **Antes de desplegar** hay que autorar en `Api.Notifications` la plantilla
+> `salud.compensacion.colgada` usando **solo** los marcadores `{cita}`, `{desde}` y `{pendientes}`.
+> Un cuarto marcador hace que el envío se rechace con `notifications.missing_placeholder` — está
+> verificado abajo. No hay seeder que la cree: CLAUDE.md §0.4 los prohíbe.
 
 ## 5. Verificación con procesos reales
 
@@ -101,6 +145,59 @@ Las dos compensaciones se comportaron distinto **y así tenía que ser**: la dev
 primer intento porque Payments estaba vivo; soltar el cupo tardó cuatro porque Booking no lo
 estaba. Cada una avanza a su ritmo, y ninguna espera a la otra.
 
+### 5.1 La segunda corrida: la que destapó el defecto de la selección
+
+Al añadir el aviso se repitió el ejercicio con seis procesos, y esta vez lo que falló fue el
+propio barrido. Antes del arreglo, una cita sana:
+
+```
+agendada     16:39:33  AwaitingConfirmation
+(nadie hace nada)
+compensada   16:39:39  ← el barrido soltó el cupo y liberó el cobro. SEIS SEGUNDOS.
+```
+
+Después del arreglo, la misma cita sana con el barrido pasando dos veces:
+
+```
+agendada     16:46:51  AwaitingConfirmation | 2 compensaciones ARMADAS
+(100 s, dos vueltas del barrido)
+16:48:41     AwaitingConfirmation | /v1/compensations: 0 filas
+             compensaciones ejecutadas por el barrido: 0
+confirmar →  Confirmed | reserva b81cc9f3…
+```
+
+Y el contrapeso, para que el filtro no se pasara de largo — matando `Api.Booking` otra vez entre
+el cobro y la confirmación:
+
+```
+1. agendada    AwaitingConfirmation, total 50 000
+2. Booking MUERTO
+3. confirmar   503 booking.unreachable        ← capturó, y no pudo confirmar
+4. cita        Compensating | pendientes 1
+5. pago        Captured | devolvible 0        ← la plata volvió sola, con Booking caído
+6. la cita sana de antes: Confirmed, intacta  ← el filtro no se llevó por delante lo bueno
+7. (vuelve Booking, 16:49:27)
+   16:49  "ReleaseBookingHold falló (Connection refused); reintento 1"
+   16:51  "ReleaseBookingHold completada en el intento 2"
+8. cita        Compensated | 0 filas en /v1/compensations
+```
+
+### 5.2 El contrato de marcadores, contra un `Api.Notifications` de verdad
+
+Es lo que un handler guionado **no** puede comprobar, porque no corre `NotificationRules.Fill`:
+
+```
+plantilla salud.compensacion.colgada con {cita} {desde} {pendientes}   201
+el cuerpo exacto que arma CompensationAlert                           201  Sent
+misma llave saga-1:alert:0  → MISMA entrega (46e99fea…)               201  ← no hay segundo correo
+llave saga-1:alert:1        → entrega NUEVA (b2ec894b…)               201  ← el reintento manual sí avisa
+plantilla con un cuarto marcador {paciente}                           400  notifications.missing_placeholder
+entregas totales a la guardia: 2                                           ← ni una de más
+```
+
+La última fila es la que le da sentido al test que fija los tres marcadores: un cuarto **rompe el
+aviso**, y rompería justo el día que hay que avisar.
+
 ## 6. Lo que queda abierto
 
 - **La máquina de sagas vive dentro de `Synergos.Bff.Salud`.** Es plumbing que los ocho BFF van a
@@ -111,6 +208,16 @@ estaba. Cada una avanza a su ritmo, y ninguna espera a la otra.
   el que una caída pierde el rastro. Las llaves deterministas lo hacen sobrevivible —repetir el
   paso devuelve lo mismo— pero *sobrevivible* no es *imposible*, y conviene no fingir lo
   contrario.
-- **`CompensationFailed` no tiene quién lo atienda.** Hoy es una fila en `/v1/compensations` y un
-  log en rojo. Falta el aviso a una persona, y eso es `Api.Notifications` — un renglón, cuando se
-  decida a quién.
+- **Nadie recoge una cita abandonada.** Si el paciente agenda y nunca confirma, la saga se queda
+  en `AwaitingConfirmation` para siempre. No es urgente —el hold de Booking vence solo por TTL y
+  la autorización de Payments también— pero la saga queda de testigo de algo que ya no existe.
+  Falta una política de abandono, y con ella la pregunta de a las cuántas horas.
+- **El retroceso no es configurable.** Ocho intentos con techo de 60 minutos son ~3 horas hasta
+  declarar algo colgado. Para una devolución puede estar bien; para un cupo de una clínica puede
+  ser lento. Es una perilla de despliegue razonable, pero se decide con números de operación
+  reales, no antes — y añadirla solo para que un test tarde menos sería la razón equivocada. Es
+  también por lo que el camino de rendirse está verificado por tests y mutación, **no en vivo**:
+  esperarlo con procesos reales cuesta tres horas de reloj.
+- **El aviso confía en que alguien autoró la plantilla.** Si falta, el fallo se grita una vez y la
+  guardia no se entera. Un arranque que compruebe la plantilla contra `Api.Notifications` lo
+  convertiría en un error de despliegue en vez de uno de madrugada.

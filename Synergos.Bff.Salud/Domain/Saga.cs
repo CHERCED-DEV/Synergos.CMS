@@ -41,6 +41,17 @@ public sealed record Compensation(
     DateTimeOffset? DoneAtUtc = null)
 {
     public bool IsPending => DoneAtUtc is null;
+
+    /// <summary>
+    /// Se rindió: agotó los intentos y sigue pendiente. <b>Necesita una persona.</b>
+    /// </summary>
+    /// <remarks>
+    /// Rendirse tiene que ser un estado y no solo una línea de log, porque de eso dependen dos
+    /// cosas: que el barrido <b>deje de intentarlo</b> —si no, «tras 8 intentos se rinde» es
+    /// mentira: sigue martillando cada minuto para siempre— y que el aviso a una persona salga
+    /// <b>una vez</b> y no una por vuelta del barrido.
+    /// </remarks>
+    public bool IsStuck => IsPending && Attempts >= Compensator.MaxAttempts;
 }
 
 /// <summary>En qué punto está el flujo.</summary>
@@ -77,6 +88,8 @@ public enum SagaStatus
 /// <param name="Compensations">Lo que hay que deshacer.</param>
 /// <param name="LastError">Qué falló, para que el llamador lo lea.</param>
 /// <param name="StartedAtUtc">Cuándo arrancó.</param>
+/// <param name="AlertedAtUtc">Cuándo se avisó a una persona de que algo quedó colgado.</param>
+/// <param name="AlertsSent">Cuántos avisos salieron. <b>Semilla de la llave del aviso.</b></param>
 /// <remarks>
 /// <para><b>El identificador de la saga es la semilla de las llaves de idempotencia</b>, y esa
 /// es la decisión que hace recuperable todo lo demás. Con llaves deterministas
@@ -97,9 +110,42 @@ public sealed record AppointmentSaga(
     Money Total,
     IReadOnlyList<Compensation> Compensations,
     string? LastError,
-    DateTimeOffset StartedAtUtc)
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset? AlertedAtUtc = null,
+    int AlertsSent = 0)
 {
     public IReadOnlyList<Compensation> Pending => Compensations.Where(c => c.IsPending).ToList();
+
+    /// <summary>Lo que se rindió y necesita una persona.</summary>
+    public IReadOnlyList<Compensation> Stuck => Compensations.Where(c => c.IsStuck).ToList();
+
+    /// <summary>
+    /// Si esta saga está deshaciendo algo. <b>Armada no es lo mismo que pendiente.</b>
+    /// </summary>
+    /// <remarks>
+    /// Es la distinción de la que dependen el barrido y la vista de operación, y saltársela sale
+    /// carísimo. Una cita en <see cref="SagaStatus.AwaitingConfirmation"/> lleva sus
+    /// compensaciones <i>armadas</i> —el cupo que soltar, el cobro que liberar— porque se anotan
+    /// en el instante en que existe lo que habría que deshacer. Pero eso es el seguro, no la
+    /// tarea: sin este filtro el barrido las ejecuta y <b>toda cita sana se cancela sola</b> en
+    /// el primer minuto, cupo soltado y cobro liberado sin que nadie lo pidiera. Una compensación
+    /// solo es trabajo cuando algo YA falló.
+    /// </remarks>
+    public bool IsUnwinding => Status is SagaStatus.Compensating or SagaStatus.CompensationFailed;
+
+    /// <summary>
+    /// Si queda algo que el barrido pueda hacer por esta saga.
+    /// </summary>
+    /// <remarks>
+    /// Dentro de una saga que ya está deshaciendo, dos cosas y solo dos: una compensación que
+    /// todavía tiene intentos, o un aviso que no llegó a salir. Una saga rendida y ya avisada
+    /// sigue apareciendo en <c>GET /v1/compensations</c> —ahí es donde tiene que estar— pero el
+    /// barrido no la vuelve a tocar: reescribir su fichero cada minuto para no cambiar nada es
+    /// ruido, no vigilancia.
+    /// </remarks>
+    public bool NeedsSweep
+        => IsUnwinding
+           && (Compensations.Any(c => c.IsPending && !c.IsStuck) || (AlertedAtUtc is null && Stuck.Count > 0));
 
     /// <summary>La llave de idempotencia de un paso. Determinista: reintentar es recuperar.</summary>
     public IdempotencyKey KeyFor(string step) => IdempotencyKey.From(Id, step);

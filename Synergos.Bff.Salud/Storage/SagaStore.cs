@@ -37,8 +37,11 @@ public sealed class FileSystemSagaStore : ISagaStore
 
     public AppointmentSaga? Find(string id) => _store.Find(id);
 
+    // IsUnwinding y no solo "tiene pendientes": una cita sana esperando confirmación lleva sus
+    // compensaciones ARMADAS, y contarlas como pendientes llenaría la vista de operación de citas
+    // que no tienen ningún problema — y haría que el barrido las ejecutara.
     public IReadOnlyList<AppointmentSaga> WithPendingCompensations()
-        => _store.Where(s => s.Compensations.Any(c => c.IsPending))
+        => _store.Where(s => s.IsUnwinding && s.Compensations.Any(c => c.IsPending))
             .OrderBy(s => s.StartedAtUtc)
             .ThenBy(s => s.Id, StringComparer.Ordinal)
             .ToList();
