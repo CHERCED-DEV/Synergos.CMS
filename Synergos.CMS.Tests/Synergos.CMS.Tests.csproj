@@ -32,6 +32,10 @@
     <ProjectReference Include="..\Synergos.Api.Notifications\Synergos.Api.Notifications.csproj" />
     <ProjectReference Include="..\Synergos.Api.Documents\Synergos.Api.Documents.csproj" />
     <ProjectReference Include="..\Synergos.Api.Catalog\Synergos.Api.Catalog.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Pricing\Synergos.Api.Pricing.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Cart\Synergos.Api.Cart.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Orders\Synergos.Api.Orders.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Payments\Synergos.Api.Payments.csproj" />
   </ItemGroup>
 
 </Project>
