@@ -8,7 +8,7 @@ namespace Synergos.CMS.Tests.Shared;
 /// Cubre <see cref="SharedKeyAuth"/> — el borde de llave compartida de las APIs internas.
 /// </summary>
 /// <remarks>
-/// Este código venía de <c>Synergos.Sessions</c>, donde funcionaba pero <b>no estaba
+/// Este código venía de <c>Synergos.Api.Sessions</c>, donde funcionaba pero <b>no estaba
 /// probado</b>. Al moverlo a <c>Synergos.Shared</c> pasa a servir a todas las APIs, y una
 /// decisión sutil rota aquí se rompe en todas a la vez. Es la parte del trato: lo que se
 /// comparte se prueba.

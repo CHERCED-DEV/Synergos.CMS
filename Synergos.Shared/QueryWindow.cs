@@ -10,7 +10,7 @@ namespace Synergos.Shared;
 /// y el tablero miente sin decirlo. Y un <c>limit</c> sin tope convierte una petición en una
 /// descarga del almacén entero — que es denegación de servicio con formulario.</para>
 ///
-/// <para>Salió de <c>Synergos.Sessions</c>, donde estos tres <c>static</c> vivían sueltos al
+/// <para>Salió de <c>Synergos.Api.Sessions</c>, donde estos tres <c>static</c> vivían sueltos al
 /// final del <c>Program.cs</c>. Es fontanería de host y no menciona ningún sustantivo del
 /// negocio: una ventana de tiempo no es un pedido ni un paciente.</para>
 /// </remarks>

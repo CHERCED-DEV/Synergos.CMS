@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 
-namespace Synergos.Sessions;
+namespace Synergos.Api.Sessions;
 
 /// <summary>Una búsqueda ejecutada, tal como la reporta un origen.</summary>
 /// <param name="Query">Texto buscado. Se normaliza a minúsculas y sin espacios sobrantes.</param>

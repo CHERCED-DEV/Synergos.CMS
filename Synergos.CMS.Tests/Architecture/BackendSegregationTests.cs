@@ -74,13 +74,12 @@ public sealed class BackendSegregationTests
 
     /// <summary>
     /// Si el proyecto pertenece al árbol de servicios —capacidades y orquestadores— y no al
-    /// del CMS. <c>Synergos.Sessions</c> entra por nombre propio: es una capacidad de
-    /// nacimiento (ADR 0130) y aún no lleva el prefijo (decisión abierta, docs/product/06 §12).
+    /// del CMS. El prefijo dice la capa, y por eso el nombre importa: sin él, la regla habría
+    /// que mantenerla a mano proyecto por proyecto.
     /// </summary>
     private static bool EsDelOtroArbol(string name) =>
         name.StartsWith("Synergos.Api.", StringComparison.Ordinal)
-        || name.StartsWith("Synergos.Domain.", StringComparison.Ordinal)
-        || name == "Synergos.Sessions";
+        || name.StartsWith("Synergos.Domain.", StringComparison.Ordinal);
 
     // ── La frontera Core ⊥ Shared ───────────────────────────────────────────
     // "Core no sabe qué es un host. Shared no sabe qué es un pedido."
@@ -231,7 +230,7 @@ public sealed class BackendSegregationTests
     }
 
     // ── La frontera CMS ⊥ API ───────────────────────────────────────────────
-    // Es la regla que hizo REAL la separación de Synergos.Sessions (ADR 0130): sin
+    // Es la regla que hizo REAL la separación de Synergos.Api.Sessions (ADR 0130): sin
     // referencia de ensamblado, mudar el servicio a su repo no tiene nada que desenredar.
 
     [Fact]
@@ -278,7 +277,7 @@ public sealed class BackendSegregationTests
 
         Assert.Contains("Synergos.CMS.Web", names);
         Assert.Contains("Synergos.CMS.Interfaces", names);
-        Assert.Contains("Synergos.Sessions", names);
+        Assert.Contains("Synergos.Api.Sessions", names);
         Assert.Contains("Synergos.Shared", names);
     }
 }

@@ -6,7 +6,7 @@ namespace Synergos.CMS.Web.Services;
 
 /// <summary>
 /// <see cref="ISearchAnalyticsStore"/> respaldado por el servicio de sesión
-/// (<c>Synergos.Sessions</c>) — ADR 0130.
+/// (<c>Synergos.Api.Sessions</c>) — ADR 0130.
 /// </summary>
 /// <remarks>
 /// <para><b>La escritura NO viaja en el request del usuario.</b> <see cref="Record"/> encola y
