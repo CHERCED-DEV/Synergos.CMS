@@ -32,6 +32,10 @@
  *      <Definition>. Built-ins Umbraco se skipean (siempre legítimos).
  *      Warning level — el operador decide si es intencional.
  *      Cap-300 Batch B (Ola 299).
+ *   9. Contenido del seeder: Content/ ya se versiona (ADR 0129), pero
+ *      lo que crea DevTestContentSeeder no es trabajo editorial y no
+ *      debe commitearse. Reemplaza a la regla de .gitignore que antes
+ *      bloqueaba TODO el contenido para no dejar pasar el del seeder.
  *   8. Mojibake hygiene: detecta byte sequences típicas de UTF-8 mal
  *      decodificado como Latin-1 y re-encodeado (PowerShell 5.1 trap).
  *      Patrones: Ã¡/Ã©/Ã­/Ã³/Ãº/Ã±/Â¿/Â¡. Error level — los XMLs uSync
@@ -245,6 +249,34 @@ async function audit() {
         if (referencedDefinitions.has(guid)) continue;
         warn('orphan-datatype',
             `${meta.alias} (${path.relative(ROOT, meta.file)}) editor=${meta.editorAlias} sin consumers`);
+    }
+
+    // ─── 9. Contenido del SEEDER fuera del repo (ADR 0129) ──────────
+    //
+    // Content/ y Media/ dejaron de estar en .gitignore para que el trabajo
+    // editorial se versione. La razón por la que se ignoraban tenía DOS
+    // partes, y solo una caducó: el agente sigue sin ser dueño del contenido
+    // (no lo autora), pero el seeder de dev SÍ escribiría basura en el repo
+    // en cuanto alguien corra /dev/seed-test-site con el export al guardar
+    // activado — que es el comportamiento por defecto de uSync.
+    //
+    // La regla de .gitignore resolvía eso a martillazos: bloqueaba TODO el
+    // contenido para no dejar pasar el del seeder. Este check es el bisturí:
+    // deja pasar lo editorial y rechaza lo sembrado, por nombre de nodo.
+    //
+    // Se comprueba el <Alias> del nodo raíz, que es lo que uSync escribe como
+    // nombre. Si mañana un seeder nuevo crea otro árbol de pruebas, se agrega
+    // aquí — y hasta entonces el repo queda limpio sin bloquear al arquitecto.
+    const SEEDED_CONTENT_ALIASES = new Set(['Test Site']);
+    const contentFiles = await readFiles(path.join(ROOT, 'Content'));
+    for (const file of contentFiles) {
+        const text = await fs.readFile(file, 'utf-8');
+        const alias = /<Content\b[^>]*\bAlias="([^"]+)"/.exec(text)?.[1];
+        if (alias && SEEDED_CONTENT_ALIASES.has(alias)) {
+            err('seeded-content',
+                `${path.relative(ROOT, file)} es contenido del SEEDER ("${alias}"), no editorial. ` +
+                'Se regenera con DevTestContentSeeder: bórralo del working tree antes de commitear.');
+        }
     }
 
     // ─── 8. Mojibake hygiene (Cap-300 Batch B) ─────────────────────
