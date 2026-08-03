@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Synergos.Api.Sessions;
+namespace Synergos.Api.Sessions.Storage;
 
 /// <summary>
 /// Borra los ficheros de búsquedas más viejos que la retención configurada.
@@ -21,12 +21,16 @@ public sealed class RetentionSweeper : BackgroundService
 
     private readonly SearchEventStore _store;
     private readonly ILogger<RetentionSweeper> _log;
+    private readonly TimeProvider _clock;
     private readonly int _retentionDays;
 
-    public RetentionSweeper(SearchEventStore store, IConfiguration config, ILogger<RetentionSweeper> log)
+    public RetentionSweeper(SearchEventStore store, IConfiguration config, TimeProvider clock, ILogger<RetentionSweeper> log)
     {
         _store = store;
         _log = log;
+        // El reloj se inyecta: probar que la retención borra lo viejo no puede exigir
+        // esperar un mes. Es la misma regla que rige en Booking (doc 08 §4.4).
+        _clock = clock;
         _retentionDays = int.TryParse(config["Sessions:Storage:RetentionDays"],
             NumberStyles.Integer, CultureInfo.InvariantCulture, out var days) && days > 0
             ? days
@@ -39,7 +43,7 @@ public sealed class RetentionSweeper : BackgroundService
         {
             try
             {
-                var purged = _store.Purge(DateTime.UtcNow.AddDays(-_retentionDays));
+                var purged = _store.Purge(_clock.GetUtcNow().UtcDateTime.AddDays(-_retentionDays));
                 if (purged > 0)
                 {
                     _log.LogInformation("Retención: {Purged} día(s) purgado(s) (>{Days}d).", purged, _retentionDays);

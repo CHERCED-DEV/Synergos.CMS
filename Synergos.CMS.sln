@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Api.Sessions", "Sy
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Core", "Synergos.Core\Synergos.Core.csproj", "{46C8E365-E314-4577-BDC7-9778EF30385C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Api.Booking", "Synergos.Api.Booking\Synergos.Api.Booking.csproj", "{3390C513-4F39-408A-939D-EF628911B5A0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -125,6 +127,18 @@ Global
 		{46C8E365-E314-4577-BDC7-9778EF30385C}.Release|x64.Build.0 = Release|Any CPU
 		{46C8E365-E314-4577-BDC7-9778EF30385C}.Release|x86.ActiveCfg = Release|Any CPU
 		{46C8E365-E314-4577-BDC7-9778EF30385C}.Release|x86.Build.0 = Release|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Debug|x64.Build.0 = Debug|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Debug|x86.Build.0 = Debug|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Release|x64.ActiveCfg = Release|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Release|x64.Build.0 = Release|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Release|x86.ActiveCfg = Release|Any CPU
+		{3390C513-4F39-408A-939D-EF628911B5A0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
