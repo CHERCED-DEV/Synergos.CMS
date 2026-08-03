@@ -1,4 +1,5 @@
 using Synergos.Sessions;
+using Synergos.Shared;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Synergos.Sessions — el servicio de señales de sesión.
@@ -11,7 +12,8 @@ using Synergos.Sessions;
 // romperse: /v1/search-events es un tipo de evento, no el único posible.
 //
 // NO referencia Synergos.CMS.*: el acople es el contrato HTTP. Es lo que permite
-// que este proyecto se mude a su propio repo el día que convenga.
+// que este proyecto se mude a su propio repo el día que convenga. Sí referencia
+// Synergos.Shared, que es fontanería de host sin dominio y viaja con él.
 // ─────────────────────────────────────────────────────────────────────────────
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,38 +22,11 @@ builder.Services.AddHostedService<RetentionSweeper>();
 
 var app = builder.Build();
 
+// La llave, la comparación en tiempo constante, la exención de /health y el aviso
+// a gritos cuando no hay llave viven en Synergos.Shared: son las mismas para toda
+// API interna, y copiadas a mano se pierde una decisión sutil por copia.
 var apiKey = app.Configuration["Sessions:ApiKey"];
-if (string.IsNullOrWhiteSpace(apiKey))
-{
-    // Degradar A GRITOS, no en silencio. Sin llave el servicio arranca —si no, un
-    // `dotnet run` recién clonado no levantaría y eso empuja a poner la llave en el
-    // repo— pero queda dicho que la ingesta está abierta: cualquiera puede envenenar
-    // el "top queries" del dashboard.
-    app.Logger.LogWarning(
-        "Sessions:ApiKey NO está configurada: la ingesta queda ABIERTA. " +
-        "Sirve para desarrollo; en cualquier despliegue alcanzable es un agujero.");
-}
-
-app.Use(async (ctx, next) =>
-{
-    // /health queda fuera a propósito: un chequeo de vida que exige credenciales no
-    // sirve como chequeo de vida.
-    if (string.IsNullOrWhiteSpace(apiKey) || ctx.Request.Path.StartsWithSegments("/health"))
-    {
-        await next();
-        return;
-    }
-
-    var sent = ctx.Request.Headers[SessionsApi.ApiKeyHeader].ToString();
-    // Comparación de longitud fija: una comparación normal filtra el prefijo correcto
-    // por tiempo de respuesta.
-    if (!FixedTimeEquals(sent, apiKey))
-    {
-        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return;
-    }
-    await next();
-});
+app.UseSharedKeyAuth(apiKey);
 
 // ── Ingesta ─────────────────────────────────────────────────────────────────
 app.MapPost("/v1/search-events", (SearchEventRequest req, SearchEventStore store) =>
@@ -69,10 +44,10 @@ app.MapPost("/v1/search-events", (SearchEventRequest req, SearchEventStore store
 
 // ── Consulta ────────────────────────────────────────────────────────────────
 app.MapGet("/v1/search/top", (DateTime? from, DateTime? to, int? limit, SearchEventStore store) =>
-    Results.Ok(store.TopQueries(From(from), To(to), Limit(limit))));
+    Results.Ok(store.TopQueries(QueryWindow.From(from), QueryWindow.To(to), QueryWindow.Limit(limit))));
 
 app.MapGet("/v1/search/no-results", (DateTime? from, DateTime? to, int? limit, SearchEventStore store) =>
-    Results.Ok(store.TopNoResultQueries(From(from), To(to), Limit(limit))));
+    Results.Ok(store.TopNoResultQueries(QueryWindow.From(from), QueryWindow.To(to), QueryWindow.Limit(limit))));
 
 app.MapGet("/health", (SearchEventStore store) =>
 {
@@ -82,31 +57,8 @@ app.MapGet("/health", (SearchEventStore store) =>
 
 app.Run();
 
-// Ventanas por defecto sensatas: sin `from` se asumen 7 días, que es lo que mira el
-// dashboard. Sin tope, una petición sin `limit` podría devolver el catálogo entero.
-static DateTime From(DateTime? v) => v?.ToUniversalTime() ?? DateTime.UtcNow.AddDays(-7);
-static DateTime To(DateTime? v) => v?.ToUniversalTime() ?? DateTime.UtcNow;
-static int Limit(int? v) => Math.Clamp(v ?? 10, 1, SessionsApi.MaxLimit);
-
-static bool FixedTimeEquals(string? a, string? b)
-{
-    var x = System.Text.Encoding.UTF8.GetBytes(a ?? string.Empty);
-    var y = System.Text.Encoding.UTF8.GetBytes(b ?? string.Empty);
-    return x.Length == y.Length && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(x, y);
-}
-
 /// <summary>Lo que un origen reporta al registrar una búsqueda.</summary>
 public sealed record SearchEventRequest(string? Query, int ResultCount, long ElapsedMs);
-
-/// <summary>Constantes del contrato HTTP, compartidas con los tests.</summary>
-public static class SessionsApi
-{
-    /// <summary>Cabecera con la llave compartida.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
-    /// <summary>Tope duro de filas por consulta.</summary>
-    public const int MaxLimit = 500;
-}
 
 /// <summary>El programa, expuesto para que los tests puedan levantarlo en memoria.</summary>
 public partial class Program;

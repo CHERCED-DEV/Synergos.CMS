@@ -9,4 +9,10 @@
          repo, esto es lo único que hay que mover. -->
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Fontanería de host sin dominio (llave compartida, ventanas de consulta).
+         Viaja con el servicio si algún día se muda de repo. -->
+    <ProjectReference Include="..\Synergos.Shared\Synergos.Shared.csproj" />
+  </ItemGroup>
+
 </Project>

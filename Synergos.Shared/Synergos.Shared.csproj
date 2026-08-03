@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- CA1716: "Shared" es palabra reservada en VB.NET. Aquí no hay VB ni lo habrá,
+         y el nombre lo pidió el arquitecto por escrito. Se silencia con motivo, no
+         se ignora. -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- Fontanería de host: por eso SÍ referencia ASP.NET, y por eso NO
+         referencia ningún otro proyecto del repo. Ver docs/product/06. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>
