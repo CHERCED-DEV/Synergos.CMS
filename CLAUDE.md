@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **1978 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **1991 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 1978 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 1991 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   ├── Api/                     tests de reglas y servicio por capacidad
 │   └── Bff/                     la compensación cruzada (48)
@@ -330,7 +330,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (1978 tests):
+# Suite completa (1991 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -427,8 +427,8 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (128 endpoints, 178 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 1978 tests, gates de
+**Construido y verificado:** 20 capacidades (128 endpoints, 180 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 1991 tests, gates de
 segregación y molde en verde.
 
 **Lo que NO está:**
@@ -443,7 +443,15 @@ segregación y molde en verde.
   forma de seguirla cuando falle en un cliente.
 - **La llave compartida no es identidad.** Sirve servicio↔servicio; no
   contesta «quién es este usuario». `Api.Identity` existe pero nadie la
-  usa como puerta.
+  usa como puerta. `Api.Messaging` ya guarda **con qué se afirmó** la
+  identidad de quien accede (HU #13) precisamente para que el día que
+  esto se arregle los registros viejos no mientan sobre su propia fuerza:
+  hoy todos dicen `CmsSession`, que es nuestro propio sistema dando fe.
+  Cablear `Api.Identity` como puerta es la HU #14.
+- **Ninguna capacidad llama a otra**, y no hay gate que lo vigile porque
+  no había caso. Apareció el primero —mandar un acceso rechazado a
+  `Api.Audit`— y se decidió NO abrir esa flecha desde la capacidad
+  (HU #15). Si algún día se abre, el gate va antes que el código.
 - **Seis orquestadores sin construir**: Viajes, Eventos, Realty, Gob,
   Academy, Social.
 - **Sin política de abandono** para una saga nunca confirmada; el
