@@ -1,6 +1,6 @@
 ---
 name: synergos-guardrails
-description: LÉEME PRIMERO. Onboarding y guardrails del proyecto Synergos — cómo trabajamos, cómo lo hacemos y qué NO hacer NUNCA. Es un proyecto delicado (Umbraco 13 CMS que compone vitrinas SSR + apps Angular custom-element vía CDN local + design system tokenizado, 7 temas por-siteRoot). Actívala al ENTRAR al proyecto o antes de proponer cualquier cambio, para no violar los principios inviolables. Consolida en un solo lugar los 10 principios (grafo de dependencias, schema solo uSync no code-first, cero seeders, branding vía provider, no multi-tenant, CDN consumido no owned, GUIDs cuádruple), la premisa capital COMPONER-NUNCA-HARDCODEAR (spacing vía Layout Composer, colores vía tokens --syn-*), la verificación real (build verde ≠ hecho; navegador + 7 temas), el rebuild del runtime compartido, la higiene de commits/DB, y el pin de Umbraco 13. Es el índice que remite a las 21 skills específicas y a los ADRs.
+description: LÉEME PRIMERO. Onboarding y guardrails del proyecto Synergos — cómo trabajamos, cómo lo hacemos y qué NO hacer NUNCA. Es un proyecto delicado (Umbraco 13 CMS que compone vitrinas SSR + apps Angular custom-element vía CDN local + design system tokenizado, 7 temas por-siteRoot). Actívala al ENTRAR al proyecto o antes de proponer cualquier cambio, para no violar los principios inviolables. Consolida en un solo lugar los 10 principios (grafo de dependencias, schema solo uSync no code-first, cero seeders, branding vía provider, no multi-tenant, CDN consumido no owned, GUIDs cuádruple), la premisa capital COMPONER-NUNCA-HARDCODEAR (spacing vía Layout Composer, colores vía tokens --syn-*), la verificación real (build verde ≠ hecho; navegador + 7 temas), el rebuild del runtime compartido, la higiene de commits/DB, y el pin de Umbraco 13. Es el índice que remite a las 23 skills específicas y a los ADRs. Cubre los DOS árboles del repo: el del CMS (Umbraco/uSync/CDN) y el de servicios (20 capacidades agnósticas + orquestadores sobre Bff.Core), que tienen reglas distintas.
 model: claude-opus-4-8
 ---
 
@@ -177,6 +177,12 @@ Luego **Ctrl+Shift+R** (el runtime es immutable/versionado; F5 sirve cache viejo
 
 ## 9. Mapa de skills — a dónde ir
 
+> **El repo tiene DOS árboles.** Casi todas las skills de abajo son del árbol del
+> CMS (Umbraco + uSync + CDN). El árbol de servicios —20 capacidades
+> `Synergos.Api.*`, `Synergos.Bff.Core` y los orquestadores— tiene reglas
+> **distintas**, sus propios gates ejecutables y sus dos skills al final de la
+> tabla. Antes de tocar nada, mirá en cuál estás. Ver `CLAUDE.md` §0.A / §0.B.
+
 | Tarea | Skill |
 |-------|-------|
 | Entender reglas / qué NO hacer | **synergos-guardrails** (esta) |
@@ -195,6 +201,8 @@ Luego **Ctrl+Shift+R** (el runtime es immutable/versionado; F5 sirve cache viejo
 | Ops de DB (seguras) | `synergos-db-ops` |
 | Abrir / cerrar una Ola | `synergos-ola-open` / `synergos-ola-close` |
 | Bootstrap + empalme UI del arquitecto | `synergos-architect` |
+| **Escribir una capacidad `Synergos.Api.*`** | **`synergos-capability-author`** |
+| **Construir un orquestador `Synergos.Bff.*`** | **`synergos-bff-author`** |
 
 ## 10. Dónde vive la verdad
 

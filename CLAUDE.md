@@ -3,7 +3,13 @@
 > Punto de entrada para agentes LLM que vayan a escribir o modificar código
 > en este proyecto. Lee en orden y ataja los errores comunes.
 
-## 0. Los 10 principios que NO se violan
+## 0. Los principios que NO se violan
+
+> **El repo tiene DOS árboles.** El del CMS (Umbraco, §0.A) y el de servicios
+> (capacidades + orquestadores, §0.B). Se hablan **solo por HTTP** y hay gates
+> que lo verifican. Antes de tocar nada, mirá en cuál de los dos estás.
+
+### 0.A — El árbol del CMS
 
 1. **Grafo de dependencias unidireccional**
    `Interfaces ← Application ← Web ← Tests`. Ninguna capa importa de
@@ -28,10 +34,45 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **976 passing**. Memoria `feedback_tests_after_full_migration`
-   (status: superseded).
+   Tests project: **1978 passing**. Memoria `feedback_tests_after_full_migration`
+   (status: superseded). En el árbol de servicios el gate es más duro:
+   además de tests, **mutación de cada gate** y **verificación con
+   procesos reales** cuando el cambio cruza servicios.
 10. **GUIDs verificados cuádruple** antes de cualquier XML uSync
     nuevo. Memoria `feedback_no_preassigned_guids_usync`.
+
+### 0.B — El árbol de servicios
+
+11. **Tres capas, una sola dirección.**
+    `Capacidad (Synergos.Api.*) ← BFF (Synergos.Bff.*) ← consumidores`.
+    **Todo el acople es HTTP**: ninguna referencia de ensamblado cruza
+    capas, y ninguna API referencia el CMS ni al revés. Si pudiera
+    llamarse en proceso, la capacidad sería una carpeta con ínfulas.
+    Ver doc 06 + `BackendSegregationTests`.
+12. **La capacidad es dueña del CUÁNDO; el orquestador, del QUÉ.**
+    `Api.Booking` sabe «recurso + ventana + cupo»; **no** sabe que el
+    recurso es un médico. Un sustantivo de negocio dentro de una
+    `Api.*` rompe el build.
+13. **`Ref(Kind, Id)` se guarda y se devuelve, NUNCA se ramifica.**
+    Un `if (kind == "salud.profesional")` dentro de una capacidad la
+    inutiliza para el siguiente dominio. Hay gate.
+14. **El piso de la atomicidad**: algo es una capacidad si (a) puede
+    decir NO sola y (b) es dueña de su almacén. **Lo que no tiene
+    almacén es un tipo, no un servicio.** Ver doc 07.
+15. **El molde es idéntico en las veinte.** Cuatro carpetas
+    (`Contracts/ Domain/ Storage/ Endpoints/`), llave compartida,
+    `/health`, todo bajo `/v1/`, sin `MapPut`/`MapPatch`, ruteo solo en
+    `Endpoints/`. Ver doc 08 §4 + `ApiMoldTests`.
+16. **Idempotencia primero.** La llave se resuelve **antes** de
+    cualquier regla que dependa del estado. Al revés, un reintento
+    choca con lo que él mismo creó (defecto real, ver §11).
+17. **Se promueve al SEGUNDO consumidor, no antes.** `Synergos.Shared`
+    esperó a seis; `Synergos.Bff.Core` esperó a que existiera
+    `Bff.Tienda`. Es CLAUDE.md §6 aplicado con fecha, no con
+    corazonada. Ver doc 10.
+18. **Una compensación es un DATO, no una función**, y se anota en el
+    instante en que existe lo que hay que deshacer. **Armada no es
+    pendiente**: solo es trabajo cuando algo YA falló. Ver doc 09.
 
 ## 1. Umbraco 13 LTS pinned
 
@@ -70,9 +111,31 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 976 tests passing (gate liftado ADR 0075)
-└── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
+├── Synergos.CMS.Tests/          xUnit — 1978 tests passing (gate liftado ADR 0075)
+│   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
+│   ├── Api/                     tests de reglas y servicio por capacidad
+│   └── Bff/                     la compensación cruzada (48)
+├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
+│
+├── Synergos.Core/               EL VOCABULARIO. Ref, Money, TimeWindow, Rejection,
+│                                Result, IdempotencyKey, Actor, Page.
+│                                CERO referencias. No sabe qué es ASP.NET.
+├── Synergos.Shared/             fontanería de host. Llave compartida, Rejection→HTTP,
+│                                libro de idempotencia, JsonCollectionStore.
+│                                Solo puede referenciar Core — UNA flecha.
+├── Synergos.Api.*/              LAS 20 CAPACIDADES, agnósticas. 128 endpoints.
+│     Sessions · Booking · Identity · Audit · Notifications · Documents ·
+│     Catalog · Pricing · Cart · Orders · Payments · Inventory · Workflow ·
+│     Messaging · Signing · Consent · Engagement · Geo · Fulfillment · Moderation
+├── Synergos.Bff.Core/           la máquina de sagas: deshacer, reintentar,
+│                                rendirse, avisar. Promovida al segundo consumidor.
+└── Synergos.Bff.*/              LOS ORQUESTADORES. Salud y Tienda construidos;
+                                 faltan Viajes, Eventos, Realty, Gob, Academy, Social.
 ```
+
+> **El árbol de servicios está construido y verificado, pero casi sin
+> conectar al producto**: de las 20 capacidades el CMS consume UNA
+> (`Api.Sessions`, vía `HttpSearchAnalyticsStore`). Ver §11.
 
 ## 3. Dónde está la verdad
 
@@ -85,6 +148,12 @@ Synergos.CMS/
 | "¿Hay compositions reservadas sin consumers?"  | Sí. Marker `[Bloqueado externamente - ...]` o `[Disponible — sin consumers actuales]` al inicio de `<Description>`. NO son orphans; son scaffolding tracked. Cap-260 audit (Cap-270 Batch C) las reconoce. |
 | "¿Cómo se acopla con el UI?"     | `Synergos.CMS.Web/docs/contracts/` — los 5 contratos. Es la ÚNICA superficie de acople. |
 | "¿Qué elementos publica el CDN?" | Repo hermano `Synergos.UI`, `vitals/contracts/src/element-registry.json` |
+| "¿Por qué el backend está partido así?" | `docs/product/06-arquitectura-backend.md` |
+| "¿Dónde para la atomicidad? ¿Qué es una capacidad?" | `docs/product/07-diseno-atomico-capacidades.md` |
+| "¿Qué API necesita cada dominio? ¿Cuál es el molde?" | `docs/product/08-despiece-apis.md` — la matriz 20×9 y §4 |
+| "¿Cómo se deshace lo que ya se hizo?" | `docs/product/09-compensacion-cruzada.md` |
+| "¿Cuándo se promueve algo a una capa compartida?" | `docs/product/10-promocion-bff-core.md` |
+| "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — es el único sitio |
 
 > **Fuentes que NO viven en este repo.** `refactor-docs/` (status de la
 > migración, inventario del legado) y el `MEMORY.md` del agente son locales de
@@ -171,6 +240,32 @@ Las memorias relevantes antes de proponer cualquier ola:
 - `feedback_non_destructive_smoke_first` — primer import no-destructivo.
 - `feedback_dev_setup_hygiene` — commits atómicos, DB nunca commiteada.
 
+Las que salieron de construir el árbol de servicios (§0.B):
+
+- `feedback_capability_ref_opaque` — la capacidad guarda y devuelve el
+  `Ref`; ramificar sobre su `Kind` la inutiliza para el siguiente dominio.
+- `feedback_atomicity_floor` — sin almacén propio no es un servicio, es
+  un tipo. El filtro contra el que se rechazan capacidades propuestas.
+- `feedback_idempotency_before_state` — la llave se resuelve ANTES de
+  toda regla que dependa del estado. Al revés, el reintento choca con
+  lo que él mismo creó.
+- `feedback_promote_on_second_consumer` — nada se promueve a una capa
+  compartida con un solo consumidor. Shared esperó seis; Bff.Core, dos.
+- `feedback_compensation_is_data` — dato y no función, anotada en el
+  instante en que existe lo que hay que deshacer. **Armada ≠ pendiente.**
+- `feedback_compensation_changes_character` — al capturar, «liberar» pasa
+  a «devolver»; al consumir stock, «soltar» pasa a «ajustar». Si no se
+  reescribe, la compensación falla para siempre por una razón que no
+  tiene nada que ver con el mundo real.
+- `feedback_close_doors_last` — lo que cierra una puerta (`fulfill`,
+  `checkout`) va lo más tarde posible en un flujo, cuando ya no queda
+  nada detrás que pueda fallar.
+- `feedback_mutate_every_gate` — un gate que no se vio fallar no está
+  vigilando nada. Se reintroduce el defecto y se confirma el rojo.
+- `feedback_verify_with_live_processes` — los defectos caros salieron
+  todos de levantar los procesos y matar uno, no de los tests: los
+  tests codificaban la misma suposición equivocada que el código.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -198,8 +293,16 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa:
+# Suite completa (1978 tests):
 dotnet test Synergos.CMS.sln -v quiet
+
+# LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
+# conviene correrlos aparte al tocar el árbol de servicios:
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj --filter "FullyQualifiedName~Architecture"
+
+# Una capacidad o un orquestador, sueltos:
+dotnet build Synergos.Api.Booking/Synergos.Api.Booking.csproj -v quiet
+dotnet build Synergos.Bff.Tienda/Synergos.Bff.Tienda.csproj -v quiet
 
 # uSync Import: lo hace el arquitecto manualmente desde backoffice —
 # agente NO ejecuta import desde CLI ni toca la DB.
@@ -275,3 +378,38 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 4. Actualiza memorias del agente si aprendiste una regla nueva.
 5. Actualiza `refactor-docs/architecture/00-current-state-synergos-cms.md`
    §11 si cambiaste algo estructural relevante.
+6. Si tocaste el árbol de servicios: **mutá los gates** que escribiste
+   —reintroducí el defecto, confirmá el rojo, restaurá— y **verificá
+   con procesos reales** si el cambio cruza servicios. Los dos defectos
+   más caros de este repo los encontró un proceso vivo, no un test.
+7. Si el cambio hace obsoleto algo de este fichero, **arreglalo en el
+   mismo commit**. Un `CLAUDE.md` que miente es peor que uno corto.
+
+## 11. Estado del árbol de servicios — lo que falta de verdad
+
+> Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
+> agente propone lo que ya existe o da por hecho lo que no.
+
+**Construido y verificado:** 20 capacidades (128 endpoints, 178 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 1978 tests, gates de
+segregación y molde en verde.
+
+**Lo que NO está:**
+
+- **Casi nada está conectado al producto.** El CMS consume UNA capacidad
+  de veinte. Es la brecha más grande y no es técnica de fondo: es
+  cableado. Sin esto, «tenemos 20 APIs» no es «tenemos un producto».
+- **19 capacidades sobre fichero JSON** con `lock` de proceso. Una sola
+  instancia por capacidad; dos réplicas se pisan. Está dicho de frente
+  en `JsonCollectionStore` y es la primera razón para cambiar de almacén.
+- **Cero trazas distribuidas.** Una saga cruza seis servicios y no hay
+  forma de seguirla cuando falle en un cliente.
+- **La llave compartida no es identidad.** Sirve servicio↔servicio; no
+  contesta «quién es este usuario». `Api.Identity` existe pero nadie la
+  usa como puerta.
+- **Seis orquestadores sin construir**: Viajes, Eventos, Realty, Gob,
+  Academy, Social.
+- **Sin política de abandono** para una saga nunca confirmada; el
+  retroceso no es configurable; `Api.Inventory` necesita ajuste relativo
+  (hoy devolver stock es un leer-sumar-escribir).
+- **`StubBundleRegistryClient`** sigue activo — bloqueo externo, §9.
