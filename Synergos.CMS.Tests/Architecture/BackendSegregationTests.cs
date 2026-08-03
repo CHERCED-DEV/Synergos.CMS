@@ -72,6 +72,16 @@ public sealed class BackendSegregationTests
     private static IReadOnlyList<Csproj> Named(string prefix) =>
         Projects().Where(p => p.Name.StartsWith(prefix, StringComparison.Ordinal)).ToList();
 
+    /// <summary>
+    /// Si el proyecto pertenece al árbol de servicios —capacidades y orquestadores— y no al
+    /// del CMS. <c>Synergos.Sessions</c> entra por nombre propio: es una capacidad de
+    /// nacimiento (ADR 0130) y aún no lleva el prefijo (decisión abierta, docs/product/06 §12).
+    /// </summary>
+    private static bool EsDelOtroArbol(string name) =>
+        name.StartsWith("Synergos.Api.", StringComparison.Ordinal)
+        || name.StartsWith("Synergos.Domain.", StringComparison.Ordinal)
+        || name == "Synergos.Sessions";
+
     // ── La frontera Core ⊥ Shared ───────────────────────────────────────────
     // "Core no sabe qué es un host. Shared no sabe qué es un pedido."
     // Un tipo que parece pertenecer a los dos NO existe: está mal cortado.
@@ -124,22 +134,35 @@ public sealed class BackendSegregationTests
         "Member", "Comment", "Blog", "Product", "Invoice", "Refund",
     };
 
-    [Fact]
-    public void Ningun_tipo_de_Shared_menciona_un_sustantivo_del_negocio()
+    /// <summary>
+    /// Sustantivos del NEGOCIO. Distintos de <see cref="DomainNouns"/> a propósito: en una
+    /// capacidad agnóstica, <c>Reservation</c> y <c>Order</c> son vocabulario propio y legítimo;
+    /// <c>Patient</c> y <c>Tramite</c> no lo son nunca.
+    /// </summary>
+    private static readonly string[] BusinessNouns =
     {
-        var shared = Named("Synergos.Shared").SingleOrDefault();
-        if (shared is null) return;
+        "Patient", "Clinical", "Doctor", "Prescription", "Diagnosis",
+        "Tramite", "Expediente", "Course", "Student", "Mortgage",
+        "Flight", "Hotel", "Stay", "Trip", "Blog",
+    };
 
-        var dir = Path.GetDirectoryName(shared.Path)!;
+    /// <summary>
+    /// Busca declaraciones de tipo cuyo nombre contenga uno de <paramref name="nouns"/>.
+    /// </summary>
+    /// <remarks>
+    /// Solo mira DECLARACIONES. El cuerpo y los comentarios pueden decir "pedido" al explicar
+    /// por qué algo existe — eso es documentación, no acople. Lo que no puede haber es un tipo
+    /// llamado así.
+    /// </remarks>
+    private static List<string> NounLeaks(string projectPath, string[] nouns)
+    {
+        var dir = Path.GetDirectoryName(projectPath)!;
         var leaks = new List<string>();
 
         foreach (var file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
         {
             if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)) continue;
 
-            // Solo declaraciones de tipo y de miembro público. El cuerpo y los comentarios
-            // pueden decir "pedido" al explicar POR QUÉ algo existe — eso es documentación,
-            // no acople. Lo que no puede es haber un tipo llamado así.
             foreach (var line in File.ReadLines(file))
             {
                 var m = Regex.Match(line,
@@ -147,7 +170,7 @@ public sealed class BackendSegregationTests
                 if (!m.Success) continue;
 
                 var name = m.Groups[1].Value;
-                var hit = DomainNouns.FirstOrDefault(n => name.Contains(n, StringComparison.Ordinal));
+                var hit = nouns.FirstOrDefault(n => name.Contains(n, StringComparison.Ordinal));
                 if (hit is not null)
                 {
                     leaks.Add($"{Path.GetFileName(file)}: '{name}' contiene '{hit}'");
@@ -155,9 +178,56 @@ public sealed class BackendSegregationTests
             }
         }
 
+        return leaks;
+    }
+
+    [Fact]
+    public void Ningun_tipo_de_Shared_menciona_un_sustantivo_del_negocio()
+    {
+        var shared = Named("Synergos.Shared").SingleOrDefault();
+        if (shared is null) return;
+
+        var leaks = NounLeaks(shared.Path, DomainNouns);
+
         Assert.True(leaks.Count == 0,
             "Synergos.Shared no puede nombrar el dominio — eso va en Synergos.Core o en su API. " +
             $"Encontrado:{Environment.NewLine}{string.Join(Environment.NewLine, leaks)}");
+    }
+
+    // ── La frontera capacidad ⊥ dominio ─────────────────────────────────────
+    // "La capacidad es dueña del CUÁNDO; el orquestador, del QUÉ." Booking sabe recurso +
+    // ventana + cupo; no sabe que el recurso es un médico. Ver docs/product/06 §3.
+
+    [Fact]
+    public void Ninguna_capacidad_nombra_un_negocio_concreto()
+    {
+        // El modo de fallo típico: aparece 'SpecialtyCode' "solo por ahora" y la capacidad
+        // deja de ser agnóstica sin que nadie lo haya decidido. Cuando eso pasa, el octavo
+        // dominio ya no puede reutilizarla y se copia — que es de donde veníamos.
+        var leaks = Named("Synergos.Api.")
+            .SelectMany(api => NounLeaks(api.Path, BusinessNouns).Select(l => $"{api.Name} → {l}"))
+            .ToList();
+
+        Assert.True(leaks.Count == 0,
+            "Una capacidad no puede nombrar un negocio concreto: eso va en su Synergos.Domain.*. " +
+            $"Encontrado:{Environment.NewLine}{string.Join(Environment.NewLine, leaks)}");
+    }
+
+    [Fact]
+    public void Ninguna_capacidad_referencia_un_orquestador()
+    {
+        // Es la flecha que se invierte sola si nadie mira, y la que vuelve inútil toda la
+        // capa: una capacidad que conoce un dominio ya no sirve al siguiente.
+        var offenders = Named("Synergos.Api.")
+            .Select(p => (p.Name, Bad: p.ProjectRefs
+                .Where(r => r.StartsWith("Synergos.Domain.", StringComparison.Ordinal)).ToList()))
+            .Where(x => x.Bad.Count > 0)
+            .Select(x => $"{x.Name} → {string.Join(", ", x.Bad)}")
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "Una capacidad no puede referenciar un orquestador — la flecha va al revés. " +
+            $"Encontrado: {string.Join(" | ", offenders)}.");
     }
 
     // ── La frontera CMS ⊥ API ───────────────────────────────────────────────
@@ -168,8 +238,7 @@ public sealed class BackendSegregationTests
     public void Ninguna_API_referencia_el_CMS()
     {
         var offenders = Projects()
-            .Where(p => p.Name.StartsWith("Synergos.Api.", StringComparison.Ordinal)
-                     || p.Name == "Synergos.Sessions")
+            .Where(p => EsDelOtroArbol(p.Name))
             .Select(p => (p.Name, Bad: p.ProjectRefs.Where(r => r.StartsWith("Synergos.CMS.", StringComparison.Ordinal)).ToList()))
             .Where(x => x.Bad.Count > 0)
             .Select(x => $"{x.Name} → {string.Join(", ", x.Bad)}")
@@ -189,9 +258,7 @@ public sealed class BackendSegregationTests
         var offenders = Projects()
             .Where(p => p.Name.StartsWith("Synergos.CMS.", StringComparison.Ordinal)
                      && p.Name != "Synergos.CMS.Tests")   // los tests sí pueden levantarlas
-            .Select(p => (p.Name, Bad: p.ProjectRefs
-                .Where(r => r.StartsWith("Synergos.Api.", StringComparison.Ordinal) || r == "Synergos.Sessions")
-                .ToList()))
+            .Select(p => (p.Name, Bad: p.ProjectRefs.Where(EsDelOtroArbol).ToList()))
             .Where(x => x.Bad.Count > 0)
             .Select(x => $"{x.Name} → {string.Join(", ", x.Bad)}")
             .ToList();
