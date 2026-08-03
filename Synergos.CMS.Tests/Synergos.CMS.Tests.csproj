@@ -20,6 +20,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Synergos.CMS.Web\Synergos.CMS.Web.csproj" />
+    <!-- Los tests SÍ pueden alcanzar el otro árbol: son el único proyecto exento del
+         gate CMS ⊥ API (BackendSegregationTests), porque probar la separación exige
+         poder ver los dos lados. -->
+    <ProjectReference Include="..\Synergos.Shared\Synergos.Shared.csproj" />
   </ItemGroup>
 
 </Project>
