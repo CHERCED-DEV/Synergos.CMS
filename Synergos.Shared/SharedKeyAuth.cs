@@ -11,7 +11,7 @@ namespace Synergos.Shared;
 /// </summary>
 /// <remarks>
 /// <para><b>Qué hace esto aquí y no en cada API.</b> Salió tal cual de
-/// <c>Synergos.Sessions</c>, donde ya estaba escrito y probado con los dos procesos hablando
+/// <c>Synergos.Api.Sessions</c>, donde ya estaba escrito y probado con los dos procesos hablando
 /// (ADR 0130). No es código que <i>podría</i> compartirse: es el código que la segunda API iba
 /// a copiar, con sus tres decisiones sutiles —comparación de tiempo fijo, exención de
 /// <c>/health</c>, degradación a gritos— que copiadas a mano se pierden una por una.</para>

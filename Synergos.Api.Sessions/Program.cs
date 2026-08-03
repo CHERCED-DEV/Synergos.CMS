@@ -1,8 +1,8 @@
-using Synergos.Sessions;
+using Synergos.Api.Sessions;
 using Synergos.Shared;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Synergos.Sessions — el servicio de señales de sesión.
+// Synergos.Api.Sessions — el servicio de señales de sesión.
 //
 // Existe porque la analítica no tiene por qué vivir dentro del CMS: el CMS sirve
 // páginas, y acumular ahí el rastro de comportamiento lo satura sin darle nada a

@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Synergos.Sessions;
+namespace Synergos.Api.Sessions;
 
 /// <summary>
 /// Borra los ficheros de búsquedas más viejos que la retención configurada.
