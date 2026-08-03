@@ -56,7 +56,7 @@ Synergos.CMS/
 │   ├── Services/                Umbraco-dependent services (LayoutCssBuilder, FlowResolver, etc.)
 │   ├── Views/                   Razor templates + partials + blockgrid components
 │   ├── docs/
-│   │   ├── adr/                 113 ADRs (0001-0114, sin 0016) — SOURCE OF TRUTH
+│   │   ├── adr/                 128 ADRs (0001-0129, sin 0016) — SOURCE OF TRUTH
 │   │   ├── contracts/           los 5 contratos CMS↔UI + harness Vitest
 │   │   └── umbraco/             cdn-contract.md (externalmente bloqueado)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
@@ -66,7 +66,10 @@ Synergos.CMS/
 │       ├── Languages/           es-CO (default) + en-US
 │       ├── MediaTypes/          synImage + synDocument + synIcon + los stock de Umbraco
 │       ├── MemberTypes/         member
-│       └── Templates/           Razor template registry (14)
+│       ├── Templates/           Razor template registry (14)
+│       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
+│       │                        uSync al guardar; el agente NO lo autora
+│       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
 ├── Synergos.CMS.Tests/          xUnit — 976 tests passing (gate liftado ADR 0075)
 └── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
 ```
