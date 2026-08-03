@@ -1,9 +1,8 @@
 # Despiece de APIs — qué necesita cada dominio, y de qué
 
-> **Estado:** **once de las veinte construidas** — `Sessions`, `Booking`, las cinco de nueve
-> consumidores (`Identity`, `Audit`, `Notifications`, `Documents`, `Catalog`) y el bloque de
-> comercio (`Pricing`, `Cart`, `Orders`, `Payments`). El molde de §4 está construido y gateado,
-> y las once lo cumplen.
+> **Estado: LAS VEINTE CONSTRUIDAS.** El molde de §4 está construido y gateado, y las veinte lo
+> cumplen sin excepciones. Lo que queda del plan no son capacidades: son los **BFF**, y con ellos
+> el problema de la **compensación cruzada** (doc 07 §7), que sigue sin resolver.
 >
 > Es el inventario que hay que acordar antes de escribir la
 > primera API. Deriva de los dos filtros de atomicidad del
@@ -349,7 +348,7 @@ es lo que de verdad erosiona veinte proyectos.
    Lo que ganó `Shared` en el camino: `JsonCollectionStore`, `IIdempotencyLedger` y la lectura de
    la cabecera, promovidos cuando tuvieron seis consumidores y no antes.
 
-   **Queda: `Inventory`, `Workflow`, `Messaging`, `Signing`, `Consent`, `Engagement`, `Geo`,
-   `Fulfillment`, `Moderation`.**
+   **Catálogo cerrado.** Las veinte existen, compilan sin warnings, pasan `ApiMoldTests` y
+   `BackendSegregationTests`, y se verificaron con los veinte procesos vivos a la vez.
 4. ~~**¿`Api.Sessions` se adapta al molde?**~~ **Resuelto: se alinea.** Un molde que nace con una
    excepción es un molde que no existe.

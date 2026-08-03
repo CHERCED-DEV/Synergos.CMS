@@ -1,0 +1,64 @@
+using Synergos.Api.Inventory.Contracts;
+using Synergos.Api.Inventory.Domain;
+using Synergos.Core;
+using Synergos.Shared;
+
+namespace Synergos.Api.Inventory.Endpoints;
+
+/// <summary>El ruteo del inventario.</summary>
+public static class InventoryEndpoints
+{
+    public static IEndpointRouteBuilder MapInventoryEndpoints(this IEndpointRouteBuilder app)
+    {
+        app.MapPost("/v1/items", (DeclareStockRequest req, HttpRequest http, InventoryService svc, TimeProvider clock) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, InventoryRules.CodePrefix, out var key, out var falta)) return falta!;
+
+            var subject = Ref.TryCreate(req.SubjectKind, req.SubjectId);
+            if (subject is null) return Invalid("bad_subject", "Hacen falta subjectKind y subjectId.");
+
+            var units = new List<StockUnit>();
+            foreach (var u in req.Units ?? Array.Empty<StockUnitDto>())
+            {
+                if (string.IsNullOrWhiteSpace(u.Code)) return Invalid("bad_unit_code", "Cada unidad necesita un código.");
+                units.Add(new StockUnit(u.Code!.Trim(), u.Row, u.Column));
+            }
+
+            return svc.Declare(subject, req.OnHand ?? 0, units, key).Match(
+                i => Results.Created($"/v1/items/{i.Id}", StockItemResponse.From(i, clock.GetUtcNow())),
+                bad => bad.ToProblem());
+        });
+
+        app.MapGet("/v1/items/{id}", (string id, InventoryService svc, TimeProvider clock) =>
+            svc.Get(id).Map(i => StockItemResponse.From(i, clock.GetUtcNow())).ToHttp());
+
+        app.MapPost("/v1/items/{id}/adjust", (string id, AdjustStockRequest req, InventoryService svc, TimeProvider clock) =>
+            svc.Adjust(id, req.OnHand ?? -1).Map(i => StockItemResponse.From(i, clock.GetUtcNow())).ToHttp());
+
+        app.MapPost("/v1/items/{id}/holds", (string id, HoldStockRequest req, HttpRequest http, InventoryService svc) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, InventoryRules.CodePrefix, out var key, out var falta)) return falta!;
+
+            var forWhat = Ref.TryCreate(req.ForKind, req.ForId);
+            if (forWhat is null) return Invalid("bad_for", "Hacen falta forKind y forId.");
+
+            var ttl = req.TtlMinutes is { } m ? TimeSpan.FromMinutes(m) : (TimeSpan?)null;
+            var codes = (req.UnitCodes ?? Array.Empty<string>()).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToList();
+
+            return svc.Hold(id, req.Quantity ?? 0, codes, forWhat, ttl, key).Match(
+                h => Results.Created($"/v1/holds/{h.Id}", StockHoldResponse.From(h)),
+                bad => bad.ToProblem());
+        });
+
+        app.MapPost("/v1/holds/{id}/release", (string id, InventoryService svc) =>
+            svc.ReleaseHold(id).Map(StockHoldResponse.From).ToHttp());
+
+        app.MapPost("/v1/holds/{id}/consume", (string id, InventoryService svc) =>
+            svc.ConsumeHold(id).Map(StockHoldResponse.From).ToHttp());
+
+        return app;
+    }
+
+    private static IResult Invalid(string code, string message)
+        => Rejection.Invalid($"{InventoryRules.CodePrefix}.{code}", message).ToProblem();
+}
