@@ -57,7 +57,7 @@ public sealed partial class SeamComposer
         // Ola 86 — Search analytics store (ADR 0045 + ADR 0130). Dos orígenes, mismo
         // contrato, elegidos por Synergos:SearchAnalytics:Mode:
         //   - FileSystem (default): JSONL en App_Data. El CMS carga con su analítica.
-        //   - Sessions: la delega al servicio Synergos.Sessions por HTTP.
+        //   - Sessions: la delega al servicio Synergos.Api.Sessions por HTTP.
         //
         // El default es FileSystem a propósito: un clon recién bajado arranca sin
         // depender de otro proceso. Encender "Sessions" sin el servicio arriba degrada
