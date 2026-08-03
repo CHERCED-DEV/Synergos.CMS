@@ -1,3 +1,4 @@
+using Synergos.Bff.Core;
 using Synergos.Bff.Salud.Contracts;
 using Synergos.Bff.Salud.Domain;
 using Synergos.Core;
@@ -60,8 +61,8 @@ public static class SaludEndpoints
         app.MapGet("/v1/compensations", (int? offset, int? limit, AppointmentFlow flow) =>
         {
             var todas = flow.PendingCompensations()
-                .SelectMany(s => s.Pending.Select(c => new PendingCompensationResponse(
-                    s.Id, c.Kind.ToString(), c.Reason, c.Attempts, c.NextAttemptUtc, c.LastError,
+                .SelectMany(s => s.Pending().Select(c => new PendingCompensationResponse(
+                    s.Id, c.Kind, c.Reason, c.Attempts, c.NextAttemptUtc, c.LastError,
                     c.IsStuck, s.AlertedAtUtc)))
                 .ToList();
 

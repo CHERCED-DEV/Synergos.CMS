@@ -1,9 +1,11 @@
 # Despiece de APIs — qué necesita cada dominio, y de qué
 
 > **Estado: LAS VEINTE CONSTRUIDAS.** El molde de §4 está construido y gateado, y las veinte lo
-> cumplen sin excepciones. Y el **primer BFF** (`Synergos.Bff.Salud`) ya existe, con la
-> **compensación cruzada** resuelta y verificada matando una capacidad en mitad del flujo —
-> ver [`09-compensacion-cruzada.md`](09-compensacion-cruzada.md).
+> cumplen sin excepciones. Y ya existen **dos BFF** —`Synergos.Bff.Salud` y
+> `Synergos.Bff.Tienda`— con la **compensación cruzada** resuelta y verificada matando una
+> capacidad en mitad del flujo (ver [`09-compensacion-cruzada.md`](09-compensacion-cruzada.md)),
+> sobre la máquina de sagas compartida de `Synergos.Bff.Core` — que se promovió al aparecer el
+> segundo consumidor y no antes (ver [`10-promocion-bff-core.md`](10-promocion-bff-core.md)).
 >
 > Es el inventario que hay que acordar antes de escribir la
 > primera API. Deriva de los dos filtros de atomicidad del

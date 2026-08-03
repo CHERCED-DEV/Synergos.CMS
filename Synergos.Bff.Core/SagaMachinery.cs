@@ -1,0 +1,71 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Synergos.Shared;
+
+namespace Synergos.Bff.Core;
+
+/// <summary>
+/// El arranque de un orquestador, en una llamada.
+/// </summary>
+/// <remarks>
+/// <b>El registro también se promueve, y no es cosmética.</b> Lo que un BFF tiene que cablear
+/// —almacén, compensador, motor, barrido, un cliente HTTP por capacidad con su llave y su
+/// timeout— son doce líneas fáciles de escribir <i>casi</i> igual ocho veces. La que se escribe
+/// distinta es la que deja un orquestador sin barrido, y eso no falla en el arranque: falla el
+/// día que hay que compensar.
+/// </remarks>
+public static class SagaMachinery
+{
+    /// <summary>
+    /// Registra la máquina de sagas para un dominio.
+    /// </summary>
+    /// <typeparam name="TSaga">La saga del dominio.</typeparam>
+    /// <typeparam name="TExecutor">Quién sabe deshacer los kinds de ese dominio.</typeparam>
+    /// <param name="builder">El host.</param>
+    /// <param name="vocabulary">Cómo se nombra este orquestador.</param>
+    /// <param name="capabilities">Las capacidades con las que habla, por nombre de cliente.</param>
+    /// <remarks>
+    /// <paramref name="capabilities"/> <b>no incluye</b> la de avisos: se agrega sola, porque un
+    /// orquestador sin forma de avisar que algo quedó colgado no es un orquestador terminado.
+    /// Olvidarla sería el modo de fallo silencioso que este método existe para cerrar.
+    /// </remarks>
+    public static WebApplicationBuilder AddSagaMachinery<TSaga, TExecutor>(
+        this WebApplicationBuilder builder,
+        SagaVocabulary vocabulary,
+        params string[] capabilities)
+        where TSaga : class, ISaga<TSaga>
+        where TExecutor : class, ICompensationExecutor<TSaga>
+    {
+        var raiz = vocabulary.Origin;
+
+        builder.Services.Configure<SagaStorageOptions>(builder.Configuration.GetSection($"{raiz}:Storage"));
+        builder.Services.Configure<AlertOptions>(builder.Configuration.GetSection($"{raiz}:Alerts"));
+
+        builder.Services.AddSingleton(vocabulary);
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<ISagaStore<TSaga>, FileSystemSagaStore<TSaga>>();
+        builder.Services.AddSingleton<ICompensationExecutor<TSaga>, TExecutor>();
+        builder.Services.AddSingleton<Compensator<TSaga>>();
+        builder.Services.AddSingleton<CompensationAlert>();
+        builder.Services.AddSingleton<SagaEngine<TSaga>>();
+        builder.Services.AddHostedService<CompensationSweeper<TSaga>>();
+
+        // Un cliente nombrado POR capacidad: cada una con su URL, su llave y su timeout.
+        // Mezclarlas haría que subir el timeout de Payments se lo subiera a todas.
+        foreach (var cap in capabilities.Append(CompensationAlert.Capability).Distinct(StringComparer.Ordinal))
+        {
+            var seccion = builder.Configuration.GetSection($"{raiz}:Capabilities:{cap}");
+            builder.Services.AddHttpClient(cap, http =>
+            {
+                http.BaseAddress = new Uri(seccion["BaseUrl"] ?? $"http://localhost/{cap}/");
+                http.Timeout = TimeSpan.FromSeconds(double.TryParse(seccion["TimeoutSeconds"], out var s) ? s : 10);
+                if (seccion["ApiKey"] is { Length: > 0 } llave)
+                {
+                    http.DefaultRequestHeaders.TryAddWithoutValidation(SharedKeyAuth.HeaderName, llave);
+                }
+            });
+        }
+
+        return builder;
+    }
+}

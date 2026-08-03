@@ -45,7 +45,9 @@
     <ProjectReference Include="..\Synergos.Api.Geo\Synergos.Api.Geo.csproj" />
     <ProjectReference Include="..\Synergos.Api.Fulfillment\Synergos.Api.Fulfillment.csproj" />
     <ProjectReference Include="..\Synergos.Api.Moderation\Synergos.Api.Moderation.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
     <ProjectReference Include="..\Synergos.Bff.Salud\Synergos.Bff.Salud.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Tienda\Synergos.Bff.Tienda.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,7 +1,7 @@
+using Synergos.Bff.Core;
 using Synergos.Bff.Salud.Clients;
 using Synergos.Bff.Salud.Domain;
 using Synergos.Bff.Salud.Endpoints;
-using Synergos.Bff.Salud.Storage;
 using Synergos.Shared;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -14,17 +14,17 @@ using Synergos.Shared;
 //
 // NO referencia ninguna Synergos.Api.*: habla con ellas por HTTP, como el CMS.
 //
-// LA MÁQUINA DE SAGAS VIVE ACÁ DENTRO A PROPÓSITO. Es plumbing que los ocho BFF
-// van a necesitar, pero con UN consumidor promoverla sería la abstracción
-// prematura que CLAUDE.md §6 prohíbe. Se promueve a Synergos.Bff.Core cuando el
-// segundo la necesite — la misma disciplina que se aplicó a JsonCollectionStore,
-// que esperó a tener seis.
+// LA MÁQUINA DE SAGAS YA NO VIVE ACÁ. Vivió dentro mientras hubo un solo
+// consumidor —la regla de CLAUDE.md §6— y con Bff.Tienda encima se promovió a
+// Synergos.Bff.Core. Lo que quedó en este proyecto es lo único que no se puede
+// compartir: el ORDEN de los pasos, y qué significa deshacer cada uno.
 //
 // ANTES DE DESPLEGAR: el aviso de compensación colgada necesita DOS cosas que no
 // se pueden inventar desde acá —
 //   1. Salud:Alerts:{ToKind,ToId,Address} — a quién se le avisa.
-//   2. La plantilla 'salud.compensacion.colgada' autorada en Api.Notifications,
-//      usando SOLO los marcadores {cita}, {desde} y {pendientes}.
+//   2. La plantilla configurada en Salud:Alerts:TemplateKey autorada en
+//      Api.Notifications, usando SOLO los marcadores {saga}, {origen}, {desde}
+//      y {pendientes}.
 // Sin las dos, una compensación rendida queda visible en /v1/compensations con
 // alertedAtUtc en nulo y un error en el log que nombra lo que falta. No hay
 // seeder que las cree: CLAUDE.md §0.4 los prohíbe, y adivinar una dirección de
@@ -33,35 +33,16 @@ using Synergos.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.Configure<SaludStorageOptions>(builder.Configuration.GetSection("Salud:Storage"));
-builder.Services.Configure<AlertOptions>(builder.Configuration.GetSection("Salud:Alerts"));
-builder.Services.AddSingleton<ISagaStore, FileSystemSagaStore>();
-builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<SaludCapabilities>();
-builder.Services.AddSingleton<Compensator>();
-builder.Services.AddSingleton<CompensationAlert>();
-builder.Services.AddSingleton<AppointmentFlow>();
-builder.Services.AddHostedService<CompensationSweeper>();
+builder.AddSagaMachinery<AppointmentSaga, SaludCompensationExecutor>(
+    // En minúscula porque es el prefijo de los códigos de rechazo (salud.saga_not_found).
+    // Sirve además de raíz de configuración: las claves de IConfiguration no distinguen
+    // mayúsculas, así que "salud:Alerts" encuentra "Salud:Alerts" del appsettings.
+    new SagaVocabulary("salud", "la cita"),
+    SaludCapabilities.Consent, SaludCapabilities.Booking,
+    SaludCapabilities.Pricing, SaludCapabilities.Payments);
 
-// Un cliente nombrado POR capacidad: cada una con su URL, su llave y su timeout.
-// Mezclarlas haría que subir el timeout de Payments se lo subiera a Consent.
-foreach (var cap in new[]
-{
-    SaludCapabilities.Consent, SaludCapabilities.Booking, SaludCapabilities.Pricing,
-    SaludCapabilities.Payments, SaludCapabilities.Notifications,
-})
-{
-    var seccion = builder.Configuration.GetSection($"Salud:Capabilities:{cap}");
-    builder.Services.AddHttpClient(cap, http =>
-    {
-        http.BaseAddress = new Uri(seccion["BaseUrl"] ?? $"http://localhost/{cap}/");
-        http.Timeout = TimeSpan.FromSeconds(double.TryParse(seccion["TimeoutSeconds"], out var s) ? s : 10);
-        if (seccion["ApiKey"] is { Length: > 0 } llave)
-        {
-            http.DefaultRequestHeaders.TryAddWithoutValidation(SharedKeyAuth.HeaderName, llave);
-        }
-    });
-}
+builder.Services.AddSingleton<SaludCapabilities>();
+builder.Services.AddSingleton<AppointmentFlow>();
 
 var app = builder.Build();
 

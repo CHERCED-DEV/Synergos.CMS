@@ -219,6 +219,68 @@ public sealed class BackendSegregationTests
             $"Encontrado:{Environment.NewLine}{string.Join(Environment.NewLine, leaks)}");
     }
 
+    // ── La frontera Bff.Core ⊥ dominio ──────────────────────────────────────
+    // Synergos.Bff.Core nació el día que hubo un SEGUNDO orquestador, que es la regla de
+    // CLAUDE.md §6. Y hereda de Synergos.Shared el mismo riesgo: un proyecto compartido sin
+    // regla de admisión verificada termina siendo el Utils que §6 prohibía, con otro nombre.
+
+    [Fact]
+    public void Bff_Core_solo_puede_referenciar_Core_y_Shared()
+    {
+        // Una referencia a una Synergos.Api.* metería una capacidad en la capa que usan los
+        // ocho orquestadores; una al CMS haría de la capa media una carpeta del CMS. Las dos
+        // son la misma pérdida: el acople deja de ser HTTP.
+        var core = Named("Synergos.Bff.Core").SingleOrDefault();
+        if (core is null) return;   // aún no existe: nada que vigilar
+
+        var permitidas = new[] { "Synergos.Core", "Synergos.Shared" };
+        var extra = core.ProjectRefs.Where(r => !permitidas.Contains(r, StringComparer.Ordinal)).ToList();
+
+        Assert.True(extra.Count == 0,
+            "Synergos.Bff.Core solo puede referenciar Synergos.Core y Synergos.Shared. " +
+            $"Encontrado además: {string.Join(", ", extra)}.");
+    }
+
+    [Fact]
+    public void Ningun_tipo_de_Bff_Core_menciona_un_sustantivo_del_dominio()
+    {
+        // La regla de admisión, en positivo: acá entra lo que los ocho orquestadores necesitan.
+        // Un tipo llamado Order, Booking o Payment delata que se coló el negocio de UNO — y a
+        // partir de ahí el segundo dominio empieza a arrastrar el vocabulario del primero.
+        //
+        // Es también lo que forzó que Compensation.Kind sea un string y no un enum: enumerar
+        // ReleaseBookingHold y ReleaseStockHold acá habría hecho que la capa compartida tuviera
+        // que tocarse cada vez que nace un dominio.
+        var core = Named("Synergos.Bff.Core").SingleOrDefault();
+        if (core is null) return;
+
+        var leaks = NounLeaks(core.Path, DomainNouns);
+
+        Assert.True(leaks.Count == 0,
+            "Synergos.Bff.Core no puede nombrar el dominio — eso va en su Synergos.Bff.*. " +
+            $"Encontrado:{Environment.NewLine}{string.Join(Environment.NewLine, leaks)}");
+    }
+
+    [Fact]
+    public void Un_orquestador_concreto_no_referencia_a_otro()
+    {
+        // Bff.Tienda llamando a Bff.Salud en proceso sería la capa media acoplándose consigo
+        // misma: el día que Salud se despliegue aparte, Tienda deja de compilar. Si un flujo
+        // necesita de verdad a otro dominio, se habla por HTTP como con todo lo demás.
+        var offenders = Named("Synergos.Bff.")
+            .Where(p => p.Name != "Synergos.Bff.Core")
+            .Select(p => (p.Name, Bad: p.ProjectRefs
+                .Where(r => r.StartsWith("Synergos.Bff.", StringComparison.Ordinal)
+                         && r != "Synergos.Bff.Core").ToList()))
+            .Where(x => x.Bad.Count > 0)
+            .Select(x => $"{x.Name} → {string.Join(", ", x.Bad)}")
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "Un orquestador no puede referenciar otro orquestador: lo común va en Synergos.Bff.Core. " +
+            $"Encontrado: {string.Join(" | ", offenders)}.");
+    }
+
     // ── La frontera capacidad ⊥ dominio ─────────────────────────────────────
     // "La capacidad es dueña del CUÁNDO; el orquestador, del QUÉ." Booking sabe recurso +
     // ventana + cupo; no sabe que el recurso es un médico. Ver docs/product/06 §3.
@@ -367,5 +429,7 @@ public sealed class BackendSegregationTests
         Assert.Contains("Synergos.CMS.Interfaces", names);
         Assert.Contains("Synergos.Api.Sessions", names);
         Assert.Contains("Synergos.Shared", names);
+        Assert.Contains("Synergos.Bff.Core", names);
+        Assert.Contains("Synergos.Bff.Salud", names);
     }
 }

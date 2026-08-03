@@ -1,17 +1,19 @@
+using Synergos.Bff.Core;
 using Synergos.Bff.Salud.Clients;
-using Synergos.Bff.Salud.Storage;
 using Synergos.Core;
 
 namespace Synergos.Bff.Salud.Domain;
 
 /// <summary>
-/// El flujo de agendar una cita con copago — <b>el orquestador propiamente dicho</b>.
+/// El flujo de agendar una cita con copago — <b>el ORDEN, que es lo del dominio</b>.
 /// </summary>
 /// <remarks>
-/// <para><b>Lo que aporta y ninguna capacidad puede aportar: el ORDEN y la COMPENSACIÓN.</b>
-/// Booking sabe apartar, Payments sabe cobrar y Consent sabe si hay permiso; ninguno de los tres
-/// sabe que el permiso va antes del cupo, que el cupo va antes del cobro, y que si la
-/// confirmación falla hay que devolver la plata. Eso es el negocio, y por eso vive acá.</para>
+/// <para><b>Lo que quedó acá tras promover la máquina de sagas.</b> Deshacer, reintentar,
+/// rendirse y avisar son iguales en los ocho dominios y viven en
+/// <see cref="SagaEngine{TSaga}"/>. Lo que no se puede compartir es <i>en qué orden van los
+/// pasos</i>: que el permiso va antes del cupo, que el cupo va antes del cobro, y que capturar va
+/// antes de confirmar. Eso es el negocio, y por eso es lo único que sigue viviendo en este
+/// fichero.</para>
 ///
 /// <para><b>Por qué el flujo tiene DOS fases.</b> Agendar apart­a el cupo y <i>autoriza</i>
 /// —reserva el cupo en el medio de pago, sin mover plata—; confirmar <i>captura</i> y confirma.
@@ -31,20 +33,16 @@ public sealed class AppointmentFlow
     public const string ConsentPurpose = "salud.agenda";
 
     private readonly SaludCapabilities _caps;
-    private readonly ISagaStore _sagas;
-    private readonly Compensator _compensator;
-    private readonly CompensationAlert _alert;
+    private readonly SagaEngine<AppointmentSaga> _sagas;
     private readonly TimeProvider _clock;
     private readonly ILogger<AppointmentFlow> _log;
 
     public AppointmentFlow(
-        SaludCapabilities caps, ISagaStore sagas, Compensator compensator, CompensationAlert alert,
+        SaludCapabilities caps, SagaEngine<AppointmentSaga> sagas,
         TimeProvider clock, ILogger<AppointmentFlow> log)
     {
         _caps = caps;
         _sagas = sagas;
-        _compensator = compensator;
-        _alert = alert;
         _clock = clock;
         _log = log;
     }
@@ -71,7 +69,7 @@ public sealed class AppointmentFlow
         var consent = await _caps.CheckConsentAsync(patient, ConsentPurpose, ct);
         if (!consent.IsOk) return Result.Rejected<AppointmentSaga>(consent.Rejection!);
 
-        saga = new AppointmentSaga(sagaId, patient, professional, window, SagaStatus.AwaitingConfirmation,
+        saga = new AppointmentSaga(sagaId, patient, professional, window, SagaStatus.Running,
             null, null, null, Money.Zero(Money.Cop), Array.Empty<Compensation>(), null, _clock.GetUtcNow());
 
         // 2. Cupo. Es el paso barato y reversible: se toma antes de hablar de plata.
@@ -81,7 +79,10 @@ public sealed class AppointmentFlow
         saga = saga with
         {
             HoldId = hold.Value.Id,
-            Compensations = new[] { Comp(CompensationKind.ReleaseBookingHold, hold.Value.Id, "cita no confirmada") },
+            Compensations = new[]
+            {
+                Compensation.For(SaludCompensations.ReleaseBookingHold, hold.Value.Id, "cita no confirmada"),
+            },
         };
         _sagas.Put(saga);
 
@@ -107,7 +108,7 @@ public sealed class AppointmentFlow
             // todavía no se movió plata — que es exactamente para lo que existen las dos fases.
             saga = saga with { LastError = pago.Rejection!.ToString(), Total = total };
             _sagas.Put(saga);
-            await CompensateAsync(saga.Id, "el cobro no se pudo autorizar", ct);
+            await _sagas.CompensateAsync(saga.Id, "el cobro no se pudo autorizar", ct);
             return Result.Rejected<AppointmentSaga>(pago.Rejection!);
         }
 
@@ -118,7 +119,9 @@ public sealed class AppointmentFlow
             // La autorización se ANOTA como compensable en el mismo momento en que existe. Si
             // se anotara después de confirmar, una caída en medio dejaría plata reservada en la
             // tarjeta del paciente sin nada que la libere.
-            Compensations = saga.Compensations.Append(Comp(CompensationKind.VoidPayment, pago.Value.Id, "cita no confirmada")).ToList(),
+            Compensations = saga.Compensations
+                .Append(Compensation.For(SaludCompensations.VoidPayment, pago.Value.Id, "cita no confirmada"))
+                .ToList(),
         };
         _sagas.Put(saga);
         return Result.Ok(saga);
@@ -134,8 +137,8 @@ public sealed class AppointmentFlow
         {
             return Rejection.NotFound("salud.appointment_not_found", $"No existe la cita {sagaId}.");
         }
-        if (saga.Status == SagaStatus.Confirmed) return Result.Ok(saga);   // idempotente
-        if (saga.Status != SagaStatus.AwaitingConfirmation)
+        if (saga.Status == SagaStatus.Completed) return Result.Ok(saga);   // idempotente
+        if (saga.Status != SagaStatus.Running)
         {
             return Rejection.Conflict("salud.not_confirmable", $"La cita está {saga.Status}.");
         }
@@ -148,7 +151,7 @@ public sealed class AppointmentFlow
             {
                 saga = saga with { LastError = capturado.Rejection!.ToString() };
                 _sagas.Put(saga);
-                await CompensateAsync(saga.Id, "el cobro no se pudo capturar", ct);
+                await _sagas.CompensateAsync(saga.Id, "el cobro no se pudo capturar", ct);
                 return Result.Rejected<AppointmentSaga>(capturado.Rejection!);
             }
 
@@ -158,8 +161,8 @@ public sealed class AppointmentFlow
             saga = saga with
             {
                 Compensations = saga.Compensations
-                    .Select(c => c.Kind == CompensationKind.VoidPayment && c.IsPending
-                        ? c with { Kind = CompensationKind.RefundPayment }
+                    .Select(c => c.Kind == SaludCompensations.VoidPayment && c.IsPending
+                        ? c with { Kind = SaludCompensations.RefundPayment }
                         : c)
                     .ToList(),
             };
@@ -174,7 +177,7 @@ public sealed class AppointmentFlow
                 saga.Id, reserva.Rejection);
             saga = saga with { LastError = reserva.Rejection!.ToString() };
             _sagas.Put(saga);
-            await CompensateAsync(saga.Id, "la cita no se pudo confirmar tras cobrar", ct);
+            await _sagas.CompensateAsync(saga.Id, "la cita no se pudo confirmar tras cobrar", ct);
             return Result.Rejected<AppointmentSaga>(reserva.Rejection!);
         }
 
@@ -183,7 +186,7 @@ public sealed class AppointmentFlow
         var ahora = _clock.GetUtcNow();
         saga = saga with
         {
-            Status = SagaStatus.Confirmed,
+            Status = SagaStatus.Completed,
             ReservationId = reserva.Value.Id,
             LastError = null,
             Compensations = saga.Compensations.Select(c => c.IsPending ? c with { DoneAtUtc = ahora } : c).ToList(),
@@ -194,146 +197,16 @@ public sealed class AppointmentFlow
 
     /// <summary>Cancela una cita todavía sin confirmar: suelta el cupo y libera el cobro.</summary>
     public Task<Result<AppointmentSaga>> CancelAsync(string sagaId, CancellationToken ct)
-        => CompensateAsync(sagaId, "cancelada por el paciente", ct);
+        => _sagas.CompensateAsync(sagaId, "cancelada por el paciente", ct);
 
-    /// <summary>
-    /// Ejecuta las compensaciones pendientes de una saga.
-    /// </summary>
-    /// <remarks>
-    /// <b>Se llama desde dos sitios y hace lo mismo en los dos:</b> en línea cuando un paso
-    /// falla, y desde el barrido de fondo cuando llega la hora de reintentar. Que sea el mismo
-    /// camino es lo que evita que la segunda vez se haga distinto de la primera.
-    /// </remarks>
-    public async Task<Result<AppointmentSaga>> CompensateAsync(string sagaId, string reason, CancellationToken ct)
-    {
-        var saga = _sagas.Find(sagaId);
-        if (saga is null)
-        {
-            return Rejection.NotFound("salud.appointment_not_found", $"No existe la cita {sagaId}.");
-        }
-        if (saga.Status == SagaStatus.Confirmed)
-        {
-            return Rejection.Conflict("salud.already_confirmed",
-                "La cita ya se confirmó. Deshacerla es una cancelación con su política, no una compensación.");
-        }
-
-        var ahora = _clock.GetUtcNow();
-        var actualizadas = new List<Compensation>(saga.Compensations.Count);
-
-        foreach (var c in saga.Compensations)
-        {
-            // Solo lo pendiente, lo que no se rindió, Y cuyo turno llegó. Las tres condiciones
-            // cuentan: respetar el retroceso evita que un barrido cada minuto martillee una
-            // capacidad caída, y saltarse lo rendido es lo que hace que rendirse SIGNIFIQUE algo
-            // — sin eso, una compensación agotada se reintentaría cada minuto para siempre,
-            // gritando el mismo error en el log y tapando los que sí se pueden atender.
-            if (!c.IsPending || c.IsStuck || (c.NextAttemptUtc is { } cuando && ahora < cuando))
-            {
-                actualizadas.Add(c);
-                continue;
-            }
-            actualizadas.Add(await _compensator.TryAsync(saga, c with { Reason = reason }, ct));
-        }
-
-        var quedan = actualizadas.Any(c => c.IsPending);
-        var colgadas = actualizadas.Any(c => c.IsStuck);
-
-        saga = saga with
-        {
-            Compensations = actualizadas,
-            Status = colgadas ? SagaStatus.CompensationFailed
-                : quedan ? SagaStatus.Compensating
-                : SagaStatus.Compensated,
-        };
-
-        // El aviso sale UNA vez por vez que la saga cae en colgada, no una por vuelta del
-        // barrido. Sin esa guarda, la guardia recibiría el mismo correo cada minuto hasta que
-        // Api.Notifications lo cortara por tope de frecuencia — y ese corte se llevaría por
-        // delante los avisos de las demás citas.
-        if (saga.Status == SagaStatus.CompensationFailed && saga.AlertedAtUtc is null)
-        {
-            saga = await AvisarAsync(saga, ahora, ct);
-        }
-
-        _sagas.Put(saga);
-        return Result.Ok(saga);
-    }
-
-    /// <summary>
-    /// Vuelve a intentar lo que se había rendido. <b>Es la puerta de la persona.</b>
-    /// </summary>
-    /// <remarks>
-    /// Rendirse a los ocho intentos es correcto mientras haya una forma de decir «ya arreglé la
-    /// causa, probá otra vez». Sin ella, «se rinde» sería «se abandona», y la única salida a una
-    /// devolución colgada sería tocarla a mano en la capacidad — por fuera del rastro de la saga.
-    /// </remarks>
-    public async Task<Result<AppointmentSaga>> RetryStuckAsync(string sagaId, CancellationToken ct)
-    {
-        var saga = _sagas.Find(sagaId);
-        if (saga is null)
-        {
-            return Rejection.NotFound("salud.appointment_not_found", $"No existe la cita {sagaId}.");
-        }
-        if (saga.Stuck.Count == 0)
-        {
-            return Rejection.Conflict("salud.nothing_stuck",
-                "Esta cita no tiene compensaciones rendidas. Las que están en curso las reintenta el barrido sola.");
-        }
-
-        _log.LogInformation("Reintento manual de las compensaciones rendidas de la cita {Saga}.", saga.Id);
-
-        saga = saga with
-        {
-            Compensations = saga.Compensations
-                .Select(c => c.IsStuck ? c with { Attempts = 0, NextAttemptUtc = null } : c)
-                .ToList(),
-            // Se rearma el aviso: si vuelve a colgarse tras el arreglo, la guardia tiene que
-            // enterarse otra vez. La llave lleva AlertsSent, así que el segundo aviso no lo
-            // confunde Notifications con el primero.
-            AlertedAtUtc = null,
-        };
-        _sagas.Put(saga);
-
-        return await CompensateAsync(sagaId, "reintento pedido por una persona", ct);
-    }
-
-    /// <summary>Manda el aviso y deja anotado en la saga qué pasó con él.</summary>
-    private async Task<AppointmentSaga> AvisarAsync(AppointmentSaga saga, DateTimeOffset ahora, CancellationToken ct)
-    {
-        var motivo = await _alert.RaiseAsync(saga, ct);
-
-        if (motivo is null)
-        {
-            _log.LogError("COMPENSACIÓN COLGADA en la cita {Saga}: avisado a la guardia.", saga.Id);
-            return saga with { AlertedAtUtc = ahora, AlertsSent = saga.AlertsSent + 1 };
-        }
-
-        if (motivo.IsTransient)
-        {
-            // Notifications caída es lo mismo que cualquier otra capacidad caída: se reintenta al
-            // siguiente barrido. NO se marca como avisada, que es justo lo que permite el
-            // reintento.
-            _log.LogWarning("No se pudo avisar de la cita {Saga} ({Error}); se reintenta en el barrido.",
-                saga.Id, motivo);
-            return saga;
-        }
-
-        // Falta la plantilla, o no hay a quién avisar. Eso no lo arregla reintentar: lo arregla
-        // una persona tocando la configuración o autorando la plantilla, y repetirlo cada minuto
-        // solo llenaría el log del mismo error tapando el que importa. Se grita una vez.
-        _log.LogError(
-            "COMPENSACIÓN COLGADA en la cita {Saga} y NO SE PUDO AVISAR A NADIE ({Error}). Revisa Salud:Alerts y la plantilla '{Plantilla}'.",
-            saga.Id, motivo, _alert.TemplateKey);
-        return saga with { AlertedAtUtc = ahora };
-    }
+    /// <summary>Vuelve a intentar lo que se había rendido.</summary>
+    public Task<Result<AppointmentSaga>> RetryStuckAsync(string sagaId, CancellationToken ct)
+        => _sagas.RetryStuckAsync(sagaId, ct);
 
     public Result<AppointmentSaga> Get(string id)
         => _sagas.Find(id) is { } s
             ? Result.Ok(s)
             : Rejection.NotFound("salud.appointment_not_found", $"No existe la cita {id}.");
 
-    public IReadOnlyList<AppointmentSaga> PendingCompensations() => _sagas.WithPendingCompensations();
-
-    private static Compensation Comp(CompensationKind kind, string targetId, string reason)
-        => new(Guid.NewGuid().ToString("n"), kind, targetId, reason);
+    public IReadOnlyList<AppointmentSaga> PendingCompensations() => _sagas.PendingCompensations();
 }

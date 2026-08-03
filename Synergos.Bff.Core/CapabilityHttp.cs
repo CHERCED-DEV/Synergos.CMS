@@ -1,7 +1,8 @@
 using System.Net;
+using System.Net.Http.Json;
 using Synergos.Core;
 
-namespace Synergos.Bff.Salud.Clients;
+namespace Synergos.Bff.Core;
 
 /// <summary>
 /// Lo que un cliente de capacidad devuelve: el resultado o el rechazo que vino del otro lado.
@@ -82,15 +83,23 @@ public static class CapabilityHttp
     private sealed record ProblemaDto(string? Code, string? Detail);
 }
 
-// ── Las formas mínimas que este BFF consume de cada capacidad ────────────────
-// Solo los campos que usa. Un DTO que copie la respuesta entera obligaría a tocar el
-// orquestador cada vez que una capacidad agrega un campo que no le importa.
+/// <summary>
+/// Base para los clientes de capacidad de un orquestador.
+/// </summary>
+/// <remarks>
+/// <b>Un cliente nombrado por capacidad</b> y no uno genérico: cada una tiene su URL base, su
+/// llave y su timeout, y mezclarlas haría que subir el timeout de Payments se lo subiera también
+/// al resto.
+/// </remarks>
+public abstract class CapabilityClients
+{
+    private readonly IHttpClientFactory _clients;
 
-public sealed record ConsentDto(string Id, bool Active);
-public sealed record HoldDto(string Id, string ResourceId, DateTimeOffset ExpiresAt);
-public sealed record ReservationDto(string Id, string Status);
-public sealed record MoneyDto(decimal Amount, string Currency);
-public sealed record QuoteDto(MoneyDto Total);
-public sealed record PaymentDto(string Id, string Status, MoneyDto Amount, MoneyDto Refundable);
-public sealed record ResourceDto(string Id);
-public sealed record DeliveryDto(string Id, string Status);
+    protected CapabilityClients(IHttpClientFactory clients) => _clients = clients;
+
+    protected Task<Result<T>> Post<T>(string capability, string path, object? body, IdempotencyKey? key, CancellationToken ct)
+        => CapabilityHttp.SendAsync<T>(_clients.CreateClient(capability), HttpMethod.Post, path, body, key, capability, ct);
+
+    protected Task<Result<T>> Get<T>(string capability, string path, CancellationToken ct)
+        => CapabilityHttp.SendAsync<T>(_clients.CreateClient(capability), HttpMethod.Get, path, null, null, capability, ct);
+}

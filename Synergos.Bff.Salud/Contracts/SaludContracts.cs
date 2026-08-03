@@ -1,3 +1,4 @@
+using Synergos.Bff.Core;
 using Synergos.Bff.Salud.Domain;
 
 namespace Synergos.Bff.Salud.Contracts;
@@ -27,7 +28,7 @@ public sealed record AppointmentResponse(
         s.Id, s.Patient.Kind, s.Patient.Id, s.Professional.Kind, s.Professional.Id,
         s.Window.Start, s.Window.End, s.Status.ToString(),
         new MoneyDto(s.Total.Amount, s.Total.Currency),
-        s.ReservationId, s.Pending.Count, s.LastError);
+        s.ReservationId, s.Pending().Count, s.LastError);
 }
 
 /// <summary>Una compensación pendiente, para quien vigila.</summary>

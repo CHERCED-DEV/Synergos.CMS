@@ -32,6 +32,21 @@ public static class InventoryEndpoints
         app.MapGet("/v1/items/{id}", (string id, InventoryService svc, TimeProvider clock) =>
             svc.Get(id).Map(i => StockItemResponse.From(i, clock.GetUtcNow())).ToHttp());
 
+        // Consulta por la referencia que la capacidad GUARDA, no por su identificador interno.
+        // Es lo que permite que quien tiene un Ref de producto —un carrito, un pedido, un
+        // orquestador— llegue a sus existencias sin llevar un mapa aparte que se desincronice.
+        app.MapGet("/v1/items", (string? subjectKind, string? subjectId, InventoryService svc, TimeProvider clock) =>
+        {
+            var subject = Ref.TryCreate(subjectKind, subjectId);
+            if (subject is null)
+            {
+                // Sin filtro esto sería un volcado del inventario entero por HTTP.
+                return Invalid("subject_required", "Hacen falta subjectKind y subjectId.");
+            }
+
+            return svc.GetBySubject(subject).Map(i => StockItemResponse.From(i, clock.GetUtcNow())).ToHttp();
+        });
+
         app.MapPost("/v1/items/{id}/adjust", (string id, AdjustStockRequest req, InventoryService svc, TimeProvider clock) =>
             svc.Adjust(id, req.OnHand ?? -1).Map(i => StockItemResponse.From(i, clock.GetUtcNow())).ToHttp());
 
