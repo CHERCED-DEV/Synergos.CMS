@@ -161,6 +161,43 @@ Synergos.CMS/
 > un clon limpio —CI, contenedor, Claude Code on the web— no los tiene: no los
 > cites como si estuvieran, y si necesitás ese contexto, pedilo.
 
+## 3.bis El ticket va ANTES del código
+
+> **Nada se codifica sin ticket.** Se abre, se discute, y recién ahí se escribe. Hay un gate de
+> CI (`.github/workflows/ticket-first.yml`) que rechaza un PR sin issue referenciado — porque un
+> proceso escrito como prosa se olvida y uno que rompe el build se cumple.
+
+**El umbral, para que el proceso sobreviva:**
+
+| | |
+|---|---|
+| **Ticket obligatorio** | cambia comportamiento, contrato o schema · es un defecto |
+| **Sin ticket** | typo, comentario, formato, documentación → etiqueta `sin-ticket` en el PR |
+
+Cuatro tipos, en `.github/ISSUE_TEMPLATE/`. Cada uno obliga a contestar lo que acá importa:
+
+- **🐛 Defecto** — y sobre todo *por qué los tests no lo vieron* y *qué mutación lo reproduce*.
+- **✨ Evolutivo** — las cuatro preguntas del refinamiento: qué problema del negocio, dónde vive
+  con el filtro de atomicidad aplicado, qué rechaza y con qué código, cómo sabemos que quedó bien.
+- **🔧 Mejora** — y *por qué ahora y no después*, que es la pregunta que mata a la mayoría, y
+  está bien que las mate.
+- **🔍 Hallazgo** — encontré algo haciendo otra cosa.
+
+### La regla que hace que esto no estorbe
+
+> **Si encontrás algo mientras hacés otra cosa: abrís un Hallazgo y SEGUÍS con lo que estabas.**
+
+Un hallazgo no puede comerse la tarea. Para eso existe ese tipo: para poder soltarlo sin
+perderlo. Los enlaces a los hallazgos abiertos van en la última sección del PR.
+
+### Y lo que hace que el proyecto aprenda
+
+Dos escrituras obligatorias **en el mismo commit** que las enseñó:
+
+1. **Regla nueva aprendida → `CLAUDE.md` §5.** El índice de memorias es lo único que sobrevive
+   a que se cierre una sesión.
+2. **Algo de este fichero quedó obsoleto → se corrige acá.** Ver §10.7.
+
 ## 4. Flujo de trabajo para un cambio
 
 ### 4.1 Cambio de schema (DocType / DataType / Dictionary)

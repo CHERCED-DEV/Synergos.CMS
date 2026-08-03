@@ -1,0 +1,83 @@
+name: ✨ Evolutivo
+description: Funcionalidad nueva
+title: "[Evolutivo] "
+labels: ["evolutivo", "en-refinamiento"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > **Se refina antes de codificar.** Las cuatro preguntas de abajo son las mismas con las
+        > que se refinaron las HU #12 y #13 — y en las dos el refinamiento cambió el alcance
+        > *antes* de escribir una línea.
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: 1. Qué problema del negocio resuelve
+      description: |
+        **El problema, no la feature.** Si no se puede escribir sin decir un nombre de clase,
+        todavía no lo entendimos.
+      placeholder: Hoy el sistema no le avisa a nadie — no hay confirmación de compra ni recordatorio de cita.
+    validations: { required: true }
+
+  - type: textarea
+    id: donde-vive
+    attributes:
+      label: 2. Dónde vive, y por qué ahí
+      description: |
+        Aplicá el filtro de atomicidad del doc 07 **por escrito**:
+        ¿puede decir NO sola? ¿es dueña de su almacén? **Lo que no tiene almacén es un tipo, no un servicio.**
+      placeholder: |
+        Integración externa detrás de INotificationSender. No es capacidad: el transporte no
+        rechaza por reglas propias, y el almacén de entregas ya es de Api.Notifications.
+    validations: { required: true }
+
+  - type: dropdown
+    id: capa
+    attributes:
+      label: Capa
+      options:
+        - capacidad-nueva (¿de verdad pasa el filtro?)
+        - feature de una capacidad existente
+        - feature de Bff.Core
+        - feature de un Bff de dominio
+        - tipo en Synergos.Core
+        - schema del CMS
+        - integración externa
+    validations: { required: true }
+
+  - type: textarea
+    id: rechazos
+    attributes:
+      label: 3. Qué rechaza, y con qué código
+      description: |
+        **En este repo las reglas de rechazo SON el diseño** — hay 178 códigos y cada uno fue una
+        decisión. Marcá cuáles son transitorios: `Rejection.IsTransient` decide si algo se
+        reintenta o se grita una vez.
+      placeholder: |
+        | código | cuándo | transitorio |
+        | notifications.transport_unavailable | el proveedor no responde | sí |
+        | notifications.transport_rejected | rechaza la dirección | no |
+    validations: { required: true }
+
+  - type: textarea
+    id: como-sabemos
+    attributes:
+      label: 4. Cómo sabemos que quedó bien
+      description: |
+        Criterios de aceptación **y la mutación que tiene que poner cada uno en rojo**.
+        Un test que nunca se vio fallar no prueba nada.
+    validations: { required: true }
+
+  - type: input
+    id: dominios
+    attributes:
+      label: Cuántos de los nueve dominios lo consumen
+      description: "5+ ⇒ se construye una vez, en Plataforma. 1 ⇒ casi siempre es feature de su BFF."
+    validations: { required: true }
+
+  - type: textarea
+    id: abiertas
+    attributes:
+      label: Preguntas abiertas antes de codificar
+      description: Lo que hay que decidir primero. Si hay alguna, el ticket queda `en-refinamiento`.
