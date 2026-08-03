@@ -36,6 +36,15 @@
     <ProjectReference Include="..\Synergos.Api.Cart\Synergos.Api.Cart.csproj" />
     <ProjectReference Include="..\Synergos.Api.Orders\Synergos.Api.Orders.csproj" />
     <ProjectReference Include="..\Synergos.Api.Payments\Synergos.Api.Payments.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Inventory\Synergos.Api.Inventory.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Workflow\Synergos.Api.Workflow.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Messaging\Synergos.Api.Messaging.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Signing\Synergos.Api.Signing.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Consent\Synergos.Api.Consent.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Engagement\Synergos.Api.Engagement.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Geo\Synergos.Api.Geo.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Fulfillment\Synergos.Api.Fulfillment.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Moderation\Synergos.Api.Moderation.csproj" />
   </ItemGroup>
 
 </Project>
