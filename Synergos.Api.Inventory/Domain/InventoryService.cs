@@ -66,6 +66,21 @@ public sealed class InventoryService
             ? Result.Ok(i)
             : Rejection.NotFound($"{InventoryRules.CodePrefix}.item_not_found", $"No existe el ítem {id}.");
 
+    /// <summary>Busca el ítem que lleva las existencias de un <see cref="Ref"/>.</summary>
+    /// <remarks>
+    /// <b>Sin esto, un consumidor no puede llegar del catálogo al stock.</b> Quien tiene una
+    /// referencia de producto —y eso es lo que tienen un carrito, un pedido y un orquestador—
+    /// no tiene el identificador interno del ítem, así que tendría que mantener un mapa
+    /// producto→ítem por su cuenta. Ese mapa es una segunda verdad que se desincroniza, y es
+    /// justo lo que una capacidad existe para evitar: la referencia que guarda tiene que poder
+    /// consultarse.
+    /// </remarks>
+    public Result<StockItem> GetBySubject(Ref subject)
+        => _stock.FindBySubject(subject) is { } i
+            ? Result.Ok(i)
+            : Rejection.NotFound($"{InventoryRules.CodePrefix}.item_not_found",
+                $"No hay existencias declaradas para {subject}.");
+
     public Result<StockItem> Adjust(string id, int nuevoTotal)
     {
         lock (_gate)

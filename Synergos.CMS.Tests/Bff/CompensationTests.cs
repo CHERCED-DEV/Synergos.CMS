@@ -1,9 +1,9 @@
 using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Synergos.Bff.Core;
 using Synergos.Bff.Salud.Clients;
 using Synergos.Bff.Salud.Domain;
-using Synergos.Bff.Salud.Storage;
 using Synergos.Core;
 
 namespace Synergos.CMS.Tests.Bff;
@@ -100,13 +100,12 @@ public sealed class CompensationTests
             => new(_handler, disposeHandler: false) { BaseAddress = new Uri("http://capacidad.local/") };
     }
 
-    private sealed class MemoriaSagas : ISagaStore
+    private sealed class MemoriaSagas : ISagaStore<AppointmentSaga>
     {
         private readonly Dictionary<string, AppointmentSaga> _s = new(StringComparer.Ordinal);
         public AppointmentSaga? Find(string id) => _s.GetValueOrDefault(id);
         public IReadOnlyList<AppointmentSaga> WithPendingCompensations()
-            => _s.Values.Where(x => x.IsUnwinding && x.Pending.Count > 0).ToList();
-        public IReadOnlyList<AppointmentSaga> ForPatient(Ref patient) => _s.Values.Where(x => x.Patient == patient).ToList();
+            => _s.Values.Where(x => x.IsUnwinding() && x.Pending().Count > 0).ToList();
         public void Put(AppointmentSaga saga) => _s[saga.Id] = saga;
     }
 
@@ -116,7 +115,11 @@ public sealed class CompensationTests
     private static readonly Ref Servicio = Ref.Create("salud.servicio", "consulta");
     private static readonly TimeWindow Cita = TimeWindow.Of(Ahora.AddDays(1), Ahora.AddDays(1).AddMinutes(30));
 
-    private sealed record Contexto(AppointmentFlow Flow, CapacidadesFalsas Caps, MemoriaSagas Sagas, RelojFalso Reloj);
+    // El motor va en el contexto porque es lo que el BARRIDO llama. Simular una vuelta del
+    // barrido a través del flujo probaría un proxy; llamando al motor se prueba el camino real.
+    private sealed record Contexto(
+        AppointmentFlow Flow, CapacidadesFalsas Caps, MemoriaSagas Sagas, RelojFalso Reloj,
+        SagaEngine<AppointmentSaga> Motor);
 
     /// <summary>Guion del camino feliz: todo responde bien.</summary>
     private static CapacidadesFalsas Feliz() => new CapacidadesFalsas()
@@ -138,18 +141,23 @@ public sealed class CompensationTests
         ToKind = "salud.guardia",
         ToId = "operaciones",
         Address = "guardia@ejemplo.co",
+        TemplateKey = "salud.compensacion.colgada",
     };
 
     private static Contexto Nuevo(CapacidadesFalsas caps, AlertOptions? alertas = null)
     {
         var sagas = new MemoriaSagas();
         var reloj = new RelojFalso(Ahora);
-        var api = new SaludCapabilities(new FabricaFalsa(caps));
-        var comp = new Compensator(api, reloj, NullLogger<Compensator>.Instance);
-        var aviso = new CompensationAlert(api, Options.Create(alertas ?? Guardia()));
+        var fabrica = new FabricaFalsa(caps);
+        var api = new SaludCapabilities(fabrica);
+        var vocabulario = new SagaVocabulary("salud", "la cita");
+        var comp = new Compensator<AppointmentSaga>(new SaludCompensationExecutor(api), reloj, NullLogger<Compensator<AppointmentSaga>>.Instance);
+        var aviso = new CompensationAlert(fabrica, vocabulario, Options.Create(alertas ?? Guardia()));
+        var motor = new SagaEngine<AppointmentSaga>(sagas, comp, aviso, vocabulario, reloj,
+            NullLogger<SagaEngine<AppointmentSaga>>.Instance);
         return new Contexto(
-            new AppointmentFlow(api, sagas, comp, aviso, reloj, NullLogger<AppointmentFlow>.Instance),
-            caps, sagas, reloj);
+            new AppointmentFlow(api, motor, reloj, NullLogger<AppointmentFlow>.Instance),
+            caps, sagas, reloj, motor);
     }
 
     /// <summary>Lleva la saga hasta rendirse: agotar los intentos con la capacidad caída.</summary>
@@ -158,10 +166,10 @@ public sealed class CompensationTests
         var agendada = await Agendar(ctx.Flow, id);
         await ctx.Flow.ConfirmAsync(id, CancellationToken.None);
 
-        for (var i = 1; i <= Compensator.MaxAttempts; i++)
+        for (var i = 1; i <= Compensator<AppointmentSaga>.MaxAttempts; i++)
         {
-            ctx.Reloj.Avanzar(Compensator.Backoff(i) + TimeSpan.FromSeconds(1));
-            await ctx.Flow.CompensateAsync(id, "barrido", CancellationToken.None);
+            ctx.Reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(i) + TimeSpan.FromSeconds(1));
+            await ctx.Motor.CompensateAsync(id, "barrido", CancellationToken.None);
         }
 
         return ctx.Flow.Get(agendada.Value.Id).Value;
@@ -180,14 +188,14 @@ public sealed class CompensationTests
     [Fact]
     public async Task El_camino_feliz_deja_la_cita_confirmada_y_nada_pendiente()
     {
-        var (flow, _, _, _) = Nuevo(Feliz());
+        var (flow, _, _, _, _) = Nuevo(Feliz());
 
         var agendada = await Agendar(flow);
         var confirmada = await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
 
-        Assert.Equal(SagaStatus.Confirmed, confirmada.Value.Status);
+        Assert.Equal(SagaStatus.Completed, confirmada.Value.Status);
         Assert.Equal("res1", confirmada.Value.ReservationId);
-        Assert.Empty(confirmada.Value.Pending);
+        Assert.Empty(confirmada.Value.Pending());
     }
 
     // ── El caso que justifica todo esto ──────────────────────────────────────
@@ -198,7 +206,7 @@ public sealed class CompensationTests
         // Es el escenario entero: se cobró y la cita no existe. Sin compensación, el paciente
         // paga por nada y el sistema no sabe que le debe.
         var caps = Feliz().Falla("POST /v1/holds/h1/confirm", HttpStatusCode.Gone, "booking.hold_expired");
-        var (flow, _, _, _) = Nuevo(caps);
+        var (flow, _, _, _, _) = Nuevo(caps);
 
         var agendada = await Agendar(flow);
         var confirmada = await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
@@ -209,7 +217,7 @@ public sealed class CompensationTests
 
         var saga = flow.Get(agendada.Value.Id).Value;
         Assert.Equal(SagaStatus.Compensated, saga.Status);
-        Assert.Empty(saga.Pending);
+        Assert.Empty(saga.Pending());
     }
 
     [Fact]
@@ -218,7 +226,7 @@ public sealed class CompensationTests
         // Si siguiera siendo "liberar la autorización", Payments la rechazaría con
         // already_captured en cada intento y la compensación quedaría colgada para siempre.
         var caps = Feliz().Falla("POST /v1/holds/h1/confirm", HttpStatusCode.Gone, "booking.hold_expired");
-        var (flow, _, _, _) = Nuevo(caps);
+        var (flow, _, _, _, _) = Nuevo(caps);
 
         var agendada = await Agendar(flow);
         await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
@@ -233,7 +241,7 @@ public sealed class CompensationTests
         // Acá compensar es barato porque no se movió plata. Es exactamente para lo que existen
         // las dos fases.
         var caps = Feliz().Falla("POST /v1/payments/pg1/capture", HttpStatusCode.Conflict, "payments.declined");
-        var (flow, _, _, _) = Nuevo(caps);
+        var (flow, _, _, _, _) = Nuevo(caps);
 
         var agendada = await Agendar(flow);
         await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
@@ -252,14 +260,14 @@ public sealed class CompensationTests
         var caps = Feliz()
             .Falla("POST /v1/holds/h1/confirm", HttpStatusCode.Gone, "booking.hold_expired")
             .Caida("GET /v1/payments/pg1");
-        var (flow, _, _, _) = Nuevo(caps);
+        var (flow, _, _, _, _) = Nuevo(caps);
 
         var agendada = await Agendar(flow);
         await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
 
         var saga = flow.Get(agendada.Value.Id).Value;
         Assert.Equal(SagaStatus.Compensating, saga.Status);
-        Assert.Contains(saga.Pending, c => c.Kind == CompensationKind.RefundPayment);
+        Assert.Contains(saga.Pending(), c => c.Kind == SaludCompensations.RefundPayment);
         Assert.Single(flow.PendingCompensations());
     }
 
@@ -271,17 +279,17 @@ public sealed class CompensationTests
         var caps = Feliz()
             .Falla("POST /v1/holds/h1/confirm", HttpStatusCode.Gone, "booking.hold_expired")
             .Caida("GET /v1/payments/pg1");
-        var (flow, _, _, reloj) = Nuevo(caps);
+        var (flow, _, _, reloj, motor) = Nuevo(caps);
 
         var agendada = await Agendar(flow);
         await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
         var trasElPrimero = caps.Veces("GET", "/v1/payments/pg1");
 
-        await flow.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
+        await motor.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
         var sinEsperar = caps.Veces("GET", "/v1/payments/pg1");
 
-        reloj.Avanzar(Compensator.Backoff(1) + TimeSpan.FromSeconds(1));
-        await flow.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
+        reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(1) + TimeSpan.FromSeconds(1));
+        await motor.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
         var trasEsperar = caps.Veces("GET", "/v1/payments/pg1");
 
         Assert.Equal(trasElPrimero, sinEsperar);
@@ -296,7 +304,7 @@ public sealed class CompensationTests
         var caps = Feliz()
             .Falla("POST /v1/holds/h1/confirm", HttpStatusCode.Gone, "booking.hold_expired")
             .Caida("GET /v1/payments/pg1");
-        var (flow, _, _, reloj) = Nuevo(caps);
+        var (flow, _, _, reloj, motor) = Nuevo(caps);
 
         var agendada = await Agendar(flow);
         await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
@@ -304,8 +312,8 @@ public sealed class CompensationTests
 
         // Payments vuelve.
         caps.Ok("GET /v1/payments/pg1", """{"id":"pg1","status":"Captured","amount":{"amount":50000,"currency":"COP"},"refundable":{"amount":50000,"currency":"COP"}}""");
-        reloj.Avanzar(Compensator.Backoff(1) + TimeSpan.FromSeconds(1));
-        await flow.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
+        reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(1) + TimeSpan.FromSeconds(1));
+        await motor.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
 
         var saga = flow.Get(agendada.Value.Id).Value;
         Assert.Equal(SagaStatus.Compensated, saga.Status);
@@ -320,20 +328,20 @@ public sealed class CompensationTests
         var caps = Feliz()
             .Falla("POST /v1/holds/h1/confirm", HttpStatusCode.Gone, "booking.hold_expired")
             .Caida("GET /v1/payments/pg1");
-        var (flow, _, _, reloj) = Nuevo(caps);
+        var (flow, _, _, reloj, motor) = Nuevo(caps);
 
         var agendada = await Agendar(flow);
         await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
 
-        for (var i = 1; i < Compensator.MaxAttempts + 2; i++)
+        for (var i = 1; i < Compensator<AppointmentSaga>.MaxAttempts + 2; i++)
         {
-            reloj.Avanzar(Compensator.Backoff(i) + TimeSpan.FromSeconds(1));
-            await flow.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
+            reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(i) + TimeSpan.FromSeconds(1));
+            await motor.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
         }
 
         var saga = flow.Get(agendada.Value.Id).Value;
         Assert.Equal(SagaStatus.CompensationFailed, saga.Status);
-        Assert.Contains(saga.Pending, c => c.Attempts >= Compensator.MaxAttempts);
+        Assert.Contains(saga.Pending(), c => c.Attempts >= Compensator<AppointmentSaga>.MaxAttempts);
     }
 
     [Fact]
@@ -345,7 +353,7 @@ public sealed class CompensationTests
         var caps = Feliz()
             .Falla("POST /v1/holds/h1/confirm", HttpStatusCode.Gone, "booking.hold_expired")
             .Ok("GET /v1/payments/pg1", """{"id":"pg1","status":"Captured","amount":{"amount":50000,"currency":"COP"},"refundable":{"amount":0,"currency":"COP"}}""");
-        var (flow, _, _, _) = Nuevo(caps);
+        var (flow, _, _, _, _) = Nuevo(caps);
 
         var agendada = await Agendar(flow);
         await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
@@ -369,10 +377,10 @@ public sealed class CompensationTests
         var ctx = Nuevo(Feliz());
         var agendada = Agendar(ctx.Flow).GetAwaiter().GetResult();
 
-        Assert.Equal(SagaStatus.AwaitingConfirmation, agendada.Value.Status);
-        Assert.Equal(2, agendada.Value.Pending.Count);       // armadas
-        Assert.False(agendada.Value.IsUnwinding);
-        Assert.False(agendada.Value.NeedsSweep);             // pero NO es trabajo
+        Assert.Equal(SagaStatus.Running, agendada.Value.Status);
+        Assert.Equal(2, agendada.Value.Pending().Count);       // armadas
+        Assert.False(agendada.Value.IsUnwinding());
+        Assert.False(agendada.Value.NeedsSweep());             // pero NO es trabajo
     }
 
     [Fact]
@@ -397,8 +405,8 @@ public sealed class CompensationTests
         await ctx.Flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
 
         var saga = ctx.Flow.Get(agendada.Value.Id).Value;
-        Assert.True(saga.IsUnwinding);
-        Assert.True(saga.NeedsSweep);
+        Assert.True(saga.IsUnwinding());
+        Assert.True(saga.NeedsSweep());
         Assert.Single(ctx.Flow.PendingCompensations());
     }
 
@@ -413,17 +421,17 @@ public sealed class CompensationTests
         var ctx = Nuevo(ImposibleDeCompensar());
         await HastaRendirse(ctx);
 
-        var intentosAlRendirse = ctx.Flow.Get("saga-1").Value.Pending.Single().Attempts;
+        var intentosAlRendirse = ctx.Flow.Get("saga-1").Value.Pending().Single().Attempts;
         var llamadasAlRendirse = ctx.Caps.Veces("GET", "/v1/payments/pg1");
 
         for (var i = 0; i < 5; i++)
         {
             ctx.Reloj.Avanzar(TimeSpan.FromHours(2));
-            await ctx.Flow.CompensateAsync("saga-1", "barrido", CancellationToken.None);
+            await ctx.Motor.CompensateAsync("saga-1", "barrido", CancellationToken.None);
         }
 
-        Assert.Equal(Compensator.MaxAttempts, intentosAlRendirse);
-        Assert.Equal(intentosAlRendirse, ctx.Flow.Get("saga-1").Value.Pending.Single().Attempts);
+        Assert.Equal(Compensator<AppointmentSaga>.MaxAttempts, intentosAlRendirse);
+        Assert.Equal(intentosAlRendirse, ctx.Flow.Get("saga-1").Value.Pending().Single().Attempts);
         Assert.Equal(llamadasAlRendirse, ctx.Caps.Veces("GET", "/v1/payments/pg1"));
     }
 
@@ -435,7 +443,7 @@ public sealed class CompensationTests
         var ctx = Nuevo(ImposibleDeCompensar());
         var saga = await HastaRendirse(ctx);
 
-        Assert.False(saga.NeedsSweep);
+        Assert.False(saga.NeedsSweep());
         Assert.Single(ctx.Flow.PendingCompensations());
     }
 
@@ -466,7 +474,7 @@ public sealed class CompensationTests
         for (var i = 0; i < 10; i++)
         {
             ctx.Reloj.Avanzar(TimeSpan.FromHours(2));
-            await ctx.Flow.CompensateAsync("saga-1", "barrido", CancellationToken.None);
+            await ctx.Motor.CompensateAsync("saga-1", "barrido", CancellationToken.None);
         }
 
         Assert.Equal(1, ctx.Caps.Veces("POST", "/v1/deliveries"));
@@ -481,8 +489,8 @@ public sealed class CompensationTests
         var agendada = await Agendar(ctx.Flow);
         await ctx.Flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
 
-        ctx.Reloj.Avanzar(Compensator.Backoff(1) + TimeSpan.FromSeconds(1));
-        await ctx.Flow.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
+        ctx.Reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(1) + TimeSpan.FromSeconds(1));
+        await ctx.Motor.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
 
         Assert.Equal(SagaStatus.Compensating, ctx.Flow.Get(agendada.Value.Id).Value.Status);
         Assert.Equal(0, ctx.Caps.Veces("POST", "/v1/deliveries"));
@@ -498,12 +506,12 @@ public sealed class CompensationTests
         var saga = await HastaRendirse(ctx);
 
         Assert.Null(saga.AlertedAtUtc);
-        Assert.True(saga.NeedsSweep, "un aviso que no salió es trabajo pendiente para el barrido");
+        Assert.True(saga.NeedsSweep(), "un aviso que no salió es trabajo pendiente para el barrido");
 
         // Vuelve Notifications.
         caps.Ok("POST /v1/deliveries", """{"id":"d1","status":"Sent"}""");
         ctx.Reloj.Avanzar(TimeSpan.FromMinutes(1));
-        await ctx.Flow.CompensateAsync("saga-1", "barrido", CancellationToken.None);
+        await ctx.Motor.CompensateAsync("saga-1", "barrido", CancellationToken.None);
 
         Assert.NotNull(ctx.Flow.Get("saga-1").Value.AlertedAtUtc);
     }
@@ -522,7 +530,7 @@ public sealed class CompensationTests
         Assert.Equal(0, saga.AlertsSent);    // pero NO salió ningún aviso, y eso queda anotado
 
         ctx.Reloj.Avanzar(TimeSpan.FromHours(2));
-        await ctx.Flow.CompensateAsync("saga-1", "barrido", CancellationToken.None);
+        await ctx.Motor.CompensateAsync("saga-1", "barrido", CancellationToken.None);
         Assert.Equal(1, ctx.Caps.Veces("POST", "/v1/deliveries"));
     }
 
@@ -602,10 +610,10 @@ public sealed class CompensationTests
         await HastaRendirse(ctx);
 
         await ctx.Flow.RetryStuckAsync("saga-1", CancellationToken.None);
-        for (var i = 1; i <= Compensator.MaxAttempts; i++)
+        for (var i = 1; i <= Compensator<AppointmentSaga>.MaxAttempts; i++)
         {
-            ctx.Reloj.Avanzar(Compensator.Backoff(i) + TimeSpan.FromSeconds(1));
-            await ctx.Flow.CompensateAsync("saga-1", "barrido", CancellationToken.None);
+            ctx.Reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(i) + TimeSpan.FromSeconds(1));
+            await ctx.Motor.CompensateAsync("saga-1", "barrido", CancellationToken.None);
         }
 
         var llaves = ctx.Caps.Llamadas.Where(l => l.Path == "/v1/deliveries").Select(l => l.Key).ToList();
@@ -637,7 +645,7 @@ public sealed class CompensationTests
         // Es lo que hace que reintentar un paso SEA la recuperación: la capacidad reconoce la
         // llave y devuelve lo que ya hizo. Sin eso, tras una caída entre "cobré" y "lo anoté" no
         // habría manera de averiguar si el cobro salió.
-        var (flow, caps, _, _) = Nuevo(Feliz());
+        var (flow, caps, _, _, _) = Nuevo(Feliz());
 
         var agendada = await Agendar(flow, "saga-fija");
         await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
@@ -653,7 +661,7 @@ public sealed class CompensationTests
     [Fact]
     public async Task Repetir_AGENDAR_con_el_mismo_id_no_toma_un_segundo_cupo()
     {
-        var (flow, caps, _, _) = Nuevo(Feliz());
+        var (flow, caps, _, _, _) = Nuevo(Feliz());
 
         await Agendar(flow, "misma");
         await Agendar(flow, "misma");
@@ -664,7 +672,7 @@ public sealed class CompensationTests
     [Fact]
     public async Task Confirmar_dos_veces_no_captura_dos_veces()
     {
-        var (flow, caps, _, _) = Nuevo(Feliz());
+        var (flow, caps, _, _, _) = Nuevo(Feliz());
         var agendada = await Agendar(flow);
 
         await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
@@ -680,7 +688,7 @@ public sealed class CompensationTests
         // Comprobarlo después de apartar un cupo obligaría a soltarlo — una compensación que no
         // hacía falta.
         var caps = Feliz().Falla("POST /v1/grants/check", HttpStatusCode.Forbidden, "consent.revoked");
-        var (flow, _, _, _) = Nuevo(caps);
+        var (flow, _, _, _, _) = Nuevo(caps);
 
         var r = await Agendar(flow);
 
@@ -694,13 +702,13 @@ public sealed class CompensationTests
     {
         // Deshacerla es una cancelación con su política de plazo, no una compensación — y
         // tratarla como compensación devolvería plata saltándose esa política.
-        var (flow, _, _, _) = Nuevo(Feliz());
+        var (flow, _, _, _, _) = Nuevo(Feliz());
         var agendada = await Agendar(flow);
         await flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
 
         var r = await flow.CancelAsync(agendada.Value.Id, CancellationToken.None);
 
-        Assert.Equal("salud.already_confirmed", r.Rejection!.Code);
+        Assert.Equal("salud.already_completed", r.Rejection!.Code);
     }
 
     [Fact]
@@ -709,7 +717,7 @@ public sealed class CompensationTests
         // Un pago de cero lo rechazaría Payments, y registrarlo ensuciaría la conciliación con
         // filas que no corresponden a ningún movimiento.
         var caps = Feliz().Ok("POST /v1/quotes", """{"total":{"amount":0,"currency":"COP"}}""");
-        var (flow, _, _, _) = Nuevo(caps);
+        var (flow, _, _, _, _) = Nuevo(caps);
 
         var agendada = await Agendar(flow);
 

@@ -118,10 +118,15 @@ Es lo que cierra el lazo. Un log en rojo solo sirve si alguien está mirando ese
 el aviso. Sin ella, «se rinde» sería «se abandona», y arreglar una devolución colgada exigiría
 tocarla a mano en la capacidad, por fuera del rastro de la saga.
 
-> **Antes de desplegar** hay que autorar en `Api.Notifications` la plantilla
-> `salud.compensacion.colgada` usando **solo** los marcadores `{cita}`, `{desde}` y `{pendientes}`.
-> Un cuarto marcador hace que el envío se rechace con `notifications.missing_placeholder` — está
-> verificado abajo. No hay seeder que la cree: CLAUDE.md §0.4 los prohíbe.
+> **Antes de desplegar** hay que autorar en `Api.Notifications` la plantilla configurada en
+> `Salud:Alerts:TemplateKey` usando **solo** los marcadores `{saga}`, `{origen}`, `{desde}` y
+> `{pendientes}`. Un quinto hace que el envío se rechace con
+> `notifications.missing_placeholder` — está verificado abajo. No hay seeder que la cree:
+> CLAUDE.md §0.4 los prohíbe.
+>
+> *(Al promover la máquina a `Bff.Core` —[doc 10](10-promocion-bff-core.md)— `{cita}` pasó a
+> `{saga}` y se sumó `{origen}`: una misma guardia puede atender Salud y Tienda con la misma
+> dirección, y necesita saber de qué sistema viene el aviso.)*
 
 ## 5. Verificación con procesos reales
 
@@ -200,10 +205,10 @@ aviso**, y rompería justo el día que hay que avisar.
 
 ## 6. Lo que queda abierto
 
-- **La máquina de sagas vive dentro de `Synergos.Bff.Salud`.** Es plumbing que los ocho BFF van a
-  necesitar, pero con un consumidor promoverla sería la abstracción prematura que CLAUDE.md §6
-  prohíbe. Se promueve a `Synergos.Bff.Core` cuando el segundo la necesite — la misma disciplina
-  que esperó a que `JsonCollectionStore` tuviera seis.
+- ~~**La máquina de sagas vive dentro de `Synergos.Bff.Salud`.**~~ **Cerrado.** Apareció el
+  segundo consumidor —`Synergos.Bff.Tienda`— y se promovió a `Synergos.Bff.Core`. Ver el
+  [doc 10](10-promocion-bff-core.md), que además cuenta los dos cambios que la promoción obligó
+  y el defecto de ordenación que destapó.
 - **La ventana irreducible.** Entre «la capacidad ejecutó» y «el BFF lo anotó» hay un instante en
   el que una caída pierde el rastro. Las llaves deterministas lo hacen sobrevivible —repetir el
   paso devuelve lo mismo— pero *sobrevivible* no es *imposible*, y conviene no fingir lo
