@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Capacidad agnóstica. NO referencia Synergos.CMS.* ni ningún Synergos.Bff.*:
+         el acople es el contrato HTTP. Ver docs/product/06 §4 y 08 §4. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Synergos.Core\Synergos.Core.csproj" />
+    <ProjectReference Include="..\Synergos.Shared\Synergos.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

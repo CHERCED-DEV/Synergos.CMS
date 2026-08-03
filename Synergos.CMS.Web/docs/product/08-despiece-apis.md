@@ -1,8 +1,9 @@
 # Despiece de APIs — qué necesita cada dominio, y de qué
 
-> **Estado:** **siete de las veinte construidas** — `Sessions`, `Booking`, y las cinco de nueve
-> consumidores (`Identity`, `Audit`, `Notifications`, `Documents`, `Catalog`). El molde de §4
-> está construido y gateado, y las siete lo cumplen.
+> **Estado:** **once de las veinte construidas** — `Sessions`, `Booking`, las cinco de nueve
+> consumidores (`Identity`, `Audit`, `Notifications`, `Documents`, `Catalog`) y el bloque de
+> comercio (`Pricing`, `Cart`, `Orders`, `Payments`). El molde de §4 está construido y gateado,
+> y las once lo cumplen.
 >
 > Es el inventario que hay que acordar antes de escribir la
 > primera API. Deriva de los dos filtros de atomicidad del
@@ -348,7 +349,7 @@ es lo que de verdad erosiona veinte proyectos.
    Lo que ganó `Shared` en el camino: `JsonCollectionStore`, `IIdempotencyLedger` y la lectura de
    la cabecera, promovidos cuando tuvieron seis consumidores y no antes.
 
-   **Queda: `Orders`, `Payments`, `Pricing`, `Cart`, `Inventory`, `Workflow`, `Messaging`,
-   `Signing`, `Consent`, `Engagement`, `Geo`, `Fulfillment`, `Moderation`.**
+   **Queda: `Inventory`, `Workflow`, `Messaging`, `Signing`, `Consent`, `Engagement`, `Geo`,
+   `Fulfillment`, `Moderation`.**
 4. ~~**¿`Api.Sessions` se adapta al molde?**~~ **Resuelto: se alinea.** Un molde que nace con una
    excepción es un molde que no existe.
