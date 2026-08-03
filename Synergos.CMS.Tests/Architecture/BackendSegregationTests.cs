@@ -244,13 +244,24 @@ public sealed class BackendSegregationTests
         // capacidad y se copió el código — que es de donde veníamos.
         //
         // Es tosco: no atrapa a un adversario, atrapa el atajo. Es lo que hace falta.
+        //
+        // Lo que se busca es la comparación contra una CADENA LITERAL, y no cualquier propiedad
+        // llamada Kind. La primera versión marcaba las dos cosas y se disparó con
+        // `promo.Kind == DiscountKind.Fixed` de Api.Pricing — un enum de dominio propio y
+        // perfectamente legítimo. Un gate que obliga a renombrar el dominio para callarlo no
+        // sobrevive: alguien lo desactiva. Y la distinción es precisa, no un apaño: Ref.Kind es
+        // un string, así que ramificar sobre él SIEMPRE compara contra texto.
         var patrones = new[]
         {
-            @"\.Kind\s*(==|!=)",          //  x.Kind == "..."
-            @"\.Kind\s+is\s",              //  x.Kind is "..."
-            @"switch\s*\(\s*\w+\.Kind",    //  switch (x.Kind)
-            @"\.Kind\.(StartsWith|Contains|EndsWith)",
+            @"\.Kind\s*(==|!=)\s*""",                          //  x.Kind == "salud.profesional"
+            @"\.Kind\s+is\s+""",                                //  x.Kind is "salud.profesional"
+            @"\.Kind\.(StartsWith|Contains|EndsWith)\s*\(\s*""", //  x.Kind.StartsWith("salud.")
         };
+
+        // Un switch sobre .Kind solo delata si sus casos son cadenas: `switch (promo.Kind)` con
+        // casos de enum es tan legítimo como la comparación de arriba.
+        var switchSobreKind = new Regex(@"switch\s*\(\s*\w+\.Kind\s*\)");
+        var casoDeTexto = new Regex(@"case\s+""");
 
         var leaks = new List<string>();
         foreach (var api in Named("Synergos.Api."))
@@ -260,18 +271,21 @@ public sealed class BackendSegregationTests
             {
                 if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)) continue;
 
-                var n = 0;
-                foreach (var line in File.ReadLines(file))
-                {
-                    n++;
-                    // Los comentarios pueden hablar de Ref.Kind al explicar por qué NO se
-                    // ramifica sobre él — justamente lo que hace este archivo.
-                    var code = line.TrimStart();
-                    if (code.StartsWith("//", StringComparison.Ordinal) || code.StartsWith("///", StringComparison.Ordinal)) continue;
+                // Los comentarios pueden hablar de Ref.Kind al explicar por qué NO se ramifica
+                // sobre él — justamente lo que hace este archivo.
+                var lineas = File.ReadLines(file)
+                    .Select((texto, i) => (Texto: texto, Numero: i + 1))
+                    .Where(l => !l.Texto.TrimStart().StartsWith("//", StringComparison.Ordinal))
+                    .ToList();
 
-                    if (patrones.Any(p => Regex.IsMatch(line, p)))
+                var hayCasosDeTexto = lineas.Any(l => casoDeTexto.IsMatch(l.Texto));
+
+                foreach (var (texto, n) in lineas)
+                {
+                    if (patrones.Any(p => Regex.IsMatch(texto, p))
+                        || (switchSobreKind.IsMatch(texto) && hayCasosDeTexto))
                     {
-                        leaks.Add($"{api.Name}/{Path.GetFileName(file)}:{n} → {line.Trim()}");
+                        leaks.Add($"{api.Name}/{Path.GetFileName(file)}:{n} → {texto.Trim()}");
                     }
                 }
             }
