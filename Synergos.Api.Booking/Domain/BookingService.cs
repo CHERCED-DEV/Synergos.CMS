@@ -1,5 +1,6 @@
 using Synergos.Api.Booking.Storage;
 using Synergos.Core;
+using Synergos.Shared;
 
 namespace Synergos.Api.Booking.Domain;
 
@@ -33,7 +34,7 @@ public sealed class BookingService
     private readonly IResourceStore _resources;
     private readonly IHoldStore _holds;
     private readonly IReservationStore _reservations;
-    private readonly IIdempotencyStore _idempotency;
+    private readonly IIdempotencyLedger _idempotency;
     private readonly TimeProvider _clock;
     private readonly object _gate = new();
 
@@ -41,7 +42,7 @@ public sealed class BookingService
         IResourceStore resources,
         IHoldStore holds,
         IReservationStore reservations,
-        IIdempotencyStore idempotency,
+        IIdempotencyLedger idempotency,
         TimeProvider clock)
     {
         _resources = resources;

@@ -1,15 +1,22 @@
 using System.Text.Json;
 
-namespace Synergos.Api.Booking.Storage;
+namespace Synergos.Shared;
 
 /// <summary>
 /// Una colección de entidades por identificador, persistida como un JSON por colección.
 /// </summary>
 /// <remarks>
-/// <para><b>Por qué un fichero y no una base.</b> El volumen de esta capacidad en v1 no la
-/// justifica, y el contrato del servicio es HTTP: el día que haga falta una base se cambia esta
-/// clase y nadie afuera se entera. Lo que <b>no</b> se negocia es que este almacén es de Booking
-/// y <b>nadie más lo lee</b> — ni un <c>JOIN</c>, ni un fichero compartido (doc 07 §6).</para>
+/// <para><b>Por qué vive en Shared.</b> Nació dentro de <c>Api.Booking</c> con la nota de que se
+/// promovería cuando una segunda capacidad lo necesitara. Con seis necesitándolo, copiarlo seis
+/// veces es exactamente lo que este proyecto existe para evitar — y las decisiones sutiles de
+/// abajo (escritura atómica, caché, lock) se pierden una por copia. No menciona ningún
+/// sustantivo del negocio: es un diccionario persistido.</para>
+///
+/// <para><b>Por qué un fichero y no una base.</b> El volumen de estas capacidades en v1 no la
+/// justifica, y el contrato de cada servicio es HTTP: el día que haga falta una base se cambia
+/// esta clase y nadie afuera se entera. Lo que <b>no</b> se negocia es que cada almacén es de
+/// UNA capacidad y <b>nadie más lo lee</b> — ni un <c>JOIN</c>, ni un fichero compartido
+/// (doc 07 §6).</para>
 ///
 /// <para><b>La limitación, dicha de frente:</b> el <c>lock</c> es de proceso. Dos instancias de
 /// esta API sobre el mismo directorio pueden pisarse. Es aceptable mientras se despliegue una
@@ -20,7 +27,7 @@ namespace Synergos.Api.Booking.Storage;
 /// fichero anterior intacto en vez de uno truncado. Con escritura directa, una caída en el
 /// momento justo pierde la colección entera.</para>
 /// </remarks>
-internal sealed class JsonCollectionStore<T> where T : class
+public sealed class JsonCollectionStore<T> where T : class
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {

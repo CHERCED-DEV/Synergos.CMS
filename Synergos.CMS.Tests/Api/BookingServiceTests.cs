@@ -1,6 +1,7 @@
 using Synergos.Api.Booking.Domain;
 using Synergos.Api.Booking.Storage;
 using Synergos.Core;
+using Synergos.Shared;
 
 namespace Synergos.CMS.Tests.Api;
 
@@ -19,7 +20,7 @@ public sealed class BookingServiceTests
     }
 
     /// <summary>Almacenes en memoria: probar el servicio no debería tocar disco.</summary>
-    private sealed class MemoriaStores : IResourceStore, IHoldStore, IReservationStore, IIdempotencyStore
+    private sealed class MemoriaStores : IResourceStore, IHoldStore, IReservationStore, IIdempotencyLedger
     {
         private readonly Dictionary<string, Resource> _r = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Hold> _h = new(StringComparer.Ordinal);

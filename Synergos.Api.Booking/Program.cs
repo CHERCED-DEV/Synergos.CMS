@@ -24,7 +24,7 @@ builder.Services.Configure<BookingStorageOptions>(builder.Configuration.GetSecti
 builder.Services.AddSingleton<IResourceStore, FileSystemResourceStore>();
 builder.Services.AddSingleton<IHoldStore, FileSystemHoldStore>();
 builder.Services.AddSingleton<IReservationStore, FileSystemReservationStore>();
-builder.Services.AddSingleton<IIdempotencyStore, FileSystemIdempotencyStore>();
+builder.Services.AddSingleton<IIdempotencyLedger, FileSystemIdempotencyStore>();
 
 // El reloj se inyecta: los bordes temporales —el hold que vence justo, la
 // cancelación en el límite del plazo— son la mitad de los errores de una agenda, y
