@@ -131,12 +131,12 @@ public sealed class AdminController : Controller
     private int CsvExportHardCap => _adminSettings.CurrentValue.CsvExportHardCap;
 
     [HttpGet("")]
-    public IActionResult Index()
+    public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var pendingPage = _comments.GetPendingPage(page: 1, pageSize: 1);
         var formKeys = _formReader.ListFormKeys();
-        var topQueries7d = _searchAnalytics.GetTopQueries(
-            DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, 5);
+        var topQueries7d = await _searchAnalytics.GetTopQueriesAsync(
+            DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, 5, cancellationToken);
 
         SetTopbar("home", pendingPage.TotalCount);
         ViewData["PendingCount"] = pendingPage.TotalCount;
@@ -686,17 +686,18 @@ public sealed class AdminController : Controller
     /// — top queries + no-result queries en la ventana indicada.
     /// </summary>
     [HttpGet("analytics/search")]
-    public IActionResult AnalyticsSearch(
+    public async Task<IActionResult> AnalyticsSearch(
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
-        [FromQuery] int limit = 20)
+        [FromQuery] int limit = 20,
+        CancellationToken cancellationToken = default)
     {
         var fromUtc = (from ?? DateTime.UtcNow.AddDays(-30)).ToUniversalTime();
         var toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
         var clampedLimit = Math.Clamp(limit, 1, 100);
 
-        var topQueries = _searchAnalytics.GetTopQueries(fromUtc, toUtc, clampedLimit);
-        var topNoResults = _searchAnalytics.GetTopNoResultQueries(fromUtc, toUtc, clampedLimit);
+        var topQueries = await _searchAnalytics.GetTopQueriesAsync(fromUtc, toUtc, clampedLimit, cancellationToken);
+        var topNoResults = await _searchAnalytics.GetTopNoResultQueriesAsync(fromUtc, toUtc, clampedLimit, cancellationToken);
 
         SetTopbar("search");
         ViewData["FromUtc"] = fromUtc;

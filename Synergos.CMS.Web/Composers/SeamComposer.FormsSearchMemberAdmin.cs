@@ -54,10 +54,42 @@ public sealed partial class SeamComposer
         // depende de IUmbracoContextAccessor per-request.
         services.AddTransient<ISearchQuery, ExamineSearchProvider>();
 
-        // Ola 86 — Search analytics store (ADR 0045). InMemory persiste
-        // top queries + no-result queries en ConcurrentDictionary.
-        // Singleton para compartir state entre requests del mismo proceso.
-        services.AddSingleton<ISearchAnalyticsStore, FileSystemSearchAnalyticsStore>();
+        // Ola 86 — Search analytics store (ADR 0045 + ADR 0130). Dos orígenes, mismo
+        // contrato, elegidos por Synergos:SearchAnalytics:Mode:
+        //   - FileSystem (default): JSONL en App_Data. El CMS carga con su analítica.
+        //   - Sessions: la delega al servicio Synergos.Sessions por HTTP.
+        //
+        // El default es FileSystem a propósito: un clon recién bajado arranca sin
+        // depender de otro proceso. Encender "Sessions" sin el servicio arriba degrada
+        // —el dashboard sale vacío— pero no tumba el CMS.
+        var searchAnalyticsMode = builder.Config["Synergos:SearchAnalytics:Mode"] ?? "FileSystem";
+        if (string.Equals(searchAnalyticsMode, "Sessions", StringComparison.OrdinalIgnoreCase))
+        {
+            var baseUrl = builder.Config["Synergos:SearchAnalytics:BaseUrl"];
+            var apiKey = builder.Config["Synergos:SearchAnalytics:ApiKey"];
+            services.AddHttpClient(HttpSearchAnalyticsStore.HttpClientName, http =>
+            {
+                http.BaseAddress = new Uri(string.IsNullOrWhiteSpace(baseUrl)
+                    ? "http://127.0.0.1:5200/"
+                    : baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
+                // Timeout corto: este servicio es auxiliar. Si tarda, el dashboard prefiere
+                // salir vacío antes que dejar la petición colgada.
+                http.Timeout = TimeSpan.FromSeconds(5);
+                if (!string.IsNullOrWhiteSpace(apiKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpSearchAnalyticsStore.ApiKeyHeader, apiKey);
+                }
+            });
+            // La MISMA instancia sirve la seam y el hosted service: el lazo de envío vive en
+            // ella. Dos registros independientes darían dos colas y una sin drenar.
+            services.AddSingleton<HttpSearchAnalyticsStore>();
+            services.AddSingleton<ISearchAnalyticsStore>(sp => sp.GetRequiredService<HttpSearchAnalyticsStore>());
+            services.AddHostedService(sp => sp.GetRequiredService<HttpSearchAnalyticsStore>());
+        }
+        else
+        {
+            services.AddSingleton<ISearchAnalyticsStore, FileSystemSearchAnalyticsStore>();
+        }
 
         // Ola 64 — Member self-service (ADR 0034). DefaultMemberAuthService
         // wraps IMemberManager + IMemberSignInManager para Register/Login/

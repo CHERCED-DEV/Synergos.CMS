@@ -98,14 +98,14 @@ public sealed class DefaultDashboardReadModelTests
     }
 
     [Fact]
-    public void GetSearchInsights_PassesThroughStore()
+    public async Task GetSearchInsights_PassesThroughStore()
     {
-        _search.GetTopQueries(Arg.Any<DateTime>(), Arg.Any<DateTime>(), Arg.Any<int>())
-            .Returns(new[] { new SearchQueryStat("camisa", 9, 4, DateTime.UtcNow) });
-        _search.GetTopNoResultQueries(Arg.Any<DateTime>(), Arg.Any<DateTime>(), Arg.Any<int>())
-            .Returns(new[] { new SearchQueryStat("xyz", 3, 0, DateTime.UtcNow) });
+        _search.GetTopQueriesAsync(Arg.Any<DateTime>(), Arg.Any<DateTime>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<SearchQueryStat>>(new[] { new SearchQueryStat("camisa", 9, 4, DateTime.UtcNow) });
+        _search.GetTopNoResultQueriesAsync(Arg.Any<DateTime>(), Arg.Any<DateTime>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<SearchQueryStat>>(new[] { new SearchQueryStat("xyz", 3, 0, DateTime.UtcNow) });
 
-        var vm = BuildSut().GetSearchInsights(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, 10);
+        var vm = await BuildSut().GetSearchInsightsAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, 10);
 
         Assert.Single(vm.TopQueries);
         Assert.Equal("camisa", vm.TopQueries[0].Query);
