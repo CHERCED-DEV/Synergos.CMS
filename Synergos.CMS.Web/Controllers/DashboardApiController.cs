@@ -63,11 +63,13 @@ public sealed class DashboardApiController : ControllerBase
     }
 
     [HttpGet("search")]
-    public IActionResult GetSearch([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] int limit = 10)
+    public async Task<IActionResult> GetSearch(
+        [FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] int limit = 10,
+        CancellationToken cancellationToken = default)
     {
         if (Deny("search") is { } denied) return denied;
         var (f, t, _) = ParseRange(from, to, null);
-        return Ok(_readModel.GetSearchInsights(f, t, limit));
+        return Ok(await _readModel.GetSearchInsightsAsync(f, t, limit, cancellationToken));
     }
 
     [HttpGet("webhooks")]

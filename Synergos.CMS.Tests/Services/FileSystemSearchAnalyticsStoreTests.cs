@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
+using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Tests.Services;
@@ -21,6 +22,19 @@ namespace Synergos.CMS.Tests.Services;
 /// </remarks>
 public sealed class FileSystemSearchAnalyticsStoreTests : IDisposable
 {
+
+    // ── Puente al contrato async ──────────────────────────────────────────────
+    //
+    // Las lecturas pasaron a async (ADR 0130) porque hay OTRA implementación que va por
+    // red. Ésta devuelve tareas ya completadas —lee del disco local, sin await real—, así
+    // que estos dos ayudantes no bloquean nada y dejan las aserciones legibles.
+    private static IReadOnlyList<SearchQueryStat> Top(
+        FileSystemSearchAnalyticsStore store, DateTime from, DateTime to, int limit)
+        => store.GetTopQueriesAsync(from, to, limit).GetAwaiter().GetResult();
+
+    private static IReadOnlyList<SearchQueryStat> NoResults(
+        FileSystemSearchAnalyticsStore store, DateTime from, DateTime to, int limit)
+        => store.GetTopNoResultQueriesAsync(from, to, limit).GetAwaiter().GetResult();
     private readonly string _tempRoot;
     private readonly StubHostEnvironment _env;
 
@@ -79,7 +93,7 @@ public sealed class FileSystemSearchAnalyticsStoreTests : IDisposable
         sut.Record("medellin", 5, 8);
 
         Assert.Equal(3, File.ReadAllLines(FilePath(Day)).Length);
-        Assert.Equal(3, sut.GetTopQueries(Day.AddHours(-1), Day.AddHours(1), 10).Sum(s => s.Count));
+        Assert.Equal(3, Top(sut, Day.AddHours(-1), Day.AddHours(1), 10).Sum(s => s.Count));
     }
 
     /// <summary>
@@ -93,7 +107,7 @@ public sealed class FileSystemSearchAnalyticsStoreTests : IDisposable
 
         var despuesDelDespliegue = Store();
 
-        var top = despuesDelDespliegue.GetTopQueries(Day.AddHours(-1), Day.AddHours(1), 10);
+        var top = Top(despuesDelDespliegue, Day.AddHours(-1), Day.AddHours(1), 10);
         Assert.Equal("reinicio", Assert.Single(top).Query);
     }
 
@@ -111,7 +125,7 @@ public sealed class FileSystemSearchAnalyticsStoreTests : IDisposable
         sut.Record("   ", 0, 1);
         sut.Record(string.Empty, 0, 1);
 
-        var top = sut.GetTopQueries(Day.AddHours(-1), Day.AddHours(1), 10);
+        var top = Top(sut, Day.AddHours(-1), Day.AddHours(1), 10);
         var unica = Assert.Single(top);
         Assert.Equal("bogotá", unica.Query);
         Assert.Equal(2, unica.Count);
@@ -131,10 +145,10 @@ public sealed class FileSystemSearchAnalyticsStoreTests : IDisposable
         Store().Record("reciente", 1, 1);
 
         var sut = Store();
-        var ultimaSemana = sut.GetTopQueries(Day.AddDays(-7), Day.AddHours(1), 10);
+        var ultimaSemana = Top(sut, Day.AddDays(-7), Day.AddHours(1), 10);
 
         Assert.Equal("reciente", Assert.Single(ultimaSemana).Query);
-        Assert.Equal(2, sut.GetTopQueries(Day.AddDays(-60), Day.AddHours(1), 10).Count);
+        Assert.Equal(2, Top(sut, Day.AddDays(-60), Day.AddHours(1), 10).Count);
     }
 
     /// <summary>
@@ -147,7 +161,7 @@ public sealed class FileSystemSearchAnalyticsStoreTests : IDisposable
         Store(() => Day.Date.AddHours(8)).Record("temprano", 1, 1);
         Store(() => Day.Date.AddHours(20)).Record("tarde", 1, 1);
 
-        var top = Store().GetTopQueries(Day.Date.AddHours(12), Day.Date.AddHours(23), 10);
+        var top = Top(Store(), Day.Date.AddHours(12), Day.Date.AddHours(23), 10);
 
         Assert.Equal("tarde", Assert.Single(top).Query);
     }
@@ -167,12 +181,12 @@ public sealed class FileSystemSearchAnalyticsStoreTests : IDisposable
         sut.Record("popular", 1, 1);
         sut.Record("popular", 1, 1);
 
-        var top = sut.GetTopQueries(Day.AddHours(-1), Day.AddHours(1), 10);
+        var top = Top(sut, Day.AddHours(-1), Day.AddHours(1), 10);
         Assert.Equal(new[] { "popular", "alfa", "zeta" }, top.Select(s => s.Query));
 
-        Assert.Equal("popular", Assert.Single(sut.GetTopQueries(Day.AddHours(-1), Day.AddHours(1), 1)).Query);
+        Assert.Equal("popular", Assert.Single(Top(sut, Day.AddHours(-1), Day.AddHours(1), 1)).Query);
         // Un límite absurdo devuelve al menos uno, igual que hacía el almacén anterior.
-        Assert.Single(sut.GetTopQueries(Day.AddHours(-1), Day.AddHours(1), 0));
+        Assert.Single(Top(sut, Day.AddHours(-1), Day.AddHours(1), 0));
     }
 
     /// <summary>
@@ -188,7 +202,7 @@ public sealed class FileSystemSearchAnalyticsStoreTests : IDisposable
         Store(() => Day.AddMinutes(1)).Record("ya-resuelta", 7, 1);
         sut.Record("sigue-vacia", 0, 1);
 
-        var huecos = sut.GetTopNoResultQueries(Day.AddHours(-1), Day.AddHours(1), 10);
+        var huecos = NoResults(sut, Day.AddHours(-1), Day.AddHours(1), 10);
 
         Assert.Equal("sigue-vacia", Assert.Single(huecos).Query);
     }
@@ -204,8 +218,8 @@ public sealed class FileSystemSearchAnalyticsStoreTests : IDisposable
     {
         var sut = Store();
 
-        Assert.Empty(sut.GetTopQueries(Day.AddDays(-7), Day, 10));
-        Assert.Empty(sut.GetTopNoResultQueries(Day.AddDays(-7), Day, 10));
+        Assert.Empty(Top(sut, Day.AddDays(-7), Day, 10));
+        Assert.Empty(NoResults(sut, Day.AddDays(-7), Day, 10));
     }
 
     /// <summary>
@@ -222,7 +236,7 @@ public sealed class FileSystemSearchAnalyticsStoreTests : IDisposable
         File.AppendAllText(FilePath(Day), Environment.NewLine);
         Store(() => Day.AddMinutes(1)).Record("otra-buena", 1, 1);
 
-        var top = Store().GetTopQueries(Day.AddHours(-1), Day.AddHours(1), 10);
+        var top = Top(Store(), Day.AddHours(-1), Day.AddHours(1), 10);
 
         Assert.Equal(new[] { "buena", "otra-buena" }, top.Select(s => s.Query).OrderBy(q => q, StringComparer.Ordinal));
     }
@@ -237,7 +251,7 @@ public sealed class FileSystemSearchAnalyticsStoreTests : IDisposable
         Store().Record("buena", 1, 1);
         File.WriteAllText(Path.Combine(DirPath, "notas.jsonl"), "{\"query\":\"colada\",\"resultCount\":1,\"elapsedMs\":1,\"atUtc\":\"2026-08-02T10:00:00Z\"}\n");
 
-        var top = Store().GetTopQueries(Day.AddHours(-1), Day.AddHours(1), 10);
+        var top = Top(Store(), Day.AddHours(-1), Day.AddHours(1), 10);
 
         Assert.Equal("buena", Assert.Single(top).Query);
     }

@@ -82,12 +82,13 @@ public sealed class DefaultDashboardReadModel : IDashboardReadModel
         return new BehaviorVm(top);
     }
 
-    public SearchInsightsVm GetSearchInsights(DateTime fromUtc, DateTime toUtc, int limit)
+    public async Task<SearchInsightsVm> GetSearchInsightsAsync(
+        DateTime fromUtc, DateTime toUtc, int limit, CancellationToken cancellationToken = default)
     {
         var safeLimit = limit <= 0 ? 10 : limit;
         return new SearchInsightsVm(
-            _search.GetTopQueries(fromUtc, toUtc, safeLimit),
-            _search.GetTopNoResultQueries(fromUtc, toUtc, safeLimit));
+            await _search.GetTopQueriesAsync(fromUtc, toUtc, safeLimit, cancellationToken),
+            await _search.GetTopNoResultQueriesAsync(fromUtc, toUtc, safeLimit, cancellationToken));
     }
 
     public WebhookHealthVm GetWebhookHealth() => new(_webhooks.GetChannelStats());

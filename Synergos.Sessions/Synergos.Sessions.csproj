@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Sin referencia a Synergos.CMS.*: el acople es el contrato HTTP, no un
+         ensamblado compartido. Si algún día este servicio se muda a su propio
+         repo, esto es lo único que hay que mover. -->
+  </PropertyGroup>
+
+</Project>

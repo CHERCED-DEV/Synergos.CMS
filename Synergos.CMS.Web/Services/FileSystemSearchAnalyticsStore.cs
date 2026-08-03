@@ -105,11 +105,16 @@ public sealed class FileSystemSearchAnalyticsStore : ISearchAnalyticsStore
         }
     }
 
-    public IReadOnlyList<SearchQueryStat> GetTopQueries(DateTime fromUtc, DateTime toUtc, int limit)
-        => Top(fromUtc, toUtc, limit, onlyNoResults: false);
+    // Tareas ya completadas: leer del disco local es síncrono y no gana nada envolviéndolo en
+    // un hilo. El async está en la INTERFAZ porque hay otra implementación que sí va por red
+    // (ADR 0130), y esta no paga por ello.
+    public Task<IReadOnlyList<SearchQueryStat>> GetTopQueriesAsync(
+        DateTime fromUtc, DateTime toUtc, int limit, CancellationToken cancellationToken = default)
+        => Task.FromResult(Top(fromUtc, toUtc, limit, onlyNoResults: false));
 
-    public IReadOnlyList<SearchQueryStat> GetTopNoResultQueries(DateTime fromUtc, DateTime toUtc, int limit)
-        => Top(fromUtc, toUtc, limit, onlyNoResults: true);
+    public Task<IReadOnlyList<SearchQueryStat>> GetTopNoResultQueriesAsync(
+        DateTime fromUtc, DateTime toUtc, int limit, CancellationToken cancellationToken = default)
+        => Task.FromResult(Top(fromUtc, toUtc, limit, onlyNoResults: true));
 
     private IReadOnlyList<SearchQueryStat> Top(DateTime fromUtc, DateTime toUtc, int limit, bool onlyNoResults)
     {
