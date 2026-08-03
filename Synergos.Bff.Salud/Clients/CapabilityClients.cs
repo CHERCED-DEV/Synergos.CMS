@@ -93,3 +93,4 @@ public sealed record MoneyDto(decimal Amount, string Currency);
 public sealed record QuoteDto(MoneyDto Total);
 public sealed record PaymentDto(string Id, string Status, MoneyDto Amount, MoneyDto Refundable);
 public sealed record ResourceDto(string Id);
+public sealed record DeliveryDto(string Id, string Status);

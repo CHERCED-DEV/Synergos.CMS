@@ -17,9 +17,10 @@ namespace Synergos.Bff.Salud.Storage;
 /// esperando más.</para>
 ///
 /// <para><b>Lo que NO hace: rendirse en silencio.</b> Tras <see cref="Compensator.MaxAttempts"/>
-/// intentos la compensación queda marcada como colgada y la saga pasa a
-/// <c>CompensationFailed</c> — visible en <c>/v1/compensations</c> y gritada en el log. Una
-/// compensación que se da por buena sin ejecutarse es plata cobrada sin servicio.</para>
+/// intentos la compensación queda marcada como colgada, la saga pasa a <c>CompensationFailed</c>,
+/// y <see cref="Domain.CompensationAlert"/> le avisa a una persona. Una compensación que se da
+/// por buena sin ejecutarse es plata cobrada sin servicio; una que se rinde sin avisar es lo
+/// mismo con un log de testigo.</para>
 /// </remarks>
 public sealed class CompensationSweeper : BackgroundService
 {
@@ -43,7 +44,10 @@ public sealed class CompensationSweeper : BackgroundService
                 using var scope = _scopes.CreateScope();
                 var flow = scope.ServiceProvider.GetRequiredService<AppointmentFlow>();
 
-                foreach (var saga in flow.PendingCompensations())
+                // NeedsSweep y no "tiene pendientes": una saga rendida y ya avisada sigue siendo
+                // una fila de /v1/compensations, pero no hay nada que el barrido pueda hacer por
+                // ella hasta que una persona pida el reintento.
+                foreach (var saga in flow.PendingCompensations().Where(s => s.NeedsSweep))
                 {
                     await flow.CompensateAsync(saga.Id, "reintento del barrido", stoppingToken);
                 }

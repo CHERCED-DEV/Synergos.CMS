@@ -14,6 +14,7 @@ public sealed class SaludCapabilities
     public const string Booking = "booking";
     public const string Pricing = "pricing";
     public const string Payments = "payments";
+    public const string Notifications = "notifications";
 
     private readonly IHttpClientFactory _clients;
 
@@ -81,6 +82,26 @@ public sealed class SaludCapabilities
 
     public Task<Result<PaymentDto>> GetPaymentAsync(string paymentId, CancellationToken ct)
         => Get<PaymentDto>(Payments, $"v1/payments/{paymentId}", ct);
+
+    // ── Notifications ───────────────────────────────────────────────────────
+
+    /// <summary>Manda un aviso con una plantilla ya autorada.</summary>
+    /// <remarks>
+    /// <b>Se manda la CLAVE de la plantilla, no el texto.</b> Es la línea que mantiene
+    /// <c>Api.Notifications</c> agnóstica: sabe rellenar marcadores y entregar, no sabe qué es una
+    /// compensación colgada. El texto lo escribe el dominio y vive del otro lado.
+    /// </remarks>
+    public Task<Result<DeliveryDto>> NotifyAsync(
+        Ref to, string address, string templateKey,
+        IReadOnlyDictionary<string, string> values, IdempotencyKey key, CancellationToken ct)
+        => Post<DeliveryDto>(Notifications, "v1/deliveries", new
+        {
+            toKind = to.Kind,
+            toId = to.Id,
+            address,
+            templateKey,
+            values,
+        }, key, ct);
 
     // ── Fontanería ──────────────────────────────────────────────────────────
 
