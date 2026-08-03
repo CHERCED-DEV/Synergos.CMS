@@ -41,6 +41,17 @@ public sealed record Ref(string Kind, string Id)
     }
 
     /// <summary>
+    /// Construye si las dos partes vienen; <c>null</c> si falta alguna.
+    /// </summary>
+    /// <remarks>
+    /// Para el borde de una API, donde "falta un campo" es un rechazo con código y no una
+    /// excepción: <see cref="Create"/> lanza, y una excepción en un endpoint es un 500 que le
+    /// dice al cliente "reintentá" cuando la respuesta correcta es "arreglá lo que mandaste".
+    /// </remarks>
+    public static Ref? TryCreate(string? kind, string? id)
+        => string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(id) ? null : Create(kind, id);
+
+    /// <summary>
     /// Forma textual <c>kind:id</c>, para claves de almacén y logs.
     /// </summary>
     /// <remarks>

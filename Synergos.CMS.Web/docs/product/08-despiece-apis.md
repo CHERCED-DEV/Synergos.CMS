@@ -1,7 +1,8 @@
 # Despiece de APIs — qué necesita cada dominio, y de qué
 
-> **Estado:** el catálogo sigue siendo propuesta; el **molde de §4 ya está construido y
-> gateado** — `Synergos.Api.Booking` lo estrena y `Synergos.Api.Sessions` está alineada.
+> **Estado:** **siete de las veinte construidas** — `Sessions`, `Booking`, y las cinco de nueve
+> consumidores (`Identity`, `Audit`, `Notifications`, `Documents`, `Catalog`). El molde de §4
+> está construido y gateado, y las siete lo cumplen.
 >
 > Es el inventario que hay que acordar antes de escribir la
 > primera API. Deriva de los dos filtros de atomicidad del
@@ -341,8 +342,13 @@ es lo que de verdad erosiona veinte proyectos.
 2. **¿Falta alguna?** Candidatas que consideré y descarté: `Api.Search` (es `Catalog`),
    `Api.Media` (es `Documents`), `Api.Reviews` (es `Engagement`), `Api.Leads` (es `Workflow` +
    `Engagement`), `Api.Policies` (no tiene almacén: es un tipo en `Core`).
-3. ~~**¿El orden de construcción?**~~ **Booking primero: hecho.** Estrenó el molde y lo pagó —
-   dos defectos salieron de construirla, no de discutirla. Sigue lo que dice la matriz: las cinco
-   de nueve consumidores (`Identity`, `Audit`, `Notifications`, `Documents`, `Catalog`).
+3. ~~**¿El orden de construcción?**~~ **Hecho hasta las cinco de nueve consumidores.** Booking
+   estrenó el molde y lo pagó —dos defectos salieron de construirla, no de discutirla—, y las
+   cinco siguientes costaron bastante menos, que era la señal de que el molde no les quedaba mal.
+   Lo que ganó `Shared` en el camino: `JsonCollectionStore`, `IIdempotencyLedger` y la lectura de
+   la cabecera, promovidos cuando tuvieron seis consumidores y no antes.
+
+   **Queda: `Orders`, `Payments`, `Pricing`, `Cart`, `Inventory`, `Workflow`, `Messaging`,
+   `Signing`, `Consent`, `Engagement`, `Geo`, `Fulfillment`, `Moderation`.**
 4. ~~**¿`Api.Sessions` se adapta al molde?**~~ **Resuelto: se alinea.** Un molde que nace con una
    excepción es un molde que no existe.
