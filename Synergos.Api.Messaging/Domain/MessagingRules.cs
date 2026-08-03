@@ -61,4 +61,45 @@ public static class MessagingRules
         => thread.Includes(who)
             ? null
             : Rejection.Forbidden($"{CodePrefix}.not_a_participant", "Quien pregunta no está en el hilo.");
+
+    /// <summary>
+    /// Si el acceso que se quiere registrar puede certificarse.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La afirmación de identidad es obligatoria, y ése es el punto entero.</b> Un acuse
+    /// dice que <i>esta persona</i> accedió; sin decir quién lo certifica, el sistema estaría
+    /// dando fe de lo que el propio llamador le contó. Puede parecer un campo más; es la
+    /// diferencia entre un registro que sirve y uno que solo parece servir.</para>
+    ///
+    /// <para>Se rechaza <b>antes</b> de mirar si es participante: quien no dice cómo se
+    /// identificó no debería enterarse de si el hilo existe.</para>
+    /// </remarks>
+    public static Rejection? CheckAcknowledge(MessageThread thread, Ref who, IdentityAssertion? assertion)
+    {
+        if (assertion is null || !Enum.IsDefined(assertion.Value))
+        {
+            return Rejection.Invalid($"{CodePrefix}.access_requires_identity",
+                "Hace falta decir cómo se afirmó la identidad de quien accede: sin eso el registro no certifica nada.");
+        }
+        return CheckRead(thread, who);
+    }
+
+    /// <summary>
+    /// Si el plazo para registrar el acceso sigue abierto.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Se comprueba DESPUÉS de resolver si ya había acuse</b>, y ése es el punto delicado.
+    /// Quien accedió dentro del plazo y vuelve a entrar tres meses después tiene que recibir
+    /// <i>su</i> acuse, el de la primera vez — no un rechazo. Al revés, el sistema le negaría a la
+    /// persona el registro que ella misma generó a tiempo (CLAUDE.md §0.B, punto 16).</para>
+    ///
+    /// <para><b>Sin plazo no se cierra nunca.</b> El plazo es de Gobierno; un DM social no tiene
+    /// término que corra, y obligar a uno haría inservible la capacidad para los otros cinco
+    /// dominios que la usan.</para>
+    /// </remarks>
+    public static Rejection? CheckAcknowledgeWindow(Message message, DateTimeOffset now)
+        => message.AcknowledgeBeforeUtc is { } limite && now > limite
+            ? Rejection.Conflict($"{CodePrefix}.acknowledgment_window_closed",
+                $"El plazo para registrar el acceso venció el {limite:O}.")
+            : null;
 }

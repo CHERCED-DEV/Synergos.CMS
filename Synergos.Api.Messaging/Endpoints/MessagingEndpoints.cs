@@ -59,7 +59,7 @@ public static class MessagingEndpoints
                 adjuntos.Add(r);
             }
 
-            return svc.Post(id, from, req.Body, adjuntos, key).Match(
+            return svc.Post(id, from, req.Body, adjuntos, key, req.AcknowledgeBeforeUtc).Match(
                 m => Results.Created($"/v1/messages/{m.Id}", MessageResponse.From(m)),
                 bad => bad.ToProblem());
         });
@@ -70,12 +70,26 @@ public static class MessagingEndpoints
                     p.Items.Select(MessageResponse.From).ToList(), p.Total, p.Offset, p.HasMore))
                 .ToHttp());
 
-        app.MapPost("/v1/messages/{id}/read", (string id, MarkReadRequest req, MessagingService svc) =>
+        // Registra que una persona ACCEDIÓ al mensaje. No es «marcar como leído»: es el dato del
+        // que depende que un término legal haya empezado a correr, y por eso exige decir cómo se
+        // afirmó la identidad de quien accede.
+        app.MapPost("/v1/messages/{id}/acknowledge", (string id, AcknowledgeRequest req, MessagingService svc) =>
         {
             var who = Ref.TryCreate(req.WhoKind, req.WhoId);
             if (who is null) return Invalid("bad_who", "Hacen falta whoKind y whoId.");
 
-            return svc.MarkRead(id, who).Map(MessageResponse.From).ToHttp();
+            // Se parsea acá y no en el servicio para poder distinguir «no vino» de «vino un
+            // valor que no existe» — las dos van al mismo rechazo, pero con detalle distinto.
+            IdentityAssertion? assertion = Enum.TryParse<IdentityAssertion>(req.Assertion, ignoreCase: true, out var a)
+                ? a
+                : null;
+            if (assertion is null)
+            {
+                return Invalid("access_requires_identity",
+                    $"Hace falta 'assertion' y tiene que ser una de: {string.Join(", ", Enum.GetNames<IdentityAssertion>())}.");
+            }
+
+            return svc.Acknowledge(id, who, assertion).Map(MessageResponse.From).ToHttp();
         });
 
         return app;

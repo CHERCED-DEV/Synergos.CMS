@@ -77,7 +77,8 @@ public sealed class MessagingService
         }
     }
 
-    public Result<Message> Post(string threadId, Ref from, string? body, IReadOnlyList<Ref> attachments, IdempotencyKey key)
+    public Result<Message> Post(string threadId, Ref from, string? body, IReadOnlyList<Ref> attachments,
+        IdempotencyKey key, DateTimeOffset? acknowledgeBeforeUtc = null)
     {
         lock (_gate)
         {
@@ -98,9 +99,13 @@ public sealed class MessagingService
             if (motivo is not null) return Result.Rejected<Message>(motivo);
 
             var id = Guid.NewGuid().ToString("n");
-            // Quien escribe cuenta como que ya lo leyó: si no, su propio mensaje le aparecería
-            // sin leer y el contador de pendientes nunca llegaría a cero.
-            var mensaje = new Message(id, threadId, from, (body ?? string.Empty).Trim(), attachments, new[] { from }, _clock.GetUtcNow());
+            var ahora = _clock.GetUtcNow();
+            // El autor cuenta como que ya accedió —si no, su propio mensaje le aparecería sin
+            // leer y el contador de pendientes nunca llegaría a cero—. Y se anota con la
+            // afirmación más fuerte: no hay duda de quién escribió, lo acaba de hacer.
+            var mensaje = new Message(id, threadId, from, (body ?? string.Empty).Trim(), attachments,
+                new[] { new Acknowledgment(from, ahora, IdentityAssertion.IdentityToken) }, ahora,
+                acknowledgeBeforeUtc);
 
             _messages.Put(mensaje);
             _idempotency.Remember("message", key, id);
@@ -117,8 +122,20 @@ public sealed class MessagingService
         return Result.Ok(new Page<Message>(todos.Skip(offset).Take(limit).ToList(), todos.Count, offset));
     }
 
-    /// <summary>Marca un mensaje como leído por alguien.</summary>
-    public Result<Message> MarkRead(string messageId, Ref who)
+    /// <summary>
+    /// Registra que alguien accedió a un mensaje: quién, cuándo y con qué afirmación de identidad.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El PRIMER acceso es el que cuenta, y por eso el instante no se sobreescribe.</b>
+    /// Un segundo acceso no es un error —la persona puede abrir el mismo acto diez veces— pero
+    /// tampoco es un dato nuevo: el término legal empezó a correr con el primero. Sobreescribir
+    /// lo correría hacia adelante cada vez que alguien vuelve a mirar, que es justo lo contrario
+    /// de lo que un acuse tiene que garantizar.</para>
+    ///
+    /// <para><b>Devuelve el mensaje completo y no solo el acuse</b> para que el llamador pueda
+    /// ver el instante que quedó registrado — que puede no ser el que acaba de pedir.</para>
+    /// </remarks>
+    public Result<Message> Acknowledge(string messageId, Ref who, IdentityAssertion? assertion)
     {
         lock (_gate)
         {
@@ -131,14 +148,26 @@ public sealed class MessagingService
             var hilo = _threads.Find(mensaje.ThreadId);
             var motivo = hilo is null
                 ? Rejection.Conflict($"{MessagingRules.CodePrefix}.thread_gone", "El mensaje apunta a un hilo que ya no está.")
-                : MessagingRules.CheckRead(hilo, who);
+                : MessagingRules.CheckAcknowledge(hilo, who, assertion);
             if (motivo is not null) return Result.Rejected<Message>(motivo);
 
-            if (mensaje.ReadBy.Contains(who)) return Result.Ok(mensaje);   // idempotente
+            // Idempotente, y el instante del primero se conserva intacto. Va ANTES del plazo a
+            // propósito: quien accedió a tiempo y vuelve tres meses después tiene que recibir su
+            // propio acuse, no un rechazo por un plazo que él ya había cumplido.
+            if (mensaje.AcknowledgmentOf(who) is not null) return Result.Ok(mensaje);
 
-            var leido = mensaje with { ReadBy = mensaje.ReadBy.Append(who).ToList() };
-            _messages.Put(leido);
-            return Result.Ok(leido);
+            var ahora = _clock.GetUtcNow();
+            var vencido = MessagingRules.CheckAcknowledgeWindow(mensaje, ahora);
+            if (vencido is not null) return Result.Rejected<Message>(vencido);
+
+            var acusado = mensaje with
+            {
+                Acknowledgments = mensaje.Acknowledgments
+                    .Append(new Acknowledgment(who, ahora, assertion!.Value))
+                    .ToList(),
+            };
+            _messages.Put(acusado);
+            return Result.Ok(acusado);
         }
     }
 

@@ -86,7 +86,7 @@ Cada paso desbloquea a los siguientes, y el orden está sesgado a favor del domi
 
 1. **Reloj de términos legales** sobre la instancia de `Workflow` (días hábiles CO, vencimiento, semáforo, escalamiento). Hoy `Api.Workflow` no tiene un solo `DateTimeOffset` fuera de `HistoryEntry.AtUtc`. En PQRSD **el plazo es el producto**. Esfuerzo M.
 2. **`Bff.Gobierno`** cableando el CMS a `Workflow` + `Documents` + `Audit` + `Consent`, reemplazando `StubCaseWorkflowService`, que hoy duplica la máquina de estados dentro del CMS. Esfuerzo L.
-3. **Notificación real con acuse de acceso certificado** (Ley 2080: la notificación electrónica surte efecto cuando el administrado accede, y la administración debe certificarlo). `Api.Messaging` ya tiene `POST /v1/messages/{id}/read` — es el germen correcto. Esfuerzo M.
+3. **Notificación real con acuse de acceso certificado** (Ley 2080: la notificación electrónica surte efecto cuando el administrado accede, y la administración debe certificarlo). `Api.Messaging` ya tiene `POST /v1/messages/{id}/acknowledge` con instante y afirmación de identidad (HU #13). Falta la parte que la HU dejó explícitamente afuera: quién certifica la identidad de verdad. Esfuerzo M.
 4. **Kit ITA / Res. 1519**: menú de Transparencia con los 10 niveles precargados como schema + gate WCAG 2.1 AA + UI kit GOV.CO. Esfuerzo L.
 
 Y una quinta que no es software y hay que empezar el mismo día: **resolver el requisito habilitante de experiencia** (entidad ancla pequeña — ESE, empresa de servicios públicos, descentralizada — o unión temporal con un integrador que ya tenga contratos públicos). Va en paralelo, no después.
