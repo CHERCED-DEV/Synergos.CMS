@@ -22,17 +22,14 @@ namespace Synergos.Api.Booking.Endpoints;
 /// </remarks>
 public static class BookingEndpoints
 {
-    /// <summary>Cabecera de idempotencia. Obligatoria en toda mutación.</summary>
-    public const string IdempotencyHeader = "Idempotency-Key";
-
     public static IEndpointRouteBuilder MapBookingEndpoints(this IEndpointRouteBuilder app)
     {
         // ── Recursos ────────────────────────────────────────────────────────
         app.MapPost("/v1/resources", (CreateResourceRequest req, HttpRequest http, BookingService svc) =>
         {
-            if (!TryKey(http, out var key, out var falta)) return falta!;
+            if (!IdempotencyHeader.TryRead(http, BookingRules.CodePrefix, out var key, out var falta)) return falta!;
 
-            var subject = TryRef(req.SubjectKind, req.SubjectId);
+            var subject = Ref.TryCreate(req.SubjectKind, req.SubjectId);
             if (subject is null) return Invalid("bad_subject", "Hacen falta subjectKind y subjectId.");
 
             var opening = new List<OpeningRule>();
@@ -84,11 +81,11 @@ public static class BookingEndpoints
         // ── Holds ───────────────────────────────────────────────────────────
         app.MapPost("/v1/holds", (CreateHoldRequest req, HttpRequest http, BookingService svc) =>
         {
-            if (!TryKey(http, out var key, out var falta)) return falta!;
+            if (!IdempotencyHeader.TryRead(http, BookingRules.CodePrefix, out var key, out var falta)) return falta!;
 
             if (string.IsNullOrWhiteSpace(req.ResourceId)) return Invalid("bad_resource_id", "Hace falta resourceId.");
 
-            var heldFor = TryRef(req.HeldForKind, req.HeldForId);
+            var heldFor = Ref.TryCreate(req.HeldForKind, req.HeldForId);
             if (heldFor is null) return Invalid("bad_held_for", "Hacen falta heldForKind y heldForId.");
 
             var window = TryWindow(req.Start, req.End);
@@ -110,7 +107,7 @@ public static class BookingEndpoints
 
         app.MapPost("/v1/holds/{id}/confirm", (string id, HttpRequest http, BookingService svc) =>
         {
-            if (!TryKey(http, out var key, out var falta)) return falta!;
+            if (!IdempotencyHeader.TryRead(http, BookingRules.CodePrefix, out var key, out var falta)) return falta!;
 
             return svc.ConfirmHold(id, key).Match(
                 r => Results.Created($"/v1/reservations/{r.Id}", ReservationResponse.From(r)),
@@ -144,26 +141,6 @@ public static class BookingEndpoints
 
     private static IResult Invalid(string code, string message)
         => Rejection.Invalid($"{BookingRules.CodePrefix}.{code}", message).ToProblem();
-
-    /// <summary>Exige la cabecera de idempotencia. Devuelve el rechazo listo si falta.</summary>
-    private static bool TryKey(HttpRequest http, out IdempotencyKey key, out IResult? missing)
-    {
-        var raw = http.Headers[IdempotencyHeader].ToString();
-        if (string.IsNullOrWhiteSpace(raw) || raw.Length > IdempotencyKey.MaxLength)
-        {
-            key = default;
-            missing = Invalid("idempotency_key_required",
-                $"Toda mutación exige la cabecera {IdempotencyHeader} (hasta {IdempotencyKey.MaxLength} caracteres). " +
-                "Sin ella, un reintento tras un timeout duplicaría la operación.");
-            return false;
-        }
-        key = IdempotencyKey.Of(raw);
-        missing = null;
-        return true;
-    }
-
-    private static Ref? TryRef(string? kind, string? id)
-        => string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(id) ? null : Ref.Create(kind!, id!);
 
     /// <summary>
     /// Lee un instante ISO-8601 de la query. Ausente es válido (lo resuelve el llamador).

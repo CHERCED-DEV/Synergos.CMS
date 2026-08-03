@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 using Synergos.Api.Booking.Domain;
-using Synergos.Core;
+using Synergos.Shared;
 
 namespace Synergos.Api.Booking.Storage;
 
@@ -30,37 +30,6 @@ public interface IReservationStore
     IReadOnlyList<Reservation> ForResource(string resourceId);
     void Put(Reservation reservation);
 }
-
-/// <summary>
-/// Recuerda qué produjo cada llave de idempotencia.
-/// </summary>
-/// <remarks>
-/// <para>Es lo que hace que reintentar una mutación no la ejecute dos veces. Cuando esta API no
-/// contesta, el llamador <b>no sabe</b> si se ejecutó; sin esto, reintentar duplica el hold y no
-/// reintentar pierde la reserva.</para>
-///
-/// <para>La llave se guarda por <b>ámbito</b> (<c>hold</c>, <c>reservation</c>) y no global: dos
-/// operaciones distintas pueden legítimamente traer la misma llave del mismo cliente, y
-/// colisionarlas haría que la segunda devolviera el resultado de la primera.</para>
-/// </remarks>
-public interface IIdempotencyStore
-{
-    /// <summary>Qué produjo esta llave, o <c>null</c> si no se ha usado.</summary>
-    /// <remarks>
-    /// <b>Separado de <see cref="Remember"/> a propósito.</b> Cuando estaban fundidos, el
-    /// servicio tenía que validar ANTES de consultar la llave — y entonces un reintento de un
-    /// hold se topaba con su propio cupo tomado y salía rechazado por <c>at_capacity</c>: justo
-    /// lo que la llave existía para evitar. Con la consulta aparte, el reintento devuelve lo ya
-    /// hecho sin volver a pasar por reglas que el estado que él mismo creó ya no satisface.
-    /// </remarks>
-    string? Find(string scope, IdempotencyKey key);
-
-    /// <summary>Asocia la llave a lo que produjo.</summary>
-    void Remember(string scope, IdempotencyKey key, string resultId);
-}
-
-/// <summary>Lo que se guarda de una llave usada.</summary>
-internal sealed record IdempotencyEntry(string Id, string ResultId);
 
 public sealed class FileSystemResourceStore : IResourceStore
 {
@@ -100,25 +69,8 @@ public sealed class FileSystemReservationStore : IReservationStore
     public void Put(Reservation reservation) => _store.Put(reservation);
 }
 
-public sealed class FileSystemIdempotencyStore : IIdempotencyStore
+/// <summary>El ledger de idempotencia de esta capacidad, sobre su propio almacén.</summary>
+public sealed class FileSystemIdempotencyStore : FileIdempotencyLedger
 {
-    private readonly JsonCollectionStore<IdempotencyEntry> _store;
-    private readonly object _gate = new();
-
-    public FileSystemIdempotencyStore(IOptions<BookingStorageOptions> options)
-        => _store = new JsonCollectionStore<IdempotencyEntry>(options.Value.Root, "idempotency", e => e.Id);
-
-    public string? Find(string scope, IdempotencyKey key)
-    {
-        lock (_gate) { return _store.Find(Clave(scope, key))?.ResultId; }
-    }
-
-    public void Remember(string scope, IdempotencyKey key, string resultId)
-    {
-        // La atomicidad de consultar-y-escribir la garantiza el lock del servicio, que abarca
-        // toda la operación: acá alcanza con proteger el fichero.
-        lock (_gate) { _store.Put(new IdempotencyEntry(Clave(scope, key), resultId)); }
-    }
-
-    private static string Clave(string scope, IdempotencyKey key) => $"{scope}|{key.Value}";
+    public FileSystemIdempotencyStore(IOptions<BookingStorageOptions> options) : base(options.Value.Root) { }
 }

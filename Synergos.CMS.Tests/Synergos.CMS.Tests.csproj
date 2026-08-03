@@ -27,6 +27,11 @@
     <ProjectReference Include="..\Synergos.Core\Synergos.Core.csproj" />
     <ProjectReference Include="..\Synergos.Api.Booking\Synergos.Api.Booking.csproj" />
     <ProjectReference Include="..\Synergos.Api.Sessions\Synergos.Api.Sessions.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Audit\Synergos.Api.Audit.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Identity\Synergos.Api.Identity.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Notifications\Synergos.Api.Notifications.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Documents\Synergos.Api.Documents.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Catalog\Synergos.Api.Catalog.csproj" />
   </ItemGroup>
 
 </Project>
