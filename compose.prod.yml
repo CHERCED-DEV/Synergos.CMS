@@ -1,0 +1,606 @@
+# GENERADO POR tools/compose-gen.mjs — NO EDITAR A MANO.
+#
+# Se regenera con `node tools/compose-gen.mjs` y hay un gate que verifica que
+# esté al día (ComposeStackTests). Editarlo a mano funciona hasta el siguiente
+# `compose-gen`, que lo pisa sin avisar.
+#
+# El producto entero: el CMS, las 20 capacidades, los 2 orquestadores y un proxy.
+#
+#   docker compose -f compose.prod.yml up -d
+#
+# Lo que hay que tener en el entorno (ver .env.example):
+#   SYNERGOS_REGISTRY  ghcr.io/cherced-dev
+#   SYNERGOS_TAG       el SHA del commit que se despliega — NUNCA `latest`
+#   SYNERGOS_API_KEY   la llave compartida entre servicios
+#   SYNERGOS_DOMAIN    el dominio publico
+#
+# ⚠️ UNA INSTANCIA POR CAPACIDAD, Y PARADA ANTES DE ARRANQUE.
+# 19 de las 20 capacidades guardan en fichero JSON con un lock de PROCESO. Dos
+# instancias se pisan y NO dan error: corrompen. Un rolling deploy son dos
+# instancias a la vez, asi que el despliegue "normal" de cualquier plataforma
+# moderna rompe esto. Mientras no cambie el almacen (epica #2), no se toca.
+
+name: synergos
+
+networks:
+  # Una sola red, y sin `ports` en nada que no sea el proxy: lo que no se
+  # publica, no se alcanza desde internet. Es la unica frontera que hay.
+  interna:
+    driver: bridge
+
+services:
+  # ── El portero ────────────────────────────────────────────────────────────
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    networks: [interna]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SYNERGOS_DOMAIN: ${SYNERGOS_DOMAIN:?falta SYNERGOS_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Los certificados. Sin persistirlos, cada despliegue pide unos nuevos a
+      # Let's Encrypt y se choca con su limite de peticiones — que se nota como
+      # "el sitio dejo de tener HTTPS" varias horas.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      cms:
+        condition: service_healthy
+
+  # ── El CMS ────────────────────────────────────────────────────────────────
+  cms:
+    image: ${SYNERGOS_REGISTRY}/synergos-cms:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      Umbraco__CMS__Global__UmbracoApplicationUrl: "https://${SYNERGOS_DOMAIN}/"
+      Synergos__Notifications__PublicBaseUrl: "https://${SYNERGOS_DOMAIN}"
+      Synergos__Cart__SecretKey: ${SYNERGOS_CART_SECRET:?falta SYNERGOS_CART_SECRET}
+
+      # La UNICA capacidad que el CMS consume hoy (ADR 0130). Por nombre de
+      # servicio, no por localhost: dentro de la red de Docker, localhost es el
+      # propio contenedor del CMS.
+      Synergos__SearchAnalytics__Mode: Http
+      Synergos__SearchAnalytics__BaseUrl: "http://api-sessions:8080"
+      Synergos__SearchAnalytics__ApiKey: ${SYNERGOS_API_KEY}
+
+      # El CDN (ADR 0132). Sin PublicBaseUrl se queda en Stub y los elementSyn*
+      # emiten su comentario de relleno — degradado y visible, no roto.
+      Synergos__BundleRegistry__Mode: ${SYNERGOS_CDN_MODE:-Stub}
+      Synergos__BundleRegistry__PublicBaseUrl: ${SYNERGOS_CDN_URL:-}
+    volumes:
+      - cms-db:/app/umbraco/Data
+      - cms-logs:/app/umbraco/Logs
+      - cms-appdata:/app/App_Data
+      - cms-media:/app/wwwroot/media
+      # Sin esto, cada despliegue desloguea el backoffice y rompe los secretos
+      # TOTP de los members (ADR 0084).
+      - cms-dpkeys:/root/.aspnet/DataProtection-Keys
+    depends_on:
+      api-sessions:
+        # Por salud y no por `sleep`: el CMS pregunta a Sessions al arrancar, y
+        # un arranque por temporizador acierta hasta el dia que la maquina esta
+        # cargada.
+        condition: service_healthy
+    deploy:
+      replicas: 1
+
+  # ── El arbol de servicios ─────────────────────────────────────────────────
+  api-audit:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.audit:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Audit__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Audit__Storage__Root: /app/data/audit
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-audit-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-booking:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.booking:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Booking__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Booking__Storage__Root: /app/data/booking
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-booking-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-cart:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.cart:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Cart__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Cart__Storage__Root: /app/data/cart
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-cart-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-catalog:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.catalog:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Catalog__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Catalog__Storage__Root: /app/data/catalog
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-catalog-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-consent:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.consent:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Consent__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Consent__Storage__Root: /app/data/consent
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-consent-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-documents:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.documents:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Documents__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Documents__Storage__Root: /app/data/documents
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-documents-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-engagement:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.engagement:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Engagement__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Engagement__Storage__Root: /app/data/engagement
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-engagement-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-fulfillment:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.fulfillment:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Fulfillment__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Fulfillment__Storage__Root: /app/data/fulfillment
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-fulfillment-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-geo:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.geo:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Geo__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Geo__Storage__Root: /app/data/geo
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-geo-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-identity:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.identity:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Identity__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Identity__Storage__Root: /app/data/identity
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-identity-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-inventory:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.inventory:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Inventory__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Inventory__Storage__Root: /app/data/inventory
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-inventory-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-messaging:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.messaging:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Messaging__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Messaging__Storage__Root: /app/data/messaging
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-messaging-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-moderation:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.moderation:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Moderation__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Moderation__Storage__Root: /app/data/moderation
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-moderation-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-notifications:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.notifications:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Notifications__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Notifications__Storage__Root: /app/data/notifications
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-notifications-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-orders:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.orders:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Orders__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Orders__Storage__Root: /app/data/orders
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-orders-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-payments:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.payments:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Payments__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Payments__Storage__Root: /app/data/payments
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-payments-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-pricing:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.pricing:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Pricing__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Pricing__Storage__Root: /app/data/pricing
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-pricing-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-sessions:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.sessions:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Sessions__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Sessions__Storage__Root: /app/data/sessions
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-sessions-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-signing:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.signing:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Signing__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Signing__Storage__Root: /app/data/signing
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-signing-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  api-workflow:
+    image: ${SYNERGOS_REGISTRY}/synergos.api.workflow:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Workflow__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Workflow__Storage__Root: /app/data/workflow
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - api-workflow-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  bff-salud:
+    image: ${SYNERGOS_REGISTRY}/synergos.bff.salud:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Salud__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Salud__Storage__Root: /app/data/salud
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - bff-salud-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+  bff-tienda:
+    image: ${SYNERGOS_REGISTRY}/synergos.bff.tienda:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Tienda__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Tienda__Storage__Root: /app/data/tienda
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - bff-tienda-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
+volumes:
+  cms-db:
+  cms-logs:
+  cms-appdata:
+  cms-media:
+  cms-dpkeys:
+  caddy-data:
+  caddy-config:
+  api-audit-data:
+  api-booking-data:
+  api-cart-data:
+  api-catalog-data:
+  api-consent-data:
+  api-documents-data:
+  api-engagement-data:
+  api-fulfillment-data:
+  api-geo-data:
+  api-identity-data:
+  api-inventory-data:
+  api-messaging-data:
+  api-moderation-data:
+  api-notifications-data:
+  api-orders-data:
+  api-payments-data:
+  api-pricing-data:
+  api-sessions-data:
+  api-signing-data:
+  api-workflow-data:
+  bff-salud-data:
+  bff-tienda-data:

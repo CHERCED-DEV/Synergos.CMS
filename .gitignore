@@ -79,6 +79,9 @@ appsettings.Local.json
 secrets.json
 .env
 .env.*
+# ...salvo la plantilla. `.env.*` la tapaba: el fichero que documenta QUÉ
+# secretos hacen falta nunca llegaba al repo, y quien montara el servidor
+# tendría que adivinarlos. No lleva valores, solo nombres y explicaciones.
 !.env.example
 
 # ───────────────────────── Test results ──────────────────────────────
