@@ -475,5 +475,10 @@ appsettings-schema.*.json
 # Log files
 /umbraco/Logs/
 
-# Media files
-/wwwroot/media/
+# Media files — NO se ignoran (ADR 0129).
+#
+# Esta regla venía del .gitignore que Umbraco genera, y es la razón por la que
+# 30 archivos quedaron trackeados de antes y ninguno nuevo se sumaba: git no
+# desindexa lo ya trackeado, así que el hueco era invisible. Los binarios de
+# media son el respaldo de los nodos de Media que ahora sí se versionan.
+# /wwwroot/media/

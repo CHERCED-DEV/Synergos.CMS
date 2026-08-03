@@ -17,9 +17,9 @@
  *   3. `processed >= archivos .config TRACKEADOS`. No es una heurística: en
  *      la medición de referencia fueron exactamente 880 = 880. Si uSync se
  *      salta una carpeta entera (el modo de falla que importa), este número
- *      se desploma. Se cuentan los trackeados en git, no el filesystem,
- *      porque la máquina del arquitecto tiene Content/ y Media/ locales
- *      (gitignored) que inflarían el conteo.
+ *      se desploma. Se cuentan los trackeados en git, no el filesystem:
+ *      la máquina del arquitecto puede tener export sin commitear todavía
+ *      —contenido del seeder, por ejemplo— y eso inflaría el conteo.
  *
  * Decisiones de entorno, todas deliberadas:
  *   - DB en un directorio temporal via ConnectionStrings override — el gate
@@ -35,9 +35,16 @@
  *   - Temp storage aislado (EnvironmentTemp + TMPDIR propio) — dos Umbraco
  *     en la misma máquina no se pelean por los índices Examine.
  *
- * Lo que el gate NO verifica, a propósito: contenido (Content/ está
- * gitignored por decisión del arquitecto — memoria feedback_schema_ownership),
- * media binaria, y el comportamiento runtime (eso es de los tests xUnit).
+ * Desde el ADR 0129 el gate TAMBIÉN cubre el contenido y los nodos de media:
+ * antes Content/ estaba en .gitignore y esta cabecera decía que quedaba fuera
+ * "por decisión del arquitecto". Esa decisión se revirtió justamente porque
+ * dejaba media verdad en pie — el esquema era derivable y el contenido no, así
+ * que las páginas vivían solo en la SQLite que nunca se commitea.
+ *
+ * Lo que el gate sigue SIN verificar, a propósito: que los BINARIOS de media
+ * referenciados existan (eso lo cubre versionar wwwroot/media, no el import),
+ * los members (uSync 13 free no trae MemberHandler) y el comportamiento
+ * runtime — eso es de los tests xUnit y del gate de HTML servido.
  *
  * Uso:
  *   node tools/usync-rebuild-check.mjs [--no-build] [--keep-db]
@@ -124,6 +131,12 @@ const child = spawn('dotnet', [DLL], {
     ConnectionStrings__umbracoDbDSN_ProviderName: 'Microsoft.Data.Sqlite',
     uSync__Settings__ImportAtStartup: 'All',
     uSync__Settings__ExportOnSave: 'None',
+    // ADR 0129 — sin esto el gate importaría el esquema y se SALTARÍA el
+    // contenido, diciendo "derivable" sobre media verdad. Los handlers vienen
+    // apagados de fábrica en uSync; appsettings.json los enciende para la app
+    // y aquí se encienden para la verificación.
+    uSync__Sets__Default__Handlers__ContentHandler__Enabled: 'true',
+    uSync__Sets__Default__Handlers__MediaHandler__Enabled: 'true',
     uSync__Sets__Default__HandlerDefaults__FailOnMissingParent: 'true',
     Synergos__DevSeed__Enabled: 'false',
     Umbraco__CMS__Hosting__LocalTempStorageLocation: 'EnvironmentTemp',

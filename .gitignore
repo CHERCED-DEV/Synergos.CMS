@@ -32,7 +32,10 @@ Synergos.CMS.Web/umbraco/Data/
 Synergos.CMS.Web/umbraco/Logs/
 Synergos.CMS.Web/umbraco/mediacache/
 Synergos.CMS.Web/App_Data/
-Synergos.CMS.Web/wwwroot/media/
+# wwwroot/media NO se ignora (ADR 0129): son los BINARIOS a los que apuntan los
+# nodos de Media. Versionar el nodo sin el archivo restaura el contenido con las
+# imágenes rotas, que es peor que no restaurarlo. mediacache sí se ignora — eso
+# sí es derivable, Umbraco lo regenera del original.
 
 # Los mismos, en la RAIZ del repo. Umbraco los crea relativos a su content
 # root, y arrancar el dll desde la raiz (en vez de desde Synergos.CMS.Web/)
@@ -55,12 +58,15 @@ Synergos.CMS.Web/umbraco/models/models.generated.hash
 Synergos.CMS.Web/uSync/uSync.History/
 Synergos.CMS.Web/uSync/uSync.Logs/
 
-# uSync auto-exports content + media from DB; el agente NO es dueño
-# de Content/Media (memoria feedback_schema_ownership_agent). Test
-# content del seeder tampoco se commitea — se regenera con
-# DevTestContentSeeder. MediaTypes (schema) sí está en uSync/v9/MediaTypes/.
-Synergos.CMS.Web/uSync/v9/Content/
-Synergos.CMS.Web/uSync/v9/Media/
+# uSync/v9/Content y Media SÍ se versionan (ADR 0129). Antes se ignoraban por
+# dos razones: que el agente no es dueño del contenido, y que el seeder de dev
+# ensuciaría el repo. La primera sigue en pie y no la cambia esto —el agente
+# no autora contenido, solo se versiona lo que autora el arquitecto—; la
+# segunda pasa de una regla de .gitignore a un check del audit, que es más
+# preciso: deja pasar el contenido editorial y sigue rechazando el del seeder.
+#
+# Sin esto, el esquema era derivable y el contenido no: las páginas y la media
+# vivían SOLO en la SQLite, que nunca se commitea.
 
 # Umbraco-generated appsettings schema references (regenerated on build)
 Synergos.CMS.Web/appsettings-schema.json
