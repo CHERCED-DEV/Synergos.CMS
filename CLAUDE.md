@@ -492,4 +492,10 @@ segregación y molde en verde.
 - **Sin política de abandono** para una saga nunca confirmada; el
   retroceso no es configurable; `Api.Inventory` necesita ajuste relativo
   (hoy devolver stock es un leer-sumar-escribir).
-- **`StubBundleRegistryClient`** sigue activo — bloqueo externo, §9.
+- **`StubBundleRegistryClient` sigue siendo el default, pero ya no hay
+  bloqueo**: el CDN está VIVO (`https://synergos-ui.synergos-labs.workers.dev`,
+  139 elementos, cabeceras verificadas 2026-08-04) y `HttpBundleRegistryClient`
+  resuelve contra él — verificado con el cliente real compilado, no con fakes.
+  Lo que falta es que el despliegue configure `SYNERGOS_CDN_MODE=Http` +
+  `SYNERGOS_CDN_URL` (ver `.env.example`). Es una decisión de entorno del
+  arquitecto, no trabajo pendiente de código. Ver §9 y ADR 0132.
