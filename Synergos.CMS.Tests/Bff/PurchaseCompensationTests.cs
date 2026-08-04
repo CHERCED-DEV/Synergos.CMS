@@ -154,8 +154,14 @@ public sealed class PurchaseCompensationTests
         .Ok("POST /v1/holds/sh-2/release", """{"id":"sh-2","quantity":1,"expiresAtUtc":"2026-03-02T10:15:00+00:00","released":true}""")
         .Ok("POST /v1/holds/sh-3/release", """{"id":"sh-3","quantity":4,"expiresAtUtc":"2026-03-02T10:15:00+00:00","released":true}""")
         // Deshacer un consumo es un AJUSTE, no una liberación: Api.Inventory lo dice y por eso
-        // el flujo reescribe la compensación al consumir. Sin estos dos guiones, el test estaría
+        // el flujo reescribe la compensación al consumir. Sin estos guiones, el test estaría
         // probando el comportamiento viejo.
+        //
+        // Estos tres GET ya no los usa la devolución (defecto #30: era un leer-sumar-escribir y
+        // ahora manda el delta), pero se quedan a propósito: si alguien volviera a leer el total
+        // antes de ajustar, el guion respondería y el test pasaría sin avisar. Que sigan acá y
+        // en cero llamadas es lo que hace visible la diferencia — lo comprueba
+        // `La_devolucion_manda_un_DELTA_y_no_lee_el_total_antes`.
         .Ok("GET /v1/items/i-1", """{"id":"i-1","subjectKind":"tienda.producto","subjectId":"p-1","onHand":8,"available":8}""")
         .Ok("GET /v1/items/i-2", """{"id":"i-2","subjectKind":"tienda.producto","subjectId":"p-2","onHand":9,"available":9}""")
         .Ok("GET /v1/items/i-3", """{"id":"i-3","subjectKind":"tienda.producto","subjectId":"p-3","onHand":6,"available":6}""")
@@ -282,6 +288,42 @@ public sealed class PurchaseCompensationTests
         Assert.Equal(1, caps.Veces("POST", "/orders/o-1/cancel"));
         Assert.Equal(0, caps.Veces("POST", "/orders/o-1/fulfill"));
         Assert.Equal(SagaStatus.Compensated, ctx.Flow.Get("compra-1").Value.Status);
+    }
+
+    [Fact]
+    public async Task La_devolucion_manda_un_DELTA_y_no_lee_el_total_antes()
+    {
+        // El defecto #30 visto desde el llamador. Esto era: traer el total, sumarle la cantidad,
+        // escribir el resultado — y dos devoluciones simultáneas sobre el mismo ítem se pisaban.
+        //
+        // Se comprueban las tres cosas que lo hacen seguro, porque cada una sola no basta:
+        //   · manda `delta` (cuánto cambió) y NO `onHand` (un total calculado acá);
+        //   · el delta es la cantidad que esta compra había apartado;
+        //   · lleva llave, porque el motor reintenta hasta ocho veces y un relativo sin llave
+        //     sumaría ocho veces — cambiar el ajuste perdido por el ajuste doble.
+        var caps = Feliz().Falla("POST /v1/shipments", HttpStatusCode.Conflict, "fulfillment.no_carrier");
+        var ctx = Nuevo(caps);
+
+        await Comprar(ctx.Flow);
+        await Confirmar(ctx.Flow);
+
+        // Ni una lectura del total: la suma la hace la capacidad, no este orquestador.
+        Assert.Equal(0, caps.Veces("GET", "/v1/items/i-1"));
+
+        var ajustes = caps.Llamadas.Where(l => l.Path.EndsWith("/adjust", StringComparison.Ordinal)).ToList();
+        Assert.Equal(3, ajustes.Count);
+
+        // Las tres líneas de la canasta: 2, 1 y 4 unidades.
+        foreach (var (item, cantidad) in new[] { ("i-1", 2), ("i-2", 1), ("i-3", 4) })
+        {
+            var ajuste = ajustes.Single(l => l.Path == $"/v1/items/{item}/adjust");
+            Assert.Contains($"\"delta\":{cantidad}", ajuste.Body!.Replace(" ", ""), StringComparison.Ordinal);
+            Assert.DoesNotContain("onHand", ajuste.Body!, StringComparison.OrdinalIgnoreCase);
+            Assert.False(string.IsNullOrWhiteSpace(ajuste.Key), $"el ajuste de {item} fue sin llave");
+        }
+
+        // Y son llaves distintas: tres devoluciones distintas, no la misma repetida.
+        Assert.Equal(3, ajustes.Select(l => l.Key).Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]

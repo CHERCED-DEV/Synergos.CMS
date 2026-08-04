@@ -47,9 +47,20 @@ public sealed class TiendaCapabilities : CapabilityClients
     public Task<Result<StockItemDto>> GetStockAsync(string itemId, CancellationToken ct)
         => Get<StockItemDto>(Inventory, $"v1/items/{itemId}", ct);
 
-    /// <summary>Fija el total en mano. Es la única forma que da Inventory de devolver existencias.</summary>
+    /// <summary>Fija el total en mano — un recuento. No sirve para devolver existencias.</summary>
     public Task<Result<StockItemDto>> AdjustStockAsync(string itemId, int onHand, CancellationToken ct)
         => Post<StockItemDto>(Inventory, $"v1/items/{itemId}/adjust", new { onHand }, null, ct);
+
+    /// <summary>
+    /// Devuelve existencias sumando sobre lo que haya, sin leer primero.
+    /// </summary>
+    /// <remarks>
+    /// La llave no es decoración: un relativo reintentado suma dos veces, y el motor de sagas
+    /// reintenta hasta ocho. Va determinista desde la saga para que los ocho intentos sean el
+    /// mismo ajuste.
+    /// </remarks>
+    public Task<Result<StockItemDto>> RestockAsync(string itemId, int delta, IdempotencyKey key, CancellationToken ct)
+        => Post<StockItemDto>(Inventory, $"v1/items/{itemId}/adjust", new { delta }, key, ct);
 
     public Task<Result<StockHoldDto>> HoldStockAsync(string itemId, int quantity, Ref forWhat, IdempotencyKey key, CancellationToken ct)
         => Post<StockHoldDto>(Inventory, $"v1/items/{itemId}/holds", new

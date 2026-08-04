@@ -11,8 +11,23 @@ public sealed record StockUnitDto(string? Code, int? Row, int? Column);
 public sealed record DeclareStockRequest(
     string? SubjectKind, string? SubjectId, int? OnHand, IReadOnlyList<StockUnitDto>? Units);
 
-/// <summary>Ajustar el total.</summary>
-public sealed record AdjustStockRequest(int? OnHand);
+/// <summary>
+/// Ajustar existencias, de las dos maneras que existen — y son distintas de verdad.
+/// </summary>
+/// <remarks>
+/// <para><b><c>Delta</c> es relativo</b> («entraron 3», «devolvieron 2») y es el que hay que usar
+/// cuando lo que se sabe es <i>cuánto cambió</i>. Es la forma segura frente a otro escritor: la
+/// suma la hace la capacidad sobre lo que hay, no el llamador sobre lo que leyó hace un rato.
+/// Exige <c>Idempotency-Key</c>, porque un relativo reintentado suma dos veces.</para>
+///
+/// <para><b><c>OnHand</c> es absoluto</b> («conté y hay 47») y es el que hay que usar cuando lo
+/// que se sabe es <i>cuánto hay</i> — un recuento físico. No exige llave porque repetirlo no
+/// cambia nada: dejar el total en 47 dos veces deja 47.</para>
+///
+/// <para><b>Va exactamente uno de los dos.</b> Los dos juntos serían dos órdenes contradictorias
+/// en el mismo cuerpo, y ninguno no es una orden.</para>
+/// </remarks>
+public sealed record AdjustStockRequest(int? OnHand, int? Delta);
 
 /// <summary>Apartar existencias.</summary>
 public sealed record HoldStockRequest(

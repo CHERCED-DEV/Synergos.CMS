@@ -39,12 +39,16 @@ public sealed class TiendaCompensationExecutor : ICompensationExecutor<PurchaseS
     /// consumo es sumar unidades al total, y para eso hacen falta el ítem y la cantidad — que la
     /// saga guardó al apartar precisamente porque después no habría de dónde sacarlos.</para>
     ///
-    /// <para><b>La limitación, dicha de frente:</b> <c>adjust</c> fija el total absoluto, así que
-    /// esto es un leer-sumar-escribir. Dos devoluciones simultáneas sobre el mismo ítem pueden
-    /// pisarse y dejar el conteo bajo. Con una sola instancia del orquestador —que es el caso
-    /// hoy— no ocurre, y es la primera razón por la que <c>Api.Inventory</c> necesitaría un
-    /// ajuste relativo, no un detalle que se descubra en producción.
-    /// </para>
+    /// <para><b>Un ajuste RELATIVO, y sin leer antes</b> (defecto #30). Esto era un
+    /// leer-sumar-escribir —traer el total, sumarle la cantidad, escribir el resultado— y dos
+    /// devoluciones simultáneas sobre el mismo ítem se pisaban: las dos leían 10, escribían 12 y
+    /// 13, y ganaba la última. Dos unidades desaparecidas del inventario, sin excepción y sin
+    /// log. Ahora se manda <i>cuánto cambió</i> y la suma la hace la capacidad dentro de su
+    /// cerrojo, que es el único sitio donde puede hacerse bien.</para>
+    ///
+    /// <para>La llave va determinista desde la saga porque el motor reintenta hasta ocho veces y
+    /// un relativo reintentado suma ocho veces. Con ella, los ocho intentos son el mismo
+    /// ajuste.</para>
     /// </remarks>
     private async Task<Rejection?> RestockAsync(PurchaseSaga saga, Compensation pendiente, CancellationToken ct)
     {
@@ -57,10 +61,8 @@ public sealed class TiendaCompensationExecutor : ICompensationExecutor<PurchaseS
                 $"La compra no tiene ningún apartado sobre el ítem {pendiente.TargetId}.");
         }
 
-        var item = await _caps.GetStockAsync(pendiente.TargetId, ct);
-        if (!item.IsOk) return item.Rejection;
-
-        var r = await _caps.AdjustStockAsync(pendiente.TargetId, item.Value.OnHand + apartado.Quantity, ct);
+        var r = await _caps.RestockAsync(
+            pendiente.TargetId, apartado.Quantity, saga.KeyFor($"restock:{pendiente.Id}"), ct);
         return r.IsOk ? null : r.Rejection;
     }
 

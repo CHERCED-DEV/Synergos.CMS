@@ -81,28 +81,96 @@ public sealed class InventoryService
             : Rejection.NotFound($"{InventoryRules.CodePrefix}.item_not_found",
                 $"No hay existencias declaradas para {subject}.");
 
-    public Result<StockItem> Adjust(string id, int nuevoTotal)
+    /// <summary>
+    /// Fija el total en mano. Es el ajuste <b>absoluto</b>: «conté y hay 47».
+    /// </summary>
+    /// <remarks>
+    /// <b>No sirve para devolver existencias</b>, y ésa fue la causa del defecto #30. Quien quería
+    /// sumar dos unidades tenía que leer el total, sumarle dos y escribir el resultado — y ese
+    /// leer-sumar-escribir ocurre <i>fuera</i> de esta capacidad, así que ningún cerrojo de acá lo
+    /// protege. Dos devoluciones a la vez leían 10, escribían 12 y 13, y la segunda pisaba a la
+    /// primera: 13 donde tenía que haber 15, sin excepción y sin log. Para eso está
+    /// <see cref="AdjustBy"/>.
+    /// </remarks>
+    public Result<StockItem> AdjustTo(string id, int nuevoTotal)
     {
         lock (_gate)
         {
-            var item = _stock.Find(id);
-            if (item is null)
+            var (item, rechazo) = Ajustable(id);
+            if (rechazo is not null) return Result.Rejected<StockItem>(rechazo);
+
+            return Aplicar(item!, nuevoTotal);
+        }
+    }
+
+    /// <summary>
+    /// Suma o resta sobre lo que haya. Es el ajuste <b>relativo</b>: «devolvieron 2».
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La suma la hace la capacidad, sobre lo que hay dentro del cerrojo.</b> Ésa es
+    /// toda la diferencia: el llamador ya no manda un total calculado desde una lectura vieja,
+    /// manda cuánto cambió. Dos <c>+2</c> y <c>+3</c> simultáneos dan 15 porque los dos leen y
+    /// escriben serializados acá adentro, no allá afuera.</para>
+    ///
+    /// <para><b>Y por eso exige llave.</b> Un absoluto reintentado es inofensivo —dejar el total
+    /// en 47 dos veces deja 47—, pero un relativo reintentado suma dos veces. Cambiar a relativo
+    /// sin idempotencia habría cambiado «se pierde un ajuste» por «se aplica de más», que es el
+    /// mismo descuadre con el signo al revés.</para>
+    ///
+    /// <para><b>La llave se resuelve ANTES de leer el ítem</b>, como en <c>Hold</c> y por la misma
+    /// razón (<c>feedback_idempotency_before_state</c>): al revés, un reintento vería el efecto
+    /// de su propio primer intento y lo volvería a aplicar sobre él.</para>
+    /// </remarks>
+    public Result<StockItem> AdjustBy(string id, int delta, IdempotencyKey key)
+    {
+        lock (_gate)
+        {
+            if (_idempotency.Find("adjust", key) is { } yaEra)
             {
-                return Rejection.NotFound($"{InventoryRules.CodePrefix}.item_not_found", $"No existe el ítem {id}.");
-            }
-            if (item.HasNamedUnits)
-            {
-                return Rejection.Conflict($"{InventoryRules.CodePrefix}.named_units_fixed",
-                    "Un ítem con unidades nombradas no se ajusta por cantidad: habría que decir cuáles se agregan o quitan.");
+                // El reintento NO vuelve a sumar. Devuelve el ítem tal como está, igual que
+                // Declare: la llave dice «esto ya pasó», no «esto valía tanto en su momento».
+                return _stock.Find(yaEra) is { } previo
+                    ? Result.Ok(previo)
+                    : Rejection.Conflict($"{InventoryRules.CodePrefix}.idempotency_orphan",
+                        "La llave ya se usó pero el ítem no está.");
             }
 
-            var motivo = InventoryRules.CheckAdjust(item, nuevoTotal, Now);
+            var motivo = InventoryRules.CheckDelta(delta);
             if (motivo is not null) return Result.Rejected<StockItem>(motivo);
 
-            var actualizado = item with { OnHand = nuevoTotal };
-            _stock.Put(actualizado);
-            return Result.Ok(actualizado);
+            var (item, rechazo) = Ajustable(id);
+            if (rechazo is not null) return Result.Rejected<StockItem>(rechazo);
+
+            var resultado = Aplicar(item!, item!.OnHand + delta);
+            if (resultado.IsOk) _idempotency.Remember("adjust", key, id);
+            return resultado;
         }
+    }
+
+    /// <summary>Lo que las dos formas de ajustar comprueban igual.</summary>
+    private (StockItem? Item, Rejection? Rechazo) Ajustable(string id)
+    {
+        var item = _stock.Find(id);
+        if (item is null)
+        {
+            return (null, Rejection.NotFound($"{InventoryRules.CodePrefix}.item_not_found", $"No existe el ítem {id}."));
+        }
+        if (item.HasNamedUnits)
+        {
+            return (null, Rejection.Conflict($"{InventoryRules.CodePrefix}.named_units_fixed",
+                "Un ítem con unidades nombradas no se ajusta por cantidad: habría que decir cuáles se agregan o quitan."));
+        }
+        return (item, null);
+    }
+
+    private Result<StockItem> Aplicar(StockItem item, int nuevoTotal)
+    {
+        var motivo = InventoryRules.CheckAdjust(item, nuevoTotal, Now);
+        if (motivo is not null) return Result.Rejected<StockItem>(motivo);
+
+        var actualizado = item with { OnHand = nuevoTotal };
+        _stock.Put(actualizado);
+        return Result.Ok(actualizado);
     }
 
     public Result<StockHold> Hold(string itemId, int quantity, IReadOnlyList<string> unitCodes, Ref forWhat, TimeSpan? ttl, IdempotencyKey key)

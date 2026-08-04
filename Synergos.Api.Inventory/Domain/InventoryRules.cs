@@ -73,6 +73,18 @@ public static class InventoryRules
     /// No se puede bajar el total por debajo de lo ya apartado: eso dejaría apartados que nadie
     /// puede cumplir, y el error saldría al entregar en vez de al ajustar.
     /// </remarks>
+    /// <summary>Si el ajuste relativo dice algo.</summary>
+    /// <remarks>
+    /// Un delta de cero no es un ajuste: es una llamada que el llamador creyó que hacía algo.
+    /// Aceptarlo en silencio esconde el defecto de arriba —una compensación que devuelve cero
+    /// unidades, un recuento que se quedó sin restar— hasta que alguien cuadre el inventario a
+    /// mano y no entienda por qué.
+    /// </remarks>
+    public static Rejection? CheckDelta(int delta)
+        => delta == 0
+            ? Rejection.Invalid($"{CodePrefix}.bad_delta", "Un ajuste de cero no ajusta nada.")
+            : null;
+
     public static Rejection? CheckAdjust(StockItem item, int nuevoTotal, DateTimeOffset now)
     {
         if (nuevoTotal < 0)

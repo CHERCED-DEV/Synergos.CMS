@@ -47,8 +47,32 @@ public static class InventoryEndpoints
             return svc.GetBySubject(subject).Map(i => StockItemResponse.From(i, clock.GetUtcNow())).ToHttp();
         });
 
-        app.MapPost("/v1/items/{id}/adjust", (string id, AdjustStockRequest req, InventoryService svc, TimeProvider clock) =>
-            svc.Adjust(id, req.OnHand ?? -1).Map(i => StockItemResponse.From(i, clock.GetUtcNow())).ToHttp());
+        // Dos formas de ajustar, y el cuerpo dice cuál. Ver AdjustStockRequest: `delta` es
+        // «cuánto cambió» y `onHand` es «cuánto hay», que no son la misma pregunta.
+        app.MapPost("/v1/items/{id}/adjust", (string id, AdjustStockRequest req, HttpRequest http, InventoryService svc, TimeProvider clock) =>
+        {
+            if (req.Delta is not null && req.OnHand is not null)
+            {
+                return Invalid("ambiguous_adjust",
+                    "Van delta (cuánto cambió) u onHand (cuánto hay), no los dos: son dos órdenes distintas.");
+            }
+
+            if (req.Delta is { } delta)
+            {
+                // La llave es OBLIGATORIA acá y no en el absoluto. Un relativo reintentado suma
+                // dos veces, y pedirla al borde es lo que impide que arreglar el ajuste perdido
+                // haya creado el ajuste doble.
+                if (!IdempotencyHeader.TryRead(http, InventoryRules.CodePrefix, out var key, out var falta)) return falta!;
+                return svc.AdjustBy(id, delta, key).Map(i => StockItemResponse.From(i, clock.GetUtcNow())).ToHttp();
+            }
+
+            if (req.OnHand is { } total)
+            {
+                return svc.AdjustTo(id, total).Map(i => StockItemResponse.From(i, clock.GetUtcNow())).ToHttp();
+            }
+
+            return Invalid("adjust_required", "Hace falta delta (cuánto cambió) u onHand (cuánto hay).");
+        });
 
         app.MapPost("/v1/items/{id}/holds", (string id, HoldStockRequest req, HttpRequest http, InventoryService svc) =>
         {

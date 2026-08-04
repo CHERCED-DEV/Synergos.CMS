@@ -498,8 +498,13 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 - **Seis orquestadores sin construir**: Viajes, Eventos, Realty, Gob,
   Academy, Social.
 - **Sin política de abandono** para una saga nunca confirmada; el
-  retroceso no es configurable; `Api.Inventory` necesita ajuste relativo
-  (hoy devolver stock es un leer-sumar-escribir).
+  retroceso no es configurable.
+- ~~`Api.Inventory` necesita ajuste relativo~~ — **hecho** (defecto #30).
+  `POST /v1/items/{id}/adjust` acepta `delta` («devolvieron 2», relativo,
+  **exige `Idempotency-Key`** porque un relativo reintentado suma dos
+  veces) u `onHand` («conté y hay 47», absoluto, sin llave porque
+  repetirlo no cambia nada). Va exactamente uno de los dos.
+  `Bff.Tienda` devuelve con `delta` y ya no lee el total antes.
 - **`StubBundleRegistryClient` sigue siendo el default, pero ya no hay
   bloqueo**: el CDN está VIVO (`https://synergos-ui.synergos-labs.workers.dev`,
   139 elementos, cabeceras verificadas 2026-08-04) y `HttpBundleRegistryClient`
