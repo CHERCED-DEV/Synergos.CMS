@@ -51,27 +51,78 @@ public sealed class LoggingPaymentProvider : IPaymentProvider
 
     public string Name => "logging-stub";
 
-    public string? Authorize(Money amount, Ref payer)
+    /// <inheritdoc />
+    /// <remarks>Dice que NO, y por eso el gate lo puede echar de producción.</remarks>
+    public bool MuevePlata => false;
+
+    public PaymentAttempt Authorize(Money amount, Ref payer)
     {
         _log.LogWarning("SIN PASARELA REAL: se 'autorizó' {Amount} de {Payer} sin mover nada.", amount, payer);
-        return $"stub-{Guid.NewGuid():n}";
+        return PaymentAttempt.Ok($"stub-{Guid.NewGuid():n}");
     }
 
-    public bool Capture(string providerReference, Money amount)
+    public PaymentAttempt Capture(string providerReference, Money amount)
     {
         _log.LogWarning("SIN PASARELA REAL: se 'capturó' {Amount} ({Ref}) sin mover plata.", amount, providerReference);
-        return true;
+        return PaymentAttempt.Ok(providerReference);
     }
 
-    public bool Refund(string providerReference, Money amount)
+    public PaymentAttempt Refund(string providerReference, Money amount)
     {
         _log.LogWarning("SIN PASARELA REAL: se 'devolvió' {Amount} ({Ref}) sin mover plata.", amount, providerReference);
-        return true;
+        return PaymentAttempt.Ok(providerReference);
     }
 
-    public bool Void(string providerReference)
+    public PaymentAttempt Void(string providerReference)
     {
         _log.LogWarning("SIN PASARELA REAL: se 'liberó' la autorización {Ref}.", providerReference);
-        return true;
+        return PaymentAttempt.Ok(providerReference);
     }
+}
+
+/// <summary>
+/// El proveedor que se elige cuando hay UNO configurado por nombre y le falta la credencial.
+/// </summary>
+/// <remarks>
+/// <para><b>Rechaza cada cobro y lo grita</b>, exactamente como ADR 0131 hizo con el correo. Es la
+/// diferencia entre un despliegue a medias que se ve a medias y uno que aparenta funcionar — y
+/// aparentar es lo caro: significa pedidos «pagados» que nadie cobró, descubiertos cuando alguien
+/// cuadre la caja.</para>
+///
+/// <para>No es lo mismo que <see cref="LoggingPaymentProvider"/>: aquél es el default de
+/// desarrollo y dice que sí a propósito; éste aparece cuando alguien PIDIÓ cobrar de verdad y no
+/// dejó con qué.</para>
+/// </remarks>
+public sealed class NotConfiguredPaymentProvider : IPaymentProvider
+{
+    private readonly string _pedido;
+    private readonly string _queFalta;
+    private readonly ILogger<NotConfiguredPaymentProvider> _log;
+
+    public NotConfiguredPaymentProvider(string pedido, string queFalta, ILogger<NotConfiguredPaymentProvider> log)
+    {
+        _pedido = pedido;
+        _queFalta = queFalta;
+        _log = log;
+    }
+
+    public string Name => $"{_pedido}-sin-configurar";
+
+    public bool MuevePlata => false;
+
+    private PaymentAttempt Gritar(string que)
+    {
+        _log.LogError(
+            "NO SE PUEDE COBRAR: se pidió el proveedor '{Pedido}' y falta {Falta}. Se rechaza {Que}.",
+            _pedido, _queFalta, que);
+        return PaymentAttempt.NotConfigured($"El medio de pago no está configurado: falta {_queFalta}.");
+    }
+
+    public PaymentAttempt Authorize(Money amount, Ref payer) => Gritar("autorizar");
+
+    public PaymentAttempt Capture(string providerReference, Money amount) => Gritar("capturar");
+
+    public PaymentAttempt Refund(string providerReference, Money amount) => Gritar("devolver");
+
+    public PaymentAttempt Void(string providerReference) => Gritar("liberar");
 }

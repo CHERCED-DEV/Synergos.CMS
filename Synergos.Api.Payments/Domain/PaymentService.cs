@@ -39,7 +39,8 @@ public sealed class PaymentService
             var motivo = PaymentRules.CheckAmount(amount);
             if (motivo is not null) return Result.Rejected<Payment>(motivo);
 
-            var referencia = _provider.Authorize(amount, payer);
+            var intento = _provider.Authorize(amount, payer);
+            var referencia = intento.IsOk ? intento.Reference : null;
             var id = Guid.NewGuid().ToString("n");
 
             // El intento se registra HAYA SIDO ACEPTADO O NO. Un rechazo sin rastro deja al
@@ -52,9 +53,10 @@ public sealed class PaymentService
             _payments.Put(payment);
             _idempotency.Remember("payment", key, id);
 
-            return referencia is null
-                ? Rejection.Conflict($"{PaymentRules.CodePrefix}.declined", "El medio de pago rechazó la autorización.")
-                : Result.Ok(payment);
+            // El motivo sale tal cual del proveedor, y el reintento depende de CUÁL fue: un
+            // rechazo firme no se reintenta y una caída sí.
+            var rechazo = PaymentRules.FromAttempt(intento, "la autorización");
+            return rechazo is not null ? Result.Rejected<Payment>(rechazo) : Result.Ok(payment);
         }
     }
 
@@ -83,10 +85,11 @@ public sealed class PaymentService
             var motivo = PaymentRules.CheckCapturable(payment);
             if (motivo is not null) return Result.Rejected<Payment>(motivo);
 
-            if (!_provider.Capture(payment.ProviderReference!, payment.Amount))
+            var capturaIntento = _provider.Capture(payment.ProviderReference!, payment.Amount);
+            if (PaymentRules.FromAttempt(capturaIntento, "la captura") is { } falloCaptura)
             {
-                return Rejection.Unavailable($"{PaymentRules.CodePrefix}.capture_failed",
-                    "El medio de pago no pudo capturar. La autorización sigue en pie.");
+                // La autorización sigue en pie pase lo que pase: no se toca el estado.
+                return Result.Rejected<Payment>(falloCaptura);
             }
 
             var capturado = payment with { Status = PaymentStatus.Captured, CapturedAtUtc = Now };
@@ -110,9 +113,9 @@ public sealed class PaymentService
             if (motivo is not null) return Result.Rejected<Payment>(motivo);
             if (payment.Status == PaymentStatus.Voided) return Result.Ok(payment);
 
-            if (!_provider.Void(payment.ProviderReference!))
+            if (PaymentRules.FromAttempt(_provider.Void(payment.ProviderReference!), "la liberación") is { } falloVoid)
             {
-                return Rejection.Unavailable($"{PaymentRules.CodePrefix}.void_failed", "El medio de pago no pudo liberar la autorización.");
+                return Result.Rejected<Payment>(falloVoid);
             }
 
             var liberado = payment with { Status = PaymentStatus.Voided };
@@ -150,9 +153,9 @@ public sealed class PaymentService
             var motivo = PaymentRules.CheckRefundable(payment, amount);
             if (motivo is not null) return Result.Rejected<Payment>(motivo);
 
-            if (!_provider.Refund(payment.ProviderReference!, amount))
+            if (PaymentRules.FromAttempt(_provider.Refund(payment.ProviderReference!, amount), "la devolución") is { } falloRefund)
             {
-                return Rejection.Unavailable($"{PaymentRules.CodePrefix}.refund_failed", "El medio de pago no pudo devolver.");
+                return Result.Rejected<Payment>(falloRefund);
             }
 
             var devoluciones = payment.Refunds.Append(

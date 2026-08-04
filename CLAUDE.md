@@ -491,10 +491,12 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   siendo `Stub` en los dos. Faltan `StubReservationService` →
   `Api.Booking` y `StubPaymentProvider` → `Api.Payments`.
 - **El borde ya avisa, pero todavía no cobra.** `Api.Notifications` tiene
-  transporte real (Resend, ADR 0131) y le falta solo la credencial del
-  arquitecto; `Api.Payments` sigue sobre `LoggingPaymentProvider` y **no
-  cobra**. Mientras eso siga así, ningún demo de venta corre de punta a
-  punta. Es la HU 6a de la épica #2.
+  transporte real (Resend, ADR 0131) y le falta solo la credencial.
+  `Api.Payments` ya distingue **rechazado** (no se reintenta) de **caído**
+  (sí) de **sin configurar**, y con un nombre de proveedor puesto rechaza a
+  gritos en vez de caer al stub en silencio — hay gate (HU #27). Lo que
+  falta es **el adaptador real y la cuenta comercial**: hoy sigue sin mover
+  plata, así que ningún demo de venta corre de punta a punta.
 - **Nada barre los envíos que quedaron en `Queued`.** Reintenta quien
   llama. El barrido periódico es la máquina de `Bff.Core` y ponerlo dentro
   de la capacidad duplicaría esa lógica.

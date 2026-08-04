@@ -22,7 +22,43 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<PaymentStorageOptions>(builder.Configuration.GetSection("Payments:Storage"));
 builder.Services.AddSingleton<IPaymentStore, FileSystemPaymentStore>();
-builder.Services.AddSingleton<IPaymentProvider, LoggingPaymentProvider>();
+// Qué proveedor cobra — `Payments:Provider` (HU #27).
+//
+//   (vacío) / "logging"  → LoggingPaymentProvider. Dice que sí a todo y lo grita. Es el default
+//                          de desarrollo: un clon limpio corre el flujo sin cuenta de pasarela.
+//   cualquier otro       → se cobra de verdad con ESE, y si le falta la credencial se registra
+//                          NotConfiguredPaymentProvider, que RECHAZA cada cobro a gritos.
+//
+// La tercera opción —el nombre puesto y el stub sirviendo en silencio— es justo el defecto que
+// el CMS ya sufrió, y por eso no existe: o cobra, o dice a gritos que no puede.
+builder.Services.AddSingleton<IPaymentProvider>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var pedido = (cfg["Payments:Provider"] ?? string.Empty).Trim();
+
+    if (pedido.Length == 0 || string.Equals(pedido, "logging", StringComparison.OrdinalIgnoreCase))
+    {
+        return new LoggingPaymentProvider(sp.GetRequiredService<ILogger<LoggingPaymentProvider>>());
+    }
+
+    // Un proveedor de verdad necesita, como mínimo, con qué autenticarse. Sin eso no hay
+    // integración que valga: se registra el que rechaza y grita.
+    var llave = cfg[$"Payments:{pedido}:ApiKey"];
+    var falta = string.IsNullOrWhiteSpace(llave) ? $"Payments:{pedido}:ApiKey" : null;
+
+    if (falta is not null)
+    {
+        return new NotConfiguredPaymentProvider(
+            pedido, falta, sp.GetRequiredService<ILogger<NotConfiguredPaymentProvider>>());
+    }
+
+    // Acá va el adaptador real cuando exista la cuenta comercial. Mientras tanto, pedir un
+    // proveedor CON credencial y no tener adaptador es un defecto de despliegue, no un motivo
+    // para caer al stub en silencio.
+    return new NotConfiguredPaymentProvider(
+        pedido, $"el adaptador de '{pedido}' (todavía no implementado)",
+        sp.GetRequiredService<ILogger<NotConfiguredPaymentProvider>>());
+});
 builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
     new FileIdempotencyLedger(sp.GetRequiredService<IOptions<PaymentStorageOptions>>().Value.Root));
 builder.Services.AddSingleton(TimeProvider.System);
