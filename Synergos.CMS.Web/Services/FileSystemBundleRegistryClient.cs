@@ -23,9 +23,13 @@ namespace Synergos.CMS.Web.Services;
 ///    detecta cambios y recarga el registry + invalida manifest cache
 ///    de los elementos afectados. Atomic swap del dictionary
 ///    (<c>volatile</c> reference) garantiza reads lock-free.
-/// 3. <b>SRI lazy compute</b>: si el <c>manifest.json</c> no trae
-///    <c>integrity</c>, lo calcula on-the-fly del <c>main.js</c> y lo
-///    cachea. El CDN team NO necesita inyectar SRI manualmente.
+/// 3. <b>SRI</b>: lo que traiga el <c>manifest.json</c>, si no lo que el
+///    publicador escribió en <c>meta.json</c> (que es donde vive de
+///    verdad), y sólo si no hay ninguno de los dos se calcula on-the-fly
+///    del <c>main.js</c>. Ese cálculo es un RESPALDO, no la fuente: es lo
+///    que tapó durante meses que este cliente leyera el SRI en el fichero
+///    equivocado — su gemelo HTTP, que no puede calcular nada, devolvía
+///    <c>null</c> siempre (defecto #32).
 /// 4. <b>Degradación graceful</b>: registry roto o ausente → log
 ///    Warning + el cliente retorna null para todos los tags. Manifests
 ///    individuales rotos → log + ese tag retorna null, el resto sigue.
@@ -113,7 +117,6 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
         var folderName = ResolveFolderName(element.Name, element.Tag, s.StripFolderPrefix);
         var bundleDir = Path.Combine(snap.BundlesRootPath, folderName, framework, slot);
         var manifestPath = Path.Combine(bundleDir, "manifest.json");
-        var mainJsPath = Path.Combine(bundleDir, "main.js");
 
         var manifest = LoadManifestCached(manifestPath);
         if (manifest is null)
@@ -132,10 +135,29 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
             : slot;
         var mainEntryUrl = BuildPublicUrl(s.PublicBaseUrl, s.BundlesNamespace, folderName, framework, urlSlot, entryScript);
 
+        // Orden: lo que el manifiesto diga, lo que el publicador escribió en meta.json, y sólo
+        // entonces calcularlo. Leer meta.json ANTES de calcular es lo que arregló el defecto #32:
+        // el SRI se publica desde siempre y este cliente lo ignoraba — no se notaba porque su
+        // respaldo tapaba la lectura equivocada. Su gemelo HTTP no puede calcular nada, así que
+        // ahí el mismo error quedaba a la vista como un `integrity` nulo.
+        //
+        // Y hace que las dos formas de leer el mismo registry vuelvan a coincidir: recalcular
+        // emitía sha384 donde el CDN publica sha256, o sea DOS SRI distintos para el MISMO
+        // fichero según por dónde se leyera. Los dos son válidos, pero divergentes; y esta clase
+        // ya advertía que si los gemelos divergen, uno de los dos está leyendo mal.
         string? integrity = manifest.Integrity;
+        if (string.IsNullOrWhiteSpace(integrity))
+        {
+            integrity = LoadPublishedIntegrity(bundleDir, entryScript);
+        }
         if (string.IsNullOrWhiteSpace(integrity) && s.ComputeIntegrityIfMissing)
         {
-            integrity = ComputeIntegrityCached(mainJsPath);
+            // Del entryScript, NO de `main.js` a secas: este path estaba cableado a `main.js` y
+            // habría hasheado el fichero equivocado para cualquier elemento que publicara otra
+            // entrada — el mismo defecto de #32 (leer el SRI de otro fichero) cinco líneas más
+            // abajo. Hoy no lo dispara nadie porque las 139 entradas del CDN son `main.js`, que
+            // es justamente por lo que nunca se vio.
+            integrity = ComputeIntegrityCached(Path.Combine(bundleDir, entryScript));
         }
 
         var descriptor = new BundleDescriptor(
@@ -314,6 +336,52 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
             return null;
         }
     }
+
+    /// <summary>
+    /// El SRI que el publicador ya escribió en <c>meta.json</c>, si describe al script que se va
+    /// a emitir.
+    /// </summary>
+    /// <remarks>
+    /// La comprobación del <c>entryScript</c> es la misma que hace el gemelo HTTP y por la misma
+    /// razón: <c>meta.json</c> hashea <c>main.js</c> —su <c>bundleSize</c> es el de ese fichero—,
+    /// no «la entrada, sea cual sea». Con otro <c>entryScript</c> se cae al cálculo local, que sí
+    /// sabe hashear el fichero correcto. Un SRI equivocado no degrada el elemento: lo borra.
+    /// </remarks>
+    private string? LoadPublishedIntegrity(string bundleDir, string entryScript)
+    {
+        if (!string.Equals(entryScript, "main.js", StringComparison.Ordinal)) return null;
+
+        var metaPath = Path.Combine(bundleDir, "meta.json");
+        try
+        {
+            if (_metaCache.TryGetValue(metaPath, out var cached)
+                && cached.LastWriteUtc == File.GetLastWriteTimeUtc(metaPath))
+            {
+                return cached.Integrity;
+            }
+        }
+        catch (IOException)
+        {
+            // Borrado entre el check y la lectura; cae al reload de abajo.
+        }
+
+        try
+        {
+            var meta = JsonSerializer.Deserialize<ElementMeta>(File.ReadAllBytes(metaPath), DeserializeOptions);
+            if (string.IsNullOrWhiteSpace(meta?.Integrity)) return null;
+            _metaCache[metaPath] = new IntegrityCacheEntry(meta!.Integrity!, File.GetLastWriteTimeUtc(metaPath));
+            return meta.Integrity;
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            // Un CDN local sin meta.json es lo normal en un clon a medio publicar. Se cae al
+            // cálculo, que es lo que este cliente venía haciendo siempre.
+            return null;
+        }
+    }
+
+    private static readonly ConcurrentDictionary<string, IntegrityCacheEntry> _metaCache =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly ConcurrentDictionary<string, IntegrityCacheEntry> _integrityCache =
         new(StringComparer.OrdinalIgnoreCase);
@@ -515,6 +583,22 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
         public string? Version { get; set; }
         public string? Tier { get; set; }
         public string? EntryScript { get; set; }
+        public string? Integrity { get; set; }
+    }
+
+    /// <summary>
+    /// El <c>meta.json</c> que <c>publish.mjs</c> deja al lado del manifiesto — el fichero donde
+    /// el SRI vive de verdad. <c>BundleSize</c> se lee aunque no se use: es lo que documenta que
+    /// el <c>Integrity</c> de acá es el de <c>main.js</c>.
+    /// </summary>
+    private sealed class ElementMeta
+    {
+        public string? Element { get; set; }
+        public string? Framework { get; set; }
+        public string? Version { get; set; }
+        public string? Commit { get; set; }
+        public string? BuiltAt { get; set; }
+        public long? BundleSize { get; set; }
         public string? Integrity { get; set; }
     }
 

@@ -77,9 +77,19 @@ public sealed class HttpBundleRegistryClientTests
     }
     """;
 
+    // Ojo: SIN `integrity`. Es la forma real de lo que publica el CDN — se comprobó contra el
+    // vivo, elemento por elemento: ni uno solo trae integrity en el manifiesto.
     private const string ManifiestoBadge = """
     { "tag": "synergos-badge", "alias": "elementSynBadge", "framework": "angular",
       "version": "0.1.0", "tier": "primitive", "entryScript": "main.js" }
+    """;
+
+    // Y acá sí. El SRI vive en el fichero de al lado, que es lo que el defecto #32 no leía.
+    private const string SriBadge = "sha256-KbM7gjPA8YeKubLAxiKOXnMPSrC/Jd6xQRAKYMr5s+k=";
+
+    private const string MetaBadge = $$"""
+    { "element": "badge", "framework": "angular", "version": "0.1.0", "commit": "91a0a38",
+      "builtAt": "2026-08-04T00:35:34.192Z", "bundleSize": 1845, "integrity": "{{SriBadge}}" }
     """;
 
     private static (HttpBundleRegistryClient Cliente, CdnFalso Cdn, RelojFalso Reloj) Nuevo(
@@ -87,7 +97,8 @@ public sealed class HttpBundleRegistryClientTests
     {
         cdn ??= new CdnFalso()
             .Con("/synergos/registry.json", Registry)
-            .Con("/synergos/badge/angular/0.1.0/manifest.json", ManifiestoBadge);
+            .Con("/synergos/badge/angular/0.1.0/manifest.json", ManifiestoBadge)
+            .Con("/synergos/badge/angular/0.1.0/meta.json", MetaBadge);
 
         var s = ajustes ?? new BundleRegistrySettings
         {
@@ -188,7 +199,8 @@ public sealed class HttpBundleRegistryClientTests
         // por un despliegue del CDN que salió mal.
         var cdn = new CdnFalso()
             .Con("/synergos/registry.json", Registry)
-            .Con("/synergos/badge/angular/0.1.0/manifest.json", ManifiestoBadge);
+            .Con("/synergos/badge/angular/0.1.0/manifest.json", ManifiestoBadge)
+            .Con("/synergos/badge/angular/0.1.0/meta.json", MetaBadge);
         var (cliente, _, reloj) = Nuevo(cdn: cdn);
         Assert.NotNull(await cliente.TryResolveAsync("synergos-badge"));
 
@@ -218,8 +230,9 @@ public sealed class HttpBundleRegistryClientTests
 
         for (var i = 0; i < 20; i++) await cliente.TryResolveAsync("synergos-badge");
 
-        // Una por el registry y una por el manifiesto del badge. Ni una más.
-        Assert.Equal(2, cdn.Peticiones);
+        // Una por el registry, una por el manifiesto del badge y una por su meta. Ni una más.
+        // Las tres son de la PRIMERA resolución: las otras diecinueve no tocan la red.
+        Assert.Equal(3, cdn.Peticiones);
     }
 
     [Fact]
@@ -269,6 +282,116 @@ public sealed class HttpBundleRegistryClientTests
         reloj.Avanzar(TimeSpan.FromMinutes(5));
 
         Assert.Equal("0.2.0", (await cliente.TryResolveAsync("synergos-badge"))!.Version);
+    }
+
+    // ── El SRI (defecto #32) ────────────────────────────────────────────────
+    //
+    // Los once tests de arriba se escribieron con manifiestos falsos que el propio test
+    // construía, y ninguno tocó un meta.json PORQUE QUIEN LOS ESCRIBIÓ CREÍA QUE ESE FICHERO NO
+    // EXISTÍA — la misma suposición equivocada que el código. Lo destapó mirar el CDN vivo con
+    // curl, no la suite. Los de acá abajo son los que faltaban.
+
+    [Fact]
+    public async Task El_integrity_sale_del_meta_aunque_el_manifiesto_no_lo_traiga()
+    {
+        // LA MUTACIÓN DEL TICKET. Un manifiesto sin integrity y un meta CON integrity es
+        // exactamente lo que sirve el CDN de producción. Antes del arreglo esto daba null y todo
+        // bundle salía sin verificar: el navegador ejecutaba lo que llegara.
+        var (cliente, _, _) = Nuevo();
+
+        var d = await cliente.TryResolveAsync("synergos-badge");
+
+        Assert.Equal(SriBadge, d!.Integrity);
+    }
+
+    [Fact]
+    public async Task Si_el_manifiesto_SI_trae_integrity_gana_el_y_no_se_pide_el_meta()
+    {
+        // El manifiesto describe al entryScript por definición, así que si algún día lo trajera
+        // sería la fuente más precisa — y ahorraría la ida al meta.
+        var cdn = new CdnFalso()
+            .Con("/synergos/registry.json", Registry)
+            .Con("/synergos/badge/angular/0.1.0/manifest.json", """
+                { "tag": "synergos-badge", "framework": "angular", "version": "0.1.0",
+                  "entryScript": "main.js", "integrity": "sha384-DELMANIFIESTO" }
+                """)
+            .Con("/synergos/badge/angular/0.1.0/meta.json", MetaBadge);
+        var (cliente, _, _) = Nuevo(cdn: cdn);
+
+        var d = await cliente.TryResolveAsync("synergos-badge");
+
+        Assert.Equal("sha384-DELMANIFIESTO", d!.Integrity);
+        Assert.DoesNotContain(cdn.Pedidas, r => r.EndsWith("meta.json", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Sin_meta_json_el_bundle_sale_sin_integrity_pero_SALE()
+    {
+        // La degradación que ya se tenía antes del arreglo. Perder la verificación es aceptable;
+        // perder el elemento porque su meta no está, no.
+        var cdn = new CdnFalso()
+            .Con("/synergos/registry.json", Registry)
+            .Con("/synergos/badge/angular/0.1.0/manifest.json", ManifiestoBadge);   // sin meta
+        var (cliente, _, _) = Nuevo(cdn: cdn);
+
+        var d = await cliente.TryResolveAsync("synergos-badge");
+
+        Assert.NotNull(d);
+        Assert.Null(d!.Integrity);
+        Assert.EndsWith("/main.js", d.MainEntryUri.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Con_otra_entrada_NO_se_emite_el_hash_de_main_js()
+    {
+        // Lo delicado del ticket, y la única forma de que este arreglo empeore las cosas.
+        // meta.json hashea `main.js` —su bundleSize es el de ese fichero—, no «la entrada, sea
+        // cual sea». Emitir ese hash para `boot.js` haría que el navegador RECHACE el script: el
+        // elemento no se registra y desaparece entero. Sin integrity sólo se pierde la
+        // verificación, que es lo que había ayer.
+        var cdn = new CdnFalso()
+            .Con("/synergos/registry.json", Registry)
+            .Con("/synergos/badge/angular/0.1.0/manifest.json", """
+                { "tag": "synergos-badge", "framework": "angular", "version": "0.1.0",
+                  "entryScript": "boot.js" }
+                """)
+            .Con("/synergos/badge/angular/0.1.0/meta.json", MetaBadge);
+        var (cliente, _, _) = Nuevo(cdn: cdn);
+
+        var d = await cliente.TryResolveAsync("synergos-badge");
+
+        Assert.Null(d!.Integrity);
+        Assert.EndsWith("/boot.js", d.MainEntryUri.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task El_meta_versionado_se_cachea_para_SIEMPRE_igual_que_el_manifiesto()
+    {
+        // «Una sola ida más por bundle», que es la condición que el ticket le puso al arreglo.
+        // Si se releyera, verificar el SRI costaría un viaje por bundle y por página.
+        var (cliente, cdn, reloj) = Nuevo();
+        await cliente.TryResolveAsync("synergos-badge");
+
+        reloj.Avanzar(TimeSpan.FromDays(30));
+        await cliente.TryResolveAsync("synergos-badge");
+
+        Assert.Single(cdn.Pedidas, r => r.EndsWith("meta.json", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Un_meta_ilegible_no_tumba_la_resolucion()
+    {
+        // JSON roto en el CDN es un despliegue a medias, no un motivo para apagar el elemento.
+        var cdn = new CdnFalso()
+            .Con("/synergos/registry.json", Registry)
+            .Con("/synergos/badge/angular/0.1.0/manifest.json", ManifiestoBadge)
+            .Con("/synergos/badge/angular/0.1.0/meta.json", "{ esto no es json");
+        var (cliente, _, _) = Nuevo(cdn: cdn);
+
+        var d = await cliente.TryResolveAsync("synergos-badge");
+
+        Assert.NotNull(d);
+        Assert.Null(d!.Integrity);
     }
 
     /// <summary>Un <see cref="IOptionsMonitor{T}"/> que no cambia — no hace falta más acá.</summary>

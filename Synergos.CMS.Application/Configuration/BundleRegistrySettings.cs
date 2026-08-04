@@ -73,12 +73,19 @@ public sealed class BundleRegistrySettings
     public bool StripFolderPrefix { get; init; } = true;
 
     /// <summary>
-    /// Si true, computa el SRI integrity (sha384) del main.js cuando el
-    /// manifest no trae <c>integrity</c>. Cacheado in-memory por path
-    /// hasta que el FileSystemWatcher detecte cambio del archivo.
-    /// Default <c>true</c>. Set a false si la CDN ya provee SRI hashes
-    /// y querés evitar el read+hash overhead.
+    /// Si true, computa el SRI integrity (sha384) del entry script cuando
+    /// NI el <c>manifest.json</c> NI el <c>meta.json</c> lo traen. Cacheado
+    /// in-memory por path hasta que el FileSystemWatcher detecte cambio.
+    /// Default <c>true</c>. Sólo aplica al cliente de filesystem: el HTTP no
+    /// puede descargarse cada bundle para hashearlo.
     /// </summary>
+    /// <remarks>
+    /// Es un RESPALDO, no la fuente. El SRI se publica en <c>meta.json</c>
+    /// desde siempre, y este cálculo fue lo que tapó durante meses que el
+    /// cliente de filesystem lo leyera en el fichero equivocado — mientras su
+    /// gemelo HTTP, incapaz de calcular nada, devolvía <c>null</c> a secas
+    /// (defecto #32). Se lee lo publicado primero.
+    /// </remarks>
     public bool ComputeIntegrityIfMissing { get; init; } = true;
 
     /// <summary>

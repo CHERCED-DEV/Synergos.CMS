@@ -38,11 +38,18 @@ namespace Synergos.CMS.Web.Services;
 ///   trabajo sin información.</item>
 /// </list>
 ///
-/// <para><b>Sin SRI, y dicho de frente.</b> El manifiesto que publica hoy <c>publish.mjs</c> no
-/// trae <c>integrity</c>, y calcularlo acá exigiría descargarse cada bundle entero para hacerle
-/// el hash. El sitio correcto para arreglarlo es el publicador —que ya calcula SRI para el
-/// import-map del runtime, o sea que sabe hacerlo—, no el consumidor. Mientras tanto el
-/// descriptor sale con <c>Integrity = null</c>, que es un valor previsto y documentado.</para>
+/// <para><b>El SRI vive en <c>meta.json</c>, no en <c>manifest.json</c>.</b> Esta clase decía lo
+/// contrario —«el publicador no lo emite, y calcularlo acá exigiría descargarse cada bundle»— y
+/// era falso: <c>publish.mjs</c> lo calcula y lo escribe desde siempre, en el fichero de al lado.
+/// El resultado fue que todo bundle salía sin <c>integrity</c> y el navegador no verificaba nada
+/// (defecto #32). Se lee de <c>meta.json</c>, con una sola ida más por bundle y cacheada igual
+/// que el manifiesto, porque la ruta versionada es inmutable por contrato.</para>
+///
+/// <para><b>Y se usa sólo si describe al script que se va a emitir.</b> <c>meta.json</c> hashea
+/// <c>main.js</c> —su <c>bundleSize</c> es el de ese fichero—, así que si algún elemento
+/// publicara otro <c>entryScript</c> el hash sería el del fichero equivocado. Un SRI equivocado
+/// es peor que no tener SRI: el navegador se niega a ejecutar el script y el elemento desaparece
+/// entero. Ante la duda se emite <c>null</c>, que sólo pierde la verificación.</para>
 /// </remarks>
 public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposable
 {
@@ -59,6 +66,7 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
 
     private readonly SemaphoreSlim _cargando = new(1, 1);
     private readonly ConcurrentDictionary<string, ElementManifest> _manifiestos = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ElementMeta> _metas = new(StringComparer.Ordinal);
 
     // Referencia volátil: los lectores ven un snapshot consistente sin cerrojo, y el refresco
     // lo reemplaza entero de un golpe. Nunca hay un snapshot a medio construir.
@@ -132,8 +140,8 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
             Tag: el.Tag,
             Alias: el.Alias,
             Tier: el.Tier,
-            // Ver el remark de la clase: el publicador es quien tiene que emitirlo.
-            Integrity: manifiesto?.Integrity,
+            Integrity: await ResolverIntegridadAsync(s, carpeta, framework, rutaVersion, entrada, manifiesto, ct)
+                .ConfigureAwait(false),
             Framework: framework);
     }
 
@@ -261,6 +269,69 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
         }
     }
 
+    // ── El SRI ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// De dónde sale el <c>integrity</c> del descriptor, y cuándo se decide no emitirlo.
+    /// </summary>
+    /// <remarks>
+    /// <para>El orden importa. Si el manifiesto lo trajera, ya está: describe al
+    /// <c>entryScript</c> por definición y no hace falta otra ida. Hoy no lo trae ninguno, así
+    /// que el camino real es el segundo: <c>meta.json</c>, que es donde el publicador lo escribe.
+    /// </para>
+    ///
+    /// <para><b>Y sólo si la entrada es <c>main.js</c>.</b> Es la comprobación que evita el peor
+    /// resultado posible de este arreglo. <c>meta.json</c> hashea el bundle —<c>bundleSize</c> es
+    /// el tamaño de <c>main.js</c>—, no «el fichero de entrada, sea cual sea». El día que un
+    /// elemento publique otro <c>entryScript</c>, emitir ese hash rompería el elemento entero: el
+    /// navegador rechaza el script y no queda nada que hidratar. Emitir <c>null</c> sólo pierde
+    /// la verificación, que es exactamente lo que se tenía antes de este arreglo.</para>
+    /// </remarks>
+    private async Task<string?> ResolverIntegridadAsync(
+        BundleRegistrySettings s, string carpeta, string framework, string rutaVersion,
+        string entrada, ElementManifest? manifiesto, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(manifiesto?.Integrity)) return manifiesto!.Integrity;
+
+        if (!string.Equals(entrada, "main.js", StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "Bundle {Carpeta}/{Framework}/{Version}: la entrada es {Entrada} y meta.json hashea main.js; "
+                + "se emite sin integrity antes que emitir el hash equivocado",
+                carpeta, framework, rutaVersion, entrada);
+            return null;
+        }
+
+        var meta = await ObtenerMetaAsync(s, carpeta, framework, rutaVersion, ct).ConfigureAwait(false);
+        return string.IsNullOrWhiteSpace(meta?.Integrity) ? null : meta!.Integrity;
+    }
+
+    private async Task<ElementMeta?> ObtenerMetaAsync(
+        BundleRegistrySettings s, string carpeta, string framework, string rutaVersion, CancellationToken ct)
+    {
+        var url = Url(s, carpeta, framework, rutaVersion, "meta.json");
+
+        // Misma caché eterna que el manifiesto y por la misma razón: la ruta lleva la versión
+        // exacta, que por contrato no cambia de contenido. Es la ida de más que el arreglo cuesta
+        // — una por bundle en toda la vida del proceso, no una por render.
+        if (_metas.TryGetValue(url, out var cacheado)) return cacheado;
+
+        try
+        {
+            var json = await _http.GetByteArrayAsync(url, ct).ConfigureAwait(false);
+            var meta = JsonSerializer.Deserialize<ElementMeta>(json, DeserializeOptions);
+            if (meta is not null) _metas[url] = meta;
+            return meta;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            // Un CDN que no publica meta.json deja el sitio como estaba antes de este arreglo:
+            // sin verificación, pero sirviendo. Perder el SRI no puede costar el elemento.
+            _logger.LogWarning(ex, "No se pudo leer {Url}; el bundle sale sin integrity", url);
+            return null;
+        }
+    }
+
     // ── Lo que sale igual que en el cliente de filesystem ───────────────────
 
     private IReadOnlyList<Uri> ResolverDependencias(RegistryElement el, Snapshot snap, BundleRegistrySettings s)
@@ -382,6 +453,22 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
         public string? Version { get; set; }
         public string? Tier { get; set; }
         public string? EntryScript { get; set; }
+        public string? Integrity { get; set; }
+    }
+
+    /// <summary>
+    /// El <c>meta.json</c> que el publicador escribe al lado del manifiesto — el que sí trae el
+    /// SRI. <c>BundleSize</c> se lee aunque no se use: es lo que documenta que el
+    /// <c>Integrity</c> de este fichero es el de <c>main.js</c> y no el de otra cosa.
+    /// </summary>
+    private sealed class ElementMeta
+    {
+        public string? Element { get; set; }
+        public string? Framework { get; set; }
+        public string? Version { get; set; }
+        public string? Commit { get; set; }
+        public string? BuiltAt { get; set; }
+        public long? BundleSize { get; set; }
         public string? Integrity { get; set; }
     }
 }

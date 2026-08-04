@@ -72,12 +72,27 @@ public sealed class FileSystemBundleRegistryClientTests : IDisposable
         System.IO.File.WriteAllText(Path.Combine(dir, "manifest.json"), content);
     }
 
-    private void WriteMainJs(string folder, string framework, string slot, string body)
+    private void WriteMainJs(string folder, string framework, string slot, string body) =>
+        WriteScript(folder, framework, slot, "main.js", body);
+
+    private void WriteScript(string folder, string framework, string slot, string file, string body)
     {
         var dir = Path.Combine(_bundlesRoot, folder, framework, slot);
         Directory.CreateDirectory(dir);
-        System.IO.File.WriteAllBytes(Path.Combine(dir, "main.js"), Encoding.UTF8.GetBytes(body));
+        System.IO.File.WriteAllBytes(Path.Combine(dir, file), Encoding.UTF8.GetBytes(body));
     }
+
+    /// <summary>El fichero de al lado del manifiesto — donde el publicador escribe el SRI.</summary>
+    private void WriteMeta(string folder, string framework, string slot, string content)
+    {
+        var dir = Path.Combine(_bundlesRoot, folder, framework, slot);
+        Directory.CreateDirectory(dir);
+        System.IO.File.WriteAllText(Path.Combine(dir, "meta.json"), content);
+    }
+
+    private static string Sha384(string body) =>
+        "sha384-" + Convert.ToBase64String(
+            System.Security.Cryptography.SHA384.HashData(Encoding.UTF8.GetBytes(body)));
 
     private const string SimpleRegistry = """
     {
@@ -246,6 +261,76 @@ public sealed class FileSystemBundleRegistryClientTests : IDisposable
 
         Assert.NotNull(d);
         Assert.Equal("sha384-PRE_PROVIDED_HASH", d!.Integrity);
+    }
+
+    // ── El SRI publicado gana al calculado (defecto #32) ────────────────────
+
+    [Fact]
+    public async Task MetaJson_GanaAlCalculo_PorqueEsLoQueElPublicadorPublico()
+    {
+        // Este cliente NO tenía el defecto #32 sólo porque su respaldo lo tapaba: si el
+        // manifiesto no traía integrity, calculaba del disco y salía algo. Estaba leyendo el SRI
+        // en el fichero equivocado igual que su gemelo HTTP — pero disimulándolo.
+        //
+        // Y el disimulo tenía precio: recalcular emite sha384 donde el CDN publica sha256, o sea
+        // DOS SRI distintos para el MISMO fichero según por dónde se leyera el registry.
+        WriteRegistry(SimpleRegistry);
+        WriteManifest("column", "angular", "latest", SimpleManifestWithoutIntegrity);
+        WriteMainJs("column", "angular", "latest", "x");
+        WriteMeta("column", "angular", "latest", """
+        { "element": "column", "framework": "angular", "version": "0.1.0",
+          "bundleSize": 1, "integrity": "sha256-ELQUEPUBLICOELPIPELINE" }
+        """);
+
+        var d = await BuildClient().TryResolveAsync("synergos-column");
+
+        Assert.Equal("sha256-ELQUEPUBLICOELPIPELINE", d!.Integrity);
+    }
+
+    [Fact]
+    public async Task SinMetaJson_SigueCalculando_ElRespaldoNoSeFue()
+    {
+        // Un CDN local a medio publicar es lo normal en una máquina de desarrollo. El cálculo
+        // deja de ser la fuente, pero sigue siendo el respaldo.
+        WriteRegistry(SimpleRegistry);
+        WriteManifest("column", "angular", "latest", SimpleManifestWithoutIntegrity);
+        WriteMainJs("column", "angular", "latest", "x");   // sin meta.json
+
+        var d = await BuildClient().TryResolveAsync("synergos-column");
+
+        Assert.StartsWith("sha384-", d!.Integrity);
+    }
+
+    [Fact]
+    public async Task ConOtraEntrada_IgnoraElMeta_YHashea_LA_ENTRADA_no_main_js()
+    {
+        // Dos cosas a la vez, y las dos son «el SRI del fichero equivocado»:
+        //
+        // 1. meta.json hashea `main.js`, así que con otro entryScript su valor NO describe lo
+        //    que se va a emitir. Se ignora.
+        // 2. El cálculo de respaldo estaba cableado a `main.js` — habría devuelto el hash de
+        //    `main.js` para un elemento que sirve `boot.js`. Mismo defecto que #32, cinco líneas
+        //    más abajo, y con la misma razón para no haberse visto nunca: las 139 entradas del
+        //    CDN son `main.js`.
+        //
+        // Un SRI equivocado no degrada el elemento: el navegador rechaza el script y no queda
+        // nada que hidratar.
+        WriteRegistry(SimpleRegistry);
+        WriteManifest("column", "angular", "latest", """
+        { "tag": "synergos-column", "framework": "angular", "version": "0.1.0",
+          "entryScript": "boot.js" }
+        """);
+        WriteMainJs("column", "angular", "latest", "soy main");
+        WriteScript("column", "angular", "latest", "boot.js", "soy boot");
+        WriteMeta("column", "angular", "latest", """
+        { "element": "column", "bundleSize": 7, "integrity": "sha256-ELDEMAINJS" }
+        """);
+
+        var d = await BuildClient().TryResolveAsync("synergos-column");
+
+        Assert.NotEqual("sha256-ELDEMAINJS", d!.Integrity);
+        Assert.Equal(Sha384("soy boot"), d.Integrity);
+        Assert.NotEqual(Sha384("soy main"), d.Integrity);
     }
 
     [Fact]
