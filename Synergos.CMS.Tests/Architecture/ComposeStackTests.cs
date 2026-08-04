@@ -76,24 +76,31 @@ public sealed class ComposeStackTests
             .ToList();
 
     [Fact]
-    public void Toda_variable_documentada_la_CONSUME_el_compose()
+    public void Toda_variable_documentada_la_CONSUME_alguien()
     {
         // El defecto que evita, y que ya ocurrió DOS veces: `.env.example` promete una variable,
-        // el operador la rellena en el servidor, y el compose nunca se la pasa al contenedor.
+        // el operador la rellena en el servidor, y nadie se la pasa a nada.
         //
         // No falla y no avisa — el servicio arranca con su default y se comporta como si nadie
         // hubiera configurado nada. Pasó con `Notifications__Resend__*` (ADR 0131, desde que se
         // escribió) y con los modos de Tienda y Salud (HU #24 y #25).
         //
-        // Es el mismo modo de fallo que el compose ya vigila para los servicios —«no falla:
-        // falta»— aplicado a la configuración.
-        var compose = Compose();
+        // «Alguien» es el compose O un script de `tools/`: no todo lo que el servidor necesita
+        // entra por un contenedor —`SYNERGOS_BACKUP_DIR` lo lee `respaldo.sh`—, y exigir que
+        // TODO pase por el compose fue la primera versión de este gate. Se corrigió al primer
+        // rojo, que llegó una hora después de escribirlo.
+        var consumidores = new List<string> { Compose() };
+        consumidores.AddRange(
+            Directory.EnumerateFiles(Path.Combine(RepoRoot(), "tools"), "*.sh")
+                .Select(File.ReadAllText));
+
         var huerfanas = VariablesDocumentadas()
-            .Where(v => !compose.Contains("${" + v, StringComparison.Ordinal))
+            .Where(v => !consumidores.Any(c => c.Contains("${" + v, StringComparison.Ordinal)))
             .ToList();
 
         Assert.True(huerfanas.Count == 0,
-            $"`.env.example` declara variables que compose.prod.yml NO consume: {string.Join(", ", huerfanas)}. "
+            $"`.env.example` declara variables que no consume ni compose.prod.yml ni ningún "
+            + $"script de tools/: {string.Join(", ", huerfanas)}. "
             + "Rellenarlas en el servidor no haría nada, y nadie se enteraría.");
     }
 

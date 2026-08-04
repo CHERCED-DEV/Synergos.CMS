@@ -500,6 +500,14 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 - **Nada barre los envíos que quedaron en `Queued`.** Reintenta quien
   llama. El barrido periódico es la máquina de `Bff.Core` y ponerlo dentro
   de la capacidad duplicaría esa lógica.
+- **Las copias existen pero NO salen del servidor** (HU #31).
+  `tools/respaldo.sh` copia en frío los volúmenes de datos —la lista sale
+  del compose, no de una lista a mano— y `tools/restaurar.sh` los
+  devuelve, exigiendo `--si-estoy-seguro` porque pisa lo vivo. Hay gate
+  (`RespaldoTests`). **Lo que falta es llevárselas fuera de la máquina**:
+  una copia que muere con el disco no protege de perder el disco. Y dónde
+  viven y cuánto duran es decisión de privacidad — llevan direcciones de
+  entrega y nombres de pacientes.
 - **19 capacidades sobre fichero JSON** con `lock` de proceso. Una sola
   instancia por capacidad; dos réplicas se pisan. Está dicho de frente
   en `JsonCollectionStore` y es la primera razón para cambiar de almacén.
