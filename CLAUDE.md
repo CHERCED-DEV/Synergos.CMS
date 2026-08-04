@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2080 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2198 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2080 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2198 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -125,7 +125,7 @@ Synergos.CMS/
 ├── Synergos.Shared/             fontanería de host. Llave compartida, Rejection→HTTP,
 │                                libro de idempotencia, JsonCollectionStore.
 │                                Solo puede referenciar Core — UNA flecha.
-├── Synergos.Api.*/              LAS 20 CAPACIDADES, agnósticas. 128 endpoints.
+├── Synergos.Api.*/              LAS 20 CAPACIDADES, agnósticas. 132 endpoints.
 │     Sessions · Booking · Identity · Audit · Notifications · Documents ·
 │     Catalog · Pricing · Cart · Orders · Payments · Inventory · Workflow ·
 │     Messaging · Signing · Consent · Engagement · Geo · Fulfillment · Moderation
@@ -363,7 +363,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2080 tests):
+# Suite completa (2198 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -464,8 +464,8 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (129 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2080 tests, gates de
+**Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2198 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -503,8 +503,18 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   apaga. **Lo que NO rescata es el stock** —los apartados de
   `Api.Inventory` vencen solos a los 15 min—, sino la autorización del
   cobro, que no vence sola.
-- **Sigue sin barrerse lo que quedó en `Queued`** en `Api.Notifications`.
-  Reintenta quien llama. Es la otra mitad de #29.
+- **Lo que quedó en `Queued` ya se barre** (HU #29, la otra mitad).
+  `Bff.Core.DeliverySweeper` mira `GET /v1/deliveries/queued`, reintenta
+  lo que le queda techo y **rinde lo que no**: al llegar a
+  `Sweep:DeliveryRetryCeiling` el envío pasa a `GivenUp` con la última
+  causa escrita. Cero lo apaga, y apagado ni pregunta. El reparto es el
+  de siempre —la capacidad sabe QUÉ está colgado y CÓMO se reintenta; el
+  orquestador, CUÁNDO y CUÁNTAS VECES— y hay gate
+  (`BarridoSegregationTests`): meter el lazo o el techo dentro de
+  `Api.Notifications` rompe el build. **Lo levantan los dos
+  orquestadores, no uno elegido a dedo**; que coincidan sobre el mismo
+  envío no manda dos correos, porque la capacidad rechaza el reintento
+  simultáneo (`retry_in_flight`).
 - **Las copias existen pero NO salen del servidor** (HU #31).
   `tools/respaldo.sh` copia en frío los volúmenes de datos —la lista sale
   del compose, no de una lista a mano— y `tools/restaurar.sh` los
@@ -536,8 +546,10 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   (HU #15). Si algún día se abre, el gate va antes que el código.
 - **Seis orquestadores sin construir**: Viajes, Eventos, Realty, Gob,
   Academy, Social.
-- **Sin política de abandono** para una saga nunca confirmada; el
-  retroceso no es configurable.
+- **El retroceso no es configurable.** El plazo de abandono y el techo de
+  reintentos sí (HU #29), pero la *forma* de reintentar —ocho intentos con
+  retroceso exponencial— está cableada en `Compensator`. Nadie ha pedido
+  otra todavía.
 - ~~`Api.Inventory` necesita ajuste relativo~~ — **hecho** (defecto #30).
   `POST /v1/items/{id}/adjust` acepta `delta` («devolvieron 2», relativo,
   **exige `Idempotency-Key`** porque un relativo reintentado suma dos

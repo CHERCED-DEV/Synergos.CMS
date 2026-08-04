@@ -60,6 +60,21 @@ public enum DeliveryStatus
 
     /// <summary>El proveedor lo rechazó de plano y nunca hubo id. No se reintenta.</summary>
     Failed = 6,
+
+    /// <summary>
+    /// Se agotaron los reintentos. <b>Visible, y con la última causa</b> (HU #29).
+    /// </summary>
+    /// <remarks>
+    /// <para>Existe porque <b>un envío que se reintenta para siempre es peor que uno que se
+    /// rinde</b>: consume la cuota del proveedor, y sobre todo <i>esconde el fallo real</i> — un
+    /// `Queued` eterno se lee como «está en camino». Rendirse tiene que ser un estado que se
+    /// vea.</para>
+    ///
+    /// <para>Distinto de <see cref="Failed"/>: aquél es «el proveedor dijo que no» a la primera;
+    /// éste es «lo intentamos N veces y nunca contestó». El primero no se reintenta porque la
+    /// respuesta no va a cambiar; el segundo, porque alguien tiene que mirar.</para>
+    /// </remarks>
+    GivenUp = 7,
 }
 
 /// <summary>Un envío, con su rastro.</summary>
@@ -74,6 +89,8 @@ public enum DeliveryStatus
 /// <param name="AtUtc">Cuándo se registró.</param>
 /// <param name="ProviderMessageId">El id que dio el proveedor, o <c>null</c> si todavía no aceptó.</param>
 /// <param name="StatusAtUtc">Cuándo cambió el estado por última vez.</param>
+/// <param name="Attempts">Cuántas veces se intentó entregar, salieran como salieran (HU #29).</param>
+/// <param name="LastError">Por qué no salió la última vez. Es lo que vuelve accionable un abandono.</param>
 /// <remarks>
 /// <para><b><c>ProviderMessageId</c> es lo que hace posible saber si llegó.</b> El proveedor
 /// avisa del rebote citando <i>su</i> id, no el nuestro. Sin guardarlo, «entregado» y «rebotado»
@@ -91,7 +108,9 @@ public sealed record Delivery(
     DeliveryStatus Status,
     DateTimeOffset AtUtc,
     string? ProviderMessageId = null,
-    DateTimeOffset? StatusAtUtc = null);
+    DateTimeOffset? StatusAtUtc = null,
+    int Attempts = 0,
+    string? LastError = null);
 
 /// <summary>
 /// Por dónde sale de verdad un aviso.

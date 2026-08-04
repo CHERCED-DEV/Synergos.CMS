@@ -14,6 +14,26 @@ public sealed class NotificationService
     private readonly TimeProvider _clock;
     private readonly object _gate = new();
 
+    /// <summary>Los envíos que tienen un reintento hablando con el proveedor ahora mismo.</summary>
+    /// <remarks>
+    /// <para><b>Existe porque el barrido no es uno solo.</b> Cada orquestador levanta el suyo
+    /// (ver <c>Bff.Core.DeliverySweeper</c>), así que dos pueden pedir el reintento del mismo
+    /// envío en el mismo segundo. El cerrojo no alcanza: el envío se hace <i>fuera</i> de él —a
+    /// propósito, para no dejar la capacidad entera esperando a un tercero—, y en esa ventana los
+    /// dos ven el registro en <c>Queued</c> y los dos mandan. El destinatario recibe el aviso dos
+    /// veces.</para>
+    ///
+    /// <para><b>Y por qué no un estado <c>Sending</c> persistido</b>, que sería la respuesta
+    /// obvia: si el proceso muere entre marcar y enviar, el envío queda en un estado del que nadie
+    /// lo saca — ningún barrido lo mira, porque ya no está <c>Queued</c>. La marca en memoria se
+    /// pierde con el proceso, que es exactamente lo que se quiere: al reiniciar, el envío vuelve a
+    /// ser reintentable.</para>
+    ///
+    /// <para>No protege de dos <i>instancias</i> de esta capacidad — nada acá lo hace, y por eso
+    /// hay una sola (<c>CLAUDE.md</c> §11, <c>JsonCollectionStore</c>).</para>
+    /// </remarks>
+    private readonly HashSet<string> _enVuelo = new(StringComparer.Ordinal);
+
     public NotificationService(
         ITemplateStore templates, IDeliveryStore deliveries, INotificationSender sender,
         IIdempotencyLedger idempotency, TimeProvider clock)
@@ -258,6 +278,161 @@ public sealed class NotificationService
             _deliveries.Put(actualizado);
             _idempotency.Remember("provider-event", llave, actualizado.Id);
             return Result.Ok(actualizado);
+        }
+    }
+
+    // ── Lo que el barrido necesita (HU #29) ─────────────────────────────────
+
+    /// <summary>Los envíos que quedaron a medias, del más viejo al más nuevo.</summary>
+    /// <remarks>
+    /// <para>Sin filtro por destinatario a propósito, al revés que <see cref="ListDeliveries"/>:
+    /// quien pregunta acá no es una persona mirando lo suyo, es <b>el barrido</b> — y lo que
+    /// necesita es justo lo que aquella consulta prohíbe, todo lo que está colgado sin importar
+    /// de quién.</para>
+    ///
+    /// <para>Del más viejo primero: si el barrido se corta a la mitad, lo atendido es lo que más
+    /// lleva esperando.</para>
+    /// </remarks>
+    public Result<Page<Delivery>> ListQueued(int offset, int limit)
+    {
+        lock (_gate)
+        {
+            var todos = _deliveries.WithStatus(DeliveryStatus.Queued)
+                .OrderBy(d => d.AtUtc)
+                .ThenBy(d => d.Id, StringComparer.Ordinal)
+                .ToList();
+
+            return Result.Ok(new Page<Delivery>(todos.Skip(offset).Take(limit).ToList(), todos.Count, offset));
+        }
+    }
+
+    /// <summary>
+    /// Vuelve a intentar un envío que quedó en <c>Queued</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>No hace falta la llave original.</b> El registro guarda todo lo que el envío
+    /// necesita —canal, dirección, asunto y cuerpo ya rellenados—, así que reintentar es
+    /// reenviar <i>ese</i> registro. Pedirle al barrido que conservara la llave del llamador
+    /// original le obligaría a guardar un estado que no es suyo.</para>
+    ///
+    /// <para><b>El contador sube SIEMPRE que se intenta</b>, salga como salga. Es lo que le
+    /// permite a quien barre saber cuándo rendirse — y si solo subiera al fallar, un envío que
+    /// alterna fallo y silencio no llegaría nunca al techo.</para>
+    ///
+    /// <para><b>Un envío a la vez, aunque quien pida sean varios</b>: ver <see cref="_enVuelo"/>.
+    /// Dos barridos pidiendo el mismo reintento a la vez mandarían dos avisos idénticos.</para>
+    /// </remarks>
+    public async Task<Result<Delivery>> RetryAsync(string id, CancellationToken ct = default)
+    {
+        Delivery actual;
+        lock (_gate)
+        {
+            var hallado = _deliveries.Find(id);
+            if (hallado is null)
+            {
+                return Rejection.NotFound($"{NotificationRules.CodePrefix}.delivery_not_found", $"No existe el envío {id}.");
+            }
+            if (hallado.Status != DeliveryStatus.Queued)
+            {
+                // Ya salió, ya rebotó o ya se rindió: reintentarlo mandaría un segundo aviso.
+                return Rejection.Conflict($"{NotificationRules.CodePrefix}.not_retryable",
+                    $"El envío {id} está en {hallado.Status} y no se reintenta.");
+            }
+            if (!_enVuelo.Add(hallado.Id))
+            {
+                // Transitorio: el otro intento está EN CURSO, no es que este envío sea irreintentable.
+                // Quien barre tiene que poder volver por él en la siguiente vuelta.
+                return Rejection.Unavailable($"{NotificationRules.CodePrefix}.retry_in_flight",
+                    $"El envío {id} ya tiene un reintento en curso.");
+            }
+            actual = hallado;
+        }
+
+        try
+        {
+            Result<string> envio;
+            try
+            {
+                envio = await _sender.SendAsync(actual.Channel, actual.Address, actual.Subject, actual.Body,
+                    actual.Id, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                envio = Result.Rejected<string>(NotificationRules.TransportUnavailable(ex.GetType().Name));
+            }
+
+            lock (_gate)
+            {
+                var vigente = _deliveries.Find(actual.Id) ?? actual;
+                var intentos = vigente.Attempts + 1;
+
+                if (!envio.IsOk)
+                {
+                    var fallido = vigente with
+                    {
+                        Attempts = intentos,
+                        LastError = envio.Rejection!.Message,
+                        // Definitivo → Failed: no se vuelve. Transitorio → sigue en Queued.
+                        Status = envio.Rejection.IsTransient ? vigente.Status : DeliveryStatus.Failed,
+                        StatusAtUtc = Now,
+                    };
+                    _deliveries.Put(fallido);
+                    return Result.Rejected<Delivery>(envio.Rejection);
+                }
+
+                var aceptada = vigente with
+                {
+                    Status = NotificationRules.Advance(vigente.Status, DeliveryStatus.Accepted),
+                    ProviderMessageId = envio.Value,
+                    Attempts = intentos,
+                    LastError = null,
+                    StatusAtUtc = Now,
+                };
+                _deliveries.Put(aceptada);
+                return Result.Ok(aceptada);
+            }
+        }
+        finally
+        {
+            // Pase lo que pase. Un envío que se queda marcado como en vuelo no lo reintenta nadie
+            // nunca más, y el síntoma sería un `Queued` eterno — el mismo que esto viene a cerrar.
+            lock (_gate) { _enVuelo.Remove(actual.Id); }
+        }
+    }
+
+    /// <summary>
+    /// Da por perdido un envío. <b>Con la causa, que es lo que lo vuelve accionable.</b>
+    /// </summary>
+    /// <remarks>
+    /// Quien decide rendirse NO es esta capacidad: es el barrido de <c>Bff.Core</c>, que es donde
+    /// vive la máquina de reintentar y rendirse. Acá solo se anota — poner el techo también acá
+    /// duplicaría esa lógica, y el día que las dos difirieran nadie sabría cuál manda
+    /// (<c>CLAUDE.md</c> §11).
+    /// </remarks>
+    public Result<Delivery> GiveUp(string id, string? reason)
+    {
+        lock (_gate)
+        {
+            var hallado = _deliveries.Find(id);
+            if (hallado is null)
+            {
+                return Rejection.NotFound($"{NotificationRules.CodePrefix}.delivery_not_found", $"No existe el envío {id}.");
+            }
+            if (hallado.Status == DeliveryStatus.GivenUp) return Result.Ok(hallado);   // idempotente
+            if (hallado.Status != DeliveryStatus.Queued)
+            {
+                return Rejection.Conflict($"{NotificationRules.CodePrefix}.not_retryable",
+                    $"El envío {id} está en {hallado.Status}: no hay nada que abandonar.");
+            }
+
+            var rendido = hallado with
+            {
+                Status = DeliveryStatus.GivenUp,
+                LastError = string.IsNullOrWhiteSpace(reason) ? hallado.LastError : reason,
+                StatusAtUtc = Now,
+            };
+            _deliveries.Put(rendido);
+            return Result.Ok(rendido);
         }
     }
 

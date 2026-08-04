@@ -54,6 +54,14 @@ public static class SagaMachinery
         builder.Services.AddSingleton<SagaEngine<TSaga>>();
         builder.Services.AddHostedService<CompensationSweeper<TSaga>>();
 
+        // El barrido de avisos colgados (HU #29). Va en TODOS los orquestadores, no en uno
+        // elegido a dedo, y eso es deliberado: elegir uno obligaría a nombrarlo en algún sitio
+        // —«el de la tienda barre los avisos de salud»— y el día que ese host esté caído nadie
+        // barrería. Que barran todos cuesta una consulta de más por vuelta y sobrevive a que
+        // falte cualquiera. Que dos coincidan sobre el mismo envío no manda dos avisos: la
+        // capacidad rechaza el reintento simultáneo (`retry_in_flight`).
+        builder.Services.AddHostedService<DeliverySweeper>();
+
         // Un cliente nombrado POR capacidad: cada una con su URL, su llave y su timeout.
         // Mezclarlas haría que subir el timeout de Payments se lo subiera a todas.
         foreach (var cap in capabilities.Append(CompensationAlert.Capability).Distinct(StringComparer.Ordinal))

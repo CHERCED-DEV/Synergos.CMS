@@ -64,6 +64,7 @@ public sealed class NotificationServiceTests
         public Delivery? FindByProviderMessageId(string providerMessageId)
             => _d.Values.FirstOrDefault(x => x.ProviderMessageId == providerMessageId);
         public IReadOnlyList<Delivery> ForRecipient(Ref recipient) => _d.Values.Where(x => x.To == recipient).ToList();
+        public IReadOnlyList<Delivery> WithStatus(DeliveryStatus status) => _d.Values.Where(x => x.Status == status).ToList();
         public void Put(Delivery delivery) => _d[delivery.Id] = delivery;
 
         public string? Find(string scope, IdempotencyKey key) => _k.GetValueOrDefault($"{scope}|{key.Value}");

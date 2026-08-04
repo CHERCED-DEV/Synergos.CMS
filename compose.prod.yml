@@ -590,6 +590,13 @@ services:
       Salud__Sweep__IntervalSeconds: ${SYNERGOS_SWEEP_INTERVAL_SECONDS:-60}
       Salud__Sweep__AbandonAfterMinutes: ${SYNERGOS_ABANDON_AFTER_MINUTES:-60}
 
+      # Cuantas veces se reintenta un AVISO colgado antes de rendirse (HU #29).
+      # Va en todos los orquestadores a proposito: elegir uno obligaria a decir
+      # cual, y el dia que ese host este caido nadie barreria. Que dos coincidan
+      # sobre el mismo envio no manda dos correos — la capacidad rechaza el
+      # reintento simultaneo con retry_in_flight.
+      Salud__Sweep__DeliveryRetryCeiling: ${SYNERGOS_DELIVERY_RETRY_CEILING:-8}
+
       Salud__Alerts__ToKind: ${SYNERGOS_ALERTS_TO_KIND:-salud.guardia}
       Salud__Alerts__ToId: ${SYNERGOS_ALERTS_TO_ID:-operaciones}
       Salud__Alerts__Address: ${SYNERGOS_ALERTS_ADDRESS:-}
@@ -639,6 +646,13 @@ services:
       # no rompe, pero nadie se entera.
       Tienda__Sweep__IntervalSeconds: ${SYNERGOS_SWEEP_INTERVAL_SECONDS:-60}
       Tienda__Sweep__AbandonAfterMinutes: ${SYNERGOS_ABANDON_AFTER_MINUTES:-60}
+
+      # Cuantas veces se reintenta un AVISO colgado antes de rendirse (HU #29).
+      # Va en todos los orquestadores a proposito: elegir uno obligaria a decir
+      # cual, y el dia que ese host este caido nadie barreria. Que dos coincidan
+      # sobre el mismo envio no manda dos correos — la capacidad rechaza el
+      # reintento simultaneo con retry_in_flight.
+      Tienda__Sweep__DeliveryRetryCeiling: ${SYNERGOS_DELIVERY_RETRY_CEILING:-8}
 
       Tienda__Alerts__ToKind: ${SYNERGOS_ALERTS_TO_KIND:-tienda.guardia}
       Tienda__Alerts__ToId: ${SYNERGOS_ALERTS_TO_ID:-operaciones}

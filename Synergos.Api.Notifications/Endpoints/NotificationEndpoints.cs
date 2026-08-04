@@ -57,6 +57,24 @@ public static class NotificationEndpoints
                     p.Items.Select(DeliveryResponse.From).ToList(), p.Total, p.Offset, p.HasMore))
                 .ToHttp());
 
+        // ── Lo que el barrido usa (HU #29) ──────────────────────────────────
+        //
+        // El QUÉ está colgado y el CÓMO se reintenta viven acá porque son de esta capacidad.
+        // El CUÁNDO y el CUÁNTAS VECES viven en Bff.Core: es la máquina de reintentar y
+        // rendirse, y duplicarla acá haría que el día que difieran nadie supiera cuál manda.
+        app.MapGet("/v1/deliveries/queued", (int? offset, int? limit, NotificationService svc) =>
+            svc.ListQueued(Math.Max(0, offset ?? 0), QueryWindow.Limit(limit))
+                .Map(p => new PageResponse<DeliveryResponse>(
+                    p.Items.Select(DeliveryResponse.From).ToList(), p.Total, p.Offset, p.HasMore))
+                .ToHttp());
+
+        app.MapPost("/v1/deliveries/{id}/retry", async (string id, NotificationService svc, CancellationToken ct) =>
+            (await svc.RetryAsync(id, ct)).Map(DeliveryResponse.From).ToHttp());
+
+        // Rendirse es un ESTADO, no un silencio: un Queued eterno se lee como «va en camino».
+        app.MapPost("/v1/deliveries/{id}/give-up", (string id, GiveUpRequest? req, NotificationService svc) =>
+            svc.GiveUp(id, req?.Reason).Map(DeliveryResponse.From).ToHttp());
+
         // El camino de vuelta: lo que el proveedor cuenta de un envío suyo.
         //
         // Es el ÚNICO endpoint que no va detrás de la llave compartida, porque quien lo llama es

@@ -152,4 +152,16 @@ public sealed class SweepOptions
     /// </remarks>
     public DateTimeOffset? FechaDeAbandono(DateTimeOffset ahora)
         => AbandonAfterMinutes <= 0 ? null : ahora - TimeSpan.FromMinutes(AbandonAfterMinutes);
+
+    /// <summary>
+    /// Cuántas veces se reintenta un aviso colgado antes de rendirse. <b>Cero lo apaga.</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>El default es el mismo techo que las compensaciones
+    /// (<see cref="CompensationLimits.MaxAttempts"/>) <b>a propósito</b>: son la misma clase de
+    /// decisión —cuánto insistir contra un tercero que no contesta— y dos números distintos
+    /// obligarían a explicar por qué. Si algún día tienen que diferir, que sea porque alguien lo
+    /// decidió, no porque se escribieron en sitios distintos.</para>
+    /// </remarks>
+    public int DeliveryRetryCeiling { get; set; } = CompensationLimits.MaxAttempts;
 }

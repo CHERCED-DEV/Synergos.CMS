@@ -28,14 +28,20 @@ public sealed record TemplateResponse(string Id, string Key, string Channel, str
 /// webhook de vuelta.
 /// </param>
 /// <param name="StatusAtUtc">Cuándo cambió el estado por última vez — distinto de <c>AtUtc</c>.</param>
+/// <param name="Attempts">Cuántas veces se intentó. Sin esto, quien barre no sabe cuándo rendirse.</param>
+/// <param name="LastError">Por qué no salió la última vez. Sin esto, «se rindió» no es accionable.</param>
 public sealed record DeliveryResponse(
     string Id, string ToKind, string ToId, string Address, string Channel,
     string TemplateKey, string Subject, string Status, DateTimeOffset AtUtc,
-    string? ProviderMessageId, DateTimeOffset? StatusAtUtc)
+    string? ProviderMessageId, DateTimeOffset? StatusAtUtc,
+    // Los dos existen para el barrido y para quien mira: sin Attempts no hay forma de saber
+    // cuándo rendirse, y sin LastError «se rindió» no es accionable.
+    int Attempts, string? LastError)
 {
     public static DeliveryResponse From(Delivery d) => new(
         d.Id, d.To.Kind, d.To.Id, d.Address, d.Channel.ToString(),
-        d.TemplateKey, d.Subject, d.Status.ToString(), d.AtUtc, d.ProviderMessageId, d.StatusAtUtc);
+        d.TemplateKey, d.Subject, d.Status.ToString(), d.AtUtc, d.ProviderMessageId, d.StatusAtUtc,
+        d.Attempts, d.LastError);
 }
 
 /// <summary>
@@ -51,3 +57,6 @@ public sealed record WebhookAck(bool Matched, string Reason);
 
 /// <summary>Una porción de una lista, con su total.</summary>
 public sealed record PageResponse<T>(IReadOnlyList<T> Items, int Total, int Offset, bool HasMore);
+
+/// <summary>Rendirse con su causa — sin causa, «se rindió» no es accionable.</summary>
+public sealed record GiveUpRequest(string? Reason);

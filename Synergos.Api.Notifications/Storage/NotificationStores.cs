@@ -31,6 +31,14 @@ public interface IDeliveryStore
     Delivery? FindByProviderMessageId(string providerMessageId);
 
     IReadOnlyList<Delivery> ForRecipient(Ref recipient);
+
+    /// <summary>Los que están en un estado concreto. <b>La consulta del barrido</b> (HU #29).</summary>
+    /// <remarks>
+    /// Sin destinatario a propósito: quien pregunta no es una persona mirando lo suyo, es el
+    /// barrido, y lo que necesita es todo lo que está colgado sin importar de quién.
+    /// </remarks>
+    IReadOnlyList<Delivery> WithStatus(DeliveryStatus status);
+
     void Put(Delivery delivery);
 }
 
@@ -69,6 +77,9 @@ public sealed class FileSystemDeliveryStore : IDeliveryStore
     }
 
     public IReadOnlyList<Delivery> ForRecipient(Ref recipient) => _store.Where(d => d.To == recipient);
+
+    public IReadOnlyList<Delivery> WithStatus(DeliveryStatus status)
+        => _store.Where(d => d.Status == status);
     public void Put(Delivery delivery) => _store.Put(delivery);
 }
 

@@ -99,6 +99,9 @@ public static class NotificationRules
         // el primero que llegó es el que queda. Un rebote posterior a una entrega no existe.
         DeliveryStatus.Delivered => 2,
         DeliveryStatus.Bounced => 2,
+        // Rendirse empata con los desenlaces del transporte: es final. Y por encima de Queued,
+        // para que un evento tardío del proveedor no resucite un envío ya abandonado.
+        DeliveryStatus.GivenUp => 2,
         DeliveryStatus.Failed => 2,
         // La queja es lo único que sí ocurre DESPUÉS de haber llegado.
         DeliveryStatus.Complained => 3,
