@@ -155,13 +155,22 @@ Synergos.CMS/
 | "¿Qué API necesita cada dominio? ¿Cuál es el molde?" | `docs/product/08-despiece-apis.md` — la matriz 20×9 y §4 |
 | "¿Cómo se deshace lo que ya se hizo?" | `docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `docs/product/10-promocion-bff-core.md` |
+| "¿Qué se hace con cada uno de los 46 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — es el único sitio |
 
+> ⚠️ **De los seis docs de `docs/product/`, sólo el 11 está versionado.** Los
+> cinco de arriba (06 a 10) **no están en el repo**: viven en la máquina del
+> arquitecto, igual que `refactor-docs/`. Esta tabla los citaba como si
+> estuvieran, y un agente en un clon limpio los busca y no los encuentra.
+> Se pueden citar como fuente de autoridad —lo son— pero hay que **pedirlos**,
+> no abrirlos.
+
 > **Fuentes que NO viven en este repo.** `refactor-docs/` (status de la
-> migración, inventario del legado) y el `MEMORY.md` del agente son locales de
-> la máquina del arquitecto y **no están versionados**. Un agente que corra en
-> un clon limpio —CI, contenedor, Claude Code on the web— no los tiene: no los
-> cites como si estuvieran, y si necesitás ese contexto, pedilo.
+> migración, inventario del legado), `docs/product/06` a `10` y el `MEMORY.md`
+> del agente son locales de la máquina del arquitecto y **no están
+> versionados**. Un agente que corra en un clon limpio —CI, contenedor, Claude
+> Code on the web— no los tiene: no los cites como si estuvieran, y si
+> necesitás ese contexto, pedilo.
 
 ## 3.bis El ticket va ANTES del código
 
