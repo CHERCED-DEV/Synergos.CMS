@@ -62,6 +62,72 @@ public sealed class ComposeStackTests
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
 
+    // ── Lo documentado y lo cableado tienen que ser lo mismo ────────────────
+
+    /// <summary>Las variables que `.env.example` declara, por nombre.</summary>
+    private static IReadOnlyList<string> VariablesDocumentadas()
+        => File.ReadAllLines(Path.Combine(RepoRoot(), ".env.example"))
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0 && !l.StartsWith('#'))
+            .Select(l => l.Split('=', 2)[0].Trim())
+            .Where(n => n.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+    [Fact]
+    public void Toda_variable_documentada_la_CONSUME_el_compose()
+    {
+        // El defecto que evita, y que ya ocurrió DOS veces: `.env.example` promete una variable,
+        // el operador la rellena en el servidor, y el compose nunca se la pasa al contenedor.
+        //
+        // No falla y no avisa — el servicio arranca con su default y se comporta como si nadie
+        // hubiera configurado nada. Pasó con `Notifications__Resend__*` (ADR 0131, desde que se
+        // escribió) y con los modos de Tienda y Salud (HU #24 y #25).
+        //
+        // Es el mismo modo de fallo que el compose ya vigila para los servicios —«no falla:
+        // falta»— aplicado a la configuración.
+        var compose = Compose();
+        var huerfanas = VariablesDocumentadas()
+            .Where(v => !compose.Contains("${" + v, StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(huerfanas.Count == 0,
+            $"`.env.example` declara variables que compose.prod.yml NO consume: {string.Join(", ", huerfanas)}. "
+            + "Rellenarlas en el servidor no haría nada, y nadie se enteraría.");
+    }
+
+    [Fact]
+    public void Todo_orquestador_sabe_llegar_a_SUS_capacidades()
+    {
+        // El peor modo de fallo del despliegue, y estuvo ahí desde que se escribió el compose:
+        // sin `Capabilities__<cap>__BaseUrl`, `AddSagaMachinery` cae a `http://localhost/{cap}/`
+        // — que dentro del contenedor es EL PROPIO BFF.
+        //
+        // El orquestador arrancaría sano, pasaría su /health, y fallaría TODAS las sagas. Parece
+        // que funciona hasta que alguien compra.
+        var compose = ComposeSinComentarios();
+
+        foreach (var bff in Servicios().Where(s => s.StartsWith("bff-", StringComparison.Ordinal)))
+        {
+            var raiz = bff["bff-".Length..];
+            var prefijo = char.ToUpperInvariant(raiz[0]) + raiz[1..];
+
+            Assert.True(
+                compose.Contains($"{prefijo}__Capabilities__", StringComparison.Ordinal),
+                $"{bff} no declara ninguna Capabilities__*__BaseUrl en compose.prod.yml. "
+                + "Sin eso llama a localhost, que es él mismo: arranca sano y falla todas las sagas.");
+
+            // Y por nombre de servicio, nunca por localhost — lo mismo que ya se exige del CMS.
+            var lineas = compose.Split('\n')
+                .Where(l => l.Contains($"{prefijo}__Capabilities__", StringComparison.Ordinal)
+                         && l.Contains("BaseUrl", StringComparison.Ordinal));
+
+            Assert.All(lineas, l =>
+                Assert.DoesNotContain("localhost", l, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     [Fact]
     public void El_compose_existe_y_lista_las_23_piezas()
     {

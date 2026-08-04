@@ -72,6 +72,23 @@ services:
       # emiten su comentario de relleno — degradado y visible, no roto.
       Synergos__BundleRegistry__Mode: ${SYNERGOS_CDN_MODE:-Stub}
       Synergos__BundleRegistry__PublicBaseUrl: ${SYNERGOS_CDN_URL:-}
+
+      # Contra quien compra la tienda (HU #24) y contra quien agenda la cita
+      # (HU #25). El MODO sale del entorno; las direcciones NO — dentro de esta
+      # red son fijas, y hacerlas configurables solo invita a que alguien ponga
+      # localhost, que aca es el propio contenedor del CMS.
+      #
+      # El default de los dos es Stub: un despliegue que no lo diga sirve los
+      # motores en proceso, igual que un clon limpio.
+      Synergos__Tienda__Mode: ${SYNERGOS_TIENDA_MODE:-Stub}
+      Synergos__Tienda__BaseUrl: "http://bff-tienda:8080"
+      Synergos__Tienda__CartBaseUrl: "http://api-cart:8080"
+      Synergos__Tienda__ApiKey: ${SYNERGOS_API_KEY}
+      Synergos__Tienda__Carrier: ${SYNERGOS_TIENDA_CARRIER:-default}
+
+      Synergos__Salud__Mode: ${SYNERGOS_SALUD_MODE:-Stub}
+      Synergos__Salud__BaseUrl: "http://bff-salud:8080"
+      Synergos__Salud__ApiKey: ${SYNERGOS_API_KEY}
     volumes:
       - cms-db:/app/umbraco/Data
       - cms-logs:/app/umbraco/Logs
@@ -387,6 +404,12 @@ services:
     environment:
       Notifications__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
       Notifications__Storage__Root: /app/data/notifications
+      # El transporte real (ADR 0131). Faltaba desde que se escribio: el correo
+      # se documento en .env.example y el compose nunca lo pasaba, asi que la
+      # capacidad rechazaba cada envio en un servidor bien configurado.
+      Notifications__Resend__ApiKey: ${Notifications__Resend__ApiKey:-}
+      Notifications__Resend__From: ${Notifications__Resend__From:-}
+      Notifications__Resend__WebhookSecret: ${Notifications__Resend__WebhookSecret:-}
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
@@ -431,6 +454,11 @@ services:
     environment:
       Payments__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
       Payments__Storage__Root: /app/data/payments
+      # Con que se cobra (HU #27). `logging` dice que si a todo y lo grita; con
+      # cualquier otro nombre y sin credencial la capacidad RECHAZA cada cobro a
+      # gritos. Lo que no existe es el stub sirviendo en silencio.
+      Payments__Provider: ${PAYMENTS_PROVIDER:-logging}
+      Payments__wompi__ApiKey: ${PAYMENTS_WOMPI_API_KEY:-}
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
@@ -541,6 +569,27 @@ services:
     environment:
       Salud__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
       Salud__Storage__Root: /app/data/salud
+      # ── A QUE CAPACIDADES LLEGA ─────────────────────────────────────────
+      # Sin esto, AddSagaMachinery cae a http://localhost/{cap}/ — que dentro
+      # del contenedor es EL PROPIO BFF. Arrancaria sano, pasaria su /health y
+      # fallaria TODAS las sagas. Por nombre de servicio, nunca localhost.
+      Salud__Capabilities__booking__BaseUrl: "http://api-booking:8080"
+      Salud__Capabilities__booking__ApiKey: ${SYNERGOS_API_KEY}
+      Salud__Capabilities__consent__BaseUrl: "http://api-consent:8080"
+      Salud__Capabilities__consent__ApiKey: ${SYNERGOS_API_KEY}
+      Salud__Capabilities__notifications__BaseUrl: "http://api-notifications:8080"
+      Salud__Capabilities__notifications__ApiKey: ${SYNERGOS_API_KEY}
+      Salud__Capabilities__payments__BaseUrl: "http://api-payments:8080"
+      Salud__Capabilities__payments__ApiKey: ${SYNERGOS_API_KEY}
+      Salud__Capabilities__pricing__BaseUrl: "http://api-pricing:8080"
+      Salud__Capabilities__pricing__ApiKey: ${SYNERGOS_API_KEY}
+
+      # El aviso cuando una compensacion se rinde tras ocho intentos. Sin esto
+      # queda visible en /v1/compensations con alertedAtUtc en nulo — degrada,
+      # no rompe, pero nadie se entera.
+      Salud__Alerts__ToKind: ${SYNERGOS_ALERTS_TO_KIND:-salud.guardia}
+      Salud__Alerts__ToId: ${SYNERGOS_ALERTS_TO_ID:-operaciones}
+      Salud__Alerts__Address: ${SYNERGOS_ALERTS_ADDRESS:-}
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
@@ -563,6 +612,31 @@ services:
     environment:
       Tienda__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
       Tienda__Storage__Root: /app/data/tienda
+      # ── A QUE CAPACIDADES LLEGA ─────────────────────────────────────────
+      # Sin esto, AddSagaMachinery cae a http://localhost/{cap}/ — que dentro
+      # del contenedor es EL PROPIO BFF. Arrancaria sano, pasaria su /health y
+      # fallaria TODAS las sagas. Por nombre de servicio, nunca localhost.
+      Tienda__Capabilities__cart__BaseUrl: "http://api-cart:8080"
+      Tienda__Capabilities__cart__ApiKey: ${SYNERGOS_API_KEY}
+      Tienda__Capabilities__fulfillment__BaseUrl: "http://api-fulfillment:8080"
+      Tienda__Capabilities__fulfillment__ApiKey: ${SYNERGOS_API_KEY}
+      Tienda__Capabilities__inventory__BaseUrl: "http://api-inventory:8080"
+      Tienda__Capabilities__inventory__ApiKey: ${SYNERGOS_API_KEY}
+      Tienda__Capabilities__notifications__BaseUrl: "http://api-notifications:8080"
+      Tienda__Capabilities__notifications__ApiKey: ${SYNERGOS_API_KEY}
+      Tienda__Capabilities__orders__BaseUrl: "http://api-orders:8080"
+      Tienda__Capabilities__orders__ApiKey: ${SYNERGOS_API_KEY}
+      Tienda__Capabilities__payments__BaseUrl: "http://api-payments:8080"
+      Tienda__Capabilities__payments__ApiKey: ${SYNERGOS_API_KEY}
+      Tienda__Capabilities__pricing__BaseUrl: "http://api-pricing:8080"
+      Tienda__Capabilities__pricing__ApiKey: ${SYNERGOS_API_KEY}
+
+      # El aviso cuando una compensacion se rinde tras ocho intentos. Sin esto
+      # queda visible en /v1/compensations con alertedAtUtc en nulo — degrada,
+      # no rompe, pero nadie se entera.
+      Tienda__Alerts__ToKind: ${SYNERGOS_ALERTS_TO_KIND:-tienda.guardia}
+      Tienda__Alerts__ToId: ${SYNERGOS_ALERTS_TO_ID:-operaciones}
+      Tienda__Alerts__Address: ${SYNERGOS_ALERTS_ADDRESS:-}
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se

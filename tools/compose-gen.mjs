@@ -33,12 +33,98 @@ const seccionConfig = (proyecto) => proyecto.replace(/^Synergos\.(Api|Bff)\./, '
 /** `Synergos.Api.Booking` → `ghcr.io/…/synergos.api.booking`. GHCR exige minúsculas. */
 const imagen = (proyecto) => `\${SYNERGOS_REGISTRY}/${proyecto.toLowerCase()}:\${SYNERGOS_TAG}`;
 
+// ── Lo que un servicio necesita ADEMAS de la llave y su almacen ─────────────
+//
+// Se DERIVA del disco, igual que la lista de servicios, y por la misma razon:
+// una tabla escrita a mano se desincroniza en la tercera ola. Lo que se añade
+// aquí aparece en el diff del generador, no escondido en la linea 400 de un YAML.
+
+/**
+ * Las capacidades a las que un orquestador llama, leidas de su `Program.cs`.
+ *
+ * SIN ESTO EL DESPLIEGUE ESTA ROTO Y NO LO PARECE: `AddSagaMachinery` cae a
+ * `http://localhost/{cap}/`, que dentro del contenedor es EL PROPIO BFF. El
+ * orquestador arranca sano, pasa su /health, y falla TODAS las sagas.
+ */
+function capacidadesDe(proyecto) {
+  const programa = readFileSync(join(RAIZ, proyecto, 'Program.cs'), 'utf8');
+
+  // `SaludCapabilities.Consent` → `consent`. El identificador de la constante y
+  // su valor coinciden en las veinte; si algun dia dejaran de coincidir, la
+  // comprobacion contra el disco de mas abajo lo caza.
+  const nombres = [...programa.matchAll(/\b\w*Capabilities\.(\w+)/g)].map((m) => m[1].toLowerCase());
+
+  // El motor añade `notifications` por su cuenta: es donde avisa cuando una
+  // compensacion se rinde (CompensationAlert.Capability).
+  return [...new Set([...nombres, 'notifications'])].sort();
+}
+
+/** Las lineas de entorno propias de cada servicio. */
+function entornoExtra(proyecto, disponibles) {
+  const seccion = seccionConfig(proyecto);
+
+  if (proyecto.startsWith('Synergos.Bff.')) {
+    const caps = capacidadesDe(proyecto);
+    const desconocidas = caps.filter((c) => !disponibles.has(c));
+    if (desconocidas.length > 0) {
+      throw new Error(
+        `compose-gen: ${proyecto} nombra capacidades que no existen: ${desconocidas.join(', ')}`);
+    }
+
+    const rutas = caps.flatMap((c) => [
+      `      ${seccion}__Capabilities__${c}__BaseUrl: "http://api-${c}:8080"`,
+      `      ${seccion}__Capabilities__${c}__ApiKey: \${SYNERGOS_API_KEY}`,
+    ]);
+
+    return [
+      '',
+      '      # ── A QUE CAPACIDADES LLEGA ─────────────────────────────────────────',
+      '      # Sin esto, AddSagaMachinery cae a http://localhost/{cap}/ — que dentro',
+      '      # del contenedor es EL PROPIO BFF. Arrancaria sano, pasaria su /health y',
+      '      # fallaria TODAS las sagas. Por nombre de servicio, nunca localhost.',
+      ...rutas,
+      '',
+      '      # El aviso cuando una compensacion se rinde tras ocho intentos. Sin esto',
+      '      # queda visible en /v1/compensations con alertedAtUtc en nulo — degrada,',
+      '      # no rompe, pero nadie se entera.',
+      `      ${seccion}__Alerts__ToKind: \${SYNERGOS_ALERTS_TO_KIND:-${seccion.toLowerCase()}.guardia}`,
+      `      ${seccion}__Alerts__ToId: \${SYNERGOS_ALERTS_TO_ID:-operaciones}`,
+      `      ${seccion}__Alerts__Address: \${SYNERGOS_ALERTS_ADDRESS:-}`,
+    ].join('\n');
+  }
+
+  if (proyecto.endsWith('.Payments')) {
+    return [
+      '',
+      '      # Con que se cobra (HU #27). `logging` dice que si a todo y lo grita; con',
+      '      # cualquier otro nombre y sin credencial la capacidad RECHAZA cada cobro a',
+      '      # gritos. Lo que no existe es el stub sirviendo en silencio.',
+      '      Payments__Provider: \${PAYMENTS_PROVIDER:-logging}',
+      '      Payments__wompi__ApiKey: \${PAYMENTS_WOMPI_API_KEY:-}',
+    ].join('\n');
+  }
+
+  if (proyecto.endsWith('.Notifications')) {
+    return [
+      '',
+      '      # El transporte real (ADR 0131). Faltaba desde que se escribio: el correo',
+      '      # se documento en .env.example y el compose nunca lo pasaba, asi que la',
+      '      # capacidad rechazaba cada envio en un servidor bien configurado.',
+      '      Notifications__Resend__ApiKey: \${Notifications__Resend__ApiKey:-}',
+      '      Notifications__Resend__From: \${Notifications__Resend__From:-}',
+      '      Notifications__Resend__WebhookSecret: \${Notifications__Resend__WebhookSecret:-}',
+    ].join('\n');
+  }
+
+  return '';
+}
+
 // ── El bloque de un servicio del árbol ───────────────────────────────────────
 //
 // Todos idénticos salvo el nombre. Que sean idénticos ES la propiedad: el día
 // que uno necesite algo distinto, se ve en el diff del generador y no escondido
 // en la línea 400 de un YAML.
-function bloqueServicio(proyecto) {
+function bloqueServicio(proyecto, disponibles) {
   const nombre = nombreServicio(proyecto);
   const seccion = seccionConfig(proyecto);
 
@@ -52,7 +138,7 @@ function bloqueServicio(proyecto) {
     # mismo. Se alcanza por nombre de servicio desde la red interna.
     environment:
       ${seccion}__ApiKey: \${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
-      ${seccion}__Storage__Root: /app/data/${seccion.toLowerCase()}
+      ${seccion}__Storage__Root: /app/data/${seccion.toLowerCase()}${entornoExtra(proyecto, disponibles)}
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
@@ -155,6 +241,23 @@ services:
       # emiten su comentario de relleno — degradado y visible, no roto.
       Synergos__BundleRegistry__Mode: \${SYNERGOS_CDN_MODE:-Stub}
       Synergos__BundleRegistry__PublicBaseUrl: \${SYNERGOS_CDN_URL:-}
+
+      # Contra quien compra la tienda (HU #24) y contra quien agenda la cita
+      # (HU #25). El MODO sale del entorno; las direcciones NO — dentro de esta
+      # red son fijas, y hacerlas configurables solo invita a que alguien ponga
+      # localhost, que aca es el propio contenedor del CMS.
+      #
+      # El default de los dos es Stub: un despliegue que no lo diga sirve los
+      # motores en proceso, igual que un clon limpio.
+      Synergos__Tienda__Mode: \${SYNERGOS_TIENDA_MODE:-Stub}
+      Synergos__Tienda__BaseUrl: "http://bff-tienda:8080"
+      Synergos__Tienda__CartBaseUrl: "http://api-cart:8080"
+      Synergos__Tienda__ApiKey: \${SYNERGOS_API_KEY}
+      Synergos__Tienda__Carrier: \${SYNERGOS_TIENDA_CARRIER:-default}
+
+      Synergos__Salud__Mode: \${SYNERGOS_SALUD_MODE:-Stub}
+      Synergos__Salud__BaseUrl: "http://bff-salud:8080"
+      Synergos__Salud__ApiKey: \${SYNERGOS_API_KEY}
     volumes:
       - cms-db:/app/umbraco/Data
       - cms-logs:/app/umbraco/Logs
@@ -175,7 +278,15 @@ services:
   # ── El arbol de servicios ─────────────────────────────────────────────────
 `;
 
-  const cuerpo = proyectos.map(bloqueServicio).join('\n');
+  // Las capacidades que EXISTEN, para que un orquestador no pueda nombrar una
+  // que no está: seria una URL a un servicio inexistente, y el fallo saldria en
+  // produccion y no acá.
+  const disponibles = new Set(
+    proyectos
+      .filter((p) => p.startsWith('Synergos.Api.'))
+      .map((p) => seccionConfig(p).toLowerCase()));
+
+  const cuerpo = proyectos.map((p) => bloqueServicio(p, disponibles)).join('\n');
 
   const volumenes = [
     'cms-db', 'cms-logs', 'cms-appdata', 'cms-media', 'cms-dpkeys',
