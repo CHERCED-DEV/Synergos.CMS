@@ -485,10 +485,11 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   propósito. Y 20 de los 46 **ya son durables** — «stub» en este repo
   dejó hace tiempo de querer decir «en memoria». Hay gate
   (`WiringMapTests`): un stub nuevo sin mapear rompe el build.
-  De los 8, el primero está hecho: la tienda compra contra `Bff.Tienda`
-  con `Synergos:Tienda:Mode=Bff` (HU #24, default sigue siendo `Stub`).
-  Faltan `StubReservationService` → `Api.Booking` y `StubPaymentProvider`
-  → `Api.Payments`, que son los dos siguientes.
+  De los 9, dos están hechos: la tienda compra contra `Bff.Tienda`
+  (`Synergos:Tienda:Mode=Bff`, HU #24) y la cita clínica agenda contra
+  `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25). El default sigue
+  siendo `Stub` en los dos. Faltan `StubReservationService` →
+  `Api.Booking` y `StubPaymentProvider` → `Api.Payments`.
 - **El borde ya avisa, pero todavía no cobra.** `Api.Notifications` tiene
   transporte real (Resend, ADR 0131) y le falta solo la credencial del
   arquitecto; `Api.Payments` sigue sobre `LoggingPaymentProvider` y **no
@@ -509,6 +510,11 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   esto se arregle los registros viejos no mientan sobre su propia fuerza:
   hoy todos dicen `CmsSession`, que es nuestro propio sistema dando fe.
   Cablear `Api.Identity` como puerta es la HU #14.
+- **`Api.Booking` ya deja llegar del sujeto a su recurso** (HU #25):
+  `GET /v1/resources?subjectKind=&subjectId=`, calcando lo que
+  `Api.Inventory` hacía con `/v1/items`. Faltaba, y obligaba a que el
+  identificador interno del recurso viajara hasta el CMS — que ninguna
+  convención podía adivinar, porque lo genera la capacidad.
 - **Ninguna capacidad llama a otra**, y no hay gate que lo vigile porque
   no había caso. Apareció el primero —mandar un acceso rechazado a
   `Api.Audit`— y se decidió NO abrir esa flecha desde la capacidad

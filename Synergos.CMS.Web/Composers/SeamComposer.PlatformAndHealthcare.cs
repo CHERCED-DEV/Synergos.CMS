@@ -153,7 +153,37 @@ public sealed partial class SeamComposer
         services.AddSingleton<IDoctorDirectory, StubDoctorDirectory>();
         services.AddSingleton<IClinicalRecordService, StubClinicalRecordService>();
         services.AddSingleton<IClinicalPrescriptionService, StubClinicalPrescriptionService>();
-        services.AddSingleton<IClinicalSchedulingService, StubClinicalSchedulingService>();
+        // HU #25 — contra quién agenda la cita. Dos orígenes, mismo contrato, elegidos por
+        // Synergos:Salud:Mode:
+        //   - Stub (default): el motor en proceso. Reserva el cupo con IReservationService,
+        //     cobra el copago y confirma — o sea, REIMPLEMENTA una saga del lado del CMS.
+        //   - Bff: contra Synergos.Bff.Salud, que ya tiene ese orden y sus compensaciones.
+        //
+        // Api.Booking no sabe que el recurso es un médico y no puede saberlo (CLAUDE.md §12):
+        // el sustantivo «doctor» vive acá y en el BFF, nunca en la capacidad. Lo vigila
+        // SaludWiringTests.
+        if (string.Equals(builder.Config["Synergos:Salud:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
+        {
+            var saludBase = builder.Config["Synergos:Salud:BaseUrl"];
+            var saludKey = builder.Config["Synergos:Salud:ApiKey"];
+            var saludTimeout = int.TryParse(builder.Config["Synergos:Salud:TimeoutSeconds"], out var st) && st > 0 ? st : 30;
+
+            services.AddHttpClient(HttpClinicalSchedulingService.BffClientName, http =>
+            {
+                var url = string.IsNullOrWhiteSpace(saludBase) ? "http://127.0.0.1:5301/" : saludBase;
+                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+                http.Timeout = TimeSpan.FromSeconds(saludTimeout);
+                if (!string.IsNullOrWhiteSpace(saludKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpClinicalSchedulingService.ApiKeyHeader, saludKey);
+                }
+            });
+            services.AddSingleton<IClinicalSchedulingService, HttpClinicalSchedulingService>();
+        }
+        else
+        {
+            services.AddSingleton<IClinicalSchedulingService, StubClinicalSchedulingService>();
+        }
 
         // OLA 7 Healthcare EHR-lite (doc 21 §2.5) — DOS portales de un mismo grafo
         // clínico. Seams NUEVOS, aditivos (no tocan el vertical Healthcare de

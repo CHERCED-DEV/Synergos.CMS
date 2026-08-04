@@ -21,9 +21,9 @@ lleva un gate detrás en vez de una lista escrita a mano.
 
 | Familia | Cuántos | Qué le pasa |
 |---|---:|---|
-| **A — cableado pendiente** | 8 | va a una capacidad o a un BFF |
+| **A — cableado pendiente** | 9 | va a una capacidad o a un BFF |
 | **B — ya resuelto desde el contenido** | 5 | sale de DocTypes; cablearlo sería un retroceso |
-| **C — se queda en stub a propósito** | 33 | no hay capacidad detrás, y no debería haberla |
+| **C — se queda en stub a propósito** | 32 | no hay capacidad detrás, y no debería haberla |
 
 > **La brecha es menor de lo que «una capacidad de veinte conectada» sugiere**, y por una razón
 > que no se ve desde el conteo: **la mitad de los stubs ya son durables**. 20 de los 46 escriben
@@ -49,6 +49,25 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 | `StubOrderTrackingService` | `Api.Workflow` | **Capacidad.** Un timeline es una máquina de estados con otro nombre. **Ojo**: hay cuatro instancias con cuatro pipelines distintos (tienda / viaje / eventos / academia) y cada una su espacio — cablear a una definición única las haría leer «enviado» donde dice «matriculado» | pendiente |
 | `StubReturnService` | `Api.Orders` + `Api.Payments` | **Orquestador** (`Bff.Tienda`, sin construir esa cara). Un RMA reembolsado son dos pasos con plata en medio: si el reembolso sale y la orden no se marca, el dinero se fue sin rastro. Es la compensación que cambia de carácter al capturar | pendiente |
 | `StubApplicationService` | `Bff.Gob` (sin construir) | **Orquestador.** Radicar valida, calcula tasa, cobra si aplica y asienta estado — con pago de por medio. Es el agregado raíz de Gobierno y hoy lo compone media docena de stubs hermanos por DIP | pendiente |
+| `StubClinicalSchedulingService` | `Bff.Salud` `POST /v1/appointments` | **Orquestador.** Apartar el cupo + cobrar el copago + avisar, con compensación si el copago falla. Ver la corrección de abajo | **HU #25** |
+
+> ### Corrección: este stub estaba mal clasificado, y por qué importa
+>
+> `StubClinicalSchedulingService` salió en la familia C de la primera versión de este mapa, con
+> el argumento de que «ya reusa `IReservationService`, así que se mueve solo el día que ése se
+> cable». **Es cierto y no alcanza.** Mirando el código de cerca, el stub no solo *usa* el motor
+> de reservas: hace `HoldItemAsync` → sesión de pago → `ConfirmAsync`, con un `CancelAsync` de
+> respaldo si el copago no se captura. Eso es **una saga con compensación, reimplementada del
+> lado del CMS** — exactamente lo que la familia A existe para señalar.
+>
+> El error es instructivo: **«compone otro seam» y «orquesta varios pasos que pueden fallar a la
+> mitad» se parecen desde el registro del composer y no son lo mismo.** El filtro que los separa
+> no es de qué depende, sino *qué pasa si el segundo paso falla*. Si hay algo que deshacer, es
+> orquestación, y la orquestación no vive en el CMS.
+>
+> Los otros dos del grupo —`StubVisitSchedulingService` y `StubClinicalOrderService`— se
+> revisaron con el mismo filtro y **sí** se quedan en C: la visita inmobiliaria confirma con el
+> paso de pago desactivado (`visit-free`), así que no hay segundo paso que pueda fallar.
 
 ### Los tres primeros, y por qué esos
 
@@ -129,18 +148,18 @@ Sirven datos coherentes para que una app Angular corra de punta a punta. **Su de
 capacidad: es contenido**, igual que la familia B — o un sistema externo de verdad (un EHR, un
 LMS), que no es nuestro.
 
-**Healthcare EHR-lite (10)** — capa ADITIVA de demo, distinta del núcleo PHI de producción de
+**Healthcare EHR-lite (9)** — capa ADITIVA de demo, distinta del núcleo PHI de producción de
 ADR 0098, que ya es durable y cifrado. Su destino real es **un EHR externo**, no una capacidad
 nuestra: `Api.Documents` guarda documentos, no historias clínicas.
 `StubPatientRegistry` · `StubDoctorDirectory` · `StubClinicalRecordService` ·
-`StubClinicalPrescriptionService` · `StubClinicalSchedulingService` ·
-`StubClinicalResultsProvider` · `StubClinicalOrderService` · `StubClinicalBillingService` ·
-`StubVisitSchedulingService` · `StubRoomAvailabilityProvider`
+`StubClinicalPrescriptionService` · `StubClinicalResultsProvider` · `StubClinicalOrderService` ·
+`StubClinicalBillingService` · `StubVisitSchedulingService` · `StubRoomAvailabilityProvider`
 
-> Dos matices dentro del grupo. `StubClinicalSchedulingService` y `StubVisitSchedulingService`
-> **ya reusan `IReservationService`**, así que se mueven solos el día que ése se cable a
-> `Api.Booking` (familia A) — no son cableado propio. Y `StubRoomAvailabilityProvider` es
-> disponibilidad hotelera: su destino es un PMS/channel-manager, un tercero.
+> `StubClinicalSchedulingService` **salió de este grupo** — orquesta, ver la corrección de la
+> familia A. `StubVisitSchedulingService` se queda: reusa `IReservationService` pero confirma con
+> el paso de pago desactivado, así que no hay segundo paso que pueda fallar ni nada que deshacer.
+> Y `StubRoomAvailabilityProvider` es disponibilidad hotelera: su destino es un PMS/channel-manager,
+> un tercero.
 
 **Motor social y de engagement (5)** — `StubSocialGraphService` · `StubReactionService` ·
 `StubContentStream` · `StubUserCollection` · `StubLeadCaptureService`.
@@ -206,7 +225,7 @@ tiene que existir en la raíz del repo.
 | `StubClinicalPrescriptionService` | C | — |
 | `StubClinicalRecordService` | C | — |
 | `StubClinicalResultsProvider` | C | — |
-| `StubClinicalSchedulingService` | C | — |
+| `StubClinicalSchedulingService` | A | `Synergos.Bff.Salud` |
 | `StubContentStream` | C | — |
 | `StubCourseCatalogProvider` | C | — |
 | `StubDoctorDirectory` | C | — |

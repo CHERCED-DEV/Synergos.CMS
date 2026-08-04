@@ -89,6 +89,26 @@ public sealed class BookingService
             ? Result.Ok(r)
             : Rejection.NotFound($"{BookingRules.CodePrefix}.resource_not_found", $"No existe el recurso {id}.");
 
+    /// <summary>Busca el recurso que lleva la agenda de un <see cref="Ref"/>.</summary>
+    /// <remarks>
+    /// <para><b>Sin esto, un consumidor no puede llegar de su entidad a su agenda.</b> Quien
+    /// tiene una referencia —un orquestador que sabe qué profesional, qué sala, qué cancha—
+    /// <b>no</b> tiene el identificador interno del recurso, que esta capacidad genera al
+    /// registrarlo. Tendría que mantener un mapa entidad→recurso por su cuenta, y ese mapa es una
+    /// segunda verdad que se desincroniza — justo lo que una capacidad existe para evitar: la
+    /// referencia que guarda tiene que poder consultarse.</para>
+    ///
+    /// <para>Es el mismo razonamiento —y el mismo remedio— que <c>Api.Inventory.GetBySubject</c>,
+    /// que ya lo había resuelto para las existencias. Que faltara acá lo destapó cablear la cita
+    /// clínica contra los procesos vivos (HU #25): <c>Bff.Salud</c> exigía un <c>resourceId</c>
+    /// que nadie río arriba podía conocer.</para>
+    /// </remarks>
+    public Result<Resource> GetResourceBySubject(Ref subject)
+        => _resources.All().FirstOrDefault(r => r.Subject == subject) is { } r
+            ? Result.Ok(r)
+            : Rejection.NotFound($"{BookingRules.CodePrefix}.resource_not_found",
+                $"No hay recurso registrado para {subject}.");
+
     public Page<Resource> ListResources(int offset, int limit)
     {
         var todos = _resources.All().OrderBy(r => r.Id, StringComparer.Ordinal).ToList();

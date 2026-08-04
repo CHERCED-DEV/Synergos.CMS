@@ -247,6 +247,24 @@ public sealed class HttpShopOrderServiceTests
     }
 
     [Fact]
+    public async Task Un_403_SI_llega_con_su_motivo_porque_NO_es_un_fallo_de_llave()
+    {
+        // `SharedKeyAuth` responde 401 cuando la llave falla, NUNCA 403. Un 403 del árbol de
+        // servicios es un rechazo de negocio —`consent.not_granted` es el que aparece de verdad—
+        // y tragarse su motivo deja al comprador sin saber qué hacer.
+        //
+        // Este test existe porque el defecto apareció agendando contra los procesos vivos de
+        // Salud (HU #25), no acá: el doble solo devolvía 403 para el caso de la llave, así que
+        // confirmaba la misma suposición equivocada que el código.
+        var svc = Feliz().Falla("POST /v1/purchases", HttpStatusCode.Forbidden,
+            "consent.not_granted", "No hay consentimiento para 'tienda.compra'.");
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Nuevo(svc).CheckoutAsync(UnItem, Ana));
+
+        Assert.Contains("consentimiento", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Un_rechazo_del_negocio_llega_CON_SU_MOTIVO()
     {
         // «Se agotó mientras comprabas» es accionable; «error» no lo es. El motivo del rechazo

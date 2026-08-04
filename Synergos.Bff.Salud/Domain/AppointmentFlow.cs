@@ -51,7 +51,7 @@ public sealed class AppointmentFlow
     /// Fase 1: comprueba permiso, aparta el cupo, cotiza y autoriza el cobro.
     /// </summary>
     public async Task<Result<AppointmentSaga>> ScheduleAsync(
-        Ref patient, Ref professional, string resourceId, Ref service, TimeWindow window, string sagaId, CancellationToken ct)
+        Ref patient, Ref professional, string? resourceId, Ref service, TimeWindow window, string sagaId, CancellationToken ct)
     {
         // La saga existe ANTES de tocar nada. Si el proceso se cae después del primer paso, lo
         // que se hizo queda escrito con su identificador — y como las llaves derivan de él,
@@ -71,6 +71,22 @@ public sealed class AppointmentFlow
 
         saga = new AppointmentSaga(sagaId, patient, professional, window, SagaStatus.Running,
             null, null, null, Money.Zero(Money.Cop), Array.Empty<Compensation>(), null, _clock.GetUtcNow());
+
+        // 1.bis. La agenda del profesional. Si el llamador no la nombró, se resuelve DESDE el
+        //    profesional — que es lo único que un consumidor puede conocer. Exigirle el
+        //    identificador interno de Api.Booking obligaba a que ese identificador viajara hasta
+        //    el CMS, y este mismo contrato dice que los identificadores internos de cada
+        //    capacidad no tienen por qué salir. Se descubrió cableando la cita clínica contra los
+        //    procesos vivos (HU #25): nadie río arriba podía conocer ese valor.
+        //
+        //    Va después del consentimiento y antes del cupo: es una lectura, no reserva nada, y
+        //    fallar acá no deja nada que deshacer.
+        if (string.IsNullOrWhiteSpace(resourceId))
+        {
+            var agenda = await _caps.FindResourceBySubjectAsync(professional, ct);
+            if (!agenda.IsOk) return Result.Rejected<AppointmentSaga>(agenda.Rejection!);
+            resourceId = agenda.Value.Id;
+        }
 
         // 2. Cupo. Es el paso barato y reversible: se toma antes de hablar de plata.
         var hold = await _caps.HoldAsync(resourceId, window, patient, saga.KeyFor("hold"), ct);

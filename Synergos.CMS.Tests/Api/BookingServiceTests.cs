@@ -66,6 +66,41 @@ public sealed class BookingServiceTests
     private static TimeWindow Ventana(DateTimeOffset inicio, int minutos)
         => TimeWindow.Starting(inicio, TimeSpan.FromMinutes(minutos));
 
+    // ── De la referencia a la agenda (HU #25) ───────────────────────────────
+
+    [Fact]
+    public void Se_puede_llegar_del_SUJETO_a_su_recurso()
+    {
+        // Sin esto, quien tiene la referencia de su entidad —un profesional, una sala— no puede
+        // llegar a su agenda: el identificador del recurso lo genera ESTA capacidad al
+        // registrarlo. Tendría que llevar un mapa aparte, que es una segunda verdad que se
+        // desincroniza — justo lo que una capacidad existe para evitar.
+        //
+        // Faltaba, y lo destapó cablear la cita clínica contra los procesos vivos: Bff.Salud
+        // exigía un resourceId que nadie río arriba podía conocer. Api.Inventory ya lo había
+        // resuelto igual para las existencias.
+        var (svc, _) = Nuevo();
+        var recurso = RegistrarRecurso(svc);
+
+        var hallado = svc.GetResourceBySubject(Ref.Create("test.recurso", "x"));
+
+        Assert.True(hallado.IsOk);
+        Assert.Equal(recurso.Id, hallado.Value.Id);
+    }
+
+    [Fact]
+    public void Un_sujeto_sin_recurso_registrado_da_not_found()
+    {
+        // Y con el mismo código que buscar por id: para el llamador, «no hay agenda para este
+        // profesional» y «no existe ese recurso» llevan a la misma acción — registrarlo.
+        var (svc, _) = Nuevo();
+        RegistrarRecurso(svc);
+
+        var r = svc.GetResourceBySubject(Ref.Create("test.recurso", "otro"));
+
+        Assert.Equal("booking.resource_not_found", r.Rejection!.Code);
+    }
+
     // ── El flujo completo ───────────────────────────────────────────────────
 
     [Fact]

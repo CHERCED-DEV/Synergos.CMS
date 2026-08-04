@@ -27,13 +27,15 @@ public static class SaludEndpoints
             if (professional is null) return Invalid("bad_professional", "Hacen falta professionalKind y professionalId.");
             var service = Ref.TryCreate(req.ServiceKind, req.ServiceId);
             if (service is null) return Invalid("bad_service", "Hacen falta serviceKind y serviceId.");
-            if (string.IsNullOrWhiteSpace(req.ResourceId)) return Invalid("bad_resource", "Hace falta resourceId.");
+            // resourceId es OPCIONAL: si no viene, el flujo lo resuelve desde el profesional.
+            // Exigirlo obligaba a que el identificador interno de Api.Booking viajara hasta el
+            // CMS, que es justo lo que este contrato dice que no debe pasar (HU #25).
             if (req.Start is null || req.End is null || req.End <= req.Start)
             {
                 return Invalid("bad_window", "Hacen falta start y end, y end tiene que ser posterior.");
             }
 
-            var r = await flow.ScheduleAsync(patient, professional, req.ResourceId!, service,
+            var r = await flow.ScheduleAsync(patient, professional, req.ResourceId, service,
                 TimeWindow.Of(req.Start.Value, req.End.Value), key.Value, ct);
 
             return r.Match(

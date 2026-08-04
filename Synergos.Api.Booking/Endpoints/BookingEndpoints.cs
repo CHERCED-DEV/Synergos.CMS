@@ -55,8 +55,20 @@ public static class BookingEndpoints
         app.MapGet("/v1/resources/{id}", (string id, BookingService svc) =>
             svc.GetResource(id).Map(ResourceResponse.From).ToHttp());
 
-        app.MapGet("/v1/resources", (int? offset, int? limit, BookingService svc) =>
+        // Con subject se resuelve UNO; sin él se lista la página. Es la misma forma que
+        // Api.Inventory le dio a /v1/items, y por la misma razón: quien tiene la referencia de su
+        // entidad —un profesional, una sala— no tiene el identificador interno que esta capacidad
+        // genera, y obligarlo a llevar un mapa aparte crea una segunda verdad.
+        app.MapGet("/v1/resources", (string? subjectKind, string? subjectId, int? offset, int? limit, BookingService svc) =>
         {
+            if (subjectKind is not null || subjectId is not null)
+            {
+                var subject = Ref.TryCreate(subjectKind, subjectId);
+                return subject is null
+                    ? Invalid("bad_subject", "Para buscar por sujeto hacen falta subjectKind y subjectId.")
+                    : svc.GetResourceBySubject(subject).Map(ResourceResponse.From).ToHttp();
+            }
+
             var page = svc.ListResources(Math.Max(0, offset ?? 0), QueryWindow.Limit(limit));
             return Results.Ok(ToPage(page.Map(ResourceResponse.From)));
         });

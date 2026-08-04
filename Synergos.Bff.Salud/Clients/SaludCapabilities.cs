@@ -29,6 +29,16 @@ public sealed class SaludCapabilities : CapabilityClients
     public Task<Result<ResourceDto>> FindResourceAsync(string resourceId, CancellationToken ct)
         => Get<ResourceDto>(Booking, $"v1/resources/{resourceId}", ct);
 
+    /// <summary>Del <see cref="Ref"/> del profesional a su agenda en <c>Api.Booking</c>.</summary>
+    /// <remarks>
+    /// Es lo que evita que el identificador INTERNO de la capacidad tenga que viajar hacia arriba
+    /// hasta el CMS. Este contrato ya dice que los identificadores internos de cada capacidad no
+    /// tienen por qué salir a la UI; exigirlos de ENTRADA era la misma fuga al revés.
+    /// </remarks>
+    public Task<Result<ResourceDto>> FindResourceBySubjectAsync(Ref subject, CancellationToken ct)
+        => Get<ResourceDto>(Booking,
+            $"v1/resources?subjectKind={Uri.EscapeDataString(subject.Kind)}&subjectId={Uri.EscapeDataString(subject.Id)}", ct);
+
     public Task<Result<HoldDto>> HoldAsync(string resourceId, TimeWindow window, Ref patient, IdempotencyKey key, CancellationToken ct)
         => Post<HoldDto>(Booking, "v1/holds", new
         {

@@ -302,14 +302,19 @@ public sealed class HttpShopOrderService : IShopOrderService
 
             var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
 
-            if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            // SOLO 401, y la distinción importa. Es un defecto de DESPLIEGUE, no del visitante:
+            // la llave compartida está mal o no está. Se grita en el log y afuera sale un error
+            // genérico — el comprador no puede hacer nada con «401», y el detalle no es suyo.
+            //
+            // El 403 NO entra acá: `SharedKeyAuth` responde 401 cuando la llave falla, nunca 403.
+            // Un 403 del árbol de servicios es un rechazo de negocio —`consent.not_granted` es el
+            // caso real— y tragarse su motivo dejaría al comprador sin saber qué hacer. Se
+            // descubrió agendando contra los procesos vivos, no con un test.
+            if (res.StatusCode == HttpStatusCode.Unauthorized)
             {
-                // Es un defecto de DESPLIEGUE, no del visitante: la llave compartida está mal o
-                // no está. Se grita en el log y afuera sale un error genérico — el comprador no
-                // puede hacer nada con «401», y el detalle no es suyo.
                 _log.LogError(
-                    "Tienda respondió {Status} al {Que}: la llave compartida es inválida o falta. "
-                    + "Revisar Synergos:Tienda:ApiKey.", (int)res.StatusCode, queHacia);
+                    "Tienda respondió 401 al {Que}: la llave compartida es inválida o falta. "
+                    + "Revisar Synergos:Tienda:ApiKey.", queHacia);
                 throw new InvalidOperationException("No pudimos procesar tu compra. No se te cobró.");
             }
 
