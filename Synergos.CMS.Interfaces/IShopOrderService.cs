@@ -83,6 +83,28 @@ public sealed record ShopOrder(
     Guid? OwnerMemberKey = null);
 
 /// <summary>
+/// A dónde se despacha la compra.
+/// </summary>
+/// <remarks>
+/// <para><b>Existe porque el motor real la pide y el CMS no la tenía.</b> El stub-first confirma
+/// capturando el pago y nada más — el despacho «lo maneja el OMS real». Cuando ese OMS resultó
+/// ser <c>Bff.Tienda</c>, apareció que confirmar de verdad exige una dirección y una
+/// transportadora, y que en el CMS no había dónde hubiera estado nunca esa dirección (HU #24).</para>
+///
+/// <para><b>Opcional en el contrato a propósito.</b> El stub la ignora, así que un clon limpio no
+/// cambia de comportamiento; el adaptador HTTP la exige y rechaza claro si falta. Obligarla en la
+/// interfaz habría roto el checkout de demo, que es el que tiene que seguir corriendo solo.</para>
+/// </remarks>
+public sealed record ShopShippingAddress(
+    string Line1,
+    string? Line2,
+    string City,
+    string? Region,
+    string? PostalCode,
+    string? Country,
+    string? Contact);
+
+/// <summary>
 /// Resultado de <see cref="IShopOrderService.ConfirmAsync"/>: estado de la orden
 /// tras capturar el pago + número de orden + las líneas. <see cref="Status"/> es
 /// "Paid" si la captura tuvo éxito.
@@ -137,7 +159,15 @@ public interface IShopOrderService
     /// orderRef no existe e <see cref="InvalidOperationException"/> si el hold de
     /// stock venció antes de confirmar.
     /// </summary>
-    Task<ShopConfirmationResult> ConfirmAsync(string orderRef, CancellationToken cancellationToken = default);
+    /// <param name="shipTo">
+    /// A dónde despachar. <b>El stub la ignora</b> —confirma capturando y nada más—; un motor
+    /// real la EXIGE, porque confirmar incluye despachar. Opcional para que el checkout de demo
+    /// siga corriendo sin ella. Ver <see cref="ShopShippingAddress"/>.
+    /// </param>
+    Task<ShopConfirmationResult> ConfirmAsync(
+        string orderRef,
+        ShopShippingAddress? shipTo = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Devuelve el historial de órdenes de un comprador (por email), de la más

@@ -63,8 +63,11 @@ public sealed class ShopPaymentEventSink : IPaymentEventSink
 
         try
         {
+            // Sin dirección: un webhook del PSP confirma un COBRO, y no trae —ni tiene por qué
+            // traer— a dónde se despacha. Contra el motor en proceso alcanza; contra un motor
+            // que además despacha, esta vía no sirve para confirmar y lo dice al rechazar.
             var result = await _orders
-                .ConfirmAsync(paymentEvent.OrderReference, cancellationToken)
+                .ConfirmAsync(paymentEvent.OrderReference, shipTo: null, cancellationToken)
                 .ConfigureAwait(false);
             return PaymentEventOutcome.Ok($"orden {result.OrderNumber} en estado {result.Status}");
         }

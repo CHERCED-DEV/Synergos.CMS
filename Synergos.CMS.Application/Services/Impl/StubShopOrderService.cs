@@ -236,7 +236,14 @@ public sealed class StubShopOrderService : IShopOrderService
         return new ShopCheckoutResult(orderRef, session.SessionId, total, currency!);
     }
 
-    public async Task<ShopConfirmationResult> ConfirmAsync(string orderRef, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    /// <remarks>
+    /// <paramref name="shipTo"/> se ignora: este motor cubre el tramo transaccional Pending→Paid
+    /// y el despacho «lo maneja el OMS real». Se acepta en la firma para que el mismo contrato
+    /// sirva a un motor que sí despacha (HU #24) sin partir la interfaz en dos.
+    /// </remarks>
+    public async Task<ShopConfirmationResult> ConfirmAsync(
+        string orderRef, ShopShippingAddress? shipTo = null, CancellationToken cancellationToken = default)
     {
         var order = await LoadAsync(orderRef, cancellationToken);
         if (order is null)

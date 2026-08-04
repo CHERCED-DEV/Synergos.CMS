@@ -58,7 +58,7 @@ public sealed class PaymentWebhookControllerTests
             .Returns(new PaymentOutcome("stub_s", PaymentStatus.Authorized, 1000m));
         _orders.GetOrderAsync("ord_1", Arg.Any<CancellationToken>()).Returns(Order());
         var confirmation = new ShopConfirmationResult("ord_1", "SYN-1", "Paid", Array.Empty<ShopOrderLine>(), 1000m, "COP");
-        _orders.ConfirmAsync("ord_1", Arg.Any<CancellationToken>()).Returns(confirmation);
+        _orders.ConfirmAsync("ord_1", Arg.Any<ShopShippingAddress?>(), Arg.Any<CancellationToken>()).Returns(confirmation);
     }
 
     [Fact] // provider desconocido → 404
@@ -94,7 +94,7 @@ public sealed class PaymentWebhookControllerTests
         var result = await BuildSut(new PaymentsSettings(), Payload()).Receive("stub", default);
 
         Assert.IsType<OkObjectResult>(result);
-        await _orders.Received(1).ConfirmAsync("ord_1", Arg.Any<CancellationToken>());
+        await _orders.Received(1).ConfirmAsync("ord_1", Arg.Any<ShopShippingAddress?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact] // happy FIRMADO: firmar con WebhookSigner + verificar aquí → confirma
@@ -109,7 +109,7 @@ public sealed class PaymentWebhookControllerTests
             .Receive("stub", default);
 
         Assert.IsType<OkObjectResult>(result);
-        await _orders.Received(1).ConfirmAsync("ord_1", Arg.Any<CancellationToken>());
+        await _orders.Received(1).ConfirmAsync("ord_1", Arg.Any<ShopShippingAddress?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact] // idempotente: evento duplicado (ledger dice ya procesado) → 200; ConfirmAsync
@@ -123,7 +123,7 @@ public sealed class PaymentWebhookControllerTests
         var result = await BuildSut(new PaymentsSettings(), Payload()).Receive("stub", default);
 
         Assert.IsType<OkObjectResult>(result);
-        await _orders.Received(1).ConfirmAsync("ord_1", Arg.Any<CancellationToken>());   // idempotente
+        await _orders.Received(1).ConfirmAsync("ord_1", Arg.Any<ShopShippingAddress?>(), Arg.Any<CancellationToken>());   // idempotente
         // NO se re-marca tras un duplicado (TryMark ya devolvió false, no se llama de nuevo).
     }
 
@@ -137,7 +137,7 @@ public sealed class PaymentWebhookControllerTests
         var result = await BuildSut(new PaymentsSettings(), Payload()).Receive("stub", default);
 
         Assert.IsType<OkObjectResult>(result);
-        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<ShopShippingAddress?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact] // ligadura: la sesión del payload no es la de la orden → 200 ignorado, no confirma
@@ -151,7 +151,7 @@ public sealed class PaymentWebhookControllerTests
 
         Assert.IsType<OkObjectResult>(result);
         // Lo esencial: NO se confirma una orden con la sesión de otra.
-        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<ShopShippingAddress?>(), Arg.Any<CancellationToken>());
 
         // ADR 0116 fase 4 — antes esta prueba también exigía que no se
         // consultara al PSP. Ese aserto cae a propósito: la comparación de
@@ -180,7 +180,7 @@ public sealed class PaymentWebhookControllerTests
 
         Assert.IsType<OkObjectResult>(result);
         await _payments.DidNotReceive().GetStatusAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<ShopShippingAddress?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -197,7 +197,7 @@ public sealed class PaymentWebhookControllerTests
 
         var status = Assert.IsType<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status500InternalServerError, status.StatusCode);
-        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<ShopShippingAddress?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public sealed class PaymentWebhookControllerTests
         var result = await BuildSut(settings, wompiBody).Receive("wompi", default);
 
         Assert.IsType<UnauthorizedObjectResult>(result);
-        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _orders.DidNotReceive().ConfirmAsync(Arg.Any<string>(), Arg.Any<ShopShippingAddress?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

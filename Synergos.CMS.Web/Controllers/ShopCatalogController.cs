@@ -549,7 +549,13 @@ public sealed class ShopCatalogController : ControllerBase
         ShopConfirmationResult result;
         try
         {
-            result = await _orders.ConfirmAsync(request.OrderRef.Trim(), cancellationToken);
+            var shipTo = request.ShipTo is { } a && !string.IsNullOrWhiteSpace(a.Line1) && !string.IsNullOrWhiteSpace(a.City)
+                ? new ShopShippingAddress(
+                    a.Line1!.Trim(), a.Line2?.Trim(), a.City!.Trim(), a.Region?.Trim(),
+                    a.PostalCode?.Trim(), a.Country?.Trim(), a.Contact?.Trim())
+                : null;
+
+            result = await _orders.ConfirmAsync(request.OrderRef.Trim(), shipTo, cancellationToken);
         }
         catch (ArgumentException ex)
         {
@@ -1046,7 +1052,17 @@ public sealed class ShopCatalogController : ControllerBase
     public sealed record CustomerRequest(string Name, string Email);
 
     /// <summary>POST /api/shop/confirm — la orden a capturar/confirmar.</summary>
-    public sealed record ConfirmRequest(string OrderRef);
+    /// <param name="ShipTo">
+    /// A dónde despachar. <b>Opcional y aditivo</b> (HU #24): el motor en proceso lo ignora
+    /// —confirma capturando y nada más—, así que la UI de hoy sigue funcionando sin mandarlo.
+    /// Un motor que además despacha lo exige, y sin él rechaza con el motivo puesto.
+    /// </param>
+    public sealed record ConfirmRequest(string OrderRef, ShipToDto? ShipTo = null);
+
+    /// <summary>La dirección de entrega tal como llega del formulario.</summary>
+    public sealed record ShipToDto(
+        string? Line1, string? Line2, string? City, string? Region,
+        string? PostalCode, string? Country, string? Contact);
 
     // ── Response DTOs (JSON estable para la UI) ─────────────────────
 

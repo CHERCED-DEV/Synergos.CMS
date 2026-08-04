@@ -71,7 +71,7 @@ public sealed class DevPaidOrderSeeder
             new ShopCustomer(member.Name ?? member.Email, member.Email, member.Key),
             cancellationToken).ConfigureAwait(false);
 
-        await _orders.ConfirmAsync(checkout.OrderRef, cancellationToken).ConfigureAwait(false);
+        await _orders.ConfirmAsync(checkout.OrderRef, shipTo: null, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "DevPaidOrderSeeder: orden {OrderRef} PAGADA para {Email} sobre {Sku}.",

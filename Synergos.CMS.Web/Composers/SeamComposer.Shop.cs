@@ -100,7 +100,35 @@ public sealed partial class SeamComposer
         // T1 (doc 25) — persistencia durable de órdenes tras el seam genérico IJsonEntityStore.
         // El motor no cambia; solo su backing store pasa de memoria a disco (JSON por
         // orderRef, App_Data/syn-orders/). Una orden confirmada sobrevive un reinicio.
-        services.AddSingleton<IShopOrderService>(sp =>
+        // HU #24 — contra quién compra la tienda. Dos orígenes, mismo contrato, elegidos por
+        // Synergos:Tienda:Mode:
+        //   - Stub (default): el motor en proceso. Un clon limpio arranca y vende sin levantar
+        //     seis servicios, y por eso el default no se mueve.
+        //   - Bff: contra Synergos.Bff.Tienda, que reserva, cobra y crea el pedido — y lo
+        //     DESHACE si algo falla a la mitad.
+        //
+        // Contra el ORQUESTADOR y no contra las capacidades sueltas: si el CMS llamara a
+        // Api.Inventory + Api.Payments + Api.Orders por separado estaría reimplementando la
+        // máquina de sagas, y peor, porque no tiene dónde anotar una compensación pendiente.
+        // Lo vigila ShopWiringTests.
+        //
+        // Encenderlo sin el BFF arriba degrada —no se puede comprar, y lo dice— pero la tienda
+        // sigue sirviendo catálogo y fichas.
+        if (string.Equals(builder.Config["Synergos:Tienda:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
+        {
+            var tiendaBase = builder.Config["Synergos:Tienda:BaseUrl"];
+            var cartBase = builder.Config["Synergos:Tienda:CartBaseUrl"];
+            var tiendaKey = builder.Config["Synergos:Tienda:ApiKey"];
+            var timeout = int.TryParse(builder.Config["Synergos:Tienda:TimeoutSeconds"], out var t) && t > 0 ? t : 30;
+
+            ConfigurarClienteTienda(services, HttpShopOrderService.BffClientName, tiendaBase, "http://127.0.0.1:5300/", tiendaKey, timeout);
+            ConfigurarClienteTienda(services, HttpShopOrderService.CartClientName, cartBase, "http://127.0.0.1:5210/", tiendaKey, timeout);
+
+            services.AddSingleton<IShopOrderService, HttpShopOrderService>();
+        }
+        else
+        {
+            services.AddSingleton<IShopOrderService>(sp =>
             new StubShopOrderService(
                 sp.GetRequiredService<IProductCatalogProvider>(),
                 sp.GetRequiredService<IReservationService>(),
@@ -113,6 +141,7 @@ public sealed partial class SeamComposer
                 // por el que una orden llega a Paid. Sin esto el panel de ventas
                 // quedaba en $0 con órdenes reales en disco.
                 checkoutRecorder: sp.GetRequiredService<ICheckoutRecorder>()));
+        }
         services.AddSingleton<IReturnService>(sp =>
             new StubReturnService(
                 sp.GetRequiredService<IShopOrderService>(),
@@ -131,5 +160,26 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<IJsonEntityStore>(),
                 StubMessagingService.DefaultResourceType));
 
+    }
+
+    /// <summary>Un cliente nombrado hacia el árbol de servicios, con su llave compartida.</summary>
+    /// <remarks>
+    /// El timeout es generoso a propósito: comprar cruza seis servicios y NO es auxiliar.
+    /// Cortarlo pronto no evita el problema —un timeout no dice «no se cobró», dice «no sé»—,
+    /// solo lo hace más probable.
+    /// </remarks>
+    private static void ConfigurarClienteTienda(
+        IServiceCollection services, string nombre, string? baseUrl, string porDefecto, string? apiKey, int timeoutSegundos)
+    {
+        services.AddHttpClient(nombre, http =>
+        {
+            var url = string.IsNullOrWhiteSpace(baseUrl) ? porDefecto : baseUrl;
+            http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+            http.Timeout = TimeSpan.FromSeconds(timeoutSegundos);
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                http.DefaultRequestHeaders.Add(HttpShopOrderService.ApiKeyHeader, apiKey);
+            }
+        });
     }
 }

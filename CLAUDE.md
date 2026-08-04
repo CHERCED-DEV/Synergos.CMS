@@ -477,9 +477,18 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 
 **Lo que NO está:**
 
-- **Casi nada está conectado al producto.** El CMS consume UNA capacidad
-  de veinte. Es la brecha más grande y no es técnica de fondo: es
-  cableado. Sin esto, «tenemos 20 APIs» no es «tenemos un producto».
+- **Poco está conectado al producto, pero la brecha es MENOR de lo que
+  parecía.** El inventario del cableado (HU #23,
+  `docs/product/11-mapa-del-cableado.md`) contó los 46 `Stub*` y los
+  clasificó: **8** son cableado pendiente, **5** ya salen del contenido
+  de Umbraco (cablearlos sería un retroceso) y **33** se quedan en stub a
+  propósito. Y 20 de los 46 **ya son durables** — «stub» en este repo
+  dejó hace tiempo de querer decir «en memoria». Hay gate
+  (`WiringMapTests`): un stub nuevo sin mapear rompe el build.
+  De los 8, el primero está hecho: la tienda compra contra `Bff.Tienda`
+  con `Synergos:Tienda:Mode=Bff` (HU #24, default sigue siendo `Stub`).
+  Faltan `StubReservationService` → `Api.Booking` y `StubPaymentProvider`
+  → `Api.Payments`, que son los dos siguientes.
 - **El borde ya avisa, pero todavía no cobra.** `Api.Notifications` tiene
   transporte real (Resend, ADR 0131) y le falta solo la credencial del
   arquitecto; `Api.Payments` sigue sobre `LoggingPaymentProvider` y **no
