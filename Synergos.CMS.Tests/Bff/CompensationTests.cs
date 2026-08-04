@@ -106,6 +106,9 @@ public sealed class CompensationTests
         public AppointmentSaga? Find(string id) => _s.GetValueOrDefault(id);
         public IReadOnlyList<AppointmentSaga> WithPendingCompensations()
             => _s.Values.Where(x => x.IsUnwinding() && x.Pending().Count > 0).ToList();
+        public IReadOnlyList<AppointmentSaga> StartedBefore(DateTimeOffset limite)
+            => _s.Values.Where(x => x.Status == SagaStatus.Running && x.StartedAtUtc < limite).ToList();
+
         public void Put(AppointmentSaga saga) => _s[saga.Id] = saga;
     }
 

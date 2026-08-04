@@ -41,6 +41,10 @@ public static class SagaMachinery
         builder.Services.Configure<SagaStorageOptions>(builder.Configuration.GetSection($"{raiz}:Storage"));
         builder.Services.Configure<AlertOptions>(builder.Configuration.GetSection($"{raiz}:Alerts"));
 
+        // La cadencia del barrido y el plazo de abandono (HU #29). Los dos son compromisos de
+        // quien despliega, no verdades del código: ver SweepOptions.
+        builder.Services.Configure<SweepOptions>(builder.Configuration.GetSection($"{raiz}:Sweep"));
+
         builder.Services.AddSingleton(vocabulary);
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<ISagaStore<TSaga>, FileSystemSagaStore<TSaga>>();

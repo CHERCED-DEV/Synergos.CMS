@@ -587,6 +587,9 @@ services:
       # El aviso cuando una compensacion se rinde tras ocho intentos. Sin esto
       # queda visible en /v1/compensations con alertedAtUtc en nulo — degrada,
       # no rompe, pero nadie se entera.
+      Salud__Sweep__IntervalSeconds: ${SYNERGOS_SWEEP_INTERVAL_SECONDS:-60}
+      Salud__Sweep__AbandonAfterMinutes: ${SYNERGOS_ABANDON_AFTER_MINUTES:-60}
+
       Salud__Alerts__ToKind: ${SYNERGOS_ALERTS_TO_KIND:-salud.guardia}
       Salud__Alerts__ToId: ${SYNERGOS_ALERTS_TO_ID:-operaciones}
       Salud__Alerts__Address: ${SYNERGOS_ALERTS_ADDRESS:-}
@@ -634,6 +637,9 @@ services:
       # El aviso cuando una compensacion se rinde tras ocho intentos. Sin esto
       # queda visible en /v1/compensations con alertedAtUtc en nulo — degrada,
       # no rompe, pero nadie se entera.
+      Tienda__Sweep__IntervalSeconds: ${SYNERGOS_SWEEP_INTERVAL_SECONDS:-60}
+      Tienda__Sweep__AbandonAfterMinutes: ${SYNERGOS_ABANDON_AFTER_MINUTES:-60}
+
       Tienda__Alerts__ToKind: ${SYNERGOS_ALERTS_TO_KIND:-tienda.guardia}
       Tienda__Alerts__ToId: ${SYNERGOS_ALERTS_TO_ID:-operaciones}
       Tienda__Alerts__Address: ${SYNERGOS_ALERTS_ADDRESS:-}

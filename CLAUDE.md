@@ -497,9 +497,14 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   gritos en vez de caer al stub en silencio — hay gate (HU #27). Lo que
   falta es **el adaptador real y la cuenta comercial**: hoy sigue sin mover
   plata, así que ningún demo de venta corre de punta a punta.
-- **Nada barre los envíos que quedaron en `Queued`.** Reintenta quien
-  llama. El barrido periódico es la máquina de `Bff.Core` y ponerlo dentro
-  de la capacidad duplicaría esa lógica.
+- **La saga que nunca confirmó ya se abandona** (HU #29, parcial): el
+  barrido de `Bff.Core` da por muerta la que lleva más de
+  `Sweep:AbandonAfterMinutes` en `Running` y deshace lo hecho. Cero lo
+  apaga. **Lo que NO rescata es el stock** —los apartados de
+  `Api.Inventory` vencen solos a los 15 min—, sino la autorización del
+  cobro, que no vence sola.
+- **Sigue sin barrerse lo que quedó en `Queued`** en `Api.Notifications`.
+  Reintenta quien llama. Es la otra mitad de #29.
 - **Las copias existen pero NO salen del servidor** (HU #31).
   `tools/respaldo.sh` copia en frío los volúmenes de datos —la lista sale
   del compose, no de una lista a mano— y `tools/restaurar.sh` los

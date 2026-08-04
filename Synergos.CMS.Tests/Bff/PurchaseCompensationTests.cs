@@ -120,6 +120,9 @@ public sealed class PurchaseCompensationTests
         public PurchaseSaga? Find(string id) => _s.GetValueOrDefault(id);
         public IReadOnlyList<PurchaseSaga> WithPendingCompensations()
             => _s.Values.Where(x => x.IsUnwinding() && x.Pending().Count > 0).ToList();
+        public IReadOnlyList<PurchaseSaga> StartedBefore(DateTimeOffset limite)
+            => _s.Values.Where(x => x.Status == SagaStatus.Running && x.StartedAtUtc < limite).ToList();
+
         public void Put(PurchaseSaga saga) => _s[saga.Id] = saga;
     }
 

@@ -48,6 +48,9 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
     /// <summary>Las sagas que están deshaciendo algo — la vista de operación.</summary>
     public IReadOnlyList<TSaga> PendingCompensations() => _sagas.WithPendingCompensations();
 
+    /// <summary>Las que empezaron antes de <paramref name="limite"/> y siguen sin cerrar (HU #29).</summary>
+    public IReadOnlyList<TSaga> StartedBefore(DateTimeOffset limite) => _sagas.StartedBefore(limite);
+
     public Result<TSaga> Get(string id)
         => _sagas.Find(id) is { } s ? Result.Ok(s) : NotFound(id);
 
