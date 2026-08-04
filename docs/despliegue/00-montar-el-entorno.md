@@ -26,7 +26,7 @@ para que no se repita:
 
 ---
 
-## 1. El servidor — Hetzner, ~€6,80/mes
+## 1. El servidor — Hetzner, ~€8,49/mes
 
 ### Por qué precio fijo y no cobro por uso
 
@@ -35,6 +35,37 @@ Es la decisión que protege del miedo real:
 > En AWS, Azure o Vercel, **un ataque genera factura**. En un VPS de precio fijo, un ataque pone
 > el sitio lento o caído — y **nunca** genera factura. Pagás lo mismo el mes del ataque que el
 > anterior.
+
+### ⚠️ Lo que este documento decía y era falso
+
+Hasta el 2026-08-04 esta sección mandaba a crear un **CX32 en Ashburn por €6,80**. Las dos mitades
+estaban mal, y sólo se vio al ir a comprarlo:
+
+- **La línea CX no existe en EE.UU.** Es exclusiva de Europa. En Ashburn y Hillsboro sólo hay
+  CPX y CCX.
+- **El CX32 ya no existe en ningún sitio**: Hetzner renombró la línea y su reemplazo es el
+  **CX33** (mismas 4 vCPU y 8 GB, 80 GB NVMe, 20 TB de tráfico) a **€8,49/mes**.
+- **Los precios de EE.UU. subieron fuerte el 15-jun-2026.** El equivalente allá —CPX31, mismas
+  4 vCPU y 8 GB— cuesta **$73,49/mes**.
+
+### La decisión que eso obliga a tomar
+
+|  | Alemania · **CX33** | Ashburn · **CPX31** |
+|---|---|---|
+| Precio | **€8,49/mes** | **$73,49/mes** |
+| CPU · RAM · disco | 4 vCPU · 8 GB · 80 GB | 4 vCPU · 8 GB · 160 GB |
+| Latencia a Colombia | ~200 ms | ~80 ms |
+| Al año | ~€102 | ~$880 |
+
+> ### Recomendado: **Alemania**. La diferencia son ~$780 al año por 120 ms.
+>
+> Y esos 120 ms se pagan **una vez por página**, no por recurso: los bundles del CDN ya salen del
+> borde de Cloudflare (que tiene presencia en Bogotá) y el HTML lo cachea el proxy en naranja. Lo
+> que de verdad viaja a Alemania es la primera petición y las de backoffice.
+>
+> Si algún día el cliente nota la diferencia, mudarse es recrear el servidor y cambiar un secreto:
+> los datos están en volúmenes y las imágenes en GHCR. **No es una decisión difícil de revertir**,
+> y por eso no vale la pena pagarla por adelantado.
 
 ### Qué crear
 
@@ -45,15 +76,19 @@ Es la decisión que protege del miedo real:
 
    | | |
    |---|---|
-   | **Location** | **Ashburn, VA** — ~80 ms a Colombia. Alemania son ~200 ms |
+   | **Location** | **Falkenstein** o **Nuremberg** (Alemania) — ver la tabla de arriba |
    | **Image** | Ubuntu 24.04 |
-   | **Type** | **CX32** — 4 vCPU · 8 GB · 80 GB |
+   | **Type** | **CX33** — 4 vCPU · 8 GB · 80 GB · 20 TB |
    | **SSH Key** | pegar la pública. **Sin contraseña**, ver §1.1 |
    | **Backups** | ver §1.2 |
 
-> **Por qué CX32 y no el CX22 de €3,79.** Son 23 procesos .NET: Umbraco solo pide 400-600 MB y
-> 22 APIs a ~80-100 MB son otros ~2 GB. En 4 GB entra con swap; en 8 GB entra tranquilo.
-> Ahorrarse €3 para después depurar por qué el servidor se traba es mal negocio.
+> **Por qué 8 GB y no 4.** Son 23 procesos .NET: Umbraco solo pide 400-600 MB y 22 APIs a
+> ~80-100 MB son otros ~2 GB. En 4 GB entra con swap; en 8 GB entra tranquilo. Ahorrarse €3 para
+> después depurar por qué el servidor se traba es mal negocio.
+>
+> **Confirmá el precio en el panel antes de crear.** Los de acá se verificaron contra la
+> [tabla oficial](https://docs.hetzner.com/general/infrastructure-and-availability/price-adjustment/)
+> el 2026-08-04, y ya cambiaron una vez desde que se escribió este documento.
 
 ### 1.1 La llave SSH
 
@@ -94,6 +129,28 @@ En **Hetzner → Firewalls**, o con `ufw` en la máquina. Entrante:
 
 > **Sin esto, todo lo de Cloudflare es decorativo.** Hay servicios que buscan la IP real detrás
 > del proxy; quien la encuentre le pega al origen directo y se salta la protección entera.
+
+### 1.4 Dejar el servidor listo — un script, una vez
+
+Todo lo que el despliegue automático da por hecho —Docker con el plugin `compose` v2, un usuario
+que no es root, `/opt/synergos` con los permisos correctos, el firewall, y un `.env` con las dos
+llaves largas ya generadas— lo pone esto:
+
+```bash
+scp tools/bootstrap-servidor.sh root@<ip>:/tmp/
+ssh root@<ip> 'bash /tmp/bootstrap-servidor.sh'
+```
+
+Está escrito para poder correrse **dos veces sin romper nada**, porque se va a correr dos veces:
+la primera siempre falta algo.
+
+> **Lo que NO hace, y es a propósito:** no escribe el dominio ni las credenciales de correo —esas
+> las ponés vos en `/opt/synergos/.env`—, y no cierra 80/443 a los rangos de Cloudflare. Ese paso
+> va **después** de que el DNS apunte (§2.3); antes deja el sitio inalcanzable hasta para vos.
+>
+> **El action entra como el usuario `despliegue`, no como root.** No es ceremonia: la llave de
+> despliegue vive en los secretos de GitHub, y una llave que abre root convierte cualquier fuga en
+> el servidor entero en vez de en un directorio y un demonio.
 
 ---
 
@@ -139,48 +196,82 @@ queda un proyecto vacío haciendo ruido en cada push. Si quedó uno, borralo en
 
 ---
 
-## 3. Los bundles del CDN — Cloudflare Pages ([#20](../../../../issues/20))
+## 3. Los bundles del CDN — ✅ **ya está hecho** ([#20](../../../../issues/20))
 
-Proyecto **Pages** (no Workers) conectado a **`Synergos.UI`** (no al CMS). El comando es el build
-de Angular; el directorio de salida, el `dist` que produzca.
+**https://synergos-ui.synergos-labs.workers.dev** — 139 elementos, desplegándose solo en cada push
+a `master` de `Synergos.UI`. No hay nada que montar acá.
 
-Y un `_headers` en la salida, que es lo que hace que Pages sea mejor que GitHub Pages acá:
+Quedó en **Workers con assets estáticos**, no en Pages como decía este documento. Dos cosas
+salieron mejor de lo previsto:
+
+- **La política de caché es código con tests** (`tools/lib/cdn-cache-policy.mjs`), no un fichero
+  `_headers`. Hizo falta: Cloudflare **fusiona** las reglas de `_headers` que se solapan, y las
+  tres rutas hermanas de cada elemento —`latest/`, la versión exacta, el alias mayor— habrían
+  producido `Cache-Control: max-age=60, max-age=31536000, immutable`. Basura.
+- **El despliegue es atómico**: todo el directorio cambia de un golpe, así que no existe la
+  ventana «registry publicado antes que los bundles» que había que vigilar.
+
+> **Y un defecto que sólo se vio en vivo:** Cloudflare sirve los assets **antes** de invocar al
+> Worker, así que las cabeceras no corrían y todo salía `max-age=0` sin CORS. Se arregla con
+> `run_worker_first: true`. Ningún test podía verlo — es comportamiento de la plataforma.
+
+Lo que falta de este lado es una línea del `.env`:
 
 ```
-/bundles/*
-  Cache-Control: public, max-age=31536000, immutable
-  Access-Control-Allow-Origin: *
-
-/element-registry.json
-  Cache-Control: public, max-age=60
+SYNERGOS_CDN_MODE=Http
+SYNERGOS_CDN_URL=https://synergos-ui.synergos-labs.workers.dev
 ```
 
-> **Caché eterna en los bundles, corta en el registry.** Al revés es el error fácil de cometer y
-> difícil de diagnosticar: publicás una versión nueva y **nadie la ve durante un año**.
+Sin eso, los 71 `elementSyn*` emiten un comentario HTML de relleno: degradado y **visible**, que
+es mejor que un sitio roto. (El `bootstrap-servidor.sh` del §1.4 ya lo deja puesto.)
 
 ---
 
 ## 4. Los secretos en GitHub
 
-**Settings → Secrets and variables → Actions → New repository secret.**
+**Settings → Secrets and variables → Actions.** Ojo con la pestaña: hay dos, y no da igual.
+
+### 4.1 Secrets — sólo lo que abre puertas
 
 | Nombre | Qué es |
 |---|---|
 | `DEPLOY_HOST` | la IP del servidor |
-| `DEPLOY_USER` | el usuario SSH |
+| `DEPLOY_USER` | el usuario SSH — `despliegue`, el que crea el script del §1.4 |
 | `DEPLOY_SSH_KEY` | la llave **privada** del §1.1 |
-| `SYNERGOS_API_KEY` | la llave compartida entre servicios. Inventala larga: `openssl rand -hex 32` |
-| `CART_SECRET` | firma de la cookie del carrito (ADR 0028) |
-| `RESEND_API_KEY` | ← HU [#12](../../../../issues/12), para que el correo salga de verdad |
-| `RESEND_FROM` | `Avisos <avisos@tu-dominio.co>` |
-| `RESEND_WEBHOOK_SECRET` | `whsec_…`, al dar de alta el webhook |
+| `DEPLOY_HOST_KEY` | *(opcional pero recomendado)* la salida de `ssh-keyscan -H <ip>` |
+
+> **Sin `DEPLOY_HOST_KEY`, el action acepta la huella que el servidor presente en el momento.**
+> Alcanza para arrancar y **no es equivalente**: quien pueda meterse en medio de ese primer saludo
+> recibe la llave de despliegue. Está escrito en el workflow para que sea una decisión y no un
+> descuido.
+
+Las credenciales de los servicios (`SYNERGOS_API_KEY`, `SYNERGOS_CART_SECRET`, las tres de Resend)
+**no van acá**: viven en `/opt/synergos/.env`, en el servidor, y nunca salen de ahí. El action no
+las necesita — sólo copia ficheros y ejecuta un script; quien las lee es `docker compose`.
+
+Los tres de Resend se sacan en [resend.com](https://resend.com) después de verificar el dominio;
+el webhook apunta a `https://<tu-dominio>/v1/webhooks/resend`.
+
+### 4.2 Variables — lo que no es secreto
+
+| Nombre | Qué es |
+|---|---|
+| `SYNERGOS_DOMAIN` | el dominio público, sin `https://` ni barra final |
+
+> **Va como Variable y no como Secret a propósito.** Un dominio no es secreto —está en el DNS—, y
+> GitHub **enmascara** los secretos en los logs: puesto como secret, la salida del humo sería
+> `✓ el humo pasó contra https://***`, que es exactamente el renglón que uno va a leer el día que
+> algo falle.
 
 > **Ninguno de estos va al repo. Nunca.** Y si alguno se pega por error en un commit, en un
 > issue o en un chat: **se rota**, no se borra el mensaje. Un secreto que se vio una vez está
 > quemado.
 
-Los tres de Resend se sacan en [resend.com](https://resend.com) después de verificar el dominio;
-el webhook apunta a `https://<tu-dominio>/v1/webhooks/resend`.
+> ### Mientras falten, el despliegue se salta solo
+>
+> No se pone rojo: si faltan `DEPLOY_HOST` o `SYNERGOS_DOMAIN`, el workflow anota qué falta y
+> termina en verde. **Un rojo permanente que todos saben ignorar entrena a ignorar los rojos de
+> verdad.** Se enciende solo el día que los secretos existan, sin tocar nada.
 
 ---
 
@@ -189,12 +280,48 @@ el webhook apunta a `https://<tu-dominio>/v1/webhooks/resend`.
 Con eso, un `git push` a `master`:
 
 ```
-gates (2044 tests + 7 workflows) → 23 imágenes a GHCR → el servidor las baja
+gates (2080 tests + 8 workflows) → 23 imágenes a GHCR → el servidor las baja
   → parada antes de arranque → humo contra la URL pública → verde
 ```
 
 Y si el humo falla: vuelve a la imagen anterior y **el action se pone rojo**. Un deploy verde con
 el sitio caído es peor que uno rojo, porque nadie lo mira.
+
+### Las tres piezas, y dónde corre cada una
+
+| Fichero | Dónde corre | Qué hace |
+|---|---|---|
+| `.github/workflows/deploy.yml` | runner | espera los gates, copia, ordena, y decide |
+| `tools/deploy-remoto.sh` | **el servidor** | baja imágenes, para, arranca, comprueba etiquetas |
+| `tools/humo-publico.sh` | **el runner** | prueba la URL pública como un visitante |
+
+> **El humo corre en el runner y no en el servidor, y esa es la parte que se suele hacer mal.**
+> Desde el servidor se prueba el último salto; desde fuera se atraviesa lo mismo que atraviesa un
+> visitante — DNS, Cloudflare, el certificado, el proxy—, que es donde falla un despliegue.
+>
+> Por eso vive en su propio fichero: así `DeployPipelineTests` puede exigir que no diga
+> `localhost`. Un humo contra el propio runner **pasa siempre**, y el único síntoma es que nunca
+> falla.
+
+### Lo que el humo comprueba, y por qué cada cosa
+
+1. **La portada devuelve 200 y es HTML.** `/health` puede contestar con el sitio inservible: no
+   toca ni el contenido, ni las plantillas, ni la base.
+2. **La versión que contesta es el commit que se subió.** `/_health` publica su SHA (lo inyecta la
+   imagen). Es lo que separa «responde» de «se actualizó»: un reinicio que falla en silencio deja
+   viva la versión anterior y el despliegue se daría por bueno habiendo desplegado nada.
+3. **El árbol de servicios no contesta desde internet.** Hay un gate que vigila el `compose`; esto
+   vigila la **realidad** — un firewall mal puesto o un `ports` añadido a mano en el servidor no
+   se ven en el repo.
+
+### La caída es a propósito
+
+Se para todo y se arranca todo. No es pereza: 19 capacidades guardan en fichero JSON con un `lock`
+de **proceso**, y un despliegue «sin caída» son dos instancias a la vez pisándose el almacén **sin
+dar error**. El despliegue que cualquier plataforma moderna hace por defecto rompería esto.
+
+> El día que cambie el almacén (épica #2) se revisa. Hasta entonces, quien lo «mejore» corrompe
+> datos sin ver un error.
 
 ### El primer arranque tarda, y es normal
 
@@ -208,14 +335,19 @@ da 502.
 
 | | |
 |---|---|
-| Servidor Hetzner CX32 | €6,80/mes |
-| Cloudflare (proxy, DDoS, SSL, Pages) | $0 |
+| Servidor Hetzner **CX33** (Alemania) | €8,49/mes |
+| Cloudflare (proxy, DDoS, SSL, y el CDN en Workers) | $0 |
 | GitHub (Actions y GHCR, repo público) | $0 |
-| Dominio `.com` | ~$10,44/año |
-| *(opcional)* backups | ~€1,40/mes |
+| Dominio `.com` en Cloudflare Registrar | ~$10,44/año |
+| *(opcional)* backups | ~€1,70/mes |
 
-> ### **~€7/mes + ~$10/año. Techo conocido de antemano.**
+> ### **~€8,5/mes + ~$10/año. Techo conocido de antemano.**
 >
-> Lo único que puede cobrar de más: Hetzner en EE.UU. incluye 1 TB/mes y cobra **€1 por TB**
-> extra. Un ataque de 10 TB costaría €10 — y con el proxy en naranja, ese tráfico ni llega al
-> servidor.
+> *(Si se eligiera Ashburn en vez de Alemania: **$73,49/mes**. Ver la tabla del §1.)*
+>
+> Lo único que puede cobrar de más es el tráfico, y el CX33 incluye **20 TB/mes**. Con el proxy en
+> naranja, además, el tráfico de un ataque ni llega al servidor: lo come Cloudflare, que no cobra
+> por ancho de banda.
+>
+> **Eso es lo que compra un precio fijo.** El mes de un ataque cuesta lo mismo que el anterior —
+> que era el miedo concreto detrás de no querer cobro por uso.

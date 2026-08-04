@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Synergos.Shared;
@@ -34,9 +35,9 @@ public static class SharedKeyAuth
     /// </summary>
     /// <param name="app">El pipeline.</param>
     /// <param name="expectedKey">
-    /// La llave esperada. Si viene vacía la autenticación queda <b>abierta</b> y se registra un
-    /// aviso: sin esto, un <c>dotnet run</c> recién clonado no levantaría, y eso empuja a poner
-    /// la llave en el repo — que es peor que no tenerla. Pero queda dicho.
+    /// La llave esperada. Si viene vacía, lo que pasa depende del entorno:
+    /// <b>en Development se abre con un aviso a gritos; en cualquier otro, el arranque falla</b>.
+    /// Ver <see cref="UseSharedKeyAuth"/> para por qué esa asimetría no es una comodidad.
     /// </param>
     /// <param name="alsoOpen">
     /// Rutas adicionales que quedan fuera de la llave. <b>Se pasan una por una y a la vista</b>,
@@ -52,9 +53,34 @@ public static class SharedKeyAuth
 
         if (string.IsNullOrWhiteSpace(expectedKey))
         {
+            var entorno = app.ApplicationServices.GetService(typeof(IHostEnvironment)) as IHostEnvironment;
+
+            // ── El aviso a gritos era insuficiente, y lo dijo la HU #19 ───────────────────
+            //
+            // Degradar a ABIERTO con un LogWarning tiene sentido exacto en UN sitio: un
+            // `dotnet run` recién clonado, donde exigir la llave empuja a ponerla en el repo
+            // —que es peor que no tenerla—. En cualquier despliegue alcanzable es otra cosa:
+            // veintidós capacidades abiertas y un renglón de log que nadie va a leer, porque
+            // el sitio FUNCIONA. Un agujero que no se nota es el que se queda.
+            //
+            // Así que el degradado se queda, pero atado al único entorno donde la razón que
+            // lo justifica es cierta.
+            if (entorno is null || !entorno.IsDevelopment())
+            {
+                // Se falla CERRADO también cuando no hay entorno que preguntar: si esto se
+                // monta fuera de un host, lo desconocido no puede resolverse a favor de abrir.
+                throw new InvalidOperationException(
+                    "La llave compartida NO está configurada y el entorno es " +
+                    $"'{entorno?.EnvironmentName ?? "(sin IHostEnvironment)"}'. Arrancar así dejaría " +
+                    "la API abierta a quien la alcance.\n" +
+                    "  · En un despliegue: configurá la llave (en compose es SYNERGOS_API_KEY).\n" +
+                    "  · En tu máquina: ASPNETCORE_ENVIRONMENT=Development, que es donde el " +
+                    "modo abierto está permitido a propósito.");
+            }
+
             logger?.CreateLogger(typeof(SharedKeyAuth)).LogWarning(
                 "La llave compartida NO está configurada: la API queda ABIERTA. " +
-                "Sirve para desarrollo; en cualquier despliegue alcanzable es un agujero.");
+                "Se permite porque el entorno es Development; en cualquier otro esto no arranca.");
             return app;
         }
 

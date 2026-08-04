@@ -67,9 +67,20 @@ COPY --from=build /src/Synergos.CMS.Web/App_Plugins ./App_Plugins
 RUN mkdir -p umbraco/Data umbraco/Logs umbraco/mediacache App_Data wwwroot/media \
              /root/.aspnet/DataProtection-Keys
 
+# Qué versión es esta imagen. La inyecta el workflow con el SHA del commit y
+# `/_health` la devuelve (HU #19): es lo que permite al humo de un despliegue
+# distinguir «el sitio responde» de «el sitio responde con lo que acabo de
+# subir». Sin esto, un reinicio que falla en silencio deja viva la versión
+# anterior, el humo pasa, y el despliegue se da por bueno.
+#
+# Va en la etapa de runtime y no en la de build a propósito: cambiar el SHA no
+# puede invalidar el caché de compilación, o cada commit reconstruiría todo.
+ARG VERSION=desconocida
+
 ENV ASPNETCORE_ENVIRONMENT=Docker \
     ASPNETCORE_URLS=http://0.0.0.0:8080 \
-    DOTNET_gcServer=0
+    DOTNET_gcServer=0 \
+    SYNERGOS_BUILD_SHA=${VERSION}
 
 EXPOSE 8080
 

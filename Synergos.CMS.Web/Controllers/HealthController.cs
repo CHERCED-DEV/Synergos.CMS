@@ -15,15 +15,29 @@ namespace Synergos.CMS.Web.Controllers;
 ///   <item>200 — every probe reports healthy.</item>
 ///   <item>503 — at least one probe reports unhealthy.</item>
 /// </list>
+///
+/// <para><b>Y dice qué versión está contestando</b> (HU #19). El humo de un despliegue tiene que
+/// poder distinguir «el sitio responde» de «el sitio responde <i>con lo que acabo de subir</i>»:
+/// sin eso, un reinicio que falla en silencio deja viva la versión anterior y el despliegue se da
+/// por bueno. El valor lo inyecta la imagen (<c>SYNERGOS_BUILD_SHA</c>, puesto por el
+/// <c>Dockerfile</c> desde el SHA del commit); fuera de un contenedor no hay ninguno y se dice
+/// así, en vez de inventar uno.</para>
 /// </remarks>
 [ApiController]
 [Route("_health")]
 public sealed class HealthController : ControllerBase
 {
-    private readonly IEnumerable<ISchemaHealthProbe> _probes;
+    /// <summary>Lo que responde <c>version</c> cuando nadie puso el SHA — o sea, fuera de la imagen.</summary>
+    public const string VersionDesconocida = "desconocida";
 
-    public HealthController(IEnumerable<ISchemaHealthProbe> probes) =>
+    private readonly IEnumerable<ISchemaHealthProbe> _probes;
+    private readonly IConfiguration _config;
+
+    public HealthController(IEnumerable<ISchemaHealthProbe> probes, IConfiguration config)
+    {
         _probes = probes;
+        _config = config;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetAsync(CancellationToken ct)
@@ -40,9 +54,15 @@ public sealed class HealthController : ControllerBase
             ? StatusCodes.Status200OK
             : StatusCodes.Status503ServiceUnavailable;
 
+        var sha = _config["SYNERGOS_BUILD_SHA"];
+
         var payload = new
         {
             status = allHealthy ? "healthy" : "unhealthy",
+            // Va FUERA de `checks` a propósito: no es una comprobación que pueda estar roja, es
+            // la identidad de lo que está contestando. Meterla entre las probes la haría capaz
+            // de poner el endpoint en 503, y una versión no es una condición de salud.
+            version = string.IsNullOrWhiteSpace(sha) ? VersionDesconocida : sha,
             checks = checks.Select(r => new
             {
                 name = r.Name,

@@ -120,6 +120,10 @@ jobs:
         with:
           context: .
           file: Dockerfile
+          # El SHA viaja DENTRO de la imagen, no sólo en su etiqueta: la etiqueta
+          # la elige quien despliega, y el humo necesita que lo diga el proceso
+          # que está corriendo (HU #19).
+          build-args: VERSION=${{ github.sha }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ env.REGISTRY }}/${{ steps.nombre.outputs.imagen }}:${{ github.sha }}
           cache-from: type=gha,scope=cms
@@ -154,9 +158,17 @@ jobs:
           tags: prueba:local
           cache-from: type=gha,scope=${{ matrix.servicio }}
 
+      # La llave va puesta porque así arranca en producción: el compose la exige
+      # con `${SYNERGOS_API_KEY:?}`. Levantarlo sin ella probaría un camino que
+      # NO es el que se despliega — y desde la HU #19 ni siquiera arranca.
       - name: Levantar y preguntar
+        env:
+          LLAVE: llave-de-prueba-que-no-protege-nada
         run: |
-          docker run --detach --name prueba --publish 8080:8080 prueba:local
+          docker run --detach --name prueba --publish 8080:8080 \
+            --env "$(echo '${{ matrix.servicio }}' | sed 's/^Synergos\.\(Api\|Bff\)\.//')__ApiKey=$LLAVE" \
+            --env Synergos__ApiKey="$LLAVE" \
+            prueba:local
           for i in $(seq 1 30); do
             if curl --silent --fail --output /dev/null http://localhost:8080/health; then
               echo "✓ ${{ matrix.servicio }} contesta /health"
@@ -169,6 +181,35 @@ jobs:
           docker logs prueba
           docker rm --force prueba
           exit 1
+
+      # ── Y sin llave NO arranca (HU #19 §3) ────────────────────────────────
+      #
+      # Antes, una capacidad sin llave levantaba ABIERTA y lo decía en un
+      # LogWarning que nadie lee, porque el sitio funciona. Este paso es la
+      # mutación permanente de esa regla: si alguien devuelve el degradado, el
+      # contenedor arranca, este paso pasa a verde… y por eso el assert está al
+      # revés — lo que se exige acá es el FALLO.
+      - name: Sin llave, se niega a arrancar
+        run: |
+          docker run --detach --name sinllave prueba:local
+          sleep 8
+
+          if [ "$(docker inspect --format '{{.State.Running}}' sinllave)" = "true" ]; then
+            echo "✗ ${{ matrix.servicio }} arrancó SIN llave compartida: quedaría abierta"
+            docker logs sinllave
+            docker rm --force sinllave
+            exit 1
+          fi
+
+          if docker logs sinllave 2>&1 | grep --quiet "llave compartida NO está configurada"; then
+            echo "✓ se negó a arrancar, y dijo por qué"
+          else
+            echo "✗ murió, pero por otra razón — el mensaje no es el de la llave:"
+            docker logs sinllave
+            docker rm --force sinllave
+            exit 1
+          fi
+          docker rm --force sinllave
 
       # El modo de fallo más caro de esta imagen es el más silencioso: sin
       # volumen, cada despliegue borra los datos y nada avisa. Acá se comprueba
