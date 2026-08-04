@@ -158,16 +158,26 @@ jobs:
           tags: prueba:local
           cache-from: type=gha,scope=${{ matrix.servicio }}
 
-      # La llave va puesta porque así arranca en producción: el compose la exige
-      # con `${SYNERGOS_API_KEY:?}`. Levantarlo sin ella probaría un camino que
-      # NO es el que se despliega — y desde la HU #19 ni siquiera arranca.
+      # ── La llave, una vez, para todos los pasos que levanten algo ─────────
+      #
+      # Va puesta porque así arranca en producción: el compose la exige con
+      # `${SYNERGOS_API_KEY:?}`. Y desde la HU #19 un servicio sin llave fuera
+      # de Development NO ARRANCA — así que cualquier paso que corra un
+      # contenedor la necesita, no sólo el que pregunta por /health.
+      #
+      # Se calcula acá y no dentro de cada paso porque olvidarla en uno es
+      # exactamente lo que pasó: el paso del volumen se quedó sin ella y el
+      # `docker exec` falló contra un contenedor ya muerto, con un error que
+      # hablaba de otra cosa. Lo destapó CI, no un test local.
+      - id: llave
+        run: |
+          NOMBRE=$(echo '${{ matrix.servicio }}' | sed 's/^Synergos\.\(Api\|Bff\)\.//')
+          echo "par=${NOMBRE}__ApiKey=llave-de-prueba-que-no-protege-nada" >> "$GITHUB_OUTPUT"
+
       - name: Levantar y preguntar
-        env:
-          LLAVE: llave-de-prueba-que-no-protege-nada
         run: |
           docker run --detach --name prueba --publish 8080:8080 \
-            --env "$(echo '${{ matrix.servicio }}' | sed 's/^Synergos\.\(Api\|Bff\)\.//')__ApiKey=$LLAVE" \
-            --env Synergos__ApiKey="$LLAVE" \
+            --env "${{ steps.llave.outputs.par }}" \
             prueba:local
           for i in $(seq 1 30); do
             if curl --silent --fail --output /dev/null http://localhost:8080/health; then
@@ -217,12 +227,14 @@ jobs:
       - name: El almacén sobrevive a que el contenedor no
         run: |
           docker volume create datos-prueba
-          docker run --detach --name p1 --volume datos-prueba:/app/data prueba:local
+          docker run --detach --name p1 --volume datos-prueba:/app/data \
+            --env "${{ steps.llave.outputs.par }}" prueba:local
           sleep 5
           docker exec p1 sh -c 'echo sobrevivi > /app/data/marca.txt'
           docker rm --force p1
 
-          docker run --detach --name p2 --volume datos-prueba:/app/data prueba:local
+          docker run --detach --name p2 --volume datos-prueba:/app/data \
+            --env "${{ steps.llave.outputs.par }}" prueba:local
           sleep 5
           if docker exec p2 cat /app/data/marca.txt | grep --quiet sobrevivi; then
             echo "✓ el almacén sobrevivió al reemplazo del contenedor"
