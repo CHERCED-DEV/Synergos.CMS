@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2234 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2255 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2234 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2255 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -131,7 +131,8 @@ Synergos.CMS/
 │     Catalog · Pricing · Cart · Orders · Payments · Inventory · Workflow ·
 │     Messaging · Signing · Consent · Engagement · Geo · Fulfillment · Moderation
 ├── Synergos.Bff.Core/           la máquina de sagas: deshacer, reintentar,
-│                                rendirse, avisar. Promovida al segundo consumidor.
+│                                rendirse, avisar. Promovida al segundo consumidor;
+│                                el TERCERO (Eventos) entró sin tocarla.
 └── Synergos.Bff.*/              LOS ORQUESTADORES. Salud y Tienda construidos;
                                  faltan Viajes, Eventos, Realty, Gob, Academy, Social.
 ```
@@ -364,7 +365,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2234 tests):
+# Suite completa (2255 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -466,7 +467,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2234 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`. 2255 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -585,8 +586,24 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > no de la plataforma: nadie cree que un 403 de `Api.Cart` merezca
   > asiento de auditoría. **#15 queda bloqueada por `Bff.Gob`**, que es
   > su resultado y no su fracaso.
-- **Seis orquestadores sin construir**: Viajes, Eventos, Realty, Gob,
-  Academy, Social.
+- **Cinco orquestadores sin construir**: Viajes, Realty, Gob, Academy,
+  Social. `Bff.Eventos` ya está (HU #35) — tres capacidades, sin
+  `Api.Orders` ni `Api.Fulfillment` porque una entrada no se despacha.
+  **No necesitó ni una capacidad nueva ni un endpoint nuevo**, que es la
+  diferencia entre «agnóstica» y «agnóstica hasta el segundo caso».
+
+  > **Y resolvió la pregunta que traía #35:** butaca nominada y cupo
+  > general son el MISMO pozo contable. La granularidad va en el
+  > identificador del sujeto —`evento/localidad` o
+  > `evento/localidad/butaca` con existencia 1— y `Api.Inventory` no
+  > distingue. Si tuviera que distinguir, dejaría de servirle a la tienda
+  > al día siguiente.
+
+  > **Falta cablearlo al CMS.** `StubEventTicketingService` sigue siendo
+  > el único camino: el seam tiene cuatro métodos y solo dos —comprar y
+  > confirmar— tienen algo que deshacer. Los otros dos (mis tickets,
+  > transferir) son ciclo de vida del artefacto y se quedan donde el
+  > firmante del QR, que es el CMS.
 - **El retroceso no es configurable.** El plazo de abandono y el techo de
   reintentos sí (HU #29), pero la *forma* de reintentar —ocho intentos con
   retroceso exponencial— está cableada en `Compensator`. Nadie ha pedido

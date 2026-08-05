@@ -566,6 +566,57 @@ services:
       # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
       replicas: 1
 
+  bff-eventos:
+    image: ${SYNERGOS_REGISTRY}/synergos.bff.eventos:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Eventos__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Eventos__Storage__Root: /app/data/eventos
+      # ── A QUE CAPACIDADES LLEGA ─────────────────────────────────────────
+      # Sin esto, AddSagaMachinery cae a http://localhost/{cap}/ — que dentro
+      # del contenedor es EL PROPIO BFF. Arrancaria sano, pasaria su /health y
+      # fallaria TODAS las sagas. Por nombre de servicio, nunca localhost.
+      Eventos__Capabilities__inventory__BaseUrl: "http://api-inventory:8080"
+      Eventos__Capabilities__inventory__ApiKey: ${SYNERGOS_API_KEY}
+      Eventos__Capabilities__notifications__BaseUrl: "http://api-notifications:8080"
+      Eventos__Capabilities__notifications__ApiKey: ${SYNERGOS_API_KEY}
+      Eventos__Capabilities__payments__BaseUrl: "http://api-payments:8080"
+      Eventos__Capabilities__payments__ApiKey: ${SYNERGOS_API_KEY}
+      Eventos__Capabilities__pricing__BaseUrl: "http://api-pricing:8080"
+      Eventos__Capabilities__pricing__ApiKey: ${SYNERGOS_API_KEY}
+
+      # El aviso cuando una compensacion se rinde tras ocho intentos. Sin esto
+      # queda visible en /v1/compensations con alertedAtUtc en nulo — degrada,
+      # no rompe, pero nadie se entera.
+      Eventos__Sweep__IntervalSeconds: ${SYNERGOS_SWEEP_INTERVAL_SECONDS:-60}
+      Eventos__Sweep__AbandonAfterMinutes: ${SYNERGOS_ABANDON_AFTER_MINUTES:-60}
+
+      # Cuantas veces se reintenta un AVISO colgado antes de rendirse (HU #29).
+      # Va en todos los orquestadores a proposito: elegir uno obligaria a decir
+      # cual, y el dia que ese host este caido nadie barreria. Que dos coincidan
+      # sobre el mismo envio no manda dos correos — la capacidad rechaza el
+      # reintento simultaneo con retry_in_flight.
+      Eventos__Sweep__DeliveryRetryCeiling: ${SYNERGOS_DELIVERY_RETRY_CEILING:-8}
+
+      Eventos__Alerts__ToKind: ${SYNERGOS_ALERTS_TO_KIND:-eventos.guardia}
+      Eventos__Alerts__ToId: ${SYNERGOS_ALERTS_TO_ID:-operaciones}
+      Eventos__Alerts__Address: ${SYNERGOS_ALERTS_ADDRESS:-}
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - bff-eventos-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
   bff-salud:
     image: ${SYNERGOS_REGISTRY}/synergos.bff.salud:${SYNERGOS_TAG}
     restart: unless-stopped
@@ -704,5 +755,6 @@ volumes:
   api-sessions-data:
   api-signing-data:
   api-workflow-data:
+  bff-eventos-data:
   bff-salud-data:
   bff-tienda-data:

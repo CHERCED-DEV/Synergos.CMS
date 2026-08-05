@@ -48,6 +48,7 @@
     <ProjectReference Include="..\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
     <ProjectReference Include="..\Synergos.Bff.Salud\Synergos.Bff.Salud.csproj" />
     <ProjectReference Include="..\Synergos.Bff.Tienda\Synergos.Bff.Tienda.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Eventos\Synergos.Bff.Eventos.csproj" />
   </ItemGroup>
 
 </Project>
