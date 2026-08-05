@@ -57,6 +57,12 @@ public sealed partial class SeamComposer
         // El reloj, inyectable. Lo pide HttpBundleRegistryClient para decidir si su snapshot
         // venció, y sin esto el fallo sería en el ARRANQUE y no en la compilación — la clase de
         // error que no se ve hasta que alguien cambia el Mode a Http en producción.
+        // Lo que lleva el identificador de correlación al siguiente servicio (HU #28).
+        // Transient porque un DelegatingHandler lo es por contrato: el pipeline de
+        // IHttpClientFactory gestiona su vida, y hacerlo singleton lo ata a un solo cliente.
+        services.AddHttpContextAccessor();
+        services.AddTransient<CorrelationForwardingHandler>();
+
         services.TryAddSingleton(TimeProvider.System);
 
         var bundleRegistryMode = builder.Config["Synergos:BundleRegistry:Mode"] ?? "Stub";

@@ -75,7 +75,13 @@ public static class SagaMachinery
                 {
                     http.DefaultRequestHeaders.TryAddWithoutValidation(SharedKeyAuth.HeaderName, llave);
                 }
-            });
+            })
+            // El hilo de la correlación cruza el salto (HU #28). Va acá y no en cada llamada
+            // porque acá es donde se crean TODOS los clientes de TODOS los orquestadores: una
+            // capacidad nueva lo hereda al registrarse, sin que nadie se acuerde. Y sin esto la
+            // saga deja seis rastros con seis identificadores distintos, que es el problema de
+            // partida con un paso más de trabajo.
+            .AddHttpMessageHandler<CorrelationHandler>();
         }
 
         return builder;

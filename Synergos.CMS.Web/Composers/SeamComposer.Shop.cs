@@ -182,6 +182,9 @@ public sealed partial class SeamComposer
             {
                 http.DefaultRequestHeaders.Add(HttpShopOrderService.ApiKeyHeader, apiKey);
             }
-        });
+        })
+        // El hilo de la correlación cruza al árbol de servicios (HU #28): sin esto, la compra
+        // deja un rastro en el CMS y otro distinto en el orquestador, y son la misma compra.
+        .AddHttpMessageHandler<CorrelationForwardingHandler>();
     }
 }

@@ -20,6 +20,9 @@ using Synergos.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// El hilo que permite seguir una compra por los seis procesos (HU #28).
+builder.AddCorrelation();
+
 builder.Services.Configure<GeoStorageOptions>(builder.Configuration.GetSection("Geo:Storage"));
 builder.Services.AddSingleton<IPlaceStore, FileSystemPlaceStore>();
 builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
@@ -29,6 +32,7 @@ builder.Services.AddSingleton<GeoService>();
 
 var app = builder.Build();
 
+app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Geo:ApiKey"]);
 app.MapGeoEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

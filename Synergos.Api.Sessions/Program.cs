@@ -23,6 +23,9 @@ using Synergos.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// El hilo que permite seguir una compra por los seis procesos (HU #28).
+builder.AddCorrelation();
+
 builder.Services.AddSingleton<SearchEventStore>();
 builder.Services.AddHostedService<RetentionSweeper>();
 
@@ -37,6 +40,7 @@ var app = builder.Build();
 // a gritos cuando no hay llave viven en Synergos.Shared: son las mismas para toda
 // API interna, y copiadas a mano se pierde una decisión sutil por copia.
 var apiKey = app.Configuration["Sessions:ApiKey"];
+app.UseCorrelation();
 app.UseSharedKeyAuth(apiKey);
 
 app.MapSessionsEndpoints();

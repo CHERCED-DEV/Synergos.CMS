@@ -20,6 +20,9 @@ using Synergos.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// El hilo que permite seguir una compra por los seis procesos (HU #28).
+builder.AddCorrelation();
+
 builder.Services.Configure<SigningStorageOptions>(builder.Configuration.GetSection("Signing:Storage"));
 builder.Services.AddSingleton<ISigningKeyStore, FileSystemSigningKeyStore>();
 builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
@@ -29,6 +32,7 @@ builder.Services.AddSingleton<SigningService>();
 
 var app = builder.Build();
 
+app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Signing:ApiKey"]);
 app.MapSigningEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

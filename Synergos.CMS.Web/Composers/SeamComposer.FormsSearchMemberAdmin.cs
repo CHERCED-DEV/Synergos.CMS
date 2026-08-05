@@ -79,7 +79,10 @@ public sealed partial class SeamComposer
                 {
                     http.DefaultRequestHeaders.Add(HttpSearchAnalyticsStore.ApiKeyHeader, apiKey);
                 }
-            });
+            })
+            // El hilo de la correlación (HU #28). Es el consumidor MÁS VIEJO del árbol de
+            // servicios y llevaba desde entonces sin rastro compartido.
+            .AddHttpMessageHandler<CorrelationForwardingHandler>();
             // La MISMA instancia sirve la seam y el hosted service: el lazo de envío vive en
             // ella. Dos registros independientes darían dos colas y una sin drenar.
             services.AddSingleton<HttpSearchAnalyticsStore>();

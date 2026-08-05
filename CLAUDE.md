@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2218 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2233 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2218 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2233 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -123,7 +123,7 @@ Synergos.CMS/
 │                                Result, IdempotencyKey, Actor, Page.
 │                                CERO referencias. No sabe qué es ASP.NET.
 ├── Synergos.Shared/             fontanería de host. Llave compartida, Rejection→HTTP,
-│                                libro de idempotencia, JsonCollectionStore.
+│                                libro de idempotencia, JsonCollectionStore, correlación.
 │                                Solo puede referenciar Core — UNA flecha.
 ├── Synergos.Api.*/              LAS 20 CAPACIDADES, agnósticas. 132 endpoints.
 │     Sessions · Booking · Identity · Audit · Notifications · Documents ·
@@ -363,7 +363,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2218 tests):
+# Suite completa (2233 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -465,7 +465,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2218 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2233 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -542,8 +542,17 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 - **19 capacidades sobre fichero JSON** con `lock` de proceso. Una sola
   instancia por capacidad; dos réplicas se pisan. Está dicho de frente
   en `JsonCollectionStore` y es la primera razón para cambiar de almacén.
-- **Cero trazas distribuidas.** Una saga cruza seis servicios y no hay
-  forma de seguirla cuando falle en un cliente.
+- **Ya se puede seguir una saga por los seis servicios** (HU #28), aunque
+  todavía no con trazas de verdad. Un identificador opaco nace en el borde
+  —o se genera si nadie lo manda—, viaja en `X-Correlation-Id` por cada
+  salto y sale impreso en cada línea de cada servicio: la pregunta que se
+  hace de verdad, «mostrame todo lo de esta compra», se contesta con
+  `docker compose logs | grep`. Hay gate (`CorrelationTests`): un host que
+  no lo cablee, o un cliente que no lo propague, rompe el build.
+  **Deliberadamente NO es OpenTelemetry**: un colector es otro proceso que
+  mantener, y se justificará el día que el `grep` deje de alcanzar.
+  El nombre de la cabecera es **lo único que comparten los dos árboles** —
+  un contrato de una cadena, porque el CMS no referencia `Synergos.Shared`.
 - **La llave compartida no es identidad.** Sirve servicio↔servicio; no
   contesta «quién es este usuario». `Api.Identity` existe pero nadie la
   usa como puerta. `Api.Messaging` ya guarda **con qué se afirmó** la

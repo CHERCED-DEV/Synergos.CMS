@@ -20,6 +20,9 @@ using Synergos.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// El hilo que permite seguir una compra por los seis procesos (HU #28).
+builder.AddCorrelation();
+
 builder.Services.Configure<BookingStorageOptions>(builder.Configuration.GetSection("Booking:Storage"));
 builder.Services.AddSingleton<IResourceStore, FileSystemResourceStore>();
 builder.Services.AddSingleton<IHoldStore, FileSystemHoldStore>();
@@ -34,6 +37,7 @@ builder.Services.AddSingleton<BookingService>();
 
 var app = builder.Build();
 
+app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Booking:ApiKey"]);
 
 app.MapBookingEndpoints();

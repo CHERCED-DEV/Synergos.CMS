@@ -20,6 +20,9 @@ using Synergos.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// El hilo que permite seguir una compra por los seis procesos (HU #28).
+builder.AddCorrelation();
+
 builder.Services.Configure<PaymentStorageOptions>(builder.Configuration.GetSection("Payments:Storage"));
 builder.Services.AddSingleton<IPaymentStore, FileSystemPaymentStore>();
 // Qué proveedor cobra — `Payments:Provider` (HU #27).
@@ -66,6 +69,7 @@ builder.Services.AddSingleton<PaymentService>();
 
 var app = builder.Build();
 
+app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Payments:ApiKey"]);
 app.MapPaymentEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

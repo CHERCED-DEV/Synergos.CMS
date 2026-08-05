@@ -20,6 +20,9 @@ using Synergos.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// El hilo que permite seguir una compra por los seis procesos (HU #28).
+builder.AddCorrelation();
+
 builder.Services.Configure<OrderStorageOptions>(builder.Configuration.GetSection("Orders:Storage"));
 builder.Services.AddSingleton<IOrderStore, FileSystemOrderStore>();
 builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
@@ -29,6 +32,7 @@ builder.Services.AddSingleton<OrderService>();
 
 var app = builder.Build();
 
+app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Orders:ApiKey"]);
 app.MapOrderEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

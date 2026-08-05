@@ -33,6 +33,9 @@ using Synergos.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// El hilo que permite seguir una compra por los seis procesos (HU #28).
+builder.AddCorrelation();
+
 builder.AddSagaMachinery<AppointmentSaga, SaludCompensationExecutor>(
     // En minúscula porque es el prefijo de los códigos de rechazo (salud.saga_not_found).
     // Sirve además de raíz de configuración: las claves de IConfiguration no distinguen
@@ -46,6 +49,7 @@ builder.Services.AddSingleton<AppointmentFlow>();
 
 var app = builder.Build();
 
+app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Salud:ApiKey"]);
 app.MapSaludEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

@@ -176,7 +176,11 @@ public sealed partial class SeamComposer
                 {
                     http.DefaultRequestHeaders.Add(HttpVisitSchedulingService.ApiKeyHeader, realtyKey);
                 }
-            });
+            })
+            // El hilo de la correlación cruza al árbol de servicios (HU #28). Va sobre los
+            // clientes NOMBRADOS y no sobre uno global: los webhooks salen a terceros, y a un
+            // tercero conviene mandarle lo mínimo.
+            .AddHttpMessageHandler<CorrelationForwardingHandler>();
             services.AddSingleton<IVisitSchedulingService, HttpVisitSchedulingService>();
         }
         else

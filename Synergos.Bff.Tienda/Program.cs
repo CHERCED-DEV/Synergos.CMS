@@ -29,6 +29,9 @@ using Synergos.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// El hilo que permite seguir una compra por los seis procesos (HU #28).
+builder.AddCorrelation();
+
 builder.AddSagaMachinery<PurchaseSaga, TiendaCompensationExecutor>(
     // En minúscula porque es el prefijo de los códigos de rechazo (tienda.saga_not_found).
     // Sirve además de raíz de configuración: las claves de IConfiguration no distinguen
@@ -42,6 +45,7 @@ builder.Services.AddSingleton<PurchaseFlow>();
 
 var app = builder.Build();
 
+app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Tienda:ApiKey"]);
 app.MapTiendaEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
