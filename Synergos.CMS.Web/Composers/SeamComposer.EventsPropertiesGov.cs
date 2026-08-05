@@ -144,15 +144,50 @@ public sealed partial class SeamComposer
                     sp.GetRequiredService<ICatalogSource<PropertyDetail>>(),
                     sp.GetRequiredService<IJsonEntityStore>())
                 : new StubPropertyCatalogProvider());
-        // Durabilidad (ADR 0105): los slots apartados viven tras el store genérico, así que
-        // una visita que un comprador ya agendó sobrevive un reinicio. Namespace propio —
-        // compartirlo haría que el estado de un dominio se leyera contra la forma de otro.
-        services.AddSingleton<IVisitSchedulingService>(sp =>
-            new StubVisitSchedulingService(
-                sp.GetRequiredService<IReservationService>(),
-                null,
-                sp.GetRequiredService<IJsonEntityStore>(),
-                "realty-visits"));
+        // Contra qué se aparta la visita (HU #33a), por configuración:
+        //   - Stub (default): el motor en proceso. Durabilidad (ADR 0105): los slots apartados
+        //     viven tras el store genérico, así que una visita ya agendada sobrevive un reinicio.
+        //     Namespace propio — compartirlo haría que el estado de un dominio se leyera contra
+        //     la forma de otro.
+        //   - Api: DIRECTO contra Synergos.Api.Booking, sin orquestador. Una visita no se cobra,
+        //     así que toca una sola capacidad: un BFF sería una saga de un paso.
+        //
+        // Api.Booking no sabe que el recurso es un inmueble y no puede saberlo (CLAUDE.md §12).
+        // Lo vigila RealtyWiringTests.
+        // La sección se ENLAZA, y no es ceremonia: sin esto el cliente HTTP recibe un
+        // RealtySettings recién construido y todo lo que no viaja por el HttpClient —el Kind del
+        // listado, el del interesado— se queda en su valor por defecto en silencio. Configurarlo
+        // no haría nada y nadie sabría por qué. Lo mismo se arregló acá para Tienda y Salud, que
+        // arrastraban el olvido desde las HU #24 y #25.
+        services.Configure<RealtySettings>(builder.Config.GetSection("Synergos:Realty"));
+
+        if (string.Equals(builder.Config["Synergos:Realty:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        {
+            var realtyBase = builder.Config["Synergos:Realty:BaseUrl"];
+            var realtyKey = builder.Config["Synergos:Realty:ApiKey"];
+            var realtyTimeout = int.TryParse(builder.Config["Synergos:Realty:TimeoutSeconds"], out var rt) && rt > 0 ? rt : 15;
+
+            services.AddHttpClient(HttpVisitSchedulingService.ClientName, http =>
+            {
+                var url = string.IsNullOrWhiteSpace(realtyBase) ? "http://127.0.0.1:5202/" : realtyBase;
+                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+                http.Timeout = TimeSpan.FromSeconds(realtyTimeout);
+                if (!string.IsNullOrWhiteSpace(realtyKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpVisitSchedulingService.ApiKeyHeader, realtyKey);
+                }
+            });
+            services.AddSingleton<IVisitSchedulingService, HttpVisitSchedulingService>();
+        }
+        else
+        {
+            services.AddSingleton<IVisitSchedulingService>(sp =>
+                new StubVisitSchedulingService(
+                    sp.GetRequiredService<IReservationService>(),
+                    null,
+                    sp.GetRequiredService<IJsonEntityStore>(),
+                    "realty-visits"));
+        }
         services.AddSingleton<IMortgageCalculator, StubMortgageCalculator>();
         // OLA 4 Propiedades (doc 21 §2.7) — cara completa: la captura de leads ahora
         // compone el catálogo para resolver el agente dueño del inmueble y alimentar el

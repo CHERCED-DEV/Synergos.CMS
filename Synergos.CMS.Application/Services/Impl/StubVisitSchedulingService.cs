@@ -209,20 +209,11 @@ public sealed class StubVisitSchedulingService : IVisitSchedulingService
     // Agenda derivada determinista: 6 slots a partir del día siguiente, a las
     // 09:00 y 11:00 de los próximos 3 días. Derivada del id del listado para que
     // GetSlots/Book sean coherentes entre llamadas.
+    // La derivación se fue a VisitAgenda al aparecer el SEGUNDO consumidor —el cliente HTTP de
+    // Api.Booking (HU #33a)—, que es el listón de CLAUDE.md §6. Mientras hubo uno solo, vivir acá
+    // dentro estaba bien.
     private IEnumerable<VisitSlot> BuildSlots(string listingId)
-    {
-        var baseDay = _now().UtcDateTime.Date.AddDays(1);
-        var hours = new[] { 9, 11 };
-        for (var day = 0; day < 3; day++)
-        {
-            foreach (var hour in hours)
-            {
-                var start = new DateTimeOffset(baseDay.AddDays(day).AddHours(hour), TimeSpan.Zero);
-                var id = $"{listingId}-{start:yyyyMMddHHmm}";
-                yield return new VisitSlot(id, start);
-            }
-        }
-    }
+        => VisitAgenda.For(listingId, _now());
 
     // La clave del store reproduce la del diccionario que había antes
     // ("(listado)/(slot)"), en minúsculas porque aquel comparaba con

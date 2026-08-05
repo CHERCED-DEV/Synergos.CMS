@@ -63,6 +63,21 @@ public sealed class SaludWiringTests
                 return i >= 0 ? l[..i] : l;
             }));
 
+    /// <summary>
+    /// El único fichero al que se le permite hablarle a <c>Api.Booking</c> de frente.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La excepción tiene una razón y tiene su propio gate.</b> Agendar una <i>visita a
+    /// un inmueble</i> (HU #33a) toca UNA sola capacidad: una visita no se cobra y no dispara
+    /// avisos, así que no hay orden que respetar ni nada que deshacer a la mitad — que es
+    /// exactamente lo que este gate defiende para el camino clínico, donde sí los hay.</para>
+    ///
+    /// <para><b>Y la excepción no es un hueco:</b> <c>RealtyWiringTests</c> comprueba que ese
+    /// cliente siga tocando una sola capacidad. El día que le aparezca un cobro o un aviso, aquel
+    /// gate cae y el vertical tiene que pasar por un orquestador, igual que Salud y Tienda.</para>
+    /// </remarks>
+    private const string ClienteDeUnaSolaCapacidad = "HttpVisitSchedulingService.cs";
+
     [Fact]
     public void El_CMS_no_llama_a_Api_Booking_de_frente()
     {
@@ -72,6 +87,8 @@ public sealed class SaludWiringTests
 
         foreach (var f in FuentesDelCms())
         {
+            if (Path.GetFileName(f) == ClienteDeUnaSolaCapacidad) continue;
+
             var codigo = SinComentarios(f);
             foreach (var ruta in Prohibidas)
             {

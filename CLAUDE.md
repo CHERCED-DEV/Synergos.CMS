@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2198 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2218 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2198 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2218 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -363,7 +363,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2198 tests):
+# Suite completa (2218 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -465,7 +465,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2198 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2218 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -485,11 +485,27 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   propósito. Y 20 de los 46 **ya son durables** — «stub» en este repo
   dejó hace tiempo de querer decir «en memoria». Hay gate
   (`WiringMapTests`): un stub nuevo sin mapear rompe el build.
-  De los 9, dos están hechos: la tienda compra contra `Bff.Tienda`
-  (`Synergos:Tienda:Mode=Bff`, HU #24) y la cita clínica agenda contra
-  `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25). El default sigue
-  siendo `Stub` en los dos. Faltan `StubReservationService` →
-  `Api.Booking` y `StubPaymentProvider` → `Api.Payments`.
+  De los 9, **tres** están hechos: la tienda compra contra `Bff.Tienda`
+  (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
+  `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25) y la visita al inmueble
+  aparta cupo **directo contra `Api.Booking`, sin orquestador**
+  (`Synergos:Realty:Mode=Api`, HU #33a) — una visita no se cobra, así que
+  toca una sola capacidad y un BFF sería una saga de un paso. El default
+  sigue siendo `Stub` en los tres. Faltan `StubPaymentProvider` →
+  `Api.Payments` y lo que queda de `StubReservationService` (Viajes y
+  Eventos, que **no van al mismo sitio** — ver #33).
+
+  > **El mapa se equivocó una segunda vez con el mismo filtro.**
+  > `StubVisitSchedulingService` estaba en la familia C porque «no hay un
+  > segundo paso que pueda fallar» — cierto, y contesta **otra** pregunta.
+  > Eso decide si hace falta un orquestador, no si hace falta cablearlo.
+  > Son dos preguntas y hay que hacerlas por separado.
+
+  > **Y el seam de reservas mezcla dos atomicidades.** `IReservationService`
+  > fusiona «cupo de un pozo contable» (`Api.Inventory`) con «una ventana
+  > sobre un recurso» (`Api.Booking`). Por eso su `Reservation` lleva
+  > `RoomTypeCode` y `GuestName`, que ninguna capacidad puede guardar. Los
+  > que quedan no van todos a Booking: una butaca es un pozo contable.
 - **El borde ya avisa, pero todavía no cobra.** `Api.Notifications` tiene
   transporte real (Resend, ADR 0131) y le falta solo la credencial.
   `Api.Payments` ya distingue **rechazado** (no se reintenta) de **caído**

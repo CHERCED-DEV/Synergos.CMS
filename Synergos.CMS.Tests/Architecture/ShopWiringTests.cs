@@ -79,6 +79,14 @@ public sealed class ShopWiringTests
 
         foreach (var f in FuentesDelCms())
         {
+            // La MISMA exención que en SaludWiringTests, y por la misma razón: agendar una visita
+            // a un inmueble (HU #33a) toca UNA sola capacidad —no se cobra, no avisa—, así que no
+            // hay saga que orquestar ni nada que deshacer. `v1/holds` aparece ahí legítimamente.
+            //
+            // Y no es un hueco: RealtyWiringTests comprueba que ese cliente siga sin tocar una
+            // segunda capacidad. El día que le entre un cobro, aquel gate cae antes que éste.
+            if (Path.GetFileName(f) == "HttpVisitSchedulingService.cs") continue;
+
             var codigo = SinComentarios(f);
             foreach (var ruta in Prohibidas)
             {

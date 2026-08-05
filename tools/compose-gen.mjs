@@ -268,6 +268,14 @@ services:
       Synergos__Salud__Mode: \${SYNERGOS_SALUD_MODE:-Stub}
       Synergos__Salud__BaseUrl: "http://bff-salud:8080"
       Synergos__Salud__ApiKey: \${SYNERGOS_API_KEY}
+
+      # Y contra quien se aparta la visita al inmueble (HU #33a). Aca el modo se
+      # llama 'Api' y no 'Bff': una visita no se cobra, asi que toca UNA sola
+      # capacidad y va DIRECTO a Api.Booking. Un orquestador seria una saga de un
+      # paso. Hay gate (RealtyWiringTests) por si algun dia le entra un cobro.
+      Synergos__Realty__Mode: \${SYNERGOS_REALTY_MODE:-Stub}
+      Synergos__Realty__BaseUrl: "http://api-booking:8080"
+      Synergos__Realty__ApiKey: \${SYNERGOS_API_KEY}
     volumes:
       - cms-db:/app/umbraco/Data
       - cms-logs:/app/umbraco/Logs

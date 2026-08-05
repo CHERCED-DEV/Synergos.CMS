@@ -114,6 +114,8 @@ public sealed partial class SeamComposer
         //
         // Encenderlo sin el BFF arriba degrada —no se puede comprar, y lo dice— pero la tienda
         // sigue sirviendo catálogo y fichas.
+        services.Configure<TiendaSettings>(builder.Config.GetSection("Synergos:Tienda"));
+
         if (string.Equals(builder.Config["Synergos:Tienda:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
         {
             var tiendaBase = builder.Config["Synergos:Tienda:BaseUrl"];

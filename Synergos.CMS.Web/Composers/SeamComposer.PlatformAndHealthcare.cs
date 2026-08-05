@@ -162,6 +162,8 @@ public sealed partial class SeamComposer
         // Api.Booking no sabe que el recurso es un médico y no puede saberlo (CLAUDE.md §12):
         // el sustantivo «doctor» vive acá y en el BFF, nunca en la capacidad. Lo vigila
         // SaludWiringTests.
+        services.Configure<SaludSettings>(builder.Config.GetSection("Synergos:Salud"));
+
         if (string.Equals(builder.Config["Synergos:Salud:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
         {
             var saludBase = builder.Config["Synergos:Salud:BaseUrl"];

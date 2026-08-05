@@ -65,9 +65,22 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 > no es de qué depende, sino *qué pasa si el segundo paso falla*. Si hay algo que deshacer, es
 > orquestación, y la orquestación no vive en el CMS.
 >
-> Los otros dos del grupo —`StubVisitSchedulingService` y `StubClinicalOrderService`— se
-> revisaron con el mismo filtro y **sí** se quedan en C: la visita inmobiliaria confirma con el
-> paso de pago desactivado (`visit-free`), así que no hay segundo paso que pueda fallar.
+> El otro del grupo, `StubClinicalOrderService`, se revisó con el mismo filtro y **sí** se queda
+> en C.
+>
+> **`StubVisitSchedulingService` NO, y es la segunda vez que este mismo error se cuela** (HU #33a).
+> Se clasificó C porque «confirma con el paso de pago desactivado (`visit-free`), así que no hay
+> segundo paso que pueda fallar» — lo cual es cierto y **contesta otra pregunta**. Que no necesite
+> orquestador no quiere decir que no haya que cablearlo: quiere decir que va **directo a la
+> capacidad**. Son dos preguntas distintas y este mapa las tenía fundidas:
+>
+> | Pregunta | Qué decide |
+> |---|---|
+> | ¿hay algo que deshacer si el segundo paso falla? | si hace falta un **orquestador** |
+> | ¿el cupo lo lleva alguien más? | si hace falta **cablearlo** |
+>
+> Con las dos separadas, la visita inmobiliaria es A con destino `Api.Booking` **sin BFF** — y es
+> el primer consumidor del repo que le habla a una capacidad de frente.
 
 ### Los tres primeros, y por qué esos
 
@@ -153,13 +166,12 @@ ADR 0098, que ya es durable y cifrado. Su destino real es **un EHR externo**, no
 nuestra: `Api.Documents` guarda documentos, no historias clínicas.
 `StubPatientRegistry` · `StubDoctorDirectory` · `StubClinicalRecordService` ·
 `StubClinicalPrescriptionService` · `StubClinicalResultsProvider` · `StubClinicalOrderService` ·
-`StubClinicalBillingService` · `StubVisitSchedulingService` · `StubRoomAvailabilityProvider`
+`StubClinicalBillingService` · `StubRoomAvailabilityProvider`
 
-> `StubClinicalSchedulingService` **salió de este grupo** — orquesta, ver la corrección de la
-> familia A. `StubVisitSchedulingService` se queda: reusa `IReservationService` pero confirma con
-> el paso de pago desactivado, así que no hay segundo paso que pueda fallar ni nada que deshacer.
-> Y `StubRoomAvailabilityProvider` es disponibilidad hotelera: su destino es un PMS/channel-manager,
-> un tercero.
+> `StubClinicalSchedulingService` y `StubVisitSchedulingService` **salieron de este grupo**: el
+> primero orquesta y el segundo lleva cupo que es de una capacidad (ver la corrección de la
+> familia A). `StubRoomAvailabilityProvider` se queda: es disponibilidad hotelera, y su destino es
+> un PMS/channel-manager, un tercero.
 
 **Motor social y de engagement (5)** — `StubSocialGraphService` · `StubReactionService` ·
 `StubContentStream` · `StubUserCollection` · `StubLeadCaptureService`.
@@ -257,7 +269,7 @@ tiene que existir en la raíz del repo.
 | `StubStayContentProvider` | B | — |
 | `StubTramiteCatalogProvider` | B | — |
 | `StubUserCollection` | C | — |
-| `StubVisitSchedulingService` | C | — |
+| `StubVisitSchedulingService` | A | `Synergos.Api.Booking` |
 <!-- MAPA:FIN -->
 
 > `Synergos.Bff.Gob` **no existe todavía** y por eso `StubApplicationService` es el único destino
