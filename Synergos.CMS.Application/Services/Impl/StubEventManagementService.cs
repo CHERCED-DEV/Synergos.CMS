@@ -1,33 +1,36 @@
-using Synergos.CMS.Interfaces;
+﻿using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
 /// <summary>
 /// Default <see cref="IEventManagementService"/> — cara de organizador (operacional)
 /// del vertical Eventos (doc eventos-app-spec §2 cara B). Lee los tickets confirmados
-/// del motor de ticketing (<see cref="StubEventTicketingService"/>) y el aforo del
+/// del registro de entradas (<see cref="EventTicketLedger"/>) y el aforo del
 /// catálogo (<see cref="IEventCatalogProvider"/>) para armar el dashboard de
 /// asistentes/aforo/vendidos, y delega el check-in (validación + marca idempotente)
-/// al motor de ticketing — fuente de verdad de los tickets.
+/// al registro — fuente de verdad de las entradas emitidas.
 /// </summary>
 /// <remarks>
 /// Lógica pura en <c>Synergos.CMS.Application</c> — cero dependencia de
 /// Umbraco/AspNetCore (ADR 0002). NO duplica el estado de los tickets: lo COMPONE
-/// (DIP) del <see cref="StubEventTicketingService"/> concreto vía
-/// <c>GetConfirmedTickets</c> / <c>MarkCheckedIn</c> (mismo patrón que
-/// <c>StubContentStream</c> sobre <c>StubReactionService</c>). <see cref="CheckInAsync"/>
+/// del <see cref="EventTicketLedger"/>.
+/// <b>Y cuelga del REGISTRO, no del motor de compra</b> (HU #35, rebanada 2b): antes
+/// colgaba del motor CONCRETO, así que cambiar por dónde se compra —el orquestador en
+/// vez del motor en proceso— habría dejado esta cara leyendo un almacén vacío. Las
+/// entradas existirían, el escáner diría <c>invalid</c>, y nada en el build avisaría.
+/// La puerta no depende de por dónde se pagó. <see cref="CheckInAsync"/>
 /// es IDEMPOTENTE — el primer check-in devuelve <c>valid</c>, los siguientes
 /// <c>already-used</c>, núcleo anti-doble-entrada. El adapter real (DB / scanner)
 /// implementa la misma seam. ADR 0075.
 /// </remarks>
 public sealed class StubEventManagementService : IEventManagementService
 {
-    private readonly StubEventTicketingService _ticketing;
+    private readonly EventTicketLedger _ledger;
     private readonly IEventCatalogProvider _catalog;
 
-    public StubEventManagementService(StubEventTicketingService ticketing, IEventCatalogProvider catalog)
+    public StubEventManagementService(EventTicketLedger ledger, IEventCatalogProvider catalog)
     {
-        _ticketing = ticketing ?? throw new ArgumentNullException(nameof(ticketing));
+        _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
     }
 
@@ -41,7 +44,7 @@ public sealed class StubEventManagementService : IEventManagementService
         var detail = await _catalog.GetEventAsync(eventId, cancellationToken)
             ?? throw new ArgumentException($"Evento '{eventId}' no encontrado.", nameof(eventId));
 
-        var attendees = _ticketing.GetConfirmedTickets(detail.Summary.Id);
+        var attendees = await _ledger.ConfirmedAttendeesAsync(detail.Summary.Id, cancellationToken);
 
         // Aforo total = suma de la capacidad de los tiers. Vendidos = tickets
         // confirmados (las unidades emitidas por el motor de ticketing).
@@ -61,7 +64,7 @@ public sealed class StubEventManagementService : IEventManagementService
     /// y nombrar a quien acaba de entrar.
     /// </remarks>
     public Task<EventCheckInResult> CheckInAsync(string ticketId, CancellationToken cancellationToken = default)
-        => _ticketing.MarkCheckedInDetailedAsync(ticketId, cancellationToken);
+        => _ledger.CheckInAsync(ticketId, cancellationToken);
 
     public async Task<EventCreateResult> CreateEventAsync(EventDraft draft, CancellationToken cancellationToken = default)
     {

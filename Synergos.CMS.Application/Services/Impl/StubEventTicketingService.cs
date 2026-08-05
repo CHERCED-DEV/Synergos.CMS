@@ -37,15 +37,6 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// </remarks>
 public sealed class StubEventTicketingService : IEventTicketingService
 {
-    private static readonly JsonSerializerOptions _json = new()
-    {
-        WriteIndented = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,   // acentos es-CO legibles en disco
-    };
-
-    /// <summary>Familia de entidades de este motor en el store genérico (→ App_Data/syn-event-orders/).</summary>
-    private const string ResourceType = "event-orders";
-
     /// <summary>Etapa que siembra ConfirmAsync en el timeline de eventos.</summary>
     public const string StageConfirmed = "confirmed";
 
@@ -66,19 +57,10 @@ public sealed class StubEventTicketingService : IEventTicketingService
     private readonly IReservationService _reservations;
     private readonly IPaymentProvider _payments;
     private readonly IOrderTrackingService? _tracking;
-    private readonly IAuditTrailWriter? _audit;
-    private readonly IJsonEntityStore _store;
     private readonly ITransactionalNotifier? _notifier;
-    /// <summary>T9 — verifica en la PUERTA el token que trae quien llega. Null = fail-closed.</summary>
-    /// <remarks>
-    /// Firmar ya no se hace acá: eso es <see cref="_issuer"/>. Este campo queda porque verificar
-    /// es lo contrario de emitir — pasa en otro momento, en otra cara del producto y sobre un
-    /// token que este proceso puede no haber emitido nunca.
-    /// </remarks>
-    private readonly ITicketSigner? _signer;
 
-    /// <summary>Cómo se llama una entrada y qué lleva su QR. El motor de compra ya no lo decide.</summary>
-    private readonly EventTicketIssuer _issuer;
+    /// <summary>El registro de las entradas: quién las tiene, quién ya entró. NO es de este motor.</summary>
+    private readonly EventTicketLedger _ledger;
     private readonly Func<DateTimeOffset> _now;
 
     public StubEventTicketingService(
@@ -127,6 +109,8 @@ public sealed class StubEventTicketingService : IEventTicketingService
     /// Null ≡ <see cref="InMemoryJsonEntityStore"/> (comportamiento previo, aditivo).
     /// <paramref name="notifier"/> opcional (T4): si viene, la compra confirmada le avisa
     /// al COMPRADOR (un solo email con todas las entradas). Null ≡ no notificar.
+    /// <paramref name="ledger"/> es el registro COMPARTIDO de entradas emitidas; sin él se arma
+    /// uno propio sobre <paramref name="store"/>.
     /// </summary>
     public StubEventTicketingService(
         IEventCatalogProvider catalog,
@@ -137,20 +121,21 @@ public sealed class StubEventTicketingService : IEventTicketingService
         IJsonEntityStore? store,
         Func<DateTimeOffset>? now,
         ITransactionalNotifier? notifier = null,
-        ITicketSigner? signer = null)
+        ITicketSigner? signer = null,
+        EventTicketLedger? ledger = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _tracking = tracking;
-        _audit = audit;
-        _store = store ?? new InMemoryJsonEntityStore();
         _notifier = notifier;
-        // T9: sin firmante NO se emite QR ni se valida nada (fail-closed). Un QR sin
-        // firma sería falsificable y —peor— parecería seguro. En Web siempre se cablea.
-        _signer = signer;
-        _issuer = new EventTicketIssuer(signer);
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        // T9: sin firmante NO se emite QR ni se valida nada (fail-closed). Un QR sin firma sería
+        // falsificable y —peor— parecería seguro. En Web siempre se cablea.
+        // El registro se INYECTA cuando hay uno compartido: el motor de compra y la cara de
+        // organizador tienen que mirar el mismo, o la puerta lee un almacén que nadie escribió.
+        // Sin él se arma uno propio, que es lo correcto en un test que solo compra.
+        _ledger = ledger ?? new EventTicketLedger(store, signer, audit, _now);
     }
 
     public async Task<EventCheckoutResult> CheckoutAsync(
@@ -284,7 +269,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
                 Metadata: null),
             cancellationToken);
 
-        await WriteAsync(
+        await _ledger.SaveAsync(
             new PersistedEventOrder(
                 OrderRef: orderRef,
                 EventId: detail.Summary.Id,
@@ -300,7 +285,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
 
     public async Task<EventConfirmationResult> ConfirmAsync(string orderRef, CancellationToken cancellationToken = default)
     {
-        var order = await LoadAsync(orderRef, cancellationToken);
+        var order = await _ledger.LoadAsync(orderRef, cancellationToken);
         if (order is null)
         {
             throw new ArgumentException("Orden no encontrada.", nameof(orderRef));
@@ -314,7 +299,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
             // es inofensivo, y rescata el caso en que el primer confirm no llegó a
             // notificar (notificaciones apagadas entonces, destinatario inválido, etc.).
             await EmitConfirmedAsync(order, cancellationToken);
-            return ToConfirmation(order);
+            return _ledger.ConfirmationOf(order);
         }
 
         // 1) Capturar el pago de la orden completa (idempotente en el PSP).
@@ -347,7 +332,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
         }
 
         var confirmed = order with { Status = EventOrderStatus.Confirmed };
-        await WriteAsync(confirmed, cancellationToken);
+        await _ledger.SaveAsync(confirmed, cancellationToken);
 
         // 3) La compra confirmada alimenta su timeline de tracking (seam genérico
         //    IOrderTrackingService): avanza a "confirmed" del pipeline
@@ -367,7 +352,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
         //    un email caído JAMÁS puede tumbar una compra ya pagada y persistida.
         await EmitConfirmedAsync(confirmed, cancellationToken);
 
-        return ToConfirmation(confirmed);
+        return _ledger.ConfirmationOf(confirmed);
     }
 
     /// <summary>
@@ -423,308 +408,45 @@ public sealed class StubEventTicketingService : IEventTicketingService
             ActionPath: $"/eventos/entradas/{order.OrderRef}");
     }
 
-    public async Task<IReadOnlyList<EventTicket>> GetTicketsAsync(string holderEmail, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(holderEmail))
-        {
-            return Array.Empty<EventTicket>();
-        }
+    // ── Ciclo de vida del artefacto: NO es de este motor ────────────────
+    // Mis entradas, transferir, la lista del organizador y la puerta viven en el registro
+    // porque no dependen de por dónde se compró. Acá solo se reexponen para no romper al
+    // llamador, que sigue hablándole al seam de siempre.
 
-        var email = holderEmail.Trim();
-        var all = await LoadAllAsync(cancellationToken);
-        return all
-            .Where(o => o.Status == EventOrderStatus.Confirmed)
-            .OrderBy(o => o.CreatedAt)
-            .SelectMany(o => o.Units.Select(u => (o.EventId, Unit: u)))
-            .Where(x => string.Equals(x.Unit.HolderEmail, email, StringComparison.OrdinalIgnoreCase))
-            .Select(x => ToTicket(x.EventId, x.Unit))
-            .ToList();
-    }
+    public Task<IReadOnlyList<EventTicket>> GetTicketsAsync(string holderEmail, CancellationToken cancellationToken = default)
+        => _ledger.TicketsOfAsync(holderEmail, cancellationToken);
 
-    public async Task<EventTicketTransferResult> TransferTicketAsync(
-        string ticketId,
-        string toEmail,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(ticketId))
-        {
-            throw new ArgumentException("El ticket es obligatorio.", nameof(ticketId));
-        }
-        if (string.IsNullOrWhiteSpace(toEmail) || !toEmail.Contains('@', StringComparison.Ordinal))
-        {
-            throw new ArgumentException("El email de destino es inválido.", nameof(toEmail));
-        }
-
-        var id = ticketId.Trim();
-        var newEmail = toEmail.Trim();
-
-        // Localizar la unidad confirmada correspondiente al ticket (read-modify-write
-        // sobre la orden dueña; el resto de órdenes no se toca).
-        var all = await LoadAllAsync(cancellationToken);
-        foreach (var order in all.OrderBy(o => o.CreatedAt))
-        {
-            if (order.Status != EventOrderStatus.Confirmed)
-            {
-                continue;
-            }
-            for (var i = 0; i < order.Units.Count; i++)
-            {
-                var unit = order.Units[i];
-                if (!string.Equals(EventTicketIssuer.TicketIdOf(unit.ReservationId), id, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                // Ya usado/cancelado → no transferible.
-                if (unit.CheckedIn)
-                {
-                    throw new ArgumentException("El ticket ya fue usado y no puede transferirse.", nameof(ticketId));
-                }
-
-                // Idempotente: transferir al portador actual no rota ni re-audita.
-                if (string.Equals(unit.HolderEmail, newEmail, StringComparison.OrdinalIgnoreCase))
-                {
-                    var same = ToTicket(order.EventId, unit);
-                    return new EventTicketTransferResult(same, same.Qr);
-                }
-
-                // Reasignar holder + rotar el QR (bump de versión ⇒ QR viejo inválido).
-                var derivedName = DeriveNameFromEmail(newEmail);
-                var updatedUnit = unit with
-                {
-                    HolderEmail = newEmail,
-                    HolderName = derivedName,
-                    QrVersion = unit.QrVersion + 1,
-                };
-                var updatedUnits = order.Units.ToList();
-                updatedUnits[i] = updatedUnit;
-                await WriteAsync(order with { Units = updatedUnits }, cancellationToken);
-
-                var ticket = ToTicket(order.EventId, updatedUnit);
-
-                // Auditar la transferencia (append-only, ADR 0037).
-                if (_audit is not null)
-                {
-                    // best-effort: el ticket YA fue transferido y persistido.
-                    await BestEffort.RunAsync(() => _audit.WriteAsync(
-                            new AuditEvent(
-                                Id: Guid.NewGuid().ToString("N"),
-                                OccurredAtUtc: _now().UtcDateTime,
-                                ActorEmail: unit.HolderEmail,
-                                ActorName: unit.HolderName,
-                                Action: "event.ticket.transfer",
-                                Resource: $"{order.EventId}/{id}",
-                                Outcome: "success",
-                                Detail: $"Ticket transferido de '{unit.HolderEmail}' a '{newEmail}'; QR rotado a v{updatedUnit.QrVersion}."),
-                            cancellationToken), cancellationToken);
-                }
-
-                return new EventTicketTransferResult(ticket, ticket.Qr);
-            }
-        }
-
-        throw new ArgumentException($"Ticket '{ticketId}' no encontrado.", nameof(ticketId));
-    }
-
-    // Deriva un nombre razonable del email del nuevo portador (la parte local,
-    // capitalizada). El adapter real resolvería el nombre del Member/cuenta.
-    private static string DeriveNameFromEmail(string email)
-    {
-        var local = email.Split('@', 2)[0].Replace('.', ' ').Replace('_', ' ').Trim();
-        if (string.IsNullOrEmpty(local))
-        {
-            return email;
-        }
-        return char.ToUpperInvariant(local[0]) + local[1..];
-    }
-
-    // ── Lectura para la cara de organizador (StubEventManagementService) ──
-    // Composición vía DIP: el motor de ticketing es la fuente de verdad de los
-    // tickets confirmados; el management service los lee sin duplicar estado.
+    public Task<EventTicketTransferResult> TransferTicketAsync(
+        string ticketId, string toEmail, CancellationToken cancellationToken = default)
+        => _ledger.TransferAsync(ticketId, toEmail, cancellationToken);
 
     /// <summary>
-    /// Devuelve los tickets confirmados de un evento (uno por unidad) con su
-    /// estado de check-in. Vacío si el evento no tiene órdenes confirmadas.
+    /// Los tickets confirmados de un evento. Firma sync PRESERVADA (call-sites intactos).
     /// </summary>
-    /// <remarks>
-    /// Firma sync PRESERVADA (call-sites intactos) sobre el store async: envuelve
-    /// <see cref="GetConfirmedTicketsAsync"/>. Preferir la variante async en código nuevo.
-    /// </remarks>
     public IReadOnlyList<EventAttendee> GetConfirmedTickets(string eventId)
         => GetConfirmedTicketsAsync(eventId).GetAwaiter().GetResult();
 
     /// <inheritdoc cref="GetConfirmedTickets"/>
-    public async Task<IReadOnlyList<EventAttendee>> GetConfirmedTicketsAsync(
-        string eventId,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(eventId))
-        {
-            return Array.Empty<EventAttendee>();
-        }
+    public Task<IReadOnlyList<EventAttendee>> GetConfirmedTicketsAsync(
+        string eventId, CancellationToken cancellationToken = default)
+        => _ledger.ConfirmedAttendeesAsync(eventId, cancellationToken);
 
-        var id = eventId.Trim();
-        var all = await LoadAllAsync(cancellationToken);
-        return all
-            .Where(o => o.Status == EventOrderStatus.Confirmed
-                && string.Equals(o.EventId, id, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(o => o.CreatedAt)
-            .SelectMany(o => o.Units)
-            .Select(u => new EventAttendee(
-                TicketId: EventTicketIssuer.TicketIdOf(u.ReservationId),
-                Name: u.HolderName,
-                Email: u.HolderEmail,
-                Tier: u.TierCode,
-                Seat: u.Seat,
-                CheckedIn: u.CheckedIn))
-            .ToList();
-    }
-
-    /// <summary>
-    /// Marca un ticket como usado (check-in). Idempotente: <c>valid</c> el primer
-    /// check-in válido, <c>already-used</c> si ya estaba marcado, <c>invalid</c> si
-    /// el ticket no corresponde a una unidad confirmada.
-    /// </summary>
-    /// <remarks>
-    /// Firma sync PRESERVADA (call-sites intactos) sobre el store async: envuelve
-    /// <see cref="MarkCheckedInAsync"/>. Preferir la variante async en código nuevo.
-    /// </remarks>
+    /// <summary>Marca un ticket como usado. Firma sync PRESERVADA.</summary>
     public string MarkCheckedIn(string ticketId)
         => MarkCheckedInAsync(ticketId).GetAwaiter().GetResult();
 
     /// <inheritdoc cref="MarkCheckedIn"/>
-    /// <remarks>
-    /// <b>T9 — se admite ÚNICAMENTE un token firmado.</b> Antes esto comparaba el input
-    /// contra el <c>ticketId</c> y no miraba el QR: escanear devolvía <c>invalid</c> y lo
-    /// único que funcionaba era teclear el id… que la UI imprime bajo el propio código.
-    /// O sea, una foto de la entrada ajena servía para entrar en su lugar. Ahora el token
-    /// es la credencial: sin firma válida no se abre la puerta.
-    /// <para>Se verifica además que la <c>QrVersion</c> del token sea la vigente: al
-    /// transferir la entrada el QR rota, y el del dueño anterior debe morir (anti-reventa).</para>
-    /// </remarks>
     public async Task<string> MarkCheckedInAsync(string ticketId, CancellationToken cancellationToken = default)
-        => (await MarkCheckedInDetailedAsync(ticketId, cancellationToken)).Status;
+        => (await _ledger.CheckInAsync(ticketId, cancellationToken)).Status;
 
-    /// <summary>
-    /// Igual que <see cref="MarkCheckedInAsync"/> pero devuelve además DE QUÉ entrada se
-    /// trataba (T7): el aviso en vivo necesita el evento para elegir el canal y el
-    /// asistente para poder nombrarlo en la consola.
-    /// </summary>
-    /// <remarks>
-    /// Cuando el token no verifica se devuelve <c>invalid</c> <b>sin</b> datos: no hay
-    /// entrada de la que hablar, y rellenar el evento con lo que el escáner afirmó sería
-    /// dar por cierto lo que justamente no se pudo comprobar.
-    /// </remarks>
-    public async Task<EventCheckInResult> MarkCheckedInDetailedAsync(
-        string ticketId,
-        CancellationToken cancellationToken = default)
-    {
-        var token = _signer?.Verify(ticketId);
-        if (token is null)
-        {
-            // Sin firma válida no hay entrada. Incluye el id suelto y el QR de otro evento.
-            return new EventCheckInResult("invalid");
-        }
-
-        var all = await LoadAllAsync(cancellationToken);
-        foreach (var order in all.OrderBy(o => o.CreatedAt))
-        {
-            if (order.Status != EventOrderStatus.Confirmed)
-            {
-                continue;
-            }
-            for (var i = 0; i < order.Units.Count; i++)
-            {
-                var unit = order.Units[i];
-                if (!string.Equals(EventTicketIssuer.TicketIdOf(unit.ReservationId), token.TicketId, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-                if (unit.QrVersion != token.QrVersion)
-                {
-                    // QR de una versión anterior: la entrada se transfirió y esta copia
-                    // ya no vale. Es el caso de la reventa del mismo QR.
-                    return new EventCheckInResult("invalid");
-                }
-
-                var found = new EventCheckInResult(
-                    Status: unit.CheckedIn ? "already-used" : "valid",
-                    EventId: order.EventId,
-                    TicketId: token.TicketId,
-                    AttendeeName: unit.AttendeeName);
-
-                if (unit.CheckedIn)
-                {
-                    return found;
-                }
-                // Mutar la unidad in-place (record mutable via copy en la lista).
-                var updatedUnits = order.Units.ToList();
-                updatedUnits[i] = unit with { CheckedIn = true };
-                await WriteAsync(order with { Units = updatedUnits }, cancellationToken);
-                return found;
-            }
-        }
-        return new EventCheckInResult("invalid");
-    }
-
-    // ── Carga/escritura del store (deserialización defensiva) ───────────
-    private async Task<PersistedEventOrder?> LoadAsync(string? orderRef, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(orderRef))
-        {
-            return null;
-        }
-        var json = await _store.ReadAsync(ResourceType, orderRef.Trim(), cancellationToken);
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return null;
-        }
-        try { return JsonSerializer.Deserialize<PersistedEventOrder>(json, _json); }
-        catch (JsonException) { return null; }   // archivo corrupto → como si no existiera
-    }
-
-    private async Task<List<PersistedEventOrder>> LoadAllAsync(CancellationToken cancellationToken)
-    {
-        var raws = await _store.ListAsync(ResourceType, cancellationToken);
-        var orders = new List<PersistedEventOrder>(raws.Count);
-        foreach (var json in raws)
-        {
-            if (string.IsNullOrWhiteSpace(json)) continue;
-            PersistedEventOrder? order;
-            try { order = JsonSerializer.Deserialize<PersistedEventOrder>(json, _json); }
-            catch (JsonException) { continue; }
-            if (order is not null) orders.Add(order);
-        }
-        return orders;
-    }
-
-    private Task WriteAsync(PersistedEventOrder order, CancellationToken cancellationToken)
-        => _store.WriteAsync(ResourceType, order.OrderRef, JsonSerializer.Serialize(order, _json), cancellationToken);
-
-    private EventConfirmationResult ToConfirmation(PersistedEventOrder order)
-    {
-        var tickets = order.Units.Select(u => ToTicket(order.EventId, u)).ToList();
-        return new EventConfirmationResult(order.Status.ToString(), tickets);
-    }
-
-    // Traduce lo que ESTE motor persistió a los hechos de una entrada, y deja emitir al
-    // emisor. Es toda la frontera: lo de arriba de esta línea sabe de órdenes, reservas y
-    // sesiones de pago; lo de abajo, solo de entradas. Un camino de compra que aparte el
-    // aforo en otro sitio construye sus propios hechos y obtiene el MISMO formato de QR.
-    private EventTicket ToTicket(string eventId, PersistedEventUnit u)
-        => _issuer.Issue(new EventTicketFacts(
-            EventId: eventId,
-            SeatRef: u.ReservationId,
-            HolderName: u.HolderName,
-            HolderEmail: u.HolderEmail,
-            Tier: u.TierCode,
-            Seat: u.Seat,
-            QrVersion: u.QrVersion,
-            CheckedIn: u.CheckedIn));
+    /// <inheritdoc cref="MarkCheckedIn"/>
+    public Task<EventCheckInResult> MarkCheckedInDetailedAsync(
+        string ticketId, CancellationToken cancellationToken = default)
+        => _ledger.CheckInAsync(ticketId, cancellationToken);
 
     // Número de orden human-facing derivado determinísticamente del orderRef (calcando
-    // StubShopOrderService): re-confirmar el mismo orderRef da el mismo número, así que
-    // el código que el asistente guarda es estable entre confirmaciones y reinicios.
+    // StubShopOrderService): re-confirmar el mismo orderRef da el mismo número, así que el
+    // código que el asistente guarda es estable entre confirmaciones y reinicios.
     private static string BuildOrderNumber(string orderRef)
     {
         var raw = orderRef.Replace("evord_", string.Empty, StringComparison.Ordinal);
@@ -733,60 +455,4 @@ public sealed class StubEventTicketingService : IEventTicketingService
 
     /// <summary>Unidad de ticket EFÍMERA del cálculo de checkout — no se persiste.</summary>
     private sealed record PlannedUnit(string TierCode, string TierName, decimal Price, string? Seat);
-}
-
-/// <summary>Estado de una compra de tickets. Serializado como número en el store.</summary>
-internal enum EventOrderStatus { Pending, Confirmed }
-
-/// <summary>
-/// La forma SERIALIZADA de una unidad de ticket (el antiguo <c>UnitState</c> anidado del
-/// <see cref="StubEventTicketingService"/>, promovido a top-level para round-trip limpio
-/// con System.Text.Json). Guarda MÁS que el <see cref="EventTicket"/> público:
-/// <see cref="ReservationId"/> es necesario para que <c>ConfirmAsync</c> sobreviva un
-/// reinicio, y <see cref="QrVersion"/>/<see cref="CheckedIn"/> son el estado anti-reventa
-/// y anti-doble-entrada.
-/// </summary>
-internal sealed record PersistedEventUnit(
-    string TierCode,
-    string TierName,
-    string? Seat,
-    decimal Price,
-    string Currency,
-    string AttendeeName,
-    string AttendeeEmail,
-    string? AttendeeDocument,
-    string ReservationId)
-{
-    public bool CheckedIn { get; init; }
-
-    /// <summary>Email del portador ACTUAL del ticket (cambia al transferir).</summary>
-    public string HolderEmail { get; init; } = AttendeeEmail;
-
-    /// <summary>Nombre del portador actual (cambia al transferir).</summary>
-    public string HolderName { get; init; } = AttendeeName;
-
-    /// <summary>
-    /// Versión del QR — arranca en 0 y se incrementa en cada transferencia
-    /// (SafeTix-like: el QR es determinista por holder+ticket+versión, así que
-    /// bumpear la versión INVALIDA el QR viejo y emite uno nuevo).
-    /// </summary>
-    public int QrVersion { get; init; }
-}
-
-/// <summary>
-/// La forma SERIALIZADA de una compra de tickets (el antiguo <c>OrderState</c> anidado del
-/// <see cref="StubEventTicketingService"/>, promovido a top-level para round-trip limpio
-/// con System.Text.Json). <see cref="PaymentSessionId"/> es necesario para que
-/// <c>ConfirmAsync</c> sobreviva un reinicio del CMS (T1/ADR 0105).
-/// </summary>
-internal sealed record PersistedEventOrder(
-    string OrderRef,
-    string EventId,
-    string PaymentSessionId,
-    decimal Total,
-    string Currency,
-    IReadOnlyList<PersistedEventUnit> Units,
-    DateTimeOffset CreatedAt)
-{
-    public EventOrderStatus Status { get; init; } = EventOrderStatus.Pending;
 }

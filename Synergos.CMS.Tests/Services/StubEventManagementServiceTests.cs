@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Synergos.CMS.Application.Services.Impl;
@@ -11,8 +11,9 @@ namespace Synergos.CMS.Tests.Services;
 /// Cubre <see cref="StubEventManagementService"/> (seam <see cref="IEventManagementService"/>,
 /// cara de organizador del vertical Eventos): los 4 casos canónicos (ADR 0075) —
 /// empty (sin ventas) / happy (dashboard tras confirmar) / filter (check-in inválido) /
-/// idempotent (check-in repetido → already-used). Compone el StubEventTicketingService
-/// concreto (DIP) como fuente de verdad de los tickets.
+/// idempotent (check-in repetido → already-used). Compone el <see cref="EventTicketLedger"/>
+/// COMPARTIDO como fuente de verdad de las entradas — no el motor de compra: la puerta no
+/// depende de por dónde se pagó (HU #35, rebanada 2b).
 /// </summary>
 public class StubEventManagementServiceTests
 {
@@ -23,10 +24,13 @@ public class StubEventManagementServiceTests
     private static (IEventManagementService Mgmt, StubEventTicketingService Ticketing) Make()
     {
         var catalog = new StubEventCatalogProvider();
+        // UN registro para los dos. Que cada uno armara el suyo es exactamente el defecto que
+        // esta rebanada arregla: la puerta leería un almacén que el motor de compra no escribió.
+        var ledger = new EventTicketLedger(signer: Signer);
         var ticketing = new StubEventTicketingService(
             catalog, new StubReservationService(), new StubPaymentProvider(),
-            null, null, null, null, signer: Signer);
-        var mgmt = new StubEventManagementService(ticketing, catalog);
+            null, null, null, null, signer: Signer, ledger: ledger);
+        var mgmt = new StubEventManagementService(ledger, catalog);
         return (mgmt, ticketing);
     }
 

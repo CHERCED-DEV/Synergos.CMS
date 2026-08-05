@@ -124,17 +124,68 @@ public sealed class EventTicketIssuanceTests
             + "hacen: " + string.Join(", ", culpables));
     }
 
+    /// <summary>
+    /// El registro proyecta a través del emisor, y el motor de compra ni siquiera proyecta.
+    /// </summary>
+    /// <remarks>
+    /// Son dos afirmaciones y las dos importan. <c>new EventTicket(</c> en cualquiera de los dos
+    /// es la extracción deshecha aunque el emisor siga existiendo al lado — un segundo formato
+    /// vivo, que es justo lo que este fichero existe para impedir. Y que el motor de compra no
+    /// proyecte es lo que hace que cambiar por dónde se compra no toque el artefacto.
+    /// </remarks>
     [Fact]
-    public void El_motor_de_compra_DELEGA_la_emision()
+    public void Solo_el_REGISTRO_proyecta_una_entrada()
     {
-        var codigo = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.CMS.Application", "Services", "Impl", "StubEventTicketingService.cs"));
+        var impl = Path.Combine(RepoRoot(), "Synergos.CMS.Application", "Services", "Impl");
 
-        Assert.Contains("_issuer.Issue(", codigo, StringComparison.Ordinal);
+        var registro = SinComentarios(Path.Combine(impl, "EventTicketLedger.cs"));
+        Assert.Contains("_issuer.Issue(", registro, StringComparison.Ordinal);
+        Assert.DoesNotContain("new EventTicket(", registro, StringComparison.Ordinal);
 
-        // Y no arma el artefacto por su cuenta. Es la mitad que de verdad importa: `new
-        // EventTicket(` acá es la extracción deshecha, aunque el emisor siga existiendo al lado.
-        Assert.DoesNotContain("new EventTicket(", codigo, StringComparison.Ordinal);
+        var motorDeCompra = SinComentarios(Path.Combine(impl, "StubEventTicketingService.cs"));
+        Assert.DoesNotContain("new EventTicket(", motorDeCompra, StringComparison.Ordinal);
+        Assert.DoesNotContain("EventTicketFacts(", motorDeCompra, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// La puerta lee el registro, no el motor de compra — y lee EL MISMO que se escribió.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que esto impide no rompía nada hasta el día del cambio, y ese día
+    /// rompía en silencio.</b> La cara de organizador colgaba del motor de compra concreto, así
+    /// que cablear <c>IEventTicketingService</c> a otro camino habría dejado el escáner leyendo
+    /// un almacén que nadie escribió: las entradas existirían, la puerta diría <c>invalid</c>, y
+    /// ni el build ni un test lo habrían dicho.</para>
+    ///
+    /// <para>La segunda mitad es igual de importante: un registro por consumidor tiene
+    /// exactamente el mismo efecto que el acople anterior. Por eso se comprueba que el composer
+    /// arme UNO y se lo dé a los dos.</para>
+    /// </remarks>
+    [Fact]
+    public void La_puerta_lee_el_registro_COMPARTIDO_y_no_el_motor_de_compra()
+    {
+        var cara = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Application", "Services", "Impl", "StubEventManagementService.cs"));
+
+        Assert.DoesNotContain("StubEventTicketingService", cara, StringComparison.Ordinal);
+        Assert.Contains("EventTicketLedger", cara, StringComparison.Ordinal);
+
+        var composer = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Web", "Composers", "SeamComposer.EventsPropertiesGov.cs"));
+
+        // Uno solo, y singleton: dos registros sobre el mismo almacén funcionarían hoy por
+        // casualidad y dejarían de hacerlo el día que uno de ellos cachee algo.
+        var construcciones = composer.Split("new EventTicketLedger(", StringSplitOptions.None).Length - 1;
+        Assert.True(construcciones == 1,
+            $"El registro de entradas se arma {construcciones} veces en el composer; tiene que ser una.");
+        Assert.Contains("AddSingleton(sp => new EventTicketLedger(", composer, StringComparison.Ordinal);
+
+        // Y es el que recibe la cara de organizador, no un motor de compra.
+        var desde = composer.IndexOf("new StubEventManagementService(", StringComparison.Ordinal);
+        Assert.True(desde >= 0, "El composer ya no arma la cara de organizador: revisar este gate.");
+        var argumentos = composer[desde..(composer.IndexOf("));", desde, StringComparison.Ordinal) + 3)];
+        Assert.Contains("EventTicketLedger", argumentos, StringComparison.Ordinal);
+        Assert.DoesNotContain("StubEventTicketingService", argumentos, StringComparison.Ordinal);
     }
 
     [Fact]

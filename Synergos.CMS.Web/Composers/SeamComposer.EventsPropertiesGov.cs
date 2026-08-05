@@ -85,6 +85,15 @@ public sealed partial class SeamComposer
 
         // Durabilidad (doc 25): las órdenes de tickets viven tras el store genérico
         // (resourceType "event-orders") → una compra confirmada sobrevive un reinicio.
+        //
+        // El REGISTRO de entradas es uno solo y lo comparten el motor de compra y la cara de
+        // organizador. Que sea singleton no es una optimización: si cada uno armara el suyo,
+        // cambiar por dónde se compra dejaría la puerta leyendo un almacén que nadie escribió.
+        services.AddSingleton(sp => new EventTicketLedger(
+            sp.GetRequiredService<IJsonEntityStore>(),
+            sp.GetRequiredService<ITicketSigner>(),
+            sp.GetRequiredService<IAuditTrailWriter>()));
+
         services.AddSingleton<StubEventTicketingService>(sp =>
             new StubEventTicketingService(
                 sp.GetRequiredService<IEventCatalogProvider>(),
@@ -97,11 +106,12 @@ public sealed partial class SeamComposer
                 null,
                 notifier: sp.GetRequiredService<ITransactionalNotifier>(),
                 // T9: sin firmante no se emite QR ni se valida en la puerta (fail-closed).
-                signer: sp.GetRequiredService<ITicketSigner>()));
+                signer: sp.GetRequiredService<ITicketSigner>(),
+                ledger: sp.GetRequiredService<EventTicketLedger>()));
         services.AddSingleton<IEventTicketingService>(sp => sp.GetRequiredService<StubEventTicketingService>());
         services.AddSingleton<IEventManagementService>(sp =>
             new StubEventManagementService(
-                sp.GetRequiredService<StubEventTicketingService>(),
+                sp.GetRequiredService<EventTicketLedger>(),
                 sp.GetRequiredService<IEventCatalogProvider>()));
 
         // OLA 7 Propiedades — portal inmobiliario (doc propiedades-app-spec).
