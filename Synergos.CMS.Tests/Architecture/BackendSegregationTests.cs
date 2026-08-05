@@ -106,6 +106,60 @@ public sealed class BackendSegregationTests
     }
 
     [Fact]
+    public void El_vocabulario_no_se_DEFINE_dos_veces()
+    {
+        // Lo que tiene que poner esto en rojo: una capacidad que necesita un concepto del
+        // vocabulario y, en vez de usar el de Core, se declara el suyo «porque es solo un enum».
+        //
+        // Pasó de verdad y por buenas razones: `IdentityAssertion` nació dentro de Api.Messaging
+        // (HU #13), que era su único usuario, y ahí estaba bien. El problema aparece con el
+        // SEGUNDO: dos definiciones de «cuánto vale este registro» pueden divergir, y el día que
+        // una gane un valor que la otra no tiene, dos partes del sistema dejan de poder comparar
+        // sus propios registros.
+        //
+        // Se mira la DECLARACIÓN, no la mención: `IdentityAssertion.CmsSession` en una capacidad
+        // es uso legítimo; `enum IdentityAssertion` fuera de Core es la copia.
+        var vocabulario = new[] { "IdentityAssertion", "Rejection", "IdempotencyKey", "Actor" };
+
+        var copias = new List<string>();
+        // Solo el árbol de SERVICIOS: son los que referencian Core y por tanto los únicos que
+        // pueden usar su vocabulario en vez de copiarlo. El CMS no lo referencia a propósito
+        // (CLAUDE.md §11), así que exigirle que no declare un `Actor` propio sería exigirle que
+        // no tenga uno. Y el proyecto de tests declara dobles: es su trabajo.
+        foreach (var raiz in Directory.EnumerateDirectories(RepoRoot())
+                     .Where(d => Path.GetFileName(d).StartsWith("Synergos.Api.", StringComparison.Ordinal)
+                              || Path.GetFileName(d).StartsWith("Synergos.Bff.", StringComparison.Ordinal)
+                              || Path.GetFileName(d) == "Synergos.Shared"))
+        {
+            foreach (var f in Directory.EnumerateFiles(raiz, "*.cs", SearchOption.AllDirectories))
+            {
+                if (f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                    || f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var codigo = File.ReadAllText(f);
+                foreach (var tipo in vocabulario)
+                {
+                    if (codigo.Contains($"enum {tipo}", StringComparison.Ordinal)
+                        || codigo.Contains($"record {tipo}(", StringComparison.Ordinal)
+                        || codigo.Contains($"class {tipo}\n", StringComparison.Ordinal))
+                    {
+                        copias.Add($"{Path.GetFileName(f)} → {tipo}");
+                    }
+                }
+            }
+        }
+
+        Assert.True(copias.Count == 0,
+            "Estos tipos del vocabulario están DECLARADOS fuera de Synergos.Core: "
+            + string.Join(", ", copias.Distinct(StringComparer.Ordinal))
+            + ". Dos definiciones del mismo concepto pueden divergir, y entonces dos partes del "
+            + "sistema dejan de poder comparar sus propios registros.");
+    }
+
+    [Fact]
     public void Core_no_referencia_ningun_otro_proyecto_del_repo()
     {
         // La flecha va en un solo sentido. Si Core referenciara Shared, el vocabulario del

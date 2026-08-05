@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2233 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2234 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2233 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2234 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -120,7 +120,8 @@ Synergos.CMS/
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
 │
 ├── Synergos.Core/               EL VOCABULARIO. Ref, Money, TimeWindow, Rejection,
-│                                Result, IdempotencyKey, Actor, Page.
+│                                Result, IdempotencyKey, Actor, Page,
+│                                IdentityAssertion.
 │                                CERO referencias. No sabe qué es ASP.NET.
 ├── Synergos.Shared/             fontanería de host. Llave compartida, Rejection→HTTP,
 │                                libro de idempotencia, JsonCollectionStore, correlación.
@@ -363,7 +364,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2233 tests):
+# Suite completa (2234 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -465,7 +466,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2233 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`. 2234 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -559,7 +560,11 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   identidad de quien accede (HU #13) precisamente para que el día que
   esto se arregle los registros viejos no mientan sobre su propia fuerza:
   hoy todos dicen `CmsSession`, que es nuestro propio sistema dando fe.
-  Cablear `Api.Identity` como puerta es la HU #14.
+  Ese `IdentityAssertion` **subió a `Synergos.Core`** al aparecer su
+  segundo consumidor (el asiento de auditoría de la HU #15), así que el
+  día que #14 cablee `Api.Identity` hay **un solo sitio** que pasa de
+  decir `CmsSession` a decir otra cosa. Hay gate: declararlo dos veces
+  rompe el build.
 - **`Api.Booking` ya deja llegar del sujeto a su recurso** (HU #25):
   `GET /v1/resources?subjectKind=&subjectId=`, calcando lo que
   `Api.Inventory` hacía con `/v1/items`. Faltaba, y obligaba a que el

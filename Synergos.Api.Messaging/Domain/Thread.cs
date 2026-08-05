@@ -24,34 +24,9 @@ public sealed record MessageThread(
     public bool Includes(Ref who) => Participants.Contains(who);
 }
 
-/// <summary>
-/// Cómo se afirmó la identidad de quien accedió.
-/// </summary>
-/// <remarks>
-/// <para><b>Este campo es lo que hace reversible la decisión de quién certifica la identidad.</b>
-/// Sin él, el día que se pase a una afirmación más fuerte los registros viejos quedarían
-/// indistinguibles de los nuevos — y todo el archivo pasaría a afirmar más de lo que puede
-/// sostener. Con él, un auditor ve que el acceso de agosto se certificó con la sesión del CMS y
-/// el de octubre con un token verificable.</para>
-///
-/// <para><b>El orden es de fuerza creciente</b>, y no es decorativo: es lo que permite responder
-/// «¿este acuse aguanta?» sin volver a leer el código que lo escribió.</para>
-/// </remarks>
-public enum IdentityAssertion
-{
-    /// <summary>
-    /// Lo afirma la sesión del CMS. <b>Registro de acceso autenticado, no acuse con valor
-    /// probatorio</b>: quien certifica es nuestro propio sistema. Sirve para operar, auditar y
-    /// discutir de buena fe; no para sostener solo que un término empezó a correr.
-    /// </summary>
-    CmsSession = 1,
-
-    /// <summary><c>Api.Identity</c> emitió un token verificable.</summary>
-    IdentityToken = 2,
-
-    /// <summary>Federación con Autenticación Digital del Estado (Dec. 620/2020).</summary>
-    GovFederation = 3,
-}
+// `IdentityAssertion` vivía acá y subió a Synergos.Core al aparecer su SEGUNDO consumidor
+// —el asiento de auditoría de la HU #15—, que es el listón de CLAUDE.md §17. Mientras hubo
+// uno solo, este era su sitio: «cuánto vale este registro» no era vocabulario todavía.
 
 /// <summary>
 /// Que alguien accedió a un mensaje: quién, cuándo, y con qué fuerza se afirmó que era él.
