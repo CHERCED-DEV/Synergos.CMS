@@ -599,11 +599,22 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > distingue. Si tuviera que distinguir, dejaría de servirle a la tienda
   > al día siguiente.
 
-  > **Falta cablearlo al CMS.** `StubEventTicketingService` sigue siendo
-  > el único camino: el seam tiene cuatro métodos y solo dos —comprar y
-  > confirmar— tienen algo que deshacer. Los otros dos (mis tickets,
-  > transferir) son ciclo de vida del artefacto y se quedan donde el
-  > firmante del QR, que es el CMS.
+  > **Falta cablearlo al CMS, pero ya no hay obstáculo.** `StubEventTicketingService`
+  > sigue siendo el único camino: el seam tiene cuatro métodos y solo dos
+  > —comprar y confirmar— tienen algo que deshacer. Los otros dos (mis
+  > tickets, transferir) son ciclo de vida del artefacto y se quedan donde
+  > el firmante del QR, que es el CMS.
+  >
+  > **Lo que bloqueaba era que la emisión estaba fundida con la compra**:
+  > proyectaba desde la unidad que el propio checkout persistía, así que un
+  > camino que no la creara no tenía de dónde emitir. Ya no —
+  > `EventTicketIssuer` (Application) es el ÚNICO sitio que nombra una
+  > entrada y arma el token de su QR, y recibe hechos, no órdenes. Hay gate
+  > (`EventTicketIssuanceTests`): construir un `TicketToken` o escribir el
+  > prefijo `tkt_` fuera de él rompe el build, y el orquestador tampoco
+  > puede nombrar entradas. **Y lo que el CMS tendrá que recordar de su
+  > lado es `sagaId → asistentes`**: la saga no lleva datos personales a
+  > propósito.
 - **El retroceso no es configurable.** El plazo de abandono y el techo de
   reintentos sí (HU #29), pero la *forma* de reintentar —ocho intentos con
   retroceso exponencial— está cableada en `Compensator`. Nadie ha pedido

@@ -21,10 +21,13 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// <see cref="TravelProductType.Hotel"/> como discriminador neutro (Eventos no tiene
 /// tipo propio en el enum del motor; la identidad real viaja en ProductRef/ProductLabel).
 /// El precio NUNCA se confía al cliente: se resuelve desde el catálogo en checkout
-/// (anti-tampering). El QR es un payload DETERMINISTA por ticket (hoy un string
-/// estable <c>SYN-TKT-{eventId}-{ticketId}</c>; el adapter real lo firma con HMAC).
+/// (anti-tampering).
 /// <see cref="ConfirmAsync"/> es idempotente: re-confirmar el mismo orderRef devuelve
 /// los mismos tickets sin doble captura ni re-emisión.
+/// <b>Este motor ya NO decide cómo se llama una entrada ni qué lleva su QR</b>: eso es
+/// <see cref="EventTicketIssuer"/>, y está afuera para que un camino de compra que aparte
+/// el aforo en otro sitio emita con el MISMO firmante y el MISMO formato en vez de copiarlo.
+/// Acá quedó el CUÁNDO se emite (tras capturar y confirmar); allá vive el QUÉ se emite.
 /// <b>T1/ADR 0105:</b> el estado (orderRef → <see cref="PersistedEventOrder"/>) ya NO
 /// vive en un diccionario del proceso sino detrás del seam
 /// <see cref="IJsonEntityStore"/> — con el adapter FileSystem la compra y sus tickets
@@ -66,8 +69,16 @@ public sealed class StubEventTicketingService : IEventTicketingService
     private readonly IAuditTrailWriter? _audit;
     private readonly IJsonEntityStore _store;
     private readonly ITransactionalNotifier? _notifier;
-    /// <summary>T9 — firma el QR y lo verifica en la puerta. Null = fail-closed.</summary>
+    /// <summary>T9 — verifica en la PUERTA el token que trae quien llega. Null = fail-closed.</summary>
+    /// <remarks>
+    /// Firmar ya no se hace acá: eso es <see cref="_issuer"/>. Este campo queda porque verificar
+    /// es lo contrario de emitir — pasa en otro momento, en otra cara del producto y sobre un
+    /// token que este proceso puede no haber emitido nunca.
+    /// </remarks>
     private readonly ITicketSigner? _signer;
+
+    /// <summary>Cómo se llama una entrada y qué lleva su QR. El motor de compra ya no lo decide.</summary>
+    private readonly EventTicketIssuer _issuer;
     private readonly Func<DateTimeOffset> _now;
 
     public StubEventTicketingService(
@@ -138,6 +149,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
         // T9: sin firmante NO se emite QR ni se valida nada (fail-closed). Un QR sin
         // firma sería falsificable y —peor— parecería seguro. En Web siempre se cablea.
         _signer = signer;
+        _issuer = new EventTicketIssuer(signer);
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -406,7 +418,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
                     Quantity: 1,
                     Amount: u.Price,
                     Currency: u.Currency,
-                    Detail: u.Seat ?? TicketId(u.ReservationId)))
+                    Detail: u.Seat ?? EventTicketIssuer.TicketIdOf(u.ReservationId)))
                 .ToList(),
             ActionPath: $"/eventos/entradas/{order.OrderRef}");
     }
@@ -458,7 +470,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
             for (var i = 0; i < order.Units.Count; i++)
             {
                 var unit = order.Units[i];
-                if (!string.Equals(TicketId(unit.ReservationId), id, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(EventTicketIssuer.TicketIdOf(unit.ReservationId), id, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -559,7 +571,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
             .OrderBy(o => o.CreatedAt)
             .SelectMany(o => o.Units)
             .Select(u => new EventAttendee(
-                TicketId: TicketId(u.ReservationId),
+                TicketId: EventTicketIssuer.TicketIdOf(u.ReservationId),
                 Name: u.HolderName,
                 Email: u.HolderEmail,
                 Tier: u.TierCode,
@@ -624,7 +636,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
             for (var i = 0; i < order.Units.Count; i++)
             {
                 var unit = order.Units[i];
-                if (!string.Equals(TicketId(unit.ReservationId), token.TicketId, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(EventTicketIssuer.TicketIdOf(unit.ReservationId), token.TicketId, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -695,49 +707,20 @@ public sealed class StubEventTicketingService : IEventTicketingService
         return new EventConfirmationResult(order.Status.ToString(), tickets);
     }
 
-    // Proyecta una unidad confirmada a su e-ticket (con QR rotativo + holder + estado).
-    // De instancia desde T9: el QR se FIRMA, y la llave vive en el firmante inyectado.
+    // Traduce lo que ESTE motor persistió a los hechos de una entrada, y deja emitir al
+    // emisor. Es toda la frontera: lo de arriba de esta línea sabe de órdenes, reservas y
+    // sesiones de pago; lo de abajo, solo de entradas. Un camino de compra que aparte el
+    // aforo en otro sitio construye sus propios hechos y obtiene el MISMO formato de QR.
     private EventTicket ToTicket(string eventId, PersistedEventUnit u)
-    {
-        var ticketId = TicketId(u.ReservationId);
-        return new EventTicket(
-            Id: ticketId,
-            Qr: BuildQr(eventId, ticketId, u.QrVersion),
+        => _issuer.Issue(new EventTicketFacts(
             EventId: eventId,
-            AttendeeName: u.HolderName,
+            SeatRef: u.ReservationId,
+            HolderName: u.HolderName,
+            HolderEmail: u.HolderEmail,
             Tier: u.TierCode,
             Seat: u.Seat,
-            HolderEmail: u.HolderEmail,
-            Status: TicketStatus(u));
-    }
-
-    // Estado del ticket para la cara de asistente: used (ya escaneado) tiene
-    // prioridad; luego transferred (QR rotado al menos una vez); si no, valid.
-    private static string TicketStatus(PersistedEventUnit u)
-    {
-        if (u.CheckedIn)
-        {
-            return "used";
-        }
-        return u.QrVersion > 0 ? "transferred" : "valid";
-    }
-
-    // Ticket id determinista derivado del id de la reserva (estable entre
-    // confirmaciones de la misma orden → idempotencia del ticket).
-    private static string TicketId(string reservationId)
-        => "tkt_" + reservationId.Replace("resv_", string.Empty, StringComparison.Ordinal);
-
-    // Payload QR ROTATIVO por ticket (SafeTix-like), FIRMADO desde T9: incluye la
-    // versión, así que transferir (bump de versión) INVALIDA el QR viejo y emite uno
-    // nuevo — y la firma impide fabricarlo.
-    //
-    // Antes el sufijo era `String.GetHashCode()` del email: no criptográfico y, en .NET
-    // Core, RANDOMIZADO POR PROCESO — el mismo ticket daba un QR distinto tras cada
-    // reinicio. Nadie lo notó porque nada verificaba el QR.
-    // Sin firmante devuelve vacío en vez de un token falsificable: la UI no pinta QR y
-    // la puerta no valida nada. Es preferible una entrada sin código a una que finge.
-    private string BuildQr(string eventId, string ticketId, int qrVersion)
-        => _signer is null ? string.Empty : _signer.Sign(new TicketToken(eventId, ticketId, qrVersion));
+            QrVersion: u.QrVersion,
+            CheckedIn: u.CheckedIn));
 
     // Número de orden human-facing derivado determinísticamente del orderRef (calcando
     // StubShopOrderService): re-confirmar el mismo orderRef da el mismo número, así que
