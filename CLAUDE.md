@@ -574,6 +574,17 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   no había caso. Apareció el primero —mandar un acceso rechazado a
   `Api.Audit`— y se decidió NO abrir esa flecha desde la capacidad
   (HU #15). Si algún día se abre, el gate va antes que el código.
+
+  > **Y se decidió también quién SÍ lo escribe: el orquestador.** Se
+  > miraron las tres opciones y las dos que se podían entregar ya —que
+  > emita la capacidad, o que emita un middleware compartido— acaban en
+  > lo mismo: cliente y llave hacia `Api.Audit` dentro del proceso de
+  > cada capacidad, o sea las veinte dejando de ser hojas. La flecha se
+  > movería de fichero, no desaparecería. La razón de fondo es que el
+  > caso —un acto administrativo notificado— es una regla de Gobierno,
+  > no de la plataforma: nadie cree que un 403 de `Api.Cart` merezca
+  > asiento de auditoría. **#15 queda bloqueada por `Bff.Gob`**, que es
+  > su resultado y no su fracaso.
 - **Seis orquestadores sin construir**: Viajes, Eventos, Realty, Gob,
   Academy, Social.
 - **El retroceso no es configurable.** El plazo de abandono y el techo de
