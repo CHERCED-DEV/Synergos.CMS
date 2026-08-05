@@ -97,6 +97,15 @@ services:
       Synergos__Realty__Mode: ${SYNERGOS_REALTY_MODE:-Stub}
       Synergos__Realty__BaseUrl: "http://api-booking:8080"
       Synergos__Realty__ApiKey: ${SYNERGOS_API_KEY}
+
+      # Y contra quien se compran las entradas (HU #35). Aca vuelve a decir 'Bff'
+      # porque SI hay algo que deshacer: si el cobro falla hay que soltar el aforo
+      # apartado, y si el consumo falla despues de capturar hay que devolver la
+      # plata. Lo que NO viaja es el artefacto: la entrada, su QR y el check-in se
+      # quedan en el CMS, donde vive el firmante.
+      Synergos__Eventos__Mode: ${SYNERGOS_EVENTOS_MODE:-Stub}
+      Synergos__Eventos__BaseUrl: "http://bff-eventos:8080"
+      Synergos__Eventos__ApiKey: ${SYNERGOS_API_KEY}
     volumes:
       - cms-db:/app/umbraco/Data
       - cms-logs:/app/umbraco/Logs

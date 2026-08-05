@@ -185,7 +185,12 @@ Academia es **el único vertical con catálogo y sin ninguna superficie CMS**: n
 `coursePage`, así que un editor no puede publicar un curso ni con el flag puesto. Su destino es
 familia B —una rebanada de contenido, como las ADR 0117/0118/0119/0123— **no una capacidad**.
 El ticketing y la matrícula son motores transaccionales con pago: irían a `Bff.Eventos` y
-`Bff.Academy`, que no están construidos.
+`Bff.Academy`. **`StubEventTicketingService` ya está cableado** (HU #35): pasa a familia A con
+destino `Bff.Eventos`, activable con `Synergos:Eventos:Mode=Bff` y con el stub de default. Y
+cablearlo obligó a partirlo antes: comprar se va al orquestador, pero **el artefacto —la entrada,
+su QR, su portador, el check-in— se queda en el CMS**, porque el firmante vive de este lado. Vive
+en `EventTicketLedger` y lo comparten los dos caminos de compra. `StubEnrollmentService` sigue
+esperando a `Bff.Academy`.
 
 **Mensajería y documentos (2)** — `StubMessagingService` · `StubDocumentUploadService`.
 Ver la nota de abajo: **es la HU #26, y su premisa no se sostiene.**
@@ -246,7 +251,7 @@ tiene que existir en la raíz del repo.
 | `StubEnrollmentService` | C | — |
 | `StubEventCatalogProvider` | B | — |
 | `StubEventManagementService` | C | — |
-| `StubEventTicketingService` | C | — |
+| `StubEventTicketingService` | A | `Synergos.Bff.Eventos` |
 | `StubFlightAvailabilityProvider` | C | — |
 | `StubGovFeeCalculator` | C | — |
 | `StubLeadCaptureService` | C | — |

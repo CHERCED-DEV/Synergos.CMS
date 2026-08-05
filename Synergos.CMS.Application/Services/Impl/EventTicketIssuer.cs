@@ -87,7 +87,26 @@ public sealed class EventTicketIssuer
         {
             throw new ArgumentException("Una entrada necesita saber qué se apartó para ella.", nameof(seatRef));
         }
-        return "tkt_" + seatRef.Trim().Replace("resv_", string.Empty, StringComparison.Ordinal);
+
+        var id = "tkt_" + seatRef.Trim().Replace("resv_", string.Empty, StringComparison.Ordinal);
+
+        // El id NO puede llevar guiones, y no es capricho de estilo: el payload del token es
+        // `SYN-TKT-{evento}-{entrada}-v{n}`, y al deshacerlo se corta por el ÚLTIMO guion para
+        // que el identificador del evento sí pueda llevarlos. Un guion en el id de la entrada
+        // mueve ese corte, y el token verifica bien pero devuelve OTRA entrada.
+        //
+        // Lo que sale de ahí es lo peor que puede pasar en esta parte del producto: se emite un
+        // QR con firma válida y la puerta dice `invalid`, sin un error en ningún log. Se prefiere
+        // reventar en la primera compra —donde hay un stack— a fallar en la entrada del recinto.
+        if (id.Contains('-', StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"El identificador de lo apartado ('{seatRef}') produce un id de entrada con guiones, "
+                + "y el token del QR no puede deshacerlos: verificaría bien y devolvería otra entrada.",
+                nameof(seatRef));
+        }
+
+        return id;
     }
 
     /// <summary>

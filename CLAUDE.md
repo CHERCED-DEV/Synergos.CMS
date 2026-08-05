@@ -487,7 +487,7 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   propósito. Y 20 de los 46 **ya son durables** — «stub» en este repo
   dejó hace tiempo de querer decir «en memoria». Hay gate
   (`WiringMapTests`): un stub nuevo sin mapear rompe el build.
-  De los 9, **tres** están hechos: la tienda compra contra `Bff.Tienda`
+  De los 9, **cuatro** están hechos: la tienda compra contra `Bff.Tienda`
   (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
   `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25) y la visita al inmueble
   aparta cupo **directo contra `Api.Booking`, sin orquestador**
@@ -599,22 +599,36 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > distingue. Si tuviera que distinguir, dejaría de servirle a la tienda
   > al día siguiente.
 
-  > **Falta cablearlo al CMS, pero ya no hay obstáculo.** `StubEventTicketingService`
-  > sigue siendo el único camino: el seam tiene cuatro métodos y solo dos
-  > —comprar y confirmar— tienen algo que deshacer. Los otros dos (mis
-  > tickets, transferir) son ciclo de vida del artefacto y se quedan donde
-  > el firmante del QR, que es el CMS.
+  > **Y ya está cableado** (HU #35, rebanada 2b):
+  > `Synergos:Eventos:Mode=Bff` compra contra el orquestador, con el stub de
+  > default. Verificado con los cuatro procesos vivos: matando `Api.Payments`
+  > a mitad de la confirmación, el aforo vuelve al pozo solo y no se emite
+  > ninguna entrada.
   >
-  > **Lo que bloqueaba era que la emisión estaba fundida con la compra**:
-  > proyectaba desde la unidad que el propio checkout persistía, así que un
-  > camino que no la creara no tenía de dónde emitir. Ya no —
-  > `EventTicketIssuer` (Application) es el ÚNICO sitio que nombra una
-  > entrada y arma el token de su QR, y recibe hechos, no órdenes. Hay gate
-  > (`EventTicketIssuanceTests`): construir un `TicketToken` o escribir el
-  > prefijo `tkt_` fuera de él rompe el build, y el orquestador tampoco
-  > puede nombrar entradas. **Y lo que el CMS tendrá que recordar de su
-  > lado es `sagaId → asistentes`**: la saga no lleva datos personales a
-  > propósito.
+  > **La compra se parte en dos mitades que viven en sitios distintos.** El
+  > orquestador mueve aforo y plata; **el artefacto se queda en el CMS**
+  > —la entrada, su QR, su portador, el check-in—, porque el firmante vive
+  > de este lado. Con el BFF caído se sigue pudiendo ver «mis entradas»,
+  > transferir y escanear en la puerta.
+  >
+  > **Cablearlo obligó a partirlo dos veces antes.** `EventTicketIssuer` es
+  > el ÚNICO sitio que nombra una entrada y arma el token de su QR;
+  > `EventTicketLedger` es el ÚNICO registro de lo emitido, y lo comparten
+  > los dos caminos de compra. Lo segundo lo destapó el propio cableado: la
+  > cara de organizador colgaba del motor de compra concreto, así que
+  > cambiar por dónde se compra habría dejado la puerta leyendo un almacén
+  > vacío, sin que nada avisara. Hay gates (`EventTicketIssuanceTests`,
+  > `EventosWiringTests`).
+  >
+  > **Lo que el CMS recuerda de su lado es `sagaId → asistentes`**: la saga
+  > no lleva la lista de asistentes a propósito, y de quien compra solo
+  > lleva un **seudónimo** — mandar el correo en crudo lo dejaba escrito en
+  > el disco del orquestador, y eso lo destapó la verificación en vivo, no
+  > una revisión. `Bff.Tienda` (#24) todavía manda el correo entero.
+  >
+  > **Y queda un defecto conocido:** la llave de idempotencia no caduca, así
+  > que si una compra se deshace, el mismo comprador que reintente lo mismo
+  > recibe la saga muerta y se queda encerrado. Lo comparte la tienda.
 - **El retroceso no es configurable.** El plazo de abandono y el techo de
   reintentos sí (HU #29), pero la *forma* de reintentar —ocho intentos con
   retroceso exponencial— está cableada en `Compensator`. Nadie ha pedido

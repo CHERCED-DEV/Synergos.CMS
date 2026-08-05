@@ -369,44 +369,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
     /// un placeholder.
     /// </remarks>
     private Task EmitConfirmedAsync(PersistedEventOrder order, CancellationToken cancellationToken)
-    {
-        var notification = BuildConfirmedNotification(order);
-        return notification is null
-            ? Task.CompletedTask
-            : NotificationEmission.SafeDispatchAsync(_notifier, notification, cancellationToken);
-    }
-
-    /// <summary>El hecho "entradas confirmadas". DedupeKey default = events.tickets.confirmed:{orderRef}
-    /// — el orderRef identifica el hecho, así que no hace falta override.</summary>
-    private NotificationEvent? BuildConfirmedNotification(PersistedEventOrder order)
-    {
-        var buyer = order.Units.Count > 0 ? order.Units[0] : null;
-        if (buyer is null
-            || string.IsNullOrWhiteSpace(buyer.AttendeeEmail)
-            || string.IsNullOrWhiteSpace(buyer.AttendeeName))
-        {
-            return null;   // sin destinatario usable no se emite (nada de placeholders)
-        }
-
-        return new NotificationEvent(
-            Type: NotificationTypes.EventTicketsConfirmed,
-            SubjectId: order.OrderRef,
-            ToEmail: buyer.AttendeeEmail,
-            ToName: buyer.AttendeeName,
-            Code: BuildOrderNumber(order.OrderRef),
-            OccurredAt: _now(),
-            Amount: order.Total,
-            Currency: order.Currency,
-            Lines: order.Units
-                .Select(u => new NotificationLine(
-                    Label: u.Seat is null ? u.TierName : $"{u.TierName} (asiento {u.Seat})",
-                    Quantity: 1,
-                    Amount: u.Price,
-                    Currency: u.Currency,
-                    Detail: u.Seat ?? EventTicketIssuer.TicketIdOf(u.ReservationId)))
-                .ToList(),
-            ActionPath: $"/eventos/entradas/{order.OrderRef}");
-    }
+        => EventPurchaseNotification.EmitAsync(_notifier, order, _now(), cancellationToken);
 
     // ── Ciclo de vida del artefacto: NO es de este motor ────────────────
     // Mis entradas, transferir, la lista del organizador y la puerta viven en el registro
@@ -443,15 +406,6 @@ public sealed class StubEventTicketingService : IEventTicketingService
     public Task<EventCheckInResult> MarkCheckedInDetailedAsync(
         string ticketId, CancellationToken cancellationToken = default)
         => _ledger.CheckInAsync(ticketId, cancellationToken);
-
-    // Número de orden human-facing derivado determinísticamente del orderRef (calcando
-    // StubShopOrderService): re-confirmar el mismo orderRef da el mismo número, así que el
-    // código que el asistente guarda es estable entre confirmaciones y reinicios.
-    private static string BuildOrderNumber(string orderRef)
-    {
-        var raw = orderRef.Replace("evord_", string.Empty, StringComparison.Ordinal);
-        return "SYN-EVT-" + (raw.Length >= 8 ? raw[..8] : raw).ToUpperInvariant();
-    }
 
     /// <summary>Unidad de ticket EFÍMERA del cálculo de checkout — no se persiste.</summary>
     private sealed record PlannedUnit(string TierCode, string TierName, decimal Price, string? Seat);

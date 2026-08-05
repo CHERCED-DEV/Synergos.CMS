@@ -108,7 +108,42 @@ public sealed partial class SeamComposer
                 // T9: sin firmante no se emite QR ni se valida en la puerta (fail-closed).
                 signer: sp.GetRequiredService<ITicketSigner>(),
                 ledger: sp.GetRequiredService<EventTicketLedger>()));
-        services.AddSingleton<IEventTicketingService>(sp => sp.GetRequiredService<StubEventTicketingService>());
+        // Contra qué se compran las entradas (HU #35). La sección se ENLAZA: sin esto el cliente
+        // recibe un EventosSettings recién construido y lo que no viaja por el HttpClient —el
+        // Kind del comprador— se queda en su valor por defecto en silencio.
+        services.Configure<EventosSettings>(builder.Config.GetSection("Synergos:Eventos"));
+
+        if (string.Equals(builder.Config["Synergos:Eventos:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
+        {
+            var evBase = builder.Config["Synergos:Eventos:BaseUrl"];
+            var evKey = builder.Config["Synergos:Eventos:ApiKey"];
+            var evTimeout = int.TryParse(builder.Config["Synergos:Eventos:TimeoutSeconds"], out var et) && et > 0 ? et : 30;
+
+            services.AddHttpClient(HttpEventTicketingService.ClientName, http =>
+            {
+                var url = string.IsNullOrWhiteSpace(evBase) ? "http://127.0.0.1:5303/" : evBase;
+                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+                http.Timeout = TimeSpan.FromSeconds(evTimeout);
+                if (!string.IsNullOrWhiteSpace(evKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpEventTicketingService.ApiKeyHeader, evKey);
+                }
+            })
+            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+
+            // El MISMO registro que lee la cara de organizador. Es lo que hace que cambiar por
+            // dónde se compra no deje la puerta ciega.
+            services.AddSingleton<IEventTicketingService>(sp => new HttpEventTicketingService(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IOptionsMonitor<EventosSettings>>(),
+                sp.GetRequiredService<EventTicketLedger>(),
+                sp.GetRequiredService<ILogger<HttpEventTicketingService>>(),
+                sp.GetRequiredService<ITransactionalNotifier>()));
+        }
+        else
+        {
+            services.AddSingleton<IEventTicketingService>(sp => sp.GetRequiredService<StubEventTicketingService>());
+        }
         services.AddSingleton<IEventManagementService>(sp =>
             new StubEventManagementService(
                 sp.GetRequiredService<EventTicketLedger>(),

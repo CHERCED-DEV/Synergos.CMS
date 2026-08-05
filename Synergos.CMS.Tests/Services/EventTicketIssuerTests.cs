@@ -144,4 +144,25 @@ public class EventTicketIssuerTests
         Assert.Throws<ArgumentException>(() => EventTicketIssuer.TicketIdOf(" "));
         Assert.Throws<ArgumentNullException>(() => new EventTicketIssuer(Signer).Issue(null!));
     }
+
+    /// <summary>
+    /// Un id con guiones se RECHAZA al emitir, y es lo contrario de una manía de estilo.
+    /// </summary>
+    /// <remarks>
+    /// El payload del token es <c>SYN-TKT-{evento}-{entrada}-v{n}</c> y al deshacerlo se corta
+    /// por el último guion —para que el identificador del evento sí pueda llevarlos—. Un guion
+    /// en el id de la entrada mueve ese corte: el token verifica bien y devuelve OTRA entrada.
+    /// Lo que se ve desde afuera es un QR con firma válida al que la puerta le dice
+    /// <c>invalid</c>, sin un error en ningún log. Reventar en la compra es mucho más barato.
+    /// </remarks>
+    [Fact]
+    public void Un_id_con_guiones_no_se_emite_porque_el_QR_no_lo_deshace()
+    {
+        Assert.Throws<ArgumentException>(() => EventTicketIssuer.TicketIdOf("saga-1-00"));
+
+        // Y la razón, demostrada: con el id troceado, lo que vuelve NO es la entrada emitida.
+        var token = Signer.Verify(Signer.Sign(new TicketToken("evt-1", "tkt_saga-1-00", 0)));
+        Assert.NotNull(token);
+        Assert.NotEqual("tkt_saga-1-00", token!.TicketId);
+    }
 }
