@@ -23,14 +23,23 @@ public class TravelCartServiceTests
     private static ITravelCartService Make(IReservationService? reservations = null, IPaymentProvider? payments = null)
         => new TravelCartService(reservations ?? new StubReservationService(), payments ?? new StubPaymentProvider());
 
+    // El periodo de cada ítem es obligatorio (HU #40) y cada producto lo lleva a su
+    // escala: el hotel de medianoche a medianoche UTC —la regla de la vía hotel, para
+    // no inventar una segunda— y el vuelo con hora real, que es lo que una ventana de
+    // `Api.Booking` necesita para no solaparse con otra.
+    private static readonly DateTimeOffset Dia1 = new(2026, 9, 10, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Dia4 = new(2026, 9, 13, 0, 0, 0, TimeSpan.Zero);
+
     private static TravelCartItem Hotel(decimal price = 600_000m)
-        => new(TravelProductType.Hotel, "DLX/BB", "Habitación Deluxe (3 noches)", price, "COP");
+        => new(TravelProductType.Hotel, "DLX/BB", "Habitación Deluxe (3 noches)", price, "COP", Dia1, Dia4);
 
     private static TravelCartItem Flight(decimal price = 450_000m)
-        => new(TravelProductType.Flight, "SYN1010-ECOBAS", "Vuelo BOG→MDE Economy", price, "COP");
+        => new(TravelProductType.Flight, "SYN1010-ECOBAS", "Vuelo BOG→MDE Economy", price, "COP",
+            new DateTimeOffset(2026, 9, 10, 14, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 9, 10, 15, 45, 0, TimeSpan.Zero));
 
     private static TravelCartItem Car(decimal price = 285_000m)
-        => new(TravelProductType.Car, "ECON", "Auto Económico (3 días)", price, "COP");
+        => new(TravelProductType.Car, "ECON", "Auto Económico (3 días)", price, "COP", Dia1, Dia4);
 
     [Fact] // empty: carrito vacío lanza
     public async Task Checkout_EmptyCart_Throws()
@@ -52,9 +61,33 @@ public class TravelCartServiceTests
         var items = new[]
         {
             Hotel(),
-            new TravelCartItem(TravelProductType.Flight, "F1", "Vuelo internacional", 1_200_000m, "USD"),
+            new TravelCartItem(TravelProductType.Flight, "F1", "Vuelo internacional", 1_200_000m, "USD", new DateTimeOffset(2026, 9, 10, 14, 30, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 10, 15, 45, 0, TimeSpan.Zero)),
         };
         await Assert.ThrowsAsync<ArgumentException>(() => Make().CheckoutAsync(items, Guest()));
+    }
+
+    [Fact] // inválido: el periodo tiene que AVANZAR — se rechaza en el borde (HU #40)
+    public async Task Checkout_VentanaQueNoAvanza_Throws()
+    {
+        var mismoInstante = new DateTimeOffset(2026, 9, 10, 0, 0, 0, TimeSpan.Zero);
+        var item = Hotel() with { Start = mismoInstante, End = mismoInstante };
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => Make().CheckoutAsync(new[] { item }, Guest()));
+        Assert.Contains("periodo", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact] // y al revés tampoco: fin antes que inicio
+    public async Task Checkout_VentanaInvertida_Throws()
+    {
+        var item = Hotel() with
+        {
+            Start = new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero),
+            End = new DateTimeOffset(2026, 9, 10, 0, 0, 0, TimeSpan.Zero),
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => Make().CheckoutAsync(new[] { item }, Guest()));
     }
 
     [Fact] // happy: un ítem → orderRef + sesión de pago + monto del ítem

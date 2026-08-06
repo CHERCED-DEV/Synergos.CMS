@@ -9,12 +9,36 @@ namespace Synergos.CMS.Interfaces;
 /// <see cref="Price"/> su total en <see cref="Currency"/>. El motor reserva CADA
 /// ítem (un hold por ítem) y abre UNA sola sesión de pago por la suma.
 /// </summary>
+/// <remarks>
+/// <para><b>El periodo es OBLIGATORIO</b> (HU #40). Un apartado de <c>Api.Booking</c>
+/// ES una ventana sobre un recurso: sin <see cref="Start"/> y <see cref="End"/> el
+/// carrito no puede apartar nada contra una capacidad que sí comprueba. Funcionaba
+/// hasta ahora sólo porque el motor en proceso no comprueba nada.</para>
+///
+/// <para>Se eligieron obligatorios y no opcionales a conciencia: con <c>null</c> por
+/// defecto un cliente viejo sigue compilando y su carrito falla más tarde y más
+/// lejos, ya en modo <c>Bff</c>. Un contrato que deja pasar lo que no puede cumplir
+/// es peor que uno que rompe el build.</para>
+///
+/// <para>Y son <see cref="DateTimeOffset"/> y no <c>DateOnly</c> porque un vuelo
+/// tiene hora de salida y un auto una franja; sólo el hotel se puede modelar por
+/// noches. Para el hotel se usa medianoche a medianoche UTC —la misma regla que la
+/// vía hotel de <c>BookingController</c>, para no inventar una segunda—, que es lo
+/// que hace que dos estadías con las mismas noches se solapen en
+/// <c>Api.Booking</c>.</para>
+///
+/// <para><b>Lo que NO hay que hacer:</b> derivar el periodo de <see cref="OfferId"/>.
+/// Es inventarse una convención sobre un identificador opaco, que es exactamente el
+/// error que costó una vuelta en la HU #25.</para>
+/// </remarks>
 public sealed record TravelCartItem(
     TravelProductType Product,
     string OfferId,
     string Label,
     decimal Price,
-    string Currency);
+    string Currency,
+    DateTimeOffset Start,
+    DateTimeOffset End);
 
 /// <summary>Datos del viajero/contacto principal del carrito (un check-out por reserva).</summary>
 public sealed record TravelGuest(string Name, string Email);
