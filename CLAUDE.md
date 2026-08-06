@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2314 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2351 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2314 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2351 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2314 tests):
+# Suite completa (2351 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -469,7 +469,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`. 2314 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`. 2351 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -669,9 +669,15 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > el disco del orquestador, y eso lo destapó la verificación en vivo, no
   > una revisión. `Bff.Tienda` (#24) todavía manda el correo entero.
   >
-  > **Y queda un defecto conocido:** la llave de idempotencia no caduca, así
-  > que si una compra se deshace, el mismo comprador que reintente lo mismo
-  > recibe la saga muerta y se queda encerrado. Lo comparte la tienda.
+  > **Y el comprador ya no queda encerrado** (defecto #41). Encontrar la llave
+  > de idempotencia no significa «esto ya pasó»: si la compra anterior se
+  > deshizo entera no queda nada que duplicar, así que la misma llave abre un
+  > intento nuevo —con identidad propia, sin pisar la muerta— y sobre una saga
+  > VIVA sigue devolviendo esa, que es lo que impide que un reintento por
+  > timeout compre dos veces. Sólo `Compensated` desbloquea: con la
+  > compensación fallida algo quedó colgado y necesita una persona. La regla
+  > vive en `SagaEngine.Abrir` y no en cada flujo — estaba copiada en los dos
+  > orquestadores, y el defecto también.
 - **El retroceso no es configurable.** El plazo de abandono y el techo de
   reintentos sí (HU #29), pero la *forma* de reintentar —ocho intentos con
   retroceso exponencial— está cableada en `Compensator`. Nadie ha pedido
