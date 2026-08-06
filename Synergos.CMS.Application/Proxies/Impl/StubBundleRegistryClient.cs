@@ -40,4 +40,15 @@ public sealed class StubBundleRegistryClient : IBundleRegistryClient
         string elementKey,
         CancellationToken ct = default)
         => Task.FromResult<BundleDescriptor?>(null);
+
+    /// <summary>
+    /// <c>null</c>, como todo acá: el stub no tiene registry del que sacar nada.
+    /// </summary>
+    /// <remarks>
+    /// Y eso <b>no</b> es un estado enfermo: <c>BundleRegistryProbe</c> reporta sano en modo
+    /// <c>Stub</c> sin llegar a preguntar. El operador ve «no hay CDN configurado», que es lo que
+    /// pasa, en vez de un rojo que confundiría «no lo montamos» con «se cayó».
+    /// </remarks>
+    public Task<BundleDescriptor?> TryResolveAnyAsync(CancellationToken ct = default)
+        => Task.FromResult<BundleDescriptor?>(null);
 }

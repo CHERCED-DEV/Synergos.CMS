@@ -53,8 +53,7 @@ public sealed class BundleRegistryProbeTests
             Integrity: "sha384-abc123",
             Framework: "angular");
         var client = Substitute.For<IBundleRegistryClient>();
-        client.TryResolveAsync("synergos-column", Arg.Any<CancellationToken>())
-              .Returns(descriptor);
+        client.TryResolveAnyAsync(Arg.Any<CancellationToken>()).Returns(descriptor);
         var settings = new BundleRegistrySettings { Mode = "FileSystem", LocalPath = @"C:\LOCAL_CDN" };
         var probe = new BundleRegistryProbe(client, MonitorFor(settings));
 
@@ -67,7 +66,7 @@ public sealed class BundleRegistryProbeTests
         // Cap-290 Batch A — Details estructurados.
         Assert.NotNull(result.Details);
         Assert.Equal("FileSystem", result.Details!["mode"]);
-        Assert.Equal("synergos-column", result.Details["probeTag"]);
+        Assert.Equal("(cualquiera)", result.Details["probeTag"]);
         Assert.Equal("angular", result.Details["framework"]);
         Assert.Equal("0.1.0", result.Details["version"]);
         Assert.Equal("present", result.Details["integrity"]);
@@ -98,7 +97,7 @@ public sealed class BundleRegistryProbeTests
         Assert.True(result.IsHealthy);
         Assert.Contains("custom-block", result.Message ?? string.Empty);
         await client.Received(1).TryResolveAsync("custom-block", Arg.Any<CancellationToken>());
-        await client.DidNotReceive().TryResolveAsync("synergos-column", Arg.Any<CancellationToken>());
+        await client.DidNotReceive().TryResolveAnyAsync(Arg.Any<CancellationToken>());
         Assert.Equal("custom-block", result.Details!["probeTag"]);
     }
 
@@ -112,8 +111,7 @@ public sealed class BundleRegistryProbeTests
             Framework: "angular",
             Integrity: null);
         var client = Substitute.For<IBundleRegistryClient>();
-        client.TryResolveAsync("synergos-column", Arg.Any<CancellationToken>())
-              .Returns(descriptor);
+        client.TryResolveAnyAsync(Arg.Any<CancellationToken>()).Returns(descriptor);
         var settings = new BundleRegistrySettings { Mode = "FileSystem", LocalPath = @"C:\LOCAL_CDN" };
         var probe = new BundleRegistryProbe(client, MonitorFor(settings));
 
@@ -127,8 +125,7 @@ public sealed class BundleRegistryProbeTests
     public async Task FileSystemMode_NullDescriptor_ReportsUnhealthy()
     {
         var client = Substitute.For<IBundleRegistryClient>();
-        client.TryResolveAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-              .Returns((BundleDescriptor?)null);
+        client.TryResolveAnyAsync(Arg.Any<CancellationToken>()).Returns((BundleDescriptor?)null);
         var settings = new BundleRegistrySettings
         {
             Mode = "FileSystem",
@@ -140,7 +137,7 @@ public sealed class BundleRegistryProbeTests
         var result = await probe.CheckAsync();
 
         Assert.False(result.IsHealthy);
-        Assert.Contains("synergos-column", result.Message ?? string.Empty);
+        Assert.Contains("cualquier elemento", result.Message ?? string.Empty);
         Assert.Contains(@"C:\LOCAL_CDN", result.Message ?? string.Empty);
     }
 
@@ -148,7 +145,7 @@ public sealed class BundleRegistryProbeTests
     public async Task FileSystemMode_ClientThrows_ReportsUnhealthyWithExceptionMessage()
     {
         var client = Substitute.For<IBundleRegistryClient>();
-        client.TryResolveAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        client.TryResolveAnyAsync(Arg.Any<CancellationToken>())
               .Returns<Task<BundleDescriptor?>>(_ => throw new InvalidOperationException("boom"));
         var settings = new BundleRegistrySettings { Mode = "FileSystem", LocalPath = @"C:\LOCAL_CDN" };
         var probe = new BundleRegistryProbe(client, MonitorFor(settings));
@@ -157,6 +154,94 @@ public sealed class BundleRegistryProbeTests
 
         Assert.False(result.IsHealthy);
         Assert.Contains("boom", result.Message ?? string.Empty);
+    }
+
+    // ── El modo Http, que faltaba desde que existe (defecto #39) ────────────
+
+    [Fact]
+    public async Task HttpMode_ConElCdnRespondiendo_ReportaSANO()
+    {
+        // EL DEFECTO. `Http` no estaba contemplado: caía al «modo desconocido» y respondía
+        // «Unknown mode 'Http'. Valid: Stub | FileSystem | Http» — contradiciéndose en la misma
+        // frase. Y como /_health devuelve 503 ante cualquier probe roja, el sitio quedaba
+        // permanentemente en 503 desde el momento en que se encendiera el CDN.
+        var descriptor = new BundleDescriptor(
+            MainEntryUri: new Uri("https://cdn.ejemplo.co/synergos/badge/angular/0.1.0/main.js"),
+            Dependencies: Array.Empty<Uri>(),
+            Version: "0.1.0",
+            Tag: "synergos-badge",
+            Integrity: "sha256-abc",
+            Framework: "angular");
+        var client = Substitute.For<IBundleRegistryClient>();
+        client.TryResolveAnyAsync(Arg.Any<CancellationToken>()).Returns(descriptor);
+        var settings = new BundleRegistrySettings
+        {
+            Mode = "Http",
+            PublicBaseUrl = "https://cdn.ejemplo.co",
+        };
+        var probe = new BundleRegistryProbe(client, MonitorFor(settings));
+
+        var result = await probe.CheckAsync();
+
+        Assert.True(result.IsHealthy);
+        Assert.Equal("Http", result.Details!["mode"]);
+        Assert.Equal("synergos-badge", result.Details["resuelto"]);
+        Assert.DoesNotContain("desconocido", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Unknown", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task HttpMode_ConElCdnCaido_ReportaNoSano_YDiceContraQueUrl()
+    {
+        // El rojo que SÍ hay que poder distinguir del anterior. Sin la URL en el mensaje, un
+        // operador no sabe si el CDN se cayó o si está mal configurada la dirección.
+        var client = Substitute.For<IBundleRegistryClient>();
+        client.TryResolveAnyAsync(Arg.Any<CancellationToken>()).Returns((BundleDescriptor?)null);
+        var settings = new BundleRegistrySettings
+        {
+            Mode = "Http",
+            PublicBaseUrl = "https://cdn.ejemplo.co",
+        };
+        var probe = new BundleRegistryProbe(client, MonitorFor(settings));
+
+        var result = await probe.CheckAsync();
+
+        Assert.False(result.IsHealthy);
+        Assert.Contains("https://cdn.ejemplo.co", result.Message ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task ConProbeTagPuesto_ElMensajeAVISA_deQuePuedeSerElTagYNoElCdn()
+    {
+        // La trampa que el default vacío evita, y que sigue existiendo para quien elija el
+        // override: el elemento se retira del CDN, el probe se pone rojo, y el rojo parece un CDN
+        // caído. Si el operador lo eligió, al menos el mensaje se lo recuerda.
+        var client = Substitute.For<IBundleRegistryClient>();
+        client.TryResolveAsync("synergos-column", Arg.Any<CancellationToken>())
+              .Returns((BundleDescriptor?)null);
+        var settings = new BundleRegistrySettings
+        {
+            Mode = "Http",
+            PublicBaseUrl = "https://cdn.ejemplo.co",
+            ProbeTag = "synergos-column",
+        };
+        var probe = new BundleRegistryProbe(client, MonitorFor(settings));
+
+        var result = await probe.CheckAsync();
+
+        Assert.False(result.IsHealthy);
+        Assert.Contains("synergos-column", result.Message ?? string.Empty);
+        Assert.Contains("dejó de publicarse", result.Message ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task ElDefaultYaNoSondeaUnTagQueElCDN_puede_retirar()
+    {
+        // La causa raíz del #39: `ProbeTag` venía con "synergos-column" de fábrica, el CDN lo
+        // retiró a propósito junto con otros ocho, y el probe se puso rojo con el registry
+        // perfecto. Un chequeo atado a un tag no vigila el registry — vigila que ESE elemento
+        // siga publicado, y qué se publica no lo decide el CMS.
+        Assert.Equal(string.Empty, new BundleRegistrySettings().ProbeTag);
     }
 
     [Fact]
