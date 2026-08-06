@@ -41,6 +41,18 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<IJsonEntityStore>()));
         services.AddSingleton<ICancellationPolicyEvaluator, StubCancellationPolicyEvaluator>();
 
+        // El flujo transaccional de la reserva de hotel: apartar → cobrar → confirmar, o
+        // cancelar. Vivía dentro de BookingController y salió de ahí en la HU #36 — no por
+        // estética: un borde de ASP.NET no se puede probar sin levantar el pipeline, y mientras
+        // el orden en que se abre la caja viviera ahí, no había forma de llevarlo contra
+        // Synergos.Bff.Viajes sin reescribir el borde entero.
+        services.AddSingleton<IHotelBookingService>(sp =>
+            new StubHotelBookingService(
+                sp.GetRequiredService<IReservationService>(),
+                sp.GetRequiredService<IPaymentProvider>(),
+                sp.GetRequiredService<ICancellationPolicyEvaluator>(),
+                sp.GetRequiredService<IAuditTrailWriter>()));
+
         // Auto-cancel de holds vencidos (aprendizaje NS.Booking, doc 17): barre
         // cada ~2 min los Held cuyo ExpiresAt pasó y libera el cupo (→ Expired).
         services.AddHostedService<HoldExpirationScannerHostedService>();
