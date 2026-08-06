@@ -101,10 +101,18 @@ public sealed class MessagingService
             var id = Guid.NewGuid().ToString("n");
             var ahora = _clock.GetUtcNow();
             // El autor cuenta como que ya accedió —si no, su propio mensaje le aparecería sin
-            // leer y el contador de pendientes nunca llegaría a cero—. Y se anota con la
-            // afirmación más fuerte: no hay duda de quién escribió, lo acaba de hacer.
+            // leer y el contador de pendientes nunca llegaría a cero—.
+            //
+            // Y se anota como CmsSession, que es la verdad. Antes decía IdentityToken con el
+            // argumento de que «no hay duda de quién escribió, lo acaba de hacer», y ese
+            // razonamiento mide CONFIANZA cuando el campo mide QUIÉN DIO FE. Nadie emitió
+            // ningún token: `Api.Identity` ni siquiera sabe emitirlos, y este `from` llegó
+            // declarado por el llamador sobre la llave compartida, igual que en cualquier otra
+            // llamada. El campo existe para poder subir de escalón sin mentir sobre el pasado
+            // (HU #13), así que llenarlo con la afirmación más fuerte «porque estamos seguros»
+            // es exactamente lo que lo inutiliza.
             var mensaje = new Message(id, threadId, from, (body ?? string.Empty).Trim(), attachments,
-                new[] { new Acknowledgment(from, ahora, IdentityAssertion.IdentityToken) }, ahora,
+                new[] { new Acknowledgment(from, ahora, IdentityAssertion.CmsSession) }, ahora,
                 acknowledgeBeforeUtc);
 
             _messages.Put(mensaje);
