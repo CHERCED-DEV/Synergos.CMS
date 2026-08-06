@@ -1,0 +1,392 @@
+/* ============================================================
+   Synergos CMS — SSR fallback for CDN-hosted blocks
+   ============================================================
+   Light-DOM markup emitted by Services/SynHostFallbackBuilder.cs
+   and injected by DefaultSynHostEmitter as
+   SynHostEmitRequest.FallbackHtml, INSIDE the <synergos-*> tag.
+
+   Contract with the bundle
+   ------------------------
+   Custom Elements render their children until the definition
+   upgrades them, so this markup ships on EVERY page load — not
+   only when the bundle registry misses. The bundle removes or
+   replaces `[data-syn-ssr-fallback]` when it upgrades the host;
+   until it does, the `:defined` rules at the bottom of this file
+   hide it, so the block never double-renders.
+
+   COMPONER-NUNCA-HARDCODEAR: colour, spacing, radius, type — all
+   through `--syn-*` tokens. Zero hex, zero magic numbers.
+   ------------------------------------------------------------ */
+
+/* ── Shared shell ────────────────────────────────────────────── */
+
+:root {
+  /* Minimum comfortable column for the fallback grids/split. Declared
+     here (not in syn-tokens.css) because it is a layout constant of this
+     shell only — nothing else in the design system consumes it. */
+  --syn-ssr-col-min: 18rem;
+}
+
+.syn-ssr-fallback {
+  display: block;
+  color: var(--syn-color-text-primary);
+  font-family: var(--syn-font-family-body);
+  line-height: var(--syn-line-height-normal);
+}
+
+.syn-ssr-fallback > * {
+  max-width: 100%;
+}
+
+.syn-ssr-fallback--theme-light {
+  background: var(--syn-color-surface-primary);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-ssr-fallback--theme-dark {
+  background: var(--syn-color-surface-inverse);
+  color: var(--syn-color-text-inverse);
+}
+
+.syn-ssr-fallback--theme-dark .syn-ssr-faq__answer,
+.syn-ssr-fallback--theme-dark .syn-ssr-features__body,
+.syn-ssr-fallback--theme-dark .syn-ssr-media-text__text,
+.syn-ssr-fallback--theme-dark .syn-ssr-testimonials__role {
+  color: var(--syn-color-text-inverse);
+}
+
+/* ── Hero banner (elementSynHeroBanner) ──────────────────────── */
+
+.syn-ssr-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-4);
+}
+
+.syn-ssr-hero__media {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--syn-radius-lg);
+  object-fit: cover;
+}
+
+.syn-ssr-hero__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--syn-space-3);
+}
+
+.syn-ssr-hero__title {
+  margin: 0;
+  font-family: var(--syn-font-family-heading);
+  font-size: var(--syn-font-size-3xl);
+  font-weight: var(--syn-font-weight-bold);
+  line-height: var(--syn-line-height-tight);
+  letter-spacing: var(--syn-letter-spacing-tight);
+}
+
+.syn-ssr-hero__subtitle {
+  margin: 0;
+  font-size: var(--syn-font-size-lg);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-ssr-hero__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--syn-control-h-md);
+  padding: var(--syn-space-2) var(--syn-space-5);
+  border-radius: var(--syn-radius-md);
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  font-size: var(--syn-font-size-sm);
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: none;
+}
+
+.syn-ssr-hero__cta:hover {
+  background: var(--syn-color-action-primary-hover);
+}
+
+/* ── FAQ (elementSynFaqSection) ──────────────────────────────── */
+
+.syn-ssr-faq {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-4);
+}
+
+.syn-ssr-faq__heading,
+.syn-ssr-features__heading,
+.syn-ssr-testimonials__heading,
+.syn-ssr-media-text__heading {
+  margin: 0;
+  font-family: var(--syn-font-family-heading);
+  font-size: var(--syn-font-size-2xl);
+  font-weight: var(--syn-font-weight-semibold);
+  line-height: var(--syn-line-height-snug);
+}
+
+.syn-ssr-faq__list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-3);
+}
+
+.syn-ssr-faq__question {
+  margin: 0;
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+.syn-ssr-faq__answer {
+  margin: 0;
+  padding-top: var(--syn-space-1);
+  color: var(--syn-color-text-secondary);
+}
+
+/* ── Feature grid (elementSynFeatureGrid) ────────────────────── */
+
+.syn-ssr-features {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-4);
+}
+
+.syn-ssr-features__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--syn-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--syn-ssr-col-min)), 1fr));
+}
+
+.syn-ssr-features--cols-1 .syn-ssr-features__list { grid-template-columns: 1fr; }
+.syn-ssr-features--cols-2 .syn-ssr-features__list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.syn-ssr-features--cols-3 .syn-ssr-features__list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.syn-ssr-features--cols-4 .syn-ssr-features__list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.syn-ssr-features__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+  padding: var(--syn-card-pad);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-md);
+}
+
+.syn-ssr-features__title {
+  margin: 0;
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+.syn-ssr-features__body {
+  margin: 0;
+  color: var(--syn-color-text-secondary);
+}
+
+/* ── Media + text (elementSynMediaText) ──────────────────────── */
+
+.syn-ssr-media-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--syn-space-5);
+}
+
+.syn-ssr-media-text--media-left { flex-direction: row; }
+.syn-ssr-media-text--media-right { flex-direction: row-reverse; }
+
+.syn-ssr-media-text__figure {
+  margin: 0;
+  flex: 1 1 var(--syn-ssr-col-min);
+}
+
+.syn-ssr-media-text__image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--syn-radius-md);
+  object-fit: cover;
+}
+
+.syn-ssr-media-text__body {
+  flex: 1 1 var(--syn-ssr-col-min);
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-3);
+}
+
+.syn-ssr-media-text__text {
+  margin: 0;
+  color: var(--syn-color-text-secondary);
+}
+
+/* ── Testimonials (elementSynTestimonialSection) ─────────────── */
+
+.syn-ssr-testimonials {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-4);
+}
+
+.syn-ssr-testimonials__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--syn-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--syn-ssr-col-min)), 1fr));
+}
+
+.syn-ssr-testimonials__item { display: flex; }
+
+.syn-ssr-testimonials__figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+  padding: var(--syn-card-pad);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-md);
+}
+
+.syn-ssr-testimonials__quote { margin: 0; }
+.syn-ssr-testimonials__quote p { margin: 0; }
+
+.syn-ssr-testimonials__attribution {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-xxs);
+  font-size: var(--syn-font-size-sm);
+}
+
+.syn-ssr-testimonials__name { font-weight: var(--syn-font-weight-semibold); }
+.syn-ssr-testimonials__role { color: var(--syn-color-text-muted); }
+
+/* ── Animated quote (elementSynQuoteAnimated) ────────────────── */
+
+.syn-ssr-quote {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+}
+
+.syn-ssr-quote__text {
+  margin: 0;
+  font-family: var(--syn-font-family-heading);
+  font-size: var(--syn-font-size-xl);
+  line-height: var(--syn-line-height-snug);
+}
+
+.syn-ssr-quote__text p { margin: 0; }
+
+.syn-ssr-quote__attribution {
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-muted);
+}
+
+/* ── Stat ticker (elementSynStatTicker) ──────────────────────── */
+
+.syn-ssr-stat {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-1);
+}
+
+.syn-ssr-stat__value {
+  margin: 0;
+  font-family: var(--syn-font-family-heading);
+  font-size: var(--syn-font-size-4xl);
+  font-weight: var(--syn-font-weight-bold);
+  line-height: var(--syn-line-height-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.syn-ssr-stat__affix {
+  font-size: var(--syn-font-size-2xl);
+  font-weight: var(--syn-font-weight-medium);
+}
+
+.syn-ssr-stat__label {
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+  letter-spacing: var(--syn-letter-spacing-wide);
+}
+
+/* ── KPI card (elementSynKpiCard) ────────────────────────────── */
+
+.syn-ssr-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+  padding: var(--syn-card-pad);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-md);
+  background: var(--syn-card-surface);
+}
+
+.syn-ssr-kpi__list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-1);
+}
+
+.syn-ssr-kpi__label {
+  margin: 0;
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-ssr-kpi__value {
+  margin: 0;
+  font-family: var(--syn-font-family-heading);
+  font-size: var(--syn-font-size-3xl);
+  font-weight: var(--syn-font-weight-bold);
+  line-height: var(--syn-line-height-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.syn-ssr-kpi__trend {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--syn-space-2);
+  font-size: var(--syn-font-size-sm);
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-ssr-kpi__trend--up { color: var(--syn-color-success-text); }
+.syn-ssr-kpi__trend--down { color: var(--syn-color-danger-text); }
+.syn-ssr-kpi__trend--flat { color: var(--syn-color-text-muted); }
+
+.syn-ssr-kpi__trend-label { font-weight: var(--syn-font-weight-medium); }
+.syn-ssr-kpi__delta { font-variant-numeric: tabular-nums; }
+.syn-ssr-kpi__period { color: var(--syn-color-text-muted); }
+
+/* ── Upgrade handshake ───────────────────────────────────────── */
+/* Once the bundle registers the custom element the browser marks it
+   `:defined`. From that moment the SSR node is redundant, so it is
+   hidden here even if the bundle has not removed it yet. Enumerated
+   per tag on purpose: `:defined` also matches every built-in
+   element, so a wildcard rule would hide the fallback always.       */
+
+synergos-hero-banner:defined > [data-syn-ssr-fallback],
+synergos-faq-section:defined > [data-syn-ssr-fallback],
+synergos-feature-grid:defined > [data-syn-ssr-fallback],
+synergos-media-text:defined > [data-syn-ssr-fallback],
+synergos-testimonial-section:defined > [data-syn-ssr-fallback],
+synergos-quote-animated:defined > [data-syn-ssr-fallback],
+synergos-stat-ticker:defined > [data-syn-ssr-fallback],
+synergos-kpi-card:defined > [data-syn-ssr-fallback] {
+  display: none;
+}

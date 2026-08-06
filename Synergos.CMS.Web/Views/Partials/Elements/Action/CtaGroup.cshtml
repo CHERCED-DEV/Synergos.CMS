@@ -1,0 +1,38 @@
+@*
+    elementActionCtaGroup renderer (Ola 17 schema + Ola 42 layout).
+    Itera el BlockList ctaItems y delega cada child a su partial
+    (Button.cshtml o Link.cshtml) — composer-agnostic per ADR 0015.
+    Flex modifiers (direction/justify/align/gap) resueltos por
+    LayoutCssBuilder a partir de compDomFlex (Ola 42).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@using Synergos.CMS.Web.Services
+@{
+    var ctaItems = Model.Value<BlockListModel>("ctaItems");
+    if (ctaItems == null || !ctaItems.Any()) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-cta-group",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-cta-group--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Concat(LayoutCssBuilder.Build(Model)).Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">
+    @foreach (var item in ctaItems)
+    {
+        var alias = item.Content.ContentType.Alias;
+        var partialPath = alias switch
+        {
+            "elementActionButton" => "Elements/Action/Button",
+            "elementActionLink"   => "Elements/Action/Link",
+            _ => null
+        };
+        if (partialPath != null)
+        {
+            @await Html.PartialAsync(partialPath, item.Content)
+        }
+    }
+</div>

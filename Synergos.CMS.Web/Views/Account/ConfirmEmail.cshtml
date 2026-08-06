@@ -1,0 +1,46 @@
+@*
+    AccountController.ConfirmEmail (Ola 83). Solo se renderiza cuando
+    el confirmEmail FALLA (token inválido/expirado/email inexistente).
+    El path success redirige a /account/login?msg=email-confirmed.
+    Frame "launcher / PS3".
+*@
+@{
+    Layout = null;
+    var errorCode = ViewData["ErrorCode"] as string;
+    var title = Umbraco.GetDictionaryValue("Account.ConfirmEmail.Title", "Confirmación de email");
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">
+<head>
+    @await Html.PartialAsync("_AccountHead")
+    <title>@title</title>
+</head>
+<body class="syn-account syn-launcher">
+    <main class="syn-launcher__main">
+        @await Html.PartialAsync("_AccountHero", (object)title)
+
+        <div class="syn-account__card">
+            <p class="syn-account__error" role="alert" aria-live="polite">
+                @{
+                    var msg = errorCode switch
+                    {
+                        "invalid-link" => Umbraco.GetDictionaryValue("Account.ConfirmEmail.InvalidLink",
+                            "El link de confirmación está incompleto. Verifica que el URL no se haya cortado al copiarlo."),
+                        "invalid-token" => Umbraco.GetDictionaryValue("Account.ConfirmEmail.InvalidToken",
+                            "El link de confirmación no es válido o ya expiró."),
+                        _ => Umbraco.GetDictionaryValue("Account.ConfirmEmail.Error.Unknown",
+                            "Ocurrió un error confirmando tu email. Inténtalo de nuevo."),
+                    };
+                }
+                @msg
+            </p>
+            <p class="syn-account__alt">
+                <a href="/account/login">
+                    @Umbraco.GetDictionaryValue("Account.BackToLogin", "Volver al login")
+                </a>
+            </p>
+        </div>
+    </main>
+    <script src="~/js/platform-root.js" asp-append-version="true" defer></script>
+</body>
+</html>

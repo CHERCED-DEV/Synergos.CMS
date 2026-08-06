@@ -1,0 +1,40 @@
+@*
+    Renderer del modal global. Emite un <dialog> oculto + atributos
+    data-* con trigger y frequency para que el JS del design-system
+    decida cuándo abrirlo. El resolver server-side solo decide si
+    el modal aplica al request — la presentación temporal es cliente.
+*@
+@model Synergos.CMS.Interfaces.CfgModal
+@{
+    if (Model is null) { return; }
+    var hasCta = !string.IsNullOrWhiteSpace(Model.CtaLabel) && !string.IsNullOrWhiteSpace(Model.CtaUrl);
+    var hasImage = !string.IsNullOrWhiteSpace(Model.ImageUrl);
+    var hasBody = !string.IsNullOrWhiteSpace(Model.Body);
+}
+<dialog class="syn-global-modal"
+        data-trigger="@Model.Trigger"
+        data-frequency="@Model.Frequency"
+        aria-labelledby="syn-global-modal-title">
+    <div class="syn-global-modal__inner">
+        <button type="button"
+                class="syn-global-modal__close"
+                aria-label="@Umbraco.GetDictionaryValue("modal.aria.close", "Cerrar")">&times;</button>
+        @if (hasImage)
+        {
+            <figure class="syn-global-modal__media">
+                <img src="@Model.ImageUrl" alt="" loading="lazy" />
+            </figure>
+        }
+        <h2 id="syn-global-modal-title" class="syn-global-modal__title">@Model.Title</h2>
+        @if (hasBody)
+        {
+            <p class="syn-global-modal__body">@Model.Body</p>
+        }
+        @if (hasCta)
+        {
+            <a class="syn-global-modal__cta"
+               href="@Model.CtaUrl"
+               @(Model.CtaOpenInNewTab ? Html.Raw("target=\"_blank\" rel=\"noopener\"") : null)>@Model.CtaLabel</a>
+        }
+    </div>
+</dialog>

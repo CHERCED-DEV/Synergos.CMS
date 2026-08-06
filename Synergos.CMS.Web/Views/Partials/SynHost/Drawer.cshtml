@@ -1,0 +1,13 @@
+﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["triggerLabel"] = Model.Value<string>("triggerLabel"),
+        ["drawerContent"] = Model.Value<string>("drawerContent"),
+        ["side"] = Model.Value<string>("side"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("drawer", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

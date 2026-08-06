@@ -1,0 +1,46 @@
+@*
+    elementShopVariantPicker renderer (Ola 33). SSR nativo con <fieldset>.
+    El CDN/JS upgrade a swatches ricos si aplica.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using System.Text.Json
+@{
+    var label = Model.Value<string>("label");
+    var variantsJson = Model.Value<string>("variantsJson");
+    if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(variantsJson)) { return; }
+    var selectedValue = Model.Value<string>("selectedValue");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-variant-picker",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-variant-picker--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    List<(string value, string label)> variants = new();
+    try
+    {
+        using var doc = JsonDocument.Parse(variantsJson);
+        foreach (var el in doc.RootElement.EnumerateArray())
+        {
+            var v = el.GetProperty("value").GetString() ?? "";
+            var l = el.GetProperty("label").GetString() ?? "";
+            variants.Add((v, l));
+        }
+    }
+    catch { return; }
+    var groupName = $"variants-{Model.Key}";
+}
+<fieldset class="@classes">
+    <legend class="syn-variant-picker__legend">@label</legend>
+    @foreach (var (v, l) in variants)
+    {
+        var id = $"{groupName}-{v}";
+        var isSelected = v == selectedValue;
+        <label for="@id" class="syn-variant-picker__option">
+            <input id="@id" type="radio" name="@groupName" value="@v"@(isSelected ? " checked" : "") />
+            <span>@l</span>
+        </label>
+    }
+</fieldset>

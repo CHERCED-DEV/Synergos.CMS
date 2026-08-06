@@ -1,0 +1,38 @@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    // apiBase: default /api/ehr si el editor no lo setea (NO mandatory).
+    var apiBase = Model.Value<string>("apiBase");
+    if (string.IsNullOrWhiteSpace(apiBase)) { apiBase = "/api/ehr"; }
+
+    // config: JSON opcional autorado por el editor; el emitter lo fusiona sobre
+    // los props base (rutas activas, defaults). Si está vacío o malformado,
+    // el componente Angular resuelve sus defaults (degrada con grace).
+    var config = Model.Value<string>("config");
+
+    // patient: identidad demo del portal del paciente. Igual que apiBase, es un
+    // DEFAULT overridable: si el editor autora `config.patient` (o el prop), gana
+    // el suyo. Sin esto el componente cae a su placeholder y muestra "datos de
+    // ejemplo". Debe ser un id sembrado real (EhrDemoSeed) para pegarle al backend.
+    var patient = Model.Value<string>("patient");
+    if (string.IsNullOrWhiteSpace(patient)) { patient = "pat-jorge-medina"; }
+
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["apiBase"] = apiBase,
+        ["patient"] = patient,
+        // Ni `heading` ni `subheading` se mandan: el portal del paciente no tiene hero de
+        // app — cada vista trae su propio <h1> ("Hola, {nombre}", "Agendar una cita",
+        // "Resultados de laboratorio"), así que el documento ya tiene nivel superior y no
+        // hay hueco donde pintar un título global. Se mandaban y el sanitizer del
+        // componente los descartaba en silencio; el Set() era decorativo en los dos casos.
+        // Darles destino exigiría inventar un encabezado que el diseño no contempla.
+        // ⚠️ Las dos propiedades siguen en el ElementType y el editor las ve: es schema y
+        // lo posee el arquitecto (ADR 0008).
+    };
+    // BlockAlias DEBE ser el name kebab del registry = "ehr" (el emitter resuelve
+    // el bundle por ese alias; camelCase no matchearía y no hidrataría).
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("ehr", props, config, System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

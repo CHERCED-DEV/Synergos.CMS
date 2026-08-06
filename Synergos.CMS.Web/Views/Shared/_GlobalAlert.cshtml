@@ -1,0 +1,37 @@
+@*
+    Renderer de la cintilla superior global del sitio (Ola 50).
+    Consume un CfgAlert ya resuelto por IGlobalComponentResolver — el
+    partial NO toma decisiones de visibilidad, solo proyecta el snapshot.
+    Las decisiones (activo, schedule, suppress por página) viven en el
+    resolver para mantener una sola fuente de verdad.
+*@
+@model Synergos.CMS.Interfaces.CfgAlert
+@{
+    if (Model is null) { return; }
+    var variant = string.IsNullOrWhiteSpace(Model.Variant) ? "neutral" : Model.Variant;
+    var tone = string.IsNullOrWhiteSpace(Model.Tone) ? "soft" : Model.Tone;
+    var hasCta = !string.IsNullOrWhiteSpace(Model.CtaLabel) && !string.IsNullOrWhiteSpace(Model.CtaUrl);
+}
+<aside class="syn-global-alert syn-global-alert--@variant syn-global-alert--@tone@(Model.Dismissible ? " syn-global-alert--dismissible" : "")"
+       role="region"
+       aria-label="@Umbraco.GetDictionaryValue("alert.aria.label", "Aviso del sitio")">
+    <div class="syn-global-alert__inner">
+        @if (!string.IsNullOrWhiteSpace(Model.Icon))
+        {
+            <span class="syn-global-alert__icon" data-icon="@Model.Icon" aria-hidden="true"></span>
+        }
+        <span class="syn-global-alert__message">@Model.Message</span>
+        @if (hasCta)
+        {
+            <a class="syn-global-alert__cta"
+               href="@Model.CtaUrl"
+               @(Model.CtaOpenInNewTab ? Html.Raw("target=\"_blank\" rel=\"noopener\"") : null)>@Model.CtaLabel</a>
+        }
+        @if (Model.Dismissible)
+        {
+            <button type="button"
+                    class="syn-global-alert__close"
+                    aria-label="@Umbraco.GetDictionaryValue("alert.aria.dismiss", "Cerrar aviso")">&times;</button>
+        }
+    </div>
+</aside>

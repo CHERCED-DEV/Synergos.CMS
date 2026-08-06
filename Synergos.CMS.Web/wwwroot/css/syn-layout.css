@@ -1,0 +1,334 @@
+/* ============================================================
+   Synergos CMS — Layout Composer presets
+   ============================================================
+   compDomPresetChrome: container widths, theme variants,
+   padding/margin removal helpers.
+   compDomLayout (legacy retired Ola 44.3) - mantenemos solo
+   los hooks vigentes.
+   ------------------------------------------------------------ */
+
+/* ── Container widths ────────────────────────────────────────── */
+
+.syn-preset--container-narrow {
+  max-width: var(--syn-max-width-hero);   /* 720px (P2-5) */
+  margin-inline: auto;
+  padding-inline: var(--syn-space-md);
+}
+
+.syn-preset--container-normal {
+  max-width: var(--syn-max-width-normal);   /* 1040px (P2-5) */
+  margin-inline: auto;
+  padding-inline: var(--syn-space-md);
+}
+
+.syn-preset--container-wide {
+  max-width: var(--syn-max-width-content);
+  margin-inline: auto;
+  padding-inline: var(--syn-space-md);
+}
+
+.syn-preset--container-full {
+  max-width: none;
+}
+
+@media (min-width: 768px) {
+  .syn-preset--container-narrow,
+  .syn-preset--container-normal,
+  .syn-preset--container-wide {
+    padding-inline: var(--syn-space-lg);
+  }
+}
+
+/* ── Theme variants on a per-section basis ───────────────────── */
+
+.syn-preset--theme-light {
+  background: var(--syn-color-surface-primary);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-preset--theme-surface {
+  background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-preset--theme-dark {
+  background: var(--syn-color-neutral-900);
+  /* Re-scopa los tokens semánticos de texto a valores on-dark: así CUALQUIER
+     componente que declare `color: var(--syn-color-text-*)` (p.ej. .syn-mission__body)
+     es legible sobre el fondo oscuro — no solo el texto directo. La rampa neutral es
+     estable (neutral-0=blanco siempre) → seguro en páginas light y dark. */
+  --syn-color-text-primary:   var(--syn-color-neutral-0);
+  --syn-color-text-secondary: var(--syn-color-neutral-300);
+  --syn-color-text-muted:     var(--syn-color-neutral-400);
+  --syn-color-text-accent:    var(--syn-color-brand-300);   /* stat value, eyebrows: legible sobre dark */
+  color: var(--syn-color-text-primary);
+}
+
+.syn-preset--theme-dark a { color: var(--syn-color-brand-300); }
+.syn-preset--theme-dark a:hover { color: var(--syn-color-brand-200); }
+
+.syn-preset--theme-brand {
+  /* a11y — piso del gradiente brand-500→600 subido a 600→700: blanco/on-accent
+     sobre brand-500 daba 4.28 (<AA); sobre brand-600 = 6.13, brand-700 = 8.84. */
+  background: linear-gradient(135deg,
+    var(--syn-color-brand-600) 0%,
+    var(--syn-color-brand-700) 100%);
+  /* Idem: todo texto sobre la banda de marca usa el token on-accent */
+  --syn-color-text-primary:   var(--syn-color-text-on-accent);
+  --syn-color-text-secondary: var(--syn-color-text-on-accent);
+  --syn-color-text-muted:     var(--syn-color-text-on-accent);
+  --syn-color-text-accent:    var(--syn-color-text-on-accent);
+  color: var(--syn-color-text-on-accent);
+}
+
+.syn-preset--theme-brand a {
+  color: var(--syn-color-text-on-accent);
+  text-decoration: underline;
+}
+
+.syn-preset--theme-accent {
+  /* a11y — piso accent-500→600 subido a 600→700 (blanco sobre accent-500 = 4.23 <AA). */
+  background: linear-gradient(135deg,
+    var(--syn-color-accent-600) 0%,
+    var(--syn-color-accent-700) 100%);
+  --syn-color-text-primary:   var(--syn-color-text-on-accent);
+  --syn-color-text-secondary: var(--syn-color-text-on-accent);
+  --syn-color-text-muted:     var(--syn-color-text-on-accent);
+  --syn-color-text-accent:    var(--syn-color-text-on-accent);
+  color: var(--syn-color-text-on-accent);
+}
+
+/* Re-ancla de texto para SUPERFICIES CLARAS PROPIAS dentro de una banda temática.
+   El re-mapeo de la banda (arriba) aclara text-* para el fondo oscuro/marca; pero una
+   card/feature/testimonial/newsletter trae su PROPIA superficie clara → heredaría texto
+   claro sobre superficie clara = ilegible. Aquí se re-anclan a la rampa oscura.
+   Band-scoped ⇒ páginas con data-theme (Tienda/Eventos) quedan intactas. */
+.syn-preset--theme-dark  :is(.syn-card, .syn-feature--elevated, .syn-feature--bordered, .syn-feature--accent, .syn-testimonial, .syn-newsletter),
+.syn-preset--theme-brand :is(.syn-card, .syn-feature--elevated, .syn-feature--bordered, .syn-feature--accent, .syn-testimonial, .syn-newsletter),
+.syn-preset--theme-accent :is(.syn-card, .syn-feature--elevated, .syn-feature--bordered, .syn-feature--accent, .syn-testimonial, .syn-newsletter) {
+  --syn-color-text-primary:   var(--syn-color-neutral-900);
+  --syn-color-text-secondary: var(--syn-color-neutral-600);
+  --syn-color-text-muted:     var(--syn-color-neutral-600);
+  --syn-color-text-accent:    var(--syn-color-brand-600);
+}
+
+/* ── Section spacing helpers ─────────────────────────────────── */
+
+.syn-preset--no-pad-top    { padding-top: 0 !important; }
+.syn-preset--no-pad-bottom { padding-bottom: 0 !important; }
+.syn-preset--no-mar-top    { margin-top: 0 !important; }
+.syn-preset--no-mar-bottom { margin-bottom: 0 !important; }
+
+.syn-preset--pad-section-sm {
+  padding-block: var(--syn-space-xl);
+}
+
+.syn-preset--pad-section-md {
+  padding-block: var(--syn-space-2xl);
+}
+
+.syn-preset--pad-section-lg {
+  padding-block: var(--syn-space-3xl);
+}
+
+/* ── SynHost wrapper — DEV scaffold, retire en prod ──────────── */
+
+.syn-host {
+  display: block;
+}
+
+.syn-host--primary {
+  outline: 1px dashed var(--syn-color-border-accent);
+  outline-offset: 4px;
+}
+
+.syn-host--secondary {
+  outline: 1px dashed var(--syn-color-accent-300);
+  outline-offset: 4px;
+}
+
+.syn-host--ghost {
+  opacity: 0.7;
+}
+
+/* ── Section + Stack + Grid + Spacer + Divider primitives ────── */
+
+.syn-section {
+  padding-block: var(--syn-space-2xl);
+}
+
+.syn-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+}
+
+.syn-stack--xs { gap: var(--syn-space-xs); }
+.syn-stack--sm { gap: var(--syn-space-sm); }
+.syn-stack--lg { gap: var(--syn-space-lg); }
+.syn-stack--xl { gap: var(--syn-space-xl); }
+.syn-stack--horizontal { flex-direction: row; align-items: center; }
+
+.syn-grid {
+  display: grid;
+  gap: var(--syn-space-md);
+}
+
+.syn-column {
+  min-width: 0;
+}
+
+.syn-divider {
+  border: 0;
+  border-top: 1px solid var(--syn-color-border-default);
+  margin: var(--syn-space-lg) 0;
+}
+
+.syn-divider--dashed { border-top-style: dashed; }
+.syn-divider--dotted { border-top-style: dotted; }
+.syn-divider--gradient {
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    var(--syn-color-border-accent),
+    transparent);
+  border: 0;
+}
+
+.syn-spacer {
+  display: block;
+}
+
+.syn-spacer--xs  { height: var(--syn-space-xs); }
+.syn-spacer--sm  { height: var(--syn-space-sm); }
+.syn-spacer--md  { height: var(--syn-space-md); }
+.syn-spacer--lg  { height: var(--syn-space-lg); }
+.syn-spacer--xl  { height: var(--syn-space-xl); }
+.syn-spacer--2xl { height: var(--syn-space-2xl); }
+
+/* ============================================================
+   Layout Composer — backing .syn-layout* (FIX 1, P0)
+   ============================================================
+   Causa raíz: los renderers elementLayout*.cshtml emiten clases
+   .syn-layout / .syn-layout--{preset} / .syn-layout__area que NO
+   tenían NINGUNA regla CSS → multi-columna colapsaba sin grid ni
+   gap. Estas reglas son el backing que faltaba. Las clases coinciden
+   EXACTO con lo que emite cada renderer (verificado contra los 14
+   .cshtml en Views/Partials/blockgrid/Components/):
+     Section→--section · Container→--container · Stack→--stack ·
+     Grid→--grid · Column→--column + --span-{1..12} (+ var inline
+     --syn-col-span) · 1Col→--1col · 2ColEven→--2col-even ·
+     MainSidebar→--main-sidebar · SidebarMain→--sidebar-main ·
+     3Col→--3col · 4Col→--4col · HolyGrail→--holy-grail · Hero→--hero.
+   Los grid-template-columns reusan los presets de .syn-grid--tpl-*
+   (syn-utilities.css): main-sidebar=1fr 280px · sidebar-main=280px 1fr
+   · holy-grail=240px 1fr 240px.
+   NOTA: --section/--container/--1col/--hero/--stack NO llevan
+   padding-block — el ritmo ENTRE secciones lo da el join del
+   block-grid (syn-pages.css .umb-block-grid__layout-item + item →
+   --syn-section-gap). Duplicarlo acumularía aire.
+   NOTA: .syn-layout--v-{variant} (primary/secondary/ghost/outlined/
+   neutral/emphasis, de DTSelectVariantKey) son variantes VISUALES,
+   no spacing → sin regla aquí (el spacing vertical lo dan las clases
+   syn-space--top/bottom/inline-* de compDomSpacing).
+   ------------------------------------------------------------ */
+
+.syn-layout {
+  display: block;
+  width: 100%;
+}
+
+/* Cada área apila sus bloques dropeados con 24px on-grid.
+   min-width:0 evita que el contenido (p.ej. line-clamp) reviente la celda. */
+.syn-layout__area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-lg);   /* 24 */
+  min-width: 0;
+}
+
+/* Presets estructurales (sin padding-block — ver nota de cabecera). */
+.syn-layout--section,
+.syn-layout--container,
+.syn-layout--1col,
+.syn-layout--hero,
+.syn-layout--stack {
+  display: block;
+}
+
+/* Grid libre: las columnas hijas (.syn-layout--column) declaran su span. */
+.syn-layout--grid {
+  display: grid;
+  gap: var(--syn-space-lg);   /* 24 */
+}
+
+/* Columna del grid libre: consume la var inline --syn-col-span que
+   emite el renderer Column (style="--syn-col-span: N;"). */
+.syn-layout--column {
+  grid-column: span var(--syn-col-span, 12);
+}
+
+/* Fallback por clase --span-{1..12} (por si la var inline faltara). */
+.syn-layout--span-1  { --syn-col-span: 1; }
+.syn-layout--span-2  { --syn-col-span: 2; }
+.syn-layout--span-3  { --syn-col-span: 3; }
+.syn-layout--span-4  { --syn-col-span: 4; }
+.syn-layout--span-5  { --syn-col-span: 5; }
+.syn-layout--span-6  { --syn-col-span: 6; }
+.syn-layout--span-7  { --syn-col-span: 7; }
+.syn-layout--span-8  { --syn-col-span: 8; }
+.syn-layout--span-9  { --syn-col-span: 9; }
+.syn-layout--span-10 { --syn-col-span: 10; }
+.syn-layout--span-11 { --syn-col-span: 11; }
+.syn-layout--span-12 { --syn-col-span: 12; }
+
+/* Presets multi-columna como GRID real (gap 24 on-grid).
+   Cada .syn-layout__area hijo es una CELDA del grid; sigue apilando
+   su propio contenido con su gap interno. */
+.syn-layout--2col-even {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--syn-space-lg);
+}
+
+.syn-layout--3col {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--syn-space-lg);
+}
+
+.syn-layout--4col {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--syn-space-lg);
+}
+
+.syn-layout--main-sidebar {
+  display: grid;
+  grid-template-columns: 1fr 280px;   /* espeja .syn-grid--tpl-main-sidebar */
+  gap: var(--syn-space-lg);
+}
+
+.syn-layout--sidebar-main {
+  display: grid;
+  grid-template-columns: 280px 1fr;   /* espeja .syn-grid--tpl-sidebar-main */
+  gap: var(--syn-space-lg);
+}
+
+.syn-layout--holy-grail {
+  display: grid;
+  grid-template-columns: 240px 1fr 240px;   /* espeja .syn-grid--tpl-holy-grail */
+  gap: var(--syn-space-lg);
+}
+
+/* Móvil: todos los multi-columna colapsan a 1 columna apilada. */
+@media (max-width: 768px) {
+  .syn-layout--2col-even,
+  .syn-layout--3col,
+  .syn-layout--4col,
+  .syn-layout--main-sidebar,
+  .syn-layout--sidebar-main,
+  .syn-layout--holy-grail {
+    grid-template-columns: 1fr;
+  }
+}

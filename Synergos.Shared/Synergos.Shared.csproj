@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- CA1716: "Shared" es palabra reservada en VB.NET. Aquí no hay VB ni lo habrá,
+         y el nombre lo pidió el arquitecto por escrito. Se silencia con motivo, no
+         se ignora. -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- Fontanería de host: por eso SÍ referencia ASP.NET, y por eso NO
+         referencia ningún otro proyecto del repo. Ver docs/product/06. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <!-- La ÚNICA referencia de proyecto permitida, y solo en esta dirección. La justifica
+         RejectionResults: el mapeo Rejection→HTTP lo necesitan las dieciséis capacidades, y
+         con la regla simétrica original había que copiarlo dieciséis veces o meter dominio
+         aquí. Core nunca referencia Shared. Ver docs/product/07 §3. -->
+    <ProjectReference Include="..\Synergos.Core\Synergos.Core.csproj" />
+  </ItemGroup>
+
+</Project>

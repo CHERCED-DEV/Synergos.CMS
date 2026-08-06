@@ -1,0 +1,35 @@
+@*
+    SynHost renderer — module-mount (ADR 0096). Monta una app Angular
+    COMPLETA: <synergos-{moduleAlias}>. El alias se usa como key del
+    registry (resuelve el bundle Tier=module) y, kebab-cased, como el tag.
+    El módulo NUNCA toca la DB: sus datos fluyen por /api/{module}/*
+    detrás de seams. El fallback CDN-offline lo emite el propio emitter
+    (data-synergos-cdn-offline + .syn-cdn-offline-fallback). El <noscript>
+    degrada sin JS — los módulos stateful son CSR-only por diseño.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var moduleAlias = Model.Value<string>("moduleAlias");
+}
+@if (!string.IsNullOrWhiteSpace(moduleAlias))
+{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["initialRoute"] = Model.Value<string>("moduleInitialRoute"),
+        ["heightHint"] = Model.Value<string>("moduleHeightHint"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: moduleAlias,
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+    @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
+    <noscript>
+        <div class="syn-module-noscript">
+            <p>Esta sección es interactiva y necesita JavaScript activado.</p>
+            <a class="syn-module-noscript__link" href="/">Ir al inicio →</a>
+        </div>
+    </noscript>
+}

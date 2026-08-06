@@ -1,0 +1,26 @@
+@*
+    elementShopPriceDisplay renderer (Ola 33). SSR nativo.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var amount = Model.Value<string>("priceAmount");
+    var currency = Model.Value<string>("priceCurrency");
+    if (string.IsNullOrWhiteSpace(amount) || string.IsNullOrWhiteSpace(currency)) { return; }
+    var original = Model.Value<string>("priceOriginal");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-price",
+        !string.IsNullOrWhiteSpace(original) ? "syn-price--sale" : null,
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-price--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<span class="@classes">
+    @if (!string.IsNullOrWhiteSpace(original))
+    {
+        <del class="syn-price__original">@original @currency</del>
+    }
+    <span class="syn-price__current">@amount @currency</span>
+</span>

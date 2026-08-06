@@ -1,0 +1,23 @@
+@*
+    elementMediaVideo renderer (Ola 14). SSR-native. Self-hosted
+    video (not embed — for embeds use elementIntIframeHost / compContentEmbed).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    if (mediaRef == null) { return; }
+    var autoplay = Model.Value<bool>("videoAutoplay");
+    var showControls = Model.Value<bool?>("videoShowControls") ?? true;
+    var loop = Model.Value<bool>("videoLoop");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-video",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-video--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<video class="@classes"@(showControls ? " controls" : "")@(autoplay ? " autoplay muted playsinline" : "")@(loop ? " loop" : "") preload="metadata">
+    <source src="@mediaRef.Url()" />
+</video>

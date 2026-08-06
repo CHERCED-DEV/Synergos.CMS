@@ -1,0 +1,79 @@
+#!/usr/bin/env sh
+# =============================================================================
+# Gate G-2 — pre-commit cross-repo (anti-drift, Ola 2 del roadmap maestro).
+#
+# PROBLEMA QUE CIERRA:
+#   `syn-tokens.css` (la FUENTE de los design tokens) vive en ESTE repo
+#   (Synergos.CMS), pero el bridge derivado `_tokens-bridge.scss` vive en
+#   el repo SIBLING Synergos.UI. El husky del UI dispara solo sobre el
+#   bridge/script, NUNCA sobre la fuente → editar `syn-tokens.css` acá y
+#   commitear dejaba el bridge stale en silencio (exactamente el agujero
+#   C-1/C-2 del audit).
+#
+# QUÉ HACE:
+#   Si el commit staged toca `wwwroot/css/syn-tokens.css`, corre el gate
+#   G-1 (`sync:tokens:check`) del repo UI vía path relativo sibling. Si el
+#   bridge quedó stale respecto a la nueva fuente, ABORTA el commit con
+#   instrucciones. Commits que no tocan tokens son no-op (~0ms).
+#
+# LIMITACIÓN CROSS-REPO (ver tools/README-gates / ADR):
+#   Este hook NO puede re-stagear el bridge regenerado: vive en OTRO repo
+#   git, así que el commit de CMS no puede incluir un cambio del UI. Por
+#   eso es un GATE (avisa/bloquea) y no un fixer. El flujo correcto es:
+#   regenerar el bridge en el repo UI y commitearlo allí.
+#
+# WIRING (una sola vez por clon, porque CMS no tiene npm `prepare`):
+#   git -C Synergos.CMS config core.hooksPath .husky
+# =============================================================================
+
+set -e
+
+CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | \
+    grep -E "Synergos\.CMS\.Web/wwwroot/css/syn-tokens\.css$" || true)
+
+if [ -z "$CHANGED" ]; then
+    exit 0
+fi
+
+echo "[husky:G-2] syn-tokens.css (FUENTE) staged — verificando bridge del UI..."
+
+# Path al repo UI: sibling de Synergos.CMS. Resolvemos desde la raíz de
+# ESTE repo (donde corre el hook) hacia ../Synergos.UI/platforms/angular.
+REPO_ROOT=$(git rev-parse --show-toplevel)
+UI_ANGULAR="$REPO_ROOT/../Synergos.UI/platforms/angular"
+
+if [ ! -d "$UI_ANGULAR" ]; then
+    echo "[husky:G-2] WARN — repo UI no encontrado en: $UI_ANGULAR"
+    echo "[husky:G-2] No se pudo verificar el bridge. Verificá manualmente:"
+    echo "[husky:G-2]   (cd ../Synergos.UI/platforms/angular && npm run sync:tokens:check)"
+    echo "[husky:G-2] Continuando con el commit (no bloqueo si no hay repo UI)."
+    exit 0
+fi
+
+# Corremos el gate G-1 del UI. Preferimos el script node directo (no
+# requiere npm install en el contexto del hook). SYNERGOS_CMS_PATH apunta
+# a ESTE repo para que el check use exactamente la fuente que se commitea.
+if [ ! -f "$UI_ANGULAR/tools/sync-tokens.mjs" ]; then
+    echo "[husky:G-2] WARN — sync-tokens.mjs no encontrado en el UI. Skip."
+    exit 0
+fi
+
+set +e
+SYNERGOS_CMS_PATH="$REPO_ROOT" node "$UI_ANGULAR/tools/sync-tokens.mjs" --check
+RESULT=$?
+set -e
+
+if [ "$RESULT" -ne 0 ]; then
+    echo ""
+    echo "[husky:G-2] ABORT — el bridge del UI quedó STALE respecto a"
+    echo "[husky:G-2] syn-tokens.css. Regeneralo y commitealo en el repo UI:"
+    echo "[husky:G-2]   cd ../Synergos.UI/platforms/angular"
+    echo "[husky:G-2]   npm run sync:tokens         # regenera el bridge"
+    echo "[husky:G-2]   git add libs/shared/src/styles/_tokens-bridge.scss"
+    echo "[husky:G-2]   git commit -m 'chore(tokens): re-sync bridge'"
+    echo "[husky:G-2] (o re-commiteá acá con --no-verify si es intencional)"
+    exit 1
+fi
+
+echo "[husky:G-2] OK — bridge del UI en sync con la fuente. Commit permitido."
+exit 0

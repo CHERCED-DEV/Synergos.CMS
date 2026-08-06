@@ -1,0 +1,21 @@
+@*
+    elementMediaAvatar renderer (Ola 14). SSR-native. Circular person photo.
+    Reads mediaReference/mediaAlt/mediaCaption from compContentMedia.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    if (mediaRef == null) { return; }
+    var alt = Model.Value<string>("mediaAlt") ?? mediaRef.Name;
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-avatar",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-avatar--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<figure class="@classes">
+    <img src="@mediaRef.Url()" alt="@alt" loading="lazy" />
+</figure>

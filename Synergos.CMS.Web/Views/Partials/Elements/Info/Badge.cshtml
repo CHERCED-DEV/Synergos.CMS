@@ -1,0 +1,19 @@
+@*
+    elementInfoBadge renderer (Ola 15). Standalone badge chip.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var label = Model.Value<string>("badgeLabel");
+    if (string.IsNullOrWhiteSpace(label)) { return; }
+    var badgeVariant = Model.Value<string>("badgeVariant") ?? "neutral";
+    var domVariant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-info-badge",
+        $"syn-info-badge--{badgeVariant}",
+        string.IsNullOrWhiteSpace(domVariant) ? null : $"syn-info-badge--size-{domVariant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<span class="@classes">@label</span>

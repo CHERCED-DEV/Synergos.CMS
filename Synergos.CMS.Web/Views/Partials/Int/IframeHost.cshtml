@@ -1,0 +1,24 @@
+@*
+    Integration renderer (Ola 8.5) — iframeHost. Framework-agnostic,
+    does NOT use ISynHostEmitter (iframeHost is not a CDN block — it
+    embeds third-party content via a standard iframe). Sandbox default
+    is conservative; editor can override per instance.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var src = Model.Value<string>("iframeSrc");
+    var sandbox = Model.Value<string>("sandboxFlags");
+    if (string.IsNullOrWhiteSpace(sandbox))
+    {
+        sandbox = "allow-same-origin allow-scripts allow-popups-to-escape-sandbox";
+    }
+    var title = Model.Value<string>("iframeTitle");
+}
+@if (!string.IsNullOrWhiteSpace(src))
+{
+    <iframe src="@src"
+            sandbox="@sandbox"
+            title="@title"
+            loading="lazy"
+            referrerpolicy="no-referrer-when-downgrade"></iframe>
+}

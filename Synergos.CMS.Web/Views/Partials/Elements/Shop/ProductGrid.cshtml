@@ -1,0 +1,73 @@
+@*
+    elementShopProductGrid renderer.
+
+    Ola 59 — usa IShopQuery.GetProducts como seam. El sortBy del block
+    se mapea al SortBy del request: "date-desc" → "newest" para alinear
+    con la nomenclatura canonical del seam (ProductCategoryPage usa lo
+    mismo).
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
+@inject Synergos.CMS.Interfaces.IShopQuery ShopQuery
+@inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
+@{
+    var categoryFilter = Model.Value<string>("categoryFilter");
+    var maxItemsRaw = Model.Value<string>("maxItems");
+    var maxItems = int.TryParse(maxItemsRaw, out var m) && m > 0 ? m : 12;
+    var sortByRaw = Model.Value<string>("sortBy") ?? "name";
+    var sortBy = sortByRaw switch
+    {
+        "date-desc" => "newest",
+        _ => sortByRaw,
+    };
+    var layout = Model.Value<string>("layout") ?? "grid";
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-product-grid",
+        $"syn-product-grid--{layout}",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-product-grid--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    var products = ShopQuery.GetProducts(new Synergos.CMS.Interfaces.ShopQueryRequest(
+        MaxItems: maxItems,
+        Skip: 0,
+        CategoryAliasOrName: string.IsNullOrWhiteSpace(categoryFilter) ? null : categoryFilter.Trim(),
+        SortBy: sortBy));
+    var coCulture = System.Globalization.CultureInfo.GetCultureInfo("es-CO");
+}
+<section class="@classes"
+         data-category-filter="@(categoryFilter ?? "")"
+         data-max-items="@maxItems"
+         data-sort-by="@sortByRaw"
+         data-layout="@layout">
+    @if (products.Count == 0)
+    {
+        <p class="syn-product-grid__empty">@Umbraco.GetDictionaryValue("Shop.Filter.NoResults")</p>
+    }
+    else
+    {
+        <div class="syn-product-grid__items">
+            @foreach (var product in products)
+            {
+                <article class="syn-product-grid__item" data-sku="@product.Sku">
+                    <a class="syn-product-grid__link" href="@product.Url">
+                        @if (!string.IsNullOrWhiteSpace(product.ImageUrl))
+                        {
+                            <img class="syn-product-grid__image" src="@product.ImageUrl" alt="@product.Name" loading="lazy" />
+                        }
+                        <h3 class="syn-product-grid__name">@product.Name</h3>
+                        <span class="syn-product-grid__price">
+                            @PriceFormatter.Format(product.Price, product.Currency)
+                        </span>
+                        @if (!product.InStock)
+                        {
+                            <span class="syn-product-grid__out-of-stock">@Umbraco.GetDictionaryValue("Shop.Product.OutOfStock")</span>
+                        }
+                    </a>
+                </article>
+            }
+        </div>
+    }
+</section>

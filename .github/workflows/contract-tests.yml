@@ -1,0 +1,51 @@
+name: Contract tests (Vitest)
+
+# Cap-250 Batch C (Ola 246).
+# Corre el Vitest harness de docs/contracts/tests/ cuando cambian los
+# specs canónicos o los specs propios del harness. Bloquea el merge
+# si los tests fallan — los contratos son la única coupling surface
+# CMS↔UI, así que el contrato roto es el equivalente a un breaking
+# change en una API publicada.
+
+on:
+  pull_request:
+    paths:
+      - 'Synergos.CMS.Web/docs/contracts/**'
+      - '.github/workflows/contract-tests.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'Synergos.CMS.Web/docs/contracts/**'
+      - '.github/workflows/contract-tests.yml'
+
+jobs:
+  vitest:
+    name: docs/contracts/tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Synergos.CMS.Web/docs/contracts/tests
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: Synergos.CMS.Web/docs/contracts/tests/package-lock.json
+
+      - name: Install (npm ci si hay lockfile, install sino)
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Run contract tests
+        run: npm test

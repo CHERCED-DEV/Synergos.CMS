@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- La máquina de sagas: ORDEN y COMPENSACIÓN, que es lo único que un
+         orquestador aporta y ninguna capacidad puede aportar.
+
+         Vivió dentro de Synergos.Bff.Salud hasta tener un SEGUNDO consumidor,
+         que es la regla de CLAUDE.md §6 y la misma disciplina que esperó a que
+         JsonCollectionStore tuviera seis. Con Bff.Tienda encima, promoverla deja
+         de ser abstracción prematura y pasa a ser lo contrario: copiarla sería
+         duplicar el retroceso, el aviso y la idempotencia — y perder una copia
+         de cada decisión sutil por cada dominio nuevo.
+
+         REGLA DE ADMISIÓN, positiva y verificada por gate: aquí entra lo que
+         los ocho BFF necesitan y NO nombra ningún negocio. Un tipo llamado
+         Order, Patient o Booking está mal puesto: eso va en su Bff.*. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- FrameworkReference y no PackageReference: hace falta BackgroundService
+         (el barrido), IHttpClientFactory (hablar con las capacidades) y las
+         Options. Es fontanería de host, exactamente como Synergos.Shared. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Synergos.Core\Synergos.Core.csproj" />
+    <ProjectReference Include="..\Synergos.Shared\Synergos.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

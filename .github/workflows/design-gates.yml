@@ -1,0 +1,111 @@
+name: Design gates (anti-drift)
+
+# Gates anti-drift del design system y del acople CMS↔UI.
+#
+#   - G-3  paridad clase↔CSS (tools/check-css-parity.mjs): toda clase
+#          `syn-*` emitida en Views/**/*.cshtml tiene regla CSS en
+#          wwwroot/css/*.css o está en la allowlist.
+#   - G-1  el `_tokens-bridge.scss` del UI está en sync con syn-tokens.css,
+#          que es la fuente. Cross-repo: hace checkout del hermano.
+#   - E1/E2 registry del UI ↔ DocTypes del CMS. Cross-repo también.
+#
+# El runner YA existe (el workflow de uSync corrió el 2026-07-31), así que
+# esto no es scaffolding a la espera: gatea de verdad.
+#
+# Los dos jobs cross-repo hacen checkout de Synergos.UI. Si el repo es
+# público basta el GITHUB_TOKEN por defecto; si se vuelve privado hay que
+# poblar el secret UI_REPO_READ_TOKEN (ver `token:` abajo). El espejo de
+# esto vive en Synergos.UI/.github/workflows/design-gates-ui.yml.
+
+on:
+  pull_request:
+    paths:
+      - 'Synergos.CMS.Web/Views/**'
+      - 'Synergos.CMS.Web/wwwroot/css/**'
+      - 'Synergos.CMS.Web/uSync/v9/ContentTypes/**'
+      - 'tools/check-css-parity.mjs'
+      - 'tools/css-parity-allowlist.txt'
+      - '.github/workflows/design-gates.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'Synergos.CMS.Web/Views/**'
+      - 'Synergos.CMS.Web/wwwroot/css/**'
+      - 'Synergos.CMS.Web/uSync/v9/ContentTypes/**'
+      - 'tools/check-css-parity.mjs'
+      - 'tools/css-parity-allowlist.txt'
+      - '.github/workflows/design-gates.yml'
+
+jobs:
+  css-parity:
+    name: G-3 paridad clase↔CSS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run css-parity gate
+        run: node tools/check-css-parity.mjs
+
+  # ───────────────────────────────────────────────────────────────────
+  # Cross-repo. Los dos checkouts quedan como HERMANOS bajo
+  # $GITHUB_WORKSPACE, que es exactamente el layout que ambas
+  # herramientas asumen por defecto (`../Synergos.CMS`).
+  # ───────────────────────────────────────────────────────────────────
+  cross-repo-parity:
+    name: G-1 token bridge · E1/E2 registry ↔ DocTypes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout CMS (este repo)
+        uses: actions/checkout@v4
+        with:
+          path: Synergos.CMS
+
+      - name: Checkout UI (hermano)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/Synergos.UI
+          path: Synergos.UI
+          # El repo es público hoy, así que el GITHUB_TOKEN por defecto
+          # alcanza. Si pasa a privado, creá el secret y descomentá:
+          # token: ${{ secrets.UI_REPO_READ_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Token bridge parity (G-1)
+        run: |
+          SYNERGOS_CMS_PATH="$GITHUB_WORKSPACE/Synergos.CMS" \
+            node Synergos.UI/platforms/angular/tools/sync-tokens.mjs --check
+
+      # SIN --strict, y el motivo por el que se puso ya no existe.
+      #
+      # Se añadió para que la ausencia del CMS fuera un FALLO y no un skip —
+      # entonces el validador salía 0 cuando no encontraba al hermano, que es
+      # justo como este gate pasaba en verde sin validar nada. Eso se arregló
+      # DENTRO del validador: hoy la ausencia del CMS es fallo por defecto, y
+      # quien la quiera tolerar pide `--allow-missing-cms` explícitamente.
+      # Comprobado: `--cms-path=/no/existe` sale 1 sin `--strict`.
+      #
+      # Lo que `--strict` hace de verdad es «exit 1 también con WARNINGS», y
+      # hay 80 de W4 —entradas del registry sin contrato tipado en
+      # ELEMENT_CONFIG_FIELDS— que son deuda conocida, no un desajuste de
+      # contrato. Con la bandera puesta este job llevaba rojo en master desde
+      # el 2026-08-01, cuatro corridas seguidas. Un gate siempre rojo deja de
+      # leerse, que es la forma más silenciosa de no vigilar nada.
+      #
+      # Lo que este job dice vigilar está en su propio nombre: E1/E2.
+      - name: Registry ↔ DocTypes (E1/E2)
+        working-directory: Synergos.UI
+        run: node tools/validate-cms-contracts.mjs

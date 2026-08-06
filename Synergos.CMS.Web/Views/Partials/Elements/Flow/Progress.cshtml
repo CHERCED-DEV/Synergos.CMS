@@ -1,0 +1,56 @@
+@*
+    elementFlowProgress renderer (Ola 36 schema + Ola 41 runtime).
+    Lee cookie syn-flow-{flowKey} para índice actual. Resuelve
+    flowDefinition + steps via FlowResolver. Emite "Paso X de N" con
+    ARIA progressbar y optional percent.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Web.Services.FlowResolver FlowResolver
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@{
+    var flowKey = Model.Value<string>("flowKey");
+    if (string.IsNullOrWhiteSpace(flowKey)) { return; }
+    var showPercent = Model.Value<bool>("showPercent");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-flow-progress",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-flow-progress--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    var descriptor = FlowResolver.Resolve(flowKey);
+    var totalSteps = descriptor?.Steps.Count ?? 0;
+
+    int currentIndex = 0;
+    var cookieName = $"syn-flow-{flowKey}";
+    var cookies = HttpContextAccessor.HttpContext?.Request.Cookies;
+    if (cookies != null && cookies.TryGetValue(cookieName, out var raw) && int.TryParse(raw, out var parsed))
+    {
+        currentIndex = parsed;
+    }
+
+    var displayStep = totalSteps > 0 ? Math.Min(currentIndex + 1, totalSteps) : 0;
+    var percent = totalSteps > 0 ? (int)Math.Round(100d * displayStep / totalSteps) : 0;
+}
+<div class="@classes"
+     data-flow-key="@flowKey"
+     data-show-percent="@showPercent"
+     role="progressbar"
+     aria-valuenow="@percent"
+     aria-valuemin="0"
+     aria-valuemax="100">
+    @if (totalSteps == 0)
+    {
+        <span class="syn-flow-progress__unavailable">—</span>
+    }
+    else
+    {
+        <span class="syn-flow-progress__label">Paso @displayStep de @totalSteps</span>
+        @if (showPercent)
+        {
+            <span class="syn-flow-progress__percent">@percent%</span>
+        }
+    }
+</div>

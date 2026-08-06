@@ -1,0 +1,67 @@
+@*
+    Tag page del blog (Ola 230, ADR 0100). Renderizada por BlogTagController
+    (RenderController MVC, sin DocType). Reutiliza el post-card canónico de
+    la categoría (.syn-post-category*) para paridad visual con
+    PostCategoryPage.cshtml.
+*@
+@model Synergos.CMS.Web.Controllers.BlogTagViewModel
+@using Umbraco.Extensions
+@{
+    Layout = "_Layout";
+    var tag = Model?.Tag ?? string.Empty;
+    var posts = Model?.Posts ?? System.Array.Empty<Synergos.CMS.Interfaces.PostSummary>();
+    ViewData["Title"] = $"#{tag}";
+}
+<section class="syn-post-category syn-blog-tag">
+    <header class="syn-post-category__header">
+        <p class="syn-post__category">@Umbraco.GetDictionaryValue("blog.tag", "Tag")</p>
+        <h1 class="syn-post-category__title">#@tag</h1>
+        <p class="syn-post-category__description">
+            @{
+                var count = posts.Count;
+                var label = count == 1
+                    ? Umbraco.GetDictionaryValue("blog.article", "artículo")
+                    : Umbraco.GetDictionaryValue("blog.articles", "artículos");
+            }
+            @count @label
+        </p>
+    </header>
+
+    @if (posts.Count == 0)
+    {
+        <p class="syn-post-category__empty">@Umbraco.GetDictionaryValue("blog.empty", "Aún no hay artículos.")</p>
+    }
+    else
+    {
+        <ul class="syn-post-category__items">
+            @foreach (var post in posts)
+            {
+                <li class="syn-post-category__item">
+                    <a class="syn-post-category__link" href="@post.Url">
+                        @if (!string.IsNullOrWhiteSpace(post.HeroImageUrl))
+                        {
+                            <img class="syn-post-category__image" src="@post.HeroImageUrl" alt="" loading="lazy" />
+                        }
+                        <h2 class="syn-post-category__item-title">@post.Title</h2>
+                        @if (!string.IsNullOrWhiteSpace(post.Excerpt))
+                        {
+                            <p class="syn-post-category__excerpt">@post.Excerpt</p>
+                        }
+                        <div class="syn-post-category__meta">
+                            @if (post.PublishDate.HasValue)
+                            {
+                                <time datetime="@post.PublishDate.Value.ToString("yyyy-MM-dd")">
+                                    @post.PublishDate.Value.ToString("dd MMM yyyy")
+                                </time>
+                            }
+                            @if (post.ReadTimeMinutes.HasValue)
+                            {
+                                <span>@post.ReadTimeMinutes min</span>
+                            }
+                        </div>
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+</section>

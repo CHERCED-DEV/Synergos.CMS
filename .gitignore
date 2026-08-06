@@ -1,0 +1,112 @@
+# ───────────────────────── .NET build output ─────────────────────────
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+[Ll]og/
+[Ll]ogs/
+
+# ───────────────────────── Visual Studio / Rider ─────────────────────
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.ncrunchsolution
+*.ncrunchproject
+
+# ───────────────────────── NuGet / tooling caches ────────────────────
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ───────────────────────── Umbraco runtime state ─────────────────────
+# These are runtime data, NOT source of truth (schema lives in uSync/v9/).
+Synergos.CMS.Web/umbraco/Data/
+Synergos.CMS.Web/umbraco/Logs/
+Synergos.CMS.Web/umbraco/mediacache/
+Synergos.CMS.Web/App_Data/
+# wwwroot/media NO se ignora (ADR 0129): son los BINARIOS a los que apuntan los
+# nodos de Media. Versionar el nodo sin el archivo restaura el contenido con las
+# imágenes rotas, que es peor que no restaurarlo. mediacache sí se ignora — eso
+# sí es derivable, Umbraco lo regenera del original.
+
+# Los mismos, en la RAIZ del repo. Umbraco los crea relativos a su content
+# root, y arrancar el dll desde la raiz (en vez de desde Synergos.CMS.Web/)
+# deja ahi una DB, los logs y el App_Data con lo que hayan sembrado los
+# seeders de dev. Son el mismo estado transitorio en otro sitio; sin estas
+# lineas aparecen como untracked y alguien termina commiteandolos.
+/App_Data/
+/umbraco/
+
+# ───────────────────────── ModelsBuilder generated code ──────────────
+# SourceCodeAuto regenera estos archivos cada vez que cambia el schema.
+# Son OUTPUT del schema XML uSync, no SOURCE — el agente nunca los
+# edita a mano. Versionarlos crearia conflictos cuando dos devs tienen
+# schemas diferentes. Local-only.
+Synergos.CMS.Web/umbraco/models/*.generated.cs
+Synergos.CMS.Web/umbraco/models/all.generated.cs
+Synergos.CMS.Web/umbraco/models/models.generated.hash
+
+# uSync state/history (transient — the v9/ authoritative XMLs are kept)
+Synergos.CMS.Web/uSync/uSync.History/
+Synergos.CMS.Web/uSync/uSync.Logs/
+
+# uSync/v9/Content y Media SÍ se versionan (ADR 0129). Antes se ignoraban por
+# dos razones: que el agente no es dueño del contenido, y que el seeder de dev
+# ensuciaría el repo. La primera sigue en pie y no la cambia esto —el agente
+# no autora contenido, solo se versiona lo que autora el arquitecto—; la
+# segunda pasa de una regla de .gitignore a un check del audit, que es más
+# preciso: deja pasar el contenido editorial y sigue rechazando el del seeder.
+#
+# Sin esto, el esquema era derivable y el contenido no: las páginas y la media
+# vivían SOLO en la SQLite, que nunca se commitea.
+
+# Umbraco-generated appsettings schema references (regenerated on build)
+Synergos.CMS.Web/appsettings-schema.json
+Synergos.CMS.Web/appsettings-schema.Umbraco.Cms.json
+Synergos.CMS.Web/appsettings-schema.usync.json
+
+# ───────────────────────── Local secrets / env ───────────────────────
+*.local.json
+appsettings.Local.json
+secrets.json
+.env
+.env.*
+# ...salvo la plantilla. `.env.*` la tapaba: el fichero que documenta QUÉ
+# secretos hacen falta nunca llegaba al repo, y quien montara el servidor
+# tendría que adivinarlos. No lleva valores, solo nombres y explicaciones.
+!.env.example
+
+# ───────────────────────── Test results ──────────────────────────────
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# ───────────────────────── Editor/OS junk ────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ───────────────────────── Claude Code harness ───────────────────────
+# .claude local sigue ignorado (settings, worktrees), MENOS las skills:
+# compartidas al remoto para que las sesiones desde la tablet las tengan.
+.claude/*
+!.claude/skills/
+
+# ───────────────────────── Harness de verificación (Fase 4) ──────────
+# El código del harness se versiona; sus salidas no. La evidencia de cada
+# corrida va a synergos-backups\verify-{ts}\ (feedback_backups_external_to_repo).
+tools/verify-ui/node_modules/
+tools/verify-ui/results/
+tools/verify-ui/.pw-artifacts/
+tools/verify-ui/.pw-report/
+tools/verify-ui/VEREDICTO-ui.md

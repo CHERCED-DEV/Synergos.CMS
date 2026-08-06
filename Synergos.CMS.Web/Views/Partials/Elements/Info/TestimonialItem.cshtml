@@ -1,0 +1,36 @@
+@*
+    elementInfoTestimonialItem renderer (Ola 15). Quote + avatar + author.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var quote = Model.Value<string>("textBody");
+    var authorName = Model.Value<string>("authorName");
+    if (string.IsNullOrWhiteSpace(quote) || string.IsNullOrWhiteSpace(authorName)) { return; }
+    var authorRole = Model.Value<string>("authorRole");
+    var avatarRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    var avatarAlt = Model.Value<string>("mediaAlt") ?? authorName;
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-testimonial",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-testimonial--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<article class="@classes">
+    <blockquote class="syn-testimonial__quote">@Html.Raw(quote)</blockquote>
+    <footer class="syn-testimonial__author">
+        @if (avatarRef != null)
+        {
+            <img class="syn-testimonial__avatar" src="@avatarRef.Url()" alt="@avatarAlt" loading="lazy" />
+        }
+        <div class="syn-testimonial__identity">
+            <cite class="syn-testimonial__name">@authorName</cite>
+            @if (!string.IsNullOrWhiteSpace(authorRole))
+            {
+                <span class="syn-testimonial__role">@authorRole</span>
+            }
+        </div>
+    </footer>
+</article>

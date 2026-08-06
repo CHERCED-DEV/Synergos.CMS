@@ -1,0 +1,15 @@
+@*
+    Hero del frame "launcher / PS3" para los Account views — réplica
+    exacta del header de PlatformRoot.cshtml (isotipo + eyebrow +
+    título). El título se pasa como modelo (string) desde cada view.
+
+    Va dentro de `.syn-launcher__main`; platform-root.js inyecta el
+    chrome animado (onda/ribbon/partículas/reloj) en el `.syn-launcher`
+    del <body>, así que aquí solo vive el contenido del hero.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<string>
+<header class="syn-launcher__hero">
+    <img class="syn-launcher__mark" src="~/img/synergoslabs-isotipo.png" alt="" width="104" height="104" />
+    <span class="syn-launcher__eyebrow">Plataforma SynergosLabs</span>
+    <h1 class="syn-launcher__title">@Model</h1>
+</header>

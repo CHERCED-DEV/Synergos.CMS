@@ -1,0 +1,733 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
+using Xunit;
+
+namespace Synergos.CMS.Tests.Services;
+
+/// <summary>
+/// Cubre <see cref="SeatMapProjection"/> — la traducción entre lo que publica un
+/// <see cref="ISeatMapProvider"/> y la carga <c>seatmap</c> que el bundle publicado sabe leer.
+/// </summary>
+/// <remarks>
+/// <para><b>Por qué estas pruebas y no otras.</b> La proyección es el único punto donde el
+/// CMS puede romper el mapa sin que nada se queje: la vista compila en runtime, el bundle
+/// normaliza a la defensiva (una clave que no entiende la ignora en silencio) y el resultado
+/// es un plano de cabina dibujado mal, no un error. Cada prueba fija una propiedad que, si se
+/// pierde, produce exactamente eso — una pantalla que se ve bien y miente.</para>
+///
+/// <para><b>La carga que el bundle lee es la fuente de verdad (ADR 0083):</b>
+/// <c>rows[].rowNumber</c>, <c>rows[].serviceClass</c>, <c>rows[].seats[]</c> con <c>id</c> /
+/// <c>type</c> / <c>available</c> / <c>price</c> / <c>features[]</c>, y
+/// <c>aisleAfterColumns</c>. Las claves se verifican serializando, no leyendo el record — un
+/// rename las rompería sin tocar ninguna otra prueba.</para>
+/// </remarks>
+public sealed class SeatMapProjectionTests
+{
+    private static SeatMapSeat Seat(
+        string id,
+        string column,
+        string status = "free",
+        string position = "middle",
+        decimal price = 0m,
+        IReadOnlyList<string>? features = null)
+        => new(id, column, status, position, price, features);
+
+    private static SeatMapRow Row(string label, params SeatMapSeat[] seats)
+        => new(label, "economy", seats);
+
+    /// <summary>Una cabina de un solo pasillo, que es el caso de casi todas las pruebas.</summary>
+    private static SeatMapLayout Layout(int aisleAfterColumns, params SeatMapRow[] rows)
+        => Cabin(aisleAfterColumns > 0 ? new[] { aisleAfterColumns } : Array.Empty<int>(), rows);
+
+    private static SeatMapLayout Cabin(IReadOnlyList<int> aisles, params SeatMapRow[] rows)
+        => new("A320-BOGMDE", "Airbus A320 · BOG → MDE", "COP", aisles, rows);
+
+    /// <summary>Una fila 3-3 completa: A B C | D E F.</summary>
+    private static SeatMapRow FilaTresTres(string label) => Row(
+        label,
+        Seat($"{label}A", "A", position: "window"),
+        Seat($"{label}B", "B"),
+        Seat($"{label}C", "C", position: "aisle"),
+        Seat($"{label}D", "D", position: "aisle"),
+        Seat($"{label}E", "E"),
+        Seat($"{label}F", "F", position: "window"));
+
+    // ── El pasillo ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Una fila <c>2-4-2</c>: A B | C D E F | G H.
+    /// </summary>
+    private static SeatMapRow FilaDosCuatroDos(string label) => Row(
+        label,
+        Seat($"{label}A", "A", position: "window"),
+        Seat($"{label}B", "B", position: "aisle"),
+        Seat($"{label}C", "C", position: "aisle"),
+        Seat($"{label}D", "D"),
+        Seat($"{label}E", "E"),
+        Seat($"{label}F", "F", position: "aisle"),
+        Seat($"{label}G", "G", position: "aisle"),
+        Seat($"{label}H", "H", position: "window"));
+
+    /// <summary>
+    /// Protege <c>aisleAfterColumns</c> en una cabina <b>2-4-2</b>. Es el caso que revienta:
+    /// el bundle, cuando no recibe el dato, parte la fila más ancha por la mitad
+    /// (<c>ceil(8/2) = 4</c>) y dibuja el pasillo entre los dos asientos del centro. El
+    /// proveedor dice 2 y ese 2 tiene que llegar intacto.
+    /// </summary>
+    [Fact]
+    public void El_pasillo_de_una_cabina_2_4_2_llega_donde_lo_puso_el_proveedor()
+    {
+        var payload = SeatMapProjection.Project(Layout(2, FilaDosCuatroDos("20")));
+
+        Assert.NotNull(payload);
+        Assert.Equal(new[] { 2 }, payload!.AisleAfterColumns);
+        // Y NO el 4 que el bundle calcularía solo si la clave no llegara.
+        Assert.DoesNotContain(payload.Rows[0].Seats.Count / 2, payload.AisleAfterColumns);
+    }
+
+    /// <summary>
+    /// Protege los <b>DOS</b> pasillos de un widebody, que es el defecto que este arreglo cierra.
+    /// Con un solo entero, un <c>2-4-2</c> dibujaba el pasillo tras la B y <b>nada entre F y
+    /// G</b>: el bloque derecho se soldaba al central y la cabina se leía como un <c>2-6</c> que
+    /// no existe en ningún avión.
+    /// </summary>
+    [Fact]
+    public void Un_widebody_emite_sus_DOS_pasillos()
+    {
+        var payload = SeatMapProjection.Project(Cabin(new[] { 2, 6 }, FilaDosCuatroDos("20")));
+
+        Assert.Equal(new[] { 2, 6 }, payload!.AisleAfterColumns);
+    }
+
+    /// <summary>
+    /// Protege el saneado de la geometría, que llega de un proveedor externo: fuera los no
+    /// positivos, fuera los repetidos, y en orden ascendente. El orden no es cosmético — el
+    /// componente los compara mientras recorre la fila de izquierda a derecha.
+    /// </summary>
+    [Fact]
+    public void Las_posiciones_de_pasillo_se_sanean_y_se_ordenan()
+    {
+        var payload = SeatMapProjection.Project(
+            Cabin(new[] { 6, 3, 6, 0, -2 }, FilaTresTres("12")));
+
+        Assert.Equal(new[] { 3, 6 }, payload!.AisleAfterColumns);
+    }
+
+    /// <summary>
+    /// Protege el vacío: cuando el proveedor no conoce la geometría, la proyección no inventa
+    /// una — emite una lista vacía y deja que el bundle aplique su propio default. Inventar aquí
+    /// sería peor que no saber.
+    /// </summary>
+    [Fact]
+    public void Sin_geometria_declarada_la_proyeccion_no_inventa_un_pasillo()
+    {
+        var payload = SeatMapProjection.Project(Layout(0, FilaTresTres("12")));
+
+        Assert.NotNull(payload);
+        Assert.Empty(payload!.AisleAfterColumns);
+    }
+
+    /// <summary>
+    /// Protege los pasillos POR FILA, que es lo que hace dibujable una cabina con dos
+    /// distribuciones. Una fila que no los declara emite <c>null</c> —se omite del JSON y usa
+    /// los del mapa—, y la que sí los declara manda sobre él.
+    /// </summary>
+    [Fact]
+    public void Una_seccion_con_otra_distribucion_lleva_sus_propios_pasillos()
+    {
+        var suites = new SeatMapRow(
+            "1",
+            "business",
+            new[]
+            {
+                Seat("1A", "A", position: "window"),
+                Seat("1B", "B", position: "aisle"),
+                Seat("1C", "C", position: "aisle"),
+                Seat("1D", "D", position: "window"),
+            },
+            AisleAfterColumns: new[] { 1, 3 });
+
+        var payload = SeatMapProjection.Project(Cabin(new[] { 3, 6 }, suites, FilaTresTres("20")));
+
+        Assert.Equal(new[] { 1, 3 }, payload!.Rows[0].AisleAfterColumns);
+        // La fila que no declaró nada emite null y hereda la del mapa.
+        Assert.Null(payload.Rows[1].AisleAfterColumns);
+        Assert.Equal(new[] { 3, 6 }, payload.AisleAfterColumns);
+    }
+
+    /// <summary>
+    /// Protege la diferencia entre <c>null</c> y lista vacía en la fila. <c>null</c> es «no digo
+    /// nada, usa los del mapa»; vacía es «esta fila no tiene ningún pasillo». Colapsarlas dejaría
+    /// sin forma de declarar una sección corrida dentro de una cabina que sí tiene pasillos, que
+    /// es exactamente el caso que este nivel viene a cubrir.
+    /// </summary>
+    [Fact]
+    public void Una_fila_SIN_pasillos_no_es_lo_mismo_que_una_que_no_los_declara()
+    {
+        var sinPasillo = new SeatMapRow(
+            "1",
+            "first",
+            new[] { Seat("1A", "A"), Seat("1B", "B") },
+            AisleAfterColumns: Array.Empty<int>());
+
+        var payload = SeatMapProjection.Project(Cabin(new[] { 3 }, sinPasillo, FilaTresTres("20")));
+
+        Assert.NotNull(payload!.Rows[0].AisleAfterColumns);
+        Assert.Empty(payload.Rows[0].AisleAfterColumns!);
+        Assert.Null(payload.Rows[1].AisleAfterColumns);
+
+        // Y la vacía SÍ viaja en el JSON; la nula no.
+        var json = JsonSerializer.Serialize(
+            payload,
+            new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
+        Assert.Contains("\"aisleAfterColumns\":[]", json, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Protege que los pasillos de la fila se saneen igual que los del mapa. Vienen del mismo
+    /// proveedor externo y los consume el mismo recorrido de izquierda a derecha.
+    /// </summary>
+    [Fact]
+    public void Los_pasillos_de_la_fila_se_sanean_y_se_ordenan_igual_que_los_del_mapa()
+    {
+        var fila = new SeatMapRow(
+            "1",
+            "economy",
+            new[] { Seat("1A", "A"), Seat("1B", "B") },
+            AisleAfterColumns: new[] { 6, 3, 6, 0, -2 });
+
+        var payload = SeatMapProjection.Project(Cabin(new[] { 3 }, fila));
+
+        Assert.Equal(new[] { 3, 6 }, payload!.Rows[0].AisleAfterColumns);
+    }
+
+    // ── El tipo de asiento ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Protege el mapeo <see cref="SeatMapSeat.Position"/> → <c>type</c>. El bundle usa el valor
+    /// para pintar la clase CSS y el aria-label: un tipo mal mapeado no falla, sólo pinta un
+    /// asiento de ventana como si fuera del centro.
+    /// </summary>
+    [Fact]
+    public void El_tipo_de_asiento_se_mapea_a_las_tres_posiciones_que_el_bundle_entiende()
+    {
+        var fila = Row(
+            "12",
+            Seat("12A", "A", position: "window"),
+            Seat("12B", "B", position: "middle"),
+            Seat("12C", "C", position: "aisle"),
+            Seat("12D", "D", position: "WINDOW"));
+
+        var payload = SeatMapProjection.Project(Layout(3, fila));
+
+        var tipos = payload!.Rows[0].Seats.Select(s => s.Type).ToArray();
+        Assert.Equal(new[] { "window", "middle", "aisle", "window" }, tipos);
+    }
+
+    /// <summary>
+    /// Protege la separación entre POSICIÓN y RASGO, que es la razón de ser de la extensión del
+    /// contrato. Antes <c>extra-legroom</c> se emitía en <c>type</c> y <b>borraba</b> la
+    /// posición: una butaca de ventana con espacio extra dejaba de ser de ventana en el mapa, y
+    /// el pasajero que busca ventana no la encontraba. Ahora la posición se conserva y el
+    /// confort viaja aparte.
+    /// </summary>
+    [Fact]
+    public void El_espacio_extra_ya_NO_borra_la_posicion_de_la_butaca()
+    {
+        var fila = Row(
+            "14",
+            Seat("14A", "A", position: "window", features: new[] { "extra-legroom" }),
+            Seat("14B", "B", position: "middle", features: new[] { "bulkhead", "recline-limited" }),
+            Seat("14C", "C", position: "aisle", features: new[] { "extra-legroom" }));
+
+        var payload = SeatMapProjection.Project(Layout(3, fila));
+        var seats = payload!.Rows[0].Seats;
+
+        Assert.Equal(new[] { "window", "middle", "aisle" }, seats.Select(s => s.Type));
+        Assert.Equal(new[] { "extra-legroom" }, seats[0].Features);
+        Assert.Equal(new[] { "bulkhead", "recline-limited" }, seats[1].Features);
+    }
+
+    /// <summary>
+    /// Protege el vocabulario ABIERTO de <c>features</c>. Un rasgo que el CMS no conoce pasa tal
+    /// cual: filtrarlo contra una lista blanca obligaría a desplegar el CMS cada vez que el
+    /// proveedor nombra uno nuevo, y el componente ya rotula lo desconocido con su propio valor.
+    /// </summary>
+    [Fact]
+    public void Un_rasgo_que_el_CMS_no_conoce_viaja_igual()
+    {
+        var fila = Row("14", Seat("14A", "A", features: new[] { "  Pet-Friendly  ", "bassinet" }));
+
+        var payload = SeatMapProjection.Project(Layout(3, fila));
+
+        Assert.Equal(new[] { "pet-friendly", "bassinet" }, payload!.Rows[0].Seats[0].Features);
+    }
+
+    /// <summary>
+    /// Protege el reparto de <see cref="SeatMapRow.IsExitRow"/> a cada butaca de la fila: el
+    /// contrato lleva los rasgos por butaca, no por fila. Y protege que NO se pliegue dentro de
+    /// <c>extra-legroom</c> aunque casi siempre coincidan — una fila de salida conlleva
+    /// requisitos regulatorios (edad mínima, nada en el piso) que "más espacio" no comunica.
+    /// </summary>
+    [Fact]
+    public void La_fila_de_salida_se_reparte_a_cada_butaca_y_NO_se_confunde_con_espacio_extra()
+    {
+        var salida = new SeatMapRow(
+            "14",
+            "economy",
+            new[]
+            {
+                Seat("14A", "A", position: "window", features: new[] { "extra-legroom" }),
+                Seat("14B", "B"),
+            },
+            IsExitRow: true);
+
+        var payload = SeatMapProjection.Project(Layout(3, salida, FilaTresTres("15")));
+
+        Assert.All(payload!.Rows[0].Seats, s => Assert.Contains("exit-row", s.Features!));
+        // Los dos rasgos conviven; el de la fila va primero y el de la butaca no lo duplica.
+        Assert.Equal(new[] { "exit-row", "extra-legroom" }, payload.Rows[0].Seats[0].Features);
+        Assert.Equal(new[] { "exit-row" }, payload.Rows[0].Seats[1].Features);
+
+        // Una fila normal no lleva la marca, y sin rasgos la clave se omite del JSON.
+        Assert.All(payload.Rows[1].Seats, s => Assert.Null(s.Features));
+    }
+
+    /// <summary>
+    /// Protege que un rasgo repetido —el proveedor ya nombró <c>exit-row</c> en la butaca y la
+    /// fila lo declara también— salga una sola vez. Duplicado, el componente pintaría dos veces
+    /// la misma marca en la leyenda.
+    /// </summary>
+    [Fact]
+    public void Un_rasgo_declarado_dos_veces_sale_una_sola()
+    {
+        var salida = new SeatMapRow(
+            "14",
+            "economy",
+            new[] { Seat("14A", "A", features: new[] { "exit-row", "EXIT-ROW" }) },
+            IsExitRow: true);
+
+        var payload = SeatMapProjection.Project(Layout(3, salida));
+
+        Assert.Equal(new[] { "exit-row" }, payload!.Rows[0].Seats[0].Features);
+    }
+
+    /// <summary>
+    /// Protege el default: una posición que el proveedor nombró distinto cae en <c>middle</c>,
+    /// que es exactamente lo que el bundle haría con un valor que no reconoce. Emitir el valor
+    /// crudo dejaría el asiento sin ninguna clase de tipo.
+    /// </summary>
+    [Fact]
+    public void Una_posicion_que_el_contrato_no_conoce_cae_en_middle()
+    {
+        var fila = Row(
+            "9",
+            Seat("9A", "A", position: "aisle-left"),
+            Seat("9B", "B", position: ""),
+            Seat("9C", "C", position: "   "));
+
+        var payload = SeatMapProjection.Project(Layout(2, fila));
+
+        Assert.All(payload!.Rows[0].Seats, s => Assert.Equal("middle", s.Type));
+    }
+
+    // ── Disponibilidad ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Protege la regla de disponibilidad. El bundle deshabilita el botón sólo cuando
+    /// <c>available</c> es <b>literalmente</b> <c>false</c> (<c>entry['available'] !== false</c>),
+    /// así que omitir la clave vende una butaca ocupada. <c>sold</c> y <c>blocked</c> son
+    /// distintos entre sí para el proveedor pero igual de no-vendibles para el visitante, y
+    /// <c>held</c> es de otra sesión de compra ahora mismo.
+    /// </summary>
+    [Fact]
+    public void Vendidos_bloqueados_y_retenidos_llegan_como_no_disponibles()
+    {
+        var fila = Row(
+            "16",
+            Seat("16A", "A", status: "free"),
+            Seat("16B", "B", status: "sold"),
+            Seat("16C", "C", status: "blocked"),
+            Seat("16D", "D", status: "held"),
+            Seat("16E", "E", status: "FREE"));
+
+        var payload = SeatMapProjection.Project(Layout(3, fila));
+
+        var libres = payload!.Rows[0].Seats.ToDictionary(s => s.Id, s => s.Available);
+        Assert.True(libres["16A"]);
+        Assert.False(libres["16B"]);
+        Assert.False(libres["16C"]);
+        Assert.False(libres["16D"]);
+        Assert.True(libres["16E"]);
+    }
+
+    /// <summary>
+    /// Protege el precio: negativo o cero se normaliza a 0, que es lo que el bundle usa para
+    /// decidir si muestra etiqueta de recargo. Un negativo dibujaría un precio en rojo inventado.
+    /// </summary>
+    [Fact]
+    public void Un_precio_negativo_se_normaliza_a_cero()
+    {
+        var fila = Row(
+            "18",
+            Seat("18A", "A", price: 45_000m),
+            Seat("18B", "B", price: 0m),
+            Seat("18C", "C", price: -1m));
+
+        var payload = SeatMapProjection.Project(Layout(3, fila));
+
+        var precios = payload!.Rows[0].Seats.Select(s => s.Price).ToArray();
+        Assert.Equal(new[] { 45_000m, 0m, 0m }, precios);
+    }
+
+    // ── Las letras de columna ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Protege el salto de la <b>I</b>. El bundle letrea cada asiento por su ÍNDICE contra el
+    /// alfabeto <c>ABCDEFGHJK</c>, no por lo que diga el proveedor; si la proyección ordenara
+    /// con un alfabeto que incluye la I, el asiento que el pasajero tiene impreso como
+    /// <c>30J</c> saldría dibujado en la posición de una <c>I</c> que no existe.
+    /// </summary>
+    [Fact]
+    public void Las_letras_de_columna_se_saltan_la_I()
+    {
+        Assert.Equal(8, SeatMapProjection.ColumnRank("H"));
+        // La siguiente NO es la I: es la J, y va en el puesto 9.
+        Assert.Equal(9, SeatMapProjection.ColumnRank("J"));
+        Assert.Equal(10, SeatMapProjection.ColumnRank("K"));
+        // La I no es una columna válida en una cabina.
+        Assert.Equal(0, SeatMapProjection.ColumnRank("I"));
+        Assert.Equal(0, SeatMapProjection.ColumnRank(null));
+        Assert.Equal(0, SeatMapProjection.ColumnRank(""));
+    }
+
+    /// <summary>
+    /// Protege el orden emitido en un widebody 3-4-3: los diez asientos tienen que salir en el
+    /// orden que hace que el índice del bundle produzca la misma letra que el proveedor puso —
+    /// con la <c>J</c> en el índice 8 (el noveno), donde otro alfabeto pondría una <c>I</c>.
+    /// </summary>
+    [Fact]
+    public void Un_widebody_de_diez_columnas_sale_en_el_orden_que_letrea_bien()
+    {
+        // A propósito desordenado: el proveedor no garantiza orden.
+        var fila = Row(
+            "30",
+            Seat("30K", "K", position: "window"),
+            Seat("30D", "D"),
+            Seat("30A", "A", position: "window"),
+            Seat("30J", "J"),
+            Seat("30C", "C", position: "aisle"),
+            Seat("30G", "G"),
+            Seat("30B", "B"),
+            Seat("30H", "H", position: "aisle"),
+            Seat("30E", "E"),
+            Seat("30F", "F"));
+
+        var payload = SeatMapProjection.Project(Layout(3, fila));
+
+        var ids = payload!.Rows[0].Seats.Select(s => s.Id).ToArray();
+        Assert.Equal(
+            new[] { "30A", "30B", "30C", "30D", "30E", "30F", "30G", "30H", "30J", "30K" },
+            ids);
+
+        // El índice 8 (noveno asiento) es el que el bundle letrea como "J".
+        Assert.Equal("30J", ids[8]);
+        Assert.Equal('J', SeatMapProjection.ColumnAlphabet[8]);
+    }
+
+    /// <summary>
+    /// Protege el orden de las columnas que el contrato no sabe letrear: van al final y entre
+    /// ellas conservan el orden del proveedor. Ponerlas primero correría todas las demás y
+    /// desalinearía la fila completa.
+    /// </summary>
+    [Fact]
+    public void Una_columna_que_el_contrato_no_letrea_va_al_final_sin_correr_a_las_demas()
+    {
+        var fila = Row(
+            "7",
+            Seat("7-XX", "XX"),
+            Seat("7B", "B"),
+            Seat("7-ZZ", "ZZ"),
+            Seat("7A", "A"));
+
+        var payload = SeatMapProjection.Project(Layout(2, fila));
+
+        var ids = payload!.Rows[0].Seats.Select(s => s.Id).ToArray();
+        Assert.Equal(new[] { "7A", "7B", "7-XX", "7-ZZ" }, ids);
+    }
+
+    // ── La fila ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Protege el rótulo de fila como <b>texto</b>. Las cabinas reales se saltan la 13 y los
+    /// teatros rotulan con letra: convertirlo a número perdería el rótulo del recinto.
+    /// </summary>
+    [Fact]
+    public void El_rotulo_de_la_fila_se_emite_tal_cual_lo_nombra_el_proveedor()
+    {
+        var payload = SeatMapProjection.Project(Layout(
+            3,
+            Row("12", Seat("12A", "A")),
+            Row("14", Seat("14A", "A")),
+            Row("  A  ", Seat("A1", "A"))));
+
+        var rotulos = payload!.Rows.Select(r => r.RowNumber).ToArray();
+        Assert.Equal(new[] { "12", "14", "A" }, rotulos);
+    }
+
+    // ── Degradación ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Protege la degradación cuando el proveedor no conoce la referencia. Sin carga
+    /// <c>seatmap</c> el bundle pinta su estado vacío; con una carga de filas vacías pintaría
+    /// una cabina sin asientos y un resumen mintiendo "0 de 1 asiento".
+    /// </summary>
+    [Fact]
+    public void Un_mapa_que_el_proveedor_no_conoce_no_produce_carga()
+    {
+        Assert.Null(SeatMapProjection.Project(null));
+        Assert.Null(SeatMapProjection.Project(Layout(3)));
+        Assert.Null(SeatMapProjection.Project(Layout(3, Row("12"))));
+    }
+
+    /// <summary>
+    /// Protege el descarte de asientos sin id: el bundle los deja caer igual (sin id no se
+    /// pueden seleccionar), y una fila que se queda sin asientos usables no se emite.
+    /// </summary>
+    [Fact]
+    public void Una_fila_cuyos_asientos_no_tienen_id_no_se_emite()
+    {
+        var payload = SeatMapProjection.Project(Layout(
+            3,
+            Row("12", Seat("", "A"), Seat("   ", "B")),
+            Row("13", Seat("13A", "A"))));
+
+        Assert.NotNull(payload);
+        Assert.Single(payload!.Rows);
+        Assert.Equal("13", payload.Rows[0].RowNumber);
+    }
+
+    /// <summary>
+    /// Protege el prop bag que va al emitter: sin mapa NO se emite la clave <c>seatmap</c>.
+    /// Emitir <c>null</c> o un objeto vacío haría que el bundle intentara dibujar.
+    /// </summary>
+    [Fact]
+    public void Sin_mapa_el_prop_bag_no_lleva_la_clave_seatmap()
+    {
+        var props = SeatMapProjection.BuildProps(null, currencyOverride: null, maxSelectable: null);
+
+        Assert.False(props.ContainsKey("seatmap"));
+        Assert.False(props.ContainsKey("currency"));
+        Assert.False(props.ContainsKey("maxSelectable"));
+        Assert.Empty(props);
+    }
+
+    // ── Los knobs del editor ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Protege la precedencia de la moneda: lo que el editor escribió gana sobre la del mapa,
+    /// y si no escribió nada se usa la del proveedor. Si no hay ninguna, la clave se omite y el
+    /// bundle aplica COP — emitir vacío rompería <c>Intl.NumberFormat</c>.
+    /// </summary>
+    [Fact]
+    public void La_moneda_del_editor_gana_sobre_la_del_mapa_y_el_blanco_no_borra_nada()
+    {
+        var layout = Layout(3, FilaTresTres("12"));
+
+        Assert.Equal("USD", SeatMapProjection.BuildProps(layout, " usd ", null)["currency"] as string);
+        Assert.Equal("COP", SeatMapProjection.BuildProps(layout, "   ", null)["currency"] as string);
+        Assert.Equal("COP", SeatMapProjection.BuildProps(layout, null, null)["currency"] as string);
+
+        var sinMoneda = new SeatMapLayout("r", "n", "  ", new[] { 3 }, new[] { FilaTresTres("12") });
+        Assert.False(SeatMapProjection.BuildProps(sinMoneda, null, null).ContainsKey("currency"));
+    }
+
+    /// <summary>
+    /// Protege el tope de selección: Umbraco.Integer devuelve 0 con el campo en blanco, y un 0
+    /// emitido dejaría al visitante sin poder elegir ningún asiento. Se omite y el bundle usa 1.
+    /// </summary>
+    [Fact]
+    public void Un_tope_de_seleccion_en_blanco_o_cero_no_se_emite()
+    {
+        var layout = Layout(3, FilaTresTres("12"));
+
+        Assert.Equal(3, Assert.IsType<int>(SeatMapProjection.BuildProps(layout, null, 3)["maxSelectable"]));
+        Assert.False(SeatMapProjection.BuildProps(layout, null, 0).ContainsKey("maxSelectable"));
+        Assert.False(SeatMapProjection.BuildProps(layout, null, -2).ContainsKey("maxSelectable"));
+        Assert.False(SeatMapProjection.BuildProps(layout, null, null).ContainsKey("maxSelectable"));
+    }
+
+    // ── Apariencia ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Protege el default: un bloque que no eligió apariencia no emite <b>ninguna</b> de las
+    /// tres claves. Emitir <c>comfortable</c> o <c>showPrices: true</c> sería repetir el default
+    /// del componente y dejar el bloque clavado al de hoy si algún día cambia.
+    /// </summary>
+    [Fact]
+    public void Un_bloque_sin_apariencia_elegida_no_emite_ninguna_de_las_tres_claves()
+    {
+        var props = SeatMapProjection.BuildProps(Layout(3, FilaTresTres("12")), null, null);
+
+        Assert.False(props.ContainsKey("density"));
+        Assert.False(props.ContainsKey("showPrices"));
+        Assert.False(props.ContainsKey("showLegend"));
+    }
+
+    /// <summary>
+    /// Protege la densidad: se normaliza y solo pasan los dos valores que el componente sabe
+    /// leer. Uno inventado se omite en vez de emitirse — el componente caería igual en
+    /// <c>comfortable</c>, pero una clave con basura adentro esconde el error del editor.
+    /// </summary>
+    [Fact]
+    public void La_densidad_se_normaliza_y_una_inventada_no_viaja()
+    {
+        var layout = Layout(3, FilaTresTres("12"));
+
+        Assert.Equal("compact", SeatMapProjection.BuildProps(layout, null, null, " COMPACT ")["density"]);
+        Assert.Equal("comfortable", SeatMapProjection.BuildProps(layout, null, null, "comfortable")["density"]);
+        Assert.False(SeatMapProjection.BuildProps(layout, null, null, "espaciosisima").ContainsKey("density"));
+        Assert.False(SeatMapProjection.BuildProps(layout, null, null, "   ").ContainsKey("density"));
+        Assert.False(SeatMapProjection.BuildProps(layout, null, null, null).ContainsKey("density"));
+    }
+
+    /// <summary>
+    /// Protege la razón de que las dos propiedades se autoren en NEGATIVO.
+    /// </summary>
+    /// <remarks>
+    /// <c>Umbraco.TrueFalse</c> guarda <c>false</c> cuando el editor nunca tocó el interruptor,
+    /// y el componente enciende precios y leyenda por defecto. Con un "Mostrar precios", ese
+    /// <c>false</c> heredado se emitiría como <c>showPrices: false</c> y un bloque ya colocado
+    /// se quedaría sin precios sin que nadie lo pidiera. Con "Ocultar", el estado apagado —el
+    /// que todo bloque tiene por defecto— significa exactamente lo que el componente ya hace.
+    /// </remarks>
+    [Fact]
+    public void El_interruptor_apagado_NO_emite_nada_y_el_encendido_apaga_la_clave()
+    {
+        var layout = Layout(3, FilaTresTres("12"));
+
+        var intacto = SeatMapProjection.BuildProps(layout, null, null, null, hidePrices: false, hideLegend: false);
+        Assert.False(intacto.ContainsKey("showPrices"));
+        Assert.False(intacto.ContainsKey("showLegend"));
+
+        var ocultos = SeatMapProjection.BuildProps(layout, null, null, null, hidePrices: true, hideLegend: true);
+        Assert.Equal(false, ocultos["showPrices"]);
+        Assert.Equal(false, ocultos["showLegend"]);
+    }
+
+    /// <summary>
+    /// Protege que la apariencia sea INDEPENDIENTE del inventario: sin mapa resuelto se emite
+    /// igual. Un bloque cuyo proveedor está caído conserva la configuración del editor, y el
+    /// componente pinta su estado vacío con el aspecto que le tocaba.
+    /// </summary>
+    [Fact]
+    public void La_apariencia_viaja_aunque_el_proveedor_no_haya_resuelto_el_mapa()
+    {
+        var props = SeatMapProjection.BuildProps(null, null, null, "compact", hideLegend: true);
+
+        Assert.False(props.ContainsKey("seatmap"));
+        Assert.Equal("compact", props["density"]);
+        Assert.Equal(false, props["showLegend"]);
+    }
+
+    // ── El contrato de claves (ADR 0083) ─────────────────────────────────────
+
+    /// <summary>
+    /// Protege los NOMBRES de las claves contra un rename de propiedades C#. El bundle lee
+    /// <c>rows</c>, <c>rowNumber</c>, <c>serviceClass</c>, <c>seats</c>, <c>id</c>,
+    /// <c>type</c>, <c>available</c>, <c>price</c>, <c>features</c> y
+    /// <c>aisleAfterColumns</c>; con cualquier otra escritura la carga se normaliza a cero
+    /// filas y el mapa sale vacío <b>sin ningún error</b>.
+    /// </summary>
+    [Fact]
+    public void Las_claves_serializadas_son_exactamente_las_que_el_bundle_lee()
+    {
+        var payload = SeatMapProjection.Project(Layout(
+            3,
+            Row("12", Seat(
+                "12A",
+                "A",
+                status: "sold",
+                position: "window",
+                price: 45_000m,
+                features: new[] { "extra-legroom" }))));
+
+        // Las mismas opciones que usa DefaultSynHostEmitter para el atributo config.
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            WriteIndented = false,
+        };
+        var json = JsonSerializer.Serialize(payload, options);
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        Assert.Equal(
+            new[] { 3 },
+            root.GetProperty("aisleAfterColumns").EnumerateArray().Select(a => a.GetInt32()).ToArray());
+        var row = root.GetProperty("rows")[0];
+        Assert.Equal("12", row.GetProperty("rowNumber").GetString());
+        Assert.Equal("economy", row.GetProperty("serviceClass").GetString());
+        var seat = row.GetProperty("seats")[0];
+        Assert.Equal("12A", seat.GetProperty("id").GetString());
+        Assert.Equal("window", seat.GetProperty("type").GetString());
+        Assert.False(seat.GetProperty("available").GetBoolean());
+        Assert.Equal(45_000m, seat.GetProperty("price").GetDecimal());
+        Assert.Equal(
+            new[] { "extra-legroom" },
+            seat.GetProperty("features").EnumerateArray().Select(f => f.GetString()).ToArray());
+
+        // `available: false` NO puede desaparecer: el bundle trata la ausencia como disponible.
+        Assert.Contains("\"available\":false", json, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Protege la clase de servicio de la fila, que el componente usa para dibujar el
+    /// encabezado de sección donde la cabina cambia. Se normaliza a minúsculas porque el
+    /// componente busca la etiqueta en un mapa con claves en minúscula, y una fila sin clase
+    /// omite la clave — un mapa sin secciones tiene que verse exactamente como antes de que el
+    /// contrato las admitiera.
+    /// </summary>
+    [Fact]
+    public void La_clase_de_servicio_de_la_fila_viaja_normalizada_y_su_ausencia_se_omite()
+    {
+        var payload = SeatMapProjection.Project(Layout(
+            3,
+            new SeatMapRow("1", "  Business  ", new[] { Seat("1A", "A") }),
+            new SeatMapRow("20", "   ", new[] { Seat("20A", "A") })));
+
+        Assert.Equal("business", payload!.Rows[0].ServiceClass);
+        Assert.Null(payload.Rows[1].ServiceClass);
+
+        var json = JsonSerializer.Serialize(
+            payload,
+            new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
+        Assert.Contains("\"serviceClass\":\"business\"", json, StringComparison.Ordinal);
+        // Una sola aparición: la fila sin clase no emite la clave con null.
+        Assert.Equal(1, json.Split("serviceClass").Length - 1);
+    }
+
+    // ── Idempotencia ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Protege que la proyección sea pura: dos pasadas sobre el mismo layout producen la misma
+    /// carga. Sin esto, un caché de página serviría un mapa distinto al de la primera visita.
+    /// </summary>
+    [Fact]
+    public void Proyectar_dos_veces_el_mismo_mapa_da_exactamente_lo_mismo()
+    {
+        var layout = Layout(3, FilaTresTres("12"), FilaTresTres("14"));
+
+        var primera = JsonSerializer.Serialize(SeatMapProjection.Project(layout));
+        var segunda = JsonSerializer.Serialize(SeatMapProjection.Project(layout));
+
+        Assert.Equal(primera, segunda);
+    }
+}

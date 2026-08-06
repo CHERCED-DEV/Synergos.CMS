@@ -1,0 +1,30 @@
+@*
+    elementInfoTestimonialCarousel renderer (Ola 19). SSR container.
+    Emite todos los testimonios inline + data-autoplay para hidratación
+    JS futura del design system.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var items = Model.Value<BlockListModel>("testimonialItems");
+    if (items == null || !items.Any()) { return; }
+    var autoplay = Model.Value<bool>("autoplay");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-testimonial-carousel",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-testimonial-carousel--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes" data-autoplay="@(autoplay.ToString().ToLowerInvariant())">
+    <ul class="syn-testimonial-carousel__track" role="list">
+        @foreach (var item in items)
+        {
+            <li class="syn-testimonial-carousel__slide">
+                @await Html.PartialAsync("Elements/Info/TestimonialItem", item.Content)
+            </li>
+        }
+    </ul>
+</section>

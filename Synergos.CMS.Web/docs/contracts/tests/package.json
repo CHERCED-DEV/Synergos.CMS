@@ -1,0 +1,17 @@
+{
+  "name": "synergos-cms-ui-contract-tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vitest harness validando los 5 contratos CMS↔UI (Cap-240 Batch D, Ola 238). Standalone — el resto de Synergos.CMS no consume node_modules.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0",
+    "happy-dom": "^15.0.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^20.16.0"
+  }
+}

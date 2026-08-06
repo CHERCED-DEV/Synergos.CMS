@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Pregunta de arquitectura
+    url: https://github.com/CHERCED-DEV/Synergos.CMS/tree/master/Synergos.CMS.Web/docs/adr
+    about: Antes de abrir un ticket, mirá si un ADR ya lo decidió. 129 decisiones están escritas.

@@ -1,0 +1,25 @@
+﻿@*
+    SynHost pilot renderer (Ola 8.5) — badge. Emits <synergos-badge>
+    with label projected from the composed elementSynBadge ElementType.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        // La clave del componente es `text`, NO `label` (badge.ts: sanitizeBadgeElementConfig
+        // sólo conserva `text`). Mandando `label` no se perdía sólo el texto: el default es
+        // '' y la plantilla hace `@if (text())`, así que el badge no renderizaba NADA.
+        // Hoy nadie siembra elementSynBadge, así que no había síntoma visible — es una
+        // trampa dormida que se dispararía en cuanto alguien lo compusiera.
+        // El alias del ElementType sigue siendo `label` (schema, ADR 0008).
+        ["text"] = Model.Value<string>("label"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "badge",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

@@ -1,0 +1,42 @@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    // apps: JSON array de dominios. Se DESERIALIZA a JsonElement (como FeatureGrid
+    // con itemsJson) para que el emitter lo serialice como array anidado en config
+    // — el componente Angular (normalizeApps) requiere un array, no un string.
+    object? apps = null;
+    var appsJson = Model.Value<string>("apps");
+    if (!string.IsNullOrWhiteSpace(appsJson))
+    {
+        try { apps = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(appsJson); }
+        catch (System.Text.Json.JsonException) { apps = null; }
+    }
+
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["apps"] = apps,
+        // La clave se llama `title`, NO `heading`: el sanitizer del componente
+        // (app-launcher.ts, sanitizeAppLauncherConfig) reconstruye el config clave por
+        // clave y descarta en silencio todo lo que no liste. Mandando `heading` el
+        // título autorado se perdía en la frontera y el Hub pintaba su fallback
+        // ('Galería de aplicaciones') — un título hardcodeado en la portada del
+        // producto, que es exactamente lo que el principio rector nº1 llama bug.
+        // El alias del ElementType sigue siendo `heading` (schema, ADR 0008): la
+        // traducción de nombre vive aquí, que es la frontera CMS↔componente.
+        ["title"] = Model.Value<string>("heading"),
+        // `subtitle` ← alias `subheading` del ElementType. Misma traducción de nombre que
+        // arriba y por la misma razón: el schema lo posee el arquitecto (ADR 0008), así
+        // que la frontera CMS↔componente es este diccionario, no el uSync.
+        //
+        // Nota de historial: en un commit anterior de esta misma sesión se retiró este
+        // Set() por no haber dónde pintarlo. Era cierto entonces y ya no: el header del
+        // Hub tiene ahora su slot. El caso NO era el de blogs/ehr —que no tienen header
+        // de app y habrían necesitado inventarlo entero—; aquí sólo faltaba una línea
+        // bajo un <syn-heading> que ya existía, y era el único de los nueve verticales
+        // sin subtítulo mientras el CMS le componía uno.
+        ["subtitle"] = Model.Value<string>("subheading"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("app-launcher", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

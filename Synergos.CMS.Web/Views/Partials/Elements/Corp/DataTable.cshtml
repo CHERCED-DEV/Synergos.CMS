@@ -1,0 +1,68 @@
+@*
+    elementCorpDataTable renderer (Ola 24). SSR-native atomic.
+    Parsea tableData como CSV simple: primera fila = headers, resto =
+    cells. Soporta valores con coma encapsulados en comillas dobles
+    (RFC 4180 basic subset). Emite <table> accesible con <caption>,
+    <thead><th scope="col">, <tbody>.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var raw = Model.Value<string>("tableData");
+    if (string.IsNullOrWhiteSpace(raw)) { return; }
+    var caption = Model.Value<string>("tableCaption");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-data-table",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-data-table--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    static List<string> ParseCsvLine(string line)
+    {
+        var cells = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var inQuotes = false;
+        foreach (var ch in line)
+        {
+            if (ch == '"') { inQuotes = !inQuotes; continue; }
+            if (ch == ',' && !inQuotes) { cells.Add(current.ToString().Trim()); current.Clear(); continue; }
+            current.Append(ch);
+        }
+        cells.Add(current.ToString().Trim());
+        return cells;
+    }
+
+    var lines = raw.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+    if (lines.Length == 0) { return; }
+    var headers = ParseCsvLine(lines[0]);
+    var bodyRows = lines.Skip(1).Select(ParseCsvLine).ToList();
+}
+<div class="@classes">
+    <table class="syn-data-table__table">
+        @if (!string.IsNullOrWhiteSpace(caption))
+        {
+            <caption class="syn-data-table__caption">@caption</caption>
+        }
+        <thead>
+            <tr>
+                @foreach (var h in headers)
+                {
+                    <th scope="col">@h</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in bodyRows)
+            {
+                <tr>
+                    @foreach (var cell in row)
+                    {
+                        <td>@cell</td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,138 @@
+@*
+    Emite las CSS custom properties del brand activo + variante de tema
+    del siteRoot (Ola 71: theme inheritance pure — el siteRoot es la
+    única fuente de pageThemeVariant; las pages YA NO componen
+    compPageTheme y heredan el valor del siteRoot ancestor).
+
+    Estrategia (post-Ola 71):
+    1. Brand-level (themeSettings o futuro siteConfiguration) — emite
+       todas las CSS vars base (color-primary, color-text, font-heading,
+       etc.) calculadas desde el brand activo.
+    2. siteRoot variant (renderCtx.ThemeVariant) — emite vars override
+       envueltas en [data-theme=X] que viene en <html>.
+       Variantes: light (no override), dark (invierte fondos/texto),
+       silverGold (paleta neutra), eventsNight (vertical Eventos),
+       terraLux (vertical Propiedades), brand (refuerza primary).
+       El contrato brandKey↔pageThemeVariant↔data-theme (1:1) y la
+       "recipe de tema" están en ADR 0101. Cada variante NO-"light"
+       trae su superficie/texto desde su [data-theme] en syn-tokens.css;
+       este partial sólo inyecta surface/text base en la rama "light"
+       (line ~85) para no pisar el tema (P0-5).
+
+    Las pages NO pueden override la variante (decision arquitectonica
+    Ola 71: tema gestionado unica y exclusivamente desde el siteRoot).
+
+    El brand se mapea a los tokens CANÓNICOS que el design system consume
+    (--syn-color-action-primary + -hover/-text, brand-500/600, accent-500/600,
+    text-primary, surface-primary, font-family-heading/body). dark/silverGold
+    YA viven tokenizados en syn-tokens.css; aquí solo se emite "brand" +
+    overrides [data-surface].
+
+    Output: <style>:root { ... } [data-theme=brand] { ... } [data-surface] { ... }</style>
+*@
+@using Synergos.CMS.Interfaces
+@using Synergos.CMS.Application.Dto.Responses
+@model BrandThemeStyleModel
+@{
+    if (Model is null) { return; }
+    var theme = Model.Theme;
+    var variant = Model.PageThemeVariant ?? "light";
+
+    var rootVars = new List<string>();
+    void Add(string name, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            rootVars.Add($"--{name}: {value};");
+        }
+    }
+    // Parsea un hex (#RRGGBB / #RGB) a triplete "R G B" para los channels
+    // theme-aware. Devuelve null si no es hex válido (mantiene el default).
+    string? RgbTriplet(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex)) { return null; }
+        var h = hex.Trim().TrimStart('#');
+        if (h.Length == 3) { h = string.Concat(h[0], h[0], h[1], h[1], h[2], h[2]); }
+        if (h.Length != 6) { return null; }
+        return int.TryParse(h.AsSpan(0, 2), System.Globalization.NumberStyles.HexNumber, null, out var r)
+            && int.TryParse(h.AsSpan(2, 2), System.Globalization.NumberStyles.HexNumber, null, out var g)
+            && int.TryParse(h.AsSpan(4, 2), System.Globalization.NumberStyles.HexNumber, null, out var b)
+            ? $"{r} {g} {b}" : null;
+    }
+    if (theme is not null)
+    {
+        // ── Tokens CANÓNICOS (los que el design system consume de verdad) ──
+        // Brand primary → action-primary + escala brand-500/600.
+        // -hover/-active se derivan oscureciendo el primary ~8% con color-mix.
+        // -text fijo a blanco (los primaries de marca son saturados/oscuros).
+        Add("syn-color-action-primary", theme.PrimaryColor);
+        Add("syn-color-brand-500", theme.PrimaryColor);
+        if (!string.IsNullOrWhiteSpace(theme.PrimaryColor))
+        {
+            var primaryHover = $"color-mix(in srgb, {theme.PrimaryColor} 92%, #000 8%)";
+            Add("syn-color-action-primary-hover", primaryHover);
+            Add("syn-color-action-primary-active", primaryHover);
+            Add("syn-color-brand-600", primaryHover);
+            Add("syn-color-action-primary-text", "#ffffff");
+        }
+        // Accent → escala accent-500/600.
+        Add("syn-color-accent-500", theme.AccentColor);
+        if (!string.IsNullOrWhiteSpace(theme.AccentColor))
+        {
+            Add("syn-color-accent-600", $"color-mix(in srgb, {theme.AccentColor} 92%, #000 8%)");
+        }
+        // Channels theme-aware (glows/gradientes) derivados del hex del brand,
+        // para que los glows sigan la identidad del siteRoot (P0-2).
+        Add("syn-channel-brand", RgbTriplet(theme.PrimaryColor));
+        Add("syn-channel-accent", RgbTriplet(theme.AccentColor));
+        // Texto/superficie base SOLO en light: en dark/silverGold la fuente es
+        // el [data-theme] de syn-tokens.css; emitir estos en :root (que carga
+        // después) los pisaría y rompería el tema (P0-5).
+        if (string.Equals(variant, "light", System.StringComparison.OrdinalIgnoreCase))
+        {
+            Add("syn-color-text-primary", theme.TextColor);
+            Add("syn-color-surface-primary", theme.BackgroundColor);
+        }
+        // Tipografía canónica (familia Manrope por defecto en syn-tokens.css).
+        Add("syn-font-family-heading", theme.HeadingFontFamily);
+        Add("syn-font-family-body", theme.BodyFontFamily);
+
+        // ── Aliases LEGACY (compat aditiva — no se eliminan para no romper
+        //    renderers que aún los referencien). ──
+        Add("syn-color-primary", theme.PrimaryColor);
+        Add("syn-color-secondary", theme.SecondaryColor);
+        Add("syn-color-accent", theme.AccentColor);
+        Add("syn-color-background", theme.BackgroundColor);
+        Add("syn-color-text", theme.TextColor);
+        Add("syn-font-heading", theme.HeadingFontFamily);
+        Add("syn-font-body", theme.BodyFontFamily);
+    }
+}
+@if (rootVars.Count > 0)
+{
+    <style>
+:root { @Html.Raw(string.Join(" ", rootVars)) }
+/* dark / silverGold YA viven tokenizados en syn-tokens.css vía [data-theme].
+   Este partial solo emite "brand" (no existe allí) + los overrides de
+   superficie, todo sobre tokens canónicos vivos. */
+[data-theme="brand"] {
+    --syn-color-surface-primary: var(--syn-color-action-primary);
+    --syn-color-surface-canvas:  var(--syn-color-action-primary);
+    --syn-color-text-primary:    var(--syn-color-action-primary-text, #ffffff);
+}
+[data-surface="muted"] {
+    --syn-color-surface-primary: color-mix(in srgb, var(--syn-color-surface-primary) 92%, var(--syn-color-text-primary) 8%);
+}
+[data-surface="contrast"] {
+    --syn-color-surface-primary: var(--syn-color-surface-inverse);
+    --syn-color-text-primary:    var(--syn-color-text-inverse);
+}
+[data-surface="brand"] {
+    --syn-color-surface-primary: var(--syn-color-action-primary);
+    --syn-color-text-primary:    var(--syn-color-action-primary-text, #ffffff);
+}
+[data-surface="transparent"] {
+    --syn-color-surface-primary: transparent;
+}
+    </style>
+}

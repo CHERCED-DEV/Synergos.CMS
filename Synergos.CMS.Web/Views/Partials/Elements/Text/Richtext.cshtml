@@ -1,0 +1,19 @@
+@*
+    elementTextRichtext renderer (Ola 12 Wave 2). SSR-native.
+    Emits richtext body from compContentText. Sanitised by Umbraco
+    TinyMCE pipeline (SanitizeTinyMce=true).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var body = Model.Value<string>("textBody");
+    if (string.IsNullOrWhiteSpace(body)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-richtext",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-richtext--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">@Html.Raw(body)</div>

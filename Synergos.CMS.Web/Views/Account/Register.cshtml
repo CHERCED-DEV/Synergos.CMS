@@ -1,0 +1,84 @@
+@*
+    Vista del AccountController.Register (Ola 64). Form POST nativo a
+    /account/register. Sin Layout. Frame "launcher / PS3" (ver Login).
+    Nombres de campos (displayName/email/password) sin cambios.
+*@
+@{
+    Layout = null;
+    var errorCode = ViewData["ErrorCode"] as string;
+    var title = Umbraco.GetDictionaryValue("Account.Register.Title", "Crear cuenta");
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">
+<head>
+    @await Html.PartialAsync("_AccountHead")
+    <title>@title</title>
+</head>
+<body class="syn-account syn-launcher">
+    <main class="syn-launcher__main">
+        @await Html.PartialAsync("_AccountHero", (object)title)
+
+        <div class="syn-account__card">
+            @if (!string.IsNullOrWhiteSpace(errorCode))
+            {
+                var msg = errorCode switch
+                {
+                    "email-taken" => Umbraco.GetDictionaryValue("Account.Register.Error.EmailTaken", "Este email ya está registrado."),
+                    "weak-password" => Umbraco.GetDictionaryValue("Account.Register.Error.WeakPassword", "La contraseña no cumple los requisitos mínimos."),
+                    "invalid-input" => Umbraco.GetDictionaryValue("Account.Register.Error.InvalidInput", "Email, contraseña y nombre son obligatorios."),
+                    _ => Umbraco.GetDictionaryValue("Account.Register.Error.Unknown", "Ocurrió un error. Inténtalo de nuevo."),
+                };
+                <p class="syn-account__error" role="alert" aria-live="polite">@msg</p>
+            }
+
+            <form class="syn-account__form" action="/account/register" method="post" novalidate>
+                <div class="syn-account__field">
+                    <label for="syn-reg-name">@Umbraco.GetDictionaryValue("Account.Register.NameLabel", "Nombre")</label>
+                    <input id="syn-reg-name"
+                           type="text"
+                           name="displayName"
+                           autocomplete="name"
+                           required
+                           aria-required="true" />
+                </div>
+
+                <div class="syn-account__field">
+                    <label for="syn-reg-email">@Umbraco.GetDictionaryValue("Account.Register.EmailLabel", "Email")</label>
+                    <input id="syn-reg-email"
+                           type="email"
+                           name="email"
+                           autocomplete="email"
+                           required
+                           aria-required="true"
+                           aria-invalid="@(errorCode == "email-taken" || errorCode == "invalid-input" ? "true" : null)" />
+                </div>
+
+                <div class="syn-account__field">
+                    <label for="syn-reg-password">@Umbraco.GetDictionaryValue("Account.Register.PasswordLabel", "Contraseña")</label>
+                    <input id="syn-reg-password"
+                           type="password"
+                           name="password"
+                           autocomplete="new-password"
+                           required
+                           aria-required="true"
+                           aria-describedby="syn-reg-password-help"
+                           aria-invalid="@(errorCode == "weak-password" || errorCode == "invalid-input" ? "true" : null)"
+                           minlength="8" />
+                    <small id="syn-reg-password-help">@Umbraco.GetDictionaryValue("Account.Register.PasswordHelp", "Mínimo 8 caracteres.")</small>
+                </div>
+
+                <button type="submit" class="syn-account__submit">
+                    @Umbraco.GetDictionaryValue("Account.Register.Submit", "Crear cuenta")
+                </button>
+            </form>
+
+            <p class="syn-account__alt">
+                <a href="/account/login">
+                    @Umbraco.GetDictionaryValue("Account.Register.HaveAccount", "¿Ya tienes cuenta? Iniciar sesión")
+                </a>
+            </p>
+        </div>
+    </main>
+    <script src="~/js/platform-root.js" asp-append-version="true" defer></script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+name: ticket-first
+
+# Un proceso escrito como prosa se olvida; uno que rompe el build se cumple. Es la misma razón
+# por la que los gates de arquitectura son tests y no una sección del CLAUDE.md.
+#
+# Umbral deliberado: se BLOQUEA lo que cambia comportamiento, contrato o schema. Un typo o un
+# comentario se arregla sin ticket, con la etiqueta `sin-ticket`. Exigir ticket para todo es lo
+# que hace que la gente abra issues basura para saltar el gate.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  referencia-un-ticket:
+    runs-on: ubuntu-latest
+    steps:
+      - name: El PR tiene que cerrar o referenciar un issue
+        env:
+          CUERPO: ${{ github.event.pull_request.body }}
+          TITULO: ${{ github.event.pull_request.title }}
+          ETIQUETAS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          if [[ ",$ETIQUETAS," == *",sin-ticket,"* ]]; then
+            echo "::notice::Etiquetado 'sin-ticket' — se salta el gate a propósito."
+            echo "Recordatorio: 'sin-ticket' es para typos, formato y documentación."
+            echo "Si esto cambia comportamiento, contrato o schema, quitá la etiqueta y abrí el ticket."
+            exit 0
+          fi
+
+          if echo "$CUERPO $TITULO" | grep -qiE '(closes|fixes|resolves|cierra|corrige|refs?) +#[0-9]+|#[0-9]+'; then
+            echo "✓ Referencia encontrada."
+            exit 0
+          fi
+
+          echo "::error::Este PR no referencia ningún issue."
+          cat <<'AYUDA'
+
+          En Synergos el ticket va ANTES del código: se abre, se discute, y recién ahí se escribe.
+
+          Qué hacer:
+            · Abrí el ticket que corresponda — Defecto, Evolutivo, Mejora o Hallazgo —
+              y poné "Cierra #N" en la primera línea del cuerpo del PR.
+            · Si de verdad es un typo, formato o documentación: etiquetá el PR con `sin-ticket`.
+
+          Por qué existe este gate: durante el desarrollo del árbol de servicios se encontraron
+          doce hallazgos verificados que vivían solo en documentos. Cuando esos documentos
+          envejecen, los hallazgos desaparecen. Como tickets, no.
+          AYUDA
+          exit 1

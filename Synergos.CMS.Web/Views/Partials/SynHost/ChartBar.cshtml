@@ -1,0 +1,20 @@
+﻿@*
+    SynHost renderer — <synergos-chart-bar>. Bar chart with Chart.js/D3.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["chartTitle"] = Model.Value<string>("chartTitle"),
+        ["dataJson"] = Model.Value<string>("dataJson"),
+        ["orientation"] = Model.Value<string>("orientation"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "chart-bar",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

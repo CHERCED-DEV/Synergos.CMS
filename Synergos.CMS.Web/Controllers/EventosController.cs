@@ -1,0 +1,841 @@
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
+using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services.Catalog;
+
+namespace Synergos.CMS.Web.Controllers;
+
+/// <summary>
+/// API JSON del vertical <strong>Eventos</strong> (OLA 6 — plataforma de eventos
+/// enterprise, doc eventos-app-spec). La consumen los módulos Angular
+/// <c>eventos-ticketing</c> (cara de asistente) y <c>eventos-manager</c> (cara de
+/// organizador). Entrar al dominio = caer directo en la app real: catálogo → ficha →
+/// seleccionar (tier/asiento) → pagar → confirmar (e-ticket QR) + dashboard/check-in.
+/// </summary>
+/// <remarks>
+/// La capa Web SOLO orquesta y mapea a DTOs JSON estables — toda la lógica vive en los
+/// seams (Application, sin Umbraco — ADR 0002), reusando el MOTOR:
+/// <list type="bullet">
+/// <item><see cref="IEventCatalogProvider"/> — catálogo + ficha (tiers + seat-map).</item>
+/// <item><see cref="IEventTicketingService"/> — checkout (reusa
+///   <see cref="IReservationService.HoldItemAsync"/> + <see cref="IPaymentProvider"/>)
+///   + confirm (captura + e-tickets QR). Idempotente por orderRef.</item>
+/// <item><see cref="IEventManagementService"/> — manage (asistentes/aforo/vendidos)
+///   + check-in (idempotente).</item>
+/// </list>
+/// El precio se formatea es-CO vía <see cref="IPriceFormatter"/>. Contrato (lo programa
+/// el agente UI): <c>GET events?q · GET event/{id} · POST checkout · POST confirm ·
+/// GET manage/{eventId} · POST checkin</c>.
+/// </remarks>
+[ApiController]
+[Route("api/eventos")]
+public sealed class EventosController : ControllerBase
+{
+    private readonly IEventCatalogProvider _catalog;
+    private readonly IEventTicketingService _ticketing;
+    private readonly IEventManagementService _management;
+    private readonly IPriceFormatter _priceFormatter;
+    private readonly IMemberAccessGate _gate;
+    private readonly IRealtimeNotifier _realtime;
+    private readonly ILogger<EventosController> _logger;
+
+    public EventosController(
+        IEventCatalogProvider catalog,
+        IEventTicketingService ticketing,
+        IEventManagementService management,
+        IPriceFormatter priceFormatter,
+        IMemberAccessGate gate,
+        IRealtimeNotifier realtime,
+        ILogger<EventosController> logger)
+    {
+        _catalog = catalog;
+        _ticketing = ticketing;
+        _management = management;
+        _priceFormatter = priceFormatter;
+        _gate = gate;
+        _realtime = realtime;
+        _logger = logger;
+    }
+
+    // ── T9 — identidad server-trusted (molde de GovController/ShopCatalogController) ──
+    //
+    // Firmar el QR no sirve de nada si el token se puede pedir: `?holder=<email>` listaba
+    // las entradas de CUALQUIERA, y con ellas su token. Cerrar esa fuga es parte de T9,
+    // no un extra.
+
+    /// <summary>
+    /// Exige un Member autenticado y devuelve su correo <b>server-trusted</b> (el que
+    /// indexa las entradas). 401 si es anónimo.
+    /// </summary>
+    private (IActionResult? denied, string email) RequireMemberEmail()
+    {
+        var email = _gate.CurrentMemberEmail;
+        if (!_gate.IsAuthenticated || string.IsNullOrWhiteSpace(email))
+        {
+            return (Unauthorized(new { error = "Se requiere iniciar sesión." }), string.Empty);
+        }
+        return (null, email);
+    }
+
+    /// <summary>
+    /// Rol(es) que dan acceso a la consola del ORGANIZADOR. <c>organizador</c> es el rol
+    /// de dominio (member group), <c>admin</c> entra como superusuario — mismo criterio
+    /// que <c>funcionario,admin</c> en Gobierno y <c>doctor,nurse,reception</c> en Healthcare.
+    /// </summary>
+    private const string OrganizerRolesCsv = "organizador,admin";
+
+    /// <summary>
+    /// Exige un ORGANIZADOR para la consola del evento. 401 si es anónimo, 403 si está
+    /// autenticado pero sin el rol. Molde de <c>DashboardApiController.Deny</c>.
+    /// </summary>
+    /// <remarks>
+    /// Estas rutas exponen la lista de asistentes con sus datos, mueven el aforo y
+    /// publican al catálogo: al revés que comprar una entrada, aquí NO basta con estar
+    /// logueado — un asistente cualquiera no es el organizador del evento.
+    /// <para><c>StatusCode(403)</c> y NO <c>Forbid()</c>: con auth de members
+    /// <c>Forbid()</c> REDIRIGE al login en vez de denegar.</para>
+    /// </remarks>
+    private IActionResult? RequireOrganizer()
+    {
+        if (!_gate.IsAuthenticated)
+        {
+            return Unauthorized(new { error = "Inicie sesión como organizador." });
+        }
+        if (!_gate.HasAnyRole(OrganizerRolesCsv))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Su cuenta no tiene permiso de organizador." });
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Publica el check-in en el canal del evento (T7). Best-effort: la entrada YA quedó
+    /// validada y persistida, así que un fallo del aviso no puede devolver un error sobre
+    /// una operación que sí ocurrió (misma regla que ADR 0037/0106).
+    /// </summary>
+    private async Task BestEffortPublishAsync(EventCheckInResult result, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var channel = RealtimeController.EventosCheckinPrefix + (result.EventId ?? string.Empty);
+            var payload = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                status = result.Status,
+                ticketId = result.TicketId,
+                attendee = result.AttendeeName,
+                at = DateTimeOffset.UtcNow,
+            });
+            await _realtime.PublishAsync(channel, "checkin", payload, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Realtime: no se pudo avisar del check-in (la entrada SÍ quedó validada).");
+        }
+    }
+
+    // ── 1. Catálogo / agenda ───────────────────────────────────────────
+    // GET /api/eventos/events?q=&category=&city=&sort= → { events:[...] }
+    //
+    // Los CUATRO parámetros los manda el cliente (`toCatalogQuery`), pero la acción
+    // solo declaraba `q`: `category`, `city` y `sort` entraban y se perdían en
+    // silencio — un [FromQuery] ausente no falla, devuelve TODO. Resultado: elegir
+    // "Más populares" o una ciudad no cambiaba nada, y el cliente NO reordena la
+    // respuesta real (su sort/filtro solo corre en el camino mock). Emitir
+    // `soldPercent` sin honrar `sort=popular` habría dejado el orden igual de muerto.
+    [HttpGet("events")]
+    public async Task<IActionResult> Events(
+        [FromQuery] string? q,
+        [FromQuery] string? category,
+        [FromQuery] string? city,
+        [FromQuery] string? sort,
+        CancellationToken cancellationToken)
+    {
+        var events = await _catalog.SearchAsync(q, cancellationToken);
+
+        // Facetas: igualdad exacta case-insensitive (misma semántica que el filtro
+        // del cliente). Se filtra ANTES de resolver fichas para no pagar detalles
+        // que se van a descartar.
+        events = ApplyFacet(events, category, static e => e.Category);
+        events = ApplyFacet(events, city, static e => e.City);
+
+        // El aforo NO viaja en EventSummary — lo derivan los tiers de la ficha. Sin
+        // resolverla aquí, `soldPercent` saldría 0 en la LISTA y el "¡Últimas
+        // localidades!" de la tarjeta nunca se pintaría (que es exactamente lo que
+        // pasaba). Se resuelve por evento contra la misma seam; un adapter que no
+        // quiera pagar N fichas siempre puede cachear detrás de GetEventAsync.
+        var dtos = new List<EventSummaryDto>(events.Count);
+        foreach (var summary in events)
+        {
+            var detail = await _catalog.GetEventAsync(summary.Id, cancellationToken);
+            dtos.Add(ToSummaryDto(summary, detail?.SoldPercent ?? 0));
+        }
+
+        return Ok(new EventsResponse(SortSummaries(dtos, sort)));
+    }
+
+    // Filtro de faceta. Vacío/null = sin filtro (no colapsar el catálogo a cero por
+    // un parámetro que el cliente manda vacío).
+    private static IReadOnlyList<EventSummary> ApplyFacet(
+        IReadOnlyList<EventSummary> events,
+        string? value,
+        Func<EventSummary, string> selector)
+        => string.IsNullOrWhiteSpace(value)
+            ? events
+            : events.Where(e => string.Equals(selector(e)?.Trim(), value.Trim(), StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+    /// <summary>
+    /// Ordena el catálogo según el vocabulario que declara la UI
+    /// (<c>EventosSortKey</c>: relevance | date-asc | price-asc | price-desc | popular),
+    /// documentado allí como "Maps 1:1 to the API `sort` query param".
+    /// <c>popular</c> usa <c>soldPercent</c> — por eso se ordena DESPUÉS de resolver
+    /// el aforo, no antes. Una clave desconocida (o <c>relevance</c>) conserva el orden
+    /// del proveedor, que ya es fecha ascendente: degradar por AUSENCIA, nunca vaciar.
+    /// </summary>
+    private static IReadOnlyList<EventSummaryDto> SortSummaries(List<EventSummaryDto> dtos, string? sort)
+        => (sort ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "date-asc" => dtos.OrderBy(d => d.StartUtc).ToList(),
+            "price-asc" => dtos.OrderBy(d => d.PriceFrom).ToList(),
+            "price-desc" => dtos.OrderByDescending(d => d.PriceFrom).ToList(),
+            "popular" => dtos.OrderByDescending(d => d.SoldPercent).ToList(),
+            _ => dtos,
+        };
+
+    // ── 2. Ficha de evento ─────────────────────────────────────────────
+    // GET /api/eventos/event/{id} → { event, tiers:[...], seatmap }
+    [HttpGet("event/{id}")]
+    public async Task<IActionResult> Event(string id, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return BadRequest(new { error = "El id del evento es requerido." });
+        }
+
+        var detail = await _catalog.GetEventAsync(id, cancellationToken);
+        if (detail is null)
+        {
+            return NotFound(new { error = $"Evento '{id}' no encontrado." });
+        }
+
+        return Ok(new EventDetailResponse(
+            // Mismo `soldPercent` que en la lista: la ficha embebe el resumen, y si la
+            // clave no saliera también aquí el aviso de aforo moriría en la ficha.
+            Event: ToSummaryDto(detail.Summary, detail.SoldPercent),
+            Description: detail.Description,
+            Highlights: detail.Highlights ?? Array.Empty<string>(),
+            Sessions: (detail.Sessions ?? Array.Empty<EventSession>()).Select(ToSessionDto).ToList(),
+            Artist: ToArtistDto(detail.Artist),
+            Organizer: new EventOrganizerDto(detail.Organizer, string.Empty, string.Empty),
+            Tiers: detail.Tiers.Select(ToTierDto).ToList(),
+            SeatMap: ToSeatMapDto(detail.SeatMap),
+            Venue: ToVenueDto(detail)));
+    }
+
+    // ── 3. Checkout (apartar + abrir sesión de pago) ────────────────────
+    // POST /api/eventos/checkout { eventId, items:[{tier,seat?,qty}], attendees:[...] }
+    //   → { orderRef, paymentSessionId, amount, currency }
+    [HttpPost("checkout")]
+    public async Task<IActionResult> Checkout([FromBody] CheckoutRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.EventId))
+        {
+            return BadRequest(new { error = "eventId es requerido." });
+        }
+
+        var items = (request.Items ?? Array.Empty<CheckoutItemRequest>())
+            .Select(i => new EventCheckoutItem(i.Tier, i.Seat, i.Qty))
+            .ToList();
+        var attendees = (request.Attendees ?? Array.Empty<AttendeeRequest>())
+            .Select(a => new EventAttendeeInfo(a.Name, a.Email, a.DocumentId))
+            .ToList();
+
+        EventCheckoutResult result;
+        try
+        {
+            result = await _ticketing.CheckoutAsync(request.EventId.Trim(), items, attendees, cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        return Ok(new CheckoutResponse(
+            OrderRef: result.OrderRef,
+            PaymentSessionId: result.PaymentSessionId,
+            Amount: result.Amount,
+            AmountFormatted: _priceFormatter.Format(result.Amount, result.Currency),
+            Currency: result.Currency));
+    }
+
+    // ── 4. Confirm (capturar + emitir e-tickets QR) ─────────────────────
+    // POST /api/eventos/confirm { orderRef } → { status, tickets:[{id, qr}] }
+    [HttpPost("confirm")]
+    public async Task<IActionResult> Confirm([FromBody] ConfirmRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.OrderRef))
+        {
+            return BadRequest(new { error = "orderRef es requerido." });
+        }
+
+        EventConfirmationResult result;
+        try
+        {
+            result = await _ticketing.ConfirmAsync(request.OrderRef.Trim(), cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        return Ok(new ConfirmResponse(
+            Status: result.Status,
+            Tickets: result.Tickets.Select(ToTicketDto).ToList()));
+    }
+
+    // ── 5. Manage (dashboard de organizador) ────────────────────────────
+    // GET /api/eventos/manage/{eventId} → { attendees:[...], capacity, sold }   🔒 organizador
+    //
+    // Devuelve la lista de ASISTENTES con sus datos. Era anónima: cualquiera veía quién
+    // va a un evento y cuánto se vendió.
+    [HttpGet("manage/{eventId}")]
+    public async Task<IActionResult> Manage(string eventId, CancellationToken cancellationToken)
+    {
+        if (RequireOrganizer() is { } denied) { return denied; }
+
+        if (string.IsNullOrWhiteSpace(eventId))
+        {
+            return BadRequest(new { error = "eventId es requerido." });
+        }
+
+        EventManageView view;
+        try
+        {
+            view = await _management.GetManageAsync(eventId.Trim(), cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+
+        return Ok(new ManageResponse(
+            Attendees: view.Attendees.Select(ToAttendeeDto).ToList(),
+            Capacity: view.Capacity,
+            Sold: view.Sold));
+    }
+
+    // ── 6. Check-in (validar + marcar asistencia, idempotente) ──────────
+    // POST /api/eventos/checkin { ticketId } → { status }   🔒 sesión
+    //
+    // El cuerpo se sigue llamando `ticketId` por compatibilidad de contrato, pero desde
+    // T9 lo que se espera es el TOKEN FIRMADO del QR: el id suelto ya no abre la puerta
+    // (la UI lo imprime bajo el código, así que valía una foto ajena).
+    [HttpPost("checkin")]
+    public async Task<IActionResult> CheckIn([FromBody] CheckInRequest? request, CancellationToken cancellationToken)
+    {
+        // Quemar una entrada es irreversible para su dueño, y quien lo hace es el staff
+        // de la puerta: exige ROL de organizador, no solo estar logueado (T9 lo dejó en
+        // "cualquier member" para no inventar un rol sin sembrar; ahora ya existe).
+        if (RequireOrganizer() is { } denied) { return denied; }
+
+        if (request is null || string.IsNullOrWhiteSpace(request.TicketId))
+        {
+            return BadRequest(new { error = "ticketId es requerido." });
+        }
+
+        var result = await _management.CheckInAsync(request.TicketId.Trim(), cancellationToken);
+
+        // T7 — avisar EN VIVO a la consola: con varias puertas, cada operador ve entrar a
+        // la gente sin recargar. Va DESPUÉS de que el check-in ya ocurrió y es
+        // best-effort: si nadie escucha o falla el aviso, la entrada sigue validada.
+        if (result.Status is "valid" or "already-used")
+        {
+            await BestEffortPublishAsync(result, cancellationToken);
+        }
+
+        return Ok(new CheckInResponse(result.Status));
+    }
+
+    // ── 7. Mis tickets (cara de asistente) ──────────────────────────────
+    // GET /api/eventos/tickets → { tickets:[...] }   🔒 sesión
+    //
+    // El `?holder=<email>` DESAPARECE: era el IDOR, y además filtraba el token del QR de
+    // cualquiera. La bandeja es la del member de la sesión.
+    [HttpGet("tickets")]
+    public async Task<IActionResult> Tickets(CancellationToken cancellationToken)
+    {
+        var (denied, email) = RequireMemberEmail();
+        if (denied is not null) { return denied; }
+
+        var tickets = await _ticketing.GetTicketsAsync(email, cancellationToken);
+        return Ok(new TicketsResponse(tickets.Select(ToTicketDto).ToList()));
+    }
+
+    // ── 8. Transferir ticket (reasigna holder + rota QR + auditado) ─────
+    // POST /api/eventos/ticket/{id}/transfer { toEmail } → { ticket, newQr }   🔒 dueño
+    [HttpPost("ticket/{id}/transfer")]
+    public async Task<IActionResult> TransferTicket(
+        string id,
+        [FromBody] TransferRequest? request,
+        CancellationToken cancellationToken)
+    {
+        // Transferir es REGALAR la entrada: sin esta guarda, conocer el id bastaba para
+        // quitársela a su dueño (y de paso rotarle el QR, dejándolo fuera del evento).
+        var (denied, email) = RequireMemberEmail();
+        if (denied is not null) { return denied; }
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return BadRequest(new { error = "El id del ticket es requerido." });
+        }
+        if (request is null || string.IsNullOrWhiteSpace(request.ToEmail))
+        {
+            return BadRequest(new { error = "toEmail es requerido." });
+        }
+
+        // Ownership: solo se transfiere lo propio. Se comprueba contra la bandeja del
+        // member de la sesión, que ya es la lista autorizada.
+        var own = await _ticketing.GetTicketsAsync(email, cancellationToken);
+        if (!own.Any(t => string.Equals(t.Id, id.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            // 403 y NO Forbid(): con auth de members Forbid REDIRIGE al login.
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "La entrada no es suya." });
+        }
+
+        EventTicketTransferResult result;
+        try
+        {
+            result = await _ticketing.TransferTicketAsync(id.Trim(), request.ToEmail.Trim(), cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        return Ok(new TransferResponse(ToTicketDto(result.Ticket), result.NewQr));
+    }
+
+    // ── 9. Crear evento (organizador → publica al catálogo) ─────────────
+    // POST /api/eventos/event { draft } → { eventId }
+    [HttpPost("event")]
+    public async Task<IActionResult> CreateEvent([FromBody] EventDraftRequest? request, CancellationToken cancellationToken)
+    {
+        // Publicar al catálogo era ANÓNIMO: cualquiera colgaba un evento en el sitio.
+        if (RequireOrganizer() is { } denied) { return denied; }
+
+        if (request is null || string.IsNullOrWhiteSpace(request.Name))
+        {
+            return BadRequest(new { error = "name es requerido." });
+        }
+
+        var tiers = (request.Tiers ?? Array.Empty<EventTierDraftRequest>())
+            .Select(t => new EventTierDraft(t.Name, t.Price, t.Capacity))
+            .ToList();
+
+        var draft = new EventDraft(
+            Name: request.Name.Trim(),
+            Venue: request.Venue ?? string.Empty,
+            Date: request.Date,
+            Tiers: tiers,
+            SeatMap: null,
+            City: request.City,
+            Category: request.Category,
+            Currency: request.Currency,
+            Description: request.Description,
+            Organizer: request.Organizer,
+            ImageUrl: request.ImageUrl);
+
+        EventCreateResult result;
+        try
+        {
+            result = await _management.CreateEventAsync(draft, cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        return Ok(new CreateEventResponse(result.EventId));
+    }
+
+    // ── Mappers a DTOs JSON estables ────────────────────────────────────
+
+    /// <summary>
+    /// Proyecta el resumen al DTO JSON. <paramref name="soldPercent"/> se pasa aparte
+    /// porque el aforo NO vive en <see cref="EventSummary"/>: lo derivan los tiers de la
+    /// ficha (<see cref="EventDetail.SoldPercent"/>). Sin fuente, 0 — que la UI lee como
+    /// "sin dato de aforo" y simplemente no pinta el aviso de últimas localidades.
+    /// </summary>
+    private EventSummaryDto ToSummaryDto(EventSummary s, int soldPercent) => new(
+        Id: s.Id,
+        Slug: s.Slug,
+        Title: s.Title,
+        Category: s.Category,
+        City: s.City,
+        Venue: s.Venue,
+        StartUtc: s.StartUtc,
+        StartsAt: s.StartUtc,   // la UI lee `startsAt` (mismo instante que startUtc)
+        ImageUrl: s.ImageUrl,
+        Cover: s.ImageUrl,
+        PriceFrom: s.PriceFrom,
+        FromAmount: s.PriceFrom,   // la UI lee `fromAmount` (número); sin esto todo salía "Gratis"
+        PriceFromFormatted: _priceFormatter.Format(s.PriceFrom, s.Currency),
+        Currency: s.Currency,
+        Mode: s.Mode,
+        Geo: s.Geo is null ? null : new EventGeoDto(s.Geo.Lat, s.Geo.Lng),
+        Subtitle: EventContentRules.BuildSubtitle(s.Venue, s.City),
+        Status: EventContentRules.BuildStatus(s.StartUtc, DateTimeOffset.UtcNow),
+        Badges: EventContentRules.BuildBadges(s.Mode),
+        SoldPercent: soldPercent);
+
+    // Artista: null-safe. Si el evento no lo provee, cadena vacía → el normalizador
+    // cliente cae a event.title (contrato UI: artist.name || event.title).
+    private static EventArtistDto ToArtistDto(EventArtist? a) =>
+        a is null
+            ? new EventArtistDto(string.Empty, string.Empty, 0)
+            : new EventArtistDto(a.Name, a.Headline, a.Followers);
+
+    private static EventSessionDto ToSessionDto(EventSession s) =>
+        new(s.Id, s.Time, s.Title, s.Speaker);
+
+    private EventTierDto ToTierDto(EventTier t) => new(
+        Id: t.Code,   // la UI lee `tier.id` para el checkout (mismo valor que code)
+        Code: t.Code,
+        Name: t.Name,
+        Amount: t.Price,   // la UI lee `tier.amount` (major units) para el precio
+        Price: t.Price,
+        PriceFormatted: _priceFormatter.Format(t.Price, t.Currency),
+        Currency: t.Currency,
+        Capacity: t.Capacity,
+        Remaining: t.Remaining,
+        MaxPerOrder: t.MaxPerOrder,
+        ZoneId: t.ZoneId,
+        // Cara editorial de la tarjeta de tier. Se emite SIEMPRE la clave, con el
+        // vacío colapsado (ADR 0083): el contrato JSON tiene que ser auto-descriptivo,
+        // no depender de que el normalizador cliente adivine la ausencia.
+        Description: t.Description ?? string.Empty,
+        Perks: t.Perks ?? Array.Empty<string>(),
+        SaleWindow: t.SaleWindow ?? string.Empty,
+        Featured: t.Featured);
+
+    private EventSeatMapDto? ToSeatMapDto(EventSeatMap? map)
+    {
+        if (map is null)
+        {
+            return null;
+        }
+        return new EventSeatMapDto(
+            VenueName: map.VenueName,
+            Zones: map.Zones.Select(z => new EventZoneDto(
+                Id: z.Id,
+                Name: z.Name,
+                Price: z.Price,
+                PriceFormatted: _priceFormatter.Format(z.Price, z.Currency),
+                Currency: z.Currency,
+                TierCode: z.TierCode,
+                Rows: z.Rows.Select(r => new EventRowDto(
+                    Label: r.Label,
+                    Seats: r.Seats.Select(seat => new EventSeatDto(seat.Id, seat.Label, seat.Status)).ToList()))
+                    .ToList()))
+                .ToList());
+    }
+
+    // Proyecta el venue con la forma anidada que lee la ficha v2 (EventVenue →
+    // VenueZone → SeatMapPayload): venue.zones[].seatmap.rows[].seats[]. Reusa el
+    // seat-map del dominio.
+    //
+    // Devolvía null en cuanto SeatMap era null, o sea en TODO evento modo general — y
+    // como 3 de los 4 del catálogo lo son, la ficha se quedaba sin recinto en la
+    // mayoría de casos. Pero un recinto EXISTE aunque sus asientos no estén numerados:
+    // el nombre y la ciudad ya viven en el summary. Modo general → mismo venue, con
+    // `zones` vacío (que es justo lo que la UI lee para decidir si hay seat-map).
+    //
+    // La dirección de calle no existe en el dominio → cadena vacía en ambos modos. No
+    // se inventa: el contrato manda emitir la clave, no rellenarla.
+    // `type` del asiento = tier de la zona (price-level).
+    private static EventVenueDto ToVenueDto(EventDetail detail)
+    {
+        var geo = detail.Summary.Geo is null
+            ? null
+            : new EventGeoDto(detail.Summary.Geo.Lat, detail.Summary.Geo.Lng);
+
+        var map = detail.SeatMap;
+        if (map is null)
+        {
+            return new EventVenueDto(
+                Name: detail.Summary.Venue ?? string.Empty,
+                Address: string.Empty,
+                City: detail.Summary.City ?? string.Empty,
+                Zones: Array.Empty<EventVenueZoneDto>(),
+                Geo: geo);
+        }
+
+        return new EventVenueDto(
+            Name: map.VenueName,
+            Address: string.Empty,
+            City: detail.Summary.City ?? string.Empty,
+            Geo: geo,
+            Zones: map.Zones.Select(z => new EventVenueZoneDto(
+                Id: z.Id,
+                Name: z.Name,
+                Amount: z.Price,
+                Seatmap: new EventVenueSeatmapDto(
+                    Rows: z.Rows.Select(r => new EventVenueRowDto(
+                        RowNumber: r.Label,
+                        Seats: r.Seats.Select(seat => new EventVenueSeatDto(
+                            Id: seat.Id,
+                            Type: z.TierCode,
+                            Available: !string.Equals(seat.Status, "sold", StringComparison.OrdinalIgnoreCase),
+                            Price: z.Price)).ToList())).ToList())))
+                .ToList());
+    }
+
+    private static EventTicketDto ToTicketDto(EventTicket t) => new(
+        Id: t.Id,
+        Qr: t.Qr,
+        EventId: t.EventId,
+        AttendeeName: t.AttendeeName,
+        Tier: t.Tier,
+        Seat: t.Seat,
+        HolderEmail: t.HolderEmail,
+        Status: t.Status);
+
+    private static EventAttendeeDto ToAttendeeDto(EventAttendee a) => new(
+        TicketId: a.TicketId,
+        Name: a.Name,
+        Email: a.Email,
+        Tier: a.Tier,
+        Seat: a.Seat,
+        CheckedIn: a.CheckedIn);
+
+    // ── Request DTOs (binding del módulo Angular) ───────────────────────
+
+    public sealed record CheckoutItemRequest(string Tier, string? Seat, int Qty);
+
+    public sealed record AttendeeRequest(string Name, string Email, string? DocumentId);
+
+    public sealed record CheckoutRequest(
+        string EventId,
+        IReadOnlyList<CheckoutItemRequest>? Items,
+        IReadOnlyList<AttendeeRequest>? Attendees);
+
+    public sealed record ConfirmRequest(string OrderRef);
+
+    public sealed record CheckInRequest(string TicketId);
+
+    // ── Response DTOs (JSON estable para la UI) ─────────────────────────
+
+    public sealed record EventGeoDto(double Lat, double Lng);
+
+    public sealed record EventSummaryDto(
+        string Id,
+        string Slug,
+        string Title,
+        string Category,
+        string City,
+        string Venue,
+        DateTimeOffset StartUtc,
+        // Contrato (EventSummary.startsAt): la UI lee `startsAt` (ISO) para la fecha
+        // en cards/ficha/wallet. `startUtc` se conserva para consumers previos; ambos
+        // portan el mismo instante.
+        DateTimeOffset StartsAt,
+        string ImageUrl,
+        string Cover,
+        decimal PriceFrom,
+        decimal FromAmount,
+        string PriceFromFormatted,
+        string Currency,
+        string Mode,
+        // Contrato: la clave es "geo" (lat/lng del venue para el mapa/discovery),
+        // null si el evento no tiene ubicación geocodificada.
+        [property: JsonPropertyName("geo")] EventGeoDto? Geo,
+        // Contrato UI (EventSummary): subtítulo compuesto (venue · ciudad), estado de
+        // ciclo de vida derivado de la fecha, y chips freeform derivados del modo.
+        string Subtitle,
+        string Status,
+        IReadOnlyList<string> Badges,
+        // Contrato UI (EventSummary.soldPercent): 0..100 del aforo vendido. La tarjeta
+        // pinta "¡Últimas localidades!" con >= 80 y el catálogo ordena por popularidad
+        // con esta clave. Viene de EventDetail.SoldPercent (derivado de los tiers), NO
+        // de EventSummary: el aforo vive en la ficha, no en el resumen.
+        int SoldPercent);
+
+    public sealed record EventsResponse(IReadOnlyList<EventSummaryDto> Events);
+
+    public sealed record EventTierDto(
+        // Contrato: la UI lee `id` (el checkout manda tier.id). `code` se conserva
+        // para consumers previos; ambos portan el código del tier.
+        string Id,
+        string Code,
+        string Name,
+        // La UI (TicketTier) lee `amount` (major units) — `tierPriceLabel` hace
+        // formatPrice(tier.amount). Se emite explícito (ADR 0083) en vez de depender
+        // del fallback `amount ?? price` del normalizador cliente. `price`/`priceFormatted`
+        // se conservan para consumers previos; todos portan el mismo valor.
+        decimal Amount,
+        decimal Price,
+        string PriceFormatted,
+        string Currency,
+        int Capacity,
+        int Remaining,
+        int MaxPerOrder,
+        string? ZoneId,
+        // Contrato UI (TicketTier): la tarjeta de tier lee `description` (qué incluye),
+        // `perks` (viñetas de inclusiones), `saleWindow` (cierre de venta YA formateado
+        // en es-CO) y `featured` (resalta el tier recomendado). Sin estos cuatro la
+        // tarjeta solo mostraba precio y aforo.
+        string Description,
+        IReadOnlyList<string> Perks,
+        string SaleWindow,
+        bool Featured);
+
+    public sealed record EventSeatDto(string Id, string Label, string Status);
+
+    public sealed record EventRowDto(string Label, IReadOnlyList<EventSeatDto> Seats);
+
+    public sealed record EventZoneDto(
+        string Id,
+        string Name,
+        decimal Price,
+        string PriceFormatted,
+        string Currency,
+        string TierCode,
+        IReadOnlyList<EventRowDto> Rows);
+
+    public sealed record EventSeatMapDto(string VenueName, IReadOnlyList<EventZoneDto> Zones);
+
+    // Contrato UI (EventOrganizer): la ficha lee organizer.name (objeto).
+    public sealed record EventOrganizerDto(string Name, string Headline, string Avatar);
+
+    // Contrato UI (EventArtist): la ficha lee artist.{name,headline,followers}.
+    public sealed record EventArtistDto(string Name, string Headline, int Followers);
+
+    // Contrato UI (EventSession): la agenda lee session.{id,time,title,speaker}.
+    public sealed record EventSessionDto(string Id, string Time, string Title, string Speaker);
+
+    // ── Venue anidado (contrato UI EventVenue → VenueZone → SeatMapPayload) ──────
+    // Es la forma que consume <synergos-seat-map>; distinta del EventSeatMapDto plano
+    // de arriba (que se conserva por compat). rowNumber/available/type calcan las
+    // claves exactas que lee la UI v2.
+
+    public sealed record EventVenueSeatDto(
+        string Id,
+        // `type` (opcional en SeatMapSeat): se puebla con el tier de la zona
+        // (price-level), útil para colorear el asiento por tier en el seat-map.
+        string Type,
+        bool Available,
+        decimal Price);
+
+    public sealed record EventVenueRowDto(
+        // Contrato: la UI lee `rowNumber` (number|string); acá el label de la fila.
+        [property: JsonPropertyName("rowNumber")] string RowNumber,
+        IReadOnlyList<EventVenueSeatDto> Seats);
+
+    public sealed record EventVenueSeatmapDto(IReadOnlyList<EventVenueRowDto> Rows);
+
+    public sealed record EventVenueZoneDto(
+        string Id,
+        string Name,
+        decimal Amount,
+        // Contrato: la clave es "seatmap" (payload para <synergos-seat-map>).
+        [property: JsonPropertyName("seatmap")] EventVenueSeatmapDto Seatmap);
+
+    public sealed record EventVenueDto(
+        string Name,
+        string Address,
+        string City,
+        IReadOnlyList<EventVenueZoneDto> Zones,
+        // Coordenada del recinto (la misma del summary), para el mapa de la ficha.
+        // null si el evento no está geocodificado.
+        [property: JsonPropertyName("geo")] EventGeoDto? Geo);
+
+    public sealed record EventDetailResponse(
+        EventSummaryDto Event,
+        string Description,
+        // Contrato UI: la ficha lee `highlights` (string[], bullets "por qué asistir")
+        // y `sessions` (agenda). Vacíos ocultan la sección (el template hace .length>0).
+        IReadOnlyList<string> Highlights,
+        IReadOnlyList<EventSessionDto> Sessions,
+        // Contrato UI: la ficha lee `artist.{name,headline,followers}` (perfil del acto).
+        EventArtistDto Artist,
+        // Contrato: la UI lee `organizer.name` (objeto {name,headline,avatar}), no un
+        // string. headline/avatar no tienen fuente en EventDetail → cadena vacía.
+        EventOrganizerDto Organizer,
+        IReadOnlyList<EventTierDto> Tiers,
+        // Contrato exacto: la clave es "seatmap" (todo minúscula), null en eventos
+        // modo general. El default camelCase daría "seatMap"; lo fijamos al contrato.
+        // Se conserva para consumers previos; la ficha v2 lee la forma anidada `venue`.
+        [property: JsonPropertyName("seatmap")] EventSeatMapDto? SeatMap,
+        // Contrato UI (EventVenue): la ficha lee `venue.{name,address,city}` SIEMPRE y
+        // `venue.zones[]` con la forma anidada
+        // {id,name,amount,seatmap:{rows:[{rowNumber,seats:[{id,type,available,price}]}]}}.
+        // En modo general el recinto SÍ va (nombre + ciudad) y `zones` sale vacío: lo que
+        // falta son los asientos numerados, no el lugar.
+        [property: JsonPropertyName("venue")] EventVenueDto Venue);
+
+    public sealed record CheckoutResponse(
+        string OrderRef,
+        string PaymentSessionId,
+        decimal Amount,
+        string AmountFormatted,
+        string Currency);
+
+    public sealed record EventTicketDto(
+        string Id,
+        string Qr,
+        string EventId,
+        string AttendeeName,
+        string Tier,
+        string? Seat,
+        string HolderEmail,
+        string Status);
+
+    public sealed record ConfirmResponse(string Status, IReadOnlyList<EventTicketDto> Tickets);
+
+    // ── OLA 3 — Mis tickets / transferir / crear evento ─────────────────
+
+    public sealed record TicketsResponse(IReadOnlyList<EventTicketDto> Tickets);
+
+    public sealed record TransferRequest(string ToEmail);
+
+    public sealed record TransferResponse(
+        EventTicketDto Ticket,
+        // Contrato exacto: la clave es "newQr" — el nuevo payload QR emitido tras
+        // la transferencia (el QR viejo queda invalidado).
+        [property: JsonPropertyName("newQr")] string NewQr);
+
+    public sealed record EventTierDraftRequest(string Name, decimal Price, int Capacity);
+
+    public sealed record EventDraftRequest(
+        string Name,
+        string? Venue,
+        DateTimeOffset Date,
+        IReadOnlyList<EventTierDraftRequest>? Tiers,
+        string? City,
+        string? Category,
+        string? Currency,
+        string? Description,
+        string? Organizer,
+        string? ImageUrl);
+
+    public sealed record CreateEventResponse(string EventId);
+
+    public sealed record EventAttendeeDto(
+        string TicketId,
+        string Name,
+        string Email,
+        string Tier,
+        string? Seat,
+        bool CheckedIn);
+
+    public sealed record ManageResponse(
+        IReadOnlyList<EventAttendeeDto> Attendees,
+        int Capacity,
+        int Sold);
+
+    public sealed record CheckInResponse(string Status);
+}

@@ -1,0 +1,71 @@
+@*
+    elementActionButton renderer. Monta <synergos-button-container> con el
+    <a>/<button> SSR DENTRO como contenido de respaldo (mejora progresiva):
+    los Custom Elements renderizan sus hijos hasta que el bundle los actualiza,
+    así que el enlace sigue siendo rastreable y usable sin JavaScript. La regla
+    :defined de syn-primitives.css lo oculta en cuanto el elemento hidrata.
+
+    Sin ctaLink el bloque ya NO se salta: renderiza un <button> sin href. Esa
+    es la única forma de que el estado de carga exista — el elemento sólo lo
+    aplica en su rama de botón, nunca en la de enlace (un enlace navega, no
+    tiene acción en curso que anunciar, y el texto sr-only contaminaría su
+    nombre accesible). `loading` se maneja en runtime desde el cliente; no hay
+    campo editorial y no debería haberlo.
+*@
+@using System.Text.Encodings.Web
+@using Umbraco.Cms.Core.Models
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var label = Model.Value<string>("ctaLabel");
+    if (string.IsNullOrWhiteSpace(label)) { return; }
+
+    var link = Model.Value<Link>("ctaLink");
+    var url = link?.Url;
+    var hasUrl = !string.IsNullOrWhiteSpace(url);
+    var openInNewTab = Model.Value<bool>("ctaOpenInNewTab")
+        || string.Equals(link?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
+
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-button",
+        string.IsNullOrWhiteSpace(variant) ? "syn-button--primary" : $"syn-button--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    // Respaldo SSR. Va crudo dentro del custom element, así que TODO valor del
+    // editor se escapa aquí — el emisor no lo toca.
+    var enc = HtmlEncoder.Default;
+    var fallbackClasses = enc.Encode($"{classes} syn-button--ssr");
+    var fallbackLabel = enc.Encode(label!);
+    var fallback = hasUrl
+        ? $"<a class=\"{fallbackClasses}\" href=\"{enc.Encode(url!)}\""
+          + (openInNewTab ? " target=\"_blank\" rel=\"noopener noreferrer\"" : string.Empty)
+          + $">{fallbackLabel}</a>"
+        : $"<button type=\"button\" class=\"{fallbackClasses}\">{fallbackLabel}</button>";
+
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["label"] = label,
+        // href vacío es lo que empuja al elemento a su rama de botón, donde
+        // `loading` sí aplica. No mandar "" explícito: null lo omite del config.
+        ["href"] = hasUrl ? url : null,
+        ["target"] = hasUrl ? (openInNewTab ? "_blank" : "_self") : null,
+        // Sin traducir: el elemento acepta el vocabulario del CMS (primary |
+        // secondary | outlined | ghost | neutral | emphasis) y lo normaliza él
+        // mismo. Mapearlo aquí duplicaba el vocabulario en dos repos y era la
+        // razón de que `secondary` se aplanara a solid al hidratar.
+        ["variant"] = string.IsNullOrWhiteSpace(variant) ? null : variant,
+    };
+
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "button-container",
+        Props: props,
+        ConfigOverrideJson: null,
+        Culture: System.Globalization.CultureInfo.CurrentUICulture,
+        FallbackHtml: fallback);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

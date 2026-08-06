@@ -1,0 +1,156 @@
+@*
+    Shared SEO <head> partial invocado desde _Layout.cshtml. Consume
+    compSeo (seoTitle/Description/canonicalLink/ogImage/ogType/
+    metaRobots) con fallback a siteConfigSettings del brand activo
+    (defaultSeoTitle/Description/socialOgImage).
+
+    Resolución:
+    1. Si compSeo.seoTitle está seteado, úsalo. Fallback
+       siteConfigSettings.defaultSeoTitle. Fallback page.Name. Fallback
+       siteRoot.siteDisplayName.
+    2. Si compSeo.seoDescription está seteado, úsalo. Fallback
+       siteConfigSettings.defaultSeoDescription.
+    3. canonicalLink (UrlPicker) override la URL canónica auto-computed.
+    4. ogImage (MediaPicker) fallback a siteConfigSettings.socialOgImage.
+    5. ogType default "website".
+    6. metaRobots default "index,follow".
+
+    Ola 54.3: agrega Twitter Card meta, JSON-LD (Organization +
+    WebSite), y hreflang links automáticos por cultura publicada del
+    nodo actual.
+*@
+@using Umbraco.Cms.Core.Models
+@using Umbraco.Cms.Core.Models.PublishedContent
+@using Umbraco.Extensions
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent?>
+@inject Synergos.CMS.Interfaces.IBrandingProvider Branding
+@{
+    var page = Model;
+    var siteRoot = page?.AncestorOrSelf("siteRoot") ?? page?.Root();
+    var siteName = siteRoot?.Value<string>("siteDisplayName") ?? "Synergos";
+    var canonicalHost = siteRoot?.Value<string>("canonicalHostname");
+
+    var brand = Branding.GetCurrent();
+    IPublishedContent? siteConfig = null;
+    if (UmbracoContext.Content is not null)
+    {
+        foreach (var root in UmbracoContext.Content.GetAtRoot())
+        {
+            if (root.ContentType.Alias != "platformRoot") continue;
+            var settingsRoot = root.Children.FirstOrDefault(c => c.ContentType.Alias == "settingsRoot");
+            if (settingsRoot is null) continue;
+            siteConfig = settingsRoot.Descendants()
+                .FirstOrDefault(c => c.ContentType.Alias == "siteConfigSettings"
+                    && string.Equals(c.Value<string>("brandKey"), brand.Key, StringComparison.OrdinalIgnoreCase));
+            if (siteConfig is not null) break;
+        }
+    }
+
+    string? PageString(string alias) => page?.Value<string>(alias);
+    string? ConfigString(string alias) => siteConfig?.Value<string>(alias);
+
+    var seoTitle = PageString("seoTitle");
+    if (string.IsNullOrWhiteSpace(seoTitle)) seoTitle = ConfigString("defaultSeoTitle");
+    if (string.IsNullOrWhiteSpace(seoTitle)) seoTitle = page?.Name ?? siteName;
+
+    var seoDesc = PageString("seoDescription");
+    if (string.IsNullOrWhiteSpace(seoDesc)) seoDesc = ConfigString("defaultSeoDescription");
+
+    var canonicalLink = page?.Value<Link>("canonicalLink");
+    var canonicalUrl = canonicalLink?.Url;
+    if (string.IsNullOrWhiteSpace(canonicalUrl) && !string.IsNullOrWhiteSpace(canonicalHost) && page is not null)
+    {
+        canonicalUrl = $"https://{canonicalHost}{page.Url()}";
+    }
+
+    var ogImage = page?.Value<IPublishedContent>("ogImage") ?? siteConfig?.Value<IPublishedContent>("socialOgImage");
+    var ogImageUrl = ogImage?.Url(mode: UrlMode.Absolute);
+
+    var ogType = PageString("ogType");
+    if (string.IsNullOrWhiteSpace(ogType)) ogType = "website";
+
+    var metaRobots = PageString("metaRobots");
+    if (string.IsNullOrWhiteSpace(metaRobots)) metaRobots = "index,follow";
+
+    // Hreflang: enumera las culturas publicadas del nodo actual.
+    var publishedCultures = page?.Cultures?.Keys?.ToArray() ?? Array.Empty<string>();
+    var siteUrl = !string.IsNullOrWhiteSpace(canonicalHost) ? $"https://{canonicalHost}" : null;
+}
+<title>@seoTitle</title>
+@if (!string.IsNullOrWhiteSpace(seoDesc))
+{
+    <meta name="description" content="@seoDesc" />
+}
+<meta name="robots" content="@metaRobots" />
+@if (!string.IsNullOrWhiteSpace(canonicalUrl))
+{
+    <link rel="canonical" href="@canonicalUrl" />
+}
+
+@* Hreflang — una entrada por cultura publicada del nodo actual. *@
+@if (publishedCultures.Length > 1 && page is not null && !string.IsNullOrWhiteSpace(siteUrl))
+{
+    foreach (var culture in publishedCultures)
+    {
+        var localizedUrl = page.Url(culture, UrlMode.Absolute);
+        if (string.IsNullOrWhiteSpace(localizedUrl)) continue;
+        <link rel="alternate" hreflang="@culture.ToLowerInvariant()" href="@localizedUrl" />
+    }
+}
+
+@* OpenGraph *@
+<meta property="og:type" content="@ogType" />
+<meta property="og:title" content="@seoTitle" />
+@if (!string.IsNullOrWhiteSpace(seoDesc))
+{
+    <meta property="og:description" content="@seoDesc" />
+}
+@if (!string.IsNullOrWhiteSpace(canonicalUrl))
+{
+    <meta property="og:url" content="@canonicalUrl" />
+}
+<meta property="og:site_name" content="@siteName" />
+@if (!string.IsNullOrWhiteSpace(ogImageUrl))
+{
+    <meta property="og:image" content="@ogImageUrl" />
+}
+
+@* Twitter Card — fallback al ogImage. summary_large_image cuando
+   hay imagen disponible, summary cuando no. *@
+@if (!string.IsNullOrWhiteSpace(ogImageUrl))
+{
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="@ogImageUrl" />
+}
+else
+{
+    <meta name="twitter:card" content="summary" />
+}
+<meta name="twitter:title" content="@seoTitle" />
+@if (!string.IsNullOrWhiteSpace(seoDesc))
+{
+    <meta name="twitter:description" content="@seoDesc" />
+}
+
+@* JSON-LD — Organization + WebSite cuando hay siteRoot resoluble. *@
+@if (siteRoot is not null && !string.IsNullOrWhiteSpace(siteUrl))
+{
+    var orgPayload = new System.Text.StringBuilder();
+    orgPayload.Append("{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",");
+    orgPayload.Append($"\"name\":{System.Text.Json.JsonSerializer.Serialize(siteName)},");
+    orgPayload.Append($"\"url\":{System.Text.Json.JsonSerializer.Serialize(siteUrl)}");
+    if (!string.IsNullOrWhiteSpace(ogImageUrl))
+    {
+        orgPayload.Append($",\"logo\":{System.Text.Json.JsonSerializer.Serialize(ogImageUrl)}");
+    }
+    orgPayload.Append("}");
+
+    var sitePayload = new System.Text.StringBuilder();
+    sitePayload.Append("{\"@context\":\"https://schema.org\",\"@type\":\"WebSite\",");
+    sitePayload.Append($"\"name\":{System.Text.Json.JsonSerializer.Serialize(siteName)},");
+    sitePayload.Append($"\"url\":{System.Text.Json.JsonSerializer.Serialize(siteUrl)}");
+    sitePayload.Append("}");
+
+    <script type="application/ld+json">@Html.Raw(orgPayload.ToString())</script>
+    <script type="application/ld+json">@Html.Raw(sitePayload.ToString())</script>
+}

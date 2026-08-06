@@ -1,0 +1,75 @@
+@*
+    Integration renderer (Ola 8.5 schema + Ola 42.8 runtime) —
+    scriptHost. Emite <script src="..."> sólo si el origen (scheme +
+    host + puerto) matchea contra la allowlist
+    Synergos:Cdn:AllowedScriptOrigins. Si NO matchea, emite comment
+    genérico (sin exponer el URL bloqueado) y loguea warning vía
+    ILoggerFactory — NO se inyecta el script.
+
+    Valida la URL del editor con Uri parsing estricto: scripts con
+    URL malformada se omiten igual que los non-allowed. Fail-safe
+    por diseño.
+
+    No requiere ISynHostEmitter: es script directo con src, no bundle
+    CDN con manifest. Separado del contrato SynHost (ADR 0015).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Microsoft.Extensions.Logging
+@using Microsoft.Extensions.Options
+@using Synergos.CMS.Application.Configuration
+@inject IOptions<CdnSettings> CdnSettings
+@inject ILoggerFactory LoggerFactory
+@{
+    var src = Model.Value<string>("scriptSrc");
+    if (string.IsNullOrWhiteSpace(src))
+    {
+        return;
+    }
+
+    bool allowed = false;
+    string? blockedReason = null;
+    if (!Uri.TryCreate(src, UriKind.Absolute, out var scriptUri))
+    {
+        blockedReason = "script URL no es una URI absoluta válida";
+    }
+    else
+    {
+        var scriptOrigin = $"{scriptUri.Scheme}://{scriptUri.Authority}";
+        var allowlist = CdnSettings.Value.AllowedScriptOrigins ?? Array.Empty<string>();
+        foreach (var entry in allowlist)
+        {
+            if (string.IsNullOrWhiteSpace(entry)) continue;
+            if (Uri.TryCreate(entry.Trim(), UriKind.Absolute, out var entryUri))
+            {
+                var entryOrigin = $"{entryUri.Scheme}://{entryUri.Authority}";
+                if (string.Equals(entryOrigin, scriptOrigin, StringComparison.OrdinalIgnoreCase))
+                {
+                    allowed = true;
+                    break;
+                }
+            }
+        }
+        if (!allowed)
+        {
+            blockedReason = $"origen '{scriptOrigin}' no está en Synergos:Cdn:AllowedScriptOrigins";
+        }
+    }
+}
+@if (allowed)
+{
+    var isAsync = Model.Value<bool>("scriptAsync");
+    if (isAsync)
+    {
+        <script src="@src" async></script>
+    }
+    else
+    {
+        <script src="@src" defer></script>
+    }
+}
+else
+{
+    var log = LoggerFactory.CreateLogger("Synergos.ScriptHost");
+    log.LogWarning("elementIntScriptHost bloqueó un script: {Reason}", blockedReason);
+    <!-- ScriptHost: script omitido por allowlist -->
+}

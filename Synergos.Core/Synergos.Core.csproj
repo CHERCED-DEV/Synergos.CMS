@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- El vocabulario del negocio. NO sabe qué es un host: ni ASP.NET, ni Umbraco,
+         ni HTTP, ni disco. Cero referencias a otros proyectos del repo.
+         Ver docs/product/07-diseno-atomico-capacidades.md §3. -->
+
+    <!-- CA1000 (miembros estáticos en tipos genéricos): lo dispara Result<T>.Ok /
+         Result<T>.Rejected / Page<T>.Empty. La preocupación del analizador es la
+         discoverability —hay que nombrar el argumento de tipo— y para eso existe
+         justamente el helper NO genérico `Result.Ok<T>(...)`. Quitar las fábricas
+         obligaría a exponer el constructor, que es lo que garantiza la invariante
+         "o valor o rechazo, nunca los dos". Se silencia con motivo. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+  </PropertyGroup>
+
+</Project>

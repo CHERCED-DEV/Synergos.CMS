@@ -1,0 +1,18 @@
+@*
+    elementTextLabel renderer (Ola 12 Wave 2). SSR-native.
+    Emits a small categorical label (tag/chip style).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var text = Model.Value<string>("labelText");
+    if (string.IsNullOrWhiteSpace(text)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-label",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-label--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<span class="@classes">@text</span>

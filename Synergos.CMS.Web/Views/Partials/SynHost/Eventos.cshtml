@@ -1,0 +1,30 @@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    // apiBase: default /api/eventos si el editor no lo setea (NO mandatory).
+    var apiBase = Model.Value<string>("apiBase");
+    if (string.IsNullOrWhiteSpace(apiBase)) { apiBase = "/api/eventos"; }
+
+    // role: cara de la app — "attendee" (ticketing) u "organizer" (manager).
+    // Default attendee si el editor no lo setea (NO mandatory).
+    var role = Model.Value<string>("role");
+    if (string.IsNullOrWhiteSpace(role)) { role = "attendee"; }
+
+    // config: JSON opcional autorado por el editor; el emitter lo fusiona sobre
+    // los props base (rutas activas, defaults). Si está vacío o malformado,
+    // el componente Angular resuelve sus defaults (degrada con grace).
+    var config = Model.Value<string>("config");
+
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["apiBase"] = apiBase,
+        ["heading"] = Model.Value<string>("heading"),
+        ["subheading"] = Model.Value<string>("subheading"),
+        ["role"] = role,
+    };
+    // BlockAlias DEBE ser el name kebab del registry = "eventos" (el emitter resuelve
+    // el bundle por ese alias; camelCase no matchearía y no hidrataría).
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("eventos", props, config, System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

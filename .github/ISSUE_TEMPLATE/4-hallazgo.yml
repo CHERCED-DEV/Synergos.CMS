@@ -1,0 +1,48 @@
+name: 🔍 Hallazgo
+description: Encontré algo haciendo otra cosa y no quiero perderlo
+title: "[Hallazgo] "
+labels: ["hallazgo"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > **Este tipo existe para que un hallazgo no se coma la tarea.**
+        > La regla: si encontrás algo mientras hacés otra cosa, **abrís esto y SEGUÍS con lo que
+        > estabas**. Sin este ticket, el hallazgo o descarrila el trabajo o se pierde.
+
+  - type: textarea
+    id: que
+    attributes:
+      label: Qué encontré
+      placeholder: |
+        Message.ReadBy es IReadOnlyList<Ref> — una lista de QUIÉN, sin CUÁNDO. AtUtc es cuándo
+        se envió, no cuándo se leyó.
+    validations: { required: true }
+
+  - type: textarea
+    id: como-verifique
+    attributes:
+      label: Cómo lo verifiqué
+      description: |
+        **Fichero y línea, salida de comando, o URL consultada.** Un hallazgo sin verificación es
+        una sospecha — y está bien abrirlo igual, pero hay que decir que lo es.
+      placeholder: Synergos.Api.Messaging/Domain/Thread.cs:40-42
+    validations: { required: true }
+
+  - type: textarea
+    id: obliga
+    attributes:
+      label: A qué obliga
+      description: ¿Cambia un contrato? ¿Invalida una promesa de venta? ¿Es solo información?
+    validations: { required: true }
+
+  - type: dropdown
+    id: urgencia
+    attributes:
+      label: Cuándo hay que decidirlo
+      options:
+        - Antes de escribir código relacionado
+        - Antes de que existan datos en producción
+        - Cuando toque ese área
+        - Solo queda anotado
+    validations: { required: true }

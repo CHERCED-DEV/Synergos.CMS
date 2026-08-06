@@ -1,0 +1,39 @@
+@*
+    elementMediaLogoItem renderer (Ola 14). SSR-native. Brand logo
+    optionally wrapped in external link.
+*@
+@using Umbraco.Cms.Core.Models
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    if (mediaRef == null) { return; }
+    var alt = Model.Value<string>("mediaAlt") ?? mediaRef.Name;
+    var logoLink = Model.Value<Link>("logoLink");
+    var linkUrl = logoLink?.Url;
+    var linkTarget = logoLink?.Target;
+    var externalAttrs = string.Equals(linkTarget, "_blank", StringComparison.OrdinalIgnoreCase)
+        ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "";
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-logo",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-logo--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+@* Sin logos de cliente reales: render como wordmark de texto (limpio, premium)
+   en vez de la imagen placeholder gris. Si más adelante hay logos reales,
+   reintroducir <img> condicionado a media real. *@
+@if (!string.IsNullOrWhiteSpace(linkUrl))
+{
+    <a class="@classes" href="@linkUrl"@Html.Raw(externalAttrs)>
+        <span class="syn-logo__wordmark">@alt</span>
+    </a>
+}
+else
+{
+    <span class="@classes">
+        <span class="syn-logo__wordmark">@alt</span>
+    </span>
+}

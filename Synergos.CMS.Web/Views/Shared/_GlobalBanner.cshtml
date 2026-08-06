@@ -1,0 +1,27 @@
+@*
+    Renderer del banner promocional global. Consume un CfgBanner ya
+    resuelto por IGlobalComponentResolver — el partial NO toma
+    decisiones de visibilidad. Si Placement="bottom" la envoltura
+    aplica clase modificadora; el orden real lo decide _Layout.
+*@
+@model Synergos.CMS.Interfaces.CfgBanner
+@{
+    if (Model is null) { return; }
+    var hasCta = !string.IsNullOrWhiteSpace(Model.CtaLabel) && !string.IsNullOrWhiteSpace(Model.CtaUrl);
+    var placement = string.IsNullOrWhiteSpace(Model.Placement) ? "top" : Model.Placement;
+    var hasImage = !string.IsNullOrWhiteSpace(Model.ImageUrl);
+}
+<aside class="syn-global-banner syn-global-banner--@placement@(hasImage ? " syn-global-banner--has-image" : "")"
+       role="region"
+       aria-label="@Umbraco.GetDictionaryValue("banner.aria.label", "Banner promocional")"
+       @(hasImage ? Html.Raw($"style=\"background-image:url('{Model.ImageUrl}')\"") : null)>
+    <div class="syn-global-banner__inner">
+        <p class="syn-global-banner__message">@Model.Message</p>
+        @if (hasCta)
+        {
+            <a class="syn-global-banner__cta"
+               href="@Model.CtaUrl"
+               @(Model.CtaOpenInNewTab ? Html.Raw("target=\"_blank\" rel=\"noopener\"") : null)>@Model.CtaLabel</a>
+        }
+    </div>
+</aside>

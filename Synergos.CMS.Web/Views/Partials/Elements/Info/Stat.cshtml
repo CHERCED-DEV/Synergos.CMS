@@ -1,0 +1,21 @@
+@*
+    elementInfoStat renderer (Ola 15). KPI display with value + label.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var value = Model.Value<string>("statValue");
+    var label = Model.Value<string>("statLabel");
+    if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(label)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-stat",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-stat--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="@classes">
+    <span class="syn-stat__value">@value</span>
+    <span class="syn-stat__label">@label</span>
+</div>

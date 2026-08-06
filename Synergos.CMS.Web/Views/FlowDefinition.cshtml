@@ -1,0 +1,54 @@
+﻿@*
+    Template del Document Type `flowDefinition`. Renderiza la landing
+    pública del flow: título + descripción + botón Start que dispara
+    GET /flow/{flowKey}/start (FlowController).
+
+    Si el flow no tiene steps publicados, el botón se omite y se muestra
+    un mensaje editor-facing.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.PublishedModels.FlowDefinition>
+@inject Synergos.CMS.Web.Services.FlowResolver FlowResolver
+@{
+    Layout = "_Layout";
+    if (Model is null) { return; }
+
+    var flowKey = Model.FlowKey;
+    var title = !string.IsNullOrWhiteSpace(Model.FlowTitle) ? Model.FlowTitle : Model.Name;
+    var description = Model.FlowDescription;
+
+    var descriptor = !string.IsNullOrWhiteSpace(flowKey)
+        ? FlowResolver.Resolve(flowKey)
+        : null;
+    var stepCount = descriptor?.Steps.Count ?? 0;
+    var startHref = !string.IsNullOrWhiteSpace(flowKey)
+        ? $"/flow/{flowKey}/start"
+        : null;
+}
+<section class="syn-flow-definition" data-flow-key="@flowKey">
+    <header class="syn-flow-definition__header">
+        <h1 class="syn-flow-definition__title">@title</h1>
+        @if (!string.IsNullOrWhiteSpace(description))
+        {
+            <p class="syn-flow-definition__description">@description</p>
+        }
+    </header>
+
+    @if (stepCount > 0 && !string.IsNullOrWhiteSpace(startHref))
+    {
+        <a class="syn-flow-definition__start"
+           href="@startHref"
+           data-action="flow-start"
+           data-flow-key="@flowKey">
+            @Umbraco.GetDictionaryValue("flow.start", "Comenzar")
+        </a>
+        <p class="syn-flow-definition__meta">
+            @Umbraco.GetDictionaryValue("flow.steps", "Pasos"): @stepCount
+        </p>
+    }
+    else
+    {
+        <p class="syn-flow-definition__empty">
+            @Umbraco.GetDictionaryValue("flow.empty", "Este flow aún no tiene pasos publicados.")
+        </p>
+    }
+</section>

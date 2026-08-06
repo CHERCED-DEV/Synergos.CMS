@@ -1,0 +1,331 @@
+using Synergos.Bff.Core;
+using Synergos.Bff.Viajes.Clients;
+using Synergos.Core;
+
+namespace Synergos.Bff.Viajes.Domain;
+
+/// <summary>Un ítem pedido: qué producto, cómo se llama, y qué periodo ocupa.</summary>
+/// <remarks>
+/// <b>Sin precio, a propósito.</b> Si el total llegara del llamador, cualquiera reservaría la
+/// suite al precio de la estándar. Se cotiza contra <c>Api.Pricing</c>.
+/// </remarks>
+public sealed record TripItem(string ProductRef, string ProductLabel, DateTimeOffset Start, DateTimeOffset End);
+
+/// <summary>
+/// El flujo de reservar un viaje — <b>el ORDEN, que es lo del dominio</b>.
+/// </summary>
+/// <remarks>
+/// <para><b>Lo que quedó acá tras promover la máquina de sagas.</b> Deshacer, reintentar,
+/// rendirse y avisar son iguales en los ocho dominios y viven en <see cref="SagaEngine{TSaga}"/>.
+/// Lo que no se puede compartir es <i>en qué orden van los pasos</i>. Eso es el negocio.</para>
+///
+/// <para><b>Lo que este dominio tiene y los tres anteriores no:</b> los pasos reversibles son
+/// VARIOS y HETEROGÉNEOS. Un vuelo, dos noches de hotel y un auto son cuatro apartados sobre
+/// cuatro recursos con cuatro ventanas, y el fallo puede llegar en cualquiera —incluso <i>después
+/// de haber confirmado los tres primeros</i>—. Es lo que convirtió a #36 de cableado en
+/// orquestador.</para>
+///
+/// <para><b>Y de ahí sale la parte delicada: la compensación del cupo cambia de carácter.</b> En
+/// Salud confirmar el cupo es el último paso y nunca hay una reserva confirmada que deshacer.
+/// Acá, al confirmar el cuarto ítem los tres primeros ya son reservas — y soltar un apartado que
+/// se convirtió en reserva lo rechaza <c>Api.Booking</c>. Por eso la reescritura va DENTRO del
+/// bucle, ítem por ítem, en el instante en que cada uno deja de ser reversible por la vía barata.
+/// Reescribirlas todas al final dejaría a las de en medio apuntando a un apartado que ya no
+/// existe si el fallo llega antes de terminar.</para>
+///
+/// <para><b>El orden dentro de confirmar</b> es el mismo que en Salud y por la misma razón:
+/// primero se captura y después se confirman los cupos. Al revés, un fallo del cobro dejaría un
+/// viaje confirmado que nadie pagó, y recuperarse de eso exige llamar al viajero. Con este orden
+/// el fallo deja plata cobrada sin viaje, que <b>sí</b> se deshace sola.</para>
+/// </remarks>
+public sealed class TripFlow
+{
+    /// <summary>Cuántos ítems admite un viaje.</summary>
+    /// <remarks>
+    /// No es una regla de negocio: es un techo para que una petición absurda no dispare cien
+    /// apartados que después haya que deshacer de a uno.
+    /// </remarks>
+    public const int MaxItems = 12;
+
+    private readonly ViajesCapabilities _caps;
+    private readonly SagaEngine<TripSaga> _sagas;
+    private readonly TimeProvider _clock;
+    private readonly ILogger<TripFlow> _log;
+
+    public TripFlow(ViajesCapabilities caps, SagaEngine<TripSaga> sagas, TimeProvider clock, ILogger<TripFlow> log)
+    {
+        _caps = caps;
+        _sagas = sagas;
+        _clock = clock;
+        _log = log;
+    }
+
+    /// <summary>
+    /// Fase 1: aparta cada ítem, cotiza el viaje entero y autoriza el cobro.
+    /// </summary>
+    public async Task<Result<TripSaga>> BookAsync(
+        Ref traveller, IReadOnlyList<TripItem> items, string sagaId, CancellationToken ct)
+    {
+        if (Revisar(items) is { } malo) return Result.Rejected<TripSaga>(malo);
+
+        // La saga existe ANTES de tocar nada. Si el proceso se cae después del primer apartado,
+        // lo que se hizo queda escrito con su identificador — y como las llaves derivan de él,
+        // repetir la llamada con el mismo sagaId no duplica nada.
+        var saga = _sagas.Find(sagaId);
+        if (saga is not null)
+        {
+            // Reintento de la misma petición: se devuelve lo que hay. La alternativa —rehacer—
+            // tomaría un segundo apartado con una llave distinta.
+            return Result.Ok(saga);
+        }
+
+        saga = new TripSaga(sagaId, traveller, SagaStatus.Running, Array.Empty<ItemHold>(), null,
+            Money.Zero(Money.Cop), Array.Empty<Compensation>(), null, _clock.GetUtcNow());
+        _sagas.Put(saga);
+
+        // 1. Apartar, ítem por ítem. Es el paso barato y reversible: se hace antes de hablar de
+        //    plata. Cada apartado se ANOTA como compensable en el mismo momento en que existe —
+        //    si se anotaran todos al final, una caída en medio dejaría cupo retenido sin nada que
+        //    lo suelte (`feedback_compensation_is_data`).
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            // La ventana ya se validó en Revisar(), antes de tocar ninguna capacidad: un periodo
+            // invertido es un error de quien pide, y descubrirlo después de haber apartado tres
+            // ítems obligaría a soltarlos por algo que se sabía desde el principio.
+            var ventana = TimeWindow.Of(item.Start, item.End);
+
+            // El recurso se resuelve DESDE el producto. Exigirle al llamador el identificador
+            // interno de Api.Booking obligaría a que ese identificador viajara hasta el CMS, que
+            // es la fuga que costó una vuelta en la HU #25.
+            var recurso = await _caps.FindResourceAsync(TravelSubject.For(item.ProductRef), ct);
+            if (!recurso.IsOk)
+            {
+                return await AbortarAsync(saga, recurso.Rejection!, "el producto no tiene recurso reservable", ct);
+            }
+
+            var apartado = await _caps.HoldAsync(
+                recurso.Value.Id, ventana, traveller, saga.KeyFor($"hold:{i}"), ct);
+            if (!apartado.IsOk)
+            {
+                return await AbortarAsync(saga, apartado.Rejection!, "un ítem del viaje no está disponible", ct);
+            }
+
+            saga = saga with
+            {
+                Holds = saga.Holds
+                    .Append(new ItemHold(apartado.Value.Id, recurso.Value.Id, ventana,
+                        item.ProductRef, item.ProductLabel))
+                    .ToList(),
+                Compensations = saga.Compensations
+                    .Append(Compensation.For(
+                        ViajesCompensations.ReleaseBookingHold, apartado.Value.Id, "viaje no confirmado"))
+                    .ToList(),
+            };
+            _sagas.Put(saga);
+        }
+
+        // 2. Cuánto cuesta el viaje entero. Una sola cotización: el precio de un paquete no es
+        //    necesariamente la suma de sus partes, y preguntarlo por ítem cerraría esa puerta.
+        var cotizacion = await _caps.QuoteAsync(
+            items.Select(i => TravelSubject.PriceOf(i.ProductRef)).ToList(), ct);
+        if (!cotizacion.IsOk)
+        {
+            return await AbortarAsync(saga, cotizacion.Rejection!, "no se pudo cotizar el viaje", ct);
+        }
+
+        var total = Money.Of(cotizacion.Value.Total.Amount, cotizacion.Value.Total.Currency);
+        saga = saga with { Total = total };
+        _sagas.Put(saga);
+
+        if (total.IsZero)
+        {
+            // Un viaje de cero lo rechazaría Payments, y además no hay nada que autorizar. Se
+            // deja apartado y listo para confirmar.
+            return Result.Ok(saga);
+        }
+
+        // 3. Autorizar: reserva cupo en el medio de pago SIN mover plata. Que sea autorización y
+        //    no cobro es lo que hace que el caso más común de fallo —el viajero se arrepiente—
+        //    no cueste una devolución.
+        var pago = await _caps.AuthorizeAsync(
+            Ref.Create("viajes.reserva", sagaId), traveller, total, saga.KeyFor("authorize"), ct);
+        if (!pago.IsOk)
+        {
+            return await AbortarAsync(saga, pago.Rejection!, "el cobro no se pudo autorizar", ct);
+        }
+
+        saga = saga with
+        {
+            PaymentId = pago.Value.Id,
+            Compensations = saga.Compensations
+                .Append(Compensation.For(ViajesCompensations.VoidPayment, pago.Value.Id, "viaje no confirmado"))
+                .ToList(),
+        };
+        _sagas.Put(saga);
+        return Result.Ok(saga);
+    }
+
+    /// <summary>
+    /// Fase 2: captura el cobro y confirma cada apartado. Si algo falla, deshace.
+    /// </summary>
+    public async Task<Result<TripSaga>> ConfirmAsync(string sagaId, CancellationToken ct)
+    {
+        var saga = _sagas.Find(sagaId);
+        if (saga is null) return Rejection.NotFound("viajes.trip_not_found", $"No existe el viaje {sagaId}.");
+        if (saga.Status == SagaStatus.Completed) return Result.Ok(saga);   // idempotente
+        if (saga.Status != SagaStatus.Running)
+        {
+            return Rejection.Conflict("viajes.not_confirmable", $"El viaje está {saga.Status}.");
+        }
+
+        // 1. Capturar. A partir de acá hay plata movida, y todo fallo cuesta una devolución.
+        if (saga.PaymentId is { } paymentId)
+        {
+            var capturado = await _caps.CaptureAsync(paymentId, saga.KeyFor("capture"), ct);
+            if (!capturado.IsOk)
+            {
+                return await AbortarAsync(saga, capturado.Rejection!, "el cobro no se pudo capturar", ct);
+            }
+
+            // «Liberar la autorización» pasa a ser «devolver»: ya se movió plata, y liberar una
+            // autorización capturada Payments lo rechaza. Sin este cambio la compensación
+            // fallaría siempre y quedaría colgada para siempre.
+            saga = saga with
+            {
+                Compensations = saga.Compensations
+                    .Select(c => c.Kind == ViajesCompensations.VoidPayment && c.IsPending
+                        ? c with { Kind = ViajesCompensations.RefundPayment }
+                        : c)
+                    .ToList(),
+            };
+            _sagas.Put(saga);
+        }
+
+        // 2. Confirmar cada apartado. Es lo que cierra la puerta, así que va lo más tarde posible
+        //    (`feedback_close_doors_last`) — y la reescritura va DENTRO del bucle: cada ítem deja
+        //    de ser reversible por la vía barata en el instante en que se confirma, no al final.
+        for (var i = 0; i < saga.Holds.Count; i++)
+        {
+            var apartado = saga.Holds[i];
+            if (apartado.ReservationId is not null) continue;   // ya confirmado en un intento previo
+
+            var reserva = await _caps.ConfirmHoldAsync(apartado.HoldId, saga.KeyFor($"confirm:{i}"), ct);
+            if (!reserva.IsOk)
+            {
+                _log.LogWarning("El viaje {Saga} no pudo confirmar '{Producto}' tras capturar ({Error}); se compensa.",
+                    saga.Id, apartado.ProductRef, reserva.Rejection);
+                return await AbortarAsync(saga, reserva.Rejection!, "un ítem no se pudo confirmar tras cobrar", ct);
+            }
+
+            var holds = saga.Holds.ToList();
+            holds[i] = apartado with { ReservationId = reserva.Value.Id };
+
+            saga = saga with
+            {
+                Holds = holds,
+                Compensations = saga.Compensations
+                    .Select(c => c.Kind == ViajesCompensations.ReleaseBookingHold
+                              && c.TargetId == apartado.HoldId && c.IsPending
+                        ? c with { Kind = ViajesCompensations.CancelReservation, TargetId = reserva.Value.Id }
+                        : c)
+                    .ToList(),
+            };
+            _sagas.Put(saga);
+        }
+
+        // Salió entero: ya no hay nada que deshacer. Las armadas se marcan como no aplicables —
+        // que es distinto de ejecutarlas (`feedback_compensation_is_data`).
+        var ahora = _clock.GetUtcNow();
+        saga = saga with
+        {
+            Status = SagaStatus.Completed,
+            Compensations = saga.Compensations.Select(c => c.IsPending ? c with { DoneAtUtc = ahora } : c).ToList(),
+        };
+        _sagas.Put(saga);
+        return Result.Ok(saga);
+    }
+
+    /// <summary>El viajero se arrepiente: se deshace lo hecho.</summary>
+    public async Task<Result<TripSaga>> CancelAsync(string sagaId, CancellationToken ct)
+    {
+        var saga = _sagas.Find(sagaId);
+        if (saga is null) return Rejection.NotFound("viajes.trip_not_found", $"No existe el viaje {sagaId}.");
+        if (saga.Status == SagaStatus.Compensated) return Result.Ok(saga);   // idempotente
+
+        await _sagas.CompensateAsync(saga.Id, "el viajero canceló", ct);
+        return Result.Ok(_sagas.Find(sagaId)!);
+    }
+
+    /// <summary>Volver a intentar lo que se rindió. Es la puerta de la persona a la que se avisó.</summary>
+    public async Task<Result<TripSaga>> RetryStuckAsync(string sagaId, CancellationToken ct)
+    {
+        var saga = _sagas.Find(sagaId);
+        if (saga is null) return Rejection.NotFound("viajes.trip_not_found", $"No existe el viaje {sagaId}.");
+
+        await _sagas.RetryStuckAsync(saga.Id, ct);
+        return Result.Ok(_sagas.Find(sagaId)!);
+    }
+
+    public Result<TripSaga> Get(string sagaId)
+        => _sagas.Find(sagaId) is { } s
+            ? Result.Ok(s)
+            : Rejection.NotFound("viajes.trip_not_found", $"No existe el viaje {sagaId}.");
+
+    public IReadOnlyList<TripSaga> PendingCompensations() => _sagas.PendingCompensations();
+
+    /// <summary>
+    /// Anota el motivo, deshace lo hecho y devuelve el rechazo original.
+    /// </summary>
+    /// <remarks>
+    /// <b>El rechazo que sale es el de la capacidad, no uno propio.</b> «No hay cupo en el hotel»
+    /// es accionable para quien reserva; «no se pudo reservar el viaje» no lo es, y taparlo con
+    /// un código del orquestador convierte cuatro motivos distintos en uno inútil.
+    /// </remarks>
+    private async Task<Result<TripSaga>> AbortarAsync(
+        TripSaga saga, Rejection motivo, string porQue, CancellationToken ct)
+    {
+        _sagas.Put(saga with { LastError = motivo.ToString() });
+        await _sagas.CompensateAsync(saga.Id, porQue, ct);
+        return Result.Rejected<TripSaga>(motivo);
+    }
+
+    /// <summary>Lo que se rechaza antes de tocar ninguna capacidad.</summary>
+    private static Rejection? Revisar(IReadOnlyList<TripItem> items)
+    {
+        if (items is null || items.Count == 0)
+        {
+            return Rejection.Invalid("viajes.no_items", "Un viaje necesita al menos un ítem.");
+        }
+        if (items.Count > MaxItems)
+        {
+            return Rejection.Invalid("viajes.too_many_items", $"Un viaje admite hasta {MaxItems} ítems.");
+        }
+
+        var vistos = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.ProductRef))
+            {
+                return Rejection.Invalid("viajes.bad_product", "Cada ítem necesita su producto.");
+            }
+            // Una ventana que no avanza no es «nada reservado», es un error de quien la
+            // construyó — y acá se contesta con un rechazo, no con una excepción: viene de una
+            // petición, no de un defecto nuestro.
+            if (item.End <= item.Start)
+            {
+                return Rejection.Invalid("viajes.bad_window",
+                    $"El periodo de '{item.ProductRef}' no avanza: {item.Start:O} → {item.End:O}.");
+            }
+            // Dos veces el mismo producto EN EL MISMO PERIODO es un error de quien pide, no una
+            // reserva doble legítima: el segundo apartado competiría con el primero por el mismo
+            // cupo. Dos periodos distintos del mismo producto sí valen — dos tramos de vuelo.
+            if (!vistos.Add($"{item.ProductRef}|{item.Start:O}|{item.End:O}"))
+            {
+                return Rejection.Invalid("viajes.duplicate_item",
+                    $"'{item.ProductRef}' viene dos veces con el mismo periodo.");
+            }
+        }
+        return null;
+    }
+}

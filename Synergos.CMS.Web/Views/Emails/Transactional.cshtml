@@ -1,0 +1,112 @@
+﻿@*
+    Email template — notificación transaccional (T4, doc 25).
+    Modelo: Synergos.CMS.Web.Services.TransactionalEmailModel
+
+    UNA plantilla data-driven para los 6 hechos (compra pagada, viaje confirmado,
+    entradas, matrícula activa, trámite radicado, decisión). El copy por tipo vive en
+    TransactionalEmailCopy; aquí solo se pinta. Es lo que evita una plantilla por
+    vertical (regla de oro doc 25).
+
+    NO inyectar servicios scoped con @@inject: el renderer es Singleton y resolver un
+    scoped desde el root provider revienta en runtime.
+*@
+@model Synergos.CMS.Web.Services.TransactionalEmailModel
+@{
+    Layout = "~/Views/Emails/_Layout.cshtml";   // ruta EXPLÍCITA: "_Layout" resolvía al layout del SITIO
+    ViewBag.Title = Model.Title;
+    ViewBag.SiteName = Model.SiteName;
+    ViewBag.PreheaderText = Model.Preheader;
+    var culture = new System.Globalization.CultureInfo("es-CO");
+}
+<h2 style="font-size:20px;color:#0f172a;margin:0 0 16px;">
+    @Model.Heading
+</h2>
+
+@if (!string.IsNullOrWhiteSpace(Model.ToName))
+{
+    <p style="font-size:14px;line-height:1.5;color:#0f172a;margin:0 0 8px;">
+        Hola, @Model.ToName:
+    </p>
+}
+
+<p style="font-size:14px;line-height:1.5;color:#475569;margin:0 0 24px;">
+    @Model.Intro
+</p>
+
+@* El código es lo que el usuario necesita guardar — va destacado. *@
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#f8fafc;border-radius:6px;margin:0 0 24px;">
+    <tr>
+        <td style="padding:16px 20px;">
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin:0 0 4px;">
+                @Model.CodeLabel
+            </div>
+            <div style="font-size:22px;font-weight:700;color:#0f172a;letter-spacing:.02em;">
+                @Model.Code
+            </div>
+        </td>
+    </tr>
+</table>
+
+@if (Model.Lines.Count > 0)
+{
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 0 24px;border-collapse:collapse;">
+        <tr>
+            <th align="left" style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;padding:0 0 8px;border-bottom:1px solid #e2e8f0;">Detalle</th>
+            <th align="right" style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;padding:0 0 8px;border-bottom:1px solid #e2e8f0;">Valor</th>
+        </tr>
+        @foreach (var line in Model.Lines)
+        {
+            <tr>
+                <td style="font-size:14px;color:#0f172a;padding:12px 0;border-bottom:1px solid #f1f5f9;">
+                    @line.Label
+                    @if (line.Quantity > 1)
+                    {
+                        <span style="color:#64748b;">&times;@line.Quantity</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(line.Detail))
+                    {
+                        <div style="font-size:12px;color:#64748b;margin-top:2px;">@line.Detail</div>
+                    }
+                </td>
+                <td align="right" style="font-size:14px;color:#0f172a;padding:12px 0;border-bottom:1px solid #f1f5f9;white-space:nowrap;">
+                    @line.Amount.ToString("N0", culture) @line.Currency
+                </td>
+            </tr>
+        }
+        @if (Model.Total is { } total)
+        {
+            <tr>
+                <td style="font-size:14px;font-weight:700;color:#0f172a;padding:12px 0;">Total</td>
+                <td align="right" style="font-size:16px;font-weight:700;color:#0f172a;padding:12px 0;white-space:nowrap;">
+                    @total.ToString("N0", culture) @Model.Currency
+                </td>
+            </tr>
+        }
+    </table>
+}
+
+@if (Model.Rows.Count > 0)
+{
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 0 24px;border-collapse:collapse;">
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td style="font-size:13px;color:#64748b;padding:6px 0;">@row.Label</td>
+                <td align="right" style="font-size:13px;color:#0f172a;padding:6px 0;">@row.Value</td>
+            </tr>
+        }
+    </table>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ActionUrl))
+{
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 8px;">
+        <tr>
+            <td style="background:#4f6ef7;border-radius:6px;">
+                <a href="@Model.ActionUrl" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">
+                    @Model.ActionLabel
+                </a>
+            </td>
+        </tr>
+    </table>
+}

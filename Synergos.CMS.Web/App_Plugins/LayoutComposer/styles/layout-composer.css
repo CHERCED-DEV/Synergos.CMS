@@ -1,0 +1,1088 @@
+/* ── Synergos Layout Composer — Backoffice preview styles ─────────────────── *
+ * Scope: App_Plugins/LayoutComposer/styles/layout-composer.css
+ * Only affects the Umbraco block grid editor preview. No frontend impact.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/* ══ 1. BASE BLOCK ══════════════════════════════════════════════════════════ */
+
+.lc-block {
+    --lc-accent:   #475569;
+    --lc-accent-2: #64748b;
+    --lc-shell-padding-inline: 10px;
+    --lc-shell-padding-top: 10px;
+    --lc-shell-padding-bottom: 10px;
+    --lc-slot-gap: 12px;
+    --umb-block-grid--column-gap: var(--lc-slot-gap);
+    --umb-block-grid--row-gap: var(--lc-slot-gap);
+    display: block;
+    min-width: 0;
+    min-height: 44px;
+    overflow: hidden;
+    border: 1px solid rgba(15, 23, 42, 0.10);
+    border-left: 4px solid var(--lc-accent);
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05), 0 4px 12px rgba(15, 23, 42, 0.04);
+    font-family: Manrope, "Segoe UI", system-ui, sans-serif;
+    transition: box-shadow 0.15s ease;
+}
+
+.lc-block:hover {
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08), 0 6px 20px rgba(15, 23, 42, 0.06);
+}
+
+/* Nested blocks recede — less shadow when inside another block */
+.lc-block .lc-block {
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+/* Preview spacing tokens */
+.lc-block[data-padding="none"] { --lc-shell-padding-top: 0px; --lc-shell-padding-bottom: 0px; }
+.lc-block[data-padding="2xs"]  { --lc-shell-padding-top: 4px;  --lc-shell-padding-bottom: 4px; }
+.lc-block[data-padding="xs"]   { --lc-shell-padding-top: 8px;  --lc-shell-padding-bottom: 8px; }
+.lc-block[data-padding="sm"]   { --lc-shell-padding-top: 12px; --lc-shell-padding-bottom: 12px; }
+.lc-block[data-padding="md"]   { --lc-shell-padding-top: 16px; --lc-shell-padding-bottom: 16px; }
+.lc-block[data-padding="lg"]   { --lc-shell-padding-top: 24px; --lc-shell-padding-bottom: 24px; }
+.lc-block[data-padding="xl"]   { --lc-shell-padding-top: 32px; --lc-shell-padding-bottom: 32px; }
+.lc-block[data-padding="2xl"]  { --lc-shell-padding-top: 40px; --lc-shell-padding-bottom: 40px; }
+.lc-block[data-padding="3xl"]  { --lc-shell-padding-top: 48px; --lc-shell-padding-bottom: 48px; }
+.lc-block[data-padding="4xl"]  { --lc-shell-padding-top: 64px; --lc-shell-padding-bottom: 64px; }
+
+.lc-block[data-gap="none"] { --lc-slot-gap: 0px; }
+.lc-block[data-gap="2xs"]  { --lc-slot-gap: 4px; }
+.lc-block[data-gap="xs"]   { --lc-slot-gap: 8px; }
+.lc-block[data-gap="sm"]   { --lc-slot-gap: 12px; }
+.lc-block[data-gap="md"]   { --lc-slot-gap: 16px; }
+.lc-block[data-gap="lg"]   { --lc-slot-gap: 24px; }
+.lc-block[data-gap="xl"]   { --lc-slot-gap: 32px; }
+.lc-block[data-gap="2xl"]  { --lc-slot-gap: 40px; }
+.lc-block[data-gap="3xl"]  { --lc-slot-gap: 48px; }
+
+.lc-block[data-margin="none"] { margin-top: 0; margin-bottom: 0; }
+.lc-block[data-margin="2xs"]  { margin-top: 4px;  margin-bottom: 4px; }
+.lc-block[data-margin="xs"]   { margin-top: 8px;  margin-bottom: 8px; }
+.lc-block[data-margin="sm"]   { margin-top: 12px; margin-bottom: 12px; }
+.lc-block[data-margin="md"]   { margin-top: 16px; margin-bottom: 16px; }
+.lc-block[data-margin="lg"]   { margin-top: 24px; margin-bottom: 24px; }
+.lc-block[data-margin="xl"]   { margin-top: 32px; margin-bottom: 32px; }
+.lc-block[data-margin="2xl"]  { margin-top: 40px; margin-bottom: 40px; }
+.lc-block[data-margin="3xl"]  { margin-top: 48px; margin-bottom: 48px; }
+.lc-block[data-margin="4xl"]  { margin-top: 64px; margin-bottom: 64px; }
+.lc-block[data-margin="auto"] { margin-left: auto; margin-right: auto; }
+
+.lc-block[data-container-type="fluid"] {
+    --lc-shell-padding-inline: 6px;
+}
+
+.lc-block[data-container-type="fullWidth"] {
+    --lc-shell-padding-inline: 0px;
+}
+
+.lc-block--no-padding-top {
+    --lc-shell-padding-top: 0px;
+}
+
+.lc-block--no-padding-bottom {
+    --lc-shell-padding-bottom: 0px;
+}
+
+.lc-block--no-margin-top {
+    margin-top: 0 !important;
+}
+
+.lc-block--no-margin-bottom {
+    margin-bottom: 0 !important;
+}
+
+/* ══ 2. HEADER (generic — structural blocks: Section, Container, Grid, Stack) */
+
+.lc-block__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    padding: 7px 12px;
+    background: linear-gradient(90deg, var(--lc-accent), var(--lc-accent-2));
+    color: #ffffff;
+    user-select: none;
+}
+
+.lc-block__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+}
+
+.lc-block__type {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.lc-block__header-spacer {
+    flex: 1;
+}
+
+.lc-block__badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.20);
+    color: #ffffff;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.lc-block__badge--variant {
+    background: rgba(15, 23, 42, 0.20);
+    font-style: italic;
+    text-transform: none;
+}
+
+/* ══ 3. BODY / INTRO ════════════════════════════════════════════════════════ */
+
+.lc-block__body,
+.lc-layout__intro {
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px 12px;
+    border-top: 1px solid rgba(15, 23, 42, 0.05);
+    background: rgba(248, 250, 252, 0.80);
+}
+
+.lc-block__body > *,
+.lc-layout__intro > * {
+    margin: 0;
+}
+
+.lc-block__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+.lc-block__preview-title {
+    display: -webkit-box;
+    overflow: hidden;
+    max-width: 100%;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    text-overflow: ellipsis;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+}
+
+.lc-block__preview-sub,
+.lc-block__hint {
+    display: -webkit-box;
+    overflow: hidden;
+    max-width: 100%;
+    color: #475569;
+    font-size: 11px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    text-overflow: ellipsis;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+}
+
+.lc-block__preview-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* ══ 4. CHIPS ═══════════════════════════════════════════════════════════════ */
+
+.lc-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.lc-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 7px;
+    max-width: 100%;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1e3a8a;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    overflow-wrap: anywhere;
+}
+
+.lc-chip--muted {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+
+.lc-chip--toggle {
+    background: #fef9c3;
+    color: #713f12;
+    border: 1px solid #fde68a;
+}
+
+/* Chips inside layout headers — keep own brand colors (toggle=yellow, muted=grey) */
+.lc-block__header--layout-1col .lc-chip,
+.lc-block__header--layout-2col .lc-chip,
+.lc-block__header--layout-3col .lc-chip,
+.lc-block__header--layout-4col .lc-chip,
+.lc-block__header--layout-main-sidebar .lc-chip {
+    flex-shrink: 0;
+}
+
+/* ══ 5. SKELETON PLACEHOLDERS ═══════════════════════════════════════════════ */
+
+.lc-block__preview-empty {
+    display: grid;
+    gap: 4px;
+    padding-top: 2px;
+}
+
+.lc-skel {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.07);
+}
+
+.lc-skel--lg { width: 74%; }
+.lc-skel--md { width: 52%; }
+.lc-skel--sm { width: 34%; }
+
+/* ══ 6. SPECIALISED PREVIEW COMPONENTS ══════════════════════════════════════ */
+
+/* Action block — CTA preview button */
+.lc-block__preview-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: #b71c1c;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* Info block — stat display */
+.lc-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.lc-stat__value {
+    color: #00695c;
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.lc-stat__label {
+    color: #475569;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+/* Media block — thumbnail */
+.lc-media-thumb {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+}
+
+.lc-media-thumb__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 24px;
+    border-radius: 8px;
+    background: #f3e8ff;
+    color: #4a1772;
+    font-size: 11px;
+    font-weight: 800;
+    flex-shrink: 0;
+}
+
+.lc-media-thumb__copy {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+/* ══ 7. AREAS & SLOTS ═══════════════════════════════════════════════════════ */
+
+/* Container for nested block slots */
+.lc-block__areas {
+    padding:
+        var(--lc-shell-padding-top)
+        var(--lc-shell-padding-inline)
+        var(--lc-shell-padding-bottom);
+    background: rgba(248, 250, 252, 0.65);
+}
+
+/* Recreate the minimum Block Grid primitives inside the shadow root. */
+.lc-block .umb-block-grid,
+.lc-block .umb-block-grid__layout-item,
+.lc-block .umb-block-grid__area-container,
+.lc-block .umb-block-grid__area {
+    min-width: 0;
+}
+
+.lc-block .umb-block-grid__layout-container {
+    display: grid;
+    grid-template-columns: repeat(var(--umb-block-grid--grid-columns, 12), minmax(0, 1fr));
+    column-gap: var(--umb-block-grid--column-gap, 12px);
+    row-gap: var(--umb-block-grid--row-gap, 12px);
+}
+
+.lc-block .umb-block-grid__layout-item {
+    grid-column: span var(--umb-block-grid--item-column-span, 12);
+    grid-row: span var(--umb-block-grid--item-row-span, 1);
+}
+
+.lc-block .umb-block-grid__area-container,
+.lc-block umb-block-grid-render-area-slots,
+.lc-block umb-block-grid-render-area-slots > .umb-block-grid__area-container {
+    display: grid;
+    grid-template-columns: repeat(var(--umb-block-grid--area-grid-columns, 12), minmax(0, 1fr));
+    column-gap: var(--umb-block-grid--column-gap, 12px);
+    row-gap: var(--umb-block-grid--row-gap, 12px);
+    align-items: start;
+    padding: 0;
+}
+
+.lc-block .umb-block-grid__area {
+    grid-column: span var(--umb-block-grid--area-column-span, 12);
+    grid-row: span var(--umb-block-grid--area-row-span, 1);
+}
+
+.lc-block umb-block-grid-render-area-slots > .umb-block-grid__area-container {
+    min-height: 0;
+    border: 0;
+    background: transparent;
+}
+
+.lc-block .umb-block-grid__area,
+.lc-block umb-block-grid-render-area-slots > :not(.umb-block-grid__area-container) {
+    min-height: 80px;
+    padding: 10px;
+    border: 1px dashed rgba(15, 23, 42, 0.14);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.88);
+    align-self: start;
+}
+
+/* ══ 8. LAYOUT-SPECIFIC AREA GRIDS ══════════════════════════════════════════ */
+
+.lc-layout {
+    --umb-block-grid--area-grid-columns: 12;
+    padding-top: 0;
+}
+
+.lc-layout [part="area-container"] {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--umb-block-grid--column-gap, 10px);
+    row-gap: var(--umb-block-grid--row-gap, 12px);
+    align-items: start;
+    width: 100%;
+}
+
+.lc-layout [part="area-container"] > slot {
+    display: block;
+    min-width: 0;
+    min-height: 0;
+    align-self: start;
+}
+
+.lc-layout [part="area-container"] > slot::slotted(.umb-block-grid__area) {
+    min-width: 0;
+    min-height: 72px;
+    height: auto;
+    padding: 8px;
+    border: 1px dashed rgba(15, 23, 42, 0.12);
+    border-radius: 12px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(248, 250, 252, 0.72) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.lc-layout [part="area-container"] > slot::slotted(.umb-block-grid__area[data-area-alias]) {
+    position: relative;
+}
+
+.lc-layout .umb-block-grid__area {
+    min-height: 72px;
+    height: auto;
+    align-self: start;
+}
+
+.lc-layout .umb-block-grid__layout-container {
+    align-content: start;
+    row-gap: var(--lc-slot-gap, 8px);
+    column-gap: var(--lc-slot-gap, 8px);
+}
+
+.lc-layout .umb-block-grid__layout-item {
+    align-self: start;
+}
+
+.lc-layout .umb-block-grid__area-actions {
+    min-height: 72px;
+    align-self: start;
+}
+
+.lc-layout .umb-block-grid__area-actions > button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 72px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.56);
+    border-color: rgba(15, 23, 42, 0.16);
+    color: #475569;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.lc-layout .umb-block-grid__area-actions > button:hover {
+    background: rgba(255, 255, 255, 0.82);
+    border-color: rgba(15, 23, 42, 0.26);
+    color: #0f172a;
+}
+
+.lc-layout .umb-block-grid__block--last-inline-create-button {
+    margin-top: -8px;
+    margin-bottom: -4px;
+}
+
+.lc-layout--1col [part="area-container"] > slot[name="main"] {
+    grid-column: span 12;
+}
+
+.lc-layout--1col [part="area-container"] > slot::slotted(.umb-block-grid__area),
+.lc-layout--1col .umb-block-grid__area-actions > button {
+    border-color: rgba(22, 163, 74, 0.18);
+}
+
+.lc-layout--2col [part="area-container"] > slot[name="left"],
+.lc-layout--2col [part="area-container"] > slot[name="right"] {
+    grid-column: span 6;
+}
+
+.lc-layout--2col [part="area-container"] > slot::slotted(.umb-block-grid__area),
+.lc-layout--2col .umb-block-grid__area-actions > button {
+    border-color: rgba(37, 99, 235, 0.18);
+}
+
+.lc-layout--3col [part="area-container"] > slot[name="col1"],
+.lc-layout--3col [part="area-container"] > slot[name="col2"],
+.lc-layout--3col [part="area-container"] > slot[name="col3"] {
+    grid-column: span 4;
+}
+
+.lc-layout--3col [part="area-container"] > slot::slotted(.umb-block-grid__area),
+.lc-layout--3col .umb-block-grid__area-actions > button {
+    border-color: rgba(109, 40, 217, 0.18);
+}
+
+.lc-layout--4col [part="area-container"] > slot[name="col1"],
+.lc-layout--4col [part="area-container"] > slot[name="col2"],
+.lc-layout--4col [part="area-container"] > slot[name="col3"],
+.lc-layout--4col [part="area-container"] > slot[name="col4"] {
+    grid-column: span 3;
+}
+
+.lc-layout--4col [part="area-container"] > slot::slotted(.umb-block-grid__area),
+.lc-layout--4col .umb-block-grid__area-actions > button {
+    border-color: rgba(234, 88, 12, 0.20);
+}
+
+.lc-layout--main-sidebar [part="area-container"] > slot[name="main"] {
+    grid-column: span 8;
+}
+
+.lc-layout--main-sidebar [part="area-container"] > slot[name="sidebar"] {
+    grid-column: span 4;
+}
+
+.lc-layout--main-sidebar [part="area-container"] > slot::slotted(.umb-block-grid__area),
+.lc-layout--main-sidebar .umb-block-grid__area-actions > button {
+    border-color: rgba(13, 148, 136, 0.18);
+}
+
+@media (max-width: 900px) {
+    .lc-layout--3col [part="area-container"] > slot[name="col1"],
+    .lc-layout--3col [part="area-container"] > slot[name="col2"],
+    .lc-layout--3col [part="area-container"] > slot[name="col3"],
+    .lc-layout--4col [part="area-container"] > slot[name="col1"],
+    .lc-layout--4col [part="area-container"] > slot[name="col2"],
+    .lc-layout--4col [part="area-container"] > slot[name="col3"],
+    .lc-layout--4col [part="area-container"] > slot[name="col4"],
+    .lc-layout--main-sidebar [part="area-container"] > slot[name="main"],
+    .lc-layout--main-sidebar [part="area-container"] > slot[name="sidebar"] {
+        grid-column: span 12;
+    }
+
+    .lc-area-labels.lc-layout--3col,
+    .lc-area-labels.lc-layout--4col,
+    .lc-area-labels.lc-layout--main-sidebar {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ══ 9. AREA COLUMN LABELS ═══════════════════════════════════════════════════ */
+
+.lc-area-labels {
+    display: grid;
+    align-items: stretch;
+    gap: max(4px, calc(var(--lc-slot-gap) * 0.6));
+    padding: 0 var(--lc-shell-padding-inline) var(--lc-shell-padding-bottom);
+}
+
+.lc-area-labels span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    color: #64748b;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.lc-area-labels.lc-layout--2col        { grid-template-columns: 1fr 1fr; }
+.lc-area-labels.lc-layout--3col        { grid-template-columns: 1fr 1fr 1fr; }
+.lc-area-labels.lc-layout--4col        { grid-template-columns: 1fr 1fr 1fr 1fr; }
+.lc-area-labels.lc-layout--main-sidebar { grid-template-columns: 2fr 1fr; }
+
+/* ══ 10. COLUMN VISUALIZER ════════════════════════════════════════════════════ */
+
+.lc-col-vis {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    width: 80px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+/* Default: white bars for dark headers (structural blocks) */
+.lc-col-vis__col {
+    height: 13px;
+    min-width: 3px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.70);
+}
+
+.lc-col-vis__col--12 { flex: 12; }
+.lc-col-vis__col--8  { flex: 8; }
+.lc-col-vis__col--6  { flex: 6; }
+.lc-col-vis__col--4  { flex: 4; }
+.lc-col-vis__col--3  { flex: 3; }
+
+/* Grid block — three-dot column indicator */
+.lc-block__col-indicator {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.lc-block__col-indicator span {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.46);
+}
+
+/* ══ 11. STRUCTURAL BLOCK TYPE ACCENTS ════════════════════════════════════════ */
+
+.lc-block--section {
+    --lc-accent:   #92400e;
+    --lc-accent-2: #b45309;
+    border-left-width: 5px;
+    margin-bottom: 16px;
+}
+
+.lc-block--grid {
+    --lc-accent:   #2e7d32;
+    --lc-accent-2: #388e3c;
+}
+
+.lc-block--column {
+    --lc-accent:   #4a7c59;
+    --lc-accent-2: #5a8c6a;
+    box-shadow: none;
+    border-style: dashed;
+    border-left-style: solid;
+}
+
+.lc-block--container {
+    --lc-accent:   #5c3d8f;
+    --lc-accent-2: #6d4ca0;
+}
+
+.lc-block--stack {
+    --lc-accent:   #b5620a;
+    --lc-accent-2: #c5720a;
+}
+
+/* ══ 12. CONTENT BLOCK TYPE ACCENTS ══════════════════════════════════════════ */
+
+.lc-block--text        { --lc-accent: #1565c0; --lc-accent-2: #1976d2; }
+.lc-block--action      { --lc-accent: #b71c1c; --lc-accent-2: #c62828; }
+.lc-block--media       { --lc-accent: #6a1b9a; --lc-accent-2: #7b1fa2; }
+.lc-block--info        { --lc-accent: #00695c; --lc-accent-2: #00796b; }
+.lc-block--composition { --lc-accent: #e65100; --lc-accent-2: #f4511e; }
+.lc-block--integration { --lc-accent: #263238; --lc-accent-2: #37474f; }
+.lc-block--corporate   { --lc-accent: #880e4f; --lc-accent-2: #ad1457; }
+
+/* ══ 13. LAYOUT PRESET BLOCKS ════════════════════════════════════════════════ *
+ *
+ * Layout blocks use a "technical tab" header instead of a dark gradient.
+ * The tab is a light-tinted strip with colored text — reads as editorial
+ * metadata, not as a UI navigation element.
+ *
+ * Color system:
+ *   1col        → green   (hero / full-width content)
+ *   2col        → blue    (feature / balanced split)
+ *   3col        → violet  (cards / repeating content)
+ *   4col        → orange  (mosaic / KPIs / stats)
+ *   main-sidebar → teal   (content + sidebar rail)
+ *
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+.lc-block--layout {
+    --lc-slot-gap: 10px;
+    border-left-width: 3px;
+    margin-bottom: 14px;
+    /* Lighter visual weight than structural blocks */
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.05);
+}
+
+.lc-block--layout > .lc-block__areas {
+    padding:
+        var(--lc-shell-padding-top)
+        var(--lc-shell-padding-inline)
+        var(--lc-shell-padding-bottom);
+}
+
+.lc-block--layout:last-child {
+    margin-bottom: 0;
+}
+
+/* Nested content blocks inside layouts are more recessive */
+.lc-block--layout .lc-block,
+.lc-block--column .lc-block,
+.lc-block--section .lc-block--column {
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+/* ─────────────────────────────────────────────────── *
+ * 1 Columna — green
+ * Full-width content: hero, rich text, forms
+ * ─────────────────────────────────────────────────── */
+
+.lc-block__header--layout-1col {
+    background: rgba(22, 163, 74, 0.07) !important;
+    border-bottom: 1.5px solid rgba(22, 163, 74, 0.18) !important;
+    color: #15803d !important;
+}
+.lc-block__header--layout-1col .lc-block__icon {
+    background: rgba(22, 163, 74, 0.14);
+    color: #15803d;
+}
+.lc-block__header--layout-1col .lc-block__badge,
+.lc-block__header--layout-1col .lc-block__badge--variant {
+    background: rgba(22, 163, 74, 0.10);
+    color: #15803d;
+    border: 1px solid rgba(22, 163, 74, 0.20);
+}
+.lc-block__header--layout-1col .lc-col-vis__col {
+    background: rgba(22, 163, 74, 0.45);
+}
+
+.lc-block--layout:has(.lc-block__header--layout-1col) {
+    border-left-color: #16a34a;
+    background: rgba(22, 163, 74, 0.025);
+}
+.lc-block--layout:has(.lc-block__header--layout-1col) .lc-layout__intro,
+.lc-block--layout:has(.lc-block__header--layout-1col) .lc-block__areas {
+    background: rgba(22, 163, 74, 0.04);
+}
+.lc-block--layout:has(.lc-block__header--layout-1col) .lc-layout__intro {
+    border-top-color: rgba(22, 163, 74, 0.18);
+}
+.lc-block--layout:has(.lc-block__header--layout-1col) .lc-block__eyebrow {
+    color: #15803d;
+}
+.lc-block--layout:has(.lc-block__header--layout-1col) .lc-area-labels span {
+    background: rgba(22, 163, 74, 0.07);
+    border-color: rgba(22, 163, 74, 0.28);
+    color: #15803d;
+}
+
+/* ─────────────────────────────────────────────────── *
+ * 2 Columnas — blue
+ * Balanced split: feature pairs, media + text
+ * ─────────────────────────────────────────────────── */
+
+.lc-block__header--layout-2col {
+    background: rgba(37, 99, 235, 0.07) !important;
+    border-bottom: 1.5px solid rgba(37, 99, 235, 0.18) !important;
+    color: #1d4ed8 !important;
+}
+.lc-block__header--layout-2col .lc-block__icon {
+    background: rgba(37, 99, 235, 0.13);
+    color: #1d4ed8;
+}
+.lc-block__header--layout-2col .lc-block__badge,
+.lc-block__header--layout-2col .lc-block__badge--variant {
+    background: rgba(37, 99, 235, 0.09);
+    color: #1d4ed8;
+    border: 1px solid rgba(37, 99, 235, 0.18);
+}
+.lc-block__header--layout-2col .lc-col-vis__col {
+    background: rgba(37, 99, 235, 0.42);
+}
+
+.lc-block--layout:has(.lc-block__header--layout-2col) {
+    border-left-color: #2563eb;
+    background: rgba(37, 99, 235, 0.025);
+}
+.lc-block--layout:has(.lc-block__header--layout-2col) .lc-layout__intro,
+.lc-block--layout:has(.lc-block__header--layout-2col) .lc-block__areas {
+    background: rgba(37, 99, 235, 0.04);
+}
+.lc-block--layout:has(.lc-block__header--layout-2col) .lc-layout__intro {
+    border-top-color: rgba(37, 99, 235, 0.18);
+}
+.lc-block--layout:has(.lc-block__header--layout-2col) .lc-block__eyebrow {
+    color: #1d4ed8;
+}
+.lc-block--layout:has(.lc-block__header--layout-2col) .lc-area-labels span {
+    background: rgba(37, 99, 235, 0.07);
+    border-color: rgba(37, 99, 235, 0.28);
+    color: #1d4ed8;
+}
+
+/* ─────────────────────────────────────────────────── *
+ * 3 Columnas — violet
+ * Cards, features, informational blocks
+ * ─────────────────────────────────────────────────── */
+
+.lc-block__header--layout-3col {
+    background: rgba(109, 40, 217, 0.07) !important;
+    border-bottom: 1.5px solid rgba(109, 40, 217, 0.18) !important;
+    color: #5b21b6 !important;
+}
+.lc-block__header--layout-3col .lc-block__icon {
+    background: rgba(109, 40, 217, 0.12);
+    color: #5b21b6;
+}
+.lc-block__header--layout-3col .lc-block__badge,
+.lc-block__header--layout-3col .lc-block__badge--variant {
+    background: rgba(109, 40, 217, 0.08);
+    color: #5b21b6;
+    border: 1px solid rgba(109, 40, 217, 0.18);
+}
+.lc-block__header--layout-3col .lc-col-vis__col {
+    background: rgba(109, 40, 217, 0.40);
+}
+
+.lc-block--layout:has(.lc-block__header--layout-3col) {
+    border-left-color: #7c3aed;
+    background: rgba(109, 40, 217, 0.025);
+}
+.lc-block--layout:has(.lc-block__header--layout-3col) .lc-layout__intro,
+.lc-block--layout:has(.lc-block__header--layout-3col) .lc-block__areas {
+    background: rgba(109, 40, 217, 0.04);
+}
+.lc-block--layout:has(.lc-block__header--layout-3col) .lc-layout__intro {
+    border-top-color: rgba(109, 40, 217, 0.18);
+}
+.lc-block--layout:has(.lc-block__header--layout-3col) .lc-block__eyebrow {
+    color: #5b21b6;
+}
+.lc-block--layout:has(.lc-block__header--layout-3col) .lc-area-labels span {
+    background: rgba(109, 40, 217, 0.06);
+    border-color: rgba(109, 40, 217, 0.25);
+    color: #5b21b6;
+}
+
+/* ─────────────────────────────────────────────────── *
+ * 4 Columnas — orange
+ * Mosaic, KPIs, dense grids, stats
+ * ─────────────────────────────────────────────────── */
+
+.lc-block__header--layout-4col {
+    background: rgba(234, 88, 12, 0.07) !important;
+    border-bottom: 1.5px solid rgba(234, 88, 12, 0.18) !important;
+    color: #c2410c !important;
+}
+.lc-block__header--layout-4col .lc-block__icon {
+    background: rgba(234, 88, 12, 0.12);
+    color: #c2410c;
+}
+.lc-block__header--layout-4col .lc-block__badge,
+.lc-block__header--layout-4col .lc-block__badge--variant {
+    background: rgba(234, 88, 12, 0.09);
+    color: #c2410c;
+    border: 1px solid rgba(234, 88, 12, 0.18);
+}
+.lc-block__header--layout-4col .lc-col-vis__col {
+    background: rgba(234, 88, 12, 0.40);
+}
+
+.lc-block--layout:has(.lc-block__header--layout-4col) {
+    border-left-color: #ea580c;
+    background: rgba(234, 88, 12, 0.025);
+}
+.lc-block--layout:has(.lc-block__header--layout-4col) .lc-layout__intro,
+.lc-block--layout:has(.lc-block__header--layout-4col) .lc-block__areas {
+    background: rgba(234, 88, 12, 0.04);
+}
+.lc-block--layout:has(.lc-block__header--layout-4col) .lc-layout__intro {
+    border-top-color: rgba(234, 88, 12, 0.18);
+}
+.lc-block--layout:has(.lc-block__header--layout-4col) .lc-block__eyebrow {
+    color: #c2410c;
+}
+.lc-block--layout:has(.lc-block__header--layout-4col) .lc-area-labels span {
+    background: rgba(234, 88, 12, 0.07);
+    border-color: rgba(234, 88, 12, 0.28);
+    color: #c2410c;
+}
+
+/* ─────────────────────────────────────────────────── *
+ * Main + Sidebar — teal
+ * Content body + narrow rail
+ * ─────────────────────────────────────────────────── */
+
+.lc-block__header--layout-main-sidebar {
+    background: rgba(13, 148, 136, 0.07) !important;
+    border-bottom: 1.5px solid rgba(13, 148, 136, 0.18) !important;
+    color: #0f766e !important;
+}
+.lc-block__header--layout-main-sidebar .lc-block__icon {
+    background: rgba(13, 148, 136, 0.13);
+    color: #0f766e;
+}
+.lc-block__header--layout-main-sidebar .lc-block__badge,
+.lc-block__header--layout-main-sidebar .lc-block__badge--variant {
+    background: rgba(13, 148, 136, 0.09);
+    color: #0f766e;
+    border: 1px solid rgba(13, 148, 136, 0.18);
+}
+.lc-block__header--layout-main-sidebar .lc-col-vis__col {
+    background: rgba(13, 148, 136, 0.42);
+}
+
+.lc-block--layout:has(.lc-block__header--layout-main-sidebar) {
+    border-left-color: #0d9488;
+    background: rgba(13, 148, 136, 0.025);
+}
+.lc-block--layout:has(.lc-block__header--layout-main-sidebar) .lc-layout__intro,
+.lc-block--layout:has(.lc-block__header--layout-main-sidebar) .lc-block__areas {
+    background: rgba(13, 148, 136, 0.04);
+}
+.lc-block--layout:has(.lc-block__header--layout-main-sidebar) .lc-layout__intro {
+    border-top-color: rgba(13, 148, 136, 0.18);
+}
+.lc-block--layout:has(.lc-block__header--layout-main-sidebar) .lc-block__eyebrow {
+    color: #0f766e;
+}
+.lc-block--layout:has(.lc-block__header--layout-main-sidebar) .lc-area-labels span {
+    background: rgba(13, 148, 136, 0.07);
+    border-color: rgba(13, 148, 136, 0.28);
+    color: #0a5c55;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Universal preview — field-aware, resilient block render
+   Single template for all content elements (SSR or CDN).
+   ───────────────────────────────────────────────────────────────────────── */
+.lc-block--universal {
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    border: 1px solid #e5e7eb;
+}
+
+.lc-universal-preview {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 12px;
+    padding: 10px 12px 12px;
+    align-items: start;
+}
+.lc-universal-preview:not(:has(.lc-universal-preview__thumb)) {
+    grid-template-columns: 1fr;
+}
+.lc-universal-preview__thumb {
+    width: 64px;
+    height: 64px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #f3f4f6;
+    flex-shrink: 0;
+}
+.lc-universal-preview__thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.lc-universal-preview__content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+/* Price callout for pricing-card-ish elements */
+.lc-universal-preview__price {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+}
+.lc-universal-preview__currency {
+    font-size: 13px;
+    color: #64748b;
+    font-weight: 500;
+}
+.lc-universal-preview__amount {
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1;
+}
+.lc-universal-preview__period {
+    font-size: 12px;
+    color: #64748b;
+}
+
+/* Author/attribution line (quotes, testimonials) */
+.lc-block__preview-sub--author {
+    font-style: italic;
+    color: #475569;
+    margin-top: 2px;
+}
+
+/* Large preview title variant (hero) */
+.lc-block__preview-title--lg {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+/* Chip variants added by universal preview */
+.lc-chip--cta {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #1d4ed8;
+    font-weight: 500;
+}
+.lc-chip--warning {
+    background: rgba(234, 88, 12, 0.08);
+    border-color: rgba(234, 88, 12, 0.3);
+    color: #9a3412;
+}
+
+/* Skeleton for missing thumbnail */
+.lc-skel--img {
+    width: 100%;
+    height: 100%;
+    min-height: 48px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #f3f4f6 0%, #e5e7eb 50%, #f3f4f6 100%);
+    background-size: 200% 100%;
+    animation: lc-skel-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes lc-skel-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Badge type color palette (for <span class="lc-block__badge lc-block__badge--<type>">) */
+.lc-block__badge--info    { background: rgba(59, 130, 246, 0.1);  color: #1d4ed8; border-color: rgba(59, 130, 246, 0.3); }
+.lc-block__badge--success { background: rgba(16, 185, 129, 0.1);  color: #047857; border-color: rgba(16, 185, 129, 0.3); }
+.lc-block__badge--warning { background: rgba(234, 179, 8, 0.1);   color: #854d0e; border-color: rgba(234, 179, 8, 0.3); }
+.lc-block__badge--danger  { background: rgba(239, 68, 68, 0.1);   color: #b91c1c; border-color: rgba(239, 68, 68, 0.3); }
+.lc-block__badge--new     { background: rgba(168, 85, 247, 0.1);  color: #6b21a8; border-color: rgba(168, 85, 247, 0.3); }
+.lc-block__badge--beta    { background: rgba(236, 72, 153, 0.1);  color: #be185d; border-color: rgba(236, 72, 153, 0.3); }
+.lc-block__badge--sale    { background: rgba(234, 88, 12, 0.1);   color: #c2410c; border-color: rgba(234, 88, 12, 0.3); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Typed/Area container previews — CardGrid, LogoCloudGrid,
+   TestimonialCarousel, AccordionGroup
+   ───────────────────────────────────────────────────────────────────────── */
+.lc-block--card-grid,
+.lc-block--logo-cloud-grid,
+.lc-block--testimonial-carousel,
+.lc-block--accordion-group {
+    border-radius: 8px;
+    background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    border: 1px solid #e5e7eb;
+}
+.lc-block--card-grid .lc-block__header,
+.lc-block--logo-cloud-grid .lc-block__header {
+    background: rgba(13, 148, 136, 0.06);
+    border-bottom: 1px solid rgba(13, 148, 136, 0.15);
+}
+.lc-block--testimonial-carousel .lc-block__header,
+.lc-block--accordion-group .lc-block__header {
+    background: rgba(168, 85, 247, 0.06);
+    border-bottom: 1px solid rgba(168, 85, 247, 0.15);
+}
+

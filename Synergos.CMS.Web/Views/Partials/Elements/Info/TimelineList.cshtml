@@ -1,0 +1,31 @@
+@*
+    elementInfoTimelineList renderer (Ola 19). SSR container.
+    <ol> semántico ordenado con items delegando a TimelineItem.cshtml.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var items = Model.Value<BlockListModel>("timelineItems");
+    if (items == null || !items.Any()) { return; }
+    var title = Model.Value<string>("timelineTitle");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-timeline-list",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-timeline-list--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-timeline-list__title">@title</h2>
+    }
+    <ol class="syn-timeline-list__items">
+        @foreach (var item in items)
+        {
+            @await Html.PartialAsync("Elements/Info/TimelineItem", item.Content)
+        }
+    </ol>
+</section>

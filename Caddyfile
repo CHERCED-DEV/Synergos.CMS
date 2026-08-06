@@ -1,0 +1,54 @@
+# El portero de Synergos.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# LO QUE SE ALCANZA DESDE INTERNET, Y NADA MÁS.
+#
+# Dos rutas. Todo lo demás —las 20 capacidades y los 2 orquestadores— vive en
+# la red interna de Docker y ni siquiera publica un puerto: no hay nada que
+# bloquear porque no hay nada expuesto.
+#
+# Caddy y no nginx por brevedad: con 23 servicios detrás, un fichero de veinte
+# líneas que se lee entero vale más que uno de doscientos que nadie relee.
+# Y saca los certificados solo.
+# ─────────────────────────────────────────────────────────────────────────────
+
+{$SYNERGOS_DOMAIN} {
+	encode zstd gzip
+
+	# ── El camino de vuelta del proveedor de correo ───────────────────────────
+	#
+	# Es el ÚNICO endpoint del árbol de servicios alcanzable desde fuera, y es a
+	# la fuerza: lo llama un tercero que no tiene la llave compartida (ADR 0131).
+	# Lo que lo protege es su firma, verificada dentro de Api.Notifications.
+	#
+	# Va PRIMERO porque Caddy evalúa por especificidad y esta ruta tiene que
+	# ganarle al catch-all de abajo.
+	handle /v1/webhooks/* {
+		reverse_proxy api-notifications:8080
+	}
+
+	# ── Todo lo demás es el CMS ───────────────────────────────────────────────
+	handle {
+		reverse_proxy cms:8080 {
+			# El primer arranque instala Umbraco desatendido e importa 880 ítems
+			# de uSync — unos 74s medidos en CI (ADR 0128). Sin esta paciencia,
+			# el proxy devuelve 502 durante ese rato y parece que el despliegue
+			# falló cuando en realidad está poblándose.
+			health_uri /_health
+			health_interval 10s
+			health_timeout 5s
+
+			# La IP real del visitante. Sin esto, el CMS ve la del proxy y todo
+			# rastro de acceso —incluido el acuse de la HU #13— apunta al mismo
+			# sitio.
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# El log en formato JSON: lo que se pueda leer con jq cuando algo falle a
+	# las tres de la mañana.
+	log {
+		output stdout
+		format json
+	}
+}

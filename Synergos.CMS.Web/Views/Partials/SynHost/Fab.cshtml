@@ -1,0 +1,20 @@
+﻿@using Umbraco.Cms.Core.Models
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var actionLink = Model.Value<Link>("actionLink");
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["iconKey"] = Model.Value<string>("iconKey"),
+        ["actionUrl"] = actionLink?.Url,
+        ["ariaLabel"] = Model.Value<string>("ariaLabel"),
+        ["position"] = Model.Value<string>("position"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "fab",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

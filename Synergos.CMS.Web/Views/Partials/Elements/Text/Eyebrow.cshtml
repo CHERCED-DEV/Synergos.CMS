@@ -1,0 +1,18 @@
+@*
+    elementTextEyebrow renderer (Ola 12 Wave 2). SSR-native.
+    Emits a short eyebrow text above a heading.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var text = Model.Value<string>("eyebrowText");
+    if (string.IsNullOrWhiteSpace(text)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-eyebrow",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-eyebrow--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<span class="@classes">@text</span>

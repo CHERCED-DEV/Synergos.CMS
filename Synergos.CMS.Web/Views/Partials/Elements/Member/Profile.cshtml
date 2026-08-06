@@ -1,0 +1,35 @@
+@*
+    elementMemberProfile renderer (Ola 35 schema + Ola 40 runtime).
+    Consulta IMemberManager.GetCurrentMemberAsync() y proyecta displayName
+    y bio (si flags activos). Solo renderea cuando hay member autenticado.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Umbraco.Cms.Web.Common.Security.IMemberManager MemberManager
+@{
+    var showName = Model.Value<bool>("showDisplayName");
+    var showBio = Model.Value<bool>("showBio");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-member-profile",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-member-profile--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    var member = await MemberManager.GetCurrentMemberAsync();
+    if (member == null) { return; }
+
+    var displayName = member.Name ?? member.UserName ?? member.Email;
+    var bio = member.Comments;
+}
+<div class="@classes" data-member-key="@member.Key">
+    @if (showName && !string.IsNullOrWhiteSpace(displayName))
+    {
+        <p class="syn-member-profile__name">@displayName</p>
+    }
+    @if (showBio && !string.IsNullOrWhiteSpace(bio))
+    {
+        <p class="syn-member-profile__bio">@bio</p>
+    }
+</div>

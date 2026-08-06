@@ -1,0 +1,24 @@
+﻿@*
+    SynHost renderer — <synergos-cookie-consent>. GDPR/LGPD consent banner.
+*@
+@using Umbraco.Cms.Core.Models
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var policyLink = Model.Value<Link>("policyLink");
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["bannerText"] = Model.Value<string>("bannerText"),
+        ["acceptLabel"] = Model.Value<string>("acceptLabel"),
+        ["rejectLabel"] = Model.Value<string>("rejectLabel"),
+        ["settingsLabel"] = Model.Value<string>("settingsLabel"),
+        ["policyUrl"] = policyLink?.Url,
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
+        BlockAlias: "cookie-consent",
+        Props: props,
+        ConfigOverrideJson: Model.Value<string>("configOverride"),
+        Culture: System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

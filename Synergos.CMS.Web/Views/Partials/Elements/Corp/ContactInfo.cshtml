@@ -1,0 +1,35 @@
+@*
+    elementCorpContactInfo renderer (Ola 21). SSR-native atomic.
+    Muestra bloque de contacto corporativo: email (mailto:), teléfono (tel:)
+    y dirección. Cada pieza es opcional — renderiza solo las presentes.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var email = Model.Value<string>("contactEmail");
+    var phone = Model.Value<string>("contactPhone");
+    var address = Model.Value<string>("contactAddress");
+    if (string.IsNullOrWhiteSpace(email) && string.IsNullOrWhiteSpace(phone) && string.IsNullOrWhiteSpace(address)) { return; }
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-contact-info",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-contact-info--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var phoneHref = string.IsNullOrWhiteSpace(phone) ? null : $"tel:{new string(phone.Where(c => char.IsDigit(c) || c == '+').ToArray())}";
+}
+<address class="@classes">
+    @if (!string.IsNullOrWhiteSpace(email))
+    {
+        <a class="syn-contact-info__email" href="mailto:@email">@email</a>
+    }
+    @if (!string.IsNullOrWhiteSpace(phone))
+    {
+        <a class="syn-contact-info__phone" href="@phoneHref">@phone</a>
+    }
+    @if (!string.IsNullOrWhiteSpace(address))
+    {
+        <span class="syn-contact-info__address">@address</span>
+    }
+</address>

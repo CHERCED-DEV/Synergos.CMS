@@ -1,0 +1,33 @@
+name: 🔧 Mejora
+description: Deuda técnica, refactor, rendimiento — nada que el usuario pidiera
+title: "[Mejora] "
+labels: ["mejora"]
+body:
+  - type: textarea
+    id: duele
+    attributes:
+      label: Qué duele hoy
+      description: Con evidencia. "Es feo" no es evidencia; "dos réplicas se pisan el almacén" sí.
+    validations: { required: true }
+
+  - type: textarea
+    id: gana
+    attributes:
+      label: Qué se gana
+    validations: { required: true }
+
+  - type: textarea
+    id: por-que-ahora
+    attributes:
+      label: Por qué ahora y no después
+      description: |
+        **La pregunta que mata la mayoría de las mejoras, y está bien que las mate.**
+        Si la respuesta es "porque me molesta", el ticket queda abierto y sin prioridad — que es
+        un destino digno. Si es "porque bloquea X", decilo.
+    validations: { required: true }
+
+  - type: input
+    id: bloquea
+    attributes:
+      label: A qué bloquea
+      description: Issue o épica. Vacío es una respuesta válida.

@@ -1,0 +1,30 @@
+@*
+    elementFlowTrigger renderer (Ola 36 schema + Ola 41 runtime + Ola 58 templates).
+    Emite <a href="/flow/{flowKey}/start?returnUrl=..."> que dispara
+    FlowController.Start — resuelve flowDefinition, inicializa cookie
+    syn-flow-{flowKey} en 0, y redirige a step[0] (renderizado por
+    Views/FlowStep.cshtml).
+*@
+@using Umbraco.Cms.Core.Models
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var flowKey = Model.Value<string>("flowKey");
+    var label = Model.Value<string>("triggerLabel");
+    if (string.IsNullOrWhiteSpace(flowKey) || string.IsNullOrWhiteSpace(label)) { return; }
+    var returnLink = Model.Value<Link>("returnLink");
+    var returnUrl = returnLink?.Url;
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-flow-trigger",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-flow-trigger--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var startHref = $"/flow/{flowKey}/start" + (!string.IsNullOrWhiteSpace(returnUrl) ? $"?returnUrl={Uri.EscapeDataString(returnUrl)}" : "");
+}
+<a class="@classes"
+   href="@startHref"
+   data-flow-key="@flowKey">
+    @label
+</a>

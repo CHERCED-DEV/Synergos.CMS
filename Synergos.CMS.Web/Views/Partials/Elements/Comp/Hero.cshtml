@@ -1,0 +1,62 @@
+@*
+    elementCompHero renderer (Ola 22). SSR-native composite para landing hero.
+    Media de fondo + heading + text + CTAs. ctaItems reutiliza
+    DT.BlockList.CtaItems (elementActionButton | elementActionLink).
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Umbraco.Cms.Core.Models.Blocks
+@{
+    var title = Model.Value<string>("headingTitle");
+    if (string.IsNullOrWhiteSpace(title)) { return; }
+    var subtitle = Model.Value<string>("headingSubtitle");
+    var body = Model.Value<string>("textBody");
+    var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
+    var mediaAlt = Model.Value<string>("mediaAlt") ?? "";
+    var ctaItems = Model.Value<BlockListModel>("ctaItems");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-hero",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-hero--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @if (mediaRef != null)
+    {
+        <div class="syn-hero__media">
+            <img src="@mediaRef.Url()" alt="@mediaAlt" loading="eager" />
+        </div>
+    }
+    <div class="syn-hero__content">
+        <h1 class="syn-hero__title">@title</h1>
+        @if (!string.IsNullOrWhiteSpace(subtitle))
+        {
+            <p class="syn-hero__subtitle">@subtitle</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(body))
+        {
+            <div class="syn-hero__body">@Html.Raw(body)</div>
+        }
+        @if (ctaItems != null && ctaItems.Any())
+        {
+            <div class="syn-hero__ctas">
+                @foreach (var cta in ctaItems)
+                {
+                    var alias = cta.Content.ContentType.Alias;
+                    var partialPath = alias switch
+                    {
+                        "elementActionButton" => "Elements/Action/Button",
+                        "elementActionLink"   => "Elements/Action/Link",
+                        _ => null
+                    };
+                    if (partialPath != null)
+                    {
+                        @await Html.PartialAsync(partialPath, cta.Content)
+                    }
+                }
+            </div>
+        }
+    </div>
+</section>

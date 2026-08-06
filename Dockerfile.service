@@ -1,0 +1,101 @@
+# syntax=docker/dockerfile:1
+#
+# Synergos — la imagen de UN servicio del árbol de capacidades/orquestadores.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ES UN SOLO FICHERO PARA LAS 22, Y ESO ES LA DECISIÓN.
+#
+# La tentación era escribir un Dockerfile por servicio. Sería el mismo error
+# que `ApiMoldTests` existe para evitar: veinte servicios con veinte formas de
+# construirse es peor que un monolito, porque el monolito al menos es
+# consistente. Y el día que haya que cambiar la imagen base, o añadir un
+# paquete del sistema, o arreglar el healthcheck, hay que acordarse de
+# veintidós sitios — y el que se olvide no rompe el build, rompe en producción.
+#
+#   docker build -f Dockerfile.service --build-arg PROJECT=Synergos.Api.Booking .
+#
+# Lo que hace uniforme esto es el molde (doc 08 §4): las 22 referencian Core y
+# Shared, las 22 exponen /health, las 22 arrancan con `dotnet <Proyecto>.dll`.
+# Si algún día una no cumple, este fichero deja de servirle — y ese es
+# exactamente el aviso que se quiere.
+# ─────────────────────────────────────────────────────────────────────────────
+
+ARG PROJECT
+
+# ─────────────────────────── build ───────────────────────────
+# SDK 10 porque global.json lo pinea (rollForward latestFeature), aunque los
+# proyectos targeteen net8.0. Igual que el Dockerfile del CMS.
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG PROJECT
+WORKDIR /src
+
+# Restore en su propia capa. Se copian SOLO los .csproj primero: mientras no
+# cambien ellos ni la lista central de paquetes, Docker reusa el caché y se
+# saltea bajar NuGet — que multiplicado por 22 imágenes es la diferencia entre
+# un CI de minutos y uno de media hora.
+COPY global.json Directory.Build.props Directory.Packages.props ./
+COPY Synergos.Core/Synergos.Core.csproj Synergos.Core/
+COPY Synergos.Shared/Synergos.Shared.csproj Synergos.Shared/
+COPY Synergos.Bff.Core/Synergos.Bff.Core.csproj Synergos.Bff.Core/
+COPY ${PROJECT}/${PROJECT}.csproj ${PROJECT}/
+RUN dotnet restore ${PROJECT}/${PROJECT}.csproj
+
+# Core y Shared van siempre; Bff.Core sólo lo usan los orquestadores, pero
+# copiarlo a todas cuesta unos kilobytes y evita ramificar este fichero por
+# tipo de servicio — que es justo lo que se quería no hacer.
+COPY Synergos.Core/ Synergos.Core/
+COPY Synergos.Shared/ Synergos.Shared/
+COPY Synergos.Bff.Core/ Synergos.Bff.Core/
+COPY ${PROJECT}/ ${PROJECT}/
+
+RUN dotnet publish ${PROJECT}/${PROJECT}.csproj \
+        --configuration Release \
+        --no-restore \
+        --output /app/publish
+
+# ────────────────────────── runtime ──────────────────────────
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+ARG PROJECT
+WORKDIR /app
+
+# curl es sólo para el HEALTHCHECK; la imagen aspnet no lo trae.
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /app/publish ./
+
+# El almacén de la capacidad.
+#
+# La ruta NO es arbitraria: las 21 opciones de almacenamiento del árbol tienen
+# el mismo default —`Path.Combine(AppContext.BaseDirectory, "data", "<nombre>")`—
+# que dentro de la imagen es `/app/data/<nombre>`. Montar `/data` a secas, que
+# es lo que uno escribe por costumbre, no persiste absolutamente nada: el
+# servicio sigue escribiendo en `/app/data` y el volumen queda vacío al lado.
+#
+# SIN VOLUMEN, CADA DESPLIEGUE BORRA LOS DATOS. No falla, no avisa: el
+# contenedor nuevo arranca con el directorio vacío y la capacidad se comporta
+# como recién instalada. Es el modo de fallo más caro que esta imagen puede
+# tener, y el más silencioso — por eso hay un paso de CI que lo comprueba
+# escribiendo una marca y reemplazando el contenedor.
+RUN mkdir -p /app/data
+VOLUME /app/data
+
+# El nombre del ensamblado no se puede resolver en el ENTRYPOINT —no hay
+# expansión de variables en la forma exec— así que se fija acá. Es la única
+# línea de este fichero que sabe qué servicio es.
+ENV SYNERGOS_ASSEMBLY=${PROJECT}.dll \
+    ASPNETCORE_URLS=http://0.0.0.0:8080 \
+    DOTNET_gcServer=0
+
+EXPOSE 8080
+
+# `/health` está garantizado por el molde: `ApiMoldTests` falla si una
+# capacidad no lo expone. Por eso este healthcheck sirve para las 22 sin
+# excepciones — y con `--fail`, porque acá un 503 SÍ significa que algo anda mal
+# (a diferencia del CMS, donde /_health está rojo por diseño mientras no haya
+# CDN local).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl --silent --fail --output /dev/null http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["sh", "-c", "exec dotnet $SYNERGOS_ASSEMBLY"]

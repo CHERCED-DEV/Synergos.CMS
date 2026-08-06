@@ -1,0 +1,37 @@
+﻿@*
+    Template del Document Type `productPage`. Renderiza un producto
+    individual reutilizando el núcleo PDP compartido
+    `Elements/Shop/_ProductDetailCore` (imágenes + nombre + precio +
+    stock + variantes JSON + Add to Cart + trust signals) + body
+    opcional via Layout Composer (sections).
+
+    PDP-1 (Ola 3): este template y el bloque editor-drop
+    `Elements/Shop/ProductDetail` convergen en _ProductDetailCore — una
+    sola fuente visual de la PDP (misma estructura `.syn-product`, mismo
+    IPriceFormatter, misma moneda).
+
+    El chrome lo aplica _Layout.cshtml. compSeo + compTagging se
+    consumen en _SeoHead, etc.
+*@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@using Umbraco.Cms.Core.Models.Blocks
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CartSettings> CartSettingsOpt
+@{
+    Layout = "_Layout";
+    var product = UmbracoContext.PublishedRequest?.PublishedContent;
+    if (product is null) { return; }
+
+    var sku = product.Value<string>("productSku") ?? string.Empty;
+    var sections = product.Value<BlockGridModel>("sections");
+    var currency = CartSettingsOpt.Value.Currency;
+}
+<article class="syn-product" data-sku="@sku" data-currency="@currency">
+    @await Html.PartialAsync("Elements/Shop/_ProductDetailCore", product)
+
+    @if (sections is not null && sections.Any())
+    {
+        <div class="syn-product__body">
+            @await Html.GetBlockGridHtmlAsync(sections)
+        </div>
+    }
+</article>

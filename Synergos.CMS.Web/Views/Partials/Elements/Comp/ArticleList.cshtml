@@ -1,0 +1,81 @@
+@*
+    elementCompArticleList renderer. Consume IBlogQuery (Ola 56.2)
+    para listar posts editoriales filtrados por categoría/tags. La
+    lógica de búsqueda vive en el service; este partial solo proyecta.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@using Synergos.CMS.Interfaces
+@inject IBlogQuery BlogQuery
+@{
+    var listTitle = Model.Value<string>("listTitle");
+    var maxItemsRaw = Model.Value<string>("maxItems");
+    var maxItems = int.TryParse(maxItemsRaw, out var m) && m > 0 ? m : 6;
+    var categoryFilter = Model.Value<string>("categoryFilter");
+    var tagsFilter = Model.Value<string>("tagsFilter");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-article-list",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-article-list--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    var posts = BlogQuery.GetPosts(new BlogQueryRequest(
+        MaxItems: maxItems,
+        Skip: 0,
+        CategoryAliasOrName: categoryFilter,
+        TagsCsv: tagsFilter));
+}
+<section class="@classes"
+         data-max-items="@maxItems"
+         data-category-filter="@(categoryFilter ?? "")"
+         data-tags-filter="@(tagsFilter ?? "")">
+    @if (!string.IsNullOrWhiteSpace(listTitle))
+    {
+        <h2 class="syn-article-list__title">@listTitle</h2>
+    }
+    @if (posts.Count == 0)
+    {
+        <p class="syn-article-list__empty">@("Aún no hay artículos.")</p>
+    }
+    else
+    {
+        <ul class="syn-article-list__items">
+            @foreach (var post in posts)
+            {
+                <li class="syn-article-list__item">
+                    <a class="syn-article-list__link" href="@post.Url">
+                        @if (!string.IsNullOrWhiteSpace(post.HeroImageUrl))
+                        {
+                            <img class="syn-article-list__image" src="@post.HeroImageUrl" alt="" loading="lazy" />
+                        }
+                        <div class="syn-article-list__body">
+                            <h3 class="syn-article-list__item-title">@post.Title</h3>
+                            @if (!string.IsNullOrWhiteSpace(post.Excerpt))
+                            {
+                                <p class="syn-article-list__excerpt">@post.Excerpt</p>
+                            }
+                            <div class="syn-article-list__meta">
+                                @if (post.PublishDate.HasValue)
+                                {
+                                    <time class="syn-article-list__date" datetime="@post.PublishDate.Value.ToString("yyyy-MM-dd")">
+                                        @post.PublishDate.Value.ToString("dd MMM yyyy")
+                                    </time>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(post.CategoryName))
+                                {
+                                    <span class="syn-article-list__category">@post.CategoryName</span>
+                                }
+                                @if (post.ReadTimeMinutes.HasValue)
+                                {
+                                    <span class="syn-article-list__read-time">@post.ReadTimeMinutes min</span>
+                                }
+                            </div>
+                        </div>
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+</section>

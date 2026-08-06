@@ -1,0 +1,238 @@
+name: Despliegue
+
+# HU #19 — un push a master llega al servidor, y el humo dice si sobrevivió.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# EL ORDEN, Y POR QUÉ CADA PIEZA ESTÁ DONDE ESTÁ
+#
+#   push a master → gates + imágenes a GHCR (#17) → ESTO
+#
+#   1. puerta   — que los gates estén verdes PARA ESTE SHA, no "en general"
+#   2. servidor — parada antes de arranque (tools/deploy-remoto.sh)
+#   3. humo     — contra la URL PÚBLICA, desde el runner (tools/humo-publico.sh)
+#   4. si el humo falla → vuelta a la versión anterior + este action ROJO
+#
+# El humo corre en el runner y no en el servidor a propósito: desde el servidor
+# se prueba el último salto, y lo que falla en un despliegue es todo lo demás
+# —DNS, Cloudflare, el certificado, el proxy—. `humo-publico.sh` vive en su
+# propio fichero para que un gate pueda leerlo y exigir que no diga `localhost`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  # Al terminar las imágenes: son lo que este workflow despliega, así que
+  # arrancar antes sería pedirle al servidor etiquetas que todavía no existen.
+  workflow_run:
+    workflows: ["Imágenes (GHCR)"]
+    types: [completed]
+    branches: [main, master]
+
+  # Para desplegar algo concreto — típicamente, volver a una versión buena.
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "SHA a desplegar (vacío = el commit de este ref)"
+        required: false
+
+# NUNCA en paralelo, y NUNCA cancelando al que está corriendo: dos despliegues a
+# la vez son dos `down`/`up` pisándose sobre los mismos volúmenes. Se encolan.
+concurrency:
+  group: despliegue
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    name: Poner en pie y comprobar
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+
+    steps:
+      # ── 0. ¿Hay servidor? ────────────────────────────────────────────────
+      #
+      # Mientras el VPS no exista, esto NO puede ponerse rojo en cada push: un
+      # rojo permanente que todos saben ignorar entrena a ignorar los rojos de
+      # verdad. Se salta con un mensaje que dice qué falta, y se enciende solo
+      # el día que aparezcan los secretos.
+      - id: config
+        name: ¿Está configurado el destino?
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          DOMINIO: ${{ vars.SYNERGOS_DOMAIN }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$DOMINIO" ]; then
+            echo "listo=no" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Sin servidor todavía"
+              echo
+              echo "Falta \`DEPLOY_HOST\` (secret) o \`SYNERGOS_DOMAIN\` (variable)."
+              echo "El paso a paso está en \`docs/despliegue/00-montar-el-entorno.md\`."
+              echo
+              echo "Esto NO es un fallo: el despliegue se enciende solo cuando existan."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "listo=si" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.config.outputs.listo == 'si'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.sha || github.event.workflow_run.head_sha || github.sha }}
+
+      - id: sha
+        if: steps.config.outputs.listo == 'si'
+        run: echo "valor=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # ── 1. La puerta: los gates, para ESTE commit ────────────────────────
+      #
+      # No basta con que las imágenes se hayan construido. Se comprueba que
+      # NINGUNA comprobación de este SHA haya fallado — sin lista blanca de
+      # workflows, que se desincroniza el día que alguien añade uno y nadie se
+      # acuerda de nombrarlo acá.
+      - name: Los gates de este commit están verdes
+        if: steps.config.outputs.listo == 'si'
+        uses: actions/github-script@v7
+        env:
+          SHA: ${{ steps.sha.outputs.valor }}
+        with:
+          script: |
+            const sha = process.env.SHA;
+            const yoMismo = context.workflow;
+
+            for (let intento = 1; intento <= 20; intento++) {
+              const { data } = await github.rest.checks.listForRef({
+                ...context.repo, ref: sha, per_page: 100,
+              });
+
+              // El propio despliegue está en curso por definición; contarlo sería
+              // esperarse a sí mismo para siempre.
+              const otros = data.check_runs.filter(c => c.name !== yoMismo && !c.name.startsWith('Poner en pie'));
+
+              const rotos = otros.filter(c =>
+                c.status === 'completed' && !['success', 'skipped', 'neutral'].includes(c.conclusion));
+              if (rotos.length) {
+                core.setFailed(`Gates en rojo para ${sha.slice(0,7)}: ` +
+                  rotos.map(c => `${c.name} → ${c.conclusion}`).join(', '));
+                return;
+              }
+
+              const pendientes = otros.filter(c => c.status !== 'completed');
+              if (!pendientes.length) {
+                core.info(`✓ ${otros.length} comprobaciones verdes para ${sha.slice(0,7)}`);
+                return;
+              }
+
+              core.info(`esperando a ${pendientes.length}: ${pendientes.map(c => c.name).join(', ')}`);
+              await new Promise(r => setTimeout(r, 30000));
+            }
+            core.setFailed('A los 10 min seguía habiendo comprobaciones sin terminar.');
+
+      # ── 2. El acceso al servidor ─────────────────────────────────────────
+      - name: Preparar SSH
+        if: steps.config.outputs.listo == 'si'
+        env:
+          LLAVE: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          CLAVE_HOST: ${{ secrets.DEPLOY_HOST_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$LLAVE" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          if [ -n "$CLAVE_HOST" ]; then
+            # Lo correcto: la huella del servidor se conoce de antemano.
+            printf '%s\n' "$CLAVE_HOST" > ~/.ssh/known_hosts
+            echo "✓ el servidor se verifica contra DEPLOY_HOST_KEY"
+          else
+            # Se acepta lo que el host presente en el momento. Basta para
+            # arrancar y NO es equivalente: quien pueda meterse en medio del
+            # primer saludo recibe la llave de despliegue. Queda dicho para que
+            # sea una decisión y no un descuido.
+            ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            echo "⚠ sin DEPLOY_HOST_KEY: se confía en la huella que presentó el host."
+            echo "  Para fijarla: ssh-keyscan -H <ip> y guardá la salida como secret."
+          fi
+
+      # ── 3. La versión a la que se puede volver ───────────────────────────
+      - id: anterior
+        if: steps.config.outputs.listo == 'si'
+        name: Qué hay corriendo ahora
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USUARIO: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ANTERIOR="$(ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$USUARIO@$HOST" \
+                      'cat /opt/synergos/tag.actual 2>/dev/null' || true)"
+          echo "valor=$ANTERIOR" >> "$GITHUB_OUTPUT"
+          echo "corriendo ahora: ${ANTERIOR:-(nada, primer despliegue)}"
+
+      # ── 4. Desplegar ─────────────────────────────────────────────────────
+      #
+      # El compose, el Caddyfile y el script viajan en cada despliegue: así el
+      # servidor no necesita el repo y lo que corre es SIEMPRE lo que este
+      # commit dice. Lo único permanente allá es `.env` —con los secretos, que
+      # no salen de ahí— y los volúmenes.
+      - name: Copiar y ejecutar
+        if: steps.config.outputs.listo == 'si'
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USUARIO: ${{ secrets.DEPLOY_USER }}
+          SHA: ${{ steps.sha.outputs.valor }}
+        run: |
+          scp -i ~/.ssh/id_deploy -o BatchMode=yes \
+            compose.prod.yml Caddyfile tools/deploy-remoto.sh \
+            "$USUARIO@$HOST:/opt/synergos/"
+
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$USUARIO@$HOST" \
+            "chmod +x /opt/synergos/deploy-remoto.sh && /opt/synergos/deploy-remoto.sh $SHA"
+
+      # ── 5. El humo, desde fuera ──────────────────────────────────────────
+      - id: humo
+        if: steps.config.outputs.listo == 'si'
+        name: Humo contra la URL pública
+        continue-on-error: true
+        env:
+          DOMINIO: ${{ vars.SYNERGOS_DOMAIN }}
+          SHA: ${{ steps.sha.outputs.valor }}
+        run: |
+          chmod +x tools/humo-publico.sh
+          ./tools/humo-publico.sh "$DOMINIO" "$SHA"
+
+      # ── 6. Si el humo falló: volver, y ponerse rojo ──────────────────────
+      #
+      # Las dos cosas. Volver sin ponerse rojo deja un despliegue "exitoso" que
+      # no desplegó nada; ponerse rojo sin volver deja el sitio caído.
+      - name: Vuelta atrás
+        if: steps.config.outputs.listo == 'si' && steps.humo.outcome == 'failure'
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USUARIO: ${{ secrets.DEPLOY_USER }}
+          ANTERIOR: ${{ steps.anterior.outputs.valor }}
+        run: |
+          if [ -z "$ANTERIOR" ]; then
+            echo "✗ El humo falló y NO hay versión anterior a la que volver."
+            echo "  Es el primer despliegue: el sitio queda como quedó, y hay que mirarlo a mano."
+            exit 1
+          fi
+
+          echo "── volviendo a $ANTERIOR"
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$USUARIO@$HOST" \
+            "/opt/synergos/deploy-remoto.sh $ANTERIOR"
+
+          echo "✓ se restauró $ANTERIOR. Este action queda ROJO a propósito:"
+          echo "  el sitio está en pie, pero lo que se quiso desplegar NO está."
+          exit 1
+
+      - name: Resumen
+        if: steps.config.outputs.listo == 'si' && steps.humo.outcome == 'success'
+        env:
+          DOMINIO: ${{ vars.SYNERGOS_DOMAIN }}
+          SHA: ${{ steps.sha.outputs.valor }}
+        run: |
+          {
+            echo "### Desplegado"
+            echo
+            echo "- **Versión**: \`${SHA:0:7}\`"
+            echo "- **URL**: https://$DOMINIO"
+            echo "- Humo público en verde: portada, versión que contesta, y el árbol de servicios cerrado."
+          } >> "$GITHUB_STEP_SUMMARY"

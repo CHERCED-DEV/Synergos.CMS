@@ -1,0 +1,11 @@
+@*
+    elementCorpTabPanel renderer (Ola 24). SSR-native atomic.
+    Renderizado únicamente desde TabGroup.cshtml. El wrapping de
+    role=tabpanel + aria-* viene del TabGroup para conservar el
+    contexto index-aware.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var content = Model.Value<string>("tabContent");
+}
+<div class="syn-tab-panel__body">@Html.Raw(content)</div>

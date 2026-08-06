@@ -1,0 +1,42 @@
+@*
+    elementInfoTimelineItem renderer (Ola 15). Milestone with semantic <time>.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@{
+    var title = Model.Value<string>("headingTitle");
+    if (string.IsNullOrWhiteSpace(title)) { return; }
+    var subtitle = Model.Value<string>("headingSubtitle");
+    var body = Model.Value<string>("textBody");
+    var date = Model.Value<DateTime?>("contentDate");
+    var dateLabel = Model.Value<string>("contentDateLabel");
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-timeline-item",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-timeline-item--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    var culture = System.Globalization.CultureInfo.CurrentUICulture;
+}
+<li class="@classes">
+    @if (date.HasValue)
+    {
+        <time class="syn-timeline-item__date" datetime="@date.Value.ToString("yyyy-MM-dd")">
+            @if (!string.IsNullOrWhiteSpace(dateLabel))
+            {
+                <span class="syn-timeline-item__date-label">@dateLabel</span>
+            }
+            <span class="syn-timeline-item__date-value">@date.Value.ToString("d", culture)</span>
+        </time>
+    }
+    <h3 class="syn-timeline-item__title">@title</h3>
+    @if (!string.IsNullOrWhiteSpace(subtitle))
+    {
+        <p class="syn-timeline-item__subtitle">@subtitle</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(body))
+    {
+        <div class="syn-timeline-item__body">@Html.Raw(body)</div>
+    }
+</li>

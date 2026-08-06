@@ -1,0 +1,150 @@
+@*
+    Vista del AdminController.Health (Ola 131). Reporte ops del
+    runtime: uptime, memory, settings activos, counts de seams.
+*@
+@{
+    Layout = null;
+    var report = (Synergos.CMS.Web.Controllers.AdminController.HealthReport)ViewData["Report"]!;
+    string FormatUptime(int seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        if (ts.TotalDays >= 1) return $"{(int)ts.TotalDays}d {ts.Hours}h {ts.Minutes}m";
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        return $"{ts.Minutes}m {ts.Seconds}s";
+    }
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    @await Html.PartialAsync("_AdminHead")
+    <title>Health · Synergos</title>
+</head>
+<body class="syn-admin">
+    @await Html.PartialAsync("_AdminTopbar")
+
+    <main class="syn-admin__main">
+        <div class="syn-admin__container">
+            <header class="syn-admin__page-header">
+                <h1 class="syn-admin__page-title">Health & runtime</h1>
+                <p class="syn-admin__page-subtitle">
+                    Estado del runtime + counts agregados de los seams. Útil
+                    para verificar que el dashboard está operacional y
+                    para troubleshooting rápido.
+                </p>
+            </header>
+
+            <section class="syn-admin__cards">
+                <div class="syn-admin__card">
+                    <span class="syn-admin__card-icon" aria-hidden="true">⏱</span>
+                    <span class="syn-admin__card-value">@FormatUptime(report.UptimeSeconds)</span>
+                    <span class="syn-admin__card-label">Uptime</span>
+                    <span class="syn-admin__card-hint">Desde el último restart del proceso.</span>
+                </div>
+                <div class="syn-admin__card">
+                    <span class="syn-admin__card-icon" aria-hidden="true">🧠</span>
+                    <span class="syn-admin__card-value">@report.ProcessMemoryMb MB</span>
+                    <span class="syn-admin__card-label">Memoria</span>
+                    <span class="syn-admin__card-hint">Working set del proceso CMS.</span>
+                </div>
+                <div class="syn-admin__card">
+                    <span class="syn-admin__card-icon" aria-hidden="true">🔷</span>
+                    <span class="syn-admin__card-value">.NET @report.DotnetVersion</span>
+                    <span class="syn-admin__card-label">Runtime</span>
+                    <span class="syn-admin__card-hint">@report.HostName</span>
+                </div>
+            </section>
+
+            <section class="syn-admin__panel" style="margin-top: var(--syn-space-xl);">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Seams + counts</h2>
+                </header>
+                <table class="syn-admin__table">
+                    <tbody>
+                        <tr>
+                            <th>Comentarios pendientes</th>
+                            <td class="syn-admin__col-num">@report.PendingComments</td>
+                        </tr>
+                        <tr>
+                            <th>Forms con submissions</th>
+                            <td class="syn-admin__col-num">@report.FormsWithSubmissions</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="syn-admin__panel" style="margin-top: var(--syn-space-lg);">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Settings activos</h2>
+                </header>
+                <table class="syn-admin__table">
+                    <tbody>
+                        <tr>
+                            <th>Pending count cache TTL</th>
+                            <td>@report.CacheTtlSeconds segundos</td>
+                        </tr>
+                        <tr>
+                            <th>Webhook max retries</th>
+                            <td class="syn-admin__col-num">@report.ResilienceMaxRetries</td>
+                        </tr>
+                        <tr>
+                            <th>Webhook total timeout</th>
+                            <td>@report.ResilienceTimeoutTotal segundos</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            @{
+                var telemetry = ViewData["WebhookTelemetry"] as IReadOnlyList<Synergos.CMS.Interfaces.ChannelTelemetrySnapshot>
+                    ?? Array.Empty<Synergos.CMS.Interfaces.ChannelTelemetrySnapshot>();
+            }
+            <section class="syn-admin__panel" style="margin-top: var(--syn-space-lg);">
+                <header class="syn-admin__panel-header">
+                    <h2 class="syn-admin__panel-title">Webhook telemetry (last 1000 outcomes per canal)</h2>
+                    <span class="syn-admin__panel-count">@telemetry.Count</span>
+                </header>
+                @if (telemetry.Count == 0)
+                {
+                    <p class="syn-admin__empty">Sin outcomes registrados desde el último restart. Dispara un test desde /admin/webhooks/test para popular.</p>
+                }
+                else
+                {
+                    <table class="syn-admin__table">
+                        <thead>
+                            <tr>
+                                <th>Canal</th>
+                                <th class="syn-admin__col-num">Total</th>
+                                <th class="syn-admin__col-num">OK</th>
+                                <th class="syn-admin__col-num">Fail</th>
+                                <th class="syn-admin__col-num">P50 (ms)</th>
+                                <th class="syn-admin__col-num">P95 (ms)</th>
+                                <th class="syn-admin__col-num">P99 (ms)</th>
+                                <th>Última call</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in telemetry)
+                            {
+                                var failRate = t.TotalCalls > 0 ? (double)t.FailureCount / t.TotalCalls : 0;
+                                var rowClass = failRate >= 0.20 ? "syn-admin__status--danger"
+                                            : failRate >= 0.05 ? "syn-admin__status--warn"
+                                            : "";
+                                <tr>
+                                    <td><code>@t.ChannelName</code></td>
+                                    <td class="syn-admin__col-num">@t.TotalCalls</td>
+                                    <td class="syn-admin__col-num">@t.SuccessCount</td>
+                                    <td class="syn-admin__col-num"><span class="@rowClass">@t.FailureCount</span></td>
+                                    <td class="syn-admin__col-num">@t.P50LatencyMs.ToString("F0")</td>
+                                    <td class="syn-admin__col-num">@t.P95LatencyMs.ToString("F0")</td>
+                                    <td class="syn-admin__col-num">@t.P99LatencyMs.ToString("F0")</td>
+                                    <td>@(t.LastObservedUtc.HasValue ? t.LastObservedUtc.Value.ToString("yyyy-MM-dd HH:mm:ss") + " UTC" : "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
+        </div>
+    </main>
+</body>
+</html>
