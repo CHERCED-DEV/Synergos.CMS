@@ -157,6 +157,17 @@ public sealed class TravelCartService : ITravelCartService
             {
                 throw new ArgumentException("Todos los ítems del carrito deben usar la misma moneda.", nameof(items));
             }
+
+            // El periodo se rechaza ACÁ, en el borde, antes de tocar ninguna capacidad
+            // (HU #40). `Bff.Viajes` ya lo rechaza con `viajes.bad_window`, pero
+            // descubrirlo allá cuesta un viaje de ida y vuelta por algo que se sabe
+            // de este lado. Es la misma familia que las cuatro validaciones de arriba.
+            if (item.End <= item.Start)
+            {
+                throw new ArgumentException(
+                    "El periodo de cada ítem debe avanzar: la fecha de fin tiene que ser posterior a la de inicio.",
+                    nameof(items));
+            }
         }
 
         // 1) Reservar CADA ítem (un hold por ítem) vía la vía polimórfica.

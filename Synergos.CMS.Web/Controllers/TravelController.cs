@@ -262,7 +262,24 @@ public sealed class TravelController : ControllerBase
                 return BadRequest(new { error = $"Producto desconocido: '{dto.Product}'." });
             }
             var currency = string.IsNullOrWhiteSpace(dto.Currency) ? "COP" : dto.Currency.Trim();
-            items.Add(new TravelCartItem(product, dto.OfferId?.Trim() ?? string.Empty, dto.Label?.Trim() ?? string.Empty, dto.Price, currency));
+
+            // El periodo es obligatorio (HU #40) y se rechaza acá, sin salir a la red:
+            // un apartado de Api.Booking ES una ventana sobre un recurso. No se deriva
+            // de OfferId — inventar una convención sobre un identificador opaco es el
+            // error que costó una vuelta en la HU #25.
+            if (dto.Start is null || dto.End is null)
+            {
+                return BadRequest(new { error = $"El ítem '{dto.Label ?? dto.OfferId}' no declara periodo (start/end)." });
+            }
+
+            items.Add(new TravelCartItem(
+                product,
+                dto.OfferId?.Trim() ?? string.Empty,
+                dto.Label?.Trim() ?? string.Empty,
+                dto.Price,
+                currency,
+                dto.Start.Value,
+                dto.End.Value));
         }
 
         TravelCheckoutResult result;
@@ -453,7 +470,17 @@ public sealed class TravelController : ControllerBase
 
     // ── Request DTOs ───────────────────────────────────────────────
 
-    public sealed record CartItemDto(string Product, string? OfferId, string? Label, decimal Price, string? Currency);
+    // `Start`/`End` son nullable en el DTO y OBLIGATORIOS en el dominio, a propósito:
+    // así un cliente que no los mande recibe un 400 que los nombra, en vez de un 415
+    // de deserialización que no dice cuál falta (HU #40).
+    public sealed record CartItemDto(
+        string Product,
+        string? OfferId,
+        string? Label,
+        decimal Price,
+        string? Currency,
+        DateTimeOffset? Start,
+        DateTimeOffset? End);
     public sealed record GuestDto(string Name, string Email);
     public sealed record CheckoutRequest(IReadOnlyList<CartItemDto> Items, GuestDto Guest);
     public sealed record ConfirmRequest(string OrderRef);

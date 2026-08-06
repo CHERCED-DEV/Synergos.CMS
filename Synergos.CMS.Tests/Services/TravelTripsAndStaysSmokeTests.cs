@@ -31,8 +31,8 @@ public class TravelTripsAndStaysSmokeTests
 
     private static TravelCartItem[] Items() => new[]
     {
-        new TravelCartItem(TravelProductType.Hotel, "DLX/DLX-FLEX", "Habitación Deluxe (3 noches)", 600_000m, "COP"),
-        new TravelCartItem(TravelProductType.Flight, "SYN1010-ECOBAS", "Vuelo BOG→MDE Economy", 450_000m, "COP"),
+        new TravelCartItem(TravelProductType.Hotel, "DLX/DLX-FLEX", "Habitación Deluxe (3 noches)", 600_000m, "COP", new DateTimeOffset(2026, 9, 10, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)),
+        new TravelCartItem(TravelProductType.Flight, "SYN1010-ECOBAS", "Vuelo BOG→MDE Economy", 450_000m, "COP", new DateTimeOffset(2026, 9, 10, 14, 30, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 10, 15, 45, 0, TimeSpan.Zero)),
     };
 
     private static TravelGuest Guest() => new("Viajera Prueba", TravelerEmail);
