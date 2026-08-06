@@ -245,8 +245,7 @@ public sealed class MessagingAcknowledgmentTests
     public void Quien_escribe_queda_con_acuse_propio_desde_el_primer_momento()
     {
         // Si no, su propio mensaje le aparecería sin leer y el contador de pendientes nunca
-        // llegaría a cero. Y se anota con la afirmación más fuerte: no hay duda de quién
-        // escribió, lo acaba de hacer.
+        // llegaría a cero.
         var ctx = Nuevo();
         var msg = ctx.Leer();
 
@@ -254,7 +253,65 @@ public sealed class MessagingAcknowledgmentTests
 
         Assert.NotNull(suyo);
         Assert.Equal(Ahora, suyo!.AtUtc);
-        Assert.Equal(IdentityAssertion.IdentityToken, suyo.Assertion);
         Assert.Null(msg.AcknowledgmentOf(Ciudadano));   // el destinatario todavía no accedió
+    }
+
+    /// <summary>
+    /// El acuse del autor se anota como <c>CmsSession</c>, que es <b>la verdad</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Este test decía <c>IdentityToken</c>, y estaba mal por la misma razón que el
+    /// código</b> (defecto #42): los dos razonaban «no hay duda de quién escribió, lo acaba de
+    /// hacer», que mide CONFIANZA. El campo mide QUIÉN DIO FE, y acá no dio fe nadie —
+    /// <c>Api.Identity</c> ni siquiera sabe emitir tokens, y el autor llegó declarado por el
+    /// llamador sobre la llave compartida, igual que en cualquier otra llamada.</para>
+    ///
+    /// <para>Es el patrón que este repo ya nombró varias veces: <b>el test codificaba la misma
+    /// suposición equivocada que el código</b>, con el comentario copiado. Por eso no lo atrapó
+    /// nadie — no había nada que contradecir.</para>
+    /// </remarks>
+    [Fact]
+    public void El_acuse_del_autor_dice_CmsSession_porque_nadie_dio_fe_de_mas()
+    {
+        var ctx = Nuevo();
+
+        var suyo = ctx.Leer().AcknowledgmentOf(Funcionario);
+
+        Assert.Equal(IdentityAssertion.CmsSession, suyo!.Assertion);
+    }
+
+    /// <summary>
+    /// Hoy NADIE emite <c>IdentityToken</c>, y este test se cae solo cuando alguien lo haga.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es la guarda que faltaba y la que hace que el campo sirva. El archivo tiene que
+    /// poder decir «esto lo certificó <c>Api.Identity</c>» sin que nadie haya podido escribirlo
+    /// por corazonada — y mientras no exista emisor, la única forma honesta de que aparezca
+    /// <c>IdentityToken</c> es que el llamador lo declare, que es justo el techo que la HU #14
+    /// existe para levantar.</para>
+    ///
+    /// <para><b>Se cae solo el día que #14 emita tokens de verdad</b>, y ahí hay que volver a
+    /// mirarlo: en ese momento la afirmación deja de ser una declaración del llamador y pasa a
+    /// ser algo que la capacidad comprobó. Un test que hay que revisar cuando cambia el mundo
+    /// vale más que uno que no dice nada.</para>
+    /// </remarks>
+    [Fact]
+    public void Ninguna_ruta_del_servicio_emite_IdentityToken_por_su_cuenta()
+    {
+        var ctx = Nuevo();
+
+        // Publicar, acceder, y volver a publicar en el mismo hilo: todo lo que el servicio
+        // anota por iniciativa propia.
+        ctx.Svc.Acknowledge(ctx.MessageId, Ciudadano, IdentityAssertion.CmsSession);
+        var segundo = ctx.Svc.Post(ctx.ThreadId, Funcionario, "otro", Array.Empty<Ref>(),
+            IdempotencyKey.Of("m2"), null);
+        Assert.True(segundo.IsOk);
+
+        var acuses = ctx.Svc.ListMessages(ctx.ThreadId, Funcionario, 0, 50).Value.Items
+            .SelectMany(m => m.Acknowledgments)
+            .ToList();
+
+        Assert.NotEmpty(acuses);
+        Assert.DoesNotContain(acuses, a => a.Assertion == IdentityAssertion.IdentityToken);
     }
 }
