@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2351 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2395 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2351 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2395 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2351 tests):
+# Suite completa (2395 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -469,7 +469,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`. 2351 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2395 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -559,8 +559,28 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   un contrato de una cadena, porque el CMS no referencia `Synergos.Shared`.
 - **La llave compartida no es identidad.** Sirve servicio↔servicio; no
   contesta «quién es este usuario». `Api.Identity` **ya emite y verifica
-  tokens** (HU #14, rebanada 2) pero **todavía no la usa nadie como
-  puerta**: falta cablear la primera capacidad.
+  tokens** (HU #14, rebanada 2) y **`Api.Messaging` es la primera
+  capacidad que los usa como puerta** (rebanada 3): el acuse de un
+  mensaje acepta `X-Synergos-Identity`, lo verifica en local y —lo que
+  de verdad cambia— **la afirmación la decide la capacidad, no el
+  llamador**. Antes se creía lo que venía en `assertion`, así que
+  cualquiera con la llave compartida podía anotar un acceso como
+  respaldado por un token que nunca existió (defecto #42). Hoy: token
+  válido del mismo sujeto → `IdentityToken`; sin token, lo más fuerte
+  que se acepta es `CmsSession`; declarar lo fuerte sin presentarlo se
+  rechaza. **Faltan las otras 19.**
+
+  > **El token de otra persona no sirve para actuar como ésta**, y ése
+  > es el caso que justifica la HU entera: sin comprobar que el sujeto
+  > del token es el `who` de la petición, la capacidad seguiría creyendo
+  > el `who` que le mandan y el token sería decoración.
+  >
+  > **Quien solo verifica arranca sin llave** —es el camino del clon
+  > limpio— pero arranca **sin poder verificar**, que no es lo mismo que
+  > verificando mal: un token presentado ahí se **rechaza**
+  > (`identity.token_not_verifiable`), no se ignora. Ignorarlo dejaría
+  > que alguien mandara cualquier cosa y siguiera adelante como si no
+  > hubiera mandado nada.
 
   > **Verificación LOCAL, y ésa es la decisión de fondo.** El token se
   > comprueba con la llave, sin llamar a `Api.Identity` — llamarla en cada
@@ -584,15 +604,31 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > roles viajan dentro, así que revocar uno tarda lo que quede de
   > vigencia — ése es el precio de no tener punto único de fallo. El `kid`
   > va desde el primer día aunque haya una sola llave. **La llave de firma
-  > NO es la compartida**, y sin ella `Api.Identity` no arranca. `Api.Messaging` ya guarda **con qué se afirmó** la
+  > NO es la compartida**, y sin ella `Api.Identity` **no arranca — y
+  > falla al cablear, no en la primera petición**. La distinción la
+  > destapó levantar el proceso: la llave se leía dentro de una fábrica
+  > de singleton y en una API mínima nadie la resuelve hasta que llega
+  > una petición que la inyecta, así que un despliegue sin llave
+  > arrancaba **verde**, contestaba `/health` y pasaba la prueba de humo.
+  > Reventaba cuando una persona intentaba entrar. Hay gate
+  > (`IdentityTokenSetupTests`), y comprueba **cuándo** falla, no solo
+  > que falle.
+  >
+  > **Y el compose ya se había desincronizado por lo mismo**: nombraba
+  > `Identity__Tokens__*` de cuando la sección era propia, así que la
+  > llave llegaba a una sección que nadie lee y un servidor bien
+  > configurado se comportaba como uno sin llave. El gate de la sección
+  > miraba código C# y el defecto vivía en un `.mjs`; ahora mira los dos.
+
+  `Api.Messaging` ya guardaba **con qué se afirmó** la
   identidad de quien accede (HU #13) precisamente para que el día que
-  esto se arregle los registros viejos no mientan sobre su propia fuerza:
-  hoy todos dicen `CmsSession`, que es nuestro propio sistema dando fe.
-  Ese `IdentityAssertion` **subió a `Synergos.Core`** al aparecer su
-  segundo consumidor (el asiento de auditoría de la HU #15), así que el
-  día que #14 cablee `Api.Identity` hay **un solo sitio** que pasa de
-  decir `CmsSession` a decir otra cosa. Hay gate: declararlo dos veces
-  rompe el build.
+  esto se arreglara los registros viejos no mintieran sobre su propia
+  fuerza. Ese día llegó con la rebanada 3, y **los registros viejos
+  siguen diciendo la verdad**: dicen `CmsSession` porque eso es lo que
+  eran. Ese `IdentityAssertion` **subió a `Synergos.Core`** al aparecer
+  su segundo consumidor (el asiento de auditoría de la HU #15), así que
+  hubo **un solo sitio** que pasar de decir `CmsSession` a decir otra
+  cosa. Hay gate: declararlo dos veces rompe el build.
 - **`Api.Booking` ya deja llegar del sujeto a su recurso** (HU #25):
   `GET /v1/resources?subjectKind=&subjectId=`, calcando lo que
   `Api.Inventory` hacía con `/v1/items`. Faltaba, y obligaba a que el

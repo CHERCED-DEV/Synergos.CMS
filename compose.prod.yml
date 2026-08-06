@@ -349,10 +349,10 @@ services:
       #
       # Sin llave el servicio NO arranca — un Api.Identity que dice emitir
       # identidades y no puede es peor que uno caido, porque parece que funciona.
-      Identity__Tokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:?falta SYNERGOS_IDENTITY_SIGNING_KEY}
-      Identity__Tokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
-      Identity__Tokens__LifetimeMinutes: ${SYNERGOS_IDENTITY_TOKEN_MINUTES:-15}
-      Identity__Tokens__MaxSessionMinutes: ${SYNERGOS_IDENTITY_SESSION_MINUTES:-480}
+      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:?falta SYNERGOS_IDENTITY_SIGNING_KEY}
+      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
+      IdentityTokens__LifetimeMinutes: ${SYNERGOS_IDENTITY_TOKEN_MINUTES:-15}
+      IdentityTokens__MaxSessionMinutes: ${SYNERGOS_IDENTITY_SESSION_MINUTES:-480}
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
@@ -397,6 +397,8 @@ services:
     environment:
       Messaging__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
       Messaging__Storage__Root: /app/data/messaging
+      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
+      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se

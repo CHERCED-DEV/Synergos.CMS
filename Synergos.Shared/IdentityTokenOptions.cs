@@ -1,7 +1,7 @@
-namespace Synergos.Api.Identity.Domain;
+namespace Synergos.Shared;
 
 /// <summary>
-/// Cuánto vale un token y hasta cuándo se puede renovar — sección <c>Identity:Tokens</c>.
+/// Cuánto vale un token, hasta cuándo se renueva y con qué se firma — sección <c>IdentityTokens</c>.
 /// </summary>
 /// <remarks>
 /// <para><b>Los dos números juntos son la decisión, no cada uno por su lado.</b> Quince minutos
@@ -9,12 +9,20 @@ namespace Synergos.Api.Identity.Domain;
 /// renovaría para siempre, de a quince minutos. Y un techo solo, sin vigencia corta, dejaría un
 /// token robado operando ocho horas.</para>
 ///
+/// <para><b>La sección se llama igual en TODOS los servicios</b>, y no es cosmética: la llave de
+/// firma es la misma para quien emite y para quien verifica, así que darle un nombre por servicio
+/// invitaría a configurar una en un sitio y otra en otro — y el síntoma sería un token válido que
+/// una capacidad rechaza, que es de los peores de diagnosticar.</para>
+///
+/// <para><b>Quien solo VERIFICA ignora las vigencias</b> y usa nada más las llaves. Están en el
+/// mismo sitio porque separarlas obligaría a dos secciones para la misma decisión.</para>
+///
 /// <para><b>Y el precio de los quince minutos está pagado a conciencia:</b> los roles viajan
 /// dentro del token para que una capacidad pueda verificar sin llamar a nadie, así que revocar un
 /// rol tarda lo que quede de vigencia. Ése es el costo de no convertir a <c>Api.Identity</c> en
 /// el punto único de fallo de las veinte capacidades (HU #14 §3.2).</para>
 /// </remarks>
-public sealed class TokenOptions
+public sealed class IdentityTokenOptions
 {
     /// <summary>Cuánto vale un token emitido. Quince minutos (HU #14).</summary>
     public int LifetimeMinutes { get; set; } = 15;

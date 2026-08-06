@@ -73,21 +73,32 @@ public static class MessagingEndpoints
         // Registra que una persona ACCEDIÓ al mensaje. No es «marcar como leído»: es el dato del
         // que depende que un término legal haya empezado a correr, y por eso exige decir cómo se
         // afirmó la identidad de quien accede.
-        app.MapPost("/v1/messages/{id}/acknowledge", (string id, AcknowledgeRequest req, MessagingService svc) =>
+        app.MapPost("/v1/messages/{id}/acknowledge", (
+            string id, AcknowledgeRequest req, HttpRequest http, MessagingService svc,
+            IdentityTokenGate identidad, TimeProvider clock) =>
         {
             var who = Ref.TryCreate(req.WhoKind, req.WhoId);
             if (who is null) return Invalid("bad_who", "Hacen falta whoKind y whoId.");
 
             // Se parsea acá y no en el servicio para poder distinguir «no vino» de «vino un
             // valor que no existe» — las dos van al mismo rechazo, pero con detalle distinto.
-            IdentityAssertion? assertion = Enum.TryParse<IdentityAssertion>(req.Assertion, ignoreCase: true, out var a)
+            IdentityAssertion? declarada = Enum.TryParse<IdentityAssertion>(req.Assertion, ignoreCase: true, out var a)
                 ? a
                 : null;
-            if (assertion is null)
-            {
-                return Invalid("access_requires_identity",
-                    $"Hace falta 'assertion' y tiene que ser una de: {string.Join(", ", Enum.GetNames<IdentityAssertion>())}.");
-            }
+
+            // LA AFIRMACIÓN LA DECIDE ESTA CAPACIDAD, NO EL LLAMADOR (HU #14).
+            //
+            // Antes se creía lo que venía en `assertion`, así que cualquiera con la llave
+            // compartida podía anotar un acceso como respaldado por un token que nunca existió
+            // —y de hecho el propio servicio lo hacía (defecto #42)—. Ahora: si presenta token, se
+            // verifica y se comprueba que su sujeto sea el mismo `who`; si no presenta, lo más
+            // fuerte que se le acepta es CmsSession, que es honesto porque significa «nos fiamos
+            // de quien llama».
+            var token = http.Headers[IdentityTokens.HeaderName].FirstOrDefault();
+            var (assertion, motivo) = IdentityAssertions.Resolve(
+                identidad, token, who, declarada, clock.GetUtcNow(), MessagingRules.CodePrefix);
+
+            if (assertion is null) return motivo!.ToProblem();
 
             return svc.Acknowledge(id, who, assertion).Map(MessageResponse.From).ToHttp();
         });
