@@ -558,8 +558,33 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   El nombre de la cabecera es **lo único que comparten los dos árboles** —
   un contrato de una cadena, porque el CMS no referencia `Synergos.Shared`.
 - **La llave compartida no es identidad.** Sirve servicio↔servicio; no
-  contesta «quién es este usuario». `Api.Identity` existe pero nadie la
-  usa como puerta. `Api.Messaging` ya guarda **con qué se afirmó** la
+  contesta «quién es este usuario». `Api.Identity` **ya emite y verifica
+  tokens** (HU #14, rebanada 2) pero **todavía no la usa nadie como
+  puerta**: falta cablear la primera capacidad.
+
+  > **Verificación LOCAL, y ésa es la decisión de fondo.** El token se
+  > comprueba con la llave, sin llamar a `Api.Identity` — llamarla en cada
+  > petición la convertiría en el punto único de fallo de las veinte, y es
+  > la peor candidata porque corre sobre fichero JSON con `lock` de
+  > proceso. Con esto, `Api.Identity` caída significa «no entran sesiones
+  > nuevas», no «se para todo». `IdentityTokens` vive en `Synergos.Shared`
+  > desde el primer día porque **no hay un sitio válido con un solo
+  > consumidor**: en una capacidad obligaría a que otra la referenciara,
+  > que está prohibido de plano (§11).
+  >
+  > **Y lo que el token NO es, para que nadie lo suponga.** Lo emite un
+  > servicio nuestro a partir de la palabra del CMS (camino (b)), así que
+  > **no es prueba más fuerte frente a un tercero** que `CmsSession`: la
+  > cadena de confianza toca fondo en el mismo sitio. Lo que compra es
+  > integridad interna — el sujeto viene firmado y no se puede reapuntar,
+  > así que una capacidad deja de creerle al llamador quién actúa. El
+  > escalón probatorio de verdad es `GovFederation`, fuera de alcance.
+  >
+  > 15 minutos de vigencia con renovación y techo de sesión de 8 h; los
+  > roles viajan dentro, así que revocar uno tarda lo que quede de
+  > vigencia — ése es el precio de no tener punto único de fallo. El `kid`
+  > va desde el primer día aunque haya una sola llave. **La llave de firma
+  > NO es la compartida**, y sin ella `Api.Identity` no arranca. `Api.Messaging` ya guarda **con qué se afirmó** la
   identidad de quien accede (HU #13) precisamente para que el día que
   esto se arregle los registros viejos no mientan sobre su propia fuerza:
   hoy todos dicen `CmsSession`, que es nuestro propio sistema dando fe.
