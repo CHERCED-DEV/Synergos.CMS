@@ -41,7 +41,7 @@ public static class IdentityEndpoints
         // CmsSession ya dice. Que el emisor no sea el que pregunta es lo único que hace que el
         // escalón exista.
         app.MapPost("/v1/tokens", (IssueTokenRequest req, IdentityService svc, IdentityTokens tokens,
-            IOptions<TokenOptions> opciones, TimeProvider clock) =>
+            IOptions<IdentityTokenOptions> opciones, TimeProvider clock) =>
         {
             var subject = Ref.TryCreate(req.SubjectKind, req.SubjectId);
             if (subject is null) return Invalid("bad_subject", "Hacen falta subjectKind y subjectId.");
@@ -54,7 +54,7 @@ public static class IdentityEndpoints
         });
 
         app.MapPost("/v1/tokens/renew", (RenewTokenRequest req, IdentityService svc, IdentityTokens tokens,
-            IOptions<TokenOptions> opciones) =>
+            IOptions<IdentityTokenOptions> opciones) =>
         {
             var o = opciones.Value;
             return svc.RenewToken(tokens, req.Token, o.LifetimeMinutes, o.MaxSessionMinutes)
