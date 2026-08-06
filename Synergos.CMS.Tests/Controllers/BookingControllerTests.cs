@@ -1,5 +1,6 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 
@@ -121,10 +122,21 @@ public sealed class BookingControllerTests
             .Returns(ci => $"{ci.ArgAt<decimal>(0)} {ci.ArgAt<string?>(1)}");
     }
 
+    /// <summary>
+    /// El controller sobre el flujo REAL, con los mismos dobles de siempre por debajo.
+    /// </summary>
+    /// <remarks>
+    /// <b>Es lo que hace que estos 38 tests sigan valiendo tras sacar la orquestación del borde</b>
+    /// (HU #36): no se sustituyó el flujo por un doble —eso habría dejado de probar el orden en
+    /// que se abre la caja, que es justo lo que se movió—, sino que se compone
+    /// <see cref="StubHotelBookingService"/> de verdad sobre las mismas capacidades simuladas.
+    /// Si la extracción hubiera cambiado una regla, estos tests lo dicen.
+    /// </remarks>
     private BookingController BuildSut() => new(
-        _availability, _reservations, _payments, _policy, _priceFormatter,
-        Microsoft.Extensions.Logging.Abstractions.NullLogger<BookingController>.Instance,
-        _audit);
+        _availability,
+        new StubHotelBookingService(_reservations, _payments, _policy, _audit),
+        _policy, _priceFormatter,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<BookingController>.Instance);
 
     /// <summary>El estado vigente, o revienta: un test que llega aquí sin reserva miente.</summary>
     private Reservation Actual() => _estado ?? throw new InvalidOperationException("Sin reserva en el motor.");

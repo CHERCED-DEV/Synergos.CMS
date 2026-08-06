@@ -251,6 +251,7 @@ tiene que existir en la raíz del repo.
 | `StubEnrollmentService` | C | — |
 | `StubEventCatalogProvider` | B | — |
 | `StubEventManagementService` | C | — |
+| `StubHotelBookingService` | A | `Synergos.Bff.Viajes` |
 | `StubEventTicketingService` | A | `Synergos.Bff.Eventos` |
 | `StubFlightAvailabilityProvider` | C | — |
 | `StubGovFeeCalculator` | C | — |

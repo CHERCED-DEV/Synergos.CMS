@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -27,29 +27,31 @@ namespace Synergos.CMS.Web.Controllers;
 public sealed class BookingController : ControllerBase
 {
     private readonly IRoomAvailabilityProvider _availability;
-    private readonly IReservationService _reservations;
-    private readonly IPaymentProvider _payments;
+
+    /// <summary>El flujo transaccional. <b>Este borde ya NO orquesta el cobro</b> (HU #36).</summary>
+    /// <remarks>
+    /// Apartar, cobrar y confirmar vivían acá dentro: unas doscientas líneas que decidían en qué
+    /// orden se abre la caja, con dos defectos ya corregidos que ningún test cubría porque no
+    /// había dónde ponerlos. Lo que queda de este lado es lo que sí es del borde — validar la
+    /// petición, formatear precios y elegir el código de estado.
+    /// </remarks>
+    private readonly IHotelBookingService _booking;
     private readonly ICancellationPolicyEvaluator _cancellationPolicy;
     private readonly IPriceFormatter _priceFormatter;
     private readonly ILogger<BookingController> _logger;
-    private readonly IAuditTrailWriter _audit;
 
     public BookingController(
         IRoomAvailabilityProvider availability,
-        IReservationService reservations,
-        IPaymentProvider payments,
+        IHotelBookingService booking,
         ICancellationPolicyEvaluator cancellationPolicy,
         IPriceFormatter priceFormatter,
-        ILogger<BookingController> logger,
-        IAuditTrailWriter audit)
+        ILogger<BookingController> logger)
     {
         _availability = availability;
-        _reservations = reservations;
-        _payments = payments;
+        _booking = booking;
         _cancellationPolicy = cancellationPolicy;
         _priceFormatter = priceFormatter;
         _logger = logger;
-        _audit = audit;
     }
 
     // ── 1. Search ──────────────────────────────────────────────────
@@ -151,7 +153,7 @@ public sealed class BookingController : ControllerBase
         Reservation reservation;
         try
         {
-            reservation = await _reservations.HoldAsync(
+            reservation = await _booking.HoldAsync(
                 new ReservationRequest(
                     RoomTypeCode: request.RoomTypeCode.Trim(),
                     RatePlanCode: request.RatePlanCode.Trim(),
@@ -186,109 +188,52 @@ public sealed class BookingController : ControllerBase
             return BadRequest(new { error = "ReservationId es requerido." });
         }
 
-        var reservation = await _reservations.GetAsync(request.ReservationId, cancellationToken);
-        if (reservation is null)
+        var pago = await _booking.PayAsync(request.ReservationId, cancellationToken);
+        if (pago is null)
         {
             return NotFound(new { error = $"Reserva '{request.ReservationId}' no encontrada." });
         }
 
-        // Idempotencia: si ya está confirmada, devolver el estado actual sin
-        // volver a cobrar.
-        if (reservation.Status == ReservationStatus.Confirmed)
+        // Reintentar un pago ya confirmado responde con la forma de una RESERVA y no con la de
+        // un cobro. Es una verruga de contrato —quien lea `paymentStatus` del reintento no lo
+        // encuentra— y está así a propósito: la UI ya la consume, y arreglarla es un cambio de
+        // API con su propio ticket, no un efecto colateral de sacar la orquestación del borde.
+        if (pago.Outcome == HotelPaymentOutcome.AlreadyConfirmed)
         {
-            return Ok(MapReservation(reservation));
-        }
-        if (reservation.Status == ReservationStatus.Cancelled)
-        {
-            return BadRequest(new PayResponse(
-                ReservationId: reservation.Id,
-                Status: reservation.Status.ToString(),
-                PaymentStatus: PaymentStatus.Cancelled.ToString(),
-                PaymentSessionId: null,
-                AmountCaptured: 0m,
-                AmountFormatted: _priceFormatter.Format(0m, reservation.Currency),
-                FailureReason: "La reserva está cancelada; no se puede cobrar."));
+            return Ok(MapReservation(pago.Reservation));
         }
 
-        // El hold vencido se corta ANTES de abrir la sesión de pago.
-        //
-        // Las dos guardas de arriba cubren Confirmed y Cancelled, y un hold vencido no es
-        // ninguna de las dos: caía derecho a CreateSessionAsync + CaptureAsync —dinero
-        // capturado— y solo entonces ConfirmAsync lanzaba porque el hold ya no valía. Nadie
-        // atrapaba esa excepción: HTTP 500, el huésped cobrado, sin reserva, y sin Void ni
-        // Refund que compensara. También se alcanza cuando el escáner de vencimientos voltea
-        // el hold entre el hold y el pago, que es una carrera de minutos, no de milisegundos.
-        //
-        // Cobrar y después descubrir que no se puede confirmar es el orden equivocado: el
-        // cupo se verifica primero, la caja se abre después. 409 y no 400 porque no es una
-        // petición mal formada: es un conflicto con el estado actual del recurso.
-        if (reservation.Status == ReservationStatus.Expired
-            || (reservation.Status == ReservationStatus.Held && reservation.ExpiresAt <= DateTimeOffset.UtcNow))
+        // Un apartado vencido se grita desde acá, que es donde hay logger. La decisión de NO
+        // abrir la caja ya la tomó el flujo; esto solo deja constancia.
+        if (pago.Outcome == HotelPaymentOutcome.Conflict
+            && pago.Reservation.Status == ReservationStatus.Expired)
         {
             _logger.LogWarning(
-                "Reserva {ReservationId}: intento de cobro sobre un hold vencido ({ExpiresAt:o}); no se abre sesión de pago.",
-                reservation.Id, reservation.ExpiresAt);
-
-            return Conflict(new PayResponse(
-                ReservationId: reservation.Id,
-                Status: ReservationStatus.Expired.ToString(),
-                PaymentStatus: PaymentStatus.Cancelled.ToString(),
-                PaymentSessionId: null,
-                AmountCaptured: 0m,
-                AmountFormatted: _priceFormatter.Format(0m, reservation.Currency),
-                FailureReason: "El hold de la reserva venció; vuelve a apartar el cupo antes de pagar."));
+                "Reserva {ReservationId}: intento de cobro sobre un hold vencido ({ExpiresAt:o}); "
+                + "no se abrió sesión de pago.",
+                pago.Reservation.Id, pago.Reservation.ExpiresAt);
         }
 
-        var session = await _payments.CreateSessionAsync(
-            new PaymentSessionRequest(
-                OrderReference: reservation.Id,
-                Amount: reservation.TotalPrice,
-                Currency: reservation.Currency,
-                Items: new[]
-                {
-                    new PaymentLineItem(
-                        Sku: $"{reservation.RoomTypeCode}/{reservation.RatePlanCode}",
-                        Description: $"Reserva {reservation.RoomTypeCode} ({reservation.CheckIn:yyyy-MM-dd} → {reservation.CheckOut:yyyy-MM-dd})",
-                        UnitPrice: reservation.TotalPrice,
-                        Quantity: 1),
-                },
-                CustomerEmail: reservation.GuestEmail,
-                ReturnUrl: null,
-                Metadata: null),
-            cancellationToken);
+        var respuesta = new PayResponse(
+            ReservationId: pago.Reservation.Id,
+            Status: pago.Reservation.Status.ToString(),
+            PaymentStatus: pago.PaymentStatus.ToString(),
+            PaymentSessionId: pago.PaymentSessionId,
+            AmountCaptured: pago.AmountCaptured,
+            AmountFormatted: _priceFormatter.Format(pago.AmountCaptured, pago.Reservation.Currency),
+            FailureReason: pago.FailureReason);
 
-        var capture = await _payments.CaptureAsync(session.SessionId, cancellationToken: cancellationToken);
-
-        if (capture.Status != PaymentStatus.Captured)
+        // Traducir los tres finales a HTTP es trabajo del borde, y la distinción importa: un
+        // apartado vencido es 409 —conflicto con el estado del recurso— y no 400, que diría que
+        // la petición está mal formada. Una reserva cancelada sí es 400: pedir cobrar algo
+        // cancelado es una petición sin sentido.
+        return pago.Outcome switch
         {
-            // El cobro no se completó (RequiresAction / Failed / etc.). No se
-            // confirma la reserva; el cliente reintenta o sigue la acción que
-            // le pida su riel: redirect en PSE, reto embebido en 3DS, o
-            // aprobación en el celular con Nequi (ADR 0116).
-            var failureReason = capture.FailureReason
-                ?? (session.Action is { Kind: not PaymentActionKind.None }
-                    ? "El pago requiere una acción adicional del cliente."
-                    : null);
-            return Ok(new PayResponse(
-                ReservationId: reservation.Id,
-                Status: reservation.Status.ToString(),
-                PaymentStatus: capture.Status.ToString(),
-                PaymentSessionId: session.SessionId,
-                AmountCaptured: capture.AmountCaptured,
-                AmountFormatted: _priceFormatter.Format(capture.AmountCaptured, reservation.Currency),
-                FailureReason: failureReason));
-        }
-
-        var confirmed = await _reservations.ConfirmAsync(reservation.Id, session.SessionId, cancellationToken);
-
-        return Ok(new PayResponse(
-            ReservationId: confirmed.Id,
-            Status: confirmed.Status.ToString(),
-            PaymentStatus: capture.Status.ToString(),
-            PaymentSessionId: confirmed.PaymentSessionId ?? session.SessionId,
-            AmountCaptured: capture.AmountCaptured,
-            AmountFormatted: _priceFormatter.Format(capture.AmountCaptured, confirmed.Currency),
-            FailureReason: null));
+            HotelPaymentOutcome.Conflict when pago.Reservation.Status == ReservationStatus.Expired
+                => Conflict(respuesta),
+            HotelPaymentOutcome.Conflict => BadRequest(respuesta),
+            _ => Ok(respuesta),
+        };
     }
 
     // ── 4. Cancel ──────────────────────────────────────────────────
@@ -304,125 +249,34 @@ public sealed class BookingController : ControllerBase
             return BadRequest(new { error = "ReservationId es requerido." });
         }
 
-        var reservation = await _reservations.GetAsync(request.ReservationId, cancellationToken);
-        if (reservation is null)
+        var cancelacion = await _booking.CancelAsync(request.ReservationId, request.Reason, cancellationToken);
+        if (cancelacion is null)
         {
             return NotFound(new { error = $"Reserva '{request.ReservationId}' no encontrada." });
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-
-        // Cancelar dos veces NO reembolsa dos veces.
-        //
-        // La guarda de abajo mira la política y la sesión de pago, nunca el ESTADO. Y
-        // CancelAsync es idempotente pero no limpia el PaymentSessionId, así que una segunda
-        // llamada con el mismo id volvía a evaluar la política y a llamar a RefundAsync por
-        // el mismo monto. Hoy no se duplica la plata solo porque el proveedor stub reembolsa
-        // únicamente sesiones capturadas y en la segunda pasada encuentra Refunded: el PSP
-        // salva al controller, el controller no se salva solo. Un gateway real que acepte
-        // reembolsos parciales sucesivos —el caso normal cuando hay penalidad, porque quedan
-        // pesos sin reembolsar en la sesión— paga dos veces.
-        //
-        // RefundAsync es además el ÚNICO método mutador de IPaymentProvider cuyo contrato no
-        // promete idempotencia; CaptureAsync y VoidAsync sí la prometen explícitamente. Así
-        // que la garantía tiene que ponerla quien llama.
-        //
-        // Se devuelve 200 y no un error porque cancelar lo ya cancelado es el resultado que
-        // el huésped pidió: reintentar tras un timeout de red no puede parecer un fallo.
-        if (reservation.Status == ReservationStatus.Cancelled)
+        // Si el reembolso salió mal se grita desde acá, que es donde hay logger. La reserva YA
+        // quedó cancelada y eso no se deshace —el cupo volvió al inventario—, así que callarlo
+        // reproduciría el defecto que este flujo cierra.
+        if (cancelacion.RefundStatus is { } estado
+            && !string.Equals(estado, PaymentStatus.Refunded.ToString(), StringComparison.Ordinal))
         {
-            var settled = _cancellationPolicy.Evaluate(reservation.RatePlanCode, reservation.CheckIn, today);
-            return Ok(new CancelResponse(
-                ReservationId: reservation.Id,
-                Status: reservation.Status.ToString(),
-                Refundable: settled.Refundable,
-                PenaltyAmount: settled.PenaltyAmount,
-                PenaltyFormatted: _priceFormatter.Format(settled.PenaltyAmount, reservation.Currency),
-                PolicyDescription: settled.Description,
-                // Null y no "Refunded": esta pasada no movió dinero, y afirmar un reembolso
-                // que no ocurrió aquí es la clase de dato con cara de verdad que ya costó
-                // una vez en este mismo endpoint.
-                RefundStatus: null));
+            _logger.LogError(
+                "Reserva {ReservationId}: cancelada pero el reembolso quedó en {Status}.",
+                cancelacion.Reservation.Id, estado);
         }
 
-        var reason = string.IsNullOrWhiteSpace(request.Reason) ? "guest-requested" : request.Reason.Trim();
-        var outcome = _cancellationPolicy.Evaluate(reservation.RatePlanCode, reservation.CheckIn, today);
-
-        var cancelled = await _reservations.CancelAsync(reservation.Id, reason, cancellationToken);
-
-        // DEVOLVER LA PLATA, no sólo calcular cuánta. Antes esto evaluaba la
-        // política, informaba el monto reembolsable, cancelaba la reserva y
-        // NUNCA llamaba al motor de pago: la cifra era decorativa y el huésped
-        // se quedaba sin su dinero y con un mensaje diciéndole que se lo
-        // devolvíamos.
-        //
-        // Lo que se devuelve es el total MENOS la penalidad. Si no hay sesión
-        // de pago —una reserva que nunca se cobró— no hay nada que devolver.
-        string? refundState = null;
-        if (outcome.Refundable && !string.IsNullOrWhiteSpace(reservation.PaymentSessionId))
-        {
-            var refundable = reservation.TotalPrice - outcome.PenaltyAmount;
-            if (refundable > 0m)
-            {
-                var refund = await _payments.RefundAsync(
-                    reservation.PaymentSessionId, refundable, cancellationToken);
-                refundState = refund.Status.ToString();
-
-                if (refund.Status != PaymentStatus.Refunded)
-                {
-                    // La reserva YA quedó cancelada y eso no se deshace: el cupo
-                    // volvió al inventario. Pero el reembolso falló, y callarlo
-                    // reproduciría exactamente el defecto que este cambio cierra.
-                    _logger.LogError(
-                        "Reserva {ReservationId}: cancelada pero el reembolso de {Amount} quedó en {Status}. {Reason}",
-                        cancelled.Id, refundable, refund.Status, refund.FailureReason);
-                }
-            }
-        }
-
-        // Rastro de la cancelación (ADR 0037), best-effort y después de que ya ocurrió: si
-        // el registro falla, desandar una cancelación ya sellada sería peor.
-        //
-        // Este endpoint es ANÓNIMO —el reservationId es la credencial, decisión deliberada
-        // para que quien compró como invitado vuelva a su reserva— y a la vez DESTRUCTIVO y
-        // con movimiento de plata. Sin rastro no había forma de responder "¿quién canceló
-        // esta estadía y cuándo?", que es justo la pregunta que llega cuando alguien reenvía
-        // un correo de confirmación o comparte un navegador. Auditarlo no rompe la compra de
-        // invitado: no pide sesión, solo deja constancia.
-        //
-        // El actor es el huésped de la reserva, NO quien hizo la petición: no hay sesión que
-        // consultar. Es una limitación honesta del modelo de credencial-por-URL, y queda
-        // dicha aquí para que nadie lea este registro como una identificación del solicitante.
-        try
-        {
-            await _audit.WriteAsync(
-                new AuditEvent(
-                    Id: Guid.NewGuid().ToString("N"),
-                    OccurredAtUtc: DateTime.UtcNow,
-                    ActorEmail: cancelled.GuestEmail,
-                    ActorName: cancelled.GuestName,
-                    Action: "booking.reservation.cancelled",
-                    Resource: cancelled.Id,
-                    Outcome: "success",
-                    Detail: $"Cancelada por URL-credencial; motivo '{reason}'; penalidad " +
-                        $"{outcome.PenaltyAmount} {cancelled.Currency}; reembolso {refundState ?? "no aplica"}."),
-                cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Reserva {ReservationId}: cancelada pero no se pudo dejar el rastro de auditoría.",
-                cancelled.Id);
-        }
-
+        // Se devuelve 200 aunque no se haya movido nada: cancelar lo ya cancelado es el
+        // resultado que el huésped pidió, y reintentar tras un timeout de red no puede parecer
+        // un fallo.
         return Ok(new CancelResponse(
-            ReservationId: cancelled.Id,
-            Status: cancelled.Status.ToString(),
-            Refundable: outcome.Refundable,
-            PenaltyAmount: outcome.PenaltyAmount,
-            PenaltyFormatted: _priceFormatter.Format(outcome.PenaltyAmount, cancelled.Currency),
-            PolicyDescription: outcome.Description,
-            RefundStatus: refundState));
+            ReservationId: cancelacion.Reservation.Id,
+            Status: cancelacion.Reservation.Status.ToString(),
+            Refundable: cancelacion.Refundable,
+            PenaltyAmount: cancelacion.PenaltyAmount,
+            PenaltyFormatted: _priceFormatter.Format(cancelacion.PenaltyAmount, cancelacion.Reservation.Currency),
+            PolicyDescription: cancelacion.PolicyDescription,
+            RefundStatus: cancelacion.RefundStatus));
     }
 
     // ── 5. Get ─────────────────────────────────────────────────────
@@ -434,7 +288,7 @@ public sealed class BookingController : ControllerBase
             return BadRequest(new { error = "ReservationId es requerido." });
         }
 
-        var reservation = await _reservations.GetAsync(reservationId, cancellationToken);
+        var reservation = await _booking.GetAsync(reservationId, cancellationToken);
         return reservation is null
             ? NotFound(new { error = $"Reserva '{reservationId}' no encontrada." })
             : Ok(MapReservation(reservation));
