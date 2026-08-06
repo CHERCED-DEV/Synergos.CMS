@@ -46,12 +46,49 @@ public sealed partial class SeamComposer
         // estética: un borde de ASP.NET no se puede probar sin levantar el pipeline, y mientras
         // el orden en que se abre la caja viviera ahí, no había forma de llevarlo contra
         // Synergos.Bff.Viajes sin reescribir el borde entero.
-        services.AddSingleton<IHotelBookingService>(sp =>
-            new StubHotelBookingService(
-                sp.GetRequiredService<IReservationService>(),
-                sp.GetRequiredService<IPaymentProvider>(),
+        // La sección se ENLAZA: sin esto el cliente recibe un ViajesSettings recién construido y
+        // lo que no viaja por el HttpClient —el Kind del viajero— se queda en su valor por
+        // defecto en silencio. Es el olvido que arrastraban Tienda (#24) y Salud (#25).
+        services.Configure<ViajesSettings>(builder.Config.GetSection("Synergos:Viajes"));
+
+        if (string.Equals(builder.Config["Synergos:Viajes:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
+        {
+            var vBase = builder.Config["Synergos:Viajes:BaseUrl"];
+            var vKey = builder.Config["Synergos:Viajes:ApiKey"];
+            var vTimeout = int.TryParse(builder.Config["Synergos:Viajes:TimeoutSeconds"], out var vt) && vt > 0 ? vt : 30;
+
+            services.AddHttpClient(HttpHotelBookingService.ClientName, http =>
+            {
+                var url = string.IsNullOrWhiteSpace(vBase) ? "http://127.0.0.1:5304/" : vBase;
+                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+                http.Timeout = TimeSpan.FromSeconds(vTimeout);
+                if (!string.IsNullOrWhiteSpace(vKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpHotelBookingService.ApiKeyHeader, vKey);
+                }
+            })
+            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+
+            // OJO: solo la vía HOTEL. El carrito multi-producto (ITravelCartService) sigue contra
+            // el motor en proceso, y no por falta de ganas: TravelCartItem no lleva fechas y un
+            // apartado de Api.Booking ES una ventana sobre un recurso. Ver ViajesSettings.
+            services.AddSingleton<IHotelBookingService>(sp => new HttpHotelBookingService(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IOptionsMonitor<ViajesSettings>>(),
                 sp.GetRequiredService<ICancellationPolicyEvaluator>(),
+                sp.GetRequiredService<IJsonEntityStore>(),
+                sp.GetRequiredService<ILogger<HttpHotelBookingService>>(),
                 sp.GetRequiredService<IAuditTrailWriter>()));
+        }
+        else
+        {
+            services.AddSingleton<IHotelBookingService>(sp =>
+                new StubHotelBookingService(
+                    sp.GetRequiredService<IReservationService>(),
+                    sp.GetRequiredService<IPaymentProvider>(),
+                    sp.GetRequiredService<ICancellationPolicyEvaluator>(),
+                    sp.GetRequiredService<IAuditTrailWriter>()));
+        }
 
         // Auto-cancel de holds vencidos (aprendizaje NS.Booking, doc 17): barre
         // cada ~2 min los Held cuyo ExpiresAt pasó y libera el cupo (→ Expired).

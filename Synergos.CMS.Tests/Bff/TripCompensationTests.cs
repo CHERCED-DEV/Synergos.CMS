@@ -560,12 +560,106 @@ public sealed class TripCompensationTests
         var ctx = Nuevo(FelizEstricto());
         await Reservar(ctx.Flow);
 
-        var r = await ctx.Flow.CancelAsync("viaje-1", CancellationToken.None);
+        var r = await ctx.Flow.CancelAsync("viaje-1", null, CancellationToken.None);
 
         Assert.True(r.IsOk);
         Assert.Equal(SagaStatus.Compensated, r.Value.Status);
         Assert.Empty(r.Value.Pending());
         Assert.Equal(3, ctx.Caps.Veces("POST", "/release"));
+        Assert.Equal(1, ctx.Caps.Veces("POST", "/v1/payments/pg1/void"));
+        Assert.Equal(0, ctx.Caps.Veces("POST", "/refund"));
+    }
+
+    /// <summary>
+    /// Cancelar tras confirmar devuelve el TOTAL MENOS la penalidad que retenga la política.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es lo que el cableado destapó (HU #36, rebanada 2b): el hotel retiene una penalidad
+    /// y este orquestador devolvía todo. Encender el modo <c>Bff</c> sin esto habría cambiado el
+    /// monto devuelto en silencio.</para>
+    ///
+    /// <para><b>La penalidad llega calculada</b>, no se calcula acá: depende de la tarifa y de
+    /// cuántos días falten, y eso lo sabe quien vendió. <c>Api.Booking</c> lo dice de frente —
+    /// «qué se devuelve y a quién lo decide Api.Payments y lo ORDENA el BFF».</para>
+    /// </remarks>
+    [Fact]
+    public async Task Cancelar_tras_confirmar_devuelve_el_TOTAL_MENOS_la_penalidad()
+    {
+        var ctx = Nuevo(FelizEstricto());
+        await Reservar(ctx.Flow);
+        await ctx.Flow.ConfirmAsync("viaje-1", CancellationToken.None);
+
+        var r = await ctx.Flow.CancelAsync(
+            "viaje-1", Money.Of(200000m, Money.Cop), CancellationToken.None);
+
+        Assert.True(r.IsOk);
+        Assert.Equal(SagaStatus.Compensated, r.Value.Status);
+        Assert.Empty(r.Value.Pending());
+
+        // 1.200.000 devolvibles menos 200.000 de penalidad.
+        var devolucion = ctx.Caps.Llamadas.Single(l => l.Path.EndsWith("/refund", StringComparison.Ordinal));
+        Assert.Contains("1000000", devolucion.Body!, StringComparison.Ordinal);
+        Assert.DoesNotContain("1200000", devolucion.Body!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Si la devolución falla al cancelar, queda ANOTADA para el barrido, no en un log.
+    /// </summary>
+    /// <remarks>
+    /// Es el único trozo de la cancelación que necesita la máquina: soltar una reserva que no se
+    /// pudo soltar se ve y se arregla; una devolución perdida se la queda alguien.
+    /// </remarks>
+    [Fact]
+    public async Task Si_la_devolucion_falla_al_cancelar_queda_pendiente()
+    {
+        var caps = FelizEstricto();
+        var ctx = Nuevo(caps);
+        await Reservar(ctx.Flow);
+        await ctx.Flow.ConfirmAsync("viaje-1", CancellationToken.None);
+
+        caps.Falla("POST /v1/payments/pg1/refund", HttpStatusCode.ServiceUnavailable, "payments.unreachable");
+
+        var r = await ctx.Flow.CancelAsync("viaje-1", null, CancellationToken.None);
+
+        Assert.True(r.IsOk);
+        // Las reservas SÍ se soltaron: no se corta el resto por una devolución caída.
+        Assert.Equal(1, ctx.Caps.Veces("POST", "/v1/reservations/res-1/cancel"));
+        Assert.Equal(1, ctx.Caps.Veces("POST", "/v1/reservations/res-3/cancel"));
+
+        // Y la plata quedó anotada, que es lo que hace que el barrido vuelva por ella.
+        var pendientes = r.Value.Pending();
+        Assert.Single(pendientes);
+        Assert.Equal(ViajesCompensations.RefundPayment, pendientes[0].Kind);
+        Assert.Contains("devolución", r.Value.LastError!, StringComparison.Ordinal);
+    }
+
+    [Fact] // una penalidad que no cabe en el viaje es un error de quien la calculó.
+    public async Task Una_penalidad_mayor_que_el_viaje_se_rechaza()
+    {
+        var ctx = Nuevo(FelizEstricto());
+        await Reservar(ctx.Flow);
+
+        var r = await ctx.Flow.CancelAsync(
+            "viaje-1", Money.Of(9_000_000m, Money.Cop), CancellationToken.None);
+
+        Assert.False(r.IsOk);
+        Assert.Equal("viajes.bad_penalty", r.Rejection!.Code);
+        Assert.Equal(0, ctx.Caps.Veces("POST", "/release"));   // no se deshizo nada
+    }
+
+    /// <summary>
+    /// Antes de confirmar, la penalidad no muerde: no se movió plata que retener.
+    /// </summary>
+    [Fact]
+    public async Task Cancelar_SIN_haber_capturado_libera_entero_aunque_haya_penalidad()
+    {
+        var ctx = Nuevo(FelizEstricto());
+        await Reservar(ctx.Flow);
+
+        var r = await ctx.Flow.CancelAsync(
+            "viaje-1", Money.Of(200000m, Money.Cop), CancellationToken.None);
+
+        Assert.True(r.IsOk);
         Assert.Equal(1, ctx.Caps.Veces("POST", "/v1/payments/pg1/void"));
         Assert.Equal(0, ctx.Caps.Veces("POST", "/refund"));
     }
@@ -578,7 +672,7 @@ public sealed class TripCompensationTests
         Assert.Equal("viajes.trip_not_found",
             (await ctx.Flow.ConfirmAsync("no-existe", CancellationToken.None)).Rejection!.Code);
         Assert.Equal("viajes.trip_not_found",
-            (await ctx.Flow.CancelAsync("no-existe", CancellationToken.None)).Rejection!.Code);
+            (await ctx.Flow.CancelAsync("no-existe", null, CancellationToken.None)).Rejection!.Code);
         Assert.Equal("viajes.trip_not_found", ctx.Flow.Get("no-existe").Rejection!.Code);
     }
 
@@ -587,7 +681,7 @@ public sealed class TripCompensationTests
     {
         var ctx = Nuevo(FelizEstricto());
         await Reservar(ctx.Flow);
-        await ctx.Flow.CancelAsync("viaje-1", CancellationToken.None);
+        await ctx.Flow.CancelAsync("viaje-1", null, CancellationToken.None);
 
         var r = await ctx.Flow.ConfirmAsync("viaje-1", CancellationToken.None);
 

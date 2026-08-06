@@ -50,8 +50,18 @@ public static class ViajesEndpoints
         app.MapPost("/v1/trips/{id}/confirm", async (string id, TripFlow flow, CancellationToken ct) =>
             (await flow.ConfirmAsync(id, ct)).Map(TripResponse.From).ToHttp());
 
-        app.MapPost("/v1/trips/{id}/cancel", async (string id, TripFlow flow, CancellationToken ct) =>
-            (await flow.CancelAsync(id, ct)).Map(TripResponse.From).ToHttp());
+        // Cancelar admite una penalidad ya calculada por quien vendió. Sin cuerpo se devuelve
+        // todo, que es lo correcto cuando no hay política que aplicar.
+        app.MapPost("/v1/trips/{id}/cancel", async (
+            string id, CancelTripRequest? req, TripFlow flow, CancellationToken ct) =>
+        {
+            Money? retener = null;
+            if (req?.Retain is { } m && m.Amount > 0m)
+            {
+                retener = Money.Of(m.Amount, string.IsNullOrWhiteSpace(m.Currency) ? Money.Cop : m.Currency);
+            }
+            return (await flow.CancelAsync(id, retener, ct)).Map(TripResponse.From).ToHttp();
+        });
 
         // Volver a intentar lo que se rindió. Es la puerta de la persona a la que se le avisó:
         // sin ella, «se rinde a los ocho intentos» sería «se abandona», y arreglar una

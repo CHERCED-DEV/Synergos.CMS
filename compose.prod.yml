@@ -106,6 +106,15 @@ services:
       Synergos__Eventos__Mode: ${SYNERGOS_EVENTOS_MODE:-Stub}
       Synergos__Eventos__BaseUrl: "http://bff-eventos:8080"
       Synergos__Eventos__ApiKey: ${SYNERGOS_API_KEY}
+
+      # Y contra quien se reserva un hotel (HU #36). SOLO la via hotel: el
+      # carrito multi-producto no lleva fechas y un apartado de Api.Booking ES
+      # una ventana sobre un recurso. Encenderlo exige ademas cargar el precio
+      # en Api.Pricing y el recurso en Api.Booking por cada tipo/tarifa — ver
+      # .env.example.
+      Synergos__Viajes__Mode: ${SYNERGOS_VIAJES_MODE:-Stub}
+      Synergos__Viajes__BaseUrl: "http://bff-viajes:8080"
+      Synergos__Viajes__ApiKey: ${SYNERGOS_API_KEY}
     volumes:
       - cms-db:/app/umbraco/Data
       - cms-logs:/app/umbraco/Logs
