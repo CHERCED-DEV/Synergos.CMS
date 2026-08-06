@@ -145,6 +145,33 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
             Framework: framework);
     }
 
+    /// <summary>Cuántos elementos se prueban antes de declarar que el registry no sirve ninguno.</summary>
+    private const int MaxSondeos = 5;
+
+    /// <inheritdoc />
+    public async Task<BundleDescriptor?> TryResolveAnyAsync(CancellationToken ct = default)
+    {
+        // Reusa el snapshot, así que NO va a la red si está fresco: esto lo llama el chequeo de
+        // salud, y un /_health que descarga el registry en cada visita se convierte él mismo en
+        // la carga que dice estar vigilando.
+        var snap = await ObtenerSnapshotAsync(_settings.CurrentValue, ct).ConfigureAwait(false);
+        if (snap is null || snap.PorTag.Count == 0) return null;
+
+        // Varios y no sólo el primero: un elemento roto no es un registry caído. Con tope, porque
+        // esto corre dentro de /_health y cada intento puede costar dos peticiones (manifiesto y
+        // meta) — recorrer 130 ante un CDN roto sería el trabajo más caro del proceso justo
+        // cuando algo anda mal.
+        var intentos = 0;
+        foreach (var tag in snap.PorTag.Keys)
+        {
+            if (intentos++ >= MaxSondeos) break;
+            var d = await TryResolveAsync(tag, ct).ConfigureAwait(false);
+            if (d is not null) return d;
+        }
+
+        return null;
+    }
+
     // ── El snapshot ─────────────────────────────────────────────────────────
 
     private async Task<Snapshot?> ObtenerSnapshotAsync(BundleRegistrySettings s, CancellationToken ct)
