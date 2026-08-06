@@ -47,6 +47,14 @@ public sealed class ViajesCompensationExecutor : ICompensationExecutor<TripSaga>
         var devolvible = Money.Of(pago.Value.Refundable.Amount, pago.Value.Refundable.Currency);
         if (devolvible.IsZero) return null;
 
+        // Acá se devuelve TODO lo devolvible, y la penalidad no pinta nada — lo destapó una
+        // mutación que no se puso roja. Una compensación corre cuando un paso falló a la mitad, y
+        // en ese camino nunca hay penalidad que retener: si el fallo llegó antes de capturar no
+        // se movió plata, y si llegó después, la saga queda Compensated ahí mismo. Retener solo
+        // tiene sentido al cancelar un viaje que salió BIEN, y eso lo hace TripFlow directamente
+        // (`CancelarConfirmadoAsync`). Restar acá era código que aparentaba proteger plata sin
+        // ejecutarse nunca, que es peor que no tenerlo: el siguiente lo lee y confía.
+
         var r = await _caps.RefundAsync(pendiente.TargetId, devolvible, pendiente.Reason,
             saga.KeyFor($"refund:{pendiente.Id}"), ct);
         return r.IsOk ? null : r.Rejection;

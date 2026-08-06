@@ -22,6 +22,14 @@ public sealed record TripItemRequest(
 public sealed record BookTripRequest(
     string? TravellerKind, string? TravellerId, IReadOnlyList<TripItemRequest>? Items);
 
+/// <summary>Cancelar un viaje, reteniendo lo que diga la política de quien vendió.</summary>
+/// <remarks>
+/// <b>La penalidad llega calculada.</b> Cuánto se retiene depende de la tarifa y de cuántos días
+/// falten, y eso lo sabe quien vendió — no un orquestador que sirve a hoteles, vuelos y autos con
+/// políticas distintas. Sin cuerpo, o con cero, se devuelve todo.
+/// </remarks>
+public sealed record CancelTripRequest(MoneyDto? Retain);
+
 /// <summary>Un ítem apartado, tal como sale.</summary>
 /// <param name="ProductRef">Qué producto.</param>
 /// <param name="ProductLabel">Cómo se llama en pantalla.</param>
@@ -39,14 +47,16 @@ public sealed record HeldItemResponse(
 /// <summary>Cómo sale un viaje.</summary>
 public sealed record TripResponse(
     string Id, string TravellerKind, string TravellerId, string Status, MoneyDto Total,
-    IReadOnlyList<HeldItemResponse> Items, int PendingCompensations, string? LastError)
+    IReadOnlyList<HeldItemResponse> Items, int PendingCompensations, string? LastError,
+    MoneyDto? Retained = null)
 {
     public static TripResponse From(TripSaga s) => new(
         s.Id, s.Traveller.Kind, s.Traveller.Id, s.Status.ToString(),
         new MoneyDto(s.Total.Amount, s.Total.Currency),
         s.Holds.Select(h => new HeldItemResponse(
             h.ProductRef, h.ProductLabel, h.Window.Start, h.Window.End, h.ReservationId is not null)).ToList(),
-        s.Pending().Count, s.LastError);
+        s.Pending().Count, s.LastError,
+        s.Retained.IsZero ? null : new MoneyDto(s.Retained.Amount, s.Retained.Currency));
 }
 
 /// <summary>Una compensación pendiente, para quien vigila.</summary>

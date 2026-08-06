@@ -611,8 +611,29 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > sobreventa por clase tarifaria. Hay gate
   > (`ViajesCapabilityChoiceTests`).
   >
-  > **Falta cablearlo** (rebanada 2): `TravelCartService` y la vía hotel de
-  > `BookingController` siguen contra el motor en proceso.
+  > **Y la vía hotel ya está cableada** (rebanada 2, `Synergos:Viajes:Mode=Bff`,
+  > con el stub de default). Verificado con los cuatro procesos vivos: matando
+  > `Api.Payments` a mitad del cobro la habitación vuelve al inventario sola, y
+  > al cancelar se devuelve el total MENOS la penalidad.
+  >
+  > **Cablearlo obligó a partir el borde antes.** Apartar, cobrar y confirmar
+  > vivían dentro de `BookingController` — con dos defectos ya corregidos que
+  > ningún test cubría porque no había dónde ponerlos. Ahora viven en
+  > `IHotelBookingService`. Hay gates (`HotelBookingSeamTests`,
+  > `ViajesWiringTests`).
+  >
+  > **Y destapó dos cosas más.** Una: el orquestador devolvía TODO al cancelar,
+  > y la política del hotel retiene una penalidad — ahora `cancel` acepta el
+  > monto a retener, ya calculado por quien vendió. Dos: un viaje ya confirmado
+  > **no se deshace compensando** —`Bff.Core` lo rechaza con todas las letras,
+  > «deshacerlo es una cancelación con su política»— así que eso es una
+  > operación propia del flujo, no una compensación.
+  >
+  > **Lo que NO se cableó, y no por descuido:** el carrito multi-producto.
+  > `TravelCartItem` no lleva fechas —ni el seam, ni el DTO HTTP, ni el motor en
+  > proceso— y un apartado de `Api.Booking` ES una ventana sobre un recurso.
+  > Añadírselas cruza a `Synergos.UI`, así que va en su propio ticket. Hay gate:
+  > el día que el contrato tenga fechas, se cae solo y hay que decidir de frente.
 
   > **Y resolvió la pregunta que traía #35:** butaca nominada y cupo
   > general son el MISMO pozo contable. La granularidad va en el

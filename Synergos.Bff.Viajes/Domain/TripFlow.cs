@@ -80,7 +80,8 @@ public sealed class TripFlow
         }
 
         saga = new TripSaga(sagaId, traveller, SagaStatus.Running, Array.Empty<ItemHold>(), null,
-            Money.Zero(Money.Cop), Array.Empty<Compensation>(), null, _clock.GetUtcNow());
+            Money.Zero(Money.Cop), Money.Zero(Money.Cop), Array.Empty<Compensation>(), null,
+            _clock.GetUtcNow());
         _sagas.Put(saga);
 
         // 1. Apartar, ítem por ítem. Es el paso barato y reversible: se hace antes de hablar de
@@ -246,15 +247,122 @@ public sealed class TripFlow
         return Result.Ok(saga);
     }
 
-    /// <summary>El viajero se arrepiente: se deshace lo hecho.</summary>
-    public async Task<Result<TripSaga>> CancelAsync(string sagaId, CancellationToken ct)
+    /// <summary>
+    /// El viajero se arrepiente: se deshace lo hecho, reteniendo lo que diga la política.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La penalidad LLEGA calculada, no se calcula acá.</b> Cuánto se retiene depende de
+    /// la tarifa y de cuántos días falten, y eso lo sabe quien vendió — no un orquestador que
+    /// sirve a hoteles, vuelos y autos con políticas distintas. Acá solo se ordena devolver el
+    /// resto, que es exactamente lo que <c>Api.Booking</c> dice que le toca al BFF: «Booking dice
+    /// si la cancelación está en plazo; qué se devuelve y a quién lo decide Api.Payments y lo
+    /// ORDENA el BFF».</para>
+    ///
+    /// <para><b>Retener sin haber capturado no tiene sentido</b> y no se intenta: antes de la
+    /// confirmación no se movió plata, así que deshacer es liberar la autorización entera. La
+    /// penalidad solo muerde sobre lo ya cobrado.</para>
+    /// </remarks>
+    public async Task<Result<TripSaga>> CancelAsync(string sagaId, Money? retain, CancellationToken ct)
     {
         var saga = _sagas.Find(sagaId);
         if (saga is null) return Rejection.NotFound("viajes.trip_not_found", $"No existe el viaje {sagaId}.");
         if (saga.Status == SagaStatus.Compensated) return Result.Ok(saga);   // idempotente
 
+        if (retain is { } penalidad && !penalidad.IsZero)
+        {
+            if (penalidad.Amount < 0m || penalidad.Amount > saga.Total.Amount)
+            {
+                return Rejection.Invalid("viajes.bad_penalty",
+                    $"La penalidad {penalidad.Amount} no cabe en un viaje de {saga.Total.Amount}.");
+            }
+            saga = saga with { Retained = penalidad };
+            _sagas.Put(saga);
+        }
+
+        // Un viaje YA CONFIRMADO no se deshace compensando, y no es un detalle: `Bff.Core` lo
+        // rechaza con todas las letras —«deshacerlo es una cancelación con su política, no una
+        // compensación»— y tiene razón. Compensar es lo que se hace cuando un paso falló a la
+        // mitad; esto es un acto del viajero sobre algo que salió bien.
+        if (saga.Status == SagaStatus.Completed)
+        {
+            return await CancelarConfirmadoAsync(saga, ct);
+        }
+
         await _sagas.CompensateAsync(saga.Id, "el viajero canceló", ct);
         return Result.Ok(_sagas.Find(sagaId)!);
+    }
+
+    /// <summary>
+    /// Cancela un viaje que ya estaba confirmado: suelta las reservas y devuelve lo que toque.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El orden es el inverso del de confirmar, y por la misma razón.</b> Primero se
+    /// sueltan las reservas —que es reversible: se pueden volver a tomar si quedan— y al final se
+    /// devuelve la plata, que es lo que no se puede deshacer. Al revés, un fallo soltando dejaría
+    /// al viajero con la devolución hecha y el cupo todavía ocupado.</para>
+    ///
+    /// <para><b>Y si la devolución falla, se ANOTA como pendiente</b> en vez de perderse: el
+    /// barrido la reintenta con su retroceso, y si se rinde avisa a una persona. Es el único
+    /// trozo de esto que necesita la máquina, porque es el único que no se puede dejar a medias
+    /// sin que alguien pierda plata.</para>
+    /// </remarks>
+    private async Task<Result<TripSaga>> CancelarConfirmadoAsync(TripSaga saga, CancellationToken ct)
+    {
+        var fallos = new List<string>();
+
+        foreach (var apartado in saga.Holds)
+        {
+            if (apartado.ReservationId is not { } reserva) continue;
+
+            var r = await _caps.CancelReservationAsync(reserva, ct);
+            if (!r.IsOk)
+            {
+                // No se corta: soltar las demás sigue valiendo la pena, y lo que no se pudo
+                // soltar queda dicho para que una persona lo vea.
+                _log.LogError("El viaje {Saga} no pudo cancelar la reserva {Reserva}: {Error}",
+                    saga.Id, reserva, r.Rejection);
+                fallos.Add($"{apartado.ProductRef}: {r.Rejection}");
+            }
+        }
+
+        var compensaciones = saga.Compensations.ToList();
+
+        if (saga.PaymentId is { } pago)
+        {
+            var estado = await _caps.GetPaymentAsync(pago, ct);
+            var devolvible = estado.IsOk
+                ? Money.Of(estado.Value.Refundable.Amount, estado.Value.Refundable.Currency)
+                : Money.Zero(saga.Total.Currency);
+
+            var aDevolver = saga.Retained.IsZero || saga.Retained.Amount >= devolvible.Amount
+                ? devolvible
+                : Money.Of(devolvible.Amount - saga.Retained.Amount, devolvible.Currency);
+
+            if (!aDevolver.IsZero)
+            {
+                var r = await _caps.RefundAsync(pago, aDevolver, "el viajero canceló",
+                    saga.KeyFor("cancel-refund"), ct);
+                if (!r.IsOk)
+                {
+                    // Se anota y el barrido se encarga. Perder una devolución en un log es el
+                    // defecto que la máquina de compensación existe para impedir.
+                    _log.LogError("El viaje {Saga} canceló las reservas pero la devolución falló: {Error}",
+                        saga.Id, r.Rejection);
+                    compensaciones.Add(Compensation.For(
+                        ViajesCompensations.RefundPayment, pago, "el viajero canceló"));
+                    fallos.Add($"devolución: {r.Rejection}");
+                }
+            }
+        }
+
+        var cancelada = saga with
+        {
+            Status = SagaStatus.Compensated,
+            Compensations = compensaciones,
+            LastError = fallos.Count == 0 ? null : string.Join(" · ", fallos),
+        };
+        _sagas.Put(cancelada);
+        return Result.Ok(cancelada);
     }
 
     /// <summary>Volver a intentar lo que se rindió. Es la puerta de la persona a la que se avisó.</summary>

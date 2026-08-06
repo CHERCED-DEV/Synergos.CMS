@@ -77,6 +77,9 @@ public sealed record ItemHold(
 /// <param name="Holds">Los apartados, <b>uno por ítem</b>.</param>
 /// <param name="PaymentId">El cobro de Payments.</param>
 /// <param name="Total">Cuánto se cobra.</param>
+/// <param name="Retained">
+/// Cuánto NO se devuelve si el viaje se cancela — la penalidad de la política comercial.
+/// </param>
 /// <param name="Compensations">Lo que hay que deshacer.</param>
 /// <param name="LastError">Qué falló, para que el llamador lo lea.</param>
 /// <param name="StartedAtUtc">Cuándo arrancó.</param>
@@ -88,6 +91,13 @@ public sealed record ItemHold(
 /// cuatro apartados sobre cuatro recursos distintos, con cuatro ventanas distintas, y el fallo
 /// puede llegar en cualquiera. Es la razón por la que #36 dejó de ser un cableado y pasó a ser un
 /// orquestador.</para>
+///
+/// <para><b>Por qué la penalidad vive acá y no en <c>Api.Booking</c>.</b> Esa capacidad lo dice
+/// de frente: «Booking dice si la cancelación está en plazo; qué se devuelve y a quién lo decide
+/// <c>Api.Payments</c> y lo ORDENA el BFF. Meter el monto acá ataría la capacidad a una política
+/// comercial que cambia por negocio». Este es el BFF, así que acá se ordena — y lo que llega es
+/// un monto ya calculado por quien conoce la tarifa, no una regla que este servicio interprete.
+/// </para>
 ///
 /// <para><b>Y lo que NO tiene:</b> ni <c>RoomTypeCode</c>, ni <c>RatePlanCode</c>, ni
 /// <c>GuestName</c>. Esos sustantivos son de viajes y ninguna capacidad puede guardarlos; se
@@ -101,6 +111,7 @@ public sealed record TripSaga(
     IReadOnlyList<ItemHold> Holds,
     string? PaymentId,
     Money Total,
+    Money Retained,
     IReadOnlyList<Compensation> Compensations,
     string? LastError,
     DateTimeOffset StartedAtUtc,
