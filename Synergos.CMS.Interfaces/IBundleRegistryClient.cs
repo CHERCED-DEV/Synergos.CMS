@@ -23,6 +23,25 @@ public interface IBundleRegistryClient
     Task<BundleDescriptor?> TryResolveAsync(
         string elementKey,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Resuelve <b>cualquier</b> elemento que el registry sepa servir. Devuelve <c>null</c> si el
+    /// registry no está disponible, está vacío, o no logra servir ninguno de los que lista.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Existe para poder preguntar «¿el registry sirve?» sin nombrar un elemento.</b>
+    /// Un chequeo de salud atado a un tag concreto no vigila el registry: vigila que <i>ese</i>
+    /// elemento siga publicado, que es otra cosa y que además no es decisión del CMS.</para>
+    ///
+    /// <para>Lo destapó un caso real (defecto #39): el probe sondeaba <c>synergos-column</c> y el
+    /// CDN lo retiró a propósito junto con otros ocho. El probe se puso rojo, el registry estaba
+    /// perfecto, y el rojo era indistinguible del de un CDN caído.</para>
+    ///
+    /// <para><b>Qué NO es.</b> No es «listame el registry» — eso invitaría al CMS a razonar sobre
+    /// el catálogo del CDN, que es justo lo que ADR 0012 prohíbe. Devuelve <b>uno</b>, y quien
+    /// pregunta sólo puede concluir que el registry responde.</para>
+    /// </remarks>
+    Task<BundleDescriptor?> TryResolveAnyAsync(CancellationToken ct = default);
 }
 
 /// <summary>

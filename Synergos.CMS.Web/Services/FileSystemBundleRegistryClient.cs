@@ -70,6 +70,33 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
         InitialLoad();
     }
 
+    /// <inheritdoc />
+    public async Task<BundleDescriptor?> TryResolveAnyAsync(CancellationToken ct = default)
+    {
+        var snap = _snapshot;
+        if (snap is null || snap.ByTag.Count == 0) return null;
+
+        // Se prueban VARIOS y no sólo el primero: un elemento roto —sin implementación para el
+        // framework por defecto, con el manifiesto ilegible— no significa que el registry esté
+        // caído, y rendirse en el primero convertiría un bache en un rojo del sitio entero.
+        //
+        // El tope existe porque esto corre dentro de /_health: con 130 elementos, recorrerlos
+        // todos ante un CDN de verdad roto convertiría el chequeo de salud en el trabajo más caro
+        // del proceso, justo cuando algo anda mal.
+        var intentos = 0;
+        foreach (var tag in snap.ByTag.Keys)
+        {
+            if (intentos++ >= MaxSondeos) break;
+            var d = await TryResolveAsync(tag, ct).ConfigureAwait(false);
+            if (d is not null) return d;
+        }
+
+        return null;
+    }
+
+    /// <summary>Cuántos elementos se prueban antes de declarar que el registry no sirve ninguno.</summary>
+    private const int MaxSondeos = 5;
+
     public Task<BundleDescriptor?> TryResolveAsync(string elementKey, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(elementKey)) return Task.FromResult<BundleDescriptor?>(null);

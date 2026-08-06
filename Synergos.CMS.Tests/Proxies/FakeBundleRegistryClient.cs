@@ -31,4 +31,20 @@ public sealed class FakeBundleRegistryClient : IBundleRegistryClient
         string elementKey,
         CancellationToken ct = default)
         => Task.FromResult(_resolver(elementKey));
+
+    /// <summary>Cuántas veces se preguntó por «cualquiera» — para distinguir las dos ramas del probe.</summary>
+    public int VecesQueSePidioCualquiera { get; private set; }
+
+    /// <summary>
+    /// Lo que devuelve <see cref="TryResolveAnyAsync"/>. Si nadie lo pone, se le pregunta al
+    /// resolver con la llave <c>"(cualquiera)"</c>, que es lo que hace un fake honesto: si el
+    /// resolver dice que no a todo, acá también.
+    /// </summary>
+    public BundleDescriptor? Cualquiera { get; init; }
+
+    public Task<BundleDescriptor?> TryResolveAnyAsync(CancellationToken ct = default)
+    {
+        VecesQueSePidioCualquiera++;
+        return Task.FromResult(Cualquiera ?? _resolver("(cualquiera)"));
+    }
 }

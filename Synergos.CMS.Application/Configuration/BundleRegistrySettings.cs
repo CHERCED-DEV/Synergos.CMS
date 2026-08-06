@@ -128,10 +128,20 @@ public sealed class BundleRegistrySettings
     public int TimeoutSeconds { get; init; } = 5;
 
     /// <summary>
-    /// Tag canónico que el <c>BundleRegistryProbe</c> intenta resolver
-    /// para verdict de salud. Default <c>"synergos-column"</c> (primer
-    /// primitive del catalog Synergos). Override útil para CDNs custom
-    /// que no exponen ese tag. Cap-290 Batch A — ADR 0090.
+    /// Elemento concreto que el <c>BundleRegistryProbe</c> vigila. <b>Vacío por defecto</b>: se
+    /// pregunta por cualquiera, que es lo que corresponde a un chequeo del registry.
     /// </summary>
-    public string ProbeTag { get; init; } = "synergos-column";
+    /// <remarks>
+    /// <para><b>El default era <c>"synergos-column"</c> y eso fue un defecto</b> (#39). El CDN
+    /// retiró ese elemento a propósito, el probe se puso rojo con el registry perfecto, y el rojo
+    /// era indistinguible del de un CDN caído. Un chequeo atado a un tag no vigila el registry:
+    /// vigila que <i>ese</i> elemento siga publicado — y qué se publica no lo decide el CMS.</para>
+    ///
+    /// <para><b>Ponerlo sigue siendo legítimo</b>, y significa otra cosa: «avisame si este
+    /// elemento en particular deja de resolver». Un operador que sepa que su sitio se cae sin
+    /// cierto elemento lo quiere así. Pero es una decisión explícita, no lo que pasa por omisión —
+    /// y el probe lo dice en su mensaje cuando falla, para que nadie confunda «se cayó el CDN» con
+    /// «retiraron el elemento que yo elegí vigilar».</para>
+    /// </remarks>
+    public string ProbeTag { get; init; } = string.Empty;
 }
