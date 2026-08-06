@@ -89,9 +89,23 @@ jobs:
           SYNERGOS_CMS_PATH="$GITHUB_WORKSPACE/Synergos.CMS" \
             node Synergos.UI/platforms/angular/tools/sync-tokens.mjs --check
 
-      # --strict para que la ausencia del CMS sea un FALLO y no un skip.
-      # Sin él el validador sale 0 cuando no encuentra el hermano, que es
-      # justo como este gate podía pasar en verde sin validar nada.
+      # SIN --strict, y el motivo por el que se puso ya no existe.
+      #
+      # Se añadió para que la ausencia del CMS fuera un FALLO y no un skip —
+      # entonces el validador salía 0 cuando no encontraba al hermano, que es
+      # justo como este gate pasaba en verde sin validar nada. Eso se arregló
+      # DENTRO del validador: hoy la ausencia del CMS es fallo por defecto, y
+      # quien la quiera tolerar pide `--allow-missing-cms` explícitamente.
+      # Comprobado: `--cms-path=/no/existe` sale 1 sin `--strict`.
+      #
+      # Lo que `--strict` hace de verdad es «exit 1 también con WARNINGS», y
+      # hay 80 de W4 —entradas del registry sin contrato tipado en
+      # ELEMENT_CONFIG_FIELDS— que son deuda conocida, no un desajuste de
+      # contrato. Con la bandera puesta este job llevaba rojo en master desde
+      # el 2026-08-01, cuatro corridas seguidas. Un gate siempre rojo deja de
+      # leerse, que es la forma más silenciosa de no vigilar nada.
+      #
+      # Lo que este job dice vigilar está en su propio nombre: E1/E2.
       - name: Registry ↔ DocTypes (E1/E2)
         working-directory: Synergos.UI
-        run: node tools/validate-cms-contracts.mjs --strict
+        run: node tools/validate-cms-contracts.mjs

@@ -1,0 +1,22 @@
+﻿@*
+    SynHost renderer — button-group. Monta <synergos-button-group> con N
+    botones. El elemento normaliza defensivamente cada valor (alignment,
+    direction, gap caen a left/row/sm si llegan fuera de rango), asi que los
+    tres desplegables se crearon con el set EXACTO que su CSS respalda: un
+    desplegable con opciones que el elemento ignora en silencio es peor que
+    no tenerlo.
+*@
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
+    {
+        ["buttons"] = Model.Value<string>("buttonsJson"),
+        ["alignment"] = Model.Value<string>("alignment"),
+        ["direction"] = Model.Value<string>("direction"),
+        ["gap"] = Model.Value<string>("gap"),
+    };
+    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("button-group", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
+    var result = await Emitter.EmitAsync(request);
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

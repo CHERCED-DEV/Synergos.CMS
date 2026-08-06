@@ -101,8 +101,8 @@ Synergos.CMS/
 │   │   ├── contracts/           los 5 contratos CMS↔UI + harness Vitest
 │   │   └── umbraco/             cdn-contract.md (externalmente bloqueado)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
-│       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (243 archivos)
-│       ├── DataTypes/           109 archivos (57 DTSelect*) + UrlPicker/MediaPicker/Tags/ContentPicker
+│       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (254 archivos)
+│       ├── DataTypes/           129 archivos (67 DTSelect*) + UrlPicker/MediaPicker/Tags/ContentPicker
 │       ├── Dictionary/          i18n es-CO + en-US (481 keys)
 │       ├── Languages/           es-CO (default) + en-US
 │       ├── MediaTypes/          synImage + synDocument + synIcon + los stock de Umbraco
