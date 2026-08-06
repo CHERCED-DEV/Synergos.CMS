@@ -72,8 +72,14 @@ public sealed class TicketingFlow
         // La saga existe ANTES de tocar nada. Si el proceso se cae después del primer paso, lo
         // que se hizo queda escrito con su identificador — y como las llaves derivan de él,
         // repetir la llamada con el mismo sagaId no duplica nada.
-        var previa = _sagas.Find(sagaId);
-        if (previa is not null) return Result.Ok(previa);
+        //
+        // Pero encontrar la llave NO siempre significa «esto ya pasó»: si la compra anterior se
+        // deshizo entera, no queda nada que duplicar y el comprador tiene derecho a reintentar.
+        // Quién decide eso vive en el motor, no acá — estas líneas estaban copiadas en los dos
+        // orquestadores y el defecto #41 también (encerraba al comprador para siempre).
+        var slot = _sagas.Abrir(sagaId);
+        if (slot.Reusar is not null) return Result.Ok(slot.Reusar);
+        sagaId = slot.Id;
 
         var motivo = Revisar(lineas);
         if (motivo is not null) return Result.Rejected<TicketingSaga>(motivo);

@@ -45,6 +45,84 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
 
     public void Put(TSaga saga) => _sagas.Put(saga);
 
+    // ── La llave de idempotencia, y qué significa encontrarla (defecto #41) ──
+
+    /// <summary>
+    /// Qué hacer con una llave que quizá ya se usó: <see cref="Reusar"/> con la saga que hay que
+    /// devolver tal cual, o <see cref="Id"/> con el identificador para empezar una nueva.
+    /// </summary>
+    public readonly record struct SagaSlot(TSaga? Reusar, string Id);
+
+    /// <summary>
+    /// Resuelve una llave de idempotencia ANTES de tocar nada, y decide si es un reintento de algo
+    /// que sigue existiendo o un intento nuevo de algo que ya no está.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Esto existe porque una llave protege contra DUPLICAR algo que existe</b>, y los dos
+    /// flujos la trataban como si prohibiera volver a intentarlo. Cuando una saga terminó en
+    /// <see cref="SagaStatus.Compensated"/> no queda nada que duplicar —el cupo volvió al pozo, el
+    /// cobro se liberó, no se emitió nada— así que devolverla no es idempotencia: es negarse a
+    /// empezar de nuevo algo que ya no está. El comprador al que le rechazaron la tarjeta quedaba
+    /// <b>encerrado para siempre</b>, porque la llave se deriva de lo que compra y por lo tanto
+    /// nunca cambia.</para>
+    ///
+    /// <para><b>Vive acá y no en cada flujo a propósito.</b> Los dos orquestadores tenían las
+    /// mismas tres líneas con el mismo comentario copiado. Una regla sutil copiada dos veces se
+    /// corrige una vez y se olvida la otra — que es la razón por la que esta capa existe.</para>
+    ///
+    /// <para><b>Qué NO desbloquea, y por qué:</b></para>
+    /// <list type="bullet">
+    ///   <item><see cref="SagaStatus.Running"/> y <see cref="SagaStatus.Compensating"/> — todavía
+    ///   hay cupo apartado o plata retenida. Dejar arrancar otra compra ahí es pedir <b>el mismo
+    ///   cupo dos veces</b>, que es justo lo que la llave venía a evitar.</item>
+    ///   <item><see cref="SagaStatus.Completed"/> — salió bien. Devolverla es la idempotencia
+    ///   funcionando: nadie compra dos veces lo mismo por darle dos clics.</item>
+    ///   <item><see cref="SagaStatus.CompensationFailed"/> — <b>algo quedó colgado y necesita una
+    ///   persona.</b> Dejar reintentar acá esconde ese estado detrás de una compra nueva, y el
+    ///   cupo que no se pudo devolver se pierde sin que nadie lo mire.</item>
+    /// </list>
+    /// </remarks>
+    public SagaSlot Abrir(string llave)
+    {
+        var previa = _sagas.Find(llave);
+        if (previa is null) return new SagaSlot(null, llave);
+        if (previa.Status != SagaStatus.Compensated) return new SagaSlot(previa, llave);
+
+        // Se deshizo todo: se puede volver a intentar. Pero con identidad PROPIA — sobrescribir la
+        // muerta borraría qué falló y, peor, las compensaciones que el barrido todavía pudiera
+        // estar reintentando.
+        //
+        // El identificador del intento nuevo es DETERMINISTA: se busca el primer hueco desde la
+        // raíz de la llave. Así un reintento por timeout del segundo intento vuelve a caer en el
+        // mismo sitio y devuelve esa saga en vez de crear una tercera — que es la propiedad que
+        // hacía correcta la llave derivada del carrito, y que no se puede perder al arreglar esto.
+        var raiz = Raiz(llave);
+        for (var intento = 2; intento <= MaxIntentos; intento++)
+        {
+            var id = $"{raiz}#{intento}";
+            var otra = _sagas.Find(id);
+            if (otra is null) return new SagaSlot(null, id);
+            if (otra.Status != SagaStatus.Compensated) return new SagaSlot(otra, id);
+        }
+
+        // Cien compras deshechas sobre la misma llave no son un cliente insistente: es un lazo.
+        // Se devuelve la última en vez de seguir creando sagas, y queda dicho en el log.
+        _log.LogWarning(
+            "Llave {Llave}: {Max} intentos deshechos seguidos. Se deja de abrir sagas nuevas.",
+            llave, MaxIntentos);
+        return new SagaSlot(_sagas.Find($"{raiz}#{MaxIntentos}"), $"{raiz}#{MaxIntentos}");
+    }
+
+    /// <summary>Cuántos intentos deshechos se admiten sobre la misma llave antes de sospechar.</summary>
+    private const int MaxIntentos = 100;
+
+    /// <summary>La llave sin el sufijo de intento — para que el intento 3 se busque desde la raíz.</summary>
+    private static string Raiz(string llave)
+    {
+        var corte = llave.LastIndexOf('#');
+        return corte > 0 ? llave[..corte] : llave;
+    }
+
     /// <summary>Las sagas que están deshaciendo algo — la vista de operación.</summary>
     public IReadOnlyList<TSaga> PendingCompensations() => _sagas.WithPendingCompensations();
 
