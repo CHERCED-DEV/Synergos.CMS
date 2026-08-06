@@ -29,6 +29,28 @@ builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IdentityService>();
 
+// Los tokens de identidad (HU #14). La llave de firma NO es la compartida: mezclarlas
+// haría que quien puede llamar a un servicio pudiera además fabricar identidades.
+builder.Services.Configure<TokenOptions>(builder.Configuration.GetSection("Identity:Tokens"));
+builder.Services.AddSingleton(sp =>
+{
+    var o = sp.GetRequiredService<IOptions<TokenOptions>>().Value;
+    var llaves = o.Keys
+        .Where(k => !string.IsNullOrWhiteSpace(k.Value))
+        .ToDictionary(k => k.Key, k => System.Text.Encoding.UTF8.GetBytes(k.Value), StringComparer.Ordinal);
+
+    if (llaves.Count == 0)
+    {
+        // Sin llave no se puede firmar NI verificar, y arrancar igual dejaría un servicio que
+        // dice emitir identidades y no puede. Se cae al arrancar, que es donde se ve.
+        throw new InvalidOperationException(
+            "Identity:Tokens:Keys está vacío. Sin llave de firma no se pueden emitir ni verificar "
+            + "tokens de identidad. NO es la misma que Identity:ApiKey — ver TokenOptions.");
+    }
+
+    return new IdentityTokens(llaves, o.ActiveKeyId);
+});
+
 var app = builder.Build();
 
 app.UseCorrelation();

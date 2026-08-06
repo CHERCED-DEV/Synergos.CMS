@@ -17,6 +17,36 @@ public sealed record VerifyCredentialRequest(string? SubjectKind, string? Subjec
 /// <summary>Otorgar o revocar roles.</summary>
 public sealed record RolesRequest(IReadOnlyList<string>? Roles);
 
+/// <summary>Pedir un token para un sujeto que ya se autenticó en otro sitio.</summary>
+/// <remarks>
+/// <para><b>No trae credencial, y eso ES el camino (b) de la HU #14.</b> Quien pide el token ya
+/// autenticó a la persona por su cuenta —el CMS con su <c>Member</c> de Umbraco— y lo único que
+/// respalda esa afirmación es la llave compartida: «este proceso es de los nuestros».</para>
+///
+/// <para><b>La consecuencia, dicha antes de que alguien la suponga:</b> la cadena de confianza
+/// toca fondo en el CMS, así que el token NO es prueba más fuerte frente a un tercero. Lo que sí
+/// compra es que una capacidad deje de creerle al llamador quién está actuando. El escalón
+/// probatorio de verdad es <c>GovFederation</c>, y está fuera de alcance.</para>
+/// </remarks>
+public sealed record IssueTokenRequest(string? SubjectKind, string? SubjectId);
+
+/// <summary>Renovar un token que todavía vale.</summary>
+/// <remarks>
+/// <b>Solo se renueva lo vigente.</b> Aceptar uno vencido volvería los quince minutos un adorno:
+/// quien se hiciera con un token tendría para siempre. Quien deja pasar la vigencia vuelve a
+/// entrar, que es lo que una sesión corta significa.
+/// </remarks>
+public sealed record RenewTokenRequest(string? Token);
+
+/// <summary>Un token emitido, con cuándo deja de valer.</summary>
+/// <param name="Token">Lo que hay que mandar en la cabecera.</param>
+/// <param name="ExpiresAtUtc">Cuándo vence ESTE token.</param>
+/// <param name="SessionEndsAtUtc">
+/// Cuándo deja de poder renovarse. <b>Es el techo</b>: sin él, un token robado se renovaría para
+/// siempre, quince minutos cada vez.
+/// </param>
+public sealed record TokenResponse(string Token, DateTimeOffset ExpiresAtUtc, DateTimeOffset SessionEndsAtUtc);
+
 /// <summary>Cómo sale un principal. <b>Sin la credencial y sin el contador de fallos.</b></summary>
 public sealed record PrincipalResponse(
     string Id, string SubjectKind, string SubjectId, IReadOnlyList<string> Roles,

@@ -342,6 +342,17 @@ services:
     environment:
       Identity__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
       Identity__Storage__Root: /app/data/identity
+      # La llave que FIRMA los tokens de identidad (HU #14). NO es
+      # SYNERGOS_API_KEY: la compartida la tienen los 22 servicios y solo dice
+      # «este proceso es de los nuestros». Si con ella se firmaran identidades,
+      # cualquiera de los 22 fabricaria personas.
+      #
+      # Sin llave el servicio NO arranca — un Api.Identity que dice emitir
+      # identidades y no puede es peor que uno caido, porque parece que funciona.
+      Identity__Tokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:?falta SYNERGOS_IDENTITY_SIGNING_KEY}
+      Identity__Tokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
+      Identity__Tokens__LifetimeMinutes: ${SYNERGOS_IDENTITY_TOKEN_MINUTES:-15}
+      Identity__Tokens__MaxSessionMinutes: ${SYNERGOS_IDENTITY_SESSION_MINUTES:-480}
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
