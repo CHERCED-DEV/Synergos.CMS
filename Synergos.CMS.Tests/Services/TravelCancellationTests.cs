@@ -24,11 +24,17 @@ public sealed class TravelCancellationTests
 {
     private static TravelGuest Guest() => new("Ada Lovelace", "ada@synergos.test");
 
+    // Periodo obligatorio (HU #40): el hotel de medianoche a medianoche UTC, el vuelo
+    // con hora real. Cancelar no mira la ventana, pero el contrato la exige.
     private static TravelCartItem Hotel(decimal price = 600_000m)
-        => new(TravelProductType.Hotel, "DLX/BB", "Habitación Deluxe (3 noches)", price, "COP");
+        => new(TravelProductType.Hotel, "DLX/BB", "Habitación Deluxe (3 noches)", price, "COP",
+            new DateTimeOffset(2026, 9, 10, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero));
 
     private static TravelCartItem Flight(decimal price = 450_000m)
-        => new(TravelProductType.Flight, "SYN1010-ECOBAS", "Vuelo BOG→MDE Economy", price, "COP");
+        => new(TravelProductType.Flight, "SYN1010-ECOBAS", "Vuelo BOG→MDE Economy", price, "COP",
+            new DateTimeOffset(2026, 9, 10, 14, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 9, 10, 15, 45, 0, TimeSpan.Zero));
 
     private sealed record Harness(
         ITravelCartService Cart,
