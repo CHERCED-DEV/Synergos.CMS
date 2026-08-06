@@ -736,6 +736,57 @@ services:
       # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
       replicas: 1
 
+  bff-viajes:
+    image: ${SYNERGOS_REGISTRY}/synergos.bff.viajes:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Viajes__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Viajes__Storage__Root: /app/data/viajes
+      # ── A QUE CAPACIDADES LLEGA ─────────────────────────────────────────
+      # Sin esto, AddSagaMachinery cae a http://localhost/{cap}/ — que dentro
+      # del contenedor es EL PROPIO BFF. Arrancaria sano, pasaria su /health y
+      # fallaria TODAS las sagas. Por nombre de servicio, nunca localhost.
+      Viajes__Capabilities__booking__BaseUrl: "http://api-booking:8080"
+      Viajes__Capabilities__booking__ApiKey: ${SYNERGOS_API_KEY}
+      Viajes__Capabilities__notifications__BaseUrl: "http://api-notifications:8080"
+      Viajes__Capabilities__notifications__ApiKey: ${SYNERGOS_API_KEY}
+      Viajes__Capabilities__payments__BaseUrl: "http://api-payments:8080"
+      Viajes__Capabilities__payments__ApiKey: ${SYNERGOS_API_KEY}
+      Viajes__Capabilities__pricing__BaseUrl: "http://api-pricing:8080"
+      Viajes__Capabilities__pricing__ApiKey: ${SYNERGOS_API_KEY}
+
+      # El aviso cuando una compensacion se rinde tras ocho intentos. Sin esto
+      # queda visible en /v1/compensations con alertedAtUtc en nulo — degrada,
+      # no rompe, pero nadie se entera.
+      Viajes__Sweep__IntervalSeconds: ${SYNERGOS_SWEEP_INTERVAL_SECONDS:-60}
+      Viajes__Sweep__AbandonAfterMinutes: ${SYNERGOS_ABANDON_AFTER_MINUTES:-60}
+
+      # Cuantas veces se reintenta un AVISO colgado antes de rendirse (HU #29).
+      # Va en todos los orquestadores a proposito: elegir uno obligaria a decir
+      # cual, y el dia que ese host este caido nadie barreria. Que dos coincidan
+      # sobre el mismo envio no manda dos correos — la capacidad rechaza el
+      # reintento simultaneo con retry_in_flight.
+      Viajes__Sweep__DeliveryRetryCeiling: ${SYNERGOS_DELIVERY_RETRY_CEILING:-8}
+
+      Viajes__Alerts__ToKind: ${SYNERGOS_ALERTS_TO_KIND:-viajes.guardia}
+      Viajes__Alerts__ToId: ${SYNERGOS_ALERTS_TO_ID:-operaciones}
+      Viajes__Alerts__Address: ${SYNERGOS_ALERTS_ADDRESS:-}
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - bff-viajes-data:/app/data
+    deploy:
+      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
+      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
+      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      replicas: 1
+
 volumes:
   cms-db:
   cms-logs:
@@ -767,3 +818,4 @@ volumes:
   bff-eventos-data:
   bff-salud-data:
   bff-tienda-data:
+  bff-viajes-data:

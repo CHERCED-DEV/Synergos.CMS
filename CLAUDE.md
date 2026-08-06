@@ -132,9 +132,11 @@ Synergos.CMS/
 │     Messaging · Signing · Consent · Engagement · Geo · Fulfillment · Moderation
 ├── Synergos.Bff.Core/           la máquina de sagas: deshacer, reintentar,
 │                                rendirse, avisar. Promovida al segundo consumidor;
-│                                el TERCERO (Eventos) entró sin tocarla.
-└── Synergos.Bff.*/              LOS ORQUESTADORES. Salud y Tienda construidos;
-                                 faltan Viajes, Eventos, Realty, Gob, Academy, Social.
+│                                el TERCERO (Eventos) y el CUARTO (Viajes)
+│                                entraron sin tocarla.
+└── Synergos.Bff.*/              LOS ORQUESTADORES. Salud, Tienda, Eventos y
+                                 Viajes construidos; faltan Realty, Gob,
+                                 Academy, Social.
 ```
 
 > **El árbol de servicios está construido y verificado, pero casi sin
@@ -586,11 +588,31 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > no de la plataforma: nadie cree que un 403 de `Api.Cart` merezca
   > asiento de auditoría. **#15 queda bloqueada por `Bff.Gob`**, que es
   > su resultado y no su fracaso.
-- **Cinco orquestadores sin construir**: Viajes, Realty, Gob, Academy,
-  Social. `Bff.Eventos` ya está (HU #35) — tres capacidades, sin
-  `Api.Orders` ni `Api.Fulfillment` porque una entrada no se despacha.
-  **No necesitó ni una capacidad nueva ni un endpoint nuevo**, que es la
+- **Cuatro orquestadores sin construir**: Realty, Gob, Academy, Social.
+  `Bff.Eventos` (HU #35) y `Bff.Viajes` (HU #36) ya están, y ninguno de los
+  dos necesitó una capacidad nueva ni un endpoint nuevo — que es la
   diferencia entre «agnóstica» y «agnóstica hasta el segundo caso».
+
+  > **`Bff.Viajes` es el primero con varios pasos reversibles HETEROGÉNEOS.**
+  > Un vuelo, dos noches de hotel y un auto son tres apartados sobre tres
+  > recursos con tres ventanas, y —lo que de verdad cambia— **pueden estar en
+  > estados distintos cuando llega el fallo**: al confirmar el tercero, los
+  > dos primeros ya son reservas. Por eso acá la compensación del cupo
+  > también cambia de carácter («soltar el apartado» → «cancelar la
+  > reserva»), y la reescritura va DENTRO del bucle de confirmación, ítem por
+  > ítem. En Salud nunca hizo falta porque confirmar es el último paso.
+  >
+  > **Y resolvió la pregunta que traía #36:** «no todo va a `Api.Booking`».
+  > Sí va todo, y no por comodidad: `Resource` ya lleva `Capacity` («1 para
+  > un consultorio; 40 para un aula»), así que el aspecto de pozo está
+  > dentro, y la regla de «horario vacío = siempre abierto» se tomó nombrando
+  > el caso hotel. El vuelo se consideró para `Api.Inventory` y se descartó
+  > con el argumento escrito y el disparador para revisarlo: que haga falta
+  > sobreventa por clase tarifaria. Hay gate
+  > (`ViajesCapabilityChoiceTests`).
+  >
+  > **Falta cablearlo** (rebanada 2): `TravelCartService` y la vía hotel de
+  > `BookingController` siguen contra el motor en proceso.
 
   > **Y resolvió la pregunta que traía #35:** butaca nominada y cupo
   > general son el MISMO pozo contable. La granularidad va en el

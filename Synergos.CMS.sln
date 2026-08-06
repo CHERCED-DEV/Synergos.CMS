@@ -47,6 +47,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Salud", "Syner
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Eventos", "Synergos.Bff.Eventos\Synergos.Bff.Eventos.csproj", "{E3D6CF23-1C1A-4EBE-9BD2-3A33B23BA99A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Viajes", "Synergos.Bff.Viajes\Synergos.Bff.Viajes.csproj", "{04F57C5A-209D-417E-A5D4-D78D5A88100C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -305,6 +307,18 @@ Global
 		{E3D6CF23-1C1A-4EBE-9BD2-3A33B23BA99A}.Release|x64.Build.0 = Release|Any CPU
 		{E3D6CF23-1C1A-4EBE-9BD2-3A33B23BA99A}.Release|x86.ActiveCfg = Release|Any CPU
 		{E3D6CF23-1C1A-4EBE-9BD2-3A33B23BA99A}.Release|x86.Build.0 = Release|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Debug|x64.Build.0 = Debug|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Debug|x86.Build.0 = Debug|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Release|x64.ActiveCfg = Release|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Release|x64.Build.0 = Release|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Release|x86.ActiveCfg = Release|Any CPU
+		{04F57C5A-209D-417E-A5D4-D78D5A88100C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
