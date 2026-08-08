@@ -245,8 +245,12 @@ public sealed class MessagingAcknowledgmentTests
     public void Quien_escribe_queda_con_acuse_propio_desde_el_primer_momento()
     {
         // Si no, su propio mensaje le aparecería sin leer y el contador de pendientes nunca
-        // llegaría a cero. Y se anota con la afirmación más fuerte: no hay duda de quién
-        // escribió, lo acaba de hacer.
+        // llegaría a cero.
+        //
+        // Y se anota con `CmsSession`, NO con la afirmación más fuerte. Esta línea decía lo
+        // contrario y era el defecto #42: el razonamiento —«no hay duda de quién escribió»—
+        // mide confianza, y el campo mide quién DA FE. `Api.Identity` no certificó nada acá;
+        // ni siquiera sabe emitir tokens todavía.
         var ctx = Nuevo();
         var msg = ctx.Leer();
 
@@ -254,7 +258,7 @@ public sealed class MessagingAcknowledgmentTests
 
         Assert.NotNull(suyo);
         Assert.Equal(Ahora, suyo!.AtUtc);
-        Assert.Equal(IdentityAssertion.IdentityToken, suyo.Assertion);
+        Assert.Equal(IdentityAssertion.CmsSession, suyo.Assertion);
         Assert.Null(msg.AcknowledgmentOf(Ciudadano));   // el destinatario todavía no accedió
     }
 }
