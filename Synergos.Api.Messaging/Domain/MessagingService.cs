@@ -101,10 +101,13 @@ public sealed class MessagingService
             var id = Guid.NewGuid().ToString("n");
             var ahora = _clock.GetUtcNow();
             // El autor cuenta como que ya accedió —si no, su propio mensaje le aparecería sin
-            // leer y el contador de pendientes nunca llegaría a cero—. Y se anota con la
-            // afirmación más fuerte: no hay duda de quién escribió, lo acaba de hacer.
+            // leer y el contador de pendientes nunca llegaría a cero—. Y se anota con
+            // `CmsSession`, que es lo único que se puede sostener: el campo NO mide cuánta
+            // confianza tenemos en que escribió él, mide QUIÉN DIO FE. Acá nadie emitió un
+            // token: `from` llegó declarado por el llamador sobre la llave compartida, igual
+            // que en cualquier otra llamada.
             var mensaje = new Message(id, threadId, from, (body ?? string.Empty).Trim(), attachments,
-                new[] { new Acknowledgment(from, ahora, IdentityAssertion.IdentityToken) }, ahora,
+                new[] { new Acknowledgment(from, ahora, IdentityAssertion.CmsSession) }, ahora,
                 acknowledgeBeforeUtc);
 
             _messages.Put(mensaje);
