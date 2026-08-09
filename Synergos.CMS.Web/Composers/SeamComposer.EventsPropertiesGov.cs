@@ -325,12 +325,47 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<IJsonEntityStore>(),
                 notifier: sp.GetRequiredService<ITransactionalNotifier>()));
         services.AddSingleton<IApplicationService>(sp => sp.GetRequiredService<StubApplicationService>());
-        services.AddSingleton<ICaseWorkflowService>(sp =>
-            new StubCaseWorkflowService(
+        // Contra qué avanza un expediente (HU #44). La sección se ENLAZA: sin esto el cliente
+        // recibe un GobSettings recién construido y lo que no viaja por el HttpClient —la clave
+        // de la definición y el Kind del expediente— se queda en su default en silencio.
+        services.Configure<GobSettings>(builder.Config.GetSection("Synergos:Gob"));
+
+        if (string.Equals(builder.Config["Synergos:Gob:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        {
+            var govBase = builder.Config["Synergos:Gob:BaseUrl"];
+            var govKey = builder.Config["Synergos:Gob:ApiKey"];
+            var govTimeout = int.TryParse(builder.Config["Synergos:Gob:TimeoutSeconds"], out var gt) && gt > 0 ? gt : 10;
+
+            services.AddHttpClient(HttpCaseWorkflowService.ClientName, http =>
+            {
+                var url = string.IsNullOrWhiteSpace(govBase) ? "http://127.0.0.1:5215/" : govBase;
+                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+                http.Timeout = TimeSpan.FromSeconds(govTimeout);
+                if (!string.IsNullOrWhiteSpace(govKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpCaseWorkflowService.ApiKeyHeader, govKey);
+                }
+            })
+            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+
+            // Dice `Api` y no `Bff`: decidir es UN paso, sin plata en medio y sin nada que
+            // deshacer si algo falla. Un orquestador acá sería una saga de un paso.
+            services.AddSingleton<ICaseWorkflowService>(sp => new HttpCaseWorkflowService(
+                sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<StubApplicationService>(),
+                sp.GetRequiredService<IOptions<GobSettings>>(),
                 sp.GetRequiredService<IAuditTrailWriter>(),
-                null,
-                notifier: sp.GetRequiredService<ITransactionalNotifier>()));
+                sp.GetRequiredService<ITransactionalNotifier>()));
+        }
+        else
+        {
+            services.AddSingleton<ICaseWorkflowService>(sp =>
+                new StubCaseWorkflowService(
+                    sp.GetRequiredService<StubApplicationService>(),
+                    sp.GetRequiredService<IAuditTrailWriter>(),
+                    null,
+                    notifier: sp.GetRequiredService<ITransactionalNotifier>()));
+        }
         services.AddSingleton<ICaseTrackingProvider>(sp =>
             new StubCaseTrackingProvider(sp.GetRequiredService<StubApplicationService>()));
         services.AddSingleton<IDocumentUploadService>(sp =>
