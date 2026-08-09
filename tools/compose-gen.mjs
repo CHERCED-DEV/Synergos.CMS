@@ -337,6 +337,18 @@ services:
       Synergos__Viajes__Mode: \${SYNERGOS_VIAJES_MODE:-Stub}
       Synergos__Viajes__BaseUrl: "http://bff-viajes:8080"
       Synergos__Viajes__ApiKey: \${SYNERGOS_API_KEY}
+
+      # Contra que avanza un expediente (HU #44). Dice Api y no Bff, igual que la
+      # visita al inmueble: decidir es UN paso, sin plata en medio y sin nada que
+      # deshacer si algo falla. Un orquestador seria una saga de un paso.
+      #
+      # Encenderlo exige PUBLICAR LA DEFINICION en Api.Workflow (POST /v1/definitions)
+      # — ver .env.example. Sin ella, decidir se rechaza con definition_not_found, que
+      # es mejor que adivinar un proceso.
+      Synergos__Gob__Mode: \${SYNERGOS_GOB_MODE:-Stub}
+      Synergos__Gob__BaseUrl: "http://api-workflow:8080"
+      Synergos__Gob__ApiKey: \${SYNERGOS_API_KEY}
+      Synergos__Gob__DefinitionKey: \${SYNERGOS_GOB_DEFINITION:-gov.tramite}
     volumes:
       - cms-db:/app/umbraco/Data
       - cms-logs:/app/umbraco/Logs
