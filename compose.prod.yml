@@ -115,6 +115,18 @@ services:
       Synergos__Viajes__Mode: ${SYNERGOS_VIAJES_MODE:-Stub}
       Synergos__Viajes__BaseUrl: "http://bff-viajes:8080"
       Synergos__Viajes__ApiKey: ${SYNERGOS_API_KEY}
+
+      # Contra que avanza un expediente (HU #44). Dice Api y no Bff, igual que la
+      # visita al inmueble: decidir es UN paso, sin plata en medio y sin nada que
+      # deshacer si algo falla. Un orquestador seria una saga de un paso.
+      #
+      # Encenderlo exige PUBLICAR LA DEFINICION en Api.Workflow (POST /v1/definitions)
+      # — ver .env.example. Sin ella, decidir se rechaza con definition_not_found, que
+      # es mejor que adivinar un proceso.
+      Synergos__Gob__Mode: ${SYNERGOS_GOB_MODE:-Stub}
+      Synergos__Gob__BaseUrl: "http://api-workflow:8080"
+      Synergos__Gob__ApiKey: ${SYNERGOS_API_KEY}
+      Synergos__Gob__DefinitionKey: ${SYNERGOS_GOB_DEFINITION:-gov.tramite}
     volumes:
       - cms-db:/app/umbraco/Data
       - cms-logs:/app/umbraco/Logs
@@ -342,6 +354,17 @@ services:
     environment:
       Identity__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
       Identity__Storage__Root: /app/data/identity
+      # La llave que FIRMA los tokens de identidad (HU #14). NO es
+      # SYNERGOS_API_KEY: la compartida la tienen los 22 servicios y solo dice
+      # «este proceso es de los nuestros». Si con ella se firmaran identidades,
+      # cualquiera de los 22 fabricaria personas.
+      #
+      # Sin llave el servicio NO arranca — un Api.Identity que dice emitir
+      # identidades y no puede es peor que uno caido, porque parece que funciona.
+      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:?falta SYNERGOS_IDENTITY_SIGNING_KEY}
+      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
+      IdentityTokens__LifetimeMinutes: ${SYNERGOS_IDENTITY_TOKEN_MINUTES:-15}
+      IdentityTokens__MaxSessionMinutes: ${SYNERGOS_IDENTITY_SESSION_MINUTES:-480}
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
@@ -386,6 +409,8 @@ services:
     environment:
       Messaging__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
       Messaging__Storage__Root: /app/data/messaging
+      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
+      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
