@@ -33,6 +33,13 @@ builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<MessagingService>();
 
+// El verificador de tokens de identidad (HU #14). NO obligatorio: un clon limpio arranca
+// sin llave y el acuse sigue funcionando con CmsSession, que es lo que hacía siempre.
+//
+// Lo que NO pasa sin llave es aceptar un token a ciegas: si alguien presenta uno y este
+// servicio no puede comprobarlo, se RECHAZA. Ignorarlo sería peor que no aceptar tokens.
+builder.AddIdentityTokens(required: false);
+
 var app = builder.Build();
 
 app.UseCorrelation();

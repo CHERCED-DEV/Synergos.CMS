@@ -73,6 +73,101 @@ public sealed class IdentityService
     /// credencial derivada ni el contador de fallos, y lo que necesita para autorizar y auditar
     /// es exactamente lo que un <c>Actor</c> lleva.
     /// </remarks>
+    /// <summary>El principal de un sujeto, o <c>null</c> si no hay ninguno registrado.</summary>
+    /// <remarks>
+    /// Hace falta para emitir tokens (HU #14): el sujeto tiene que EXISTIR. Sin esta
+    /// comprobación, cualquiera con la llave compartida emitiría tokens para identidades
+    /// inventadas y el token dejaría de significar «esta capacidad conoce a esta persona».
+    /// </remarks>
+    public Principal? FindBySubject(Ref subject)
+    {
+        lock (_gate) { return _principals.FindBySubject(subject); }
+    }
+
+    /// <summary>
+    /// Emite un token para un sujeto que ya se autenticó en otro sitio (HU #14, camino (b)).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El sujeto tiene que EXISTIR como principal.</b> Sin eso, cualquiera con la llave
+    /// compartida emitiría tokens para identidades inventadas, y el token dejaría de significar
+    /// «esta capacidad conoce a esta persona» — que es lo único que aporta sobre una afirmación
+    /// del llamador.</para>
+    ///
+    /// <para><b>Y un principal bloqueado no recibe token</b>, aunque el CMS jure que se
+    /// autenticó. El bloqueo es de esta capacidad y tiene que valer también acá; si no, bastaría
+    /// con pedir un token para saltárselo.</para>
+    ///
+    /// <para>Vive en el servicio y no en el endpoint a propósito (<c>CLAUDE.md</c> §15): las
+    /// reglas metidas en un lambda de ruteo no se pueden probar sin levantar el host, y lo
+    /// primero que se descubre al mutarlas es que las sostenía el compilador.</para>
+    /// </remarks>
+    public Result<IdentityClaims> IssueToken(Ref subject, int lifetimeMinutes)
+    {
+        lock (_gate)
+        {
+            var principal = _principals.FindBySubject(subject);
+            if (principal is null)
+            {
+                return Rejection.NotFound($"{IdentityRules.CodePrefix}.principal_not_found",
+                    $"No hay principal registrado para {subject}.");
+            }
+
+            var ahora = Now;
+            if (principal.IsLocked(ahora))
+            {
+                return Rejection.Conflict($"{IdentityRules.CodePrefix}.principal_locked",
+                    "El principal está bloqueado; no se emiten tokens para él.");
+            }
+
+            return Result.Ok(new IdentityClaims(
+                principal.Subject, principal.Roles, ahora, ahora.AddMinutes(lifetimeMinutes), ahora));
+        }
+    }
+
+    /// <summary>
+    /// Renueva un token vigente, refrescando los roles y respetando el techo de la sesión.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Solo se renueva lo VIGENTE</b>: aceptar un token vencido volvería la vigencia
+    /// corta un adorno, porque quien se hiciera con uno lo tendría para siempre.</para>
+    ///
+    /// <para><b>El techo se cuenta desde que empezó la SESIÓN</b>, no desde el último token. Si
+    /// se contara desde el último no sería un techo: sería la misma vigencia con otro nombre, y
+    /// un token robado se renovaría indefinidamente de a quince minutos.</para>
+    ///
+    /// <para><b>Los roles se refrescan acá</b>, y es lo que acota el costo de llevarlos dentro
+    /// del token: revocar uno tarda, como mucho, lo que quede de vigencia.</para>
+    /// </remarks>
+    public Result<IdentityClaims> RenewToken(
+        IdentityTokens tokens, string? rawToken, int lifetimeMinutes, int maxSessionMinutes)
+    {
+        ArgumentNullException.ThrowIfNull(tokens);
+
+        var ahora = Now;
+        var (claims, motivo) = tokens.Verify(rawToken, ahora);
+        if (claims is null) return IdentityTokens.ToRejection(motivo!.Value);
+
+        if (ahora >= claims.SessionStartedAtUtc.AddMinutes(maxSessionMinutes))
+        {
+            return Rejection.Invalid($"{IdentityRules.CodePrefix}.session_expired",
+                "La sesión llegó a su límite; hay que volver a autenticarse.");
+        }
+
+        lock (_gate)
+        {
+            var principal = _principals.FindBySubject(claims.Subject);
+            if (principal is null || principal.IsLocked(ahora))
+            {
+                return Rejection.Conflict($"{IdentityRules.CodePrefix}.principal_locked",
+                    "El principal ya no puede operar; no se renueva.");
+            }
+
+            return Result.Ok(new IdentityClaims(
+                claims.Subject, principal.Roles, ahora, ahora.AddMinutes(lifetimeMinutes),
+                claims.SessionStartedAtUtc));
+        }
+    }
+
     public Result<Actor> Authenticate(Ref subject, string? secret)
     {
         lock (_gate)

@@ -25,11 +25,11 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// </remarks>
 public sealed class StubCaseWorkflowService : ICaseWorkflowService
 {
-    /// <summary>Actor de demo de la cara de funcionario (la UI conmuta rol, no identidad).</summary>
-    private const string OfficerActor = "funcionario@entidad.gov.co";
-    private const string OfficerName = "Funcionario de ventanilla";
-
     // outcome → (estado destino, estados de origen legales).
+    //
+    // ESTA TABLA ES LO QUE SE MUDA A Api.Workflow (HU #44). Vive acá y sólo acá mientras el
+    // modo sea Stub: tenerla en los dos sitios haría que un trámite avanzara distinto según
+    // por dónde se pregunte, que es peor que no haberla mudado.
     private static readonly IReadOnlyDictionary<string, (CaseStatus To, CaseStatus[] From)> Outcomes =
         new Dictionary<string, (CaseStatus, CaseStatus[])>(StringComparer.OrdinalIgnoreCase)
         {
@@ -38,9 +38,7 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
             ["request-info"] = (CaseStatus.Subsanacion, new[] { CaseStatus.Radicado, CaseStatus.EnRevision }),
         };
 
-    private readonly StubApplicationService _cases;
-    private readonly IAuditTrailWriter? _audit;
-    private readonly ITransactionalNotifier? _notifier;
+    private readonly GovCaseDecisionRecorder _recorder;
     private readonly Func<DateTimeOffset> _now;
 
     public StubCaseWorkflowService(StubApplicationService cases)
@@ -59,9 +57,7 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
         Func<DateTimeOffset>? now,
         ITransactionalNotifier? notifier = null)
     {
-        _cases = cases ?? throw new ArgumentNullException(nameof(cases));
-        _audit = audit;
-        _notifier = notifier;
+        _recorder = new GovCaseDecisionRecorder(cases, audit, notifier);
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -81,7 +77,7 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
                 "outcome es requerido: approve | reject | request-info.", nameof(outcome));
         }
 
-        var current = _cases.FindCase(caseId)
+        var current = _recorder.Find(caseId)
             ?? throw new ArgumentException($"Expediente '{caseId.Trim()}' no encontrado.", nameof(caseId));
 
         // Idempotente: si el expediente YA está en el estado destino, devolverlo sin
@@ -91,7 +87,7 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
             // Re-emite: el ledger del dispatcher deduplica por (caso, transición), así que
             // es inofensivo, y rescata el caso en que la primera decisión no llegó a
             // notificar (notificaciones apagadas entonces, destinatario inválido, etc.).
-            await EmitDecidedAsync(current, rule.To, _now(), cancellationToken);
+            await _recorder.NotifyAsync(current, rule.To, _now(), cancellationToken);
             return current;
         }
 
@@ -101,90 +97,6 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
                 $"Decisión ilegal: el expediente {current.Radicado} está en '{GovStatusSlugs.ToSlug(current.Status)}' y no admite '{outcome}'.");
         }
 
-        var occurred = _now();
-        var cleanNote = string.IsNullOrWhiteSpace(note) ? DefaultNote(rule.To) : note.Trim();
-
-        // La decisión terminal (approve/reject) deja registro de resolución; request-info no.
-        var decision = rule.To is CaseStatus.Resuelto or CaseStatus.Rechazado
-            ? new CaseDecision(outcome.Trim().ToLowerInvariant(), cleanNote, occurred, OfficerActor)
-            : null;
-
-        var updated = _cases.ApplyDecision(current.CaseId, rule.To, OfficerActor, cleanNote, occurred, decision);
-
-        // CADA decisión legal = evento append-only (ADR 0037). Id único por
-        // (case, destino) mantiene el dedupe del writer sin colisionar entre pasos.
-        if (_audit is not null)
-        {
-            // best-effort: la decisión YA está aplicada y persistida.
-            await BestEffort.RunAsync(() => _audit.WriteAsync(
-                    new AuditEvent(
-                        Id: $"{current.CaseId}:{rule.To}",
-                        OccurredAtUtc: occurred.UtcDateTime,
-                        ActorEmail: OfficerActor,
-                        ActorName: OfficerName,
-                        Action: "gov.case-decision",
-                        Resource: current.Radicado,
-                        Outcome: "success",
-                        Detail: $"{GovStatusSlugs.ToSlug(current.Status)} → {GovStatusSlugs.ToSlug(rule.To)} ({outcome.Trim()}): {cleanNote}"),
-                    cancellationToken), cancellationToken);
-        }
-
-        // Avisarle al ciudadano el resultado de la decisión (T4). Best-effort: un email
-        // caído JAMÁS puede tumbar una decisión ya aplicada y persistida.
-        await EmitDecidedAsync(updated, rule.To, occurred, cancellationToken);
-
-        return updated;
+        return await _recorder.RecordAsync(current, outcome, rule.To, note, _now(), cancellationToken);
     }
-
-    /// <summary>
-    /// El hecho "expediente decidido" para T4.
-    /// <para>
-    /// <b>DedupeKey con la transición</b> (<c>gov.case.decided:{radicado}:{statusSlug}</c>):
-    /// el SubjectId NO identifica el hecho — un mismo expediente pasa por varias
-    /// transiciones (revisión → subsanación → aprobado) y CADA una merece su aviso. Con el
-    /// default (<c>{Type}:{SubjectId}</c>) el ciudadano solo se enteraría de la primera.
-    /// </para>
-    /// <para>
-    /// <b>Destinatario ausente:</b> el ciudadano se resuelve de las respuestas del
-    /// formulario y su email puede venir vacío. En ese caso NO se emite (ni se inventa un
-    /// placeholder): un evento sin destinatario real solo ensuciaría el ledger del
-    /// dispatcher con una clave de hecho ya "vista", tapando un reintento legítimo.
-    /// </para>
-    /// </summary>
-    private Task EmitDecidedAsync(
-        CaseDetail @case,
-        CaseStatus to,
-        DateTimeOffset occurredAt,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(@case.Citizen?.Email))
-        {
-            return Task.CompletedTask;
-        }
-
-        var notification = new NotificationEvent(
-            Type: NotificationTypes.GovCaseDecided,
-            SubjectId: @case.CaseId,
-            ToEmail: @case.Citizen.Email,
-            ToName: @case.Citizen.Name,
-            Code: @case.Radicado,                      // el radicado es el comprobante que guarda
-            OccurredAt: occurredAt,
-            Data: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["Trámite"] = @case.TramiteName,
-                ["Estado"] = @case.CurrentStage,
-            },
-            ActionPath: $"/gobierno/tramites/{@case.Radicado}",
-            DedupeKey: $"{NotificationTypes.GovCaseDecided}:{@case.Radicado}:{GovStatusSlugs.ToSlug(to)}");
-
-        return NotificationEmission.SafeDispatchAsync(_notifier, notification, cancellationToken);
-    }
-
-    private static string DefaultNote(CaseStatus to) => to switch
-    {
-        CaseStatus.Resuelto => "Solicitud aprobada.",
-        CaseStatus.Rechazado => "Solicitud rechazada.",
-        CaseStatus.Subsanacion => "Se solicita información adicional.",
-        _ => $"Transición a {GovStatusSlugs.ToSlug(to)}.",
-    };
 }

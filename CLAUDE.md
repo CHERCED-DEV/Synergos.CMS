@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2314 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2412 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2314 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2412 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2314 tests):
+# Suite completa (2412 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -469,7 +469,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`. 2314 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2412 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -489,15 +489,47 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   propósito. Y 20 de los 46 **ya son durables** — «stub» en este repo
   dejó hace tiempo de querer decir «en memoria». Hay gate
   (`WiringMapTests`): un stub nuevo sin mapear rompe el build.
-  De los 9, **cuatro** están hechos: la tienda compra contra `Bff.Tienda`
+  De los 9, **cinco** están hechos: la tienda compra contra `Bff.Tienda`
   (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
-  `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25) y la visita al inmueble
+  `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25), la visita al inmueble
   aparta cupo **directo contra `Api.Booking`, sin orquestador**
   (`Synergos:Realty:Mode=Api`, HU #33a) — una visita no se cobra, así que
-  toca una sola capacidad y un BFF sería una saga de un paso. El default
-  sigue siendo `Stub` en los tres. Faltan `StubPaymentProvider` →
-  `Api.Payments` y lo que queda de `StubReservationService` (Viajes y
-  Eventos, que **no van al mismo sitio** — ver #33).
+  toca una sola capacidad y un BFF sería una saga de un paso — y **el
+  expediente decide contra `Api.Workflow`**, también directo
+  (`Synergos:Gob:Mode=Api`, HU #44). El default sigue siendo `Stub` en
+  todos. Faltan `StubPaymentProvider` → `Api.Payments` y lo que queda de
+  `StubReservationService` (Viajes y Eventos, que **no van al mismo
+  sitio** — ver #33).
+
+  > **Lo que #44 mudó no es un paso: es una TABLA.** Qué puede pasarle a un
+  > expediente estaba escrito en C# y se desplegaba con el sitio, así que
+  > añadir un paso de revisión era un cambio de código. `Api.Workflow` las
+  > tiene como **dato**. Y el destino de un `outcome` se lee de la
+  > definición, no de una copia local: con la tabla en dos sitios, un
+  > trámite avanzaría distinto según a quién se le pregunte — peor que no
+  > haberla mudado. Hay gate (`GobWiringTests`).
+  >
+  > **La idempotencia significa cosas distintas a cada lado**, y es el punto
+  > más fino. El motor en proceso es idempotente sobre el estado destino
+  > («¿hace falta hacer algo?»); la capacidad contesta `instance_closed`
+  > («¿es legal esta transición?»). Las dos son correctas. Se resuelve del
+  > lado del CMS **antes** de llamar: dejar subir la suya convertiría el
+  > doble clic del funcionario, que hoy no hace nada, en un error en
+  > pantalla que nadie decidió.
+  >
+  > **Y los expedientes anteriores al cableado no se adivinan.** Uno recién
+  > radicado arranca su proceso solo —no hay historia que inventar—; uno ya
+  > en revisión se **rechaza** diciendo que hay que migrarlo. Arrancarle una
+  > instancia ahora diría que un expediente casi resuelto acaba de empezar,
+  > y adelantarlo a golpe de transiciones escribiría fechas y actores que no
+  > ocurrieron: parecería que funciona, que es lo peor que puede hacer una
+  > migración.
+  >
+  > **Publicar la definición es un paso de DESPLIEGUE**, como los recursos
+  > de `Api.Booking` en #25 y #33a. Sin ella se rechaza con
+  > `definition_not_found`. Versionar es publicar **otra clave**: la
+  > capacidad se niega a reescribir una viva, porque cambiarle las
+  > transiciones a instancias en marcha las dejaría en estados imposibles.
 
   > **El mapa se equivocó una segunda vez con el mismo filtro.**
   > `StubVisitSchedulingService` estaba en la familia C porque «no hay un
@@ -558,16 +590,77 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   El nombre de la cabecera es **lo único que comparten los dos árboles** —
   un contrato de una cadena, porque el CMS no referencia `Synergos.Shared`.
 - **La llave compartida no es identidad.** Sirve servicio↔servicio; no
-  contesta «quién es este usuario». `Api.Identity` existe pero nadie la
-  usa como puerta. `Api.Messaging` ya guarda **con qué se afirmó** la
+  contesta «quién es este usuario». `Api.Identity` **ya emite y verifica
+  tokens** (HU #14, rebanada 2) y **`Api.Messaging` es la primera
+  capacidad que los usa como puerta** (rebanada 3): el acuse de un
+  mensaje acepta `X-Synergos-Identity`, lo verifica en local y —lo que
+  de verdad cambia— **la afirmación la decide la capacidad, no el
+  llamador**. Antes se creía lo que venía en `assertion`, así que
+  cualquiera con la llave compartida podía anotar un acceso como
+  respaldado por un token que nunca existió (defecto #42). Hoy: token
+  válido del mismo sujeto → `IdentityToken`; sin token, lo más fuerte
+  que se acepta es `CmsSession`; declarar lo fuerte sin presentarlo se
+  rechaza. **Faltan las otras 19.**
+
+  > **El token de otra persona no sirve para actuar como ésta**, y ése
+  > es el caso que justifica la HU entera: sin comprobar que el sujeto
+  > del token es el `who` de la petición, la capacidad seguiría creyendo
+  > el `who` que le mandan y el token sería decoración.
+  >
+  > **Quien solo verifica arranca sin llave** —es el camino del clon
+  > limpio— pero arranca **sin poder verificar**, que no es lo mismo que
+  > verificando mal: un token presentado ahí se **rechaza**
+  > (`identity.token_not_verifiable`), no se ignora. Ignorarlo dejaría
+  > que alguien mandara cualquier cosa y siguiera adelante como si no
+  > hubiera mandado nada.
+
+  > **Verificación LOCAL, y ésa es la decisión de fondo.** El token se
+  > comprueba con la llave, sin llamar a `Api.Identity` — llamarla en cada
+  > petición la convertiría en el punto único de fallo de las veinte, y es
+  > la peor candidata porque corre sobre fichero JSON con `lock` de
+  > proceso. Con esto, `Api.Identity` caída significa «no entran sesiones
+  > nuevas», no «se para todo». `IdentityTokens` vive en `Synergos.Shared`
+  > desde el primer día porque **no hay un sitio válido con un solo
+  > consumidor**: en una capacidad obligaría a que otra la referenciara,
+  > que está prohibido de plano (§11).
+  >
+  > **Y lo que el token NO es, para que nadie lo suponga.** Lo emite un
+  > servicio nuestro a partir de la palabra del CMS (camino (b)), así que
+  > **no es prueba más fuerte frente a un tercero** que `CmsSession`: la
+  > cadena de confianza toca fondo en el mismo sitio. Lo que compra es
+  > integridad interna — el sujeto viene firmado y no se puede reapuntar,
+  > así que una capacidad deja de creerle al llamador quién actúa. El
+  > escalón probatorio de verdad es `GovFederation`, fuera de alcance.
+  >
+  > 15 minutos de vigencia con renovación y techo de sesión de 8 h; los
+  > roles viajan dentro, así que revocar uno tarda lo que quede de
+  > vigencia — ése es el precio de no tener punto único de fallo. El `kid`
+  > va desde el primer día aunque haya una sola llave. **La llave de firma
+  > NO es la compartida**, y sin ella `Api.Identity` **no arranca — y
+  > falla al cablear, no en la primera petición**. La distinción la
+  > destapó levantar el proceso: la llave se leía dentro de una fábrica
+  > de singleton y en una API mínima nadie la resuelve hasta que llega
+  > una petición que la inyecta, así que un despliegue sin llave
+  > arrancaba **verde**, contestaba `/health` y pasaba la prueba de humo.
+  > Reventaba cuando una persona intentaba entrar. Hay gate
+  > (`IdentityTokenSetupTests`), y comprueba **cuándo** falla, no solo
+  > que falle.
+  >
+  > **Y el compose ya se había desincronizado por lo mismo**: nombraba
+  > `Identity__Tokens__*` de cuando la sección era propia, así que la
+  > llave llegaba a una sección que nadie lee y un servidor bien
+  > configurado se comportaba como uno sin llave. El gate de la sección
+  > miraba código C# y el defecto vivía en un `.mjs`; ahora mira los dos.
+
+  `Api.Messaging` ya guardaba **con qué se afirmó** la
   identidad de quien accede (HU #13) precisamente para que el día que
-  esto se arregle los registros viejos no mientan sobre su propia fuerza:
-  hoy todos dicen `CmsSession`, que es nuestro propio sistema dando fe.
-  Ese `IdentityAssertion` **subió a `Synergos.Core`** al aparecer su
-  segundo consumidor (el asiento de auditoría de la HU #15), así que el
-  día que #14 cablee `Api.Identity` hay **un solo sitio** que pasa de
-  decir `CmsSession` a decir otra cosa. Hay gate: declararlo dos veces
-  rompe el build.
+  esto se arreglara los registros viejos no mintieran sobre su propia
+  fuerza. Ese día llegó con la rebanada 3, y **los registros viejos
+  siguen diciendo la verdad**: dicen `CmsSession` porque eso es lo que
+  eran. Ese `IdentityAssertion` **subió a `Synergos.Core`** al aparecer
+  su segundo consumidor (el asiento de auditoría de la HU #15), así que
+  hubo **un solo sitio** que pasar de decir `CmsSession` a decir otra
+  cosa. Hay gate: declararlo dos veces rompe el build.
 - **`Api.Booking` ya deja llegar del sujeto a su recurso** (HU #25):
   `GET /v1/resources?subjectKind=&subjectId=`, calcando lo que
   `Api.Inventory` hacía con `/v1/items`. Faltaba, y obligaba a que el
@@ -669,9 +762,15 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > el disco del orquestador, y eso lo destapó la verificación en vivo, no
   > una revisión. `Bff.Tienda` (#24) todavía manda el correo entero.
   >
-  > **Y queda un defecto conocido:** la llave de idempotencia no caduca, así
-  > que si una compra se deshace, el mismo comprador que reintente lo mismo
-  > recibe la saga muerta y se queda encerrado. Lo comparte la tienda.
+  > **Y el comprador ya no queda encerrado** (defecto #41). Encontrar la llave
+  > de idempotencia no significa «esto ya pasó»: si la compra anterior se
+  > deshizo entera no queda nada que duplicar, así que la misma llave abre un
+  > intento nuevo —con identidad propia, sin pisar la muerta— y sobre una saga
+  > VIVA sigue devolviendo esa, que es lo que impide que un reintento por
+  > timeout compre dos veces. Sólo `Compensated` desbloquea: con la
+  > compensación fallida algo quedó colgado y necesita una persona. La regla
+  > vive en `SagaEngine.Abrir` y no en cada flujo — estaba copiada en los dos
+  > orquestadores, y el defecto también.
 - **El retroceso no es configurable.** El plazo de abandono y el techo de
   reintentos sí (HU #29), pero la *forma* de reintentar —ocho intentos con
   retroceso exponencial— está cableada en `Compensator`. Nadie ha pedido

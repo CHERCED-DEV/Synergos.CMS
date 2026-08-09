@@ -29,6 +29,11 @@ builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IdentityService>();
 
+// Los tokens de identidad (HU #14). La llave de firma NO es la compartida: mezclarlas
+// haría que quien puede llamar a un servicio pudiera además fabricar identidades.
+// Obligatoria acá: un emisor que no puede firmar no sirve de nada.
+builder.AddIdentityTokens(required: true);
+
 var app = builder.Build();
 
 app.UseCorrelation();

@@ -23,6 +23,15 @@ const RAIZ = process.cwd();
 const DESTINO = join(RAIZ, 'compose.prod.yml');
 const CHECK = process.argv.includes('--check');
 
+/**
+ * Las capacidades que VERIFICAN tokens de identidad (HU #14, rebanada 3).
+ *
+ * Es una lista y no «todas» a proposito: una capacidad que no lee la cabecera no
+ * gana nada teniendo la llave, y tenerla la pondria a un descuido de empezar a
+ * creerse tokens que nadie decidio que aceptara. Se anade cuando se cablea, no antes.
+ */
+const VERIFICAN_IDENTIDAD = new Set(['Synergos.Api.Messaging']);
+
 /** `Synergos.Api.Booking` → `api-booking`. Docker no quiere mayúsculas ni puntos. */
 const nombreServicio = (proyecto) =>
   proyecto.replace(/^Synergos\./, '').replace(/\./g, '-').toLowerCase();
@@ -111,6 +120,40 @@ function entornoExtra(proyecto, disponibles) {
       '      # gritos. Lo que no existe es el stub sirviendo en silencio.',
       '      Payments__Provider: \${PAYMENTS_PROVIDER:-logging}',
       '      Payments__wompi__ApiKey: \${PAYMENTS_WOMPI_API_KEY:-}',
+    ].join('\n');
+  }
+
+  if (proyecto.endsWith('.Identity')) {
+    return [
+      '',
+      '      # La llave que FIRMA los tokens de identidad (HU #14). NO es',
+      '      # SYNERGOS_API_KEY: la compartida la tienen los 22 servicios y solo dice',
+      '      # «este proceso es de los nuestros». Si con ella se firmaran identidades,',
+      '      # cualquiera de los 22 fabricaria personas.',
+      '      #',
+      '      # Sin llave el servicio NO arranca — un Api.Identity que dice emitir',
+      '      # identidades y no puede es peor que uno caido, porque parece que funciona.',
+      `      IdentityTokens__Keys__\${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: \${SYNERGOS_IDENTITY_SIGNING_KEY:?falta SYNERGOS_IDENTITY_SIGNING_KEY}`,
+      '      IdentityTokens__ActiveKeyId: \${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}',
+      '      IdentityTokens__LifetimeMinutes: \${SYNERGOS_IDENTITY_TOKEN_MINUTES:-15}',
+      '      IdentityTokens__MaxSessionMinutes: \${SYNERGOS_IDENTITY_SESSION_MINUTES:-480}',
+    ].join('\n');
+  }
+
+  // Las capacidades que VERIFICAN tokens (HU #14, rebanada 3). Misma llave que la
+  // de firma y MISMA seccion que en Api.Identity: si aca se llamara distinto,
+  // configurarla en uno y olvidarla en otro daria un token valido que la capacidad
+  // rechaza, que es de los peores sintomas de diagnosticar porque todo «parece bien».
+  //
+  // Sin `:?` a proposito, al reves que en Api.Identity: quien solo verifica arranca
+  // sin llave — es el camino del clon limpio, donde nadie presenta tokens todavia. Y
+  // arranca sin poder verificar, que NO es lo mismo que verificando mal: un token
+  // presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.
+  if (VERIFICAN_IDENTIDAD.has(proyecto)) {
+    return [
+      '',
+      `      IdentityTokens__Keys__\${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: \${SYNERGOS_IDENTITY_SIGNING_KEY:-}`,
+      '      IdentityTokens__ActiveKeyId: \${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}',
     ].join('\n');
   }
 
@@ -294,6 +337,18 @@ services:
       Synergos__Viajes__Mode: \${SYNERGOS_VIAJES_MODE:-Stub}
       Synergos__Viajes__BaseUrl: "http://bff-viajes:8080"
       Synergos__Viajes__ApiKey: \${SYNERGOS_API_KEY}
+
+      # Contra que avanza un expediente (HU #44). Dice Api y no Bff, igual que la
+      # visita al inmueble: decidir es UN paso, sin plata en medio y sin nada que
+      # deshacer si algo falla. Un orquestador seria una saga de un paso.
+      #
+      # Encenderlo exige PUBLICAR LA DEFINICION en Api.Workflow (POST /v1/definitions)
+      # — ver .env.example. Sin ella, decidir se rechaza con definition_not_found, que
+      # es mejor que adivinar un proceso.
+      Synergos__Gob__Mode: \${SYNERGOS_GOB_MODE:-Stub}
+      Synergos__Gob__BaseUrl: "http://api-workflow:8080"
+      Synergos__Gob__ApiKey: \${SYNERGOS_API_KEY}
+      Synergos__Gob__DefinitionKey: \${SYNERGOS_GOB_DEFINITION:-gov.tramite}
     volumes:
       - cms-db:/app/umbraco/Data
       - cms-logs:/app/umbraco/Logs

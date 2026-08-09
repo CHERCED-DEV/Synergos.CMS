@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Synergos.Api.Identity.Contracts;
 using Synergos.Api.Identity.Domain;
 using Synergos.Core;
@@ -31,6 +32,35 @@ public static class IdentityEndpoints
             var page = svc.List(Math.Max(0, offset ?? 0), QueryWindow.Limit(limit));
             return Results.Ok(new PageResponse<PrincipalResponse>(
                 page.Items.Select(p => PrincipalResponse.From(p, ahora)).ToList(), page.Total, page.Offset, page.HasMore));
+        });
+
+        // ── Tokens de identidad (HU #14) ────────────────────────────────────
+        //
+        // Emitir es un acto de esta capacidad y NO del que pregunta: si firmara el llamador, la
+        // afirmación diría «nuestro propio BFF dice que sí», que es literalmente lo que
+        // CmsSession ya dice. Que el emisor no sea el que pregunta es lo único que hace que el
+        // escalón exista.
+        app.MapPost("/v1/tokens", (IssueTokenRequest req, IdentityService svc, IdentityTokens tokens,
+            IOptions<IdentityTokenOptions> opciones, TimeProvider clock) =>
+        {
+            var subject = Ref.TryCreate(req.SubjectKind, req.SubjectId);
+            if (subject is null) return Invalid("bad_subject", "Hacen falta subjectKind y subjectId.");
+
+            var o = opciones.Value;
+            return svc.IssueToken(subject, o.LifetimeMinutes)
+                .Map(c => new TokenResponse(
+                    tokens.Issue(c), c.ExpiresAtUtc, c.SessionStartedAtUtc.AddMinutes(o.MaxSessionMinutes)))
+                .ToHttp();
+        });
+
+        app.MapPost("/v1/tokens/renew", (RenewTokenRequest req, IdentityService svc, IdentityTokens tokens,
+            IOptions<IdentityTokenOptions> opciones) =>
+        {
+            var o = opciones.Value;
+            return svc.RenewToken(tokens, req.Token, o.LifetimeMinutes, o.MaxSessionMinutes)
+                .Map(c => new TokenResponse(
+                    tokens.Issue(c), c.ExpiresAtUtc, c.SessionStartedAtUtc.AddMinutes(o.MaxSessionMinutes)))
+                .ToHttp();
         });
 
         // Verificar una credencial es un POST y no un GET: el secreto no puede viajar en la URL,
