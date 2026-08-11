@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
@@ -373,13 +375,32 @@ public sealed class HttpShopOrderService : IShopOrderService
 
     /// <summary>Quién compra, en el vocabulario del árbol de servicios.</summary>
     /// <remarks>
-    /// El <c>memberKey</c> cuando hay sesión —es la identidad de confianza-servidor— y el correo
-    /// normalizado en el checkout de invitado. Nunca el nombre: dos personas se llaman igual.
+    /// <para>El <c>memberKey</c> cuando hay sesión —es la identidad de confianza-servidor, y ya
+    /// es opaco— y en el checkout de invitado <b>un seudónimo del correo, no el correo</b>
+    /// (defecto #47).</para>
+    ///
+    /// <para><b>Por qué importa:</b> la saga persiste este valor. Con el correo en crudo,
+    /// <c>Bff.Tienda</c> acababa con un fichero lleno de direcciones de gente que compró sin
+    /// registrarse, en un servicio que no tiene ninguna razón para saber quién es nadie. Y no se
+    /// pierde nada, que es lo que hace la decisión fácil: el orquestador sólo necesita que el
+    /// comprador sea estable y opaco, y el CMS conserva de su lado quién es cada quien.</para>
+    ///
+    /// <para><b>El mismo seudónimo que Eventos y la visita al inmueble</b> (#33a): SHA-256 del
+    /// correo normalizado, 16 hex. Inventar un tercero haría que el mismo comprador fuera dos
+    /// personas distintas según por dónde entró.</para>
+    ///
+    /// <para><b>No es anonimato</b> y no hay que venderlo como tal: un correo conocido se puede
+    /// volver a hashear y comparar. Es no esparcir lo que no hace falta esparcir.</para>
+    ///
+    /// <para>Nunca el nombre: dos personas se llaman igual.</para>
     /// </remarks>
     internal static string BuyerId(ShopCustomer customer)
-        => customer.MemberKey is Guid k && k != Guid.Empty
-            ? k.ToString("n")
-            : (customer.Email ?? string.Empty).Trim().ToLowerInvariant();
+    {
+        if (customer.MemberKey is Guid k && k != Guid.Empty) return k.ToString("n");
+
+        var correo = (customer.Email ?? string.Empty).Trim().ToLowerInvariant();
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(correo)))[..16].ToLowerInvariant();
+    }
 
     internal static string SubjectId(ShopCartItem item)
         => string.IsNullOrWhiteSpace(item.VariantId) ? item.ProductId : $"{item.ProductId}:{item.VariantId}";
@@ -422,7 +443,13 @@ public sealed class HttpShopOrderService : IShopOrderService
             _ => OrderStatus.Pending,
         },
         CustomerName: string.Empty,
-        CustomerEmail: c.BuyerId ?? string.Empty,
+        // Vacío, y NO el buyerId (defecto #47). El orquestador no sabe quién es el comprador:
+        // devuelve el mismo identificador opaco que el CMS le mandó. Ponerlo acá coincidía con
+        // el correo por accidente mientras el buyerId ERA el correo, y ya mentía para quien
+        // tiene sesión — ahí devolvía el memberKey en hexadecimal donde la vista espera un
+        // correo. Vacío es lo mismo que hace CustomerName justo arriba y por la misma razón:
+        // este camino no lo sabe, y quien lo sepa es el CMS de su lado.
+        CustomerEmail: string.Empty,
         Lines: Array.Empty<ShopOrderLine>(),
         Total: c.Total.Amount,
         Currency: c.Total.Currency,

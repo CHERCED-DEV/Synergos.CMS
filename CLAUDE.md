@@ -760,7 +760,10 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > no lleva la lista de asistentes a propósito, y de quien compra solo
   > lleva un **seudónimo** — mandar el correo en crudo lo dejaba escrito en
   > el disco del orquestador, y eso lo destapó la verificación en vivo, no
-  > una revisión. `Bff.Tienda` (#24) todavía manda el correo entero.
+  > una revisión. **Ya lo hacen los cuatro**: `Bff.Tienda` era el último que mandaba
+  > el correo entero y se corrigió con el defecto #47 —que además destapó que el
+  > listado devolvía ese `buyerId` como si fuera el correo, y para quien tiene
+  > sesión eso ya era un `memberKey` en hexadecimal en pantalla.
   >
   > **Y el comprador ya no queda encerrado** (defecto #41). Encontrar la llave
   > de idempotencia no significa «esto ya pasó»: si la compra anterior se
