@@ -31,6 +31,7 @@ public sealed partial class SeamComposer : IComposer
     public void Compose(IUmbracoBuilder builder)
     {
         ComposePlatform(builder);
+        ComposeTracking(builder);
         ComposePaymentEngine(builder);
         ComposeTravelAndBooking(builder);
         ComposeShop(builder);
