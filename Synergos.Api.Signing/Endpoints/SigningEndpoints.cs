@@ -41,6 +41,16 @@ public static class SigningEndpoints
         app.MapPost("/v1/signatures/verify", (VerifyRequest req, SigningService svc) =>
             svc.Verify(req.Token).Map(p => new VerifiedResponse(p)).ToHttp());
 
+        // Sellar tampoco muta —es una función pura de (llave, contenido)— y aun así es POST, por
+        // una razón más fuerte que la del token: el contenido que se sella ES el sujeto. En la
+        // URL quedaría escrito en el log de cada proxy que lo vea, que es exactamente lo que el
+        // sello existe para no publicar.
+        app.MapPost("/v1/seals", (SealRequest req, SigningService svc) =>
+            svc.Seal(req.Purpose, req.Payload).Map(s => new SealResponse(s.Seal, s.KeyId)).ToHttp());
+
+        app.MapPost("/v1/seals/verify", (VerifySealRequest req, SigningService svc) =>
+            svc.VerifySeal(req.Purpose, req.Payload, req.Seal).Map(k => new SealVerifiedResponse(k)).ToHttp());
+
         return app;
     }
 }

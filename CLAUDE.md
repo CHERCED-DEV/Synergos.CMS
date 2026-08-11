@@ -126,7 +126,7 @@ Synergos.CMS/
 ├── Synergos.Shared/             fontanería de host. Llave compartida, Rejection→HTTP,
 │                                libro de idempotencia, JsonCollectionStore, correlación.
 │                                Solo puede referenciar Core — UNA flecha.
-├── Synergos.Api.*/              LAS 20 CAPACIDADES, agnósticas. 132 endpoints.
+├── Synergos.Api.*/              LAS 20 CAPACIDADES, agnósticas. 134 endpoints.
 │     Sessions · Booking · Identity · Audit · Notifications · Documents ·
 │     Catalog · Pricing · Cart · Orders · Payments · Inventory · Workflow ·
 │     Messaging · Signing · Consent · Engagement · Geo · Fulfillment · Moderation
@@ -468,7 +468,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
+**Construido y verificado:** 20 capacidades (134 endpoints, 195 códigos
 de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2412 tests, gates de
 segregación y molde en verde.
 
