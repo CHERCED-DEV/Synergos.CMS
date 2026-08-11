@@ -61,8 +61,7 @@ public sealed partial class SeamComposer
             var enrollment = new StubEnrollmentService(
                 sp.GetRequiredService<ICourseCatalogProvider>(),
                 sp.GetRequiredService<IPaymentProvider>(),
-                new StubOrderTrackingService(StubEnrollmentService.AcademyPipeline, null,
-                    sp.GetRequiredService<IJsonEntityStore>(), "tracking-academy"),
+                Tracking(sp, StubEnrollmentService.AcademyPipeline, "tracking-academy", "academy"),
                 sp.GetRequiredService<IJsonEntityStore>(),
                 null,
                 notifier: sp.GetRequiredService<ITransactionalNotifier>());

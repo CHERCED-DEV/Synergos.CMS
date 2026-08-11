@@ -349,6 +349,20 @@ services:
       Synergos__Gob__BaseUrl: "http://api-workflow:8080"
       Synergos__Gob__ApiKey: \${SYNERGOS_API_KEY}
       Synergos__Gob__DefinitionKey: \${SYNERGOS_GOB_DEFINITION:-gov.tramite}
+
+      # Contra que se valida el avance de un pedido (HU #46). Los cuatro dominios
+      # comparten esta seccion y cada uno pide SU definicion: tracking.shop,
+      # tracking.travel, tracking.events, tracking.academy. Una compartida leeria
+      # la etapa de un dominio contra el pipeline de otro — «enviado» convertido
+      # en «matriculado» sin que nada falle.
+      #
+      # Encenderlo exige publicar LAS CUATRO definiciones — ver .env.example. Y
+      # ojo: leer el timeline NO sale a la red, asi que con la capacidad caida se
+      # sigue viendo donde va un pedido; solo se para avanzarlo.
+      Synergos__Tracking__Mode: \${SYNERGOS_TRACKING_MODE:-Stub}
+      Synergos__Tracking__BaseUrl: "http://api-workflow:8080"
+      Synergos__Tracking__ApiKey: \${SYNERGOS_API_KEY}
+      Synergos__Tracking__DefinitionPrefix: \${SYNERGOS_TRACKING_PREFIX:-tracking}
     volumes:
       - cms-db:/app/umbraco/Data
       - cms-logs:/app/umbraco/Logs

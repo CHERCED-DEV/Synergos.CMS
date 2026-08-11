@@ -135,8 +135,7 @@ public sealed partial class SeamComposer
             new TravelCartService(
                 sp.GetRequiredService<IReservationService>(),
                 sp.GetRequiredService<IPaymentProvider>(),
-                new StubOrderTrackingService(TravelCartService.TravelPipeline, null,
-                    sp.GetRequiredService<IJsonEntityStore>(), "tracking-travel"),
+                Tracking(sp, TravelCartService.TravelPipeline, "tracking-travel", "travel"),
                 null,
                 sp.GetRequiredService<IJsonEntityStore>(),
                 notifier: sp.GetRequiredService<ITransactionalNotifier>(),

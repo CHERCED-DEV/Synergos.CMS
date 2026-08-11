@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2412 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2430 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2412 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2430 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2412 tests):
+# Suite completa (2430 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -469,7 +469,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2412 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2430 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -530,6 +530,36 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > `definition_not_found`. Versionar es publicar **otra clave**: la
   > capacidad se niega a reescribir una viva, porque cambiarle las
   > transiciones a instancias en marcha las dejaría en estados imposibles.
+
+  > **Y los cuatro pipelines de seguimiento también son datos** (HU #46,
+  > `Synergos:Tracking:Mode=Api`). Por dónde pasa un pedido estaba escrito
+  > en C# **cuatro veces** —Tienda, Viajes, Eventos, Educación—, cada una
+  > un `static readonly` en otra clase. Va **una definición por dominio**:
+  > los nombres de estado se repiten entre pipelines (`paid` en tres,
+  > `completed` en dos), así que una compartida leería la etapa de un
+  > dominio contra el pipeline de otro y «enviado» sería «matriculado» sin
+  > que nada fallara.
+  >
+  > **Acá LEER no sale a la red, al revés que en Gobierno**, y la
+  > diferencia es la que importa: el timeline se pinta en cada vista de
+  > pedido, así que el CMS conserva su almacén como modelo de lectura y la
+  > capacidad sólo valida el avance. Con `Api.Workflow` caída, quien compró
+  > **sigue viendo dónde va lo suyo**; sólo se para avanzarlo. En un
+  > expediente el riesgo es *decidir* con un proceso que quizá ya no es el
+  > vigente; en un pedido es *mostrar* lo que ya pasó, que no decide nada.
+  >
+  > **Y por eso mismo un pedido en vuelo SÍ se puede poner al día**, cosa
+  > que en Gobierno estaba prohibida. Allá la historia de la capacidad es
+  > el registro legal y fabricarla escribiría fechas y actores que no
+  > ocurrieron; acá la capacidad es un **motor de reglas** y las fechas
+  > siguen siendo las del CMS, intactas: se reconstruye *dónde va* el
+  > pedido, no *cuándo pasó*. El día que esa historia pase a ser la fuente
+  > de las fechas, hay que revisarlo.
+  >
+  > **Lo que NO mudó son las etiquetas.** «Enviado», «Matriculado» son
+  > presentación del dominio (§12), así que añadir una etapa sigue
+  > necesitando su rótulo de este lado; lo que deja de necesitar es tocar
+  > la tabla de qué sigue a qué. Hay gate (`TrackingWiringTests`).
 
   > **El mapa se equivocó una segunda vez con el mismo filtro.**
   > `StubVisitSchedulingService` estaba en la familia C porque «no hay un

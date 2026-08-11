@@ -94,9 +94,7 @@ public sealed partial class SeamComposer
         // estado guarda el índice de etapa, así que compartir espacio haría que
         // "enviado" se leyera como "matriculado" sin que nada fallara.
         services.AddSingleton<IOrderTrackingService>(sp =>
-            new StubOrderTrackingService(
-                StubOrderTrackingService.ShopPipeline, null,
-                sp.GetRequiredService<IJsonEntityStore>(), "tracking-shop"));
+            Tracking(sp, StubOrderTrackingService.ShopPipeline, "tracking-shop", "shop"));
         // T1 (doc 25) — persistencia durable de órdenes tras el seam genérico IJsonEntityStore.
         // El motor no cambia; solo su backing store pasa de memoria a disco (JSON por
         // orderRef, App_Data/syn-orders/). Una orden confirmada sobrevive un reinicio.
