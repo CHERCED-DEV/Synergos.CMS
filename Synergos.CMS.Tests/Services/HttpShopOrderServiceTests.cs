@@ -32,6 +32,10 @@ public sealed class HttpShopOrderServiceTests
         private readonly Dictionary<string, Func<HttpResponseMessage>> _rutas = new(StringComparer.OrdinalIgnoreCase);
 
         public List<(string Method, string Path, string? Key)> Llamadas { get; } = new();
+
+        /// <summary>Lo que se manda, para poder mirar por dónde viajaba un dato personal (#47).</summary>
+        public List<string> Cuerpos { get; } = new();
+
         public HashSet<string> Caidas { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public ServiciosFalsos Ok(string ruta, string json)
@@ -65,6 +69,11 @@ public sealed class HttpShopOrderServiceTests
             var clave = $"{req.Method.Method} {path}";
             req.Headers.TryGetValues("Idempotency-Key", out var k);
             Llamadas.Add((req.Method.Method, path, k?.FirstOrDefault()));
+
+            if (req.Content is not null)
+            {
+                Cuerpos.Add(req.Content.ReadAsStringAsync(ct).GetAwaiter().GetResult());
+            }
 
             if (Caidas.Contains(clave)) throw new HttpRequestException("guionado: caída");
 
@@ -230,6 +239,75 @@ public sealed class HttpShopOrderServiceTests
         var r = await Nuevo(svc).CheckoutAsync(UnItem, Ana);
 
         Assert.Equal("p-1", r.OrderRef);
+    }
+
+    /// <summary>
+    /// Quien compra sin registrarse viaja SEUDONIMIZADO: el orquestador no tiene por qué guardar
+    /// un correo (defecto #47).
+    /// </summary>
+    /// <remarks>
+    /// La saga persiste el <c>buyerId</c>. Con el correo en crudo, <c>Bff.Tienda</c> acababa con
+    /// un fichero lleno de direcciones de gente que compró como invitada, en un servicio que no
+    /// tiene ninguna razón para saber quién es nadie. Eventos y la visita al inmueble (#33a) ya
+    /// lo hacían así; Tienda era el que faltaba.
+    /// </remarks>
+    [Fact]
+    public async Task El_comprador_invitado_viaja_seudonimizado()
+    {
+        var id = HttpShopOrderService.BuyerId(Ana);
+
+        Assert.DoesNotContain("@", id, StringComparison.Ordinal);
+        Assert.DoesNotContain("ana", id, StringComparison.OrdinalIgnoreCase);
+
+        // Estable —el mismo comprador es el mismo aunque escriba el correo distinto— y distinto
+        // por persona. Sin lo primero, cada compra sería de alguien nuevo y la idempotencia se
+        // caería con él.
+        Assert.Equal(id, HttpShopOrderService.BuyerId(new ShopCustomer("Otra", "  ANA@ejemplo.co ")));
+        Assert.NotEqual(id, HttpShopOrderService.BuyerId(new ShopCustomer("Ana", "otra@ejemplo.co")));
+
+        // Y lo que de verdad importa: no sale por el cable. Se mira el CUERPO, que es por donde
+        // viajaba.
+        var orq = Feliz();
+        await Nuevo(orq).CheckoutAsync(UnItem, Ana);
+
+        Assert.NotEmpty(orq.Cuerpos);
+        Assert.All(orq.Cuerpos, c => Assert.DoesNotContain("ana@ejemplo.co", c, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(orq.Cuerpos, c => c.Contains(id, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Con_sesion_viaja_el_memberKey_y_no_se_vuelve_a_hashear()
+    {
+        // El memberKey ya es opaco. Hashearlo otra vez no agregaría nada y rompería la
+        // correspondencia con el resto del CMS, que lo usa tal cual.
+        var k = Guid.NewGuid();
+
+        Assert.Equal(k.ToString("n"), HttpShopOrderService.BuyerId(new ShopCustomer("Ana", "ana@ejemplo.co", k)));
+    }
+
+    /// <summary>
+    /// El correo que sale de una compra leída NO es el que devuelve el orquestador (defecto #47).
+    /// </summary>
+    /// <remarks>
+    /// El orquestador no sabe quién compró: devuelve el mismo identificador opaco que el CMS le
+    /// mandó. Copiarlo a <c>CustomerEmail</c> coincidía con el correo por accidente mientras el
+    /// <c>buyerId</c> ERA el correo, y ya mentía para quien tiene sesión — devolvía el
+    /// <c>memberKey</c> en hexadecimal donde la vista espera un correo.
+    /// </remarks>
+    [Fact]
+    public async Task Una_compra_leida_NO_devuelve_el_buyerId_como_si_fuera_el_correo()
+    {
+        // El guion de `CompraOk` devuelve a propósito un `buyerId` CON FORMA DE CORREO
+        // ("ana@ejemplo.co") aunque el CMS ya no mande ninguno: es el caso adversario. Lo que se
+        // afirma no es «no hay correos por ahí», sino que este camino no lo copia venga como
+        // venga.
+        var svc = Feliz();
+
+        var orden = await Nuevo(svc).GetOrderAsync("p-1");
+
+        Assert.NotNull(orden);
+        Assert.Equal(string.Empty, orden!.CustomerEmail);
+        Assert.DoesNotContain("@", orden.CustomerEmail, StringComparison.Ordinal);
     }
 
     [Fact]
