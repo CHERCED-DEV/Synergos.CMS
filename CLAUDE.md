@@ -112,7 +112,7 @@ Synergos.CMS/
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
 ├── Synergos.CMS.Tests/          xUnit — 2412 tests passing (gate liftado ADR 0075)
-│   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
+│   ├── Architecture/            LOS GATES: segregación (17) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
 │   ├── Api/                     tests de reglas y servicio por capacidad
@@ -666,10 +666,21 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   `Api.Inventory` hacía con `/v1/items`. Faltaba, y obligaba a que el
   identificador interno del recurso viajara hasta el CMS — que ninguna
   convención podía adivinar, porque lo genera la capacidad.
-- **Ninguna capacidad llama a otra**, y no hay gate que lo vigile porque
-  no había caso. Apareció el primero —mandar un acceso rechazado a
-  `Api.Audit`— y se decidió NO abrir esa flecha desde la capacidad
-  (HU #15). Si algún día se abre, el gate va antes que el código.
+- **Ninguna capacidad llama a otra, y ya hay gate** (#49). Apareció el
+  primer caso —mandar un acceso rechazado a `Api.Audit`— y se decidió NO
+  abrir esa flecha desde la capacidad (HU #15). `CLAUDE.md` decía que el
+  día que se abriera, el gate iría antes que el código: se escribió
+  **mientras estaba en verde**, que es cuando es gratis —sin excepciones
+  que negociar y sin nadie esperando—. Eran tres dientes y no uno:
+  referencia de ensamblado Api→Api, **nombrar** a otra capacidad con los
+  comentarios quitados, y `HttpClient` dentro de una capacidad, que va con
+  lista y con la razón al lado. El tercero es el que atrapa lo que los
+  otros no ven: una URL que llega por variable de entorno sin que el
+  nombre aparezca nunca. **No prohíbe hablar con un tercero** —hoy
+  `Api.Notifications` sale a Resend (ADR 0131) y está en la lista—; obliga
+  a que salir sea una decisión escrita. Y la lista se vigila en los dos
+  sentidos: un permiso que ya nadie usa también rompe el build, porque un
+  permiso que sobra deja de leerse.
 
   > **Y se decidió también quién SÍ lo escribe: el orquestador.** Se
   > miraron las tres opciones y las dos que se podían entregar ya —que
