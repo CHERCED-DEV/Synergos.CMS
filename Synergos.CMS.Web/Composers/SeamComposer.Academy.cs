@@ -84,7 +84,42 @@ public sealed partial class SeamComposer
         // El índice de emitidos pasa además a IJsonEntityStore (familia "certificates") para
         // que un QR impreso en un diploma siga verificando después de un reinicio.
         services.AddSingleton<CertificateSigningKeyProvider>();
-        services.AddSingleton<ICertificateIdSigner, LazyCertificateIdSigner>();
+
+        // Quién CUSTODIA esa llave (hallazgo #45). La sección se ENLAZA: sin esto el cliente
+        // recibe un AcademySettings recién construido y el propósito del sello se queda en su
+        // default en silencio — sellaría bajo una etiqueta que el despliegue no configuró.
+        services.Configure<AcademySettings>(builder.Config.GetSection("Synergos:Academy"));
+
+        if (string.Equals(builder.Config["Synergos:Academy:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        {
+            var acBase = builder.Config["Synergos:Academy:BaseUrl"];
+            var acKey = builder.Config["Synergos:Academy:ApiKey"];
+            var acTimeout = int.TryParse(builder.Config["Synergos:Academy:TimeoutSeconds"], out var at) && at > 0 ? at : 10;
+
+            services.AddHttpClient(HttpCertificateIdSigner.ClientName, http =>
+            {
+                var url = string.IsNullOrWhiteSpace(acBase) ? "http://127.0.0.1:5218/" : acBase;
+                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+                http.Timeout = TimeSpan.FromSeconds(acTimeout);
+                if (!string.IsNullOrWhiteSpace(acKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpCertificateIdSigner.ApiKeyHeader, acKey);
+                }
+            })
+            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+
+            // El firmante local NO se descarta: se le pasa como VERIFICADOR de los ids
+            // anteriores al cableado. El sello y el HMAC local no dan el mismo valor, así que
+            // sin esto cada diploma ya impreso dejaría de verificar el día del despliegue.
+            services.AddSingleton<ICertificateIdSigner>(sp => new HttpCertificateIdSigner(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IOptions<AcademySettings>>(),
+                new LazyCertificateIdSigner(sp.GetRequiredService<CertificateSigningKeyProvider>())));
+        }
+        else
+        {
+            services.AddSingleton<ICertificateIdSigner, LazyCertificateIdSigner>();
+        }
         services.AddSingleton<ICertificateService>(sp =>
             new StubCertificateService(
                 sp.GetRequiredService<ICourseCatalogProvider>(),
