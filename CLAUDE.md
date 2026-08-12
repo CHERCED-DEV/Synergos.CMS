@@ -111,8 +111,8 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-**Construido y verificado:** 20 capacidades (134 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2462 tests, gates de
+├── Synergos.CMS.Tests/          xUnit — 2462 tests passing (gate liftado ADR 0075)
+│   ├── Architecture/            LOS GATES: segregación (17) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
 │   ├── Api/                     tests de reglas y servicio por capacidad
