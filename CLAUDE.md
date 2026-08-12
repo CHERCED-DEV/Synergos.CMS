@@ -159,7 +159,7 @@ Synergos.CMS/
 | "¿Qué API necesita cada dominio? ¿Cuál es el molde?" | `docs/product/08-despiece-apis.md` — la matriz 20×9 y §4 |
 | "¿Cómo se deshace lo que ya se hizo?" | `docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `docs/product/10-promocion-bff-core.md` |
-| "¿Qué se hace con cada uno de los 46 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
+| "¿Qué se hace con cada uno de los 47 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — es el único sitio |
 
 > ⚠️ **De los seis docs de `docs/product/`, sólo el 11 está versionado.** Los
@@ -483,13 +483,16 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 
 - **Poco está conectado al producto, pero la brecha es MENOR de lo que
   parecía.** El inventario del cableado (HU #23,
-  `docs/product/11-mapa-del-cableado.md`) contó los 46 `Stub*` y los
-  clasificó: **8** son cableado pendiente, **5** ya salen del contenido
-  de Umbraco (cablearlos sería un retroceso) y **33** se quedan en stub a
-  propósito. Y 20 de los 46 **ya son durables** — «stub» en este repo
-  dejó hace tiempo de querer decir «en memoria». Hay gate
-  (`WiringMapTests`): un stub nuevo sin mapear rompe el build.
-  De los 9, **cinco** están hechos: la tienda compra contra `Bff.Tienda`
+  `docs/product/11-mapa-del-cableado.md`) contó los **47** `Stub*` y los
+  clasificó: **12** son cableado pendiente, **5** ya salen del contenido
+  de Umbraco (cablearlos sería un retroceso) y **30** se quedan en stub a
+  propósito. Y **18 de los 47** referencian un almacén durable — «stub» en
+  este repo dejó hace tiempo de querer decir «en memoria». Hay gate
+  (`WiringMapTests`): un stub nuevo sin mapear rompe el build, y desde
+  #50 **también rompe que estas cifras no cuadren** — el doc llegó a decir
+  46 con dos repartos contradictorios en la misma página mientras su tabla
+  gateada estaba bien, porque el gate no llegaba hasta la prosa.
+  De los 12, **siete** están hechos: la tienda compra contra `Bff.Tienda`
   (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
   `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25), la visita al inmueble
   aparta cupo **directo contra `Api.Booking`, sin orquestador**
@@ -497,9 +500,14 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   toca una sola capacidad y un BFF sería una saga de un paso — y **el
   expediente decide contra `Api.Workflow`**, también directo
   (`Synergos:Gob:Mode=Api`, HU #44). El default sigue siendo `Stub` en
-  todos. Faltan `StubPaymentProvider` → `Api.Payments` y lo que queda de
-  `StubReservationService` (Viajes y Eventos, que **no van al mismo
-  sitio** — ver #33).
+  todos. A los cuatro de arriba se suman la entrada de evento
+  (`Bff.Eventos`, HU #35), la habitación de hotel (`Bff.Viajes`, HU #36) y
+  el seguimiento de pedido (`Api.Workflow`, HU #46). **Faltan cinco**:
+  `StubPaymentProvider` → `Api.Payments`, `StubCertificateService` →
+  `Api.Signing` (el sello ya existe, #45; falta el cableado),
+  `StubReturnService`, `StubApplicationService` → `Bff.Gob` sin construir,
+  y lo que queda de `StubReservationService` (el carrito de viaje, que
+  **no va al mismo sitio** que lo demás — ver #33 y #40).
 
   > **Lo que #44 mudó no es un paso: es una TABLA.** Qué puede pasarle a un
   > expediente estaba escrito en C# y se desplegaba con el sitio, así que

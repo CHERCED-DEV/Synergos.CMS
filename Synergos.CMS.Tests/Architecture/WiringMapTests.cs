@@ -91,6 +91,83 @@ public sealed class WiringMapTests
         }).ToList();
     }
 
+    /// <summary>
+    /// Las cifras que el doc declara EN PROSA tienen que cuadrar con el inventario (#50).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que evita ya pasó, y pasó porque este gate no llegaba hasta acá.</b>
+    /// Los marcadores <c>MAPA:INICIO</c>/<c>MAPA:FIN</c> existen para que la prosa pueda nombrar
+    /// stubs sin confundir al gate — decisión correcta— y el efecto secundario fue que **nada de
+    /// lo que está fuera de los marcadores lo medía nadie**. Durante tres olas la tabla estuvo
+    /// bien, porque el gate se lo exigía a quien la tocaba, y la prosa se quedó diciendo 46 con
+    /// dos repartos de familias contradictorios en la misma página.</para>
+    ///
+    /// <para><b>Se miden las cifras y no la prosa</b>, a propósito: el porqué escrito a mano es
+    /// lo que le da valor al documento y generarlo lo empeoraría. Lo que se desvía son los
+    /// números, y los números sí se pueden contar solos.</para>
+    /// </remarks>
+    [Fact]
+    public void Las_cifras_de_la_prosa_cuadran_con_el_inventario()
+    {
+        var texto = File.ReadAllText(MapaPath());
+        var mapa = Mapa();
+        var total = mapa.Count;
+        var porFamilia = FamiliasValidas.ToDictionary(f => f, f => mapa.Count(e => e.Familia == f));
+
+        var malas = new List<string>();
+
+        void Exige(string que, string patron, int esperado)
+        {
+            var m = Regex.Match(texto, patron);
+            if (!m.Success)
+            {
+                malas.Add($"{que}: no se encontró la cifra en el doc (patrón `{patron}`)");
+                return;
+            }
+            var declarado = int.Parse(m.Groups[1].Value);
+            if (declarado != esperado) malas.Add($"{que}: el doc dice {declarado}, el inventario tiene {esperado}");
+        }
+
+        Exige("el encabezado", @"Los (\d+) `Stub\*` de", total);
+        Exige("la lista del final", @"## Los (\d+), en una lista", total);
+
+        var nombres = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["A"] = "cableado pendiente",
+            ["B"] = "ya resuelto desde el contenido",
+            ["C"] = "se queda en stub a propósito",
+        };
+
+        foreach (var f in FamiliasValidas)
+        {
+            Exige($"la tabla de reparto, familia {f}",
+                $@"\|\s*\*\*{f} — {Regex.Escape(nombres[f])}\*\*\s*\|\s*(\d+)\s*\|", porFamilia[f]);
+            Exige($"la cabecera de la familia {f}",
+                $@"## Familia {f} —[^\n(]*\((\d+)\)", porFamilia[f]);
+        }
+
+        // Y la tabla narrativa de la familia A tiene que listar a los doce: es la que se lee para
+        // elegir el siguiente cableado, y le faltaban tres — los tres últimos que se cablearon.
+        var iniA = texto.IndexOf("## Familia A", StringComparison.Ordinal);
+        var finA = texto.IndexOf("## Familia B", StringComparison.Ordinal);
+        if (iniA >= 0 && finA > iniA)
+        {
+            var filas = Regex.Matches(texto[iniA..finA], @"^\|\s*`(Stub\w+)`\s*\|", RegexOptions.Multiline)
+                .Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+            var faltan = mapa.Where(e => e.Familia == "A" && !filas.Contains(e.Stub)).Select(e => e.Stub).ToList();
+
+            if (faltan.Count > 0)
+            {
+                malas.Add($"la tabla narrativa de la familia A no lista: {string.Join(", ", faltan)}");
+            }
+        }
+
+        Assert.True(malas.Count == 0,
+            "El mapa se contradice a sí mismo. Quien lo abre para elegir el siguiente cableado lee "
+            + "la prosa, no la tabla de abajo." + Environment.NewLine
+            + string.Join(Environment.NewLine, malas));
+    }
+
     [Fact]
     public void Todo_stub_del_disco_esta_en_el_mapa()
     {
