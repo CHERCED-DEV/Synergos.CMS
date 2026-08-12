@@ -17,7 +17,10 @@ using Synergos.Shared;
 // dominio esperaría turno para cambiar su propio proceso.
 //
 // Y la guarda por rol es lo que la hace servir a Gobierno: radicar lo hace el
-// ciudadano y aprobar el funcionario.
+// ciudadano y aprobar el funcionario — PERO vale lo que valga su prueba. Los roles
+// que vienen declarados en el cuerpo guardan contra el accidente, no contra quien
+// quiera saltarse la guarda (defecto #48). Con Workflow:Roles:RequireVerifiedRoles
+// se exige token verificado, y eso espera a que la HU #14 llegue al CMS.
 // ─────────────────────────────────────────────────────────────────────────────
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,6 +35,14 @@ builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
     new FileIdempotencyLedger(sp.GetRequiredService<IOptions<WorkflowStorageOptions>>().Value.Root));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<WorkflowService>();
+
+// De dónde salen los roles de quien dispara una transición (defecto #48). NO obligatorio:
+// un clon limpio arranca sin llave y la guarda sigue funcionando contra el accidente.
+//
+// Lo que NO pasa sin llave es aceptar un token a ciegas: si alguien presenta uno y este
+// servicio no puede comprobarlo, se RECHAZA.
+builder.AddIdentityTokens(required: false);
+builder.Services.Configure<WorkflowRoleOptions>(builder.Configuration.GetSection("Workflow:Roles"));
 
 var app = builder.Build();
 

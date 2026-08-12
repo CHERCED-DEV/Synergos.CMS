@@ -423,6 +423,13 @@ services:
     environment:
       Messaging__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
       Messaging__Storage__Root: /app/data/messaging
+      # La llave con la que se COMPRUEBAN los tokens (HU #14). La misma que firma y
+      # en la MISMA seccion que en Api.Identity: con dos nombres, configurarla en uno
+      # y olvidarla en otro da un token valido que la capacidad rechaza.
+      #
+      # Sin `:?` a proposito: quien solo verifica arranca sin llave — es el camino del
+      # clon limpio. Y arranca SIN PODER verificar, que no es verificando mal: un token
+      # presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.
       IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
       IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
     volumes:
@@ -612,6 +619,25 @@ services:
     environment:
       Workflow__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
       Workflow__Storage__Root: /app/data/workflow
+      # De donde salen los roles de quien dispara una transicion (defecto #48).
+      # Los declarados en el cuerpo guardan contra el ACCIDENTE, no contra quien
+      # quiera saltarse la guarda: cualquiera con la llave compartida se asciende
+      # escribiendo una linea de JSON. Con esto en true, una transicion que exige
+      # rol SOLO acepta roles de un token verificado.
+      #
+      # Default false a proposito: encenderlo hoy romperia Gobierno (#44) y el
+      # seguimiento (#46), que mandan el rol a mano porque NADIE puede presentar un
+      # token todavia — el puente Member <-> Principal de la HU #14 no esta hecho.
+      Workflow__Roles__RequireVerifiedRoles: ${SYNERGOS_WORKFLOW_REQUIRE_VERIFIED_ROLES:-false}
+      # La llave con la que se COMPRUEBAN los tokens (HU #14). La misma que firma y
+      # en la MISMA seccion que en Api.Identity: con dos nombres, configurarla en uno
+      # y olvidarla en otro da un token valido que la capacidad rechaza.
+      #
+      # Sin `:?` a proposito: quien solo verifica arranca sin llave — es el camino del
+      # clon limpio. Y arranca SIN PODER verificar, que no es verificando mal: un token
+      # presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.
+      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
+      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se

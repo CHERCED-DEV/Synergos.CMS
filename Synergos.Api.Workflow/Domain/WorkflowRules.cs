@@ -1,4 +1,5 @@
 using Synergos.Core;
+using Synergos.Shared;
 
 namespace Synergos.Api.Workflow.Domain;
 
@@ -40,7 +41,9 @@ public static class WorkflowRules
     }
 
     /// <summary>Busca la transición aplicable, o dice por qué no hay.</summary>
-    public static Result<TransitionRule> Resolve(WorkflowDefinition def, WorkflowInstance instance, string? name, Actor actor)
+    public static Result<TransitionRule> Resolve(
+        WorkflowDefinition def, WorkflowInstance instance, string? name, Actor actor,
+        bool verified = false, bool requireVerified = false)
     {
         if (def.IsFinal(instance.State))
         {
@@ -65,12 +68,74 @@ public static class WorkflowRules
                 $"Desde '{instance.State}' no se puede '{name}'. Sí se puede: {string.Join(", ", posibles)}.");
         }
 
-        // La guarda por rol es lo que hace que esta capacidad sirva a Gobierno: radicar lo hace
-        // el ciudadano y aprobar el funcionario, y sin guarda serían la misma máquina sin
-        // control de quién avanza qué.
-        return regla.RequiredRoles.Count == 0 || actor.HasAnyRole(regla.RequiredRoles.ToArray())
+        if (regla.RequiredRoles.Count == 0) return Result.Ok(regla);
+
+        // LA GUARDA VALE LO QUE VALGA SU PRUEBA (defecto #48).
+        //
+        // Este comentario decía que la guarda «hace que esta capacidad sirva a Gobierno: radicar
+        // lo hace el ciudadano y aprobar el funcionario». Era falso: los roles llegaban en el
+        // CUERPO de la petición, así que cualquiera con la llave compartida se ascendía a
+        // funcionario escribiendo una línea de JSON. La regla estaba bien; la fuente del dato
+        // estaba mal — la misma forma del defecto #42.
+        //
+        // Hoy: si el rol viene de un token verificado, la guarda guarda. Si viene declarado, es
+        // una guarda contra el ACCIDENTE, no contra alguien que quiera saltársela — y un
+        // despliegue que ya tenga identidad lo puede exigir con RequireVerifiedRoles.
+        if (requireVerified && !verified)
+        {
+            return Rejection.Forbidden($"{CodePrefix}.roles_not_verified",
+                $"'{regla.Name}' exige rol y este despliegue sólo acepta roles de un token de identidad verificado.");
+        }
+
+        return actor.HasAnyRole(regla.RequiredRoles.ToArray())
             ? Result.Ok(regla)
             : Rejection.Forbidden($"{CodePrefix}.role_required",
                 $"'{regla.Name}' exige alguno de estos roles: {string.Join(", ", regla.RequiredRoles)}.");
+    }
+
+    /// <summary>
+    /// De dónde salen los roles de quien dispara: del token si lo hay, del cuerpo si no.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El token GANA sobre lo declarado</b> (defecto #48). Con los dos presentes, creerle
+    /// al cuerpo dejaría que un llamador se ascendiera presentando un token honesto y pidiendo
+    /// además el rol que le falta.</para>
+    ///
+    /// <para><b>Y el sujeto del token tiene que ser quien actúa.</b> Sin esa comprobación, el
+    /// token de una persona serviría para actuar como otra y sería decoración — es la lección de
+    /// la HU #14 rebanada 3, aplicada acá.</para>
+    ///
+    /// <para>Presentar un token donde nadie puede comprobarlo se <b>rechaza</b>, no se ignora:
+    /// ignorarlo dejaría a quien lo manda creyendo que probó algo.</para>
+    /// </remarks>
+    public static Result<(Actor Actor, bool Verified)> ResolveActor(
+        IdentityTokenGate gate, string? rawToken, Ref principal,
+        IReadOnlyList<string>? declaredRoles, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+
+        var declarados = (declaredRoles ?? Array.Empty<string>())
+            .Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToArray();
+
+        if (string.IsNullOrWhiteSpace(rawToken))
+        {
+            return Result.Ok((Actor.Of(principal, declarados), false));
+        }
+
+        if (!gate.Configured)
+        {
+            return Rejection.Invalid($"{IdentityTokens.CodePrefix}.token_not_verifiable",
+                "Se presentó un token de identidad y este servicio no tiene llave para comprobarlo.");
+        }
+
+        var (claims, motivo) = gate.Tokens!.Verify(rawToken, now);
+        if (claims is null) return Result.Rejected<(Actor, bool)>(IdentityTokens.ToRejection(motivo!.Value));
+
+        if (claims.Subject != principal)
+        {
+            return Result.Rejected<(Actor, bool)>(IdentityTokens.SubjectMismatch(claims.Subject, principal));
+        }
+
+        return Result.Ok((Actor.Of(principal, claims.Roles.ToArray()), true));
     }
 }
