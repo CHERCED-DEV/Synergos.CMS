@@ -815,10 +815,16 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > operación propia del flujo, no una compensación.
   >
   > **Lo que NO se cableó, y no por descuido:** el carrito multi-producto.
-  > `TravelCartItem` no lleva fechas —ni el seam, ni el DTO HTTP, ni el motor en
-  > proceso— y un apartado de `Api.Booking` ES una ventana sobre un recurso.
-  > Añadírselas cruza a `Synergos.UI`, así que va en su propio ticket. Hay gate:
-  > el día que el contrato tenga fechas, se cae solo y hay que decidir de frente.
+  > Era porque `TravelCartItem` no llevaba fechas —ni el seam, ni el DTO HTTP,
+  > ni el motor en proceso— y un apartado de `Api.Booking` ES una ventana sobre
+  > un recurso. **La HU #40 se las puso, y el gate se cayó solo como estaba
+  > previsto**: se reescribió en vez de borrarse, porque la frontera se movió,
+  > no desapareció. Hoy exige que el periodo esté y sea **obligatorio** —un
+  > `Start` opcional deja compilar a un cliente que falla más tarde y más
+  > lejos, ya contra la capacidad— y sigue prohibiendo el cableado por **otro**
+  > motivo: falta la verificación con procesos vivos de que tres ítems en
+  > fechas distintas apartan tres ventanas distintas y las tres vuelven con el
+  > cobro caído a la mitad. El día que esa evidencia exista, la línea se borra.
 
   > **Y resolvió la pregunta que traía #35:** butaca nominada y cupo
   > general son el MISMO pozo contable. La granularidad va en el

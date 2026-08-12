@@ -10,10 +10,18 @@ namespace Synergos.CMS.Tests.Architecture;
 /// separado, el CMS estaría reimplementando la máquina de sagas — y peor, porque no tiene dónde
 /// anotar una compensación pendiente.</para>
 ///
-/// <para><b>Y por qué SOLO la vía hotel.</b> El carrito multi-producto no lleva fechas —ni el
-/// seam, ni el DTO HTTP, ni el motor en proceso— y un apartado de <c>Api.Booking</c> ES una
-/// ventana sobre un recurso. Cablearlo exigiría inventarse las fechas, que es el error que costó
-/// una vuelta en la HU #25. Este gate fija esa frontera para que no se cruce por descuido.</para>
+/// <para><b>Y por qué SOLO la vía hotel.</b> Lo era porque el carrito multi-producto no llevaba
+/// fechas —ni el seam, ni el DTO HTTP, ni el motor en proceso— y un apartado de
+/// <c>Api.Booking</c> ES una ventana sobre un recurso: cablearlo exigía inventárselas, que es el
+/// error que costó una vuelta en la HU #25. <b>La HU #40 se las puso</b>, así que ese motivo ya
+/// no está en pie.</para>
+///
+/// <para>Lo que queda en pie es otro, y es el que sostiene la frontera hoy: <b>no existe la
+/// evidencia con procesos vivos</b> de que tres ítems en fechas distintas aparten tres ventanas
+/// distintas y las tres vuelvan con el cobro caído a la mitad. Ver
+/// <c>El_carrito_lleva_periodo_y_el_cableado_sigue_pendiente</c>, que es donde el cambio de
+/// motivo está escrito con detalle — y que ahora exige que el periodo sea OBLIGATORIO, porque
+/// un <c>Start</c> opcional deja compilar a un cliente que fallará más tarde y más lejos.</para>
 /// </remarks>
 public sealed class ViajesWiringTests
 {
