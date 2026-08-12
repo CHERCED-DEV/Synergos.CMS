@@ -202,8 +202,8 @@ public sealed class PaymentCompensationTests
         var checkout = await cart.CheckoutAsync(
             new[]
             {
-                new TravelCartItem(TravelProductType.Flight, "of_1", "Vuelo BOG-MDE", 200_000m, "COP"),
-                new TravelCartItem(TravelProductType.Hotel, "of_2", "Hotel 1 noche", 100_000m, "COP"),
+                new TravelCartItem(TravelProductType.Flight, "of_1", "Vuelo BOG-MDE", 200_000m, "COP", new DateTimeOffset(2026, 9, 10, 14, 30, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 10, 15, 45, 0, TimeSpan.Zero)),
+                new TravelCartItem(TravelProductType.Hotel, "of_2", "Hotel 1 noche", 100_000m, "COP", new DateTimeOffset(2026, 9, 10, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero)),
             },
             new TravelGuest("Ana Torres", "ana@x.co"));
 
@@ -249,8 +249,8 @@ public sealed class PaymentCompensationTests
         var checkout = await cart.CheckoutAsync(
             new[]
             {
-                new TravelCartItem(TravelProductType.Flight, "of_1", "Vuelo BOG-MDE", 200_000m, "COP"),
-                new TravelCartItem(TravelProductType.Hotel, "of_2", "Hotel 1 noche", 100_000m, "COP"),
+                new TravelCartItem(TravelProductType.Flight, "of_1", "Vuelo BOG-MDE", 200_000m, "COP", new DateTimeOffset(2026, 9, 10, 14, 30, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 10, 15, 45, 0, TimeSpan.Zero)),
+                new TravelCartItem(TravelProductType.Hotel, "of_2", "Hotel 1 noche", 100_000m, "COP", new DateTimeOffset(2026, 9, 10, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero)),
             },
             new TravelGuest("Ana Torres", "ana@x.co"));
 

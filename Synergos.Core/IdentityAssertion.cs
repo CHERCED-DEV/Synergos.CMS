@@ -37,6 +37,18 @@ public enum IdentityAssertion
     CmsSession = 1,
 
     /// <summary><c>Api.Identity</c> emitió un token verificable.</summary>
+    /// <remarks>
+    /// <para><b>Los acuses anteriores a la HU #14 que digan <c>IdentityToken</c> mienten sobre sí
+    /// mismos, y hay que leerlos como <see cref="CmsSession"/>.</b> Antes de esa HU nadie sabía
+    /// emitir tokens, y aun así <c>Api.Messaging</c> anotaba con este valor el acuse del propio
+    /// autor de un mensaje: el razonamiento era «no hay duda de quién escribió», que mide
+    /// CONFIANZA cuando el campo mide QUIÉN DIO FE. Es el defecto #42.</para>
+    ///
+    /// <para><b>Y no se corrigen.</b> Reescribir un registro append-only para que diga lo que
+    /// debió decir lo convierte en editable, que es exactamente lo que lo inutiliza como prueba.
+    /// El archivo dice lo que dijo; esta nota dice cuánto vale. Por eso queda escrita acá y no en
+    /// una migración: la fecha del acuse es lo que permite distinguir unos de otros.</para>
+    /// </remarks>
     IdentityToken = 2,
 
     /// <summary>Federación con Autenticación Digital del Estado (Dec. 620/2020).</summary>
