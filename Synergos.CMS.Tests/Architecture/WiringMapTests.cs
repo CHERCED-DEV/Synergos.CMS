@@ -154,6 +154,57 @@ public sealed class WiringMapTests
     }
 
     /// <summary>
+    /// La tabla narrativa de la familia A lista a TODOS los de la familia A. Uno por uno.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Que las cifras cuadren no obliga a que exista la fila.</b> El gate de arriba
+    /// compara números: si el inventario tiene 13 en A, la cabecera tiene que decir «(13)». Pero
+    /// la cabecera se corrige de un tecleo y la tabla de abajo —la que dice a qué nivel va cada
+    /// uno y por qué— se queda con doce filas, y todo sigue en verde.</para>
+    ///
+    /// <para><b>Y es justo el fallo que ocurrió</b>: los stubs que se cablearon en #33a, #44 y
+    /// #46 entraron a la familia A moviendo su fila del inventario, que es lo que el gate exigía.
+    /// La tabla narrativa no los nombraba. La consecuencia no es cosmética: <b>ésta es la tabla
+    /// que se lee para elegir el siguiente trabajo</b> —el inventario es una rejilla de tres
+    /// columnas—, así que un stub ausente de aquí es un stub que nadie va a tomar.</para>
+    ///
+    /// <para>Sólo la familia A. B y C describen decisiones tomadas —«ya sale del contenido», «se
+    /// queda a propósito»— y agrupan bien en prosa; A es la única que es una <b>lista de trabajo
+    /// pendiente</b>, y una lista de trabajo incompleta es la que hace daño. Se comprueba en los
+    /// dos sentidos: una fila narrativa de un stub que ya no es A también miente, y esa mentira
+    /// dice «esto está por hacer» de algo que ya se hizo.</para>
+    /// </remarks>
+    [Fact]
+    public void La_tabla_narrativa_de_la_familia_A_lista_a_todos()
+    {
+        var texto = File.ReadAllText(MapaPath());
+
+        var inicio = texto.IndexOf("## Familia A", StringComparison.Ordinal);
+        var fin = texto.IndexOf("## Familia B", StringComparison.Ordinal);
+        Assert.True(inicio >= 0 && fin > inicio, "El mapa no tiene las secciones «## Familia A» y «## Familia B».");
+
+        // Las filas de la sección, no las de los recuadros: una fila citada dentro de un `>` es
+        // una corrección explicando el pasado, no el inventario de lo que falta.
+        var narradas = Regex.Matches(texto[inicio..fin], @"^\|\s*`(Stub\w+)`\s*\|", RegexOptions.Multiline)
+            .Select(m => m.Groups[1].Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var familiaA = Mapa().Where(e => e.Familia == "A").Select(e => e.Stub).ToList();
+
+        var sinFila = familiaA.Where(s => !narradas.Contains(s)).ToList();
+        Assert.True(sinFila.Count == 0,
+            $"Estos stubs son familia A en el inventario y no tienen fila en la tabla narrativa de "
+            + $"«## Familia A»: {string.Join(", ", sinFila)}. Esa tabla es la que se lee para elegir "
+            + "el siguiente trabajo: sin fila, el stub es invisible aunque la cifra cuadre.");
+
+        var deMas = narradas.Where(s => !familiaA.Contains(s)).ToList();
+        Assert.True(deMas.Count == 0,
+            $"Estos stubs tienen fila en la tabla narrativa de «## Familia A» y no son familia A en "
+            + $"el inventario: {string.Join(", ", deMas)}. La tabla anuncia trabajo pendiente que "
+            + "el inventario ya no reconoce como tal.");
+    }
+
+    /// <summary>
     /// Cuántos stubs son DURABLES se cuenta, no se recuerda.
     /// </summary>
     /// <remarks>

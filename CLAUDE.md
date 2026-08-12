@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2481 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2482 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2481 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2482 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2481 tests):
+# Suite completa (2482 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -469,7 +469,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (134 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2481 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2482 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -491,7 +491,11 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   (`WiringMapTests`): un stub nuevo sin mapear rompe el build, y desde
   #50 **también cuadra las cifras de la prosa** contra el inventario y
   contra el disco — se habían desviado tres olas seguidas, porque el gate
-  sólo miraba la tabla y la gente lee el resumen.
+  sólo miraba la tabla y la gente lee el resumen. Y cuadrar la cifra no
+  basta: **la tabla narrativa de la familia A tiene que listarlos uno por
+  uno**, porque una cabecera que dice «(13)» sobre doce filas pasa el
+  recuento y deja un stub que nadie va a tomar — es la tabla que se lee
+  para elegir el siguiente trabajo, no la rejilla del inventario.
   De los 12, **ocho** están hechos: la tienda compra contra `Bff.Tienda`
   (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
   `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25), la visita al inmueble
