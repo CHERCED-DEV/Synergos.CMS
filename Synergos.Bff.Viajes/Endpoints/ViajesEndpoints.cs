@@ -35,7 +35,9 @@ public static class ViajesEndpoints
                     i.End ?? default))
                 .ToList();
 
-            var r = await flow.BookAsync(traveller, items, key.Value, ct);
+            // El modo lo elige quien vende y el default es el de siempre: todo-o-nada. Un cliente
+            // viejo que no lo mande sigue teniendo exactamente el comportamiento que tenía.
+            var r = await flow.BookAsync(traveller, items, key.Value, ct, req.PartialConfirm ?? false);
 
             return r.Match(
                 s => Results.Created($"/v1/trips/{s.Id}", TripResponse.From(s)),

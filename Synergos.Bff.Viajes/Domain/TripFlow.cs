@@ -63,8 +63,13 @@ public sealed class TripFlow
     /// <summary>
     /// Fase 1: aparta cada ítem, cotiza el viaje entero y autoriza el cobro.
     /// </summary>
+    /// <param name="partialConfirm">
+    /// Qué pasa si un ítem no se puede confirmar tras cobrar. Lo decide quien vende: un paquete
+    /// que no sirve partido quiere todo-o-nada; tres compras que coinciden en un carrito, no.
+    /// </param>
     public async Task<Result<TripSaga>> BookAsync(
-        Ref traveller, IReadOnlyList<TripItem> items, string sagaId, CancellationToken ct)
+        Ref traveller, IReadOnlyList<TripItem> items, string sagaId, CancellationToken ct,
+        bool partialConfirm = false)
     {
         if (Revisar(items) is { } malo) return Result.Rejected<TripSaga>(malo);
 
@@ -81,7 +86,7 @@ public sealed class TripFlow
 
         saga = new TripSaga(sagaId, traveller, SagaStatus.Running, Array.Empty<ItemHold>(), null,
             Money.Zero(Money.Cop), Money.Zero(Money.Cop), Array.Empty<Compensation>(), null,
-            _clock.GetUtcNow());
+            _clock.GetUtcNow(), PartialConfirm: partialConfirm);
         _sagas.Put(saga);
 
         // 1. Apartar, ítem por ítem. Es el paso barato y reversible: se hace antes de hablar de
@@ -214,9 +219,28 @@ public sealed class TripFlow
             var reserva = await _caps.ConfirmHoldAsync(apartado.HoldId, saga.KeyFor($"confirm:{i}"), ct);
             if (!reserva.IsOk)
             {
-                _log.LogWarning("El viaje {Saga} no pudo confirmar '{Producto}' tras capturar ({Error}); se compensa.",
+                if (!saga.PartialConfirm)
+                {
+                    _log.LogWarning("El viaje {Saga} no pudo confirmar '{Producto}' tras capturar ({Error}); se compensa.",
+                        saga.Id, apartado.ProductRef, reserva.Rejection);
+                    return await AbortarAsync(saga, reserva.Rejection!, "un ítem no se pudo confirmar tras cobrar", ct);
+                }
+
+                // CONFIRMACIÓN PARCIAL (#40): lo que sí salió se queda. Quien compró un vuelo, un
+                // hotel y un auto no pierde el vuelo porque el auto se agotó — y tumbar el viaje
+                // entero sería peor servicio y más plata moviéndose sin necesidad.
+                //
+                // Lo que NO se hace acá es devolver plata. El precio se cotiza UNA vez por viaje
+                // a propósito («el precio de un paquete no es necesariamente la suma de sus
+                // partes»), así que este orquestador no sabe cuánto vale el ítem caído — y
+                // repartir el total sería inventarse una política comercial. Se reporta qué no se
+                // cumplió y quien vendió ordena la devolución, exactamente igual que la penalidad
+                // de `CancelAsync` llega calculada de fuera.
+                _log.LogWarning("El viaje {Saga} no pudo confirmar '{Producto}' ({Error}); sigue PARCIAL.",
                     saga.Id, apartado.ProductRef, reserva.Rejection);
-                return await AbortarAsync(saga, reserva.Rejection!, "un ítem no se pudo confirmar tras cobrar", ct);
+
+                saga = await SoltarNoCumplidoAsync(saga, i, ct);
+                continue;
             }
 
             var holds = saga.Holds.ToList();
@@ -235,16 +259,84 @@ public sealed class TripFlow
             _sagas.Put(saga);
         }
 
+        // Un viaje parcial en el que no se cumplió NADA no es un viaje parcial: es un viaje
+        // fallido, y se trata como tal. Dejarlo Completed diría que se entregó algo.
+        if (saga.PartialConfirm && saga.Holds.Count > 0 && saga.Holds.All(h => h.Unfulfilled))
+        {
+            return await AbortarAsync(saga,
+                Rejection.Conflict("viajes.nothing_fulfilled", "Ningún ítem del viaje se pudo confirmar."),
+                "ningún ítem se pudo confirmar tras cobrar", ct);
+        }
+
         // Salió entero: ya no hay nada que deshacer. Las armadas se marcan como no aplicables —
         // que es distinto de ejecutarlas (`feedback_compensation_is_data`).
+        //
+        // CON UNA EXCEPCIÓN, y la destapó un test antes de que llegara a ningún lado: el apartado
+        // de un ítem no cumplido que NO se pudo soltar sigue siendo trabajo de verdad. Barrerlo
+        // acá porque «el viaje salió» perdería ese cupo en silencio — el hotel acabaría lleno de
+        // reservas que nadie hizo, y nada habría fallado.
+        var sinSoltar = saga.Holds
+            .Where(h => h.Unfulfilled)
+            .Select(h => h.HoldId)
+            .ToHashSet(StringComparer.Ordinal);
+
         var ahora = _clock.GetUtcNow();
         saga = saga with
         {
             Status = SagaStatus.Completed,
-            Compensations = saga.Compensations.Select(c => c.IsPending ? c with { DoneAtUtc = ahora } : c).ToList(),
+            Compensations = saga.Compensations
+                .Select(c => c.IsPending
+                             && !(c.Kind == ViajesCompensations.ReleaseBookingHold && sinSoltar.Contains(c.TargetId))
+                    ? c with { DoneAtUtc = ahora }
+                    : c)
+                .ToList(),
         };
         _sagas.Put(saga);
         return Result.Ok(saga);
+    }
+
+    /// <summary>
+    /// Marca un ítem como no cumplido y suelta su apartado, sin tumbar el viaje.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Se suelta AQUÍ y no al final</b>: el viaje va a terminar en <c>Completed</c>, y
+    /// completar marca las compensaciones armadas como no aplicables. Dejarlo para entonces
+    /// convertiría el apartado de este ítem en cupo retenido que ya no lo suelta nadie.</para>
+    ///
+    /// <para><b>Si soltarlo falla, su compensación se queda PENDIENTE</b> a propósito, para que el
+    /// barrido lo reintente. Marcarla hecha porque «el viaje siguió» perdería el cupo en silencio,
+    /// que es la clase de fallo que no rompe nada y se descubre cuando el hotel está lleno de
+    /// reservas que nadie hizo.</para>
+    /// </remarks>
+    private async Task<TripSaga> SoltarNoCumplidoAsync(TripSaga saga, int indice, CancellationToken ct)
+    {
+        var apartado = saga.Holds[indice];
+        var soltado = await _caps.ReleaseHoldAsync(apartado.HoldId, ct);
+
+        var holds = saga.Holds.ToList();
+        holds[indice] = apartado with { Unfulfilled = true };
+
+        var ahora = _clock.GetUtcNow();
+        saga = saga with
+        {
+            Holds = holds,
+            Compensations = saga.Compensations
+                .Select(c => soltado.IsOk
+                             && c.Kind == ViajesCompensations.ReleaseBookingHold
+                             && c.TargetId == apartado.HoldId && c.IsPending
+                    ? c with { DoneAtUtc = ahora }
+                    : c)
+                .ToList(),
+        };
+
+        if (!soltado.IsOk)
+        {
+            _log.LogWarning("El viaje {Saga} no pudo soltar el apartado de '{Producto}' ({Error}); queda para el barrido.",
+                saga.Id, apartado.ProductRef, soltado.Rejection);
+        }
+
+        _sagas.Put(saga);
+        return saga;
     }
 
     /// <summary>

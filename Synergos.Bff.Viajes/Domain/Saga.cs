@@ -60,13 +60,23 @@ public static class ViajesCompensations
 /// <para><b><see cref="ReservationId"/> se llena al confirmar</b>, y es lo que permite que la
 /// compensación cambie de carácter sin perder a qué se refiere.</para>
 /// </remarks>
+/// <param name="Unfulfilled">
+/// El ítem no se pudo confirmar y se soltó, en un viaje con confirmación PARCIAL.
+/// </param>
+/// <remarks>
+/// <b>«No confirmado» y «no cumplido» no son lo mismo.</b> Un apartado sin
+/// <see cref="ReservationId"/> puede estar simplemente pendiente; uno con
+/// <see cref="Unfulfilled"/> ya se intentó, falló y se soltó. Sin distinguirlos, un reintento
+/// volvería a probar algo que ya se decidió que no iba.
+/// </remarks>
 public sealed record ItemHold(
     string HoldId,
     string ResourceId,
     TimeWindow Window,
     string ProductRef,
     string ProductLabel,
-    string? ReservationId = null);
+    string? ReservationId = null,
+    bool Unfulfilled = false);
 
 /// <summary>
 /// Un viaje que cruza capacidades, con lo que haya que deshacer si falla.
@@ -82,6 +92,10 @@ public sealed record ItemHold(
 /// </param>
 /// <param name="Compensations">Lo que hay que deshacer.</param>
 /// <param name="LastError">Qué falló, para que el llamador lo lea.</param>
+/// <param name="PartialConfirm">
+/// Si un ítem que no se pueda confirmar tumba el viaje entero (<c>false</c>, el default) o sólo
+/// se marca como no cumplido y el resto sigue en pie (<c>true</c>).
+/// </param>
 /// <param name="StartedAtUtc">Cuándo arrancó.</param>
 /// <param name="AlertedAtUtc">Cuándo se avisó a una persona de que algo quedó colgado.</param>
 /// <param name="AlertsSent">Cuántos avisos salieron.</param>
@@ -116,7 +130,8 @@ public sealed record TripSaga(
     string? LastError,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? AlertedAtUtc = null,
-    int AlertsSent = 0) : ISaga<TripSaga>
+    int AlertsSent = 0,
+    bool PartialConfirm = false) : ISaga<TripSaga>
 {
     public TripSaga WithStatus(SagaStatus status) => this with { Status = status };
 
