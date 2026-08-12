@@ -123,6 +123,18 @@ services:
       # Encenderlo exige PUBLICAR LA DEFINICION en Api.Workflow (POST /v1/definitions)
       # — ver .env.example. Sin ella, decidir se rechaza con definition_not_found, que
       # es mejor que adivinar un proceso.
+      # Quien custodia la llave que identifica un diploma (hallazgo #45). Lo que se
+      # gana es la CUSTODIA: rotar y RETIRAR una llave, que la local no sabe hacer.
+      # El firmante local NO se descarta — queda verificando los ids emitidos antes
+      # del cableado, o cada QR ya impreso dejaria de valer.
+      #
+      # Encenderlo exige crear la llave en Api.Signing (POST /v1/keys con
+      # purpose=academy.certificate) — ver .env.example.
+      Synergos__Academy__Mode: ${SYNERGOS_ACADEMY_MODE:-Stub}
+      Synergos__Academy__BaseUrl: "http://api-signing:8080"
+      Synergos__Academy__ApiKey: ${SYNERGOS_API_KEY}
+      Synergos__Academy__SealPurpose: ${SYNERGOS_ACADEMY_SEAL_PURPOSE:-academy.certificate}
+
       Synergos__Gob__Mode: ${SYNERGOS_GOB_MODE:-Stub}
       Synergos__Gob__BaseUrl: "http://api-workflow:8080"
       Synergos__Gob__ApiKey: ${SYNERGOS_API_KEY}

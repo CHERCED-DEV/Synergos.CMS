@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2462 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2479 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2462 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2479 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2462 tests):
+# Suite completa (2479 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -469,7 +469,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (134 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2462 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2479 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -708,6 +708,31 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   su segundo consumidor (el asiento de auditoría de la HU #15), así que
   hubo **un solo sitio** que pasar de decir `CmsSession` a decir otra
   cosa. Hay gate: declararlo dos veces rompe el build.
+- **El diploma ya lo sella una capacidad** (HU #45, `Synergos:Academy:Mode=Api`).
+  Lo que se gana es la **custodia**, no el algoritmo: el id ya era un HMAC
+  opaco con llave del servidor (ADR 0124), pero esa llave **no sabía
+  retirarse** — no había forma de rotar sin invalidar todos los diplomas ni
+  registro de con cuál se firmó cada uno. Verificado en vivo: tras retirar la
+  llave y crear otra, **un diploma emitido antes de rotar sigue verificando**.
+
+  > **Va a `/v1/seals` y no a `/v1/signatures`**, y ése fue el hallazgo: aquel
+  > token vence (≤365 d), no es determinista y **publica su payload sin
+  > llave**. Las tres cosas son correctas para lo que ese endpoint hace y
+  > ninguna sirve para un diploma, que no vence, se re-emite igual y lleva a
+  > su titular dentro del contenido sellado.
+  >
+  > **El firmante local NO se descarta: queda verificando los ids
+  > anteriores.** El sello y el HMAC local no dan el mismo valor, así que sin
+  > eso cada QR ya impreso dejaría de valer el día del despliegue — y no
+  > ruidosamente: contestando que la credencial no vale, que es lo peor que
+  > puede decir. Se reconocen por su forma (32 hex) y ni salen a la red.
+  >
+  > **Con la capacidad caída no se emite ni se verifica un diploma nuevo, y NO
+  > se da por bueno.** Comprobar el sello contra el sujeto es lo único que
+  > impide que quien escriba en el almacén fabrique una credencial con el
+  > nombre que quiera. Los diplomas viejos se siguen verificando, porque son
+  > locales. Hay gate (`AcademyWiringTests`).
+
 - **`Api.Booking` ya deja llegar del sujeto a su recurso** (HU #25):
   `GET /v1/resources?subjectKind=&subjectId=`, calcando lo que
   `Api.Inventory` hacía con `/v1/items`. Faltaba, y obligaba a que el
