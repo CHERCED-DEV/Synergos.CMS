@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2430 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2443 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2430 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2443 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2430 tests):
+# Suite completa (2443 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -469,7 +469,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2430 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2443 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -643,6 +643,23 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > (`identity.token_not_verifiable`), no se ignora. Ignorarlo dejaría
   > que alguien mandara cualquier cosa y siguiera adelante como si no
   > hubiera mandado nada.
+  >
+  > **`Api.Workflow` es la segunda** (defecto #48), y su caso es distinto:
+  > lo que verifica no es «con qué fuerza» sino **de dónde salen los
+  > roles**. Venían en el CUERPO de la petición, así que cualquiera con la
+  > llave compartida se ascendía a funcionario escribiendo una línea de
+  > JSON — y `requiredRoles`, que el código presentaba como «lo que hace
+  > que esta capacidad sirva a Gobierno», no guardaba nada. Los tests no lo
+  > vieron porque construían el `Actor` a mano: la regla estaba bien y la
+  > **fuente del dato** estaba mal, igual que en #42.
+  >
+  > Hoy el token gana sobre lo declarado y su sujeto tiene que ser quien
+  > actúa. Pero **el agujero sólo se cierra del todo con
+  > `Workflow:Roles:RequireVerifiedRoles`**, que va en `false` por defecto
+  > porque encenderlo hoy rompería #44 y #46: mandan el rol a mano ya que
+  > **nadie puede presentar un token todavía**. Es la forma de #27 — el
+  > despliegue declara su postura — y se enciende el día que el CMS sepa
+  > emitir la identidad de quien decide.
 
   > **Verificación LOCAL, y ésa es la decisión de fondo.** El token se
   > comprueba con la llave, sin llamar a `Api.Identity` — llamarla en cada

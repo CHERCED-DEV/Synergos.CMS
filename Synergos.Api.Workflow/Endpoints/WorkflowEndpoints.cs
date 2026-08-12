@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Synergos.Api.Workflow.Contracts;
 using Synergos.Api.Workflow.Domain;
 using Synergos.Core;
@@ -56,16 +57,28 @@ public static class WorkflowEndpoints
                     p.Items.Select(InstanceResponse.From).ToList(), p.Total, p.Offset, p.HasMore))
                 .ToHttp());
 
-        app.MapPost("/v1/instances/{id}/fire", (string id, FireRequest req, HttpRequest http, WorkflowService svc) =>
+        app.MapPost("/v1/instances/{id}/fire", (
+            string id, FireRequest req, HttpRequest http, WorkflowService svc,
+            IdentityTokenGate identidad, IOptions<WorkflowRoleOptions> roles, TimeProvider clock) =>
         {
             if (!IdempotencyHeader.TryRead(http, WorkflowRules.CodePrefix, out var key, out var falta)) return falta!;
 
             var principal = Ref.TryCreate(req.ActorKind, req.ActorId);
             if (principal is null) return Invalid("bad_actor", "Hacen falta actorKind y actorId.");
 
-            var actor = Actor.Of(principal, (req.ActorRoles ?? Array.Empty<string>()).ToArray());
+            // LOS ROLES NO SE LE CREEN AL LLAMADOR SI TRAE CON QUÉ PROBARLOS (defecto #48).
+            // Antes salían del cuerpo y punto, así que cualquiera con la llave compartida se
+            // ascendía a funcionario escribiendo una línea de JSON. La regla vive en el dominio;
+            // acá sólo se lee la cabecera y se rutea.
+            var quien = WorkflowRules.ResolveActor(
+                identidad, http.Headers[IdentityTokens.HeaderName].FirstOrDefault(),
+                principal, req.ActorRoles, clock.GetUtcNow());
 
-            return svc.Fire(id, req.Transition, actor, req.Note, key).Map(InstanceResponse.From).ToHttp();
+            if (!quien.IsOk) return quien.Rejection!.ToProblem();
+
+            return svc.Fire(id, req.Transition, quien.Value.Actor, req.Note, key,
+                    quien.Value.Verified, roles.Value.RequireVerifiedRoles)
+                .Map(InstanceResponse.From).ToHttp();
         });
 
         return app;

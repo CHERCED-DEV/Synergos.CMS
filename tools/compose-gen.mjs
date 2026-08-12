@@ -30,7 +30,7 @@ const CHECK = process.argv.includes('--check');
  * gana nada teniendo la llave, y tenerla la pondria a un descuido de empezar a
  * creerse tokens que nadie decidio que aceptara. Se anade cuando se cablea, no antes.
  */
-const VERIFICAN_IDENTIDAD = new Set(['Synergos.Api.Messaging']);
+const VERIFICAN_IDENTIDAD = new Set(['Synergos.Api.Messaging', 'Synergos.Api.Workflow']);
 
 /** `Synergos.Api.Booking` → `api-booking`. Docker no quiere mayúsculas ni puntos. */
 const nombreServicio = (proyecto) =>
@@ -66,6 +66,23 @@ function capacidadesDe(proyecto) {
   // El motor añade `notifications` por su cuenta: es donde avisa cuando una
   // compensacion se rinde (CompensationAlert.Capability).
   return [...new Set([...nombres, 'notifications'])].sort();
+}
+
+/** La llave con la que una capacidad VERIFICA tokens de identidad, si los verifica. */
+function entornoIdentidad(proyecto) {
+  if (!VERIFICAN_IDENTIDAD.has(proyecto)) return '';
+  return [
+    '',
+    '      # La llave con la que se COMPRUEBAN los tokens (HU #14). La misma que firma y',
+    '      # en la MISMA seccion que en Api.Identity: con dos nombres, configurarla en uno',
+    '      # y olvidarla en otro da un token valido que la capacidad rechaza.',
+    '      #',
+    '      # Sin `:?` a proposito: quien solo verifica arranca sin llave — es el camino del',
+    '      # clon limpio. Y arranca SIN PODER verificar, que no es verificando mal: un token',
+    '      # presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.',
+    `      IdentityTokens__Keys__\${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: \${SYNERGOS_IDENTITY_SIGNING_KEY:-}`,
+    '      IdentityTokens__ActiveKeyId: \${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}',
+  ].join('\n');
 }
 
 /** Las lineas de entorno propias de cada servicio. */
@@ -149,12 +166,20 @@ function entornoExtra(proyecto, disponibles) {
   // sin llave — es el camino del clon limpio, donde nadie presenta tokens todavia. Y
   // arranca sin poder verificar, que NO es lo mismo que verificando mal: un token
   // presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.
-  if (VERIFICAN_IDENTIDAD.has(proyecto)) {
+  if (proyecto.endsWith('.Workflow')) {
     return [
       '',
-      `      IdentityTokens__Keys__\${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: \${SYNERGOS_IDENTITY_SIGNING_KEY:-}`,
-      '      IdentityTokens__ActiveKeyId: \${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}',
-    ].join('\n');
+      '      # De donde salen los roles de quien dispara una transicion (defecto #48).',
+      '      # Los declarados en el cuerpo guardan contra el ACCIDENTE, no contra quien',
+      '      # quiera saltarse la guarda: cualquiera con la llave compartida se asciende',
+      '      # escribiendo una linea de JSON. Con esto en true, una transicion que exige',
+      '      # rol SOLO acepta roles de un token verificado.',
+      '      #',
+      '      # Default false a proposito: encenderlo hoy romperia Gobierno (#44) y el',
+      '      # seguimiento (#46), que mandan el rol a mano porque NADIE puede presentar un',
+      '      # token todavia — el puente Member <-> Principal de la HU #14 no esta hecho.',
+      '      Workflow__Roles__RequireVerifiedRoles: \${SYNERGOS_WORKFLOW_REQUIRE_VERIFIED_ROLES:-false}',
+    ].join('\n') + entornoIdentidad(proyecto);
   }
 
   if (proyecto.endsWith('.Notifications')) {
@@ -169,7 +194,10 @@ function entornoExtra(proyecto, disponibles) {
     ].join('\n');
   }
 
-  return '';
+  // Fallback: quien verifica tokens y no tiene bloque propio se lleva sólo la llave.
+  // Va al FINAL a proposito — puesto arriba se comia el bloque de Api.Workflow, que
+  // ademas de la llave necesita su postura de roles.
+  return entornoIdentidad(proyecto);
 }
 
 // ── El bloque de un servicio del árbol ───────────────────────────────────────

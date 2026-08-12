@@ -89,7 +89,11 @@ public sealed class WorkflowService
             ? Result.Ok(i)
             : Rejection.NotFound($"{WorkflowRules.CodePrefix}.instance_not_found", $"No existe la instancia {id}.");
 
-    public Result<WorkflowInstance> Fire(string instanceId, string? transition, Actor actor, string? note, IdempotencyKey idem)
+    /// <param name="verified">Si los roles del actor salieron de un token verificado (defecto #48).</param>
+    /// <param name="requireVerified">Si este despliegue sólo acepta roles verificados.</param>
+    public Result<WorkflowInstance> Fire(
+        string instanceId, string? transition, Actor actor, string? note, IdempotencyKey idem,
+        bool verified = false, bool requireVerified = false)
     {
         lock (_gate)
         {
@@ -111,7 +115,7 @@ public sealed class WorkflowService
                     $"La instancia sigue la definición '{instancia.DefinitionKey}', que ya no está.");
             }
 
-            var regla = WorkflowRules.Resolve(def, instancia, transition, actor);
+            var regla = WorkflowRules.Resolve(def, instancia, transition, actor, verified, requireVerified);
             if (!regla.IsOk) return Result.Rejected<WorkflowInstance>(regla.Rejection!);
 
             var paso = new HistoryEntry(regla.Value.Name, instancia.State, regla.Value.To, actor.Principal, note?.Trim(), _clock.GetUtcNow());
