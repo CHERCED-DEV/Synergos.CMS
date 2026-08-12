@@ -91,6 +91,93 @@ public sealed class WiringMapTests
         }).ToList();
     }
 
+    /// <summary>
+    /// Las CIFRAS de la prosa cuadran con el inventario y con el disco.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Este gate existe porque la prosa se desvió tres olas seguidas</b> (#50). Los
+    /// marcadores <c>MAPA:INICIO</c>/<c>MAPA:FIN</c> están puestos a propósito para que la
+    /// narrativa pueda nombrar stubs sin romper el inventario — y el efecto secundario fue que
+    /// <b>nada medía la narrativa</b>. Quien cableaba movía su fila del inventario, porque el gate
+    /// se lo exigía, y no el resumen, porque nadie se lo pedía.</para>
+    ///
+    /// <para>El resultado: el documento se contradecía a sí mismo —resumen A=9, cabecera A(8)— y
+    /// ninguna de las dos era la verdad, que eran 12. <b>El gate estaba verde y tenía razón</b>;
+    /// mentía la mitad que se mantiene a mano, que además es la que la gente lee para elegir el
+    /// siguiente trabajo.</para>
+    ///
+    /// <para>Se comprueban las cifras y no el texto: el <i>porqué</i> escrito a mano es lo que da
+    /// valor al documento y generarlo lo convertiría en un artefacto. Lo que se desvía son los
+    /// números.</para>
+    /// </remarks>
+    [Fact]
+    public void Las_cifras_de_la_prosa_cuadran_con_el_inventario()
+    {
+        var texto = File.ReadAllText(MapaPath());
+        var mapa = Mapa();
+        var enDisco = StubsEnDisco().Count;
+
+        Assert.Equal(enDisco, mapa.Count);
+
+        // El total, en las tres veces que el documento lo dice.
+        foreach (var frase in new[]
+                 {
+                     $"Los {enDisco} `Stub*` de",
+                     $"## Lo primero: son {enDisco}, no 45",
+                     $"## Los {enDisco}, en una lista",
+                 })
+        {
+            Assert.True(texto.Contains(frase, StringComparison.Ordinal),
+                $"La prosa del mapa no dice «{frase}». Son {enDisco} stubs en disco: "
+                + "si la cifra cambió, hay que moverla en la prosa además del inventario.");
+        }
+
+        // El reparto por familia, en la tabla-resumen y en cada cabecera de sección.
+        var titulos = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["A"] = "## Familia A — cableado pendiente ({0})",
+            ["B"] = "## Familia B — ya resuelto desde el contenido de Umbraco ({0})",
+            ["C"] = "## Familia C — se queda en stub a propósito ({0})",
+        };
+
+        foreach (var familia in FamiliasValidas)
+        {
+            var cuantos = mapa.Count(e => e.Familia == familia);
+
+            Assert.True(Regex.IsMatch(texto, $@"^\|\s*\*\*{familia} —[^|]*\|\s*{cuantos}\s*\|", RegexOptions.Multiline),
+                $"La tabla-resumen no dice {cuantos} para la familia {familia}, que es lo que tiene el inventario.");
+
+            var titulo = string.Format(System.Globalization.CultureInfo.InvariantCulture, titulos[familia], cuantos);
+            Assert.True(texto.Contains(titulo, StringComparison.Ordinal),
+                $"La cabecera de la familia {familia} no dice ({cuantos}). Esperado: «{titulo}».");
+        }
+    }
+
+    /// <summary>
+    /// Cuántos stubs son DURABLES se cuenta, no se recuerda.
+    /// </summary>
+    /// <remarks>
+    /// La cifra decía 20 sobre 46 y son 18 sobre 47. Es la afirmación más citada del documento
+    /// —«"stub" en este repo dejó de querer decir en memoria»— y la que más caro sale equivocada:
+    /// hace que un ticket prometa arreglar algo que ya está arreglado. El criterio es el que el
+    /// propio documento declara, así que se puede contar.
+    /// </remarks>
+    [Fact]
+    public void La_cifra_de_stubs_durables_se_cuenta_contra_el_disco()
+    {
+        var impl = Path.Combine(RepoRoot(), "Synergos.CMS.Application", "Services", "Impl");
+
+        var durables = Directory.EnumerateFiles(impl, "Stub*.cs")
+            .Count(f => File.ReadAllText(f) is var codigo
+                        && (codigo.Contains("IJsonEntityStore", StringComparison.Ordinal)
+                            || codigo.Contains("IPrivateFileStore", StringComparison.Ordinal)
+                            || codigo.Contains("IPhiStore", StringComparison.Ordinal)));
+
+        var esperado = $"{durables} de los {StubsEnDisco().Count}";
+        Assert.True(File.ReadAllText(MapaPath()).Contains(esperado, StringComparison.Ordinal),
+            $"El mapa no dice «{esperado}» al hablar de durabilidad. Contados en disco: {durables}.");
+    }
+
     [Fact]
     public void Todo_stub_del_disco_esta_en_el_mapa()
     {

@@ -1,6 +1,6 @@
 # 11 — El mapa del cableado
 
-> Los 46 `Stub*` de `Synergos.CMS.Application/Services/Impl/`, y qué se hace con cada uno.
+> Los 47 `Stub*` de `Synergos.CMS.Application/Services/Impl/`, y qué se hace con cada uno.
 >
 > **Esto es un inventario, no un rediseño.** Describe lo que hay y decide destino. El rediseño
 > de algo concreto es otro ticket.
@@ -9,11 +9,20 @@ Lo vigila `Synergos.CMS.Tests/Architecture/WiringMapTests.cs`. Un stub nuevo sin
 **rompe el build**, y una entrada que nombre una capacidad inexistente también. Un mapa que se
 mantiene a mano se desactualiza en la tercera ola.
 
-## Lo primero: son 46, no 45
+## Lo primero: son 47, no 45
 
-El ticket decía 45. La cuenta real al levantar el inventario es **46**, y no porque alguien
+El ticket decía 45. La cuenta real al levantar el inventario fue **46**, y no porque alguien
 añadiera uno: la cuenta de 45 era de memoria. Es exactamente la razón por la que este documento
 lleva un gate detrás en vez de una lista escrita a mano.
+
+**Hoy son 47**, y cómo se enteró este documento vale más que la cifra. Durante tres olas el
+inventario de abajo se mantuvo al día —el gate lo exige— mientras las cifras de esta sección se
+quedaron en 46: quien cableaba movía su fila y nadie le pedía tocar el resumen. El gate estaba
+verde y tenía razón; lo que mentía era la prosa (#50).
+
+Ahora **las cifras de esta sección también las comprueba el gate**, contándolas contra el
+inventario y contra el disco. Un número escrito acá que no cuadre rompe el build, que es la única
+forma conocida de que una cifra a mano sobreviva a la cuarta ola.
 
 ## Lo segundo, y es lo que cambia la épica
 
@@ -21,19 +30,19 @@ lleva un gate detrás en vez de una lista escrita a mano.
 
 | Familia | Cuántos | Qué le pasa |
 |---|---:|---|
-| **A — cableado pendiente** | 9 | va a una capacidad o a un BFF |
+| **A — cableado pendiente** | 12 | va a una capacidad o a un BFF |
 | **B — ya resuelto desde el contenido** | 5 | sale de DocTypes; cablearlo sería un retroceso |
-| **C — se queda en stub a propósito** | 32 | no hay capacidad detrás, y no debería haberla |
+| **C — se queda en stub a propósito** | 30 | no hay capacidad detrás, y no debería haberla |
 
 > **La brecha es menor de lo que «una capacidad de veinte conectada» sugiere**, y por una razón
-> que no se ve desde el conteo: **la mitad de los stubs ya son durables**. 20 de los 46 escriben
-> tras `IJsonEntityStore`, `IPrivateFileStore` o `IPhiStore` (ADR 0105, ADR 0116 fase 6, doc 25,
+> que no se ve desde el conteo: **más de un tercio de los stubs ya son durables**. 18 de los 47
+> escriben tras `IJsonEntityStore`, `IPrivateFileStore` o `IPhiStore` (ADR 0105, ADR 0116 fase 6, doc 25,
 > T6). «Stub» en este repo dejó hace tiempo de querer decir «en memoria», y leerlo así es lo que
 > hace que un ticket prometa arreglar algo que ya está arreglado — ver la nota sobre #26 al final.
 
 ---
 
-## Familia A — cableado pendiente (8)
+## Familia A — cableado pendiente (12)
 
 Lo que sí tiene una capacidad o un orquestador detrás. **La columna «a qué nivel» es la decisión
 que no hay que equivocar**: contra el BFF cuando hay varios pasos que pueden fallar a la mitad y
@@ -50,6 +59,9 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 | `StubReturnService` | `Api.Orders` + `Api.Payments` | **Orquestador** (`Bff.Tienda`, sin construir esa cara). Un RMA reembolsado son dos pasos con plata en medio: si el reembolso sale y la orden no se marca, el dinero se fue sin rastro. Es la compensación que cambia de carácter al capturar | pendiente |
 | `StubApplicationService` | `Bff.Gob` (sin construir) | **Orquestador.** Radicar valida, calcula tasa, cobra si aplica y asienta estado — con pago de por medio. Es el agregado raíz de Gobierno y hoy lo compone media docena de stubs hermanos por DIP | pendiente |
 | `StubClinicalSchedulingService` | `Bff.Salud` `POST /v1/appointments` | **Orquestador.** Apartar el cupo + cobrar el copago + avisar, con compensación si el copago falla. Ver la corrección de abajo | **HU #25** |
+| `StubEventTicketingService` | `Bff.Eventos` `POST /v1/ticketing` | **Orquestador.** Aforo + cobro pueden fallar a la mitad. La compra se parte: el orquestador mueve aforo y plata, y **el artefacto se queda acá** —la entrada, su QR, su portador, el check-in— porque el firmante vive de este lado | **HU #35** |
+| `StubHotelBookingService` | `Bff.Viajes` `POST /v1/trips` | **Orquestador.** Apartar, cobrar y confirmar pueden fallar a la mitad. Sólo la vía hotel; el carrito multi-producto sigue pendiente (#40) | **HU #36** |
+| `StubVisitSchedulingService` | `Api.Booking` `/v1/holds` | **Capacidad, no orquestador.** Una visita NO se cobra, así que no hay segundo paso que compensar — una saga de un paso sería la máquina de compensar sin nada que compensar. Ver la corrección de abajo | **HU #33a** |
 
 > ### Corrección: este stub estaba mal clasificado, y por qué importa
 >
@@ -119,7 +131,7 @@ Los cinco tienen la misma forma: un flag `Synergos:Catalog:Sources:{vertical}` q
 
 ---
 
-## Familia C — se queda en stub a propósito (33)
+## Familia C — se queda en stub a propósito (30)
 
 No hay capacidad detrás, y no debería haberla. Tres razones distintas, y conviene no mezclarlas
 porque «qué haría falta para que dejara de ser stub» es diferente en cada una.
@@ -221,7 +233,7 @@ otro riesgo, y la decisión es del arquitecto. Está escrita en el ticket.
 
 ---
 
-## Los 46, en una lista
+## Los 47, en una lista
 
 Para el gate. La familia va entre corchetes; el destino, cuando lo hay, es un directorio que
 tiene que existir en la raíz del repo.

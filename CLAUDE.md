@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2479 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2481 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2479 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2481 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (8) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -159,7 +159,7 @@ Synergos.CMS/
 | "¿Qué API necesita cada dominio? ¿Cuál es el molde?" | `docs/product/08-despiece-apis.md` — la matriz 20×9 y §4 |
 | "¿Cómo se deshace lo que ya se hizo?" | `docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `docs/product/10-promocion-bff-core.md` |
-| "¿Qué se hace con cada uno de los 46 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
+| "¿Qué se hace con cada uno de los 47 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — es el único sitio |
 
 > ⚠️ **De los seis docs de `docs/product/`, sólo el 11 está versionado.** Los
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2479 tests):
+# Suite completa (2481 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -469,7 +469,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (134 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2479 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2481 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -483,13 +483,16 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 
 - **Poco está conectado al producto, pero la brecha es MENOR de lo que
   parecía.** El inventario del cableado (HU #23,
-  `docs/product/11-mapa-del-cableado.md`) contó los 46 `Stub*` y los
-  clasificó: **8** son cableado pendiente, **5** ya salen del contenido
-  de Umbraco (cablearlos sería un retroceso) y **33** se quedan en stub a
-  propósito. Y 20 de los 46 **ya son durables** — «stub» en este repo
+  `docs/product/11-mapa-del-cableado.md`) contó los 47 `Stub*` y los
+  clasificó: **12** son cableado pendiente, **5** ya salen del contenido
+  de Umbraco (cablearlos sería un retroceso) y **30** se quedan en stub a
+  propósito. Y 18 de los 47 **ya son durables** — «stub» en este repo
   dejó hace tiempo de querer decir «en memoria». Hay gate
-  (`WiringMapTests`): un stub nuevo sin mapear rompe el build.
-  De los 9, **cinco** están hechos: la tienda compra contra `Bff.Tienda`
+  (`WiringMapTests`): un stub nuevo sin mapear rompe el build, y desde
+  #50 **también cuadra las cifras de la prosa** contra el inventario y
+  contra el disco — se habían desviado tres olas seguidas, porque el gate
+  sólo miraba la tabla y la gente lee el resumen.
+  De los 12, **ocho** están hechos: la tienda compra contra `Bff.Tienda`
   (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
   `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25), la visita al inmueble
   aparta cupo **directo contra `Api.Booking`, sin orquestador**
@@ -497,9 +500,11 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   toca una sola capacidad y un BFF sería una saga de un paso — y **el
   expediente decide contra `Api.Workflow`**, también directo
   (`Synergos:Gob:Mode=Api`, HU #44). El default sigue siendo `Stub` en
-  todos. Faltan `StubPaymentProvider` → `Api.Payments` y lo que queda de
-  `StubReservationService` (Viajes y Eventos, que **no van al mismo
-  sitio** — ver #33).
+  todos. **Faltan cuatro**: `StubPaymentProvider` → `Api.Payments`
+  (bloqueado por #27), lo que queda de `StubReservationService` —el
+  carrito multi-producto de Viajes, #40—, y `StubReturnService` y
+  `StubApplicationService`, que esperan caras de orquestador sin
+  construir (`Bff.Tienda` de devoluciones y `Bff.Gob`).
 
   > **Lo que #44 mudó no es un paso: es una TABLA.** Qué puede pasarle a un
   > expediente estaba escrito en C# y se desplegaba con el sitio, así que
