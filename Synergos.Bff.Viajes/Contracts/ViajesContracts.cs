@@ -19,8 +19,19 @@ public sealed record TripItemRequest(
     string? ProductRef, string? ProductLabel, DateTimeOffset? Start, DateTimeOffset? End);
 
 /// <summary>Reservar un viaje.</summary>
+/// <param name="PartialConfirm">
+/// Qué pasa si un ítem no se puede confirmar tras cobrar: <c>false</c> (el default) tumba el
+/// viaje entero y devuelve todo; <c>true</c> conserva lo que sí salió y marca lo caído.
+/// </param>
+/// <remarks>
+/// <b>Lo decide quien vende, no el orquestador</b> (#40). Un paquete que no sirve partido quiere
+/// todo-o-nada; tres compras que coinciden en un carrito, no. La misma máquina sirve a los dos y
+/// no puede adivinar cuál es cuál — igual que la penalidad de <see cref="CancelTripRequest"/>
+/// llega calculada de fuera.
+/// </remarks>
 public sealed record BookTripRequest(
-    string? TravellerKind, string? TravellerId, IReadOnlyList<TripItemRequest>? Items);
+    string? TravellerKind, string? TravellerId, IReadOnlyList<TripItemRequest>? Items,
+    bool? PartialConfirm = null);
 
 /// <summary>Cancelar un viaje, reteniendo lo que diga la política de quien vendió.</summary>
 /// <remarks>
@@ -36,13 +47,19 @@ public sealed record CancelTripRequest(MoneyDto? Retain);
 /// <param name="Start">Desde.</param>
 /// <param name="End">Hasta.</param>
 /// <param name="Confirmed">Si el apartado ya es una reserva.</param>
+/// <param name="Unfulfilled">
+/// Si se intentó confirmarlo, falló y se soltó — sólo pasa en un viaje con confirmación parcial.
+/// <b>Es lo que quien vendió necesita para decidir cuánto devolver</b>: acá no se sabe cuánto
+/// vale este ítem, porque el viaje se cotiza entero.
+/// </param>
 /// <remarks>
 /// <b>Sin el identificador del apartado, del recurso ni de la reserva.</b> Los tres son internos
 /// de <c>Api.Booking</c> y quien pregunta no puede hacer nada con ellos — sacarlos solo invita a
 /// que alguien los cablee río arriba, que es el error que costó una vuelta en la HU #25.
 /// </remarks>
 public sealed record HeldItemResponse(
-    string ProductRef, string ProductLabel, DateTimeOffset Start, DateTimeOffset End, bool Confirmed);
+    string ProductRef, string ProductLabel, DateTimeOffset Start, DateTimeOffset End, bool Confirmed,
+    bool Unfulfilled = false);
 
 /// <summary>Cómo sale un viaje.</summary>
 public sealed record TripResponse(
@@ -54,7 +71,8 @@ public sealed record TripResponse(
         s.Id, s.Traveller.Kind, s.Traveller.Id, s.Status.ToString(),
         new MoneyDto(s.Total.Amount, s.Total.Currency),
         s.Holds.Select(h => new HeldItemResponse(
-            h.ProductRef, h.ProductLabel, h.Window.Start, h.Window.End, h.ReservationId is not null)).ToList(),
+            h.ProductRef, h.ProductLabel, h.Window.Start, h.Window.End,
+            h.ReservationId is not null, h.Unfulfilled)).ToList(),
         s.Pending().Count, s.LastError,
         s.Retained.IsZero ? null : new MoneyDto(s.Retained.Amount, s.Retained.Currency));
 }
