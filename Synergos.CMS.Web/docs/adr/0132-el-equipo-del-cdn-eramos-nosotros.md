@@ -113,3 +113,40 @@ Que `Synergos.UI` esté publicado (misma HU) y dos valores de configuración:
 Synergos:BundleRegistry:Mode          Http
 Synergos:BundleRegistry:PublicBaseUrl https://<el-cdn-publicado>
 ```
+
+## Addendum #53 — el «hay que revisarlos» apuntaba a artefactos que no existen
+
+La sección «Consecuencias» de arriba dice, y se copió literal a `CLAUDE.md` §9:
+
+> Los 9 DocTypes de *Experience CDN* + `compBehaviorTracking` + `compBehaviorInteraction`
+> heredaban ese bloqueo: hay que revisarlos, porque probablemente sean **trabajo y no espera**.
+
+**Se revisaron, y de los tres nombres ninguno existe** — ni hoy ni en la historia del repo:
+
+```
+$ grep -rli "compBehaviorTracking\|compBehaviorInteraction" . --exclude-dir=.git
+docs/adr/0132-el-equipo-del-cdn-eramos-nosotros.md
+CLAUDE.md
+
+$ grep -rli "experience" uSync/v9/ContentTypes/     # nada
+$ git log --all -S "compBehaviorTracking" -- uSync   # nada
+```
+
+Los dos únicos sitios donde aparecen son esta ADR y `CLAUDE.md`, que la citaba. La frase no
+describía el schema: **arrastraba nombres de un inventario anterior sin comprobarlos**, que es
+justo el defecto que esta misma ADR celebra haber destapado en otro sitio.
+
+**Lo que sí heredó el bloqueo es UNA composition, y no está nombrada arriba:**
+`compBehaviorFeatureFlag`. Sigue sin consumers y su `<Description>` —editor-facing— sigue
+diciendo *«Espera el contrato `HttpBundleRegistryClient`»*, que es exactamente lo que esta ADR
+entregó.
+
+> **Y ese texto es load-bearing.** `tools/usync-audit.mjs` exime del chequeo de compositions
+> huérfanas a lo que empiece por `[Bloqueado externamente`. Quitando sólo ese prefijo, la
+> auditoría reporta `[orphan-composition] compBehaviorFeatureFlag`. O sea: **el schema pasa la
+> auditoría porque afirma un bloqueo que esta ADR eliminó.** El gate hace lo que se le pidió;
+> lo que caducó es la condición que lo exime.
+
+Qué hacer con esa composition —re-marcarla como disponible, darle consumer, o borrarla— es una
+decisión y queda en #53. Este addendum sólo deja de mandar a la gente a buscar tres artefactos
+que no existen.

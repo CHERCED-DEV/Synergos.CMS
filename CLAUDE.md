@@ -444,9 +444,18 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
   `Synergos.UI` — publicaba a una carpeta local. Lo que faltaba era que
   esa carpeta fuera alcanzable por HTTP. Los tres modos hoy:
   `Stub` (default, siempre null) · `FileSystem` (CDN local) · `Http`.
-- **Experience CDN** (9 DocTypes) + `compBehaviorTracking` +
-  `compBehaviorInteraction` — heredaban el bloqueo de arriba, que ya no
-  existe. Falta revisarlos: probablemente sea trabajo, no espera.
+- ~~**Experience CDN** (9 DocTypes) + `compBehaviorTracking` +
+  `compBehaviorInteraction`~~ — **no existen** (#53). Se revisaron y de los
+  tres nombres no hay ninguno en `uSync/v9/`, ni lo hubo nunca: la frase
+  venía de la ADR 0132 y arrastraba nombres de un inventario anterior sin
+  comprobarlos. Ver el addendum #53 de esa ADR.
+- **`compBehaviorFeatureFlag`** — es la única que heredó aquel bloqueo, y
+  sigue sin consumers. Su `<Description>` **editor-facing** todavía dice
+  «espera el contrato `HttpBundleRegistryClient`», que ya se entregó.
+  **Ojo:** ese texto es lo que la exime del chequeo de huérfanas de
+  `usync-audit` — quitarle el prefijo `[Bloqueado externamente` la pone en
+  amarillo. Qué hacer con ella (re-marcarla `[Disponible — sin consumers
+  actuales]`, darle consumer, o borrarla) es una decisión, y está en #53.
 
 ## 10. Cuando termines una tarea
 
