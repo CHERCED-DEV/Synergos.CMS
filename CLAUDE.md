@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2443 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2462 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,8 +111,8 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2443 tests passing (gate liftado ADR 0075)
-│   ├── Architecture/            LOS GATES: segregación (13) + molde (8) + capas (10)
+**Construido y verificado:** 20 capacidades (134 endpoints, 195 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2462 tests, gates de
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
 │   ├── Api/                     tests de reglas y servicio por capacidad
@@ -126,7 +126,7 @@ Synergos.CMS/
 ├── Synergos.Shared/             fontanería de host. Llave compartida, Rejection→HTTP,
 │                                libro de idempotencia, JsonCollectionStore, correlación.
 │                                Solo puede referenciar Core — UNA flecha.
-├── Synergos.Api.*/              LAS 20 CAPACIDADES, agnósticas. 132 endpoints.
+├── Synergos.Api.*/              LAS 20 CAPACIDADES, agnósticas. 134 endpoints.
 │     Sessions · Booking · Identity · Audit · Notifications · Documents ·
 │     Catalog · Pricing · Cart · Orders · Payments · Inventory · Workflow ·
 │     Messaging · Signing · Consent · Engagement · Geo · Fulfillment · Moderation
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2443 tests):
+# Suite completa (2462 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -468,8 +468,8 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (132 endpoints, 192 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2443 tests, gates de
+**Construido y verificado:** 20 capacidades (134 endpoints, 195 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2462 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -713,10 +713,21 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   `Api.Inventory` hacía con `/v1/items`. Faltaba, y obligaba a que el
   identificador interno del recurso viajara hasta el CMS — que ninguna
   convención podía adivinar, porque lo genera la capacidad.
-- **Ninguna capacidad llama a otra**, y no hay gate que lo vigile porque
-  no había caso. Apareció el primero —mandar un acceso rechazado a
-  `Api.Audit`— y se decidió NO abrir esa flecha desde la capacidad
-  (HU #15). Si algún día se abre, el gate va antes que el código.
+- **Ninguna capacidad llama a otra, y ya hay gate** (#49). Apareció el
+  primer caso —mandar un acceso rechazado a `Api.Audit`— y se decidió NO
+  abrir esa flecha desde la capacidad (HU #15). `CLAUDE.md` decía que el
+  día que se abriera, el gate iría antes que el código: se escribió
+  **mientras estaba en verde**, que es cuando es gratis —sin excepciones
+  que negociar y sin nadie esperando—. Eran tres dientes y no uno:
+  referencia de ensamblado Api→Api, **nombrar** a otra capacidad con los
+  comentarios quitados, y `HttpClient` dentro de una capacidad, que va con
+  lista y con la razón al lado. El tercero es el que atrapa lo que los
+  otros no ven: una URL que llega por variable de entorno sin que el
+  nombre aparezca nunca. **No prohíbe hablar con un tercero** —hoy
+  `Api.Notifications` sale a Resend (ADR 0131) y está en la lista—; obliga
+  a que salir sea una decisión escrita. Y la lista se vigila en los dos
+  sentidos: un permiso que ya nadie usa también rompe el build, porque un
+  permiso que sobra deja de leerse.
 
   > **Y se decidió también quién SÍ lo escribe: el orquestador.** Se
   > miraron las tres opciones y las dos que se podían entregar ya —que
@@ -807,7 +818,10 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > no lleva la lista de asistentes a propósito, y de quien compra solo
   > lleva un **seudónimo** — mandar el correo en crudo lo dejaba escrito en
   > el disco del orquestador, y eso lo destapó la verificación en vivo, no
-  > una revisión. `Bff.Tienda` (#24) todavía manda el correo entero.
+  > una revisión. **Ya lo hacen los cuatro**: `Bff.Tienda` era el último que mandaba
+  > el correo entero y se corrigió con el defecto #47 —que además destapó que el
+  > listado devolvía ese `buyerId` como si fuera el correo, y para quien tiene
+  > sesión eso ya era un `memberKey` en hexadecimal en pantalla.
   >
   > **Y el comprador ya no queda encerrado** (defecto #41). Encontrar la llave
   > de idempotencia no significa «esto ya pasó»: si la compra anterior se

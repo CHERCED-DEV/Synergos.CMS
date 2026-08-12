@@ -433,6 +433,144 @@ public sealed class BackendSegregationTests
             $"Encontrado: {string.Join(" | ", offenders)}.");
     }
 
+    // ── Las veinte son HOJAS: ninguna llama a otra (#49) ─────────────────────
+    // Era la única de las cuatro flechas que nadie medía. Api → Bff, Bff → Bff, API ⊥ CMS ya
+    // tenían gate; Api → Api se cumplía por disciplina. `CLAUDE.md` §11 lo decía con todas las
+    // letras —«no hay gate que lo vigile porque no había caso»— y dejaba dicho que el día que
+    // alguien abra la flecha, el gate va antes que el código. Esto es cumplirlo mientras está
+    // en verde, que es cuando es gratis: sin excepciones que negociar y sin nadie esperando.
+
+    /// <summary>
+    /// Las capacidades que pueden salir a la red, con la razón al lado.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La razón va en la lista, no en un comentario suelto.</b> Un nombre sin razón es
+    /// un permiso permanente que nadie vuelve a revisar — y una lista blanca es exactamente en
+    /// lo que degenera un gate al que nadie le pide explicaciones.</para>
+    ///
+    /// <para><b>Esto no prohíbe hablar con un tercero</b>, que es legítimo: el principio es que
+    /// las capacidades no se llamen <b>entre ellas</b>. Lo que obliga es a que salir sea una
+    /// decisión escrita y no un descuido de un martes.</para>
+    /// </remarks>
+    private static readonly Dictionary<string, string> PuedenSalirALaRed = new(StringComparer.Ordinal)
+    {
+        ["Synergos.Api.Notifications"] = "Resend, el transporte de correo real (ADR 0131). Un tercero, no una capacidad.",
+    };
+
+    /// <summary>Quita comentarios para no medir la prosa que documenta la regla.</summary>
+    /// <remarks>
+    /// <b>Este repo ya se tropezó dos veces con lo mismo</b>: un gate que leía el fichero con
+    /// comentarios y pasaba en verde porque la explicación citaba justo lo que él prohibía
+    /// (#29, y el de #33a escrito en su propio comentario). Medir prosa es no medir nada.
+    /// </remarks>
+    private static string SinComentarios(string file)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var line in File.ReadLines(file))
+        {
+            var t = line.TrimStart();
+            if (t.StartsWith("//", StringComparison.Ordinal)
+                || t.StartsWith("*", StringComparison.Ordinal)
+                || t.StartsWith("/*", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var i = line.IndexOf("//", StringComparison.Ordinal);
+            sb.AppendLine(i >= 0 ? line[..i] : line);
+        }
+        return sb.ToString();
+    }
+
+    private static IEnumerable<string> FuentesDe(string projectPath)
+        => Directory.EnumerateFiles(Path.GetDirectoryName(projectPath)!, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                     && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+
+    [Fact]
+    public void Ninguna_capacidad_referencia_a_otra_capacidad()
+    {
+        // El diente barato. No es el atajo probable —todo el acople de este repo es HTTP— pero
+        // es el que deja el grafo del árbol de servicios demostrable con leer los csproj.
+        var offenders = Named("Synergos.Api.")
+            .Select(p => (p.Name, Bad: p.ProjectRefs
+                .Where(r => r.StartsWith("Synergos.Api.", StringComparison.Ordinal)
+                         && !string.Equals(r, p.Name, StringComparison.Ordinal)).ToList()))
+            .Where(x => x.Bad.Count > 0)
+            .Select(x => $"{x.Name} → {string.Join(", ", x.Bad)}")
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "Las veinte capacidades son HOJAS: ninguna llama a otra. Si una necesita algo de " +
+            "otra, quien las ordena es un orquestador — abrir esta flecha convierte a las veinte " +
+            "en un grafo y a cada caída en una caída de todas. " +
+            $"Encontrado: {string.Join(" | ", offenders)}.");
+    }
+
+    [Fact]
+    public void Ninguna_capacidad_NOMBRA_a_otra_capacidad()
+    {
+        // El diente con dientes. Para llamar a otra capacidad hay que nombrarla en algún sitio:
+        // un nombre de cliente, una clave de configuración, una dirección base. Se lee el código
+        // SIN comentarios, porque la prosa sí puede explicar por qué NO se la llama —y de hecho
+        // lo hace, en `Api.Messaging` y en el propio §11.
+        var capacidades = Named("Synergos.Api.").ToList();
+        var nombres = capacidades.Select(c => c.Name).ToList();
+        var leaks = new List<string>();
+
+        foreach (var cap in capacidades)
+        {
+            foreach (var file in FuentesDe(cap.Path))
+            {
+                var codigo = SinComentarios(file);
+
+                foreach (var otra in nombres.Where(n => !string.Equals(n, cap.Name, StringComparison.Ordinal)))
+                {
+                    var corto = otra["Synergos.".Length..];   // Api.Booking
+                    if (codigo.Contains(otra, StringComparison.Ordinal)
+                        || Regex.IsMatch(codigo, $@"\b{Regex.Escape(corto)}\b"))
+                    {
+                        leaks.Add($"{cap.Name}/{Path.GetFileName(file)} → nombra {otra}");
+                    }
+                }
+            }
+        }
+
+        Assert.True(leaks.Count == 0,
+            "Una capacidad no nombra a otra: nombrarla es el primer paso de llamarla, y la " +
+            "segunda es una URL en un appsettings que ningún gate vería. " +
+            $"Encontrado:{Environment.NewLine}{string.Join(Environment.NewLine, leaks)}");
+    }
+
+    [Fact]
+    public void Una_capacidad_que_sale_a_la_red_esta_en_la_lista_y_con_razon()
+    {
+        // El diente que atrapa lo que el anterior NO ve: una URL que llega por variable de
+        // entorno, sin que el nombre de la otra capacidad aparezca nunca en el código. Una
+        // capacidad hoja no necesita cliente HTTP; la que lo tiene, tiene que decir para qué.
+        var conCliente = Named("Synergos.Api.")
+            .Where(c => FuentesDe(c.Path).Any(f => SinComentarios(f).Contains("HttpClient", StringComparison.Ordinal)))
+            .Select(c => c.Name)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+        var sinPermiso = conCliente.Where(n => !PuedenSalirALaRed.ContainsKey(n)).ToList();
+
+        Assert.True(sinPermiso.Count == 0,
+            "Una capacidad con HttpClient sale a la red, y una hoja no tiene a dónde salir. " +
+            "Si de verdad hace falta —un tercero, no otra capacidad— hay que ponerla en " +
+            $"{nameof(PuedenSalirALaRed)} CON LA RAZÓN. " +
+            $"Sin permiso: {string.Join(", ", sinPermiso)}.");
+
+        // Y al revés: un permiso que ya no se usa es una puerta abierta que nadie vigila.
+        var sobrantes = PuedenSalirALaRed.Keys.Where(n => !conCliente.Contains(n, StringComparer.Ordinal)).ToList();
+
+        Assert.True(sobrantes.Count == 0,
+            $"Hay permisos en {nameof(PuedenSalirALaRed)} que ya nadie usa. Un permiso que " +
+            "sobra deja de leerse y el día que alguien lo aproveche no habrá quien pregunte. " +
+            $"Sobran: {string.Join(", ", sobrantes)}.");
+    }
+
     // ── La frontera CMS ⊥ API ───────────────────────────────────────────────
     // Es la regla que hizo REAL la separación de Synergos.Api.Sessions (ADR 0130): sin
     // referencia de ensamblado, mudar el servicio a su repo no tiene nada que desenredar.

@@ -125,15 +125,25 @@ public sealed class ViajesWiringTests
     }
 
     /// <summary>
-    /// El carrito multi-producto sigue en el motor propio, y no por descuido.
+    /// El contrato del carrito YA lleva periodo, y el cableado sigue pendiente a conciencia.
     /// </summary>
     /// <remarks>
-    /// <c>TravelCartItem</c> no lleva fechas. Cablearlo contra <c>Api.Booking</c> exigiría
-    /// inventárselas, y ese error ya costó una vuelta (HU #25). Cuando el contrato tenga periodo,
-    /// esta línea se borra a conciencia — que es justo la conversación que debe pasar antes.
+    /// <para>Esta línea era, hasta la HU #40, «el contrato sigue sin fechas». Se cayó sola al
+    /// añadirlas —que es justo para lo que estaba puesta— y se REESCRIBE en vez de borrarse,
+    /// porque la frontera que vigilaba no desapareció: se movió.</para>
+    ///
+    /// <para><b>Lo que ahora se exige.</b> Que el periodo esté en el contrato y sea OBLIGATORIO.
+    /// Con <c>Start</c>/<c>End</c> opcionales un cliente viejo compila y su carrito falla más
+    /// tarde y más lejos, ya contra <c>Api.Booking</c>. El gate impide esa regresión, que es la
+    /// que parece más suave y es más traicionera.</para>
+    ///
+    /// <para><b>Y lo que sigue prohibido.</b> Cablear el carrito a <c>Bff.Viajes</c> sin haber
+    /// verificado con procesos vivos que tres ítems en fechas distintas apartan tres ventanas
+    /// distintas, y que con el cobro caído a mitad las tres vuelven. El contrato ya lo permite;
+    /// la evidencia todavía no existe. Cuando exista, esta línea se borra a conciencia.</para>
     /// </remarks>
     [Fact]
-    public void El_carrito_multiproducto_NO_se_cablea_todavia()
+    public void El_carrito_lleva_periodo_y_el_cableado_sigue_pendiente()
     {
         var composer = Composer();
         var condicion = composer.IndexOf("\"Synergos:Viajes:Mode\"", StringComparison.Ordinal);
@@ -142,14 +152,18 @@ public sealed class ViajesWiringTests
 
         Assert.DoesNotContain("ITravelCartService", rama, StringComparison.Ordinal);
 
-        // Y el contrato sigue sin fechas: el día que las tenga, este gate se cae solo y hay que
-        // decidir de frente si el carrito se cablea.
         var item = SinComentarios(Path.Combine(
             RepoRoot(), "Synergos.CMS.Interfaces", "ITravelCartService.cs"));
         var declaracion = item[item.IndexOf("record TravelCartItem(", StringComparison.Ordinal)..];
         declaracion = declaracion[..declaracion.IndexOf(");", StringComparison.Ordinal)];
-        Assert.DoesNotContain("DateOnly", declaracion, StringComparison.Ordinal);
-        Assert.DoesNotContain("DateTimeOffset", declaracion, StringComparison.Ordinal);
+
+        // El periodo está, y con hora: un vuelo no es una noche.
+        Assert.Contains("DateTimeOffset Start", declaracion, StringComparison.Ordinal);
+        Assert.Contains("DateTimeOffset End", declaracion, StringComparison.Ordinal);
+
+        // Y no es opcional: `DateTimeOffset?` dejaría pasar el carrito sin fechas.
+        Assert.DoesNotContain("DateTimeOffset? Start", declaracion, StringComparison.Ordinal);
+        Assert.DoesNotContain("DateTimeOffset? End", declaracion, StringComparison.Ordinal);
     }
 
     /// <summary>La sección se ENLAZA, o el Kind del viajero se queda en su default en silencio.</summary>

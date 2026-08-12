@@ -99,6 +99,56 @@ public static class SigningRules
             ? null
             : Rejection.Invalid($"{CodePrefix}.bad_lifetime", $"La vigencia va entre 0 y {MaxLifetime}.");
 
+    /// <summary>
+    /// Etiqueta que separa el dominio del SELLO del de la firma. Va dentro del MAC.
+    /// </summary>
+    /// <remarks>
+    /// Las dos operaciones usan la MISMA llave, así que sin separación explícita lo único que
+    /// impediría que un sello valiera como firma —o al revés— sería que sus cuerpos tengan
+    /// forma distinta por casualidad. Depender de esa casualidad es exactamente lo que deja de
+    /// ser cierto el día que alguien toque el formato de una de las dos.
+    /// </remarks>
+    private const string SealDomain = "seal.v1";
+
+    /// <summary>
+    /// Sella un contenido: MAC determinista, <b>sin vencimiento</b> y <b>sin payload
+    /// recuperable</b>. El resultado es un identificador opaco, no un token que se lee.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es una operación distinta de <see cref="Sign"/>, no un parámetro suyo.</b> Un
+    /// token de <c>/v1/signatures</c> lleva el vencimiento dentro y el payload en base64url
+    /// legible por cualquiera; las dos cosas son correctas para lo que ese endpoint hace y
+    /// ninguna sirve para identificar algo permanente. Un diploma no vence, se re-emite igual
+    /// las veces que haga falta, y su identificador se imprime y viaja en cada verificación
+    /// pública: si el payload fuera recuperable, ese identificador publicaría al titular. Ver
+    /// el hallazgo #45.</para>
+    ///
+    /// <para><b>No se trunca.</b> Recortar el MAC es una decisión sobre dónde se va a imprimir
+    /// el valor, y eso lo sabe quien lo imprime, no una capacidad agnóstica.</para>
+    /// </remarks>
+    public static string Seal(SigningKey key, string payload)
+        => Mac(key.Secret, $"{SealDomain}{Separator}{ToBase64Url(Encoding.UTF8.GetBytes(payload))}");
+
+    /// <summary>
+    /// Si <paramref name="seal"/> es el sello que le corresponde a <paramref name="payload"/>
+    /// bajo <paramref name="key"/>. Comparación en tiempo constante.
+    /// </summary>
+    /// <remarks>
+    /// <b>Se comprueba el sello CONTRA el contenido</b>, no el sello solo. Es la diferencia de
+    /// fondo con verificar una firma: acá no se pregunta «¿este valor lo emitimos nosotros?»
+    /// sino «¿es este el valor que le toca a este sujeto?». Sin esa segunda pregunta, quien
+    /// consiga escribir en el índice de quien consume podría inventar un registro con el
+    /// nombre que quiera, y el índice volvería a ser la autoridad.
+    /// </remarks>
+    public static bool SealMatches(SigningKey key, string payload, string? seal)
+    {
+        if (string.IsNullOrWhiteSpace(seal)) return false;
+
+        var a = Encoding.UTF8.GetBytes(seal.Trim());
+        var b = Encoding.UTF8.GetBytes(Seal(key, payload));
+        return a.Length == b.Length && CryptographicOperations.FixedTimeEquals(a, b);
+    }
+
     private static string Armar(string keyId, DateTimeOffset expiresAt, string payload)
         => $"{keyId}{Separator}{expiresAt.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}{Separator}{ToBase64Url(Encoding.UTF8.GetBytes(payload))}";
 
