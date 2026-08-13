@@ -340,6 +340,89 @@ public sealed class TripFlow
     }
 
     /// <summary>
+    /// Devuelve una PARTE de lo cobrado por un viaje que salió a medias.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es la otra mitad de la confirmación parcial</b> (#40). Al conservar lo que sí
+    /// salió, este orquestador no devuelve nada por su cuenta y lo dice de frente: el precio se
+    /// cotiza <i>una vez por viaje</i>, así que acá no se sabe cuánto vale el ítem caído, y
+    /// repartir el total sería inventarse una política comercial. Sin esta puerta, «quien vendió
+    /// ordena la devolución» era una frase sin forma de cumplirse — y la plata del ítem no
+    /// entregado se quedaba con nosotros.</para>
+    ///
+    /// <para><b>El monto llega calculado de fuera</b>, exactamente igual que la penalidad de
+    /// <see cref="CancelAsync"/> y por la misma razón. Lo único que se comprueba acá es que quepa
+    /// en el viaje; cuánto queda devolvible de verdad lo decide <c>Api.Payments</c>, que es su
+    /// dueño.</para>
+    ///
+    /// <para><b>Si la devolución falla NO se anota una compensación</b>, y no es un olvido: el
+    /// motor sólo sabe devolver <i>todo lo devolvible</i> (<c>RefundPayment</c>), y correrlo acá
+    /// devolvería un viaje que SÍ se entregó. El rechazo sale hacia quien vendió, que es quien
+    /// puede repetir la orden con la misma llave sin duplicar nada.</para>
+    ///
+    /// <para><b>Y lo devuelto se ESPEJA de la capacidad, no se acumula acá.</b> Repetir la misma
+    /// llave devuelve la misma operación de <c>Api.Payments</c>; sumarla de este lado la contaría
+    /// dos veces y el viaje diría haber devuelto el doble de lo que devolvió.</para>
+    /// </remarks>
+    public async Task<Result<TripSaga>> RefundAsync(
+        string sagaId, Money amount, string? reason, IdempotencyKey key, CancellationToken ct)
+    {
+        var saga = _sagas.Find(sagaId);
+        if (saga is null) return Rejection.NotFound("viajes.trip_not_found", $"No existe el viaje {sagaId}.");
+
+        // Sólo sobre un viaje que salió. Antes de confirmar no se movió plata —deshacer es
+        // liberar la autorización, no devolver— y sobre uno ya compensado la devolución ya la
+        // ordenó la máquina.
+        if (saga.Status != SagaStatus.Completed)
+        {
+            return Rejection.Conflict("viajes.not_refundable",
+                $"El viaje está {saga.Status}: sólo se devuelve una parte de un viaje confirmado.");
+        }
+
+        if (saga.PaymentId is not { } pago)
+        {
+            return Rejection.Conflict("viajes.nothing_to_refund",
+                "El viaje no movió plata: no hay nada que devolver.");
+        }
+
+        if (amount.IsZero || amount.IsNegative)
+        {
+            return Rejection.Invalid("viajes.bad_refund", $"No se puede devolver {amount}.");
+        }
+
+        if (!string.Equals(amount.Currency, saga.Total.Currency, StringComparison.Ordinal))
+        {
+            return Rejection.Invalid("viajes.bad_refund",
+                $"Se pidió devolver {amount} de un viaje en {saga.Total.Currency}.");
+        }
+
+        if (amount > saga.Total)
+        {
+            return Rejection.Invalid("viajes.bad_refund",
+                $"Se pidió devolver {amount} de un viaje de {saga.Total}.");
+        }
+
+        var r = await _caps.RefundAsync(pago, amount, reason ?? "ítem del viaje no cumplido", key, ct);
+        if (!r.IsOk)
+        {
+            _log.LogError("El viaje {Saga} no pudo devolver {Monto}: {Error}", saga.Id, amount, r.Rejection);
+            return Result.Rejected<TripSaga>(r.Rejection!);
+        }
+
+        saga = saga with { Refunded = Devuelto(r.Value, amount) };
+        _sagas.Put(saga);
+        return Result.Ok(saga);
+    }
+
+    /// <summary>Cuánto lleva devuelto el cobro, según la capacidad que lo guarda.</summary>
+    /// <remarks>
+    /// El respaldo —lo que se acaba de pedir— es para una capacidad que no informe el acumulado.
+    /// Es peor dato que el suyo, pero mucho mejor que decir que no se devolvió nada.
+    /// </remarks>
+    private static Money Devuelto(PaymentDto pago, Money pedido)
+        => pago.Refunded is { } d ? Money.Of(d.Amount, d.Currency) : pedido;
+
+    /// <summary>
     /// El viajero se arrepiente: se deshace lo hecho, reteniendo lo que diga la política.
     /// </summary>
     /// <remarks>
@@ -418,6 +501,7 @@ public sealed class TripFlow
         }
 
         var compensaciones = saga.Compensations.ToList();
+        var devuelto = saga.Refunded;
 
         if (saga.PaymentId is { } pago)
         {
@@ -434,7 +518,15 @@ public sealed class TripFlow
             {
                 var r = await _caps.RefundAsync(pago, aDevolver, "el viajero canceló",
                     saga.KeyFor("cancel-refund"), ct);
-                if (!r.IsOk)
+                if (r.IsOk)
+                {
+                    // Cuánto volvió, para que quien vendió lo pueda decir sin preguntarle a
+                    // Payments —a la que no puede llamar— y sin deducirlo del total, que sería
+                    // adivinar: lo devuelto no es el total menos la penalidad cuando ya se había
+                    // devuelto algo antes por un ítem no cumplido.
+                    devuelto = Devuelto(r.Value, aDevolver);
+                }
+                else
                 {
                     // Se anota y el barrido se encarga. Perder una devolución en un log es el
                     // defecto que la máquina de compensación existe para impedir.
@@ -451,6 +543,7 @@ public sealed class TripFlow
         {
             Status = SagaStatus.Compensated,
             Compensations = compensaciones,
+            Refunded = devuelto,
             LastError = fallos.Count == 0 ? null : string.Join(" · ", fallos),
         };
         _sagas.Put(cancelada);

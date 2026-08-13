@@ -9,11 +9,17 @@ namespace Synergos.CMS.Application.Configuration;
 /// orquestador arriba degrada —no se puede apartar ni cobrar, y lo dice— pero no tumba el
 /// vertical: buscar, ver la ficha y consultar una reserva ya hecha siguen sirviendo.</para>
 ///
-/// <para><b>Solo la vía hotel.</b> El carrito multi-producto (<c>TravelCartService</c>) NO se
-/// cablea todavía, y no por falta de ganas: <c>TravelCartItem</c> no lleva fechas —ni el seam, ni
-/// el DTO HTTP, ni el motor en proceso— y un apartado de <c>Api.Booking</c> <i>es</i> una ventana
-/// sobre un recurso. Hasta que el contrato tenga periodo, ese carrito no se puede llevar allá sin
-/// inventarse las fechas, que es exactamente el error que costó una vuelta en la HU #25.</para>
+/// <para><b>Las DOS vías, desde la HU #40.</b> La reserva de hotel y el carrito multi-producto
+/// cruzan con el mismo interruptor y contra el mismo orquestador. El carrito esperó a que
+/// <c>TravelCartItem</c> llevara periodo —un apartado de <c>Api.Booking</c> <i>es</i> una ventana
+/// sobre un recurso, y sin fechas habría habido que inventárselas, que es el error que costó una
+/// vuelta en la HU #25— y a que existiera la confirmación PARCIAL, porque un carrito que se cae
+/// a medias no se tumba entero.</para>
+///
+/// <para><b>Antes de poner esto en <c>Bff</c>:</b> cada oferta del catálogo de viaje necesita su
+/// recurso dado de alta en <c>Api.Booking</c> y su precio en <c>Api.Pricing</c> — apartar y
+/// cotizar se rechazan si falta cualquiera de los dos. Es el mismo paso de despliegue que la vía
+/// hotel, ahora para las tres familias (estadías, vuelos, autos).</para>
 /// </remarks>
 public sealed class ViajesSettings
 {
