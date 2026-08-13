@@ -114,39 +114,33 @@ Synergos:BundleRegistry:Mode          Http
 Synergos:BundleRegistry:PublicBaseUrl https://<el-cdn-publicado>
 ```
 
-## Addendum #53 — el «hay que revisarlos» apuntaba a artefactos que no existen
+---
 
-La sección «Consecuencias» de arriba dice, y se copió literal a `CLAUDE.md` §9:
+## Addendum (#53) — dos de los tres nombres de arriba no existen
 
-> Los 9 DocTypes de *Experience CDN* + `compBehaviorTracking` + `compBehaviorInteraction`
-> heredaban ese bloqueo: hay que revisarlos, porque probablemente sean **trabajo y no espera**.
+> Esta ADR es registro histórico: no se reescribe, se le añade. Lo de arriba queda
+> tal como se escribió, incluida su parte falsa, porque de ahí la copió `CLAUDE.md` §9
+> y eso es justamente lo que hay que poder rastrear.
 
-**Se revisaron, y de los tres nombres ninguno existe** — ni hoy ni en la historia del repo:
+La frase «los 9 DocTypes de *Experience CDN* + `compBehaviorTracking` +
+`compBehaviorInteraction` heredaban ese bloqueo» **nombra tres cosas que nunca
+estuvieron en el repo**. No hay un `compBehaviorTracking`, no hay un
+`compBehaviorInteraction`, y no hay nueve DocTypes de *Experience CDN* en
+`uSync/v9/`; el historial de git tampoco los conoce. Los únicos dos sitios donde
+aparecieron esos nombres son prosa: este párrafo y la línea de `CLAUDE.md` §9 que lo
+copió.
 
-```
-$ grep -rli "compBehaviorTracking\|compBehaviorInteraction" . --exclude-dir=.git
-docs/adr/0132-el-equipo-del-cdn-eramos-nosotros.md
-CLAUDE.md
+**La que sí existía es una y no se llamaba así: `compBehaviorFeatureFlag`.** Y su
+descripción —que es editor-facing, se lee en el backoffice— decía esperar el
+contrato `HttpBundleRegistryClient`, o sea el que esta misma ADR entregó.
 
-$ grep -rli "experience" uSync/v9/ContentTypes/     # nada
-$ git log --all -S "compBehaviorTracking" -- uSync   # nada
-```
+**Eso tenía una consecuencia que no se vio.** `tools/usync-audit.mjs` exime del
+chequeo de compositions huérfanas a lo que lleve marker `[Bloqueado externamente]`.
+La exención es una buena idea y hace exactamente lo que se le pidió; lo que pasó es
+que **su condición de salida se volvió falsa y nadie la movió**, así que la auditoría
+llevaba tres olas verde por una razón que ya no era cierta, sin que nada avisara.
 
-Los dos únicos sitios donde aparecen son esta ADR y `CLAUDE.md`, que la citaba. La frase no
-describía el schema: **arrastraba nombres de un inventario anterior sin comprobarlos**, que es
-justo el defecto que esta misma ADR celebra haber destapado en otro sitio.
-
-**Lo que sí heredó el bloqueo es UNA composition, y no está nombrada arriba:**
-`compBehaviorFeatureFlag`. Sigue sin consumers y su `<Description>` —editor-facing— sigue
-diciendo *«Espera el contrato `HttpBundleRegistryClient`»*, que es exactamente lo que esta ADR
-entregó.
-
-> **Y ese texto es load-bearing.** `tools/usync-audit.mjs` exime del chequeo de compositions
-> huérfanas a lo que empiece por `[Bloqueado externamente`. Quitando sólo ese prefijo, la
-> auditoría reporta `[orphan-composition] compBehaviorFeatureFlag`. O sea: **el schema pasa la
-> auditoría porque afirma un bloqueo que esta ADR eliminó.** El gate hace lo que se le pidió;
-> lo que caducó es la condición que lo exime.
-
-Qué hacer con esa composition —re-marcarla como disponible, darle consumer, o borrarla— es una
-decisión y queda en #53. Este addendum sólo deja de mandar a la gente a buscar tres artefactos
-que no existen.
+Hoy esa composition está marcada `[Disponible — sin consumers actuales]` —existe, no
+está bloqueada, nadie la usa— y el cruce entre los markers del schema y la lista de
+`CLAUDE.md` §9 lo comprueba el propio audit (check 10), en los dos sentidos. Darle un
+consumer sigue siendo trabajo real: hace falta quién lea la clave y quién decida.
