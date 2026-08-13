@@ -16,13 +16,15 @@ namespace Synergos.CMS.Tests.Architecture;
 /// error que costó una vuelta en la HU #25. <b>La HU #40 se las puso</b>, así que ese motivo ya
 /// no está en pie.</para>
 ///
-/// <para>Lo que queda en pie son otros, y son los que sostienen la frontera hoy: los dos motores
-/// <b>no fallan igual</b> —el de proceso conserva lo que sí salió y <c>Bff.Viajes</c> abortaba el
-/// viaje entero, así que cablear tal cual habría cambiado el producto sin que nadie lo decidiera
-/// (#40, rebanada 1)—; hay que <b>partirle el motor a <c>TravelCartService</c></b>, porque el
-/// controller usa los cinco métodos del seam y las lecturas viven de este lado; y <b>no existe la
-/// evidencia con procesos vivos</b> de que tres ítems en fechas distintas aparten tres ventanas
-/// distintas y las tres vuelvan con el cobro caído a la mitad. Ver
+/// <para>Los otros dos motivos que lo sostenían también cayeron, y en el mismo día: que los dos
+/// motores <b>no fallan igual</b> se resolvió dejando que el modo lo elija quien vende (#40,
+/// rebanada 1), y <c>TravelCartService</c> ya tiene <b>motor aparte</b> (rebanada 2).</para>
+///
+/// <para>Lo que sostiene la frontera hoy es lo que falta: <b>el segundo motor</b> —el que habla
+/// con <c>Bff.Viajes</c>; hoy sólo existe el de proceso, y una seam con una sola implementación
+/// todavía no es un cableado— y <b>la evidencia con procesos vivos</b> de que tres ítems en
+/// fechas distintas apartan tres ventanas distintas y las tres vuelven con el cobro caído a la
+/// mitad. Ver
 /// <c>El_carrito_lleva_periodo_y_el_cableado_sigue_pendiente</c>, que es donde el cambio de
 /// motivo está escrito con detalle — y que ahora exige que el periodo sea OBLIGATORIO, porque
 /// un <c>Start</c> opcional deja compilar a un cliente que fallará más tarde y más lejos.</para>
@@ -150,12 +152,13 @@ public sealed class ViajesWiringTests
     /// que parece más suave y es más traicionera.</para>
     ///
     /// <para><b>Y lo que sigue prohibido.</b> Cablear el carrito a <c>Bff.Viajes</c> mientras
-    /// falte cualquiera de las tres: que el modo de fallo lo elija quien vende y no lo herede del
-    /// motor (#40, rebanada 1, ya hecho); que <c>TravelCartService</c> esté partido, porque el
-    /// controller usa los cinco métodos del seam y las lecturas viven de este lado; y que se haya
-    /// verificado <b>con procesos vivos</b> que tres ítems en fechas distintas apartan tres
-    /// ventanas distintas y que con el cobro caído a mitad las tres vuelven. El contrato ya lo
-    /// permite; lo demás todavía no. Cuando esté, esta línea se borra a conciencia.</para>
+    /// falte la rebanada 3. De las cuatro condiciones, tres ya están: el periodo en el contrato
+    /// (#40), que el modo de fallo lo elija quien vende (rebanada 1) y el motor partido
+    /// (rebanada 2). Faltan <b>el segundo motor</b> —el que habla con el orquestador; con una
+    /// sola implementación la seam todavía no cablea nada— y la verificación <b>con procesos
+    /// vivos</b> de que tres ítems en fechas distintas apartan tres ventanas distintas y que con
+    /// el cobro caído a mitad las tres vuelven. Cuando estén, esta línea se borra a
+    /// conciencia.</para>
     /// </remarks>
     [Fact]
     public void El_carrito_lleva_periodo_y_el_cableado_sigue_pendiente()
