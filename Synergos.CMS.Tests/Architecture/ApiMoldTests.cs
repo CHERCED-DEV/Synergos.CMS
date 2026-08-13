@@ -138,6 +138,52 @@ public sealed class ApiMoldTests
         Assert.True(malas.Count == 0, string.Join(Environment.NewLine, malas));
     }
 
+    /// <summary>
+    /// Cuántos endpoints hay se CUENTA. <c>CLAUDE.md</c> tiene que decir esa cifra.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que evita ya ocurrió, y de la peor forma</b> (#52). <c>CLAUDE.md</c>
+    /// decía 134 y eran 136 — pero el 2 no es lo interesante: <b>el desfase era constante desde
+    /// dieciocho commits</b>. La cifra se movió de 132 a 134 mientras el árbol iba de 134 a 136,
+    /// o sea que quien la actualizaba <b>arrastraba el error anterior en vez de contar</b>. Es
+    /// exactamente lo que #50 dijo de sí mismo, «la cuenta era de memoria», en otro fichero.</para>
+    ///
+    /// <para><b>Por qué se cuenta así.</b> La cifra incluye los veinte <c>/health</c>: cuando fue
+    /// verdad por última vez eran 112 bajo <c>/v1</c> más 20. <c>MapPut</c>/<c>MapPatch</c> entran
+    /// en la cuenta aunque hoy sean cero, porque el día que alguien los añada la cifra tiene que
+    /// moverse — que no existan lo vigila
+    /// <c>Ninguna_capacidad_expone_PUT_ni_PATCH</c>, no éste.</para>
+    ///
+    /// <para><b>Y por qué el número va en la prosa y no en un fichero de datos.</b> Porque el
+    /// valor de <c>CLAUDE.md</c> es que se lee de corrido: «20 capacidades, 136 endpoints» le dice
+    /// a un agente el tamaño del árbol en una línea. Sacarlo a un JSON generado lo haría cierto y
+    /// nadie lo leería. Se queda escrito a mano y se le pone un gate detrás, que es el trato.</para>
+    /// </remarks>
+    [Fact]
+    public void La_cifra_de_endpoints_de_CLAUDE_md_se_cuenta_contra_el_arbol()
+    {
+        var cuantos = Capacidades()
+            .SelectMany(c => Fuentes(c.Dir))
+            .Sum(f => Regex.Matches(SinComentarios(f), @"\.Map(Get|Post|Delete|Put|Patch)\(").Count);
+
+        // Sin esto, un descubrimiento roto dejaría el assert de abajo comparando contra cero.
+        Assert.True(cuantos > 100, $"Se contaron {cuantos} endpoints: el descubrimiento está roto.");
+
+        var claude = File.ReadAllText(Path.Combine(RepoRoot(), "CLAUDE.md"));
+
+        foreach (var frase in new[]
+                 {
+                     $"LAS 20 CAPACIDADES, agnósticas. {cuantos} endpoints.",
+                     $"20 capacidades ({cuantos} endpoints,",
+                 })
+        {
+            Assert.True(claude.Contains(frase, StringComparison.Ordinal),
+                $"CLAUDE.md no dice «{frase}». En el árbol hay {cuantos} endpoints "
+                + "(rutas bajo /v1 más un /health por capacidad). La cifra se cuenta, no se "
+                + "recuerda: si añadiste un endpoint, movela en §2 y en §11.");
+        }
+    }
+
     [Fact]
     public void El_ruteo_vive_en_Endpoints_y_no_desperdigado()
     {

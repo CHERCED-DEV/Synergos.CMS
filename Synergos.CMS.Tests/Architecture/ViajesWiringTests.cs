@@ -1,7 +1,7 @@
 namespace Synergos.CMS.Tests.Architecture;
 
 /// <summary>
-/// La reserva de hotel se lleva contra el ORQUESTADOR, y solo la vía hotel (HU #36).
+/// Viajes se lleva contra el ORQUESTADOR — las DOS vías, hotel y carrito (HU #36 + #40).
 /// </summary>
 /// <remarks>
 /// <para><b>Por qué acá hace falta un orquestador.</b> Apartar, cobrar y confirmar pueden fallar
@@ -10,10 +10,25 @@ namespace Synergos.CMS.Tests.Architecture;
 /// separado, el CMS estaría reimplementando la máquina de sagas — y peor, porque no tiene dónde
 /// anotar una compensación pendiente.</para>
 ///
-/// <para><b>Y por qué SOLO la vía hotel.</b> El carrito multi-producto no lleva fechas —ni el
-/// seam, ni el DTO HTTP, ni el motor en proceso— y un apartado de <c>Api.Booking</c> ES una
-/// ventana sobre un recurso. Cablearlo exigiría inventarse las fechas, que es el error que costó
-/// una vuelta en la HU #25. Este gate fija esa frontera para que no se cruce por descuido.</para>
+/// <para><b>Este párrafo decía «y por qué SOLO la vía hotel», y ya no es cierto.</b> Lo era
+/// porque el carrito multi-producto no llevaba fechas —ni el seam, ni el DTO HTTP, ni el motor
+/// en proceso— y un apartado de <c>Api.Booking</c> ES una ventana sobre un recurso: cablearlo
+/// exigía inventárselas, que es el error que costó una vuelta en la HU #25. La HU #40 lo tumbó
+/// en tres rebanadas —el periodo obligatorio, el modo de fallo que elige quien vende, y el motor
+/// aparte— y la tercera cableó el carrito. <b>Hoy las dos vías van contra el orquestador.</b></para>
+///
+/// <para><b>Y por eso mismo la frontera cambió de sitio, no desapareció.</b> Lo que este fichero
+/// vigila ahora no es «cuál de las dos vías puede cablearse» sino <b>por dónde cruza cada una</b>:
+/// el carrito pasa por el <b>motor</b> y no por el servicio entero, porque sustituir un
+/// <c>ITravelCartService</c> completo obligaría a reimplementar el expediente —viajero, código de
+/// confirmación, timeline, rastro de la cancelación— del lado del orquestador, y la segunda copia
+/// divergiría. El detalle está en
+/// <c>El_carrito_cruza_por_el_motor_y_el_periodo_sigue_siendo_obligatorio</c>.</para>
+///
+/// <para><b>Nota para quien venga después</b>, porque esta prosa ya se quedó atrás tres veces
+/// seguidas mientras las tres rebanadas entraban: <c>git</c> la mezcla limpia siempre —nadie más
+/// la toca— así que nada avisa cuando deja de ser verdad. Si estás cambiando un test de aquí
+/// abajo, releé esto antes de irte.</para>
 /// </remarks>
 public sealed class ViajesWiringTests
 {
