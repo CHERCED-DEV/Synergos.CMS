@@ -109,6 +109,65 @@ sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/
 sudo systemctl restart ssh
 ```
 
+### 1.1.bis Si dirigís esto desde una tablet — la ruta sin terminal local
+
+Lo de arriba supone un portátil con `ssh-keygen`, `ssh` y `scp`. **Buena parte de este proyecto
+se dirige desde una tablet Android**, donde eso es un estorbo. Esta ruta hace exactamente lo
+mismo usando sólo el navegador y la **consola web de Hetzner**.
+
+**1. Crear el servidor SIN llave SSH.** Hetzner muestra una contraseña de root al terminar.
+
+**2. Abrir la consola web** (el botón `>_` en el panel del servidor) y entrar como `root`.
+
+**3. Preparar la máquina, de una línea.** El repo es público, así que el script se baja solo —
+no hay que pegarlo:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CHERCED-DEV/Synergos.CMS/master/tools/bootstrap-servidor.sh | bash
+```
+
+**4. Generar la llave de despliegue EN el servidor**, que es lo que evita necesitar terminal
+propia:
+
+```bash
+ssh-keygen -t ed25519 -f /root/deploy_key -N "" -C "synergos-deploy"
+install -o despliegue -g despliegue -m 700 -d /home/despliegue/.ssh
+cat /root/deploy_key.pub >> /home/despliegue/.ssh/authorized_keys
+chown despliegue:despliegue /home/despliegue/.ssh/authorized_keys
+chmod 600 /home/despliegue/.ssh/authorized_keys
+
+cat /root/deploy_key        # ← copiar ESTO al secret DEPLOY_SSH_KEY de GitHub
+```
+
+**5. Comprobar que la llave nueva funciona ANTES de cerrar la contraseña:**
+
+```bash
+ssh -i /root/deploy_key -o BatchMode=yes despliegue@localhost 'echo ok'
+```
+
+**6. Borrar la privada del servidor**, ya guardada en GitHub. No tiene por qué quedarse donde
+vive la pública:
+
+```bash
+shred -u /root/deploy_key /root/deploy_key.pub
+```
+
+**7. Cerrar la puerta que abrió el paso 1:**
+
+```bash
+sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+systemctl reload ssh
+```
+
+> **El orden importa y no es intercambiable.** Cerrar la contraseña antes de comprobar la llave
+> (paso 5) deja fuera de su propio servidor a quien lo monta — recuperable por la consola web,
+> pero un rato desagradable. Y dejar la privada en el servidor significa que quien entre ahí una
+> vez puede volver a entrar mañana aunque se le quite todo lo demás.
+>
+> **La privada pasa por el portapapeles UNA vez.** No por un chat, no por un fichero del repo, no
+> por correo. Si aparece en algún otro sitio: **se rota** —llave nueva, `authorized_keys` nuevo,
+> secret nuevo— en vez de borrar el rastro.
+
 ### 1.2 Backups — la decisión honesta
 
 Cuestan **20% del servidor (~€1,4/mes)**. Hoy no hay nada que perder, así que se pueden dejar
@@ -139,6 +198,12 @@ llaves largas ya generadas— lo pone esto:
 ```bash
 scp tools/bootstrap-servidor.sh root@<ip>:/tmp/
 ssh root@<ip> 'bash /tmp/bootstrap-servidor.sh'
+```
+
+Sin terminal local —desde la consola web de Hetzner— es una línea, porque el repo es público:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CHERCED-DEV/Synergos.CMS/master/tools/bootstrap-servidor.sh | bash
 ```
 
 Está escrito para poder correrse **dos veces sin romper nada**, porque se va a correr dos veces:
