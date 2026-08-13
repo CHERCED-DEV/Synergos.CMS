@@ -41,6 +41,18 @@ public sealed record BookTripRequest(
 /// </remarks>
 public sealed record CancelTripRequest(MoneyDto? Retain);
 
+/// <summary>Devolver una parte de lo cobrado por un viaje que salió a medias.</summary>
+/// <param name="Amount">Cuánto devolver. Llega calculado por quien vendió.</param>
+/// <param name="Reason">Por qué, para el rastro de <c>Api.Payments</c>.</param>
+/// <remarks>
+/// <b>Es la otra mitad de <see cref="BookTripRequest.PartialConfirm"/></b> (#40). Un viaje
+/// parcial deja al comprador habiendo pagado algo que no recibió, y este orquestador no puede
+/// calcular cuánto vale: cotiza el viaje entero de una vez, a propósito. Quien vendió sí lo sabe,
+/// y con esta puerta puede ordenarlo — igual que ordena la penalidad de
+/// <see cref="CancelTripRequest"/>.
+/// </remarks>
+public sealed record RefundTripRequest(MoneyDto? Amount, string? Reason);
+
 /// <summary>Un ítem apartado, tal como sale.</summary>
 /// <param name="ProductRef">Qué producto.</param>
 /// <param name="ProductLabel">Cómo se llama en pantalla.</param>
@@ -62,10 +74,15 @@ public sealed record HeldItemResponse(
     bool Unfulfilled = false);
 
 /// <summary>Cómo sale un viaje.</summary>
+/// <param name="Refunded">
+/// Cuánto se ha devuelto ya de este viaje, <b>según <c>Api.Payments</c></b>. Nulo mientras no se
+/// haya devuelto nada. Es lo que permite a quien vendió sellar su propia orden sin preguntarle a
+/// una capacidad con la que no puede hablar, y sin deducirlo del total, que sería adivinar.
+/// </param>
 public sealed record TripResponse(
     string Id, string TravellerKind, string TravellerId, string Status, MoneyDto Total,
     IReadOnlyList<HeldItemResponse> Items, int PendingCompensations, string? LastError,
-    MoneyDto? Retained = null)
+    MoneyDto? Retained = null, MoneyDto? Refunded = null)
 {
     public static TripResponse From(TripSaga s) => new(
         s.Id, s.Traveller.Kind, s.Traveller.Id, s.Status.ToString(),
@@ -74,7 +91,8 @@ public sealed record TripResponse(
             h.ProductRef, h.ProductLabel, h.Window.Start, h.Window.End,
             h.ReservationId is not null, h.Unfulfilled)).ToList(),
         s.Pending().Count, s.LastError,
-        s.Retained.IsZero ? null : new MoneyDto(s.Retained.Amount, s.Retained.Currency));
+        s.Retained.IsZero ? null : new MoneyDto(s.Retained.Amount, s.Retained.Currency),
+        s.Refunded is { } d && !d.IsZero ? new MoneyDto(d.Amount, d.Currency) : null);
 }
 
 /// <summary>Una compensación pendiente, para quien vigila.</summary>
