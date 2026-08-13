@@ -53,7 +53,7 @@ public sealed class TravelCartService : ITravelCartService
     };
 
     private readonly IReservationService _reservations;
-    private readonly IPaymentProvider _payments;
+    private readonly ITravelCartEngine _engine;
     private readonly IOrderTrackingService? _tracking;
     /// <summary>Familia de entidades de este motor en el store genérico (→ App_Data/syn-travel-orders/).</summary>
     private const string ResourceType = "travel-orders";
@@ -102,6 +102,17 @@ public sealed class TravelCartService : ITravelCartService
     /// Rastro de la cancelación (ADR 0037). Sin él la cancelación sigue funcionando y no queda
     /// registrada — que es exactamente el hueco que este parámetro cierra.
     /// </param>
+    /// <param name="engine">
+    /// Quién aparta, cobra y suelta. Null arma el de siempre con
+    /// <paramref name="reservations"/> y <paramref name="payments"/>.
+    /// </param>
+    /// <remarks>
+    /// <b>El motor es lo ÚNICO que cambia entre comprar en proceso y comprar contra un
+    /// orquestador</b> (HU #40). El expediente —huésped, código de confirmación, etapa del
+    /// timeline, rastro de la cancelación— se queda de este lado porque un orquestador no guarda
+    /// nada de eso a propósito, y reimplementarlo dos veces garantizaría que las dos copias
+    /// divergieran.
+    /// </remarks>
     public TravelCartService(
         IReservationService reservations,
         IPaymentProvider payments,
@@ -109,10 +120,16 @@ public sealed class TravelCartService : ITravelCartService
         Func<DateTimeOffset>? now,
         IJsonEntityStore? store,
         ITransactionalNotifier? notifier = null,
-        IAuditTrailWriter? audit = null)
+        IAuditTrailWriter? audit = null,
+        ITravelCartEngine? engine = null)
     {
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
-        _payments = payments ?? throw new ArgumentNullException(nameof(payments));
+        ArgumentNullException.ThrowIfNull(payments);
+
+        // Sin motor explícito se arma el de siempre, con lo que ya venía por parámetro. Así los
+        // call-sites que existían no cambian ni una línea — y que sus tests sigan en verde es la
+        // prueba de que esta extracción no cambió ningún comportamiento.
+        _engine = engine ?? new InProcessTravelCartEngine(reservations, payments);
         _tracking = tracking;
         _store = store ?? new InMemoryJsonEntityStore();
         _notifier = notifier;
@@ -170,53 +187,31 @@ public sealed class TravelCartService : ITravelCartService
             }
         }
 
-        // 1) Reservar CADA ítem (un hold por ítem) vía la vía polimórfica.
-        var lines = new List<CartLine>(items.Count);
-        var paymentLines = new List<PaymentLineItem>(items.Count);
-        decimal total = 0m;
-        foreach (var item in items)
-        {
-            var reservation = await _reservations.HoldItemAsync(
-                new TravelItemReservationRequest(
-                    ProductType: item.Product,
-                    ProductRef: item.OfferId,
-                    ProductLabel: item.Label,
-                    GuestName: guest.Name.Trim(),
-                    GuestEmail: guest.Email.Trim(),
-                    TotalPrice: item.Price,
-                    Currency: currency),
-                cancellationToken);
-
-            lines.Add(new CartLine(item.Product, item.OfferId, item.Label, reservation.Id, item.Price, currency));
-            paymentLines.Add(new PaymentLineItem(
-                Sku: $"{item.Product}:{item.OfferId}",
-                Description: item.Label,
-                UnitPrice: item.Price,
-                Quantity: 1));
-            total += item.Price;
-        }
-
-        // 2) UNA sola sesión de pago por el total agregado del carrito.
+        // 1) Apartar cada ítem y abrir UNA sesión de pago: es lo que hace el MOTOR, y es lo
+        //    único que cambia entre comprar en proceso y comprar contra un orquestador. El
+        //    expediente de abajo —huésped, timeline, código de confirmación— se queda acá.
         var orderRef = $"trip_{Guid.NewGuid():N}";
-        var session = await _payments.CreateSessionAsync(
-            new PaymentSessionRequest(
-                OrderReference: orderRef,
-                Amount: total,
-                Currency: currency,
-                Items: paymentLines,
-                CustomerEmail: guest.Email.Trim(),
-                ReturnUrl: null,
-                Metadata: null),
-            cancellationToken);
+        var apartado = await _engine.HoldAllAsync(items, guest, orderRef, cancellationToken);
+
+        // El TOTAL lo dice el motor, no la vitrina: uno que cotice contra una capacidad de
+        // precios devolverá el suyo, y aceptar el del carrito dejaría reservar la suite al
+        // precio de la estándar (la lección de la vía hotel, HU #36).
+        var porOferta = apartado.Items.ToDictionary(i => i.OfferId, i => i.ReservationId, StringComparer.Ordinal);
+        var lines = items
+            .Select(i => new CartLine(
+                i.Product, i.OfferId, i.Label,
+                porOferta.TryGetValue(i.OfferId, out var r) ? r : string.Empty,
+                i.Price, currency))
+            .ToList();
 
         // Registra el guest (email = clave de "Mis viajes") + fechas del ciclo.
         var createdAt = _now();
         var order = new CartOrder(
-            orderRef, session.SessionId, total, currency, lines,
+            orderRef, apartado.PaymentSessionId, apartado.Total, apartado.Currency, lines,
             guest.Name.Trim(), guest.Email.Trim(), createdAt, createdAt);
         await WriteAsync(order, cancellationToken);
 
-        return new TravelCheckoutResult(orderRef, session.SessionId, total, currency);
+        return new TravelCheckoutResult(orderRef, apartado.PaymentSessionId, apartado.Total, apartado.Currency);
     }
 
     public async Task<TravelConfirmationResult> ConfirmAsync(string orderRef, CancellationToken cancellationToken = default)
@@ -231,13 +226,13 @@ public sealed class TravelCartService : ITravelCartService
             throw new InvalidOperationException("El carrito de viaje ya fue cancelado.");
         }
 
-        // 1) Capturar el pago del carrito completo (idempotente en el PSP).
-        var capture = await _payments.CaptureAsync(order.PaymentSessionId, cancellationToken: cancellationToken);
-        if (capture.Status != PaymentStatus.Captured)
-        {
-            throw new InvalidOperationException(
-                capture.FailureReason ?? $"No se pudo capturar el pago del carrito (estado {capture.Status}).");
-        }
+        // 1) Cobrar y confirmar: del motor. Devuelve QUÉ SE HONRÓ Y QUÉ NO — por ítem y no un
+        //    booleano, porque un carrito multi-producto puede quedar a medias legítimamente.
+        var liquidado = await _engine.SettleAsync(
+            null,
+            order.PaymentSessionId,
+            order.Lines.Select(l => new TravelCartSettledLine(l.OfferId, l.ReservationId, l.Price)).ToList(),
+            cancellationToken);
 
         // 2) Confirmar TODAS las reservas del carrito (ConfirmAsync es idempotente
         //    por reserva: re-confirmar deja Confirmed sin doble efecto).
@@ -248,57 +243,21 @@ public sealed class TravelCartService : ITravelCartService
         //    cliente YA pagó el carrito entero y hay que devolverle esa parte.
         //    Sin esto, la orden quedaba en "Partial" y el dinero de lo no
         //    entregado se quedaba acá.
-        var confirmedItems = new List<TravelOrderItem>(order.Lines.Count);
-        var unfulfilledAmount = 0m;
-        foreach (var line in order.Lines)
-        {
-            string lineStatus;
-            string reservationId = line.ReservationId;
-            try
-            {
-                var confirmed = await _reservations.ConfirmAsync(
-                    line.ReservationId, order.PaymentSessionId, cancellationToken);
-                lineStatus = confirmed.Status.ToString();
-                reservationId = confirmed.Id;
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-            {
-                // Un ítem que no se pudo confirmar NO tumba los que sí: el
-                // cliente se queda con el vuelo aunque el hotel se haya caído,
-                // y se le devuelve lo del hotel. Cancelar todo sería peor
-                // servicio y más plata moviéndose sin necesidad.
-                lineStatus = ReservationStatus.Cancelled.ToString();
-            }
-
-            if (!string.Equals(lineStatus, ReservationStatus.Confirmed.ToString(), StringComparison.Ordinal))
-            {
-                unfulfilledAmount += line.Price;
-            }
-
-            confirmedItems.Add(new TravelOrderItem(
-                Product: line.Product,
-                OfferId: line.OfferId,
-                Label: line.Label,
-                ReservationId: reservationId,
-                Status: lineStatus,
-                Price: line.Price,
-                Currency: line.Currency));
-        }
+        var porOfertaLinea = order.Lines.ToDictionary(l => l.OfferId, StringComparer.Ordinal);
+        var confirmedItems = liquidado.Items
+            .Select(i => new TravelOrderItem(
+                Product: porOfertaLinea[i.OfferId].Product,
+                OfferId: i.OfferId,
+                Label: porOfertaLinea[i.OfferId].Label,
+                ReservationId: i.ReservationId,
+                Status: i.Status,
+                Price: porOfertaLinea[i.OfferId].Price,
+                Currency: porOfertaLinea[i.OfferId].Currency))
+            .ToList();
+        var unfulfilledAmount = liquidado.UnfulfilledAmount;
 
         var allConfirmed = unfulfilledAmount == 0m;
         var noneConfirmed = confirmedItems.Count > 0 && unfulfilledAmount >= order.Total;
-
-        // 3) Devolver lo que no se pudo entregar. Reembolso PARCIAL por el monto
-        //    de las líneas caídas — para eso RefundAsync acepta monto.
-        //    Best-effort: lo que SÍ salió ya está confirmado, y un reembolso
-        //    caído no puede deshacer un viaje confirmado. Pero se intenta
-        //    siempre, porque no intentarlo es el defecto que esto cierra.
-        if (unfulfilledAmount > 0m && !string.IsNullOrWhiteSpace(order.PaymentSessionId))
-        {
-            await BestEffort.RunAsync(
-                () => _payments.RefundAsync(order.PaymentSessionId, unfulfilledAmount, cancellationToken),
-                cancellationToken);
-        }
 
         // 4) Si NADA se pudo confirmar, el confirm falló: se devuelve todo y se
         //    lanza. Un carrito donde no sobrevivió ni un ítem no es un viaje
@@ -428,11 +387,12 @@ public sealed class TravelCartService : ITravelCartService
 
         // 1) Cancela CADA reserva del carrito (CancelAsync es idempotente por
         //    reserva en el motor).
-        foreach (var line in order.Lines)
-        {
-            await _reservations.CancelAsync(
-                line.ReservationId, $"Cancelación del viaje {order.OrderRef} (MMB).", cancellationToken);
-        }
+        var soltado = await _engine.ReleaseAsync(
+            null,
+            order.PaymentSessionId,
+            order.Lines.Select(l => new TravelCartSettledLine(l.OfferId, l.ReservationId, l.Price)).ToList(),
+            $"Cancelación del viaje {order.OrderRef} (MMB).",
+            cancellationToken);
 
         // 2) Reembolso SOLO si el pago estaba capturado: el PSP devuelve
         //    Refunded únicamente sobre una sesión Captured (pre-confirm el stub
@@ -441,14 +401,8 @@ public sealed class TravelCartService : ITravelCartService
         //    ratePlanCode+checkIn del vertical Hoteles (BookingController), y
         //    las líneas heterogéneas del carrito no cargan fechas/rate plan;
         //    el MMB v1 reembolsa total (política demo).
-        var refunded = false;
-        var refundAmount = 0m;
-        var outcome = await _payments.RefundAsync(order.PaymentSessionId, null, cancellationToken);
-        if (outcome.Status == PaymentStatus.Refunded)
-        {
-            refunded = true;
-            refundAmount = outcome.AmountCaptured;
-        }
+        var refunded = soltado.Refunded;
+        var refundAmount = soltado.Amount;
 
         var cancelled = order with
         {
