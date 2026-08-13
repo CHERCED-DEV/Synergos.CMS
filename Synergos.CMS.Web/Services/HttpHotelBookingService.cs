@@ -45,23 +45,17 @@ namespace Synergos.CMS.Web.Services;
 public sealed class HttpHotelBookingService : IHotelBookingService
 {
     /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
+    public const string ApiKeyHeader = ViajesWire.ApiKeyHeader;
 
     /// <summary>Cliente nombrado que registra el composer.</summary>
-    public const string ClientName = "synergos-bff-viajes";
+    public const string ClientName = ViajesWire.ClientName;
 
     /// <summary>Familia de entidades en el store genérico (→ App_Data/syn-travel-stays/).</summary>
     public const string ResourceType = "travel-stays";
 
-    private static readonly JsonSerializerOptions Wire = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
     private static readonly JsonSerializerOptions Disco = new() { WriteIndented = true };
 
-    private readonly IHttpClientFactory _clients;
+    private readonly ViajesWire _wire;
     private readonly IOptionsMonitor<ViajesSettings> _settings;
     private readonly ICancellationPolicyEvaluator _cancellationPolicy;
     private readonly IJsonEntityStore _store;
@@ -78,7 +72,9 @@ public sealed class HttpHotelBookingService : IHotelBookingService
         IAuditTrailWriter? audit = null,
         Func<DateTimeOffset>? now = null)
     {
-        _clients = clients;
+        // El mensaje de caída es de este consumidor: quien está reservando una habitación
+        // necesita saber que NO se le cobró, que es lo único accionable de un fallo de red.
+        _wire = new ViajesWire(clients, log, "No pudimos procesar tu reserva. No se te cobró.");
         _settings = settings;
         _cancellationPolicy = cancellationPolicy;
         _store = store;
@@ -182,7 +178,7 @@ public sealed class HttpHotelBookingService : IHotelBookingService
         {
             viaje = await EnviarAsync<TripDto>(req, "cobrar la reserva", cancellationToken).ConfigureAwait(false);
         }
-        catch (BookingRejectedException ex)
+        catch (ViajesRejectedException ex)
         {
             // El apartado venció mientras el huésped pagaba, o el cobro no salió. Los dos son
             // rechazos del negocio y llevan su motivo — taparlos con «error» dejaría al huésped
@@ -320,76 +316,13 @@ public sealed class HttpHotelBookingService : IHotelBookingService
     }
 
     // ── El cable ────────────────────────────────────────────────────────────
+    //
+    // Vive en ViajesWire desde que hay un SEGUNDO consumidor —el carrito multi-producto (#40)—
+    // y no antes. Con uno solo estaba bien acá; copiarlo para el segundo habría dejado dos
+    // manejos de error contra el mismo orquestador, divergiendo justo donde menos se nota.
 
-    /// <summary>Un rechazo del orquestador que trae su código, para poder distinguirlo.</summary>
-    private sealed class BookingRejectedException : Exception
-    {
-        public BookingRejectedException(string? code, string message) : base(message) => Code = code;
-        public string? Code { get; }
-    }
-
-    private async Task<T> EnviarAsync<T>(HttpRequestMessage req, string queHacia, CancellationToken ct)
-    {
-        var http = _clients.CreateClient(ClientName);
-
-        HttpResponseMessage res;
-        try
-        {
-            res = await http.SendAsync(req, ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;   // el huésped cerró la pestaña; no es un fallo del servicio
-        }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
-        {
-            // NO se traga la excepción. Un fallo de red que devolviera «reserva confirmada» es
-            // el peor defecto posible de este camino.
-            _log.LogError(ex, "No se pudo {Que}: el orquestador de Viajes no respondió.", queHacia);
-            throw new InvalidOperationException("No pudimos procesar tu reserva. No se te cobró.", ex);
-        }
-
-        using (res)
-        {
-            if (res.IsSuccessStatusCode)
-            {
-                var cuerpo = await res.Content.ReadFromJsonAsync<T>(Wire, ct).ConfigureAwait(false);
-                return cuerpo ?? throw new InvalidOperationException($"No pudimos {queHacia}: la respuesta vino vacía.");
-            }
-
-            var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
-
-            // SOLO 401. Es un defecto de DESPLIEGUE, no del huésped: la llave compartida está mal
-            // o no está. El 403 NO entra acá — `SharedKeyAuth` responde 401 cuando la llave
-            // falla, nunca 403, y un 403 del árbol de servicios es un rechazo de negocio cuyo
-            // motivo sí le sirve a quien reserva.
-            if (res.StatusCode == HttpStatusCode.Unauthorized)
-            {
-                _log.LogError(
-                    "Viajes respondió 401 al {Que}: la llave compartida es inválida o falta. "
-                    + "Revisar Synergos:Viajes:ApiKey.", queHacia);
-                throw new InvalidOperationException("No pudimos procesar tu reserva. No se te cobró.");
-            }
-
-            _log.LogWarning("Viajes rechazó {Que} con {Status} ({Code}): {Detalle}",
-                queHacia, (int)res.StatusCode, problema.Code ?? "-", problema.Detail ?? "-");
-
-            var mensaje = string.IsNullOrWhiteSpace(problema.Detail) ? $"No pudimos {queHacia}." : problema.Detail!;
-            throw new BookingRejectedException(problema.Code, mensaje);
-        }
-    }
-
-    private static async Task<ProblemDto> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
-    {
-        try
-        {
-            return await res.Content.ReadFromJsonAsync<ProblemDto>(Wire, ct).ConfigureAwait(false) ?? new ProblemDto();
-        }
-        catch (Exception ex) when (ex is JsonException or HttpRequestException or NotSupportedException)
-        {
-            return new ProblemDto();
-        }
-    }
+    private Task<T> EnviarAsync<T>(HttpRequestMessage req, string queHacia, CancellationToken ct)
+        => _wire.SendAsync<T>(req, queHacia, ct);
 
     // ── Traducciones ────────────────────────────────────────────────────────
 
@@ -415,17 +348,8 @@ public sealed class HttpHotelBookingService : IHotelBookingService
     internal static DateTimeOffset Salida(DateOnly checkOut)
         => new(checkOut.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
-    /// <summary>Quién viaja, seudonimizado.</summary>
-    /// <remarks>
-    /// El orquestador necesita un viajero estable y no necesita saber quién es. Mandar el correo
-    /// en crudo lo dejaría escrito en el disco de otro servicio — lo mismo que se corrigió en la
-    /// HU #35 tras verlo con los procesos vivos.
-    /// </remarks>
-    internal static string TravellerId(string? guestEmail)
-    {
-        var correo = (guestEmail ?? string.Empty).Trim().ToLowerInvariant();
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(correo)))[..16].ToLowerInvariant();
-    }
+    /// <inheritdoc cref="ViajesWire.TravellerId"/>
+    internal static string TravellerId(string? guestEmail) => ViajesWire.TravellerId(guestEmail);
 
     /// <summary>
     /// La llave de idempotencia: <b>determinista sobre lo que se reserva</b>, no sobre cuándo.
@@ -444,19 +368,8 @@ public sealed class HttpHotelBookingService : IHotelBookingService
         return "stay-" + Convert.ToHexString(hash)[..32].ToLowerInvariant();
     }
 
-    // Los DTO viven acá y NO en Synergos.CMS.Interfaces: son la forma del contrato HTTP con otro
-    // servicio, no vocabulario del dominio del CMS.
-
-    internal sealed record MoneyDto(decimal Amount, string Currency);
-
-    internal sealed record TripDto(
-        string Id, string? TravellerKind, string? TravellerId, string? Status,
-        MoneyDto Total, int PendingCompensations, string? LastError);
-
-    private sealed record ProblemDto
-    {
-        public string? Title { get; init; }
-        public string? Detail { get; init; }
-        public string? Code { get; init; }
-    }
+    // Los DTO del viaje viven en ViajesWire y NO en Synergos.CMS.Interfaces: son la forma del
+    // contrato HTTP con otro servicio, no vocabulario del dominio del CMS. Están allá desde que
+    // los leen los dos consumidores — uno solo por lado dejaría al carrito redeclarando la misma
+    // respuesta, y una de las dos copias se quedaría vieja al primer campo nuevo.
 }
