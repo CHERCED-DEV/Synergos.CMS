@@ -128,4 +128,14 @@ public interface ITravelCartEngine
 /// <param name="OfferId">La oferta.</param>
 /// <param name="ReservationId">La referencia opaca que devolvió el apartado.</param>
 /// <param name="Price">Cuánto vale esta línea según el CMS.</param>
-public sealed record TravelCartSettledLine(string OfferId, string ReservationId, decimal Price);
+/// <param name="Currency">En qué moneda.</param>
+/// <remarks>
+/// <b>La moneda va con el precio y no se sobreentiende</b>, aunque un carrito sólo admita una.
+/// Un motor que tenga que ORDENAR una devolución necesita decir cuánto <i>y de qué</i>: sin este
+/// campo, el que habla con el orquestador tendría que suponerla, y suponer una moneda es
+/// exactamente el defecto que <c>Money</c> existe para impedir. Lo destapó cablear el segundo
+/// motor (#40); el primero no lo necesitaba porque devolvía contra una sesión de pago que ya
+/// llevaba la suya.
+/// </remarks>
+public sealed record TravelCartSettledLine(
+    string OfferId, string ReservationId, decimal Price, string Currency);

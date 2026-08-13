@@ -208,7 +208,12 @@ public sealed class TravelCartService : ITravelCartService
         var createdAt = _now();
         var order = new CartOrder(
             orderRef, apartado.PaymentSessionId, apartado.Total, apartado.Currency, lines,
-            guest.Name.Trim(), guest.Email.Trim(), createdAt, createdAt);
+            guest.Name.Trim(), guest.Email.Trim(), createdAt, createdAt)
+        {
+            // Lo que el motor pidió recordar para reconocer este carrito después. Tirarlo acá
+            // obligaría a que el motor lo dedujera de otra cosa, que es adivinar.
+            EngineRef = apartado.EngineRef,
+        };
         await WriteAsync(order, cancellationToken);
 
         return new TravelCheckoutResult(orderRef, apartado.PaymentSessionId, apartado.Total, apartado.Currency);
@@ -229,9 +234,9 @@ public sealed class TravelCartService : ITravelCartService
         // 1) Cobrar y confirmar: del motor. Devuelve QUÉ SE HONRÓ Y QUÉ NO — por ítem y no un
         //    booleano, porque un carrito multi-producto puede quedar a medias legítimamente.
         var liquidado = await _engine.SettleAsync(
-            null,
+            order.EngineRef,
             order.PaymentSessionId,
-            order.Lines.Select(l => new TravelCartSettledLine(l.OfferId, l.ReservationId, l.Price)).ToList(),
+            order.Lines.Select(l => new TravelCartSettledLine(l.OfferId, l.ReservationId, l.Price, l.Currency)).ToList(),
             cancellationToken);
 
         // 2) Confirmar TODAS las reservas del carrito (ConfirmAsync es idempotente
@@ -283,11 +288,22 @@ public sealed class TravelCartService : ITravelCartService
         // 3) Sella el estado agregado en la orden (para "Mis viajes"/MMB) y
         //    alimenta el timeline de viaje (paid→confirmed, monotónico; el
         //    AdvanceAsync es idempotente así que el re-confirm no duplica).
+        //
+        //    Y sella también CÓMO QUEDÓ CADA LÍNEA. Con el motor en proceso daba igual —el
+        //    estado se leía en vivo de sus reservas— pero un motor que no viva en este proceso
+        //    no deja nada que leer, y sin esto un viaje confirmado mostraría todas sus líneas
+        //    en "Held" para siempre, sin que nada fallara.
+        var porOfertaLiquidada = liquidado.Items.ToDictionary(i => i.OfferId, StringComparer.Ordinal);
         var confirmedOrder = order with
         {
             Status = status,
             ConfirmationCode = confirmationCode,
             UpdatedAt = _now(),
+            Lines = order.Lines
+                .Select(l => porOfertaLiquidada.TryGetValue(l.OfferId, out var i)
+                    ? l with { ReservationId = i.ReservationId, Status = i.Status }
+                    : l)
+                .ToList(),
         };
         await WriteAsync(confirmedOrder, cancellationToken);
         if (_tracking is not null && allConfirmed)
@@ -388,9 +404,9 @@ public sealed class TravelCartService : ITravelCartService
         // 1) Cancela CADA reserva del carrito (CancelAsync es idempotente por
         //    reserva en el motor).
         var soltado = await _engine.ReleaseAsync(
-            null,
+            order.EngineRef,
             order.PaymentSessionId,
-            order.Lines.Select(l => new TravelCartSettledLine(l.OfferId, l.ReservationId, l.Price)).ToList(),
+            order.Lines.Select(l => new TravelCartSettledLine(l.OfferId, l.ReservationId, l.Price, l.Currency)).ToList(),
             $"Cancelación del viaje {order.OrderRef} (MMB).",
             cancellationToken);
 
@@ -410,6 +426,12 @@ public sealed class TravelCartService : ITravelCartService
             Refunded = refunded,
             RefundAmount = refundAmount,
             UpdatedAt = _now(),
+            // Cada línea también quedó cancelada. Con reservas locales esto se leía en vivo; sin
+            // ellas, dejar las líneas en «Confirmed» diría que el viaje sigue en pie mientras la
+            // orden dice lo contrario.
+            Lines = order.Lines
+                .Select(l => l with { Status = ReservationStatus.Cancelled.ToString() })
+                .ToList(),
         };
         await WriteAsync(cancelled, cancellationToken);
 
@@ -470,13 +492,19 @@ public sealed class TravelCartService : ITravelCartService
         var items = new List<TravelOrderItem>(order.Lines.Count);
         foreach (var line in order.Lines)
         {
-            var reservation = await _reservations.GetAsync(line.ReservationId, cancellationToken);
+            // La reserva EN VIVO gana cuando la hay: es más fresca que lo que este lado
+            // recuerda. Cuando no hay —un motor que no vive en este proceso no expone sus
+            // identificadores internos, a propósito— vale el estado que se selló al liquidar.
+            var reservation = string.IsNullOrWhiteSpace(line.ReservationId)
+                ? null
+                : await _reservations.GetAsync(line.ReservationId, cancellationToken);
+
             items.Add(new TravelOrderItem(
                 Product: line.Product,
                 OfferId: line.OfferId,
                 Label: line.Label,
                 ReservationId: line.ReservationId,
-                Status: reservation?.Status.ToString() ?? ReservationStatus.Held.ToString(),
+                Status: reservation?.Status.ToString() ?? line.Status,
                 Price: line.Price,
                 Currency: line.Currency));
         }
@@ -544,13 +572,24 @@ public sealed class TravelCartService : ITravelCartService
 
 /// <summary>Una línea del carrito de viaje (ítem reservado). Promovida a top-level
 /// internal para round-trip limpio con System.Text.Json (fan-out T1).</summary>
+/// <param name="Status">
+/// Cómo quedó esta línea la última vez que se supo.
+/// </param>
+/// <remarks>
+/// <b>El estado se GUARDA desde que hay un segundo motor</b> (HU #40). Antes se leía en vivo del
+/// motor de reservas en proceso —«la fuente de verdad»— y con el carrito comprando contra un
+/// orquestador ese almacén está vacío: cada línea de un viaje confirmado se habría mostrado
+/// «Held» para siempre, sin que nada fallara. Cuando SÍ hay reserva local se sigue prefiriendo la
+/// lectura en vivo, que es más fresca que lo que este lado recuerda.
+/// </remarks>
 internal readonly record struct CartLine(
     TravelProductType Product,
     string OfferId,
     string Label,
     string ReservationId,
     decimal Price,
-    string Currency);
+    string Currency,
+    string Status = "Held");
 
 /// <summary>El estado serializado de una orden de viaje (el superset que persiste el
 /// motor). Promovida a top-level internal para round-trip limpio con System.Text.Json.</summary>
@@ -569,4 +608,15 @@ internal sealed record CartOrder(
     public string? ConfirmationCode { get; init; }
     public bool Refunded { get; init; }
     public decimal RefundAmount { get; init; }
+
+    /// <summary>
+    /// Con qué se le vuelve a hablar al MOTOR de este carrito, si el motor devolvió algo.
+    /// </summary>
+    /// <remarks>
+    /// <b>Se guarda porque el motor lo devuelve y hace falta después</b>: liquidar y soltar
+    /// ocurren en peticiones distintas —y a veces en otra vida del proceso— así que un motor que
+    /// no sea el de este proceso no tendría cómo reconocer el carrito. El de proceso no devuelve
+    /// ninguna y sigue funcionando igual, con esto en nulo.
+    /// </remarks>
+    public string? EngineRef { get; init; }
 }
