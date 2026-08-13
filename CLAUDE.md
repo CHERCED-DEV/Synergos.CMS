@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2515 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2516 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2515 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2516 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (9) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2515 tests):
+# Suite completa (2516 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -445,17 +445,31 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
   esa carpeta fuera alcanzable por HTTP. Los tres modos hoy:
   `Stub` (default, siempre null) · `FileSystem` (CDN local) · `Http`.
 - ~~**Experience CDN** (9 DocTypes) + `compBehaviorTracking` +
-  `compBehaviorInteraction`~~ — **no existen** (#53). Se revisaron y de los
-  tres nombres no hay ninguno en `uSync/v9/`, ni lo hubo nunca: la frase
-  venía de la ADR 0132 y arrastraba nombres de un inventario anterior sin
-  comprobarlos. Ver el addendum #53 de esa ADR.
-- **`compBehaviorFeatureFlag`** — es la única que heredó aquel bloqueo, y
-  sigue sin consumers. Su `<Description>` **editor-facing** todavía dice
-  «espera el contrato `HttpBundleRegistryClient`», que ya se entregó.
-  **Ojo:** ese texto es lo que la exime del chequeo de huérfanas de
-  `usync-audit` — quitarle el prefijo `[Bloqueado externamente` la pone en
-  amarillo. Qué hacer con ella (re-marcarla `[Disponible — sin consumers
-  actuales]`, darle consumer, o borrarla) es una decisión, y está en #53.
+  `compBehaviorInteraction`~~ — **nunca existieron** (#53). Los tres nombres
+  sólo aparecían en prosa: acá y en las consecuencias de la ADR 0132, de donde
+  esta línea los copió. No hay ni hubo un `compBehaviorTracking`, un
+  `compBehaviorInteraction` ni nueve DocTypes de *Experience CDN* en
+  `uSync/v9/` — el historial de git tampoco los conoce. **Mandar a alguien a
+  buscarlos era peor que no decir nada**: parece trabajo identificado y es una
+  hora perdida antes de descubrir que no hay nada ahí.
+- La que sí existía —`compBehaviorFeatureFlag`— **no estaba en esta lista**, y
+  su marcador decía esperar `HttpBundleRegistryClient`, entregado en la HU #20.
+  Hoy está marcada `[Disponible — sin consumers actuales]`, que es lo que es:
+  existe, no está bloqueada, nadie la usa. Darle consumer es trabajo real
+  —hace falta quién lea la clave y quién decida— y no lo pide nadie todavía.
+
+**Bloqueos vigentes:** ninguno.
+
+> **Esa línea de arriba la cruza el gate contra el schema**
+> (`tools/usync-audit.mjs`, check 10): se lee **ella sola**, no la sección —el
+> resto es prosa que explica bloqueos ya levantados, y leerla entera haría que
+> contar la historia de uno se leyera como declararlo vigente—. Un marker
+> `[Bloqueado externamente]` que no esté en esa línea rompe el build, y nombrar
+> ahí algo que el schema no tiene marcado, también.
+>
+> La razón por la que hace falta: el chequeo de compositions huérfanas **exime**
+> a lo que lleve marker, así que un bloqueo que terminó y nadie movió deja de
+> vigilarse **en silencio**. Es exactamente lo que pasó acá durante tres olas.
 
 ## 10. Cuando termines una tarea
 
@@ -478,7 +492,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2515 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2516 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
