@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2494 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2514 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2494 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2514 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (9) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2494 tests):
+# Suite completa (2514 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -478,7 +478,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2494 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2514 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -513,11 +513,10 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   toca una sola capacidad y un BFF sería una saga de un paso — y **el
   expediente decide contra `Api.Workflow`**, también directo
   (`Synergos:Gob:Mode=Api`, HU #44). El default sigue siendo `Stub` en
-  todos. **Faltan cuatro**: `StubPaymentProvider` → `Api.Payments`
-  (bloqueado por #27), lo que queda de `StubReservationService` —el
-  carrito multi-producto de Viajes, #40—, y `StubReturnService` y
-  `StubApplicationService`, que esperan caras de orquestador sin
-  construir (`Bff.Tienda` de devoluciones y `Bff.Gob`).
+  todos. **Faltan tres**: `StubPaymentProvider` → `Api.Payments`
+  (bloqueado por #27), y `StubReturnService` y `StubApplicationService`,
+  que esperan caras de orquestador sin construir (`Bff.Tienda` de
+  devoluciones y `Bff.Gob`).
 
   > **Lo que #44 mudó no es un paso: es una TABLA.** Qué puede pasarle a un
   > expediente estaba escrito en C# y se desplegaba con el sitio, así que
@@ -823,45 +822,30 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > «deshacerlo es una cancelación con su política»— así que eso es una
   > operación propia del flujo, no una compensación.
   >
-  > **Lo que NO se cableó, y no por descuido:** el carrito multi-producto.
-  > Era porque `TravelCartItem` no llevaba fechas —ni el seam, ni el DTO HTTP,
-  > ni el motor en proceso— y un apartado de `Api.Booking` ES una ventana sobre
-  > un recurso. **La HU #40 se las puso, y el gate se cayó solo como estaba
-  > previsto**: se reescribió en vez de borrarse, porque la frontera se movió,
-  > no desapareció. Hoy exige que el periodo esté y sea **obligatorio** —un
-  > `Start` opcional deja compilar a un cliente que falla más tarde y más
-  > lejos, ya contra la capacidad— y sigue prohibiendo el cableado por **otros
-  > dos** motivos, que ya no tienen nada que ver con las fechas:
+  > **Y el carrito multi-producto ya cruza también** (HU #40), con el mismo
+  > interruptor. Necesitó tres cosas y ninguna era el cliente HTTP. Una:
+  > **periodo en `TravelCartItem`** —un apartado de `Api.Booking` ES una ventana
+  > sobre un recurso, y sin fechas habría que inventárselas—. Dos:
+  > **confirmación PARCIAL** en el orquestador, porque quien compró un vuelo, un
+  > hotel y un auto no pierde el vuelo porque el auto se agotó; el default sigue
+  > siendo todo-o-nada, que es lo correcto para un paquete. Tres: **una puerta
+  > para DEVOLVER lo no cumplido** (`POST /v1/trips/{id}/refund`), y ésa es la
+  > que faltaba de verdad: sin ella, «quien vendió ordena la devolución» era una
+  > frase sin forma de cumplirse y la plata del ítem caído se quedaba acá, **sin
+  > que nada fallara**. El monto llega calculado, igual que la penalidad de
+  > cancelar: el orquestador cotiza el viaje entero a propósito, así que no sabe
+  > cuánto vale una parte.
   >
-  > 1. **Los dos motores no fallan igual, y la diferencia la nota el cliente**
-  >    (#40, rebanada 1). Si un ítem no se puede confirmar después de cobrar, el
-  >    motor en proceso conserva lo que sí salió y `Bff.Viajes` abortaba el viaje
-  >    entero. Cablear tal cual habría cambiado el producto sin que nadie lo
-  >    decidiera. Hoy **el modo lo elige quien vende** y llega en la petición,
-  >    con `false` de default —la vía hotel reserva UNA habitación y para ella
-  >    todo-o-nada es correcto—. Y **acá no se devuelve plata**: el viaje se
-  >    cotiza UNA vez a propósito, así que el orquestador no sabe cuánto vale el
-  >    ítem caído; reparte `Unfulfilled` por ítem y quien vendió ordena la
-  >    devolución con el monto que él sí sabe calcular.
-  > 2. ~~Hay que partirle el motor a `TravelCartService`~~ — **hecho** (#40,
-  >    rebanada 2). El controller usaba los cinco métodos del seam, así que no
-  >    se podía sustituir el servicio: se le partió el **motor**, con la forma
-  >    de `IHotelBookingService` y por la misma razón. La frontera es la que
-  >    importa: el motor **aparta, cobra-y-confirma y suelta** —lo único que
-  >    cambia entre comprar en proceso y comprar contra un orquestador— y el
-  >    **expediente se queda en el CMS** (huésped, código de confirmación,
-  >    etapa del timeline, rastro de la cancelación), porque un orquestador no
-  >    guarda nada de eso **a propósito** y llevárselo obligaría a
-  >    reimplementarlo allá, con una segunda copia que divergiría. Y el motor
-  >    **reporta por ítem**: un `Task<bool>` habría cerrado desde el tipo la
-  >    puerta que la rebanada 1 acababa de abrir.
+  > **Lo que NO se hace, y es lo más fino:** anotar una compensación cuando esa
+  > devolución falla. El motor sólo sabe devolver *todo lo devolvible*, así que
+  > el barrido acabaría deshaciendo un viaje que SÍ se entregó. El rechazo sale
+  > hacia quien vendió, que puede repetir con la misma llave.
   >
-  > Así que lo que **de verdad** queda es la rebanada 3: **el segundo motor**,
-  > el que habla con `Bff.Viajes` —hoy sólo existe el de proceso, y una seam
-  > con una sola implementación todavía no es un cableado—, y su
-  > **verificación con procesos vivos** de que tres ítems en fechas distintas
-  > apartan tres ventanas distintas y las tres vuelven con el cobro caído a la
-  > mitad. El día que las dos estén, la línea se borra.
+  > **Y el cableado destapó que el expediente leía el estado de cada línea del
+  > almacén del motor en proceso.** Con un motor que no vive en este proceso ese
+  > almacén está vacío: un viaje confirmado habría mostrado sus tres líneas en
+  > «Held» para siempre, sin que nada fallara. Ahora el estado se sella al
+  > liquidar y la lectura en vivo sólo gana cuando existe.
 
   > **Y resolvió la pregunta que traía #35:** butaca nominada y cupo
   > general son el MISMO pozo contable. La granularidad va en el

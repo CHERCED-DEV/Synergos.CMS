@@ -120,4 +120,10 @@ public sealed record QuoteDto(MoneyDto Subtotal, MoneyDto Tax, MoneyDto Total);
 public sealed record ResourceDto(string Id, string SubjectKind, string SubjectId, int Capacity);
 public sealed record HoldDto(string Id, string ResourceId, DateTimeOffset ExpiresAt);
 public sealed record ReservationDto(string Id, string Status);
-public sealed record PaymentDto(string Id, string Status, MoneyDto Amount, MoneyDto Refundable);
+/// <param name="Refunded">
+/// Cuánto se ha devuelto ya de este cobro. <b>Lo dice la capacidad, no lo acumula la saga</b>: un
+/// reintento con la misma llave devuelve la misma operación, y sumarla de este lado la contaría
+/// dos veces.
+/// </param>
+public sealed record PaymentDto(
+    string Id, string Status, MoneyDto Amount, MoneyDto Refundable, MoneyDto? Refunded = null);

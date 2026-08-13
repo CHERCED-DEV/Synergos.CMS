@@ -60,9 +60,31 @@ public static class ViajesEndpoints
             Money? retener = null;
             if (req?.Retain is { } m && m.Amount > 0m)
             {
-                retener = Money.Of(m.Amount, string.IsNullOrWhiteSpace(m.Currency) ? Money.Cop : m.Currency);
+                if (!TryMoney(m, out var leida, out var mala)) return mala!;
+                retener = leida;
             }
             return (await flow.CancelAsync(id, retener, ct)).Map(TripResponse.From).ToHttp();
+        });
+
+        // Devolver una PARTE de lo cobrado, para un viaje que salió a medias. Es la otra mitad de
+        // la confirmación parcial (#40): acá no se sabe cuánto vale el ítem caído —el viaje se
+        // cotiza entero— así que el monto llega calculado, igual que la penalidad de cancelar.
+        //
+        // EXIGE llave, y no por ceremonia: devolver plata es un movimiento RELATIVO, así que un
+        // reintento tras un timeout sin llave devolvería dos veces. Es la misma razón por la que
+        // el ajuste relativo de Api.Inventory la exige y el absoluto no (#30).
+        app.MapPost("/v1/trips/{id}/refund", async (
+            string id, RefundTripRequest? req, HttpRequest http, TripFlow flow, CancellationToken ct) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
+
+            if (req?.Amount is not { } m)
+            {
+                return Invalid("bad_refund", "Hace falta el monto a devolver.");
+            }
+            if (!TryMoney(m, out var monto, out var mala)) return mala!;
+
+            return (await flow.RefundAsync(id, monto, req.Reason, key, ct)).Map(TripResponse.From).ToHttp();
         });
 
         // Volver a intentar lo que se rindió. Es la puerta de la persona a la que se le avisó:
@@ -92,4 +114,28 @@ public static class ViajesEndpoints
 
     private static IResult Invalid(string code, string message)
         => Rejection.Invalid($"{CodePrefix}.{code}", message).ToProblem();
+
+    /// <summary>
+    /// Lee un monto del cuerpo sin dejar que una moneda mal escrita se convierta en un 500.
+    /// </summary>
+    /// <remarks>
+    /// <c>Money.Of</c> LANZA con un código que no sea ISO 4217, y eso está bien donde lo llama el
+    /// dominio —ahí un código malo es un defecto nuestro— pero acá el dato viene de fuera: un
+    /// <c>"US"</c> en el JSON es una petición mal formada, y contestarla con «error interno» le
+    /// echa la culpa al servidor de algo que hizo quien llamó.
+    /// </remarks>
+    private static bool TryMoney(MoneyDto dto, out Money money, out IResult? bad)
+    {
+        var moneda = string.IsNullOrWhiteSpace(dto.Currency) ? Money.Cop : dto.Currency.Trim();
+        if (moneda.Length != 3)
+        {
+            money = default;
+            bad = Invalid("bad_currency", $"'{dto.Currency}' no es un código ISO 4217.");
+            return false;
+        }
+
+        money = Money.Of(dto.Amount, moneda);
+        bad = null;
+        return true;
+    }
 }
