@@ -444,9 +444,32 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
   `Synergos.UI` — publicaba a una carpeta local. Lo que faltaba era que
   esa carpeta fuera alcanzable por HTTP. Los tres modos hoy:
   `Stub` (default, siempre null) · `FileSystem` (CDN local) · `Http`.
-- **Experience CDN** (9 DocTypes) + `compBehaviorTracking` +
-  `compBehaviorInteraction` — heredaban el bloqueo de arriba, que ya no
-  existe. Falta revisarlos: probablemente sea trabajo, no espera.
+- ~~**Experience CDN** (9 DocTypes) + `compBehaviorTracking` +
+  `compBehaviorInteraction`~~ — **nunca existieron** (#53). Los tres nombres
+  sólo aparecían en prosa: acá y en las consecuencias de la ADR 0132, de donde
+  esta línea los copió. No hay ni hubo un `compBehaviorTracking`, un
+  `compBehaviorInteraction` ni nueve DocTypes de *Experience CDN* en
+  `uSync/v9/` — el historial de git tampoco los conoce. **Mandar a alguien a
+  buscarlos era peor que no decir nada**: parece trabajo identificado y es una
+  hora perdida antes de descubrir que no hay nada ahí.
+- La que sí existía —`compBehaviorFeatureFlag`— **no estaba en esta lista**, y
+  su marcador decía esperar `HttpBundleRegistryClient`, entregado en la HU #20.
+  Hoy está marcada `[Disponible — sin consumers actuales]`, que es lo que es:
+  existe, no está bloqueada, nadie la usa. Darle consumer es trabajo real
+  —hace falta quién lea la clave y quién decida— y no lo pide nadie todavía.
+
+**Bloqueos vigentes:** ninguno.
+
+> **Esa línea de arriba la cruza el gate contra el schema**
+> (`tools/usync-audit.mjs`, check 10): se lee **ella sola**, no la sección —el
+> resto es prosa que explica bloqueos ya levantados, y leerla entera haría que
+> contar la historia de uno se leyera como declararlo vigente—. Un marker
+> `[Bloqueado externamente]` que no esté en esa línea rompe el build, y nombrar
+> ahí algo que el schema no tiene marcado, también.
+>
+> La razón por la que hace falta: el chequeo de compositions huérfanas **exime**
+> a lo que lleve marker, así que un bloqueo que terminó y nadie movió deja de
+> vigilarse **en silencio**. Es exactamente lo que pasó acá durante tres olas.
 
 ## 10. Cuando termines una tarea
 

@@ -41,6 +41,12 @@
  *      Patrones: Ã¡/Ã©/Ã­/Ã³/Ãº/Ã±/Â¿/Â¡. Error level — los XMLs uSync
  *      con mojibake muestran texto roto en backoffice.
  *      Cap-300 Batch B (Ola 299).
+ *  10. Bloqueos externos declarados: todo marker [Bloqueado externamente]
+ *      tiene que estar en la línea «**Bloqueos vigentes:**» de CLAUDE.md
+ *      §9, y esa línea no puede nombrar bloqueos que el schema no tenga.
+ *      Existe porque el check 2 EXIME a lo marcado, así que un bloqueo que
+ *      terminó y nadie movió deja de vigilarse en silencio — pasó tres olas
+ *      seguidas (#53). Error level: la exención sale gratis, mentir no.
  */
 
 import { promises as fs } from 'node:fs';
@@ -60,10 +66,44 @@ const RESERVED_MARKERS = [
 // "Blog.PostType.article" o "Form.Stepper.next").
 const PASCAL_CASE_DICT = /^[A-Z][a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$/;
 
+const GUIA_PATH = path.resolve(process.cwd(), 'CLAUDE.md');
+
 const findings = {
     errors: [],
     warnings: [],
 };
+
+/**
+ * Los bloqueos que CLAUDE.md §9 declara VIGENTES hoy.
+ *
+ * Se lee UNA línea —`**Bloqueos vigentes:** ninguno.` o con los alias entre
+ * backticks— y no la sección entera, a propósito: §9 es prosa, y esa prosa
+ * nombra bloqueos pasados para explicarlos. Leer la sección completa haría que
+ * contar la historia de un bloqueo levantado se leyera como declararlo vigente,
+ * que es lo contrario de lo que dice.
+ *
+ * Devuelve `null` si no hay fichero, no hay §9 o no está la línea: contestar
+ * «no hay bloqueos» cuando lo que pasa es que no se pudo leer la lista dejaría
+ * el cruce verde por la razón equivocada — el defecto exacto que esto cierra.
+ */
+async function bloqueosDeclarados() {
+    let texto;
+    try {
+        texto = await fs.readFile(GUIA_PATH, 'utf-8');
+    } catch {
+        return null;
+    }
+
+    const desde = texto.indexOf('## 9. Tareas bloqueadas externamente');
+    if (desde < 0) return null;
+    const hasta = texto.indexOf('\n## ', desde + 1);
+    const seccion = hasta < 0 ? texto.slice(desde) : texto.slice(desde, hasta);
+
+    const linea = seccion.split('\n').find((l) => l.includes('**Bloqueos vigentes:**'));
+    if (!linea) return null;
+
+    return [...matchAll(linea, /`([A-Za-z0-9_.]+)`/g)].map((m) => m[1]);
+}
 
 function err(category, message) {
     findings.errors.push(`[${category}] ${message}`);
@@ -177,6 +217,48 @@ async function audit() {
         if (!definedTypes.has(ref)) {
             err('missing-composition-ref',
                 `<Composition>${ref}</Composition> referenciada pero no existe ContentType con ese Alias`);
+        }
+    }
+
+    // ─── 10. Los bloqueos externos, contra la lista que los declara ────
+    //
+    // El check 2 EXIME del chequeo de huérfanas a lo que lleve marker, y esa
+    // exención es load-bearing: mientras el marker esté puesto, esa composition
+    // deja de vigilarse. El defecto que esto cierra (#53) es que el marker
+    // afirmaba un bloqueo que ya no existía —el contrato que decía esperar se
+    // había entregado tres olas antes— así que la auditoría estaba verde por
+    // una razón falsa, y nadie se enteró porque nada cruzaba las dos listas.
+    //
+    // Se cruzan en los DOS sentidos, y la segunda mitad importa tanto como la
+    // primera: §9 llegó a nombrar tres artefactos que NUNCA existieron, que es
+    // peor que no decir nada — parece trabajo identificado y es una hora
+    // perdida antes de descubrir que no hay nada ahí.
+    const bloqueadas = [...definedTypes]
+        .filter(([, info]) => /\[Bloqueado externamente/.test(info.description))
+        .map(([alias]) => alias);
+
+    const declarados = await bloqueosDeclarados();
+    if (declarados === null) {
+        err('bloqueo-sin-lista',
+            'CLAUDE.md §9 no tiene su línea «**Bloqueos vigentes:**». Sin ella no hay contra qué '
+            + 'cruzar los markers del schema, y la exención del check 2 vuelve a ser invisible.');
+    } else {
+        for (const alias of bloqueadas) {
+            if (!declarados.includes(alias)) {
+                err('bloqueo-sin-declarar',
+                    `${alias} lleva marker [Bloqueado externamente] y no está en los bloqueos `
+                    + 'vigentes de CLAUDE.md §9. Un bloqueo fuera de la lista deja de vigilarse '
+                    + 'sin que nadie lo decida.');
+            }
+        }
+
+        for (const alias of declarados) {
+            if (!bloqueadas.includes(alias)) {
+                err('bloqueo-fantasma',
+                    `CLAUDE.md §9 declara ${alias} como bloqueo vigente y el schema no lo tiene `
+                    + 'marcado (o no existe). Mandar a alguien a buscar algo que no está es peor '
+                    + 'que callarse: parece trabajo identificado y es una hora perdida.');
+            }
         }
     }
 

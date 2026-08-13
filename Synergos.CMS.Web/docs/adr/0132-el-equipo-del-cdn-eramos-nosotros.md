@@ -113,3 +113,34 @@ Que `Synergos.UI` esté publicado (misma HU) y dos valores de configuración:
 Synergos:BundleRegistry:Mode          Http
 Synergos:BundleRegistry:PublicBaseUrl https://<el-cdn-publicado>
 ```
+
+---
+
+## Addendum (#53) — dos de los tres nombres de arriba no existen
+
+> Esta ADR es registro histórico: no se reescribe, se le añade. Lo de arriba queda
+> tal como se escribió, incluida su parte falsa, porque de ahí la copió `CLAUDE.md` §9
+> y eso es justamente lo que hay que poder rastrear.
+
+La frase «los 9 DocTypes de *Experience CDN* + `compBehaviorTracking` +
+`compBehaviorInteraction` heredaban ese bloqueo» **nombra tres cosas que nunca
+estuvieron en el repo**. No hay un `compBehaviorTracking`, no hay un
+`compBehaviorInteraction`, y no hay nueve DocTypes de *Experience CDN* en
+`uSync/v9/`; el historial de git tampoco los conoce. Los únicos dos sitios donde
+aparecieron esos nombres son prosa: este párrafo y la línea de `CLAUDE.md` §9 que lo
+copió.
+
+**La que sí existía es una y no se llamaba así: `compBehaviorFeatureFlag`.** Y su
+descripción —que es editor-facing, se lee en el backoffice— decía esperar el
+contrato `HttpBundleRegistryClient`, o sea el que esta misma ADR entregó.
+
+**Eso tenía una consecuencia que no se vio.** `tools/usync-audit.mjs` exime del
+chequeo de compositions huérfanas a lo que lleve marker `[Bloqueado externamente]`.
+La exención es una buena idea y hace exactamente lo que se le pidió; lo que pasó es
+que **su condición de salida se volvió falsa y nadie la movió**, así que la auditoría
+llevaba tres olas verde por una razón que ya no era cierta, sin que nada avisara.
+
+Hoy esa composition está marcada `[Disponible — sin consumers actuales]` —existe, no
+está bloqueada, nadie la usa— y el cruce entre los markers del schema y la lista de
+`CLAUDE.md` §9 lo comprueba el propio audit (check 10), en los dos sentidos. Darle un
+consumer sigue siendo trabajo real: hace falta quién lea la clave y quién decida.
