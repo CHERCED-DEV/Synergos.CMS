@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2483 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2490 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2483 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2490 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (9) + capas (10)
 │   │                            + imagen de contenedor (6) + compose (8)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2483 tests):
+# Suite completa (2490 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -478,7 +478,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2483 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2490 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -830,10 +830,25 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > previsto**: se reescribió en vez de borrarse, porque la frontera se movió,
   > no desapareció. Hoy exige que el periodo esté y sea **obligatorio** —un
   > `Start` opcional deja compilar a un cliente que falla más tarde y más
-  > lejos, ya contra la capacidad— y sigue prohibiendo el cableado por **otro**
-  > motivo: falta la verificación con procesos vivos de que tres ítems en
-  > fechas distintas apartan tres ventanas distintas y las tres vuelven con el
-  > cobro caído a la mitad. El día que esa evidencia exista, la línea se borra.
+  > lejos, ya contra la capacidad— y sigue prohibiendo el cableado por **otros
+  > dos** motivos, que ya no tienen nada que ver con las fechas:
+  >
+  > 1. **Los dos motores no fallan igual, y la diferencia la nota el cliente**
+  >    (#40, rebanada 1). Si un ítem no se puede confirmar después de cobrar, el
+  >    motor en proceso conserva lo que sí salió y `Bff.Viajes` abortaba el viaje
+  >    entero. Cablear tal cual habría cambiado el producto sin que nadie lo
+  >    decidiera. Hoy **el modo lo elige quien vende** y llega en la petición,
+  >    con `false` de default —la vía hotel reserva UNA habitación y para ella
+  >    todo-o-nada es correcto—. Y **acá no se devuelve plata**: el viaje se
+  >    cotiza UNA vez a propósito, así que el orquestador no sabe cuánto vale el
+  >    ítem caído; reparte `Unfulfilled` por ítem y quien vendió ordena la
+  >    devolución con el monto que él sí sabe calcular.
+  > 2. **Hay que partirle el motor a `TravelCartService`**: el controller usa
+  >    los cinco métodos del seam y las lecturas viven del lado del CMS.
+  >
+  > Y falta la verificación con procesos vivos de que tres ítems en fechas
+  > distintas apartan tres ventanas distintas y las tres vuelven con el cobro
+  > caído a la mitad. El día que las tres cosas estén, la línea se borra.
 
   > **Y resolvió la pregunta que traía #35:** butaca nominada y cupo
   > general son el MISMO pozo contable. La granularidad va en el
