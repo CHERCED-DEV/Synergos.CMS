@@ -16,7 +16,11 @@ namespace Synergos.CMS.Tests.Architecture;
 /// error que costó una vuelta en la HU #25. <b>La HU #40 se las puso</b>, así que ese motivo ya
 /// no está en pie.</para>
 ///
-/// <para>Lo que queda en pie es otro, y es el que sostiene la frontera hoy: <b>no existe la
+/// <para>Lo que queda en pie son otros, y son los que sostienen la frontera hoy: los dos motores
+/// <b>no fallan igual</b> —el de proceso conserva lo que sí salió y <c>Bff.Viajes</c> abortaba el
+/// viaje entero, así que cablear tal cual habría cambiado el producto sin que nadie lo decidiera
+/// (#40, rebanada 1)—; hay que <b>partirle el motor a <c>TravelCartService</c></b>, porque el
+/// controller usa los cinco métodos del seam y las lecturas viven de este lado; y <b>no existe la
 /// evidencia con procesos vivos</b> de que tres ítems en fechas distintas aparten tres ventanas
 /// distintas y las tres vuelvan con el cobro caído a la mitad. Ver
 /// <c>El_carrito_lleva_periodo_y_el_cableado_sigue_pendiente</c>, que es donde el cambio de
@@ -145,10 +149,13 @@ public sealed class ViajesWiringTests
     /// tarde y más lejos, ya contra <c>Api.Booking</c>. El gate impide esa regresión, que es la
     /// que parece más suave y es más traicionera.</para>
     ///
-    /// <para><b>Y lo que sigue prohibido.</b> Cablear el carrito a <c>Bff.Viajes</c> sin haber
-    /// verificado con procesos vivos que tres ítems en fechas distintas apartan tres ventanas
-    /// distintas, y que con el cobro caído a mitad las tres vuelven. El contrato ya lo permite;
-    /// la evidencia todavía no existe. Cuando exista, esta línea se borra a conciencia.</para>
+    /// <para><b>Y lo que sigue prohibido.</b> Cablear el carrito a <c>Bff.Viajes</c> mientras
+    /// falte cualquiera de las tres: que el modo de fallo lo elija quien vende y no lo herede del
+    /// motor (#40, rebanada 1, ya hecho); que <c>TravelCartService</c> esté partido, porque el
+    /// controller usa los cinco métodos del seam y las lecturas viven de este lado; y que se haya
+    /// verificado <b>con procesos vivos</b> que tres ítems en fechas distintas apartan tres
+    /// ventanas distintas y que con el cobro caído a mitad las tres vuelven. El contrato ya lo
+    /// permite; lo demás todavía no. Cuando esté, esta línea se borra a conciencia.</para>
     /// </remarks>
     [Fact]
     public void El_carrito_lleva_periodo_y_el_cableado_sigue_pendiente()
