@@ -69,9 +69,6 @@ public sealed partial class SeamComposer
             })
             .AddHttpMessageHandler<CorrelationForwardingHandler>();
 
-            // OJO: solo la vía HOTEL. El carrito multi-producto (ITravelCartService) sigue contra
-            // el motor en proceso, y no por falta de ganas: TravelCartItem no lleva fechas y un
-            // apartado de Api.Booking ES una ventana sobre un recurso. Ver ViajesSettings.
             services.AddSingleton<IHotelBookingService>(sp => new HttpHotelBookingService(
                 sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<IOptionsMonitor<ViajesSettings>>(),
@@ -79,6 +76,16 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<IJsonEntityStore>(),
                 sp.GetRequiredService<ILogger<HttpHotelBookingService>>(),
                 sp.GetRequiredService<IAuditTrailWriter>()));
+
+            // Y el carrito multi-producto, que hasta la HU #40 se quedaba acá (TravelCartItem no
+            // llevaba fechas, y un apartado de Api.Booking ES una ventana sobre un recurso). Va
+            // por el MOTOR y no por el servicio entero: el expediente de la compra —el viajero,
+            // el código de confirmación, la etapa del timeline, el rastro de la cancelación— se
+            // queda de este lado porque el orquestador no guarda nada de eso a propósito.
+            services.AddSingleton<ITravelCartEngine>(sp => new HttpTravelCartEngine(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IOptionsMonitor<ViajesSettings>>(),
+                sp.GetRequiredService<ILogger<HttpTravelCartEngine>>()));
         }
         else
         {
@@ -88,6 +95,10 @@ public sealed partial class SeamComposer
                     sp.GetRequiredService<IPaymentProvider>(),
                     sp.GetRequiredService<ICancellationPolicyEvaluator>(),
                     sp.GetRequiredService<IAuditTrailWriter>()));
+
+            services.AddSingleton<ITravelCartEngine>(sp => new InProcessTravelCartEngine(
+                sp.GetRequiredService<IReservationService>(),
+                sp.GetRequiredService<IPaymentProvider>()));
         }
 
         // Auto-cancel de holds vencidos (aprendizaje NS.Booking, doc 17): barre
@@ -143,7 +154,10 @@ public sealed partial class SeamComposer
                 // vez destructiva y con movimiento de plata. El rastro es lo que permite
                 // responder "¿quién canceló este viaje y cuándo?" sin romper la compra de
                 // invitado: no pide sesión, solo deja constancia.
-                audit: sp.GetRequiredService<IAuditTrailWriter>()));
+                audit: sp.GetRequiredService<IAuditTrailWriter>(),
+                // Quién aparta, cobra y suelta (HU #40). Lo demás de este servicio es el
+                // expediente, y es idéntico compre contra el proceso o contra el orquestador.
+                engine: sp.GetRequiredService<ITravelCartEngine>()));
 
         // OLA 2 Booking — ficha de estadía rica (galería/amenities/specs/geo/
         // reviews) separada de la disponibilidad (IRoomAvailabilityProvider

@@ -51,7 +51,7 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 | Stub | Destino | A qué nivel, y por qué | Estado |
 |---|---|---|---|
 | `StubShopOrderService` | `Bff.Tienda` `POST /v1/purchases` | **Orquestador.** Reservar + cobrar + crear pedido pueden fallar a la mitad; si el cobro falla hay que soltar el stock. Contra las capacidades sueltas, el CMS reimplementaría la máquina de sagas — y peor, porque no tiene dónde anotar una compensación pendiente | **HU #24** |
-| `StubReservationService` | `Api.Booking` `/v1/holds` | **Capacidad.** Apartar es un paso que dice NO solo (`insufficient_capacity`). Es el motor polimórfico que ya comparten hoteles, vuelos, autos, visitas, citas clínicas y asientos: cablearlo mueve seis verticales de una vez | pendiente |
+| `StubReservationService` | `Api.Booking` `/v1/holds` | **Capacidad.** Apartar es un paso que dice NO solo (`insufficient_capacity`). Era «el motor polimórfico que comparten seis verticales, y cablearlo los mueve de una vez» — y **el apalancamiento bajó**: el carrito de viaje (#40) y la visita al inmueble (#33a) ya no pasan por él. Lo que queda detrás es el flujo hotel del `BookingController` y el asiento de vuelo | pendiente |
 | `StubPaymentProvider` | `Api.Payments` `/v1/payments` | **Capacidad.** Ya hay `RoutingPaymentProvider` + `WompiPaymentProvider` delante; el stub es el respaldo cuando no hay credencial. Bloqueado por la misma HU que hace que `Api.Payments` cobre de verdad | épica #2 |
 | `StubCaseWorkflowService` | `Api.Workflow` `/v1/instances/{id}/fire` | **Capacidad.** Una transición de estado es un paso que dice NO solo (`transition_not_allowed`). La tabla de transiciones vivía en C# dentro del stub, que es justo lo que `Api.Workflow` existe para no repetir por dominio | **HU #44** |
 | `StubCertificateService` | `Api.Signing` `POST /v1/seals` — **NO `/v1/signatures`** | **Capacidad.** El motivo sigue en pie: el HMAC local (ADR 0124) guarda su llave y **no sabe retirarla**, y la capacidad sí. Lo que no encajaba era el endpoint: el token de `/v1/signatures` **vence** (≤365 d), **no es determinista** y **publica el payload** —o sea el alumno— dentro del id que se imprime. El **sello** (#45) es la operación que faltaba: determinista, sin vencimiento, opaca, y se comprueba **contra el sujeto**. El firmante local **se conserva** verificando los ids anteriores, o cada QR ya impreso dejaría de valer | **HU #45** |
@@ -60,7 +60,7 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 | `StubApplicationService` | `Bff.Gob` (sin construir) | **Orquestador.** Radicar valida, calcula tasa, cobra si aplica y asienta estado — con pago de por medio. Es el agregado raíz de Gobierno y hoy lo compone media docena de stubs hermanos por DIP | pendiente |
 | `StubClinicalSchedulingService` | `Bff.Salud` `POST /v1/appointments` | **Orquestador.** Apartar el cupo + cobrar el copago + avisar, con compensación si el copago falla. Ver la corrección de abajo | **HU #25** |
 | `StubEventTicketingService` | `Bff.Eventos` `POST /v1/ticketing` | **Orquestador.** Aforo + cobro pueden fallar a la mitad. La compra se parte: el orquestador mueve aforo y plata, y **el artefacto se queda acá** —la entrada, su QR, su portador, el check-in— porque el firmante vive de este lado | **HU #35** |
-| `StubHotelBookingService` | `Bff.Viajes` `POST /v1/trips` | **Orquestador.** Apartar, cobrar y confirmar pueden fallar a la mitad. Sólo la vía hotel; el carrito multi-producto sigue pendiente (#40) | **HU #36** |
+| `StubHotelBookingService` | `Bff.Viajes` `POST /v1/trips` | **Orquestador.** Apartar, cobrar y confirmar pueden fallar a la mitad. Las **dos** vías: la reserva de hotel y el carrito multi-producto, que además pide confirmación PARCIAL y **ordena la devolución** de lo que no se cumplió — el orquestador cotiza el viaje entero y no sabe cuánto vale el ítem caído | **HU #36 + #40** |
 | `StubVisitSchedulingService` | `Api.Booking` `/v1/holds` | **Capacidad, no orquestador.** Una visita NO se cobra, así que no hay segundo paso que compensar — una saga de un paso sería la máquina de compensar sin nada que compensar. Ver la corrección de abajo | **HU #33a** |
 
 > ### Corrección: este stub estaba mal clasificado, y por qué importa
@@ -99,8 +99,11 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 1. **`StubShopOrderService`** (#24) — es el único con el orquestador **ya construido, probado y
    sin un solo consumidor**. Es la distancia más corta entre «tenemos 20 APIs» y «tenemos un
    producto», y no cuesta código nuevo del lado del servicio.
-2. **`StubReservationService`** — un cableado, seis verticales. Ningún otro tiene ese
-   apalancamiento, y `Api.Booking` es la capacidad más madura de las veinte.
+2. **`StubReservationService`** — era «un cableado, seis verticales», y hoy son menos: el
+   carrito de viaje (#40) y la visita al inmueble (#33a) llegaron a `Api.Booking` por su
+   cuenta, cada uno por la puerta que le tocaba. **La lección no es que la estimación
+   estuviera mal, sino que el apalancamiento de un seam se evapora si se tarda**: cada
+   consumidor que se cablea por separado se lo lleva consigo.
 3. **`StubPaymentProvider`** — mientras no cobre, ningún demo de venta corre de punta a punta.
    Va tercero y no primero porque lo que falta es una credencial, no un cliente HTTP.
 
