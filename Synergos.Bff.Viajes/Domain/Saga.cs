@@ -90,6 +90,9 @@ public sealed record ItemHold(
 /// <param name="Retained">
 /// Cuánto NO se devuelve si el viaje se cancela — la penalidad de la política comercial.
 /// </param>
+/// <param name="Refunded">
+/// Cuánto se ha devuelto ya, <b>tal como lo dice <c>Api.Payments</c></b>.
+/// </param>
 /// <param name="Compensations">Lo que hay que deshacer.</param>
 /// <param name="LastError">Qué falló, para que el llamador lo lea.</param>
 /// <param name="PartialConfirm">
@@ -131,7 +134,8 @@ public sealed record TripSaga(
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? AlertedAtUtc = null,
     int AlertsSent = 0,
-    bool PartialConfirm = false) : ISaga<TripSaga>
+    bool PartialConfirm = false,
+    Money? Refunded = null) : ISaga<TripSaga>
 {
     public TripSaga WithStatus(SagaStatus status) => this with { Status = status };
 
