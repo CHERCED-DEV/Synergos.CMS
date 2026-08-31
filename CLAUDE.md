@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2516 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2531 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2516 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2531 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (9) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -159,7 +159,7 @@ Synergos.CMS/
 | "¿Qué API necesita cada dominio? ¿Cuál es el molde?" | `docs/product/08-despiece-apis.md` — la matriz 20×9 y §4 |
 | "¿Cómo se deshace lo que ya se hizo?" | `docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `docs/product/10-promocion-bff-core.md` |
-| "¿Qué se hace con cada uno de los 47 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
+| "¿Qué se hace con cada uno de los 48 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — es el único sitio |
 
 > ⚠️ **De los seis docs de `docs/product/`, sólo el 11 está versionado.** Los
@@ -367,7 +367,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2516 tests):
+# Suite completa (2531 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -492,7 +492,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2516 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2531 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -506,20 +506,20 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 
 - **Poco está conectado al producto, pero la brecha es MENOR de lo que
   parecía.** El inventario del cableado (HU #23,
-  `docs/product/11-mapa-del-cableado.md`) contó los 47 `Stub*` y los
-  clasificó: **12** son cableado pendiente, **5** ya salen del contenido
+  `docs/product/11-mapa-del-cableado.md`) contó los 48 `Stub*` y los
+  clasificó: **13** son cableado pendiente, **5** ya salen del contenido
   de Umbraco (cablearlos sería un retroceso) y **30** se quedan en stub a
-  propósito. Y 18 de los 47 **ya son durables** — «stub» en este repo
+  propósito. Y 18 de los 48 **ya son durables** — «stub» en este repo
   dejó hace tiempo de querer decir «en memoria». Hay gate
   (`WiringMapTests`): un stub nuevo sin mapear rompe el build, y desde
   #50 **también cuadra las cifras de la prosa** contra el inventario y
   contra el disco — se habían desviado tres olas seguidas, porque el gate
   sólo miraba la tabla y la gente lee el resumen. Y cuadrar la cifra no
   basta: **la tabla narrativa de la familia A tiene que listarlos uno por
-  uno**, porque una cabecera que dice «(13)» sobre doce filas pasa el
+  uno**, porque una cabecera que dice «(14)» sobre trece filas pasa el
   recuento y deja un stub que nadie va a tomar — es la tabla que se lee
   para elegir el siguiente trabajo, no la rejilla del inventario.
-  De los 12, **ocho** están hechos: la tienda compra contra `Bff.Tienda`
+  De los 13, **nueve** están hechos: la tienda compra contra `Bff.Tienda`
   (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
   `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25), la visita al inmueble
   aparta cupo **directo contra `Api.Booking`, sin orquestador**
@@ -661,7 +661,8 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   respaldado por un token que nunca existió (defecto #42). Hoy: token
   válido del mismo sujeto → `IdentityToken`; sin token, lo más fuerte
   que se acepta es `CmsSession`; declarar lo fuerte sin presentarlo se
-  rechaza. **Faltan las otras 19.**
+  rechaza. **Faltan las otras 19** — y desde la rebanada 4 hay quien les
+  presente identidad cuando la pidan: el CMS ya la emite.
 
   > **El token de otra persona no sirve para actuar como ésta**, y ése
   > es el caso que justifica la HU entera: sin comprobar que el sujeto
@@ -685,12 +686,36 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > **fuente del dato** estaba mal, igual que en #42.
   >
   > Hoy el token gana sobre lo declarado y su sujeto tiene que ser quien
-  > actúa. Pero **el agujero sólo se cierra del todo con
-  > `Workflow:Roles:RequireVerifiedRoles`**, que va en `false` por defecto
-  > porque encenderlo hoy rompería #44 y #46: mandan el rol a mano ya que
-  > **nadie puede presentar un token todavía**. Es la forma de #27 — el
-  > despliegue declara su postura — y se enciende el día que el CMS sepa
-  > emitir la identidad de quien decide.
+  > actúa. Y **el agujero ya se puede cerrar del todo con
+  > `Workflow:Roles:RequireVerifiedRoles`**: desde la rebanada 4 el CMS
+  > **presenta** la identidad del funcionario (`Synergos:Identity:Mode=Api`),
+  > así que ese interruptor dejó de ser inútil. Sigue en `false` por defecto,
+  > pero por otra razón: el seguimiento de pedidos (#46) todavía declara su
+  > actor, y exigir roles verificados a TODO pararía cualquier pipeline cuya
+  > transición pida rol. Es la forma de #27 — el despliegue declara su postura.
+
+  > **El CMS emite la identidad de quien decide** (rebanada 4). Lo que cambia no
+  > es que se pueda actuar, es **con qué se respalda**: el sujeto viaja firmado y
+  > la capacidad deja de creerle al llamador quién actúa y con qué roles.
+  >
+  > **Y para eso `Api.Identity` tuvo que admitir un principal SIN credencial.**
+  > Un token se emite para un principal que exista, y quien actúa desde el CMS ya
+  > entró por otra puerta: su sesión de Umbraco. Exigir contraseña obligaba al
+  > CMS a inventarse una por persona y a custodiarla — o sea a fabricar
+  > credenciales que nadie usa, que es sólo superficie de ataque. Intentar
+  > autenticar a uno de esos se rechaza con `identity.no_credential` y **no
+  > cuenta como intento fallido**: si contara, cualquiera bloquearía a un
+  > funcionario mandando cinco peticiones por una puerta que esa persona no usa.
+  > Verificado en vivo: tras siete intentos, sigue decidiendo.
+  >
+  > **Con `Api.Identity` caída no se para nada**: sin token se sigue declarando,
+  > que es lo que se hacía antes. El emisor **nunca lanza**, y hay gate — lanzar
+  > devolvería el punto único de fallo que se evitó verificando en local.
+  >
+  > **Falta el puente con el Member de verdad.** Hoy el funcionario es un actor
+  > de demo que la cara de Gobierno tiene cableado; lo que esta rebanada mudó es
+  > de dónde salen sus roles, no quién es. El día que la ventanilla tenga
+  > miembros reales, el sujeto sale de la sesión y los roles de sus grupos.
 
   > **Verificación LOCAL, y ésa es la decisión de fondo.** El token se
   > comprueba con la llave, sin llamar a `Api.Identity` — llamarla en cada

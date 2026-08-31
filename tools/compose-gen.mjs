@@ -385,6 +385,14 @@ services:
       Synergos__Academy__ApiKey: \${SYNERGOS_API_KEY}
       Synergos__Academy__SealPurpose: \${SYNERGOS_ACADEMY_SEAL_PURPOSE:-academy.certificate}
 
+      # Si el CMS presenta identidad verificable de quien actua (HU #14). Va acá
+      # y no en el bloque de Gobierno porque quien actua no es asunto de un
+      # vertical: el segundo consumidor tiene que encontrarlo registrado. Con la
+      # capacidad caida NO se para nada — sin token se sigue declarando.
+      Synergos__Identity__Mode: \${SYNERGOS_IDENTITY_MODE:-Stub}
+      Synergos__Identity__BaseUrl: "http://api-identity:8080"
+      Synergos__Identity__ApiKey: \${SYNERGOS_API_KEY}
+
       Synergos__Gob__Mode: \${SYNERGOS_GOB_MODE:-Stub}
       Synergos__Gob__BaseUrl: "http://api-workflow:8080"
       Synergos__Gob__ApiKey: \${SYNERGOS_API_KEY}
