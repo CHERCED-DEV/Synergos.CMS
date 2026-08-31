@@ -144,4 +144,55 @@ public sealed class BundleRegistrySettings
     /// «retiraron el elemento que yo elegí vigilar».</para>
     /// </remarks>
     public string ProbeTag { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Exige lo que el modo <c>Http</c> necesita y no puede darse por hecho: una URL base
+    /// absoluta. Lanza si falta, <b>al cablear</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que evita</b> (#56). <c>CLAUDE.md</c> §11 manda encender el CDN con dos
+    /// variables. Con la primera puesta y la segunda olvidada, el compose pasa
+    /// <c>PublicBaseUrl</c> <b>presente y vacía</b> —no ausente—, así que pisa el default de esta
+    /// clase; la URL sale relativa (<c>/synergos/registry.json</c>) y el <c>HttpClient</c> del
+    /// registry no tiene <c>BaseAddress</c>. Un default protege de la ausencia, no del vacío.</para>
+    ///
+    /// <para><b>Y el arranque quedaba verde.</b> El warmup sólo resuelve el cliente —no descarga—
+    /// y atrapa <c>Exception</c> entera, así que el contenedor subía, <c>/health</c> contestaba y
+    /// la prueba de humo pasaba. Es la misma forma que ya costó dos veces: la llave de firma de
+    /// <c>Api.Identity</c> (HU #14, rebanada 3) y el <c>TimeProvider</c> de la ADR 0132. La regla
+    /// está escrita doce líneas encima del registro que fallaba, y no se le aplicó al único valor
+    /// que el operador escribe a mano.</para>
+    ///
+    /// <para><b>Se exige absoluta sólo en <c>Http</c></b>, a propósito: el default
+    /// <c>/cdn-bundles</c> es relativo y es el correcto para <c>FileSystem</c>, donde la sirve el
+    /// propio sitio. Exigirla siempre rompería el camino local.</para>
+    ///
+    /// <para><b>Lanza en vez de caer a <c>Stub</c></b>, por lo mismo que <c>Api.Identity</c>: uno
+    /// que dice servir bundles y no puede es peor que uno caído, porque parece que funciona. Caer
+    /// a <c>Stub</c> dejaría el sitio en pie sin ningún elemento — justo la degradación silenciosa
+    /// que este arreglo existe para acabar.</para>
+    /// </remarks>
+    /// <param name="publicBaseUrl">Lo que trae la configuración, tal cual.</param>
+    /// <exception cref="InvalidOperationException">Si falta o no es absoluta.</exception>
+    public static void ExigirUrlPublicaAbsoluta(string? publicBaseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(publicBaseUrl))
+        {
+            throw new InvalidOperationException(
+                "Synergos:BundleRegistry:Mode=Http exige Synergos:BundleRegistry:PublicBaseUrl, y "
+                + "llegó vacía. En el despliegue es SYNERGOS_CDN_URL — el compose la pasa presente "
+                + "y vacía cuando no está definida, así que pisa el default en vez de dejarlo. Sin "
+                + "ella el registry se pediría a una URL relativa y ninguna página con un "
+                + "<synergos-*> renderizaría, con el arranque en verde.");
+        }
+
+        if (!Uri.TryCreate(publicBaseUrl.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException(
+                $"Synergos:BundleRegistry:PublicBaseUrl vale «{publicBaseUrl}», que no es una URL "
+                + "http(s) absoluta. En modo Http el cliente no tiene BaseAddress, así que una "
+                + "relativa —el default /cdn-bundles, correcto para FileSystem— no se puede pedir.");
+        }
+    }
 }
