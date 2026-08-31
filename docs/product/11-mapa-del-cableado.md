@@ -51,7 +51,7 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 | Stub | Destino | A qué nivel, y por qué | Estado |
 |---|---|---|---|
 | `StubShopOrderService` | `Bff.Tienda` `POST /v1/purchases` | **Orquestador.** Reservar + cobrar + crear pedido pueden fallar a la mitad; si el cobro falla hay que soltar el stock. Contra las capacidades sueltas, el CMS reimplementaría la máquina de sagas — y peor, porque no tiene dónde anotar una compensación pendiente | **HU #24** |
-| `StubReservationService` | `Api.Booking` `/v1/holds` | **Capacidad.** Apartar es un paso que dice NO solo (`insufficient_capacity`). Era «el motor polimórfico que comparten seis verticales, y cablearlo los mueve de una vez» — y **el apalancamiento bajó**: el carrito de viaje (#40) y la visita al inmueble (#33a) ya no pasan por él. Lo que queda detrás es el flujo hotel del `BookingController` y el asiento de vuelo | pendiente |
+| `StubReservationService` | `Api.Booking` `/v1/holds` | **Capacidad.** Apartar es un paso que dice NO solo (`insufficient_capacity`). Era «el motor polimórfico que comparten seis verticales, y cablearlo los mueve de una vez» — y **el apalancamiento se agotó**: los seis se cablearon de a uno (#24, #25, #33a, #35, #36, #40). Con los seis flags en su modo cableado **no le queda un solo llamador de negocio**; el único que lo llama fuera de un flag es `HoldExpirationScannerHostedService`, que se registra incondicionalmente. Lo que queda no es cablear: es decidir el destino del motor en proceso y que su barredor lo siga (#33) | premisa agotada |
 | `StubPaymentProvider` | `Api.Payments` `/v1/payments` | **Capacidad.** Ya hay `RoutingPaymentProvider` + `WompiPaymentProvider` delante; el stub es el respaldo cuando no hay credencial. Bloqueado por la misma HU que hace que `Api.Payments` cobre de verdad | épica #2 |
 | `StubCaseWorkflowService` | `Api.Workflow` `/v1/instances/{id}/fire` | **Capacidad.** Una transición de estado es un paso que dice NO solo (`transition_not_allowed`). La tabla de transiciones vivía en C# dentro del stub, que es justo lo que `Api.Workflow` existe para no repetir por dominio | **HU #44** |
 | `StubCertificateService` | `Api.Signing` `POST /v1/seals` — **NO `/v1/signatures`** | **Capacidad.** El motivo sigue en pie: el HMAC local (ADR 0124) guarda su llave y **no sabe retirarla**, y la capacidad sí. Lo que no encajaba era el endpoint: el token de `/v1/signatures` **vence** (≤365 d), **no es determinista** y **publica el payload** —o sea el alumno— dentro del id que se imprime. El **sello** (#45) es la operación que faltaba: determinista, sin vencimiento, opaca, y se comprueba **contra el sujeto**. El firmante local **se conserva** verificando los ids anteriores, o cada QR ya impreso dejaría de valer | **HU #45** |
@@ -99,11 +99,12 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 1. **`StubShopOrderService`** (#24) — es el único con el orquestador **ya construido, probado y
    sin un solo consumidor**. Es la distancia más corta entre «tenemos 20 APIs» y «tenemos un
    producto», y no cuesta código nuevo del lado del servicio.
-2. **`StubReservationService`** — era «un cableado, seis verticales», y hoy son menos: el
-   carrito de viaje (#40) y la visita al inmueble (#33a) llegaron a `Api.Booking` por su
-   cuenta, cada uno por la puerta que le tocaba. **La lección no es que la estimación
-   estuviera mal, sino que el apalancamiento de un seam se evapora si se tarda**: cada
-   consumidor que se cablea por separado se lo lleva consigo.
+2. ~~**`StubReservationService`**~~ — **ya no es candidato, y la lección es la buena.** Era
+   «un cableado, seis verticales»; los seis llegaron a su destino por su cuenta, cada uno por
+   la puerta que le tocaba (#24, #25, #33a, #35, #36, #40). **El apalancamiento de un seam se
+   evapora si se tarda**: cada consumidor que se cablea por separado se lo lleva consigo, y al
+   final no quedó nada que mover de una vez. Lo que queda de #33 es otra cosa —qué se hace con
+   el motor en proceso y con su barredor de holds, que corre siempre— y está anotado allí.
 3. **`StubPaymentProvider`** — mientras no cobre, ningún demo de venta corre de punta a punta.
    Va tercero y no primero porque lo que falta es una credencial, no un cliente HTTP.
 
