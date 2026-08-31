@@ -113,6 +113,13 @@ public sealed partial class SeamComposer
         }
         else if (string.Equals(bundleRegistryMode, "Http", StringComparison.OrdinalIgnoreCase))
         {
+            // Antes de registrar nada: sin URL base absoluta este modo no puede funcionar, y
+            // fallaría en el primer render con el arranque ya dado por bueno (#56). Mismo trato
+            // que la llave de firma de Api.Identity — la regla está dos comentarios más arriba,
+            // aplicada al reloj y no al único valor que el operador escribe a mano.
+            BundleRegistrySettings.ExigirUrlPublicaAbsoluta(
+                builder.Config["Synergos:BundleRegistry:PublicBaseUrl"]);
+
             // Cliente tipado: el HttpClient lo gestiona la fábrica (reuso de conexiones,
             // reciclado de DNS). Un HttpClient a mano dentro de un singleton es el clásico que
             // deja de ver un cambio de DNS del CDN hasta que se reinicia el proceso.
