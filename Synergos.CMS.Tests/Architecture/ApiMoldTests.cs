@@ -184,6 +184,53 @@ public sealed class ApiMoldTests
         }
     }
 
+    /// <summary>
+    /// Toda capacidad tiene su fichero de reglas, y declara su prefijo de códigos.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que evita</b> (#58). <c>CLAUDE.md</c> §3 dice que la respuesta a «¿qué
+    /// rechaza esta capacidad?» está en <c>Domain/XRules.cs</c> y que <b>es el único sitio</b>.
+    /// Era cierto en diecinueve: <c>Api.Sessions</c> no tenía ese fichero y su única regla vivía
+    /// dentro del método del endpoint — donde no se puede probar sin levantar el host.</para>
+    ///
+    /// <para><b>Y el gate de las cuatro carpetas no lo veía</b>, porque <c>Domain/</c> existía:
+    /// dentro estaba <c>SearchEvent.cs</c>. Medía la carpeta, no lo que §3 promete que hay en
+    /// ella.</para>
+    ///
+    /// <para><b>Pide que el fichero EXISTA, no que ningún rechazo viva fuera.</b> La diferencia
+    /// importa: <c>Api.Notifications</c> construye cinco códigos en <c>Transport/</c> —los fallos
+    /// de firma del webhook de Resend— y ahí es donde corresponden, porque son del transporte y no
+    /// del negocio. Un gate que prohibiera eso nacería con una lista de exenciones, y un gate con
+    /// exenciones deja de leerse.</para>
+    /// </remarks>
+    [Fact]
+    public void Toda_capacidad_tiene_su_fichero_de_reglas()
+    {
+        var malas = new List<string>();
+
+        foreach (var (nombre, dir) in Capacidades())
+        {
+            var reglas = Directory.EnumerateFiles(Path.Combine(dir, "Domain"), "*Rules.cs").ToList();
+
+            if (reglas.Count == 0)
+            {
+                malas.Add($"{nombre} no tiene Domain/*Rules.cs. Sus rechazos viven donde no se "
+                          + "pueden probar sin levantar el host — es lo que costó una vuelta en "
+                          + "BookingController (#36) y en la emisión de tokens (#14, rebanada 2).");
+                continue;
+            }
+
+            // Sin prefijo declarado, cada rechazo escribe el suyo a mano y el día que uno se
+            // teclee mal nadie lo nota: un código es una cadena hasta que alguien la agrupa.
+            if (!reglas.Any(f => SinComentarios(f).Contains("CodePrefix", StringComparison.Ordinal)))
+            {
+                malas.Add($"{nombre} tiene fichero de reglas pero ninguno declara CodePrefix.");
+            }
+        }
+
+        Assert.True(malas.Count == 0, string.Join(Environment.NewLine, malas));
+    }
+
     [Fact]
     public void El_ruteo_vive_en_Endpoints_y_no_desperdigado()
     {
