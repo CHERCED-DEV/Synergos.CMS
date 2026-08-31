@@ -46,7 +46,10 @@ public sealed class IdentityService
             if (motivo is not null) return Result.Rejected<Principal>(motivo);
 
             var id = Guid.NewGuid().ToString("n");
-            var principal = new Principal(id, subject, IdentityRules.Derive(secret!), Normalize(roles));
+            // Sin secreto se registra SIN credencial, no con una vacía: una derivación de la
+            // cadena vacía sería una contraseña que alguien puede acertar.
+            var credencial = string.IsNullOrWhiteSpace(secret) ? null : IdentityRules.Derive(secret!);
+            var principal = new Principal(id, subject, credencial, Normalize(roles));
 
             _principals.Put(principal);
             _idempotency.Remember("principal", key, id);

@@ -28,6 +28,47 @@ public sealed partial class SeamComposer
         services.AddOptions<WebhookResilienceSettings>()
             .Bind(builder.Config.GetSection("Synergos:Admin:WebhookResilience"));
 
+        // ── Identidad verificable de quien actúa (HU #14) ───────────────────
+        //
+        // Va acá y no en el composer de Gobierno aunque hoy la use sólo el expediente: quien
+        // actúa no es un asunto de un vertical. El día que el segundo la pida —un acuse de
+        // Api.Messaging, una reserva a nombre de alguien— tiene que encontrarla registrada, no
+        // duplicada en otro sitio con otro cliente y otro timeout.
+        //
+        // La sección se ENLAZA: sin esto el cliente recibe un IdentitySettings recién construido
+        // y lo que no viaja por el HttpClient —el margen de renovación— se queda en su default en
+        // silencio. Es el olvido que arrastraban Tienda (#24), Salud (#25) y Viajes (#36).
+        services.Configure<IdentitySettings>(builder.Config.GetSection("Synergos:Identity"));
+
+        if (string.Equals(builder.Config["Synergos:Identity:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        {
+            var idBase = builder.Config["Synergos:Identity:BaseUrl"];
+            var idKey = builder.Config["Synergos:Identity:ApiKey"];
+            var idTimeout = int.TryParse(builder.Config["Synergos:Identity:TimeoutSeconds"], out var it) && it > 0
+                ? it : 5;
+
+            services.AddHttpClient(HttpIdentityTokenIssuer.ClientName, http =>
+            {
+                var url = string.IsNullOrWhiteSpace(idBase) ? "http://127.0.0.1:5220/" : idBase;
+                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+                http.Timeout = TimeSpan.FromSeconds(idTimeout);
+                if (!string.IsNullOrWhiteSpace(idKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpIdentityTokenIssuer.ApiKeyHeader, idKey);
+                }
+            })
+            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+
+            services.AddSingleton<IIdentityTokenIssuer>(sp => new HttpIdentityTokenIssuer(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IOptionsMonitor<IdentitySettings>>(),
+                sp.GetRequiredService<ILogger<HttpIdentityTokenIssuer>>()));
+        }
+        else
+        {
+            services.AddSingleton<IIdentityTokenIssuer, StubIdentityTokenIssuer>();
+        }
+
         // Ola 54.1 — IBrandingProvider resuelve el brand activo según el
         // hostname del request, matchéandolo contra los siteConfigSettings
         // publicados (cada uno con su brandKey via compBranding). Si no
