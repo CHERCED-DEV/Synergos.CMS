@@ -55,6 +55,21 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService
     /// <summary>Cliente nombrado que registra el composer.</summary>
     public const string ClientName = "synergos-api-workflow";
 
+    /// <summary>El vocabulario con el que este vertical nombra a quien decide.</summary>
+    public const string ActorKind = "gov.funcionario";
+
+    /// <summary>
+    /// Los roles del funcionario de ventanilla.
+    /// </summary>
+    /// <remarks>
+    /// <b>Están en UN sitio porque ahora se usan para dos cosas</b>: viajan en el cuerpo —el
+    /// camino degradado— y se registran en <c>Api.Identity</c> al dar de alta la identidad, que
+    /// es de donde salen firmados. Con dos listas, un despliegue acabaría presentando un token
+    /// con un rol y declarando otro, y el mismo funcionario decidiría distinto según qué mire la
+    /// capacidad.
+    /// </remarks>
+    public static readonly IReadOnlyList<string> OfficerRoles = new[] { "funcionario" };
+
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -65,6 +80,7 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService
     private readonly IHttpClientFactory _factory;
     private readonly GovCaseDecisionRecorder _recorder;
     private readonly GobSettings _settings;
+    private readonly IIdentityTokenIssuer _identidad;
     private readonly Func<DateTimeOffset> _now;
     private readonly SemaphoreSlim _defGate = new(1, 1);
     private DefinitionDto? _definition;
@@ -75,10 +91,14 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService
         IOptions<GobSettings> settings,
         IAuditTrailWriter? audit = null,
         ITransactionalNotifier? notifier = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        IIdentityTokenIssuer? identity = null)
     {
         _factory = factory ?? throw new ArgumentNullException(nameof(factory));
         _settings = settings?.Value ?? throw new ArgumentNullException(nameof(settings));
+        // Sin emisor se declara quién actúa, que es lo que se hacía antes de la HU #14. Va al
+        // final y con default para no re-ligar los args posicionales de este ctor otra vez.
+        _identidad = identity ?? new StubIdentityTokenIssuer();
         _recorder = new GovCaseDecisionRecorder(cases, audit, notifier);
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
@@ -245,9 +265,9 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService
 
         var cuerpo = new FireDto(
             transicion,
-            "gov.funcionario",
+            ActorKind,
             GovCaseDecisionRecorder.OfficerActor,
-            new[] { "funcionario" },
+            OfficerRoles,
             string.IsNullOrWhiteSpace(note) ? null : note.Trim());
 
         using var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/instances/{instancia.Id}/fire")
@@ -259,6 +279,20 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService
         // cambio un paso distinto más tarde sí es otro paso.
         peticion.Headers.TryAddWithoutValidation(
             "Idempotency-Key", $"gov-fire-{instancia.Id}-{instancia.State}-{transicion}");
+
+        // La identidad de quien decide, si se puede conseguir (HU #14). Los roles del cuerpo
+        // SIGUEN yendo y no es redundancia: con token, la capacidad los ignora y usa los del
+        // token (#48); sin token —clon limpio, o Api.Identity caída— son el único dato que hay,
+        // y un trámite no se para porque la identidad esté caída. Cuál de los dos manda lo
+        // decide el despliegue del otro lado, con Workflow:Roles:RequireVerifiedRoles.
+        var token = await _identidad.IssueAsync(
+            new IdentitySubject(ActorKind, GovCaseDecisionRecorder.OfficerActor, OfficerRoles), ct)
+            .ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            peticion.Headers.TryAddWithoutValidation("X-Synergos-Identity", token);
+        }
 
         using var respuesta = await http.SendAsync(peticion, ct);
 

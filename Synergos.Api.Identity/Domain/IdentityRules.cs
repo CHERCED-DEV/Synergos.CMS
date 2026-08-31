@@ -26,9 +26,26 @@ public static class IdentityRules
     /// <summary>Cuánto dura el bloqueo.</summary>
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 
-    /// <summary>Si la credencial propuesta sirve.</summary>
+    /// <summary>
+    /// Si la credencial propuesta sirve. <b>No traerla es válido</b> — ver
+    /// <see cref="Principal.Secret"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Un principal SIN credencial es legítimo, y hacía falta</b> (HU #14). Esta
+    /// capacidad contesta «¿quién es y qué puede hacer?»; verificar una contraseña es <i>una</i>
+    /// forma de establecerlo, no la única. Quien ya entró por otro sitio —una sesión del CMS,
+    /// mañana una federación— necesita existir acá para poder ser sujeto de un token y llevar
+    /// roles, y no necesita una contraseña.</para>
+    ///
+    /// <para><b>Exigirla era peor que no exigirla:</b> obligaba a quien registra a inventarse un
+    /// secreto por persona y a guardarlo, o sea a fabricar credenciales que nadie usa y que hay
+    /// que custodiar igual. Una credencial que no se usa es sólo superficie de ataque.</para>
+    ///
+    /// <para>Lo que NO cambia: si se manda una, tiene que ser buena. Media credencial es peor
+    /// que ninguna, porque parece protección.</para>
+    /// </remarks>
     public static Rejection? CheckSecret(string? secret)
-        => !string.IsNullOrWhiteSpace(secret) && secret!.Length >= MinSecretLength
+        => string.IsNullOrWhiteSpace(secret) || secret!.Length >= MinSecretLength
             ? null
             : Rejection.Invalid($"{CodePrefix}.weak_secret",
                 $"La credencial tiene que tener al menos {MinSecretLength} caracteres.");
@@ -80,6 +97,22 @@ public static class IdentityRules
         if (principal is null)
         {
             return new AuthOutcome(BadCredentials(), 0, null);
+        }
+
+        // Un principal sin credencial no se autentica por credencial NUNCA, y se dice con su
+        // propio código en vez de con «credenciales inválidas»: lo segundo invita a reintentar
+        // algo que no puede funcionar.
+        //
+        // Y NO cuenta como intento fallido, que es la mitad que importa: si contara, cualquiera
+        // podría bloquear a una persona que ni siquiera entra por acá mandando cinco peticiones
+        // con cualquier contraseña. Sería una negación de servicio contra alguien por una puerta
+        // que no usa.
+        if (principal.Secret is null)
+        {
+            return new AuthOutcome(
+                Rejection.Conflict($"{CodePrefix}.no_credential",
+                    "Este principal no tiene credencial: su identidad se establece en otro sitio."),
+                principal.FailedAttempts, principal.LockedUntilUtc);
         }
 
         if (principal.IsLocked(now))

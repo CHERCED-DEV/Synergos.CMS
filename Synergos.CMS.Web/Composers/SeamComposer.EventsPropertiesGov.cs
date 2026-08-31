@@ -354,7 +354,11 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<StubApplicationService>(),
                 sp.GetRequiredService<IOptions<GobSettings>>(),
                 sp.GetRequiredService<IAuditTrailWriter>(),
-                sp.GetRequiredService<ITransactionalNotifier>()));
+                sp.GetRequiredService<ITransactionalNotifier>(),
+                now: null,
+                // Quién decide, presentado en vez de declarado (HU #14). El default de la seam
+                // no emite nada, así que esto sigue funcionando igual en un clon limpio.
+                identity: sp.GetRequiredService<IIdentityTokenIssuer>()));
         }
         else
         {
