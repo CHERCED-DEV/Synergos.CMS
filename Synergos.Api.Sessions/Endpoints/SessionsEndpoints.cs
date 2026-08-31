@@ -60,10 +60,9 @@ public static class SessionsEndpoints
         var desde = QueryWindow.From(from, ahora);
         var hasta = QueryWindow.To(to, ahora);
 
-        if (hasta <= desde)
+        if (SessionsRules.CheckWindow(desde, hasta) is { } rechazo)
         {
-            return Rejection.Invalid("sessions.bad_window",
-                $"La ventana no avanza: {desde:O} → {hasta:O}.").ToProblem();
+            return rechazo.ToProblem();
         }
 
         return Results.Ok(consulta(TimeWindow.Of(desde, hasta)).Select(QueryStatResponse.From).ToList());
