@@ -244,10 +244,12 @@ Dos escrituras obligatorias **en el mismo commit** que las enseñó:
 2. Escribir el XML uSync directo en `Synergos.CMS.Web/uSync/v9/{tipo}/`.
 3. Si es icono: verificar que existe en `tools/umbraco13-icons-stock.txt`
    (627 iconos, versionado en el repo) — no inventar.
-4. Correr `node tools/usync-audit.mjs` — 8 checks: colisión de GUID,
+4. Correr `node tools/usync-audit.mjs` — 11 checks: colisión de GUID,
    compositions huérfanas, refs rotas, iconos, alias de Dictionary,
-   cross-check `<Definition>`↔`<DataType Key>`, DataTypes huérfanos y
-   mojibake. Es el mismo gate que corre en CI.
+   cross-check `<Definition>`↔`<DataType Key>`, DataTypes huérfanos,
+   mojibake, contenido del seeder (ADR 0129), bloqueos externos declarados
+   (#53) y claves de Dictionary sin respaldo (#60). Es el mismo gate que
+   corre en CI.
 5. El arquitecto corre uSync Import desde backoffice manualmente para
    aplicar al DB.
 
@@ -388,7 +390,7 @@ Los cuatro son los mismos que gatean los PRs. No necesitan `dotnet`, así que
 un agente en un contenedor sin SDK **sí puede** verificarlos:
 
 ```bash
-node tools/usync-audit.mjs        # 8 checks de schema uSync
+node tools/usync-audit.mjs        # 11 checks de schema uSync
 node tools/check-css-parity.mjs   # G-3: toda clase syn-* emitida tiene CSS
 (cd Synergos.CMS.Web/docs/contracts/tests && npm ci && npm test)  # contratos
 ```
