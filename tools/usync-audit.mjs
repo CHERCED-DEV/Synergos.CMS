@@ -36,6 +36,10 @@
  *      lo que crea DevTestContentSeeder no es trabajo editorial y no
  *      debe commitearse. Reemplaza a la regla de .gitignore que antes
  *      bloqueaba TODO el contenido para no dejar pasar el del seeder.
+ *  11. Claves de Dictionary sin respaldo: toda GetDictionaryValue("X")
+ *      SIN segundo argumento tiene que existir como <Dictionary Alias="X">.
+ *      Sin respaldo y sin definir, Umbraco devuelve la CLAVE y el visitante
+ *      ve una cadena técnica en la página — sin error y sin log.
  *   8. Mojibake hygiene: detecta byte sequences típicas de UTF-8 mal
  *      decodificado como Latin-1 y re-encodeado (PowerShell 5.1 trap).
  *      Patrones: Ã¡/Ã©/Ã­/Ã³/Ãº/Ã±/Â¿/Â¡. Error level — los XMLs uSync
@@ -53,6 +57,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(process.cwd(), 'Synergos.CMS.Web/uSync/v9');
+const VIEWS = path.resolve(process.cwd(), 'Synergos.CMS.Web/Views');
 const ICONS_STOCK_PATH = path.resolve(process.cwd(), 'tools/umbraco13-icons-stock.txt');
 
 const RESERVED_MARKERS = [
@@ -358,6 +363,42 @@ async function audit() {
             err('seeded-content',
                 `${path.relative(ROOT, file)} es contenido del SEEDER ("${alias}"), no editorial. ` +
                 'Se regenera con DevTestContentSeeder: bórralo del working tree antes de commitear.');
+        }
+    }
+
+    // ─── 11. Claves de Dictionary sin respaldo (#60) ───────────────
+    //
+    // Las vistas piden i18n de dos formas y solo una es segura:
+    //
+    //   GetDictionaryValue("X", "texto")  → si X falta, sale "texto". Inofensivo.
+    //   GetDictionaryValue("X")           → si X falta, sale "X". Al visitante.
+    //
+    // Lo segundo no da error ni log: pone una cadena técnica en medio de una
+    // página. Este check mira SOLO las llamadas sin respaldo, y eso importa:
+    // hay 145 claves con respaldo que a propósito no están en uSync —son
+    // textos por defecto que el editor puede sobrescribir— y meterlas aquí
+    // haría nacer el chequeo con 145 falsos positivos.
+    //
+    // Una clave que no sea un literal se IGNORA en silencio. Hoy las 234
+    // llamadas lo son, pero un chequeo que se pone rojo con lo que no
+    // entiende obliga a desactivarlo, y desactivado no vigila nada.
+    const aliasDefinidos = new Set();
+    for (const file of dictionary) {
+        const text = await fs.readFile(file, 'utf-8');
+        const m = text.match(/<Dictionary[^>]*\sAlias="([^"]+)"/);
+        if (m) aliasDefinidos.add(m[1]);
+    }
+
+    const vistas = await readFiles(VIEWS, '.cshtml');
+    for (const file of vistas) {
+        const text = await fs.readFile(file, 'utf-8');
+        for (const m of matchAll(text, /GetDictionaryValue\(\s*"([^"]+)"\s*(,)?/g)) {
+            if (m[2]) continue; // lleva respaldo: no puede fallar
+            if (aliasDefinidos.has(m[1])) continue;
+            err('dictionary-sin-respaldo',
+                `${path.relative(process.cwd(), file)} pide "${m[1]}" sin valor por defecto y esa `
+                + 'clave no está en uSync/v9/Dictionary/. Umbraco devuelve la clave, así que el '
+                + 'visitante vería esa cadena en la página. Añadí la clave, o un respaldo en la vista.');
         }
     }
 
