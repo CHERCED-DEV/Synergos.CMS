@@ -30,9 +30,9 @@ forma conocida de que una cifra a mano sobreviva a la cuarta ola.
 
 | Familia | Cuántos | Qué le pasa |
 |---|---:|---|
-| **A — cableado pendiente** | 13 | va a una capacidad o a un BFF |
+| **A — cableado pendiente** | 12 | va a una capacidad o a un BFF |
 | **B — ya resuelto desde el contenido** | 5 | sale de DocTypes; cablearlo sería un retroceso |
-| **C — se queda en stub a propósito** | 30 | no hay capacidad detrás, y no debería haberla |
+| **C — se queda en stub a propósito** | 31 | no hay capacidad detrás — o la hay y el stub es el camino por defecto |
 
 > **La brecha es menor de lo que «una capacidad de veinte conectada» sugiere**, y por una razón
 > que no se ve desde el conteo: **más de un tercio de los stubs ya son durables**. 18 de los 48
@@ -42,7 +42,7 @@ forma conocida de que una cifra a mano sobreviva a la cuarta ola.
 
 ---
 
-## Familia A — cableado pendiente (13)
+## Familia A — cableado pendiente (12)
 
 Lo que sí tiene una capacidad o un orquestador detrás. **La columna «a qué nivel» es la decisión
 que no hay que equivocar**: contra el BFF cuando hay varios pasos que pueden fallar a la mitad y
@@ -51,7 +51,6 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 | Stub | Destino | A qué nivel, y por qué | Estado |
 |---|---|---|---|
 | `StubShopOrderService` | `Bff.Tienda` `POST /v1/purchases` | **Orquestador.** Reservar + cobrar + crear pedido pueden fallar a la mitad; si el cobro falla hay que soltar el stock. Contra las capacidades sueltas, el CMS reimplementaría la máquina de sagas — y peor, porque no tiene dónde anotar una compensación pendiente | **HU #24** |
-| `StubReservationService` | `Api.Booking` `/v1/holds` | **Capacidad.** Apartar es un paso que dice NO solo (`insufficient_capacity`). Era «el motor polimórfico que comparten seis verticales, y cablearlo los mueve de una vez» — y **el apalancamiento se agotó**: los seis se cablearon de a uno (#24, #25, #33a, #35, #36, #40). Con los seis flags en su modo cableado **no le queda un solo llamador de negocio**; el único que lo llama fuera de un flag es `HoldExpirationScannerHostedService`, y **está fuera del `if/else` porque tiene que estarlo**: los cinco flags son independientes, así que con `Viajes=Bff` y `Salud=Stub` las citas siguen apartando acá y sus holds necesitan quien los expire. Lo que queda no es cablear, es decidir si el motor en proceso se queda como camino del clon limpio — y si la respuesta es sí, esto no es familia A (#33) | premisa agotada |
 | `StubPaymentProvider` | `Api.Payments` `/v1/payments` | **Capacidad.** Ya hay `RoutingPaymentProvider` + `WompiPaymentProvider` delante; el stub es el respaldo cuando no hay credencial. Bloqueado por la misma HU que hace que `Api.Payments` cobre de verdad | épica #2 |
 | `StubCaseWorkflowService` | `Api.Workflow` `/v1/instances/{id}/fire` | **Capacidad.** Una transición de estado es un paso que dice NO solo (`transition_not_allowed`). La tabla de transiciones vivía en C# dentro del stub, que es justo lo que `Api.Workflow` existe para no repetir por dominio | **HU #44** |
 | `StubCertificateService` | `Api.Signing` `POST /v1/seals` — **NO `/v1/signatures`** | **Capacidad.** El motivo sigue en pie: el HMAC local (ADR 0124) guarda su llave y **no sabe retirarla**, y la capacidad sí. Lo que no encajaba era el endpoint: el token de `/v1/signatures` **vence** (≤365 d), **no es determinista** y **publica el payload** —o sea el alumno— dentro del id que se imprime. El **sello** (#45) es la operación que faltaba: determinista, sin vencimiento, opaca, y se comprueba **contra el sujeto**. El firmante local **se conserva** verificando los ids anteriores, o cada QR ya impreso dejaría de valer | **HU #45** |
@@ -136,9 +135,10 @@ Los cinco tienen la misma forma: un flag `Synergos:Catalog:Sources:{vertical}` q
 
 ---
 
-## Familia C — se queda en stub a propósito (30)
+## Familia C — se queda en stub a propósito (31)
 
-No hay capacidad detrás, y no debería haberla. Tres razones distintas, y conviene no mezclarlas
+No hay capacidad detrás, o la hay y el stub es el camino por defecto a propósito. Cuatro razones
+distintas, y conviene no mezclarlas
 porque «qué haría falta para que dejara de ser stub» es diferente en cada una.
 
 ### C.1 — Cálculo puro: no tiene almacén, luego no es un servicio (6)
@@ -238,6 +238,34 @@ otro riesgo, y la decisión es del arquitecto. Está escrita en el ticket.
 
 ---
 
+### C.4 — Motor en proceso: es el camino del clon limpio (1)
+
+| Stub | Qué es | Para que dejara de ser stub |
+|---|---|---|
+| `StubReservationService` | el motor de apartados con almacén propio (`IJsonEntityStore`), registrado **siempre** | que se decidiera que un clon sin servicios levantados ya no tiene que poder apartar |
+
+**Esta subfamilia existe porque ninguna de las otras tres le encaja**, y forzarlo en una habría
+sido peor que crearla: tiene almacén propio (no es C.1), no se deriva de otro estado (no es C.2)
+y no es contenido sembrado para una demo (no es C.3).
+
+Estuvo en la familia A desde el primer inventario, con el titular «un cableado, seis verticales».
+**Los seis se cablearon de a uno** —#24, #25, #33a, #35, #36 y #40— y cada uno se llevó consigo su
+parte del apalancamiento. Con los cinco flags en su modo cableado, este stub **no tiene un solo
+llamador de negocio**: lo único que lo llama fuera de un flag es
+`HoldExpirationScannerHostedService`, y está fuera del `if/else` **porque tiene que estarlo** —los
+flags son independientes, así que con `Viajes=Bff` y `Salud=Stub` las citas siguen apartando aquí
+y sus holds necesitan quien los expire.
+
+> **Lo que queda no es cablearlo: es que sea el default.** `CLAUDE.md` dice que el stub es el
+> camino por omisión en los cinco verticales, y eso es deliberado — permite levantar el repo
+> entero sin ningún servicio. Mientras esa siga siendo la postura, esto no es trabajo pendiente:
+> es la implementación por defecto de un seam cuyos consumidores ya eligen destino cada uno.
+>
+> **Y la lección se guarda, porque costó una HU de prioridad 1:** el apalancamiento de un seam no
+> baja, **se evapora**. Cada consumidor que se cablea por separado se lo lleva consigo, y al final
+> no queda nada que mover de una vez.
+
+
 ## Los 48, en una lista
 
 Para el gate. La familia va entre corchetes; el destino, cuando lo hay, es un directorio que
@@ -283,7 +311,7 @@ tiene que existir en la raíz del repo.
 | `StubProductCatalogProvider` | B | — |
 | `StubPropertyCatalogProvider` | B | — |
 | `StubReactionService` | C | — |
-| `StubReservationService` | A | `Synergos.Api.Booking` |
+| `StubReservationService` | C | — |
 | `StubReturnService` | A | `Synergos.Bff.Tienda` |
 | `StubRoomAvailabilityProvider` | C | — |
 | `StubSavedSearchService` | C | — |
