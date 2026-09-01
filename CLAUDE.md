@@ -509,8 +509,8 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 - **Poco está conectado al producto, pero la brecha es MENOR de lo que
   parecía.** El inventario del cableado (HU #23,
   `docs/product/11-mapa-del-cableado.md`) contó los 48 `Stub*` y los
-  clasificó: **13** son cableado pendiente, **5** ya salen del contenido
-  de Umbraco (cablearlos sería un retroceso) y **30** se quedan en stub a
+  clasificó: **12** son cableado pendiente, **5** ya salen del contenido
+  de Umbraco (cablearlos sería un retroceso) y **31** se quedan en stub a
   propósito. Y 18 de los 48 **ya son durables** — «stub» en este repo
   dejó hace tiempo de querer decir «en memoria». Hay gate
   (`WiringMapTests`): un stub nuevo sin mapear rompe el build, y desde
@@ -521,7 +521,7 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   uno**, porque una cabecera que dice «(14)» sobre trece filas pasa el
   recuento y deja un stub que nadie va a tomar — es la tabla que se lee
   para elegir el siguiente trabajo, no la rejilla del inventario.
-  De los 13, **nueve** están hechos: la tienda compra contra `Bff.Tienda`
+  De los 12, **nueve** están hechos: la tienda compra contra `Bff.Tienda`
   (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
   `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25), la visita al inmueble
   aparta cupo **directo contra `Api.Booking`, sin orquestador**
@@ -533,6 +533,23 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   (bloqueado por #27), y `StubReturnService` y `StubApplicationService`,
   que esperan caras de orquestador sin construir (`Bff.Tienda` de
   devoluciones y `Bff.Gob`).
+
+  > **Y son 12 porque `StubReservationService` pasó a la familia C** (#33).
+  > Entró en A como «un cableado, seis verticales», y **los seis se cablearon
+  > de a uno** —#24, #25, #33a, #35, #36 y #40—: con los cinco flags en su
+  > modo cableado no le queda un solo llamador de negocio. Lo que queda no es
+  > cablearlo, es que **sea el default**, y eso es deliberado — permite
+  > levantar el repo entero sin ningún servicio. Está en `C.4`, una
+  > subfamilia nueva porque ninguna de las otras tres le encajaba: tiene
+  > almacén propio, no se deriva de nada y no es contenido de demo.
+  >
+  > **El nueve más tres de arriba suma doce, y hasta ahora no sumaba trece.**
+  > Ese descuadre era exactamente este stub: estaba en A sin estado, ni hecho
+  > ni pendiente, porque no era ninguna de las dos cosas.
+  >
+  > La lección se guarda, que costó una HU de prioridad 1: **el
+  > apalancamiento de un seam no baja, se evapora**. Cada consumidor que se
+  > cablea por separado se lo lleva consigo.
 
   > **Lo que #44 mudó no es un paso: es una TABLA.** Qué puede pasarle a un
   > expediente estaba escrito en C# y se desplegaba con el sitio, así que
