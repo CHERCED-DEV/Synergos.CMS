@@ -544,9 +544,27 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   en conocimiento contra `Api.Messaging`**, por su propio interruptor
   (`Synergos:Gob:Notifications:Mode=Api`, HU #62). El default sigue
   siendo `Stub` —`Local` en el de notificaciones— en todos. **Faltan
-  dos**: `StubPaymentProvider` → `Api.Payments` (bloqueado por #27) y
-  `StubApplicationService`, que espera una cara de orquestador sin
-  construir (`Bff.Gob`).
+  dos**, y los dos por lo mismo: `StubPaymentProvider` y
+  `StubApplicationService` → `Api.Payments`, **bloqueados por #27**.
+
+  > **`StubApplicationService` NO espera un orquestador, y el mapa se
+  > equivocó con el mismo filtro por CUARTA vez.** Decía «con pago de por
+  > medio», que suena a saga; el propio código dice lo contrario y con la
+  > razón escrita: **no se aborta el trámite si la captura no sale** —en un
+  > servicio público, perder la radicación de un ciudadano porque su banco
+  > tardó es peor que arrastrar una tasa pendiente—. Si no se aborta, no hay
+  > nada que deshacer, y un orquestador sería la máquina de compensar sin
+  > compensación.
+  >
+  > **Componer no es orquestar.** Las cuatro veces el error fue mirar
+  > *cuántos pasos compone* en vez de las tres preguntas, que son distintas
+  > y hay que hacerlas por separado: ¿hay algo que **deshacer**? (decide si
+  > hace falta orquestador) · ¿el recurso lo lleva **alguien más**? (decide
+  > si hace falta cablearlo, #33a) · ¿**quién tiene la plata**? (decide a
+  > quién se le pide el movimiento, #57).
+  >
+  > **Y eso deja a `Bff.Gob` sin razón para existir hoy** — que es la
+  > consecuencia que importa, porque #15 estaba bloqueada esperándolo.
 
   > **El acto administrativo notificado existe para sostener CUÁNDO
   > ACCEDIÓ, no para enviar** (#62). Un correo enviado prueba que salió del
