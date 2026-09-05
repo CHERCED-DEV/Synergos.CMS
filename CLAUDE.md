@@ -506,18 +506,36 @@ segregación y molde en verde.
 > que las veinte construyen —el primer argumento de un `Rejection.*`, con
 > `{CodePrefix}` resuelto—, y por eso **excluye dos cosas que sí existen**: los
 > que se arman en tiempo de ejecución (`orders.already_{destino}`, y los
-> reenvoltorios `xxx.{code}`), que no se pueden enumerar sin ejecutar; y los
-> **seis que viven en `Synergos.Shared`** —`identity.token_expired`,
-> `token_malformed`, `token_unknown_key`, `token_subject_mismatch`,
-> `assertion_not_proven` y `token_not_verifiable`—, que una capacidad devuelve
-> pero no declara. Contando aquéllos serían 240.
+> reenvoltorios `xxx.{code}`), que no se pueden enumerar sin ejecutar; y los que
+> viven en `Synergos.Shared`, que una capacidad devuelve pero no declara.
+>
+> **Ésos últimos NO son un número, y creer que lo eran fue el error.** Seis
+> llevan prefijo fijo —`identity.token_expired`, `token_malformed`,
+> `token_unknown_key`, `token_subject_mismatch`, `assertion_not_proven` y
+> `token_not_verifiable`—, así que se pueden contar y esta guía decía «con ellos
+> serían 240». Pero hay **dos más que llevan el prefijo de quien llama**:
+> `{prefijo}.idempotency_key_required`, que emiten las **19** capacidades que
+> exigen la cabecera, y `{prefijo}.access_requires_identity`, que emite quien
+> deje la afirmación sin declarar —hoy `Api.Audit` y `Api.Consent`;
+> `Api.Messaging` declara el suyo y `Api.Workflow` no puede llegar ahí—. Sumarlo
+> todo no da una cifra estable: da **una función de quién llama**, que cambia
+> cuando una capacidad empieza a exigir una llave sin que nadie escriba un
+> `Rejection` nuevo. Por eso el criterio cuenta **el árbol de las capacidades**
+> y no «todo lo que puede salir»: lo segundo hay que ejecutarlo para saberlo.
+>
+> Se eligió el criterio **simétrico con el de endpoints** —lo que hay en el
+> **árbol de las capacidades**— porque el sujeto de la frase son las veinte.
+> Hay gate (`ApiMoldTests`), y desde el descuadre de abajo **cuenta también el
+> número de esta nota**: tener la cifra en dos sitios y vigilar uno solo es
+> cómo se acaba discutiendo cuál de los dos está mal.
 >
 > **El sexto llegó ahí solo, y el gate lo cazó** (#72): al subir la
 > comprobación del token a `Shared`, `token_not_verifiable` dejó de
 > construirse dentro de una capacidad y la cifra bajó de 235 a 234 sin que
 > nadie tocara una regla. Es lo que se quería — mover código no debería poder
-> cambiar en silencio lo que la guía afirma. Se eligió el criterio simétrico con el de endpoints: lo
-> que hay **en el árbol de las capacidades**. Hay gate (`ApiMoldTests`).
+> cambiar en silencio lo que la guía afirma. **Y la nota se quedó diciendo
+> 235** cuando el resumen ya decía 234: el gate miraba la frase del resumen y
+> la de la nota no la miraba nadie.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
 imágenes por SHA a GHCR, `compose.prod.yml`, `tools/bootstrap-servidor.sh`,
