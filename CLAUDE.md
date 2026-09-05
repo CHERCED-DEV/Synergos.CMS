@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2635 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2651 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2635 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2651 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (11) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -159,7 +159,7 @@ Synergos.CMS/
 | "¿Qué API necesita cada dominio? ¿Cuál es el molde?" | `docs/product/08-despiece-apis.md` — la matriz 20×9 y §4 |
 | "¿Cómo se deshace lo que ya se hizo?" | `docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `docs/product/10-promocion-bff-core.md` |
-| "¿Qué se hace con cada uno de los 48 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
+| "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; la única excepción son los cinco de `Api.Notifications/Transport/`, que son fallos de la firma del webhook y no reglas de negocio |
 
 > ⚠️ **De los seis docs de `docs/product/`, sólo el 11 está versionado.** Los
@@ -369,7 +369,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2635 tests):
+# Suite completa (2651 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -413,7 +413,7 @@ Después de las Olas 42 → 44 el Layout Composer es end-to-end:
   Hero, SnippetRef.
 - **Block Grid con areas** (`DTBlockGridSections.config`) permite al
   editor dropear presets al root de `sections` y cualquier elemento
-  de contenido (148 blocks) dentro de las areas.
+  de contenido (159 blocks) dentro de las areas.
 - **Plugin backoffice** `App_Plugins/LayoutComposer/` con custom
   views + SVG thumbnails + JS defaults pre-drop.
 - **Runtime SSR** `Views/Partials/blockgrid/Components/
@@ -425,7 +425,7 @@ Después de las Olas 42 → 44 el Layout Composer es end-to-end:
   `Synergos:LayoutComposer:EnableStarterScaffold`.
 - **Reusable snippets** (Ola 42.10) via `elementLayoutSnippetRef` que
   referencia un `reusableBlock` de Ola 34.
-- **compDom* universal** (Ola 43.15/43.16): los 156 element types
+- **compDom* universal** (Ola 43.15/43.16): los 173 element types
   tienen compDomClass + compDomVariant + compDomVisibility +
   compDomAttributes. El wrapper `SynHost/_Wrapper.cshtml` (Ola 44.1)
   aplica estos props al HTML emitido por los SynHost partials.
@@ -493,8 +493,8 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (136 endpoints, 235 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2635 tests, gates de
+**Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2651 tests, gates de
 segregación y molde en verde.
 
 > **Los 235 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -503,10 +503,16 @@ segregación y molde en verde.
 > `{CodePrefix}` resuelto—, y por eso **excluye dos cosas que sí existen**: los
 > que se arman en tiempo de ejecución (`orders.already_{destino}`, y los
 > reenvoltorios `xxx.{code}`), que no se pueden enumerar sin ejecutar; y los
-> **cinco que viven en `Synergos.Shared`** —`identity.token_expired`,
-> `token_malformed`, `token_unknown_key`, `token_subject_mismatch` y
-> `assertion_not_proven`—, que una capacidad devuelve pero no declara. Contando
-> aquéllos serían 240. Se eligió el criterio simétrico con el de endpoints: lo
+> **seis que viven en `Synergos.Shared`** —`identity.token_expired`,
+> `token_malformed`, `token_unknown_key`, `token_subject_mismatch`,
+> `assertion_not_proven` y `token_not_verifiable`—, que una capacidad devuelve
+> pero no declara. Contando aquéllos serían 240.
+>
+> **El sexto llegó ahí solo, y el gate lo cazó** (#72): al subir la
+> comprobación del token a `Shared`, `token_not_verifiable` dejó de
+> construirse dentro de una capacidad y la cifra bajó de 235 a 234 sin que
+> nadie tocara una regla. Es lo que se quería — mover código no debería poder
+> cambiar en silencio lo que la guía afirma. Se eligió el criterio simétrico con el de endpoints: lo
 > que hay **en el árbol de las capacidades**. Hay gate (`ApiMoldTests`).
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -642,7 +648,8 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > arreglo en una regresión. Hoy el estado sólo pasa a `Refunded` cuando no
   > queda saldo. Hay gate (`ShopWiringTests`).
 
-  > **Y son 12 porque `StubReservationService` pasó a la familia C** (#33).
+  > **`StubReservationService` pasó a la familia C** (#33), y ésa es la única
+  > salida que ha tenido A.
   > Entró en A como «un cableado, seis verticales», y **los seis se cablearon
   > de a uno** —#24, #25, #33a, #35, #36 y #40—: con los cinco flags en su
   > modo cableado no le queda un solo llamador de negocio. Lo que queda no es
@@ -651,9 +658,11 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > subfamilia nueva porque ninguna de las otras tres le encajaba: tiene
   > almacén propio, no se deriva de nada y no es contenido de demo.
   >
-  > **El nueve más tres de arriba suma doce, y hasta ahora no sumaba trece.**
-  > Ese descuadre era exactamente este stub: estaba en A sin estado, ni hecho
-  > ni pendiente, porque no era ninguna de las dos cosas.
+  > **El descuadre que destapó era exactamente este stub**: estaba en A sin
+  > estado, ni hecho ni pendiente, porque no era ninguna de las dos cosas, y
+  > por eso «nueve más tres» no sumaba los doce de entonces. Hoy la cuenta se
+  > comprueba sola (#66): once más dos son trece, y el gate lo cuadra contra
+  > la columna «Estado» de la tabla narrativa.
   >
   > La lección se guarda, que costó una HU de prioridad 1: **el
   > apalancamiento de un seam no baja, se evapora**. Cada consumidor que se
@@ -790,8 +799,45 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   que se acepta es `CmsSession`; declarar lo fuerte sin presentarlo se
   rechaza. **`Api.Consent` es la tercera** (rebanada 5): otorgar y
   revocar guardan **con qué** se afirmó la identidad de quien lo hizo.
-  **Faltan las otras 17** — y desde la rebanada 4 hay quien les
+  **`Api.Audit` es la cuarta** (#72), y era la que peor estaba.
+  **Faltan las otras 16** — y desde la rebanada 4 hay quien les
   presente identidad cuando la pidan: el CMS ya la emite.
+
+  > **La bitácora estaba blindada contra reescribir el pasado y abierta a
+  > FABRICARLO** (#72). No hay `PUT` ni `DELETE` desde el primer día —el
+  > propio fichero explica que «una bitácora editable no sirve de
+  > bitácora»— pero el actor **y sus roles** llegaban del cuerpo sin que
+  > nadie los comprobara: con la llave compartida se escribía un asiento a
+  > nombre de quien fuera y quedaba permanente. Un registro inmutable de
+  > asientos falsificables es **peor** que no tenerlo — es una mentira con
+  > aspecto de prueba, y justo la pieza que alguien va a citar el día que
+  > haya que demostrar quién hizo qué.
+  >
+  > Es el defecto #48 exacto en la capacidad cuyo valor entero es ser
+  > creíble, y **el más silencioso de los tres** (#42, #48, éste): un
+  > asiento falso no falla, se guarda. Los tres comparten la misma forma
+  > —la regla estaba bien y la FUENTE DEL DATO estaba mal— y los tests no
+  > lo vieron por la misma razón: construían el `Actor` a mano.
+  >
+  > **El asiento ahora guarda con qué se afirmó** (`ActedWith`), como el
+  > acuse de `Api.Messaging` desde la HU #13. Sin eso el arreglo sería
+  > invisible: los asientos nuevos valdrían más que los viejos y nada lo
+  > diría. **Los anteriores dicen «no consta», que es la verdad** —
+  > rellenarlos con `CmsSession` inventaría una afirmación que nadie hizo,
+  > y exigiría reescribir un registro append-only.
+  >
+  > **Sin llave se sigue auditando.** Parar la bitácora cuando falla la
+  > identidad convierte una caída en un hueco en el registro, que es peor
+  > que un asiento débil; un token presentado donde no se puede comprobar
+  > se **rechaza**, no se ignora. Hay gate (`AuditActorSourceTests`), y
+  > vigila las dos formas de deshacerlo: volver a armar el actor con el
+  > cuerpo, o resolverlo bien y no guardar con qué.
+  >
+  > **Y la comprobación subió a `Synergos.Shared` al segundo consumidor**
+  > (§0.B.17): nació en `Api.Workflow` con #48 y volvió a hacer falta,
+  > igual, acá. Con una tercera copia el mismo token valdría distinto
+  > según a quién se le presente — y una capacidad no puede referenciar a
+  > otra, así que `Shared` es el único sitio válido.
 
   > **«Fulano consintió» no dice nada sin «y así se supo que era
   > fulano»** (rebanada 5). El día que alguien niegue haber dado un
@@ -1004,6 +1050,22 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > no cambia lo que ahí se comprobó, y escribir `IdentityToken` porque
   > se podría haber presentado uno guardaría como hecho lo que nadie
   > verificó — el defecto #42 sobre el registro que más se conserva.
+  >
+  > **Y desde la #72 no hace falta creerle a este lado**: la afirmación
+  > viaja en el campo que la capacidad **resuelve** y guarda como
+  > `ActedWith`, no en un detalle opaco — tenerla en los dos sitios los
+  > dejaría discrepar sobre un mismo hecho, y ganaría el que nadie
+  > comprueba. Verificado en vivo: declarar `IdentityToken` sin
+  > presentarlo lo rechaza **ella** con `assertion_not_proven`, y el
+  > hueco queda anotado de este lado.
+  >
+  > **El suelo es `CmsSession`, y no es un relleno.** La capacidad exige
+  > una afirmación —sin ella rechaza con `access_requires_identity`—, así
+  > que un asiento que no registra ninguna se volvería un hueco: ruido en
+  > vez de rastro. Se manda el suelo, que significa «nos fiamos de quien
+  > llama», o sea la *ausencia* de comprobación. Es la diferencia con el
+  > nulo de `Api.Consent` (#14 rebanada 5), donde el campo **sí** admite
+  > «no consta» y por eso los permisos viejos lo conservan.
   >
   > **Se escribe LOCAL primero y se reenvía después**, y el JSONL sigue
   > siendo el modelo de lectura: las lecturas del seam son síncronas y la

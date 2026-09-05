@@ -36,9 +36,13 @@ namespace Synergos.CMS.Web.Services;
 /// un dato personal escrito en el disco de otro servicio es un segundo sitio donde borrar el día
 /// que alguien ejerce el derecho al olvido, y la bitácora es justo la que más se conserva.</para>
 ///
-/// <para><b>Y el asiento no afirma que el actor fuera quien dice ser.</b> Viaja
-/// <see cref="AuditEvent.Assertion"/> tal cual: vacío es «no consta», y no se sube a
-/// <c>CmsSession</c> por el camino — inventaría una comprobación que nadie hizo.</para>
+/// <para><b>Y el asiento no afirma que el actor fuera quien dice ser.</b> Lo que viaja es
+/// <see cref="AuditEvent.Assertion"/>, y cuando el asiento no registra ninguna se manda el SUELO
+/// —<c>CmsSession</c>, que significa «nos fiamos de quien llama»—, porque desde la #72 la
+/// capacidad exige una y sin ella cada asiento se volvería un hueco. Ese suelo es la <i>ausencia</i>
+/// de comprobación, no una comprobación inventada; lo que nunca se manda de más es
+/// <c>IdentityToken</c>, y si un asiento lo declarara sin prueba la capacidad lo rechazaría
+/// (<c>assertion_not_proven</c>).</para>
 /// </remarks>
 public sealed class HttpAuditTrailWriter : IAuditTrailWriter
 {
@@ -125,6 +129,21 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
                 // descarta: se nombra la ausencia. Api.Audit exige las dos partes del Ref.
                 targetId = string.IsNullOrWhiteSpace(evt.Resource) ? "(sin recurso)" : evt.Resource.Trim(),
                 details = Detalles(evt),
+                // CON QUÉ SE AFIRMÓ, EN EL CAMPO QUE LA CAPACIDAD RESUELVE (#72), no en un
+                // detalle: ella lo guarda como `ActedWith` tras comprobarlo, y tenerlo además
+                // suelto en `details` daría dos sitios que pueden discrepar sobre un mismo hecho.
+                //
+                // El SUELO es `CmsSession` y no es un relleno: significa «nos fiamos de quien
+                // llama», o sea la AUSENCIA de comprobación, que es exactamente lo que hay en un
+                // asiento que no registra ninguna. Lo que sí sería inventar es mandar
+                // `IdentityToken`, y eso no pasa acá — se manda lo que el asiento diga, y si dice
+                // algo fuerte sin prueba la capacidad lo rechaza a gritos (`assertion_not_proven`).
+                //
+                // Y no se puede omitir: sin afirmación la capacidad rechaza con
+                // `access_requires_identity`, así que cada asiento se volvería un hueco.
+                assertion = string.IsNullOrWhiteSpace(evt.Assertion)
+                    ? IdentityAssertions.CmsSession
+                    : evt.Assertion,
             }),
         };
 
@@ -162,9 +181,6 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
         var d = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["outcome"] = Recortar(evt.Outcome),
-            // Lo que se afirmó, tal cual. Vacío es «no consta» y se manda vacío: subirlo a
-            // CmsSession «porque venía de una sesión» es el defecto #42 con otro disfraz.
-            ["assertion"] = Recortar(evt.Assertion),
         };
 
         if (!string.IsNullOrWhiteSpace(evt.Detail)) d["detail"] = Recortar(evt.Detail);
