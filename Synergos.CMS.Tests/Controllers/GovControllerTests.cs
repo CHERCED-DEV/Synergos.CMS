@@ -26,6 +26,7 @@ public sealed class GovControllerTests
     private readonly IPrivateFileStore _files = Substitute.For<IPrivateFileStore>();
     private readonly IMessagingService _messaging = Substitute.For<IMessagingService>();
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
+    private readonly IGovActNotificationService _notifications = Substitute.For<IGovActNotificationService>();
 
     /// <summary>
     /// El controller lleva un <see cref="Microsoft.AspNetCore.Http.DefaultHttpContext"/>
@@ -33,7 +34,7 @@ public sealed class GovControllerTests
     /// sin contexto eso revienta con NullReference y el test no vería el código real.
     /// </summary>
     private GovController BuildSut() => new(
-        _catalog, _applications, _workflow, _tracking, _documents, _files, _messaging, _gate)
+        _catalog, _applications, _workflow, _tracking, _documents, _files, _messaging, _gate, _notifications)
     {
         ControllerContext = new ControllerContext
         {

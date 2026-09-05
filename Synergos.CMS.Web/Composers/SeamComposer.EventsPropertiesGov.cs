@@ -369,6 +369,15 @@ public sealed partial class SeamComposer
                     null,
                     notifier: sp.GetRequiredService<ITransactionalNotifier>()));
         }
+        // ── El acto administrativo notificado (HU #62) ──────────────────────
+        //
+        // De este lado, y es un camino legítimo de producción: una entidad pequeña que no
+        // despliega el árbol de servicios sigue pudiendo notificar y registrar accesos. Lo que
+        // no tiene es la afirmación verificable de identidad, y por eso todo lo que registra
+        // dice CmsSession — que es la verdad sobre ello.
+        services.AddSingleton<IGovActNotificationService>(sp =>
+            new StubGovActNotificationService(sp.GetRequiredService<IJsonEntityStore>()));
+
         services.AddSingleton<ICaseTrackingProvider>(sp =>
             new StubCaseTrackingProvider(sp.GetRequiredService<StubApplicationService>()));
         services.AddSingleton<IDocumentUploadService>(sp =>
