@@ -252,7 +252,10 @@ public sealed class AuditWiringTests
     {
         var e = Escritor();
 
-        Assert.Contains("actorId = Seudonimo(evt.ActorEmail)", e, StringComparison.Ordinal);
+        // El actor es el seudónimo, y lo es en UN solo sitio: si se derivara dos veces, una de
+        // las dos podría cambiar y el token dejaría de nombrar al mismo que el cuerpo.
+        Assert.Contains("var actor = Seudonimo(evt.ActorEmail);", e, StringComparison.Ordinal);
+        Assert.Contains("actorId = actor,", e, StringComparison.Ordinal);
 
         var i = e.IndexOf("HttpMethod.Post, \"v1/entries\"", StringComparison.Ordinal);
         Assert.True(i > 0, "Cambió el endpoint del reenvío: revisar este gate.");
@@ -325,6 +328,64 @@ public sealed class AuditWiringTests
         Assert.Contains(
             "services.Configure<AuditSettings>(builder.Config.GetSection(\"Synergos:Audit\"))",
             Composer(), StringComparison.Ordinal);
+    }
+
+    // ── 6. Quién actuó viaja PRESENTADO, no sólo declarado ──────────────────
+
+    /// <summary>
+    /// El asiento va firmado si el despliegue sabe firmar.
+    /// </summary>
+    /// <remarks>
+    /// <para>Con la llave compartida sola, quien pueda hablar con la capacidad escribe un asiento
+    /// a nombre de quien quiera y queda permanente — es el defecto #72 visto desde el lado del que
+    /// escribe. El token lo arregla porque la capacidad comprueba que su sujeto sea el actor.</para>
+    ///
+    /// <para><b>El sujeto TIENE que ser el mismo seudónimo que viaja como actor</b>: la capacidad
+    /// rechaza un token que nombre a otro (<c>token_subject_mismatch</c>), y eso es justo lo que lo
+    /// vuelve prueba y no adorno. Firmar con otro sujeto no fallaría en el CMS — fallaría allá, y
+    /// convertiría cada asiento en un hueco.</para>
+    /// </remarks>
+    [Fact]
+    public void El_asiento_viaja_firmado_y_el_sujeto_es_el_actor()
+    {
+        var e = Escritor();
+
+        Assert.Contains("_identidad.IssueAsync(", e, StringComparison.Ordinal);
+        Assert.Contains("new IdentitySubject(s.ActorKind, actor, Array.Empty<string>())", e, StringComparison.Ordinal);
+        Assert.Contains("req.Headers.TryAddWithoutValidation(IdentityHeader, token)", e, StringComparison.Ordinal);
+
+        // Y el actor del cuerpo es ese mismo valor, no otra derivación del correo.
+        Assert.Contains("var actor = Seudonimo(evt.ActorEmail);", e, StringComparison.Ordinal);
+        Assert.Contains("actorId = actor,", e, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Si la capacidad no puede comprobar el token, el asiento se repite SIN firmar.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el principio de la #72 sostenido: «parar la bitácora cuando falla la identidad
+    /// convierte una caída en un hueco en el registro, que es peor que un asiento débil». Sin este
+    /// reintento, presentar identidad a una capacidad sin llave de verificación perdería TODOS los
+    /// asientos — y el cambio que quería fortalecerlos los habría borrado.</para>
+    ///
+    /// <para><b>Y sólo por esa causa.</b> Un token vencido o de otro sujeto son fallos de este
+    /// lado; repetirlos sin firma los escondería para siempre detrás de un asiento débil.</para>
+    /// </remarks>
+    [Fact]
+    public void Si_la_capacidad_no_puede_comprobar_el_asiento_se_repite_sin_firmar()
+    {
+        var e = Escritor();
+
+        var i = e.IndexOf("NoSePuedeComprobar, StringComparison.Ordinal", StringComparison.Ordinal);
+        Assert.True(i > 0, "Desapareció la distinción de «no puedo comprobarlo»: revisar este gate.");
+
+        var cuerpo = e[i..Math.Min(e.Length, i + 500)];
+        Assert.Contains("IntentarAsync(evt, firmado: false", cuerpo, StringComparison.Ordinal);
+
+        // El reintento es POR ESA causa y no por cualquier rechazo: si el gate viera sólo
+        // «hay un reintento», un catch-all pasaría en verde.
+        Assert.Contains("NoSePuedeComprobar = \"identity.token_not_verifiable\"", e, StringComparison.Ordinal);
+        Assert.DoesNotContain("firmado: false, ct).ConfigureAwait(false);\n        }\n\n        return causa;\n    }\n\n        return await IntentarAsync", e, StringComparison.Ordinal);
     }
 
     /// <summary>

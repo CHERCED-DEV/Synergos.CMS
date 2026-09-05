@@ -158,7 +158,11 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<FileSystemAuditTrailWriter>(),
                 sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<IOptionsMonitor<AuditSettings>>(),
-                sp.GetRequiredService<ILogger<HttpAuditTrailWriter>>()));
+                sp.GetRequiredService<ILogger<HttpAuditTrailWriter>>(),
+                // Quién actuó, PRESENTADO en vez de declarado (HU #14). Con la llave compartida
+                // sola, quien pueda hablar con la capacidad escribe un asiento a nombre de quien
+                // quiera y queda permanente — es el defecto #72 desde el lado del que escribe.
+                sp.GetRequiredService<IIdentityTokenIssuer>()));
         }
         else
         {

@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2679 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2691 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2679 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2691 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (11) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -139,9 +139,13 @@ Synergos.CMS/
                                  Academy, Social.
 ```
 
-> **El árbol de servicios está construido y verificado, pero casi sin
-> conectar al producto**: de las 20 capacidades el CMS consume UNA
-> (`Api.Sessions`, vía `HttpSearchAnalyticsStore`). Ver §11.
+> **El árbol de servicios está construido y el producto ya lo consume**, aunque
+> con todos los interruptores apagados por defecto. El CMS habla hoy con **siete**
+> capacidades —`Sessions`, `Booking`, `Workflow`, `Messaging`, `Signing`,
+> `Identity` y `Audit`— y con los cuatro orquestadores. Esta línea decía «UNA»
+> desde antes de las HU #24, #25, #33a, #35, #36, #40, #44, #45, #46, #62 y #15:
+> un agente que la leyera concluía que no había nada cableado y proponía de cero
+> lo que ya existe. Ver §11, que es donde está el detalle.
 
 ## 3. Dónde está la verdad
 
@@ -369,7 +373,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2679 tests):
+# Suite completa (2691 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -494,10 +498,10 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2679 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2691 tests, gates de
 segregación y molde en verde.
 
-> **Los 235 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
+> **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
 > y nadie la había vuelto a contar. Cuenta los códigos **literales distintos**
 > que las veinte construyen —el primer argumento de un `Rejection.*`, con
 > `{CodePrefix}` resuelto—, y por eso **excluye dos cosas que sí existen**: los
@@ -799,8 +803,10 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   que se acepta es `CmsSession`; declarar lo fuerte sin presentarlo se
   rechaza. **`Api.Consent` es la tercera** (rebanada 5): otorgar y
   revocar guardan **con qué** se afirmó la identidad de quien lo hizo.
-  **`Api.Audit` es la cuarta** (#72), y era la que peor estaba.
-  **Faltan las otras 16** — y desde la rebanada 4 hay quien les
+  **`Api.Audit` es la cuarta** (#72), y era la que peor estaba —
+  y desde la rebanada 6 es también **la primera a la que el CMS le
+  PRESENTA** identidad para escribir, no sólo para leer.
+  **Faltan las otras 16**, y desde la rebanada 4 hay quien les
   presente identidad cuando la pidan: el CMS ya la emite.
 
   > **La bitácora estaba blindada contra reescribir el pasado y abierta a
@@ -1085,6 +1091,51 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > hueco queda escrito y la bitácora se sigue leyendo. Hay gate
   > (`AuditWiringTests`).
   >
+  > **Y desde la rebanada 6 el asiento va FIRMADO** (HU #14). Con la llave
+  > compartida sola, quien pueda hablar con la capacidad escribe un asiento a
+  > nombre de quien quiera y queda permanente — es el defecto #72 visto desde
+  > el lado del que escribe. El sujeto del token es **el mismo seudónimo** que
+  > viaja como actor, porque la capacidad rechaza uno que nombre a otro
+  > (`token_subject_mismatch`): eso es lo que lo vuelve prueba y no adorno.
+  > Verificado en vivo con `Api.Identity` y `Api.Audit`: la capacidad sube la
+  > afirmación a `IdentityToken` ella sola, mientras el CMS sigue declarando
+  > `CmsSession`.
+  >
+  > **Y si la capacidad NO puede comprobarlo, el asiento se repite sin firmar.**
+  > Es el principio de #72 sostenido —«parar la bitácora cuando falla la
+  > identidad convierte una caída en un hueco en el registro, que es peor que un
+  > asiento débil»—: sin ese reintento, presentar identidad a una capacidad sin
+  > llave de verificación habría perdido **todos** los asientos, y el cambio que
+  > venía a fortalecerlos los habría borrado. **Sólo por esa causa**: un token
+  > vencido o de otro sujeto son fallos de este lado, y repetirlos sin firma los
+  > escondería para siempre detrás de un asiento débil.
+
+  > **Y la bitácora no se podía LEER tras un reinicio** (defecto #82), que lo
+  > destapó levantar los procesos para verificar lo de arriba. `Actor.Roles` es
+  > un `IReadOnlySet<string>`: `System.Text.Json` lo escribe y **no sabe
+  > leerlo**, así que `Api.Audit` guardaba sus asientos y devolvía 500 en toda
+  > lectura en cuanto el proceso se reiniciaba. Blindada contra reescribir el
+  > pasado y sin poder leerlo — hermano exacto de #72, donde la propiedad que la
+  > capacidad anuncia como su razón de ser tampoco se cumplía.
+  >
+  > **El caché de `JsonCollectionStore` es lo que lo escondía**: mientras el
+  > proceso vive, las lecturas salen de memoria y nunca deserializan. La primera
+  > que toca el disco es la de después del reinicio. Por eso ningún test lo vio
+  > —ninguno reinicia— y por eso el gate nuevo abre un almacén **nuevo** sobre el
+  > mismo fichero: comprobado mutando que leer del mismo pasa en verde con el
+  > defecto puesto.
+  >
+  > **Y el arreglo reconstruye por `Actor.Of`, no por el constructor.** Es el
+  > punto fino: `Of` arma el conjunto con `OrdinalIgnoreCase`, así que un
+  > conversor que devolviera un `HashSet` cualquiera dejaría
+  > `HasAnyRole("Funcionario")` en `false` después de reiniciar sin que nada
+  > fallara — cambiaría un 500 ruidoso por una decisión de permisos equivocada y
+  > callada. Vive en `Synergos.Shared` y no en `Core`: Core es el vocabulario y
+  > no sabe qué es un disco; cómo se escribe ese vocabulario es fontanería, y
+  > `JsonCollectionStore` es el embudo de las veinte. **Los datos anteriores se
+  > recuperan solos** —los bytes siempre estuvieron bien— y se verificó leyendo
+  > el mismo almacén que devolvía 500.
+
   > **Y el vocabulario de la afirmación subió al segundo consumidor**
   > (`CLAUDE.md` §17): `GovActAssertions` nació en #62 con uno y hoy es
   > `IdentityAssertions` en `Synergos.CMS.Interfaces`. Es el gemelo de lo
