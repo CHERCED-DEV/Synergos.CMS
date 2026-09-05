@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2603 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2604 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,8 +111,8 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2603 tests passing (gate liftado ADR 0075)
-│   ├── Architecture/            LOS GATES: segregación (17) + molde (10) + capas (8)
+├── Synergos.CMS.Tests/          xUnit — 2604 tests passing (gate liftado ADR 0075)
+│   ├── Architecture/            LOS GATES: segregación (17) + molde (11) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
 │   ├── Api/                     tests de reglas y servicio por capacidad
@@ -369,7 +369,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2603 tests):
+# Suite completa (2604 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -493,9 +493,21 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (136 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2603 tests, gates de
+**Construido y verificado:** 20 capacidades (136 endpoints, 235 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2604 tests, gates de
 segregación y molde en verde.
+
+> **Los 235 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
+> y nadie la había vuelto a contar. Cuenta los códigos **literales distintos**
+> que las veinte construyen —el primer argumento de un `Rejection.*`, con
+> `{CodePrefix}` resuelto—, y por eso **excluye dos cosas que sí existen**: los
+> que se arman en tiempo de ejecución (`orders.already_{destino}`, y los
+> reenvoltorios `xxx.{code}`), que no se pueden enumerar sin ejecutar; y los
+> **cinco que viven en `Synergos.Shared`** —`identity.token_expired`,
+> `token_malformed`, `token_unknown_key`, `token_subject_mismatch` y
+> `assertion_not_proven`—, que una capacidad devuelve pero no declara. Contando
+> aquéllos serían 240. Se eligió el criterio simétrico con el de endpoints: lo
+> que hay **en el árbol de las capacidades**. Hay gate (`ApiMoldTests`).
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
 imágenes por SHA a GHCR, `compose.prod.yml`, `tools/bootstrap-servidor.sh`,
