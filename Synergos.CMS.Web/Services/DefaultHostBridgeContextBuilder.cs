@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Constants;
@@ -25,6 +26,7 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
     private readonly ILocalizationService _localizationService;
     private readonly IOptionsMonitor<HostBridgeSettings> _settings;
+    private readonly ILogger<DefaultHostBridgeContextBuilder> _logger;
 
     public DefaultHostBridgeContextBuilder(
         IBrandingProvider branding,
@@ -32,7 +34,8 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
         IMemberAccessGate gate,
         IUmbracoContextAccessor umbracoContextAccessor,
         ILocalizationService localizationService,
-        IOptionsMonitor<HostBridgeSettings> settings)
+        IOptionsMonitor<HostBridgeSettings> settings,
+        ILogger<DefaultHostBridgeContextBuilder> logger)
     {
         _branding = branding;
         _renderCtx = renderCtx;
@@ -40,6 +43,7 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
         _umbracoContextAccessor = umbracoContextAccessor;
         _localizationService = localizationService;
         _settings = settings;
+        _logger = logger;
     }
 
     public HostBridgeContext Build()
@@ -70,9 +74,16 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
                 CollectMatchingKeys(root.Key, root.ItemKey, culture, s.I18nKeyPrefixes, keys);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort. Si falla, UI cae a fallback inline strings.
+            // Best-effort: la UI cae a sus strings inline y la página se sirve igual. Pero se
+            // AVISA, que es lo único que faltaba (#92): éste es el más silencioso de los dos
+            // catch del bridge, porque devuelve un contexto que PARECE sano —marca, tema y página
+            // intactos— con el diccionario vacío. Sin esta línea, un sitio entero se queda sin
+            // traducciones y no hay dónde verlo.
+            _logger.LogWarning(ex,
+                "No se pudieron leer las claves de diccionario para el host bridge (cultura {Cultura}). "
+                + "La UI caerá a sus strings inline.", culture);
         }
 
         return new HostBridgeI18n(
