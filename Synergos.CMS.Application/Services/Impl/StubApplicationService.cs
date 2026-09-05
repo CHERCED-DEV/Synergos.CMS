@@ -457,15 +457,32 @@ public sealed class StubApplicationService : IApplicationService
         Timeline: BuildTimeline(s),
         Decision: s.Decision);
 
-    // Días de SLA restantes = (radicación + días estimados) − hoy. Terminal ⇒ 0.
+    // Días HÁBILES de SLA restantes = (radicación + días hábiles autorados) − hoy. Terminal ⇒ 0.
+    //
+    // Antes esto sumaba días CALENDARIO mientras la ficha del trámite le prometía al editor días
+    // hábiles con esas palabras (defecto #77). Un trámite de 15 días radicado un lunes vencía seis
+    // días antes de lo autorado, sin contar un solo festivo — y como el error crece con la
+    // longitud del término, dos trámites con plazos distintos se ordenaban mal ENTRE SÍ en la cola
+    // del funcionario: decía que urgía primero el que no urgía.
+    //
+    // Y lo que queda también se cuenta en hábiles: con el vencimiento en hábiles y el resto en
+    // calendario, el número diría «quedan 10» cuando quedan seis días de trabajo.
+    //
+    // LOS EXPEDIENTES EN VUELO NO NECESITAN MIGRACIÓN, y conviene decir por qué: el vencimiento
+    // nunca se guardó. Se deriva de RadicadoAt + SlaDays en cada lectura, así que lo que cambia
+    // es el CÁLCULO y no un dato escrito — no hay fechas ni actores que inventar, que es lo que
+    // prohibió #44. Lo que sí se mueve es lo que ve el funcionario: todo lo radicado pasa a tener
+    // MÁS plazo del que mostraba, que es el lado seguro, y algún expediente que aparecía vencido
+    // deja de estarlo. Eso es la corrección, no un efecto colateral de ella.
     private static int SlaDaysLeft(CaseState s, DateTimeOffset now)
     {
         if (s.Status is CaseStatus.Resuelto or CaseStatus.Rechazado)
         {
             return 0;
         }
-        var due = s.RadicadoAt.AddDays(s.SlaDays);
-        return (int)Math.Ceiling((due - now).TotalDays);
+
+        var vence = CalendarioHabil.Sumar(CalendarioHabil.EnColombia(s.RadicadoAt), s.SlaDays);
+        return CalendarioHabil.Entre(CalendarioHabil.EnColombia(now), vence);
     }
 
     // Timeline como 3 hitos (radicado/revisión/decisión) con estado visual:
