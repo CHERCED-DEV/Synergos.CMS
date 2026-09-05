@@ -29,11 +29,22 @@ implementa contra estos contratos sin importar código del otro.
 
 | # | Doc | Propósito | Owner del schema |
 |---|---|---|---|
-| 1 | [`cdn-bundle-registry.md`](../umbraco/cdn-contract.md) | Endpoint REST que el CDN team publica para resolver `elementKey → bundle URL`. | CDN team (CMS bloqueado esperando) |
+| 1 | [`cdn-bundle-structure.md`](cdn-bundle-structure.md) | La forma de las rutas del CDN —`{tag}/{framework}/{versión}/`— que `IBundleRegistryClient` resuelve. | Joint (el CDN produce, el CMS consume) |
 | 2 | [`dom-events.md`](dom-events.md) | CustomEvents que los `<synergos-*>` emiten + payload schemas. CMS escucha si necesita. | UI team |
 | 3 | [`css-tokens.md`](css-tokens.md) | Las `--syn-*` custom properties que el CMS publica vía `<head>` y que el UI puede asumir. UI declara fallbacks. | CMS host (source of truth) |
 | 4 | [`i18n-bridge.md`](i18n-bridge.md) | `window.synergos.i18n.t(key, fallback)` global que el UI consume. CMS popula via Razor partial. | CMS (server-side resolution) |
 | 5 | [`host-bridge.md`](host-bridge.md) | Big picture: cómo los 4 anteriores se conectan en runtime. Init order + lifecycle. | Joint |
+
+> **Dónde se verifica cada uno, porque no es donde parece.** El harness Vitest de
+> `tests/` cubre **cuatro** —tokens CSS, eventos DOM, puente de host, i18n—, que son
+> los de comportamiento en el navegador. El **primero no está ahí y no le falta**:
+> es una forma de rutas, y quien la verifica es el lado C# que las resuelve
+> (`HttpBundleRegistryClientTests`, `FileSystemBundleRegistryClientTests`,
+> `BundleRegistryProbeTests`).
+>
+> Se dice porque «los 5 contratos + un harness» se lee como «los cinco están en el
+> harness», y entonces alguien abre `tests/`, cuenta cuatro, y va a escribir un
+> spec que duplicaría lo que ya cubre la suite.
 
 ## Naming conventions canónicas
 
