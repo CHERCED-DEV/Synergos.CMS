@@ -183,7 +183,7 @@ public sealed class GovNotificationWiringTests
         var cliente = Cliente();
 
         Assert.Contains("OpenedWith = acuse.Assertion", cliente, StringComparison.Ordinal);
-        Assert.DoesNotContain("OpenedWith = GovActAssertions.", cliente, StringComparison.Ordinal);
+        Assert.DoesNotContain("OpenedWith = IdentityAssertions.", cliente, StringComparison.Ordinal);
 
         // Y el token se PRESENTA, no se declara: la cabecera de identidad viaja cuando la hay.
         Assert.Contains("IdentityHeader", cliente, StringComparison.Ordinal);

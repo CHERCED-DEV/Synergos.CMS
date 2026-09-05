@@ -231,7 +231,7 @@ public sealed class GovActNotificationControllerTests
     {
         ConSesion(Ciudadano);
         _notifications.GetForCitizenAsync(Ciudadano, Arg.Any<CancellationToken>())
-            .Returns(new[] { Acto(opened: DateTimeOffset.UtcNow, openedWith: GovActAssertions.CmsSession) });
+            .Returns(new[] { Acto(opened: DateTimeOffset.UtcNow, openedWith: IdentityAssertions.CmsSession) });
 
         var payload = Assert.IsType<GovController.ActNotificationsResponse>(
             Assert.IsType<OkObjectResult>(await BuildSut().Notifications(default)).Value);
@@ -239,7 +239,7 @@ public sealed class GovActNotificationControllerTests
         var uno = Assert.Single(payload.Notifications);
         Assert.Equal("Se resuelve NEGAR la solicitud.", uno.Body);
         Assert.True(uno.Opened);
-        Assert.Equal(GovActAssertions.CmsSession, uno.OpenedWith);
+        Assert.Equal(IdentityAssertions.CmsSession, uno.OpenedWith);
     }
 
     [Fact] // la bandeja es la del member de la sesión, y no acepta a quién listar
@@ -313,7 +313,7 @@ public sealed class GovActNotificationControllerTests
         var cuando = DateTimeOffset.UtcNow;
         ConSesion(Ciudadano);
         _notifications.AcknowledgeAsync("not_abc", Ciudadano, Arg.Any<CancellationToken>())
-            .Returns(Acto(opened: cuando, openedWith: GovActAssertions.CmsSession));
+            .Returns(Acto(opened: cuando, openedWith: IdentityAssertions.CmsSession));
 
         var payload = Assert.IsType<GovController.ActNotificationResponse>(
             Assert.IsType<OkObjectResult>(await BuildSut().OpenNotification("not_abc", default)).Value);
@@ -329,7 +329,7 @@ public sealed class GovActNotificationControllerTests
     {
         ConSesion(Ciudadano);
         _notifications.AcknowledgeAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Acto(opened: DateTimeOffset.UtcNow, openedWith: GovActAssertions.CmsSession));
+            .Returns(Acto(opened: DateTimeOffset.UtcNow, openedWith: IdentityAssertions.CmsSession));
 
         await BuildSut().OpenNotification("not_abc", default);
 
