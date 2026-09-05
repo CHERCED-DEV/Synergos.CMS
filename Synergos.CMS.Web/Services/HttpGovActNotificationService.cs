@@ -200,7 +200,7 @@ public sealed class HttpGovActNotificationService : IGovActNotificationService
                 // Lo DECLARADO es lo más débil que se puede afirmar sin prueba. Si se presentó
                 // token, la capacidad lo verifica y sube la afirmación por su cuenta — no se le
                 // pide que crea lo que decimos (defecto #42).
-                assertion = GovActAssertions.CmsSession,
+                assertion = IdentityAssertions.CmsSession,
             }),
         };
 

@@ -56,7 +56,7 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 | `StubCertificateService` | `Api.Signing` `POST /v1/seals` — **NO `/v1/signatures`** | **Capacidad.** El motivo sigue en pie: el HMAC local (ADR 0124) guarda su llave y **no sabe retirarla**, y la capacidad sí. Lo que no encajaba era el endpoint: el token de `/v1/signatures` **vence** (≤365 d), **no es determinista** y **publica el payload** —o sea el alumno— dentro del id que se imprime. El **sello** (#45) es la operación que faltaba: determinista, sin vencimiento, opaca, y se comprueba **contra el sujeto**. El firmante local **se conserva** verificando los ids anteriores, o cada QR ya impreso dejaría de valer | **HU #45** |
 | `StubOrderTrackingService` | `Api.Workflow` | **Capacidad.** Un timeline es una máquina de estados con otro nombre. Las cuatro instancias (tienda / viaje / eventos / academia) usan **una definición cada una** — compartirla las haría leer «enviado» donde dice «matriculado». El CMS conserva su almacén como modelo de LECTURA: con la capacidad caída el timeline se sigue viendo, y sólo se para avanzarlo | **HU #46** |
 | `StubReturnService` | `Bff.Tienda` `POST /v1/purchases/{id}/refund` | **Orquestador, y esta fila tenía mal la razón** (#57). Decía «dos pasos con plata en medio»; mirando el código el segundo paso es una escritura LOCAL y un reembolso **no se compensa**. La pregunta que decide no es «¿qué hay que deshacer?» sino **«¿quién tiene la plata?»** — y con la tienda cableada la tiene el orquestador, porque el `PaymentSessionId` que conoce el CMS es el de la saga | **#57** |
-| `StubApplicationService` | `Bff.Gob` (sin construir) | **Orquestador.** Radicar valida, calcula tasa, cobra si aplica y asienta estado — con pago de por medio. Es el agregado raíz de Gobierno y hoy lo compone media docena de stubs hermanos por DIP | pendiente |
+| `StubApplicationService` | `Api.Payments` `/v1/payments` | **Capacidad, NO orquestador — y el mapa se equivocó con el mismo filtro por CUARTA vez.** Decía «con pago de por medio», que suena a saga; el propio código dice lo contrario, y con la razón escrita: «**no se aborta el trámite si la captura no sale** — en un servicio público, perder la radicación de un ciudadano porque su banco tardó es peor que arrastrar una tasa pendiente». Si no se aborta, **no hay nada que deshacer**, y un orquestador sería la máquina de compensar sin compensación. Lo que sí falta es que la tasa la cobre la capacidad, y eso lo frena #27 — el mismo bloqueo que `StubPaymentProvider`, no un `Bff.Gob` inexistente | bloqueado por #27 |
 | `StubClinicalSchedulingService` | `Bff.Salud` `POST /v1/appointments` | **Orquestador.** Apartar el cupo + cobrar el copago + avisar, con compensación si el copago falla. Ver la corrección de abajo | **HU #25** |
 | `StubEventTicketingService` | `Bff.Eventos` `POST /v1/ticketing` | **Orquestador.** Aforo + cobro pueden fallar a la mitad. La compra se parte: el orquestador mueve aforo y plata, y **el artefacto se queda acá** —la entrada, su QR, su portador, el check-in— porque el firmante vive de este lado | **HU #35** |
 | `StubHotelBookingService` | `Bff.Viajes` `POST /v1/trips` | **Orquestador.** Apartar, cobrar y confirmar pueden fallar a la mitad. Las **dos** vías: la reserva de hotel y el carrito multi-producto, que además pide confirmación PARCIAL y **ordena la devolución** de lo que no se cumplió — el orquestador cotiza el viaje entero y no sabe cuánto vale el ítem caído | **HU #36 + #40** |
@@ -65,6 +65,22 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 | `StubGovActNotificationService` | `Api.Messaging` `POST /v1/threads` + `/v1/messages/{id}/acknowledge` | **Capacidad.** Poner un acto en conocimiento es un paso que dice NO solo (el hilo cerrado, el plazo de acuse vencido) y no mueve nada que haya que deshacer. Y es el **primer consumidor de `Api.Messaging`**, que llevaba meses construida sin nadie: no hizo falta añadirle un endpoint. Lo que se queda de este lado es el expediente —radicado, título del acto, quién es el dueño y la bandeja—, y las bandejas se LEEN de acá, como el timeline de #46: con la capacidad caída el ciudadano sigue viendo sus notificaciones, sólo se para abrirlas | **HU #62** |
 
 > ### Corrección: este stub estaba mal clasificado, y por qué importa
+>
+> **Y con `StubApplicationService` van CUATRO, todas con el mismo filtro mal aplicado**
+> (`StubClinicalSchedulingService`, `StubVisitSchedulingService`, `StubReturnService` y éste).
+> El patrón es siempre el mismo: se mira **cuántos pasos compone** y se concluye «orquestador».
+> La pregunta que decide no es ésa. Son tres, y hay que hacerlas por separado:
+>
+> | Pregunta | Qué decide |
+> |---|---|
+> | ¿hay algo que **deshacer** si un paso falla? | si hace falta un **orquestador** |
+> | ¿el recurso lo lleva **alguien más**? | si hace falta **cablearlo** |
+> | ¿**quién tiene la plata**? | a **quién** se le pide el movimiento (#57) |
+>
+> Radicar compone media docena de seams y contesta **NO** a la primera, por una decisión de
+> negocio escrita en el código: la radicación no se pierde porque el cobro falle. Componer no es
+> orquestar.
+
 >
 > `StubClinicalSchedulingService` salió en la familia C de la primera versión de este mapa, con
 > el argumento de que «ya reusa `IReservationService`, así que se mueve solo el día que ése se
@@ -275,7 +291,7 @@ tiene que existir en la raíz del repo.
 <!-- MAPA:INICIO -->
 | Stub | Familia | Destino |
 |---|---|---|
-| `StubApplicationService` | A | `Synergos.Bff.Gob` |
+| `StubApplicationService` | A | `Synergos.Api.Payments` |
 | `StubCabinSeatMapProvider` | C | — |
 | `StubCancellationPolicyEvaluator` | C | — |
 | `StubCarRentalProvider` | C | — |
@@ -326,7 +342,10 @@ tiene que existir en la raíz del repo.
 | `StubVisitSchedulingService` | A | `Synergos.Api.Booking` |
 <!-- MAPA:FIN -->
 
-> `Synergos.Bff.Gob` **no existe todavía** y por eso `StubApplicationService` es el único destino
-> de la tabla que el gate no puede comprobar contra un directorio. El gate acepta un destino
-> marcado como no construido sólo si está en su lista explícita de orquestadores pendientes —
-> los seis de `CLAUDE.md` §11. Un destino inventado sigue rompiendo.
+> **Ya no queda ningún destino sin construir en esta tabla.** `StubApplicationService` era el
+> único, y apuntaba a `Synergos.Bff.Gob`; se corrigió a `Api.Payments` al descubrir que radicar no
+> tiene nada que compensar. El gate sigue aceptando un destino no construido si está en su lista
+> explícita de orquestadores pendientes —los seis de `CLAUDE.md` §11—, y **conviene que la lista
+> siga ahí aunque hoy nadie la use**: es la que permite mapear un stub a un orquestador el día que
+> se decida construirlo, sin que el gate obligue a crear el directorio primero. Un destino
+> inventado sigue rompiendo.
