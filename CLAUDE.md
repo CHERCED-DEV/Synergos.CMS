@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2701 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2703 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2701 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2703 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -373,7 +373,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2701 tests):
+# Suite completa (2703 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -399,13 +399,29 @@ node tools/check-css-parity.mjs   # G-3: toda clase syn-* emitida tiene CSS
 (cd Synergos.CMS.Web/docs/contracts/tests && npm ci && npm test)  # contratos
 ```
 
-El cuarto es **cross-repo** y necesita `Synergos.UI` clonado como hermano
-(`../Synergos.UI`), porque valida las dos mitades del acople:
+El cuarto es **cross-repo** y necesita `Synergos.UI` clonado como hermano, porque valida las dos
+mitades del acople:
 
 ```bash
-(cd ../Synergos.UI && npm run cms:validate)   # registry ↔ DocTypes
+git clone --depth 1 https://github.com/CHERCED-DEV/synergos.ui ../Synergos.UI
+
+# registry ↔ DocTypes. El script está en tools/, así que no hace falta `npm ci`:
+(cd ../Synergos.UI && node tools/validate-cms-contracts.mjs --cms-path=$PWD)
+
+# los derivados del SSOT de tokens (G-2):
 (cd ../Synergos.UI/platforms/angular && node tools/sync-tokens.mjs --check)
 ```
+
+> **Se pueden correr en un contenedor, y nunca se habían corrido** (#86). Esta sección los
+> describía como si hicieran falta la máquina del arquitecto y un `npm ci` — los dos son scripts de
+> Node sueltos contra ficheros del repo hermano, así que basta clonarlo. Comprobado el 2026-09-05:
+> el validador de contratos pasa con **80 avisos `[W4]`** (entradas sin `ELEMENT_CONFIG_FIELDS`,
+> que son avisos y no errores) y `sync-tokens --check` da OK sobre **322 tokens**.
+>
+> **Un aviso: el generador del catálogo de la skill asume una ruta.**
+> `refresh-skill-catalog.mjs` deriva dónde escribir como *el padre del repo UI*, sin variable que lo
+> anule, así que clonar el hermano en otro sitio lo manda a escribir fuera del CMS. Con
+> `../Synergos.UI` funciona; con cualquier otra ruta hay que armarle ese layout.
 
 ## 8. Layout Composer — el feature más maduro
 
@@ -498,7 +514,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2701 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2703 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -1355,9 +1371,34 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   repetirlo no cambia nada). Va exactamente uno de los dos.
   `Bff.Tienda` devuelve con `delta` y ya no lee el total antes.
 - **`StubBundleRegistryClient` sigue siendo el default, pero ya no hay
-  bloqueo**: el CDN está VIVO (`https://synergos-ui.synergos-labs.workers.dev`,
-  139 elementos, cabeceras verificadas 2026-08-04) y `HttpBundleRegistryClient`
-  resuelve contra él — verificado con el cliente real compilado, no con fakes.
+  bloqueo**: el CDN está VIVO (`https://synergos-ui.synergos-labs.workers.dev`)
+  y `HttpBundleRegistryClient` resuelve contra él — verificado con el cliente
+  real compilado, no con fakes.
+
+  > **Cuántos publica es LA cifra, y vive sólo acá** (#86).
+  > El CDN sirve hoy **130 elementos**, medidos el 2026-09-05 con:
+  >
+  > ```bash
+  > curl -s https://synergos-ui.synergos-labs.workers.dev/synergos/registry.json \
+  >   | python3 -c "import sys,json;print(len(json.load(sys.stdin)['elements']))"
+  > ```
+  >
+  > **El comando va al lado del número a propósito.** Decía 139 «cabeceras
+  > verificadas 2026-08-04» —copiado en seis sitios, y con el valor correcto y
+  > uno equivocado en el MISMO fichero a cien líneas de distancia—. Una fecha
+  > hace que un número recordado se lea como medido, que es lo peor de los dos
+  > mundos: nadie lo cruza porque parece que ya alguien lo hizo.
+  >
+  > **No se puede gatear su valor desde este repo** —depende de la red y del
+  > repo hermano, y CI no clona ninguno—, así que lo que hay gate para es la
+  > forma en que se rompió: que no aparezca en un segundo sitio
+  > (`CifrasDelCdnTests`). Eso sí se comprueba contra el disco.
+  >
+  > **El repo hermano declara 132 y el CDN publica 130.** Los dos que declara y
+  > no publica son `synergos-module-mount` y `synergos-stat-counter`, que son
+  > los dos primeros que el validador de contratos marca con `[W4]`. Puede ser
+  > deliberado —`module-mount` tiene pinta de anfitrión y no de bundle
+  > publicable— y queda anotado sin concluirlo.
   Lo que falta es que el despliegue configure `SYNERGOS_CDN_MODE=Http` +
   `SYNERGOS_CDN_URL` (ver `.env.example`). Es una decisión de entorno del
   arquitecto, no trabajo pendiente de código. Ver §9 y ADR 0132.

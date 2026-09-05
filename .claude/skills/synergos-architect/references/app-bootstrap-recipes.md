@@ -1,7 +1,7 @@
 # App Bootstrap Recipes — 5 verticales SYNERGOS
 
 > **Premisa polimórfica**: SYNERGOS es plataforma multi-vertical. Un código,
-> un CMS, 122 bundles UI = N productos distintos. Las recetas no cambian
+> un CMS, el catálogo de bundles UI = N productos distintos. Las recetas no cambian
 > código — cambian schema instances + brand assets + settings + pages.
 > Si una receta requiere cambios de código, **se rompe la promesa polimórfica**
 > y hay que rediseñar antes de añadir.
