@@ -8,10 +8,18 @@
     garantizar que window.synergos exista cuando los Web Components
     hidraten.
 
-    Cero side effects en HTML — solo emite el <script>. Falla silenciosa
-    si el builder lanza (degradación graceful: UI cae a fallback inline
-    strings + tokens locales). En CSP-strict mode, la failure handling
-    vive en el controller del endpoint.
+    Cero side effects en HTML — solo emite el <script>. Si el builder lanza,
+    degrada al fallback (UI cae a strings inline + tokens locales) Y LO
+    REGISTRA (defecto #92).
+
+    Esta rama es la que corre POR DEFECTO —CspStrictMode es false— y era la
+    única de las dos que se caía en silencio: el gemelo de CSP-strict
+    (SynergosBridgeController) llevaba su LogWarning desde el principio. O sea
+    que el camino probado y ruidoso era el que NO corre.
+
+    Degradar está bien y está razonado; lo que no puede es no saberse. El sitio
+    devuelve 200, /health contesta y el humo pasa mientras un miembro
+    autenticado se ve anónimo para todos los web components.
 *@
 @using System.Text.Json
 @using Microsoft.Extensions.Options
@@ -19,6 +27,7 @@
 @using Synergos.CMS.Web.Services
 @inject Synergos.CMS.Interfaces.IHostBridgeContextBuilder Bridge
 @inject IOptionsMonitor<HostBridgeSettings> BridgeSettings
+@inject Microsoft.Extensions.Logging.ILogger<Synergos.CMS.Web.Services.DefaultHostBridgeContextBuilder> BridgeLogger
 @{
     var cspStrict = BridgeSettings.CurrentValue.CspStrictMode;
 }
@@ -37,8 +46,10 @@ else
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         });
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        BridgeLogger.LogWarning(ex,
+            "Synergos bridge build failed; serving minimal fallback payload (inline path)");
         json = HostBridgeFallback.Json;
     }
     <script>
