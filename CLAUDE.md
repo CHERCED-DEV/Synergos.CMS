@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2592 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2603 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2592 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2603 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (10) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -369,7 +369,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2592 tests):
+# Suite completa (2603 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -494,7 +494,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2592 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2603 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -758,8 +758,42 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   respaldado por un token que nunca existió (defecto #42). Hoy: token
   válido del mismo sujeto → `IdentityToken`; sin token, lo más fuerte
   que se acepta es `CmsSession`; declarar lo fuerte sin presentarlo se
-  rechaza. **Faltan las otras 19** — y desde la rebanada 4 hay quien les
+  rechaza. **`Api.Consent` es la tercera** (rebanada 5): otorgar y
+  revocar guardan **con qué** se afirmó la identidad de quien lo hizo.
+  **Faltan las otras 17** — y desde la rebanada 4 hay quien les
   presente identidad cuando la pidan: el CMS ya la emite.
+
+  > **«Fulano consintió» no dice nada sin «y así se supo que era
+  > fulano»** (rebanada 5). El día que alguien niegue haber dado un
+  > permiso, la diferencia entre un token verificado y la palabra del
+  > sitio es la diferencia entre poder sostenerlo y no — y el registro
+  > no guardaba ninguna de las dos.
+  >
+  > **Otorgar y revocar llevan la suya por separado**, y no es simetría
+  > por gusto: retirar el permiso de otro es tan grave como darlo en su
+  > nombre, y un consentimiento dado en ventanilla y retirado desde el
+  > portal son dos actos. Un gate que sólo mirara `grants` habría dejado
+  > `grants/revoke` de puerta de atrás.
+  >
+  > **Nulo es «no consta», no un default.** Los permisos anteriores a
+  > esta rebanada no llevan afirmación, y ésa es la verdad sobre ellos:
+  > rellenarlos con `CmsSession` sería inventar una comprobación que
+  > nadie hizo — el defecto #42 con otro disfraz. Siguen siendo válidos.
+  >
+  > **Y el gate mira el CABLEADO, no la regla.** La primera versión de
+  > esta rebanada pasaba en verde con el defecto puesto: reemplazar la
+  > llamada del borde por «anotar lo que declaró el llamador» no ponía
+  > rojo nada, porque los tests cubrían el helper compartido y el
+  > servicio, y el que decide es lo que hay entre los dos. Hoy hay gate
+  > (`IdentityGateTests`) sobre los dos endpoints que escriben.
+  >
+  > Verificado en vivo contra `Api.Consent` + `Api.Identity`: declarar
+  > `IdentityToken` sin presentarlo se rechaza; **presentando el token,
+  > la capacidad sube la afirmación sola** aunque el llamador declare
+  > `CmsSession`; un token de otro sujeto se rechaza con
+  > `token_subject_mismatch`; y **sin llave de firma arranca igual** —el
+  > camino del clon limpio— pero un token presentado ahí se **rechaza**,
+  > no se ignora.
 
   > **El token de otra persona no sirve para actuar como ésta**, y ése
   > es el caso que justifica la HU entera: sin comprobar que el sujeto

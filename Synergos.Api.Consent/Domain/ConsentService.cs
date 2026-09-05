@@ -21,7 +21,12 @@ public sealed class ConsentService
 
     private DateTimeOffset Now => _clock.GetUtcNow();
 
-    public Result<ConsentGrant> Grant(Ref subject, string? purpose, string? policyVersion, DateTimeOffset? expiresAt, IdempotencyKey key)
+    /// <param name="assertion">
+    /// Con qué fuerza se afirmó la identidad de quien lo da — <b>ya RESUELTA por el borde</b>, no
+    /// lo que el llamador declaró. El servicio no puede saber si se presentó un token: eso vive
+    /// en la petición HTTP, y por eso la decisión se toma en <c>Endpoints/</c> y llega hecha.
+    /// </param>
+    public Result<ConsentGrant> Grant(Ref subject, string? purpose, string? policyVersion, DateTimeOffset? expiresAt, IdempotencyKey key, IdentityAssertion assertion)
     {
         lock (_gate)
         {
@@ -36,7 +41,7 @@ public sealed class ConsentService
             if (motivo is not null) return Result.Rejected<ConsentGrant>(motivo);
 
             var id = Guid.NewGuid().ToString("n");
-            var grant = new ConsentGrant(id, subject, purpose!.Trim(), policyVersion!.Trim(), Now, expiresAt);
+            var grant = new ConsentGrant(id, subject, purpose!.Trim(), policyVersion!.Trim(), Now, expiresAt, GrantedWith: assertion);
             _store.Put(grant);
             _idempotency.Remember("grant", key, id);
             return Result.Ok(grant);
@@ -44,7 +49,7 @@ public sealed class ConsentService
     }
 
     /// <summary>Retira el consentimiento vigente para ese propósito.</summary>
-    public Result<ConsentGrant> Revoke(Ref subject, string purpose)
+    public Result<ConsentGrant> Revoke(Ref subject, string purpose, IdentityAssertion assertion)
     {
         lock (_gate)
         {
@@ -56,7 +61,7 @@ public sealed class ConsentService
             // Revocar lo revocado NO es un error: es el estado que el llamador quería.
             if (grant.RevokedAtUtc is not null) return Result.Ok(grant);
 
-            var revocado = grant with { RevokedAtUtc = Now };
+            var revocado = grant with { RevokedAtUtc = Now, RevokedWith = assertion };
             _store.Put(revocado);
             return Result.Ok(revocado);
         }
