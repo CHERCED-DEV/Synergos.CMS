@@ -201,4 +201,116 @@ public sealed class CifrasDeClaudeMdTests
             + "Estas cifras se cuentan, no se recuerdan (#52). «la compensación cruzada (48)» era "
             + "exacta el día que se escribió y siguió ahí siete ficheros después.");
     }
+
+    /// <summary>
+    /// Cada cifra que §2 y §4.1 dicen del SCHEMA, con su frase exacta y qué se cuenta.
+    /// </summary>
+    /// <remarks>
+    /// La frase es el ancla, igual que arriba: reescribirla rompe el gate y obliga a mirar el
+    /// número, que es justo cuando conviene mirarlo.
+    /// </remarks>
+    private static readonly (string Plantilla, string Carpeta, string Patron)[] Schema =
+    {
+        ("Compositions ({0} archivos)", "Synergos.CMS.Web/uSync/v9/ContentTypes", "*.config"),
+        ("{0} archivos (", "Synergos.CMS.Web/uSync/v9/DataTypes", "*.config"),
+        ("({0} DTSelect*)", "Synergos.CMS.Web/uSync/v9/DataTypes", "DTSelect*.config"),
+        ("en-US ({0} keys)", "Synergos.CMS.Web/uSync/v9/Dictionary", "*.config"),
+        ("Razor template registry ({0})", "Synergos.CMS.Web/uSync/v9/Templates", "*.config"),
+        ("LAS {0} CAPACIDADES", ".", "Synergos.Api.*"),
+    };
+
+    /// <summary>
+    /// Las cifras del SCHEMA que <c>CLAUDE.md</c> declara, contadas contra el disco.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que evita, y por qué se escribe estando en verde.</b> Las ocho cifras
+    /// que §2 y §4.1 dan del schema —los ficheros de cada carpeta de <c>uSync/v9/</c>, los iconos
+    /// del stock, los ADR, las capacidades— <b>cuadraban todas</b> el día que se escribió este
+    /// fact. No se arregla nada acá: se les pone el vigilante que no tenían.</para>
+    ///
+    /// <para><b>«Cuadra hoy» no es un estado, es una foto.</b> Lo acaba de demostrar la cifra de
+    /// códigos de rechazo: era exacta, tenía gate, y aun así §11 acabó diciendo 234 en un sitio y
+    /// 235 en otro porque el gate miraba sólo uno de los dos. Y antes que ésa, «la compensación
+    /// cruzada (48)» fue exacta el día que se escribió y siguió ahí siete ficheros después. Una
+    /// cifra a mano sin gate no se degrada despacio: se queda quieta mientras el repo se mueve.
+    /// </para>
+    ///
+    /// <para><b>Los ADR se cuentan además contra su propio enunciado.</b> La línea no dice sólo
+    /// cuántos hay: dice «0001-0133, sin 0016», que es una afirmación comprobable —el mayor es el
+    /// 133, el 16 no está, y por tanto son 132—. Un rango que no cuadra con el conteo es la señal
+    /// de que se añadió un ADR y se tocó una de las dos mitades.</para>
+    /// </remarks>
+    [Fact]
+    public void Las_cifras_del_schema_de_CLAUDE_md_se_cuentan_contra_el_disco()
+    {
+        var raiz = RepoRoot();
+        var guia = File.ReadAllText(Path.Combine(raiz, "CLAUDE.md"));
+        var malas = new List<string>();
+
+        foreach (var (plantilla, carpeta, patron) in Schema)
+        {
+            var dir = Path.Combine(raiz, carpeta.Replace('/', Path.DirectorySeparatorChar));
+
+            var cuantos = patron.EndsWith(".config", StringComparison.Ordinal)
+                ? Directory.EnumerateFiles(dir, patron).Count()
+                : Directory.EnumerateDirectories(dir, patron).Count();
+
+            // Sin esto, una carpeta movida dejaría el conteo en cero y el build se arreglaría
+            // escribiendo «(0)» en la guía.
+            Assert.True(cuantos > 0,
+                $"No se encontró nada para «{plantilla}» en {carpeta} ({patron}). Si se movió, "
+                + "mové también su cifra en CLAUDE.md §2 — y este gate.");
+
+            var frase = string.Format(System.Globalization.CultureInfo.InvariantCulture, plantilla, cuantos);
+
+            if (!guia.Contains(frase, StringComparison.Ordinal))
+            {
+                malas.Add($"CLAUDE.md no dice «{frase}» — en {carpeta} hay {cuantos} ({patron})");
+            }
+        }
+
+        var iconos = File.ReadAllLines(Path.Combine(raiz, "tools", "umbraco13-icons-stock.txt"))
+            .Count(l => l.Length > 0);
+
+        Assert.True(iconos > 0, "El fichero de iconos del stock está vacío.");
+
+        if (!guia.Contains($"({iconos} iconos, versionado en el repo)", StringComparison.Ordinal))
+        {
+            malas.Add($"CLAUDE.md §4.1 no dice «({iconos} iconos, versionado en el repo)» — "
+                + $"tools/umbraco13-icons-stock.txt tiene {iconos}. Es la lista contra la que §4.1 "
+                + "manda verificar un icono antes de escribirlo: si la cifra miente, quien la lea "
+                + "creerá que verificó contra otra cosa.");
+        }
+
+        var adrs = Directory.EnumerateFiles(Path.Combine(raiz, "Synergos.CMS.Web", "docs", "adr"), "*.md")
+            .Select(f => Regex.Match(Path.GetFileName(f), @"^(\d{4})-"))
+            .Where(m => m.Success)
+            .Select(m => int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))
+            .ToHashSet();
+
+        Assert.True(adrs.Count > 0, "No se encontró ningún ADR con nombre NNNN-*.md.");
+
+        var faltan = Enumerable.Range(1, adrs.Max()).Where(n => !adrs.Contains(n)).ToList();
+
+        // El enunciado de la línea —«0001-0133, sin 0016»— es tan comprobable como la cifra, y
+        // las dos mitades se tocan por separado: se puede añadir un ADR y arreglar sólo una.
+        var hueco = faltan.Count == 1
+            ? $"sin {faltan[0]:0000}"
+            : string.Join(" y ", faltan.Select(n => $"{n:0000}"));
+
+        var linea = $"{adrs.Count} ADRs (0001-{adrs.Max():0000}, {hueco})";
+
+        if (!guia.Contains(linea, StringComparison.Ordinal))
+        {
+            malas.Add($"CLAUDE.md §2 no dice «{linea}» — en docs/adr/ hay {adrs.Count} ficheros, "
+                + $"el mayor es {adrs.Max():0000} y falta{(faltan.Count == 1 ? "" : "n")} "
+                + $"{string.Join(", ", faltan.Select(n => $"{n:0000}"))}.");
+        }
+
+        Assert.True(malas.Count == 0,
+            string.Join(Environment.NewLine, malas)
+            + Environment.NewLine
+            + "Estas cifras se cuentan, no se recuerdan (#52). Cuadraban todas el día que se "
+            + "escribió este gate: lo que se les añadió no fue una corrección, fue el vigilante.");
+    }
 }
