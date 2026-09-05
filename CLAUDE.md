@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2583 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2592 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2583 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2592 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (10) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -369,7 +369,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2583 tests):
+# Suite completa (2592 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -494,7 +494,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2583 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2592 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -521,19 +521,20 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   uno**, porque una cabecera que dice «(14)» sobre trece filas pasa el
   recuento y deja un stub que nadie va a tomar — es la tabla que se lee
   para elegir el siguiente trabajo, no la rejilla del inventario.
-  De los 13, **diez** están hechos: la tienda compra contra `Bff.Tienda`
+  De los 13, **once** están hechos: la tienda compra contra `Bff.Tienda`
   (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
   `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25), la visita al inmueble
   aparta cupo **directo contra `Api.Booking`, sin orquestador**
   (`Synergos:Realty:Mode=Api`, HU #33a) — una visita no se cobra, así que
   toca una sola capacidad y un BFF sería una saga de un paso — y **el
   expediente decide contra `Api.Workflow`**, también directo
-  (`Synergos:Gob:Mode=Api`, HU #44). El default sigue siendo `Stub` en
-  todos. **Faltan tres**: `StubPaymentProvider` → `Api.Payments`
-  (bloqueado por #27), `StubApplicationService`, que espera una cara de
-  orquestador sin construir (`Bff.Gob`), y `StubGovActNotificationService`
-  → `Api.Messaging`, que va **a medias**: existe el registro y la
-  superficie, falta el camino HTTP (#62, rebanada 2).
+  (`Synergos:Gob:Mode=Api`, HU #44) — y **el acto administrativo se pone
+  en conocimiento contra `Api.Messaging`**, por su propio interruptor
+  (`Synergos:Gob:Notifications:Mode=Api`, HU #62). El default sigue
+  siendo `Stub` —`Local` en el de notificaciones— en todos. **Faltan
+  dos**: `StubPaymentProvider` → `Api.Payments` (bloqueado por #27) y
+  `StubApplicationService`, que espera una cara de orquestador sin
+  construir (`Bff.Gob`).
 
   > **El acto administrativo notificado existe para sostener CUÁNDO
   > ACCEDIÓ, no para enviar** (#62). Un correo enviado prueba que salió del
@@ -555,6 +556,30 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   >
   > Es durable desde el primer día, porque un registro que se pierde al
   > reiniciar no sirve para lo único que existe.
+  >
+  > **Y ya cruza contra `Api.Messaging`** (rebanada 2,
+  > `Synergos:Gob:Notifications:Mode=Api`, con el registro local de
+  > default). Va por **su propio interruptor** y no por
+  > `Synergos:Gob:Mode`: notificar es `Api.Messaging` y decidir es
+  > `Api.Workflow`, y juntarlas obligaría a encender las dos para probar
+  > una. **Es el primer consumidor de esa capacidad** —llevaba meses
+  > construida sin nadie— y **no hizo falta añadirle un endpoint**: hilo,
+  > adjunto por referencia, plazo de acuse y acuse con afirmación
+  > verificada (#14) ya estaban.
+  >
+  > **La afirmación la decide la capacidad, no el CMS.** Este lado declara
+  > lo más débil (`CmsSession`) y presenta el token si el despliegue sabe
+  > emitirlo; quien decide si eso vale como `IdentityToken` es
+  > `Api.Messaging`, que lo verifica. Escribirla acá «porque es lo que
+  > mandamos» dejaría el registro mintiendo hacia abajo — es el defecto
+  > #42 sobre un dato que sostiene un plazo legal. Verificado en vivo: el
+  > mismo ciudadano queda anotado con `CmsSession` sin `Api.Identity` y con
+  > `IdentityToken` con ella, **en el almacén de la capacidad**.
+  >
+  > **Y las bandejas se LEEN de este lado**, como el timeline de #46: con
+  > `Api.Messaging` caída el ciudadano sigue viendo sus notificaciones y si
+  > las abrió; lo que se para es notificar y abrir, y **no se dan por
+  > hechos en silencio**. Hay gate (`GovNotificationWiringTests`).
 
   > **La devolución de la tienda estaba ROTA, no pendiente** (#57), y el mapa
   > tenía mal la razón. Decía que `StubReturnService` iba a un orquestador por
