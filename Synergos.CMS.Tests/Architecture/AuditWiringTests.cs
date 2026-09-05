@@ -129,23 +129,35 @@ public sealed class AuditWiringTests
     }
 
     /// <summary>
-    /// El reenvío manda la afirmación tal cual, sin subirla por el camino.
+    /// La afirmación viaja en el campo que la capacidad resuelve, y nunca de más.
     /// </summary>
     /// <remarks>
-    /// Vacío es «no consta» y tiene que llegar vacío: rellenarlo con <c>CmsSession</c> porque el
-    /// asiento vino del CMS inventaría una comprobación que nadie hizo, y es exactamente lo que
-    /// la HU #14 rebanada 5 decidió NO hacer con los consentimientos anteriores.
+    /// <para>Desde la #72 <c>Api.Audit</c> comprueba la afirmación y la guarda como
+    /// <c>ActedWith</c>. Mandarla además suelta en <c>details</c> daría dos sitios que pueden
+    /// discrepar sobre el mismo hecho, y el opaco ganaría al comprobado.</para>
+    ///
+    /// <para>El suelo <c>CmsSession</c> es la AUSENCIA de comprobación —«nos fiamos de quien
+    /// llama»— y no un relleno: la capacidad exige una afirmación y sin ella cada asiento se
+    /// volvería un hueco. Lo que no puede aparecer nunca es <c>IdentityToken</c> puesto por el
+    /// camino, que sí sería inventar una comprobación (defecto #42).</para>
     /// </remarks>
     [Fact]
-    public void El_reenvio_no_sube_la_afirmacion_por_el_camino()
+    public void La_afirmacion_viaja_en_su_campo_y_nunca_de_mas()
     {
         var e = Escritor();
-        Assert.Contains("[\"assertion\"] = Recortar(evt.Assertion)", e, StringComparison.Ordinal);
 
-        var i = e.IndexOf("Dictionary<string, string> Detalles", StringComparison.Ordinal);
-        Assert.True(i > 0, "Se renombró el armado de detalles: revisar este gate.");
-        var cuerpo = e[i..Math.Min(e.Length, i + 900)];
-        Assert.DoesNotContain("IdentityAssertions.CmsSession", cuerpo, StringComparison.Ordinal);
+        var i = e.IndexOf("HttpMethod.Post, \"v1/entries\"", StringComparison.Ordinal);
+        Assert.True(i > 0, "Cambió el endpoint del reenvío: revisar este gate.");
+        var peticion = e[i..Math.Min(e.Length, i + 2000)];
+
+        Assert.Contains("assertion = string.IsNullOrWhiteSpace(evt.Assertion)", peticion, StringComparison.Ordinal);
+        Assert.Contains("? IdentityAssertions.CmsSession", peticion, StringComparison.Ordinal);
+        Assert.Contains(": evt.Assertion", peticion, StringComparison.Ordinal);
+        Assert.DoesNotContain("IdentityAssertions.IdentityToken", peticion, StringComparison.Ordinal);
+
+        var j = e.IndexOf("Dictionary<string, string> Detalles", StringComparison.Ordinal);
+        Assert.True(j > 0, "Se renombró el armado de detalles: revisar este gate.");
+        Assert.DoesNotContain("assertion", e[j..Math.Min(e.Length, j + 700)], StringComparison.Ordinal);
     }
 
     // ── 3. Local primero ────────────────────────────────────────────────────

@@ -20,6 +20,13 @@ var builder = WebApplication.CreateBuilder(args);
 // El hilo que permite seguir una compra por los seis procesos (HU #28).
 builder.AddCorrelation();
 
+// Verificar identidad, para que un asiento diga quién actuó DE VERDAD (#72). `required: false`
+// es deliberado: sin llave se sigue auditando —el asiento dirá CmsSession, que es la verdad— y
+// un token presentado donde no se puede comprobar se RECHAZA, no se ignora. Parar la bitácora
+// cuando falla la identidad convertiría una caída en un hueco en el registro, que es peor que
+// un asiento débil.
+builder.AddIdentityTokens(required: false);
+
 builder.Services.Configure<AuditStorageOptions>(builder.Configuration.GetSection("Audit:Storage"));
 builder.Services.AddSingleton<IAuditStore, FileSystemAuditStore>();
 builder.Services.AddSingleton<IIdempotencyLedger>(sp =>

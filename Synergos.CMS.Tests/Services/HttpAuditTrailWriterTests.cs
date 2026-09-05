@@ -275,20 +275,45 @@ public sealed class HttpAuditTrailWriterTests
         Assert.Equal("sistema", Cuerpo(cap).GetProperty("actorId").GetString());
     }
 
+    /// <summary>
+    /// La afirmación viaja en SU campo, el que la capacidad comprueba y guarda.
+    /// </summary>
+    /// <remarks>
+    /// Desde la #72 <c>Api.Audit</c> la resuelve y la persiste como <c>ActedWith</c>. Dejarla
+    /// además en <c>details</c> daría dos sitios que pueden discrepar sobre un mismo hecho, y el
+    /// opaco —que nadie comprueba— le ganaría al comprobado.
+    /// </remarks>
     [Fact]
-    public async Task La_afirmacion_viaja_tal_cual_y_vacia_llega_vacia()
+    public async Task La_afirmacion_viaja_en_el_campo_que_la_capacidad_comprueba()
     {
         var (svc, _, cap) = Nuevo();
 
         await svc.WriteAsync(Asiento(afirmacion: IdentityAssertions.CmsSession), CancellationToken.None);
-        Assert.Equal("CmsSession", Cuerpo(cap).GetProperty("details").GetProperty("assertion").GetString());
 
-        cap.Llamadas.Clear();
+        Assert.Equal("CmsSession", Cuerpo(cap).GetProperty("assertion").GetString());
+        Assert.False(Cuerpo(cap).GetProperty("details").TryGetProperty("assertion", out _));
+    }
 
-        // «No consta» es la verdad sobre todo lo escrito antes de que esto existiera. Subirlo a
-        // CmsSession por el camino inventaría una comprobación que nadie hizo (defecto #42).
+    /// <summary>
+    /// Un asiento que no registra afirmación viaja con el SUELO, no sin nada.
+    /// </summary>
+    /// <remarks>
+    /// <para><c>CmsSession</c> significa «nos fiamos de quien llama», o sea la <i>ausencia</i> de
+    /// comprobación — que es exactamente lo que hay en un asiento que no registra ninguna. No es
+    /// inventar una comprobación; inventarla sería mandar <c>IdentityToken</c>.</para>
+    ///
+    /// <para>Y no se puede omitir: desde la #72 la capacidad rechaza con
+    /// <c>access_requires_identity</c>, así que cada asiento del CMS anterior a este campo se
+    /// volvería un hueco anotado — ruido en vez de rastro.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Un_asiento_sin_afirmacion_viaja_con_el_suelo()
+    {
+        var (svc, _, cap) = Nuevo();
+
         await svc.WriteAsync(Asiento(afirmacion: IdentityAssertions.None), CancellationToken.None);
-        Assert.Equal(string.Empty, Cuerpo(cap).GetProperty("details").GetProperty("assertion").GetString());
+
+        Assert.Equal("CmsSession", Cuerpo(cap).GetProperty("assertion").GetString());
     }
 
     [Fact]
