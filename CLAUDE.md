@@ -399,13 +399,25 @@ node tools/check-css-parity.mjs   # G-3: toda clase syn-* emitida tiene CSS
 (cd Synergos.CMS.Web/docs/contracts/tests && npm ci && npm test)  # contratos
 ```
 
-El cuarto es **cross-repo** y necesita `Synergos.UI` clonado como hermano
-(`../Synergos.UI`), porque valida las dos mitades del acople:
+El cuarto es **cross-repo** y valida las dos mitades del acople, así que
+necesita `Synergos.UI` clonado. **No hace falta que sea hermano ni correr
+`npm install`**: los dos scripts aceptan la ruta del CMS, así que un agente en
+un contenedor puede clonarlo donde sea y correrlos con `node` a secas. Se
+decía que hacía falta la disposición de hermanos y por eso nadie los corría
+(#86):
 
 ```bash
-(cd ../Synergos.UI && npm run cms:validate)   # registry ↔ DocTypes
-(cd ../Synergos.UI/platforms/angular && node tools/sync-tokens.mjs --check)
+git clone --depth 1 https://github.com/cherced-dev/synergos.ui /tmp/ui
+
+# registry ↔ DocTypes. También acepta --cms-path=…
+(cd /tmp/ui && SYNERGOS_CMS_PATH=$PWD/../Synergos.CMS node tools/validate-cms-contracts.mjs)
+
+# los tokens del design system, contra syn-tokens.css de este repo
+(cd /tmp/ui/platforms/angular && SYNERGOS_CMS_PATH=… node tools/sync-tokens.mjs --check)
 ```
+
+Los dos pasan hoy. El primero sale con **avisos** `[W4]` —entradas del registry
+sin su espejo en `ELEMENT_CONFIG_FIELDS`— que son avisos y no errores: sale 0.
 
 ## 8. Layout Composer — el feature más maduro
 
