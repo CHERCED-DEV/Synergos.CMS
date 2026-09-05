@@ -1,6 +1,6 @@
 # 11 — El mapa del cableado
 
-> Los 48 `Stub*` de `Synergos.CMS.Application/Services/Impl/`, y qué se hace con cada uno.
+> Los 49 `Stub*` de `Synergos.CMS.Application/Services/Impl/`, y qué se hace con cada uno.
 >
 > **Esto es un inventario, no un rediseño.** Describe lo que hay y decide destino. El rediseño
 > de algo concreto es otro ticket.
@@ -9,13 +9,13 @@ Lo vigila `Synergos.CMS.Tests/Architecture/WiringMapTests.cs`. Un stub nuevo sin
 **rompe el build**, y una entrada que nombre una capacidad inexistente también. Un mapa que se
 mantiene a mano se desactualiza en la tercera ola.
 
-## Lo primero: son 48, no 45
+## Lo primero: son 49, no 45
 
 El ticket decía 45. La cuenta real al levantar el inventario fue **46**, y no porque alguien
 añadiera uno: la cuenta de 45 era de memoria. Es exactamente la razón por la que este documento
 lleva un gate detrás en vez de una lista escrita a mano.
 
-**Hoy son 48**, y cómo se enteró este documento vale más que la cifra. Durante tres olas el
+**Hoy son 49**, y cómo se enteró este documento vale más que la cifra. Durante tres olas el
 inventario de abajo se mantuvo al día —el gate lo exige— mientras las cifras de esta sección se
 quedaron en 46: quien cableaba movía su fila y nadie le pedía tocar el resumen. El gate estaba
 verde y tenía razón; lo que mentía era la prosa (#50).
@@ -30,19 +30,19 @@ forma conocida de que una cifra a mano sobreviva a la cuarta ola.
 
 | Familia | Cuántos | Qué le pasa |
 |---|---:|---|
-| **A — cableado pendiente** | 12 | va a una capacidad o a un BFF |
+| **A — cableado pendiente** | 13 | va a una capacidad o a un BFF |
 | **B — ya resuelto desde el contenido** | 5 | sale de DocTypes; cablearlo sería un retroceso |
 | **C — se queda en stub a propósito** | 31 | no hay capacidad detrás — o la hay y el stub es el camino por defecto |
 
 > **La brecha es menor de lo que «una capacidad de veinte conectada» sugiere**, y por una razón
-> que no se ve desde el conteo: **más de un tercio de los stubs ya son durables**. 18 de los 48
+> que no se ve desde el conteo: **más de un tercio de los stubs ya son durables**. 19 de los 49
 > escriben tras `IJsonEntityStore`, `IPrivateFileStore` o `IPhiStore` (ADR 0105, ADR 0116 fase 6, doc 25,
 > T6). «Stub» en este repo dejó hace tiempo de querer decir «en memoria», y leerlo así es lo que
 > hace que un ticket prometa arreglar algo que ya está arreglado — ver la nota sobre #26 al final.
 
 ---
 
-## Familia A — cableado pendiente (12)
+## Familia A — cableado pendiente (13)
 
 Lo que sí tiene una capacidad o un orquestador detrás. **La columna «a qué nivel» es la decisión
 que no hay que equivocar**: contra el BFF cuando hay varios pasos que pueden fallar a la mitad y
@@ -62,6 +62,7 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 | `StubHotelBookingService` | `Bff.Viajes` `POST /v1/trips` | **Orquestador.** Apartar, cobrar y confirmar pueden fallar a la mitad. Las **dos** vías: la reserva de hotel y el carrito multi-producto, que además pide confirmación PARCIAL y **ordena la devolución** de lo que no se cumplió — el orquestador cotiza el viaje entero y no sabe cuánto vale el ítem caído | **HU #36 + #40** |
 | `StubVisitSchedulingService` | `Api.Booking` `/v1/holds` | **Capacidad, no orquestador.** Una visita NO se cobra, así que no hay segundo paso que compensar — una saga de un paso sería la máquina de compensar sin nada que compensar. Ver la corrección de abajo | **HU #33a** |
 | `StubIdentityTokenIssuer` | `Api.Identity` `POST /v1/tokens` | **Capacidad.** Conseguir una identidad es UN paso que dice NO solo (`principal_not_found`, `principal_locked`) y no mueve nada que haya que deshacer. Y es el único stub cuyo `null` es una respuesta de producción: sin identidad se sigue declarando quién actúa, que es lo que se hacía antes — un trámite no se para porque la identidad esté caída | **HU #14** |
+| `StubGovActNotificationService` | `Api.Messaging` `POST /v1/threads` + `/v1/messages/{id}/acknowledge` | **Capacidad.** Poner un acto en conocimiento es un paso que dice NO solo (el hilo cerrado, el plazo de acuse vencido) y no mueve nada que haya que deshacer. Y es el **primer consumidor de `Api.Messaging`**, que llevaba meses construida sin nadie: no hizo falta añadirle un endpoint. Lo que se queda de este lado es el expediente —radicado, título del acto, quién es el dueño y la bandeja—, y las bandejas se LEEN de acá, como el timeline de #46: con la capacidad caída el ciudadano sigue viendo sus notificaciones, sólo se para abrirlas | **HU #62** |
 
 > ### Corrección: este stub estaba mal clasificado, y por qué importa
 >
@@ -266,7 +267,7 @@ y sus holds necesitan quien los expire.
 > no queda nada que mover de una vez.
 
 
-## Los 48, en una lista
+## Los 49, en una lista
 
 Para el gate. La familia va entre corchetes; el destino, cuando lo hay, es un directorio que
 tiene que existir en la raíz del repo.
@@ -300,6 +301,7 @@ tiene que existir en la raíz del repo.
 | `StubIdentityTokenIssuer` | A | `Synergos.Api.Identity` |
 | `StubEventTicketingService` | A | `Synergos.Bff.Eventos` |
 | `StubFlightAvailabilityProvider` | C | — |
+| `StubGovActNotificationService` | A | `Synergos.Api.Messaging` |
 | `StubGovFeeCalculator` | C | — |
 | `StubLeadCaptureService` | C | — |
 | `StubMessagingService` | C | — |
