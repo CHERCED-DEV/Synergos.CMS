@@ -185,6 +185,123 @@ public sealed class ApiMoldTests
     }
 
     /// <summary>
+    /// El primer argumento de un <c>Rejection.*</c>: el código que un orquestador compara.
+    /// </summary>
+    private const string Rechazo =
+        @"Rejection\.(?:Invalid|NotFound|Conflict|Forbidden|Expired|Unavailable)\(\s*\$?""((?:[^""\\]|\\.)*)""";
+
+    /// <summary>
+    /// Qué prefijo declara cada tipo que tenga <c>CodePrefix</c>, en las capacidades y en
+    /// <c>Synergos.Shared</c>.
+    /// </summary>
+    /// <remarks>
+    /// Hace falta <c>Shared</c> porque <c>Api.Workflow</c> construye un rechazo con
+    /// <c>IdentityTokens.CodePrefix</c> (HU #14, rebanada 3): sin resolverlo, ese código se
+    /// descartaría por «dinámico» y la cifra saldría uno corta sin que nada lo dijera.
+    /// </remarks>
+    private static IReadOnlyDictionary<string, string> PrefijosDeclarados()
+    {
+        var mapa = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        var raices = Capacidades().Select(c => c.Dir)
+            .Append(Path.Combine(RepoRoot(), "Synergos.Shared"));
+
+        foreach (var fichero in raices.SelectMany(Fuentes))
+        {
+            var texto = SinComentarios(fichero);
+            var tipos = Regex.Matches(texto, @"\b(?:class|record|struct)\s+(\w+)");
+
+            foreach (Match asignacion in Regex.Matches(texto, @"CodePrefix\s*=\s*""([^""]+)"""))
+            {
+                // El tipo que la contiene es el último declarado antes de ella. Un fichero puede
+                // declarar varios —IdentityTokens.cs declara cuatro— y quedarse con el primero
+                // mapea el prefijo al tipo equivocado.
+                var tipo = tipos.LastOrDefault(t => t.Index < asignacion.Index);
+                if (tipo is not null) mapa[tipo.Groups[1].Value] = asignacion.Groups[1].Value;
+            }
+        }
+
+        return mapa;
+    }
+
+    /// <summary>
+    /// La cifra de códigos de rechazo que <c>CLAUDE.md</c> §11 declara, contada contra el árbol.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que evita es el mismo de los endpoints</b> (#52), y venía en la misma
+    /// frase: «20 capacidades (136 endpoints, <b>195</b> códigos de rechazo)». Los endpoints ya
+    /// se contaban; los códigos no, y eran <b>235</b>. Una cifra escrita a mano en una guía es
+    /// exacta el día que se escribe y nadie vuelve.</para>
+    ///
+    /// <para><b>El criterio ES parte de la cifra</b>, y por eso va escrito acá y en la guía. Se
+    /// cuentan los códigos <b>literales distintos</b> que el árbol de las capacidades construye.
+    /// Quedan fuera dos cosas que sí existen:</para>
+    /// <list type="number">
+    ///   <item>los que se arman en ejecución —<c>orders.already_{destino}</c>, y los
+    ///   reenvoltorios <c>xxx.{code}</c> que pasan un código recibido—, que no se pueden
+    ///   enumerar sin ejecutar;</item>
+    ///   <item>los <b>cinco de <c>Synergos.Shared</c></b> que una capacidad devuelve sin
+    ///   declararlos. Con ellos serían 240.</item>
+    /// </list>
+    ///
+    /// <para>Se eligió el criterio <b>simétrico con el de endpoints</b> —lo que hay en el árbol
+    /// de las capacidades— porque el sujeto de la frase son las veinte capacidades. Dos cifras
+    /// de la misma frase contadas con dos varas distintas es cómo se acaba discutiendo cuál de
+    /// las dos está mal.</para>
+    ///
+    /// <para><b>La frase se busca con los espacios colapsados</b>: la guía va envuelta a mano a
+    /// ~72 columnas y esta cae partida. Exigirla contigua obligaría a maquetar la prosa para
+    /// pasar el gate, y entonces manda el gate y no lo que dice el texto.</para>
+    /// </remarks>
+    [Fact]
+    public void La_cifra_de_codigos_de_rechazo_de_CLAUDE_md_se_cuenta_contra_el_arbol()
+    {
+        var prefijos = PrefijosDeclarados();
+        var codigos = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var (_, dir) in Capacidades())
+        {
+            var propio = Directory.EnumerateFiles(Path.Combine(dir, "Domain"), "*Rules.cs")
+                .Select(f => Regex.Match(SinComentarios(f), @"CodePrefix\s*=\s*""([^""]+)"""))
+                .FirstOrDefault(m => m.Success)?.Groups[1].Value;
+
+            foreach (var fichero in Fuentes(dir))
+            {
+                foreach (Match uso in Regex.Matches(SinComentarios(fichero), Rechazo))
+                {
+                    var codigo = Regex.Replace(uso.Groups[1].Value, @"\{(\w+)\.CodePrefix\}",
+                        m => prefijos.TryGetValue(m.Groups[1].Value, out var p) ? p : m.Value);
+
+                    if (propio is not null)
+                    {
+                        codigo = codigo.Replace("{CodePrefix}", propio, StringComparison.Ordinal);
+                    }
+
+                    // Lo que sigue teniendo una interpolación se arma en ejecución.
+                    if (codigo.Contains('{')) continue;
+
+                    codigos.Add(codigo);
+                }
+            }
+        }
+
+        // Sin esto, un descubrimiento roto dejaría el assert de abajo comparando contra cero —
+        // y el build se arreglaría escribiendo «0 códigos de rechazo» en la guía.
+        Assert.True(codigos.Count > 150,
+            $"Se contaron {codigos.Count} códigos de rechazo: el descubrimiento está roto.");
+
+        var claude = Regex.Replace(
+            File.ReadAllText(Path.Combine(RepoRoot(), "CLAUDE.md")), @"\s+", " ");
+
+        var frase = $"{codigos.Count} códigos de rechazo)";
+
+        Assert.True(claude.Contains(frase, StringComparison.Ordinal),
+            $"CLAUDE.md §11 no dice «{frase}». En el árbol de las capacidades hay "
+            + $"{codigos.Count} códigos literales distintos. La cifra se cuenta, no se recuerda: "
+            + "decía 195 y llevaba sin contarse desde que se escribió (#52).");
+    }
+
+    /// <summary>
     /// Toda capacidad tiene su fichero de reglas, y declara su prefijo de códigos.
     /// </summary>
     /// <remarks>
