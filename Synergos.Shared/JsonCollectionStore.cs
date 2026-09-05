@@ -32,6 +32,12 @@ public sealed class JsonCollectionStore<T> where T : class
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = false,
+        // Un Actor se ESCRIBE bien de serie y no se puede LEER: sus roles son un
+        // IReadOnlySet<string> y System.Text.Json no sabe instanciar una interfaz de conjunto.
+        // Sin esto, la bitácora guardaba sus asientos y devolvía 500 en toda lectura en cuanto el
+        // proceso se reiniciaba — y no antes, porque el caché de acá tapa el viaje al disco
+        // mientras el proceso vive (defecto #82).
+        Converters = { new ActorJsonConverter() },
     };
 
     private readonly string _path;

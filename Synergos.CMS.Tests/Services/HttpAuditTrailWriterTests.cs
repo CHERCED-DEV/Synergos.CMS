@@ -49,16 +49,33 @@ public sealed class HttpAuditTrailWriterTests
         /// <summary>Si viene, la capacidad no contesta: se cae la conexión.</summary>
         public bool Caida { get; set; }
 
-        public List<(string Uri, string? Idem, string Body)> Llamadas { get; } = new();
+        public List<(string Uri, string? Idem, string Body, string? Identidad)> Llamadas { get; } = new();
+
+        /// <summary>Si la capacidad no tiene llave para comprobar lo que le presenten.</summary>
+        public bool SinLlaveDeVerificacion { get; set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct)
         {
             if (Caida) throw new HttpRequestException("guionado: caída");
 
+            var identidad = req.Headers.TryGetValues("X-Synergos-Identity", out var t) ? t.FirstOrDefault() : null;
+
             Llamadas.Add((
                 req.RequestUri!.PathAndQuery,
                 req.Headers.TryGetValues("Idempotency-Key", out var v) ? v.FirstOrDefault() : null,
-                req.Content is null ? string.Empty : await req.Content.ReadAsStringAsync(ct)));
+                req.Content is null ? string.Empty : await req.Content.ReadAsStringAsync(ct),
+                identidad));
+
+            // Presentar una prueba donde no hay con qué verificarla se RECHAZA — no se ignora.
+            if (SinLlaveDeVerificacion && !string.IsNullOrWhiteSpace(identidad))
+            {
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent(
+                        """{"code":"identity.token_not_verifiable","detail":"sin llave"}""",
+                        Encoding.UTF8, "application/json"),
+                };
+            }
 
             return Estado == HttpStatusCode.Created
                 ? new HttpResponseMessage(HttpStatusCode.Created)
@@ -81,6 +98,20 @@ public sealed class HttpAuditTrailWriterTests
             => new(_h, disposeHandler: false) { BaseAddress = new Uri("http://audit.local/") };
     }
 
+    /// <summary>Emisor guionado. <c>null</c> = el despliegue no sabe emitir (el default).</summary>
+    private sealed class Emisor : IIdentityTokenIssuer
+    {
+        public string? Token { get; set; }
+
+        public List<IdentitySubject> Pedidos { get; } = new();
+
+        public Task<string?> IssueAsync(IdentitySubject subject, CancellationToken cancellationToken = default)
+        {
+            Pedidos.Add(subject);
+            return Task.FromResult(Token);
+        }
+    }
+
     private sealed class OptionsMonitorFalso : IOptionsMonitor<AuditSettings>
     {
         public OptionsMonitorFalso(AuditSettings v) => CurrentValue = v;
@@ -91,13 +122,21 @@ public sealed class HttpAuditTrailWriterTests
 
     private static (HttpAuditTrailWriter Svc, Local Loc, Capacidad Cap) Nuevo()
     {
+        var (svc, loc, cap, _) = NuevoConEmisor();
+        return (svc, loc, cap);
+    }
+
+    private static (HttpAuditTrailWriter Svc, Local Loc, Capacidad Cap, Emisor Ide) NuevoConEmisor(string? token = null)
+    {
         var cap = new Capacidad();
         var loc = new Local();
+        var ide = new Emisor { Token = token };
         var svc = new HttpAuditTrailWriter(
             loc, new Fabrica(cap),
             new OptionsMonitorFalso(new AuditSettings()),
-            NullLogger<HttpAuditTrailWriter>.Instance);
-        return (svc, loc, cap);
+            NullLogger<HttpAuditTrailWriter>.Instance,
+            ide);
+        return (svc, loc, cap, ide);
     }
 
     private static AuditEvent Asiento(
@@ -364,6 +403,115 @@ public sealed class HttpAuditTrailWriterTests
         // Y lo local NO se recorta: el recorte es del contrato de la capacidad, no del rastro.
         Assert.Equal(900, loc.Escritos[0].Detail.Length);
         Assert.Single(loc.Escritos);
+    }
+
+    // ── Quién actuó, presentado y no sólo declarado ─────────────────────────
+
+    /// <summary>
+    /// Sin emisor —el default— el asiento sale sin firmar y llega igual.
+    /// </summary>
+    /// <remarks>
+    /// Es el camino del clon limpio y el de <c>Api.Identity</c> caída: sin token se sigue
+    /// declarando, que es lo que se hacía antes de la HU #14. Un asiento no se pierde porque la
+    /// identidad no esté.
+    /// </remarks>
+    [Fact]
+    public async Task Sin_emisor_el_asiento_sale_sin_firmar_y_llega()
+    {
+        var (svc, loc, cap, _) = NuevoConEmisor(token: null);
+
+        await svc.WriteAsync(Asiento(), CancellationToken.None);
+
+        Assert.Null(cap.Llamadas[0].Identidad);
+        Assert.Single(loc.Escritos);
+    }
+
+    /// <summary>
+    /// Con emisor, el asiento va firmado y el sujeto del token ES el actor.
+    /// </summary>
+    /// <remarks>
+    /// La capacidad rechaza un token que nombre a otro (<c>token_subject_mismatch</c>), y eso es
+    /// justo lo que lo vuelve prueba y no adorno: firmar con otro sujeto no fallaría acá — fallaría
+    /// allá, y convertiría cada asiento en un hueco.
+    /// </remarks>
+    [Fact]
+    public async Task El_asiento_va_firmado_y_el_sujeto_del_token_es_el_actor()
+    {
+        var (svc, _, cap, ide) = NuevoConEmisor(token: "tok-abc");
+
+        await svc.WriteAsync(Asiento(), CancellationToken.None);
+
+        Assert.Equal("tok-abc", cap.Llamadas[0].Identidad);
+
+        var pedido = Assert.Single(ide.Pedidos);
+        Assert.Equal("cms.actor", pedido.Kind);
+        Assert.Equal(Cuerpo(cap).GetProperty("actorId").GetString(), pedido.Id);
+
+        // Y el correo tampoco viaja dentro del sujeto del token.
+        Assert.DoesNotContain("@", pedido.Id, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Si la capacidad no puede comprobar el token, el asiento se repite SIN firmar y llega.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el principio de la #72 sostenido: «parar la bitácora cuando falla la identidad
+    /// convierte una caída en un hueco en el registro, que es peor que un asiento débil». Sin este
+    /// reintento, presentar identidad a una capacidad sin llave de verificación perdería
+    /// <b>todos</b> los asientos — el cambio que quería fortalecerlos los habría borrado.</para>
+    ///
+    /// <para>Y queda como <c>CmsSession</c>, que es lo que este lado siempre pudo respaldar: no se
+    /// inventa nada, se deja de probar algo que allá no se puede comprobar.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Si_la_capacidad_no_puede_comprobarlo_el_asiento_se_repite_sin_firmar()
+    {
+        var (svc, loc, cap, _) = NuevoConEmisor(token: "tok-abc");
+        cap.SinLlaveDeVerificacion = true;
+
+        await svc.WriteAsync(Asiento(), CancellationToken.None);
+
+        Assert.Equal(2, cap.Llamadas.Count);
+        Assert.Equal("tok-abc", cap.Llamadas[0].Identidad);
+        Assert.Null(cap.Llamadas[1].Identidad);
+
+        // Y NO quedó hueco: el asiento llegó.
+        Assert.Single(loc.Escritos);
+    }
+
+    /// <summary>
+    /// Un token rechazado por OTRA causa no se repite sin firmar: queda el hueco.
+    /// </summary>
+    /// <remarks>
+    /// Un token vencido o de otro sujeto son fallos de este lado. Repetirlos sin firma los
+    /// escondería para siempre detrás de un asiento débil, y el defecto seguiría ahí — pareciendo
+    /// que todo funciona, que es lo peor que puede hacer un reintento.
+    /// </remarks>
+    [Fact]
+    public async Task Un_rechazo_de_identidad_por_otra_causa_no_se_repite_sin_firmar()
+    {
+        var (svc, loc, cap, _) = NuevoConEmisor(token: "tok-abc");
+        cap.Estado = HttpStatusCode.BadRequest;
+        cap.Codigo = "identity.token_subject_mismatch";
+
+        await svc.WriteAsync(Asiento(), CancellationToken.None);
+
+        Assert.Single(cap.Llamadas);
+        Assert.Equal(2, loc.Escritos.Count);
+        Assert.Contains("token_subject_mismatch", loc.Escritos[1].Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>El asiento del hueco tampoco pide token: no sale a la red.</summary>
+    [Fact]
+    public async Task El_asiento_del_hueco_no_pide_token()
+    {
+        var (svc, _, cap, ide) = NuevoConEmisor(token: "tok-abc");
+        cap.Caida = true;
+
+        await svc.WriteAsync(Asiento(), CancellationToken.None);
+
+        // Un solo intento de red ⇒ un solo token pedido. El hueco no genera otro.
+        Assert.Single(ide.Pedidos);
     }
 
     // ── Leer nunca sale a la red ────────────────────────────────────────────
