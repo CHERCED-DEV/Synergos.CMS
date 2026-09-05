@@ -182,7 +182,10 @@ public sealed class SynergosIdentitySeeder
     private static string ResolveSeoDescription(string pageName) => pageName switch
     {
         "Home" => "Synergos es el motor editorial detrás de marcas profesionales, e-commerce, portales de membresía y experiencias corporativas.",
-        "Identidad" => "Synergos es un CMS empresarial polimórfico: un código, un schema, 122 bundles UI. Conoce el equipo y la visión.",
+        // Sin cifra a propósito: esto es copy que ve un visitante, y decía 122 cuando el CDN
+        // publica 130 (#86). Un número en una descripción SEO no se actualiza nunca —nadie lo
+        // cruza con nada— así que la frase se escribe para que no pueda envejecer.
+        "Identidad" => "Synergos es un CMS empresarial polimórfico: un código, un schema, un catálogo de elementos UI. Conoce el equipo y la visión.",
         "Contacto" => "Agenda una sesión técnica con el equipo de plataforma.",
         _ => string.Empty,
     };

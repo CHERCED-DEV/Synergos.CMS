@@ -1049,6 +1049,6 @@ Invoke-RestMethod "$baseUrl/umbraco/management/api/v1/document/$docKey/publish" 
 - `refactor-docs/architecture/06-composition-design-principles.md` — filtro 3 preguntas
 - `Synergos.CMS.Web/docs/contracts/` — 5 contratos CMS↔UI (ADR 0083)
 - `Synergos.CMS.Web/docs/adr/` — 92 ADRs ratificados
-- `references/ui-elements-catalog.md` — 122 bundles publicados
+- `references/ui-elements-catalog.md` — los bundles publicados
 - `references/cms-to-ui-mapping.md` — alias CMS ↔ tag DOM ↔ bundle URL
 - `vitals/contracts/src/elements-syn.contract.ts` — schema mirrors TS

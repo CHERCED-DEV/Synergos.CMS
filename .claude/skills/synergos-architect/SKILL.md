@@ -1,12 +1,12 @@
 ---
 name: synergos-architect
-description: Arquitecto SYNERGOS — bootstrap completo + autoría editorial + empalme UI. Activar cuando el arquitecto (a) está creando o editando contenido (páginas, secciones, cards, CTAs, alertas globales, navegación), (b) está draftando copy (títulos, descripciones, CTA labels), (c) está decidiendo qué composition/block/element usar y qué DataType aplica por campo, (d) está armando un aplicativo desde 0 (vertical profesional / e-commerce / marca / membership / healthcare / multi-dominio), o (e) preguntando qué bundle UI consume cierto schema CMS. Sugiere piezas concretas del schema vivo, las mappea a bundles UI publicados (122 elementos), justifica con principios y ADRs del proyecto, y entrega backoffice steps + drafts de copy listos para pegar. Lee `Synergos.CMS/Synergos.CMS.Web/uSync/v9/` (schema CMS) + `references/ui-elements-catalog.md` (122 bundles UI) + `references/cms-to-ui-mapping.md` (mapeo schema↔bundle) + `references/app-bootstrap-recipes.md` (5 verticales) como fuentes de verdad.
+description: Arquitecto SYNERGOS — bootstrap completo + autoría editorial + empalme UI. Activar cuando el arquitecto (a) está creando o editando contenido (páginas, secciones, cards, CTAs, alertas globales, navegación), (b) está draftando copy (títulos, descripciones, CTA labels), (c) está decidiendo qué composition/block/element usar y qué DataType aplica por campo, (d) está armando un aplicativo desde 0 (vertical profesional / e-commerce / marca / membership / healthcare / multi-dominio), o (e) preguntando qué bundle UI consume cierto schema CMS. Sugiere piezas concretas del schema vivo, las mappea a bundles UI publicados, justifica con principios y ADRs del proyecto, y entrega backoffice steps + drafts de copy listos para pegar. Lee `Synergos.CMS/Synergos.CMS.Web/uSync/v9/` (schema CMS) + `references/ui-elements-catalog.md` (el catálogo de bundles UI) + `references/cms-to-ui-mapping.md` (mapeo schema↔bundle) + `references/app-bootstrap-recipes.md` (5 verticales) como fuentes de verdad.
 ---
 
 # SYNERGOS Architect — bootstrap + content authoring + UI bridge
 
 > **Visión polimórfica**: SYNERGOS es una plataforma empresarial pensada para
-> deploy multi-vertical. Un código + un CMS + 122 bundles UI = N productos
+> deploy multi-vertical. Un código + un CMS + el catálogo de bundles UI = N productos
 > distintos (profesional independiente, e-commerce, marca corporativa,
 > membership portal, healthcare, blog corporate, multi-dominio). Las recetas
 > verticales no cambian código — cambian schema instances + brand assets +
@@ -184,7 +184,7 @@ Para cada página de la receta, citar:
 ### Paso 5.6 — Empalme UI: confirmar bundles publicados
 
 Para cada `elementSyn*` recomendado, verificar en `references/ui-elements-catalog.md`:
-- ¿El bundle está publicado al CDN? (122 elementos hoy disponibles)
+- ¿El bundle está publicado al CDN? (ver `references/ui-elements-catalog.md`)
 - Si NO: marcar como **gap** — requiere scaffolding nuevo (`npx nx generate` siguiendo el pattern de los 122 existentes), publicación al CDN, y el SSR va a emitir offline fallback hasta que esté publicado.
 - Si SÍ: citar la shape de inputs (rich `{Pascal}ElementConfig` si existe, o schema mirror `Syn{Pascal}Schema`).
 
@@ -313,7 +313,7 @@ Ver receta detallada en `references/app-bootstrap-recipes.md` § Receta 1.
 - `references/naming-and-ui-bridge.md` — `elementSyn*` / `<synergos-*>` / bundle CDN
 
 ### Bootstrap + UI catalog (nuevos cap-310 architect)
-- `references/ui-elements-catalog.md` — **AUTO-GENERATED** — 122 bundles publicados al CDN con tier/tag/framework/shape rich + schema + inputs. Re-genera con `node Synergos.UI/tools/refresh-skill-catalog.mjs`.
+- `references/ui-elements-catalog.md` — **AUTO-GENERATED** — los bundles publicados al CDN con tier/tag/framework/shape rich + schema + inputs. Re-genera con `node Synergos.UI/tools/refresh-skill-catalog.mjs`.
 - `references/cms-to-ui-mapping.md` — **AUTO-GENERATED** — tabla 1:1 alias CMS ↔ tag DOM ↔ bundle URL ↔ shape ↔ Razor partial.
 - `references/app-bootstrap-recipes.md` — 5 verticales (profesional / e-commerce / corporate / membership / healthcare) con páginas + blocks + settings + multi-domain.
 
