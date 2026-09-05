@@ -115,7 +115,7 @@ public sealed class StubGovActNotificationService : IGovActNotificationService
                 OpenedBy = memberKey,
                 // Sin identidad verificable, esto es lo más fuerte que se puede afirmar — y es
                 // honesto: significa «nuestra propia sesión da fe».
-                OpenedWith = GovActAssertions.CmsSession,
+                OpenedWith = IdentityAssertions.CmsSession,
             };
 
             await GuardarAsync(abierta, memberKey, cancellationToken).ConfigureAwait(false);

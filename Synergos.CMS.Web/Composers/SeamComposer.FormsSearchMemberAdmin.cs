@@ -121,7 +121,49 @@ public sealed partial class SeamComposer
         // persiste eventos admin en App_Data/syn-audit/{yyyy-MM-dd}.jsonl.
         // Singleton — solo depende de IHostEnvironment + ILogger; concurrency
         // gestionada via lock interno.
-        services.AddSingleton<IAuditTrailWriter, FileSystemAuditTrailWriter>();
+        services.AddSingleton<FileSystemAuditTrailWriter>();
+
+        // La sección se ENLAZA: sin esto el escritor recibe un AuditSettings recién construido y
+        // lo que no viaja por el HttpClient —los Kind del actor y del recurso— se queda en su
+        // default en silencio. Es el olvido que arrastraron Tienda (#24), Salud (#25),
+        // Viajes (#36) y las notificaciones de Gobierno (#62).
+        services.Configure<AuditSettings>(builder.Config.GetSection("Synergos:Audit"));
+
+        // HU #15 — el asiento también sale de esta máquina, si el despliegue lo enciende.
+        //
+        // El JSONL NO se sustituye: envuelve. Las lecturas del seam son síncronas y la bitácora
+        // del backoffice se pinta en cada carga, así que sigue siendo el modelo de lectura con la
+        // capacidad encendida — con Api.Audit caída el administrador SIGUE viendo qué pasó, y lo
+        // que se para es que el asiento salga de acá. Es la forma del timeline de pedidos (#46).
+        if (string.Equals(builder.Config["Synergos:Audit:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        {
+            var auditBase = builder.Config["Synergos:Audit:BaseUrl"];
+            var auditKey = builder.Config["Synergos:Audit:ApiKey"];
+            var auditTimeout = int.TryParse(
+                builder.Config["Synergos:Audit:TimeoutSeconds"], out var at) && at > 0 ? at : 5;
+
+            services.AddHttpClient(HttpAuditTrailWriter.ClientName, http =>
+            {
+                var url = string.IsNullOrWhiteSpace(auditBase) ? "http://127.0.0.1:5222/" : auditBase;
+                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+                http.Timeout = TimeSpan.FromSeconds(auditTimeout);
+                if (!string.IsNullOrWhiteSpace(auditKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpAuditTrailWriter.ApiKeyHeader, auditKey);
+                }
+            })
+            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+
+            services.AddSingleton<IAuditTrailWriter>(sp => new HttpAuditTrailWriter(
+                sp.GetRequiredService<FileSystemAuditTrailWriter>(),
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IOptionsMonitor<AuditSettings>>(),
+                sp.GetRequiredService<ILogger<HttpAuditTrailWriter>>()));
+        }
+        else
+        {
+            services.AddSingleton<IAuditTrailWriter>(sp => sp.GetRequiredService<FileSystemAuditTrailWriter>());
+        }
 
         // Ola 162 + Cap-270 Batch B — Retention sweep generalizado
         // (ADRs 0070 + 0088). RetentionSweepHostedService itera todas

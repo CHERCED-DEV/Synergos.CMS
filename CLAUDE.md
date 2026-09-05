@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2622 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2654 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2622 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2654 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (11) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -369,7 +369,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2622 tests):
+# Suite completa (2654 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -494,7 +494,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2622 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2654 tests, gates de
 segregación y molde en verde.
 
 > **Los 235 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -550,9 +550,27 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   en conocimiento contra `Api.Messaging`**, por su propio interruptor
   (`Synergos:Gob:Notifications:Mode=Api`, HU #62). El default sigue
   siendo `Stub` —`Local` en el de notificaciones— en todos. **Faltan
-  dos**: `StubPaymentProvider` → `Api.Payments` (bloqueado por #27) y
-  `StubApplicationService`, que espera una cara de orquestador sin
-  construir (`Bff.Gob`).
+  dos**, y los dos por lo mismo: `StubPaymentProvider` y
+  `StubApplicationService` → `Api.Payments`, **bloqueados por #27**.
+
+  > **`StubApplicationService` NO espera un orquestador, y el mapa se
+  > equivocó con el mismo filtro por CUARTA vez.** Decía «con pago de por
+  > medio», que suena a saga; el propio código dice lo contrario y con la
+  > razón escrita: **no se aborta el trámite si la captura no sale** —en un
+  > servicio público, perder la radicación de un ciudadano porque su banco
+  > tardó es peor que arrastrar una tasa pendiente—. Si no se aborta, no hay
+  > nada que deshacer, y un orquestador sería la máquina de compensar sin
+  > compensación.
+  >
+  > **Componer no es orquestar.** Las cuatro veces el error fue mirar
+  > *cuántos pasos compone* en vez de las tres preguntas, que son distintas
+  > y hay que hacerlas por separado: ¿hay algo que **deshacer**? (decide si
+  > hace falta orquestador) · ¿el recurso lo lleva **alguien más**? (decide
+  > si hace falta cablearlo, #33a) · ¿**quién tiene la plata**? (decide a
+  > quién se le pide el movimiento, #57).
+  >
+  > **Y eso deja a `Bff.Gob` sin razón para existir hoy** — que es la
+  > consecuencia que importa, porque #15 estaba bloqueada esperándolo.
 
   > **El acto administrativo notificado existe para sostener CUÁNDO
   > ACCEDIÓ, no para enviar** (#62). Un correo enviado prueba que salió del
@@ -1007,8 +1025,72 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > movería de fichero, no desaparecería. La razón de fondo es que el
   > caso —un acto administrativo notificado— es una regla de Gobierno,
   > no de la plataforma: nadie cree que un 403 de `Api.Cart` merezca
-  > asiento de auditoría. **#15 queda bloqueada por `Bff.Gob`**, que es
-  > su resultado y no su fracaso.
+  > asiento de auditoría.
+
+  > **Y el orquestador que lo escribe resultó ser el CMS** (HU #15,
+  > `Synergos:Audit:Mode=Api`). El razonamiento de arriba se sostiene
+  > entero —es política del dominio, y una capacidad no puede llamar a
+  > otra— y lo único que estaba mal era **a quién nombraba**: se dio por
+  > hecho que el compositor de Gobierno sería `Bff.Gob`, y quien recibe
+  > el rechazo es la cara de Gobierno del CMS, que no es una capacidad y
+  > por tanto no abre ninguna flecha lateral. Es la misma corrección que
+  > ya se hizo cuatro veces sobre el mapa del cableado, aplicada esta vez
+  > a un consumidor en vez de a un `Stub*`. **#15 estuvo bloqueada dos
+  > olas por un servicio que el propio código dice que no debe existir.**
+  >
+  > **Lo que faltaba de verdad era la superficie**, y llegó con #62: hasta
+  > que hubo un acto que abrir, no había acceso que rechazar ni que
+  > auditar. Hoy el 403 de un acto ajeno deja asiento —quién lo afirmó,
+  > sobre qué y por qué se rechazó— y antes salía sin escribirse en
+  > ninguna parte.
+  >
+  > **El asiento dice `CmsSession` y NUNCA más que eso.** Ese camino no
+  > presenta ni verifica ningún token: lo único que respalda al actor es
+  > nuestra cookie. Que el despliegue *sepa emitir* identidad verificable
+  > no cambia lo que ahí se comprobó, y escribir `IdentityToken` porque
+  > se podría haber presentado uno guardaría como hecho lo que nadie
+  > verificó — el defecto #42 sobre el registro que más se conserva.
+  >
+  > **Y desde la #72 no hace falta creerle a este lado**: la afirmación
+  > viaja en el campo que la capacidad **resuelve** y guarda como
+  > `ActedWith`, no en un detalle opaco — tenerla en los dos sitios los
+  > dejaría discrepar sobre un mismo hecho, y ganaría el que nadie
+  > comprueba. Verificado en vivo: declarar `IdentityToken` sin
+  > presentarlo lo rechaza **ella** con `assertion_not_proven`, y el
+  > hueco queda anotado de este lado.
+  >
+  > **El suelo es `CmsSession`, y no es un relleno.** La capacidad exige
+  > una afirmación —sin ella rechaza con `access_requires_identity`—, así
+  > que un asiento que no registra ninguna se volvería un hueco: ruido en
+  > vez de rastro. Se manda el suelo, que significa «nos fiamos de quien
+  > llama», o sea la *ausencia* de comprobación. Es la diferencia con el
+  > nulo de `Api.Consent` (#14 rebanada 5), donde el campo **sí** admite
+  > «no consta» y por eso los permisos viejos lo conservan.
+  >
+  > **Se escribe LOCAL primero y se reenvía después**, y el JSONL sigue
+  > siendo el modelo de lectura: las lecturas del seam son síncronas y la
+  > bitácora del backoffice se pinta en cada carga, así que con
+  > `Api.Audit` caída el administrador **sigue viendo qué pasó**; lo que
+  > se para es que el asiento salga de la máquina. Es la forma del
+  > timeline de pedidos (#46). Y **si el reenvío no llega queda escrito
+  > que no llegó**: un segundo asiento local nombra al que se quedó y por
+  > qué —un rastro que se pierde en silencio se pierde justo el día que
+  > hace falta—. Ese asiento del hueco no se reenvía, o sería contarle a
+  > la capacidad caída que no se pudo hablar con ella.
+  >
+  > **El correo no sale de esta máquina**: viaja un seudónimo estable, y
+  > el nombre legible se queda en el JSONL. Verificado en vivo contra la
+  > capacidad: el asiento llega con `CmsSession`, sin dato personal y sin
+  > duplicarse al reintentar; matándola, el asiento sobrevive local, el
+  > hueco queda escrito y la bitácora se sigue leyendo. Hay gate
+  > (`AuditWiringTests`).
+  >
+  > **Y el vocabulario de la afirmación subió al segundo consumidor**
+  > (`CLAUDE.md` §17): `GovActAssertions` nació en #62 con uno y hoy es
+  > `IdentityAssertions` en `Synergos.CMS.Interfaces`. Es el gemelo de lo
+  > que `IdentityAssertion` hizo en el árbol de servicios subiendo a
+  > `Synergos.Core`, y **sigue siendo `string` a propósito**: los dos
+  > árboles no se referencian. Hay gate contra la segunda declaración.
 - **Cuatro orquestadores sin construir**: Realty, Gob, Academy, Social.
   `Bff.Eventos` (HU #35) y `Bff.Viajes` (HU #36) ya están, y ninguno de los
   dos necesitó una capacidad nueva ni un endpoint nuevo — que es la
