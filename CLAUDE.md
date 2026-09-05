@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2606 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2607 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2606 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2607 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (11) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -369,7 +369,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2606 tests):
+# Suite completa (2607 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -413,7 +413,7 @@ Después de las Olas 42 → 44 el Layout Composer es end-to-end:
   Hero, SnippetRef.
 - **Block Grid con areas** (`DTBlockGridSections.config`) permite al
   editor dropear presets al root de `sections` y cualquier elemento
-  de contenido (148 blocks) dentro de las areas.
+  de contenido (159 blocks) dentro de las areas.
 - **Plugin backoffice** `App_Plugins/LayoutComposer/` con custom
   views + SVG thumbnails + JS defaults pre-drop.
 - **Runtime SSR** `Views/Partials/blockgrid/Components/
@@ -425,7 +425,7 @@ Después de las Olas 42 → 44 el Layout Composer es end-to-end:
   `Synergos:LayoutComposer:EnableStarterScaffold`.
 - **Reusable snippets** (Ola 42.10) via `elementLayoutSnippetRef` que
   referencia un `reusableBlock` de Ola 34.
-- **compDom* universal** (Ola 43.15/43.16): los 156 element types
+- **compDom* universal** (Ola 43.15/43.16): los 173 element types
   tienen compDomClass + compDomVariant + compDomVisibility +
   compDomAttributes. El wrapper `SynHost/_Wrapper.cshtml` (Ola 44.1)
   aplica estos props al HTML emitido por los SynHost partials.
@@ -494,7 +494,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 235 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2606 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2607 tests, gates de
 segregación y molde en verde.
 
 > **Los 235 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
