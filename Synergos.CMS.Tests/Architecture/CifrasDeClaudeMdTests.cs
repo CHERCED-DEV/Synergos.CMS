@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Xunit.Sdk;
 
 namespace Synergos.CMS.Tests.Architecture;
@@ -96,6 +98,72 @@ public sealed class CifrasDeClaudeMdTests
         }
 
         return total;
+    }
+
+    /// <summary>
+    /// Las tres cifras que <c>CLAUDE.md</c> §8 declara sobre el Layout Composer, contadas
+    /// contra el schema uSync.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Las dos primeras estaban desviadas</b> cuando se escribió esto, y por bastante:
+    /// «los <b>156</b> element types tienen compDom*» cuando son 173, y «(<b>148</b> blocks)»
+    /// cuando el Block Grid declara 159 de contenido. §8 se presenta como «el feature más maduro»,
+    /// que es justo la sección que nadie vuelve a medir.</para>
+    ///
+    /// <para><b>Por qué acá y no en <c>tools/usync-audit.mjs</c>.</b> Aquel gate sólo corre
+    /// cuando el PR toca <c>uSync/v9/**</c> o el propio script; un cambio que sólo toque
+    /// <c>CLAUDE.md</c> no lo enciende. Y el desvío que se vigila vive **en CLAUDE.md**, así que
+    /// tiene que colgar de un gate que corra siempre.</para>
+    ///
+    /// <para><b>Las tres se leen del schema, no de una lista</b>: los element types del disco y
+    /// los bloques declarados por el propio <c>DTBlockGridSections</c>. La de 14 presets cuadra
+    /// hoy y va igual: es la que separa «lo que se dropea al root» de «lo que va dentro de un
+    /// area», o sea la frase entera de arriba.</para>
+    /// </remarks>
+    [Fact]
+    public void Las_cifras_del_layout_composer_se_cuentan_contra_el_schema()
+    {
+        var raiz = RepoRoot();
+        var tipos = Path.Combine(raiz, "Synergos.CMS.Web", "uSync", "v9", "ContentTypes");
+
+        // Los element types que llevan los CUATRO compDom*, que es lo que la frase afirma.
+        var conCompDom = Directory.EnumerateFiles(tipos, "*.config")
+            .Select(File.ReadAllText)
+            .Count(x => x.Contains("<IsElement>true</IsElement>", StringComparison.OrdinalIgnoreCase)
+                        && new[] { "compDomClass", "compDomVariant", "compDomVisibility", "compDomAttributes" }
+                            .All(p => x.Contains(p, StringComparison.OrdinalIgnoreCase)));
+
+        // Los bloques que el Block Grid de secciones declara, partidos por dónde se pueden soltar.
+        var grid = File.ReadAllText(Path.Combine(
+            raiz, "Synergos.CMS.Web", "uSync", "v9", "DataTypes", "DTBlockGridSections.config"));
+
+        var cdata = Regex.Match(grid, @"<Config><!\[CDATA\[(.*?)\]\]></Config>", RegexOptions.Singleline);
+        Assert.True(cdata.Success, "No se pudo leer la configuración de DTBlockGridSections: revisar este gate.");
+
+        using var json = JsonDocument.Parse(cdata.Groups[1].Value);
+        var bloques = json.RootElement.GetProperty("Blocks").EnumerateArray().ToList();
+
+        var alRoot = bloques.Count(b => b.TryGetProperty("allowAtRoot", out var v) && v.ValueKind == JsonValueKind.True);
+        var enAreas = bloques.Count - alRoot;
+
+        // Red de seguridad: un descubrimiento roto dejaría los asserts comparando contra cero.
+        Assert.True(conCompDom > 100 && bloques.Count > 100,
+            $"Se contaron {conCompDom} element types y {bloques.Count} bloques: el descubrimiento está roto.");
+
+        var guia = Regex.Replace(File.ReadAllText(Path.Combine(raiz, "CLAUDE.md")), @"\s+", " ");
+
+        foreach (var frase in new[]
+                 {
+                     $"los {conCompDom} element types tienen compDomClass",
+                     $"de contenido ({enAreas} blocks) dentro de las areas",
+                     $"**{alRoot} Layout Preset ElementTypes**",
+                 })
+        {
+            Assert.True(guia.Contains(frase, StringComparison.Ordinal),
+                $"CLAUDE.md §8 no dice «{frase}». En el schema hay {conCompDom} element types con los "
+                + $"cuatro compDom*, y el Block Grid declara {bloques.Count} bloques ({alRoot} al root, "
+                + $"{enAreas} dentro de areas). Estas cifras se cuentan, no se recuerdan: decían 156 y 148.");
+        }
     }
 
     [Fact]

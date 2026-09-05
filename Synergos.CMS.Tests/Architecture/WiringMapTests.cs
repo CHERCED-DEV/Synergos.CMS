@@ -205,6 +205,139 @@ public sealed class WiringMapTests
     }
 
     /// <summary>
+    /// La columna «Estado» de la tabla narrativa de la familia A, fila por fila.
+    /// </summary>
+    /// <remarks>
+    /// <b>El criterio de «hecho» es la NEGRITA</b>, y es el que ya usa el documento: distingue
+    /// <c>**HU #24**</c> de <c>pendiente</c>, de <c>épica #2</c> y de <c>bloqueado por #27</c>.
+    /// Contar por «menciona un número de ticket» daría por entregado justo lo que está bloqueado
+    /// <i>por</i> uno, que es el error más fácil de cometer acá.
+    /// </remarks>
+    private static IReadOnlyList<(string Stub, bool Hecho)> EstadosDeLaFamiliaA()
+    {
+        var texto = File.ReadAllText(MapaPath());
+
+        var inicio = texto.IndexOf("## Familia A", StringComparison.Ordinal);
+        var fin = texto.IndexOf("## Familia B", StringComparison.Ordinal);
+        Assert.True(inicio >= 0 && fin > inicio, "El mapa no tiene las secciones «## Familia A» y «## Familia B».");
+
+        return Regex.Matches(texto[inicio..fin],
+                @"^\|\s*`(Stub\w+)`\s*\|[^|]*\|[^|]*\|\s*([^|]+?)\s*\|\s*$", RegexOptions.Multiline)
+            .Select(m => (Stub: m.Groups[1].Value, Hecho: m.Groups[2].Value.StartsWith("**", StringComparison.Ordinal)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// El desglose «de los N, X están hechos … faltan Y» cuadra con la tabla, y los que faltan
+    /// se nombran.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que evita ya ocurrió dos veces, y la segunda mientras se escribía este
+    /// gate</b> (#66). La primera fue en la dirección obvia: la prosa decía «once están hechos …
+    /// faltan dos» sobre una familia de catorce, y el que se caía de la cuenta era el stub con más
+    /// consumidores vivos. La segunda fue <b>al revés</b>: <c>#57</c> cableó
+    /// <c>StubReturnService</c> contra <c>Bff.Tienda</c>, movió §11 a «once hechos» y dejó su fila
+    /// narrativa diciendo <c>pendiente</c> — con el razonamiento viejo, el que ese mismo ticket
+    /// había corregido.</para>
+    ///
+    /// <para><b>Ninguno de los dos rompía nada.</b> Los gates de arriba cuadran el TOTAL de la
+    /// familia contra la rejilla y contra el disco, y trece filas siguen siendo trece filas
+    /// aunque una mienta sobre su estado. Lo que se desvía es el desglose, que es exactamente lo
+    /// que alguien lee para decidir qué toma: en el primer caso deja un stub sin dueño, en el
+    /// segundo manda a alguien a hacer trabajo que ya está hecho.</para>
+    ///
+    /// <para><b>Y se exige que los que faltan se NOMBREN</b>, no sólo que la cifra cuadre. «Faltan
+    /// dos» sin decir cuáles obliga a recorrer trece filas a ojo, que es la operación que este
+    /// documento existe para ahorrar.</para>
+    ///
+    /// <para><b>La frase se busca con los espacios colapsados</b>: la guía va envuelta a mano a
+    /// ~72 columnas y estas frases caen partidas. Exigirlas contiguas obligaría a maquetar la
+    /// prosa para pasar el gate, y entonces manda el gate y no lo que dice el texto.</para>
+    /// </remarks>
+    [Fact]
+    public void El_desglose_hecho_y_pendiente_de_la_familia_A_cuadra()
+    {
+        var estados = EstadosDeLaFamiliaA();
+        var familiaA = Mapa().Where(e => e.Familia == "A").Select(e => e.Stub).ToList();
+
+        // Sin esto, un regex roto leería cero filas y el gate pediría «de los 0, 0 están hechos».
+        Assert.Equal(familiaA.Count, estados.Count);
+
+        var hechos = estados.Count(e => e.Hecho);
+        var faltan = estados.Where(e => !e.Hecho).Select(e => e.Stub).ToList();
+
+        var guia = Regex.Replace(File.ReadAllText(Path.Combine(RepoRoot(), "CLAUDE.md")), @"\s+", " ");
+
+        foreach (var frase in new[]
+                 {
+                     $"De los {estados.Count}, **{Palabra(hechos)}** están hechos",
+                     $"**Faltan {Palabra(faltan.Count)}**",
+                 })
+        {
+            Assert.True(guia.Contains(frase, StringComparison.Ordinal),
+                $"CLAUDE.md §11 no dice «{frase}». La tabla narrativa de la familia A tiene "
+                + $"{estados.Count} filas: {hechos} en negrita (hechas) y {faltan.Count} sin negrita. "
+                + "El desglose se cuenta contra la columna «Estado», no se recuerda (#66).");
+        }
+
+        // Y con nombre, EN LA FRASE — no en cualquier parte del fichero.
+        //
+        // Buscarlo en todo CLAUDE.md es la trampa de «la declaración se valida contra su propia
+        // declaración»: el párrafo que documenta este defecto nombra los stubs, así que el gate
+        // se satisfaría a sí mismo y quedaría verde sobre una enumeración vacía. Se mira desde
+        // «**Faltan N**» hasta donde arranca la nota siguiente.
+        var desde = guia.IndexOf($"**Faltan {Palabra(faltan.Count)}**", StringComparison.Ordinal);
+        var hasta = guia.IndexOf(" > ", desde, StringComparison.Ordinal);
+        var enumeracion = hasta > desde ? guia[desde..hasta] : guia[desde..];
+
+        var sinNombrar = faltan.Where(s => !enumeracion.Contains($"`{s}`", StringComparison.Ordinal)).ToList();
+        Assert.True(sinNombrar.Count == 0,
+            $"CLAUDE.md §11 dice cuántos faltan y no los nombra ahí mismo: {string.Join(", ", sinNombrar)}. "
+            + "Un stub que no se nombra es un stub que nadie va a tomar — y nombrarlo doce párrafos "
+            + "más abajo no cuenta, porque eso ya lo hace la nota que explica este gate.");
+    }
+
+    /// <summary>Las cifras de esta prosa se escriben con letra, así que se comparan con letra.</summary>
+    private static string Palabra(int n) => n switch
+    {
+        0 => "cero", 1 => "uno", 2 => "dos", 3 => "tres", 4 => "cuatro", 5 => "cinco",
+        6 => "seis", 7 => "siete", 8 => "ocho", 9 => "nueve", 10 => "diez", 11 => "once",
+        12 => "doce", 13 => "trece", 14 => "catorce", 15 => "quince",
+        _ => n.ToString(System.Globalization.CultureInfo.InvariantCulture),
+    };
+
+    /// <summary>
+    /// La cifra de stubs que <c>CLAUDE.md</c> declara, contada contra el disco.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Otro sitio a mano que se desvió, y lo destapó buscar el de arriba</b>: §3 decía
+    /// «cada uno de los <b>48</b> <c>Stub*</c>» cuando §11 —doce pantallas más abajo, en el mismo
+    /// fichero— ya decía 49. El gate del mapa cuadra la prosa DEL MAPA contra el disco; nadie
+    /// miraba la de la guía.</para>
+    ///
+    /// <para>Y §3 es la tabla «dónde está la verdad», o sea lo primero que abre un agente que no
+    /// conoce el repo. Una cifra equivocada ahí no se lee como un typo: se lee como el inventario.</para>
+    /// </remarks>
+    [Fact]
+    public void La_cifra_de_stubs_de_CLAUDE_md_se_cuenta_contra_el_disco()
+    {
+        var cuantos = StubsEnDisco().Count;
+        var guia = Regex.Replace(File.ReadAllText(Path.Combine(RepoRoot(), "CLAUDE.md")), @"\s+", " ");
+
+        var menciones = Regex.Matches(guia, @"(\d{2,3}) `Stub\*`").Select(m => int.Parse(m.Groups[1].Value)).ToList();
+
+        Assert.True(menciones.Count >= 2,
+            $"CLAUDE.md menciona la cifra de stubs {menciones.Count} vez/veces. Eran dos —§3 y §11—: "
+            + "borrar una mención no es una forma válida de pasar este gate.");
+
+        var desviadas = menciones.Where(n => n != cuantos).ToList();
+        Assert.True(desviadas.Count == 0,
+            $"En disco hay {cuantos} `Stub*` y CLAUDE.md dice {string.Join(" y ", desviadas)}. "
+            + "La cifra se cuenta, no se recuerda: §3 llevaba 48 con 49 en disco, y §11 ya decía 49 "
+            + "en el mismo fichero.");
+    }
+
+    /// <summary>
     /// Cuántos stubs son DURABLES se cuenta, no se recuerda.
     /// </summary>
     /// <remarks>

@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2604 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2607 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2604 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2607 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (11) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -159,7 +159,7 @@ Synergos.CMS/
 | "¿Qué API necesita cada dominio? ¿Cuál es el molde?" | `docs/product/08-despiece-apis.md` — la matriz 20×9 y §4 |
 | "¿Cómo se deshace lo que ya se hizo?" | `docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `docs/product/10-promocion-bff-core.md` |
-| "¿Qué se hace con cada uno de los 48 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
+| "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; la única excepción son los cinco de `Api.Notifications/Transport/`, que son fallos de la firma del webhook y no reglas de negocio |
 
 > ⚠️ **De los seis docs de `docs/product/`, sólo el 11 está versionado.** Los
@@ -369,7 +369,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2604 tests):
+# Suite completa (2607 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -413,7 +413,7 @@ Después de las Olas 42 → 44 el Layout Composer es end-to-end:
   Hero, SnippetRef.
 - **Block Grid con areas** (`DTBlockGridSections.config`) permite al
   editor dropear presets al root de `sections` y cualquier elemento
-  de contenido (148 blocks) dentro de las areas.
+  de contenido (159 blocks) dentro de las areas.
 - **Plugin backoffice** `App_Plugins/LayoutComposer/` con custom
   views + SVG thumbnails + JS defaults pre-drop.
 - **Runtime SSR** `Views/Partials/blockgrid/Components/
@@ -425,7 +425,7 @@ Después de las Olas 42 → 44 el Layout Composer es end-to-end:
   `Synergos:LayoutComposer:EnableStarterScaffold`.
 - **Reusable snippets** (Ola 42.10) via `elementLayoutSnippetRef` que
   referencia un `reusableBlock` de Ola 34.
-- **compDom* universal** (Ola 43.15/43.16): los 156 element types
+- **compDom* universal** (Ola 43.15/43.16): los 173 element types
   tienen compDomClass + compDomVariant + compDomVisibility +
   compDomAttributes. El wrapper `SynHost/_Wrapper.cshtml` (Ola 44.1)
   aplica estos props al HTML emitido por los SynHost partials.
@@ -494,7 +494,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 235 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2604 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2607 tests, gates de
 segregación y molde en verde.
 
 > **Los 235 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -624,7 +624,8 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > arreglo en una regresión. Hoy el estado sólo pasa a `Refunded` cuando no
   > queda saldo. Hay gate (`ShopWiringTests`).
 
-  > **Y son 12 porque `StubReservationService` pasó a la familia C** (#33).
+  > **`StubReservationService` pasó a la familia C** (#33), y ésa es la única
+  > salida que ha tenido A.
   > Entró en A como «un cableado, seis verticales», y **los seis se cablearon
   > de a uno** —#24, #25, #33a, #35, #36 y #40—: con los cinco flags en su
   > modo cableado no le queda un solo llamador de negocio. Lo que queda no es
@@ -633,9 +634,11 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > subfamilia nueva porque ninguna de las otras tres le encajaba: tiene
   > almacén propio, no se deriva de nada y no es contenido de demo.
   >
-  > **El nueve más tres de arriba suma doce, y hasta ahora no sumaba trece.**
-  > Ese descuadre era exactamente este stub: estaba en A sin estado, ni hecho
-  > ni pendiente, porque no era ninguna de las dos cosas.
+  > **El descuadre que destapó era exactamente este stub**: estaba en A sin
+  > estado, ni hecho ni pendiente, porque no era ninguna de las dos cosas, y
+  > por eso «nueve más tres» no sumaba los doce de entonces. Hoy la cuenta se
+  > comprueba sola (#66): once más dos son trece, y el gate lo cuadra contra
+  > la columna «Estado» de la tabla narrativa.
   >
   > La lección se guarda, que costó una HU de prioridad 1: **el
   > apalancamiento de un seam no baja, se evapora**. Cada consumidor que se
