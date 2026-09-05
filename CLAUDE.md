@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2691 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2699 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2691 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2699 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (11) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -373,7 +373,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2691 tests):
+# Suite completa (2699 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -498,7 +498,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2691 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2699 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -844,6 +844,41 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > igual, acá. Con una tercera copia el mismo token valdría distinto
   > según a quién se le presente — y una capacidad no puede referenciar a
   > otra, así que `Shared` es el único sitio válido.
+
+  > **Y las dos tenían un endpoint fuera de la lista** (#81 y #83), los dos
+  > encontrados barriendo las veinte en busca de la forma de #42/#48/#72.
+  > `Api.Messaging` **verificaba quién ACUSA y creía a quién ESCRIBE** —el
+  > mismo `who`, en la misma capacidad, dieciséis líneas más arriba—, y lo
+  > que `CheckPost` sí miraba era otra cosa: si el remitente participa del
+  > hilo, que es autorización y no autenticación. Importa porque #62 puso el
+  > cuerpo de un acto administrativo en un mensaje de hilo, y no hay `PUT`
+  > ni `DELETE`: un acto notificado con autor falsificable es #72 sobre el
+  > documento que sostiene un plazo legal. Hoy el mensaje guarda
+  > `PostedWith`, y el CMS **presenta** la identidad de la ventanilla al
+  > publicarlo.
+  >
+  > **Y ahí NO se reintenta sin firmar, al revés que en la bitácora.** La
+  > diferencia es qué es peor en cada caso: perder un asiento es peor que un
+  > asiento débil, porque un rastro que falta no se nota; una notificación
+  > débil, en cambio, le dice a la entidad que un término empezó a correr.
+  > Cuando no se puede probar quién notifica, es mejor que falle a la vista.
+  >
+  > **En `Api.Consent` el hueco era el derecho al olvido.** El gate decía,
+  > con todas las letras, que «un gate que sólo mirara `grants` dejaría
+  > `grants/revoke` de puerta de atrás» — el razonamiento correcto y la
+  > **lista corta**: eran tres, y `forget` retira TODOS los permisos de una
+  > persona sin pedir nada. La ironía estaba en el propio fichero: revoca en
+  > vez de borrar «para poder demostrar que la revocación se atendió», y esa
+  > prueba no decía quién la pidió.
+  >
+  > **Es el mismo error por tercera vez: una lista sacada de la cabeza en
+  > vez de medida contra el fichero** —como «los seis de `Synergos.Shared`»
+  > y «faltan las otras 16»—. Así que el gate nuevo **no enumera: cuenta**,
+  > y deduce qué endpoint escribe mirando si el método del servicio al que
+  > llama toca el almacén. `/v1/grants/check` es una LECTURA que usa POST a
+  > propósito, para que el sujeto y el propósito no queden en la URL, así
+  > que el criterio no podía ser «MapPost». Comprobado mutando: con `forget`
+  > fuera de la lista escrita a mano, el gate que cuenta lo caza igual.
 
   > **«Fulano consintió» no dice nada sin «y así se supo que era
   > fulano»** (rebanada 5). El día que alguien niegue haber dado un

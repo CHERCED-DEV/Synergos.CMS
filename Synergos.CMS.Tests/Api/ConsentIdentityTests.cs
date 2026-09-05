@@ -181,4 +181,82 @@ public sealed class ConsentIdentityTests
         Assert.True(recargado.IsOk);
         Assert.Equal(IdentityAssertion.IdentityToken, recargado.Value.GrantedWith);
     }
+
+    // ── El derecho al olvido (defecto #83) ──────────────────────────────────
+
+    /// <summary>
+    /// Olvidar deja escrito con qué se afirmó quien lo pidió.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es la mitad que le faltaba a la prueba. <c>Forget</c> revoca en vez de borrar
+    /// —documentado en su propio fichero— «para poder demostrar que la revocación se atendió, que
+    /// es exactamente lo que exige quien la pidió». Esa demostración no decía <b>quién</b> la
+    /// pidió ni cómo se supo que era esa persona.</para>
+    /// </remarks>
+    [Theory]
+    [InlineData(IdentityAssertion.CmsSession)]
+    [InlineData(IdentityAssertion.IdentityToken)]
+    public void Olvidar_guarda_con_que_se_afirmo_quien_lo_pidio(IdentityAssertion afirmacion)
+    {
+        var (svc, _) = Nuevo();
+        Otorgar(svc, IdentityAssertion.CmsSession);
+
+        Assert.Equal(1, svc.Forget(Paciente, afirmacion));
+
+        // Se lee del listado y no de `Check`: `Check` contesta «¿está activo?» y un permiso
+        // revocado no lo está, que es justo lo que se acaba de hacer.
+        Assert.Equal(afirmacion, Revocado(svc, "salud.agenda").RevokedWith);
+    }
+
+    /// <summary>
+    /// Olvidar alcanza a TODOS los permisos activos, y cada uno queda con su afirmación.
+    /// </summary>
+    /// <remarks>
+    /// Es lo que lo hace más grave que <c>revoke</c>, y lo que hacía de este endpoint la puerta
+    /// de atrás: una sola llamada retira todo lo de una persona.
+    /// </remarks>
+    [Fact]
+    public void Olvidar_alcanza_a_todos_y_todos_quedan_anotados()
+    {
+        var (svc, _) = Nuevo();
+        svc.Grant(Paciente, "salud.agenda", "v1", null, IdempotencyKey.Of("g1"), IdentityAssertion.CmsSession);
+        svc.Grant(Paciente, "salud.marketing", "v1", null, IdempotencyKey.Of("g2"), IdentityAssertion.CmsSession);
+
+        Assert.Equal(2, svc.Forget(Paciente, IdentityAssertion.IdentityToken));
+
+        foreach (var proposito in new[] { "salud.agenda", "salud.marketing" })
+        {
+            Assert.Equal(IdentityAssertion.IdentityToken, Revocado(svc, proposito).RevokedWith);
+        }
+    }
+
+    /// <summary>
+    /// Lo ya revocado no se re-anota: olvidar dos veces no reescribe quién lo pidió la primera.
+    /// </summary>
+    /// <remarks>
+    /// El primer acto es el que consta. Pisar la afirmación con la del segundo intento cambiaría
+    /// el registro de una revocación que ya ocurrió — y este registro existe justamente para poder
+    /// sostener que ocurrió como dice.
+    /// </remarks>
+    [Fact]
+    public void Olvidar_dos_veces_no_reescribe_la_primera()
+    {
+        var (svc, _) = Nuevo();
+        Otorgar(svc, IdentityAssertion.CmsSession);
+
+        Assert.Equal(1, svc.Forget(Paciente, IdentityAssertion.CmsSession));
+        Assert.Equal(0, svc.Forget(Paciente, IdentityAssertion.IdentityToken));
+
+        Assert.Equal(IdentityAssertion.CmsSession, Revocado(svc, "salud.agenda").RevokedWith);
+    }
+
+    /// <summary>El permiso de ese propósito, ya revocado.</summary>
+    private static ConsentGrant Revocado(ConsentService svc, string proposito)
+    {
+        var pagina = svc.ListForSubject(Paciente, 0, 50);
+        Assert.True(pagina.IsOk);
+        var g = pagina.Value.Items.Single(x => x.Purpose == proposito);
+        Assert.NotNull(g.RevokedAtUtc);
+        return g;
+    }
 }

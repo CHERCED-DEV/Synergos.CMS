@@ -44,12 +44,35 @@ public static class MessagingEndpoints
         app.MapPost("/v1/threads/{id}/close", (string id, MessagingService svc) =>
             svc.CloseThread(id).Map(ThreadResponse.From).ToHttp());
 
-        app.MapPost("/v1/threads/{id}/messages", (string id, PostRequest req, HttpRequest http, MessagingService svc) =>
+        app.MapPost("/v1/threads/{id}/messages", (
+            string id, PostRequest req, HttpRequest http, MessagingService svc,
+            IdentityTokenGate identidad, TimeProvider clock) =>
         {
             if (!IdempotencyHeader.TryRead(http, MessagingRules.CodePrefix, out var key, out var falta)) return falta!;
 
             var from = Ref.TryCreate(req.FromKind, req.FromId);
             if (from is null) return Invalid("bad_from", "Hacen falta fromKind y fromId.");
+
+            // QUIÉN ESCRIBE SE COMPRUEBA IGUAL QUE QUIÉN ACUSA (defecto #81).
+            //
+            // Este endpoint tomaba el `from` del cuerpo y lo creía, dieciséis líneas encima del
+            // que sí lo verifica: el mismo `who`, en la misma capacidad, comprobado en uno y
+            // creído en el otro. Lo que `CheckPost` mira es OTRA cosa —si ese remitente participa
+            // del hilo— y eso es autorización, no autenticación: contesta «¿puede escribir acá?»
+            // y no «¿el que llama es quien dice?».
+            //
+            // Importa más de lo que parece porque la HU #62 puso el cuerpo de un acto
+            // administrativo en un mensaje de hilo, y no hay PUT ni DELETE: un acto notificado con
+            // autor falsificable es el defecto #72 sobre el documento que sostiene un plazo legal.
+            IdentityAssertion? declarada = Enum.TryParse<IdentityAssertion>(req.Assertion, ignoreCase: true, out var dicha)
+                ? dicha
+                : null;
+
+            var (assertion, porQue) = IdentityAssertions.Resolve(
+                identidad, http.Headers[IdentityTokens.HeaderName].FirstOrDefault(),
+                from, declarada, clock.GetUtcNow(), MessagingRules.CodePrefix);
+
+            if (assertion is null) return porQue!.ToProblem();
 
             var adjuntos = new List<Ref>();
             foreach (var a in req.Attachments ?? Array.Empty<RefDto>())
@@ -59,7 +82,7 @@ public static class MessagingEndpoints
                 adjuntos.Add(r);
             }
 
-            return svc.Post(id, from, req.Body, adjuntos, key, req.AcknowledgeBeforeUtc).Match(
+            return svc.Post(id, from, req.Body, adjuntos, key, assertion.Value, req.AcknowledgeBeforeUtc).Match(
                 m => Results.Created($"/v1/messages/{m.Id}", MessageResponse.From(m)),
                 bad => bad.ToProblem());
         });

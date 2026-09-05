@@ -143,6 +143,19 @@ public sealed class HttpGovActNotificationService : IGovActNotificationService
         string threadId, string body, string? documentRef, DateTimeOffset? plazo,
         GovNotificationSettings s, CancellationToken ct)
     {
+        // QUIÉN FIRMA EL ACTO se presenta, no se declara (defecto #81). El cuerpo del acto va en
+        // un mensaje de hilo y no hay PUT ni DELETE: con la llave compartida sola, cualquiera de
+        // nuestros servicios podía publicar un acto a nombre de la ventanilla y quedaba ahí para
+        // siempre. Es el defecto #72 sobre el documento que sostiene un plazo legal.
+        //
+        // Y AQUÍ NO SE REINTENTA SIN FIRMAR, al revés que en la bitácora (#15). La diferencia es
+        // qué es peor en cada caso: allá perder el asiento es peor que un asiento débil, porque un
+        // rastro que falta no se nota. Acá una notificación débil le dice a la entidad que un
+        // término empezó a correr — así que si no se puede probar quién notifica, es mejor que
+        // esto falle a la vista.
+        var token = await _identidad.IssueAsync(
+            new IdentitySubject(s.EntityKind, s.EntityId, Array.Empty<string>()), ct).ConfigureAwait(false);
+
         using var req = new HttpRequestMessage(HttpMethod.Post, $"v1/threads/{Uri.EscapeDataString(threadId)}/messages")
         {
             Content = JsonContent.Create(new
@@ -157,9 +170,18 @@ public sealed class HttpGovActNotificationService : IGovActNotificationService
                     ? Array.Empty<object>()
                     : new object[] { new { kind = "gov.documento", id = documentRef.Trim() } },
                 acknowledgeBeforeUtc = plazo,
+                // Lo DECLARADO es lo más débil que se puede afirmar sin prueba. Si se presentó
+                // token, la capacidad lo verifica y sube la afirmación por su cuenta — no se le
+                // pide que crea lo que decimos (defecto #42).
+                assertion = IdentityAssertions.CmsSession,
             }),
         };
         req.Headers.TryAddWithoutValidation("Idempotency-Key", $"gov-act-{threadId}-{Huella(body)}");
+
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            req.Headers.TryAddWithoutValidation(IdentityHeader, token);
+        }
 
         return await EnviarAsync<MessageDto>(req, "poner el acto en conocimiento", ct).ConfigureAwait(false);
     }

@@ -17,7 +17,12 @@ public sealed record GrantRequest(
 public sealed record RevokeRequest(string? SubjectKind, string? SubjectId, string? Purpose, string? Assertion);
 
 /// <summary>Derecho al olvido.</summary>
-public sealed record ForgetRequest(string? SubjectKind, string? SubjectId);
+/// <param name="Assertion">
+/// Con qué dice quien llama que se afirmó la identidad del sujeto. <b>Obligatorio</b>, igual que
+/// en <c>revoke</c>: retirarle TODOS los permisos a alguien es más grave que retirarle uno, y
+/// hasta el defecto #83 era lo único que no pedía nada (defecto #83).
+/// </param>
+public sealed record ForgetRequest(string? SubjectKind, string? SubjectId, string? Assertion = null);
 
 /// <summary>Cómo sale un consentimiento.</summary>
 /// <param name="GrantedWith">
