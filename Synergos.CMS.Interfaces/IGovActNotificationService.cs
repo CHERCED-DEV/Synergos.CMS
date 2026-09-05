@@ -1,25 +1,6 @@
 namespace Synergos.CMS.Interfaces;
 
 /// <summary>
-/// Con qué fuerza se afirmó la identidad de quien abrió un acto.
-/// </summary>
-/// <remarks>
-/// <para><b>Es el mismo vocabulario de <c>Api.Messaging</c></b> (<c>IdentityAssertion</c> de
-/// <c>Synergos.Core</c>), reescrito acá como <c>string</c> a propósito: el árbol del CMS no
-/// referencia el de servicios —se hablan sólo por HTTP (<c>CLAUDE.md</c> §11)— y meter un tipo de
-/// <c>Synergos.Core</c> en <c>Interfaces</c> abriría la primera flecha de ensamblado entre los
-/// dos. El precio es esta nota; la alternativa era romper el principio por comodidad.</para>
-/// </remarks>
-public static class GovActAssertions
-{
-    /// <summary>Lo afirma nuestra propia sesión. Es lo que hay sin identidad verificable.</summary>
-    public const string CmsSession = "CmsSession";
-
-    /// <summary>Lo respalda un token emitido por <c>Api.Identity</c>.</summary>
-    public const string IdentityToken = "IdentityToken";
-}
-
-/// <summary>
 /// Un acto administrativo puesto en conocimiento de un ciudadano.
 /// </summary>
 /// <param name="Id">Identificador de la notificación.</param>
@@ -32,7 +13,7 @@ public static class GovActAssertions
 /// <param name="AcknowledgeBeforeUtc">Hasta cuándo se admite registrar el acceso.</param>
 /// <param name="OpenedAtUtc">Cuándo lo abrió el ciudadano. <b>Nulo mientras no lo abra.</b></param>
 /// <param name="OpenedBy">Quién lo abrió — la llave del Member, no un correo del formulario.</param>
-/// <param name="OpenedWith">Con qué fuerza se afirmó que era él (<see cref="GovActAssertions"/>).</param>
+/// <param name="OpenedWith">Con qué fuerza se afirmó que era él (<see cref="IdentityAssertions"/>).</param>
 /// <remarks>
 /// <para><b>El término empieza en <see cref="OpenedAtUtc"/>, no en <see cref="NotifiedAtUtc"/></b>,
 /// y ésa es la razón de que esto exista. Un correo enviado prueba que salió del servidor, no que
