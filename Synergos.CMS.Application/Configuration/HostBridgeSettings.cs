@@ -28,10 +28,27 @@ public sealed class HostBridgeSettings
     };
 
     /// <summary>
-    /// Si true, incluye Member context (key + email + roles) en el
-    /// bridge. Útil para UI que customiza per-member. False por
-    /// privacy/compliance default.
+    /// Si true (default true), incluye Member context (key + email + roles) en el bridge.
+    /// Útil para UI que customiza per-member.
     /// </summary>
+    /// <remarks>
+    /// <para><b>Decía «False por privacy/compliance default» y el default es y era `true`</b>
+    /// (defecto #95). No hay override en ningún `appsettings*.json` ni en el compose, así que todo
+    /// despliegue emite hoy el bloque `member` —clave, correo y roles— en el HTML de cada página
+    /// para cada visitante autenticado.</para>
+    ///
+    /// <para><b>Que el correo viaje ahí está DECIDIDO y documentado</b> —`docs/contracts/host-bridge.md`
+    /// §Security lo enumera de frente—, así que el defecto no era que saliera: era que el único
+    /// texto del repo que hablaba de la postura de privacidad de este bloque <b>afirmaba la
+    /// contraria a la que el código aplica</b>. Quien lo leyera para decidir si hacía falta
+    /// configurar algo concluía que ya estaba apagado.</para>
+    ///
+    /// <para><b>Se corrigió la PROSA, no el valor</b>, y a propósito: cambiarlo alteraría en
+    /// silencio lo que emite cada despliegue, y la UI no tiene definido qué hacer sin bloque
+    /// `member` —el contrato v1 asume que está, su tabla de degradación habla de un `member` que
+    /// se queda stale, o sea de uno que existe—. Apagarlo es una decisión del arquitecto y está
+    /// planteada en #95.</para>
+    /// </remarks>
     public bool IncludeMemberContext { get; init; } = true;
 
     /// <summary>
