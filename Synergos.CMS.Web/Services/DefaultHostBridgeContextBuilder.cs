@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Constants;
@@ -25,6 +26,7 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
     private readonly ILocalizationService _localizationService;
     private readonly IOptionsMonitor<HostBridgeSettings> _settings;
+    private readonly ILogger<DefaultHostBridgeContextBuilder> _logger;
 
     public DefaultHostBridgeContextBuilder(
         IBrandingProvider branding,
@@ -32,7 +34,8 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
         IMemberAccessGate gate,
         IUmbracoContextAccessor umbracoContextAccessor,
         ILocalizationService localizationService,
-        IOptionsMonitor<HostBridgeSettings> settings)
+        IOptionsMonitor<HostBridgeSettings> settings,
+        ILogger<DefaultHostBridgeContextBuilder> logger)
     {
         _branding = branding;
         _renderCtx = renderCtx;
@@ -40,6 +43,7 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
         _umbracoContextAccessor = umbracoContextAccessor;
         _localizationService = localizationService;
         _settings = settings;
+        _logger = logger;
     }
 
     public HostBridgeContext Build()
@@ -70,9 +74,18 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
                 CollectMatchingKeys(root.Key, root.ItemKey, culture, s.I18nKeyPrefixes, keys);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort. Si falla, UI cae a fallback inline strings.
+            // Best-effort: si el diccionario falla NO se tumba la página. Pero se DICE
+            // (defecto #92), y éste es el más silencioso de los dos catch del bridge.
+            //
+            // El de fuera produce un contexto EVIDENTEMENTE degradado —sin member, sin page—.
+            // Éste devuelve uno que parece sano con `keys` vacío: el sitio pierde todas las
+            // traducciones, la UI cae a sus strings inline, y todo lo demás sigue igual. Nadie
+            // mira una página en inglés y piensa «se cayó el diccionario».
+            _logger.LogWarning(ex,
+                "Synergos bridge: no se pudieron leer las claves de diccionario para {Culture}; "
+                + "la UI caerá a sus strings inline", culture);
         }
 
         return new HostBridgeI18n(
