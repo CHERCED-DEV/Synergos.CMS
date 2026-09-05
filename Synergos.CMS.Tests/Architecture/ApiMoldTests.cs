@@ -225,6 +225,57 @@ public sealed class ApiMoldTests
     }
 
     /// <summary>
+    /// <c>CLAUDE.md</c> con los saltos colapsados y <b>sin los marcadores de cita</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para>La guía va envuelta a mano a ~72 columnas, así que las frases que estos gates buscan
+    /// caen partidas: colapsar los espacios es obligatorio. Lo que no es evidente es que <b>hay
+    /// que quitar el <c>&gt;</c> primero</b> — media §11 son blockquotes, y una frase que cruza
+    /// dos líneas de uno se queda con un <c>&gt;</c> en medio después de colapsar. El síntoma es
+    /// un gate que exige maquetar la prosa de cierta manera para pasar, y entonces manda el gate
+    /// y no lo que el texto dice.</para>
+    /// </remarks>
+    private static string GuiaPlana()
+    {
+        var crudo = File.ReadAllText(Path.Combine(RepoRoot(), "CLAUDE.md"));
+        return Regex.Replace(Regex.Replace(crudo, @"^>\s?", string.Empty, RegexOptions.Multiline),
+            @"\s+", " ");
+    }
+
+    /// <summary>
+    /// La nota de §11 que explica el criterio de la cifra, sola: sus líneas de cita y nada más.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Por qué no vale buscar en toda la guía.</b> La primera versión de esto pedía que
+    /// §11 «nombrara» cada código de <c>Synergos.Shared</c> y buscaba en el fichero entero — y
+    /// pasaba en verde con un nombre borrado de la enumeración, porque <c>assertion_not_proven</c>
+    /// se menciona más abajo, en la nota del reenvío a <c>Api.Audit</c>. El gate afirmaba «la
+    /// lista está completa» y comprobaba «la palabra aparece en alguna parte», que no es lo
+    /// mismo: lo que un agente lee para saber qué sale de una capacidad sin estar en su fichero
+    /// de reglas es <b>esa lista</b>, no el buscador.</para>
+    /// </remarks>
+    private static string NotaDelCriterio()
+    {
+        // Se busca por la frase y NO por la cifra: cuál es el número lo comprueba el otro fact,
+        // y acoplarlos haría que un descuadre de la cifra rompiera los dos con el mismo mensaje.
+        const string Marca = "se cuentan, y el criterio es parte de la cifra";
+
+        var lineas = File.ReadAllLines(Path.Combine(RepoRoot(), "CLAUDE.md"));
+        var inicio = Array.FindIndex(lineas, l => l.Contains(Marca, StringComparison.Ordinal));
+
+        Assert.True(inicio >= 0,
+            $"CLAUDE.md §11 no tiene la nota «…{Marca}…». Es la que explica el criterio de la "
+            + "cifra, y sin ella no hay nada contra qué contar Synergos.Shared.");
+
+        var fin = inicio;
+        while (fin + 1 < lineas.Length && lineas[fin + 1].StartsWith('>')) fin++;
+
+        return Regex.Replace(
+            string.Join(" ", lineas[inicio..(fin + 1)].Select(l => l.TrimStart('>', ' '))),
+            @"\s+", " ");
+    }
+
+    /// <summary>
     /// La cifra de códigos de rechazo que <c>CLAUDE.md</c> §11 declara, contada contra el árbol.
     /// </summary>
     /// <remarks>
@@ -240,14 +291,23 @@ public sealed class ApiMoldTests
     ///   <item>los que se arman en ejecución —<c>orders.already_{destino}</c>, y los
     ///   reenvoltorios <c>xxx.{code}</c> que pasan un código recibido—, que no se pueden
     ///   enumerar sin ejecutar;</item>
-    ///   <item>los <b>cinco de <c>Synergos.Shared</c></b> que una capacidad devuelve sin
-    ///   declararlos. Con ellos serían 240.</item>
+    ///   <item>los de <c>Synergos.Shared</c> que una capacidad devuelve sin declararlos. Ésos
+    ///   <b>no son un número</b>: seis llevan prefijo fijo y dos llevan el de quien llama, así
+    ///   que sumarlos da una función del llamador. Ver el fact de abajo.</item>
     /// </list>
     ///
     /// <para>Se eligió el criterio <b>simétrico con el de endpoints</b> —lo que hay en el árbol
     /// de las capacidades— porque el sujeto de la frase son las veinte capacidades. Dos cifras
     /// de la misma frase contadas con dos varas distintas es cómo se acaba discutiendo cuál de
     /// las dos está mal.</para>
+    ///
+    /// <para><b>Y se comprueban las DOS apariciones, no sólo la del resumen.</b> §11 escribe la
+    /// cifra dos veces —en «20 capacidades (136 endpoints, N códigos de rechazo)» y en la
+    /// cabecera de la nota que explica el criterio, «Los N se cuentan»—, y este gate miraba la
+    /// primera. Al fusionar dos ramas la nota se quedó en 235 con el resumen ya en 234, y el
+    /// build siguió verde: la sección se contradecía a sí misma sobre el dato que este gate
+    /// existe para sostener. Una cifra vigilada a medias es una cifra sin vigilar, porque quien
+    /// lee la nota no sabe que la de arriba manda.</para>
     ///
     /// <para><b>La frase se busca con los espacios colapsados</b>: la guía va envuelta a mano a
     /// ~72 columnas y esta cae partida. Exigirla contigua obligaría a maquetar la prosa para
@@ -290,8 +350,7 @@ public sealed class ApiMoldTests
         Assert.True(codigos.Count > 150,
             $"Se contaron {codigos.Count} códigos de rechazo: el descubrimiento está roto.");
 
-        var claude = Regex.Replace(
-            File.ReadAllText(Path.Combine(RepoRoot(), "CLAUDE.md")), @"\s+", " ");
+        var claude = GuiaPlana();
 
         var frase = $"{codigos.Count} códigos de rechazo)";
 
@@ -299,6 +358,126 @@ public sealed class ApiMoldTests
             $"CLAUDE.md §11 no dice «{frase}». En el árbol de las capacidades hay "
             + $"{codigos.Count} códigos literales distintos. La cifra se cuenta, no se recuerda: "
             + "decía 195 y llevaba sin contarse desde que se escribió (#52).");
+
+        var cabecera = $"**Los {codigos.Count} se cuentan";
+
+        Assert.True(claude.Contains(cabecera, StringComparison.Ordinal),
+            $"CLAUDE.md §11 no dice «{cabecera}…». La nota que explica el criterio repite la "
+            + "cifra en su cabecera, y ésa también se cuenta: se quedó en 235 con el resumen ya "
+            + $"en 234 y el build siguió verde. Hoy hay {codigos.Count}.");
+    }
+
+    /// <summary>
+    /// Cómo se escriben en castellano las cuentas pequeñas que la guía enuncia con letra.
+    /// </summary>
+    private static string Palabra(int n) => n switch
+    {
+        1 => "Uno", 2 => "Dos", 3 => "Tres", 4 => "Cuatro", 5 => "Cinco", 6 => "Seis",
+        7 => "Siete", 8 => "Ocho", 9 => "Nueve", 10 => "Diez",
+        _ => n.ToString(System.Globalization.CultureInfo.InvariantCulture),
+    };
+
+    /// <summary>
+    /// Lo que §11 dice de los códigos que viven en <c>Synergos.Shared</c>, contado contra
+    /// <c>Synergos.Shared</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que evita.</b> La nota del criterio enumeraba «los seis que viven en
+    /// <c>Synergos.Shared</c>» y remataba con «contando aquéllos serían 240». Los seis eran
+    /// ciertos y el 240 no: la enumeración sólo había mirado los códigos de <b>prefijo fijo</b>
+    /// —los <c>identity.*</c>— y se le habían pasado <b>dos que llevan el prefijo de quien
+    /// llama</b>, <c>{prefijo}.idempotency_key_required</c> y
+    /// <c>{prefijo}.access_requires_identity</c>. Ésos no suman una vez: suman una por capacidad
+    /// que los emita, y hoy la primera la emiten diecinueve.
+    /// </para>
+    ///
+    /// <para><b>Por eso lo que se comprueba NO es un total.</b> Un total de «todo lo que puede
+    /// salir» cambia cuando una capacidad empieza a exigir la cabecera de idempotencia, sin que
+    /// nadie escriba un <c>Rejection</c> nuevo — escribirlo a mano en la guía lo dejaría obsoleto
+    /// por un cambio que no lo parece. Se comprueban las dos afirmaciones que sí son estables:
+    /// <b>qué seis</b> tienen prefijo fijo, y <b>cuántas</b> capacidades exigen la llave.
+    /// </para>
+    ///
+    /// <para><b>Y los seis se piden por NOMBRE, no por cuenta.</b> Una lista que dice «seis» y
+    /// nombra otros seis pasaría cualquier recuento; lo que un agente lee, para saber qué puede
+    /// devolver una capacidad sin que esté en su fichero de reglas, son los nombres.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Lo_que_CLAUDE_md_dice_de_los_codigos_de_Shared_se_cuenta_contra_Shared()
+    {
+        var shared = Path.Combine(RepoRoot(), "Synergos.Shared");
+        var ficheros = Directory.EnumerateFiles(shared, "*.cs", SearchOption.AllDirectories).ToList();
+
+        var prefijoIdentidad = ficheros
+            .Select(f => Regex.Match(SinComentarios(f),
+                @"class\s+IdentityTokens\b[\s\S]*?CodePrefix\s*=\s*""([^""]+)"""))
+            .First(m => m.Success).Groups[1].Value;
+
+        var fijos = new SortedSet<string>(StringComparer.Ordinal);
+        var porLlamador = new SortedSet<string>(StringComparer.Ordinal);
+
+        foreach (var fichero in ficheros)
+        {
+            foreach (Match uso in Regex.Matches(SinComentarios(fichero), Rechazo))
+            {
+                var codigo = uso.Groups[1].Value;
+
+                // El prefijo en minúscula es un PARÁMETRO: lo pone quien llama, así que el
+                // código literal es uno por capacidad. Los demás resuelven a uno solo.
+                if (codigo.Contains("{codePrefix}", StringComparison.Ordinal))
+                {
+                    porLlamador.Add(codigo.Replace("{codePrefix}.", string.Empty, StringComparison.Ordinal));
+                    continue;
+                }
+
+                fijos.Add(Regex.Replace(codigo, @"\{(?:IdentityTokens\.)?CodePrefix\}", prefijoIdentidad));
+            }
+        }
+
+        Assert.All(fijos, c => Assert.DoesNotContain("{", c, StringComparison.Ordinal));
+
+        var texto = NotaDelCriterio();
+
+        // La guía dice el prefijo una vez y cuelga los demás de él, que es como se lee.
+        foreach (var codigo in fijos)
+        {
+            var corto = codigo[(codigo.IndexOf('.') + 1)..];
+
+            Assert.True(texto.Contains($"`{codigo}`", StringComparison.Ordinal)
+                     || texto.Contains($"`{corto}`", StringComparison.Ordinal),
+                $"CLAUDE.md §11 no nombra `{corto}`, que vive en Synergos.Shared y una capacidad "
+                + "devuelve sin declararlo. La lista se enumera para que se pueda leer qué sale de "
+                + "una capacidad sin estar en su fichero de reglas: una que se queda corta manda a "
+                + "buscar el código a un sitio donde no está.");
+        }
+
+        Assert.True(texto.Contains($"{Palabra(fijos.Count)} llevan prefijo fijo", StringComparison.Ordinal),
+            $"CLAUDE.md §11 no dice «{Palabra(fijos.Count)} llevan prefijo fijo». En "
+            + $"Synergos.Shared hay {fijos.Count}: {string.Join(", ", fijos)}.");
+
+        // Sin esto, un descubrimiento roto dejaría el bucle de abajo sin iteraciones y el fact
+        // pasaría afirmando nada.
+        Assert.True(porLlamador.Count > 0,
+            "No se encontró en Synergos.Shared ningún código con prefijo de llamador: el "
+            + "descubrimiento está roto.");
+
+        foreach (var sufijo in porLlamador)
+        {
+            Assert.True(texto.Contains($"`{{prefijo}}.{sufijo}`", StringComparison.Ordinal),
+                $"CLAUDE.md §11 no nombra `{{prefijo}}.{sufijo}`, que Synergos.Shared construye con "
+                + "el prefijo de quien llama. Es justo la clase de código que se le pasó a la "
+                + "enumeración vieja: contó los de prefijo fijo y dio el total por cerrado.");
+        }
+
+        var exigen = Capacidades().Count(c => Fuentes(c.Dir).Any(f =>
+            SinComentarios(f).Contains("IdempotencyHeader.TryRead", StringComparison.Ordinal)));
+
+        Assert.True(texto.Contains($"las **{exigen}** capacidades que exigen la cabecera",
+                StringComparison.Ordinal),
+            $"CLAUDE.md §11 no dice «las **{exigen}** capacidades que exigen la cabecera». Hoy "
+            + $"llaman a IdempotencyHeader.TryRead {exigen} de las veinte, y cada una puede "
+            + "devolver su propio `idempotency_key_required` sin declararlo.");
     }
 
     /// <summary>
