@@ -34,9 +34,10 @@ public sealed class GovActNotificationControllerTests
     private readonly IMessagingService _messaging = Substitute.For<IMessagingService>();
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
     private readonly IGovActNotificationService _notifications = Substitute.For<IGovActNotificationService>();
+    private readonly IAuditTrailWriter _audit = Substitute.For<IAuditTrailWriter>();
 
     private GovController BuildSut() => new(
-        _catalog, _applications, _workflow, _tracking, _documents, _files, _messaging, _gate, _notifications)
+        _catalog, _applications, _workflow, _tracking, _documents, _files, _messaging, _gate, _notifications, _audit)
     {
         ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
     };
@@ -277,6 +278,79 @@ public sealed class GovActNotificationControllerTests
         var resultado = await BuildSut().OpenNotification("not_abc", default);
 
         Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(resultado).StatusCode);
+    }
+
+    /// <summary>
+    /// El intento ajeno deja asiento (HU #15).
+    /// </summary>
+    /// <remarks>
+    /// Que un acceso se rechace no lo vuelve ruido: es el dato que un auditor pide primero. Hasta
+    /// la HU #15 el 403 salía y no quedaba escrito en ninguna parte, así que el día que alguien
+    /// preguntara quién intentó leer un expediente ajeno no había nada que mirar.
+    /// </remarks>
+    [Fact]
+    public async Task Abrir_Lo_Ajeno_Deja_Asiento()
+    {
+        ConSesion(Ajeno);
+        _gate.CurrentMemberEmail.Returns("intruso@correo.co");
+        _notifications.AcknowledgeAsync("not_abc", Ajeno, Arg.Any<CancellationToken>())
+            .Throws(new GovActNotAddresseeException());
+
+        await BuildSut().OpenNotification("not_abc", default);
+
+        await _audit.Received(1).WriteAsync(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == "gov.notification.open"
+                && e.Outcome == "failure"
+                && e.Resource == "not_abc"
+                && e.Detail == "not_the_addressee"
+                && e.ActorEmail == "intruso@correo.co"),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// El asiento dice <c>CmsSession</c>, nunca <c>IdentityToken</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>Este camino no presenta ni verifica ningún token: lo único que respalda al actor es
+    /// nuestra propia cookie. Que el despliegue <i>sepa emitir</i> identidad verificable no cambia
+    /// lo que aquí se comprobó — escribir <c>IdentityToken</c> porque se podría haber presentado
+    /// uno guardaría como hecho lo que nadie verificó.</para>
+    ///
+    /// <para>Es el defecto #42 con otro disfraz, sobre el registro que más se conserva.</para>
+    /// </remarks>
+    [Fact]
+    public async Task El_Asiento_Del_Intento_No_Afirma_Mas_De_Lo_Que_Se_Comprobo()
+    {
+        ConSesion(Ajeno);
+        _notifications.AcknowledgeAsync("not_abc", Ajeno, Arg.Any<CancellationToken>())
+            .Throws(new GovActNotAddresseeException());
+
+        await BuildSut().OpenNotification("not_abc", default);
+
+        await _audit.Received(1).WriteAsync(
+            Arg.Is<AuditEvent>(e => e.Assertion == IdentityAssertions.CmsSession),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Un acceso legítimo NO deja asiento de intento rechazado.
+    /// </summary>
+    /// <remarks>
+    /// El acceso que sí ocurre ya queda como acuse en <c>Api.Messaging</c> (#13/#62), con la
+    /// afirmación que ELLA verificó. Duplicarlo acá escribiría dos veces el mismo hecho con dos
+    /// fuerzas distintas, y la más débil sería la de este lado.
+    /// </remarks>
+    [Fact]
+    public async Task Abrir_Lo_Propio_No_Deja_Asiento_De_Intento()
+    {
+        ConSesion(Ciudadano);
+        _notifications.AcknowledgeAsync("not_abc", Ciudadano, Arg.Any<CancellationToken>())
+            .Returns(Acto(opened: DateTimeOffset.UtcNow, openedWith: IdentityAssertions.CmsSession));
+
+        await BuildSut().OpenNotification("not_abc", default);
+
+        await _audit.DidNotReceive().WriteAsync(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>
