@@ -457,15 +457,35 @@ public sealed class StubApplicationService : IApplicationService
         Timeline: BuildTimeline(s),
         Decision: s.Decision);
 
-    // Días de SLA restantes = (radicación + días estimados) − hoy. Terminal ⇒ 0.
+    /// <summary>
+    /// Días HÁBILES restantes del término. Terminal ⇒ 0.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Hábiles y no calendario</b> (#77). El schema le promete al editor «cuántos días
+    /// hábiles tarda la respuesta» —está escrito así en <c>tramiteEstimatedDays</c>— y esto
+    /// contaba calendario: un trámite de 15 días radicado un lunes vencía SEIS días antes de lo
+    /// autorado, sin contar un solo festivo.</para>
+    ///
+    /// <para><b>Y no era sólo un rótulo</b>: esta cifra ordena la cola del funcionario, y el error
+    /// crecía con la longitud del término (≈2 días por cada 5 hábiles). Dos trámites con plazos
+    /// distintos se ordenaban mal entre sí — no era un desplazamiento uniforme que se cancelara.</para>
+    ///
+    /// <para><b>Se recalcula, no se guarda</b>, así que corregirlo no reescribe nada: los
+    /// expedientes en vuelo pasan a mostrar el plazo que su ficha prometía, que es más tiempo del
+    /// que decían. Es el lado seguro, y por eso el cambio no necesita migración — al revés que la
+    /// historia de #44, que sí la habría necesitado.</para>
+    /// </remarks>
     private static int SlaDaysLeft(CaseState s, DateTimeOffset now)
     {
         if (s.Status is CaseStatus.Resuelto or CaseStatus.Rechazado)
         {
             return 0;
         }
-        var due = s.RadicadoAt.AddDays(s.SlaDays);
-        return (int)Math.Ceiling((due - now).TotalDays);
+
+        var vence = BusinessDayCalendar.AddBusinessDays(
+            DateOnly.FromDateTime(s.RadicadoAt.UtcDateTime), s.SlaDays);
+
+        return BusinessDayCalendar.BusinessDaysBetween(DateOnly.FromDateTime(now.UtcDateTime), vence);
     }
 
     // Timeline como 3 hitos (radicado/revisión/decisión) con estado visual:
