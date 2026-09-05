@@ -5,7 +5,7 @@
 > Esta tabla cierra el loop entre el schema CMS uSync (lo que el editor llena
 > en backoffice) y el bundle UI que efectivamente hidrata en el browser.
 >
-> Generated: 2026-05-04T11:15:57.590Z
+> Generated: 2026-09-05T23:08:39.695Z
 
 ## Pipeline editor → bundle
 
@@ -35,12 +35,20 @@
 
 | Alias CMS | Tag DOM | Tier | Framework(s) | Versions disponibles | Schema mirror | Rich config |
 |---|---|---|---|---|---|---|
+| `elementSynAcademy` | `<synergos-academy>` | module | angular | angular: latest/v0 | `SynAcademySchema` | — |
+| `elementSynAccordion` | `<synergos-accordion>` | composition | angular | angular: latest/v0 | `SynAccordionSchema` | — |
+| `elementSynAppLauncher` | `<synergos-app-launcher>` | module | angular | angular: latest/v0 | `SynAppLauncherSchema` | — |
 | `elementSynAudioPlayer` | `<synergos-audio-player>` | module | angular | angular: latest/v0 | `SynAudioPlayerSchema` | — |
 | `elementSynAutocomplete` | `<synergos-autocomplete>` | composition | angular | angular: latest/v0 | `SynAutocompleteSchema` | — |
+| `elementSynAvatar` | `<synergos-avatar>` | primitive | angular | angular: latest/v0 | `SynAvatarSchema` | `AvatarElementConfig` |
 | `elementSynAvatarGroup` | `<synergos-avatar-group>` | composition | angular | angular: latest/v0 | `SynAvatarGroupSchema` | — |
 | `elementSynAvatarUpload` | `<synergos-avatar-upload>` | composition | angular | angular: latest/v0 | `SynAvatarUploadSchema` | — |
+| `elementSynBadge` | `<synergos-badge>` | primitive | angular | angular: latest/v0 | `SynBadgeSchema` | `BadgeElementConfig` |
 | `elementSynBadgeGroup` | `<synergos-badge-group>` | composition | angular | angular: latest/v0 | `SynBadgeGroupSchema` | — |
+| `elementSynBlogs` | `<synergos-blogs>` | module | angular | angular: latest/v0 | `SynBlogsSchema` | — |
+| `elementSynBookingWizard` | `<synergos-booking-wizard>` | module | angular | angular: latest/v0 | `SynBookingWizardSchema` | — |
 | `elementSynBreadcrumb` | `<synergos-breadcrumb>` | primitive | angular | angular: latest/v0 | `SynBreadcrumbSchema` | — |
+| `elementSynButtonGroup` | `<synergos-button-group>` | composition | angular | angular: latest/v0 | `SynButtonGroupSchema` | `ButtonGroupElementConfig` |
 | `elementSynCalendar` | `<synergos-calendar>` | module | angular | angular: latest/v0 | `SynCalendarSchema` | — |
 | `elementSynCarousel` | `<synergos-carousel>` | module | angular | angular: latest/v0 | `SynCarouselSchema` | — |
 | `elementSynChartBar` | `<synergos-chart-bar>` | module | angular | angular: latest/v0 | `SynChartBarSchema` | — |
@@ -50,27 +58,37 @@
 | `elementSynCommentsWidget` | `<synergos-comments-widget>` | module | angular | angular: latest/v0 | `SynCommentsWidgetSchema` | — |
 | `elementSynCookieConsent` | `<synergos-cookie-consent>` | module | angular | angular: latest/v0 | `SynCookieConsentSchema` | — |
 | `elementSynCopyButton` | `<synergos-copy-button>` | primitive | angular | angular: latest/v0 | `SynCopyButtonSchema` | — |
+| `elementSynCountdownClock` | `<synergos-countdown-clock>` | module | angular | angular: latest/v0 | `SynCountdownClockSchema` | `CountdownClockElementConfig` |
 | `elementSynCountdownDigital` | `<synergos-countdown-digital>` | module | angular | angular: latest/v0 | `SynCountdownDigitalSchema` | — |
 | `elementSynDataGrid` | `<synergos-data-grid>` | module | angular | angular: latest/v0 | `SynDataGridSchema` | — |
 | `elementSynDatePicker` | `<synergos-date-picker>` | composition | angular | angular: latest/v0 | `SynDatePickerSchema` | — |
+| `elementSynDivider` | `<synergos-divider>` | primitive | angular | angular: latest/v0 | `SynDividerSchema` | `DividerElementConfig` |
 | `elementSynDrawer` | `<synergos-drawer>` | module | angular | angular: latest/v0 | `SynDrawerSchema` | — |
 | `elementSynDropdown` | `<synergos-dropdown>` | composition | angular | angular: latest/v0 | `SynDropdownSchema` | — |
 | `elementSynDropzone` | `<synergos-dropzone>` | module | angular | angular: latest/v0 | `SynDropzoneSchema` | — |
+| `elementSynEhr` | `<synergos-ehr>` | module | angular | angular: latest/v0 | `SynEhrSchema` | — |
+| `elementSynEventos` | `<synergos-eventos>` | module | angular | angular: latest/v0 | `SynEventosSchema` | — |
 | `elementSynFab` | `<synergos-fab>` | primitive | angular | angular: latest/v0 | `SynFabSchema` | — |
+| `elementSynFaqSection` | `<synergos-faq-section>` | module | angular | angular: latest/v0 | `SynFaqSectionSchema` | `FaqSectionElementConfig` |
+| `elementSynFeatureGrid` | `<synergos-feature-grid>` | module | angular | angular: latest/v0 | `SynFeatureGridSchema` | `FeatureGridElementConfig` |
 | `elementSynFileUploader` | `<synergos-file-uploader>` | module | angular | angular: latest/v0 | `SynFileUploaderSchema` | — |
 | `elementSynFormStepper` | `<synergos-form-stepper>` | composition | angular | angular: latest/v0 | `SynFormStepperSchema` | — |
+| `elementSynGov` | `<synergos-gov>` | module | angular | angular: latest/v0 | `SynGovSchema` | — |
 | `elementSynHeroBanner` | `<synergos-hero-banner>` | module | angular | angular: latest/v0 | `SynHeroBannerSchema` | — |
 | `elementSynIconLabel` | `<synergos-icon-label>` | primitive | angular | angular: latest/v0 | `SynIconLabelSchema` | — |
+| `elementSynInfoBlock` | `<synergos-info-block>` | composition | angular | angular: latest/v0 | `SynInfoBlockSchema` | `InfoBlockElementConfig` |
 | `elementSynKpiCard` | `<synergos-kpi-card>` | module | angular | angular: latest/v0 | `SynKpiCardSchema` | — |
 | `elementSynLightboxGallery` | `<synergos-lightbox-gallery>` | module | angular | angular: latest/v0 | `SynLightboxGallerySchema` | — |
 | `elementSynLivestream` | `<synergos-livestream>` | module | angular | angular: latest/v0 | `SynLivestreamSchema` | — |
 | `elementSynMapPin` | `<synergos-map-pin>` | module | angular | angular: latest/v0 | `SynMapPinSchema` | — |
+| `elementSynMediaText` | `<synergos-media-text>` | composition | angular | angular: latest/v0 | `SynMediaTextSchema` | `MediaTextElementConfig` |
 | `elementSynModalTrigger` | `<synergos-modal-trigger>` | composition | angular | angular: latest/v0 | `SynModalTriggerSchema` | — |
 | `elementSynNotificationCenter` | `<synergos-notification-center>` | module | angular | angular: latest/v0 | `SynNotificationCenterSchema` | — |
 | `elementSynNotificationToast` | `<synergos-notification-toast>` | module | angular | angular: latest/v0 | `SynNotificationToastSchema` | — |
 | `elementSynOEmbed` | `<synergos-oembed>` | module | angular | angular: latest/v0 | `SynOembedSchema` | — |
 | `elementSynOtpInput` | `<synergos-otp-input>` | composition | angular | angular: latest/v0 | `SynOtpInputSchema` | — |
 | `elementSynPagination` | `<synergos-pagination>` | composition | angular | angular: latest/v0 | `SynPaginationSchema` | — |
+| `elementSynPaxSelector` | `<synergos-pax-selector>` | composition | angular | angular: latest/v0 | — | — |
 | `elementSynPoll` | `<synergos-poll>` | module | angular | angular: latest/v0 | `SynPollSchema` | — |
 | `elementSynPopover` | `<synergos-popover>` | primitive | angular | angular: latest/v0 | `SynPopoverSchema` | — |
 | `elementSynProgressBar` | `<synergos-progress-bar>` | primitive | angular | angular: latest/v0 | `SynProgressBarSchema` | — |
@@ -78,26 +96,33 @@
 | `elementSynQuoteAnimated` | `<synergos-quote-animated>` | module | angular | angular: latest/v0 | `SynQuoteAnimatedSchema` | — |
 | `elementSynRangeSlider` | `<synergos-range-slider>` | composition | angular | angular: latest/v0 | `SynRangeSliderSchema` | — |
 | `elementSynRatingStars` | `<synergos-rating-stars>` | composition | angular | angular: latest/v0 | `SynRatingStarsSchema` | — |
+| `elementSynRealty` | `<synergos-realty>` | module | angular | angular: latest/v0 | `SynRealtySchema` | — |
 | `elementSynRichTooltip` | `<synergos-rich-tooltip>` | composition | angular | angular: latest/v0 | `SynRichTooltipSchema` | — |
 | `elementSynScrollTop` | `<synergos-scroll-top>` | primitive | angular | angular: latest/v0 | `SynScrollTopSchema` | — |
 | `elementSynSearchBox` | `<synergos-search-box>` | composition | angular | angular: latest/v0 | `SynSearchBoxSchema` | — |
+| `elementSynSeatMap` | `<synergos-seat-map>` | composition | angular | angular: latest/v0 | `SynSeatMapSchema` | — |
 | `elementSynSelectMulti` | `<synergos-select-multi>` | composition | angular | angular: latest/v0 | `SynSelectMultiSchema` | — |
+| `elementSynSeller` | `<synergos-seller>` | module | angular | angular: latest/v0 | `SynSellerSchema` | — |
 | `elementSynSeparator` | `<synergos-separator>` | primitive | angular | angular: latest/v0 | `SynSeparatorSchema` | — |
 | `elementSynShareBar` | `<synergos-share-bar>` | composition | angular | angular: latest/v0 | `SynShareBarSchema` | — |
 | `elementSynSignaturePad` | `<synergos-signature-pad>` | composition | angular | angular: latest/v0 | `SynSignaturePadSchema` | — |
 | `elementSynSkeleton` | `<synergos-skeleton>` | primitive | angular | angular: latest/v0 | `SynSkeletonSchema` | — |
 | `elementSynSocialProof` | `<synergos-social-proof>` | composition | angular | angular: latest/v0 | `SynSocialProofSchema` | — |
+| `elementSynSpacer` | `<synergos-spacer>` | primitive | angular | angular: latest/v0 | `SynSpacerSchema` | `SpacerElementConfig` |
 | `elementSynSplitter` | `<synergos-splitter>` | composition | angular | angular: latest/v0 | `SynSplitterSchema` | — |
 | `elementSynStatTicker` | `<synergos-stat-ticker>` | primitive | angular | angular: latest/v0 | `SynStatTickerSchema` | — |
 | `elementSynStepper` | `<synergos-stepper>` | composition | angular | angular: latest/v0 | `SynStepperSchema` | — |
+| `elementSynStorefront` | `<synergos-storefront>` | module | angular | angular: latest/v0 | `SynStorefrontSchema` | — |
 | `elementSynTabs` | `<synergos-tabs>` | composition | angular | angular: latest/v0 | `SynTabsSchema` | — |
 | `elementSynTag` | `<synergos-tag>` | primitive | angular | angular: latest/v0 | `SynTagSchema` | — |
 | `elementSynTestimonialCarousel` | `<synergos-testimonial-carousel>` | module | angular | angular: latest/v0 | `SynTestimonialCarouselSchema` | — |
+| `elementSynTestimonialSection` | `<synergos-testimonial-section>` | module | angular | angular: latest/v0 | `SynTestimonialSectionSchema` | `TestimonialSectionElementConfig` |
 | `elementSynTimeline` | `<synergos-timeline>` | module | angular | angular: latest/v0 | `SynTimelineSchema` | — |
 | `elementSynTimelineHorizontal` | `<synergos-timeline-horizontal>` | composition | angular | angular: latest/v0 | `SynTimelineHorizontalSchema` | — |
 | `elementSynToastCenter` | `<synergos-toast-center>` | module | angular | angular: latest/v0 | `SynToastCenterSchema` | — |
 | `elementSynTooltip` | `<synergos-tooltip>` | primitive | angular | angular: latest/v0 | `SynTooltipSchema` | — |
 | `elementSynTourGuide` | `<synergos-tour-guide>` | module | angular | angular: latest/v0 | `SynTourGuideSchema` | — |
+| `elementSynTravelShell` | `<synergos-travel-shell>` | module | angular | angular: latest/v0 | `SynTravelShellSchema` | — |
 | `elementSynTreeView` | `<synergos-tree-view>` | module | angular | angular: latest/v0 | `SynTreeViewSchema` | — |
 | `elementSynVideoPlayer` | `<synergos-video-player>` | module | angular | angular: latest/v0 | `SynVideoPlayerSchema` | — |
 

@@ -1,4 +1,4 @@
-# UI Elements Catalog — 122 bundles publicados al CDN
+# UI Elements Catalog — 130 bundles publicados al CDN
 
 > **AUTO-GENERATED** by `tools/refresh-skill-catalog.mjs`. Re-run via `npm run skill:refresh`
 > o automáticamente al final de `npm run release:angular`. Edits manuales se pierden.
@@ -6,7 +6,7 @@
 > Snapshot del CDN registry (`C:\LOCAL_CDN\synergos\registry.json`) + UI contracts
 > (`vitals/contracts/src/{element-config,elements-syn,element-inputs}`).
 >
-> Generated: 2026-05-04T11:15:57.586Z
+> Generated: 2026-09-05T23:08:39.690Z
 
 ## Cómo leer este catálogo
 
@@ -16,7 +16,7 @@ Cada elemento listado tiene:
 - **`alias`**: el alias CMS uSync (`elementSyn{Pascal}`) que aparece en los
   ContentTypes XMLs de `Synergos.CMS.Web/uSync/v9/ContentTypes/`.
 - **`framework`(s)**: el(los) framework(s) en los que el bundle está publicado
-  (angular | react | svelte | vanilla). Hoy todos son angular.
+  Hoy la única plataforma es angular (purga 2026-08-04).
 - **`shape rich`** (cuando existe): el contract canónico editorial 3-way mirror
   C# `CdnConfig` ↔ TypeScript `{Name}ElementConfig` ↔ Web Component `config`
   prop. Vive en `vitals/contracts/src/element-config.contract.ts` (manual).
@@ -30,16 +30,16 @@ Cuando recomendes un elemento, **siempre** mencioná: tier, tag DOM, y la
 shape que el bundle espera (rich si existe, schema si no).
 
 
-## Primitives (28)
+## Primitives (31)
 
 **Primitives** — atómicos, sin lógica de negocio. Building blocks reutilizables (avatar, badge, divider, etc.). Pueden vivir solos o composarse.
 
-### `<synergos-avatar>` — elementMediaAvatar
+### `<synergos-avatar>` — elementSynAvatar
 
 - **tag**: `<synergos-avatar>`
-- **alias CMS**: `elementMediaAvatar`
+- **alias CMS**: `elementSynAvatar`
 - **tier**: primitive
-- **frameworks**: svelte, angular
+- **frameworks**: angular
 - **shape rich** (`AvatarElementConfig` — manual canónico):
   - `src`: string
   - `alt`: string
@@ -60,10 +60,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `status` (string) — Presence status (online | offline | busy | away)
   - `theme` (string) — Color theme (light | dark)
 
-### `<synergos-badge>` — elementInfoBadge
+### `<synergos-badge>` — elementSynBadge
 
 - **tag**: `<synergos-badge>`
-- **alias CMS**: `elementInfoBadge`
+- **alias CMS**: `elementSynBadge`
 - **tier**: primitive
 - **frameworks**: angular
 - **shape rich** (`BadgeElementConfig` — manual canónico):
@@ -92,60 +92,37 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `itemsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `includeStructuredData` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `itemsJson` (string) — Array de items serializado como JSON string
+  - `includeStructuredData` (string) — Campo "Include Structured Data" del componente synergos-breadcrumb. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
-### `<synergos-column>` — elementStructColumn
+### `<synergos-button-container>` — elementActionButton
 
-- **tag**: `<synergos-column>`
-- **alias CMS**: `elementStructColumn`
+- **tag**: `<synergos-button-container>`
+- **alias CMS**: `elementActionButton`
 - **tier**: primitive
 - **frameworks**: angular
-- **shape rich** (`ColumnElementConfig` — manual canónico):
-  - `width`: string
-  - `minWidth`: string
-  - `alignment`: string
-  - `padding`: string
-  - `gap`: string
+- **shape rich** (`ButtonContainerElementConfig` — manual canónico):
+  - `label`: string
+  - `href`: string
+  - `target`: string
   - `variant`: string
   - `tone`: string
-  - `theme`: string
+  - `size`: string
+  - `disabled`: boolean
+  - `loading`: boolean
+  - `loadingLabel`: string
   - `translations`: ComponentTranslations
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `width` (string) — Optional explicit width value
-  - `minWidth` (string) — Optional explicit minimum width value
-  - `alignment` (string) — Column align-self value
-  - `padding` (string) — Inner spacing token
-  - `gap` (string) — Gap between column children
-  - `theme` (string) — Color theme (light | dark)
-
-### `<synergos-container-block>` — elementStructContainer
-
-- **tag**: `<synergos-container-block>`
-- **alias CMS**: `elementStructContainer`
-- **tier**: primitive
-- **frameworks**: angular
-- **shape rich** (`ContainerBlockElementConfig` — manual canónico):
-  - `elementId`: string
-  - `ariaLabel`: string
-  - `containerType`: string
-  - `maxWidth`: string
-  - `padding`: string
-  - `variant`: string
-  - `tone`: string
-  - `theme`: string
-  - `translations`: ComponentTranslations
-- **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `containerType` (string) — Container width mode
-  - `maxWidth` (string) — Optional explicit max-width value
-  - `padding` (string) — Inner padding token
-  - `theme` (string) — Color theme (light | dark)
-  - `elementId` (string) — DOM id from CMS config.
-  - `ariaLabel` (string) — ARIA label from CMS config.
-  - `variant` (string) — Visual variant key from CMS config.
+  - `label` (string) — Button visible text
+  - `variant` (string) — Variante visual. Acepta el vocabulario del CMS (primary | secondary | outlined | ghost | neutral | emphasis) y el propio (solid | outline | ghost | danger | gradient); lo desconocido cae a solid.
+  - `size` (string) — sm | md | lg
+  - `href` (string) — If set, renders as <a> instead of <button>
+  - `target` (string) — Link target (_self | _blank)
+  - `loading` (boolean) — Loading state; disables interaction and shows the loading label
+  - `loadingLabel` (string) — Text shown while loading (falls back to the button label)
+  - `disabled` (boolean) — Disabled state
 
 ### `<synergos-copy-button>` — elementSynCopyButton
 
@@ -160,15 +137,15 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `copyText` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `buttonLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `feedbackLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `copyText` (string) — Campo "Copy Text" del componente synergos-copy-button. Editor: editar manualmente para enriquecer documentación.
+  - `buttonLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Button Label" del componente synergos-copy-button)
+  - `feedbackLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Feedback Label" del componente synergos-copy-button)
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
-### `<synergos-divider>` — elementStructDivider
+### `<synergos-divider>` — elementSynDivider
 
 - **tag**: `<synergos-divider>`
-- **alias CMS**: `elementStructDivider`
+- **alias CMS**: `elementSynDivider`
 - **tier**: primitive
 - **frameworks**: angular
 - **shape rich** (`DividerElementConfig` — manual canónico):
@@ -184,6 +161,20 @@ shape que el bundle espera (rich si existe, schema si no).
   - `inset` (string) — Outer spacing token applied around the divider
   - `theme` (string) — Color theme (light | dark)
 
+### `<synergos-eyebrow>` — elementTextEyebrow
+
+- **tag**: `<synergos-eyebrow>`
+- **alias CMS**: `elementTextEyebrow`
+- **tier**: primitive
+- **frameworks**: angular
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
+  - `headingText` (string) — Heading text content
+  - `headingLevel` (string) — HTML heading tag: h1-h6
+  - `body` (string) — Supporting body copy
+  - `alignment` (string) — Text alignment (left | center)
+  - `theme` (string) — Color theme (light | dark)
+
 ### `<synergos-fab>` — elementSynFab
 
 - **tag**: `<synergos-fab>`
@@ -197,41 +188,23 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `iconKey` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `actionLink` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `position` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `iconKey` (string) — Nombre del icono stock o URL del SVG custom (campo "Icon Key" del componente synergos-fab)
+  - `actionLink` (string) — URL destino del form submit o action handler (campo "Action Link" del componente synergos-fab)
+  - `position` (string) — Campo "Position" del componente synergos-fab. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
-### `<synergos-grid>` — elementStructGrid
+### `<synergos-heading>` — elementTextHeading
 
-- **tag**: `<synergos-grid>`
-- **alias CMS**: `elementStructGrid`
+- **tag**: `<synergos-heading>`
+- **alias CMS**: `elementTextHeading`
 - **tier**: primitive
 - **frameworks**: angular
-- **shape rich** (`GridElementConfig` — manual canónico):
-  - `columns`: number
-  - `gap`: string
-  - `minColumnWidth`: string
-  - `variant`: string
-  - `tone`: string
-  - `theme`: string
-  - `translations`: ComponentTranslations
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `columns` (number) — Preferred number of columns
-  - `gap` (string) — Gap size token (sm | md | lg)
-  - `minColumnWidth` (string) — Optional auto-fit minimum column width
-  - `theme` (string) — Color theme (light | dark)
-
-### `<synergos-hello-world>` — elementTemplateHelloWorld
-
-- **tag**: `<synergos-hello-world>`
-- **alias CMS**: `elementTemplateHelloWorld`
-- **tier**: primitive
-- **frameworks**: vanilla
-- **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `heading` (string) — Main heading text
-  - `message` (string) — Text to display
+  - `headingText` (string) — Heading text content
+  - `headingLevel` (string) — HTML heading tag: h1-h6
+  - `body` (string) — Supporting body copy
+  - `alignment` (string) — Text alignment (left | center)
   - `theme` (string) — Color theme (light | dark)
 
 ### `<synergos-icon-block>` — elementMediaIcon
@@ -253,7 +226,7 @@ shape que el bundle espera (rich si existe, schema si no).
   - `size` (string) — Icon size token
   - `color` (string) — Optional icon color token or CSS value
   - `ariaLabel` (string) — Accessible label for assistive technology
-  - `ariaHidden` (boolean) — Marks the icon as decorative when true.
+  - `ariaHidden` (boolean) — Decorative by default: the icon is hidden from assistive tech. Set false only when the icon carries meaning no nearby text conveys, and pair it with ariaLabel.
 
 ### `<synergos-icon-label>` — elementSynIconLabel
 
@@ -267,9 +240,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `iconKey` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `labelText` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `iconKey` (string) — Nombre del icono stock o URL del SVG custom (campo "Icon Key" del componente synergos-icon-label)
+  - `labelText` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Label Text" del componente synergos-icon-label)
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-image-block>` — elementMediaImage
 
@@ -292,6 +265,56 @@ shape que el bundle espera (rich si existe, schema si no).
   - `aspectRatio` (string) — Aspect ratio token or CSS ratio
   - `loading` (string) — Native image loading mode
 
+### `<synergos-label>` — elementTextLabel
+
+- **tag**: `<synergos-label>`
+- **alias CMS**: `elementTextLabel`
+- **tier**: primitive
+- **frameworks**: angular
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
+  - `headingText` (string) — Heading text content
+  - `headingLevel` (string) — HTML heading tag: h1-h6
+  - `body` (string) — Supporting body copy
+  - `alignment` (string) — Text alignment (left | center)
+  - `theme` (string) — Color theme (light | dark)
+
+### `<synergos-link-block>` — elementActionLink
+
+- **tag**: `<synergos-link-block>`
+- **alias CMS**: `elementActionLink`
+- **tier**: primitive
+- **frameworks**: angular
+- **shape rich** (`LinkBlockElementConfig` — manual canónico):
+  - `href`: string
+  - `label`: string
+  - `target`: string
+  - `ariaLabel`: string
+  - `variant`: string
+  - `tone`: string
+  - `translations`: ComponentTranslations
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
+  - `href` (string) — Link destination URL
+  - `label` (string) — Visible link text
+  - `target` (string) — Link target attribute
+  - `ariaLabel` (string) — Accessible label override
+  - `variant` (string) — Presentation variant key
+
+### `<synergos-paragraph>` — elementTextParagraph
+
+- **tag**: `<synergos-paragraph>`
+- **alias CMS**: `elementTextParagraph`
+- **tier**: primitive
+- **frameworks**: angular
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
+  - `headingText` (string) — Heading text content
+  - `headingLevel` (string) — HTML heading tag: h1-h6
+  - `body` (string) — Supporting body copy
+  - `alignment` (string) — Text alignment (left | center)
+  - `theme` (string) — Color theme (light | dark)
+
 ### `<synergos-popover>` — elementSynPopover
 
 - **tag**: `<synergos-popover>`
@@ -305,10 +328,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `triggerLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `popoverContent` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `placement` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `triggerLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Trigger Label" del componente synergos-popover)
+  - `popoverContent` (string) — Campo "Popover Content" del componente synergos-popover. Editor: editar manualmente para enriquecer documentación.
+  - `placement` (string) — Campo "Placement" del componente synergos-popover. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-price-display>` — elementShopPriceDisplay
 
@@ -348,9 +371,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `valueNow` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `valueMax` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `valueNow` (string) — Campo "Value Now" del componente synergos-progress-bar. Editor: editar manualmente para enriquecer documentación.
+  - `valueMax` (string) — Campo "Value Max" del componente synergos-progress-bar. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-qr-code>` — elementSynQrCode
 
@@ -365,10 +388,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `data` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `size` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `ecLevel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `data` (string) — Campo "Data" del componente synergos-qr-code. Editor: editar manualmente para enriquecer documentación.
+  - `size` (string) — Tamaño: sm | md | lg | xl según escala del componente
+  - `ecLevel` (string) — Campo "Ec Level" del componente synergos-qr-code. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-quantity-selector>` — elementShopQuantitySelector
 
@@ -403,6 +426,34 @@ shape que el bundle espera (rich si existe, schema si no).
   - `variant` (string) — Visual variant key.
   - `variantKey` (string) — CMS compatibility alias for the visual variant key.
 
+### `<synergos-quote>` — elementTextQuote
+
+- **tag**: `<synergos-quote>`
+- **alias CMS**: `elementTextQuote`
+- **tier**: primitive
+- **frameworks**: angular
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
+  - `headingText` (string) — Heading text content
+  - `headingLevel` (string) — HTML heading tag: h1-h6
+  - `body` (string) — Supporting body copy
+  - `alignment` (string) — Text alignment (left | center)
+  - `theme` (string) — Color theme (light | dark)
+
+### `<synergos-rich-text>` — elementTextRichtext
+
+- **tag**: `<synergos-rich-text>`
+- **alias CMS**: `elementTextRichtext`
+- **tier**: primitive
+- **frameworks**: angular
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
+  - `headingText` (string) — Heading text content
+  - `headingLevel` (string) — HTML heading tag: h1-h6
+  - `body` (string) — Supporting body copy
+  - `alignment` (string) — Text alignment (left | center)
+  - `theme` (string) — Color theme (light | dark)
+
 ### `<synergos-scroll-top>` — elementSynScrollTop
 
 - **tag**: `<synergos-scroll-top>`
@@ -415,9 +466,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `scrollThreshold` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `position` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `scrollThreshold` (string) — Campo "Scroll Threshold" del componente synergos-scroll-top. Editor: editar manualmente para enriquecer documentación.
+  - `position` (string) — Campo "Position" del componente synergos-scroll-top. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-separator>` — elementSynSeparator
 
@@ -430,8 +481,8 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `style` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `style` (string) — Campo "Style" del componente synergos-separator. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-skeleton>` — elementSynSkeleton
 
@@ -445,14 +496,14 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `shape` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `count` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `shape` (string) — Campo "Shape" del componente synergos-skeleton. Editor: editar manualmente para enriquecer documentación.
+  - `count` (string) — Campo "Count" del componente synergos-skeleton. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
-### `<synergos-spacer>` — elementStructSpacer
+### `<synergos-spacer>` — elementSynSpacer
 
 - **tag**: `<synergos-spacer>`
-- **alias CMS**: `elementStructSpacer`
+- **alias CMS**: `elementSynSpacer`
 - **tier**: primitive
 - **frameworks**: angular
 - **shape rich** (`SpacerElementConfig` — manual canónico):
@@ -466,31 +517,6 @@ shape que el bundle espera (rich si existe, schema si no).
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
   - `size` (string) — Spacing token that controls the spacer size
   - `axis` (string) — Spacer axis (vertical | horizontal)
-
-### `<synergos-stack>` — elementStructStack
-
-- **tag**: `<synergos-stack>`
-- **alias CMS**: `elementStructStack`
-- **tier**: primitive
-- **frameworks**: angular
-- **shape rich** (`StackElementConfig` — manual canónico):
-  - `direction`: string
-  - `gap`: string
-  - `alignment`: string
-  - `justify`: string
-  - `wrap`: boolean
-  - `variant`: string
-  - `tone`: string
-  - `theme`: string
-  - `translations`: ComponentTranslations
-- **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `direction` (string) — Layout direction
-  - `gap` (string) — Gap size token
-  - `alignment` (string) — Cross-axis alignment
-  - `wrap` (boolean) — Allows wrapping onto multiple rows
-  - `theme` (string) — Color theme (light | dark)
-  - `justify` (string) — Justify-content override for stacked layouts.
 
 ### `<synergos-stat-ticker>` — elementSynStatTicker
 
@@ -506,11 +532,11 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `statValue` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `statLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `statPrefix` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `statSuffix` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `statValue` (string) — Campo "Stat Value" del componente synergos-stat-ticker. Editor: editar manualmente para enriquecer documentación.
+  - `statLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Stat Label" del componente synergos-stat-ticker)
+  - `statPrefix` (string) — Campo "Stat Prefix" del componente synergos-stat-ticker. Editor: editar manualmente para enriquecer documentación.
+  - `statSuffix` (string) — Campo "Stat Suffix" del componente synergos-stat-ticker. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-tag>` — elementSynTag
 
@@ -524,9 +550,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `tagLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `tagColor` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `tagLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Tag Label" del componente synergos-tag)
+  - `tagColor` (string) — Campo "Tag Color" del componente synergos-tag. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-text-block>` — elementTextBlock
 
@@ -563,9 +589,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `triggerText` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `tooltipText` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `triggerText` (string) — Campo "Trigger Text" del componente synergos-tooltip. Editor: editar manualmente para enriquecer documentación.
+  - `tooltipText` (string) — Campo "Tooltip Text" del componente synergos-tooltip. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-video-block>` — elementMediaVideo
 
@@ -597,12 +623,12 @@ shape que el bundle espera (rich si existe, schema si no).
 
 **Compositions** — combinan 2+ primitives + lógica simple. Self-contained editorial pieces (accordion, dropdown, search-box, etc.). Hidratan en cliente.
 
-### `<synergos-accordion>` — elementCompAccordion
+### `<synergos-accordion>` — elementSynAccordion
 
 - **tag**: `<synergos-accordion>`
-- **alias CMS**: `elementCompAccordion`
+- **alias CMS**: `elementSynAccordion`
 - **tier**: composition
-- **frameworks**: svelte, angular
+- **frameworks**: angular
 - **shape schema** (`SynAccordionSchema` — auto del CMS):
   - `itemsJson`: string
   - `allowMultiple`: string
@@ -652,10 +678,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `label` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `placeholder` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `suggestionsEndpoint` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `label` (string) — Texto visible del elemento (botón, input, badge, etc.)
+  - `placeholder` (string) — Texto guía mostrado cuando el campo está vacío
+  - `suggestionsEndpoint` (string) — Campo "Suggestions Endpoint" del componente synergos-autocomplete. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-avatar-group>` — elementSynAvatarGroup
 
@@ -669,9 +695,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `avatarsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `maxVisible` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `avatarsJson` (string) — Campo "Avatars Json" del componente synergos-avatar-group. Editor: editar manualmente para enriquecer documentación.
+  - `maxVisible` (string) — Campo "Max Visible" del componente synergos-avatar-group. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-avatar-upload>` — elementSynAvatarUpload
 
@@ -685,9 +711,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `label` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `uploadEndpoint` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `label` (string) — Texto visible del elemento (botón, input, badge, etc.)
+  - `uploadEndpoint` (string) — Campo "Upload Endpoint" del componente synergos-avatar-upload. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-badge-group>` — elementSynBadgeGroup
 
@@ -701,14 +727,14 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `badgesJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `layout` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `badgesJson` (string) — Campo "Badges Json" del componente synergos-badge-group. Editor: editar manualmente para enriquecer documentación.
+  - `layout` (string) — Campo "Layout" del componente synergos-badge-group. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
-### `<synergos-button-group>` — elementActionButtonGroup
+### `<synergos-button-group>` — elementSynButtonGroup
 
 - **tag**: `<synergos-button-group>`
-- **alias CMS**: `elementActionButtonGroup`
+- **alias CMS**: `elementSynButtonGroup`
 - **tier**: composition
 - **frameworks**: angular
 - **shape rich** (`ButtonGroupElementConfig` — manual canónico):
@@ -717,6 +743,12 @@ shape que el bundle espera (rich si existe, schema si no).
   - `gap`: 'xs' | 'sm' | 'md' | 'lg'
   - `items`: ReadonlyArray<ButtonGroupItemConfig>
   - `translations`: ComponentTranslations
+- **shape schema** (`SynButtonGroupSchema` — auto del CMS):
+  - `buttonsJson`: string
+  - `alignment`: string
+  - `direction`: string
+  - `gap`: string
+  - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
   - `buttons` (json) — JSON array of button items. Overrides config.buttons when provided directly.
@@ -798,10 +830,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `code` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `language` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `showLineNumbers` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `code` (string) — Campo "Code" del componente synergos-code-block. Editor: editar manualmente para enriquecer documentación.
+  - `language` (string) — Campo "Language" del componente synergos-code-block. Editor: editar manualmente para enriquecer documentación.
+  - `showLineNumbers` (string) — Campo "Show Line Numbers" del componente synergos-code-block. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-color-picker>` — elementSynColorPicker
 
@@ -816,10 +848,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `label` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `initialColor` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `paletteJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `label` (string) — Texto visible del elemento (botón, input, badge, etc.)
+  - `initialColor` (string) — Campo "Initial Color" del componente synergos-color-picker. Editor: editar manualmente para enriquecer documentación.
+  - `paletteJson` (string) — Campo "Palette Json" del componente synergos-color-picker. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-color-swatches>` — elementSynColorSwatches
 
@@ -833,9 +865,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `swatchesJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `shape` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `swatchesJson` (string) — Campo "Swatches Json" del componente synergos-color-swatches. Editor: editar manualmente para enriquecer documentación.
+  - `shape` (string) — Campo "Shape" del componente synergos-color-swatches. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-cta-group>` — elementActionCtaGroup
 
@@ -880,11 +912,11 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `label` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `initialDate` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `minDate` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `maxDate` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `label` (string) — Texto visible del elemento (botón, input, badge, etc.)
+  - `initialDate` (string) — Campo "Initial Date" del componente synergos-date-picker. Editor: editar manualmente para enriquecer documentación.
+  - `minDate` (string) — Campo "Min Date" del componente synergos-date-picker. Editor: editar manualmente para enriquecer documentación.
+  - `maxDate` (string) — Campo "Max Date" del componente synergos-date-picker. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-dropdown>` — elementSynDropdown
 
@@ -900,34 +932,11 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `triggerLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `optionsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `selectedValue` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `searchable` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-
-### `<synergos-external-widget>` — elementIntExternalWidget
-
-- **tag**: `<synergos-external-widget>`
-- **alias CMS**: `elementIntExternalWidget`
-- **tier**: composition
-- **frameworks**: angular
-- **shape rich** (`ExternalWidgetElementConfig` — manual canónico):
-  - `src`: string
-  - `type`: string
-  - `title`: string
-  - `endpoint`: string
-  - `translations`: ComponentTranslations
-- **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `config` (json) — Base element configuration object for the external widget.
-  - `tagName` (string) — Host tag name created for the widget.
-  - `scriptSrc` (string) — External script source URL.
-  - `props` (json) — JSON object mapped to attributes on the widget host.
-  - `textContent` (string) — Optional text content for the widget host.
-  - `src` (string) — Canonical CMS widget script URL.
-  - `type` (string) — Canonical CMS widget tag or type.
-  - `title` (string) — Canonical CMS widget title payload.
-  - `endpoint` (string) — Canonical CMS endpoint passed to the widget.
+  - `triggerLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Trigger Label" del componente synergos-dropdown)
+  - `optionsJson` (string) — Campo "Options Json" del componente synergos-dropdown. Editor: editar manualmente para enriquecer documentación.
+  - `selectedValue` (string) — Campo "Selected Value" del componente synergos-dropdown. Editor: editar manualmente para enriquecer documentación.
+  - `searchable` (string) — Campo "Searchable" del componente synergos-dropdown. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-faq-item>` — elementInfoFaqItem
 
@@ -983,10 +992,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `stepsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `submitEndpoint` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `allowSkip` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `stepsJson` (string) — Campo "Steps Json" del componente synergos-form-stepper. Editor: editar manualmente para enriquecer documentación.
+  - `submitEndpoint` (string) — Campo "Submit Endpoint" del componente synergos-form-stepper. Editor: editar manualmente para enriquecer documentación.
+  - `allowSkip` (string) — Campo "Allow Skip" del componente synergos-form-stepper. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-gallery-item>` — elementMediaGalleryItem
 
@@ -1007,30 +1016,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `caption` (string) — Optional caption text.
   - `aspectRatio` (string) — Aspect ratio token or CSS ratio.
 
-### `<synergos-iframe-embed>` — elementIntIframeEmbed
-
-- **tag**: `<synergos-iframe-embed>`
-- **alias CMS**: `elementIntIframeEmbed`
-- **tier**: composition
-- **frameworks**: angular
-- **shape rich** (`IframeEmbedElementConfig` — manual canónico):
-  - `src`: string
-  - `title`: string
-  - `height`: string
-  - `allowFullscreen`: boolean
-  - `translations`: ComponentTranslations
-- **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `config` (json) — Base element configuration object for the iframe embed.
-  - `src` (string) — Iframe source URL.
-  - `title` (string) — Iframe title attribute.
-  - `loading` (string) — Native iframe loading mode.
-  - `allowFullscreen` (boolean) — Enables the allowfullscreen attribute.
-  - `height` (string) — Iframe height value.
-
-### `<synergos-info-block>` — elementCompInfoBlock
+### `<synergos-info-block>` — elementSynInfoBlock
 
 - **tag**: `<synergos-info-block>`
-- **alias CMS**: `elementCompInfoBlock`
+- **alias CMS**: `elementSynInfoBlock`
 - **tier**: composition
 - **frameworks**: angular
 - **shape rich** (`InfoBlockElementConfig` — manual canónico):
@@ -1042,6 +1031,14 @@ shape que el bundle espera (rich si existe, schema si no).
   - `tone`: string
   - `theme`: string
   - `translations`: ComponentTranslations
+- **shape schema** (`SynInfoBlockSchema` — auto del CMS):
+  - `title`: string
+  - `body`: string
+  - `ctaLabel`: string
+  - `ctaUrl`: string
+  - `variant`: string
+  - `theme`: string
+  - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
   - `title` (string) — Heading text for the block
@@ -1091,10 +1088,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `label` (string) — Optional label for the logo.
   - `target` (string) — Link target attribute.
 
-### `<synergos-media-text>` — elementCompMediaTextSplit
+### `<synergos-media-text>` — elementSynMediaText
 
 - **tag**: `<synergos-media-text>`
-- **alias CMS**: `elementCompMediaTextSplit`
+- **alias CMS**: `elementSynMediaText`
 - **tier**: composition
 - **frameworks**: angular
 - **shape rich** (`MediaTextElementConfig` — manual canónico):
@@ -1110,6 +1107,14 @@ shape que el bundle espera (rich si existe, schema si no).
   - `tone`: string
   - `theme`: string
   - `translations`: ComponentTranslations
+- **shape schema** (`SynMediaTextSchema` — auto del CMS):
+  - `headingText`: string
+  - `body`: string
+  - `mediaReference`: string
+  - `mediaAlt`: string
+  - `mediaPosition`: string
+  - `theme`: string
+  - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
   - `imageSrc` (string) — Media image URL
@@ -1137,11 +1142,11 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `triggerLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `modalTitle` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `modalContent` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `modalSize` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `triggerLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Trigger Label" del componente synergos-modal-trigger)
+  - `modalTitle` (string) — Título mostrado destacado (campo "Modal Title" del componente synergos-modal-trigger)
+  - `modalContent` (string) — Campo "Modal Content" del componente synergos-modal-trigger. Editor: editar manualmente para enriquecer documentación.
+  - `modalSize` (string) — Tamaño: sm | md | lg | xl según escala del componente (campo "Modal Size" del componente synergos-modal-trigger)
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-newsletter-form>` — elementCorpNewsletterForm
 
@@ -1186,9 +1191,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `label` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `length` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `label` (string) — Texto visible del elemento (botón, input, badge, etc.)
+  - `length` (string) — Campo "Length" del componente synergos-otp-input. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-pagination>` — elementSynPagination
 
@@ -1204,42 +1209,48 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `totalItems` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `itemsPerPage` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `currentPage` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `urlTemplate` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `totalItems` (string) — Campo "Total Items" del componente synergos-pagination. Editor: editar manualmente para enriquecer documentación.
+  - `itemsPerPage` (string) — Campo "Items Per Page" del componente synergos-pagination. Editor: editar manualmente para enriquecer documentación.
+  - `currentPage` (string) — Campo "Current Page" del componente synergos-pagination. Editor: editar manualmente para enriquecer documentación.
+  - `urlTemplate` (string) — Campo "Url Template" del componente synergos-pagination. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
-### `<synergos-pricing-card>` — elementInfoPricingCard
+### `<synergos-pax-selector>` — elementSynPaxSelector
 
-- **tag**: `<synergos-pricing-card>`
-- **alias CMS**: `elementInfoPricingCard`
+- **tag**: `<synergos-pax-selector>`
+- **alias CMS**: `elementSynPaxSelector`
 - **tier**: composition
-- **frameworks**: react
-- **shape rich** (`PricingCardElementConfig` — manual canónico):
-  - `title`: string
-  - `price`: string
-  - `period`: string
-  - `description`: string
-  - `ctaLabel`: string
-  - `ctaUrl`: string
-  - `badgeText`: string
-  - `badgeTone`: string
-  - `variant`: string
-  - `tone`: string
-  - `theme`: string
-  - `featured`: boolean
-  - `translations`: ComponentTranslations
+- **frameworks**: angular
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `planName` (string) — Plan or tier name
-  - `price` (string) — Price label
-  - `period` (string) — Billing period label
-  - `features` (json) — JSON array of included feature strings
-  - `ctaLabel` (string) — Call-to-action label
-  - `ctaUrl` (string) — Call-to-action destination URL
-  - `highlighted` (boolean) — Highlights the card visually
-  - `variant` (string) — Presentation variant key
-  - `theme` (string) — Color theme (light | dark)
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for pax-selector.
+  - `maxRooms` (number) — Maximum number of rooms selectable.
+  - `maxPerRoom` (number) — Maximum number of guests per room.
+  - `maxChildAge` (number) — Highest age still counted as a child.
+  - `initial` (json) — JSON with the initial occupancy selection.
+
+### `<synergos-product-card>` — elementShopProductCard
+
+- **tag**: `<synergos-product-card>`
+- **alias CMS**: `elementShopProductCard`
+- **tier**: composition
+- **frameworks**: angular
+- **shape rich** (`ProductCardElementConfig` — manual canónico):
+  - `productSku`: string
+  - `productUrlTemplate`: string
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Product card configuration from CMS contract bridge.
+  - `productSku` (string) — Product SKU resolved from CMS.
+  - `productUrlTemplate` (string) — Product detail URL template with placeholders ({id}, {sku}, {slug}).
+  - `name` (string) — Editorial product name override.
+  - `imageSrc` (string) — Editorial product image override.
+  - `imageAlt` (string) — Editorial image alt override.
+  - `showPrice` (boolean) — Whether the price section is rendered.
+  - `showBadge` (boolean) — Whether the product badge is rendered.
+  - `layout` (string) — Card layout mode (vertical | horizontal).
+  - `cardLayout` (string) — CMS compatibility alias for card layout (standard | vertical | horizontal).
+  - `theme` (string) — Color theme key.
+  - `variant` (string) — Visual variant key.
+  - `variantKey` (string) — CMS compatibility alias for the visual variant key.
 
 ### `<synergos-range-slider>` — elementSynRangeSlider
 
@@ -1256,12 +1267,12 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `label` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `minValue` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `maxValue` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `step` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `initialValue` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `label` (string) — Texto visible del elemento (botón, input, badge, etc.)
+  - `minValue` (string) — Campo "Min Value" del componente synergos-range-slider. Editor: editar manualmente para enriquecer documentación.
+  - `maxValue` (string) — Campo "Max Value" del componente synergos-range-slider. Editor: editar manualmente para enriquecer documentación.
+  - `step` (string) — Campo "Step" del componente synergos-range-slider. Editor: editar manualmente para enriquecer documentación.
+  - `initialValue` (string) — Campo "Initial Value" del componente synergos-range-slider. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-rating-stars>` — elementSynRatingStars
 
@@ -1275,9 +1286,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `valueNow` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `maxStars` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `valueNow` (string) — Campo "Value Now" del componente synergos-rating-stars. Editor: editar manualmente para enriquecer documentación.
+  - `maxStars` (string) — Campo "Max Stars" del componente synergos-rating-stars. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-rich-tooltip>` — elementSynRichTooltip
 
@@ -1292,10 +1303,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `triggerText` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `tooltipContent` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `placement` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `triggerText` (string) — Campo "Trigger Text" del componente synergos-rich-tooltip. Editor: editar manualmente para enriquecer documentación.
+  - `tooltipContent` (string) — Campo "Tooltip Content" del componente synergos-rich-tooltip. Editor: editar manualmente para enriquecer documentación.
+  - `placement` (string) — Campo "Placement" del componente synergos-rich-tooltip. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-search-box>` — elementSynSearchBox
 
@@ -1310,10 +1321,34 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `searchPlaceholder` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `searchEndpoint` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `searchParamName` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `searchPlaceholder` (string) — Texto guía mostrado cuando el campo está vacío (campo "Search Placeholder" del componente synergos-search-box)
+  - `searchEndpoint` (string) — Campo "Search Endpoint" del componente synergos-search-box. Editor: editar manualmente para enriquecer documentación.
+  - `searchParamName` (string) — Identificador o nombre mostrado (campo "Search Param Name" del componente synergos-search-box)
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
+
+### `<synergos-seat-map>` — elementSynSeatMap
+
+- **tag**: `<synergos-seat-map>`
+- **alias CMS**: `elementSynSeatMap`
+- **tier**: composition
+- **frameworks**: angular
+- **shape schema** (`SynSeatMapSchema` — auto del CMS):
+  - `mapRef`: string
+  - `maxSelectable`: string
+  - `currency`: string
+  - `density`: string
+  - `hidePrices`: string
+  - `hideLegend`: string
+  - `style`: string
+  - `integration`: string
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for seat-map.
+  - `seatmap` (json) — JSON describing the seat layout: rows, seats and their state. Optional per row: serviceClass (cabin section — first/business/premium/economy, or any provider vocabulary). Optional per seat: features[] (extra-legroom, exit-row, bulkhead, recline-limited, or any provider vocabulary). `type` carries the POSITION (window/aisle/middle); the legacy value extra-legroom is still accepted and folded into features. aisleAfterColumns marks where the aisles go, by 1-based column index: an array ([3, 6] for a 3-3-3 widebody) or a single number for a one-aisle cabin. Omitted, the widest row is split in half. A row may override it with its own rows[].aisleAfterColumns when its section has a different layout (business 1-2-1 over economy 3-3-3); an empty array there means that row has no aisle at all, which is not the same as omitting the key.
+  - `currency` (string) — ISO 4217 currency code used to format amounts.
+  - `maxSelectable` (number) — Maximum number of seats selectable at once.
+  - `density` (string) — How much room the map takes: comfortable | compact. compact shrinks the seat, the gaps and the aisle without removing anything; a 44-row cabin does not fit on a phone. Anything else falls back to comfortable.
+  - `showPrices` (boolean) — Whether the per-seat surcharge label is drawn. Turn it off where the price does not distinguish seats — the total stays in the summary and the price stays in each seat's aria-label.
+  - `showLegend` (boolean) — Whether the legend is drawn. The legend already derives from the payload (a map with no features explains none), so this is for maps embedded where the visitor has already seen the conventions.
 
 ### `<synergos-select-multi>` — elementSynSelectMulti
 
@@ -1328,10 +1363,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `label` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `optionsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `maxSelections` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `label` (string) — Texto visible del elemento (botón, input, badge, etc.)
+  - `optionsJson` (string) — Campo "Options Json" del componente synergos-select-multi. Editor: editar manualmente para enriquecer documentación.
+  - `maxSelections` (string) — Campo "Max Selections" del componente synergos-select-multi. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-share-bar>` — elementSynShareBar
 
@@ -1346,10 +1381,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `platforms` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `shareLink` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `shareTitle` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `platforms` (string) — Campo "Platforms" del componente synergos-share-bar. Editor: editar manualmente para enriquecer documentación.
+  - `shareLink` (string) — Campo "Share Link" del componente synergos-share-bar. Editor: editar manualmente para enriquecer documentación.
+  - `shareTitle` (string) — Título mostrado destacado (campo "Share Title" del componente synergos-share-bar)
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-signature-pad>` — elementSynSignaturePad
 
@@ -1364,10 +1399,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `label` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `width` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `height` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `label` (string) — Texto visible del elemento (botón, input, badge, etc.)
+  - `width` (string) — Ancho explícito (CSS value: px / % / fr / auto)
+  - `height` (string) — Alto explícito (CSS value)
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-social-proof>` — elementSynSocialProof
 
@@ -1382,10 +1417,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `template` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `dataSource` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `rotationInterval` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `template` (string) — Campo "Template" del componente synergos-social-proof. Editor: editar manualmente para enriquecer documentación.
+  - `dataSource` (string) — Campo "Data Source" del componente synergos-social-proof. Editor: editar manualmente para enriquecer documentación.
+  - `rotationInterval` (string) — Campo "Rotation Interval" del componente synergos-social-proof. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-social-share>` — elementCorpSocialShare
 
@@ -1419,10 +1454,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `leftContent` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `rightContent` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `orientation` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `leftContent` (string) — Campo "Left Content" del componente synergos-splitter. Editor: editar manualmente para enriquecer documentación.
+  - `rightContent` (string) — Campo "Right Content" del componente synergos-splitter. Editor: editar manualmente para enriquecer documentación.
+  - `orientation` (string) — Campo "Orientation" del componente synergos-splitter. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-stepper>` — elementSynStepper
 
@@ -1436,9 +1471,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `stepsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `currentStep` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `stepsJson` (string) — Campo "Steps Json" del componente synergos-stepper. Editor: editar manualmente para enriquecer documentación.
+  - `currentStep` (string) — Campo "Current Step" del componente synergos-stepper. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-tabs>` — elementSynTabs
 
@@ -1452,9 +1487,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `tabsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `initialTab` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `tabsJson` (string) — Campo "Tabs Json" del componente synergos-tabs. Editor: editar manualmente para enriquecer documentación.
+  - `initialTab` (string) — Campo "Initial Tab" del componente synergos-tabs. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-testimonial-item>` — elementInfoTestimonialItem
 
@@ -1491,9 +1526,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `eventsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `snapEnabled` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `eventsJson` (string) — Campo "Events Json" del componente synergos-timeline-horizontal. Editor: editar manualmente para enriquecer documentación.
+  - `snapEnabled` (string) — Campo "Snap Enabled" del componente synergos-timeline-horizontal. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-timeline-item>` — elementInfoTimelineItem
 
@@ -1546,29 +1581,51 @@ shape que el bundle espera (rich si existe, schema si no).
   - `variantKey` (string) — CMS compatibility alias for the visual variant key.
 
 
-## Modules (48)
+## Modules (53)
 
 **Modules** — features ricas con state propio + posiblemente fetch (carousel, hero, comments-widget, etc.). Self-contained but heavier.
 
-### `<synergos-angular-host>` — elementIntAngularHost
+### `<synergos-academy>` — elementSynAcademy
 
-- **tag**: `<synergos-angular-host>`
-- **alias CMS**: `elementIntAngularHost`
+- **tag**: `<synergos-academy>`
+- **alias CMS**: `elementSynAcademy`
 - **tier**: module
 - **frameworks**: angular
-- **shape rich** (`AngularHostElementConfig` — manual canónico):
-  - `component`: string
-  - `endpoint`: string
-  - `params`: Record<string, string>
+- **shape schema** (`SynAcademySchema` — auto del CMS):
+  - `heading`: string
+  - `subheading`: string
+  - `apiBase`: string
+  - `config`: string
+  - `content`: string
+  - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `config` (json) — Base element configuration object for the Angular host.
-  - `component` (string) — Catalog alias or custom element tag to mount. Preferred over tagName.
-  - `endpoint` (string) — Optional API endpoint injected into the hosted element props.
-  - `params` (json) — JSON object of lightweight params merged into hosted element props.
-  - `scriptSrc` (string) — Optional script URL to load before mounting the hosted element.
-  - `tagName` (string) — Legacy explicit custom element tag to render.
-  - `props` (json) — JSON object mapped to attributes on the hosted element.
-  - `textContent` (string) — Optional text content for the hosted element.
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for academy.
+  - `apiBase` (string) — Base URL of the backing API. Defaults to the module route when unset.
+  - `currency` (string) — ISO 4217 currency code used to format amounts.
+  - `scope` (string) — Content scope (siteRoot) the module reads from.
+  - `role` (string) — Viewer role; drives which actions and sections are offered.
+
+### `<synergos-app-launcher>` — elementSynAppLauncher
+
+- **tag**: `<synergos-app-launcher>`
+- **alias CMS**: `elementSynAppLauncher`
+- **tier**: module
+- **frameworks**: angular
+- **shape schema** (`SynAppLauncherSchema` — auto del CMS):
+  - `heading`: string
+  - `subheading`: string
+  - `apps`: string
+  - `content`: string
+  - `integration`: string
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for app-launcher.
+  - `title` (string) — Main heading rendered above the module.
+  - `searchLabel` (string) — Accessible label of the search field.
+  - `searchPlaceholder` (string) — Placeholder text of the search field.
+  - `ctaLabel` (string) — Label of the primary call to action.
+  - `emptyLabel` (string) — Message shown when there is nothing to list.
+  - `allFiltersLabel` (string) — Label of the option that clears every filter.
+  - `apps` (json) — JSON array of apps to list: {id, name, tagline, status, url, icon}.
 
 ### `<synergos-audio-player>` — elementSynAudioPlayer
 
@@ -1583,10 +1640,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `audioFile` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `trackTitle` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `artistName` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `audioFile` (string) — Campo "Audio File" del componente synergos-audio-player. Editor: editar manualmente para enriquecer documentación.
+  - `trackTitle` (string) — Título mostrado destacado (campo "Track Title" del componente synergos-audio-player)
+  - `artistName` (string) — Identificador o nombre mostrado (campo "Artist Name" del componente synergos-audio-player)
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-banner>` — elementCompCtaBanner
 
@@ -1652,6 +1709,46 @@ shape que el bundle espera (rich si existe, schema si no).
   - `variant` (string) — Presentation variant key.
   - `theme` (string) — Color theme key.
 
+### `<synergos-blogs>` — elementSynBlogs
+
+- **tag**: `<synergos-blogs>`
+- **alias CMS**: `elementSynBlogs`
+- **tier**: module
+- **frameworks**: angular
+- **shape schema** (`SynBlogsSchema` — auto del CMS):
+  - `heading`: string
+  - `subheading`: string
+  - `apiBase`: string
+  - `config`: string
+  - `content`: string
+  - `integration`: string
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for blogs.
+  - `apiBase` (string) — Base URL of the backing API. Defaults to the module route when unset.
+  - `scope` (string) — Content scope (siteRoot) the module reads from.
+  - `user` (string) — Author identifier whose posts are listed.
+  - `viewerHandle` (string) — Handle of the signed-in reader, used for their own actions.
+  - `viewerName` (string) — Display name of the signed-in reader.
+  - `view` (string) — Initial view to render.
+
+### `<synergos-booking-wizard>` — elementSynBookingWizard
+
+- **tag**: `<synergos-booking-wizard>`
+- **alias CMS**: `elementSynBookingWizard`
+- **tier**: module
+- **frameworks**: angular
+- **shape schema** (`SynBookingWizardSchema` — auto del CMS):
+  - `apiBase`: string
+  - `destinationLabel`: string
+  - `currency`: string
+  - `integration`: string
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for booking-wizard.
+  - `apiBase` (string) — Base URL of the backing API. Defaults to the module route when unset.
+  - `currency` (string) — ISO 4217 currency code used to format amounts.
+  - `destinationLabel` (string) — Label of the destination field.
+  - `sessionKey` (string) — Key used to persist wizard progress across reloads.
+
 ### `<synergos-calendar>` — elementSynCalendar
 
 - **tag**: `<synergos-calendar>`
@@ -1664,9 +1761,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `eventsEndpoint` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `initialMonth` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `eventsEndpoint` (string) — Campo "Events Endpoint" del componente synergos-calendar. Editor: editar manualmente para enriquecer documentación.
+  - `initialMonth` (string) — Campo "Initial Month" del componente synergos-calendar. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-carousel>` — elementSynCarousel
 
@@ -1680,9 +1777,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `slidesJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `autoplayInterval` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `slidesJson` (string) — Campo "Slides Json" del componente synergos-carousel. Editor: editar manualmente para enriquecer documentación.
+  - `autoplayInterval` (string) — Campo "Autoplay Interval" del componente synergos-carousel. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-cart-summary>` — elementShopCartSummary
 
@@ -1731,10 +1828,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `chartTitle` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `dataJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `orientation` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `chartTitle` (string) — Título mostrado destacado (campo "Chart Title" del componente synergos-chart-bar)
+  - `dataJson` (string) — Campo "Data Json" del componente synergos-chart-bar. Editor: editar manualmente para enriquecer documentación.
+  - `orientation` (string) — Campo "Orientation" del componente synergos-chart-bar. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-comments-widget>` — elementSynCommentsWidget
 
@@ -1749,10 +1846,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `provider` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `threadId` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `configNote` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `provider` (string) — Campo "Provider" del componente synergos-comments-widget. Editor: editar manualmente para enriquecer documentación.
+  - `threadId` (string) — Campo "Thread Id" del componente synergos-comments-widget. Editor: editar manualmente para enriquecer documentación.
+  - `configNote` (string) — Campo "Config Note" del componente synergos-comments-widget. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-cookie-consent>` — elementSynCookieConsent
 
@@ -1769,17 +1866,17 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `bannerText` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `acceptLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `rejectLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `settingsLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `policyLink` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `bannerText` (string) — Campo "Banner Text" del componente synergos-cookie-consent. Editor: editar manualmente para enriquecer documentación.
+  - `acceptLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Accept Label" del componente synergos-cookie-consent)
+  - `rejectLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Reject Label" del componente synergos-cookie-consent)
+  - `settingsLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Settings Label" del componente synergos-cookie-consent)
+  - `policyLink` (string) — Campo "Policy Link" del componente synergos-cookie-consent. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
-### `<synergos-countdown-clock>` — experienceCountdownClock
+### `<synergos-countdown-clock>` — elementSynCountdownClock
 
 - **tag**: `<synergos-countdown-clock>`
-- **alias CMS**: `experienceCountdownClock`
+- **alias CMS**: `elementSynCountdownClock`
 - **tier**: module
 - **frameworks**: angular
 - **shape rich** (`CountdownClockElementConfig` — manual canónico):
@@ -1811,10 +1908,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `endDateTime` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `showLabels` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `style` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `endDateTime` (string) — Campo "End Date Time" del componente synergos-countdown-digital. Editor: editar manualmente para enriquecer documentación.
+  - `showLabels` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Show Labels" del componente synergos-countdown-digital)
+  - `style` (string) — Campo "Style" del componente synergos-countdown-digital. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-data-grid>` — elementSynDataGrid
 
@@ -1829,10 +1926,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `dataSource` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `columnsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `pageSize` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `dataSource` (string) — Campo "Data Source" del componente synergos-data-grid. Editor: editar manualmente para enriquecer documentación.
+  - `columnsJson` (string) — Campo "Columns Json" del componente synergos-data-grid. Editor: editar manualmente para enriquecer documentación.
+  - `pageSize` (string) — Tamaño: sm | md | lg | xl según escala del componente (campo "Page Size" del componente synergos-data-grid)
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-data-table>` — elementCorpDataTable
 
@@ -1877,10 +1974,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `triggerLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `drawerContent` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `side` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `triggerLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Trigger Label" del componente synergos-drawer)
+  - `drawerContent` (string) — Campo "Drawer Content" del componente synergos-drawer. Editor: editar manualmente para enriquecer documentación.
+  - `side` (string) — Campo "Side" del componente synergos-drawer. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-dropzone>` — elementSynDropzone
 
@@ -1895,15 +1992,60 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `label` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `acceptedTypes` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `uploadEndpoint` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `label` (string) — Texto visible del elemento (botón, input, badge, etc.)
+  - `acceptedTypes` (string) — Campo "Accepted Types" del componente synergos-dropzone. Editor: editar manualmente para enriquecer documentación.
+  - `uploadEndpoint` (string) — Campo "Upload Endpoint" del componente synergos-dropzone. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
-### `<synergos-faq-section>` — elementCompFaqList
+### `<synergos-ehr>` — elementSynEhr
+
+- **tag**: `<synergos-ehr>`
+- **alias CMS**: `elementSynEhr`
+- **tier**: module
+- **frameworks**: angular
+- **shape schema** (`SynEhrSchema` — auto del CMS):
+  - `heading`: string
+  - `subheading`: string
+  - `apiBase`: string
+  - `config`: string
+  - `content`: string
+  - `integration`: string
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for ehr.
+  - `apiBase` (string) — Base URL of the backing API. Defaults to the module route when unset.
+  - `clinic` (string) — Clinic identifier the records belong to.
+  - `scope` (string) — Content scope (siteRoot) the module reads from.
+  - `role` (string) — Viewer role; drives which actions and sections are offered.
+  - `patient` (string) — Patient identifier to open on load.
+  - `copayMinor` (number) — Copay amount in minor units (cents).
+
+### `<synergos-eventos>` — elementSynEventos
+
+- **tag**: `<synergos-eventos>`
+- **alias CMS**: `elementSynEventos`
+- **tier**: module
+- **frameworks**: angular
+- **shape schema** (`SynEventosSchema` — auto del CMS):
+  - `heading`: string
+  - `subheading`: string
+  - `apiBase`: string
+  - `role`: string
+  - `config`: string
+  - `content`: string
+  - `integration`: string
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for eventos.
+  - `apiBase` (string) — Base URL of the backing API. Defaults to the module route when unset.
+  - `currency` (string) — ISO 4217 currency code used to format amounts.
+  - `scope` (string) — Content scope (siteRoot) the module reads from.
+  - `role` (json) — Viewer role; drives which actions and sections are offered.
+  - `eventId` (string) — Event identifier to open on load.
+  - `feePercent` (number) — Service fee applied to the ticket price, as a percentage.
+
+### `<synergos-faq-section>` — elementSynFaqSection
 
 - **tag**: `<synergos-faq-section>`
-- **alias CMS**: `elementCompFaqList`
+- **alias CMS**: `elementSynFaqSection`
 - **tier**: module
 - **frameworks**: angular
 - **shape rich** (`FaqSectionElementConfig` — manual canónico):
@@ -1911,16 +2053,21 @@ shape que el bundle espera (rich si existe, schema si no).
   - `theme`: string
   - `items`: ReadonlyArray<FaqSectionItemConfig>
   - `translations`: ComponentTranslations
+- **shape schema** (`SynFaqSectionSchema` — auto del CMS):
+  - `headingText`: string
+  - `itemsJson`: string
+  - `theme`: string
+  - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
   - `headingText` (string) — Section heading text
   - `items` (json) — JSON array of FAQ items with question, answer and optional initiallyExpanded
   - `theme` (string) — Color theme (light | dark)
 
-### `<synergos-feature-grid>` — elementCompFeatureGrid
+### `<synergos-feature-grid>` — elementSynFeatureGrid
 
 - **tag**: `<synergos-feature-grid>`
-- **alias CMS**: `elementCompFeatureGrid`
+- **alias CMS**: `elementSynFeatureGrid`
 - **tier**: module
 - **frameworks**: angular
 - **shape rich** (`FeatureGridElementConfig` — manual canónico):
@@ -1931,6 +2078,12 @@ shape que el bundle espera (rich si existe, schema si no).
   - `theme`: string
   - `items`: ReadonlyArray<FeatureGridItemConfig>
   - `translations`: ComponentTranslations
+- **shape schema** (`SynFeatureGridSchema` — auto del CMS):
+  - `headingText`: string
+  - `itemsJson`: string
+  - `columns`: string
+  - `theme`: string
+  - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
   - `headingText` (string) — Section heading text
@@ -1974,12 +2127,32 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `uploadEndpoint` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `acceptedTypes` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `maxFileSizeMb` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `maxFiles` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `label` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `uploadEndpoint` (string) — Campo "Upload Endpoint" del componente synergos-file-uploader. Editor: editar manualmente para enriquecer documentación.
+  - `acceptedTypes` (string) — Campo "Accepted Types" del componente synergos-file-uploader. Editor: editar manualmente para enriquecer documentación.
+  - `maxFileSizeMb` (string) — Tamaño: sm | md | lg | xl según escala del componente (campo "Max File Size Mb" del componente synergos-file-uploader)
+  - `maxFiles` (string) — Campo "Max Files" del componente synergos-file-uploader. Editor: editar manualmente para enriquecer documentación.
+  - `label` (string) — Texto visible del elemento (botón, input, badge, etc.)
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
+
+### `<synergos-gov>` — elementSynGov
+
+- **tag**: `<synergos-gov>`
+- **alias CMS**: `elementSynGov`
+- **tier**: module
+- **frameworks**: angular
+- **shape schema** (`SynGovSchema` — auto del CMS):
+  - `heading`: string
+  - `subheading`: string
+  - `apiBase`: string
+  - `config`: string
+  - `content`: string
+  - `integration`: string
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for gov.
+  - `apiBase` (string) — Base URL of the backing API. Defaults to the module route when unset.
+  - `role` (string) — Viewer role; drives which actions and sections are offered.
+  - `agency` (string) — Agency identifier the procedures belong to.
+  - `scope` (string) — Content scope (siteRoot) the module reads from.
 
 ### `<synergos-hero>` — elementCompHero
 
@@ -2028,12 +2201,12 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `title` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `subtitle` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `media` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `ctaLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `ctaLink` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `title` (string) — Título mostrado destacado
+  - `subtitle` (string) — Texto secundario debajo del título
+  - `media` (string) — Campo "Media" del componente synergos-hero-banner. Editor: editar manualmente para enriquecer documentación.
+  - `ctaLabel` (string) — Texto del call-to-action (botón)
+  - `ctaLink` (string) — Campo "Cta Link" del componente synergos-hero-banner. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-insight-explorer>` — experienceInsightExplorer
 
@@ -2071,12 +2244,12 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `kpiLabel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `kpiValue` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `kpiTrend` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `kpiDelta` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `kpiPeriod` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `kpiLabel` (string) — Texto visible del elemento (botón, input, badge, etc.) (campo "Kpi Label" del componente synergos-kpi-card)
+  - `kpiValue` (string) — Campo "Kpi Value" del componente synergos-kpi-card. Editor: editar manualmente para enriquecer documentación.
+  - `kpiTrend` (string) — Campo "Kpi Trend" del componente synergos-kpi-card. Editor: editar manualmente para enriquecer documentación.
+  - `kpiDelta` (string) — Campo "Kpi Delta" del componente synergos-kpi-card. Editor: editar manualmente para enriquecer documentación.
+  - `kpiPeriod` (string) — Campo "Kpi Period" del componente synergos-kpi-card. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-lightbox-gallery>` — elementSynLightboxGallery
 
@@ -2090,9 +2263,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `imagesJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `columns` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `imagesJson` (string) — Campo "Images Json" del componente synergos-lightbox-gallery. Editor: editar manualmente para enriquecer documentación.
+  - `columns` (string) — Campo "Columns" del componente synergos-lightbox-gallery. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-livestream>` — elementSynLivestream
 
@@ -2107,48 +2280,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `streamUrl` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `streamType` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `viewerCountEndpoint` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-
-### `<synergos-logo-cloud>` — elementCompLogoCloud
-
-- **tag**: `<synergos-logo-cloud>`
-- **alias CMS**: `elementCompLogoCloud`
-- **tier**: module
-- **frameworks**: angular
-- **shape rich** (`LogoCloudElementConfig` — manual canónico):
-  - `headingText`: string
-  - `body`: string
-  - `columns`: number
-  - `variant`: string
-  - `tone`: string
-  - `theme`: string
-  - `items`: ReadonlyArray<LogoCloudItemConfig>
-  - `translations`: ComponentTranslations
-- **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `config` (json) — Base element configuration object for the logo cloud.
-  - `headingText` (string) — Section heading text.
-  - `body` (string) — Supporting introductory copy.
-  - `items` (json) — JSON array of logo items with src, alt, href and label.
-  - `columns` (number) — Preferred number of columns.
-  - `variant` (string) — Presentation variant key.
-  - `theme` (string) — Color theme key.
-
-### `<synergos-macro-host>` — elementIntegrationMacroHost
-
-- **tag**: `<synergos-macro-host>`
-- **alias CMS**: `elementIntegrationMacroHost`
-- **tier**: module
-- **frameworks**: angular
-- **shape rich** (`MacroHostElementConfig` — manual canónico):
-  - `contentType`: string
-  - `contentData`: Record<string, unknown>
-- **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `contentType` (string) — Nested element alias to mount inside the macro host
-  - `contentData` (json) — Nested element payload passed to the block mapper
+  - `streamUrl` (string) — Campo "Stream Url" del componente synergos-livestream. Editor: editar manualmente para enriquecer documentación.
+  - `streamType` (string) — Campo "Stream Type" del componente synergos-livestream. Editor: editar manualmente para enriquecer documentación.
+  - `viewerCountEndpoint` (string) — Campo "Viewer Count Endpoint" del componente synergos-livestream. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-map-pin>` — elementSynMapPin
 
@@ -2164,11 +2299,11 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `centerLat` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `centerLng` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `zoomLevel` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `pinsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `centerLat` (string) — Campo "Center Lat" del componente synergos-map-pin. Editor: editar manualmente para enriquecer documentación.
+  - `centerLng` (string) — Campo "Center Lng" del componente synergos-map-pin. Editor: editar manualmente para enriquecer documentación.
+  - `zoomLevel` (string) — Campo "Zoom Level" del componente synergos-map-pin. Editor: editar manualmente para enriquecer documentación.
+  - `pinsJson` (string) — Campo "Pins Json" del componente synergos-map-pin. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-media-explorer>` — experienceMediaExplorer
 
@@ -2193,28 +2328,6 @@ shape que el bundle espera (rich si existe, schema si no).
   - `defaultCategory` (string) — Initial category filter.
   - `items` (json) — JSON array of media items.
 
-### `<synergos-mf-host>` — elementIntMfHost
-
-- **tag**: `<synergos-mf-host>`
-- **alias CMS**: `elementIntMfHost`
-- **tier**: module
-- **frameworks**: angular
-- **shape rich** (`MfHostElementConfig` — manual canónico):
-  - `exposedModule`: string
-  - `endpoint`: string
-  - `remoteEntry`: string
-  - `params`: Record<string, string>
-- **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `config` (json) — Base element configuration object for the remote host.
-  - `component` (string) — Remote exposed module name, catalog alias or custom element tag to mount.
-  - `endpoint` (string) — Optional API endpoint injected into the hosted remote element props.
-  - `params` (json) — JSON object of lightweight params merged into hosted remote element props.
-  - `scriptSrc` (string) — Preferred script URL to load before mounting.
-  - `remoteEntry` (string) — Legacy remote entry script URL to load before mounting.
-  - `exposedModule` (string) — Legacy exposed module name used as hosted component name.
-  - `tagName` (string) — Legacy explicit custom element tag exposed by the remote bundle.
-  - `props` (json) — JSON object mapped to attributes on the hosted remote element.
-
 ### `<synergos-notification-center>` — elementSynNotificationCenter
 
 - **tag**: `<synergos-notification-center>`
@@ -2227,9 +2340,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `fetchEndpoint` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `pollingInterval` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `fetchEndpoint` (string) — Campo "Fetch Endpoint" del componente synergos-notification-center. Editor: editar manualmente para enriquecer documentación.
+  - `pollingInterval` (string) — Campo "Polling Interval" del componente synergos-notification-center. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-notification-toast>` — elementSynNotificationToast
 
@@ -2244,10 +2357,10 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `message` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `type` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `durationMs` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `message` (string) — Campo "Message" del componente synergos-notification-toast. Editor: editar manualmente para enriquecer documentación.
+  - `type` (string) — Campo "Type" del componente synergos-notification-toast. Editor: editar manualmente para enriquecer documentación.
+  - `durationMs` (string) — Campo "Duration Ms" del componente synergos-notification-toast. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-oembed>` — elementSynOEmbed
 
@@ -2257,8 +2370,8 @@ shape que el bundle espera (rich si existe, schema si no).
 - **frameworks**: angular
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `embedUrl` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `embedUrl` (string) — Campo "Embed Url" del componente synergos-oembed. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-poll>` — elementSynPoll
 
@@ -2274,11 +2387,11 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `question` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `optionsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `voteEndpoint` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `resultsEndpoint` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `question` (string) — Campo "Question" del componente synergos-poll. Editor: editar manualmente para enriquecer documentación.
+  - `optionsJson` (string) — Campo "Options Json" del componente synergos-poll. Editor: editar manualmente para enriquecer documentación.
+  - `voteEndpoint` (string) — Campo "Vote Endpoint" del componente synergos-poll. Editor: editar manualmente para enriquecer documentación.
+  - `resultsEndpoint` (string) — Campo "Results Endpoint" del componente synergos-poll. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-product-detail>` — elementShopProductDetail
 
@@ -2351,63 +2464,72 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `quote` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `attribution` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `animationMode` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `quote` (string) — Campo "Quote" del componente synergos-quote-animated. Editor: editar manualmente para enriquecer documentación.
+  - `attribution` (string) — Campo "Attribution" del componente synergos-quote-animated. Editor: editar manualmente para enriquecer documentación.
+  - `animationMode` (string) — Campo "Animation Mode" del componente synergos-quote-animated. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
-### `<synergos-script-embed>` — elementIntScriptEmbed
+### `<synergos-realty>` — elementSynRealty
 
-- **tag**: `<synergos-script-embed>`
-- **alias CMS**: `elementIntScriptEmbed`
+- **tag**: `<synergos-realty>`
+- **alias CMS**: `elementSynRealty`
 - **tier**: module
 - **frameworks**: angular
-- **shape rich** (`ScriptEmbedElementConfig` — manual canónico):
-  - `scriptType`: string
+- **shape schema** (`SynRealtySchema` — auto del CMS):
+  - `heading`: string
+  - `subheading`: string
+  - `apiBase`: string
+  - `config`: string
   - `content`: string
-  - `translations`: ComponentTranslations
+  - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `config` (json) — Base element configuration object for the script embed.
-  - `src` (string) — External script source URL.
-  - `type` (string) — Script MIME type.
-  - `inlineScript` (string) — Inline script body to inject.
-  - `target` (string) — Document target for script injection (head | body).
-  - `async` (boolean) — Sets the async script attribute.
-  - `defer` (boolean) — Sets the defer script attribute.
-  - `scriptType` (string) — Canonical CMS script type.
-  - `content` (string) — Canonical CMS script payload or external URL.
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for realty.
+  - `apiBase` (string) — Base URL of the backing API. Defaults to the module route when unset.
+  - `currency` (string) — ISO 4217 currency code used to format amounts.
+  - `scope` (string) — Content scope (siteRoot) the module reads from.
+  - `role` (string) — Viewer role; drives which actions and sections are offered.
+  - `operation` (string) — Listing operation to show: sale or rent.
+  - `layout` (string) — Layout variant used to present the listings.
+  - `defaultRate` (number) — Interest rate prefilled in the mortgage estimator.
 
-### `<synergos-section>` — elementStructSection
+### `<synergos-seller>` — elementSynSeller
 
-- **tag**: `<synergos-section>`
-- **alias CMS**: `elementStructSection`
+- **tag**: `<synergos-seller>`
+- **alias CMS**: `elementSynSeller`
 - **tier**: module
 - **frameworks**: angular
-- **shape rich** (`SectionElementConfig` — manual canónico):
-  - `headingText`: string
-  - `headingLevel`: string
-  - `containerType`: string
-  - `alignment`: string
-  - `direction`: string
-  - `margin`: string
-  - `padding`: string
-  - `gap`: string
-  - `variant`: string
-  - `tone`: string
-  - `theme`: string
-  - `translations`: ComponentTranslations
+- **shape schema** (`SynSellerSchema` — auto del CMS):
+  - `heading`: string
+  - `subheading`: string
+  - `apiBase`: string
+  - `config`: string
+  - `content`: string
+  - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
-  - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `headingText` (string) — Section heading text
-  - `headingLevel` (string) — HTML heading tag: h1-h6
-  - `containerType` (string) — Section width container mode
-  - `alignment` (string) — Cross-axis alignment for the inner layout
-  - `direction` (string) — Flex direction for the inner layout
-  - `margin` (string) — Optional CSS margin shorthand
-  - `padding` (string) — Optional CSS padding shorthand
-  - `gap` (string) — Gap between section children
-  - `variant` (string) — Layout variant key
-  - `theme` (string) — Color theme (light | dark)
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for seller.
+  - `apiBase` (string) — Base URL of the backing API. Defaults to the module route when unset.
+  - `sellerName` (string) — Seller display name shown in the console header.
+  - `heading` (string) — Main heading rendered above the module.
+  - `currency` (string) — ISO 4217 currency code used to format amounts.
+
+### `<synergos-storefront>` — elementSynStorefront
+
+- **tag**: `<synergos-storefront>`
+- **alias CMS**: `elementSynStorefront`
+- **tier**: module
+- **frameworks**: angular
+- **shape schema** (`SynStorefrontSchema` — auto del CMS):
+  - `heading`: string
+  - `subheading`: string
+  - `apiBase`: string
+  - `config`: string
+  - `content`: string
+  - `integration`: string
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for storefront.
+  - `apiBase` (string) — Base URL of the backing API. Defaults to the module route when unset.
+  - `currency` (string) — ISO 4217 currency code used to format amounts.
+  - `scope` (string) — Content scope (siteRoot) the module reads from.
 
 ### `<synergos-tab-group>` — elementCorpTabGroup
 
@@ -2445,14 +2567,14 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `testimonialsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `autoplayInterval` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `testimonialsJson` (string) — Campo "Testimonials Json" del componente synergos-testimonial-carousel. Editor: editar manualmente para enriquecer documentación.
+  - `autoplayInterval` (string) — Campo "Autoplay Interval" del componente synergos-testimonial-carousel. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
-### `<synergos-testimonial-section>` — elementCompTestimonialList
+### `<synergos-testimonial-section>` — elementSynTestimonialSection
 
 - **tag**: `<synergos-testimonial-section>`
-- **alias CMS**: `elementCompTestimonialList`
+- **alias CMS**: `elementSynTestimonialSection`
 - **tier**: module
 - **frameworks**: angular
 - **shape rich** (`TestimonialSectionElementConfig` — manual canónico):
@@ -2460,6 +2582,11 @@ shape que el bundle espera (rich si existe, schema si no).
   - `theme`: string
   - `items`: ReadonlyArray<TestimonialSectionItemConfig>
   - `translations`: ComponentTranslations
+- **shape schema** (`SynTestimonialSectionSchema` — auto del CMS):
+  - `headingText`: string
+  - `itemsJson`: string
+  - `theme`: string
+  - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
   - `headingText` (string) — Section heading text
@@ -2478,9 +2605,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `eventsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `orientation` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `eventsJson` (string) — Campo "Events Json" del componente synergos-timeline. Editor: editar manualmente para enriquecer documentación.
+  - `orientation` (string) — Campo "Orientation" del componente synergos-timeline. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-toast-center>` — elementSynToastCenter
 
@@ -2494,9 +2621,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `position` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `maxVisible` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `position` (string) — Campo "Position" del componente synergos-toast-center. Editor: editar manualmente para enriquecer documentación.
+  - `maxVisible` (string) — Campo "Max Visible" del componente synergos-toast-center. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-tour-guide>` — elementSynTourGuide
 
@@ -2510,9 +2637,29 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `stepsJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `autoStart` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `stepsJson` (string) — Campo "Steps Json" del componente synergos-tour-guide. Editor: editar manualmente para enriquecer documentación.
+  - `autoStart` (string) — Campo "Auto Start" del componente synergos-tour-guide. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
+
+### `<synergos-travel-shell>` — elementSynTravelShell
+
+- **tag**: `<synergos-travel-shell>`
+- **alias CMS**: `elementSynTravelShell`
+- **tier**: module
+- **frameworks**: angular
+- **shape schema** (`SynTravelShellSchema` — auto del CMS):
+  - `heading`: string
+  - `subheading`: string
+  - `apiBase`: string
+  - `config`: string
+  - `content`: string
+  - `integration`: string
+- **inputs públicos** (HTML attributes, kebab-case en DOM):
+  - `config` (json) — Runtime configuration object; merged over the individual attributes for travel-shell.
+  - `apiBase` (string) — Base URL of the backing API. Defaults to the module route when unset.
+  - `currency` (string) — ISO 4217 currency code used to format amounts.
+  - `scope` (string) — Content scope (siteRoot) the module reads from.
+  - `traveler` (string) — Traveller identifier whose bookings are listed.
 
 ### `<synergos-tree-view>` — elementSynTreeView
 
@@ -2526,9 +2673,9 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `treeJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `expandAll` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `treeJson` (string) — Campo "Tree Json" del componente synergos-tree-view. Editor: editar manualmente para enriquecer documentación.
+  - `expandAll` (string) — Campo "Expand All" del componente synergos-tree-view. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 ### `<synergos-video-player>` — elementSynVideoPlayer
 
@@ -2544,11 +2691,11 @@ shape que el bundle espera (rich si existe, schema si no).
   - `integration`: string
 - **inputs públicos** (HTML attributes, kebab-case en DOM):
   - `config` (json) — Base element configuration object. Prefer this payload for structural content; direct inputs act as state or override props.
-  - `videoFile` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `posterImage` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `chaptersJson` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `enableAnalytics` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
-  - `integration` (string) — Auto-generated from CMS schema. Edit description manually for editor docs.
+  - `videoFile` (string) — Campo "Video File" del componente synergos-video-player. Editor: editar manualmente para enriquecer documentación.
+  - `posterImage` (string) — Campo "Poster Image" del componente synergos-video-player. Editor: editar manualmente para enriquecer documentación.
+  - `chaptersJson` (string) — Campo "Chapters Json" del componente synergos-video-player. Editor: editar manualmente para enriquecer documentación.
+  - `enableAnalytics` (string) — Campo "Enable Analytics" del componente synergos-video-player. Editor: editar manualmente para enriquecer documentación.
+  - `integration` (string) — Hook opcional para integración custom — vacío por default
 
 
 ## Cómo se consume desde el CMS Razor

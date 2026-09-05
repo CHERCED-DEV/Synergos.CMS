@@ -310,8 +310,8 @@ public sealed class FileSystemBundleRegistryClientTests : IDisposable
         //    que se va a emitir. Se ignora.
         // 2. El cálculo de respaldo estaba cableado a `main.js` — habría devuelto el hash de
         //    `main.js` para un elemento que sirve `boot.js`. Mismo defecto que #32, cinco líneas
-        //    más abajo, y con la misma razón para no haberse visto nunca: las 139 entradas del
-        //    CDN son `main.js`.
+        //    más abajo, y con la misma razón para no haberse visto nunca: TODAS las entradas
+        //    del CDN son `main.js`. Lo que importa es «todas», no cuántas (#86).
         //
         // Un SRI equivocado no degrada el elemento: el navegador rechaza el script y no queda
         // nada que hidratar.
