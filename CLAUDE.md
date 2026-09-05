@@ -112,7 +112,7 @@ Synergos.CMS/
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
 ├── Synergos.CMS.Tests/          xUnit — 2699 tests passing (gate liftado ADR 0075)
-│   ├── Architecture/            LOS GATES: segregación (17) + molde (11) + capas (8)
+│   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
 │   ├── Api/                     tests de reglas y servicio por capacidad
