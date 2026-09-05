@@ -824,8 +824,44 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   **`Api.Audit` es la cuarta** (#72), y era la que peor estaba —
   y desde la rebanada 6 es también **la primera a la que el CMS le
   PRESENTA** identidad para escribir, no sólo para leer.
-  **Faltan las otras 16**, y desde la rebanada 4 hay quien les
-  presente identidad cuando la pidan: el CMS ya la emite.
+
+  > **No eran «las otras 16»** (#81), y la nota de más abajo cita esa
+  > misma cifra como ejemplo del error que describe —sin corregirla—. Salía de restar cuatro
+  > a veinte, no de mirar qué guarda cada capacidad: al barrer las veinte,
+  > **trece no guardan actor ninguno** — sus pares `<X>Kind`/`<X>Id`
+  > nombran el **objeto** de la operación (`Target`, `Topic`, `Subject`,
+  > `To`, `For`), no a quien la hizo. Para ésas «poner identidad como
+  > puerta» no es trabajo pendiente: es otra pregunta, **autorizar** en vez
+  > de **atribuir**.
+  >
+  > Quedan **seis**, y tampoco son un grupo. Ninguna está cableada a un
+  > consumidor que **presente identidad** —los emisores del repo son tres,
+  > `HttpCaseWorkflowService` y `HttpGovActNotificationService` hacia
+  > Gobierno y `HttpAuditTrailWriter` hacia `Api.Audit`, y ninguno apunta a
+  > ellas—, pero de ahí **no** se sigue que a todas les falte cableado:
+  >
+  > | capacidad | campo | consumidor hoy |
+  > |---|---|---|
+  > | `Moderation` | `DecidedBy`, `Reporter` | ninguno |
+  > | `Engagement` | `Actor` | ninguno |
+  > | `Documents` | `Owner` | sólo nombrada por Gobierno, como adjunto por referencia |
+  > | `Cart` | `Owner` | **el CMS, directo** (`POST /v1/carts` en `HttpShopOrderService`) |
+  > | `Orders` | `Buyer` | **`Bff.Tienda`** |
+  > | `Payments` | `Payer` | **los tres orquestadores** |
+  >
+  > Y para las tres de abajo el actor **no es un seudónimo opaco**: con
+  > sesión iniciada es el `memberKey`, que es exactamente la forma de
+  > sujeto que el CMS ya firma (el seudónimo de #47 sustituye al **correo**,
+  > no al identificador). Así que su disparador no es un cableado que
+  > falte: es **extender `Synergos:Identity:Mode=Api` más allá de
+  > Gobierno**, y para `Orders` y `Payments` además decidir si el
+  > orquestador **propaga** la cabecera — que hoy no la propaga nadie y no
+  > está escrito en ninguna parte que deba.
+  >
+  > Las tres de arriba sí esperan su primer consumidor, y conviene que sea
+  > entonces: se verifica contra un llamador real y no contra un fake, que
+  > es lo que hacía que #72 tocara —`Api.Audit` acababa de estrenar
+  > consumidor con #15—.
 
   > **La bitácora estaba blindada contra reescribir el pasado y abierta a
   > FABRICARLO** (#72). No hay `PUT` ni `DELETE` desde el primer día —el
