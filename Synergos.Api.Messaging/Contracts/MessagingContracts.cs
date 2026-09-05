@@ -18,9 +18,15 @@ public sealed record OpenThreadRequest(string? TopicKind, string? TopicId, IRead
 /// <param name="AcknowledgeBeforeUtc">Hasta cuándo se admite registrar el acceso. Opcional: el
 /// plazo lo define el dominio —Gobierno sí lo tiene, un DM social no— y lo pone el orquestador.
 /// La capacidad solo sabe que hay una fecha y que después de ella no certifica.</param>
+/// <param name="Assertion">
+/// Con qué dice quien llama que se afirmó la identidad del remitente. <b>Obligatorio</b>: sin esto
+/// el mensaje quedaría atribuido a alguien por la sola palabra de quien llama, y no se puede
+/// editar ni borrar (defecto #81). Lo único que se acepta sin prueba es <c>CmsSession</c>.
+/// </param>
 public sealed record PostRequest(
     string? FromKind, string? FromId, string? Body, IReadOnlyList<RefDto>? Attachments,
-    DateTimeOffset? AcknowledgeBeforeUtc = null);
+    DateTimeOffset? AcknowledgeBeforeUtc = null,
+    string? Assertion = null);
 
 /// <summary>Registrar que alguien accedió a un mensaje.</summary>
 /// <param name="WhoKind">Tipo de quien accede.</param>
@@ -59,15 +65,21 @@ public sealed record AcknowledgmentResponse(string WhoKind, string WhoId, DateTi
 /// término legal haya empezado a correr. Es un cambio de contrato deliberado, hecho antes de que
 /// existieran datos.
 /// </remarks>
+/// <param name="PostedWith">
+/// Con qué se afirmó la identidad de quien lo escribió, o <c>null</c> si no consta — los mensajes
+/// anteriores al defecto #81. Sale a propósito: sin esto, quien lee un hilo no puede distinguir un
+/// mensaje respaldado por un token de uno que sólo lleva la palabra de quien lo escribió.
+/// </param>
 public sealed record MessageResponse(
     string Id, string ThreadId, string FromKind, string FromId, string Body,
     IReadOnlyList<RefDto> Attachments, IReadOnlyList<AcknowledgmentResponse> Acknowledgments,
-    DateTimeOffset AtUtc, DateTimeOffset? AcknowledgeBeforeUtc)
+    DateTimeOffset AtUtc, DateTimeOffset? AcknowledgeBeforeUtc, string? PostedWith)
 {
     public static MessageResponse From(Message m) => new(
         m.Id, m.ThreadId, m.From.Kind, m.From.Id, m.Body,
         m.Attachments.Select(a => new RefDto(a.Kind, a.Id)).ToList(),
-        m.Acknowledgments.Select(AcknowledgmentResponse.From).ToList(), m.AtUtc, m.AcknowledgeBeforeUtc);
+        m.Acknowledgments.Select(AcknowledgmentResponse.From).ToList(), m.AtUtc, m.AcknowledgeBeforeUtc,
+        m.PostedWith?.ToString());
 }
 
 /// <summary>Una porción de una lista, con su total.</summary>

@@ -67,10 +67,17 @@ public sealed record Acknowledgment(Ref Who, DateTimeOffset AtUtc, IdentityAsser
 /// hábiles desde el envío, en Gobierno— es cosa del orquestador. Poner acá la regla que la deriva
 /// metería un régimen regulatorio dentro de una capacidad que sirve a seis dominios.</para>
 /// </remarks>
+/// <param name="PostedWith">
+/// Con qué se afirmó la identidad de quien lo escribió (defecto #81). <b>Nulo es «no consta»</b>,
+/// no lo más débil: es la verdad sobre los mensajes anteriores a esta comprobación, y rellenarlos
+/// con <c>CmsSession</c> inventaría una comprobación que nadie hizo — el defecto #42 con otro
+/// disfraz, sobre mensajes que no se pueden editar ni borrar.
+/// </param>
 public sealed record Message(
     string Id, string ThreadId, Ref From, string Body,
     IReadOnlyList<Ref> Attachments, IReadOnlyList<Acknowledgment> Acknowledgments, DateTimeOffset AtUtc,
-    DateTimeOffset? AcknowledgeBeforeUtc = null)
+    DateTimeOffset? AcknowledgeBeforeUtc = null,
+    IdentityAssertion? PostedWith = null)
 {
     /// <summary>El acuse de esta persona, si accedió.</summary>
     public Acknowledgment? AcknowledgmentOf(Ref who) => Acknowledgments.FirstOrDefault(a => a.Who == who);

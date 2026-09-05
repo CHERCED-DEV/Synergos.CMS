@@ -53,7 +53,7 @@ public sealed class MessagingAcknowledgmentTests
         var hilo = svc.OpenThread(Expediente, new[] { Funcionario, Ciudadano }, IdempotencyKey.Of("h1"));
         Assert.True(hilo.IsOk);
         var msg = svc.Post(hilo.Value.Id, Funcionario, "Su trámite fue resuelto.",
-            Array.Empty<Ref>(), IdempotencyKey.Of("m1"), plazo);
+            Array.Empty<Ref>(), IdempotencyKey.Of("m1"), IdentityAssertion.CmsSession, plazo);
         Assert.True(msg.IsOk);
 
         return new Contexto(svc, reloj, hilo.Value.Id, msg.Value.Id);
@@ -304,7 +304,7 @@ public sealed class MessagingAcknowledgmentTests
         // anota por iniciativa propia.
         ctx.Svc.Acknowledge(ctx.MessageId, Ciudadano, IdentityAssertion.CmsSession);
         var segundo = ctx.Svc.Post(ctx.ThreadId, Funcionario, "otro", Array.Empty<Ref>(),
-            IdempotencyKey.Of("m2"), null);
+            IdempotencyKey.Of("m2"), IdentityAssertion.CmsSession, null);
         Assert.True(segundo.IsOk);
 
         var acuses = ctx.Svc.ListMessages(ctx.ThreadId, Funcionario, 0, 50).Value.Items

@@ -118,6 +118,12 @@ public sealed class IdentityGateTests
     [Theory]
     [InlineData("/v1/grants\"")]
     [InlineData("/v1/grants/revoke")]
+    // Eran TRES, no dos (defecto #83). El razonamiento de abajo era correcto y la LISTA se
+    // escribió a mano y se quedó corta: `forget` retira TODOS los permisos de una persona y era
+    // el único que no pedía nada. Es el mismo error que «los seis de Synergos.Shared» y que
+    // «faltan las otras 16» — una enumeración sacada de la cabeza en vez de medida contra el
+    // fichero. Por eso ahora hay además un test que CUENTA los endpoints que escriben.
+    [InlineData("/v1/grants/forget")]
     public void El_consentimiento_RESUELVE_la_identidad_y_no_se_cree_lo_declarado(string ruta)
     {
         var cuerpo = Consentimiento(ruta);
@@ -240,5 +246,131 @@ public sealed class IdentityGateTests
         Assert.Contains(lineas, l =>
             l.StartsWith($"{IdentityTokenSetup.Section}__Keys__", StringComparison.Ordinal)
             && l.Contains(":?", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Todo endpoint de <c>Api.Consent</c> que ESCRIBE resuelve identidad — medido, no listado.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Este gate existe porque el de arriba se quedó corto</b> (defecto #83). Su
+    /// razonamiento era correcto —«los endpoints que escriben»— y su enumeración estaba escrita a
+    /// mano: eran tres y decía dos, así que el derecho al olvido quedó de puerta de atrás
+    /// justamente debajo del comentario que explicaba por qué no debía haberla. Es el mismo error
+    /// que ya costó «los seis de <c>Synergos.Shared</c>» y «faltan las otras 16»: <b>una lista
+    /// derivada de la cabeza en vez de medida contra el fichero</b>.</para>
+    ///
+    /// <para><b>Y «escribe» tampoco se lista: se deduce.</b> El criterio no puede ser
+    /// <c>MapPost</c> —<c>/v1/grants/check</c> es una LECTURA que usa POST a propósito, para que
+    /// el sujeto y el propósito no queden en la URL ni en los logs de un proxy—. Así que el gate
+    /// mira a qué método del servicio llama cada endpoint y si ese método toca el almacén. Un
+    /// endpoint nuevo que escriba rompe el build hasta que resuelva identidad, y uno que sólo lea
+    /// no molesta a nadie — que es lo que hace que este gate sobreviva.</para>
+    /// </remarks>
+    [Fact]
+    public void Ningun_endpoint_que_escribe_se_queda_fuera()
+    {
+        var endpoints = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.Api.Consent", "Endpoints", "ConsentEndpoints.cs"));
+        var servicio = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.Api.Consent", "Domain", "ConsentService.cs"));
+
+        var rutas = System.Text.RegularExpressions.Regex
+            .Matches(endpoints, @"app\.MapPost\(""(?<ruta>[^""]+)""")
+            .Select(m => m.Groups["ruta"].Value)
+            .ToList();
+
+        Assert.NotEmpty(rutas);
+        var comprobados = 0;
+
+        foreach (var ruta in rutas)
+        {
+            var i = endpoints.IndexOf($"MapPost(\"{ruta}\"", StringComparison.Ordinal);
+            var fin = endpoints.IndexOf("app.Map", i + 1, StringComparison.Ordinal);
+            var cuerpo = fin > i ? endpoints[i..fin] : endpoints[i..];
+
+            var llamadas = System.Text.RegularExpressions.Regex
+                .Matches(cuerpo, @"svc\.(?<metodo>[A-Z]\w*)\(")
+                .Select(m => m.Groups["metodo"].Value)
+                .Distinct()
+                .ToList();
+
+            if (!llamadas.Any(m => Escribe(servicio, m))) continue;
+
+            comprobados++;
+            Assert.True(cuerpo.Contains("Afirmacion(identidad, http", StringComparison.Ordinal),
+                $"'{ruta}' escribe ({string.Join(", ", llamadas)}) y no resuelve identidad: " +
+                "es la puerta de atrás que este gate existe para cerrar.");
+        }
+
+        // Si un renombrado dejara al gate sin nada que mirar, pasaría en verde vigilando cero.
+        Assert.True(comprobados >= 3,
+            $"El gate sólo encontró {comprobados} endpoints de escritura; eran al menos tres (#83).");
+    }
+
+    /// <summary>Si ese método del servicio toca el almacén.</summary>
+    private static bool Escribe(string servicio, string metodo)
+    {
+        var i = servicio.IndexOf($" {metodo}(", StringComparison.Ordinal);
+        if (i < 0) return false;
+
+        var fin = servicio.IndexOf("\n    public ", i + 1, StringComparison.Ordinal);
+        var cuerpo = fin > i ? servicio[i..fin] : servicio[i..];
+        return cuerpo.Contains("_store.Put(", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Quién ESCRIBE un mensaje se comprueba igual que quién lo acusa (defecto #81).
+    /// </summary>
+    /// <remarks>
+    /// <para>El mismo <c>who</c>, en la misma capacidad, estaba verificado en un endpoint y creído
+    /// en el otro — dieciséis líneas más arriba. Y lo que <c>CheckPost</c> comprueba es otra cosa:
+    /// si ese remitente participa del hilo, que es autorización y no autenticación.</para>
+    ///
+    /// <para>Importa porque la HU #62 puso el cuerpo de un acto administrativo en un mensaje de
+    /// hilo, y no hay <c>PUT</c> ni <c>DELETE</c>: un acto notificado con autor falsificable es el
+    /// defecto #72 sobre el documento que sostiene un plazo legal.</para>
+    /// </remarks>
+    [Fact]
+    public void El_mensaje_RESUELVE_quien_lo_escribe()
+    {
+        var texto = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.Api.Messaging", "Endpoints", "MessagingEndpoints.cs"));
+
+        var i = texto.IndexOf("MapPost(\"/v1/threads/{id}/messages\"", StringComparison.Ordinal);
+        Assert.True(i > 0, "Cambió la ruta de publicar mensaje: revisar este gate.");
+
+        var fin = texto.IndexOf("app.MapGet(", i, StringComparison.Ordinal);
+        var cuerpo = fin > i ? texto[i..fin] : texto[i..];
+
+        Assert.Contains("IdentityAssertions.Resolve(", cuerpo, StringComparison.Ordinal);
+
+        // Y lo que baja al servicio es lo RESUELTO, no lo declarado: resolver bien y guardar lo
+        // que dijo el llamador es la mitad que hizo invisible el arreglo en #72.
+        Assert.Contains("assertion.Value", cuerpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("req.Assertion)", cuerpo, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Y el mensaje GUARDA con qué se afirmó su autor.
+    /// </summary>
+    /// <remarks>
+    /// Sin esto el arreglo sería invisible: los mensajes nuevos valdrían más que los viejos y nada
+    /// lo diría. Es la mitad que faltó en #42 y que #72 tuvo que añadir después.
+    /// </remarks>
+    [Fact]
+    public void El_mensaje_guarda_con_que_se_afirmo_su_autor()
+    {
+        var dominio = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.Api.Messaging", "Domain", "Thread.cs"));
+        Assert.Contains("IdentityAssertion? PostedWith", dominio, StringComparison.Ordinal);
+
+        var servicio = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.Api.Messaging", "Domain", "MessagingService.cs"));
+
+        // El acuse automático del autor lleva la afirmación RESUELTA, no una constante: con una
+        // constante, un mensaje escrito presentando token quedaría anotado como si sólo lo
+        // respaldara nuestra palabra.
+        Assert.Contains("new Acknowledgment(from, ahora, assertion)", servicio, StringComparison.Ordinal);
+        Assert.DoesNotContain("new Acknowledgment(from, ahora, IdentityAssertion.", servicio, StringComparison.Ordinal);
     }
 }

@@ -103,14 +103,22 @@ public sealed class ConsentService
     /// atendió — y esa demostración es exactamente lo que exige quien la pidió. Lo que se borra
     /// son los datos personales, y esos no viven acá.
     /// </remarks>
-    public int Forget(Ref subject)
+    /// <summary>
+    /// Retira TODOS los permisos activos del sujeto, anotando con qué se afirmó quién lo pidió.
+    /// </summary>
+    /// <remarks>
+    /// La afirmación no es decorativa acá: esto revoca en vez de borrar precisamente para poder
+    /// demostrar que la revocación se atendió, y esa demostración no vale sin «y así se supo que
+    /// era quien decía ser» (defecto #83).
+    /// </remarks>
+    public int Forget(Ref subject, IdentityAssertion assertion)
     {
         lock (_gate)
         {
             var tocados = 0;
             foreach (var grant in _store.ForSubject(subject).Where(g => g.RevokedAtUtc is null))
             {
-                _store.Put(grant with { RevokedAtUtc = Now });
+                _store.Put(grant with { RevokedAtUtc = Now, RevokedWith = assertion });
                 tocados++;
             }
             return tocados;
