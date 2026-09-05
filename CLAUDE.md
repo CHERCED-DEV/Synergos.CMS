@@ -400,11 +400,13 @@ node tools/check-css-parity.mjs   # G-3: toda clase syn-* emitida tiene CSS
 ```
 
 El cuarto es **cross-repo** y valida las dos mitades del acople, así que
-necesita `Synergos.UI` clonado. **No hace falta que sea hermano ni correr
-`npm install`**: los dos scripts aceptan la ruta del CMS, así que un agente en
-un contenedor puede clonarlo donde sea y correrlos con `node` a secas. Se
-decía que hacía falta la disposición de hermanos y por eso nadie los corría
-(#86):
+necesita `Synergos.UI` clonado. **La CI ya los corre** —`design-gates.yml`
+hace checkout del hermano y lanza los dos—, así que no son gates dormidos; lo
+que faltaba era poder correrlos **acá**, antes de subir. Y sí se puede: **no
+hace falta que sea hermano ni correr `npm install`**, porque los dos scripts
+aceptan la ruta del CMS. Esta sección describía la disposición de hermanos
+como requisito, que es lo que hacía que un agente en un contenedor los diera
+por imposibles (#86):
 
 ```bash
 git clone --depth 1 https://github.com/cherced-dev/synergos.ui /tmp/ui
@@ -418,6 +420,9 @@ git clone --depth 1 https://github.com/cherced-dev/synergos.ui /tmp/ui
 
 Los dos pasan hoy. El primero sale con **avisos** `[W4]` —entradas del registry
 sin su espejo en `ELEMENT_CONFIG_FIELDS`— que son avisos y no errores: sale 0.
+Son **deuda conocida y declarada**: el propio `design-gates.yml` explica que
+con la bandera estricta puesta ese job llevaba rojo en `master` cuatro
+corridas seguidas, y que un gate siempre rojo deja de leerse.
 
 ## 8. Layout Composer — el feature más maduro
 
