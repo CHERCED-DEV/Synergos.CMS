@@ -121,10 +121,10 @@ public sealed class TrackingAndReturnsDurabilityTests
         var store = new InMemoryJsonEntityStore();
         var (orders, orderRef) = await PaidOrderAsync(store);
 
-        var before = new StubReturnService(orders, new StubPaymentProvider(store), null, null, store);
+        var before = new StubReturnService(orders, null, null, store);
         var rma = await before.RequestAsync(orderRef, "tec-laptop-pro-14", "No me sirvió");
 
-        var after = new StubReturnService(orders, new StubPaymentProvider(store), null, null, store);
+        var after = new StubReturnService(orders, null, null, store);
         var cases = await after.GetForOrderAsync(orderRef);
 
         Assert.Contains(cases, c => c.RmaId == rma.RmaId);
@@ -139,10 +139,10 @@ public sealed class TrackingAndReturnsDurabilityTests
         var store = new InMemoryJsonEntityStore();
         var (orders, orderRef) = await PaidOrderAsync(store);
 
-        var before = new StubReturnService(orders, new StubPaymentProvider(store), null, null, store);
+        var before = new StubReturnService(orders, null, null, store);
         var first = await before.RequestAsync(orderRef, "tec-laptop-pro-14", "No me sirvió");
 
-        var after = new StubReturnService(orders, new StubPaymentProvider(store), null, null, store);
+        var after = new StubReturnService(orders, null, null, store);
         var second = await after.RequestAsync(orderRef, "tec-laptop-pro-14", "Otra razón");
 
         Assert.Equal(first.RmaId, second.RmaId);
@@ -154,11 +154,11 @@ public sealed class TrackingAndReturnsDurabilityTests
         var store = new InMemoryJsonEntityStore();
         var (orders, orderRef) = await PaidOrderAsync(store);
 
-        var before = new StubReturnService(orders, new StubPaymentProvider(store), null, null, store);
+        var before = new StubReturnService(orders, null, null, store);
         var rma = await before.RequestAsync(orderRef, "tec-laptop-pro-14", "No me sirvió");
         await before.AdvanceAsync(rma.RmaId, ShopReturnStatus.Approved);
 
-        var after = new StubReturnService(orders, new StubPaymentProvider(store), null, null, store);
+        var after = new StubReturnService(orders, null, null, store);
         var cases = await after.GetForOrderAsync(orderRef);
 
         Assert.Equal(ShopReturnStatus.Approved, cases.Single(c => c.RmaId == rma.RmaId).Status);

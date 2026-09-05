@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2551 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2554 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2551 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2554 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (10) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -369,7 +369,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2551 tests):
+# Suite completa (2554 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -494,7 +494,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2551 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2554 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -521,7 +521,7 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   uno**, porque una cabecera que dice «(14)» sobre trece filas pasa el
   recuento y deja un stub que nadie va a tomar — es la tabla que se lee
   para elegir el siguiente trabajo, no la rejilla del inventario.
-  De los 12, **nueve** están hechos: la tienda compra contra `Bff.Tienda`
+  De los 12, **diez** están hechos: la tienda compra contra `Bff.Tienda`
   (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
   `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25), la visita al inmueble
   aparta cupo **directo contra `Api.Booking`, sin orquestador**
@@ -529,10 +529,40 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   toca una sola capacidad y un BFF sería una saga de un paso — y **el
   expediente decide contra `Api.Workflow`**, también directo
   (`Synergos:Gob:Mode=Api`, HU #44). El default sigue siendo `Stub` en
-  todos. **Faltan tres**: `StubPaymentProvider` → `Api.Payments`
-  (bloqueado por #27), y `StubReturnService` y `StubApplicationService`,
-  que esperan caras de orquestador sin construir (`Bff.Tienda` de
-  devoluciones y `Bff.Gob`).
+  todos. **Faltan dos**: `StubPaymentProvider` → `Api.Payments`
+  (bloqueado por #27) y `StubApplicationService`, que espera una cara de
+  orquestador sin construir (`Bff.Gob`).
+
+  > **La devolución de la tienda estaba ROTA, no pendiente** (#57), y el mapa
+  > tenía mal la razón. Decía que `StubReturnService` iba a un orquestador por
+  > «dos pasos con plata en medio»; mirando el código, el segundo paso —marcar
+  > el RMA— es una escritura LOCAL, y un reembolso no se compensa: una saga acá
+  > tendría un paso irreversible y nada que deshacer. **La pregunta que sí
+  > decide no es «¿qué hay que deshacer?» sino «¿QUIÉN TIENE LA PLATA?»**, y con
+  > la tienda cableada la tiene el orquestador.
+  >
+  > Lo que pasaba: el RMA le pedía el reembolso a `IPaymentProvider` con
+  > `ShopOrder.PaymentSessionId`, y con `Tienda:Mode=Bff` ese identificador es
+  > **el de la saga** —el de `Api.Payments` no sale del orquestador, a
+  > propósito—. El proveedor local no lo conocía, así que el caso **no llegaba
+  > nunca a reembolsado**, y sin que nada fallara ruidosamente. Verificado en
+  > vivo con los ocho procesos: pedírselo al proveedor local con ese id
+  > contesta «sesión de pago no encontrada».
+  >
+  > Hoy la ordena quien vendió, por `POST /v1/purchases/{id}/refund` —el gemelo
+  > del de Viajes—, con el monto ya calculado (el orquestador cotiza la compra
+  > entera y no sabe cuánto vale una línea) y con **llave de idempotencia
+  > obligatoria**, porque devolver plata es un movimiento RELATIVO y un
+  > reintento sin llave devuelve dos veces. El expediente del RMA se queda de
+  > este lado.
+  >
+  > **Y destapó un segundo defecto en el camino en proceso**: el proveedor local
+  > **ignoraba el monto** y reembolsaba la sesión entera, así que devolver una
+  > línea de dos marcaba el pedido completo y la siguiente devolución se
+  > rechazaba por un estado que nadie había querido poner. Un test afirmaba eso
+  > como si fuera lo correcto — un test que codifica el defecto convierte el
+  > arreglo en una regresión. Hoy el estado sólo pasa a `Refunded` cuando no
+  > queda saldo. Hay gate (`ShopWiringTests`).
 
   > **Y son 12 porque `StubReservationService` pasó a la familia C** (#33).
   > Entró en A como «un cableado, seis verticales», y **los seis se cablearon

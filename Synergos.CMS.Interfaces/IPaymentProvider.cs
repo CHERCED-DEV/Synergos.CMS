@@ -164,11 +164,22 @@ public sealed record PaymentSession(
     string? ProviderKey = null);
 
 /// <summary>Resultado de consultar/capturar/reembolsar una sesión.</summary>
+/// <param name="SessionId">La sesión.</param>
+/// <param name="Status">Cómo quedó.</param>
+/// <param name="AmountCaptured">Cuánto se cobró.</param>
+/// <param name="FailureReason">Por qué no, si no.</param>
+/// <param name="AmountRefunded">
+/// Cuánto se ha devuelto <b>en total</b> de esa sesión, no lo que se acaba de mover (#57).
+/// <para>Es el acumulado porque es lo único con lo que se puede comprobar un tope: mirar sólo
+/// el último monto dejaría pasar tres devoluciones de la mitad. Cero mientras nadie devuelva
+/// nada, que es lo que vale para las sesiones que sólo se consultan o se capturan.</para>
+/// </param>
 public sealed record PaymentOutcome(
     string SessionId,
     PaymentStatus Status,
     decimal AmountCaptured = 0m,
-    string? FailureReason = null);
+    string? FailureReason = null,
+    decimal AmountRefunded = 0m);
 
 /// <summary>
 /// Pasarela de pago (PSP), agnóstica del proveedor. Es la pieza del MOTOR

@@ -457,6 +457,71 @@ public sealed class HttpShopOrderService : IShopOrderService
         CreatedAt: DateTimeOffset.MinValue,
         OwnerMemberKey: null);
 
+    /// <summary>
+    /// Ordena la devolución a QUIEN TIENE LA PLATA (#57).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Éste es el defecto que el ticket cierra.</b> Con este camino activo, el
+    /// <c>PaymentSessionId</c> que el CMS conoce es el id de la <b>saga</b> del orquestador — el
+    /// de <c>Api.Payments</c> no sale de allá a propósito—, así que pedirle el reembolso al
+    /// proveedor de pagos local era pedírselo a quien no conoce esa llave: el RMA no llegaba
+    /// nunca a reembolsado, y <b>sin que nada fallara ruidosamente</b>.</para>
+    ///
+    /// <para><b>Lleva llave de idempotencia</b>, y no por ceremonia: devolver plata es un
+    /// movimiento RELATIVO, así que un reintento tras un timeout sin llave devolvería dos veces.
+    /// La llave es determinista por (orden, monto, motivo) para que el reintento de ESTA misma
+    /// devolución la reconozca, y dos devoluciones legítimas distintas no se pisen.</para>
+    /// </remarks>
+    public async Task<decimal> RefundAsync(
+        string orderRef,
+        decimal amount,
+        string currency,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(orderRef))
+        {
+            throw new ArgumentException("Hace falta la referencia de la orden.", nameof(orderRef));
+        }
+
+        using var req = new HttpRequestMessage(
+            HttpMethod.Post, $"v1/purchases/{Uri.EscapeDataString(orderRef)}/refund")
+        {
+            Content = JsonContent.Create(new
+            {
+                amount = new { amount, currency },
+                reason,
+            }),
+        };
+        req.Headers.TryAddWithoutValidation("Idempotency-Key", LlaveDe(orderRef, amount, currency, reason));
+
+        var compra = await EnviarAsync<PurchaseDto>(
+            _clients.CreateClient(BffClientName), req, "devolver el pago", cancellationToken).ConfigureAwait(false);
+
+        // Lo devuelto lo dice el ORQUESTADOR, que es quien movió la plata. Devolver el monto que
+        // pedimos daría por buena una devolución que quizá salió por menos.
+        return compra.Refunded?.Amount
+            ?? throw new InvalidOperationException(
+                "Bff.Tienda aceptó la devolución pero no dijo cuánto quedó devuelto: no se puede "
+                + "dar por reembolsado el caso.");
+    }
+
+    /// <summary>
+    /// La llave de una devolución concreta: misma devolución, misma llave.
+    /// </summary>
+    /// <remarks>
+    /// Determinista por (orden, monto, motivo) — no por la orden sola, porque un pedido admite
+    /// más de una devolución legítima y compartir llave haría que la segunda contestara con el
+    /// resultado de la primera sin mover un peso.
+    /// </remarks>
+    internal static string LlaveDe(string orderRef, decimal amount, string currency, string reason)
+    {
+        var crudo = $"refund|{orderRef}|{amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+            + $"|{currency}|{reason}";
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(crudo));
+        return Convert.ToHexString(hash)[..32].ToLowerInvariant();
+    }
+
     // Los DTO viven acá y NO en Synergos.CMS.Interfaces: son la forma del contrato HTTP con otro
     // servicio, no vocabulario del dominio del CMS.
 
@@ -467,7 +532,7 @@ public sealed class HttpShopOrderService : IShopOrderService
     private sealed record PurchaseDto(
         string Id, string? BuyerKind, string? BuyerId, string? CartId, string? Status,
         MoneyDto Total, string? OrderId, string? ShipmentId, int HeldLines,
-        int PendingCompensations, string? LastError);
+        int PendingCompensations, string? LastError, MoneyDto? Refunded = null);
 
     private sealed record ProblemDto
     {

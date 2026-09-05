@@ -86,7 +86,8 @@ public sealed record PurchaseSaga(
     string? LastError,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? AlertedAtUtc = null,
-    int AlertsSent = 0) : ISaga<PurchaseSaga>
+    int AlertsSent = 0,
+    Money? Refunded = null) : ISaga<PurchaseSaga>
 {
     public PurchaseSaga WithStatus(SagaStatus status) => this with { Status = status };
 

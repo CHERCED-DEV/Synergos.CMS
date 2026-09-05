@@ -450,6 +450,47 @@ public sealed class StubShopOrderService : IShopOrderService
         LineTotal: l.LineTotal,
         Currency: l.Currency);
 
+    /// <summary>
+    /// Devuelve por el proveedor local, que acá SÍ conoce la sesión (#57).
+    /// </summary>
+    /// <remarks>
+    /// <para>En el camino en proceso, <c>PaymentSessionId</c> es una sesión de este mismo
+    /// proveedor, así que devolver por él es correcto — y era correcto antes: lo que estaba mal
+    /// no era esta rama, era que <c>StubReturnService</c> la llamara <b>directamente</b>, con lo
+    /// que el camino HTTP acababa pidiéndole el reembolso al proveedor equivocado.</para>
+    ///
+    /// <para>Devuelve el ACUMULADO, que es lo que el seam promete: el proveedor lo sabe porque
+    /// lleva la cuenta de lo devuelto de esa sesión.</para>
+    /// </remarks>
+    public async Task<decimal> RefundAsync(
+        string orderRef,
+        decimal amount,
+        string currency,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var order = await GetOrderAsync(orderRef, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"La orden {orderRef} no existe.");
+
+        if (string.IsNullOrWhiteSpace(order.PaymentSessionId))
+        {
+            throw new InvalidOperationException($"La orden {orderRef} no tiene sesión de pago para reembolsar.");
+        }
+
+        var outcome = await _payments.RefundAsync(order.PaymentSessionId, amount, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Refunded o Captured: una devolución PARCIAL deja la sesión capturada, y tratar eso
+        // como fallo dejaría el RMA sin avanzar por haber devuelto sólo una línea.
+        if (outcome.Status is not (PaymentStatus.Refunded or PaymentStatus.Captured))
+        {
+            throw new InvalidOperationException(
+                outcome.FailureReason ?? $"No se pudo reembolsar la orden {orderRef} (estado del pago {outcome.Status}).");
+        }
+
+        return outcome.AmountRefunded;
+    }
+
     // Número de orden human-facing derivado determinísticamente del orderRef
     // (idempotente: re-confirmar el mismo orderRef da el mismo número).
     private static string BuildOrderNumber(string orderRef)
