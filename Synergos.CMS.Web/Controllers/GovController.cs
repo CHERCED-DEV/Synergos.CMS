@@ -67,6 +67,7 @@ public sealed class GovController : ControllerBase
     private readonly IMessagingService _messaging;
     private readonly IMemberAccessGate _gate;
     private readonly IGovActNotificationService _notifications;
+    private readonly IAuditTrailWriter _audit;
 
     public GovController(
         ITramiteCatalogProvider catalog,
@@ -77,7 +78,8 @@ public sealed class GovController : ControllerBase
         IPrivateFileStore files,
         IMessagingService messaging,
         IMemberAccessGate gate,
-        IGovActNotificationService notifications)
+        IGovActNotificationService notifications,
+        IAuditTrailWriter audit)
     {
         _catalog = catalog;
         _applications = applications;
@@ -88,6 +90,7 @@ public sealed class GovController : ControllerBase
         _messaging = messaging;
         _gate = gate;
         _notifications = notifications;
+        _audit = audit;
     }
 
     /// <summary>
@@ -600,6 +603,7 @@ public sealed class GovController : ControllerBase
             // pasó el plazo»—, y una sola de las dos le dice al ciudadano qué hacer a
             // continuación. Por eso el seam lanza un TIPO y no un mensaje: mirar el texto
             // habría atado esta decisión a una frase que cualquiera reescribe.
+            await AsentarAccesoRechazadoAsync(id ?? string.Empty, cancellationToken);
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "La notificación no es suya." });
         }
         catch (InvalidOperationException ex)
@@ -608,6 +612,44 @@ public sealed class GovController : ControllerBase
         }
 
         return Ok(new ActNotificationResponse(ToActNotificationDto(opened, revealBody: true)));
+    }
+
+    /// <summary>
+    /// Deja asiento de que alguien ajeno intentó abrir un acto notificado (HU #15).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Que el intento se rechace no lo vuelve ruido: es el dato que un auditor pide
+    /// primero.</b> Hasta acá el 403 salía y no quedaba escrito en ninguna parte, así que el día
+    /// que alguien preguntara quién intentó leer un expediente ajeno no había nada que mirar.</para>
+    ///
+    /// <para><b>El asiento dice CmsSession y nunca más que eso</b>, y ésa es la parte fina. Este
+    /// camino no presenta ni verifica ningún token: lo único que respalda al actor es nuestra
+    /// propia cookie. Que el despliegue <i>sepa emitir</i> identidad verificable
+    /// (<c>Synergos:Identity:Mode=Api</c>) no cambia lo que aquí se comprobó — escribir
+    /// <c>IdentityToken</c> porque se podría haber presentado uno guardaría como hecho lo que
+    /// nadie verificó. Es el defecto #42 con otro disfraz, sobre el registro que más se conserva.</para>
+    ///
+    /// <para><b>Y no se le devuelve nada al llamador si el asiento falla.</b> Escribirlo es
+    /// mejor-esfuerzo hacia fuera y decisión escrita hacia dentro: el escritor ya guarda local
+    /// primero y anota el hueco si el reenvío no llega (<c>HttpAuditTrailWriter</c>), así que
+    /// tragarse una excepción acá convertiría el 403 en un 500 sin proteger nada.</para>
+    /// </remarks>
+    private async Task AsentarAccesoRechazadoAsync(string notificationId, CancellationToken cancellationToken)
+    {
+        var correo = _gate.CurrentMemberEmail ?? string.Empty;
+
+        var evt = new AuditEvent(
+            Id: Guid.NewGuid().ToString("N"),
+            OccurredAtUtc: DateTime.UtcNow,
+            ActorEmail: correo,
+            ActorName: _gate.CurrentMemberDisplayName ?? correo,
+            Action: "gov.notification.open",
+            Resource: notificationId,
+            Outcome: "failure",
+            Detail: "not_the_addressee",
+            Assertion: IdentityAssertions.CmsSession);
+
+        await _audit.WriteAsync(evt, cancellationToken);
     }
 
     // ══════════════════════ Mappers ══════════════════════

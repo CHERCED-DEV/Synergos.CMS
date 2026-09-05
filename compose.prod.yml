@@ -159,6 +159,18 @@ services:
       Synergos__Gob__Notifications__EntityKind: ${SYNERGOS_GOB_ENTITY_KIND:-gov.entidad}
       Synergos__Gob__Notifications__EntityId: ${SYNERGOS_GOB_ENTITY_ID:-ventanilla}
 
+      # Si el asiento de la bitacora ademas sale de esta maquina (HU #15). El
+      # JSONL de App_Data NO se sustituye: envuelve, y sigue siendo el modelo de
+      # lectura — con Api.Audit caida el administrador SIGUE viendo que paso, y
+      # lo que se para es que el asiento salga. Si el reenvio no llega, queda
+      # escrito localmente que no llego. El correo de quien actuo no viaja:
+      # viaja un seudonimo.
+      Synergos__Audit__Mode: ${SYNERGOS_AUDIT_MODE:-Local}
+      Synergos__Audit__BaseUrl: "http://api-audit:8080"
+      Synergos__Audit__ApiKey: ${SYNERGOS_API_KEY}
+      Synergos__Audit__ActorKind: ${SYNERGOS_AUDIT_ACTOR_KIND:-cms.actor}
+      Synergos__Audit__TargetKind: ${SYNERGOS_AUDIT_TARGET_KIND:-cms.recurso}
+
       # Contra que se valida el avance de un pedido (HU #46). Los cuatro dominios
       # comparten esta seccion y cada uno pide SU definicion: tracking.shop,
       # tracking.travel, tracking.events, tracking.academy. Una compartida leeria

@@ -78,7 +78,7 @@ public sealed class StubGovActNotificationServiceTests
         Assert.Equal(reloj.Ahora, abierta.OpenedAtUtc);
         Assert.Equal(Ciudadano, abierta.OpenedBy);
         // Sin identidad verificable, esto es lo más fuerte que se puede afirmar — y es honesto.
-        Assert.Equal(GovActAssertions.CmsSession, abierta.OpenedWith);
+        Assert.Equal(IdentityAssertions.CmsSession, abierta.OpenedWith);
     }
 
     // ── filter ──────────────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ public sealed class StubGovActNotificationServiceTests
         var recargada = Assert.Single(await despues.GetForCitizenAsync(Ciudadano));
 
         Assert.True(recargada.Opened);
-        Assert.Equal(GovActAssertions.CmsSession, recargada.OpenedWith);
+        Assert.Equal(IdentityAssertions.CmsSession, recargada.OpenedWith);
     }
 
     [Fact] // lo que no se puede notificar se rechaza de frente, no a medias

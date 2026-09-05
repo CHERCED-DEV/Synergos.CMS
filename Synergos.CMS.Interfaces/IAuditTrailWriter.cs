@@ -82,6 +82,12 @@ public interface IAuditTrailWriter
 ///   <c>"failure"</c> o <c>"partial"</c> (para bulk).</param>
 /// <param name="Detail">Detalle libre — counts, error messages,
 ///   undo tokens, etc. Vacío si no aplica.</param>
+/// <param name="Assertion">Con qué fuerza se afirmó que el actor era quien
+///   dice ser (<see cref="IdentityAssertions"/>). <b>Vacío significa «no
+///   consta»</b>, no «lo más débil»: es la verdad sobre todo asiento escrito
+///   antes de que esta noción existiera, y sobre los caminos que no la
+///   registran. Rellenarlo por defecto inventaría una comprobación que nadie
+///   hizo. (HU #15)</param>
 public sealed record AuditEvent(
     string Id,
     DateTime OccurredAtUtc,
@@ -90,4 +96,5 @@ public sealed record AuditEvent(
     string Action,
     string Resource,
     string Outcome,
-    string Detail);
+    string Detail,
+    string Assertion = IdentityAssertions.None);
