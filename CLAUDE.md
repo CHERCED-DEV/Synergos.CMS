@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2705 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2706 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2705 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2706 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -165,6 +165,18 @@ Synergos.CMS/
 | "¿Cuándo se promueve algo a una capa compartida?" | `docs/product/10-promocion-bff-core.md` |
 | "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; la única excepción son los cinco de `Api.Notifications/Transport/`, que son fallos de la firma del webhook y no reglas de negocio |
+
+> **La forma de `window.synergos` se declara en TRES sitios, y hay gate** (#88,
+> `ContractsIndexTests`): los `record` de `IHostBridgeContextBuilder.cs` que el CMS **emite**, las
+> interfaces de `host-bridge.md` + `i18n-bridge.md` que el contrato **documenta**, y las de
+> `tests/host-bridge.contract.test.ts` que el harness **prueba**. Se cruzan las tres por **nombre de
+> campo** —no por tipo, y está dicho para no mentir sobre el alcance—.
+>
+> **La tercera pata es la que menos se ve y la que más hace falta.** El harness dice de sí mismo que
+> **no instancia el bridge desde el CMS**: arma un mock con la forma canónica y prueba los helpers
+> consumidores contra él, o sea **se prueba contra sí mismo**. Comprobado renombrando un campo de su
+> interfaz y dejando sus otras tres menciones intactas —una incoherencia interna—: **los 56 tests
+> siguen verdes**. Sin este cruce, el UI lee `undefined` en producción y nada se pone rojo.
 
 > ⚠️ **De los seis docs de `docs/product/`, sólo el 11 está versionado.** Los
 > cinco de arriba (06 a 10) **no están en el repo**: viven en la máquina del
@@ -373,7 +385,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2705 tests):
+# Suite completa (2706 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -424,6 +436,10 @@ git clone --depth 1 https://github.com/cherced-dev/synergos.ui /tmp/ui
 Los dos pasan hoy. El primero sale con **avisos** `[W4]` —entradas del registry
 sin su espejo en `ELEMENT_CONFIG_FIELDS`— que son avisos y no errores: sale 0.
 
+Son **deuda conocida y declarada**: el propio `design-gates.yml` explica que
+con la bandera estricta puesta ese job llevaba rojo en `master` cuatro
+corridas seguidas, y que un gate siempre rojo deja de leerse.
+
 > **Mirá `git status` antes de `git add -A` después de correr esto.** `master` llegó a traer un
 > symlink a sí mismo —`Synergos.CMS → /home/user/Synergos.CMS`, ruta absoluta de un contenedor— y
 > tumbó los **seis** gates de segregación de golpe: .NET sigue los enlaces al recorrer directorios,
@@ -434,9 +450,6 @@ sin su espejo en `ELEMENT_CONFIG_FIELDS`— que son avisos y no errores: sale 0.
 > `mode 120000` entraba por un `add -A` sin que nada chistara. Hoy hay gate
 > (`FormaDelArbolTests`), y va sobre la clase entera porque el próximo enlace se llamará de otra
 > manera.
-Son **deuda conocida y declarada**: el propio `design-gates.yml` explica que
-con la bandera estricta puesta ese job llevaba rojo en `master` cuatro
-corridas seguidas, y que un gate siempre rojo deja de leerse.
 
 ## 8. Layout Composer — el feature más maduro
 
@@ -529,7 +542,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2705 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2706 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -1391,13 +1404,6 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   real compilado, no con fakes. **Cuántos elementos sirve se mide, no se
   recuerda** (#86): `curl -s $URL/synergos/registry.json | jq '.elements | length'`.
 
-  > **El `| jq length` a secas devuelve `4`, no 130**, y estuvo así el rato que
-  > tardó en verse: la raíz del registry es un objeto —`generated`, `version`,
-  > `baseUrl`, `elements`— así que `length` cuenta sus CLAVES. Un comando que
-  > contesta un número plausible y equivocado es peor que ninguno: la cifra
-  > venía con él justamente para que se pudiera comprobar, y comprobarla
-  > confirmaba otra cosa. Se corrigió ejecutándolo, que es la única forma de
-  > saberlo — mirarlo no lo dice.
   El CDN servía **130 elementos** el 2026-09-05, y el repo hermano declara
   dos más que no publica (`synergos-stat-counter` y `synergos-module-mount`).
   Ésta es la ÚNICA cifra del CDN que da este fichero, y va con el comando al
@@ -1406,6 +1412,14 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   garantizar que se desvíe. Ya pasó, y en tres versiones distintas a la vez.
   Hay gate (`CifrasDeClaudeMdTests`), y no comprueba que sea correcta —desde
   acá no se puede— sino **que no esté copiada**.
+
+  > **El `| jq length` a secas devuelve `4`, no 130**, y estuvo así el rato que
+  > tardó en verse: la raíz del registry es un objeto —`generated`, `version`,
+  > `baseUrl`, `elements`— así que `length` cuenta sus CLAVES. Un comando que
+  > contesta un número plausible y equivocado es peor que ninguno: la cifra
+  > venía con él justamente para que se pudiera comprobar, y comprobarla
+  > confirmaba otra cosa. Se corrigió ejecutándolo, que es la única forma de
+  > saberlo — mirarlo no lo dice.
   Lo que falta es que el despliegue configure `SYNERGOS_CDN_MODE=Http` +
   `SYNERGOS_CDN_URL` (ver `.env.example`). Es una decisión de entorno del
   arquitecto, no trabajo pendiente de código. Ver §9 y ADR 0132.
