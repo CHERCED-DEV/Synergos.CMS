@@ -69,12 +69,33 @@ public static class ConsentEndpoints
                 .Map(g => ConsentResponse.From(g, clock.GetUtcNow())).ToHttp();
         });
 
-        app.MapPost("/v1/grants/forget", (ForgetRequest req, ConsentService svc) =>
+        // EL DERECHO AL OLVIDO TAMBIÉN SE COMPRUEBA (defecto #83).
+        //
+        // Éste era el tercer endpoint que escribe, y el gate de esta capacidad —que decía, con
+        // todas las letras, que un gate que sólo mirara `grants` dejaría `grants/revoke` de puerta
+        // de atrás— tenía el razonamiento bien y la LISTA corta. Con la llave compartida sola,
+        // cualquiera retiraba TODOS los consentimientos de cualquier persona, y no quedaba nada
+        // escrito sobre quién lo pidió.
+        //
+        // Y hay una ironía en el propio fichero: `Forget` revoca en vez de borrar «para poder
+        // demostrar que la revocación se atendió», que es justo lo que exige quien la pidió. Esa
+        // prueba no decía quién la pidió — le faltaba la mitad que la sostiene.
+        //
+        // Se exige LO MISMO que `revoke` y ni un escalón más: quien ejerce el derecho es el propio
+        // sujeto. Si algún día hace falta que un operador lo ejerza en su nombre —una petición por
+        // ventanilla— eso es otra cosa: hay que distinguir «revocado por el titular» de «revocado
+        // por un tercero a petición suya», y hoy no lo pide nadie.
+        app.MapPost("/v1/grants/forget", (
+            ForgetRequest req, HttpRequest http, ConsentService svc,
+            IdentityTokenGate identidad, TimeProvider clock) =>
         {
             var subject = Ref.TryCreate(req.SubjectKind, req.SubjectId);
             if (subject is null) return Invalid("bad_subject", "Hacen falta subjectKind y subjectId.");
 
-            return Results.Ok(new ForgetResponse(svc.Forget(subject)));
+            var (assertion, motivo) = Afirmacion(identidad, http, subject, req.Assertion, clock);
+            if (assertion is null) return motivo!.ToProblem();
+
+            return Results.Ok(new ForgetResponse(svc.Forget(subject, assertion.Value)));
         });
 
         return app;
