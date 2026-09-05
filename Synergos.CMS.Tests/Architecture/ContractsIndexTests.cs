@@ -292,4 +292,65 @@ public sealed class ContractsIndexTests
     /// <summary>Primera letra en minúscula: los records van en PascalCase y el JSON en camelCase.</summary>
     private static string Minuscula(string s)
         => s.Length == 0 ? s : char.ToLowerInvariant(s[0]) + s[1..];
+
+    /// <summary>
+    /// Los tres sitios donde el host bridge se degrada DEJAN RASTRO (#92).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que evita ya estaba puesto, y en el camino que corre.</b>
+    /// <c>window.synergos</c> se emite por dos rutas según <c>CspStrictMode</c>: el controller
+    /// —cuando está en <c>true</c>— y la vista Razor —cuando está en <c>false</c>, que es el
+    /// <b>default</b>—. Las dos caían al mismo contexto degradado; sólo el controller lo
+    /// registraba. O sea que la ruta que de verdad corre era la muda.</para>
+    ///
+    /// <para><b>Y había un tercer catch, más adentro y más silencioso:</b> el del propio builder
+    /// al leer el diccionario. Ése es peor que los otros dos porque devuelve un contexto que
+    /// <b>parece sano</b> —marca, tema y página intactos— con <c>i18n.keys</c> vacío: el sitio se
+    /// queda sin traducciones y todo lo demás sigue igual.</para>
+    ///
+    /// <para><b>Degradar está bien; degradar en silencio no.</b> Que el bridge no tumbe la página
+    /// es correcto y está razonado en el propio fichero — y degrada <b>cerrada</b>, sin otorgar
+    /// nada de más. Lo que faltaba es que se sepa: sin una línea de log, un miembro autenticado se
+    /// ve anónimo para todos los componentes, el sitio devuelve 200, <c>/health</c> contesta y la
+    /// prueba de humo pasa. Es la forma que §11 cataloga como la más cara de este repo.</para>
+    ///
+    /// <para><b>Por qué los tests no lo vieron:</b> el caso SÍ estaba probado —
+    /// <c>Get_BuilderThrows_ReturnsFallbackPayload</c>— pero <b>en la rama que no es el
+    /// default</b>, y además sólo afirmaba que devuelve el fallback, no que quede registrado. La
+    /// cobertura existía, apuntaba al hermano, y daba la sensación de que el caso estaba cubierto.
+    /// </para>
+    ///
+    /// <para><b>Mira que el catch registre, no CÓMO.</b> Da igual si es <c>LogWarning</c> o
+    /// <c>LogError</c> y con qué mensaje; lo que no puede volver es un <c>catch</c> vacío en el
+    /// camino del bridge.</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("Synergos.CMS.Web/Views/Shared/_SynergosBridge.cshtml")]
+    [InlineData("Synergos.CMS.Web/Services/DefaultHostBridgeContextBuilder.cs")]
+    [InlineData("Synergos.CMS.Web/Controllers/SynergosBridgeController.cs")]
+    public void Toda_degradacion_del_bridge_deja_rastro(string ruta)
+    {
+        var fichero = Path.Combine(RepoRoot(), ruta.Replace('/', Path.DirectorySeparatorChar));
+        Assert.True(File.Exists(fichero), $"No existe {ruta}: revisar este gate.");
+
+        var codigo = File.ReadAllText(fichero);
+        var catches = Regex.Matches(codigo, @"catch\s*\([^)]*\)\s*\{([\s\S]*?)\n(\s*)\}");
+
+        Assert.True(catches.Count > 0,
+            $"{ruta} no tiene ningún `catch`. O se quitó la degradación —y entonces hay que "
+            + "revisar este gate— o el descubrimiento está roto y lo de abajo no probaría nada.");
+
+        var mudos = catches
+            .Where(c => !Regex.IsMatch(c.Groups[1].Value, @"\.Log(Warning|Error|Critical|Information)\("))
+            .Select(c => c.Value.Split('\n')[0].Trim())
+            .ToList();
+
+        Assert.True(mudos.Count == 0,
+            $"{ruta} vuelve a degradarse sin dejar rastro (#92). Que el bridge no tumbe la página "
+            + "es correcto —y degrada cerrada—, pero sin una línea de log un miembro autenticado se "
+            + "ve anónimo para todos los componentes, el sitio devuelve 200 y la prueba de humo "
+            + "pasa. El camino por defecto es la vista Razor, no el controller."
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, mudos));
+    }
 }
