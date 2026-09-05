@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2703 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2705 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2703 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2705 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -373,7 +373,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2703 tests):
+# Suite completa (2705 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -423,6 +423,17 @@ git clone --depth 1 https://github.com/cherced-dev/synergos.ui /tmp/ui
 
 Los dos pasan hoy. El primero sale con **avisos** `[W4]` —entradas del registry
 sin su espejo en `ELEMENT_CONFIG_FIELDS`— que son avisos y no errores: sale 0.
+
+> **Mirá `git status` antes de `git add -A` después de correr esto.** `master` llegó a traer un
+> symlink a sí mismo —`Synergos.CMS → /home/user/Synergos.CMS`, ruta absoluta de un contenedor— y
+> tumbó los **seis** gates de segregación de golpe: .NET sigue los enlaces al recorrer directorios,
+> así que cada `.csproj` aparecía dos veces y todo `SingleOrDefault()` sobre un nombre reventaba
+> (#90). **De dónde salió no se sabe**: las tres herramientas de acá se probaron con la variable y
+> sin ella y ninguna lo crea —fallan a la vista, que es lo correcto—, así que no se les echa la
+> culpa. Lo que faltaba era que **algo mirara la FORMA del árbol y no sólo su contenido**: un
+> `mode 120000` entraba por un `add -A` sin que nada chistara. Hoy hay gate
+> (`FormaDelArbolTests`), y va sobre la clase entera porque el próximo enlace se llamará de otra
+> manera.
 Son **deuda conocida y declarada**: el propio `design-gates.yml` explica que
 con la bandera estricta puesta ese job llevaba rojo en `master` cuatro
 corridas seguidas, y que un gate siempre rojo deja de leerse.
@@ -518,7 +529,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2703 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2705 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -1378,7 +1389,15 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   bloqueo**: el CDN está VIVO (`https://synergos-ui.synergos-labs.workers.dev`)
   y `HttpBundleRegistryClient` resuelve contra él — verificado con el cliente
   real compilado, no con fakes. **Cuántos elementos sirve se mide, no se
-  recuerda** (#86): `curl -s $URL/synergos/registry.json | jq length`.
+  recuerda** (#86): `curl -s $URL/synergos/registry.json | jq '.elements | length'`.
+
+  > **El `| jq length` a secas devuelve `4`, no 130**, y estuvo así el rato que
+  > tardó en verse: la raíz del registry es un objeto —`generated`, `version`,
+  > `baseUrl`, `elements`— así que `length` cuenta sus CLAVES. Un comando que
+  > contesta un número plausible y equivocado es peor que ninguno: la cifra
+  > venía con él justamente para que se pudiera comprobar, y comprobarla
+  > confirmaba otra cosa. Se corrigió ejecutándolo, que es la única forma de
+  > saberlo — mirarlo no lo dice.
   El CDN servía **130 elementos** el 2026-09-05, y el repo hermano declara
   dos más que no publica (`synergos-stat-counter` y `synergos-module-mount`).
   Ésta es la ÚNICA cifra del CDN que da este fichero, y va con el comando al
