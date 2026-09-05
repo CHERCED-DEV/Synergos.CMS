@@ -313,4 +313,106 @@ public sealed class CifrasDeClaudeMdTests
             + "Estas cifras se cuentan, no se recuerdan (#52). Cuadraban todas el día que se "
             + "escribió este gate: lo que se les añadió no fue una corrección, fue el vigilante.");
     }
+
+    /// <summary>
+    /// La cuenta de elementos del CDN aparece <b>en un solo sitio</b> del repo.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que evita</b> (#86). Esa cifra estaba copiada en seis sitios y decía
+    /// tres cosas distintas — una en la guía, el doc de despliegue y dos comentarios de código;
+    /// otra en un tercer comentario del <b>mismo fichero</b> que uno de aquéllos; y una tercera en
+    /// el catálogo de una skill. Ninguna coincidía con lo que el CDN servía.</para>
+    ///
+    /// <para><b>Y es la única cifra de la guía que NO se puede cruzar contra el disco</b>, porque
+    /// depende de la red y del repo hermano — que CI no clona. Por eso fue la que se desvió: los
+    /// demás gates de cifras cuentan contra algo que está acá. Éste no puede comprobar que sea
+    /// correcta; comprueba <b>que no esté copiada</b>, que es la forma exacta en que se rompió.
+    /// Una cifra que no se puede verificar y vive en seis ficheros se desvía en seis ficheros.</para>
+    ///
+    /// <para><b>Por eso los comentarios de código la perdieron y no la corrigieron.</b> Uno
+    /// explicaba que todas las entradas del CDN sirven <c>main.js</c>; el otro, que recorrer el
+    /// catálogo entero dentro de <c>/_health</c> saldría caro. En los dos, lo que sostiene el
+    /// argumento es <b>todas</b> y <b>entero</b>, no cuántas sean. Un número que no hace falta es
+    /// un número que sólo puede envejecer.</para>
+    ///
+    /// <para><b>Qué mira y qué no, y no es una lista de exenciones.</b> Mira lo que describe el
+    /// estado <b>de hoy</b>: la guía, el doc de despliegue y los comentarios de código. Deja fuera
+    /// los ADR y los inventarios fechados, que son <b>historia</b>: un ADR que dice cuántos
+    /// elementos había el día de esa decisión no está desviado, está fechado, y reescribirlo sería
+    /// falsificarlo. La frontera es «¿esto afirma el presente?», no una lista de rutas.</para>
+    ///
+    /// <para>Fuera queda también el catálogo de <c>synergos-architect</c>, que se declara
+    /// <c>AUTO-GENERATED</c>: a mano no se toca. Y ahí hay un hallazgo aparte, en #86 — su
+    /// generador vive en el repo hermano y escribe a <c>&lt;padre&gt;/.claude/skills/…</c>, no al
+    /// que este repo versiona, así que en la disposición que §7 prescribe <b>no puede
+    /// refrescarlo</b>. Un fichero rotulado auto-generado que nadie puede regenerar se lee como
+    /// fresco y no lo está.</para>
+    /// </remarks>
+    [Fact]
+    public void La_cuenta_de_elementos_del_CDN_vive_en_un_solo_sitio()
+    {
+        var raiz = RepoRoot();
+
+        // Una cifra pegada a la palabra que la nombra. No se busca el número suelto: «130» sale
+        // en cualquier parte y buscarlo así daría falsos positivos sin fin.
+        var patron = new Regex(@"\b(\d{2,4})\s+(?:elementos|entradas|bundles)\b", RegexOptions.IgnoreCase);
+
+        var mirados = new[]
+        {
+            "CLAUDE.md",
+            Path.Combine("docs", "despliegue"),
+            Path.Combine("Synergos.CMS.Web", "Services"),
+        };
+        var hallazgos = new List<string>();
+
+        foreach (var entrada in mirados)
+        {
+            var ruta = Path.Combine(raiz, entrada);
+
+            var ficheros = File.Exists(ruta)
+                ? new[] { ruta }
+                : Directory.EnumerateFiles(ruta, "*.*", SearchOption.AllDirectories)
+                    .Where(f => f.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                             || f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                    .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                             && !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                    .ToArray();
+
+            foreach (var fichero in ficheros)
+            {
+                foreach (var linea in File.ReadAllLines(fichero))
+                {
+                    // Sólo cuenta si la línea habla del CDN o del registry: «14 elementos» de
+                    // otra cosa no tiene nada que ver.
+                    if (!linea.Contains("CDN", StringComparison.OrdinalIgnoreCase)
+                        && !linea.Contains("registry", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    var m = patron.Match(linea);
+                    if (!m.Success) continue;
+
+                    hallazgos.Add($"{Path.GetRelativePath(raiz, fichero)}: «{m.Value.Trim()}»");
+                }
+            }
+        }
+
+        // Sin esto el fact pasaría en verde vigilando el vacío: si el patrón dejara de encontrar
+        // nada —porque alguien reescribe la frase de §11 de otra forma— «cero copias» se cumpliría
+        // solo, y la próxima copia entraría sin que nadie la viera.
+        Assert.True(hallazgos.Count >= 1,
+            "No se encontró NINGUNA mención de la cuenta de elementos del CDN. Tiene que haber "
+            + "exactamente una, en CLAUDE.md §11 y con el comando para medirla al lado: si se "
+            + "reescribió de otra forma, este gate dejó de vigilar (#86).");
+
+        // La única que puede llevarla es la de §11, que trae el comando para medirla al lado.
+        var conComando = hallazgos.Count(h => h.StartsWith("CLAUDE.md", StringComparison.Ordinal));
+
+        Assert.True(hallazgos.Count == conComando && conComando == 1,
+            "La cuenta de elementos del CDN volvió a estar copiada, y es la única cifra de este "
+            + "repo que no se puede cruzar contra el disco —depende de la red y del repo hermano—, "
+            + "así que copiarla es garantizar que se desvíe. Llegó a decir 139 en cuatro sitios, "
+            + "130 en uno y 122 en cinco más, con el CDN sirviendo 130 (#86). Va en CLAUDE.md §11 "
+            + "y en ningún otro lado, con el comando para medirla al lado."
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, hallazgos));
+    }
 }
