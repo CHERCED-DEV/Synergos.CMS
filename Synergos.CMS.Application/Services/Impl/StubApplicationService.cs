@@ -482,10 +482,14 @@ public sealed class StubApplicationService : IApplicationService
             return 0;
         }
 
+        // EN HORA DE COLOMBIA Y NO EN UTC: un término se cuenta en días, y un día es local. A
+        // partir de las 19:00 de Bogotá el instante ya es mañana en UTC, así que contar allá le
+        // regalaba un hábil a quien radicaba de noche —dos si el desfase cruzaba el fin de
+        // semana— y le quitaba uno a quien miraba su expediente de noche.
         var vence = BusinessDayCalendar.AddBusinessDays(
-            DateOnly.FromDateTime(s.RadicadoAt.UtcDateTime), s.SlaDays);
+            BusinessDayCalendar.ColombiaDate(s.RadicadoAt), s.SlaDays);
 
-        return BusinessDayCalendar.BusinessDaysBetween(DateOnly.FromDateTime(now.UtcDateTime), vence);
+        return BusinessDayCalendar.BusinessDaysBetween(BusinessDayCalendar.ColombiaDate(now), vence);
     }
 
     // Timeline como 3 hitos (radicado/revisión/decisión) con estado visual:

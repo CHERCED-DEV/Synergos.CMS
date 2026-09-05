@@ -43,6 +43,31 @@ public static class BusinessDayCalendar
     public static IReadOnlySet<DateOnly> Holidays(int year)
         => _porAnio.GetOrAdd(year, Calcular);
 
+    /// <summary>
+    /// Colombia no tiene horario de verano: el desfase con UTC es fijo.
+    /// </summary>
+    public static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
+
+    /// <summary>
+    /// Qué día es en Colombia el instante dado.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Un término se cuenta en días, y un día es local.</b> A partir de las 19:00 de
+    /// Bogotá el instante ya es el día siguiente en UTC, así que contar allá desplaza el término
+    /// un día — <b>y en los dos sentidos</b>: quien radica de noche recibe el plazo del día
+    /// siguiente (un hábil de regalo, dos si cruza el fin de semana), y quien mira su expediente
+    /// de noche ve un día menos del que le queda.</para>
+    ///
+    /// <para><b>No salta a la vista</b> porque el caso obvio —el viernes por la noche— NO lo
+    /// destapa: sábado y viernes ruedan al mismo lunes hábil, así que las dos formas de contar
+    /// coinciden. Hace falta una noche entre semana para verlo, y ése es justo el caso que nadie
+    /// escribe a mano.</para>
+    ///
+    /// <para>Misma convención que <c>UmbracoEventCatalogSource</c>.</para>
+    /// </remarks>
+    public static DateOnly ColombiaDate(DateTimeOffset instant)
+        => DateOnly.FromDateTime(instant.ToOffset(ColombiaOffset).DateTime);
+
     /// <summary>Si es día hábil: ni sábado, ni domingo, ni festivo.</summary>
     public static bool IsBusinessDay(DateOnly day)
         => day.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)
