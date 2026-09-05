@@ -20,6 +20,11 @@ public sealed record StockHoldDto(string Id, int Quantity, DateTimeOffset Expire
 
 public sealed record OrderDto(string Id, string Status, MoneyDto Total);
 
-public sealed record PaymentDto(string Id, string Status, MoneyDto Amount, MoneyDto Refundable);
+// `Refunded` se añadió con #57: la capacidad siempre lo mandó —es el ACUMULADO devuelto— y acá
+// no se leía porque hasta ahora sólo se compensaba, y para eso basta con lo que queda devolvible.
+// Va opcional para no romper a quien lo construye posicionalmente: si no viene, quien lo use cae
+// a lo que pidió.
+public sealed record PaymentDto(
+    string Id, string Status, MoneyDto Amount, MoneyDto Refundable, MoneyDto? Refunded = null);
 
 public sealed record ShipmentDto(string Id, string Status);

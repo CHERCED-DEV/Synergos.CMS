@@ -9,8 +9,9 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// marketplace en memoria del proceso. Compone los seams existentes:
 /// <see cref="IShopOrderService"/> resuelve la orden/línea real
 /// (anti-tampering — el monto a reembolsar sale de la orden, no del cliente),
-/// <see cref="IPaymentProvider.RefundAsync"/> ejecuta el reembolso al llegar
-/// a <see cref="ShopReturnStatus.Refunded"/>, y <see cref="IAuditTrailWriter"/>
+/// <see cref="IShopOrderService.RefundAsync"/> ejecuta el reembolso al llegar
+/// a <see cref="ShopReturnStatus.Refunded"/> —contra quien tiene la plata, que
+/// no siempre es el proveedor local (#57)—, y <see cref="IAuditTrailWriter"/>
 /// deja rastro forense append-only de cada solicitud y transición (ADR 0037).
 /// </summary>
 /// <remarks>
@@ -38,7 +39,6 @@ public sealed class StubReturnService : IReturnService
         };
 
     private readonly IShopOrderService _orders;
-    private readonly IPaymentProvider _payments;
     private readonly IAuditTrailWriter? _audit;
     private readonly Func<DateTimeOffset> _now;
     private static readonly JsonSerializerOptions _json = new()
@@ -55,8 +55,14 @@ public sealed class StubReturnService : IReturnService
     // Serializa el read-modify-write. lock{} no sirve: el cuerpo hace await.
     private readonly SemaphoreSlim _mutate = new(1, 1);
 
-    public StubReturnService(IShopOrderService orders, IPaymentProvider payments)
-        : this(orders, payments, null, null)
+    /// <remarks>
+    /// <b>Ya NO recibe un <c>IPaymentProvider</c></b> (#57): la devolución se la pide al seam de
+    /// órdenes, que sabe contra quién se cobró. Un constructor que siguiera exigiéndolo mentiría
+    /// sobre lo que esta clase necesita — y dejaría el campo a mano para volver a llamarlo, que
+    /// es exactamente el defecto que se acaba de cerrar.
+    /// </remarks>
+    public StubReturnService(IShopOrderService orders)
+        : this(orders, null, null)
     {
     }
 
@@ -66,10 +72,9 @@ public sealed class StubReturnService : IReturnService
     /// </summary>
     public StubReturnService(
         IShopOrderService orders,
-        IPaymentProvider payments,
         IAuditTrailWriter? audit,
         Func<DateTimeOffset>? now)
-        : this(orders, payments, audit, now, null)
+        : this(orders, audit, now, null)
     {
     }
 
@@ -85,13 +90,11 @@ public sealed class StubReturnService : IReturnService
     /// </remarks>
     public StubReturnService(
         IShopOrderService orders,
-        IPaymentProvider payments,
         IAuditTrailWriter? audit,
         Func<DateTimeOffset>? now,
         IJsonEntityStore? store)
     {
         _orders = orders ?? throw new ArgumentNullException(nameof(orders));
-        _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _audit = audit;
         _now = now ?? (() => DateTimeOffset.UtcNow);
         _store = store ?? new InMemoryJsonEntityStore();
@@ -235,22 +238,27 @@ public sealed class StubReturnService : IReturnService
                 $"Transición ilegal del RMA {rma.RmaId}: {rma.Status} → {target}.");
         }
 
-        // Reembolso al llegar a Refunded — vía la sesión de pago de la orden.
+        // Reembolso al llegar a Refunded — se lo pide a QUIEN VENDIÓ, no al proveedor de pagos.
+        //
+        // Antes iba directo a IPaymentProvider con order.PaymentSessionId, y con la tienda
+        // cableada (Tienda:Mode=Bff) ese identificador es el de la SAGA del orquestador: el id de
+        // Api.Payments no sale de allá a propósito. El proveedor local no conocía esa llave, así
+        // que el caso NO llegaba nunca a reembolsado — y no ruidosamente (#57).
+        //
+        // La pregunta que decide a quién pedírselo no es «¿qué se está deshaciendo?» sino
+        // «¿QUIÉN TIENE LA PLATA?». Con la tienda en proceso la tiene el proveedor local, y el
+        // seam de órdenes se la pide a él; con la tienda cableada, el orquestador.
         if (target == ShopReturnStatus.Refunded)
         {
             var order = await _orders.GetOrderAsync(rma.OrderRef, cancellationToken)
                 ?? throw new InvalidOperationException($"La orden {rma.OrderRef} del RMA ya no existe.");
-            if (string.IsNullOrWhiteSpace(order.PaymentSessionId))
-            {
-                throw new InvalidOperationException($"La orden {rma.OrderRef} no tiene sesión de pago para reembolsar.");
-            }
 
-            var outcome = await _payments.RefundAsync(order.PaymentSessionId, rma.RefundAmount, cancellationToken);
-            if (outcome.Status != PaymentStatus.Refunded)
-            {
-                throw new InvalidOperationException(
-                    outcome.FailureReason ?? $"No se pudo reembolsar el RMA (estado del pago {outcome.Status}).");
-            }
+            await _orders.RefundAsync(
+                rma.OrderRef,
+                rma.RefundAmount,
+                order.Currency,
+                $"RMA {rma.RmaId}",
+                cancellationToken).ConfigureAwait(false);
         }
 
         var advanced = rma with

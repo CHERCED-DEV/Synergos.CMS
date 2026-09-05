@@ -193,4 +193,36 @@ public interface IShopOrderService
     /// vacío).
     /// </summary>
     Task<ShopOrder?> GetOrderAsync(string orderRef, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Devuelve <paramref name="amount"/> de lo cobrado por <paramref name="orderRef"/>.
+    /// </summary>
+    /// <returns>El acumulado devuelto de esa compra, según quien tiene la plata.</returns>
+    /// <remarks>
+    /// <para><b>Está acá y no en <see cref="IPaymentProvider"/>, y ésa es la corrección</b>
+    /// (#57). La devolución de un RMA se le pedía al proveedor de pagos local pasándole
+    /// <c>ShopOrder.PaymentSessionId</c>; con <c>Tienda:Mode=Bff</c> ese identificador es el de
+    /// la <b>saga</b> del orquestador —el de <c>Api.Payments</c> no sale de allá a propósito—,
+    /// así que el proveedor local no lo conocía y el caso <b>no llegaba nunca a reembolsado</b>.
+    /// La pregunta que decide dónde vive esto no es «¿qué se está deshaciendo?» sino
+    /// <b>«¿quién tiene la plata?»</b>, y con la tienda cableada la tiene quien vendió.</para>
+    ///
+    /// <para><b>El monto lo calcula quien llama</b>, desde la orden y nunca desde el cliente
+    /// (anti-tampering). Quien implementa esto no sabe qué línea se devolvió: sabe cuánto se
+    /// cobró y cuánto queda por devolver.</para>
+    ///
+    /// <para><b>Devuelve el ACUMULADO y no lo que se acaba de mover</b>, porque es lo único con
+    /// lo que se puede comprobar el tope: mirar sólo el último monto dejaría pasar tres
+    /// devoluciones de la mitad. Y sale de quien tiene la plata, no de nuestra suma.</para>
+    ///
+    /// <para><b>Lanza si no se pudo devolver.</b> Contestar con el acumulado anterior dejaría al
+    /// RMA marcándose reembolsado sin que se moviera un peso — que es exactamente el defecto que
+    /// esto cierra, con otra cara.</para>
+    /// </remarks>
+    Task<decimal> RefundAsync(
+        string orderRef,
+        decimal amount,
+        string currency,
+        string reason,
+        CancellationToken cancellationToken = default);
 }

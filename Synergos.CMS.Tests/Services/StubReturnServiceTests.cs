@@ -13,13 +13,14 @@ namespace Synergos.CMS.Tests.Services;
 /// devoluciones/RMA del marketplace — journeys J2/J5 del spec tienda.md):
 /// los 4 casos canónicos (ADR 0075) — empty / happy / filter / idempotent —
 /// más la máquina de estados del RMA (solicitada→aprobada/rechazada→recibida→
-/// reembolsada), el reembolso vía <see cref="IPaymentProvider.RefundAsync"/> y
+/// reembolsada), el reembolso vía <see cref="IShopOrderService.RefundAsync"/> y
 /// el rastro en <see cref="IAuditTrailWriter"/>. Compone los stubs reales del
 /// motor para ejercer el flujo end-to-end comprar → confirmar → devolver.
 /// </summary>
 public class StubReturnServiceTests
 {
     private const string LineLaptop = "tec-laptop-pro-14/tec-laptop-pro-14-16-512";
+    private const string LineHeadphones = "tec-audifonos-anc/tec-audifonos-anc-negro";
 
     private static ShopCustomer Customer() => new("Camila Restrepo", "camila@synergos.co");
 
@@ -38,7 +39,7 @@ public class StubReturnServiceTests
                 new StubReservationService(),
                 Payments,
                 now);
-            Returns = new StubReturnService(Orders, Payments, Audit, now);
+            Returns = new StubReturnService(Orders, Audit, now);
         }
 
         /// <summary>Compra pagada real: checkout + confirm de una laptop y unos audífonos.</summary>
@@ -137,8 +138,21 @@ public class StubReturnServiceTests
         Assert.Equal("camila@synergos.co", evt.ActorEmail);
     }
 
-    [Fact] // happy/estados: solicitada → aprobada → recibida → reembolsada ejecuta el refund en el PSP
-    public async Task FullLifecycle_RefundsThroughPaymentProvider()
+    /// <summary>
+    /// El ciclo completo devuelve la LÍNEA, y el pedido sigue capturado.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Este test afirmaba lo contrario, y afirmaba un defecto</b> (#57). Decía que tras
+    /// devolver una línea la sesión de pago quedaba <c>Refunded</c> — y quedaba, porque el
+    /// proveedor local <b>ignoraba el monto</b> y reembolsaba la sesión entera. El pedido tiene
+    /// dos líneas: devolver la laptop marcaba también los audífonos como reembolsados, y la
+    /// segunda devolución se rechazaba después por un estado que nadie había querido poner.</para>
+    ///
+    /// <para>Un test que codifica el defecto es peor que no tenerlo: convierte el arreglo en una
+    /// regresión y obliga a discutir con el rojo antes de poder mirar el código.</para>
+    /// </remarks>
+    [Fact]
+    public async Task FullLifecycle_RefundsTheLine_AndLeavesTheRestCaptured()
     {
         var h = new Harness();
         var order = await h.PaidOrderAsync();
@@ -153,12 +167,51 @@ public class StubReturnServiceTests
         var refunded = await h.Returns.AdvanceAsync(rma.RmaId, ShopReturnStatus.Refunded);
         Assert.Equal(ShopReturnStatus.Refunded, refunded.Status);
 
-        // El PSP quedó Refunded sobre la sesión de pago de la orden.
+        // Se devolvió EXACTAMENTE la línea, no el pedido.
         var outcome = await h.Payments.GetStatusAsync(order.PaymentSessionId);
-        Assert.Equal(PaymentStatus.Refunded, outcome.Status);
+        Assert.Equal(rma.RefundAmount, outcome.AmountRefunded);
+        Assert.True(rma.RefundAmount < order.Amount,
+            "El pedido tiene dos líneas: si devolver una fuera devolver el total, este test no probaría nada.");
+
+        // Y el pago sigue CAPTURADO, porque queda saldo de la otra línea.
+        Assert.Equal(PaymentStatus.Captured, outcome.Status);
 
         // Audit: 1 solicitud + 3 transiciones.
         Assert.Equal(4, h.Audit.Events.Count);
+    }
+
+    /// <summary>
+    /// Dos devoluciones se ACUMULAN, y sólo la última cierra el pago.
+    /// </summary>
+    /// <remarks>
+    /// Es el caso que el defecto hacía imposible: con la sesión marcada <c>Refunded</c> por la
+    /// primera línea, la segunda se rechazaba con «solo se reembolsa lo capturado». Nadie lo veía
+    /// porque ningún test devolvía dos líneas del mismo pedido.
+    /// </remarks>
+    [Fact]
+    public async Task TwoLines_Accumulate_AndOnlyTheLastClosesThePayment()
+    {
+        var h = new Harness();
+        var order = await h.PaidOrderAsync();
+
+        async Task DevolverAsync(string linea, string motivo)
+        {
+            var caso = await h.Returns.RequestAsync(order.OrderRef, linea, motivo);
+            await h.Returns.AdvanceAsync(caso.RmaId, ShopReturnStatus.Approved);
+            await h.Returns.AdvanceAsync(caso.RmaId, ShopReturnStatus.Received);
+            await h.Returns.AdvanceAsync(caso.RmaId, ShopReturnStatus.Refunded);
+        }
+
+        await DevolverAsync(LineLaptop, "Llegó dañado");
+        var tras1 = await h.Payments.GetStatusAsync(order.PaymentSessionId);
+        Assert.Equal(PaymentStatus.Captured, tras1.Status);
+
+        await DevolverAsync(LineHeadphones, "Ya no los quiere");
+        var tras2 = await h.Payments.GetStatusAsync(order.PaymentSessionId);
+
+        // Devuelto TODO lo cobrado → ahí sí, y no antes.
+        Assert.Equal(order.Amount, tras2.AmountRefunded);
+        Assert.Equal(PaymentStatus.Refunded, tras2.Status);
     }
 
     [Fact] // estados: rechazo es terminal; y tras un rechazo se puede abrir un caso nuevo

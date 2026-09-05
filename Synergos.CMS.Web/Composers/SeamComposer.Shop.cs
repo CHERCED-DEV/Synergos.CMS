@@ -144,8 +144,10 @@ public sealed partial class SeamComposer
         }
         services.AddSingleton<IReturnService>(sp =>
             new StubReturnService(
+                // Sin IPaymentProvider (#57): la devolución se la pide al seam de ÓRDENES, que
+                // sabe contra quién se cobró. Con la tienda cableada, quien tiene la plata es el
+                // orquestador, y la sesión que el CMS conoce es la de la saga.
                 sp.GetRequiredService<IShopOrderService>(),
-                sp.GetRequiredService<IPaymentProvider>(),
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 null,
                 // ADR 0116 fase 6 — los RMA a disco. Vivían en memoria mientras
