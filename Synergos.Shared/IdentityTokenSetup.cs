@@ -167,4 +167,78 @@ public static class IdentityAssertions
 
         return (IdentityAssertion.CmsSession, null);
     }
+
+    /// <summary>
+    /// Resuelve QUIÉN actúa —con sus roles— y con qué fuerza se afirmó, de una sola verificación.
+    /// </summary>
+    /// <param name="gate">El verificador, que puede no estar configurado.</param>
+    /// <param name="rawToken">Lo que vino en la cabecera, si vino algo.</param>
+    /// <param name="principal">Quién dice la petición que está actuando.</param>
+    /// <param name="declaredRoles">Los roles que declara el cuerpo. Se usan SOLO si no hay token.</param>
+    /// <param name="declared">La afirmación que declara el cuerpo, si la hay.</param>
+    /// <param name="now">Ahora.</param>
+    /// <param name="codePrefix">El prefijo de rechazo de la capacidad que pregunta.</param>
+    /// <remarks>
+    /// <para><b>Por qué existe además de <see cref="Resolve"/>.</b> Aquél contesta «con qué
+    /// fuerza», que es lo que necesita quien sólo va a <i>anotar</i> el acceso. Esto contesta
+    /// además «con qué roles», que es lo que necesita quien va a <b>decidir</b> con ellos — y
+    /// esos roles están dentro del token, así que sacarlos exige las <c>claims</c> y no sólo el
+    /// veredicto. Encadenar los dos verificaría el mismo token dos veces.</para>
+    ///
+    /// <para><b>Vive acá desde su SEGUNDO consumidor, no antes</b> (<c>CLAUDE.md</c> §0.B.17).
+    /// Nació dentro de <c>Api.Workflow</c> con el defecto #48 —los roles venían en el cuerpo, así
+    /// que cualquiera con la llave compartida se ascendía a funcionario— y apareció igual en
+    /// <c>Api.Audit</c> (#72). Con una tercera copia, la comprobación del token derivaría entre
+    /// capacidades y el mismo token valdría distinto según a quién se le presente; y una
+    /// capacidad no puede referenciar a otra (§0.B.11), así que <c>Shared</c> es el único sitio
+    /// válido.</para>
+    ///
+    /// <para><b>El token gana sobre lo declarado, y no es preferencia:</b> los roles declarados
+    /// son la palabra de quien llama y los del token vienen firmados. Cuando hay prueba, lo
+    /// declarado no se mezcla — se descarta.</para>
+    ///
+    /// <para><b>Sin token se sigue adelante declarando</b>, que es lo que se hacía antes de la
+    /// HU #14. Rechazar ahí convertiría cada despliegue sin <c>Api.Identity</c> en uno que no
+    /// puede operar, y la identidad es justo la pieza que no debe ser punto único de fallo.</para>
+    /// </remarks>
+    public static Result<(Actor Actor, IdentityAssertion Assertion)> ResolveActor(
+        IdentityTokenGate gate, string? rawToken, Ref principal,
+        IReadOnlyList<string>? declaredRoles, IdentityAssertion? declared,
+        DateTimeOffset now, string codePrefix)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+
+        if (string.IsNullOrWhiteSpace(rawToken))
+        {
+            // Sin prueba, la afirmación se resuelve con la MISMA regla que el resto de la
+            // plataforma: lo único que se acepta declarado es lo más débil.
+            var (afirmacion, motivo) = Resolve(gate, rawToken, principal, declared, now, codePrefix);
+            if (afirmacion is null) return Result.Rejected<(Actor, IdentityAssertion)>(motivo!);
+
+            var declarados = (declaredRoles ?? Array.Empty<string>())
+                .Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToArray();
+
+            return Result.Ok((Actor.Of(principal, declarados), afirmacion.Value));
+        }
+
+        if (!gate.Configured)
+        {
+            return Result.Rejected<(Actor, IdentityAssertion)>(
+                Rejection.Invalid($"{IdentityTokens.CodePrefix}.token_not_verifiable",
+                    "Se presentó un token de identidad y este servicio no tiene llave para comprobarlo."));
+        }
+
+        var (claims, falla) = gate.Tokens!.Verify(rawToken, now);
+        if (claims is null) return Result.Rejected<(Actor, IdentityAssertion)>(IdentityTokens.ToRejection(falla!.Value));
+
+        // El token dice una persona y la petición actúa como otra: sin esto el token sería
+        // decoración y la capacidad seguiría creyendo el `who` que le mandan.
+        if (claims.Subject != principal)
+        {
+            return Result.Rejected<(Actor, IdentityAssertion)>(
+                IdentityTokens.SubjectMismatch(claims.Subject, principal));
+        }
+
+        return Result.Ok((Actor.Of(principal, claims.Roles.ToArray()), IdentityAssertion.IdentityToken));
+    }
 }
