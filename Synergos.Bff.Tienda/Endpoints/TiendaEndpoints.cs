@@ -48,6 +48,34 @@ public static class TiendaEndpoints
         app.MapPost("/v1/purchases/{id}/cancel", async (string id, PurchaseFlow flow, CancellationToken ct) =>
             (await flow.CancelAsync(id, ct)).Map(PurchaseResponse.From).ToHttp());
 
+        // Devolver una PARTE de lo cobrado, por una compra que SÍ se cumplió (#57).
+        //
+        // No es una compensación: aquélla deshace lo que quedó a medias y la ordena la máquina.
+        // Esto lo ordena quien vendió, sobre una compra completa, y no deshace nada — el pedido
+        // siguió existiendo y el cliente devolvió una caja.
+        //
+        // Hace falta porque LA PLATA LA TIENE ESTE LADO. El expediente del RMA vive en el CMS,
+        // pero el id de pago de Api.Payments no sale de acá a propósito: lo que el CMS conoce es
+        // el id de la SAGA. Sin esta puerta le pedía el reembolso a su proveedor local, que no
+        // conoce esa llave, y el RMA no llegaba nunca a reembolsado.
+        //
+        // EXIGE llave, y no por ceremonia: devolver plata es un movimiento RELATIVO, así que un
+        // reintento tras un timeout sin llave devolvería dos veces. Es la misma razón por la que
+        // el ajuste relativo de Api.Inventory la exige y el absoluto no (#30).
+        app.MapPost("/v1/purchases/{id}/refund", async (
+            string id, RefundPurchaseRequest? req, HttpRequest http, PurchaseFlow flow, CancellationToken ct) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
+
+            if (req?.Amount is not { } m)
+            {
+                return Invalid("bad_refund", "Hace falta el monto a devolver.");
+            }
+            if (!TryMoney(m, out var monto, out var mala)) return mala!;
+
+            return (await flow.RefundAsync(id, monto, req.Reason, key, ct)).Map(PurchaseResponse.From).ToHttp();
+        });
+
         // Volver a intentar lo que se rindió. Es la puerta de la persona a la que se le avisó:
         // sin ella, "se rinde a los ocho intentos" sería "se abandona", y arreglar una devolución
         // colgada exigiría tocarla a mano en la capacidad, por fuera del rastro de la saga.
@@ -75,4 +103,27 @@ public static class TiendaEndpoints
 
     private static IResult Invalid(string code, string message)
         => Rejection.Invalid($"{CodePrefix}.{code}", message).ToProblem();
+
+    /// <summary>
+    /// Lee un monto del cuerpo, o dice por qué no.
+    /// </summary>
+    /// <remarks>
+    /// <c>Money.Of</c> lanza con una moneda vacía o mal formada, y una excepción en el borde sale
+    /// como 500 — un problema del servidor por un cuerpo que mandó el cliente. Se valida la FORMA
+    /// acá (CLAUDE.md §15) y se deja el negocio en <c>Domain/</c>.
+    /// </remarks>
+    private static bool TryMoney(MoneyDto dto, out Money monto, out IResult? mala)
+    {
+        monto = default;
+        mala = null;
+
+        if (string.IsNullOrWhiteSpace(dto.Currency) || dto.Currency.Trim().Length != 3)
+        {
+            mala = Invalid("bad_refund", $"Moneda inválida: '{dto.Currency}'.");
+            return false;
+        }
+
+        monto = Money.Of(dto.Amount, dto.Currency.Trim().ToUpperInvariant());
+        return true;
+    }
 }

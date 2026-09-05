@@ -21,6 +21,15 @@ public sealed record AddressRequest(
 /// <summary>Confirmar la compra: capturar y despachar.</summary>
 public sealed record ConfirmRequest(AddressRequest? To, string? Carrier);
 
+/// <summary>
+/// Lo que quien vendió manda para devolver una parte de lo cobrado (#57).
+/// </summary>
+/// <remarks>
+/// <b>El monto llega calculado.</b> El orquestador cotiza la compra entera y no sabe cuánto vale
+/// una línea; quien vende sí, y lo saca de la orden — no del cliente.
+/// </remarks>
+public sealed record RefundPurchaseRequest(MoneyDto? Amount, string? Reason);
+
 /// <summary>Cómo sale una compra.</summary>
 /// <param name="Id">Identificador.</param>
 /// <param name="BuyerKind">Tipo del comprador.</param>
@@ -35,12 +44,16 @@ public sealed record ConfirmRequest(AddressRequest? To, string? Carrier);
 /// <param name="LastError">Qué falló.</param>
 public sealed record PurchaseResponse(
     string Id, string BuyerKind, string BuyerId, string CartId, string Status, MoneyDto Total,
-    string? OrderId, string? ShipmentId, int HeldLines, int PendingCompensations, string? LastError)
+    string? OrderId, string? ShipmentId, int HeldLines, int PendingCompensations, string? LastError,
+    MoneyDto? Refunded = null)
 {
     public static PurchaseResponse From(PurchaseSaga s) => new(
         s.Id, s.Buyer.Kind, s.Buyer.Id, s.CartId, s.Status.ToString(),
         new MoneyDto(s.Total.Amount, s.Total.Currency),
-        s.OrderId, s.ShipmentId, s.Holds.Count, s.Pending().Count, s.LastError);
+        s.OrderId, s.ShipmentId, s.Holds.Count, s.Pending().Count, s.LastError,
+        // Nulo es «no se devolvió nada», no «cero»: un cero escrito diría que alguien ordenó una
+        // devolución de cero, y quien lea la compra no puede distinguir eso de que nadie la tocó.
+        s.Refunded is { } d ? new MoneyDto(d.Amount, d.Currency) : null);
 }
 
 /// <summary>Una compensación pendiente, para quien vigila.</summary>

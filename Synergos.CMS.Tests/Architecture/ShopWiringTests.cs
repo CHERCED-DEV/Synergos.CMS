@@ -117,6 +117,63 @@ public sealed class ShopWiringTests
         Assert.Contains("v1/purchases", cliente, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// La devolución se la pide a QUIEN TIENE LA PLATA, no al proveedor de pagos (#57).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Éste es el defecto, y no fallaba ruidosamente.</b> El RMA llamaba a
+    /// <c>IPaymentProvider.RefundAsync</c> con <c>ShopOrder.PaymentSessionId</c>. Con la tienda
+    /// cableada ese identificador es el de la <b>saga</b> del orquestador —el id de
+    /// <c>Api.Payments</c> no sale de allá a propósito—, así que el proveedor local no lo conocía
+    /// y el caso no llegaba nunca a reembolsado.</para>
+    ///
+    /// <para><b>Y el mapa del cableado tenía mal la razón.</b> Decía que <c>StubReturnService</c>
+    /// iba a un orquestador por «dos pasos con plata en medio»; mirando el código, el segundo
+    /// paso —marcar el RMA— es una escritura LOCAL, y un reembolso no se compensa. La pregunta
+    /// que decide no es «¿qué hay que deshacer?» sino <b>«¿quién tiene la plata?»</b>.</para>
+    ///
+    /// <para>Se mira el fichero sin comentarios, porque la prosa de arriba NOMBRA la ruta
+    /// prohibida para explicarla — un gate que leyera el texto entero se pondría rojo por su
+    /// propia explicación.</para>
+    /// </remarks>
+    [Fact]
+    public void La_devolucion_no_le_pide_la_plata_al_proveedor_local()
+    {
+        var rma = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Application", "Services", "Impl", "StubReturnService.cs"));
+
+        Assert.DoesNotContain("_payments.RefundAsync", rma, StringComparison.Ordinal);
+        Assert.DoesNotContain("PaymentSessionId", rma, StringComparison.Ordinal);
+
+        // Y se la pide al seam de órdenes, que es quien sabe contra qué se cobró.
+        Assert.Contains("_orders.RefundAsync", rma, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// El camino HTTP devuelve con LLAVE de idempotencia.
+    /// </summary>
+    /// <remarks>
+    /// Devolver plata es un movimiento RELATIVO: un reintento tras un timeout sin llave devuelve
+    /// dos veces. Es la misma razón por la que el ajuste relativo de <c>Api.Inventory</c> la exige
+    /// y el absoluto no (#30) — y acá el daño es peor, porque no se nota hasta que cuadran caja.
+    /// </remarks>
+    [Fact]
+    public void La_devolucion_por_HTTP_lleva_llave()
+    {
+        var cliente = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Web", "Services", "HttpShopOrderService.cs"));
+
+        var refund = cliente.IndexOf("purchases/{Uri.EscapeDataString(orderRef)}/refund", StringComparison.Ordinal);
+        Assert.True(refund > 0, "El cliente ya no llama a la devolución del orquestador: revisar este gate.");
+
+        var trozo = cliente[refund..Math.Min(cliente.Length, refund + 700)];
+        Assert.Contains("Idempotency-Key", trozo, StringComparison.Ordinal);
+
+        // Y lo devuelto sale de la RESPUESTA, no del monto que pedimos: dar por bueno lo nuestro
+        // marcaría el caso reembolsado por una cifra que quizá nadie movió.
+        Assert.Contains("compra.Refunded", trozo, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void El_stub_sigue_siendo_el_default()
     {

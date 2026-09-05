@@ -108,7 +108,9 @@ public sealed class StubPaymentProvider : IPaymentProvider
         var s = await LoadSessionAsync(sessionId, cancellationToken);
         return s is null
             ? NotFound(sessionId)
-            : new PaymentOutcome(sessionId, s.Status, s.Captured);
+            // Lo devuelto viaja en TODA respuesta sobre la sesión, no sólo en la de devolver:
+            // es un dato de la sesión, y quien consulta necesita poder ver que ya salió plata.
+            : new PaymentOutcome(sessionId, s.Status, s.Captured, null, s.Refunded);
     }
 
     public async Task<PaymentOutcome> CaptureAsync(string sessionId, decimal? amount = null, CancellationToken cancellationToken = default)
@@ -135,9 +137,9 @@ public sealed class StubPaymentProvider : IPaymentProvider
                 var target = amount is decimal a && a > 0m ? Math.Min(a, s.Amount) : s.Amount;
                 var captured = s with { Status = PaymentStatus.Captured, Captured = target };
                 await WriteSessionAsync(sessionId, captured, cancellationToken);
-                return new PaymentOutcome(sessionId, PaymentStatus.Captured, captured.Captured);
+                return new PaymentOutcome(sessionId, PaymentStatus.Captured, captured.Captured, null, captured.Refunded);
             }
-            return new PaymentOutcome(sessionId, s.Status, s.Captured, $"No se puede capturar en estado {s.Status}.");
+            return new PaymentOutcome(sessionId, s.Status, s.Captured, $"No se puede capturar en estado {s.Status}.", s.Refunded);
         }
         finally
         {
@@ -197,12 +199,40 @@ public sealed class StubPaymentProvider : IPaymentProvider
             {
                 return NotFound(sessionId);
             }
-            if (s.Status != PaymentStatus.Captured)
+            // Captured o Refunded: una sesión con una devolución PARCIAL sigue teniendo saldo, y
+            // rechazarla por «ya está reembolsada» dejaba la segunda línea de un pedido sin poder
+            // devolverse (#57).
+            if (s.Status is not (PaymentStatus.Captured or PaymentStatus.Refunded))
             {
-                return new PaymentOutcome(sessionId, s.Status, s.Captured, $"Solo se reembolsa lo capturado (estado actual {s.Status}).");
+                return new PaymentOutcome(sessionId, s.Status, s.Captured,
+                    $"Solo se reembolsa lo capturado (estado actual {s.Status}).", s.Refunded);
             }
-            await WriteSessionAsync(sessionId, s with { Status = PaymentStatus.Refunded }, cancellationToken);
-            return new PaymentOutcome(sessionId, PaymentStatus.Refunded, s.Captured);
+
+            // EL MONTO SE RESPETA. Antes se ignoraba y la sesión entera pasaba a Refunded, así
+            // que devolver una línea de tres marcaba el pedido completo como reembolsado —y la
+            // siguiente devolución se rechazaba por un estado que nadie había querido poner.
+            var pedido = amount ?? (s.Captured - s.Refunded);
+            if (pedido <= 0m)
+            {
+                return new PaymentOutcome(sessionId, s.Status, s.Captured,
+                    $"No se puede devolver {pedido}.", s.Refunded);
+            }
+
+            var disponible = s.Captured - s.Refunded;
+            if (pedido > disponible)
+            {
+                return new PaymentOutcome(sessionId, s.Status, s.Captured,
+                    $"Se pidió devolver {pedido} y quedan {disponible} por devolver.", s.Refunded);
+            }
+
+            var acumulado = s.Refunded + pedido;
+
+            // El estado sólo cambia cuando ya no queda nada. Con saldo, la sesión sigue
+            // CAPTURADA con una devolución parcial anotada, que es lo que de verdad pasó.
+            var estado = acumulado >= s.Captured ? PaymentStatus.Refunded : PaymentStatus.Captured;
+
+            await WriteSessionAsync(sessionId, s with { Status = estado, Refunded = acumulado }, cancellationToken);
+            return new PaymentOutcome(sessionId, estado, s.Captured, null, acumulado);
         }
         finally
         {
@@ -228,5 +258,11 @@ public sealed class StubPaymentProvider : IPaymentProvider
         => new(sessionId ?? string.Empty, PaymentStatus.Failed, 0m, "Sesión de pago no encontrada.");
 
     /// <summary>Estado serializado de la sesión: monto/estado/capturado + la orden asociada.</summary>
-    private sealed record PersistedSession(PaymentStatus Status, decimal Amount, decimal Captured, string? OrderRef, string? RedirectUrl);
+    /// <remarks>
+    /// <c>Refunded</c> lleva default para que las sesiones ya escritas en disco sigan
+    /// deserializando: la que no lo trae es una en la que nadie devolvió nada, que es la verdad.
+    /// </remarks>
+    private sealed record PersistedSession(
+        PaymentStatus Status, decimal Amount, decimal Captured, string? OrderRef, string? RedirectUrl,
+        decimal Refunded = 0m);
 }
