@@ -257,18 +257,24 @@ public sealed class MessagingAcknowledgmentTests
     }
 
     /// <summary>
-    /// El acuse del autor se anota como <c>CmsSession</c>, que es <b>la verdad</b>.
+    /// El servicio no ASCIENDE la afirmación del autor: escribió con el suelo, su acuse dice el suelo.
     /// </summary>
     /// <remarks>
     /// <para><b>Este test decía <c>IdentityToken</c>, y estaba mal por la misma razón que el
     /// código</b> (defecto #42): los dos razonaban «no hay duda de quién escribió, lo acaba de
-    /// hacer», que mide CONFIANZA. El campo mide QUIÉN DIO FE, y acá no dio fe nadie —
-    /// <c>Api.Identity</c> ni siquiera sabe emitir tokens, y el autor llegó declarado por el
-    /// llamador sobre la llave compartida, igual que en cualquier otra llamada.</para>
+    /// hacer», que mide CONFIANZA. El campo mide QUIÉN DIO FE.</para>
     ///
     /// <para>Es el patrón que este repo ya nombró varias veces: <b>el test codificaba la misma
     /// suposición equivocada que el código</b>, con el comentario copiado. Por eso no lo atrapó
     /// nadie — no había nada que contradecir.</para>
+    ///
+    /// <para><b>Y lo que guarda cambió con #81</b>, así que conviene decir qué guarda hoy. El
+    /// razonamiento de arriba se apoyaba en que «nadie dio fe»: <c>Api.Identity</c> no sabía
+    /// emitir tokens y el autor llegaba declarado sobre la llave compartida. Las dos cosas dejaron
+    /// de ser ciertas —emite desde la HU #14 rebanada 2, y desde #81 la capacidad <b>comprueba</b>
+    /// quién escribe—, así que el <c>CmsSession</c> de acá ya no es una constante del servicio:
+    /// es <b>lo que este caso presentó</b>. Lo que sigue vigilando, y sigue importando, es que no
+    /// se ascienda — el caso general de la propagación lo cubren los tests de <c>PostedWith</c>.</para>
     /// </remarks>
     [Fact]
     public void El_acuse_del_autor_dice_CmsSession_porque_nadie_dio_fe_de_mas()
@@ -281,19 +287,24 @@ public sealed class MessagingAcknowledgmentTests
     }
 
     /// <summary>
-    /// Hoy NADIE emite <c>IdentityToken</c>, y este test se cae solo cuando alguien lo haga.
+    /// El servicio no INVENTA un <c>IdentityToken</c>: si nadie lo presentó, no aparece.
     /// </summary>
     /// <remarks>
-    /// <para>Es la guarda que faltaba y la que hace que el campo sirva. El archivo tiene que
-    /// poder decir «esto lo certificó <c>Api.Identity</c>» sin que nadie haya podido escribirlo
-    /// por corazonada — y mientras no exista emisor, la única forma honesta de que aparezca
-    /// <c>IdentityToken</c> es que el llamador lo declare, que es justo el techo que la HU #14
-    /// existe para levantar.</para>
+    /// <para>Es la guarda que hace que el campo sirva. El registro tiene que poder decir «esto lo
+    /// certificó <c>Api.Identity</c>» sin que nadie haya podido escribirlo por corazonada.</para>
     ///
-    /// <para><b>Se cae solo el día que #14 emita tokens de verdad</b>, y ahí hay que volver a
-    /// mirarlo: en ese momento la afirmación deja de ser una declaración del llamador y pasa a
-    /// ser algo que la capacidad comprobó. Un test que hay que revisar cuando cambia el mundo
-    /// vale más que uno que no dice nada.</para>
+    /// <para><b>El día que decía esperar ya llegó, y por eso este test cambió de sentido.</b>
+    /// Estaba escrito como «hoy nadie emite tokens, así que esto se cae solo cuando alguien lo
+    /// haga» — <c>Api.Identity</c> los emite desde la HU #14 rebanada 2 y no se cayó, porque lo
+    /// que en realidad comprobaba era que el servicio no se los inventa. Eso <b>sigue siendo
+    /// cierto y sigue valiendo</b>: la afirmación entra resuelta por el borde y ninguna de las
+    /// rutas que el servicio anota por iniciativa propia —el autoacuse del autor— la sube.</para>
+    ///
+    /// <para><b>Lo que ya NO comprueba, dicho para que nadie se apoye en ello:</b> que la
+    /// capacidad rechace un <c>IdentityToken</c> declarado sin presentarlo. Eso vive en el borde
+    /// desde #81 y lo vigilan <c>IdentityGateTests</c> y los tests de
+    /// <c>IdentityAssertions.Resolve</c>. Un test de servicio no puede verlo, porque a este nivel
+    /// la afirmación ya viene decidida.</para>
     /// </remarks>
     [Fact]
     public void Ninguna_ruta_del_servicio_emite_IdentityToken_por_su_cuenta()

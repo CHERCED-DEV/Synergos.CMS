@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2699 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2701 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,8 +111,8 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2699 tests passing (gate liftado ADR 0075)
-│   ├── Architecture/            LOS GATES: segregación (17) + molde (11) + capas (8)
+├── Synergos.CMS.Tests/          xUnit — 2701 tests passing (gate liftado ADR 0075)
+│   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
 │   ├── Api/                     tests de reglas y servicio por capacidad
@@ -373,7 +373,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2699 tests):
+# Suite completa (2701 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -498,7 +498,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2699 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2701 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -506,18 +506,36 @@ segregación y molde en verde.
 > que las veinte construyen —el primer argumento de un `Rejection.*`, con
 > `{CodePrefix}` resuelto—, y por eso **excluye dos cosas que sí existen**: los
 > que se arman en tiempo de ejecución (`orders.already_{destino}`, y los
-> reenvoltorios `xxx.{code}`), que no se pueden enumerar sin ejecutar; y los
-> **seis que viven en `Synergos.Shared`** —`identity.token_expired`,
-> `token_malformed`, `token_unknown_key`, `token_subject_mismatch`,
-> `assertion_not_proven` y `token_not_verifiable`—, que una capacidad devuelve
-> pero no declara. Contando aquéllos serían 240.
+> reenvoltorios `xxx.{code}`), que no se pueden enumerar sin ejecutar; y los que
+> viven en `Synergos.Shared`, que una capacidad devuelve pero no declara.
+>
+> **Ésos últimos NO son un número, y creer que lo eran fue el error.** Seis
+> llevan prefijo fijo —`identity.token_expired`, `token_malformed`,
+> `token_unknown_key`, `token_subject_mismatch`, `assertion_not_proven` y
+> `token_not_verifiable`—, así que se pueden contar y esta guía decía «con ellos
+> serían 240». Pero hay **dos más que llevan el prefijo de quien llama**:
+> `{prefijo}.idempotency_key_required`, que emiten las **19** capacidades que
+> exigen la cabecera, y `{prefijo}.access_requires_identity`, que emite quien
+> deje la afirmación sin declarar —hoy `Api.Audit` y `Api.Consent`;
+> `Api.Messaging` declara el suyo y `Api.Workflow` no puede llegar ahí—. Sumarlo
+> todo no da una cifra estable: da **una función de quién llama**, que cambia
+> cuando una capacidad empieza a exigir una llave sin que nadie escriba un
+> `Rejection` nuevo. Por eso el criterio cuenta **el árbol de las capacidades**
+> y no «todo lo que puede salir»: lo segundo hay que ejecutarlo para saberlo.
+>
+> Se eligió el criterio **simétrico con el de endpoints** —lo que hay en el
+> **árbol de las capacidades**— porque el sujeto de la frase son las veinte.
+> Hay gate (`ApiMoldTests`), y desde el descuadre de abajo **cuenta también el
+> número de esta nota**: tener la cifra en dos sitios y vigilar uno solo es
+> cómo se acaba discutiendo cuál de los dos está mal.
 >
 > **El sexto llegó ahí solo, y el gate lo cazó** (#72): al subir la
 > comprobación del token a `Shared`, `token_not_verifiable` dejó de
 > construirse dentro de una capacidad y la cifra bajó de 235 a 234 sin que
 > nadie tocara una regla. Es lo que se quería — mover código no debería poder
-> cambiar en silencio lo que la guía afirma. Se eligió el criterio simétrico con el de endpoints: lo
-> que hay **en el árbol de las capacidades**. Hay gate (`ApiMoldTests`).
+> cambiar en silencio lo que la guía afirma. **Y la nota se quedó diciendo
+> 235** cuando el resumen ya decía 234: el gate miraba la frase del resumen y
+> la de la nota no la miraba nadie.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
 imágenes por SHA a GHCR, `compose.prod.yml`, `tools/bootstrap-servidor.sh`,
@@ -806,8 +824,45 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   **`Api.Audit` es la cuarta** (#72), y era la que peor estaba —
   y desde la rebanada 6 es también **la primera a la que el CMS le
   PRESENTA** identidad para escribir, no sólo para leer.
-  **Faltan las otras 16**, y desde la rebanada 4 hay quien les
-  presente identidad cuando la pidan: el CMS ya la emite.
+
+  > **No eran «las otras 16»** (#81), y la nota de más abajo cita esa
+  > misma cifra como ejemplo del error que describe —sin corregirla—. Salía
+  > de restar cuatro a veinte, no de mirar qué guarda cada capacidad: al
+  > barrer las veinte,
+  > **trece no guardan actor ninguno** — sus pares `<X>Kind`/`<X>Id`
+  > nombran el **objeto** de la operación (`Target`, `Topic`, `Subject`,
+  > `To`, `For`), no a quien la hizo. Para ésas «poner identidad como
+  > puerta» no es trabajo pendiente: es otra pregunta, **autorizar** en vez
+  > de **atribuir**.
+  >
+  > Quedan **seis**, y tampoco son un grupo. Ninguna está cableada a un
+  > consumidor que **presente identidad** —los emisores del repo son tres,
+  > `HttpCaseWorkflowService` y `HttpGovActNotificationService` hacia
+  > Gobierno y `HttpAuditTrailWriter` hacia `Api.Audit`, y ninguno apunta a
+  > ellas—, pero de ahí **no** se sigue que a todas les falte cableado:
+  >
+  > | capacidad | campo | consumidor hoy |
+  > |---|---|---|
+  > | `Moderation` | `DecidedBy`, `Reporter` | ninguno |
+  > | `Engagement` | `Actor` | ninguno |
+  > | `Documents` | `Owner` | sólo nombrada por Gobierno, como adjunto por referencia |
+  > | `Cart` | `Owner` | **el CMS, directo** (`POST /v1/carts` en `HttpShopOrderService`) |
+  > | `Orders` | `Buyer` | **`Bff.Tienda`** |
+  > | `Payments` | `Payer` | **los tres orquestadores** |
+  >
+  > Y para las tres de abajo el actor **no es un seudónimo opaco**: con
+  > sesión iniciada es el `memberKey`, que es exactamente la forma de
+  > sujeto que el CMS ya firma (el seudónimo de #47 sustituye al **correo**,
+  > no al identificador). Así que su disparador no es un cableado que
+  > falte: es **extender `Synergos:Identity:Mode=Api` más allá de
+  > Gobierno**, y para `Orders` y `Payments` además decidir si el
+  > orquestador **propaga** la cabecera — que hoy no la propaga nadie y no
+  > está escrito en ninguna parte que deba.
+  >
+  > Las tres de arriba sí esperan su primer consumidor, y conviene que sea
+  > entonces: se verifica contra un llamador real y no contra un fake, que
+  > es lo que hacía que #72 tocara —`Api.Audit` acababa de estrenar
+  > consumidor con #15—.
 
   > **La bitácora estaba blindada contra reescribir el pasado y abierta a
   > FABRICARLO** (#72). No hay `PUT` ni `DELETE` desde el primer día —el
