@@ -5,7 +5,7 @@
 > Esta tabla cierra el loop entre el schema CMS uSync (lo que el editor llena
 > en backoffice) y el bundle UI que efectivamente hidrata en el browser.
 >
-> Generated: 2026-09-05T23:08:39.695Z
+> Generated: 2026-09-05T23:25:46.043Z
 
 ## Pipeline editor → bundle
 

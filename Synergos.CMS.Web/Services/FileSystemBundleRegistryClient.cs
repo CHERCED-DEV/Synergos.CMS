@@ -80,10 +80,10 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
         // framework por defecto, con el manifiesto ilegible— no significa que el registry esté
         // caído, y rendirse en el primero convertiría un bache en un rojo del sitio entero.
         //
-        // El tope existe porque esto corre dentro de /_health: recorrer el registry entero ante
+        // El tope existe porque esto corre dentro de /_health: recorrer el catálogo entero ante
         // un CDN de verdad roto convertiría el chequeo de salud en el trabajo más caro del
-        // proceso, justo cuando algo anda mal. Cuántos elementos hay no cambia el argumento —y
-        // por eso no va acá: la cifra vive en CLAUDE.md §11 y sólo ahí (#86).
+        // proceso, justo cuando algo anda mal. (Cuántos elementos hay no se escribe acá: se mide,
+        // y el comando vive en CLAUDE.md §11 — ver #86.)
         var intentos = 0;
         foreach (var tag in snap.ByTag.Keys)
         {
@@ -184,7 +184,8 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
             // habría hasheado el fichero equivocado para cualquier elemento que publicara otra
             // entrada — el mismo defecto de #32 (leer el SRI de otro fichero) cinco líneas más
             // abajo. Hoy no lo dispara nadie porque TODAS las entradas del CDN son `main.js`,
-            // que es justamente por lo que nunca se vio. Lo que importa es «todas», no cuántas.
+            // que es justamente por lo que nunca se vio — y lo que importa es el «todas», no
+            // cuántas sean.
             integrity = ComputeIntegrityCached(Path.Combine(bundleDir, entryScript));
         }
 

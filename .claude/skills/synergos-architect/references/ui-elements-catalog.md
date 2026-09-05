@@ -1,4 +1,4 @@
-# UI Elements Catalog — 130 bundles publicados al CDN
+# UI Elements Catalog — 122 bundles publicados al CDN
 
 > **AUTO-GENERATED** by `tools/refresh-skill-catalog.mjs`. Re-run via `npm run skill:refresh`
 > o automáticamente al final de `npm run release:angular`. Edits manuales se pierden.
@@ -6,7 +6,7 @@
 > Snapshot del CDN registry (`C:\LOCAL_CDN\synergos\registry.json`) + UI contracts
 > (`vitals/contracts/src/{element-config,elements-syn,element-inputs}`).
 >
-> Generated: 2026-09-05T23:08:39.690Z
+> Generated: 2026-09-05T23:25:46.040Z
 
 ## Cómo leer este catálogo
 
