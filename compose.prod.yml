@@ -148,6 +148,17 @@ services:
       Synergos__Gob__ApiKey: ${SYNERGOS_API_KEY}
       Synergos__Gob__DefinitionKey: ${SYNERGOS_GOB_DEFINITION:-gov.tramite}
 
+      # Contra que se pone un acto administrativo en conocimiento (HU #62). Va por
+      # SU PROPIO interruptor: notificar es Api.Messaging y decidir es Api.Workflow,
+      # y un despliegue puede querer una sin la otra. Con la capacidad caida no se
+      # notifica ni se abre —no se da por notificado en silencio— pero la bandeja
+      # del ciudadano se sigue viendo, porque se lee de este lado.
+      Synergos__Gob__Notifications__Mode: ${SYNERGOS_GOB_NOTIFICATIONS_MODE:-Local}
+      Synergos__Gob__Notifications__BaseUrl: "http://api-messaging:8080"
+      Synergos__Gob__Notifications__ApiKey: ${SYNERGOS_API_KEY}
+      Synergos__Gob__Notifications__EntityKind: ${SYNERGOS_GOB_ENTITY_KIND:-gov.entidad}
+      Synergos__Gob__Notifications__EntityId: ${SYNERGOS_GOB_ENTITY_ID:-ventanilla}
+
       # Contra que se valida el avance de un pedido (HU #46). Los cuatro dominios
       # comparten esta seccion y cada uno pide SU definicion: tracking.shop,
       # tracking.travel, tracking.events, tracking.academy. Una compartida leeria

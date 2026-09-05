@@ -369,6 +369,57 @@ public sealed partial class SeamComposer
                     null,
                     notifier: sp.GetRequiredService<ITransactionalNotifier>()));
         }
+        // ── El acto administrativo notificado (HU #62) ──────────────────────
+        //
+        // De este lado, y es un camino legítimo de producción: una entidad pequeña que no
+        // despliega el árbol de servicios sigue pudiendo notificar y registrar accesos. Lo que
+        // no tiene es la afirmación verificable de identidad, y por eso todo lo que registra
+        // dice CmsSession — que es la verdad sobre ello.
+        // La sección se ENLAZA: sin esto el cliente recibe un GovNotificationSettings recién
+        // construido y lo que no viaja por el HttpClient —los Kind de la entidad y del
+        // ciudadano— se queda en su default en silencio. Es el olvido que arrastraban Tienda
+        // (#24), Salud (#25) y Viajes (#36).
+        services.Configure<GovNotificationSettings>(
+            builder.Config.GetSection("Synergos:Gob:Notifications"));
+
+        // Va por SU PROPIO interruptor y no por Synergos:Gob:Mode, que decide contra qué avanza
+        // el expediente (Api.Workflow, #44). Son dos capacidades distintas y un despliegue puede
+        // querer una y no la otra; juntarlas obligaría a encender las dos para probar una.
+        if (string.Equals(builder.Config["Synergos:Gob:Notifications:Mode"], "Api",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            var notiBase = builder.Config["Synergos:Gob:Notifications:BaseUrl"];
+            var notiKey = builder.Config["Synergos:Gob:Notifications:ApiKey"];
+            var notiTimeout = int.TryParse(
+                builder.Config["Synergos:Gob:Notifications:TimeoutSeconds"], out var nt) && nt > 0 ? nt : 20;
+
+            services.AddHttpClient(HttpGovActNotificationService.ClientName, http =>
+            {
+                var url = string.IsNullOrWhiteSpace(notiBase) ? "http://127.0.0.1:5221/" : notiBase;
+                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+                http.Timeout = TimeSpan.FromSeconds(notiTimeout);
+                if (!string.IsNullOrWhiteSpace(notiKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpGovActNotificationService.ApiKeyHeader, notiKey);
+                }
+            })
+            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+
+            services.AddSingleton<IGovActNotificationService>(sp => new HttpGovActNotificationService(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IOptionsMonitor<GovNotificationSettings>>(),
+                sp.GetRequiredService<IJsonEntityStore>(),
+                sp.GetRequiredService<ILogger<HttpGovActNotificationService>>(),
+                // Quién abre, presentado en vez de declarado (HU #14 rebanada 4). Acá es una
+                // persona de verdad: sale de la cookie de sesión, no del cuerpo.
+                sp.GetRequiredService<IIdentityTokenIssuer>()));
+        }
+        else
+        {
+            services.AddSingleton<IGovActNotificationService>(sp =>
+                new StubGovActNotificationService(sp.GetRequiredService<IJsonEntityStore>()));
+        }
+
         services.AddSingleton<ICaseTrackingProvider>(sp =>
             new StubCaseTrackingProvider(sp.GetRequiredService<StubApplicationService>()));
         services.AddSingleton<IDocumentUploadService>(sp =>

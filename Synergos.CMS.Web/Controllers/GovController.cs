@@ -66,6 +66,7 @@ public sealed class GovController : ControllerBase
     private readonly IPrivateFileStore _files;
     private readonly IMessagingService _messaging;
     private readonly IMemberAccessGate _gate;
+    private readonly IGovActNotificationService _notifications;
 
     public GovController(
         ITramiteCatalogProvider catalog,
@@ -75,7 +76,8 @@ public sealed class GovController : ControllerBase
         IDocumentUploadService documents,
         IPrivateFileStore files,
         IMessagingService messaging,
-        IMemberAccessGate gate)
+        IMemberAccessGate gate,
+        IGovActNotificationService notifications)
     {
         _catalog = catalog;
         _applications = applications;
@@ -85,6 +87,7 @@ public sealed class GovController : ControllerBase
         _files = files;
         _messaging = messaging;
         _gate = gate;
+        _notifications = notifications;
     }
 
     /// <summary>
@@ -482,6 +485,131 @@ public sealed class GovController : ControllerBase
         return Ok(new CaseResponse(await ToCaseDtoAsync(updated, cancellationToken)));
     }
 
+    // ══════════════════════ ACTOS NOTIFICADOS (HU #62) ══════════════════════
+    //
+    // Lo que estos tres endpoints existen para poder sostener no es «se le avisó»: es
+    // CUÁNDO ACCEDIÓ y CÓMO SE SUPO QUE ERA ÉL. Un correo enviado prueba que salió del
+    // servidor, no que llegó a quien tenía que llegar, y el término de un recurso no
+    // empieza a contar con lo que salió.
+
+    // ── 11. Notificar un acto (funcionario) ─────────────────────────────
+    // POST /api/gov/notification { caseId, title, body, documentRef?, acknowledgeBefore? }
+    //   → { notification:{...} }   🔒 rol funcionario
+    [HttpPost("notification")]
+    public async Task<IActionResult> Notify(
+        [FromBody] NotifyActRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (RequireOfficer() is { } denied) { return denied; }
+
+        if (request is null
+            || string.IsNullOrWhiteSpace(request.CaseId)
+            || string.IsNullOrWhiteSpace(request.Title))
+        {
+            return BadRequest(new { error = "caseId y title son requeridos." });
+        }
+
+        var detail = await _tracking.GetCaseAsync(request.CaseId.Trim(), cancellationToken);
+        if (detail is null)
+        {
+            return NotFound(new { error = $"Expediente '{request.CaseId}' no encontrado." });
+        }
+
+        // El destinatario sale del EXPEDIENTE, no del cuerpo: notificar a quien mande la
+        // petición sería dejar que un funcionario le ponga en conocimiento un acto a
+        // cualquiera, y el dueño del expediente es un dato que ya está.
+        if (detail.Citizen.MemberKey is not Guid citizenKey || citizenKey == Guid.Empty)
+        {
+            // Los expedientes radicados antes de ADR 0103 no tienen Member detrás. No se
+            // adivina: notificar electrónicamente a alguien que no tiene con qué acceder
+            // dejaría escrito un término que nadie puede empezar a contar.
+            return Conflict(new
+            {
+                error = "El expediente no tiene un ciudadano con sesión; no admite notificación electrónica.",
+            });
+        }
+
+        GovActNotification notification;
+        try
+        {
+            notification = await _notifications.NotifyAsync(
+                caseId: detail.CaseId,
+                radicado: detail.Radicado,
+                citizenMemberKey: citizenKey,
+                title: request.Title.Trim(),
+                body: request.Body ?? string.Empty,
+                documentRef: request.DocumentRef,
+                acknowledgeBeforeUtc: request.AcknowledgeBefore,
+                cancellationToken: cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+
+        // Al funcionario SÍ se le devuelve el cuerpo: es quien lo escribió.
+        return Ok(new ActNotificationResponse(ToActNotificationDto(notification, revealBody: true)));
+    }
+
+    // ── 12. Mis notificaciones (bandeja del ciudadano) ──────────────────
+    // GET /api/gov/notifications → { notifications:[...] }
+    //
+    // La bandeja NO trae el cuerpo del acto mientras no esté abierto — ver
+    // ToActNotificationDto. Poder leerlo desde el listado convertiría el acuse en
+    // decoración: el ciudadano se enteraría de lo resuelto sin que nada registrara que
+    // accedió, que es exactamente lo que esta HU existe para impedir.
+    [HttpGet("notifications")]
+    public async Task<IActionResult> Notifications(CancellationToken cancellationToken)
+    {
+        var (denied, actorKey) = RequireMember();
+        if (denied is not null) { return denied; }
+
+        var items = await _notifications.GetForCitizenAsync(actorKey, cancellationToken);
+        return Ok(new ActNotificationsResponse(
+            items.Select(n => ToActNotificationDto(n, revealBody: false)).ToList()));
+    }
+
+    // ── 13. Abrir un acto (empieza el término) ──────────────────────────
+    // POST /api/gov/notification/{id}/open → { notification:{...} }
+    //
+    // Es POST y no GET a propósito: abrir un acto ESCRIBE —deja registrado el acceso— y
+    // un GET lo dispararía un prefetch del navegador o un rastreador siguiendo el enlace
+    // de un correo, arrancando el término sin que nadie hubiera leído nada.
+    [HttpPost("notification/{id}/open")]
+    public async Task<IActionResult> OpenNotification(string id, CancellationToken cancellationToken)
+    {
+        var (denied, actorKey) = RequireMember();
+        if (denied is not null) { return denied; }
+
+        GovActNotification opened;
+        try
+        {
+            opened = await _notifications.AcknowledgeAsync(id ?? string.Empty, actorKey, cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (GovActNotAddresseeException)
+        {
+            // Ajena y vencida son cosas distintas hacia fuera —403 «no es suya» y 409 «se
+            // pasó el plazo»—, y una sola de las dos le dice al ciudadano qué hacer a
+            // continuación. Por eso el seam lanza un TIPO y no un mensaje: mirar el texto
+            // habría atado esta decisión a una frase que cualquiera reescribe.
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "La notificación no es suya." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+
+        return Ok(new ActNotificationResponse(ToActNotificationDto(opened, revealBody: true)));
+    }
+
     // ══════════════════════ Mappers ══════════════════════
 
     private ServiceDto ToServiceDto(TramiteSummary t) => new(
@@ -529,6 +657,37 @@ public sealed class GovController : ControllerBase
         SubmittedAt: i.RadicadoAt,
         CurrentStage: i.CurrentStage);
 
+    /// <summary>
+    /// Un acto notificado, hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El cuerpo y el PDF sólo salen si el acto ya está abierto</b>
+    /// (<paramref name="revealBody"/> es la excepción del funcionario y la del propio acuse, que
+    /// devuelve lo que se acaba de abrir). Si la bandeja los trajera, el ciudadano leería lo
+    /// resuelto sin que nada registrara su acceso y el término no empezaría nunca — que es justo
+    /// lo que esta superficie existe para impedir.</para>
+    ///
+    /// <para><b><c>OpenedBy</c> no se mapea.</b> Es la llave del Member y no tiene por qué salir
+    /// del servidor: es la lección de #47, donde el seudónimo del comprador acabó en pantalla,
+    /// aplicada antes de que pase.</para>
+    /// </remarks>
+    private static ActNotificationDto ToActNotificationDto(GovActNotification n, bool revealBody)
+    {
+        var visible = revealBody || n.Opened;
+        return new ActNotificationDto(
+            Id: n.Id,
+            CaseId: n.CaseId,
+            Reference: n.Radicado,
+            Title: n.Title,
+            Body: visible ? n.Body : null,
+            DocumentRef: visible ? n.DocumentRef : null,
+            NotifiedAt: n.NotifiedAtUtc,
+            AcknowledgeBefore: n.AcknowledgeBeforeUtc,
+            OpenedAt: n.OpenedAtUtc,
+            OpenedWith: n.OpenedWith,
+            Opened: n.Opened);
+    }
+
     private static QueueCaseDto ToQueueDto(CaseInboxItem i) => new(
         Id: i.CaseId,
         Reference: i.Radicado,
@@ -545,6 +704,10 @@ public sealed class GovController : ControllerBase
     private async Task<CaseDto> ToCaseDtoAsync(CaseDetail c, CancellationToken cancellationToken)
     {
         var labels = await ResolveFieldLabelsAsync(c.TramiteId, cancellationToken);
+        // Lo que el funcionario necesita ver del expediente no es que se notificó, es si el
+        // ciudadano ABRIÓ — y con qué se afirmó que era él. Es lo único que la entidad puede
+        // sostener el día que alguien recurre tarde.
+        var notificaciones = await _notifications.GetForCaseAsync(c.CaseId, cancellationToken);
         return new CaseDto(
             Application: new CaseApplicationDto(
                 Id: c.CaseId,
@@ -559,6 +722,7 @@ public sealed class GovController : ControllerBase
                 .ToList(),
             Documents: c.Documents.Select(ToDocumentDto).ToList(),
             Timeline: c.Timeline.Select(ToTimelineDto).ToList(),
+            Notifications: notificaciones.Select(n => ToActNotificationDto(n, revealBody: true)).ToList(),
             Decision: c.Decision is null
                 ? null
                 : new DecisionDto(c.Decision.Outcome, c.Decision.Note, c.Decision.DecidedAt, c.Decision.DecidedBy));
@@ -677,6 +841,20 @@ public sealed class GovController : ControllerBase
     //  un JSON con un nombre, es un multipart con el fichero.)
 
     public sealed record DecisionRequest(string CaseId, string Outcome, string? Note);
+
+    /// <summary>
+    /// Lo que el funcionario manda para poner un acto en conocimiento.
+    /// </summary>
+    /// <remarks>
+    /// <b>No lleva destinatario</b>: sale del expediente. Dejar que el cuerpo lo nombrara
+    /// permitiría notificarle a cualquiera un acto que no es suyo, y el radicado es secuencial.
+    /// </remarks>
+    public sealed record NotifyActRequest(
+        string CaseId,
+        string Title,
+        string? Body,
+        string? DocumentRef,
+        DateTimeOffset? AcknowledgeBefore);
 
     // ══════════════════════ Response DTOs (camelCase por defecto) ══════════════════════
 
@@ -797,7 +975,25 @@ public sealed class GovController : ControllerBase
         IReadOnlyList<AnswerDto> Answers,
         IReadOnlyList<DocumentDto> Documents,
         IReadOnlyList<TimelineDto> Timeline,
+        IReadOnlyList<ActNotificationDto> Notifications,
         DecisionDto? Decision);
 
     public sealed record CaseResponse(CaseDto Case);
+
+    public sealed record ActNotificationDto(
+        string Id,
+        string CaseId,
+        string Reference,
+        string Title,
+        string? Body,
+        string? DocumentRef,
+        DateTimeOffset NotifiedAt,
+        DateTimeOffset? AcknowledgeBefore,
+        DateTimeOffset? OpenedAt,
+        string? OpenedWith,
+        bool Opened);
+
+    public sealed record ActNotificationResponse(ActNotificationDto Notification);
+
+    public sealed record ActNotificationsResponse(IReadOnlyList<ActNotificationDto> Notifications);
 }
