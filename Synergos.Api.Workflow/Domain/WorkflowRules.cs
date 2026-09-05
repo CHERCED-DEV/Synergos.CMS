@@ -108,34 +108,27 @@ public static class WorkflowRules
     /// <para>Presentar un token donde nadie puede comprobarlo se <b>rechaza</b>, no se ignora:
     /// ignorarlo dejaría a quien lo manda creyendo que probó algo.</para>
     /// </remarks>
+    /// <para><b>La comprobación en sí ya no vive acá</b> (#72). Nació en esta capacidad con el
+    /// defecto #48 y volvió a hacer falta, igual, en <c>Api.Audit</c>: es el SEGUNDO consumidor,
+    /// que es cuando <c>CLAUDE.md</c> §0.B.17 dice que algo sube a una capa compartida. Con una
+    /// tercera copia, la comprobación del token derivaría entre capacidades y el mismo token
+    /// valdría distinto según a quién se le presente.</para>
+    ///
+    /// <para>Lo que se queda es la <b>firma</b>: <c>Verified</c> en vez de la afirmación, porque
+    /// esta capacidad decide con ella (<c>RequireVerifiedRoles</c>) y no la anota.</para>
     public static Result<(Actor Actor, bool Verified)> ResolveActor(
         IdentityTokenGate gate, string? rawToken, Ref principal,
         IReadOnlyList<string>? declaredRoles, DateTimeOffset now)
     {
-        ArgumentNullException.ThrowIfNull(gate);
+        // Esta capacidad no tiene campo `assertion` en su contrato: sin token, lo que hay es la
+        // palabra de quien llama, que es exactamente lo que CmsSession significa. Declararlo acá
+        // mantiene el comportamiento de siempre —sin token se sigue adelante— sin repetir la
+        // regla de qué se acepta sin prueba.
+        var resuelto = IdentityAssertions.ResolveActor(
+            gate, rawToken, principal, declaredRoles, IdentityAssertion.CmsSession, now, CodePrefix);
 
-        var declarados = (declaredRoles ?? Array.Empty<string>())
-            .Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToArray();
-
-        if (string.IsNullOrWhiteSpace(rawToken))
-        {
-            return Result.Ok((Actor.Of(principal, declarados), false));
-        }
-
-        if (!gate.Configured)
-        {
-            return Rejection.Invalid($"{IdentityTokens.CodePrefix}.token_not_verifiable",
-                "Se presentó un token de identidad y este servicio no tiene llave para comprobarlo.");
-        }
-
-        var (claims, motivo) = gate.Tokens!.Verify(rawToken, now);
-        if (claims is null) return Result.Rejected<(Actor, bool)>(IdentityTokens.ToRejection(motivo!.Value));
-
-        if (claims.Subject != principal)
-        {
-            return Result.Rejected<(Actor, bool)>(IdentityTokens.SubjectMismatch(claims.Subject, principal));
-        }
-
-        return Result.Ok((Actor.Of(principal, claims.Roles.ToArray()), true));
+        return resuelto.IsOk
+            ? Result.Ok((resuelto.Value.Actor, resuelto.Value.Assertion == IdentityAssertion.IdentityToken))
+            : Result.Rejected<(Actor, bool)>(resuelto.Rejection!);
     }
 }
