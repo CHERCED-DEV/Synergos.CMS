@@ -29,15 +29,36 @@ public sealed class HostBridgeSettings
 
     /// <summary>
     /// Si true, incluye Member context (key + email + roles) en el
-    /// bridge. Útil para UI que customiza per-member. False por
-    /// privacy/compliance default.
+    /// bridge. Útil para UI que customiza per-member. Default true.
     /// </summary>
+    /// <remarks>
+    /// <para><b>Decía lo contrario de lo que hace</b> (#95): afirmaba que el
+    /// valor por defecto era el apagado «por privacy/compliance», y el default
+    /// es <c>true</c> desde siempre. Nadie lo apagó nunca —no hay override en
+    /// ningún <c>appsettings*</c> ni en el compose—, así que todo despliegue
+    /// emite hoy el bloque <c>member</c> para cada visitante autenticado.</para>
+    ///
+    /// <para><b>Lo que estaba mal era el texto, no el valor.</b> Que el correo
+    /// viaje ahí está decidido y documentado: <c>docs/contracts/host-bridge.md</c>
+    /// §Security lo enumera de frente («display name + email + roles»). Pero
+    /// éste era el único sitio del repo que describía la postura de privacidad
+    /// del bloque, y describía la contraria — quien lo leyera para decidir si
+    /// hacía falta configurar algo concluía que ya estaba apagado.</para>
+    ///
+    /// <para><b>Y ponerlo en false no lo nota ningún test.</b> Deja
+    /// <c>window.synergos.member</c> en <c>null</c> en todo el sitio: el harness
+    /// de contratos monta su propio mock del bridge y el gate de #88 cruza
+    /// nombres de campo, no si el bloque llega a emitirse. La UI leería
+    /// <c>member</c> como <c>undefined</c> y trataría a un miembro autenticado
+    /// como anónimo, con el sitio devolviendo 200. Es una consecuencia que hay
+    /// que decidir, no heredar.</para>
+    /// </remarks>
     public bool IncludeMemberContext { get; init; } = true;
 
     /// <summary>
     /// Si true, incluye Page metadata (id + docType + cultures) en
     /// el bridge. Útil para UI que routeа page-specific. Cero
-    /// privacy concern — public info.
+    /// privacy concern — public info. Default true.
     /// </summary>
     public bool IncludePageMetadata { get; init; } = true;
 
