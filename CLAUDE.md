@@ -409,13 +409,16 @@ como requisito, que es lo que hacía que un agente en un contenedor los diera
 por imposibles (#86):
 
 ```bash
+# Se guarda ANTES de moverse: los dos comandos corren dentro del otro repo,
+# así que un `$PWD` relativo ahí dentro apunta al sitio equivocado.
+CMS=$PWD                       # desde la raíz de ESTE repo
 git clone --depth 1 https://github.com/cherced-dev/synergos.ui /tmp/ui
 
-# registry ↔ DocTypes. También acepta --cms-path=…
-(cd /tmp/ui && SYNERGOS_CMS_PATH=$PWD/../Synergos.CMS node tools/validate-cms-contracts.mjs)
+# registry ↔ DocTypes. También acepta --cms-path=/ruta
+(cd /tmp/ui && SYNERGOS_CMS_PATH=$CMS node tools/validate-cms-contracts.mjs)
 
-# los tokens del design system, contra syn-tokens.css de este repo
-(cd /tmp/ui/platforms/angular && SYNERGOS_CMS_PATH=… node tools/sync-tokens.mjs --check)
+# los tokens del design system, contra el syn-tokens.css de este repo
+(cd /tmp/ui/platforms/angular && SYNERGOS_CMS_PATH=$CMS node tools/sync-tokens.mjs --check)
 ```
 
 Los dos pasan hoy. El primero sale con **avisos** `[W4]` —entradas del registry
