@@ -52,6 +52,12 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
     /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
     public const string ApiKeyHeader = "X-Synergos-Key";
 
+    /// <summary>Cabecera con la que viaja la identidad verificable de quien actuó.</summary>
+    public const string IdentityHeader = "X-Synergos-Identity";
+
+    /// <summary>Lo que contesta la capacidad cuando NO tiene llave para comprobar el token.</summary>
+    internal const string NoSePuedeComprobar = "identity.token_not_verifiable";
+
     /// <summary>La acción con la que se anota que un asiento no llegó a la capacidad.</summary>
     public const string ForwardFailureAction = "platform.audit.forward";
 
@@ -66,18 +72,21 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
     private readonly IAuditTrailWriter _local;
     private readonly IHttpClientFactory _clients;
     private readonly IOptionsMonitor<AuditSettings> _settings;
+    private readonly IIdentityTokenIssuer _identidad;
     private readonly ILogger<HttpAuditTrailWriter> _log;
 
     public HttpAuditTrailWriter(
         IAuditTrailWriter local,
         IHttpClientFactory clients,
         IOptionsMonitor<AuditSettings> settings,
-        ILogger<HttpAuditTrailWriter> log)
+        ILogger<HttpAuditTrailWriter> log,
+        IIdentityTokenIssuer identity)
     {
         _local = local;
         _clients = clients;
         _settings = settings;
         _log = log;
+        _identidad = identity;
     }
 
     public async Task WriteAsync(AuditEvent evt, CancellationToken cancellationToken)
@@ -110,9 +119,41 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
     }
 
     /// <summary>Manda el asiento. Devuelve <c>null</c> si llegó, o la causa si no.</summary>
+    /// <remarks>
+    /// <para><b>Va FIRMADO si el despliegue sabe firmar</b> (HU #14). Con la llave compartida sola,
+    /// quien pueda hablar con la capacidad escribe un asiento a nombre de quien quiera y queda
+    /// permanente — es el defecto #72 visto desde el lado del que escribe. El sujeto del token es
+    /// el mismo seudónimo que viaja como actor, porque la capacidad rechaza un token que nombre a
+    /// otro (<c>token_subject_mismatch</c>), y eso es justo lo que lo vuelve prueba y no adorno.</para>
+    ///
+    /// <para><b>Y si la capacidad no puede comprobarlo, se repite SIN token.</b> Presentar una
+    /// prueba donde no hay con qué verificarla se rechaza —bien rechazado— pero perder el asiento
+    /// por eso convertiría una caída de la identidad en un hueco en la bitácora, que es lo que la
+    /// #72 declaró peor que un asiento débil. Se repite una vez y queda como <c>CmsSession</c>,
+    /// que es lo que este lado siempre pudo respaldar.</para>
+    ///
+    /// <para><b>Sólo por ESA causa</b>: un token vencido o de otro sujeto son fallos de este lado,
+    /// y repetirlos sin firma los escondería para siempre detrás de un asiento débil.</para>
+    /// </remarks>
     private async Task<string?> ReenviarAsync(AuditEvent evt, CancellationToken ct)
     {
+        var causa = await IntentarAsync(evt, firmado: true, ct).ConfigureAwait(false);
+
+        if (causa is not null && causa.Contains(NoSePuedeComprobar, StringComparison.Ordinal))
+        {
+            _log.LogWarning(
+                "Api.Audit no tiene llave para comprobar identidad: el asiento {Id} se repite sin firmar.",
+                evt.Id);
+            return await IntentarAsync(evt, firmado: false, ct).ConfigureAwait(false);
+        }
+
+        return causa;
+    }
+
+    private async Task<string?> IntentarAsync(AuditEvent evt, bool firmado, CancellationToken ct)
+    {
         var s = _settings.CurrentValue;
+        var actor = Seudonimo(evt.ActorEmail);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, "v1/entries")
         {
@@ -121,7 +162,7 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
                 actorKind = s.ActorKind,
                 // El SEUDÓNIMO, no el correo. Estable, así que sigue agrupando por persona sin
                 // que el dato personal salga de esta máquina.
-                actorId = Seudonimo(evt.ActorEmail),
+                actorId = actor,
                 actorRoles = Array.Empty<string>(),
                 action = evt.Action,
                 targetKind = s.TargetKind,
@@ -150,6 +191,19 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
         // El id del asiento ES la llave: el seam ya deduplica por él de este lado, así que un
         // reintento tras un timeout no puede escribir dos veces lo mismo en la capacidad.
         req.Headers.TryAddWithoutValidation("Idempotency-Key", $"cms-audit-{evt.Id}");
+
+        if (firmado)
+        {
+            // El emisor NUNCA lanza: sin Api.Identity esto es null y el asiento sigue su camino
+            // declarando, que es lo que se hacía antes de la HU #14.
+            var token = await _identidad.IssueAsync(
+                new IdentitySubject(s.ActorKind, actor, Array.Empty<string>()), ct).ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                req.Headers.TryAddWithoutValidation(IdentityHeader, token);
+            }
+        }
 
         try
         {
