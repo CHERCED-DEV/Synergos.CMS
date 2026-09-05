@@ -179,9 +179,7 @@ public sealed class ContractsIndexTests
         var emitido = Regex.Matches(csharp, @"record HostBridge(\w+)\(([\s\S]*?)\);")
             .ToDictionary(
                 m => m.Groups[1].Value,
-                m => Regex.Matches(m.Groups[2].Value, @"(?:^|,)\s*[\w<>,?\s.]+?\s(\w+)(?=\s*[,)]|\s*$)")
-                    .Select(c => Minuscula(c.Groups[1].Value))
-                    .ToHashSet(StringComparer.Ordinal),
+                m => CamposDelRecord(m.Groups[2].Value).Select(Minuscula).ToHashSet(StringComparer.Ordinal),
                 StringComparer.Ordinal);
 
         Assert.True(emitido.Count >= 5,
@@ -240,6 +238,55 @@ public sealed class ContractsIndexTests
             + "`undefined` y pinta un hueco (#88)."
             + Environment.NewLine
             + string.Join(Environment.NewLine, malas));
+    }
+
+    /// <summary>
+    /// Los nombres de los parámetros de un record posicional.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Se parte por comas de PRIMER NIVEL, no con una expresión regular.</b> La primera
+    /// versión de esto usaba una, y se le escapaba <b>en silencio</b> un campo con valor por
+    /// defecto —<c>IReadOnlyDictionary&lt;string, string&gt;? Extras = null</c>—: su lookahead
+    /// exigía <c>,</c> o <c>)</c> justo detrás del nombre, y ahí venía un <c>=</c>. El gate se
+    /// quedaba <b>verde</b> vigilando un campo menos, que es peor que fallar.</para>
+    ///
+    /// <para><b>Y no es un caso raro:</b> añadir un campo con valor por defecto es exactamente
+    /// cómo se amplía un record sin romper a quien lo construye — es lo que se hizo con
+    /// <c>SentWith</c> y con <c>ActedWith</c>. O sea que el hueco estaba justo en la forma que más
+    /// se usa para crecer.</para>
+    ///
+    /// <para>Un genérico anidado trae comas propias (<c>Dictionary&lt;string, string&gt;</c>), así
+    /// que la profundidad de <c>&lt;&gt;</c> se lleva a mano. Es más largo que un regex y no se
+    /// equivoca.</para>
+    /// </remarks>
+    private static IEnumerable<string> CamposDelRecord(string parametros)
+    {
+        var partes = new List<string>();
+        var actual = new System.Text.StringBuilder();
+        var profundidad = 0;
+
+        foreach (var c in parametros)
+        {
+            switch (c)
+            {
+                case '<': profundidad++; actual.Append(c); break;
+                case '>': profundidad--; actual.Append(c); break;
+                case ',' when profundidad == 0: partes.Add(actual.ToString()); actual.Clear(); break;
+                default: actual.Append(c); break;
+            }
+        }
+
+        partes.Add(actual.ToString());
+
+        foreach (var parte in partes)
+        {
+            // Se corta el valor por defecto y se toma el ÚLTIMO identificador: lo que queda antes
+            // es el tipo, con los genéricos que traiga.
+            var sinDefecto = parte.Split('=')[0];
+            var nombre = Regex.Match(sinDefecto, @"(\w+)\s*$");
+
+            if (nombre.Success) yield return nombre.Groups[1].Value;
+        }
     }
 
     /// <summary>Primera letra en minúscula: los records van en PascalCase y el JSON en camelCase.</summary>
