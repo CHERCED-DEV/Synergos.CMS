@@ -312,4 +312,91 @@ public sealed class PurchaseFlow
         await _sagas.CompensateAsync(saga.Id, razon, ct);
         return Result.Rejected<PurchaseSaga>(motivo);
     }
+    /// <summary>
+    /// Devuelve una PARTE de lo cobrado por una compra que ya salió.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>No es una compensación, y esa distinción es el ticket entero</b> (#57). Una
+    /// compensación deshace lo que se hizo cuando la compra falló a medias, y la ordena la
+    /// máquina de sagas. Esto lo ordena <b>quien vendió</b>, sobre una compra que se cumplió, y
+    /// no deshace nada: el pedido siguió existiendo y el cliente devolvió una caja.</para>
+    ///
+    /// <para><b>Y hace falta porque la plata la tiene el orquestador.</b> El expediente del RMA
+    /// vive en el CMS —quién pidió, qué línea, en qué estado va— pero el
+    /// <c>PaymentSessionId</c> que el CMS conoce con <c>Tienda:Mode=Bff</c> es el id de la
+    /// SAGA, no el del pago: el de <c>Api.Payments</c> no sale de acá a propósito. Sin esta
+    /// puerta, el CMS le pedía el reembolso a su proveedor local, que no conoce esa llave, y el
+    /// RMA no llegaba nunca a reembolsado.</para>
+    ///
+    /// <para><b>El monto llega calculado</b>, igual que en el gemelo de Viajes: el orquestador
+    /// cotiza la compra entera y no sabe cuánto vale una línea. Quien vende sí — el monto sale
+    /// de la orden, no del cliente.</para>
+    /// </remarks>
+    public async Task<Result<PurchaseSaga>> RefundAsync(
+        string sagaId, Money amount, string? reason, IdempotencyKey key, CancellationToken ct)
+    {
+        var saga = _sagas.Find(sagaId);
+        if (saga is null) return Rejection.NotFound("tienda.purchase_not_found", $"No existe la compra {sagaId}.");
+
+        // Sólo sobre una compra que salió. Antes de confirmar no se movió plata —deshacer es
+        // liberar la autorización, no devolver— y sobre una ya compensada la devolución ya la
+        // ordenó la máquina: encimarle otra devolvería dos veces.
+        if (saga.Status != SagaStatus.Completed)
+        {
+            return Rejection.Conflict("tienda.not_refundable",
+                $"La compra está {saga.Status}: sólo se devuelve una parte de una compra confirmada.");
+        }
+
+        if (saga.PaymentId is not { } pago)
+        {
+            return Rejection.Conflict("tienda.nothing_to_refund",
+                "La compra no movió plata: no hay nada que devolver.");
+        }
+
+        if (amount.IsZero || amount.IsNegative)
+        {
+            return Rejection.Invalid("tienda.bad_refund", $"No se puede devolver {amount}.");
+        }
+
+        // Money lanza al mezclar monedas, así que se compara ANTES de sumar o restar nada.
+        if (!string.Equals(amount.Currency, saga.Total.Currency, StringComparison.Ordinal))
+        {
+            return Rejection.Invalid("tienda.bad_refund",
+                $"Se pidió devolver {amount} de una compra en {saga.Total.Currency}.");
+        }
+
+        // Lo ya devuelto cuenta: dos devoluciones parciales legítimas no pueden sumar más que
+        // la compra. Es el acumulado y no el último monto — mirar sólo éste dejaría pasar
+        // tres devoluciones de la mitad.
+        var yaDevuelto = saga.Refunded ?? Money.Of(0m, saga.Total.Currency);
+        if (yaDevuelto + amount > saga.Total)
+        {
+            return Rejection.Invalid("tienda.bad_refund",
+                $"Se pidió devolver {amount} de una compra de {saga.Total} con {yaDevuelto} ya devuelto.");
+        }
+
+        var r = await _caps.RefundAsync(pago, amount, reason ?? "devolución de la tienda", key, ct);
+        if (!r.IsOk)
+        {
+            _log.LogError("La compra {Saga} no pudo devolver {Monto}: {Error}", saga.Id, amount, r.Rejection);
+            return Result.Rejected<PurchaseSaga>(r.Rejection!);
+        }
+
+        saga = saga with { Refunded = Devuelto(r.Value, yaDevuelto + amount) };
+        _sagas.Put(saga);
+        return Result.Ok(saga);
+    }
+
+    /// <summary>
+    /// Cuánto quedó devuelto según <b>la capacidad</b>, no según lo que pedimos.
+    /// </summary>
+    /// <remarks>
+    /// Si <c>Api.Payments</c> devolvió menos de lo pedido —porque otro reembolso se le adelantó,
+    /// o porque el reintento de una llave ya usada le contestó con el estado que ya tenía—, lo
+    /// que vale es su cifra. Escribir la nuestra dejaría el acumulado mintiendo hacia arriba, y
+    /// el próximo tope se calcularía contra un número que nadie movió.
+    /// </remarks>
+    private static Money Devuelto(PaymentDto pago, Money acumuladoPedido)
+        => pago.Refunded is { } d ? Money.Of(d.Amount, d.Currency) : acumuladoPedido;
+
 }
