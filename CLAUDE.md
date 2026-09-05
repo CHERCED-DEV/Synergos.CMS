@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2554 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2583 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2554 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2583 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (10) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -369,7 +369,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2554 tests):
+# Suite completa (2583 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -494,7 +494,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 195 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2554 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2583 tests, gates de
 segregación y molde en verde.
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -508,10 +508,10 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 
 - **Poco está conectado al producto, pero la brecha es MENOR de lo que
   parecía.** El inventario del cableado (HU #23,
-  `docs/product/11-mapa-del-cableado.md`) contó los 48 `Stub*` y los
-  clasificó: **12** son cableado pendiente, **5** ya salen del contenido
+  `docs/product/11-mapa-del-cableado.md`) contó los 49 `Stub*` y los
+  clasificó: **13** son cableado pendiente, **5** ya salen del contenido
   de Umbraco (cablearlos sería un retroceso) y **31** se quedan en stub a
-  propósito. Y 18 de los 48 **ya son durables** — «stub» en este repo
+  propósito. Y 19 de los 49 **ya son durables** — «stub» en este repo
   dejó hace tiempo de querer decir «en memoria». Hay gate
   (`WiringMapTests`): un stub nuevo sin mapear rompe el build, y desde
   #50 **también cuadra las cifras de la prosa** contra el inventario y
@@ -521,7 +521,7 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   uno**, porque una cabecera que dice «(14)» sobre trece filas pasa el
   recuento y deja un stub que nadie va a tomar — es la tabla que se lee
   para elegir el siguiente trabajo, no la rejilla del inventario.
-  De los 12, **diez** están hechos: la tienda compra contra `Bff.Tienda`
+  De los 13, **diez** están hechos: la tienda compra contra `Bff.Tienda`
   (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
   `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25), la visita al inmueble
   aparta cupo **directo contra `Api.Booking`, sin orquestador**
@@ -529,9 +529,32 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   toca una sola capacidad y un BFF sería una saga de un paso — y **el
   expediente decide contra `Api.Workflow`**, también directo
   (`Synergos:Gob:Mode=Api`, HU #44). El default sigue siendo `Stub` en
-  todos. **Faltan dos**: `StubPaymentProvider` → `Api.Payments`
-  (bloqueado por #27) y `StubApplicationService`, que espera una cara de
-  orquestador sin construir (`Bff.Gob`).
+  todos. **Faltan tres**: `StubPaymentProvider` → `Api.Payments`
+  (bloqueado por #27), `StubApplicationService`, que espera una cara de
+  orquestador sin construir (`Bff.Gob`), y `StubGovActNotificationService`
+  → `Api.Messaging`, que va **a medias**: existe el registro y la
+  superficie, falta el camino HTTP (#62, rebanada 2).
+
+  > **El acto administrativo notificado existe para sostener CUÁNDO
+  > ACCEDIÓ, no para enviar** (#62). Un correo enviado prueba que salió del
+  > servidor, no que llegó a quien tenía que llegar, y el término de un
+  > recurso no empieza a contar con lo que salió. Por eso el acto **no se
+  > puede leer sin registrar el acceso**: la bandeja lista el título —hace
+  > falta saber que existe— y el cuerpo sólo sale al abrirlo. Si el listado
+  > lo trajera, el acuse sería un botón decorativo y el término no
+  > empezaría nunca. Y abrir es `POST`: con un `GET` lo dispararía el
+  > prefetch del navegador y el ciudadano perdería días sin haber leído
+  > nada.
+  >
+  > **El primer acceso es el que cuenta**, y re-notificar el mismo acto
+  > devuelve el que ya está: dos plazos para un acto le dan un argumento a
+  > quien recurre tarde. **Quién abre sale de la sesión y el destinatario
+  > del expediente** —el radicado es secuencial (ADR 0103)—, y un
+  > expediente **sin Member detrás no se notifica electrónicamente**:
+  > dejaría escrito un término que nadie puede empezar a contar.
+  >
+  > Es durable desde el primer día, porque un registro que se pierde al
+  > reiniciar no sirve para lo único que existe.
 
   > **La devolución de la tienda estaba ROTA, no pendiente** (#57), y el mapa
   > tenía mal la razón. Decía que `StubReturnService` iba a un orquestador por
