@@ -174,25 +174,52 @@ public sealed class GovSlaHabilesTests
     }
 
     /// <summary>
-    /// Radicar de noche no gasta un día.
+    /// Radicar de noche no regala un día de plazo.
     /// </summary>
     /// <remarks>
-    /// Las 23:00 del viernes en Bogotá son sábado en UTC. Contando allá, el término de quien
-    /// radica de noche arrancaría un día tarde — un error que aparece y desaparece según la hora.
+    /// <para>Las 20:00 de Bogotá ya son el día siguiente en UTC. Contando allá, quien radica un
+    /// lunes por la noche recibe el término de quien radicó el martes — <b>un día hábil de
+    /// regalo</b>, y sólo por la hora a la que le dio a enviar.</para>
+    ///
+    /// <para>No es simétrico ni se compensa: el mismo desfase le QUITA un día a quien mira su
+    /// expediente de noche. Y no salta a la vista porque de viernes a sábado las dos formas de
+    /// contar coinciden —ninguno de los dos es hábil—, así que hace falta un lunes para verlo.</para>
     /// </remarks>
     [Fact]
-    public async Task Radicar_de_noche_no_corre_el_termino_al_dia_siguiente()
+    public async Task Radicar_de_noche_no_regala_un_dia_de_plazo()
     {
         var (svc, reloj) = Nuevo();
 
-        // Viernes 25-sep-2026, 23:00 en Bogotá = sábado 26 a las 04:00 UTC.
-        reloj.Ahora = new DateTimeOffset(2026, 9, 25, 23, 0, 0, TimeSpan.FromHours(-5));
-        Assert.Equal(DayOfWeek.Saturday, reloj.Ahora.UtcDateTime.DayOfWeek);
+        // Lunes 7-sep-2026, 20:00 en Bogotá = martes 8 a las 01:00 UTC.
+        reloj.Ahora = new DateTimeOffset(2026, 9, 7, 20, 0, 0, TimeSpan.FromHours(-5));
+        Assert.Equal(new DateOnly(2026, 9, 8), DateOnly.FromDateTime(reloj.Ahora.UtcDateTime));
 
         var caso = (await svc.RadicarAsync("trm-licencia-conduccion", Licencia(), Ciudadano)).Case.CaseId;
 
-        // 5 hábiles desde el viernes 25: lun 28, mar 29, mié 30, jue 1-oct, vie 2-oct.
-        reloj.EnBogota(2026, 10, 2);
+        // 5 hábiles desde el LUNES 7: mar 8, mié 9, jue 10, vie 11, lun 14 → vence el lunes 14.
+        // Desde el martes 8 vencería el martes 15: un día hábil que nadie autorizó.
+        reloj.EnBogota(2026, 9, 14);
         Assert.Equal(0, svc.FindCase(caso)!.SlaDaysLeft);
+    }
+
+    /// <summary>
+    /// Y mirarlo de noche no descuenta un día que todavía queda.
+    /// </summary>
+    /// <remarks>
+    /// El mismo desfase, del otro lado: a las 20:00 del lunes en Bogotá el expediente aún tiene el
+    /// martes por delante, pero contando en UTC ya es martes y ese día deja de contarse.
+    /// </remarks>
+    [Fact]
+    public async Task Mirar_el_expediente_de_noche_no_descuenta_un_dia()
+    {
+        var (svc, reloj) = Nuevo();
+        reloj.EnBogota(2026, 9, 7);
+        var caso = (await svc.RadicarAsync("trm-licencia-conduccion", Licencia(), Ciudadano)).Case.CaseId;
+
+        // Vence el lunes 14. El lunes 7 a las 20:00 de Bogotá quedan cinco hábiles: 8, 9, 10, 11, 14.
+        // Contando en UTC ya sería martes y el propio martes dejaría de contarse: diría cuatro.
+        reloj.Ahora = new DateTimeOffset(2026, 9, 7, 20, 0, 0, TimeSpan.FromHours(-5));
+
+        Assert.Equal(5, svc.FindCase(caso)!.SlaDaysLeft);
     }
 }
