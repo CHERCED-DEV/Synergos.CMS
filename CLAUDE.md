@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2701 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2702 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2701 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2702 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -373,7 +373,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2701 tests):
+# Suite completa (2702 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -498,7 +498,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2701 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2702 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -1355,9 +1355,18 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   repetirlo no cambia nada). Va exactamente uno de los dos.
   `Bff.Tienda` devuelve con `delta` y ya no lee el total antes.
 - **`StubBundleRegistryClient` sigue siendo el default, pero ya no hay
-  bloqueo**: el CDN está VIVO (`https://synergos-ui.synergos-labs.workers.dev`,
-  139 elementos, cabeceras verificadas 2026-08-04) y `HttpBundleRegistryClient`
-  resuelve contra él — verificado con el cliente real compilado, no con fakes.
+  bloqueo**: el CDN está VIVO (`https://synergos-ui.synergos-labs.workers.dev`)
+  y `HttpBundleRegistryClient` resuelve contra él — verificado con el cliente
+  real compilado, no con fakes. **Cuántos elementos sirve se mide, no se
+  recuerda** (#86): `curl -s $URL/synergos/registry.json | jq length`.
+  El CDN servía **130 elementos** el 2026-09-05, y el repo hermano declara
+  dos más que no publica (`synergos-stat-counter` y `synergos-module-mount`).
+  Ésta es la ÚNICA cifra del CDN que da este fichero, y va con el comando al
+  lado a propósito: es la única que no se puede cruzar contra el disco de este
+  repo —depende de la red y del hermano—, así que copiarla a otro sitio es
+  garantizar que se desvíe. Ya pasó, y en tres versiones distintas a la vez.
+  Hay gate (`CifrasDeClaudeMdTests`), y no comprueba que sea correcta —desde
+  acá no se puede— sino **que no esté copiada**.
   Lo que falta es que el despliegue configure `SYNERGOS_CDN_MODE=Http` +
   `SYNERGOS_CDN_URL` (ver `.env.example`). Es una decisión de entorno del
   arquitecto, no trabajo pendiente de código. Ver §9 y ADR 0132.

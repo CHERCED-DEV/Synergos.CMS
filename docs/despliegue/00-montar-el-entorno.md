@@ -263,8 +263,9 @@ queda un proyecto vacío haciendo ruido en cada push. Si quedó uno, borralo en
 
 ## 3. Los bundles del CDN — ✅ **ya está hecho** ([#20](../../../../issues/20))
 
-**https://synergos-ui.synergos-labs.workers.dev** — 139 elementos, desplegándose solo en cada push
-a `master` de `Synergos.UI`. No hay nada que montar acá.
+**https://synergos-ui.synergos-labs.workers.dev** — se despliega solo en cada push a `master` de
+`Synergos.UI`. No hay nada que montar acá. (Cuántos elementos sirve se mide, no se copia: el
+comando está en `CLAUDE.md` §11, que es el único sitio donde va esa cifra — ver #86.)
 
 Quedó en **Workers con assets estáticos**, no en Pages como decía este documento. Dos cosas
 salieron mejor de lo previsto:
