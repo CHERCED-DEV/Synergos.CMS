@@ -22,9 +22,14 @@ public sealed class AuditService
         _clock = clock;
     }
 
+    /// <param name="actedWith">
+    /// Con qué se afirmó la identidad del actor. La resuelve el borde —necesita la cabecera del
+    /// token, que el servicio no tiene ni debe tener—; acá sólo se guarda.
+    /// </param>
     public Result<AuditEntry> Append(
         Actor? actor, string? action, Ref? target,
-        IReadOnlyDictionary<string, string>? details, IdempotencyKey key)
+        IReadOnlyDictionary<string, string>? details, IdempotencyKey key,
+        IdentityAssertion? actedWith = null)
     {
         lock (_gate)
         {
@@ -42,7 +47,7 @@ public sealed class AuditService
 
             var id = Guid.NewGuid().ToString("n");
             var entry = new AuditEntry(id, actor!, action!.Trim(), target!, _clock.GetUtcNow(),
-                details ?? new Dictionary<string, string>(StringComparer.Ordinal));
+                details ?? new Dictionary<string, string>(StringComparer.Ordinal), actedWith);
 
             _store.Append(entry);
             _idempotency.Remember("entry", key, id);

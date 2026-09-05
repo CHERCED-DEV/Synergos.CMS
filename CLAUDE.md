@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2607 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2619 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2607 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2619 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (11) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -369,7 +369,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2607 tests):
+# Suite completa (2619 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -493,8 +493,8 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (136 endpoints, 235 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2607 tests, gates de
+**Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2619 tests, gates de
 segregación y molde en verde.
 
 > **Los 235 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -503,10 +503,16 @@ segregación y molde en verde.
 > `{CodePrefix}` resuelto—, y por eso **excluye dos cosas que sí existen**: los
 > que se arman en tiempo de ejecución (`orders.already_{destino}`, y los
 > reenvoltorios `xxx.{code}`), que no se pueden enumerar sin ejecutar; y los
-> **cinco que viven en `Synergos.Shared`** —`identity.token_expired`,
-> `token_malformed`, `token_unknown_key`, `token_subject_mismatch` y
-> `assertion_not_proven`—, que una capacidad devuelve pero no declara. Contando
-> aquéllos serían 240. Se eligió el criterio simétrico con el de endpoints: lo
+> **seis que viven en `Synergos.Shared`** —`identity.token_expired`,
+> `token_malformed`, `token_unknown_key`, `token_subject_mismatch`,
+> `assertion_not_proven` y `token_not_verifiable`—, que una capacidad devuelve
+> pero no declara. Contando aquéllos serían 240.
+>
+> **El sexto llegó ahí solo, y el gate lo cazó** (#72): al subir la
+> comprobación del token a `Shared`, `token_not_verifiable` dejó de
+> construirse dentro de una capacidad y la cifra bajó de 235 a 234 sin que
+> nadie tocara una regla. Es lo que se quería — mover código no debería poder
+> cambiar en silencio lo que la guía afirma. Se eligió el criterio simétrico con el de endpoints: lo
 > que hay **en el árbol de las capacidades**. Hay gate (`ApiMoldTests`).
 
 **El despliegue está construido y espera una máquina** (HU #19, ADR 0133):
@@ -775,8 +781,45 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   que se acepta es `CmsSession`; declarar lo fuerte sin presentarlo se
   rechaza. **`Api.Consent` es la tercera** (rebanada 5): otorgar y
   revocar guardan **con qué** se afirmó la identidad de quien lo hizo.
-  **Faltan las otras 17** — y desde la rebanada 4 hay quien les
+  **`Api.Audit` es la cuarta** (#72), y era la que peor estaba.
+  **Faltan las otras 16** — y desde la rebanada 4 hay quien les
   presente identidad cuando la pidan: el CMS ya la emite.
+
+  > **La bitácora estaba blindada contra reescribir el pasado y abierta a
+  > FABRICARLO** (#72). No hay `PUT` ni `DELETE` desde el primer día —el
+  > propio fichero explica que «una bitácora editable no sirve de
+  > bitácora»— pero el actor **y sus roles** llegaban del cuerpo sin que
+  > nadie los comprobara: con la llave compartida se escribía un asiento a
+  > nombre de quien fuera y quedaba permanente. Un registro inmutable de
+  > asientos falsificables es **peor** que no tenerlo — es una mentira con
+  > aspecto de prueba, y justo la pieza que alguien va a citar el día que
+  > haya que demostrar quién hizo qué.
+  >
+  > Es el defecto #48 exacto en la capacidad cuyo valor entero es ser
+  > creíble, y **el más silencioso de los tres** (#42, #48, éste): un
+  > asiento falso no falla, se guarda. Los tres comparten la misma forma
+  > —la regla estaba bien y la FUENTE DEL DATO estaba mal— y los tests no
+  > lo vieron por la misma razón: construían el `Actor` a mano.
+  >
+  > **El asiento ahora guarda con qué se afirmó** (`ActedWith`), como el
+  > acuse de `Api.Messaging` desde la HU #13. Sin eso el arreglo sería
+  > invisible: los asientos nuevos valdrían más que los viejos y nada lo
+  > diría. **Los anteriores dicen «no consta», que es la verdad** —
+  > rellenarlos con `CmsSession` inventaría una afirmación que nadie hizo,
+  > y exigiría reescribir un registro append-only.
+  >
+  > **Sin llave se sigue auditando.** Parar la bitácora cuando falla la
+  > identidad convierte una caída en un hueco en el registro, que es peor
+  > que un asiento débil; un token presentado donde no se puede comprobar
+  > se **rechaza**, no se ignora. Hay gate (`AuditActorSourceTests`), y
+  > vigila las dos formas de deshacerlo: volver a armar el actor con el
+  > cuerpo, o resolverlo bien y no guardar con qué.
+  >
+  > **Y la comprobación subió a `Synergos.Shared` al segundo consumidor**
+  > (§0.B.17): nació en `Api.Workflow` con #48 y volvió a hacer falta,
+  > igual, acá. Con una tercera copia el mismo token valdría distinto
+  > según a quién se le presente — y una capacidad no puede referenciar a
+  > otra, así que `Shared` es el único sitio válido.
 
   > **«Fulano consintió» no dice nada sin «y así se supo que era
   > fulano»** (rebanada 5). El día que alguien niegue haber dado un
