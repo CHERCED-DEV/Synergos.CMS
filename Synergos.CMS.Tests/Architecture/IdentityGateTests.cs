@@ -86,6 +86,73 @@ public sealed class IdentityGateTests
     }
 
     /// <summary>
+    /// Los dos endpoints del consentimiento que ESCRIBEN, delimitados.
+    /// </summary>
+    private static string Consentimiento(string ruta)
+    {
+        var codigo = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.Api.Consent", "Endpoints", "ConsentEndpoints.cs"));
+
+        var desde = codigo.IndexOf(ruta, StringComparison.Ordinal);
+        Assert.True(desde > 0, $"El endpoint {ruta} cambió de forma: revisar este gate.");
+
+        var hasta = codigo.IndexOf("        });", desde, StringComparison.Ordinal);
+        Assert.True(hasta > desde, $"No se pudo delimitar {ruta}: revisar este gate.");
+        return codigo[desde..hasta];
+    }
+
+    /// <summary>
+    /// El consentimiento RESUELVE la identidad; no se cree lo declarado (HU #14, rebanada 5).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Este gate existe porque la primera versión de esta rebanada pasaba en verde con
+    /// el defecto puesto.</b> Reemplazar la llamada del borde por «anotar lo que declaró el
+    /// llamador» no ponía rojo nada: los tests cubrían el helper compartido y el servicio, y el
+    /// que decide es el <b>cableado</b> entre los dos, que no tenía quien lo mirara. Es
+    /// exactamente el defecto #42 —creerle al llamador— vuelto a aparecer un piso más arriba.</para>
+    ///
+    /// <para><b>Y va sobre los DOS endpoints que escriben.</b> Retirar el permiso de otro es tan
+    /// grave como darlo en su nombre; un gate que sólo mirara <c>grants</c> dejaría
+    /// <c>grants/revoke</c> como la puerta de atrás.</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("/v1/grants\"")]
+    [InlineData("/v1/grants/revoke")]
+    public void El_consentimiento_RESUELVE_la_identidad_y_no_se_cree_lo_declarado(string ruta)
+    {
+        var cuerpo = Consentimiento(ruta);
+
+        // Se LEE lo que vino, y se resuelve: sin esto el cableado está muerto.
+        Assert.Contains("Afirmacion(identidad, http", cuerpo, StringComparison.Ordinal);
+
+        // Y lo que baja al servicio es lo RESUELTO. `req.Assertion` es lo que dijo el llamador:
+        // puede leerse, pero no puede ser lo que se anota.
+        Assert.Contains("assertion.Value", cuerpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("req.Assertion)", cuerpo, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// El helper del borde usa el resolutor compartido y no una copia propia.
+    /// </summary>
+    /// <remarks>
+    /// La regla de «sólo se acepta a la baja» vive en <c>Synergos.Shared</c> porque la comparten
+    /// las capacidades que aceptan identidad. Una copia local se desviaría de la original el día
+    /// que la original cambie — y la desviación sería silenciosa, porque las dos compilan.
+    /// </remarks>
+    [Fact]
+    public void El_consentimiento_no_reimplementa_la_regla_de_la_afirmacion()
+    {
+        var codigo = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.Api.Consent", "Endpoints", "ConsentEndpoints.cs"));
+
+        Assert.Contains("IdentityAssertions.Resolve(", codigo, StringComparison.Ordinal);
+        Assert.Contains("IdentityTokens.HeaderName", codigo, StringComparison.Ordinal);
+
+        // Y NO decide por su cuenta qué se acepta sin prueba: eso es de la regla compartida.
+        Assert.DoesNotContain("assertion_not_proven", codigo, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// La sección de configuración del token se llama IGUAL en todos los servicios.
     /// </summary>
     /// <remarks>
