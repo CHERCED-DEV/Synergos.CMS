@@ -812,6 +812,23 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   gritos en vez de caer al stub en silencio — hay gate (HU #27). Lo que
   falta es **el adaptador real y la cuenta comercial**: hoy sigue sin mover
   plata, así que ningún demo de venta corre de punta a punta.
+
+  > **«El adaptador real» es el de `Api.Payments`. En el árbol del CMS ya hay
+  > uno entero** (`WompiPaymentProvider`, ADR 0116), con router por reglas y
+  > dos sinks de confirmación asíncrona. Esta línea no lo decía, y leída sola
+  > manda a escribir el segundo — el modo de fallo que §2 describe con todas
+  > las letras. Lo que le falta a **ése** no es código: son las llaves y **una
+  > corrida contra el sandbox**, que sus propios `<remarks>` declaran
+  > pendiente y que se puede hacer con llaves de prueba antes de la cuenta
+  > comercial.
+  >
+  > **Y por eso #27 decide algo que no es «escribir un adapter»**: si se porta
+  > a la capacidad o el CMS sigue cobrando por su seam. Los dos caminos ya
+  > divergen —con `Tienda:Mode=Bff` la plata la tiene el orquestador (#57)—,
+  > así que dejarlos vivos hace que un mismo cobro pase por proveedores
+  > distintos según un interruptor. Portarlo además obliga a añadir
+  > `Api.Payments` a la lista de #49 **en el mismo commit** que el transporte:
+  > un permiso sin uso también rompe el build.
 - **La saga que nunca confirmó ya se abandona** (HU #29, parcial): el
   barrido de `Bff.Core` da por muerta la que lleva más de
   `Sweep:AbandonAfterMinutes` en `Running` y deshace lo hecho. Cero lo
