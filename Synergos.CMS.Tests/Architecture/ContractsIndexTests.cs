@@ -241,6 +241,106 @@ public sealed class ContractsIndexTests
     }
 
     /// <summary>
+    /// Y lo que el HARNESS prueba es lo mismo que el CMS emite (#88, la tercera pata).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Ésta es la pata que el ticket señalaba como el fallo silencioso, y faltaba.</b> El
+    /// gate de arriba cruza dos de las tres declaraciones —lo que el CMS emite y lo que el contrato
+    /// documenta— y deja fuera la que el harness usa para probar. Y el harness dice de sí mismo que
+    /// <b>no instancia el bridge desde el CMS</b>: arma un mock con la forma canónica y verifica los
+    /// helpers consumidores contra él. O sea que <b>prueba el mock contra sí mismo</b>.</para>
+    ///
+    /// <para>Sin esto, alguien renombra <c>canonicalUrl</c> en el C# y en los <c>.md</c>, el harness
+    /// se queda con el nombre viejo en su mock, y <b>los 56 tests siguen verdes</b> probando una
+    /// forma que ya nadie emite. El UI lee <c>undefined</c> en producción y nada se pone rojo — que
+    /// es exactamente lo que este ticket existe para impedir.</para>
+    ///
+    /// <para><b>La raíz se llama distinto en cada sitio, y eso es legítimo.</b> El C# la llama
+    /// <c>HostBridgeContext</c>, el contrato la declara como el bloque <c>window.synergos</c>, y el
+    /// harness la nombra <c>SynergosBridge</c>. Lo que tiene que coincidir son los CAMPOS, no el
+    /// nombre del tipo, así que el mapeo va explícito acá en vez de exigir que se renombre algo por
+    /// comodidad de un gate.</para>
+    ///
+    /// <para>Mismo alcance declarado que el de arriba: <b>nombres de campo, no tipos</b>. Y
+    /// <c>t(key, fallback)</c> queda fuera solo, sin excepción escrita: no es <c>readonly</c>,
+    /// porque es un helper del lado consumidor y no un campo que el CMS serialice.</para>
+    /// </remarks>
+    [Fact]
+    public void Lo_que_el_bridge_EMITE_y_lo_que_el_HARNESS_prueba_son_lo_mismo()
+    {
+        var csharp = File.ReadAllText(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Interfaces", "IHostBridgeContextBuilder.cs"));
+
+        var harness = File.ReadAllText(Path.Combine(
+            CarpetaContratos(), "tests", "host-bridge.contract.test.ts"));
+
+        var emitido = Regex.Matches(csharp, @"record HostBridge(\w+)\(([\s\S]*?)\);")
+            .ToDictionary(
+                m => m.Groups[1].Value,
+                m => CamposDelRecord(m.Groups[2].Value).Select(Minuscula).ToHashSet(StringComparer.Ordinal),
+                StringComparer.Ordinal);
+
+        Assert.True(emitido.Count >= 5,
+            $"Sólo se leyeron {emitido.Count} records de HostBridge*: el descubrimiento está roto "
+            + "y lo de abajo no probaría nada.");
+
+        var probado = Regex.Matches(harness, @"interface Synergos(\w+)\s*\{([\s\S]*?)\n\}")
+            .ToDictionary(
+                m => m.Groups[1].Value,
+                m => Regex.Matches(m.Groups[2].Value, @"readonly\s+(\w+)\s*[?:]")
+                    .Select(c => c.Groups[1].Value)
+                    .ToHashSet(StringComparer.Ordinal),
+                StringComparer.Ordinal);
+
+        // Sin esto, un cambio de formato en el .ts dejaría el diccionario vacío y el bucle de abajo
+        // no recorrería nada: verde vigilando cero, que es el modo de fallo de #89.
+        Assert.True(probado.Count >= 5,
+            $"Sólo se leyeron {probado.Count} interfaces Synergos* de host-bridge.contract.test.ts: "
+            + "cambió de forma y este gate dejó de leerlas.");
+
+        // La raíz: `SynergosBridge` en el harness es `HostBridgeContext` en el C#.
+        if (probado.Remove("Bridge", out var raiz))
+        {
+            probado["Context"] = raiz;
+        }
+
+        var malas = new List<string>();
+
+        foreach (var (nombre, campos) in emitido.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            if (!probado.TryGetValue(nombre, out var mock))
+            {
+                malas.Add($"HostBridge{nombre} se emite y el harness NO lo declara: sus tests no "
+                    + "pueden cazar un cambio ahí.");
+                continue;
+            }
+
+            var soloCodigo = campos.Except(mock).OrderBy(x => x, StringComparer.Ordinal).ToList();
+            var soloMock = mock.Except(campos).OrderBy(x => x, StringComparer.Ordinal).ToList();
+
+            if (soloCodigo.Count > 0)
+            {
+                malas.Add($"HostBridge{nombre}: el CMS emite [{string.Join(", ", soloCodigo)}] y el "
+                    + "harness no los prueba — su mock se quedó atrás.");
+            }
+
+            if (soloMock.Count > 0)
+            {
+                malas.Add($"HostBridge{nombre}: el harness prueba [{string.Join(", ", soloMock)}] "
+                    + "que el CMS ya no emite — está verde sobre una forma muerta.");
+            }
+        }
+
+        Assert.True(malas.Count == 0,
+            "El mock del harness dejó de coincidir con lo que el CMS emite. El harness NO instancia "
+            + "el bridge desde el CMS —lo dice él mismo—, así que sin este cruce sus 56 tests siguen "
+            + "verdes probando una forma que ya nadie emite, y el UI lee `undefined` en producción "
+            + "(#88)."
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, malas));
+    }
+
+    /// <summary>
     /// Los nombres de los parámetros de un record posicional.
     /// </summary>
     /// <remarks>
@@ -292,65 +392,4 @@ public sealed class ContractsIndexTests
     /// <summary>Primera letra en minúscula: los records van en PascalCase y el JSON en camelCase.</summary>
     private static string Minuscula(string s)
         => s.Length == 0 ? s : char.ToLowerInvariant(s[0]) + s[1..];
-
-    /// <summary>
-    /// Los tres sitios donde el host bridge se degrada DEJAN RASTRO (#92).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>El defecto que evita ya estaba puesto, y en el camino que corre.</b>
-    /// <c>window.synergos</c> se emite por dos rutas según <c>CspStrictMode</c>: el controller
-    /// —cuando está en <c>true</c>— y la vista Razor —cuando está en <c>false</c>, que es el
-    /// <b>default</b>—. Las dos caían al mismo contexto degradado; sólo el controller lo
-    /// registraba. O sea que la ruta que de verdad corre era la muda.</para>
-    ///
-    /// <para><b>Y había un tercer catch, más adentro y más silencioso:</b> el del propio builder
-    /// al leer el diccionario. Ése es peor que los otros dos porque devuelve un contexto que
-    /// <b>parece sano</b> —marca, tema y página intactos— con <c>i18n.keys</c> vacío: el sitio se
-    /// queda sin traducciones y todo lo demás sigue igual.</para>
-    ///
-    /// <para><b>Degradar está bien; degradar en silencio no.</b> Que el bridge no tumbe la página
-    /// es correcto y está razonado en el propio fichero — y degrada <b>cerrada</b>, sin otorgar
-    /// nada de más. Lo que faltaba es que se sepa: sin una línea de log, un miembro autenticado se
-    /// ve anónimo para todos los componentes, el sitio devuelve 200, <c>/health</c> contesta y la
-    /// prueba de humo pasa. Es la forma que §11 cataloga como la más cara de este repo.</para>
-    ///
-    /// <para><b>Por qué los tests no lo vieron:</b> el caso SÍ estaba probado —
-    /// <c>Get_BuilderThrows_ReturnsFallbackPayload</c>— pero <b>en la rama que no es el
-    /// default</b>, y además sólo afirmaba que devuelve el fallback, no que quede registrado. La
-    /// cobertura existía, apuntaba al hermano, y daba la sensación de que el caso estaba cubierto.
-    /// </para>
-    ///
-    /// <para><b>Mira que el catch registre, no CÓMO.</b> Da igual si es <c>LogWarning</c> o
-    /// <c>LogError</c> y con qué mensaje; lo que no puede volver es un <c>catch</c> vacío en el
-    /// camino del bridge.</para>
-    /// </remarks>
-    [Theory]
-    [InlineData("Synergos.CMS.Web/Views/Shared/_SynergosBridge.cshtml")]
-    [InlineData("Synergos.CMS.Web/Services/DefaultHostBridgeContextBuilder.cs")]
-    [InlineData("Synergos.CMS.Web/Controllers/SynergosBridgeController.cs")]
-    public void Toda_degradacion_del_bridge_deja_rastro(string ruta)
-    {
-        var fichero = Path.Combine(RepoRoot(), ruta.Replace('/', Path.DirectorySeparatorChar));
-        Assert.True(File.Exists(fichero), $"No existe {ruta}: revisar este gate.");
-
-        var codigo = File.ReadAllText(fichero);
-        var catches = Regex.Matches(codigo, @"catch\s*\([^)]*\)\s*\{([\s\S]*?)\n(\s*)\}");
-
-        Assert.True(catches.Count > 0,
-            $"{ruta} no tiene ningún `catch`. O se quitó la degradación —y entonces hay que "
-            + "revisar este gate— o el descubrimiento está roto y lo de abajo no probaría nada.");
-
-        var mudos = catches
-            .Where(c => !Regex.IsMatch(c.Groups[1].Value, @"\.Log(Warning|Error|Critical|Information)\("))
-            .Select(c => c.Value.Split('\n')[0].Trim())
-            .ToList();
-
-        Assert.True(mudos.Count == 0,
-            $"{ruta} vuelve a degradarse sin dejar rastro (#92). Que el bridge no tumbe la página "
-            + "es correcto —y degrada cerrada—, pero sin una línea de log un miembro autenticado se "
-            + "ve anónimo para todos los componentes, el sitio devuelve 200 y la prueba de humo "
-            + "pasa. El camino por defecto es la vista Razor, no el controller."
-            + Environment.NewLine
-            + string.Join(Environment.NewLine, mudos));
-    }
 }
