@@ -54,7 +54,7 @@ public sealed class HostBridgeSettings
     /// <summary>
     /// Si true, incluye Page metadata (id + docType + cultures) en
     /// el bridge. Útil para UI que routeа page-specific. Cero
-    /// privacy concern — public info.
+    /// privacy concern — public info. Default true.
     /// </summary>
     public bool IncludePageMetadata { get; init; } = true;
 
