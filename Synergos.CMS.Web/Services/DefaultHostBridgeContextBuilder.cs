@@ -76,14 +76,16 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
         }
         catch (Exception ex)
         {
-            // Best-effort: la UI cae a sus strings inline y la página se sirve igual. Pero se
-            // AVISA, que es lo único que faltaba (#92): éste es el más silencioso de los dos
-            // catch del bridge, porque devuelve un contexto que PARECE sano —marca, tema y página
-            // intactos— con el diccionario vacío. Sin esta línea, un sitio entero se queda sin
-            // traducciones y no hay dónde verlo.
+            // Best-effort: si el diccionario falla NO se tumba la página. Pero se DICE
+            // (defecto #92), y éste es el más silencioso de los dos catch del bridge.
+            //
+            // El de fuera produce un contexto EVIDENTEMENTE degradado —sin member, sin page—.
+            // Éste devuelve uno que parece sano con `keys` vacío: el sitio pierde todas las
+            // traducciones, la UI cae a sus strings inline, y todo lo demás sigue igual. Nadie
+            // mira una página en inglés y piensa «se cayó el diccionario».
             _logger.LogWarning(ex,
-                "No se pudieron leer las claves de diccionario para el host bridge (cultura {Cultura}). "
-                + "La UI caerá a sus strings inline.", culture);
+                "Synergos bridge: no se pudieron leer las claves de diccionario para {Culture}; "
+                + "la UI caerá a sus strings inline", culture);
         }
 
         return new HostBridgeI18n(
