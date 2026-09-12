@@ -158,11 +158,11 @@ Synergos.CMS/
 | "¿Hay compositions reservadas sin consumers?"  | Sí. Marker `[Bloqueado externamente - ...]` o `[Disponible — sin consumers actuales]` al inicio de `<Description>`. NO son orphans; son scaffolding tracked. Cap-260 audit (Cap-270 Batch C) las reconoce. |
 | "¿Cómo se acopla con el UI?"     | `Synergos.CMS.Web/docs/contracts/` — los 5 contratos. Es la ÚNICA superficie de acople. |
 | "¿Qué elementos publica el CDN?" | Repo hermano `Synergos.UI`, `vitals/contracts/src/element-registry.json` |
-| "¿Por qué el backend está partido así?" | `docs/product/06-arquitectura-backend.md` |
-| "¿Dónde para la atomicidad? ¿Qué es una capacidad?" | `docs/product/07-diseno-atomico-capacidades.md` |
-| "¿Qué API necesita cada dominio? ¿Cuál es el molde?" | `docs/product/08-despiece-apis.md` — la matriz 20×9 y §4 |
-| "¿Cómo se deshace lo que ya se hizo?" | `docs/product/09-compensacion-cruzada.md` |
-| "¿Cuándo se promueve algo a una capa compartida?" | `docs/product/10-promocion-bff-core.md` |
+| "¿Por qué el backend está partido así?" | `Synergos.CMS.Web/docs/product/06-arquitectura-backend.md` |
+| "¿Dónde para la atomicidad? ¿Qué es una capacidad?" | `Synergos.CMS.Web/docs/product/07-diseno-atomico-capacidades.md` |
+| "¿Qué API necesita cada dominio? ¿Cuál es el molde?" | `Synergos.CMS.Web/docs/product/08-despiece-apis.md` — la matriz 20×9 y §4 |
+| "¿Cómo se deshace lo que ya se hizo?" | `Synergos.CMS.Web/docs/product/09-compensacion-cruzada.md` |
+| "¿Cuándo se promueve algo a una capa compartida?" | `Synergos.CMS.Web/docs/product/10-promocion-bff-core.md` |
 | "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; la única excepción son los cinco de `Api.Notifications/Transport/`, que son fallos de la firma del webhook y no reglas de negocio |
 
@@ -178,17 +178,24 @@ Synergos.CMS/
 > interfaz y dejando sus otras tres menciones intactas —una incoherencia interna—: **los 56 tests
 > siguen verdes**. Sin este cruce, el UI lee `undefined` en producción y nada se pone rojo.
 
-> ⚠️ **De los seis docs de `docs/product/`, sólo el 11 está versionado.** Los
-> cinco de arriba (06 a 10) **no están en el repo**: viven en la máquina del
-> arquitecto, igual que `refactor-docs/`. Esta tabla los citaba como si
-> estuvieran, y un agente en un clon limpio los busca y no los encuentra.
-> Se pueden citar como fuente de autoridad —lo son— pero hay que **pedirlos**,
-> no abrirlos.
+> ⚠️ **Hay DOS carpetas `docs/product/`, y esta nota describía la equivocada.**
+> La de la raíz del repo tiene sólo el doc 11. Los demás —**06 a 10, más el 00
+> inventario funcional, `inventario/`, `investigacion-dominios/` e
+> `investigacion-pagos/`— SÍ están versionados**, en
+> `Synergos.CMS.Web/docs/product/`. Ábrelos ahí.
+>
+> Esta nota decía que no estaban y que había que pedirlos, y el efecto era el
+> que pretendía evitar: un agente en un clon limpio los busca en la raíz, no los
+> encuentra, y reconstruye desde cero un inventario funcional de 2.269 líneas
+> que ya existe. Casi pasa.
+>
+> Lo que de verdad NO está versionado es `refactor-docs/` y el `MEMORY.md` del
+> agente (§5). Eso sí hay que pedirlo.
 
 > **Fuentes que NO viven en este repo.** `refactor-docs/` (status de la
-> migración, inventario del legado), `docs/product/06` a `10` y el `MEMORY.md`
-> del agente son locales de la máquina del arquitecto y **no están
-> versionados**. Un agente que corra en un clon limpio —CI, contenedor, Claude
+> migración, inventario del legado) y el `MEMORY.md` del agente son locales de
+> la máquina del arquitecto y **no están versionados**. Los docs de producto sí
+> están — ver la nota de arriba. Un agente que corra en un clon limpio —CI, contenedor, Claude
 > Code on the web— no los tiene: no los cites como si estuvieran, y si
 > necesitás ese contexto, pedilo.
 
