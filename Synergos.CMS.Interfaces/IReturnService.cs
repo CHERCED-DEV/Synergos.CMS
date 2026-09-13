@@ -39,6 +39,28 @@ public sealed record ShopReturnCase(
     string? Note);
 
 /// <summary>
+/// Por qué NO se puede abrir una devolución sobre una línea (#34).
+/// </summary>
+/// <remarks>
+/// Es un motivo y no un booleano a propósito: quien pregunta tiene que poder
+/// DECIR por qué, y con un <c>false</c> a secas la UI tendría que adivinarlo —
+/// el mismo error que esto viene a cerrar, con otra forma.
+/// </remarks>
+public enum ShopReturnBlock
+{
+    /// <summary>Se puede: no hay nada que lo impida.</summary>
+    None,
+    /// <summary>La orden no existe.</summary>
+    OrderNotFound,
+    /// <summary>La orden no está pagada — es la única condición dura del dominio.</summary>
+    OrderNotPaid,
+    /// <summary>Esa línea no está en esa orden.</summary>
+    LineNotInOrder,
+    /// <summary>Ya hay un RMA vivo para esa línea (sólo un rechazo previo permite otro).</summary>
+    AlreadyOpen,
+}
+
+/// <summary>
 /// Devoluciones/reclamos del marketplace (dominio Tienda) — el "Necesito
 /// ayuda" de Mis compras (journey J2 del spec <c>tienda.md</c>) y su
 /// contraparte del vendedor (J5). Abre un RMA sobre una línea de una orden
@@ -100,5 +122,27 @@ public interface IReturnService
     /// </summary>
     Task<IReadOnlyList<ShopReturnCase>> GetForOrderAsync(
         string orderRef,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// ¿Se puede abrir una devolución sobre <paramref name="lineId"/> de
+    /// <paramref name="orderRef"/>? Devuelve <see cref="ShopReturnBlock.None"/>
+    /// si sí, y el motivo si no.
+    /// </summary>
+    /// <remarks>
+    /// **Es la MISMA evaluación que aplica <see cref="RequestAsync"/>**, no una
+    /// segunda opinión: aquélla la consume en vez de repetir las comprobaciones.
+    /// Ésa es toda la razón de que este método exista — la regla estaba escrita
+    /// dos veces (acá como <c>throw</c>s y en la UI como un <c>if</c>) y la copia
+    /// de la UI se desvió hasta pedir estados que este dominio no emite, con lo
+    /// que el botón de devolver quedó inalcanzable contra un servidor real (#33).
+    /// Una tercera copia dentro de este mismo fichero sería peor todavía: dos
+    /// respuestas del servidor que se contradicen se ven igual de autorizadas.
+    ///
+    /// Es una consulta pura: no escribe, no audita y no lanza.
+    /// </remarks>
+    Task<ShopReturnBlock> CanRequestAsync(
+        string orderRef,
+        string lineId,
         CancellationToken cancellationToken = default);
 }

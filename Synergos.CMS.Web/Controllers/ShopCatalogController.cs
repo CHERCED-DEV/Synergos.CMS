@@ -594,18 +594,31 @@ public sealed class ShopCatalogController : ControllerBase
 
         var orders = await _orders.GetOrdersByMemberAsync(actorKey, cancellationToken);
 
-        var dtos = orders.Select(o => new OrderDto(
-            OrderRef: o.OrderRef,
-            OrderNumber: o.OrderNumber,
-            Status: o.Status.ToString(),
-            CustomerName: o.CustomerName,
-            CustomerEmail: o.CustomerEmail,
-            Total: o.Total,
-            TotalFormatted: _priceFormatter.Format(o.Total, o.Currency),
-            Currency: o.Currency,
-            Date: o.CreatedAt,
-            CreatedAt: o.CreatedAt,
-            Items: o.Lines.Select(ToOrderLineDto).ToList())).ToList();
+        // El veredicto de devolución se pide por línea (#34). En secuencia y no en
+        // paralelo: `IReturnService` serializa su almacén con un semáforo, así que
+        // disparar N lecturas a la vez las encolaría igual y además dejaría el
+        // orden de los efectos a merced del planificador.
+        var dtos = new List<OrderDto>(orders.Count);
+        foreach (var o in orders)
+        {
+            var items = new List<OrderLineDto>(o.Lines.Count);
+            foreach (var line in o.Lines)
+            {
+                items.Add(await ToOrderLineDtoWithReturnAsync(o.OrderRef, line, cancellationToken));
+            }
+            dtos.Add(new OrderDto(
+                OrderRef: o.OrderRef,
+                OrderNumber: o.OrderNumber,
+                Status: o.Status.ToString(),
+                CustomerName: o.CustomerName,
+                CustomerEmail: o.CustomerEmail,
+                Total: o.Total,
+                TotalFormatted: _priceFormatter.Format(o.Total, o.Currency),
+                Currency: o.Currency,
+                Date: o.CreatedAt,
+                CreatedAt: o.CreatedAt,
+                Items: items));
+        }
 
         return Ok(new OrdersResponse(Orders: dtos));
     }
@@ -1038,6 +1051,42 @@ public sealed class ShopCatalogController : ControllerBase
         LineTotalFormatted: _priceFormatter.Format(l.LineTotal, l.Currency),
         Currency: l.Currency);
 
+    /// <summary>
+    /// La línea del historial, con el veredicto de devolución del servidor (#34).
+    /// </summary>
+    /// <remarks>
+    /// El default de <c>CanReturn</c> es <c>false</c>, así que los demás sitios que
+    /// emiten líneas —el confirm, por ejemplo— siguen diciendo la verdad sin
+    /// tocarlos: en el acuse de compra no se puede devolver nada todavía.
+    /// </remarks>
+    private async Task<OrderLineDto> ToOrderLineDtoWithReturnAsync(
+        string orderRef,
+        ShopOrderLine l,
+        CancellationToken cancellationToken)
+    {
+        var lineId = string.IsNullOrWhiteSpace(l.VariantId) ? l.ProductId : $"{l.ProductId}/{l.VariantId}";
+        var block = await _returns.CanRequestAsync(orderRef, lineId, cancellationToken);
+        return ToOrderLineDto(l) with
+        {
+            CanReturn = block == ShopReturnBlock.None,
+            // `None` no viaja: un motivo cuando NO hay motivo invita a pintarlo.
+            ReturnBlock = block == ShopReturnBlock.None ? null : ToReturnBlockKey(block),
+        };
+    }
+
+    /// <summary>
+    /// El motivo en el vocabulario del contrato — `kebab-case`, como el resto de
+    /// claves que lee la UI. El nombre del enum de C# no es un contrato.
+    /// </summary>
+    private static string ToReturnBlockKey(ShopReturnBlock block) => block switch
+    {
+        ShopReturnBlock.OrderNotFound => "order-not-found",
+        ShopReturnBlock.OrderNotPaid => "order-not-paid",
+        ShopReturnBlock.LineNotInOrder => "line-not-in-order",
+        ShopReturnBlock.AlreadyOpen => "already-open",
+        _ => "none",
+    };
+
     // ── Request DTOs (binding del módulo storefront) ────────────────
 
     /// <summary>POST /api/shop/checkout — líneas del carrito + comprador.</summary>
@@ -1189,7 +1238,14 @@ public sealed class ShopCatalogController : ControllerBase
         string UnitPriceFormatted,
         decimal LineTotal,
         string LineTotalFormatted,
-        string Currency);
+        string Currency,
+        // Lo decide el SERVIDOR con el mismo gate que aplica el POST (#34), igual
+        // que `ProductDetail.canReview`. La UI lo deducía y su copia se desvió
+        // hasta pedir estados que este dominio no emite (#33).
+        bool CanReturn = false,
+        // Por qué no, cuando no. Sin esto la UI tendría que adivinar el motivo,
+        // que es el mismo error con otra forma.
+        string? ReturnBlock = null);
 
     public sealed record ConfirmResponse(
         string Status,
