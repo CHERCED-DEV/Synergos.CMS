@@ -253,7 +253,14 @@ public sealed class EventosController : ControllerBase
         EventCheckoutResult result;
         try
         {
-            result = await _ticketing.CheckoutAsync(request.EventId.Trim(), items, attendees, cancellationToken);
+            var buyer = request.Buyer is not null
+                && !string.IsNullOrWhiteSpace(request.Buyer.Name)
+                && !string.IsNullOrWhiteSpace(request.Buyer.Email)
+                    ? new EventBuyerInfo(request.Buyer.Name.Trim(), request.Buyer.Email.Trim())
+                    : null;
+
+            result = await _ticketing.CheckoutAsync(
+                request.EventId.Trim(), items, attendees, buyer, cancellationToken);
         }
         catch (ArgumentException ex)
         {
@@ -701,10 +708,23 @@ public sealed class EventosController : ControllerBase
         public string? Identification => string.IsNullOrWhiteSpace(Document) ? DocumentId : Document;
     }
 
+    /// <summary>Quien compra, que no tiene por qué ir al evento.</summary>
+    public sealed record BuyerRequest(string? Name, string? Email);
+
+    /// <summary>
+    /// <c>POST /checkout</c> — evento + ítems + asistentes + quien compra.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>Buyer</c> faltaba y se descartaba en silencio</b> (#107). La app lo manda desde
+    /// siempre; el motor asumía que el comprador era <c>attendees[0]</c>, así que quien compra
+    /// cuatro entradas para su familia y se queda en casa no recibía su propia confirmación —
+    /// le llegaba al primero de la lista.
+    /// </remarks>
     public sealed record CheckoutRequest(
         string? EventId,
         IReadOnlyList<CheckoutItemRequest>? Items,
-        IReadOnlyList<AttendeeRequest>? Attendees);
+        IReadOnlyList<AttendeeRequest>? Attendees,
+        BuyerRequest? Buyer = null);
 
     public sealed record ConfirmRequest(string? OrderRef);
 

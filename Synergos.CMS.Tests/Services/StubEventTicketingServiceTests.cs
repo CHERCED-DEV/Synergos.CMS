@@ -38,8 +38,91 @@ public class StubEventTicketingServiceTests
             null,
             signer: Signer);
 
+    /// <summary>
+    /// Un proveedor de pagos que recuerda con qué se le abrió la sesión.
+    /// </summary>
+    /// <remarks>
+    /// Hace falta porque el comprador no sale del resultado del checkout: sale del
+    /// <c>CustomerEmail</c> con el que se abre la sesión, que es a quien le llega el acuse.
+    /// </remarks>
+    private sealed class PagosQueRecuerdan : IPaymentProvider
+    {
+        private readonly StubPaymentProvider _real = new();
+
+        public string ProviderKey => _real.ProviderKey;
+
+        public PaymentSessionRequest? Ultima { get; private set; }
+
+        public Task<PaymentSession> CreateSessionAsync(PaymentSessionRequest request, CancellationToken ct = default)
+        {
+            Ultima = request;
+            return _real.CreateSessionAsync(request, ct);
+        }
+
+        public Task<PaymentOutcome> GetStatusAsync(string sessionId, CancellationToken ct = default)
+            => _real.GetStatusAsync(sessionId, ct);
+
+        public Task<PaymentOutcome> CaptureAsync(string sessionId, decimal? amount = null, CancellationToken ct = default)
+            => _real.CaptureAsync(sessionId, amount, ct);
+
+        public Task<PaymentOutcome> VoidAsync(string sessionId, CancellationToken ct = default)
+            => _real.VoidAsync(sessionId, ct);
+
+        public Task<PaymentOutcome> RefundAsync(string sessionId, decimal? amount = null, CancellationToken ct = default)
+            => _real.RefundAsync(sessionId, amount, ct);
+    }
+
     private static EventAttendeeInfo Attendee(string suffix = "1")
         => new($"Asistente {suffix}", $"asistente{suffix}@synergos.co", $"100{suffix}");
+
+    /// <summary>
+    /// La sesión de pago se abre a nombre de QUIEN COMPRA, no del primer asistente.
+    /// </summary>
+    /// <remarks>
+    /// <b>El motor lo daba por supuesto</b> (#107): `attendees[0]` era el comprador, así que
+    /// quien compra cuatro entradas para su familia y se queda en casa no recibía su propia
+    /// confirmación — le llegaba al primero de la lista. La app mandaba el comprador desde
+    /// siempre y el borde lo descartaba en silencio.
+    ///
+    /// <para><b>El fixture EXIGE la regla porque el comprador NO está entre los asistentes.</b>
+    /// Con un comprador que además asiste, el test pasaría en verde con el campo descartado —
+    /// que es exactamente el defecto.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Checkout_ConComprador_AbreLaSesionASuNombre()
+    {
+        var pagos = new PagosQueRecuerdan();
+        var svc = Make(payments: pagos);
+
+        await svc.CheckoutAsync(
+            "evt-festival-estereo",
+            new[] { new EventCheckoutItem("GEN", null, 2) },
+            new[] { Attendee("1"), Attendee("2") },
+            new EventBuyerInfo("Quien Regala", "regala@synergos.co"));
+
+        Assert.Equal("regala@synergos.co", pagos.Ultima!.CustomerEmail);
+    }
+
+    /// <summary>
+    /// Sin comprador se conserva el supuesto de siempre: el primer asistente.
+    /// </summary>
+    /// <remarks>
+    /// Es lo correcto en el caso común —quien compra va— y lo que mantiene funcionando a los
+    /// consumidores que no lo mandan.
+    /// </remarks>
+    [Fact]
+    public async Task Checkout_SinComprador_UsaElPrimerAsistente()
+    {
+        var pagos = new PagosQueRecuerdan();
+        var svc = Make(payments: pagos);
+
+        await svc.CheckoutAsync(
+            "evt-festival-estereo",
+            new[] { new EventCheckoutItem("GEN", null, 1) },
+            new[] { Attendee("1") });
+
+        Assert.Equal("asistente1@synergos.co", pagos.Ultima!.CustomerEmail);
+    }
 
     [Fact] // empty: sin ítems lanza
     public async Task Checkout_NoItems_Throws()

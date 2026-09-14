@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2853 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2855 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2853 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2855 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -434,7 +434,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2853 tests):
+# Suite completa (2855 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -460,7 +460,28 @@ node tools/check-css-parity.mjs   # G-3: toda clase syn-* emitida tiene CSS
 (cd Synergos.CMS.Web/docs/contracts/tests && npm ci && npm test)  # contratos
 ```
 
-**Y uno más que SÍ necesita al hermano, pero acepta su ruta** (G-6, #102):
+**Y DOS más que sí necesitan al hermano, pero aceptan su ruta** (G-6 y G-7, #102):
+
+```bash
+node tools/contract-keys.mjs  --ui-path=/tmp/ui   # lo que el borde EMITE  ↔ lo que la app LEE
+node tools/contract-bodies.mjs --ui-path=/tmp/ui  # lo que la app MANDA   ↔ lo que el borde DECLARA
+```
+
+**G-7 es el que mira donde de verdad dolió.** En los ocho verticales auditados (#102 a #105)
+lo caro estuvo SIEMPRE en los cuerpos de petición: un `planId` que el record no declaraba y
+cobraba el plan equivocado, un `slot: {date,time}` contra un `string` que daba 400 siempre,
+`lat`/`lng` planos que publicaban un inmueble en (0,0), la dirección de entrega descartada,
+seis rutas de EHR en 400 permanente. Ninguno fallaba a la vista: System.Text.Json descarta
+en silencio lo que no mapea, y el `catch` del cliente inventa el acuse.
+
+Por eso G-7 es **error y no trinquete**: una clave que se manda a una ruta y cuyo record no
+la declara no tiene lectura inocente. Hoy ligan 37 claves en 18 rutas.
+
+> **Lo que G-7 no ve, y lo dice al correr**: los cuerpos que construye una función
+> (`postJson(url, toCourseDraftWire(body))`) quedan fuera, porque seguirla exige resolver su
+> return. Los lista en cada corrida en vez de contarlos como cubiertos.
+
+Y el de las claves de respuesta:
 
 ```bash
 node tools/contract-keys.mjs --ui-path=/tmp/ui   # o SYNERGOS_UI_PATH
@@ -627,7 +648,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2853 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2855 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

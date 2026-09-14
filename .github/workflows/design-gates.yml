@@ -122,3 +122,16 @@ jobs:
       - name: Claves CMS ↔ UI (G-6)
         working-directory: Synergos.CMS
         run: node tools/contract-keys.mjs --ui-path="$GITHUB_WORKSPACE/Synergos.UI"
+
+      # G-7 · los CUERPOS DE PETICIÓN, cruzados por ruta.
+      #
+      # G-6 mira lo que el borde EMITE; éste, lo que la app MANDA — y ahí estuvo lo caro en los
+      # ocho verticales auditados, sin excepción: un campo que el record no declara lo descarta
+      # System.Text.Json sin decir nada (el dato se pierde) o revienta el binding entero (400),
+      # y las dos cosas las tapa el catch del cliente.
+      #
+      # Es ERROR y no trinquete: una clave que se manda a una ruta y su record no declara no
+      # tiene lectura inocente.
+      - name: Cuerpos de petición CMS ↔ UI (G-7)
+        working-directory: Synergos.CMS
+        run: node tools/contract-bodies.mjs --ui-path="$GITHUB_WORKSPACE/Synergos.UI"
