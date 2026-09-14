@@ -61,6 +61,11 @@ public sealed partial class SeamComposer
         // fábrica, contra IOptions — misma sección, pero un valor y no dos fuentes.
         var routingEnabled = builder.Config.GetValue<bool>("Synergos:Payments:Routing:Enabled");
 
+        // HU #27 — las dos mitades no pueden cobrar de verdad a la vez. Falla al CABLEAR, no en
+        // la primera petición: un despliegue que arranca verde, contesta /health y revienta
+        // cuando una persona intenta pagar es el peor de los tres modos de fallo.
+        ExigirUnaSolaPlomeria(builder.Config);
+
         // Named client de Wompi. Sandbox y producción se distinguen SÓLO por la
         // base: las llaves ya vienen con su prefijo (pub_test_ / pub_prod_), así
         // que apuntar a producción con llaves de prueba falla en Wompi y no en
@@ -140,6 +145,55 @@ public sealed partial class SeamComposer
         services.AddSingleton<IPaymentEventSink, ShopPaymentEventSink>();
         services.AddSingleton<IPaymentEventSink, TravelPaymentEventSink>();
 
+    }
+
+
+    /// <summary>
+    /// Que sólo una de las dos mitades cobre de verdad (HU #27).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La plata la mueve <c>Api.Payments</c>.</b> Este motor en proceso sigue vivo porque
+    /// es lo que permite levantar el repo entero sin ningún servicio —<c>Tienda:Mode=Stub</c>—,
+    /// pero con la tienda cableada contra el orquestador la plata la tiene él, y dejar las dos
+    /// plomerías cobrando hace que un mismo cobro pase por proveedores distintos según un
+    /// interruptor. <b>Eso ya ocurrió</b>: es el defecto #57, donde el RMA le pedía el reembolso
+    /// al proveedor local con el identificador de la saga —que ese proveedor no conocía— y el
+    /// caso no llegaba nunca a reembolsado <i>sin que nada fallara</i>.</para>
+    ///
+    /// <para><b>Se revienta al arrancar y no al primer cobro</b>, que es la forma de #56 (el modo
+    /// <c>Http</c> del CDN sin URL) y la de la llave de firma de <c>Api.Identity</c>. Un
+    /// despliegue mal configurado que arranca verde, contesta <c>/health</c> y pasa la prueba de
+    /// humo <b>parece uno bueno</b>, y lo desmiente la primera persona que intenta pagar.</para>
+    ///
+    /// <para><b>Lo que se mira es si este lado COBRARÍA</b>, no si el nombre está escrito: hacen
+    /// falta las dos llaves del checkout —sin ellas <see cref="TryBuildWompi"/> devuelve
+    /// <c>null</c> y acá no se cobra nada—, y además que algo pueda elegirlo, o sea el proveedor
+    /// único puesto en <c>wompi</c> o el router encendido, que lo admite como miembro.</para>
+    /// </remarks>
+    internal static void ExigirUnaSolaPlomeria(IConfiguration config)
+    {
+        var tiendaCableada = string.Equals(
+            config["Synergos:Tienda:Mode"], "Bff", StringComparison.OrdinalIgnoreCase);
+        if (!tiendaCableada) return;
+
+        var tieneLlaves = !string.IsNullOrWhiteSpace(config["Synergos:Payments:WompiPublicKey"])
+            && !string.IsNullOrWhiteSpace(config["Synergos:Payments:WompiIntegritySecret"]);
+        if (!tieneLlaves) return;
+
+        var loPuedeElegir = string.Equals(
+                config["Synergos:Payments:Provider"]?.Trim(), WompiProviderKey, StringComparison.OrdinalIgnoreCase)
+            || config.GetValue<bool>("Synergos:Payments:Routing:Enabled");
+        if (!loPuedeElegir) return;
+
+        throw new InvalidOperationException(
+            "Synergos:Tienda:Mode=Bff manda la plata al orquestador, y este despliegue tiene "
+            + "ADEMÁS llaves reales de Wompi del lado del CMS "
+            + "(Synergos:Payments:WompiPublicKey + WompiIntegritySecret, con "
+            + "Synergos:Payments:Provider=Wompi o Routing:Enabled=true). Las dos mitades cobrarían, "
+            + "y un mismo cobro pasaría por proveedores distintos según un interruptor — es el "
+            + "defecto #57, que no falla a la vista. Desde la HU #27 la plata la mueve "
+            + "Api.Payments: quitá las llaves de acá (Payments__wompi__* van en la capacidad) o "
+            + "volvé la tienda a Synergos:Tienda:Mode=Stub.");
     }
 
     /// <summary>Clave del proveedor Wompi. Es la misma que devuelve su <c>ProviderKey</c>.</summary>
