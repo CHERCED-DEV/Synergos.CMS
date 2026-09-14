@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2717 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2763 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2717 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2763 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -361,6 +361,16 @@ Las que salieron de construir el árbol de servicios (§0.B):
   nada detrás que pueda fallar.
 - `feedback_mutate_every_gate` — un gate que no se vio fallar no está
   vigilando nada. Se reintroduce el defecto y se confirma el rojo.
+- `feedback_seeded_content_needs_fingerprint` — un seam que sólo sabe CREAR
+  convierte una edición en INVISIBLE. Si un catálogo editable siembra su
+  contenido en otro almacén, la clave de siembra lleva la huella del texto
+  (o se edita y no se ve), y el mapping es DURABLE (o cada arranque duplica
+  el feed entero, creciendo para siempre sin que nada falle).
+- `feedback_property_injection_breaks_at_two_impls` — inyectar por propiedad
+  resolviendo un TIPO CONCRETO se rompe en silencio el día que hay dos
+  implementaciones detrás de la seam: la dependencia aterriza en la que no
+  sirve, y los tests siguen verdes porque cablean la inyección ellos mismos.
+  Se resuelve por la SEAM, que es lo que el flag decide.
 - `feedback_verify_with_live_processes` — los defectos caros salieron
   todos de levantar los procesos y matar uno, no de los tests: los
   tests codificaban la misma suposición equivocada que el código.
@@ -392,7 +402,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2717 tests):
+# Suite completa (2763 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -549,7 +559,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2717 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2763 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -1300,6 +1310,54 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > que `IdentityAssertion` hizo en el árbol de servicios subiendo a
   > `Synergos.Core`, y **sigue siendo `string` a propósito**: los dos
   > árboles no se referencian. Hay gate contra la segunda declaración.
+- **El catálogo de Educación ya puede salir del CMS** (#100,
+  `Synergos:Catalog:Sources:Academy = cms`, con el seed de demo de default).
+  Era **el único vertical cuyo objeto central no se podía autorar**: un curso
+  salía de `StubCourseCatalogProvider`, sembrado en C#, así que publicar uno
+  exigía un despliegue. Hoy `coursePage` lleva su currículum
+  (`elementCourseModule` / `elementCourseLesson` + sus Block List) y
+  `UmbracoCourseCatalogSource` lo sirve. El mapa del cableado decía que
+  «no existe `coursePage`» y eso era falso ya entonces — el DocType estaba
+  con sus 16 campos de ficha; lo que faltaba era el temario, y sin él un curso
+  autorado no se podía cursar.
+
+  > **Y añade algo que las otras cuatro fuentes no necesitan: SEMBRAR.** Una
+  > lección referencia su cuerpo por `ContentItemId` —un item del
+  > `IContentStream` con `Kind=lesson`— y ese id lo asigna el feed, así que la
+  > fuente no lo puede rellenar: entrega el cuerpo y el catálogo lo siembra.
+  > Sembrar en la FUENTE habría sido el defecto caro y callado:
+  > `ICatalogSource.GetAllAsync` se llama en CADA búsqueda —el catálogo no
+  > cachea, a propósito, para que el read-your-writes salga gratis—, así que
+  > el feed crecería un item por lección y por búsqueda. Hay gate
+  > (`AcademyCatalogSourceTests`).
+  >
+  > **La siembra es durable y su clave lleva la HUELLA del cuerpo**, y las dos
+  > mitades hacen falta. Sin lo primero, cada arranque re-siembra el feed
+  > entero. Sin lo segundo, editar una lección no se ve nunca: `IContentStream`
+  > sólo sabe CREAR —no hay update—, así que un mapping por `lessonId` a secas
+  > serviría para siempre el primer cuerpo. El `lessonId` NO cambia al
+  > reescribir, que es lo que salva el progreso del alumno
+  > (`CompletedLessonIds` guarda el id de la lección, no el del item). El coste
+  > es un item huérfano por edición, y es el barato de los dos.
+  >
+  > **El id de una lección no lleva su número de orden**, aunque sea lo natural
+  > de escribir: reordenar el temario es normal, y con el orden dentro,
+  > reordenarlo reescribiría la historia de todos los matriculados en silencio.
+  > Se deriva del título y el editor puede fijarlo.
+  >
+  > **Y el descriptor de búsqueda subió al tipo del CONTRATO.** Estaba sobre
+  > `SeedCourse` —el tipo del seed de demo—, así que la fuente nueva habría
+  > tenido que declarar el suyo: dos descriptores y la búsqueda comportándose
+  > distinto según una línea de config. Al moverlo apareció el hueco: ningún
+  > test buscaba por instructor, que es el único campo del descriptor que no se
+  > resuelve leyendo una propiedad.
+  >
+  > **Lo que NO cruza todavía**: `PublishCourseAsync` guarda en el overlay
+  > durable y el editor lo promueve a `coursePage` cuando quiera — que ese
+  > ascenso sea manual es deliberado, igual que en Eventos. Y el instructor
+  > sigue siendo tres campos del curso, no una entidad con ficha: el día que
+  > haya un `instructorPage`, su id deja de derivarse del nombre.
+
 - **Cuatro orquestadores sin construir**: Realty, Gob, Academy, Social.
   `Bff.Eventos` (HU #35) y `Bff.Viajes` (HU #36) ya están, y ninguno de los
   dos necesitó una capacidad nueva ni un endpoint nuevo — que es la
