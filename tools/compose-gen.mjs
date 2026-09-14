@@ -24,13 +24,27 @@ const DESTINO = join(RAIZ, 'compose.prod.yml');
 const CHECK = process.argv.includes('--check');
 
 /**
- * Las capacidades que VERIFICAN tokens de identidad (HU #14, rebanada 3).
+ * Si esta capacidad VERIFICA tokens de identidad (HU #14), leido de su `Program.cs`.
  *
- * Es una lista y no «todas» a proposito: una capacidad que no lee la cabecera no
- * gana nada teniendo la llave, y tenerla la pondria a un descuido de empezar a
- * creerse tokens que nadie decidio que aceptara. Se anade cuando se cablea, no antes.
+ * Sigue sin ser «todas» a proposito: una capacidad que no lee la cabecera no gana
+ * nada teniendo la llave, y tenerla la pondria a un descuido de empezar a creerse
+ * tokens que nadie decidio que aceptara. Lo que cambia es COMO se sabe cuales son.
+ *
+ * ERA UNA LISTA A MANO, Y YA SE HABIA DESINCRONIZADO: decia dos —Messaging y
+ * Workflow— cuando eran cuatro. `Api.Consent` (rebanada 5) y `Api.Audit` (#72)
+ * cablearon el verificador y nadie volvio a mirar esta linea, asi que el compose no
+ * les pasaba la llave. Y eso NO falla al arrancar: la capacidad sirve y RECHAZA el
+ * primer token que alguien le presente, o sea un servidor bien configurado
+ * comportandose como uno sin llave — el sintoma que el comentario de abajo llama de
+ * los peores de diagnosticar. Es el mismo error que ya costo el defecto #83.
+ *
+ * `required: false` distingue a quien VERIFICA de quien EMITE: `Api.Identity` pide
+ * `required: true` y tiene su propio bloque, con `:?` porque sin llave no arranca.
  */
-const VERIFICAN_IDENTIDAD = new Set(['Synergos.Api.Messaging', 'Synergos.Api.Workflow']);
+function verificaIdentidad(proyecto) {
+  const programa = readFileSync(join(RAIZ, proyecto, 'Program.cs'), 'utf8');
+  return /AddIdentityTokens\(required:\s*false\)/.test(programa);
+}
 
 /** `Synergos.Api.Booking` → `api-booking`. Docker no quiere mayúsculas ni puntos. */
 const nombreServicio = (proyecto) =>
@@ -70,7 +84,7 @@ function capacidadesDe(proyecto) {
 
 /** La llave con la que una capacidad VERIFICA tokens de identidad, si los verifica. */
 function entornoIdentidad(proyecto) {
-  if (!VERIFICAN_IDENTIDAD.has(proyecto)) return '';
+  if (!verificaIdentidad(proyecto)) return '';
   return [
     '',
     '      # La llave con la que se COMPRUEBAN los tokens (HU #14). La misma que firma y',
