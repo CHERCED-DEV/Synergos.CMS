@@ -229,7 +229,19 @@ public sealed class StubShopOrderService : IShopOrderService
             Lines: lines,
             CreatedAt: _now(),
             // T2: el dueño viene de la sesión (server-trusted) o null si es invitado.
-            OwnerMemberKey: customer.MemberKey);
+            OwnerMemberKey: customer.MemberKey,
+            // Este motor no despacha, pero la dirección se guarda igual: el confirm de un
+            // motor que SÍ despacha la exige, y el cliente no la vuelve a mandar.
+            ShipTo: string.IsNullOrWhiteSpace(customer.Address) || string.IsNullOrWhiteSpace(customer.City)
+                ? null
+                : new ShopShippingAddress(
+                    Line1: customer.Address.Trim(),
+                    Line2: null,
+                    City: customer.City.Trim(),
+                    Region: null,
+                    PostalCode: null,
+                    Country: null,
+                    Contact: customer.Name.Trim()));
 
         await _store.WriteAsync(ResourceType, orderRef, JsonSerializer.Serialize(order, _json), cancellationToken);
 
@@ -439,7 +451,8 @@ public sealed class StubShopOrderService : IShopOrderService
         Currency: order.Currency,
         PaymentSessionId: order.PaymentSessionId,
         CreatedAt: order.CreatedAt,
-        OwnerMemberKey: order.OwnerMemberKey);
+        OwnerMemberKey: order.OwnerMemberKey,
+        ShipTo: order.ShipTo);
 
     private static ShopOrderLine ToLine(PersistedOrderLine l) => new(
         ProductId: l.ProductId,

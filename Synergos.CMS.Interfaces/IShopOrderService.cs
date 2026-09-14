@@ -1,4 +1,4 @@
-namespace Synergos.CMS.Interfaces;
+﻿namespace Synergos.CMS.Interfaces;
 
 /// <summary>
 /// Ciclo de vida de una orden del marketplace (dominio Tienda). <see cref="Pending"/>
@@ -36,7 +36,19 @@ public sealed record ShopCartItem(
 /// nunca del body (anti-tampering) — liga la orden a un login real, no a un email
 /// tecleado.
 /// </summary>
-public sealed record ShopCustomer(string Name, string Email, Guid? MemberKey = null);
+/// <param name="Address">
+/// A dónde se despacha, tal como lo escribió quien compra. <b>Aditivo, y no es un adorno</b>:
+/// el formulario del checkout la EXIGE desde siempre y el borde la descartaba, así que la
+/// dirección no salía del navegador. Un motor que además despacha (<c>Bff.Tienda</c>, HU #24)
+/// la pide al confirmar, y sin ella la compra no se cierra.
+/// </param>
+/// <param name="City">La ciudad, por la misma razón y con la misma exigencia del motor real.</param>
+public sealed record ShopCustomer(
+    string Name,
+    string Email,
+    Guid? MemberKey = null,
+    string? Address = null,
+    string? City = null);
 
 /// <summary>
 /// Resultado de <see cref="IShopOrderService.CheckoutAsync"/>: la referencia de
@@ -80,7 +92,11 @@ public sealed record ShopOrder(
     // o null en órdenes de invitado. Es la llave de ownership que cierra el IDOR:
     // el historial y los endpoints por-orden se filtran/gatean por este campo,
     // no por el email (enumerable). Aditivo → órdenes previas quedan sin dueño.
-    Guid? OwnerMemberKey = null);
+    Guid? OwnerMemberKey = null,
+    // A dónde va, capturada en el checkout. Vive en la orden porque el que la necesita es
+    // CONFIRM, un paso después: el cliente no la vuelve a mandar y sin guardarla se pierde
+    // entre los dos. Aditivo → las órdenes anteriores quedan sin dirección, que es la verdad.
+    ShopShippingAddress? ShipTo = null);
 
 /// <summary>
 /// A dónde se despacha la compra.
