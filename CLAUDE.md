@@ -452,7 +452,34 @@ node tools/check-css-parity.mjs   # G-3: toda clase syn-* emitida tiene CSS
 (cd Synergos.CMS.Web/docs/contracts/tests && npm ci && npm test)  # contratos
 ```
 
-El cuarto es **cross-repo** y valida las dos mitades del acople, así que
+**Y uno más que SÍ necesita al hermano, pero acepta su ruta** (G-6, #102):
+
+```bash
+node tools/contract-keys.mjs --ui-path=/tmp/ui   # o SYNERGOS_UI_PATH
+```
+
+Cruza **la forma del JSON** de cada controller contra las claves que lee su app del
+catálogo — la superficie que no miraba nadie, y por la que doce claves de Academy se
+desviaron sin que nada se pusiera rojo: el normalizador del cliente es defensivo, así
+que una clave que falta **degrada en silencio**. Es un **trinquete** contra
+`tools/contract-keys.baseline.json`, como el presupuesto de tamaño del repo hermano: no
+falla por deuda vieja, sólo el día que algo que hoy cruza deja de cruzar. Se regenera
+con `--actualizar` y el diff va en el commit que lo causó.
+
+> **Cruza por NOMBRE DE CLAVE, no por tipo**, y está dicho para no mentir sobre su
+> alcance — igual que el cruce de `window.synergos` de §3. Un `string` que pasa a
+> `number` bajo la misma clave sigue pasando por aquí.
+>
+> **La tabla app↔controller es a mano y por eso lleva guarda.** El vínculo no está
+> escrito en ningún sitio del que se pueda deducir, así que la lista es inevitable —
+> pero una lista mal escrita congela un verde falso para siempre, y ya pasó al
+> escribirlo: `storefront` apuntaba a `ShopController` (el del carrito, 110 líneas) en
+> vez de a `ShopCatalogController` (1372), y cruzaba **3 claves de 94**. La guarda
+> rechaza un vertical que cruce menos de una de cada cinco, **y corre también al
+> regenerar la línea base** — salir antes dejaba abierto justo el camino por el que
+> entra el error, porque `--actualizar` es lo que uno teclea cuando el gate se queja.
+
+El otro cross-repo valida las dos mitades del acople, así que
 necesita `Synergos.UI` clonado. **La CI ya los corre** —`design-gates.yml`
 hace checkout del hermano y lanza los dos—, así que no son gates dormidos; lo
 que faltaba era poder correrlos **acá**, antes de subir. Y sí se puede: **no
