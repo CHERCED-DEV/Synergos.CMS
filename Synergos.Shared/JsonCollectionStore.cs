@@ -78,6 +78,26 @@ public sealed class JsonCollectionStore<T> where T : class
         }
     }
 
+    /// <summary>
+    /// Tira lo que haya en memoria: la próxima lectura vuelve a bajar al fichero.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Quien lo necesita es quien desconfía de tener la última palabra</b> — hoy, el
+    /// barrido de compensaciones de <c>Bff.Core</c> (#34). Mientras haya una sola instancia por
+    /// capacidad, el caché <i>es</i> la verdad: nadie más escribe ese fichero. En cuanto hay dos
+    /// procesos sobre el mismo directorio deja de serlo, y lo que se lee es la foto del arranque —
+    /// que es la forma exacta en la que el defecto #82 se escondió durante meses.</para>
+    ///
+    /// <para><b>No arregla el caso de dos instancias</b>, y conviene decirlo acá para que nadie lo
+    /// lea como que sí: <see cref="Put"/> sigue escribiendo el mapa ENTERO, así que dos procesos
+    /// que escriban a la vez se pisan igual. Esto sólo permite que quien va a decidir algo lea
+    /// antes lo que hay en el disco. Arreglar lo otro es cambiar de almacén.</para>
+    /// </remarks>
+    public void Invalidate()
+    {
+        lock (_gate) { _cache = null; }
+    }
+
     private Dictionary<string, T> Load()
     {
         if (_cache is not null) return _cache;

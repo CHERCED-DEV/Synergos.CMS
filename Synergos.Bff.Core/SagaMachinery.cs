@@ -48,6 +48,15 @@ public static class SagaMachinery
         builder.Services.AddSingleton(vocabulary);
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<ISagaStore<TSaga>, FileSystemSagaStore<TSaga>>();
+
+        // El arriendo de la compensación (#34). Va acá y NO por orquestador: es la pieza que hace
+        // que el barrido sea correcto por sí mismo y no por que hoy haya una sola réplica, y un
+        // orquestador al que se le olvidara registrarlo arrancaría sano, pasaría su /health y
+        // compensaría dos veces el día que alguien escale una réplica.
+        //
+        // No es genérico por saga a propósito: el arriendo es de un IDENTIFICADOR, y cada
+        // orquestador tiene su propia raíz de almacén, así que dos dominios no se pisan.
+        builder.Services.AddSingleton<ISagaLease, FileSystemSagaLease>();
         builder.Services.AddSingleton<ICompensationExecutor<TSaga>, TExecutor>();
         builder.Services.AddSingleton<Compensator<TSaga>>();
         builder.Services.AddSingleton<CompensationAlert>();

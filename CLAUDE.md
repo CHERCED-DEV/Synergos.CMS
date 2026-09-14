@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2782 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2793 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,12 +111,12 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2782 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2793 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
 │   ├── Api/                     tests de reglas y servicio por capacidad
-│   └── Bff/                     la compensación cruzada (132)
+│   └── Bff/                     la compensación cruzada (142)
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
 │
 ├── Synergos.Core/               EL VOCABULARIO. Ref, Money, TimeWindow, Rejection,
@@ -359,6 +359,14 @@ Las que salieron de construir el árbol de servicios (§0.B):
 - `feedback_close_doors_last` — lo que cierra una puerta (`fulfill`,
   `checkout`) va lo más tarde posible en un flujo, cuando ya no queda
   nada detrás que pueda fallar.
+- `feedback_sweep_lease_where_both_see_it` — un barrido que reintenta
+  tiene que marcar lo que está ejecutando, y la marca va **donde la ven
+  los dos**: en memoria alcanza cuando varios procesos reintentan contra
+  UNA capacidad (`retry_in_flight`), y no alcanza cuando cada proceso
+  tiene su propio almacén. **Tiene que vencer** —sin vencimiento cambia
+  «se hace dos veces» por «no se hace nunca», que no se nota— y **no
+  sirve sin releer el almacén al tomarlo**: el caché del proceso deja que
+  el segundo repita un minuto después lo que el primero ya hizo.
 - `feedback_mutate_every_gate` — un gate que no se vio fallar no está
   vigilando nada. Se reintroduce el defecto y se confirma el rojo.
 - `feedback_seeded_content_needs_fingerprint` — un seam que sólo sabe CREAR
@@ -410,7 +418,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2782 tests):
+# Suite completa (2793 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -567,7 +575,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2782 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2793 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -1523,6 +1531,32 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > compensación fallida algo quedó colgado y necesita una persona. La regla
   > vive en `SagaEngine.Abrir` y no en cada flujo — estaba copiada en los dos
   > orquestadores, y el defecto también.
+- **Dos barridos ya NO compensan dos veces lo mismo** (#34). `CompensateAsync`
+  leía, ejecutaba y escribía **sin marca de en-curso**, y lo llaman el barrido
+  y cada flujo en línea: la carrera no necesitaba dos réplicas — bastaba un
+  barrido y un `AbortarAsync` simultáneos en el mismo proceso. Hoy va bajo
+  arriendo (`ISagaLease`, fichero por saga tomado con `rename`, lo único
+  atómico), que **vence** —`Sweep:CompensationLeaseSeconds`, con piso duro—
+  porque un arriendo eterno cambia «se hace dos veces» por «no se hace
+  nunca», que no se nota. Quien no lo consigue recibe
+  `compensation_in_flight` **transitorio**, como el `retry_in_flight` de
+  `Api.Notifications`: no es que no se pueda, es que el otro está en curso.
+
+  > **Y había una segunda mitad que el ticket no nombraba**: el caché de
+  > `JsonCollectionStore` vive en la instancia, así que un arriendo a secas
+  > habría sido teatro — la segunda réplica no compensaría *a la vez*, y lo
+  > repetiría un minuto después leyendo su propia copia. Es la forma exacta
+  > del defecto #82. Por eso bajo arriendo se **relee del disco**, y el
+  > barrido relee al empezar la vuelta.
+  >
+  > **Lo que NO queda arreglado, y está dicho**: `JsonCollectionStore.Put`
+  > sigue escribiendo el mapa entero desde el caché de su proceso, así que
+  > dos réplicas que escriban a la vez se pisan igual, arriendo o no. Eso es
+  > el cambio de almacén, no esto.
+  >
+  > Y los barridos los levantan los **CUATRO** orquestadores, no dos: esta
+  > sección decía «los dos» desde antes de `Bff.Eventos` y `Bff.Viajes`, que
+  > los heredaron de `AddSagaMachinery` sin que nadie tocara una línea.
 - **El retroceso no es configurable.** El plazo de abandono y el techo de
   reintentos sí (HU #29), pero la *forma* de reintentar —ocho intentos con
   retroceso exponencial— está cableada en `Compensator`. Nadie ha pedido
