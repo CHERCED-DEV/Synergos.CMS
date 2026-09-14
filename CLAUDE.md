@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2807 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2853 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2807 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2853 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,6 +367,14 @@ Las que salieron de construir el árbol de servicios (§0.B):
   «se hace dos veces» por «no se hace nunca», que no se nota— y **no
   sirve sin releer el almacén al tomarlo**: el caché del proceso deja que
   el segundo repita un minuto después lo que el primero ya hizo.
+- `feedback_a_gate_that_parses_source_needs_its_own_mutations` — un gate que
+  LEE CÓDIGO con regex tiene puntos ciegos que no se ven midiendo: sale un
+  número plausible y nadie lo cruza. G-6 perdía en silencio todo parámetro con
+  valor por defecto (`string X = null` daba la clave `null`) y todo parámetro
+  con un `=` en su comentario de arriba. Los dos los destapó **medir el gate
+  contra un cambio ajeno y desconfiar del resultado**, no leerlo. Se parsea
+  sobre la fuente SIN comentarios, y cada corte se prueba contra el caso raro
+  del repo, no contra el bonito.
 - `feedback_contract_shape_needs_its_own_test` — un test que construye el DTO
   del controller y comprueba sus campos es una TAUTOLOGÍA: afirma lo que el
   controller decidió poner, no lo que el consumidor lee. Lo que hay que
@@ -426,7 +434,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2807 tests):
+# Suite completa (2853 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -469,6 +477,15 @@ con `--actualizar` y el diff va en el commit que lo causó.
 > **Cruza por NOMBRE DE CLAVE, no por tipo**, y está dicho para no mentir sobre su
 > alcance — igual que el cruce de `window.synergos` de §3. Un `string` que pasa a
 > `number` bajo la misma clave sigue pasando por aquí.
+>
+> **Y cruza por CONTROLLER ENTERO, no por endpoint** — que es el límite que más
+> conviene saber. Si `title` ya sale de `/products`, que FALTE en `/wishlist` no se
+> ve: la clave sigue cruzando. Se midió contra el arreglo de #104, donde la wishlist
+> emitía `itemRef`/`owner` mientras la UI leía `productId`/`title` —una lista vacía
+> con el servidor lleno— y **este gate no lo habría cazado**. Afinarlo exigiría seguir
+> el tipo de retorno de cada acción hasta su `record`; se puede hacer y es otro
+> trabajo. Queda escrito porque un gate que se cree más listo de lo que es es peor que
+> no tenerlo: alguien deja de mirar confiando en él.
 >
 > **La tabla app↔controller es a mano y por eso lleva guarda.** El vínculo no está
 > escrito en ningún sitio del que se pueda deducir, así que la lista es inevitable —
@@ -610,7 +627,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2807 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2853 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
