@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2867 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2886 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2867 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2886 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -426,6 +426,15 @@ Las que salieron de construir el árbol de servicios (§0.B):
   trinquete de G-6 como si cruzara. Se escribe la decisión y el
   disparador en el `record`, que es donde la va a leer la próxima
   auditoría.
+- `feedback_a_derived_fallback_must_never_overwrite_what_arrived` — **un campo que se
+  DERIVA para los casos en que no llega no puede pisar el que llegó.** La dirección de un
+  inmueble se rellenaba con «{barrio}, {ciudad}» y el borde no declaraba `address`, así que
+  el binder la tiraba y el respaldo tapaba el hueco: la ficha salía con algo que PARECE una
+  dirección y está a tres cuadras (#110). Es la forma más silenciosa de los defectos de
+  contrato —los demás dejan un hueco que alguien reporta, y un hueco plausible no—, y por
+  eso el orden importa: **lo recibido gana, la derivación es el suelo**. El test lo exige
+  con un dato que la derivación NO puede producir: si la calle del fixture se pareciera a
+  «{barrio}, {ciudad}», el defecto pasaría en verde.
 - `feedback_restored_mutation_needs_a_touch` — **al mutar un gate, la
   restauración tiene que TOCAR el fichero.** Un `cp`/`mv` devuelve el
   contenido con una fecha ANTERIOR a la de la escritura mutada, así que
@@ -464,7 +473,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2867 tests):
+# Suite completa (2886 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -501,11 +510,17 @@ node tools/contract-bodies.mjs --ui-path=/tmp/ui  # lo que la app MANDA   ↔ lo
 lo caro estuvo SIEMPRE en los cuerpos de petición: un `planId` que el record no declaraba y
 cobraba el plan equivocado, un `slot: {date,time}` contra un `string` que daba 400 siempre,
 `lat`/`lng` planos que publicaban un inmueble en (0,0), la dirección de entrega descartada,
-seis rutas de EHR en 400 permanente. Ninguno fallaba a la vista: System.Text.Json descarta
-en silencio lo que no mapea, y el `catch` del cliente inventa el acuse.
+seis rutas de EHR en 400 permanente, y la calle del inmueble reemplazada por «{barrio},
+{ciudad}» (#110). Ninguno fallaba a la vista: System.Text.Json descarta en silencio lo que no
+mapea, y el `catch` del cliente inventa el acuse.
+
+**El último es el peor de la lista y por eso está el último**: los otros dejan un hueco —un
+pin en (0,0), un 400— y un hueco alguien lo reporta. Ése dejaba una dirección PLAUSIBLE
+donde había una calle, así que la ficha se veía bien y el comprador tocaba el timbre a tres
+cuadras. Un campo derivado que pisa uno recibido no se detecta mirando la pantalla.
 
 Por eso G-7 es **error y no trinquete**: una clave que se manda a una ruta y cuyo record no
-la declara no tiene lectura inocente. Hoy ligan 37 claves en 18 rutas.
+la declara no tiene lectura inocente. Hoy ligan 58 claves en 22 rutas.
 
 > **Lo que G-7 no ve, y lo dice al correr**: los cuerpos que construye una función
 > (`postJson(url, toCourseDraftWire(body))`) quedan fuera, porque seguirla exige resolver su
@@ -678,7 +693,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2867 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2886 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

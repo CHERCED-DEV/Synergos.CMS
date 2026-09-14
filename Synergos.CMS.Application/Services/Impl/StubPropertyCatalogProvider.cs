@@ -208,8 +208,12 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
             new("Estrato", draft.Stratum.ToString()),
         };
 
+        // Lo escrito gana sobre lo derivado — ver PropertyDraft.Address (#110).
+        var address = string.IsNullOrWhiteSpace(draft.Address)
+            ? $"{neighborhood}, {draft.City.Trim()}"
+            : draft.Address!.Trim();
         var location = new PropertyLocation(draft.Geo.Lat, draft.Geo.Lng,
-            Address: $"{neighborhood}, {draft.City.Trim()}", Neighborhood: neighborhood, City: draft.City.Trim());
+            Address: address, Neighborhood: neighborhood, City: draft.City.Trim());
 
         var detail = new PropertyDetail(
             summary,

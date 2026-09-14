@@ -98,6 +98,26 @@ public class StubPropertyCatalogProviderTests
         Gallery: new[] { "/media/realty/nuevo-1.jpg" },
         Description: "Inmueble publicado por el agente en la demo.");
 
+    [Fact] // la calle que escribe el agente no la pisa «{barrio}, {ciudad}» (#110)
+    public async Task Publish_KeepsTheAddressTheAgentWrote()
+    {
+        var svc = Make();
+
+        var published = await svc.PublishListingAsync(Draft() with { Address = "Cl 37 Sur #27-15" });
+
+        Assert.Equal("Cl 37 Sur #27-15", published.Location.Address);
+    }
+
+    [Fact] // sin calle, el respaldo derivado sigue siendo lo que tienen las fichas viejas
+    public async Task Publish_WithoutAddress_FallsBackToNeighborhoodAndCity()
+    {
+        var svc = Make();
+
+        var published = await svc.PublishListingAsync(Draft());
+
+        Assert.Equal("Medellín, Medellín", published.Location.Address);
+    }
+
     [Fact] // happy: publicar aparece en el search + resuelve su ficha por el id devuelto
     public async Task Publish_Happy_AppearsInSearch()
     {

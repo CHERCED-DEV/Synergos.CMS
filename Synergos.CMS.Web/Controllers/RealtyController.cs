@@ -851,7 +851,10 @@ public sealed class RealtyController : ControllerBase
         int Stratum = 0,
         string? Currency = null,
         string? AgentName = null,
-        string? AgentPhone = null)
+        string? AgentPhone = null,
+        // La dirección que escribe quien publica. La ficha la pinta (`LocationDto.Address`) y
+        // este record no la recibía: el inmueble salía con barrio y ciudad y sin calle (#110).
+        string? Address = null)
     {
         /// <summary>El área construida, venga plana (<c>areaBuilt</c>) o legacy (<c>area</c>).</summary>
         public int BuiltArea => AreaBuilt > 0 ? AreaBuilt : Area;
@@ -877,7 +880,8 @@ public sealed class RealtyController : ControllerBase
             Stratum: Stratum,
             Currency: Currency,
             AgentName: AgentName,
-            AgentPhone: AgentPhone);
+            AgentPhone: AgentPhone,
+            Address: Address);
     }
 
     // ── Response DTOs (JSON estable para la UI) ─────────────────────────

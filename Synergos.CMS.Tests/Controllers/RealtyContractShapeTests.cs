@@ -268,6 +268,10 @@ public sealed class RealtyContractShapeTests
         Assert.Equal(4.6736, draft.Geo.Lat);
         Assert.Equal(-74.0556, draft.Geo.Lng);
         Assert.Equal(98, draft.Area);
+        // La calle que escribió el agente, que el record no declaraba: se descartaba en el
+        // binding y los dos catálogos rellenaban con «{barrio}, {ciudad}». La ficha quedaba
+        // diciendo "Chicó, Bogotá" — plausible, y a tres cuadras de la puerta (#110).
+        Assert.Equal("Cra 11 #93-45", draft.Address);
         // Y en el vocabulario del dominio: guardado como "sale" ningún filtro lo encuentra.
         Assert.Equal("venta", draft.Operation);
 
