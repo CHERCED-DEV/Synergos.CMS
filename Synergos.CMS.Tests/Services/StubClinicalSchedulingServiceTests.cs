@@ -126,4 +126,47 @@ public class StubClinicalSchedulingServiceTests
         var starts = today.Select(a => a.StartUtc).ToList();
         Assert.Equal(starts.OrderBy(s => s), starts);
     }
+
+    // ── La pregunta por paciente (HU #111) ────────────────────────────────────────
+    //
+    // Existe para que la ficha del paciente deje de barrer la ventana día a día: eran 91
+    // llamadas por carga. Los tres casos de siempre — vacío / filtro por paciente / filtro por
+    // ventana — porque son las dos mitades que el bucle hacía de este lado.
+
+    [Fact] // vacío: un paciente sin citas es una lista vacía, no un null.
+    public async Task GetForPatient_SinCitas_DevuelveVacio()
+    {
+        var (svc, _) = Make(seed: true);
+        var hoy = DateOnly.FromDateTime(Now);
+
+        var list = await svc.GetForPatientAsync("pat-sin-citas", hoy.AddDays(-30), hoy.AddDays(60));
+
+        Assert.Empty(list);
+    }
+
+    [Fact] // filtro: sólo las del paciente que se pide — lo que antes filtraba el controller.
+    public async Task GetForPatient_SoloLasDeEsePaciente()
+    {
+        var (svc, _) = Make(seed: true);
+        var hoy = DateOnly.FromDateTime(Now);
+
+        var list = await svc.GetForPatientAsync("pat-jorge-medina", hoy.AddDays(-30), hoy.AddDays(60));
+
+        Assert.NotEmpty(list);
+        Assert.All(list, a => Assert.Equal("pat-jorge-medina", a.PatientId));
+    }
+
+    [Fact] // filtro: la ventana ACOTA de verdad — si no, «por paciente» traería su historia entera.
+    public async Task GetForPatient_LaVentanaDeja_FueraLoQueNoCae_EnElla()
+    {
+        var (svc, _) = Make(seed: true);
+        var hoy = DateOnly.FromDateTime(Now);
+
+        // Las citas sembradas son de HOY; una ventana que empieza mañana no puede traerlas.
+        var fuera = await svc.GetForPatientAsync("pat-jorge-medina", hoy.AddDays(1), hoy.AddDays(60));
+        var dentro = await svc.GetForPatientAsync("pat-jorge-medina", hoy, hoy);
+
+        Assert.Empty(fuera);
+        Assert.NotEmpty(dentro);
+    }
 }

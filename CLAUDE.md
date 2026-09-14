@@ -499,6 +499,16 @@ Las que salieron de construir el árbol de servicios (§0.B):
   —`await` no cabe en un `lock`, y sacar la llamada fuera del cerrojo rompe
   justo la regla que el cerrojo protegía—. Y se cierra con gate: es reversible
   de una línea.
+  **Addendum #111 — lo mismo pasa con la GRANULARIDAD, y se ve todavía menos.**
+  `IClinicalSchedulingService` sólo sabía listar **por fecha**, así que la ficha del paciente
+  barría −30/+60 días llamando una vez **por día** y tirando el 99 % de lo que traía: 91
+  llamadas por carga, y la ficha se carga dos veces por visita al portal. No lo tapaba un
+  `catch` ni un mock: lo tapaba **el default en memoria**, donde 91 filtros de LINQ no cuestan
+  nada — y el comentario que lo justificaba («mantiene ISP en el seam») **sonaba a decisión de
+  diseño**, que es la peor forma de esconder un defecto. Con el adapter real ya escrito, medir
+  el coste era leer una línea. La pregunta que lo caza: **¿el llamador está barriendo una
+  dimensión porque el seam sólo sabe contestar por la otra?** Y el test no mira el resultado
+  —no cambia— sino **cuántas veces se pregunta**, que es lo que ningún test miraba.
 - `feedback_only_one_layer_may_do_the_irreversible_thing` — **cuando dos capas
   saben hacer lo que no se deshace, un despliegue con las dos vivas tiene que
   FALLAR AL CABLEAR.** No es teoría: es el defecto #57, donde el CMS y el

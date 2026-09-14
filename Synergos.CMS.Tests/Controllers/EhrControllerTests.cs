@@ -127,6 +127,11 @@ public sealed class EhrControllerTests
         _scheduling.GetByDateAsync(Arg.Any<DateOnly>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(citas);
 
+    private void CitasDelPacienteDevuelven(params ClinicalAppointment[] citas) =>
+        _scheduling.GetForPatientAsync(
+            Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(citas);
+
     /// <summary>
     /// 16 identificadores distintos <b>y de longitudes distintas</b>. Lo segundo importa: con
     /// ids del mismo largo, una fabricación «determinista» a partir de <c>id.Length</c> daría
@@ -409,6 +414,58 @@ public sealed class EhrControllerTests
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
+    // 1.ter · #111 — una pregunta, no noventa y una
+    // ══════════════════════════════════════════════════════════════════════════════
+    //
+    // `CollectPatientAppointmentsAsync` barría −30/+60 días llamando a `GetByDateAsync` UN DÍA
+    // A LA VEZ y descartando de este lado casi todo lo que traía: 91 llamadas por carga, y lo
+    // llaman la ficha del paciente Y el home del portal. Contra el stub en memoria no se nota
+    // —por eso vivió tanto—; contra `HttpClinicalSchedulingService` son 91 viajes para traer lo
+    // mismo. Lo que se mide aquí no es el resultado (no cambia) sino CUÁNTAS VECES se pregunta,
+    // que es justo lo que ningún test miraba.
+
+    [Fact]
+    public async Task Chart_LasCitasDelPaciente_SePidenDeUnaVez_YNoDiaPorDia()
+    {
+        PadronDevuelve(Paciente());
+        CitasDelPacienteDevuelven(Cita());
+
+        await BuildSut().Patient("pat-1", default);
+
+        await _scheduling.Received(1).GetForPatientAsync(
+            "pat-1", Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
+        await _scheduling.DidNotReceive().GetByDateAsync(
+            Arg.Any<DateOnly>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PortalHome_LasCitasDelPaciente_SePidenDeUnaVez_YNoDiaPorDia()
+    {
+        PadronDevuelve(Paciente());
+        CitasDelPacienteDevuelven(Cita());
+
+        await BuildSut().PortalHome("pat-1", default);
+
+        await _scheduling.Received(1).GetForPatientAsync(
+            "pat-1", Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
+        await _scheduling.DidNotReceive().GetByDateAsync(
+            Arg.Any<DateOnly>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // La ventana es la MISMA que barría el bucle: esto no estrecha ni ensancha nada.
+    public async Task Chart_LaVentanaDeCitas_SigueSiendoLaDeAntes()
+    {
+        PadronDevuelve(Paciente());
+        CitasDelPacienteDevuelven();
+        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        await BuildSut().Patient("pat-1", default);
+
+        await _scheduling.Received(1).GetForPatientAsync(
+            "pat-1", hoy.AddDays(-30), hoy.AddDays(60), Arg.Any<CancellationToken>());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
     // 2 · Los caminos de rechazo (el borde es anónimo: lo mínimo es no inventarse el sujeto)
     // ══════════════════════════════════════════════════════════════════════════════
 
@@ -678,7 +735,7 @@ public sealed class EhrControllerTests
     public async Task PortalHome_LosNoLeidos_SoloCuentanLosClinicos()
     {
         PadronDevuelve(Paciente());
-        AgendaDelDiaDevuelve();
+        CitasDelPacienteDevuelven();
         _messaging.GetInboxAsync("pat-1", Arg.Any<CancellationToken>()).Returns(new[]
         {
             Resumen("t-1", "clinical:advice:pat-1", mensajes: 3),
@@ -694,12 +751,12 @@ public sealed class EhrControllerTests
     public async Task PortalHome_ECheckIn_SoloDentroDe48h()
     {
         PadronDevuelve(Paciente());
-        AgendaDelDiaDevuelve(Cita(startUtc: DateTime.UtcNow.AddHours(20)));
+        CitasDelPacienteDevuelven(Cita(startUtc: DateTime.UtcNow.AddHours(20)));
 
         var cerca = Json(await BuildSut().PortalHome("pat-1", default));
         Assert.Equal(1, cerca.GetProperty("pendingCheckins").GetInt32());
 
-        AgendaDelDiaDevuelve(Cita(startUtc: DateTime.UtcNow.AddDays(9)));
+        CitasDelPacienteDevuelven(Cita(startUtc: DateTime.UtcNow.AddDays(9)));
         var lejos = Json(await BuildSut().PortalHome("pat-1", default));
         Assert.Equal(0, lejos.GetProperty("pendingCheckins").GetInt32());
     }
@@ -708,7 +765,7 @@ public sealed class EhrControllerTests
     public async Task PortalHome_LaCitaCancelada_NoEsLaProxima()
     {
         PadronDevuelve(Paciente());
-        AgendaDelDiaDevuelve(
+        CitasDelPacienteDevuelven(
             Cita(id: "a-cancelada", startUtc: DateTime.UtcNow.AddDays(1), status: "cancelled"),
             Cita(id: "a-viva", startUtc: DateTime.UtcNow.AddDays(2)));
 
@@ -721,7 +778,7 @@ public sealed class EhrControllerTests
     public async Task PortalHome_SinCitas_NoInventaLaProxima()
     {
         PadronDevuelve(Paciente());
-        AgendaDelDiaDevuelve();
+        CitasDelPacienteDevuelven();
 
         var body = Json(await BuildSut().PortalHome("pat-1", default));
 
