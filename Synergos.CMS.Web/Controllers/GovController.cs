@@ -797,12 +797,30 @@ public sealed class GovController : ControllerBase
             ? null
             : $"/api/gov/document/{Uri.EscapeDataString(d.CaseId)}/{Uri.EscapeDataString(d.Id)}");
 
+    /// <summary>
+    /// Un hito del timeline, hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Un hito <c>pending</c> sale SIN fecha, y ésa es la corrección.</b>
+    /// <see cref="CaseTimelineEntry.Date"/> no es anulable, así que el motor rellena los hitos
+    /// que todavía no ocurrieron con la fecha de RADICACIÓN — un valor de relleno que hacia
+    /// fuera se lee como un hecho. El ciudadano veía «Decisión · 24 de junio de 2026» sobre una
+    /// decisión que nadie ha tomado, y en un expediente administrativo una fecha que no ocurrió
+    /// es lo único que no se puede enseñar: de fechas así dependen los términos.</para>
+    ///
+    /// <para>La UI ya lo contempla —<c>date: entry.date ? formatDate(entry.date) : undefined</c>—
+    /// y su modelo lo dice con todas las letras («may be empty for pending nodes»). Lo que
+    /// faltaba era que el borde emitiera el vacío en vez de un relleno.</para>
+    /// </remarks>
     private static TimelineDto ToTimelineDto(CaseTimelineEntry e) => new(
         Id: e.Id,
         Label: e.Label,
-        Date: e.Date,
+        Date: IsPending(e.State) ? null : e.Date,
         State: e.State,
         Note: e.Note);
+
+    private static bool IsPending(string? state)
+        => string.Equals(state?.Trim(), "pending", StringComparison.OrdinalIgnoreCase);
 
     // Resuelve el ciudadano desde las respuestas del formulario (once-only lo prellena):
     // nombre + correo + documento + teléfono si el trámite los pidió.
@@ -958,7 +976,12 @@ public sealed class GovController : ControllerBase
 
     public sealed record ApplicationsResponse(IReadOnlyList<ApplicationSummaryDto> Applications);
 
-    public sealed record TimelineDto(string Id, string Label, DateTimeOffset Date, string State, string Note);
+    /// <summary>
+    /// Un hito del expediente. <see cref="Date"/> es <c>null</c> cuando el hito todavía no
+    /// ocurrió — ver <c>ToTimelineDto</c>: una fecha de relleno en un hito pendiente se lee
+    /// como un hecho, y acá los hechos con fecha sostienen términos.
+    /// </summary>
+    public sealed record TimelineDto(string Id, string Label, DateTimeOffset? Date, string State, string Note);
 
     public sealed record DocumentDto(
         string Id,

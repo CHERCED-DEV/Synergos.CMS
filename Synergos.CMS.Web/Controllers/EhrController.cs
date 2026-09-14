@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Filters;
@@ -122,12 +123,19 @@ public sealed class EhrController : ControllerBase
         // Citas del paciente: filtra de la agenda viva (sin fecha → todas).
         var appointments = await CollectPatientAppointmentsAsync(id, cancellationToken);
 
+        // `history` es la LISTA DE NOTAS, no el resumen. La pestaña «Notas» de la historia
+        // clínica lee `chart.history[]`; mientras esta clave llevó el resumen (un objeto), esa
+        // pestaña salía VACÍA contra el servidor y llena contra el mock — o sea que el clínico
+        // veía notas de ejemplo donde debía ver las del paciente. El resumen no se pierde: pasa
+        // a `clinicalHistory`, porque el mismo nombre no puede significar dos cosas.
+        var notes = encounters.Select(ToEncounterDto).ToList();
         return Ok(new PatientChartResponse(
             Patient: ToPatientDto(patient),
-            History: history is null ? null : ToHistoryDto(history),
-            Encounters: encounters.Select(ToEncounterDto).ToList(),
+            History: notes,
+            Encounters: notes,
             Prescriptions: prescriptions.Select(ToPrescriptionDto).ToList(),
-            Appointments: appointments.Select(ToAppointmentDto).ToList()));
+            Appointments: appointments.Select(ToAppointmentDto).ToList(),
+            ClinicalHistory: history is null ? null : ToHistoryDto(history)));
     }
 
     // ── 3. Doctores ────────────────────────────────────────────────────
@@ -161,9 +169,9 @@ public sealed class EhrController : ControllerBase
         {
             return BadRequest(new { error = "patientId, doctorId y slot son requeridos." });
         }
-        if (body.Slot is not { } slot)
+        if (body.ResolveSlotUtc() is not { } slot)
         {
-            return BadRequest(new { error = "slot (fecha/hora UTC) es requerido y debe ser válido." });
+            return BadRequest(new { error = "slot (fecha/hora UTC, o { date, time }) es requerido y debe ser válido." });
         }
 
         try
@@ -203,16 +211,12 @@ public sealed class EhrController : ControllerBase
                     ReasonForVisit: body.ReasonForVisit ?? string.Empty,
                     Soap: new SoapNote(
                         Subjective: body.Soap.Subjective ?? string.Empty,
-                        Objective: body.Soap.Objective ?? string.Empty,
+                        Objective: body.Soap.ObjectiveText(),
                         Assessment: body.Soap.Assessment ?? string.Empty,
                         Plan: body.Soap.Plan ?? string.Empty,
-                        Vitals: body.Soap.Vitals is null
-                            ? null
-                            : new ClinicalVitals(
-                                body.Soap.Vitals.SystolicMmHg, body.Soap.Vitals.DiastolicMmHg,
-                                body.Soap.Vitals.HeartRateBpm, body.Soap.Vitals.TemperatureC,
-                                body.Soap.Vitals.WeightKg, body.Soap.Vitals.HeightCm,
-                                body.Soap.Vitals.GlucoseMgDl, body.Soap.Vitals.OxygenSaturationPct)),
+                        // Los signos vitales salen de `objective` cuando llega como objeto —que es
+                        // como este mismo borde los DEVUELVE— y de `vitals` cuando vienen aparte.
+                        Vitals: body.Soap.ResolveVitals()),
                     DiagnosisCode: body.DiagnosisCode),
                 cancellationToken);
             return Ok(new EncounterEnvelope(ToEncounterDto(encounter)));
@@ -240,8 +244,8 @@ public sealed class EhrController : ControllerBase
                     PatientId: body.PatientId.Trim(),
                     DoctorId: (body.DoctorId ?? string.Empty).Trim(),
                     Items: body.Items.Select(i => new EhrPrescriptionItem(
-                        MedicationName: i.MedicationName ?? string.Empty,
-                        Dosage: i.Dosage ?? string.Empty,
+                        MedicationName: i.ResolveDrug(),
+                        Dosage: i.ResolveDose(),
                         Frequency: i.Frequency ?? string.Empty,
                         DurationDays: i.DurationDays,
                         Instructions: i.Instructions)).ToList(),
@@ -395,14 +399,16 @@ public sealed class EhrController : ControllerBase
     [HttpPost("refill")]
     public async Task<IActionResult> Refill([FromBody] RefillBody? body, CancellationToken cancellationToken)
     {
-        if (body is null || string.IsNullOrWhiteSpace(body.Patient) || string.IsNullOrWhiteSpace(body.MedId))
+        var refillPatient = body?.ResolvePatient() ?? string.Empty;
+        var refillMedication = body?.ResolveMedication() ?? string.Empty;
+        if (string.IsNullOrEmpty(refillPatient) || string.IsNullOrEmpty(refillMedication))
         {
-            return BadRequest(new { error = "patient y medId son requeridos." });
+            return BadRequest(new { error = "patientId (patient) y medicationId (medId) son requeridos." });
         }
         try
         {
             var refill = await _medications.RequestRefillAsync(
-                new RefillRequest(body.Patient.Trim(), body.MedId.Trim(), body.Note),
+                new RefillRequest(refillPatient, refillMedication, body!.Note),
                 cancellationToken);
             // La UI lee `status` top-level (requested|approved|denied); el seam usa
             // 'pending' para una solicitud recién creada → 'requested'.
@@ -443,9 +449,10 @@ public sealed class EhrController : ControllerBase
     [HttpPost("message")]
     public async Task<IActionResult> SendMessage([FromBody] SendMessageBody? body, CancellationToken cancellationToken)
     {
-        if (body is null || string.IsNullOrWhiteSpace(body.From) || string.IsNullOrWhiteSpace(body.Body))
+        var sender = body?.ResolveFrom() ?? string.Empty;
+        if (string.IsNullOrEmpty(sender) || string.IsNullOrWhiteSpace(body!.Body))
         {
-            return BadRequest(new { error = "from y body son requeridos." });
+            return BadRequest(new { error = "user (from) y body son requeridos." });
         }
 
         try
@@ -454,7 +461,7 @@ public sealed class EhrController : ControllerBase
             if (!string.IsNullOrWhiteSpace(body.ThreadId))
             {
                 // Respuesta a un hilo existente.
-                thread = await _messaging.ReplyAsync(body.ThreadId.Trim(), body.From.Trim(), body.Body, cancellationToken);
+                thread = await _messaging.ReplyAsync(body.ThreadId.Trim(), sender, body.Body, cancellationToken);
             }
             else
             {
@@ -463,10 +470,10 @@ public sealed class EhrController : ControllerBase
                     return BadRequest(new { error = "to (o threadId) es requerido para iniciar un hilo." });
                 }
                 // Nuevo hilo clínico: contexto namespaced para que el In Basket lo reconozca.
-                var contextRef = $"{ClinicalMessageContext}:msg:{body.From.Trim()}:{body.To.Trim()}";
-                thread = await _messaging.StartThreadAsync(contextRef, body.From.Trim(), body.To.Trim(), body.Body, cancellationToken);
+                var contextRef = $"{ClinicalMessageContext}:msg:{sender}:{body.To.Trim()}";
+                thread = await _messaging.StartThreadAsync(contextRef, sender, body.To.Trim(), body.Body, cancellationToken);
             }
-            return Ok(new ThreadEnvelope(ToThreadDto(thread, body.From.Trim())));
+            return Ok(new ThreadEnvelope(ToThreadDto(thread, sender)));
         }
         catch (ArgumentException ex)
         {
@@ -492,18 +499,30 @@ public sealed class EhrController : ControllerBase
     [HttpPost("order")]
     public async Task<IActionResult> PlaceOrder([FromBody] PlaceOrderBody? body, CancellationToken cancellationToken)
     {
-        if (body is null
-            || string.IsNullOrWhiteSpace(body.Patient)
-            || string.IsNullOrWhiteSpace(body.Provider)
-            || string.IsNullOrWhiteSpace(body.Type)
-            || string.IsNullOrWhiteSpace(body.Detail))
+        var orderPatient = body?.ResolvePatient() ?? string.Empty;
+        var orderType = body?.ResolveType() ?? string.Empty;
+        if (string.IsNullOrEmpty(orderPatient)
+            || string.IsNullOrEmpty(orderType)
+            || string.IsNullOrWhiteSpace(body!.Detail))
         {
-            return BadRequest(new { error = "patient, provider, type y detail son requeridos." });
+            return BadRequest(new { error = "patientId (patient), kind (type) y detail son requeridos." });
         }
+
+        // El prescriptor no viaja desde la UI. En vez de inventarlo, se resuelve al médico
+        // tratante del padrón; si el paciente no tiene, se dice, porque una orden clínica sin
+        // quien la firma no es una orden.
+        var orderProvider = string.IsNullOrWhiteSpace(body.Provider)
+            ? ((await _patients.GetAsync(orderPatient, cancellationToken))?.PrimaryDoctorId ?? string.Empty)
+            : body.Provider.Trim();
+        if (string.IsNullOrWhiteSpace(orderProvider))
+        {
+            return BadRequest(new { error = "provider es requerido: el paciente no tiene médico tratante registrado." });
+        }
+
         try
         {
             var order = await _orders.PlaceAsync(
-                new PlaceOrderRequest(body.Patient.Trim(), body.Provider.Trim(), body.Type.Trim(), body.Detail),
+                new PlaceOrderRequest(orderPatient, orderProvider, orderType, body.Detail),
                 cancellationToken);
             return Ok(new OrderEnvelope(ToOrderDto(order)));
         }
@@ -852,19 +871,164 @@ public sealed class EhrController : ControllerBase
         return new BillingDto(statement);
     }
 
+    // ── Lectura tolerante del cuerpo (ADR 0083: la UI es la fuente del contrato) ──
+    //
+    // Los cuerpos de abajo declaran DOS juegos de claves: el que este borde estrenó y el que
+    // la UI manda. No es cortesía — `System.Text.Json` DESCARTA en silencio lo que no mapea,
+    // así que una clave que falta no es un error visible: es un campo vacío corriente abajo,
+    // o un 400 constante que el cliente tapa con su valor optimista. Se prefiere siempre la
+    // clave de la UI y se cae a la legacy.
+
+    private static readonly JsonSerializerOptions VitalsJson = new(JsonSerializerDefaults.Web);
+
+    private static string FirstNonBlank(string? preferred, string? legacy)
+    {
+        if (!string.IsNullOrWhiteSpace(preferred)) { return preferred.Trim(); }
+        return string.IsNullOrWhiteSpace(legacy) ? string.Empty : legacy.Trim();
+    }
+
+    /// <summary>
+    /// El inicio del slot, venga como instante ISO o como el objeto <c>{ date, time }</c> que
+    /// este mismo borde devuelve en <see cref="AppointmentDto.Slot"/>.
+    /// </summary>
+    private static DateTime? ReadSlot(JsonElement? slot)
+    {
+        if (slot is not { } value)
+        {
+            return null;
+        }
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            return value.TryGetDateTime(out var instant) ? instant : null;
+        }
+        if (value.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var date = value.TryGetProperty("date", out var d) && d.ValueKind == JsonValueKind.String
+            ? d.GetString()
+            : null;
+        var time = value.TryGetProperty("time", out var t) && t.ValueKind == JsonValueKind.String
+            ? t.GetString()
+            : null;
+        if (string.IsNullOrWhiteSpace(date))
+        {
+            return null;
+        }
+
+        // Sin hora, el slot es el arranque del día; la agenda rechazará lo que no sea suyo.
+        var composed = string.IsNullOrWhiteSpace(time) ? date : $"{date}T{time}";
+        return DateTime.TryParse(
+            composed,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+            out var parsed)
+            ? parsed
+            : null;
+    }
+
     // ── Request bodies (binding del módulo UI) ─────────────────────────
 
-    public sealed record BookAppointmentBody(string PatientId, string DoctorId, DateTime? Slot);
+    /// <summary>
+    /// Reservar una cita. <see cref="Slot"/> admite <b>las dos formas</b>: el instante ISO que
+    /// usaba el contrato original (<c>"2026-09-18T08:00:00Z"</c>) y el objeto
+    /// <c>{ date, time }</c> que manda la UI, que es el que el propio borde DEVUELVE en
+    /// <c>AppointmentDto.Slot</c>.
+    /// </summary>
+    /// <remarks>
+    /// Con <c>DateTime?</c> a secas, el objeto de la UI hacía reventar a
+    /// <c>System.Text.Json</c> y la petición salía <b>400 siempre</b>. No se veía porque el
+    /// cliente de la UI envuelve el fallo y devuelve la cita optimista que ya tenía en
+    /// pantalla: el paciente leía «cita agendada» y no había ninguna.
+    /// </remarks>
+    public sealed record BookAppointmentBody(string PatientId, string DoctorId, JsonElement? Slot)
+    {
+        /// <summary>El inicio del slot, venga como instante o como <c>{date,time}</c>.</summary>
+        public DateTime? ResolveSlotUtc() => ReadSlot(Slot);
+    }
 
+    /// <summary>
+    /// Signos vitales de la petición. Lleva <b>los dos juegos de nombres</b>: los del seam
+    /// (<c>systolicMmHg</c>…) y los que emite y lee la UI (<c>systolic</c>…). Todos opcionales:
+    /// lo que no llegue queda nulo, que es distinto de cero.
+    /// </summary>
     public sealed record VitalsBody(
-        double? SystolicMmHg, double? DiastolicMmHg, double? HeartRateBpm, double? TemperatureC,
-        double? WeightKg, double? HeightCm, double? GlucoseMgDl, double? OxygenSaturationPct);
+        double? SystolicMmHg = null, double? DiastolicMmHg = null, double? HeartRateBpm = null,
+        double? TemperatureC = null, double? WeightKg = null, double? HeightCm = null,
+        double? GlucoseMgDl = null, double? OxygenSaturationPct = null,
+        double? Systolic = null, double? Diastolic = null, double? HeartRate = null,
+        double? Temperature = null, double? Weight = null, double? Height = null,
+        double? Glucose = null)
+    {
+        public ClinicalVitals ToClinicalVitals() => new(
+            Systolic ?? SystolicMmHg, Diastolic ?? DiastolicMmHg,
+            HeartRate ?? HeartRateBpm, Temperature ?? TemperatureC,
+            Weight ?? WeightKg, Height ?? HeightCm,
+            Glucose ?? GlucoseMgDl, OxygenSaturationPct);
+    }
 
-    public sealed record SoapBody(string? Subjective, string? Objective, string? Assessment, string? Plan, VitalsBody? Vitals);
+    /// <summary>
+    /// La nota SOAP de la petición.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><c>objective</c> admite texto Y objeto</b>, porque el propio borde lo DEVUELVE
+    /// como objeto: <c>SoapDto.Objective</c> es un <see cref="VitalsDto"/>. Tipado como
+    /// <c>string?</c>, el cuerpo que la UI construye a partir de lo que este mismo controller le
+    /// dio hacía reventar a <c>System.Text.Json</c> y <c>POST /encounter</c> salía <b>400
+    /// siempre</b> — y el clínico veía su nota en pantalla igual, porque el cliente cae a la
+    /// versión optimista. Una nota clínica que se da por guardada y no se guardó es el peor de
+    /// los fallos silenciosos de esta superficie.</para>
+    ///
+    /// <para>Los signos vitales se leen de <c>objective</c> cuando viene como objeto y de
+    /// <c>vitals</c> cuando viene aparte; la clave legacy se conserva.</para>
+    /// </remarks>
+    public sealed record SoapBody(
+        string? Subjective,
+        JsonElement? Objective,
+        string? Assessment,
+        string? Plan,
+        VitalsBody? Vitals)
+    {
+        /// <summary>El texto libre del objetivo, si <c>objective</c> llegó como cadena.</summary>
+        public string ObjectiveText()
+            => Objective is { ValueKind: JsonValueKind.String } text ? text.GetString() ?? string.Empty : string.Empty;
+
+        /// <summary>Los signos vitales: de <c>objective</c> si es objeto, si no de <c>vitals</c>.</summary>
+        public ClinicalVitals? ResolveVitals()
+        {
+            if (Objective is { ValueKind: JsonValueKind.Object } obj)
+            {
+                var fromObjective = obj.Deserialize<VitalsBody>(VitalsJson);
+                if (fromObjective is not null)
+                {
+                    return fromObjective.ToClinicalVitals();
+                }
+            }
+            return Vitals?.ToClinicalVitals();
+        }
+    }
 
     public sealed record AddEncounterBody(string PatientId, SoapBody Soap, string? DoctorId, string? ReasonForVisit, string? DiagnosisCode);
 
-    public sealed record PrescriptionItemBody(string? MedicationName, string? Dosage, string? Frequency, int DurationDays, string? Instructions);
+    /// <summary>
+    /// Una línea de la receta. <c>drug</c>/<c>dose</c> son las claves que la UI manda —y que el
+    /// borde ya devuelve en <see cref="PrescriptionItemDto"/>—; <c>medicationName</c>/<c>dosage</c>
+    /// se conservan. Sin las primeras, la receta se guardaba <b>sin nombre de medicamento</b>:
+    /// <c>System.Text.Json</c> descarta lo que no mapea y nadie se entera.
+    /// </summary>
+    public sealed record PrescriptionItemBody(
+        string? MedicationName = null,
+        string? Dosage = null,
+        string? Frequency = null,
+        int DurationDays = 0,
+        string? Instructions = null,
+        string? Drug = null,
+        string? Dose = null)
+    {
+        public string ResolveDrug() => FirstNonBlank(Drug, MedicationName);
+        public string ResolveDose() => FirstNonBlank(Dose, Dosage);
+    }
 
     public sealed record AddPrescriptionBody(string PatientId, IReadOnlyList<PrescriptionItemBody> Items, string? DoctorId, string? EncounterId);
 
@@ -925,20 +1089,80 @@ public sealed class EhrController : ControllerBase
 
     public sealed record AppointmentEnvelope(AppointmentDto Appointment);
 
+    /// <summary>
+    /// La historia clínica del paciente hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="History"/> es la lista de notas</b> —lo que lee <c>chart.history[]</c>— y
+    /// <b><see cref="ClinicalHistory"/> es el resumen</b> (motivo, problemas activos, alergias,
+    /// basales). Antes las dos cosas compartían la clave <c>history</c> y ganaba el resumen, así
+    /// que la pestaña «Notas» del clínico llegaba vacía. El resumen no se quitó: se le dio nombre
+    /// propio, que es lo único que permite emitir las dos.
+    /// </remarks>
     public sealed record PatientChartResponse(
         PatientDto Patient,
-        HistoryDto? History,
+        IReadOnlyList<EncounterDto> History,
         IReadOnlyList<EncounterDto> Encounters,
         IReadOnlyList<PrescriptionDto> Prescriptions,
-        IReadOnlyList<AppointmentDto> Appointments);
+        IReadOnlyList<AppointmentDto> Appointments,
+        HistoryDto? ClinicalHistory = null);
 
     // ── OLA 7 · Request bodies ──────────────────────────────────────────
 
-    public sealed record RefillBody(string Patient, string MedId, string? Note);
+    /// <summary>
+    /// Solicitud de resurtido. <c>patientId</c>/<c>medicationId</c> son las claves de la UI
+    /// —y las que el borde devuelve en <see cref="RefillDto"/>—; <c>patient</c>/<c>medId</c>
+    /// se conservan. Con sólo las segundas declaradas, el cuerpo de la UI llegaba <b>vacío</b>
+    /// y el endpoint contestaba 400 <b>siempre</b>; el paciente veía «Solicitada» porque el
+    /// cliente marca optimista antes de llamar.
+    /// </summary>
+    public sealed record RefillBody(
+        string? Patient = null,
+        string? MedId = null,
+        string? Note = null,
+        string? PatientId = null,
+        string? MedicationId = null)
+    {
+        public string ResolvePatient() => FirstNonBlank(PatientId, Patient);
+        public string ResolveMedication() => FirstNonBlank(MedicationId, MedId);
+    }
 
-    public sealed record SendMessageBody(string From, string? To, string Body, string? ThreadId);
+    /// <summary>
+    /// Enviar un mensaje al equipo de salud. <c>user</c> es quien escribe según la UI;
+    /// <c>from</c> se conserva. Sin <c>user</c>, el remitente llegaba nulo y el endpoint
+    /// contestaba 400 siempre.
+    /// </summary>
+    public sealed record SendMessageBody(
+        string? From = null,
+        string? To = null,
+        string? Body = null,
+        string? ThreadId = null,
+        string? User = null)
+    {
+        public string ResolveFrom() => FirstNonBlank(User, From);
+    }
 
-    public sealed record PlaceOrderBody(string Patient, string Provider, string Type, string Detail);
+    /// <summary>
+    /// Colocar una orden clínica. <c>patientId</c> y <c>kind</c> son las claves de la UI;
+    /// <c>patient</c>/<c>type</c> se conservan.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>provider</c> no viaja desde la UI y no se inventa</b>: se resuelve al médico
+    /// tratante del paciente (<c>EhrPatient.PrimaryDoctorId</c>), que es un dato del padrón y
+    /// no una constante de relleno. Si el paciente no tiene tratante, el endpoint lo dice
+    /// —400— en vez de atribuirle la orden a nadie.
+    /// </remarks>
+    public sealed record PlaceOrderBody(
+        string? Patient = null,
+        string? Provider = null,
+        string? Type = null,
+        string? Detail = null,
+        string? PatientId = null,
+        string? Kind = null)
+    {
+        public string ResolvePatient() => FirstNonBlank(PatientId, Patient);
+        public string ResolveType() => FirstNonBlank(Kind, Type);
+    }
 
     // ── OLA 7 · Response DTOs ───────────────────────────────────────────
 
