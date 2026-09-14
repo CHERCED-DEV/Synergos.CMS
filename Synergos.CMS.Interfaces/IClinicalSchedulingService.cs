@@ -34,6 +34,25 @@ public interface IClinicalSchedulingService
     /// por médico, ordenadas por hora ascendente. Vacío si no hay.
     /// </summary>
     Task<IReadOnlyList<ClinicalAppointment>> GetByDateAsync(DateOnly date, string? doctorId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Las citas de UN paciente dentro de la ventana <paramref name="from"/>–<paramref name="to"/>
+    /// (ambas inclusive, fecha del consultorio), ordenadas por hora ascendente. Vacío si no hay.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Existe porque la pregunta es UNA, y se estaba haciendo noventa y una veces</b>
+    /// (HU #111). La ficha del paciente y el home del portal necesitan «las citas de esta
+    /// persona alrededor de hoy»; sin este método, el borde barría la ventana de −30/+60 días
+    /// llamando a <see cref="GetByDateAsync"/> <b>un día a la vez</b> y descartando el 99 % de
+    /// lo que traía. Contra el stub en memoria no se nota; contra cualquier adapter que hable
+    /// por la red son 91 viajes por carga de ficha, y la ficha se carga dos veces por visita al
+    /// portal.</para>
+    /// <para>La ventana es parte de la pregunta y no un detalle de implementación: «todas las
+    /// citas de siempre» es una promesa mucho más cara de sostener para un PMS real, y nadie la
+    /// necesita.</para>
+    /// </remarks>
+    Task<IReadOnlyList<ClinicalAppointment>> GetForPatientAsync(
+        string patientId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

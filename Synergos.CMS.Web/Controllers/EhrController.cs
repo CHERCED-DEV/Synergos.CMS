@@ -660,20 +660,29 @@ public sealed class EhrController : ControllerBase
             && (string.Equals(contextRef, ClinicalMessageContext, StringComparison.Ordinal)
                 || contextRef.StartsWith($"{ClinicalMessageContext}:", StringComparison.Ordinal));
 
+    /// <summary>Días hacia atrás y hacia delante que cubre la ficha del paciente.</summary>
+    private const int VentanaAtrasDias = 30;
+    private const int VentanaAdelanteDias = 60;
+
+    /// <summary>
+    /// Las citas del paciente alrededor de hoy — <b>UNA pregunta al seam, no noventa y una</b>.
+    /// </summary>
+    /// <remarks>
+    /// Esto barría la ventana día a día con <c>GetByDateAsync</c>, filtrando por paciente de
+    /// este lado: 91 llamadas por carga, y lo llaman <c>patient/{id}</c> <b>y</b>
+    /// <c>portal/home</c>. Contra el stub en memoria no se nota; contra
+    /// <see cref="Synergos.CMS.Web.Services.HttpClinicalSchedulingService"/> son 91 viajes para
+    /// traer lo mismo. La pregunta siempre fue una sola —«las citas de esta persona en esta
+    /// ventana»— y ahora el seam la sabe contestar (HU #111).
+    /// </remarks>
     private async Task<IReadOnlyList<ClinicalAppointment>> CollectPatientAppointmentsAsync(string patientId, CancellationToken cancellationToken)
     {
-        // La agenda se consulta por fecha; barre una ventana razonable alrededor de
-        // hoy para reunir las citas del paciente sin un seam de "por paciente"
-        // (mantiene ISP en el seam de agenda). Suficiente para la demo.
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var result = new List<ClinicalAppointment>();
-        for (var offset = -30; offset <= 60; offset++)
-        {
-            var day = today.AddDays(offset);
-            var dayAppts = await _scheduling.GetByDateAsync(day, doctorId: null, cancellationToken);
-            result.AddRange(dayAppts.Where(a => string.Equals(a.PatientId, patientId, StringComparison.Ordinal)));
-        }
-        return result.OrderBy(a => a.StartUtc).ToList();
+        var citas = await _scheduling.GetForPatientAsync(
+            patientId, today.AddDays(-VentanaAtrasDias), today.AddDays(VentanaAdelanteDias), cancellationToken);
+        // El seam promete orden ascendente; la «próxima cita» del home depende de él, así que
+        // se ordena igual — cuesta nada y un adapter que no cumpla no lo estropea en silencio.
+        return citas.OrderBy(a => a.StartUtc).ToList();
     }
 
     private static DateOnly ParseDateOrToday(string? date)
