@@ -109,3 +109,16 @@ jobs:
       - name: Registry ↔ DocTypes (E1/E2)
         working-directory: Synergos.UI
         run: node tools/validate-cms-contracts.mjs
+
+      # G-6 · la FORMA del JSON de los controllers contra lo que leen las apps.
+      #
+      # El de arriba cruza el registry del CDN contra los DocTypes; éste cruza otra superficie
+      # que no miraba nadie: las claves que cada controller emite contra las que su app lee.
+      # Doce de Academy se desviaron sin que nada se pusiera rojo (#102), porque el
+      # normalizador del cliente es defensivo y una clave que falta degrada EN SILENCIO.
+      #
+      # Es un TRINQUETE contra una línea base versionada, así que no falla por deuda vieja:
+      # sólo el día que algo que HOY cruza deja de cruzar.
+      - name: Claves CMS ↔ UI (G-6)
+        working-directory: Synergos.CMS
+        run: node tools/contract-keys.mjs --ui-path="$GITHUB_WORKSPACE/Synergos.UI"
