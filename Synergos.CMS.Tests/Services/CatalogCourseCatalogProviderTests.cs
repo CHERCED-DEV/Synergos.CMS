@@ -1,8 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Xunit;
@@ -290,5 +292,97 @@ public class CatalogCourseCatalogProviderTests
         Assert.Equal(0, row.Metrics.Students);
         Assert.Equal(0m, row.Metrics.Revenue);
         Assert.Equal(0, result.TotalStudents);
+    }
+    // ── Estado y fecha de publicación (#102) ───────────────────────────────────
+
+    private static CourseDraft Draft(string title = "Angular moderno") => new(
+        Title: title,
+        Summary: "Signals y zoneless",
+        Description: "",
+        School: "",
+        Category: "Desarrollo",
+        Level: "Intermedio",
+        InstructorId: "ins-elena",
+        Price: 300_000m,
+        Modules: new[]
+        {
+            new CourseDraftModule("Fundamentos", new[] { new CourseDraftLesson("Signals", null, 12) }),
+        });
+
+    /// <summary>
+    /// La fecha con la que se publicó SOBREVIVE al reinicio.
+    /// </summary>
+    /// <remarks>
+    /// <b>Es la mitad que un test sobre la misma instancia no ve.</b> La fecha no se guarda en
+    /// un almacén aparte: viaja dentro del documento del overlay, así que lo que se está
+    /// comprobando es que el <c>AuthoredCourse</c> serializado la lleve y la recupere. Por eso
+    /// el provider de la segunda mitad es NUEVO sobre el mismo store —igual que el gate de la
+    /// bitácora (#82)—: con el mismo, la respuesta saldría del caché y pasaría en verde aunque
+    /// el campo no se hubiera escrito nunca.
+    /// </remarks>
+    [Fact]
+    public async Task PublishCourse_LaFechaSobreviveAlReinicio()
+    {
+        var store = new InMemoryJsonEntityStore();
+        var feed = Feed();
+        var reloj = new DateTimeOffset(2026, 9, 14, 11, 30, 0, TimeSpan.Zero);
+
+        var publicado = await new CatalogCourseCatalogProvider(
+            new FakeSource(), store, feed,
+            new InMemoryCatalogIndex<CourseSummary>(StubCourseCatalogProvider.Descriptor, CatalogSettings.Unpaged),
+            () => reloj).PublishCourseAsync(Draft());
+
+        Assert.Equal(new DateOnly(2026, 9, 14), publicado.Course.PublishedAt);
+
+        // Proceso nuevo: provider nuevo, mismo store.
+        var despues = await new CatalogCourseCatalogProvider(new FakeSource(), store, feed)
+            .GetCourseAsync(publicado.Course.Id);
+
+        Assert.Equal(new DateOnly(2026, 9, 14), despues!.Course.PublishedAt);
+        Assert.Equal(CourseStatuses.Published, despues.Course.Status);
+    }
+
+    /// <summary>
+    /// Un curso que YA estaba en el overlay antes de que el campo existiera se sirve igual, y
+    /// su fecha queda en «no consta».
+    /// </summary>
+    /// <remarks>
+    /// <b>Es el caso que decide que el campo sea nullable.</b> El overlay es durable: el día
+    /// del despliegue hay documentos escritos sin fecha, y de ésos no se sabe cuándo se
+    /// publicaron. Rellenarlos con la fecha de hoy los pondría los primeros en «Más
+    /// recientes» siendo los más viejos — un orden estable y falso, que es peor que uno que no
+    /// cambia. Lo que NO puede pasar es que el documento viejo tumbe el catálogo.
+    ///
+    /// <para>El fixture no simula el documento viejo a mano: serializa uno de verdad y le
+    /// QUITA las dos claves, que es exactamente la forma que tiene en disco un curso
+    /// publicado antes de este cambio.</para>
+    /// </remarks>
+    [Fact]
+    public async Task UnCursoDelOverlaySinFecha_SeSirveYDiceNoConsta()
+    {
+        var store = new InMemoryJsonEntityStore();
+        var feed = Feed();
+
+        var publicado = await new CatalogCourseCatalogProvider(new FakeSource(), store, feed)
+            .PublishCourseAsync(Draft());
+
+        // El documento tal como lo habría escrito la versión anterior: sin las dos claves.
+        var json = (await store.ReadAsync(
+            CatalogCourseCatalogProvider.ResourceType, publicado.Course.Id))!;
+        var node = JsonNode.Parse(json)!;
+        var course = node["detail"]!["course"]!.AsObject();
+        course.Remove("status");
+        course.Remove("publishedAt");
+        await store.WriteAsync(
+            CatalogCourseCatalogProvider.ResourceType, publicado.Course.Id, node.ToJsonString());
+
+        var viejo = await new CatalogCourseCatalogProvider(new FakeSource(), store, feed)
+            .GetCourseAsync(publicado.Course.Id);
+
+        Assert.NotNull(viejo);
+        Assert.Null(viejo!.Course.PublishedAt);
+        // Sigue estando publicado: el overlay sólo contiene lo que alguien publicó. Lo que no
+        // se sabe es CUÁNDO.
+        Assert.Equal(CourseStatuses.Published, viejo.Course.Status);
     }
 }

@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Synergos.CMS.Application.Configuration;
@@ -83,17 +83,25 @@ public sealed class CatalogCourseCatalogProvider : ICourseCatalogProvider
     {
     }
 
+    /// <param name="now">
+    /// Reloj de la publicación desde el panel. Los tests lo fijan para poder afirmar la fecha
+    /// sin depender del día en que corran.
+    /// </param>
     internal CatalogCourseCatalogProvider(
         ICatalogSource<AuthoredCourse> source,
         IJsonEntityStore store,
         IContentStream contentStream,
-        ICatalogIndex<CourseSummary> index)
+        ICatalogIndex<CourseSummary> index,
+        Func<DateTimeOffset>? now = null)
     {
         _source = source ?? throw new ArgumentNullException(nameof(source));
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _contentStream = contentStream ?? throw new ArgumentNullException(nameof(contentStream));
         _index = index ?? throw new ArgumentNullException(nameof(index));
+        _now = now ?? (() => DateTimeOffset.UtcNow);
     }
+
+    private readonly Func<DateTimeOffset> _now;
 
     public async Task<CourseSearchResult> SearchAsync(CourseQuery query, CancellationToken cancellationToken = default)
     {
@@ -238,7 +246,13 @@ public sealed class CatalogCourseCatalogProvider : ICourseCatalogProvider
             IsFree: price <= 0m,
             Rating: 0d, // sin reseñas todavía
             LessonCount: modules.Sum(m => m.Lessons.Count),
-            DurationMinutes: modules.Sum(m => m.Lessons.Sum(l => l.DurationMinutes)));
+            DurationMinutes: modules.Sum(m => m.Lessons.Sum(l => l.DurationMinutes)),
+            // Publicar ES el acto que fecha el curso, y la fecha viaja DENTRO del documento
+            // que se escribe: sobrevive al reinicio sin un almacén aparte. Los cursos que ya
+            // estaban en el overlay antes de este campo se releen sin él y quedan en «no
+            // consta» — es la verdad sobre ellos, y no hay de dónde sacarla (#102).
+            Status: CourseStatuses.Published,
+            PublishedAt: DateOnly.FromDateTime(_now().UtcDateTime));
 
         var authored = new AuthoredCourse(
             new CourseDetail(

@@ -1,4 +1,4 @@
-namespace Synergos.CMS.Interfaces;
+﻿namespace Synergos.CMS.Interfaces;
 
 /// <summary>
 /// Filtros de la búsqueda del catálogo de cursos (dominio Educación — LMS).
@@ -21,10 +21,63 @@ public sealed record CourseSearchResult(
     int Total);
 
 /// <summary>
+/// El vocabulario de estado de un curso. Es el de la UI —<c>published | draft | review</c>—
+/// y no uno propio, para que nadie tenga que traducirlo por el camino (ADR 0083).
+/// </summary>
+/// <remarks>
+/// <b>Hoy el motor sólo produce <see cref="Published"/>, y eso es un hecho, no un atajo</b>
+/// (#102): las tres fuentes del catálogo sólo pueden servir cursos publicados —el caché de
+/// Umbraco sólo contiene contenido publicado, el seed ES el catálogo de demo, y el overlay
+/// durable se escribe en el acto de publicar—. Los otros dos existen porque son lo que la
+/// consola del instructor sabe pintar y porque el día que alguien los produzca no puede
+/// además tener que inventarse el nombre.
+///
+/// <para><b>Disparador para que dejen de estar sin productor:</b> que la consola del
+/// instructor tenga que listar lo NO publicado. Hoy no puede — el catálogo mira el caché
+/// publicado de Umbraco, y lo que un editor guardó sin publicar no llega a él.</para>
+/// </remarks>
+public static class CourseStatuses
+{
+    /// <summary>Publicado: se anuncia en el catálogo y se puede cursar.</summary>
+    public const string Published = "published";
+
+    /// <summary>Borrador: lo escribió su autor y todavía no se anuncia.</summary>
+    public const string Draft = "draft";
+
+    /// <summary>En revisión: enviado a aprobación editorial.</summary>
+    public const string Review = "review";
+}
+
+/// <summary>
 /// Proyección liviana de un curso para el catálogo/grid (card): metadatos +
 /// precio + instructor + agregados (rating, nº lecciones, duración). El detalle
 /// rico (módulos + lecciones + planes) vive en <see cref="CourseDetail"/>.
 /// </summary>
+/// <remarks>
+/// <b><see cref="Status"/> y <see cref="PublishedAt"/> son trabajo de SEAM y no de mapeo</b>
+/// (#102). La consola del instructor pinta la píldora «Estado» y cuenta «Cursos publicados»,
+/// y el borde no emitía ninguno de los dos: el normalizador del otro lado degrada a
+/// <c>published</c> cuando la clave falta, así que la consola afirmaba que todo está
+/// publicado sin que nadie se lo hubiera dicho. Y el desplegable «Más recientes» no tenía
+/// con qué ordenar.
+///
+/// <para><b>El default de <see cref="Status"/> es <c>published</c> y NO «no consta»</b>, al
+/// revés que el de <see cref="PublishedAt"/>, y la diferencia es que aquí sí se sabe: un
+/// curso que el catálogo sirve está publicado, porque eso es lo que el catálogo es. La
+/// fuente que algún día sepa servir un borrador lo declara; el vocabulario y el disparador
+/// están en <see cref="CourseStatuses"/>.</para>
+///
+/// <para><b><see cref="PublishedAt"/> es nullable porque hay cursos de los que no se
+/// sabe</b>: los que ya estaban en el overlay durable antes de que este campo existiera no
+/// llevan fecha, y no hay de dónde sacarla. Nulo dice eso —no consta— y no se rellena
+/// derivándola del id ni del orden del seed, que daría un orden estable y falso. Quien
+/// ordena por «más recientes» los pone al final.</para>
+///
+/// <para><b>Es <see cref="DateOnly"/> a propósito.</b> La fuente de contenido sólo tiene la
+/// fecha de la última publicación del nodo, sin zona horaria fiable, así que fingir hora y
+/// desfase sería precisión inventada. Los empates los rompe el título, como el resto de los
+/// órdenes de este catálogo.</para>
+/// </remarks>
 public sealed record CourseSummary(
     string Id,
     string Title,
@@ -38,7 +91,9 @@ public sealed record CourseSummary(
     bool IsFree,
     double Rating,
     int LessonCount,
-    int DurationMinutes);
+    int DurationMinutes,
+    string Status = CourseStatuses.Published,
+    DateOnly? PublishedAt = null);
 
 /// <summary>
 /// Detalle completo de un curso (la PDP-curso): el resumen + descripción +
