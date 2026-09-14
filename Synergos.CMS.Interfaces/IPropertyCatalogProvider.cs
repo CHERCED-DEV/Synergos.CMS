@@ -6,13 +6,21 @@ namespace Synergos.CMS.Interfaces;
 /// (null = sin filtro) y se combinan en AND. Lo arma la barra de filtros del
 /// módulo Angular <c>module-realty-portal</c> (doc propiedades-app-spec §2).
 /// </summary>
+/// <param name="Operation">
+/// Venta o arriendo, en el vocabulario del dominio (<c>venta</c> | <c>arriendo</c>). Es el
+/// PRIMER filtro que usa quien busca vivienda —los dos universos no se mezclan nunca— y sin
+/// él la barra de operación del portal no filtraba nada: el cliente lo manda en TODAS las
+/// búsquedas y el borde lo descartaba. Null = sin filtro. Opcional y al final para no tocar
+/// a los llamadores existentes.
+/// </param>
 public sealed record PropertyQuery(
     string? Text = null,
     string? Type = null,
     decimal? MinPrice = null,
     decimal? MaxPrice = null,
     int? Beds = null,
-    string? Location = null);
+    string? Location = null,
+    string? Operation = null);
 
 /// <summary>
 /// Resumen de un listado para la grilla de resultados + el pin del mapa (lo que

@@ -112,6 +112,7 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
             .Where(l => query.MinPrice is null || l.Price >= query.MinPrice.Value)
             .Where(l => query.MaxPrice is null || l.Price <= query.MaxPrice.Value)
             .Where(l => MatchesLocation(l, query.Location))
+            .Where(l => MatchesOperation(l, query.Operation))
             .ToList();
 
         var filters = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
@@ -238,6 +239,20 @@ public sealed class StubPropertyCatalogProvider : IPropertyCatalogProvider
         }
         return slug.Trim('-');
     }
+
+    /// <summary>
+    /// ¿Este inmueble es de la operación buscada? Igualdad exacta case-insensitive sobre el
+    /// vocabulario del dominio (<c>venta</c>|<c>arriendo</c>); vacío = sin filtro.
+    /// </summary>
+    /// <remarks>
+    /// Va con el precio y la ubicación —acotando el UNIVERSO— y no como faceta del
+    /// descriptor, a propósito: los conteos de tipo/ciudad/habitaciones tienen que contar
+    /// DENTRO de la operación elegida. Un chip que dice "Apartamento (12)" contando los de
+    /// venta cuando estás mirando arriendos es peor que no tener conteo.
+    /// </remarks>
+    private static bool MatchesOperation(PropertyListing l, string? operation)
+        => string.IsNullOrWhiteSpace(operation)
+            || string.Equals(l.Operation?.Trim(), operation.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private static bool MatchesLocation(PropertyListing l, string? location)
     {
