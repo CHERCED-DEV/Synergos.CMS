@@ -374,6 +374,14 @@ Las que salieron de construir el árbol de servicios (§0.B):
 - `feedback_verify_with_live_processes` — los defectos caros salieron
   todos de levantar los procesos y matar uno, no de los tests: los
   tests codificaban la misma suposición equivocada que el código.
+- `feedback_identity_failure_is_not_one_answer` — qué hacer cuando la
+  identidad falla **no es la misma respuesta en todas partes**, y se
+  decide con dos preguntas: ¿el registro se puede rehacer? y ¿su
+  ausencia se nota? La bitácora se repite sin firmar (perder un asiento
+  es peor que uno débil: un hueco no se ve); la notificación de
+  Gobierno y la canasta **fallan a la vista** (un término que empieza a
+  correr, y una atribución que nadie audita nunca). Degradar en
+  silencio es siempre la peor de las tres.
 
 ## 6. Prohibiciones explícitas
 
@@ -913,18 +921,20 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > puerta» no es trabajo pendiente: es otra pregunta, **autorizar** en vez
   > de **atribuir**.
   >
-  > Quedan **seis**, y tampoco son un grupo. Ninguna está cableada a un
-  > consumidor que **presente identidad** —los emisores del repo son tres,
-  > `HttpCaseWorkflowService` y `HttpGovActNotificationService` hacia
-  > Gobierno y `HttpAuditTrailWriter` hacia `Api.Audit`, y ninguno apunta a
-  > ellas—, pero de ahí **no** se sigue que a todas les falte cableado:
+  > Quedaban **seis**, y tampoco eran un grupo. **La canasta ya está
+  > hecha** —`Api.Cart`, séptima rebanada de la HU #14— y las otras cinco
+  > siguen sin estar cableadas a un consumidor que **presente identidad**;
+  > los emisores del repo son **cuatro**: `HttpCaseWorkflowService` y
+  > `HttpGovActNotificationService` hacia Gobierno, `HttpAuditTrailWriter`
+  > hacia `Api.Audit` y `HttpShopOrderService` hacia `Api.Cart`. De ahí
+  > **no** se sigue que a las cinco les falte cableado:
   >
   > | capacidad | campo | consumidor hoy |
   > |---|---|---|
   > | `Moderation` | `DecidedBy`, `Reporter` | ninguno |
   > | `Engagement` | `Actor` | ninguno |
   > | `Documents` | `Owner` | sólo nombrada por Gobierno, como adjunto por referencia |
-  > | `Cart` | `Owner` | **el CMS, directo** (`POST /v1/carts` en `HttpShopOrderService`) |
+  > | ~~`Cart`~~ | `Owner` | **hecho** — el CMS, directo (`POST /v1/carts`) |
   > | `Orders` | `Buyer` | **`Bff.Tienda`** |
   > | `Payments` | `Payer` | **los tres orquestadores** |
   >
@@ -934,13 +944,56 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > no al identificador). Así que su disparador no es un cableado que
   > falte: es **extender `Synergos:Identity:Mode=Api` más allá de
   > Gobierno**, y para `Orders` y `Payments` además decidir si el
-  > orquestador **propaga** la cabecera — que hoy no la propaga nadie y no
-  > está escrito en ninguna parte que deba.
+  > orquestador **propaga** la cabecera — que hoy no la propaga nadie, no
+  > está escrito en ninguna parte que deba, y **es la decisión que queda
+  > pendiente**: la canasta se pudo hacer sin tomarla porque el CMS la llama
+  > directo.
   >
   > Las tres de arriba sí esperan su primer consumidor, y conviene que sea
   > entonces: se verifica contra un llamador real y no contra un fake, que
   > es lo que hacía que #72 tocara —`Api.Audit` acababa de estrenar
   > consumidor con #15—.
+
+  > **La canasta ya no se cree de quién es** (HU #14, séptima rebanada).
+  > `POST /v1/carts` es el **único** endpoint de `Api.Cart` donde el
+  > llamador nombra a una persona; los otros tres llegan con el
+  > identificador de una canasta que ya sabe de quién es, y lo que su
+  > cuerpo nombra —`subjectKind`/`subjectId`— es el **producto**. Por eso
+  > el gate no pide identidad a los cuatro: exigírsela a los otros no
+  > añadiría prueba ninguna, sólo movería el campo de sitio. Que alguien
+  > con la llave compartida pueda tocar la canasta de otro si adivina su
+  > identificador es la otra pregunta —**autorizar**, no atribuir— y esta
+  > HU no la contesta en ninguna capacidad.
+  >
+  > La canasta guarda `OpenedWith`, y nulo es «no consta»: las anteriores
+  > no llevan afirmación y no se rellenan. **Sólo se presenta token cuando
+  > hay SESIÓN.** El dueño de la canasta de un invitado es un seudónimo de
+  > un correo que alguien escribió en un formulario y que nadie comprobó;
+  > pedirle token haría que la capacidad anotara `IdentityToken` sobre una
+  > identidad que no verificó nadie — el defecto #42 con la firma tapándolo
+  > mejor.
+  >
+  > **Y si falla la identidad, NO se repite sin firmar** — al revés que la
+  > bitácora (#72), y por la razón que la bitácora da: allá perder un
+  > asiento es peor que un asiento débil porque **un hueco no se nota**.
+  > Acá se nota: falla delante de quien está comprando, en ese momento, y
+  > se arregla poniendo la llave o apagando el modo. Repetir sin firma
+  > dejaría canastas atribuidas a un miembro por la sola palabra de quien
+  > llamó, en un registro que **nadie audita** y que vence solo a los siete
+  > días: el hueco sería permanente y no lo vería nunca nadie. Hay gates
+  > (`IdentityGateTests`, `ShopWiringTests`), y el de la capacidad **cuenta
+  > en vez de enumerar**: cruza qué contratos de petición dejan nombrar al
+  > dueño contra qué endpoints tocan el almacén.
+  >
+  > **De paso, la lista del compose ya se había desincronizado**, y así se
+  > descubrió: `tools/compose-gen.mjs` llevaba a mano las capacidades que
+  > verifican tokens y decía **dos** cuando eran **cuatro** —`Api.Consent`
+  > (rebanada 5) y `Api.Audit` (#72) cablearon el verificador y nadie
+  > volvió a mirar esa línea—, así que el despliegue no les pasaba la
+  > llave. Eso **no falla al arrancar**: la capacidad sirve y rechaza el
+  > primer token que le presenten, o sea un servidor bien configurado
+  > comportándose como uno sin llave. Hoy la lista se **deriva** del
+  > `Program.cs` de cada una, y hay gate.
 
   > **La bitácora estaba blindada contra reescribir el pasado y abierta a
   > FABRICARLO** (#72). No hay `PUT` ni `DELETE` desde el primer día —el

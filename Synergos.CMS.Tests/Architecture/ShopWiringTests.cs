@@ -193,4 +193,97 @@ public sealed class ShopWiringTests
             Path.Combine(RepoRoot(), "Synergos.CMS.Application", "Configuration", "TiendaSettings.cs"));
         Assert.Contains("Mode { get; init; } = \"Stub\"", settings, StringComparison.Ordinal);
     }
+
+    // ── La identidad de quien compra (HU #14) ───────────────────────────────
+
+    /// <summary>El cuerpo del método que abre la canasta en <c>Api.Cart</c>.</summary>
+    private static string AbrirCanasta()
+    {
+        var cliente = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Web", "Services", "HttpShopOrderService.cs"));
+
+        var i = cliente.IndexOf("private async Task<string> AbrirCanastaAsync(", StringComparison.Ordinal);
+        Assert.True(i > 0, "Cambió el método que abre la canasta: revisar este gate.");
+
+        var fin = cliente.IndexOf("private async Task<PurchaseDto> ComprarAsync(", i, StringComparison.Ordinal);
+        Assert.True(fin > i, "No se pudo delimitar el método que abre la canasta: revisar este gate.");
+        return cliente[i..fin];
+    }
+
+    /// <summary>
+    /// Abrir la canasta PRESENTA identidad y declara el suelo (HU #14).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El gate mira el cableado, no la regla</b>, que es la lección de la rebanada 5: los
+    /// tests del cliente pasan en verde con la cabecera quitada si nadie mira que se ponga. Y sin
+    /// la cabecera, <c>Api.Cart</c> vuelve a creerle al CMS de quién es la canasta — el defecto
+    /// #42 reaparecido un piso más arriba.</para>
+    ///
+    /// <para><b>Y lo que se declara es siempre el SUELO.</b> Escribir <c>IdentityToken</c> desde
+    /// este lado porque el despliegue sepa emitir tokens guardaría como hecho lo que nadie
+    /// verificó: quien sube la afirmación es la capacidad, y sólo tras comprobar la firma.</para>
+    /// </remarks>
+    [Fact]
+    public void Abrir_la_canasta_PRESENTA_identidad_y_declara_el_suelo()
+    {
+        var cuerpo = AbrirCanasta();
+
+        Assert.Contains("IdentityHeader", cuerpo, StringComparison.Ordinal);
+        Assert.Contains("_identidad.IssueAsync(", cuerpo, StringComparison.Ordinal);
+
+        // El suelo, y sólo el suelo.
+        Assert.Contains("assertion = IdentityAssertions.CmsSession", cuerpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("IdentityAssertions.IdentityToken", cuerpo, StringComparison.Ordinal);
+
+        // El sujeto del token es el DUEÑO de la canasta. Firmar por otro no fallaría acá: fallaría
+        // en la capacidad (token_subject_mismatch) y dejaría de poder comprarse.
+        Assert.Contains("new IdentitySubject(BuyerKind, buyerId", cuerpo, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Sólo se pide token cuando hay SESIÓN; el invitado no.
+    /// </summary>
+    /// <remarks>
+    /// El identificador de un invitado es un seudónimo de un correo que escribió en un formulario
+    /// y que nadie comprobó. Pedir un token para él haría que la capacidad anotara
+    /// <c>IdentityToken</c> sobre una identidad que nadie verificó — el defecto #42, con la firma
+    /// tapándolo mejor.
+    /// </remarks>
+    [Fact]
+    public void Solo_se_pide_token_cuando_hay_sesion()
+    {
+        var cuerpo = AbrirCanasta();
+
+        var guarda = cuerpo.IndexOf("customer.MemberKey is Guid", StringComparison.Ordinal);
+        var emision = cuerpo.IndexOf("_identidad.IssueAsync(", StringComparison.Ordinal);
+
+        Assert.True(guarda > 0, "Desapareció la guarda de sesión: un invitado conseguiría token.");
+        Assert.True(emision > guarda, "La emisión quedó fuera de la guarda de sesión.");
+    }
+
+    /// <summary>
+    /// Un rechazo por identidad NO se degrada a un reintento sin firma.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es la decisión opuesta a la de la bitácora, y a propósito.</b> Allá el asiento se
+    /// repite sin firmar porque perder un rastro es peor que un rastro débil: un hueco no se nota.
+    /// Acá una canasta abierta sin comprobar quedaría atribuida a un miembro por la sola palabra
+    /// de quien llamó, nadie audita una canasta y vence sola a los siete días — el hueco sería
+    /// permanente y silencioso. Fallar se ve, y lo ve quien está comprando.</para>
+    ///
+    /// <para>El gate mira que el cliente <b>reconozca</b> el rechazo de identidad y no lo trate
+    /// como un rechazo de negocio: eso es lo que impide que el motivo de un defecto de despliegue
+    /// salga por pantalla como si fuera algo que el comprador puede resolver.</para>
+    /// </remarks>
+    [Fact]
+    public void Un_rechazo_por_identidad_no_se_reintenta_sin_firma()
+    {
+        var cliente = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Web", "Services", "HttpShopOrderService.cs"));
+
+        Assert.Contains("IdentityCodePrefix", cliente, StringComparison.Ordinal);
+
+        // Y NO hay un segundo intento sin firma: el de la bitácora se llama así, y acá no va.
+        Assert.DoesNotContain("firmado: false", cliente, StringComparison.Ordinal);
+    }
 }
