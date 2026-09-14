@@ -1,4 +1,6 @@
-﻿using System.Text.Encodings.Web;
+﻿using System.Security.Cryptography;
+using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
@@ -403,6 +405,95 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
             .ToList();
 
         return new CourseEnrollmentStats(active.Count, active.Sum(e => e.Total));
+    }
+
+    public async Task<IReadOnlyList<CourseRosterEntry>> GetCourseRosterAsync(
+        string courseId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(courseId))
+        {
+            return Array.Empty<CourseRosterEntry>();
+        }
+
+        var id = courseId.Trim();
+        // El MISMO filtro que GetCourseStatsAsync —sólo las activas— y no por simetría estética:
+        // si el listado contara una PendingPayment que el conteo no cuenta, la consola diría
+        // «42 alumnos» encima de 39 filas y nadie sabría cuál de los dos está mal.
+        var active = (await LoadAllEnrollmentsAsync(cancellationToken))
+            .Where(e => e.Status == EnrollmentStatus.Active
+                        && string.Equals(e.CourseId, id, StringComparison.OrdinalIgnoreCase))
+            // Los últimos en matricularse primero (como «mi aprendizaje»), con desempate por
+            // id: el orden en que el store enumera los ficheros no está garantizado, y sin
+            // desempate dos llamadas seguidas podrían devolver la misma lista barajada.
+            .OrderByDescending(e => e.CreatedAt)
+            .ThenBy(e => e.EnrollmentId, StringComparer.Ordinal)
+            .ToList();
+
+        if (active.Count == 0)
+        {
+            return Array.Empty<CourseRosterEntry>();
+        }
+
+        // El temario se resuelve UNA vez por curso: todas las filas son del mismo curso, así que
+        // preguntarlo por alumno sería el mismo viaje al catálogo repetido N veces.
+        var totalLessons = await ResolveTotalLessonsAsync(id, cancellationToken);
+
+        var rows = new List<CourseRosterEntry>(active.Count);
+        foreach (var enrollment in active)
+        {
+            var progress = await BuildProgressAsync(
+                id, enrollment.StudentEmail, totalLessons, cancellationToken);
+
+            rows.Add(new CourseRosterEntry(
+                StudentId: StudentPseudonym(enrollment.StudentEmail),
+                StudentName: DisplayName(enrollment.StudentName),
+                CourseId: enrollment.CourseId,
+                Percent: progress.Percent,
+                // La fecha de la MATRÍCULA, que es lo que la columna «Inscrito» dice ser. No hay
+                // registro de cuándo se vio cada lección, así que cualquier otra cosa sería
+                // inventada — la misma advertencia que lleva StudentEnrollment.LastActivityAt.
+                EnrolledAt: enrollment.CreatedAt));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Quién es el alumno, para un tercero que lo mira: un seudónimo, no su dirección.
+    /// </summary>
+    /// <remarks>
+    /// <b>SHA-256 del correo normalizado, 16 hex — la MISMA receta</b> que usan Tienda, Eventos
+    /// y la visita al inmueble (#33a, defecto #47). Inventar una cuarta haría que el mismo
+    /// alumno fuera dos personas distintas según por dónde entró.
+    /// <para><b>No es anonimato y no hay que venderlo como tal</b>: un correo conocido se vuelve
+    /// a hashear y comparar. Es no esparcir lo que no hace falta esparcir — la consola del
+    /// instructor no tiene una sola acción que use una dirección.</para>
+    /// <para>Las otras tres copias de esta receta viven en <c>Synergos.CMS.Web</c> y no se
+    /// pueden compartir desde aquí (Application no referencia Web, ADR 0002). Promoverla a un
+    /// sitio común es trabajo aparte, anotado en #107.</para>
+    /// </remarks>
+    private static string StudentPseudonym(string? email)
+    {
+        var correo = (email ?? string.Empty).Trim().ToLowerInvariant();
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(correo)))[..16]
+            .ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// El nombre visible del alumno, o vacío si lo que hay no es un nombre.
+    /// </summary>
+    /// <remarks>
+    /// <b>Un valor con arroba se descarta</b>, que es el mismo guardarraíl que
+    /// <c>PublicHolderName</c> aplica al portador de un certificado público. Sin él, una
+    /// matrícula creada con el correo en el campo del nombre publicaría la dirección por la
+    /// puerta de al lado — justo lo que este listado decidió no emitir. Vacío es la verdad («no
+    /// consta»), y quien lo pinta ya escribe «Estudiante» cuando falta.
+    /// </remarks>
+    private static string DisplayName(string? studentName)
+    {
+        var name = (studentName ?? string.Empty).Trim();
+        return name.Contains('@', StringComparison.Ordinal) ? string.Empty : name;
     }
 
     // ── Persistencia (deserialización defensiva) ───────────────────────

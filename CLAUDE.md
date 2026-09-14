@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2855 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2867 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2855 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2867 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -406,6 +406,36 @@ Las que salieron de construir el árbol de servicios (§0.B):
   Gobierno y la canasta **fallan a la vista** (un término que empieza a
   correr, y una atribución que nadie audita nunca). Degradar en
   silencio es siempre la peor de las tres.
+- `feedback_pii_decision_lives_in_the_seam_type` — **qué dato personal se
+  emite se decide en el TIPO del seam, no en el mapeo del DTO.** Si el
+  dato llega hasta el borde, dejarlo fuera es una convención, y una
+  convención la olvida el campo que alguien añade el mes que viene. Sin
+  campo, emitirlo vuelve a ser una decisión. Y el test va sobre el JSON
+  serializado entero —no campo por campo—: lo que hay que impedir no es
+  que exista una propiedad con cierto nombre, es que el dato salga, y
+  puede salir por el identificador, por el nombre o por un campo nuevo.
+  El corte de `ICommentReader`/`ICommentWriter` es el mismo movimiento:
+  «hace que eso sea una propiedad del tipo y no una convención».
+- `feedback_no_read_without_a_write_path` — **una lectura cuyo único
+  camino de escritura es un mock no se emite.** Antes de servir una
+  colección nueva se mira si algo puede crearla y si algo puede
+  atenderla; si las dos acciones del consumidor son locales y no tocan
+  la red, lo que se estaría entregando es mobiliario con aspecto de
+  bandeja. **Y tampoco se emite `[]`**: la lista vacía dice «no hay»
+  cuando la verdad es «esto no existe», y congela la clave en el
+  trinquete de G-6 como si cruzara. Se escribe la decisión y el
+  disparador en el `record`, que es donde la va a leer la próxima
+  auditoría.
+- `feedback_restored_mutation_needs_a_touch` — **al mutar un gate, la
+  restauración tiene que TOCAR el fichero.** Un `cp`/`mv` devuelve el
+  contenido con una fecha ANTERIOR a la de la escritura mutada, así que
+  MSBuild no reconstruye y la corrida siguiente ejecuta el **binario
+  mutado** con el código bueno en disco. El síntoma es desconcertante y
+  no apunta a la causa: un test que pasa suelto y falla en la suite
+  entera —o al revés—, y una hora buscando un problema de aislamiento
+  que no existe. Es el primo del «una mutación cuyo BUILD falló no es una
+  mutación» del repo hermano: ahí la mutación nunca se aplicó, acá
+  **nunca se quitó**.
 
 ## 6. Prohibiciones explícitas
 
@@ -434,7 +464,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2855 tests):
+# Suite completa (2867 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -648,7 +678,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2855 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2867 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

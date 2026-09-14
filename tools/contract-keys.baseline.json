@@ -20,6 +20,7 @@
     "durationMinutes",
     "email",
     "enrolled",
+    "enrolledAt",
     "enrollmentId",
     "enrollments",
     "headline",
