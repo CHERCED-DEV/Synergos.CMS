@@ -244,10 +244,10 @@ public sealed class EventosController : ControllerBase
         }
 
         var items = (request.Items ?? Array.Empty<CheckoutItemRequest>())
-            .Select(i => new EventCheckoutItem(i.Tier, i.Seat, i.Qty))
+            .Select(i => new EventCheckoutItem(i.Tier ?? string.Empty, i.Seat, i.Qty))
             .ToList();
         var attendees = (request.Attendees ?? Array.Empty<AttendeeRequest>())
-            .Select(a => new EventAttendeeInfo(a.Name, a.Email, a.DocumentId))
+            .Select(a => new EventAttendeeInfo(a.Name ?? string.Empty, a.Email ?? string.Empty, a.Identification))
             .ToList();
 
         EventCheckoutResult result;
@@ -265,7 +265,11 @@ public sealed class EventosController : ControllerBase
             PaymentSessionId: result.PaymentSessionId,
             Amount: result.Amount,
             AmountFormatted: _priceFormatter.Format(result.Amount, result.Currency),
-            Currency: result.Currency));
+            Currency: result.Currency,
+            // Contrato UI (CheckoutResult.free): una orden de total cero NO abre sesión de
+            // pago. La UI lo deducía del monto; se emite explícito (ADR 0083) para que el
+            // contrato sea auto-descriptivo.
+            Free: result.Amount <= 0m));
     }
 
     // ── 4. Confirm (capturar + emitir e-tickets QR) ─────────────────────
@@ -292,9 +296,10 @@ public sealed class EventosController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
 
+        var events = await ResolveEventsAsync(result.Tickets, cancellationToken);
         return Ok(new ConfirmResponse(
             Status: result.Status,
-            Tickets: result.Tickets.Select(ToTicketDto).ToList()));
+            Tickets: result.Tickets.Select(t => ToTicketDto(t, Lookup(events, t))).ToList()));
     }
 
     // ── 5. Manage (dashboard de organizador) ────────────────────────────
@@ -357,7 +362,10 @@ public sealed class EventosController : ControllerBase
             await BestEffortPublishAsync(result, cancellationToken);
         }
 
-        return Ok(new CheckInResponse(result.Status));
+        // El seam YA sabe de quién es la entrada —el aviso en vivo de arriba lo publica—,
+        // pero la respuesta directa devolvía solo el estado: el registro de escaneos de la
+        // puerta salía sin nombre, que es justo lo que el operador necesita leer.
+        return Ok(new CheckInResponse(result.Status, result.TicketId, result.AttendeeName));
     }
 
     // ── 7. Mis tickets (cara de asistente) ──────────────────────────────
@@ -372,7 +380,8 @@ public sealed class EventosController : ControllerBase
         if (denied is not null) { return denied; }
 
         var tickets = await _ticketing.GetTicketsAsync(email, cancellationToken);
-        return Ok(new TicketsResponse(tickets.Select(ToTicketDto).ToList()));
+        var events = await ResolveEventsAsync(tickets, cancellationToken);
+        return Ok(new TicketsResponse(tickets.Select(t => ToTicketDto(t, Lookup(events, t))).ToList()));
     }
 
     // ── 8. Transferir ticket (reasigna holder + rota QR + auditado) ─────
@@ -392,9 +401,10 @@ public sealed class EventosController : ControllerBase
         {
             return BadRequest(new { error = "El id del ticket es requerido." });
         }
-        if (request is null || string.IsNullOrWhiteSpace(request.ToEmail))
+        var toEmail = request?.Destination;
+        if (string.IsNullOrWhiteSpace(toEmail))
         {
-            return BadRequest(new { error = "toEmail es requerido." });
+            return BadRequest(new { error = "to es requerido." });
         }
 
         // Ownership: solo se transfiere lo propio. Se comprueba contra la bandeja del
@@ -409,14 +419,23 @@ public sealed class EventosController : ControllerBase
         EventTicketTransferResult result;
         try
         {
-            result = await _ticketing.TransferTicketAsync(id.Trim(), request.ToEmail.Trim(), cancellationToken);
+            result = await _ticketing.TransferTicketAsync(id.Trim(), toEmail.Trim(), cancellationToken);
         }
         catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
 
-        return Ok(new TransferResponse(ToTicketDto(result.Ticket), result.NewQr));
+        var events = await ResolveEventsAsync(new[] { result.Ticket }, cancellationToken);
+        return Ok(new TransferResponse(
+            Ticket: ToTicketDto(result.Ticket, Lookup(events, result.Ticket)),
+            NewQr: result.NewQr,
+            // Contrato UI (TransferResult): la billetera lee `status`, `to` y `ticketId` en
+            // la RAÍZ. Sin ellas el cliente rellenaba los tres con lo que él mismo había
+            // mandado, o sea daba por transferida una entrada sin mirar la respuesta.
+            Status: result.Ticket.Status,
+            To: result.Ticket.HolderEmail,
+            TicketId: result.Ticket.Id));
     }
 
     // ── 9. Crear evento (organizador → publica al catálogo) ─────────────
@@ -427,19 +446,20 @@ public sealed class EventosController : ControllerBase
         // Publicar al catálogo era ANÓNIMO: cualquiera colgaba un evento en el sitio.
         if (RequireOrganizer() is { } denied) { return denied; }
 
-        if (request is null || string.IsNullOrWhiteSpace(request.Name))
+        var name = request?.EventName;
+        if (string.IsNullOrWhiteSpace(name))
         {
-            return BadRequest(new { error = "name es requerido." });
+            return BadRequest(new { error = "title es requerido." });
         }
 
-        var tiers = (request.Tiers ?? Array.Empty<EventTierDraftRequest>())
-            .Select(t => new EventTierDraft(t.Name, t.Price, t.Capacity))
+        var tiers = (request!.Tiers ?? Array.Empty<EventTierDraftRequest>())
+            .Select(t => new EventTierDraft(t.Name ?? string.Empty, t.UnitPrice, t.Capacity))
             .ToList();
 
         var draft = new EventDraft(
-            Name: request.Name.Trim(),
-            Venue: request.Venue ?? string.Empty,
-            Date: request.Date,
+            Name: name.Trim(),
+            Venue: request.Place ?? string.Empty,
+            Date: request.StartsAt ?? request.Date ?? default,
             Tiers: tiers,
             SeatMap: null,
             City: request.City,
@@ -459,7 +479,18 @@ public sealed class EventosController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
 
-        return Ok(new CreateEventResponse(result.EventId));
+        // El slug y el estado NO salen de EventCreateResult (solo trae el id), y la UI
+        // los lee: sin `id` su normalizador devuelve null y da el POST por caído aunque
+        // haya funcionado. Se resuelven contra el catálogo —el evento acaba de
+        // publicarse ahí—, con vacío cuando el proveedor no lo devuelve todavía.
+        var published = await _catalog.GetEventAsync(result.EventId, cancellationToken);
+        return Ok(new CreateEventResponse(
+            EventId: result.EventId,
+            Id: result.EventId,
+            Slug: published?.Summary.Slug ?? string.Empty,
+            Status: published is null
+                ? string.Empty
+                : EventContentRules.BuildStatus(published.Summary.StartUtc, DateTimeOffset.UtcNow)));
     }
 
     // ── Mappers a DTOs JSON estables ────────────────────────────────────
@@ -477,6 +508,7 @@ public sealed class EventosController : ControllerBase
         Category: s.Category,
         City: s.City,
         Venue: s.Venue,
+        VenueName: s.Venue,   // la UI lee `venueName` (mismo recinto que venue)
         StartUtc: s.StartUtc,
         StartsAt: s.StartUtc,   // la UI lee `startsAt` (mismo instante que startUtc)
         ImageUrl: s.ImageUrl,
@@ -594,15 +626,53 @@ public sealed class EventosController : ControllerBase
                 .ToList());
     }
 
-    private static EventTicketDto ToTicketDto(EventTicket t) => new(
+    /// <summary>
+    /// Proyecta la entrada al DTO JSON. <paramref name="ev"/> es el resumen del evento al
+    /// que pertenece, cuando se pudo resolver: la entrada guarda el <c>eventId</c> y nada
+    /// más, así que el título, el recinto y la fecha —que la billetera pinta en cada
+    /// tarjeta— salen del catálogo. Null (evento retirado del catálogo) emite las tres
+    /// claves vacías; no se inventan.
+    /// </summary>
+    private static EventTicketDto ToTicketDto(EventTicket t, EventSummary? ev = null) => new(
         Id: t.Id,
         Qr: t.Qr,
         EventId: t.EventId,
         AttendeeName: t.AttendeeName,
+        Attendee: t.AttendeeName,
         Tier: t.Tier,
         Seat: t.Seat,
         HolderEmail: t.HolderEmail,
-        Status: t.Status);
+        Holder: t.HolderEmail,
+        Status: t.Status,
+        EventTitle: ev?.Title ?? string.Empty,
+        VenueName: ev?.Venue ?? string.Empty,
+        StartsAt: ev is null ? string.Empty : ev.StartUtc.ToString("o", System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>
+    /// Resuelve los resúmenes de los eventos de un lote de entradas, UNA vez por evento
+    /// distinto. Un evento que el catálogo ya no tiene queda fuera del mapa y sus entradas
+    /// se emiten sin título/recinto/fecha — la entrada sigue siendo válida.
+    /// </summary>
+    private async Task<Dictionary<string, EventSummary>> ResolveEventsAsync(
+        IEnumerable<EventTicket> tickets,
+        CancellationToken cancellationToken)
+    {
+        var byId = new Dictionary<string, EventSummary>(StringComparer.OrdinalIgnoreCase);
+        foreach (var eventId in tickets.Select(t => t.EventId)
+                     .Where(id => !string.IsNullOrWhiteSpace(id))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var detail = await _catalog.GetEventAsync(eventId, cancellationToken);
+            if (detail is not null)
+            {
+                byId[eventId] = detail.Summary;
+            }
+        }
+        return byId;
+    }
+
+    private static EventSummary? Lookup(IReadOnlyDictionary<string, EventSummary> events, EventTicket t)
+        => t.EventId is not null && events.TryGetValue(t.EventId, out var ev) ? ev : null;
 
     private static EventAttendeeDto ToAttendeeDto(EventAttendee a) => new(
         TicketId: a.TicketId,
@@ -610,22 +680,35 @@ public sealed class EventosController : ControllerBase
         Email: a.Email,
         Tier: a.Tier,
         Seat: a.Seat,
-        CheckedIn: a.CheckedIn);
+        CheckedIn: a.CheckedIn,
+        // Contrato UI (ManagedAttendee.state): "checked-in" | "pending". La UI NO lee
+        // `checkedIn`, así que la tabla de asistentes daba a TODOS por pendientes —
+        // incluidos los que ya habían entrado por la puerta.
+        State: a.CheckedIn ? "checked-in" : "pending");
 
     // ── Request DTOs (binding del módulo Angular) ───────────────────────
 
-    public sealed record CheckoutItemRequest(string Tier, string? Seat, int Qty);
+    public sealed record CheckoutItemRequest(string? Tier, string? Seat, int Qty);
 
-    public sealed record AttendeeRequest(string Name, string Email, string? DocumentId);
+    /// <summary>
+    /// Un asistente del checkout. La UI (<c>Attendee</c>) manda <c>document</c>;
+    /// <c>documentId</c> se conserva para consumers previos y gana el primero que venga.
+    /// Es el documento que se pide en la puerta de un evento con entrada nominada: se
+    /// descartaba en silencio.
+    /// </summary>
+    public sealed record AttendeeRequest(string? Name, string? Email, string? DocumentId = null, string? Document = null)
+    {
+        public string? Identification => string.IsNullOrWhiteSpace(Document) ? DocumentId : Document;
+    }
 
     public sealed record CheckoutRequest(
-        string EventId,
+        string? EventId,
         IReadOnlyList<CheckoutItemRequest>? Items,
         IReadOnlyList<AttendeeRequest>? Attendees);
 
-    public sealed record ConfirmRequest(string OrderRef);
+    public sealed record ConfirmRequest(string? OrderRef);
 
-    public sealed record CheckInRequest(string TicketId);
+    public sealed record CheckInRequest(string? TicketId);
 
     // ── Response DTOs (JSON estable para la UI) ─────────────────────────
 
@@ -638,6 +721,9 @@ public sealed class EventosController : ControllerBase
         string Category,
         string City,
         string Venue,
+        // Contrato (EventSummary.venueName): la UI lee `venueName` y solo cae a `venue`
+        // por el `??` defensivo de su normalizador. Ambos portan el mismo recinto.
+        string VenueName,
         DateTimeOffset StartUtc,
         // Contrato (EventSummary.startsAt): la UI lee `startsAt` (ISO) para la fecha
         // en cards/ficha/wallet. `startUtc` se conserva para consumers previos; ambos
@@ -782,17 +868,32 @@ public sealed class EventosController : ControllerBase
         string PaymentSessionId,
         decimal Amount,
         string AmountFormatted,
-        string Currency);
+        string Currency,
+        bool Free);
 
     public sealed record EventTicketDto(
         string Id,
         string Qr,
         string EventId,
         string AttendeeName,
+        // Contrato UI (ETicket.attendee + WalletTicket.holder): la confirmación lee
+        // `attendee` y la billetera `holder`. `attendeeName`/`holderEmail` se conservan
+        // para consumers previos; cada par porta el mismo valor.
+        string Attendee,
         string Tier,
         string? Seat,
         string HolderEmail,
-        string Status);
+        string Holder,
+        string Status,
+        // Contrato UI (WalletTicket): la tarjeta de "mis entradas" lee `eventTitle`,
+        // `venueName` y `startsAt`. NO viven en EventTicket —solo su `eventId`—, así que
+        // se resuelven contra el catálogo en el mapper. Sin ellas la billetera pintaba
+        // "Evento", sin recinto y sin fecha, en TODAS las entradas.
+        string EventTitle,
+        string VenueName,
+        // ISO del inicio del evento. Cadena vacía —y no una fecha inventada— cuando el
+        // evento ya no está en el catálogo: la tarjeta oculta la línea.
+        string StartsAt);
 
     public sealed record ConfirmResponse(string Status, IReadOnlyList<EventTicketDto> Tickets);
 
@@ -800,29 +901,84 @@ public sealed class EventosController : ControllerBase
 
     public sealed record TicketsResponse(IReadOnlyList<EventTicketDto> Tickets);
 
-    public sealed record TransferRequest(string ToEmail);
+    /// <summary>
+    /// El destinatario de la transferencia. La UI manda <c>{ to }</c>; <c>toEmail</c> se
+    /// conserva para consumers previos y gana el primero que venga.
+    /// </summary>
+    /// <remarks>
+    /// <b>Los DOS son nulables a propósito</b>, y no es cosmético: con <c>[ApiController]</c>
+    /// y tipos de referencia no anulables, un <c>string</c> obligatorio hace que la
+    /// validación automática rechace con 400 cualquier cuerpo que no lo traiga — y el
+    /// cliente real manda <c>to</c>, no <c>toEmail</c>. Es la lección que ya costó los
+    /// favoritos de Propiedades (<see cref="RealtyController.FavoriteRequest"/>).
+    /// </remarks>
+    public sealed record TransferRequest(string? ToEmail = null, string? To = null)
+    {
+        /// <summary>El correo destino, venga por la clave que venga.</summary>
+        public string? Destination => string.IsNullOrWhiteSpace(To) ? ToEmail : To;
+    }
 
     public sealed record TransferResponse(
         EventTicketDto Ticket,
         // Contrato exacto: la clave es "newQr" — el nuevo payload QR emitido tras
         // la transferencia (el QR viejo queda invalidado).
-        [property: JsonPropertyName("newQr")] string NewQr);
+        [property: JsonPropertyName("newQr")] string NewQr,
+        // Contrato UI (TransferResult): status | to | ticketId, en la raíz.
+        string Status,
+        string To,
+        string TicketId);
 
-    public sealed record EventTierDraftRequest(string Name, decimal Price, int Capacity);
+    /// <summary>
+    /// Una localidad del borrador. La UI (<c>CreateTierDraft</c>) manda <c>amount</c>;
+    /// <c>price</c> se conserva para consumers previos.
+    /// </summary>
+    public sealed record EventTierDraftRequest(string? Name, decimal Price = 0m, int Capacity = 0, decimal? Amount = null)
+    {
+        /// <summary>El precio de la localidad, venga por la clave que venga.</summary>
+        public decimal UnitPrice => Amount ?? Price;
+    }
 
+    /// <summary>
+    /// El borrador del wizard SH-6. Las claves que la UI manda de verdad
+    /// (<c>CreateEventRequest</c>) son <c>title</c>, <c>venueName</c> y <c>startsAt</c>;
+    /// <c>name</c>/<c>venue</c>/<c>date</c> se conservan para consumers previos.
+    /// </summary>
+    /// <remarks>
+    /// <b>TODO nulable, y ahí estaba el defecto.</b> <c>Name</c> era un <c>string</c> no
+    /// anulable, así que con <c>[ApiController]</c> la validación automática rechazaba con
+    /// 400 el cuerpo del wizard —que manda <c>title</c>— ANTES de entrar al método. Publicar
+    /// un evento fallaba el 100 % de las veces y no se notaba porque el cliente lo tapa con
+    /// un id inventado y un "borrador creado".
+    /// <para><c>mode</c> y <c>capacity</c> los manda la UI y NO tienen sitio en
+    /// <see cref="EventDraft"/>: el modo lo RESUELVE <c>EventContentRules.ResolveMode</c> a
+    /// partir de si hay mapa servible, y el aforo es la suma de las localidades. No se
+    /// aceptan para no fingir que se guardan.</para>
+    /// </remarks>
     public sealed record EventDraftRequest(
-        string Name,
-        string? Venue,
-        DateTimeOffset Date,
-        IReadOnlyList<EventTierDraftRequest>? Tiers,
-        string? City,
-        string? Category,
-        string? Currency,
-        string? Description,
-        string? Organizer,
-        string? ImageUrl);
+        string? Name = null,
+        string? Title = null,
+        string? Venue = null,
+        string? VenueName = null,
+        DateTimeOffset? Date = null,
+        DateTimeOffset? StartsAt = null,
+        IReadOnlyList<EventTierDraftRequest>? Tiers = null,
+        string? City = null,
+        string? Category = null,
+        string? Currency = null,
+        string? Description = null,
+        string? Organizer = null,
+        string? ImageUrl = null)
+    {
+        /// <summary>El nombre del evento, venga por la clave que venga.</summary>
+        public string? EventName => string.IsNullOrWhiteSpace(Title) ? Name : Title;
 
-    public sealed record CreateEventResponse(string EventId);
+        /// <summary>El recinto, venga por la clave que venga.</summary>
+        public string? Place => string.IsNullOrWhiteSpace(VenueName) ? Venue : VenueName;
+    }
+
+    // Contrato UI (CreateEventResult): id | slug | status. `eventId` se conserva para
+    // consumers previos y porta el mismo id.
+    public sealed record CreateEventResponse(string EventId, string Id, string Slug, string Status);
 
     public sealed record EventAttendeeDto(
         string TicketId,
@@ -830,12 +986,15 @@ public sealed class EventosController : ControllerBase
         string Email,
         string Tier,
         string? Seat,
-        bool CheckedIn);
+        bool CheckedIn,
+        string State);
 
     public sealed record ManageResponse(
         IReadOnlyList<EventAttendeeDto> Attendees,
         int Capacity,
         int Sold);
 
-    public sealed record CheckInResponse(string Status);
+    // Contrato UI (CheckInResult): status | ticketId? | attendee?. Null en `invalid`
+    // (no hay entrada de la que hablar) — no se inventa un nombre.
+    public sealed record CheckInResponse(string Status, string? TicketId, string? Attendee);
 }
