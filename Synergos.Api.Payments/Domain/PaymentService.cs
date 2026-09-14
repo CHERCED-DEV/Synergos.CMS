@@ -208,6 +208,62 @@ public sealed class PaymentService
         }
     }
 
+
+    /// <summary>
+    /// Anota lo que el proveedor cuenta de un cobro suyo.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es el camino por el que un cobro se entera de verdad de que la plata se movió.</b>
+    /// Con checkout hospedado la transacción nace cuando el comprador la completa, y con PSE el
+    /// desenlace llega minutos después: preguntar en un bucle es la otra manera, y es la cara.</para>
+    ///
+    /// <para><b>No lleva llave de idempotencia y no la necesita</b>, que es la excepción que
+    /// conviene entender. Quien llama es el proveedor, no un cliente nuestro: no hay cabecera que
+    /// exigirle. Lo que hace las veces de llave es el estado —solo se avanza desde
+    /// <c>Authorized</c>—, así que el mismo evento reentregado tres veces deja el cobro donde
+    /// estaba y devuelve lo mismo.</para>
+    /// </remarks>
+    public async Task<Result<Payment>> RecordProviderEventAsync(
+        string? providerReference, PaymentStatus destino, long centavosDelProveedor, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(providerReference))
+        {
+            return Rejection.Invalid($"{PaymentRules.CodePrefix}.webhook_unreadable",
+                "El evento no dice de qué transacción habla.");
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var payment = _payments.FindByProviderReference(providerReference);
+            if (payment is null)
+            {
+                // No es de este despliegue —pasa con transacciones de otra cuenta o de un
+                // despliegue anterior—, así que no es un error del proveedor y se le acusa recibo.
+                return Rejection.NotFound($"{PaymentRules.CodePrefix}.unknown_provider_reference",
+                    $"No hay ningún cobro con la referencia {providerReference}.");
+            }
+
+            if (PaymentRules.CheckProviderEvent(payment, destino, centavosDelProveedor) is { } motivo)
+            {
+                return Result.Rejected<Payment>(motivo);
+            }
+
+            if (payment.Status != PaymentStatus.Authorized) return Result.Ok(payment);
+
+            var movido = destino == PaymentStatus.Captured
+                ? payment with { Status = destino, CapturedAtUtc = Now }
+                : payment with { Status = destino };
+
+            _payments.Put(movido);
+            return Result.Ok(movido);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public Result<Page<Payment>> ListFor(Ref? subject, int offset, int limit)
     {
         if (subject is null)

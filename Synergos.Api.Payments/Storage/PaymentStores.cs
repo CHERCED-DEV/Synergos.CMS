@@ -14,6 +14,17 @@ public sealed class PaymentStorageOptions
 public interface IPaymentStore
 {
     Payment? Find(string id);
+
+    /// <summary>
+    /// El cobro que lleva esa referencia del proveedor, o <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// Es lo único con lo que se puede atender un webhook: el proveedor no conoce nuestro
+    /// identificador —se lo inventamos nosotros después de firmar— y lo que trae de vuelta es la
+    /// referencia que le mandamos.
+    /// </remarks>
+    Payment? FindByProviderReference(string providerReference);
+
     IReadOnlyList<Payment> ForSubject(Ref subject);
     void Put(Payment payment);
 }
@@ -26,6 +37,12 @@ public sealed class FileSystemPaymentStore : IPaymentStore
         => _store = new JsonCollectionStore<Payment>(options.Value.Root, "payments", p => p.Id);
 
     public Payment? Find(string id) => _store.Find(id);
+
+    public Payment? FindByProviderReference(string providerReference)
+        => _store.Where(p => string.Equals(p.ProviderReference, providerReference, StringComparison.Ordinal))
+            .OrderBy(p => p.AuthorizedAtUtc)
+            .FirstOrDefault();
+
     public IReadOnlyList<Payment> ForSubject(Ref subject) => _store.Where(p => p.For == subject);
     public void Put(Payment payment) => _store.Put(payment);
 }
