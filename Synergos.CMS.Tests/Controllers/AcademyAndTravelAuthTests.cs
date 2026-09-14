@@ -112,6 +112,31 @@ public sealed class AcademyControllerAuthTests
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact] // el expediente que se lista es el MÍO — nació enumerable por correo (#102)
+    public async Task Learning_LeeElExpedienteDeLaSESION_NoElQueSePida()
+    {
+        Alumna();
+        _enrollments.GetEnrollmentsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<StudentEnrollment>());
+
+        await BuildSut().Learning(default);
+
+        // El fixture EXIGE la regla: si el endpoint volviera a aceptar un `?student=`, lo que
+        // lo delata es a quién se le pregunta al seam — no el código de estado, que sería 200
+        // en los dos casos.
+        await _enrollments.Received(1).GetEnrollmentsAsync(Yo, Arg.Any<CancellationToken>());
+        await _enrollments.DidNotReceive().GetEnrollmentsAsync(Otro, Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // anónimo no lista el expediente de nadie
+    public async Task Learning_Anonimo_Da401_YNoTocaElSeam()
+    {
+        Anonimo();
+
+        Assert.IsType<UnauthorizedObjectResult>(await BuildSut().Learning(default));
+        await _enrollments.DidNotReceive().GetEnrollmentsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact] // el certificado que se consulta es el PROPIO — con ?student= era enumerable
     public async Task GetCertificate_Logueada_PideElDelGate()
     {
