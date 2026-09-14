@@ -456,6 +456,40 @@ Las que salieron de construir el árbol de servicios (§0.B):
   sujetos idénticos salvo el id dan la misma respuesta—, que es lo único que caza una
   fabricación derivada del id que no sea el id mismo. Los ids del fixture tienen que ser de
   **longitudes distintas**, o una derivación de `id.Length` pasa en verde.
+- `feedback_a_seam_widens_when_it_meets_the_network` — **una costura escrita
+  contra implementaciones en proceso no sobrevive a la primera que habla por
+  la red, y la salida barata es la trampa.** `IPaymentProvider` nació síncrona
+  porque sus dos únicos proveedores escribían en un log; el adaptador real
+  dejaba dos caminos y `.Result` dentro del proveedor **vacía el pool de
+  hilos**, porque el cerrojo del servicio rodea la llamada entera y cada cobro
+  en vuelo se queda con un hilo durante todo el viaje. **No se lee como un
+  problema de pagos**: se lee como que «el servicio se puso lento», que es la
+  peor pista posible. Se sube la costura, y el `lock` pasa a `SemaphoreSlim`
+  —`await` no cabe en un `lock`, y sacar la llamada fuera del cerrojo rompe
+  justo la regla que el cerrojo protegía—. Y se cierra con gate: es reversible
+  de una línea.
+- `feedback_only_one_layer_may_do_the_irreversible_thing` — **cuando dos capas
+  saben hacer lo que no se deshace, un despliegue con las dos vivas tiene que
+  FALLAR AL CABLEAR.** No es teoría: es el defecto #57, donde el CMS y el
+  orquestador sabían cobrar y el reembolso se le pedía al proveedor que no
+  conocía el identificador, así que el caso **no llegaba nunca a reembolsado
+  sin que nada fallara**. La comprobación mira si ese lado **cobraría** —las
+  credenciales presentes Y algo que pueda elegirlo— y no si el nombre está
+  escrito. Y revienta al arrancar, no en la primera petición: uno que arranca
+  verde, contesta `/health` y pasa la prueba de humo **parece uno bueno**, y lo
+  desmiente la primera persona que intenta pagar.
+- `feedback_an_exemption_needs_a_signature_behind_it` — **una ruta exenta de la
+  llave compartida sin verificación detrás es un endpoint abierto que
+  escribe**, y la exención se escribe en una línea sin tocar ningún endpoint.
+  Por eso el gate tiene dos dientes —todo webhook verifica **antes** de tocar
+  el almacén, y toda exención tiene un verificador detrás— y mide que la pieza
+  esté **ENCHUFADA** y no que exista: `Api.Notifications` quitó la llamada de
+  su lambda y no falló ni un test, porque los suyos probaban el verificador.
+  **Y la firma no se coteja contra un valor que también manda quien llama**: el
+  `checksum` del cuerpo lo escribe el atacante igual que el resto. El fixture
+  tiene que exigirlo poniendo **el mismo valor inventado en los dos sitios** —
+  con valores distintos, las dos comparaciones rechazan y el test no prueba
+  nada.
 - `feedback_restored_mutation_needs_a_touch` — **al mutar un gate, la
   restauración tiene que TOCAR el fichero.** Un `cp`/`mv` devuelve el
   contenido con una fecha ANTERIOR a la de la escritura mutada, así que
