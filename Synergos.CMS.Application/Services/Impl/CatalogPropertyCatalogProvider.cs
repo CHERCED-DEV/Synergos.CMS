@@ -219,9 +219,14 @@ public sealed class CatalogPropertyCatalogProvider : IPropertyCatalogProvider
             ImageUrl: gallery.Count > 0 ? gallery[0] : string.Empty,
             Featured: false);
 
-        var address = neighborhood.Length > 0 && city.Length > 0
+        // Lo que escribió quien publica gana. La derivación sigue detrás para las fichas
+        // anteriores a #110 y para quien publique sin dirección; lo que NO puede volver a
+        // pasar es que pise una calle real con «{barrio}, {ciudad}», que parece una
+        // dirección y no lleva a ninguna puerta.
+        var derivada = neighborhood.Length > 0 && city.Length > 0
             ? $"{neighborhood}, {city}"
             : neighborhood.Length > 0 ? neighborhood : city;
+        var address = string.IsNullOrWhiteSpace(draft.Address) ? derivada : draft.Address.Trim();
 
         return new PropertyDetail(
             Summary: summary,
