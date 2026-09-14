@@ -11,7 +11,19 @@ public sealed class PaymentService
     private readonly IPaymentProvider _provider;
     private readonly IIdempotencyLedger _idempotency;
     private readonly TimeProvider _clock;
-    private readonly object _gate = new();
+
+    /// <summary>
+    /// El cerrojo que hace que comprobar y escribir sean una sola operación.
+    /// </summary>
+    /// <remarks>
+    /// <b>Es un <see cref="SemaphoreSlim"/> y no un <c>lock</c> porque dentro se espera a la
+    /// pasarela</b> (HU #27): <c>await</c> no cabe en un <c>lock</c>, y sacar la llamada fuera
+    /// del cerrojo rompería justo lo que <c>CheckRefundable</c> necesita — dos devoluciones
+    /// parciales simultáneas que, sumadas, devuelven más de lo que entró. Con el semáforo el
+    /// hilo se suelta mientras la pasarela contesta, que es lo contrario de lo que hacía el
+    /// <c>lock</c>.
+    /// </remarks>
+    private readonly SemaphoreSlim _gate = new(1, 1);
 
     public PaymentService(IPaymentStore payments, IPaymentProvider provider, IIdempotencyLedger idempotency, TimeProvider clock)
     {
@@ -23,9 +35,11 @@ public sealed class PaymentService
 
     private DateTimeOffset Now => _clock.GetUtcNow();
 
-    public Result<Payment> Authorize(Ref forWhat, Ref payer, Money amount, IdempotencyKey key)
+    public async Task<Result<Payment>> AuthorizeAsync(
+        Ref forWhat, Ref payer, Money amount, IdempotencyKey key, CancellationToken ct = default)
     {
-        lock (_gate)
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
             // De todas las llaves de idempotencia del sistema, esta es la que más duele si
             // falla: un reintento tras un timeout cobra dos veces a una persona real.
@@ -39,7 +53,7 @@ public sealed class PaymentService
             var motivo = PaymentRules.CheckAmount(amount);
             if (motivo is not null) return Result.Rejected<Payment>(motivo);
 
-            var intento = _provider.Authorize(amount, payer);
+            var intento = await _provider.AuthorizeAsync(amount, payer, ct).ConfigureAwait(false);
             var referencia = intento.IsOk ? intento.Reference : null;
             var id = Guid.NewGuid().ToString("n");
 
@@ -58,6 +72,10 @@ public sealed class PaymentService
             var rechazo = PaymentRules.FromAttempt(intento, "la autorización");
             return rechazo is not null ? Result.Rejected<Payment>(rechazo) : Result.Ok(payment);
         }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public Result<Payment> Get(string id)
@@ -65,9 +83,10 @@ public sealed class PaymentService
             ? Result.Ok(p)
             : Rejection.NotFound($"{PaymentRules.CodePrefix}.payment_not_found", $"No existe el cobro {id}.");
 
-    public Result<Payment> Capture(string id, IdempotencyKey key)
+    public async Task<Result<Payment>> CaptureAsync(string id, IdempotencyKey key, CancellationToken ct = default)
     {
-        lock (_gate)
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
             if (_idempotency.Find("capture", key) is { } yaEra)
             {
@@ -85,7 +104,8 @@ public sealed class PaymentService
             var motivo = PaymentRules.CheckCapturable(payment);
             if (motivo is not null) return Result.Rejected<Payment>(motivo);
 
-            var capturaIntento = _provider.Capture(payment.ProviderReference!, payment.Amount);
+            var capturaIntento = await _provider
+                .CaptureAsync(payment.ProviderReference!, payment.Amount, ct).ConfigureAwait(false);
             if (PaymentRules.FromAttempt(capturaIntento, "la captura") is { } falloCaptura)
             {
                 // La autorización sigue en pie pase lo que pase: no se toca el estado.
@@ -97,11 +117,16 @@ public sealed class PaymentService
             _idempotency.Remember("capture", key, id);
             return Result.Ok(capturado);
         }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
-    public Result<Payment> Void(string id)
+    public async Task<Result<Payment>> VoidAsync(string id, CancellationToken ct = default)
     {
-        lock (_gate)
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
             var payment = _payments.Find(id);
             if (payment is null)
@@ -113,7 +138,9 @@ public sealed class PaymentService
             if (motivo is not null) return Result.Rejected<Payment>(motivo);
             if (payment.Status == PaymentStatus.Voided) return Result.Ok(payment);
 
-            if (PaymentRules.FromAttempt(_provider.Void(payment.ProviderReference!), "la liberación") is { } falloVoid)
+            var intentoVoid = await _provider
+                .VoidAsync(payment.ProviderReference!, ct).ConfigureAwait(false);
+            if (PaymentRules.FromAttempt(intentoVoid, "la liberación") is { } falloVoid)
             {
                 return Result.Rejected<Payment>(falloVoid);
             }
@@ -121,6 +148,10 @@ public sealed class PaymentService
             var liberado = payment with { Status = PaymentStatus.Voided };
             _payments.Put(liberado);
             return Result.Ok(liberado);
+        }
+        finally
+        {
+            _gate.Release();
         }
     }
 
@@ -133,9 +164,11 @@ public sealed class PaymentService
     /// devolución tiene <c>Reason</c>: sin él, una devolución compensatoria y una pedida por el
     /// cliente son indistinguibles en la conciliación.
     /// </remarks>
-    public Result<Payment> RefundPayment(string id, Money amount, string? reason, IdempotencyKey key)
+    public async Task<Result<Payment>> RefundPaymentAsync(
+        string id, Money amount, string? reason, IdempotencyKey key, CancellationToken ct = default)
     {
-        lock (_gate)
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
             if (_idempotency.Find("refund", key) is { } yaEra)
             {
@@ -153,7 +186,9 @@ public sealed class PaymentService
             var motivo = PaymentRules.CheckRefundable(payment, amount);
             if (motivo is not null) return Result.Rejected<Payment>(motivo);
 
-            if (PaymentRules.FromAttempt(_provider.Refund(payment.ProviderReference!, amount), "la devolución") is { } falloRefund)
+            var intentoRefund = await _provider
+                .RefundAsync(payment.ProviderReference!, amount, ct).ConfigureAwait(false);
+            if (PaymentRules.FromAttempt(intentoRefund, "la devolución") is { } falloRefund)
             {
                 return Result.Rejected<Payment>(falloRefund);
             }
@@ -165,6 +200,10 @@ public sealed class PaymentService
             _payments.Put(actualizado);
             _idempotency.Remember("refund", key, id);
             return Result.Ok(actualizado);
+        }
+        finally
+        {
+            _gate.Release();
         }
     }
 
