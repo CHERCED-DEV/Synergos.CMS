@@ -25,7 +25,8 @@ public sealed record PaymentResponse(
     MoneyDto Amount, string Status, string Provider,
     MoneyDto Refunded, MoneyDto Refundable,
     IReadOnlyList<RefundResponse> Refunds,
-    DateTimeOffset AuthorizedAtUtc, DateTimeOffset? CapturedAtUtc)
+    DateTimeOffset AuthorizedAtUtc, DateTimeOffset? CapturedAtUtc,
+    string? ActionUrl = null)
 {
     public static PaymentResponse From(Payment p) => new(
         p.Id, p.For.Kind, p.For.Id, p.Payer.Kind, p.Payer.Id,
@@ -33,7 +34,7 @@ public sealed record PaymentResponse(
         new MoneyDto(p.Refunded.Amount, p.Refunded.Currency),
         new MoneyDto(p.Refundable.Amount, p.Refundable.Currency),
         p.Refunds.Select(r => new RefundResponse(r.Id, new MoneyDto(r.Amount.Amount, r.Amount.Currency), r.Reason, r.AtUtc)).ToList(),
-        p.AuthorizedAtUtc, p.CapturedAtUtc);
+        p.AuthorizedAtUtc, p.CapturedAtUtc, p.ActionUrl);
 }
 
 /// <summary>Una porción de una lista, con su total.</summary>

@@ -455,6 +455,8 @@ public sealed class BackendSegregationTests
     private static readonly Dictionary<string, string> PuedenSalirALaRed = new(StringComparer.Ordinal)
     {
         ["Synergos.Api.Notifications"] = "Resend, el transporte de correo real (ADR 0131). Un tercero, no una capacidad.",
+        ["Synergos.Api.Payments"] = "Wompi, la pasarela de pago real (HU #27). Un tercero, no una capacidad: "
+            + "PSE y Nequi son la mitad de los pagos de este mercado y no hay forma de cobrarlos sin salir.",
     };
 
     /// <summary>Quita comentarios para no medir la prosa que documenta la regla.</summary>

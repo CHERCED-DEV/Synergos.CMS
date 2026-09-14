@@ -789,7 +789,9 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   (`Synergos:Gob:Notifications:Mode=Api`, HU #62). El default sigue
   siendo `Stub` —`Local` en el de notificaciones— en todos. **Faltan
   dos**, y los dos por lo mismo: `StubPaymentProvider` y
-  `StubApplicationService` → `Api.Payments`, **bloqueados por #27**.
+  `StubApplicationService` → `Api.Payments`. **Ya no están bloqueados**: #27
+  entregó el adaptador y decidió lo que los tenía parados —quién cobra—, así
+  que lo que queda es el cableado, que es trabajo y no una espera.
 
   > **`StubApplicationService` NO espera un orquestador, y el mapa se
   > equivocó con el mismo filtro por CUARTA vez.** Decía «con pago de por
@@ -977,30 +979,58 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > sobre un recurso» (`Api.Booking`). Por eso su `Reservation` lleva
   > `RoomTypeCode` y `GuestName`, que ninguna capacidad puede guardar. Los
   > que quedan no van todos a Booking: una butaca es un pozo contable.
-- **El borde ya avisa, pero todavía no cobra.** `Api.Notifications` tiene
-  transporte real (Resend, ADR 0131) y le falta solo la credencial.
-  `Api.Payments` ya distingue **rechazado** (no se reintenta) de **caído**
+- **Los dos bordes ya tienen transporte real, y a los dos les falta la
+  credencial.** `Api.Notifications` sale por Resend (ADR 0131) y
+  `Api.Payments` cobra por **Wompi** (HU #27) — se eligió porque en Colombia
+  PSE y Nequi son la mitad de los pagos, así que una pasarela sin ellos no
+  cobra. Sigue distinguiendo **rechazado** (no se reintenta) de **caído**
   (sí) de **sin configurar**, y con un nombre de proveedor puesto rechaza a
-  gritos en vez de caer al stub en silencio — hay gate (HU #27). Lo que
-  falta es **el adaptador real y la cuenta comercial**: hoy sigue sin mover
-  plata, así que ningún demo de venta corre de punta a punta.
+  gritos en vez de caer al stub en silencio. Lo que falta **no es código**:
+  son las llaves y **una corrida contra el sandbox**, que los `<remarks>` del
+  adaptador declaran pendiente y que se puede hacer con llaves de prueba
+  antes de la cuenta comercial. Hasta entonces ningún demo de venta corre de
+  punta a punta con Wompi puesto.
 
-  > **«El adaptador real» es el de `Api.Payments`. En el árbol del CMS ya hay
-  > uno entero** (`WompiPaymentProvider`, ADR 0116), con router por reglas y
-  > dos sinks de confirmación asíncrona. Esta línea no lo decía, y leída sola
-  > manda a escribir el segundo — el modo de fallo que §2 describe con todas
-  > las letras. Lo que le falta a **ése** no es código: son las llaves y **una
-  > corrida contra el sandbox**, que sus propios `<remarks>` declaran
-  > pendiente y que se puede hacer con llaves de prueba antes de la cuenta
-  > comercial.
+  > **La pregunta que #27 tenía abierta no era «qué proveedor»: era QUIÉN
+  > COBRA**, y está decidida — **`Api.Payments` es lo único que mueve plata de
+  > verdad**. La razón es la tercera pregunta del repo, *¿quién tiene la
+  > plata?*, y no es hipotética: con `Tienda:Mode=Bff` la tiene el orquestador,
+  > y dejar las dos mitades cobrando fue exactamente el defecto **#57** —el RMA
+  > le pedía el reembolso al proveedor local con el identificador de la saga,
+  > que ese proveedor no conocía, y el caso no llegaba nunca a reembolsado sin
+  > que nada fallara—.
   >
-  > **Y por eso #27 decide algo que no es «escribir un adapter»**: si se porta
-  > a la capacidad o el CMS sigue cobrando por su seam. Los dos caminos ya
-  > divergen —con `Tienda:Mode=Bff` la plata la tiene el orquestador (#57)—,
-  > así que dejarlos vivos hace que un mismo cobro pase por proveedores
-  > distintos según un interruptor. Portarlo además obliga a añadir
-  > `Api.Payments` a la lista de #49 **en el mismo commit** que el transporte:
-  > un permiso sin uso también rompe el build.
+  > **El `WompiPaymentProvider` del CMS NO se borra** (ADR 0116, con router por
+  > reglas y dos sinks de confirmación asíncrona): sigue sirviendo el camino en
+  > proceso —`Tienda:Mode=Stub`—, que es el que permite levantar el repo entero
+  > sin ningún servicio. Lo que cambia es su papel. **Y los dos no pueden
+  > cobrar de verdad a la vez**: un despliegue con `Tienda:Mode=Bff` y llaves
+  > reales de Wompi del lado del CMS **falla al arrancar** en vez de cobrar en
+  > silencio por dos plomerías distintas. Es la forma de #56 y la de la llave
+  > de firma de `Api.Identity` — arrancar verde, contestar `/health` y reventar
+  > cuando una persona intenta pagar es el peor de los tres. Hay gate
+  > (`PaymentProviderGateTests`, `PaymentEngineCoexistenceTests`).
+  >
+  > **El portarlo destapó que la costura era síncrona.** Los dos únicos
+  > proveedores que había escribían en un log; una pasarela vive al otro lado
+  > de la red. La salida que NO se tomó es `.Result` dentro del proveedor: el
+  > cerrojo de `PaymentService` rodea la llamada entera, así que cada cobro en
+  > vuelo se habría quedado con un hilo del pool durante todo el viaje, y eso no
+  > se lee como un problema de pagos sino como que «el servicio se puso lento».
+  > El `lock` es hoy un `SemaphoreSlim` —`await` no cabe en un `lock`, y sacar
+  > la llamada fuera del cerrojo rompería lo que `CheckRefundable` protege— y
+  > el atajo está cerrado por gate.
+  >
+  > **Y «autorizar» con checkout hospedado no es «reservar cupo».** Wompi Web
+  > Checkout cubre tarjeta, PSE, Nequi y efectivo con un solo flujo y deja los
+  > datos de tarjeta fuera de nuestros servidores, pero la transacción **nace
+  > cuando el comprador la completa**: autorizar es firmar la intención, y
+  > quien constata que la plata se movió es capturar, que contesta
+  > *transitorio* mientras la transacción no exista o siga `PENDING`. Eso
+  > encaja con la máquina de sagas sin tocarla —capturar se reintenta; al
+  > rendirse, se libera una intención que nadie pagó—. **Lo que falta para que
+  > un comprador pueda pagar es que alguien LEA el `actionUrl`** que la
+  > capacidad ya emite: el camino de escritura existe y el consumidor no.
 - **La saga que nunca confirmó ya se abandona** (HU #29, parcial): el
   barrido de `Bff.Core` da por muerta la que lleva más de
   `Sweep:AbandonAfterMinutes` en `Running` y deshace lo hecho. Cero lo

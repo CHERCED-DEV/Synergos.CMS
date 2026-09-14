@@ -39,6 +39,9 @@ public sealed record Refund(string Id, Money Amount, string? Reason, DateTimeOff
 /// <param name="Refunds">Las devoluciones aplicadas.</param>
 /// <param name="AuthorizedAtUtc">Cuándo se autorizó.</param>
 /// <param name="CapturedAtUtc">Cuándo se capturó.</param>
+/// <param name="ActionUrl">
+/// A dónde hay que mandar al comprador para que pague, cuando el medio lo exige.
+/// </param>
 public sealed record Payment(
     string Id,
     Ref For,
@@ -49,7 +52,8 @@ public sealed record Payment(
     string? ProviderReference,
     IReadOnlyList<Refund> Refunds,
     DateTimeOffset AuthorizedAtUtc,
-    DateTimeOffset? CapturedAtUtc = null)
+    DateTimeOffset? CapturedAtUtc = null,
+    string? ActionUrl = null)
 {
     /// <summary>Lo ya devuelto.</summary>
     public Money Refunded => Money.Sum(Refunds.Select(r => r.Amount), Amount.Currency);
@@ -92,11 +96,28 @@ public enum PaymentOutcome
 /// El motivo <b>del proveedor</b>, tal cual. «Fondos insuficientes» lleva a una acción y «el pago
 /// falló» no lleva a ninguna: por eso viaja y no se resume.
 /// </param>
-public sealed record PaymentAttempt(PaymentOutcome Outcome, string? Reference, string? Reason)
+/// <param name="ActionUrl">
+/// A dónde hay que mandar al comprador, cuando el medio de pago lo exige.
+/// </param>
+/// <remarks>
+/// <para><b><see cref="ActionUrl"/> existe porque sin él no se puede cobrar</b> (HU #27). Los dos
+/// proveedores que había —los dos de mentira— resolvían el cobro dentro del proceso, así que la
+/// costura no tenía por dónde devolver «y ahora el comprador tiene que ir acá». Una pasarela
+/// real de este mercado sí lo necesita: el checkout hospedado de Wompi es lo que cubre tarjeta,
+/// PSE, Nequi y efectivo con un solo flujo, y es también lo que deja los datos de tarjeta fuera
+/// de nuestros servidores.</para>
+///
+/// <para><b>Se emite aunque todavía nadie lo lea</b>, y eso es deuda declarada y no un descuido:
+/// el camino de ESCRITURA es real —lo produce el adaptador— y quien falta es el consumidor, o
+/// sea el orquestador que se lo entregue al comprador. Es lo que impide que hoy un demo de venta
+/// corra de punta a punta con Wompi puesto.</para>
+/// </remarks>
+public sealed record PaymentAttempt(PaymentOutcome Outcome, string? Reference, string? Reason, string? ActionUrl = null)
 {
     public bool IsOk => Outcome == PaymentOutcome.Ok;
 
-    public static PaymentAttempt Ok(string? reference = null) => new(PaymentOutcome.Ok, reference, null);
+    public static PaymentAttempt Ok(string? reference = null, string? actionUrl = null)
+        => new(PaymentOutcome.Ok, reference, null, actionUrl);
 
     public static PaymentAttempt Declined(string reason) => new(PaymentOutcome.Declined, null, reason);
 
