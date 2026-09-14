@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -31,8 +31,10 @@ public sealed class AcademyControllerAuthTests
     private readonly ICertificateService _certificates = Substitute.For<ICertificateService>();
     private readonly IPriceFormatter _priceFormatter = Substitute.For<IPriceFormatter>();
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
+    private readonly IEnrollmentMetrics _metrics = Substitute.For<IEnrollmentMetrics>();
 
-    private AcademyController BuildSut() => new(_catalog, _enrollments, _certificates, _priceFormatter, _gate);
+    private AcademyController BuildSut()
+        => new(_catalog, _enrollments, _certificates, _priceFormatter, _gate, _metrics);
 
     /// <summary>Seams con datos reales: null → NRE en el mapeo, antes de afirmar nada.</summary>
     private void SeamsConDatos()

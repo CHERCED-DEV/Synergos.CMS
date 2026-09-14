@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -124,6 +124,52 @@ public class AcademyContractShapeTests
                 PriceFormatted: "$180.000", StudentCount: 42, Students: 42,
                 Revenue: 7560000m, RevenueFormatted: "$7.560.000", Rating: 4.8),
             "id", "title", "price", "studentCount", "revenue", "rating");
+
+    /// <summary>
+    /// Cada alumno de la consola lleva las seis claves que <c>normalizeInstructorStudent</c> lee.
+    /// </summary>
+    /// <remarks>
+    /// <b>Sin <c>id</c> el normalizador descarta la fila entera</b>, igual que hacía con las de
+    /// curso antes de #102. Y <c>enrolledAt</c> se pinta CRUDO en la celda («Inscrito»), sin
+    /// pasar por <c>formatDate</c> como sí hace <c>lastActivityAt</c>: por eso viaja como
+    /// <c>yyyy-MM-dd</c> y no como un <c>DateTimeOffset</c>, que sacaría la T y el desfase
+    /// horario a la tabla.
+    /// </remarks>
+    [Fact]
+    public void El_alumno_de_la_consola_emite_lo_que_la_UI_lee()
+        => AssertHas(
+            new AcademyController.InstructorStudentDto(
+                Id: "9f1c", Name: "Ana Rincón", CourseId: "excel",
+                CourseTitle: "Excel financiero", Percent: 40, EnrolledAt: "2026-06-20"),
+            "id", "name", "courseId", "courseTitle", "percent", "enrolledAt");
+
+    /// <summary>
+    /// La respuesta de la consola emite <c>students</c> en la RAÍZ.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es donde <c>normalizeInstructorDesk</c> lo busca; anidarlo por curso lo dejaría
+    /// invisible, y con las tres listas vacías la consola entera cae al mock con el cartel de
+    /// «datos de ejemplo» encendido.</para>
+    ///
+    /// <para><b><c>questions</c> NO se emite, y eso también se afirma</b> (#107): nadie puede
+    /// escribir ni responder una pregunta —las dos acciones del otro lado son locales y no tocan
+    /// la red—, así que emitirla sería servir un buzón decorativo. Si alguien la añade, que sea
+    /// porque decidió cambiar eso y no de pasada.</para>
+    /// </remarks>
+    [Fact]
+    public void La_consola_del_instructor_emite_students_en_la_raiz_y_no_questions()
+    {
+        var response = new AcademyController.InstructorCoursesResponse(
+            Instructor: "elena@synergos.co",
+            Courses: Array.Empty<AcademyController.InstructorCourseDto>(),
+            Students: Array.Empty<AcademyController.InstructorStudentDto>(),
+            TotalStudents: 0,
+            TotalRevenue: 0m,
+            TotalRevenueFormatted: "$0");
+
+        AssertHas(response, "courses", "students", "totalStudents", "totalRevenue");
+        Assert.DoesNotContain("questions", KeysOf(response));
+    }
 
     [Fact] // normalizeLearning lee `enrollments` y `paths`
     public void Mi_aprendizaje_emite_enrollments_y_paths()
