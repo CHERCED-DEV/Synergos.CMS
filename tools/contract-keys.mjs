@@ -153,6 +153,7 @@ function recogerClaves(src, claves) {
 }
 
 const medido = {};
+const huerfanas = {};
 const problemas = [];
 const avisos = [];
 
@@ -165,6 +166,7 @@ for (const { app, controllers } of PARES) {
 
     const cruzan = [...ui].filter((k) => cms.has(k)).sort();
     medido[app] = cruzan;
+    huerfanas[app] = [...ui].filter((k) => !cms.has(k)).sort();
 
     // La guarda: un par mal escrito cruza casi nada, y congelarlo así da verde para siempre.
     const proporcion = ui.size === 0 ? 1 : cruzan.length / ui.size;
@@ -174,6 +176,22 @@ for (const { app, controllers } of PARES) {
             + `${controllers.join(' + ')} (${Math.round(proporcion * 100)} %).\n    → casi seguro el par `
             + `apunta al controller equivocado. Mirá qué rutas pide el cliente antes de congelar esto.`);
     }
+}
+
+if (process.argv.includes('--huerfanas')) {
+    // INFORMATIVO, nunca falla: son CANDIDATAS a revisar, no defectos.
+    //
+    // La mayoría es ruido legítimo —estado interno de la app, fallbacks legacy, respuestas de
+    // otros bordes— y por eso el gate NO las exige: hacerlo daría cientos de falsos positivos y
+    // acabaría saltándose. Pero esta lista es exactamente lo que produjo #102 al mirarse a
+    // mano vertical por vertical, así que tenerla a un comando ahorra esa vuelta: lo que hay
+    // que hacer con ella es cruzarla con lo que la app PINTA, no arreglarla entera.
+    console.log('Claves que cada app LEE y ningún controller emite — candidatas, no defectos:\n');
+    for (const [app, claves] of Object.entries(huerfanas)) {
+        console.log(`  ${app} (${claves.length})`);
+        if (claves.length > 0) console.log(`    ${claves.join(', ')}\n`);
+    }
+    process.exit(0);
 }
 
 if (process.argv.includes('--actualizar')) {
