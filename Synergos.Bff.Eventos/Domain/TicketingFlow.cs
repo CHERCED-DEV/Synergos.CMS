@@ -290,7 +290,7 @@ public sealed class TicketingFlow
     /// </summary>
     /// <remarks>
     /// <b>Se devuelve el rechazo de la capacidad y no uno propio</b>: quien llamó necesita saber
-    /// si fue <c>inventory.out_of_stock</c> —ofrecer otra localidad— o <c>payments.declined</c>
+    /// si fue <c>inventory.out_of_stock</c> —ofrecer otra localidad— o <c>payments.payment_declined</c>
     /// —pedir otro medio de pago—, y aplanarlos a «no se pudo comprar» deja al comprador sin nada
     /// que hacer.
     /// </remarks>
