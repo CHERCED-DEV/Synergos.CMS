@@ -116,7 +116,7 @@ Synergos.CMS/
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
 │   ├── Api/                     tests de reglas y servicio por capacidad
-│   └── Bff/                     la compensación cruzada (142)
+│   └── Bff/                     la compensación cruzada (144)
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
 │
 ├── Synergos.Core/               EL VOCABULARIO. Ref, Money, TimeWindow, Rejection,

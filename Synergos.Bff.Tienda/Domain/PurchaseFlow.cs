@@ -302,7 +302,7 @@ public sealed class PurchaseFlow
     /// <remarks>
     /// <b>Se devuelve el rechazo de la capacidad y no uno propio</b>: quien llamó necesita saber
     /// si fue <c>inventory.out_of_stock</c> —ofrecer menos unidades— o
-    /// <c>payments.declined</c> —pedir otro medio de pago—, y aplanarlos a «no se pudo comprar»
+    /// <c>payments.payment_declined</c> —pedir otro medio de pago—, y aplanarlos a «no se pudo comprar»
     /// deja al cliente sin nada que hacer.
     /// </remarks>
     private async Task<Result<PurchaseSaga>> AbortarAsync(
