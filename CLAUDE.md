@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **2793 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **2807 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 2793 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 2807 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (10)
 │   │                            + despliegue (14, ADR 0133)
@@ -367,6 +367,14 @@ Las que salieron de construir el árbol de servicios (§0.B):
   «se hace dos veces» por «no se hace nunca», que no se nota— y **no
   sirve sin releer el almacén al tomarlo**: el caché del proceso deja que
   el segundo repita un minuto después lo que el primero ya hizo.
+- `feedback_contract_shape_needs_its_own_test` — un test que construye el DTO
+  del controller y comprueba sus campos es una TAUTOLOGÍA: afirma lo que el
+  controller decidió poner, no lo que el consumidor lee. Lo que hay que
+  vigilar es la CLAVE SERIALIZADA, porque el normalizador del otro lado es
+  defensivo y una clave que falta degrada en silencio. **Y la mutación no es
+  borrar el campo** —eso rompe el build, que no es lo mismo que un test
+  rojo—: es renombrar la clave serializada con `JsonPropertyName`, que
+  compila y es la forma real de la deriva.
 - `feedback_mutate_every_gate` — un gate que no se vio fallar no está
   vigilando nada. Se reintroduce el defecto y se confirma el rojo.
 - `feedback_seeded_content_needs_fingerprint` — un seam que sólo sabe CREAR
@@ -418,7 +426,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (2793 tests):
+# Suite completa (2807 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -575,7 +583,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2793 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2807 tests, gates de
 segregación y molde en verde.
 
 > **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

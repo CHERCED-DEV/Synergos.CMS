@@ -156,7 +156,7 @@ public sealed class AcademyControllerAuthTests
     {
         Anonimo();
 
-        Assert.IsNotType<UnauthorizedObjectResult>(await BuildSut().Courses(null, null, null, default));
+        Assert.IsNotType<UnauthorizedObjectResult>(await BuildSut().Courses(null, null, null, null, null, default));
     }
 }
 

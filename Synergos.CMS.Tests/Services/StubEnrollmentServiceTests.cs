@@ -37,6 +37,90 @@ public class StubEnrollmentServiceTests
 
     private static Student StudentJuan() => new("Juan Pérez", "juan@synergos.co");
 
+    /// <summary>
+    /// Elegir el plan de cuotas cobra el TOTAL DEL PLAN, no el precio del curso.
+    /// </summary>
+    /// <remarks>
+    /// <b>Era plata, y no fallaba</b> (#102): la UI manda <c>planId</c> desde siempre, el
+    /// motor nunca lo recibió, y el alumno que elegía «3 cuotas» pagaba el contado — ni el
+    /// cobro, ni el expediente de la matrícula, ni un log decían nada.
+    ///
+    /// <para><b>El fixture EXIGE la regla porque los dos montos son DISTINTOS.</b> El plan de
+    /// cuotas lleva un recargo del 8 %, así que 320.000 de contado son 345.600 financiados. Con
+    /// un plan que costara lo mismo que el curso —el de contado— el test pasaría en verde con
+    /// el planId descartado, que es exactamente el defecto.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Enroll_ConPlanDeCuotas_CobraElTotalDelPlan()
+    {
+        var (svc, catalog) = Make();
+
+        var detail = await catalog.GetCourseAsync(PaidCourse);
+        var cuotas = detail!.Plans.Single(p => p.Installments > 1);
+        Assert.NotEqual(detail.Course.Price, cuotas.Total);   // el fixture exige la regla
+
+        var result = await svc.EnrollAsync(PaidCourse, StudentJuan(), cuotas.Code);
+
+        Assert.Equal(cuotas.Total, result.Amount);
+    }
+
+    /// <summary>
+    /// Sin plan elegido se cobra el precio del curso — el comportamiento de siempre.
+    /// </summary>
+    [Fact]
+    public async Task Enroll_SinPlan_CobraElPrecioDelCurso()
+    {
+        var (svc, catalog) = Make();
+        var detail = await catalog.GetCourseAsync(PaidCourse);
+
+        var result = await svc.EnrollAsync(PaidCourse, StudentJuan());
+
+        Assert.Equal(detail!.Course.Price, result.Amount);
+    }
+
+    /// <summary>
+    /// Un plan que no existe se RECHAZA; no cae al precio del curso.
+    /// </summary>
+    /// <remarks>
+    /// Caer sería el defecto original con otro nombre: el alumno elige algo y se le cobra otra
+    /// cosa, en silencio. Es plata y el error se nota al instante, así que falla a la vista.
+    /// </remarks>
+    [Fact]
+    public async Task Enroll_ConPlanInexistente_Rechaza()
+    {
+        var (svc, _) = Make();
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => svc.EnrollAsync(PaidCourse, StudentJuan(), "plan-que-no-existe"));
+    }
+
+    /// <summary>
+    /// «Mi aprendizaje» lista las matrículas ACTIVAS del alumno, no las pendientes de pago.
+    /// </summary>
+    /// <remarks>
+    /// <b>El fixture mete las dos</b> —una gratis (que queda Activa al instante) y una de pago
+    /// (que queda PendingPayment)— porque con una sola el test pasaría en verde sin el filtro.
+    /// Una matrícula pendiente es un carrito abandonado: listarla entre «mis cursos» le diría
+    /// al alumno que tiene acceso a algo que no pagó.
+    /// </remarks>
+    [Fact]
+    public async Task GetEnrollments_SoloLasActivas()
+    {
+        var (svc, _) = Make();
+        var juan = StudentJuan();
+
+        await svc.EnrollAsync(FreeCourse, juan);    // → Active
+        await svc.EnrollAsync(PaidCourse, juan);    // → PendingPayment
+
+        var mine = await svc.GetEnrollmentsAsync(juan.Email);
+
+        Assert.Equal(FreeCourse, Assert.Single(mine).CourseId);
+    }
+
+    [Fact] // empty: un alumno sin matrículas no lanza
+    public async Task GetEnrollments_SinMatriculas_DevuelveVacio()
+        => Assert.Empty(await Make().Svc.GetEnrollmentsAsync("nadie@synergos.co"));
+
     [Fact] // empty: inscribir en un curso inexistente lanza
     public async Task Enroll_UnknownCourse_Throws()
     {
