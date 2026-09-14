@@ -124,6 +124,9 @@ public sealed class PurchaseCompensationTests
             => _s.Values.Where(x => x.Status == SagaStatus.Running && x.StartedAtUtc < limite).ToList();
 
         public void Put(PurchaseSaga saga) => _s[saga.Id] = saga;
+
+        // Un fake en memoria no tiene caché que vaciar: la verdad ES el diccionario (#34).
+        public void Invalidate() { }
     }
 
     private static readonly DateTimeOffset Ahora = new(2026, 3, 2, 10, 0, 0, TimeSpan.Zero);
@@ -203,7 +206,7 @@ public sealed class PurchaseCompensationTests
         var vocabulario = new SagaVocabulary("tienda", "la compra");
         var comp = new Compensator<PurchaseSaga>(new TiendaCompensationExecutor(api), reloj, NullLogger<Compensator<PurchaseSaga>>.Instance);
         var aviso = new CompensationAlert(fabrica, vocabulario, Options.Create(alertas ?? Guardia()));
-        var motor = new SagaEngine<PurchaseSaga>(sagas, comp, aviso, vocabulario, reloj,
+        var motor = new SagaEngine<PurchaseSaga>(sagas, comp, aviso, ArriendoDePrueba.Nuevo(), vocabulario, reloj,
             NullLogger<SagaEngine<PurchaseSaga>>.Instance);
         return new Contexto(
             new PurchaseFlow(api, motor, reloj, NullLogger<PurchaseFlow>.Instance),

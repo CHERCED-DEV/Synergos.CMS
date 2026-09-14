@@ -168,6 +168,9 @@ public sealed class TripCompensationTests
         public IReadOnlyList<TripSaga> StartedBefore(DateTimeOffset limite)
             => _s.Values.Where(x => x.Status == SagaStatus.Running && x.StartedAtUtc < limite).ToList();
         public void Put(TripSaga saga) => _s[saga.Id] = saga;
+
+        // Un fake en memoria no tiene caché que vaciar: la verdad ES el diccionario (#34).
+        public void Invalidate() { }
     }
 
     private static readonly DateTimeOffset Ahora = new(2026, 8, 5, 10, 0, 0, TimeSpan.Zero);
@@ -231,7 +234,7 @@ public sealed class TripCompensationTests
             Address = "guardia@ejemplo.co",
             TemplateKey = "viajes.compensacion.colgada",
         }));
-        var motor = new SagaEngine<TripSaga>(sagas, comp, aviso, vocabulario, reloj,
+        var motor = new SagaEngine<TripSaga>(sagas, comp, aviso, ArriendoDePrueba.Nuevo(), vocabulario, reloj,
             NullLogger<SagaEngine<TripSaga>>.Instance);
 
         return new Contexto(new TripFlow(api, motor, reloj, NullLogger<TripFlow>.Instance), caps, sagas, reloj);
