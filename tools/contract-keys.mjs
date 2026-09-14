@@ -31,6 +31,16 @@
  * su alcance — igual que el cruce de `window.synergos` en CLAUDE.md §3. Un `string` que pasa a
  * `number` bajo la misma clave sigue pasando por aquí.
  *
+ * **Y cruza por CONTROLLER ENTERO, no por endpoint.** Si `title` ya sale de `/products`, que
+ * FALTE en `/wishlist` no se ve: la clave sigue cruzando. Se descubrió midiendo contra el
+ * arreglo de #104 —la wishlist emitía `itemRef`/`owner` y la UI leía `productId`/`title`, así
+ * que devolvía una lista vacía con el servidor lleno— y este gate no lo habría cazado.
+ *
+ * No es un descuido que se pueda tapar afinando el regex: exigiría saber qué DTO devuelve cada
+ * ruta, o sea seguir el tipo de retorno de cada acción hasta su `record`. Se puede hacer y es
+ * otro trabajo. Mientras tanto queda escrito, porque un gate que se cree más listo de lo que
+ * es resulta peor que no tenerlo: alguien deja de mirar confiando en él.
+ *
  * USO
  *   node tools/contract-keys.mjs                    # con el hermano en ../Synergos.UI
  *   node tools/contract-keys.mjs --ui-path=/ruta    # o SYNERGOS_UI_PATH
@@ -128,7 +138,16 @@ function clavesQueEmiteElCms(controllers) {
     return alguno ? claves : null;
 }
 
-function recogerClaves(src, claves) {
+function recogerClaves(fuente, claves) {
+    // Los comentarios se quitan ANTES de parsear, y no es cosmética: este repo documenta cada
+    // clave de contrato en la línea de arriba —«// Contrato UI: la app lee `verb` (= tipo del
+    // evento)»— y ese `=` dentro del comentario partía el parámetro por el sitio equivocado,
+    // así que `verb` desaparecía del cruce. Un comentario nunca declara una clave; dejarlo
+    // dentro sólo añade formas de equivocarse.
+    const src = fuente
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/\/\/[^\n]*/g, ' ');
+
 
     // Los `record` de respuesta: cada parámetro es una clave del JSON.
     for (const m of src.matchAll(/record\s+\w+\s*\(([\s\S]*?)\)\s*;/g)) {
@@ -137,7 +156,12 @@ function recogerClaves(src, claves) {
             // sin tocar C#, y es la forma que toma una deriva de verdad.
             const explicita = p.match(/JsonPropertyName\("([^"]+)"\)/);
             if (explicita) { claves.add(explicita[1]); continue; }
-            const nombre = p.trim().split(/\s+/).pop()?.replace(/[=].*$/, '').trim();
+            // El valor por defecto se corta ANTES de partir por espacios. Al revés —que es
+            // como estaba— `DateTimeOffset? Date = null` daba la clave `null` y PERDÍA `Date`:
+            // el gate ignoraba en silencio todo parámetro con default, que son muchos, y de
+            // paso inventaba un falso positivo al ponerle un default a un campo existente.
+            // Lo destapó el propio gate al medir el arreglo de #103.
+            const nombre = p.split('=')[0].trim().split(/\s+/).pop()?.trim();
             if (nombre && /^[A-Za-z_]\w*$/.test(nombre)) claves.add(camel(nombre));
         }
     }
