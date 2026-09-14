@@ -473,6 +473,20 @@ Las que salieron de construir el árbol de servicios (§0.B):
   sujetos idénticos salvo el id dan la misma respuesta—, que es lo único que caza una
   fabricación derivada del id que no sea el id mismo. Los ids del fixture tienen que ser de
   **longitudes distintas**, o una derivación de `id.Length` pasa en verde.
+  **Addendum #111 — cuando lo fabricado es una CONSTANTE, y no una derivación.** La misma regla
+  y dos cosas que #106 no tuvo que resolver. Una: **la ausencia tiene que poder distinguirse de
+  la afirmación contraria, y eso vive en el TIPO** —`int? Unread` con `null`, no la clave
+  quitada—, porque `0` no dice «no sé»: dice «no tienes mensajes sin leer», que es lo que hace
+  que nadie abra el mensaje de su médico; igual `false` no es «no consta» para «este médico
+  acepta pacientes». La clave se conserva declarada, como el `ImmunizationDto` de #106, para que
+  el día que exista el seam recupere su forma sin reinventarla. Dos: **quitar la constante del
+  borde NO arregla nada solo, porque el normalizador del consumidor la repone** —
+  `readBoolean(value['active'], true)` fabrica el mismo `true` con la clave ausente Y con la
+  clave en `null`—, así que el arreglo cruza los dos árboles y hay que decirlo: un campo emitido
+  con honestidad y leído con un default sigue mintiendo, y ahora **sin que nada en este repo lo
+  señale**. Y la mutación que de verdad prueba el fixture no es sólo devolver la constante: es
+  **refabricar desde lo que hay a mano** (`t.Messages.Count`, `s.MessageCount`), así que un
+  fixture sin mensajes no distingue «cero» de «no se sabe» y pasa en verde con el defecto puesto.
 - `feedback_a_seam_widens_when_it_meets_the_network` — **una costura escrita
   contra implementaciones en proceso no sobrevive a la primera que habla por
   la red, y la salida barata es la trampa.** `IPaymentProvider` nació síncrona
