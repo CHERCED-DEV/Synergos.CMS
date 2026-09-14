@@ -36,6 +36,30 @@ public class StubCourseCatalogProviderTests
         Assert.Equal(0, result.Total);
     }
 
+    /// <summary>
+    /// Buscar por el APELLIDO del instructor encuentra sus cursos.
+    /// </summary>
+    /// <remarks>
+    /// <b>El descriptor declara esto como intención explícita</b> —«buscar "Elena" y
+    /// encontrar sus cursos es intención real y hay que preservarla»— y no lo vigilaba nadie:
+    /// los tests de búsqueda cubrían texto, categoría y nivel, y el campo del instructor es
+    /// justo el que no se resuelve leyendo una propiedad sino componiendo dos datos.
+    ///
+    /// <para><b>El fixture EXIGE la regla y por eso usa el apellido.</b> "Restrepo" aparece
+    /// UNA sola vez en todo el seed, en el <c>Name</c> del instructor: no está en ningún
+    /// título, resumen ni categoría. Con "Elena" el test también pasaría si el campo
+    /// desapareciera del descriptor y el nombre casara por accidente en alguna prosa — un
+    /// verde que no prueba nada.</para>
+    /// </remarks>
+    [Fact] // filter: el instructor es un campo buscable, no un dato de la tarjeta
+    public async Task Search_ByInstructorSurname_FindsTheirCourses()
+    {
+        var result = await Make().SearchAsync(new CourseQuery(Text: "Restrepo"));
+
+        Assert.NotEmpty(result.Courses);
+        Assert.All(result.Courses, c => Assert.Equal("Elena Restrepo", c.InstructorName));
+    }
+
     [Fact] // happy: sin filtros devuelve el catálogo sembrado, ordenado por rating
     public async Task Search_NoFilters_ReturnsSeededCatalog()
     {
