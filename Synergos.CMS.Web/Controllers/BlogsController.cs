@@ -135,12 +135,7 @@ public sealed class BlogsController : ControllerBase
 
         var post = await ToPostDto(item, DemoCurrentActor, cancellationToken);
 
-        var approved = _comments.GetApprovedForNode(NodeIdFor(id));
-        var comments = new List<CommentDto>(approved.Count);
-        foreach (var c in approved)
-        {
-            comments.Add(await ToCommentDto(c, cancellationToken));
-        }
+        var comments = await ToThreadAsync(_comments.GetApprovedForNode(NodeIdFor(id)), cancellationToken);
 
         return Ok(new PostDetailResponse(Post: post, Comments: comments));
     }
@@ -168,7 +163,8 @@ public sealed class BlogsController : ControllerBase
                     AuthorId: authorId,
                     Body: request.Body ?? string.Empty,
                     MediaUrl: request.MediaUrl,
-                    Kind: string.IsNullOrWhiteSpace(request.Kind) ? "post" : request.Kind.Trim()),
+                    Kind: string.IsNullOrWhiteSpace(request.Kind) ? "post" : request.Kind.Trim(),
+                    MediaAlt: request.MediaAlt),
                 cancellationToken);
         }
         catch (ArgumentException ex)
@@ -277,12 +273,22 @@ public sealed class BlogsController : ControllerBase
         var viewerFollows = await _graph.IsFollowingAsync(DemoCurrentActor, profile.ActorId, cancellationToken);
 
         return Ok(new ProfileResponse(
-            Author: ToProfileDto(profile) with { Following = viewerFollows },
+            Author: ToProfileDto(profile) with
+            {
+                Following = viewerFollows,
+                // Los TRES contadores del header se leen del autor, no de `stats`: el
+                // borde los tenía y los ponía donde nadie los mira, así que todo
+                // perfil mostraba 0 publicaciones, 0 seguidores y 0 siguiendo.
+                FollowersCount = counts.Followers,
+                FollowingCount = counts.Following,
+                PostsCount = posts.Count,
+            },
             Posts: posts,
             Stats: new ProfileStatsDto(
                 Posts: posts.Count,
                 Followers: counts.Followers,
-                Following: counts.Following)));
+                Following: counts.Following),
+            Following: viewerFollows));
     }
 
     // ── 7. Long-form (artículos) ───────────────────────────────────
@@ -304,13 +310,23 @@ public sealed class BlogsController : ControllerBase
         var (denied, authorId) = RequireActor();
         if (denied is not null) { return denied; }
 
-        var body = ComposeArticleBody(request.Title.Trim(), request.Body.Trim(), request.Tags);
+        // `hashtags` es la clave que declara el contrato de la UI; `tags` la que el
+        // borde estrenó. Se aceptan las dos y gana la que venga.
+        var tags = request.Tags is { Count: > 0 } ? request.Tags : request.Hashtags;
+        var body = ComposeArticleBody(request.Title.Trim(), request.Body.Trim(), tags);
 
         ContentStreamItem created;
         try
         {
             created = await _stream.CreateAsync(
-                new NewContentItem(AuthorId: authorId, Body: body, MediaUrl: null, Kind: "article"),
+                new NewContentItem(
+                    AuthorId: authorId,
+                    Body: body,
+                    // La portada que eligió quien escribe. Iba en `null` fijo, así que
+                    // el editor largo pedía una imagen y el artículo salía sin ella.
+                    MediaUrl: string.IsNullOrWhiteSpace(request.CoverUrl) ? null : request.CoverUrl.Trim(),
+                    Kind: "article",
+                    MediaAlt: string.IsNullOrWhiteSpace(request.CoverAlt) ? request.Title.Trim() : request.CoverAlt.Trim()),
                 cancellationToken);
         }
         catch (ArgumentException ex)
@@ -335,12 +351,17 @@ public sealed class BlogsController : ControllerBase
         var threads = new List<DmThreadSummaryDto>(inbox.Count);
         foreach (var t in inbox)
         {
+            var participants = await ToParticipants(t.Participants, cancellationToken);
             threads.Add(new DmThreadSummaryDto(
                 ThreadId: t.ThreadId,
-                Participants: await ToParticipants(t.Participants, cancellationToken),
+                Participants: participants,
                 LastMessagePreview: t.LastMessagePreview,
                 LastMessageAt: t.LastMessageAt,
-                MessageCount: t.MessageCount));
+                MessageCount: t.MessageCount,
+                Id: t.ThreadId,
+                Participant: OtherParticipant(participants, who),
+                LastMessage: t.LastMessagePreview,
+                LastAtUtc: t.LastMessageAt));
         }
 
         return Ok(new MessagesResponse(Threads: threads));
@@ -372,7 +393,7 @@ public sealed class BlogsController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "La conversación no es suya." });
         }
 
-        return Ok(new ThreadResponse(Thread: await ToDmThreadDto(thread, cancellationToken)));
+        return Ok(new ThreadResponse(Thread: await ToDmThreadDto(thread, actorId, cancellationToken)));
     }
 
     // POST /api/blogs/message { from, to, body } → { thread }
@@ -386,9 +407,10 @@ public sealed class BlogsController : ControllerBase
         var (denied, from) = RequireActor();
         if (denied is not null) { return denied; }
 
-        if (request is null || string.IsNullOrWhiteSpace(request.To) || string.IsNullOrWhiteSpace(request.Body))
+        if (request is null || string.IsNullOrWhiteSpace(request.Body)
+            || (string.IsNullOrWhiteSpace(request.To) && string.IsNullOrWhiteSpace(request.ThreadId)))
         {
-            return BadRequest(new { error = "El mensaje requiere destinatario y cuerpo." });
+            return BadRequest(new { error = "El mensaje requiere hilo o destinatario, y cuerpo." });
         }
 
         // El remitente sale del GATE y se IGNORA `request.From`: antes cualquiera
@@ -397,15 +419,42 @@ public sealed class BlogsController : ControllerBase
         MessageThread thread;
         try
         {
-            thread = await _messaging.StartThreadAsync(
-                DmContext, from, request.To.Trim(), request.Body, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(request.ThreadId))
+            {
+                // La vía que usa la app: se contesta DENTRO de la conversación abierta,
+                // donde no hay a quién elegir. El destinatario sale del hilo, no del
+                // cuerpo — pedírselo al cliente era lo que devolvía 400 siempre.
+                var target = await _messaging.GetThreadAsync(request.ThreadId.Trim(), cancellationToken);
+                if (target is null)
+                {
+                    return NotFound(new { error = $"Hilo '{request.ThreadId.Trim()}' no encontrado." });
+                }
+
+                // MISMA regla de propiedad que leer el hilo: escribir en una conversación
+                // ajena es peor que leerla. 403 y no 400 — la app los distingue, y "no es
+                // suya" no se arregla reintentando.
+                if (!target.Participants.Any(pp => string.Equals(pp, from, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { error = "La conversación no es suya." });
+                }
+
+                thread = await _messaging.ReplyAsync(target.ThreadId, from, request.Body, cancellationToken);
+            }
+            else
+            {
+                thread = await _messaging.StartThreadAsync(
+                    DmContext, from, request.To!.Trim(), request.Body, cancellationToken);
+            }
         }
         catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
 
-        return Ok(new ThreadResponse(Thread: await ToDmThreadDto(thread, cancellationToken)));
+        var dto = await ToDmThreadDto(thread, from, cancellationToken);
+        // El mensaje RECIÉN añadido, que es lo que la app lee para pintar la burbuja
+        // confirmada. Devolver sólo el hilo la dejaba sintetizándola en local.
+        return Ok(new ThreadResponse(Thread: dto, Message: dto.Messages.LastOrDefault()));
     }
 
     // ── 9. Notificaciones ──────────────────────────────────────────
@@ -422,13 +471,15 @@ public sealed class BlogsController : ControllerBase
         var dtos = events.Select(n => new NotificationDto(
             Id: n.Id,
             Type: n.Type,
-            Verb: n.Type,
-            Actor: new AuthorDto(n.Actor.Id, n.Actor.Handle, n.Actor.DisplayName, n.Actor.AvatarUrl, n.Actor.Verified),
+            Verb: MapVerb(n.Type),
+            Actor: new AuthorDto(n.Actor.Id, n.Actor.Handle, n.Actor.DisplayName, n.Actor.AvatarUrl, n.Actor.Verified,
+                ActorKey: n.Actor.Id),
             ObjectId: n.ObjectId,
             PostId: n.ObjectId,
             Text: n.Text,
             Summary: n.Text,
-            CreatedUtc: n.CreatedUtc)).ToList();
+            CreatedUtc: n.CreatedUtc,
+            CreatedAtUtc: n.CreatedUtc)).ToList();
 
         return Ok(new NotificationsResponse(Notifications: dtos));
     }
@@ -466,7 +517,24 @@ public sealed class BlogsController : ControllerBase
             posts.Add(await ToPostDto(item, DemoCurrentActor, cancellationToken));
         }
 
-        return Ok(new ExploreResponse(Posts: posts, Trending: trending));
+        // `hashtags` es la clave que la UI lee; `trending` se conserva para los
+        // consumers previos. La MISMA lista en las dos.
+        return Ok(new ExploreResponse(Posts: posts, Trending: trending, Hashtags: trending));
+    }
+
+    // GET /api/blogs/trending → { hashtags:[...] }
+    //
+    // La app lo pide sola, desde el día uno, para la barra de tendencias, y no
+    // existía: 404 → tendencias de ejemplo, SIEMPRE. Degrada en silencio (es un
+    // widget auxiliar), así que ni el cartel de datos de ejemplo lo delataba.
+    // No hay cálculo nuevo — es el MISMO ranking que ya devuelve `/explore`.
+    [HttpGet("trending")]
+    public async Task<IActionResult> Trending(CancellationToken cancellationToken)
+    {
+        var page = await _stream.GetFeedAsync(new FeedQuery(Scope: FeedScope.ForYou, PageSize: 100), cancellationToken);
+        var trending = ComputeTrending(page.Items, await ResolveReactionWeightsAsync(page.Items, cancellationToken));
+
+        return Ok(new TrendingResponse(Hashtags: trending));
     }
 
     // ── 11. Guardados ──────────────────────────────────────────────
@@ -562,7 +630,9 @@ public sealed class BlogsController : ControllerBase
                 Kind: item.Kind,
                 Excerpt: Excerpt(item.Body),
                 Reactions: state.Total,
-                Comments: item.Metrics.Comments));
+                Comments: item.Metrics.Comments,
+                PostId: item.Id,
+                Engagements: state.Total + item.Metrics.Comments));
         }
 
         var postCount = page.Items.Count;
@@ -583,7 +653,11 @@ public sealed class BlogsController : ControllerBase
                 Posts: postCount,
                 Reach: reach,
                 Engagement: engagement),
-            TopPosts: top));
+            TopPosts: top,
+            // Arriba del todo, o la consola entera se va al mock. Ver StudioResponse.
+            Followers: counts.Followers,
+            Reach: reach,
+            EngagementRate: engagement));
     }
 
     // ── Helpers ────────────────────────────────────────────────────
@@ -610,13 +684,18 @@ public sealed class BlogsController : ControllerBase
                 Handle: item.Author.Handle,
                 DisplayName: item.Author.DisplayName,
                 AvatarUrl: item.Author.AvatarUrl,
-                Verified: item.Author.Verified),
+                Verified: item.Author.Verified,
+                ActorKey: item.Author.Id),
             Body: item.Body,
             MediaUrl: item.MediaUrl,
             Media: string.IsNullOrWhiteSpace(item.MediaUrl)
                 ? System.Array.Empty<PostMediaDto>()
-                : new[] { new PostMediaDto(item.MediaUrl!, "image", BuildMediaAlt(item.Body)) },
+                // El alt de quien publicó gana; el recorte del cuerpo es la red para
+                // lo que se publicó antes de que el alt viajara — nunca al revés.
+                : new[] { new PostMediaDto(item.MediaUrl!, "image",
+                    string.IsNullOrWhiteSpace(item.MediaAlt) ? BuildMediaAlt(item.Body) : item.MediaAlt!) },
             Hashtags: ExtractTags(item.Body),
+            Mentions: ExtractMentions(item.Body),
             CreatedUtc: item.CreatedUtc,
             CreatedAtUtc: item.CreatedUtc,
             Reactions: ToReactionsDto(reactions),
@@ -635,6 +714,30 @@ public sealed class BlogsController : ControllerBase
         _ => "post",
     };
 
+    /// <summary>
+    /// Vocabulario UI del verbo de una notificación.
+    /// </summary>
+    /// <remarks>
+    /// El seam emite <c>follow|reaction|comment|mention</c> (strings abiertos, a
+    /// propósito) y la app conoce <c>follow|react|mention|reply|repost</c>. Lo que NO
+    /// reconoce <b>no falla: cae en <c>mention</c></b>, así que una reacción y un
+    /// comentario se leían como menciones — con su icono, su texto y, peor, dentro de
+    /// la pestaña «Menciones», que dejaba de significar nada. Es un VOCAB, como el
+    /// <c>Rejected → "resuelto"</c> de #104: no rompe, miente.
+    /// </remarks>
+    private static string MapVerb(string? type) => (type?.Trim().ToLowerInvariant()) switch
+    {
+        "reaction" => "react",
+        "comment" => "reply",
+        "follow" => "follow",
+        "repost" => "repost",
+        "mention" => "mention",
+        // Un verbo que no conocemos se manda tal cual: la app ya decide qué hacer con
+        // lo que no reconoce, y traducirlo a "mention" acá sería fabricar el defecto
+        // que esto viene a cerrar.
+        var other => other ?? "mention",
+    };
+
     private static string BuildMediaAlt(string? body)
     {
         var text = (body ?? string.Empty).Trim();
@@ -651,6 +754,52 @@ public sealed class BlogsController : ControllerBase
             .ToList(),
         Mine: state.MyReaction);
 
+    /// <summary>
+    /// Arma el hilo ANIDADO que la UI pinta a partir de la lista plana del nodo.
+    /// </summary>
+    /// <remarks>
+    /// <para>El borde devolvía los aprobados tal cual: padres y respuestas mezclados en
+    /// el mismo nivel. La UI lee <c>comment.replies</c>, así que cada respuesta se
+    /// pintaba como comentario suelto — el hilo se veía completo y contaba otra
+    /// conversación, que es peor que verse vacío.</para>
+    /// <para>La anidación es de 2 niveles por contrato (ADR 0100: el repositorio
+    /// re-ancla al abuelo), así que basta un pase. Una respuesta cuyo padre no esté en
+    /// el lote —moderado, borrado— sube a primer nivel: perderla sería peor.</para>
+    /// </remarks>
+    private async Task<IReadOnlyList<CommentDto>> ToThreadAsync(
+        IReadOnlyList<Comment> approved, CancellationToken cancellationToken)
+    {
+        var flat = new List<CommentDto>(approved.Count);
+        foreach (var c in approved)
+        {
+            flat.Add(await ToCommentDto(c, cancellationToken));
+        }
+
+        var byId = flat.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
+        var children = new Dictionary<string, List<CommentDto>>(StringComparer.OrdinalIgnoreCase);
+        var roots = new List<CommentDto>();
+        foreach (var c in flat)
+        {
+            if (c.ParentId is not null && byId.ContainsKey(c.ParentId))
+            {
+                if (!children.TryGetValue(c.ParentId, out var bucket))
+                {
+                    bucket = new List<CommentDto>();
+                    children[c.ParentId] = bucket;
+                }
+                bucket.Add(c);
+            }
+            else
+            {
+                roots.Add(c);
+            }
+        }
+
+        return roots
+            .Select(r => children.TryGetValue(r.Id, out var kids) ? r with { Replies = kids } : r)
+            .ToList();
+    }
+
     private async Task<CommentDto> ToCommentDto(Comment c, CancellationToken cancellationToken)
     {
         var author = await ResolveCommentAuthor(c, cancellationToken);
@@ -660,9 +809,13 @@ public sealed class BlogsController : ControllerBase
             Body: c.Body,
             CreatedUtc: c.CreatedAtUtc,
             CreatedAtUtc: c.CreatedAtUtc,
-            ParentId: c.ParentId?.ToString(),
+            // Formato "N" — el MISMO con el que el repositorio genera los `Id`. Con el
+            // formato con guiones el `parentId` no casaba con el id de ningún
+            // comentario del lote, así que no había con qué emparejar la respuesta.
+            ParentId: c.ParentId?.ToString("N"),
             Likes: c.Likes,
-            LikeCount: c.Likes);
+            LikeCount: c.Likes,
+            Replies: Array.Empty<CommentDto>());
     }
 
     // Resuelve el autor del comentario al AuthorDto (objeto) que la UI lee. Si el
@@ -686,7 +839,8 @@ public sealed class BlogsController : ControllerBase
             Handle: HandleFromName(c.AuthorName),
             DisplayName: string.IsNullOrWhiteSpace(c.AuthorName) ? id : c.AuthorName,
             AvatarUrl: null,
-            Verified: false);
+            Verified: false,
+            ActorKey: id);
     }
 
     // Deriva un @handle estable del nombre visible (minúsculas, solo alfanuméricos).
@@ -702,7 +856,12 @@ public sealed class BlogsController : ControllerBase
         Handle: p.Handle,
         DisplayName: p.DisplayName,
         AvatarUrl: p.AvatarUrl,
-        Verified: p.Verified);
+        Verified: p.Verified,
+        ActorKey: p.ActorId,
+        // La bio y el banner ya vivían en SocialProfile; el DTO no los llevaba, así
+        // que el header del perfil salía sin biografía y sin portada.
+        Bio: p.Bio,
+        BannerUrl: p.BannerUrl);
 
     private static FeedScope ParseScope(string? scope) => (scope?.Trim().ToLowerInvariant()) switch
     {
@@ -739,15 +898,45 @@ public sealed class BlogsController : ControllerBase
         return list;
     }
 
-    private async Task<DmThreadDto> ToDmThreadDto(MessageThread thread, CancellationToken cancellationToken) => new(
-        ThreadId: thread.ThreadId,
-        Participants: await ToParticipants(thread.Participants, cancellationToken),
-        Messages: thread.Messages.Select(m => new DmMessageDto(
+    private async Task<DmThreadDto> ToDmThreadDto(
+        MessageThread thread, string viewerId, CancellationToken cancellationToken)
+    {
+        var participants = await ToParticipants(thread.Participants, cancellationToken);
+        var byId = new Dictionary<string, AuthorDto>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in participants)
+        {
+            byId[p.Id] = p;
+        }
+
+        var messages = thread.Messages.Select(m => new DmMessageDto(
             Id: m.MessageId,
             From: m.From,
             Body: m.Body,
-            SentAt: m.SentAt)).ToList(),
-        LastMessageAt: thread.LastMessageAt);
+            SentAt: m.SentAt,
+            // El autor va como OBJETO: el id suelto no le sirve al normalizador, que
+            // descartaba cada mensaje y dejaba la conversación en blanco.
+            Author: byId.TryGetValue(m.From, out var a) ? a : SyntheticAuthor(m.From),
+            CreatedAtUtc: m.SentAt,
+            Outgoing: string.Equals(m.From, viewerId, StringComparison.OrdinalIgnoreCase),
+            ThreadId: thread.ThreadId)).ToList();
+
+        return new DmThreadDto(
+            ThreadId: thread.ThreadId,
+            Participants: participants,
+            Messages: messages,
+            LastMessageAt: thread.LastMessageAt,
+            Id: thread.ThreadId,
+            Participant: OtherParticipant(participants, viewerId));
+    }
+
+    /// <summary>
+    /// El otro lado de una conversación 1:1. Quien mira no se lista a sí mismo; si el
+    /// hilo no lo incluye (no debería: la propiedad se comprueba antes), se devuelve el
+    /// primero antes que <c>null</c> — una fila sin participante la UI la descarta entera.
+    /// </summary>
+    private static AuthorDto? OtherParticipant(IReadOnlyList<AuthorDto> participants, string viewerId)
+        => participants.FirstOrDefault(p => !string.Equals(p.Id, viewerId, StringComparison.OrdinalIgnoreCase))
+           ?? participants.FirstOrDefault();
 
     /// <summary>
     /// El peso de reacciones de cada post del lote, resuelto de una vez.
@@ -810,7 +999,8 @@ public sealed class BlogsController : ControllerBase
             .OrderByDescending(kv => kv.Value.Weight)
             .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
             .Take(10)
-            .Select(kv => new TrendingTagDto(Tag: kv.Key, Posts: kv.Value.Posts, Score: kv.Value.Weight))
+            .Select(kv => new TrendingTagDto(
+                Tag: kv.Key, Posts: kv.Value.Posts, Score: kv.Value.Weight, PostCount: kv.Value.Posts))
             .ToList();
     }
 
@@ -831,6 +1021,25 @@ public sealed class BlogsController : ControllerBase
         return tags;
     }
 
+    // Extrae las menciones (@handle) del cuerpo, sin el prefijo @, en minúsculas.
+    // Gemelo exacto de ExtractTags: el contrato declara las dos y el borde derivaba
+    // una sola.
+    private static IReadOnlyList<string> ExtractMentions(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return Array.Empty<string>();
+        }
+
+        var handles = new List<string>();
+        var matches = System.Text.RegularExpressions.Regex.Matches(body, @"@(\w[\w-]*)");
+        foreach (System.Text.RegularExpressions.Match m in matches)
+        {
+            handles.Add(m.Groups[1].Value.ToLowerInvariant());
+        }
+        return handles;
+    }
+
     // Normaliza un tag de entrada: sin #, trim, minúsculas.
     private static string NormalizeTag(string? tag)
         => string.IsNullOrWhiteSpace(tag) ? string.Empty : tag.Trim().TrimStart('#').ToLowerInvariant();
@@ -843,7 +1052,8 @@ public sealed class BlogsController : ControllerBase
 
     // Autor sintético estable cuando el actor no está en el catálogo de perfiles.
     private static AuthorDto SyntheticAuthor(string actorId)
-        => new(Id: actorId, Handle: actorId, DisplayName: actorId, AvatarUrl: null, Verified: false);
+        => new(Id: actorId, Handle: actorId, DisplayName: actorId, AvatarUrl: null, Verified: false,
+            ActorKey: actorId);
 
     // nodeId determinista a partir del id string del post (FNV-1a 32-bit, forzado
     // positivo) para reusar el ICommentReader (indexado por int) sin schema nuevo.
@@ -863,16 +1073,44 @@ public sealed class BlogsController : ControllerBase
     // ── Request DTOs (binding del módulo blogs) ────────────────────
 
     /// <summary>POST /api/blogs/post — cuerpo + media opcional (+ autor/kind opcionales).</summary>
-    public sealed record CreatePostRequest(string? Body, string? MediaUrl, string? AuthorId, string? Kind);
+    /// <param name="MediaAlt">
+    /// El texto alternativo que escribi&#243; quien publica. El compositor lo PIDE y lo
+    /// manda, y el record no lo declaraba: System.Text.Json lo descartaba sin decir
+    /// nada, as&#237; que el alt de cada imagen acababa siendo un recorte del cuerpo.
+    /// </param>
+    public sealed record CreatePostRequest(string? Body, string? MediaUrl, string? AuthorId, string? Kind, string? MediaAlt = null);
 
     /// <summary>POST /api/blogs/post/{id}/react — el tipo de reacción.</summary>
     public sealed record ReactRequest(string? Type);
 
     /// <summary>POST /api/blogs/article — artículo long-form (Kind=article).</summary>
-    public sealed record CreateArticleRequest(string? Author, string? Title, string? Body, IReadOnlyList<string>? Tags);
+    /// <param name="CoverUrl">
+    /// La portada del art&#237;culo. El editor largo la pide en su propio campo y la
+    /// manda; el record no la declaraba, as&#237; que el art&#237;culo se publicaba SIN
+    /// portada y sin que nada fallara — y el modo demo s&#237; la pintaba, porque el
+    /// post sintetizado en local s&#237; la usa.
+    /// </param>
+    /// <param name="Hashtags">Alias de <paramref name="Tags"/>: es la clave que declara el contrato de la UI.</param>
+    public sealed record CreateArticleRequest(
+        string? Author,
+        string? Title,
+        string? Body,
+        IReadOnlyList<string>? Tags,
+        string? CoverUrl = null,
+        string? CoverAlt = null,
+        IReadOnlyList<string>? Hashtags = null);
 
     /// <summary>POST /api/blogs/message — DM: remitente (opcional) + destinatario + cuerpo.</summary>
-    public sealed record SendMessageRequest(string? From, string? To, string? Body);
+    /// <param name="ThreadId">
+    /// El hilo al que se responde. <b>Es la forma que manda la app</b> —un DM se
+    /// contesta desde la conversaci&#243;n abierta, donde no hay a qui&#233;n elegir— y el
+    /// record s&#243;lo declaraba <c>To</c>: el destinatario llegaba vac&#237;o y el
+    /// endpoint contestaba <b>400 siempre</b>. El cliente lo tapaba sintetizando la
+    /// burbuja, as&#237; que el mensaje se ve&#237;a enviado y no exist&#237;a en ninguna parte.
+    /// Se aceptan las dos formas: con hilo se responde en &#233;l; con <c>To</c> se abre
+    /// (o se retoma) el de esa pareja.
+    /// </param>
+    public sealed record SendMessageRequest(string? From, string? To, string? Body, string? ThreadId = null);
 
     /// <summary>POST /api/blogs/saved — guardar un post (owner opcional).</summary>
     public sealed record SaveRequest(string? User, string? PostId);
@@ -894,7 +1132,17 @@ public sealed class BlogsController : ControllerBase
         int Followers,
         int FollowingCount);
 
-    public sealed record ProfileResponse(AuthorDto Author, IReadOnlyList<PostDto> Posts, ProfileStatsDto Stats);
+    /// <param name="Following">
+    /// Contrato UI: <c>normalizeProfile</c> lee <c>following</c> en la RAÍZ de la
+    /// respuesta, no dentro de <c>author</c>. Anidado se descartaba, así que el
+    /// botón del perfil decía «Seguir» sobre alguien a quien ya se seguía — y al
+    /// pulsarlo dejaba de seguirlo. Se emite en los dos sitios.
+    /// </param>
+    public sealed record ProfileResponse(
+        AuthorDto Author,
+        IReadOnlyList<PostDto> Posts,
+        ProfileStatsDto Stats,
+        bool Following = false);
 
     public sealed record PostDto(
         string Id,
@@ -907,6 +1155,9 @@ public sealed class BlogsController : ControllerBase
         IReadOnlyList<PostMediaDto> Media,
         // Contrato UI: `hashtags:[...]` derivado del cuerpo (#tag).
         IReadOnlyList<string> Hashtags,
+        // Contrato UI: `mentions:[...]` (@handle) — la MISMA derivación que los
+        // hashtags, sobre el mismo cuerpo. Se emitía una y no la otra.
+        IReadOnlyList<string> Mentions,
         DateTime CreatedUtc,
         // Contrato UI: la app lee `createdAtUtc`, no `createdUtc` (o muestra "ahora").
         DateTime CreatedAtUtc,
@@ -929,7 +1180,21 @@ public sealed class BlogsController : ControllerBase
         // Contrato UI (solo header de perfil): ¿el viewer sigue a este autor?
         // Defaultea a false para no romper los otros call-sites de AuthorDto
         // (post/notificación/participante), donde el dato no aplica.
-        bool Following = false);
+        bool Following = false,
+        // Contrato UI: `normalizeAuthor` resuelve `actorKey` ?? `id`. La canónica es
+        // la primera; `id` funcionaba por el `??` — la red de seguridad, no el
+        // arreglo (ADR 0083). Misma clave que el resto de la app usa para seguir,
+        // abrir perfil y emitir `authorfollowed`.
+        string? ActorKey = null,
+        // Contrato UI (header de perfil): la app pinta `author.bio` y los TRES
+        // contadores del header desde el AUTOR, no desde `stats` —que el borde sí
+        // emitía y nadie lee—. Nulos/cero en los call-sites donde no aplica
+        // (post/notificación/participante), que es la verdad sobre ellos.
+        string? Bio = null,
+        string? BannerUrl = null,
+        int FollowersCount = 0,
+        int FollowingCount = 0,
+        int PostsCount = 0);
 
     public sealed record ReactionsDto(
         int Total,
@@ -953,7 +1218,12 @@ public sealed class BlogsController : ControllerBase
         DateTime CreatedAtUtc,
         string? ParentId,
         int Likes,
-        int LikeCount);
+        int LikeCount,
+        // Contrato UI: el hilo se pinta ANIDADO (`comment.replies`), no plano. El
+        // borde devolvía la lista plana del nodo con su `parentId`, así que cada
+        // respuesta salía como comentario de primer nivel: el hilo se veía, pero
+        // contaba otra conversación. La anidación es de 2 niveles (ADR 0100).
+        IReadOnlyList<CommentDto> Replies);
 
     public sealed record ProfileStatsDto(int Posts, int Followers, int Following);
 
@@ -961,26 +1231,58 @@ public sealed class BlogsController : ControllerBase
 
     public sealed record MessagesResponse(IReadOnlyList<DmThreadSummaryDto> Threads);
 
-    public sealed record ThreadResponse(DmThreadDto Thread);
+    /// <param name="Message">
+    /// Contrato UI: <c>sendMessage</c> lee <c>message</c> (el mensaje reci&#233;n
+    /// a&#241;adido), no el hilo entero. Sin &#233;l el normalizador devolv&#237;a
+    /// <c>null</c> y el cliente sintetizaba la burbuja en local — la misma forma
+    /// de #104: un env&#237;o que no ocurri&#243; se ve igual que uno que s&#237;.
+    /// </param>
+    public sealed record ThreadResponse(DmThreadDto Thread, DmMessageDto? Message = null);
 
+    /// <remarks>
+    /// <b>Cada clave nueva de aqu&#237; es la diferencia entre una bandeja llena y una
+    /// vac&#237;a.</b> <c>normalizeThread</c> exige <c>id</c> Y <c>participant</c> y
+    /// DESCARTA la fila entera si falta cualquiera de los dos; el borde emit&#237;a
+    /// <c>threadId</c> y <c>participants</c> (plural, la lista cruda), as&#237; que las
+    /// descartaba todas y devolv&#237;a <c>[]</c> — una respuesta v&#225;lida, sin error
+    /// y sin cartel de datos de ejemplo.
+    /// </remarks>
     public sealed record DmThreadSummaryDto(
         string ThreadId,
         IReadOnlyList<AuthorDto> Participants,
         string LastMessagePreview,
         DateTimeOffset LastMessageAt,
-        int MessageCount);
+        int MessageCount,
+        string? Id = null,
+        // El OTRO participante, ya resuelto a autor: una conversaci&#243;n 1:1 se
+        // lista por con qui&#233;n es, y quien mira no se lista a s&#237; mismo.
+        AuthorDto? Participant = null,
+        string? LastMessage = null,
+        DateTimeOffset? LastAtUtc = null);
 
     public sealed record DmThreadDto(
         string ThreadId,
         IReadOnlyList<AuthorDto> Participants,
         IReadOnlyList<DmMessageDto> Messages,
-        DateTimeOffset LastMessageAt);
+        DateTimeOffset LastMessageAt,
+        string? Id = null,
+        AuthorDto? Participant = null);
 
+    /// <remarks>
+    /// <c>normalizeMessage</c> exige <c>id</c> Y <c>author</c> (un OBJETO), y el borde
+    /// emit&#237;a <c>from</c> (un id suelto): cada mensaje se descartaba, as&#237; que la
+    /// conversaci&#243;n abierta sal&#237;a vac&#237;a. <c>outgoing</c> es lo que alinea la
+    /// burbuja a la derecha — sin &#233;l, los mensajes propios se ven como ajenos.
+    /// </remarks>
     public sealed record DmMessageDto(
         string Id,
         string From,
         string Body,
-        DateTimeOffset SentAt);
+        DateTimeOffset SentAt,
+        AuthorDto? Author = null,
+        DateTimeOffset? CreatedAtUtc = null,
+        bool Outgoing = false,
+        string? ThreadId = null);
 
     // ── OLA 6 — Notificaciones ─────────────────────────────────────
 
@@ -998,13 +1300,31 @@ public sealed class BlogsController : ControllerBase
         string Text,
         // Contrato UI: la app lee `summary`, no `text`.
         string Summary,
-        DateTime CreatedUtc);
+        DateTime CreatedUtc,
+        // Contrato UI: la app lee `createdAtUtc`; con `createdUtc` a secas caía al
+        // `new Date()` del normalizador y TODA notificación decía "ahora".
+        DateTime? CreatedAtUtc = null);
 
     // ── OLA 6 — Explore / trending ─────────────────────────────────
 
-    public sealed record ExploreResponse(IReadOnlyList<PostDto> Posts, IReadOnlyList<TrendingTagDto> Trending);
+    /// <param name="Hashtags">
+    /// Contrato UI: <c>normalizeSearch</c> lee <c>hashtags</c>. El borde emit&#237;a la
+    /// MISMA lista bajo <c>trending</c>, as&#237; que la pesta&#241;a de hashtags de
+    /// explorar sal&#237;a vac&#237;a con el servidor lleno. Las dos claves llevan lo mismo.
+    /// </param>
+    public sealed record ExploreResponse(
+        IReadOnlyList<PostDto> Posts,
+        IReadOnlyList<TrendingTagDto> Trending,
+        IReadOnlyList<TrendingTagDto>? Hashtags = null);
 
-    public sealed record TrendingTagDto(string Tag, int Posts, int Score);
+    /// <summary>La bandeja de tendencias — <c>GET /trending</c>, que la app pide sola.</summary>
+    public sealed record TrendingResponse(IReadOnlyList<TrendingTagDto> Hashtags);
+
+    /// <param name="PostCount">
+    /// Contrato UI: el contador de la faceta de tendencias. <c>posts</c> no lo lee
+    /// nadie, as&#237; que cada tendencia sal&#237;a con un 0 al lado.
+    /// </param>
+    public sealed record TrendingTagDto(string Tag, int Posts, int Score, int PostCount = 0);
 
     // ── OLA 6 — Guardados ──────────────────────────────────────────
 
@@ -1012,7 +1332,21 @@ public sealed class BlogsController : ControllerBase
 
     // ── OLA 6 — Creator Studio ─────────────────────────────────────
 
-    public sealed record StudioResponse(AuthorDto Author, StudioMetricsDto Metrics, IReadOnlyList<StudioPostDto> TopPosts);
+    /// <remarks>
+    /// <b>Las tres cifras van en la RA&#205;Z y no s&#243;lo en <c>metrics</c>, y de eso depende
+    /// que el estudio exista.</b> <c>normalizeStudio</c> devuelve <c>null</c> cuando no
+    /// encuentra <c>followers</c> ni <c>reach</c> arriba del todo, y ese <c>null</c> manda
+    /// la consola ENTERA al mock — con su cartel de datos de ejemplo — aunque el servidor
+    /// traiga los n&#250;meros buenos. Es el defecto de la consola del instructor de #102,
+    /// calcado. <c>metrics</c> se conserva para los consumers previos.
+    /// </remarks>
+    public sealed record StudioResponse(
+        AuthorDto Author,
+        StudioMetricsDto Metrics,
+        IReadOnlyList<StudioPostDto> TopPosts,
+        int Followers = 0,
+        int Reach = 0,
+        double EngagementRate = 0d);
 
     public sealed record StudioMetricsDto(
         int Followers,
@@ -1021,10 +1355,22 @@ public sealed class BlogsController : ControllerBase
         int Reach,
         double Engagement);
 
+    /// <param name="PostId">
+    /// Contrato UI: <c>normalizeTopPosts</c> exige <c>postId</c> y descarta la fila sin
+    /// &#233;l — la tabla de contenido top sal&#237;a vac&#237;a. Mismo valor que <c>id</c>.
+    /// </param>
+    /// <param name="Engagements">
+    /// Reacciones + comentarios del post. Es la MISMA suma con la que el propio endpoint
+    /// calcula <c>reach</c>, aplicada a una fila; no hay dato nuevo detr&#225;s.
+    /// <c>impressions</c> NO se emite: no hay seam que cuente vistas y un n&#250;mero
+    /// inventado en una tabla de m&#233;tricas es peor que una columna en cero.
+    /// </param>
     public sealed record StudioPostDto(
         string Id,
         string Kind,
         string Excerpt,
         int Reactions,
-        int Comments);
+        int Comments,
+        string? PostId = null,
+        int Engagements = 0);
 }
