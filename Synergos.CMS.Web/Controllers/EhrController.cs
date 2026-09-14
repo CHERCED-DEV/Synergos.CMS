@@ -355,7 +355,7 @@ public sealed class EhrController : ControllerBase
         cards.Add(new HomeCardDto(
             Id: "card-reminder-health", Kind: "reminder",
             Title: "Cuidado preventivo",
-            Detail: "Revisa tus vacunas y tamizajes al día en tu resumen de salud.",
+            Detail: "Revisa qué tamizajes te corresponden en tu resumen de salud.",
             Action: "health", ActionLabel: "Ver mi salud", Tone: "neutral"));
 
         return Ok(new PortalHomeResponse(
@@ -551,6 +551,12 @@ public sealed class EhrController : ControllerBase
 
     // 17. Tablero clínico del día (schedule board con máquina de estados)
     // GET /api/ehr/schedule?date= → { slots:[...] } (deriva de la agenda viva)
+    //
+    // `checkedInAhead` NO se emite (HU #106). Que el paciente llegara antes de su hora es un
+    // HECHO —lo sabe recepción, no este borde—, y salía de `a.Id.GetHashCode() % 2`: cara o
+    // cruz, y encima distinta en cada arranque del proceso porque el hash de string está
+    // aleatorizado. El día que la agenda registre la llegada (un `CheckedInAtUtc` en
+    // `ClinicalAppointment`), la clave vuelve con el dato detrás.
     [HttpGet("schedule")]
     public async Task<IActionResult> Schedule([FromQuery] string? date, CancellationToken cancellationToken)
     {
@@ -569,8 +575,7 @@ public sealed class EhrController : ControllerBase
                 DurationMin: Math.Max(0, (int)(a.EndUtc - a.StartUtc).TotalMinutes),
                 Reason: string.IsNullOrWhiteSpace(a.Specialty) ? "Consulta" : a.Specialty,
                 Type: "in-person",
-                State: DeriveScheduleState(a.StartUtc, a.EndUtc, now),
-                CheckedInAhead: (Math.Abs(a.Id.GetHashCode()) % 2) == 0))
+                State: DeriveScheduleState(a.StartUtc, a.EndUtc, now)))
             .ToList();
         return Ok(new ScheduleResponse(slots));
     }
@@ -591,39 +596,49 @@ public sealed class EhrController : ControllerBase
         }
         var history = await _records.GetHistoryAsync(patient, cancellationToken);
 
-        // Condiciones/alergias son datos REALES del registro; vacunas y cuidado
-        // preventivo se derivan de forma determinista (capa demo, coherente con la
-        // tarjeta "Cuidado preventivo" del home).
+        // Condiciones y alergias son datos REALES del registro clínico.
+        //
+        // Vacunas y cuidado preventivo NO se fabrican, y es el criterio de fondo de esta
+        // superficie: **si el valor entero de un campo es ser cierto —el estado de una
+        // vacuna, el resultado de un tamizaje— no se rellena; sin dato, se dice que no hay
+        // dato.** Una lista de alergias o de vacunas es aquello sobre lo que alguien decide
+        // qué recetar, así que un valor plausible e inventado ahí no es un hueco cosmético:
+        // es una decisión clínica tomada sobre algo que nadie comprobó.
+        //
+        // Hasta la HU #106 las dos salían de `person.Id.GetHashCode()` bajo un comentario que
+        // las llamaba «deterministas». En .NET Core el hash de string está **aleatorizado por
+        // proceso**, así que «Influenza: al día» pasaba a «vencida» en cada reinicio del
+        // servidor sin que nadie tocara nada — el código afirmaba justo la propiedad que no
+        // cumplía, que es la forma de #72 y #82. Y derivarlo del id de forma de verdad
+        // determinista TAMPOCO es la salida: cambia un dato que varía al azar por uno que
+        // miente siempre igual.
         var conditions = (history?.ActiveProblems?.Count > 0 ? history.ActiveProblems : person.ChronicConditions)
             ?? Array.Empty<string>();
         var allergies = (history?.Allergies?.Count > 0 ? history.Allergies : person.Allergies)
             ?? Array.Empty<string>();
 
-        var seed = Math.Abs(person.Id.GetHashCode());
-        var immunizations = new List<ImmunizationDto>
-        {
-            new($"imm-flu-{person.Id}", "Influenza (anual)", ClinicRelDate(-8 - (seed % 4)), (seed % 3) == 0 ? "due" : "complete"),
-            new($"imm-covid-{person.Id}", "COVID-19 (refuerzo)", ClinicRelDate(-14 - (seed % 6)), (seed % 2) == 0 ? "complete" : "due"),
-            new($"imm-tdap-{person.Id}", "Tétanos/difteria (Td)", ClinicRelDate(-60 - (seed % 24)), person.AgeYears >= 50 ? "overdue" : "complete"),
-        };
+        // Cuidado preventivo: se emite QUÉ le corresponde a esta persona —eso se deriva de su
+        // edad y su sexo, que son datos del padrón— y NO se emite en qué estado va ni para
+        // cuándo, porque eso exige saber si se lo hizo, y aquí no lo sabe nadie.
         var maintenance = new List<HealthMaintenanceDto>();
         if (person.AgeYears >= 45)
         {
             maintenance.Add(new($"pm-colon-{person.Id}", "Tamizaje de colon",
-                "Colonoscopia o prueba de sangre oculta según riesgo.", person.AgeYears >= 50 ? "overdue" : "due", ClinicRelDate(-2)));
+                "Colonoscopia o prueba de sangre oculta según riesgo."));
         }
+        // Control de presión: le corresponde a toda persona adulta, no se deriva de nada más.
         maintenance.Add(new($"pm-bp-{person.Id}", "Control de presión arterial",
-            "Toma de presión en consulta de control.", (seed % 2) == 0 ? "due" : "complete", ClinicRelDate(1)));
+            "Toma de presión en consulta de control."));
         if (string.Equals(person.Gender, "F", StringComparison.OrdinalIgnoreCase) && person.AgeYears >= 40)
         {
             maintenance.Add(new($"pm-mammo-{person.Id}", "Mamografía",
-                "Tamizaje de mama bienal.", "due", ClinicRelDate(3)));
+                "Tamizaje de mama bienal."));
         }
 
         return Ok(new HealthSummaryResponse(
             Conditions: conditions,
             Allergies: allergies,
-            Immunizations: immunizations,
+            Immunizations: Array.Empty<ImmunizationDto>(),
             Maintenance: maintenance));
     }
 
@@ -639,10 +654,6 @@ public sealed class EhrController : ControllerBase
         if (minutesToStart <= 60) { return "arrived"; }
         return "scheduled";
     }
-
-    // Fecha relativa (meses respecto a hoy UTC) en formato yyyy-MM-dd para la demo.
-    private static string ClinicRelDate(int months)
-        => DateTime.UtcNow.AddMonths(months).ToString("yyyy-MM-dd");
 
     private static bool IsClinicalContext(string contextRef)
         => !string.IsNullOrEmpty(contextRef)
@@ -1179,15 +1190,48 @@ public sealed class EhrController : ControllerBase
         int UnreadMessages,
         int PendingCheckins);
 
+    /// <summary>
+    /// Una fila del tablero del día. <b>Sin <c>checkedInAhead</c></b>: ver la nota del endpoint
+    /// <c>schedule</c> — si el paciente llegó antes es un hecho, y este borde no lo sabe.
+    /// </summary>
     public sealed record ScheduleSlotDto(
         string AppointmentId, string PatientId, string PatientName, string DoctorId, string DoctorName,
-        string Time, int DurationMin, string Reason, string Type, string State, bool CheckedInAhead);
+        string Time, int DurationMin, string Reason, string Type, string State);
 
     public sealed record ScheduleResponse(IReadOnlyList<ScheduleSlotDto> Slots);
 
+    /// <summary>
+    /// Una vacuna aplicada. <b>Este borde no construye ninguna</b> y <c>immunizations</c> sale
+    /// siempre vacío (HU #106).
+    /// </summary>
+    /// <remarks>
+    /// <para>No es un hueco disimulado: la lista vacía dice la verdad —el EHR <b>no guarda
+    /// registro de vacunación de nadie</b>, así que para todo paciente hay cero— y la UI la
+    /// pinta como «Sin vacunas registradas». Lo que había antes era otra cosa: tres vacunas
+    /// inventadas con fecha y estado derivados de <c>person.Id.GetHashCode()</c>, o sea un
+    /// carné de vacunas que cambiaba de contenido en cada reinicio del servidor. Un estado de
+    /// vacunación cuyo valor entero es ser cierto no se rellena — es aquello sobre lo que
+    /// alguien decide qué recetar.</para>
+    /// <para><b>Disparador para volver a llenarla</b>: que exista un seam de vacunación en
+    /// <c>Synergos.CMS.Interfaces</c> —un <c>IImmunizationRegistry</c>, o vacunas dentro de
+    /// <see cref="IClinicalRecordService"/>— que sepa decir qué se aplicó y cuándo. El
+    /// <c>record</c> se conserva declarado para que ese día la clave recupere su forma sin
+    /// tener que reinventarla.</para>
+    /// </remarks>
     public sealed record ImmunizationDto(string Id, string Name, string Date, string Status);
 
-    public sealed record HealthMaintenanceDto(string Id, string Name, string Detail, string Status, string DueDate);
+    /// <summary>
+    /// Una recomendación de cuidado preventivo: QUÉ le corresponde a esta persona.
+    /// </summary>
+    /// <remarks>
+    /// <b>Sin <c>status</c> ni <c>dueDate</c></b> (HU #106). El <i>qué</i> se deriva de la edad
+    /// y el sexo del padrón —tamizaje de colon, mamografía—, y eso es una guía clínica, no un
+    /// invento. El <i>estado</i> (<c>due</c>/<c>overdue</c>/<c>complete</c>) y la <i>fecha</i>
+    /// exigen saber si la persona se lo hizo, y aquí no lo sabe nadie: salían de
+    /// <c>person.Id.GetHashCode()</c>. <b>Disparador</b>: un seam que registre tamizajes
+    /// realizados; hasta entonces se emite la recomendación y nada más.
+    /// </remarks>
+    public sealed record HealthMaintenanceDto(string Id, string Name, string Detail);
 
     public sealed record HealthSummaryResponse(
         IReadOnlyList<string> Conditions,
