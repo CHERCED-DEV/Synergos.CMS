@@ -115,6 +115,28 @@ function mandadoPorLaUi(app) {
     walk(dir);
     if (ficheros.length === 0) return null;
 
+    /**
+     * Las interfaces y alias de tipo del módulo, por nombre.
+     *
+     * Hace falta porque el patrón dominante no es un literal ni un tipo inline: el cuerpo
+     * llega como un parámetro con TIPO NOMBRADO (`draft: NewMessage`). Sin resolverlo, cuatro
+     * rutas de Blogs quedaban fuera del cruce — y eran justo las que daban 400 el 100 % de las
+     * veces (#109).
+     */
+    const tipos = new Map();
+    const indexar = (d) => {
+        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+            const q = path.join(d, e.name);
+            if (e.isDirectory()) { indexar(q); continue; }
+            if (!e.name.endsWith('.ts')) continue;
+            const src = fs.readFileSync(q, 'utf8');
+            for (const m of src.matchAll(/(?:interface|type)\s+(\w+)\s*(?:=\s*)?\{([\s\S]*?)\n\}/g)) {
+                tipos.set(m[1], m[2]);
+            }
+        }
+    };
+    indexar(dir);
+
     const porRuta = new Map();
     const noLiterales = [];
 
@@ -168,16 +190,52 @@ function mandadoPorLaUi(app) {
          * de los defectos más caros del barrido: sin esto el gate no los vería.
          */
         const tipoInlineDeParametro = (variable, desde) => {
-            for (let j = desde; j >= Math.max(0, desde - 30); j--) {
+            const tope = inicioDelMetodo(desde);
+            for (let j = desde; j >= tope; j--) {
                 const m = lineas[j].match(new RegExp(`^\\s*${variable}\\s*:\\s*\\{(.*)\\}`));
                 if (m) return m[1].replace(/;/g, ',');
             }
             return null;
         };
 
+        /**
+         * Hasta dónde puede mirar hacia atrás una búsqueda: el cierre del método ANTERIOR.
+         *
+         * Sin este tope, resolver el parámetro de una llamada se colaba al método de arriba y
+         * cogía SU cuerpo: `POST /lead` acabó denunciado por mandar `slot` y `mode`, que son
+         * del método de agendar visita, veinte líneas más arriba. Un gate que denuncia un
+         * cuerpo correcto se desactiva a la tercera, así que el alcance se acota de verdad en
+         * vez de subirle el número de líneas.
+         */
+        const inicioDelMetodo = (desde) => {
+            for (let j = desde; j >= 0; j--) {
+                if (/^ {2}\}/.test(lineas[j])) return j + 1;
+            }
+            return 0;
+        };
+
+        /** El TIPO NOMBRADO de un parámetro (`draft: NewMessage,`), resuelto en el índice. */
+        const tipoNombradoDeParametro = (variable, desde) => {
+            const tope = inicioDelMetodo(desde);
+            for (let j = desde; j >= tope; j--) {
+                const m = lineas[j].match(new RegExp(`^\\s*${variable}\\s*:\\s*(\\w+)\\s*,?\\s*$`));
+                if (m && tipos.has(m[1])) {
+                    // Los campos de una interfaz van con `;` o con salto, y llevan `readonly`
+                    // y `?` que no son parte del nombre.
+                    return tipos.get(m[1])
+                        .replace(/;/g, ',')
+                        .replace(/\n/g, ',')
+                        .replace(/\breadonly\s+/g, '')
+                        .replace(/\?\s*:/g, ':');
+                }
+            }
+            return null;
+        };
+
         /** El objeto literal asignado a una variable, buscando hacia atrás. */
         const literalDeVariable = (variable, desde) => {
-            for (let j = desde; j >= Math.max(0, desde - 40); j--) {
+            const tope = inicioDelMetodo(desde);
+            for (let j = desde; j >= tope; j--) {
                 if (!new RegExp(`\\b(?:const|let|var)\\s+${variable}\\s*(?::[^=]*)?=\\s*\\{`).test(lineas[j])) continue;
                 // Junta hasta la llave de cierre al mismo nivel de indentación.
                 let bloque = lineas[j].slice(lineas[j].indexOf('{') + 1);
@@ -213,7 +271,9 @@ function mandadoPorLaUi(app) {
             if (argumento.startsWith('{')) {
                 claves = clavesDeLiteral(argumento.slice(1).split('}')[0]);
             } else if (/^[A-Za-z_]\w*$/.test(argumento)) {
-                const bloque = literalDeVariable(argumento, i) ?? tipoInlineDeParametro(argumento, i);
+                const bloque = literalDeVariable(argumento, i)
+                    ?? tipoInlineDeParametro(argumento, i)
+                    ?? tipoNombradoDeParametro(argumento, i);
                 if (bloque !== null) claves = clavesDeLiteral(bloque);
             }
 
