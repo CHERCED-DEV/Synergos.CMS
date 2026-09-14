@@ -47,10 +47,17 @@ public sealed class PaymentProviderOutcomeTests
         public string Name => "guionado";
         public bool MuevePlata => true;
 
-        public Pagos.PaymentAttempt Authorize(Money amount, Ref payer) => _respuesta;
-        public Pagos.PaymentAttempt Capture(string r, Money a) => _respuesta;
-        public Pagos.PaymentAttempt Refund(string r, Money a) => _respuesta;
-        public Pagos.PaymentAttempt Void(string r) => _respuesta;
+        public Task<Pagos.PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, CancellationToken ct = default)
+            => Task.FromResult(_respuesta);
+
+        public Task<Pagos.PaymentAttempt> CaptureAsync(string r, Money a, CancellationToken ct = default)
+            => Task.FromResult(_respuesta);
+
+        public Task<Pagos.PaymentAttempt> RefundAsync(string r, Money a, CancellationToken ct = default)
+            => Task.FromResult(_respuesta);
+
+        public Task<Pagos.PaymentAttempt> VoidAsync(string r, CancellationToken ct = default)
+            => Task.FromResult(_respuesta);
     }
 
     private static readonly Ref Compra = Ref.Create("tienda.compra", "c-1");
@@ -67,13 +74,13 @@ public sealed class PaymentProviderOutcomeTests
     // ── Las cuatro respuestas ───────────────────────────────────────────────
 
     [Fact]
-    public void Un_rechazo_del_banco_NO_es_transitorio_y_lleva_su_motivo()
+    public async Task Un_rechazo_del_banco_NO_es_transitorio_y_lleva_su_motivo()
     {
         // Es la mitad del defecto: reintentar un rechazo firme no cambia la respuesta, solo
         // molesta al comprador. Y «fondos insuficientes» lleva a una acción; «el pago falló» no.
         var svc = Con(Pagos.PaymentAttempt.Declined("Fondos insuficientes."));
 
-        var r = svc.Authorize(Compra, Pagador, Cop(119000), Llave("a"));
+        var r = await svc.AuthorizeAsync(Compra, Pagador, Cop(119000), Llave("a"));
 
         Assert.Equal("payments.payment_declined", r.Rejection!.Code);
         Assert.False(r.Rejection.IsTransient);
@@ -81,44 +88,44 @@ public sealed class PaymentProviderOutcomeTests
     }
 
     [Fact]
-    public void Una_pasarela_caida_SI_es_transitoria()
+    public async Task Una_pasarela_caida_SI_es_transitoria()
     {
         // La otra mitad: no se sabe qué pasó, y no saberlo es razón para volver a preguntar.
         var svc = Con(Pagos.PaymentAttempt.Unavailable("La pasarela no respondió."));
 
-        var r = svc.Authorize(Compra, Pagador, Cop(119000), Llave("a"));
+        var r = await svc.AuthorizeAsync(Compra, Pagador, Cop(119000), Llave("a"));
 
         Assert.Equal("payments.payment_provider_unavailable", r.Rejection!.Code);
         Assert.True(r.Rejection.IsTransient);
     }
 
     [Fact]
-    public void Rechazado_y_caido_NO_son_el_mismo_codigo()
+    public async Task Rechazado_y_caido_NO_son_el_mismo_codigo()
     {
         // El corazón de la HU. Con un bool eran indistinguibles, y por eso los dos salían
         // reintentables.
-        var declinado = Con(Pagos.PaymentAttempt.Declined("no")).Authorize(Compra, Pagador, Cop(1000), Llave("a"));
-        var caido = Con(Pagos.PaymentAttempt.Unavailable("timeout")).Authorize(Compra, Pagador, Cop(1000), Llave("b"));
+        var declinado = await Con(Pagos.PaymentAttempt.Declined("no")).AuthorizeAsync(Compra, Pagador, Cop(1000), Llave("a"));
+        var caido = await Con(Pagos.PaymentAttempt.Unavailable("timeout")).AuthorizeAsync(Compra, Pagador, Cop(1000), Llave("b"));
 
         Assert.NotEqual(declinado.Rejection!.Code, caido.Rejection!.Code);
         Assert.NotEqual(declinado.Rejection.IsTransient, caido.Rejection.IsTransient);
     }
 
     [Fact]
-    public void Sin_credencial_se_rechaza_y_NO_se_aparenta_cobrar()
+    public async Task Sin_credencial_se_rechaza_y_NO_se_aparenta_cobrar()
     {
         // Un despliegue a medias no puede parecer uno que funciona: eso son pedidos «pagados»
         // que nadie cobró, descubiertos cuando alguien cuadre la caja.
         var svc = Con(Pagos.PaymentAttempt.NotConfigured("falta Payments:wompi:ApiKey"));
 
-        var r = svc.Authorize(Compra, Pagador, Cop(119000), Llave("a"));
+        var r = await svc.AuthorizeAsync(Compra, Pagador, Cop(119000), Llave("a"));
 
         Assert.Equal("payments.transport_not_configured", r.Rejection!.Code);
         Assert.True(r.Rejection.IsTransient);   // la operación NO ocurrió: se puede reintentar
     }
 
     [Fact]
-    public void El_intento_rechazado_QUEDA_registrado()
+    public async Task El_intento_rechazado_QUEDA_registrado()
     {
         // Un rechazo sin rastro deja al cliente diciendo «yo lo intenté» y al sistema sin manera
         // de saber si es cierto.
@@ -126,7 +133,7 @@ public sealed class PaymentProviderOutcomeTests
         var svc = new Pagos.PaymentService(
             store, new ProveedorGuionado(Pagos.PaymentAttempt.Declined("no")), store, new RelojFalso());
 
-        svc.Authorize(Compra, Pagador, Cop(1000), Llave("a"));
+        await svc.AuthorizeAsync(Compra, Pagador, Cop(1000), Llave("a"));
 
         var registrados = store.ForSubject(Compra);
         Assert.Single(registrados);
@@ -136,17 +143,17 @@ public sealed class PaymentProviderOutcomeTests
     // ── El proveedor que no está configurado ────────────────────────────────
 
     [Fact]
-    public void NotConfiguredPaymentProvider_rechaza_las_CUATRO_operaciones()
+    public async Task NotConfiguredPaymentProvider_rechaza_las_CUATRO_operaciones()
     {
         // Si alguna dijera que sí, el despliegue a medias volvería a parecer uno que funciona
         // — por esa operación.
         var p = new NotConfiguredPaymentProvider(
             "wompi", "Payments:wompi:ApiKey", NullLogger<NotConfiguredPaymentProvider>.Instance);
 
-        Assert.Equal(Pagos.PaymentOutcome.NotConfigured, p.Authorize(Cop(1000), Pagador).Outcome);
-        Assert.Equal(Pagos.PaymentOutcome.NotConfigured, p.Capture("r", Cop(1000)).Outcome);
-        Assert.Equal(Pagos.PaymentOutcome.NotConfigured, p.Refund("r", Cop(1000)).Outcome);
-        Assert.Equal(Pagos.PaymentOutcome.NotConfigured, p.Void("r").Outcome);
+        Assert.Equal(Pagos.PaymentOutcome.NotConfigured, (await p.AuthorizeAsync(Cop(1000), Pagador)).Outcome);
+        Assert.Equal(Pagos.PaymentOutcome.NotConfigured, (await p.CaptureAsync("r", Cop(1000))).Outcome);
+        Assert.Equal(Pagos.PaymentOutcome.NotConfigured, (await p.RefundAsync("r", Cop(1000))).Outcome);
+        Assert.Equal(Pagos.PaymentOutcome.NotConfigured, (await p.VoidAsync("r")).Outcome);
         Assert.False(p.MuevePlata);
     }
 

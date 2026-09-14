@@ -55,28 +55,28 @@ public sealed class LoggingPaymentProvider : IPaymentProvider
     /// <remarks>Dice que NO, y por eso el gate lo puede echar de producción.</remarks>
     public bool MuevePlata => false;
 
-    public PaymentAttempt Authorize(Money amount, Ref payer)
+    public Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, CancellationToken ct = default)
     {
         _log.LogWarning("SIN PASARELA REAL: se 'autorizó' {Amount} de {Payer} sin mover nada.", amount, payer);
-        return PaymentAttempt.Ok($"stub-{Guid.NewGuid():n}");
+        return Task.FromResult(PaymentAttempt.Ok($"stub-{Guid.NewGuid():n}"));
     }
 
-    public PaymentAttempt Capture(string providerReference, Money amount)
+    public Task<PaymentAttempt> CaptureAsync(string providerReference, Money amount, CancellationToken ct = default)
     {
         _log.LogWarning("SIN PASARELA REAL: se 'capturó' {Amount} ({Ref}) sin mover plata.", amount, providerReference);
-        return PaymentAttempt.Ok(providerReference);
+        return Task.FromResult(PaymentAttempt.Ok(providerReference));
     }
 
-    public PaymentAttempt Refund(string providerReference, Money amount)
+    public Task<PaymentAttempt> RefundAsync(string providerReference, Money amount, CancellationToken ct = default)
     {
         _log.LogWarning("SIN PASARELA REAL: se 'devolvió' {Amount} ({Ref}) sin mover plata.", amount, providerReference);
-        return PaymentAttempt.Ok(providerReference);
+        return Task.FromResult(PaymentAttempt.Ok(providerReference));
     }
 
-    public PaymentAttempt Void(string providerReference)
+    public Task<PaymentAttempt> VoidAsync(string providerReference, CancellationToken ct = default)
     {
         _log.LogWarning("SIN PASARELA REAL: se 'liberó' la autorización {Ref}.", providerReference);
-        return PaymentAttempt.Ok(providerReference);
+        return Task.FromResult(PaymentAttempt.Ok(providerReference));
     }
 }
 
@@ -118,11 +118,15 @@ public sealed class NotConfiguredPaymentProvider : IPaymentProvider
         return PaymentAttempt.NotConfigured($"El medio de pago no está configurado: falta {_queFalta}.");
     }
 
-    public PaymentAttempt Authorize(Money amount, Ref payer) => Gritar("autorizar");
+    public Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, CancellationToken ct = default)
+        => Task.FromResult(Gritar("autorizar"));
 
-    public PaymentAttempt Capture(string providerReference, Money amount) => Gritar("capturar");
+    public Task<PaymentAttempt> CaptureAsync(string providerReference, Money amount, CancellationToken ct = default)
+        => Task.FromResult(Gritar("capturar"));
 
-    public PaymentAttempt Refund(string providerReference, Money amount) => Gritar("devolver");
+    public Task<PaymentAttempt> RefundAsync(string providerReference, Money amount, CancellationToken ct = default)
+        => Task.FromResult(Gritar("devolver"));
 
-    public PaymentAttempt Void(string providerReference) => Gritar("liberar");
+    public Task<PaymentAttempt> VoidAsync(string providerReference, CancellationToken ct = default)
+        => Task.FromResult(Gritar("liberar"));
 }

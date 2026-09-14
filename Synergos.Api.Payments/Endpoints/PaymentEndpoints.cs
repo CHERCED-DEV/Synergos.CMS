@@ -10,7 +10,8 @@ public static class PaymentEndpoints
 {
     public static IEndpointRouteBuilder MapPaymentEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/v1/payments", (AuthorizeRequest req, HttpRequest http, PaymentService svc) =>
+        app.MapPost("/v1/payments", async (
+            AuthorizeRequest req, HttpRequest http, PaymentService svc, CancellationToken ct) =>
         {
             if (!IdempotencyHeader.TryRead(http, PaymentRules.CodePrefix, out var key, out var falta)) return falta!;
 
@@ -20,7 +21,7 @@ public static class PaymentEndpoints
             if (payer is null) return Invalid("bad_payer", "Hacen falta payerKind y payerId.");
             if (!TryMoney(req.Amount, out var amount, out var badMoney)) return badMoney!;
 
-            return svc.Authorize(forWhat, payer, amount, key).Match(
+            return (await svc.AuthorizeAsync(forWhat, payer, amount, key, ct)).Match(
                 p => Results.Created($"/v1/payments/{p.Id}", PaymentResponse.From(p)),
                 bad => bad.ToProblem());
         });
@@ -34,24 +35,26 @@ public static class PaymentEndpoints
                     p.Items.Select(PaymentResponse.From).ToList(), p.Total, p.Offset, p.HasMore))
                 .ToHttp());
 
-        app.MapPost("/v1/payments/{id}/capture", (string id, HttpRequest http, PaymentService svc) =>
+        app.MapPost("/v1/payments/{id}/capture", async (
+            string id, HttpRequest http, PaymentService svc, CancellationToken ct) =>
         {
             if (!IdempotencyHeader.TryRead(http, PaymentRules.CodePrefix, out var key, out var falta)) return falta!;
-            return svc.Capture(id, key).Map(PaymentResponse.From).ToHttp();
+            return (await svc.CaptureAsync(id, key, ct)).Map(PaymentResponse.From).ToHttp();
         });
 
         // Liberar NO lleva llave: la operación ya es idempotente por diseño —liberar lo
         // liberado devuelve lo mismo— y exigir una cabecera que no protege de nada solo
         // enseñaría a los clientes a inventar llaves.
-        app.MapPost("/v1/payments/{id}/void", (string id, PaymentService svc) =>
-            svc.Void(id).Map(PaymentResponse.From).ToHttp());
+        app.MapPost("/v1/payments/{id}/void", async (string id, PaymentService svc, CancellationToken ct) =>
+            (await svc.VoidAsync(id, ct)).Map(PaymentResponse.From).ToHttp());
 
-        app.MapPost("/v1/payments/{id}/refund", (string id, RefundRequest req, HttpRequest http, PaymentService svc) =>
+        app.MapPost("/v1/payments/{id}/refund", async (
+            string id, RefundRequest req, HttpRequest http, PaymentService svc, CancellationToken ct) =>
         {
             if (!IdempotencyHeader.TryRead(http, PaymentRules.CodePrefix, out var key, out var falta)) return falta!;
             if (!TryMoney(req.Amount, out var amount, out var badMoney)) return badMoney!;
 
-            return svc.RefundPayment(id, amount, req.Reason, key).Map(PaymentResponse.From).ToHttp();
+            return (await svc.RefundPaymentAsync(id, amount, req.Reason, key, ct)).Map(PaymentResponse.From).ToHttp();
         });
 
         return app;

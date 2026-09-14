@@ -58,13 +58,6 @@ public sealed record Payment(
     public Money Refundable => Status == PaymentStatus.Captured ? Amount - Refunded : Money.Zero(Amount.Currency);
 }
 
-/// <summary>
-/// El medio de pago de verdad.
-/// </summary>
-/// <remarks>
-/// Es la costura hacia el mundo: una pasarela, un banco, un botón. El servicio no sabe cuál — y
-/// por eso esta API se puede probar y desplegar sin ninguno.
-/// </remarks>
 /// <summary>Las cuatro formas en que termina una operación con el medio de pago.</summary>
 /// <remarks>
 /// <para><b>Que sean cuatro y no un booleano es el punto</b> (HU #27). Con <c>bool</c>, «el banco
@@ -112,6 +105,22 @@ public sealed record PaymentAttempt(PaymentOutcome Outcome, string? Reference, s
     public static PaymentAttempt NotConfigured(string reason) => new(PaymentOutcome.NotConfigured, null, reason);
 }
 
+/// <summary>
+/// El medio de pago de verdad.
+/// </summary>
+/// <remarks>
+/// <para>Es la costura hacia el mundo: una pasarela, un banco, un botón. El servicio no sabe cuál
+/// — y por eso esta API se puede probar y desplegar sin ninguno.</para>
+///
+/// <para><b>Las cuatro operaciones son asíncronas, y no por estilo</b> (HU #27). Una pasarela
+/// vive al otro lado de la red: la costura nació síncrona porque los dos únicos implementadores
+/// escribían en un log, y el día que apareció uno que habla HTTP quedaban dos salidas. La que
+/// no se tomó es <c>.Result</c> dentro del proveedor — bloquea un hilo del pool por cada cobro
+/// en vuelo, y el <c>lock</c> del servicio lo mantenía bloqueado durante toda la llamada, así
+/// que bastaban unas pocas pasarelas lentas a la vez para dejar el proceso sin hilos con los
+/// que contestar. Un deadlock por inanición no se parece a un problema de pagos: se parece a
+/// que el servicio «se puso lento», que es la peor pista posible.</para>
+/// </remarks>
 public interface IPaymentProvider
 {
     /// <summary>Cómo se llama, para dejarlo en el rastro.</summary>
@@ -128,14 +137,14 @@ public interface IPaymentProvider
     bool MuevePlata { get; }
 
     /// <summary>Reserva el cupo.</summary>
-    PaymentAttempt Authorize(Money amount, Ref payer);
+    Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, CancellationToken ct = default);
 
     /// <summary>Mueve la plata.</summary>
-    PaymentAttempt Capture(string providerReference, Money amount);
+    Task<PaymentAttempt> CaptureAsync(string providerReference, Money amount, CancellationToken ct = default);
 
     /// <summary>Devuelve plata ya capturada.</summary>
-    PaymentAttempt Refund(string providerReference, Money amount);
+    Task<PaymentAttempt> RefundAsync(string providerReference, Money amount, CancellationToken ct = default);
 
     /// <summary>Libera una autorización sin cobrar.</summary>
-    PaymentAttempt Void(string providerReference);
+    Task<PaymentAttempt> VoidAsync(string providerReference, CancellationToken ct = default);
 }
