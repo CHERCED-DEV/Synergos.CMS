@@ -27,10 +27,14 @@
  *      existente (<DataType Key="{guid}">) en uSync/v9/DataTypes/.
  *      Definition rota = property no carga el editor en backoffice.
  *      Cap-290 Batch C (Ola 295).
- *   7. DataType orphan: DataType custom (EditorAlias NO empieza con
- *      "Umbraco.") definido pero nunca referenciado por ningún
- *      <Definition>. Built-ins Umbraco se skipean (siempre legítimos).
- *      Warning level — el operador decide si es intencional.
+ *   7. DataType orphan: DataType PROPIO (Alias con prefijo "DT" —
+ *      "DTSelect*", "DT.BlockList.*"...) definido pero nunca referenciado
+ *      por ningún <Definition>. Los de STOCK de Umbraco (Alias sin ese
+ *      prefijo: Textstring, Numeric, "Multi URL Picker"...) se skipean
+ *      siempre — son parte del runtime aún cuando un site no los use.
+ *      Warning level — el operador decide si es intencional. Corregido
+ *      en #101: exentaba por EDITOR ("no Umbraco.*"), y en este repo
+ *      TODO DataType usa un editor built-in, así que nunca disparaba.
  *      Cap-300 Batch B (Ola 299).
  *   9. Contenido del seeder: Content/ ya se versiona (ADR 0129), pero
  *      lo que crea DevTestContentSeeder no es trabajo editorial y no
@@ -326,13 +330,25 @@ async function audit() {
         }
     }
 
-    // ─── 7. DataType orphan (Cap-300 Batch B) ──────────────────────
-    // Custom DataTypes (EditorAlias no empieza con "Umbraco.") sin
-    // consumers son potencialmente dead weight. Built-ins Umbraco se
-    // skipean siempre — son parte del runtime aún cuando un site no
-    // los use directamente.
+    // ─── 7. DataType orphan (Cap-300 Batch B, corregido #101) ──────
+    // La exención original miraba el EDITOR ("no empieza con Umbraco.")
+    // para saltarse los DataTypes de STOCK que Umbraco instala. Pero en
+    // este repo TODO DataType usa un editor built-in — no hay terceros—,
+    // así que ese criterio eximía a los 131 y el check nunca disparaba
+    // (#101). El criterio correcto es «¿es de stock?», y stock y propio
+    // se distinguen por el ALIAS, no por el editor: los 94 propios de
+    // este repo llevan siempre prefijo "DT" — "DTSelect*", "DTBlockGridSections",
+    // "DT.BlockList.*" — porque así los nombró quien los autoró; los 37
+    // de stock llevan el nombre que trae Umbraco (Textstring, Numeric,
+    // "Multi URL Picker", "True/false"...) y ninguno empieza con "DT".
+    // Sólo los propios son "potencialmente dead weight": un stock sin
+    // consumer sigue siendo parte del runtime que Umbraco instala.
+    // Barrido de los 131 (#101): 0 huérfanos hoy con este criterio — se
+    // queda en warning porque un DT* sin consumer puede ser scaffolding
+    // a propósito (mismo espíritu que el check 2 con compositions).
+    const isStockAlias = (alias) => !/^DT([A-Z.]|$)/.test(alias);
     for (const [guid, meta] of dataTypeMeta) {
-        if (meta.editorAlias.startsWith('Umbraco.')) continue;
+        if (isStockAlias(meta.alias)) continue;
         if (referencedDefinitions.has(guid)) continue;
         warn('orphan-datatype',
             `${meta.alias} (${path.relative(ROOT, meta.file)}) editor=${meta.editorAlias} sin consumers`);
