@@ -1279,6 +1279,21 @@ public sealed class EhrController : ControllerBase
         IReadOnlyList<ImmunizationDto> Immunizations,
         IReadOnlyList<HealthMaintenanceDto> Maintenance);
 
+    /// <summary>
+    /// Un resultado de laboratorio hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="Released"/> sale en <c>true</c> constante, y NO es de la familia que la HU
+    /// #111 vino a quitar</b> — está escrito porque es la primera pregunta que va a hacerse quien
+    /// audite este fichero después. Ahí <c>true</c> no afirma un hecho que nadie comprobó: es un
+    /// <b>invariante del seam</b>. <see cref="EhrLabResult"/> se documenta como «un resultado de
+    /// laboratorio <i>liberado</i>» y la única puerta por la que entra uno es
+    /// <c>IClinicalResultsProvider.ReleaseResultAsync</c>, así que todo lo que sale de
+    /// <c>GetForPatientAsync</c> está liberado por construcción. La UI usa la clave para decidir
+    /// qué ve el paciente, así que el día que el seam empiece a devolver resultados sin liberar
+    /// —un LIS real puede— esto pasa a ser una fabricación y el campo tiene que salir del
+    /// registro, no de aquí.
+    /// </remarks>
     public sealed record LabResultDto(
         string Id, string PatientId, string Panel, string Name,
         string Value, string Unit, double? RefLow, double? RefHigh,
