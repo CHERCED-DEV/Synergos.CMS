@@ -142,6 +142,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
         string eventId,
         IReadOnlyList<EventCheckoutItem> items,
         IReadOnlyList<EventAttendeeInfo> attendees,
+        EventBuyerInfo? buyer = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(eventId))
@@ -213,8 +214,13 @@ public sealed class StubEventTicketingService : IEventTicketingService
 
         // 2) Apartar cada unidad como una reserva (hold-timeout incluido) +
         //    armar las líneas de pago. El comprador es el primer asistente.
-        var buyer = attendees[0];
-        if (string.IsNullOrWhiteSpace(buyer.Name) || string.IsNullOrWhiteSpace(buyer.Email))
+        // Quien compra, que NO tiene por qué ir (#107). Sin él, el primer asistente — el
+        // supuesto de siempre, correcto en el caso común y lo que mantiene funcionando a los
+        // consumidores que no lo mandan.
+        var purchaser = buyer is not null && !string.IsNullOrWhiteSpace(buyer.Email)
+            ? new EventAttendeeInfo(buyer.Name, buyer.Email)
+            : attendees[0];
+        if (string.IsNullOrWhiteSpace(purchaser.Name) || string.IsNullOrWhiteSpace(purchaser.Email))
         {
             throw new ArgumentException("El nombre y el email del comprador son obligatorios.", nameof(attendees));
         }
@@ -264,7 +270,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
                 Amount: total,
                 Currency: currency!,
                 Items: paymentLines,
-                CustomerEmail: buyer.Email.Trim(),
+                CustomerEmail: purchaser.Email.Trim(),
                 ReturnUrl: null,
                 Metadata: null),
             cancellationToken);

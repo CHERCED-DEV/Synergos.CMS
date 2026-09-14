@@ -18,6 +18,20 @@ public sealed record EventAttendeeInfo(
     string? DocumentId = null);
 
 /// <summary>
+/// Quien COMPRA las entradas, que no tiene por qué ir al evento.
+/// </summary>
+/// <remarks>
+/// <b>Existe porque el motor lo daba por supuesto</b> (#107): asumía que el comprador era
+/// <c>attendees[0]</c>, así que quien compra cuatro entradas para su familia y se queda en casa
+/// no recibía su propia confirmación — le llegaba al primero de la lista. La app lo manda desde
+/// siempre y se descartaba en silencio.
+///
+/// <para>Es opcional: sin él se conserva el supuesto anterior, que es correcto en el caso
+/// común —quien compra va— y es lo que mantiene a los consumidores previos funcionando.</para>
+/// </remarks>
+public sealed record EventBuyerInfo(string Name, string Email);
+
+/// <summary>
 /// Resultado del checkout de eventos: la orden apartada + la sesión de pago
 /// abierta por el total. <see cref="OrderRef"/> es la credencial idempotente para
 /// confirmar; <see cref="PaymentSessionId"/> liga la orden con el
@@ -89,10 +103,14 @@ public interface IEventTicketingService
     /// Lanza <see cref="ArgumentException"/> si la solicitud es inválida (evento
     /// inexistente, sin ítems/asistentes, tier inexistente, aforo insuficiente).
     /// </summary>
+    /// <param name="buyer">
+    /// Quien compra, si no es el primer asistente. Null conserva el supuesto de siempre.
+    /// </param>
     Task<EventCheckoutResult> CheckoutAsync(
         string eventId,
         IReadOnlyList<EventCheckoutItem> items,
         IReadOnlyList<EventAttendeeInfo> attendees,
+        EventBuyerInfo? buyer = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

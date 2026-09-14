@@ -249,6 +249,7 @@ public sealed class EventosContractShapeTests
                 Arg.Any<string>(),
                 Arg.Any<IReadOnlyList<EventCheckoutItem>>(),
                 Arg.Any<IReadOnlyList<EventAttendeeInfo>>(),
+                Arg.Any<EventBuyerInfo?>(),
                 Arg.Any<CancellationToken>())
             .Returns(new EventCheckoutResult("evord_1", "psp_1", 180_000m, "COP"));
 
