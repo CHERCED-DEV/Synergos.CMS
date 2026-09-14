@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text.RegularExpressions;
 using Xunit;
@@ -144,5 +144,31 @@ public class AcademyCatalogSourceTests
 
         Assert.DoesNotContain("IContentStream", fuente, StringComparison.Ordinal);
         Assert.DoesNotContain("CreateAsync", fuente, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// El curso autorado llega con su fecha de publicación y diciendo que está publicado.
+    /// </summary>
+    /// <remarks>
+    /// <b>Sin esto, la regresión sólo aparece al mover una línea de configuración</b>, que es
+    /// la peor forma de aparecer: el catálogo de demo seguiría ordenando «Más recientes»
+    /// —sus cursos llevan fecha escrita— y el servido desde el CMS caería a «no consta» en
+    /// todos, o sea el desplegable vuelto decorativo únicamente con
+    /// <c>Synergos:Catalog:Sources:Academy = cms</c>. Los tests de las otras dos fuentes no lo
+    /// ven porque ésta no se puede instanciar sin un contexto de Umbraco (#102).
+    ///
+    /// <para><b>Mira la FUENTE, con lo que eso vale y no más.</b> Comprueba que el proyector
+    /// declare las dos claves y de dónde saca la fecha; no puede comprobar que el valor sea
+    /// correcto —para eso haría falta levantar Umbraco—. Se vio en rojo quitando cada una de
+    /// las dos líneas.</para>
+    /// </remarks>
+    [Fact]
+    public void El_curso_autorado_declara_su_estado_y_su_fecha_de_publicacion()
+    {
+        var fuente = File.ReadAllText(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Web", "Services", "Catalog", "UmbracoCourseCatalogSource.cs"));
+
+        Assert.Contains("Status: CourseStatuses.Published", fuente, StringComparison.Ordinal);
+        Assert.Contains("PublishedAt: DateOnly.FromDateTime(node.UpdateDate)", fuente, StringComparison.Ordinal);
     }
 }

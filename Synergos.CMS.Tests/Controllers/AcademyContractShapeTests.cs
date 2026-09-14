@@ -119,15 +119,23 @@ public class AcademyContractShapeTests
     /// Sin el id en la raíz, <c>normalizeInstructorCourse</c> devolvía <c>null</c> por cada
     /// fila; con la lista vacía, la consola entera caía al mock y encendía el cartel de «datos
     /// de ejemplo» aunque el servidor tuviera los cursos reales.
+    ///
+    /// <para><b><c>status</c> y <c>publishedAt</c> eran las dos que quedaban</b> de las siete
+    /// que este ticket enumeró. La primera no era cosmética: <c>readCourseStatus</c> degrada a
+    /// <c>published</c> cuando la clave falta, así que la píldora «Estado» decía «Publicado»
+    /// de todo curso y el KPI contaba «N publicados / N en total». Que el estado se PASE
+    /// —y no se afirme aquí— lo vigila <c>AcademyPublicationStateTests</c>; esto vigila que la
+    /// clave salga, con el casing que el cliente lee.</para>
     /// </remarks>
     [Fact]
     public void La_fila_del_instructor_emite_id_y_titulo_aplanados()
         => AssertHas(
             new AcademyController.InstructorCourseDto(
-                Course: Course(), Id: "excel", Title: "Excel financiero", Price: 180000m,
+                Course: Course(), Id: "excel", Title: "Excel financiero",
+                Status: "published", PublishedAt: new DateOnly(2026, 2, 17), Price: 180000m,
                 PriceFormatted: "$180.000", StudentCount: 42, Students: 42,
                 Revenue: 7560000m, RevenueFormatted: "$7.560.000", Rating: 4.8),
-            "id", "title", "price", "studentCount", "revenue", "rating");
+            "id", "title", "status", "publishedAt", "price", "studentCount", "revenue", "rating");
 
     /// <summary>
     /// Cada alumno de la consola lleva las seis claves que <c>normalizeInstructorStudent</c> lee.

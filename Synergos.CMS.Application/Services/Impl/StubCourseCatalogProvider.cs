@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
@@ -74,11 +74,22 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     {
     }
 
-    internal StubCourseCatalogProvider(IContentStream contentStream, ICatalogIndex<CourseSummary> index)
+    /// <param name="now">
+    /// Reloj de la publicación de un curso del panel. Opcional para no tocar el ctor público,
+    /// que es el que el composer usa (ver arriba); los tests lo fijan para poder afirmar la
+    /// fecha sin depender del día en que corran.
+    /// </param>
+    internal StubCourseCatalogProvider(
+        IContentStream contentStream,
+        ICatalogIndex<CourseSummary> index,
+        Func<DateTimeOffset>? now = null)
     {
         _contentStream = contentStream ?? throw new ArgumentNullException(nameof(contentStream));
         _index = index ?? throw new ArgumentNullException(nameof(index));
+        _now = now ?? (() => DateTimeOffset.UtcNow);
     }
+
+    private readonly Func<DateTimeOffset> _now;
 
     // Vista unificada del catálogo: cursos sembrados + publicados en runtime.
     private IEnumerable<AcademyDemoSeed.SeedCourse> AllCourses()
@@ -315,6 +326,9 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
             CoverImageUrl: draft.CoverImageUrl,
             Price: Math.Max(0m, draft.Price),
             Rating: 0.0, // sin reseñas todavía
+            // Publicar ES el acto que le pone fecha: no se hereda de nada ni se deja sin
+            // poner, porque de éste sí se sabe (#102).
+            PublishedAt: DateOnly.FromDateTime(_now().UtcDateTime),
             Outcomes: draft.Outcomes ?? Array.Empty<string>(),
             Modules: seedModules);
 
@@ -410,6 +424,10 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
         IsFree: c.IsFree,
         Rating: c.Rating,
         LessonCount: c.LessonCount,
-        DurationMinutes: c.DurationMinutes);
+        DurationMinutes: c.DurationMinutes,
+        // Todo lo que este catálogo sirve está publicado: el seed ES el catálogo de demo y
+        // lo que publica un instructor entra publicado. No hay un tercer caso que ocultar.
+        Status: CourseStatuses.Published,
+        PublishedAt: c.PublishedAt);
 
 }
