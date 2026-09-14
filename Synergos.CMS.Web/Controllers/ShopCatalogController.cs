@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -509,12 +509,25 @@ public sealed class ShopCatalogController : ControllerBase
         // se liga al memberKey y se ignora el name/email del body (anti-tampering —
         // no se puede colocar una orden a nombre de otro). Sin sesión → invitado con
         // los datos del form, OwnerMemberKey null (guest checkout sigue abierto).
+        // La DIRECCIÓN sí sale del cuerpo, y no es una excepción a lo de arriba: la identidad
+        // se falsifica, un domicilio no — es de quien compra y no hay nada que suplantar.
+        // `CustomerRequest` no la tenía, así que System.Text.Json la descartaba en silencio y
+        // el checkout perdía lo único que el formulario EXIGE además del correo.
+        var address = string.IsNullOrWhiteSpace(request.Customer.Address) ? null : request.Customer.Address.Trim();
+        var city = string.IsNullOrWhiteSpace(request.Customer.City) ? null : request.Customer.City.Trim();
+
         var customer = _gate.IsAuthenticated && _gate.CurrentMemberKey is Guid memberKey
             ? new ShopCustomer(
                 Name: _gate.CurrentMemberDisplayName ?? request.Customer.Name.Trim(),
                 Email: _gate.CurrentMemberEmail ?? request.Customer.Email.Trim(),
-                MemberKey: memberKey)
-            : new ShopCustomer(request.Customer.Name.Trim(), request.Customer.Email.Trim());
+                MemberKey: memberKey,
+                Address: address,
+                City: city)
+            : new ShopCustomer(
+                request.Customer.Name.Trim(),
+                request.Customer.Email.Trim(),
+                Address: address,
+                City: city);
 
         ShopCheckoutResult result;
         try
@@ -554,6 +567,16 @@ public sealed class ShopCatalogController : ControllerBase
                     a.Line1!.Trim(), a.Line2?.Trim(), a.City!.Trim(), a.Region?.Trim(),
                     a.PostalCode?.Trim(), a.Country?.Trim(), a.Contact?.Trim())
                 : null;
+
+            // Si el cuerpo no la trae, la de la orden — que es la que se capturó en el
+            // checkout. La UI no reenvía la dirección al confirmar (manda sólo `orderRef`), y
+            // sin este respaldo un motor que despacha rechaza la compra por un campo que el
+            // comprador SÍ escribió, un paso antes.
+            if (shipTo is null)
+            {
+                var placed = await _orders.GetOrderAsync(request.OrderRef.Trim(), cancellationToken);
+                shipTo = placed?.ShipTo;
+            }
 
             result = await _orders.ConfirmAsync(request.OrderRef.Trim(), shipTo, cancellationToken);
         }
@@ -644,11 +667,7 @@ public sealed class ShopCatalogController : ControllerBase
         }
 
         var name = string.IsNullOrWhiteSpace(collection) ? DefaultCollection : collection.Trim();
-        var items = await _collections.GetAsync(owner, name, cancellationToken);
-        return Ok(new WishlistResponse(
-            Owner: owner,
-            Collection: name,
-            Items: items.Select(ToCollectionItemDto).ToList()));
+        return Ok(await BuildWishlistAsync(owner, name, cancellationToken));
     }
 
     [HttpGet("wishlist/collections")]
@@ -679,14 +698,33 @@ public sealed class ShopCatalogController : ControllerBase
             return denied;
         }
 
-        if (request is null || string.IsNullOrWhiteSpace(request.ItemRef))
+        // La UI manda `{ productId, action }` y este borde exigía `itemRef`: el POST
+        // contestaba 400 SIEMPRE, y el cliente lo tapaba con una lista local optimista.
+        // Quien guardaba un favorito lo veía guardado y no se guardaba nada.
+        var itemRef = string.IsNullOrWhiteSpace(request?.ItemRef) ? request?.ProductId : request.ItemRef;
+        if (request is null || string.IsNullOrWhiteSpace(itemRef))
         {
-            return BadRequest(new { error = "itemRef es requerido." });
+            return BadRequest(new { error = "itemRef (o productId) es requerido." });
         }
 
         var name = string.IsNullOrWhiteSpace(request.Collection) ? DefaultCollection : request.Collection.Trim();
-        var item = await _collections.AddAsync(owner, name, request.ItemRef.Trim(), cancellationToken);
-        return Ok(ToCollectionItemDto(item));
+
+        // `action: "remove"` llega por POST porque es lo que manda la UI; el DELETE de abajo
+        // se conserva. Quitar por una puerta y no por la otra dejaba el corazón encendido
+        // sobre un favorito que el servidor seguía teniendo.
+        if (string.Equals(request.Action?.Trim(), "remove", StringComparison.OrdinalIgnoreCase))
+        {
+            await _collections.RemoveAsync(owner, name, itemRef.Trim(), cancellationToken);
+        }
+        else
+        {
+            await _collections.AddAsync(owner, name, itemRef.Trim(), cancellationToken);
+        }
+
+        // Se devuelve la LISTA entera y no el ítem suelto: es lo que la UI lee de vuelta
+        // (`normalizeWishlist` busca `items`), y con un objeto suelto descartaba la respuesta
+        // y volvía a su copia local.
+        return Ok(await BuildWishlistAsync(owner, name, cancellationToken));
     }
 
     [HttpDelete("wishlist")]
@@ -737,11 +775,17 @@ public sealed class ShopCatalogController : ControllerBase
             CurrentStage: timeline?.CurrentStage,
             Stages: timeline?.Stages
                 .Select(s => new TrackingStageDto(
-                    s.Stage, s.Label,
+                    s.Stage,
+                    // `id` es la clave con la que la UI identifica la etapa; caía a la
+                    // etiqueta, así que dos etapas con el mismo rótulo eran la misma.
+                    Id: s.Stage,
+                    Label: s.Label,
                     // done si ya se alcanzó; current si es la etapa activa; pending si no.
                     State: s.Reached ? "done" : (s.Stage == timeline.CurrentStage ? "current" : "pending"),
                     Date: s.ReachedAt,
-                    s.Reached, s.ReachedAt, s.Note))
+                    Reached: s.Reached,
+                    ReachedAt: s.ReachedAt,
+                    Note: s.Note))
                 .ToList() ?? new List<TrackingStageDto>()));
     }
 
@@ -974,6 +1018,11 @@ public sealed class ShopCatalogController : ControllerBase
     private ProductDto ToProductDto(CatalogProductSummary p) => new(
         Id: p.Id,
         Name: p.Name,
+        // `title` y `amount` son las claves canónicas que lee la UI; `name`/`price` se
+        // conservan. Funcionaba por el `??` del normalizador, y un fallback no es el
+        // arreglo (ADR 0083).
+        Title: p.Name,
+        Amount: p.Price,
         Price: p.Price,
         PriceFormatted: _priceFormatter.Format(p.Price, p.Currency),
         Currency: p.Currency,
@@ -990,11 +1039,50 @@ public sealed class ShopCatalogController : ControllerBase
         // → la card cae al monograma). Contrato alineado (UI = fuente de verdad).
         Images: p.ImageUrl is null ? System.Array.Empty<string>() : new[] { p.ImageUrl });
 
-    private static CollectionItemDto ToCollectionItemDto(UserCollectionItem i) => new(
-        Owner: i.Owner,
-        Collection: i.Collection,
-        ItemRef: i.ItemRef,
-        AddedAt: i.AddedAt);
+    /// <summary>
+    /// La lista de deseos con los ítems que la UI SÍ puede leer.
+    /// </summary>
+    /// <remarks>
+    /// <para>El seam guarda una referencia opaca y nada más, así que el DTO salía con
+    /// <c>itemRef</c>/<c>owner</c>/<c>collection</c> y la UI —que lee <c>productId</c> y
+    /// <c>title</c>— descartaba cada fila. El resultado no era un error: era una lista de
+    /// favoritos VACÍA, con el servidor lleno.</para>
+    ///
+    /// <para>El nombre y el precio se resuelven con <see cref="IShopQuery"/>, que es el mismo
+    /// seam con el que la tarjeta de producto pinta ese SKU — así el favorito y la tarjeta no
+    /// pueden decir cosas distintas del mismo producto. Un ítem que el catálogo ya no conoce
+    /// conserva su referencia como título: dejarlo sin título lo haría desaparecer de la
+    /// pantalla, que es justo el defecto que esto cierra.</para>
+    /// </remarks>
+    private async Task<WishlistResponse> BuildWishlistAsync(
+        string owner,
+        string collection,
+        CancellationToken cancellationToken)
+    {
+        var items = await _collections.GetAsync(owner, collection, cancellationToken);
+        return new WishlistResponse(
+            Owner: owner,
+            Collection: collection,
+            Items: items.Select(ToCollectionItemDto).ToList());
+    }
+
+    private CollectionItemDto ToCollectionItemDto(UserCollectionItem i)
+    {
+        var product = _shopQuery.GetProductBySku(i.ItemRef);
+        return new CollectionItemDto(
+            Owner: i.Owner,
+            Collection: i.Collection,
+            ItemRef: i.ItemRef,
+            AddedAt: i.AddedAt,
+            // Claves que lee la UI (ADR 0083). `productId` es la referencia guardada: en este
+            // dominio el ítem de una lista de deseos ES el SKU del producto.
+            ProductId: i.ItemRef,
+            Title: product?.Name ?? i.ItemRef,
+            Amount: product?.Price ?? 0m,
+            AmountFormatted: product is null ? null : _priceFormatter.Format(product.Price, product.Currency),
+            Currency: product?.Currency,
+            Image: product?.ImageUrl);
+    }
 
     private ReturnDto ToReturnDto(ShopReturnCase c) => new(
         ClaimId: c.RmaId,   // clave que lee la UI
@@ -1018,7 +1106,12 @@ public sealed class ShopCatalogController : ControllerBase
     {
         ShopReturnStatus.Requested => "abierto",
         ShopReturnStatus.Approved or ShopReturnStatus.Received => "en-revision",
-        ShopReturnStatus.Refunded or ShopReturnStatus.Rejected => "resuelto",
+        ShopReturnStatus.Refunded => "resuelto",
+        // `rechazado` está en el vocabulario de la UI desde siempre y acá se colapsaba a
+        // `resuelto`: a quien le negaron la devolución la pantalla le decía que su reclamo
+        // quedó atendido. Dos finales distintos con el mismo rótulo, y el peor de los dos
+        // disfrazado del bueno.
+        ShopReturnStatus.Rejected => "rechazado",
         _ => "abierto",
     };
 
@@ -1098,7 +1191,19 @@ public sealed class ShopCatalogController : ControllerBase
     public sealed record CartItemRequest(string ProductId, string? VariantId, int Qty);
 
     /// <summary>El comprador en el payload del checkout.</summary>
-    public sealed record CustomerRequest(string Name, string Email);
+    /// <param name="Address">
+    /// A dónde se despacha. <b>La UI la manda desde siempre y este record no la tenía</b>:
+    /// System.Text.Json descarta lo que no mapea sin decir nada, así que el domicilio que el
+    /// formulario OBLIGA a escribir moría en el borde. Con <c>Tienda:Mode=Bff</c> eso no es
+    /// cosmético: el confirm del orquestador exige dirección y ciudad, y sin ellas la compra
+    /// se rechaza — con el cliente degradando a un acuse inventado, o sea diciéndole al
+    /// comprador «pedido confirmado» sobre una compra que no se cerró.
+    /// </param>
+    public sealed record CustomerRequest(
+        string Name,
+        string Email,
+        string? Address = null,
+        string? City = null);
 
     /// <summary>POST /api/shop/confirm — la orden a capturar/confirmar.</summary>
     /// <param name="ShipTo">
@@ -1119,6 +1224,8 @@ public sealed class ShopCatalogController : ControllerBase
     public sealed record ProductDto(
         string Id,
         string Name,
+        string Title,
+        decimal Amount,
         decimal Price,
         string PriceFormatted,
         string Currency,
@@ -1278,13 +1385,33 @@ public sealed class ShopCatalogController : ControllerBase
     /// <summary>POST /api/shop/wishlist — agregar un ítem a una lista del usuario.</summary>
     // Owner se conserva por compatibilidad del contrato UI pero el servidor lo IGNORA:
     // el dueño es el member de la sesión (ver WishlistAdd). Mismo trato que Orders da a Customer.
-    public sealed record WishlistItemRequest(string? Owner, string? Collection, string ItemRef);
+    /// <param name="ProductId">
+    /// Alias de <paramref name="ItemRef"/>: es la clave con la que la UI manda el producto.
+    /// </param>
+    /// <param name="Action">
+    /// <c>add</c> (default) o <c>remove</c>. La UI quita favoritos por POST; el
+    /// <c>DELETE</c> se conserva.
+    /// </param>
+    public sealed record WishlistItemRequest(
+        string? Owner,
+        string? Collection,
+        string ItemRef,
+        string? ProductId = null,
+        string? Action = null);
 
     public sealed record CollectionItemDto(
         string Owner,
         string Collection,
         string ItemRef,
-        DateTimeOffset AddedAt);
+        DateTimeOffset AddedAt,
+        // Lo que la UI lee de un favorito. Sin `productId` + `title` la fila se descarta
+        // entera; el resto es lo que hace que la tarjeta se pinte con algo más que el SKU.
+        string? ProductId = null,
+        string? Title = null,
+        decimal Amount = 0m,
+        string? AmountFormatted = null,
+        string? Currency = null,
+        string? Image = null);
 
     public sealed record WishlistResponse(
         string Owner,
@@ -1299,6 +1426,7 @@ public sealed class ShopCatalogController : ControllerBase
 
     public sealed record TrackingStageDto(
         string Stage,
+        string Id,
         string Label,
         // `state` (done|current|pending) y `date` son lo que lee la UI (normalizeTracking);
         // se derivan de Reached + CurrentStage. Reached/ReachedAt se conservan.
