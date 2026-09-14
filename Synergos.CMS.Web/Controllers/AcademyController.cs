@@ -93,21 +93,82 @@ public sealed class AcademyController : ControllerBase
     }
 
     // ── 1. Courses (catálogo buscable) ─────────────────────────────────
-    // GET /api/academy/courses?q=&category=&level= → { courses:[...] }
+    // GET /api/academy/courses?q=&category=&level=&price=&sort= → { courses:[...] }
+    /// <summary>
+    /// El catálogo buscable, filtrado y ordenado.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>price</c> y <c>sort</c> los mandaba la UI desde siempre y aquí no se ligaban</b>
+    /// (#102): contra el servidor real el desplegable de orden y la faceta de precio **no
+    /// hacían nada**, y contra el mock sí, porque el mock ordena y filtra. Es la forma del
+    /// defecto de la Tienda —el mock describiendo un servidor que no existe— sobre dos
+    /// controles que el usuario ve responder.
+    ///
+    /// <para><b>Se resuelven aquí y no en el seam</b> porque <see cref="CourseQuery"/> promete
+    /// TODAS las coincidencias (sin paginar), así que la lista completa ya está en memoria:
+    /// bajar el filtro al catálogo obligaría a que las dos fuentes —el seed y el contenido del
+    /// CMS— lo implementaran igual, para el mismo resultado.</para>
+    /// </remarks>
     [HttpGet("courses")]
     public async Task<IActionResult> Courses(
         [FromQuery] string? q,
         [FromQuery] string? category,
         [FromQuery] string? level,
+        [FromQuery] string? price,
+        [FromQuery] string? sort,
         CancellationToken cancellationToken)
     {
         var result = await _catalog.SearchAsync(
             new CourseQuery(Text: q, Category: category, Level: level),
             cancellationToken);
 
-        var courses = result.Courses.Select(ToCourseDto).ToList();
-        return Ok(new CoursesResponse(Courses: courses, Total: result.Total));
+        var matched = ApplyPriceBracket(result.Courses, price);
+        matched = ApplySort(matched, sort);
+
+        var courses = matched.Select(ToCourseDto).ToList();
+        // El total es el de lo que se devuelve, no el de antes de filtrar: la UI lo pinta como
+        // «N cursos» junto a la lista, y decir 40 sobre doce tarjetas es peor que no decirlo.
+        return Ok(new CoursesResponse(Courses: courses, Total: courses.Count));
     }
+
+    /// <summary>
+    /// Umbral de la franja de precio media. <b>Vive aquí porque el servidor es quien filtra</b>:
+    /// el vocabulario del contrato es <c>free|mid|premium</c>, así que alguien de este lado
+    /// tiene que saber qué significan. Está en pesos enteros, como el resto del motor.
+    /// </summary>
+    private const decimal MidPriceCeiling = 450_000m;
+
+    private static IReadOnlyList<CourseSummary> ApplyPriceBracket(
+        IReadOnlyList<CourseSummary> courses,
+        string? bracket)
+        => (bracket ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "free" => courses.Where(c => c.Price <= 0m).ToList(),
+            "mid" => courses.Where(c => c.Price > 0m && c.Price <= MidPriceCeiling).ToList(),
+            "premium" => courses.Where(c => c.Price > MidPriceCeiling).ToList(),
+            // Una franja desconocida no filtra en vez de devolver vacío: un vocabulario que se
+            // amplíe en la UI antes que aquí tiene que enseñar el catálogo entero, no ninguno.
+            _ => courses,
+        };
+
+    /// <summary>
+    /// Ordena el catálogo según el desplegable.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>newest</c> NO se puede servir y cae al orden por defecto</b>, que es «mejor
+    /// calificados primero»: <see cref="CourseSummary"/> no lleva fecha de publicación, y
+    /// ninguna de las dos fuentes la produce. Inventar una —del id, del orden del seed— daría
+    /// un orden estable y falso, que es peor que uno que no cambia. Darle dato de verdad es
+    /// trabajo de seam, anotado en #102.
+    /// </remarks>
+    private static IReadOnlyList<CourseSummary> ApplySort(IReadOnlyList<CourseSummary> courses, string? sort)
+        => (sort ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "price-asc" => courses.OrderBy(c => c.Price).ThenBy(c => c.Title, StringComparer.Ordinal).ToList(),
+            "price-desc" => courses.OrderByDescending(c => c.Price).ThenBy(c => c.Title, StringComparer.Ordinal).ToList(),
+            "rating" => courses.OrderByDescending(c => c.Rating).ThenBy(c => c.Title, StringComparer.Ordinal).ToList(),
+            _ => courses,
+        };
 
     // ── 2. Course detail (PDP-curso) ───────────────────────────────────
     // GET /api/academy/course/{id} → { course, modules:[{lessons:[...]}], instructor }
@@ -145,6 +206,9 @@ public sealed class AcademyController : ControllerBase
                 : string.Empty;
             return new PlanDto(
                 Code: p.Code,
+                // El MISMO código bajo la clave que la UI lee: es el valor que vuelve como
+                // `planId` al matricularse, y ahora decide cuánto se cobra.
+                Id: p.Code,
                 Label: p.Label,
                 Total: p.Total,
                 Amount: p.Total,
@@ -170,11 +234,13 @@ public sealed class AcademyController : ControllerBase
             Course: course,
             Modules: modules,
             Instructor: instructor,
-            Plans: plans));
+            Plans: plans,
+            // También en la RAÍZ, que es donde la UI lo lee. Dentro de `course` se conserva.
+            Outcomes: detail.Outcomes));
     }
 
     // ── 3. Enroll ──────────────────────────────────────────────────────
-    // POST /api/academy/enroll { courseId, student:{name,email} }
+    // POST /api/academy/enroll { courseId, planId?, student:{name,email} }
     //   → { orderRef, paymentSessionId, amount, currency } | { enrolled:true }
     [HttpPost("enroll")]
     public async Task<IActionResult> Enroll(
@@ -198,6 +264,7 @@ public sealed class AcademyController : ControllerBase
             result = await _enrollments.EnrollAsync(
                 request.CourseId.Trim(),
                 new Student(request.Student.Name.Trim(), request.Student.Email.Trim()),
+                request.PlanId,
                 cancellationToken);
         }
         catch (ArgumentException ex)
@@ -218,6 +285,60 @@ public sealed class AcademyController : ControllerBase
             Amount: result.Amount,
             AmountFormatted: _priceFormatter.Format(result.Amount, result.Currency),
             Currency: result.Currency!));
+    }
+
+    // ── 3b. Learning (mi aprendizaje) ──────────────────────────────────
+    // GET /api/academy/learning?student= → { enrollments:[...], paths:[] }
+    /// <summary>
+    /// Lo que el alumno está cursando, con su avance.
+    /// </summary>
+    /// <remarks>
+    /// <b>Este endpoint NO EXISTÍA</b> (#102). La app lo llama desde el día uno, recibía un 404,
+    /// y su `catch` servía cursos de ejemplo: «mi aprendizaje» era 100 % mock SIEMPRE, con el
+    /// cartel de datos de ejemplo encendido y nadie mirándolo. No era una deriva de claves —era
+    /// media pantalla que nunca estuvo conectada.
+    ///
+    /// <para><b><c>paths</c> sale VACÍO y eso es deliberado.</b> Una ruta de aprendizaje es una
+    /// colección curada de cursos con su propio título y descripción, y no existe en ningún
+    /// seam ni en el schema: no hay de dónde sacarla. Devolver el array vacío hace que la UI
+    /// no pinte la sección, que es la verdad; fabricar rutas agrupando por categoría le pondría
+    /// nombre de producto a un <c>GROUP BY</c>.</para>
+    /// </remarks>
+    [HttpGet("learning")]
+    public async Task<IActionResult> Learning(
+        [FromQuery] string? student,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(student))
+        {
+            return BadRequest(new { error = "student es requerido." });
+        }
+
+        var enrollments = await _enrollments.GetEnrollmentsAsync(student.Trim(), cancellationToken);
+
+        var rows = new List<EnrolledCourseDto>(enrollments.Count);
+        foreach (var e in enrollments)
+        {
+            var detail = await _catalog.GetCourseAsync(e.CourseId, cancellationToken);
+            if (detail is null)
+            {
+                // El curso se despublicó después de que alguien se matriculara. Se omite la
+                // fila en vez de emitirla a medias: una tarjeta sin título ni portada en «mis
+                // cursos» se lee como un fallo de la pantalla, no como un curso retirado.
+                continue;
+            }
+
+            rows.Add(new EnrolledCourseDto(
+                EnrollmentId: e.EnrollmentId,
+                Course: ToCourseDto(detail.Course),
+                Percent: e.Percent,
+                LessonCount: detail.Course.LessonCount,
+                CompletedCount: e.CompletedCount,
+                LastActivityAt: e.LastActivityAt,
+                Completed: e.Percent >= 100));
+        }
+
+        return Ok(new LearningResponse(Enrollments: rows, Paths: Array.Empty<LearningPathDto>()));
     }
 
     // ── 4. Confirm ─────────────────────────────────────────────────────
@@ -275,7 +396,7 @@ public sealed class AcademyController : ControllerBase
         var progress = await _enrollments.GetProgressAsync(courseKey.Trim(), student.Trim(), cancellationToken);
         var certificate = await _certificates.GetAsync(student.Trim(), courseKey.Trim(), cancellationToken);
 
-        return Ok(ToProgressDto(progress, certificate));
+        return Ok(ToProgressDto(progress, await ToCertificateDtoAsync(certificate, cancellationToken)));
     }
 
     // ── 6. Post progress (marcar lección) ──────────────────────────────
@@ -320,7 +441,7 @@ public sealed class AcademyController : ControllerBase
             ? await _certificates.GetAsync(student, courseKey.Trim(), cancellationToken)
             : null;
 
-        return Ok(ToProgressDto(progress, certificate));
+        return Ok(ToProgressDto(progress, await ToCertificateDtoAsync(certificate, cancellationToken)));
     }
 
     // ── 7. Certificate (credencial verificable) ─────────────────────────
@@ -347,9 +468,7 @@ public sealed class AcademyController : ControllerBase
 
         var certificate = await _certificates.GetAsync(student, course.Trim(), cancellationToken);
         return Ok(new CertificateResponse(
-            Certificate: certificate is null
-                ? null
-                : new CertificateDto(certificate.Id, certificate.StudentName, certificate.IssuedAt, certificate.VerifyUrl)));
+            Certificate: await ToCertificateDtoAsync(certificate, cancellationToken)));
     }
 
     // ── 7b. Verificación PÚBLICA de la credencial ───────────────────────
@@ -441,6 +560,15 @@ public sealed class AcademyController : ControllerBase
         var courses = result.Courses.Select(ic => new InstructorCourseDto(
             // studentCount real desde las métricas del panel (la card lo lee en course.studentCount).
             Course: ToCourseDto(ic.Course) with { StudentCount = ic.Metrics.Students },
+            // Y los mismos datos APLANADOS, que es donde la UI los lee. Sin el id en la raíz su
+            // normalizador descartaba la fila entera.
+            Id: ic.Course.Id,
+            Title: ic.Course.Title,
+            Price: ic.Course.Price,
+            PriceFormatted: ic.Course.IsFree
+                ? "Gratis"
+                : _priceFormatter.Format(ic.Course.Price, ic.Course.Currency),
+            StudentCount: ic.Metrics.Students,
             Students: ic.Metrics.Students,
             Revenue: ic.Metrics.Revenue,
             RevenueFormatted: _priceFormatter.Format(ic.Metrics.Revenue, ic.Metrics.Currency),
@@ -515,6 +643,9 @@ public sealed class AcademyController : ControllerBase
         Id: c.Id,
         Title: c.Title,
         Summary: c.Summary,
+        // La MISMA cadena bajo la clave que la UI lee. Va duplicada y no renombrada por la
+        // convención de este controller (CoverImageUrl/Cover, Total/Amount/Price).
+        Subtitle: c.Summary,
         Category: c.Category,
         Level: MapLevel(c.Level),
         InstructorName: c.InstructorName,
@@ -537,8 +668,13 @@ public sealed class AcademyController : ControllerBase
     // La data del catálogo viene en español (Principiante/Intermedio/Avanzado).
     private static string MapLevel(string? level) => (level ?? string.Empty).Trim().ToLowerInvariant() switch
     {
-        "avanzado" => "advanced",
-        "intermedio" => "intermediate",
+        // Reconoce también lo que ESTE MISMO método emite. Era una bomba de relojería: un
+        // catálogo que sirviera "advanced" —que es lo que el schema de `coursePage` le pide al
+        // editor— caía al `_` y salía «beginner», o sea todos los cursos en el nivel más bajo
+        // sin que nada fallara. Hoy no pasa porque la fuente de contenido normaliza al
+        // vocabulario del seed, pero eso es una coincidencia entre dos ficheros, no una regla.
+        "avanzado" or "advanced" => "advanced",
+        "intermedio" or "intermediate" => "intermediate",
         _ => "beginner",
     };
 
@@ -552,17 +688,50 @@ public sealed class AcademyController : ControllerBase
         // Blogs): el course-player resuelve el cuerpo de la lección del MISMO feed.
         ContentItemId: l.ContentItemId,
         Resources: l.Resources.Select(r => new ResourceDto(r.Title, r.Url, r.Kind)).ToList(),
-        IsPreview: l.IsPreview);
+        IsPreview: l.IsPreview,
+        // La MISMA bandera bajo la clave que la UI lee: sin ella la vista previa no se
+        // ofrecía nunca, que es el gancho comercial de la ficha.
+        Preview: l.IsPreview,
+        // DERIVADO de lo que hay, no inventado: con video es una clase, sin él es lectura.
+        // La UI pinta un icono por tipo y sin el campo pintaba «video» en todas.
+        Kind: string.IsNullOrWhiteSpace(l.VideoRef) ? "reading" : "video");
 
-    private static ProgressResponse ToProgressDto(CourseProgress progress, Certificate? certificate) => new(
+    /// <summary>
+    /// La credencial con el título de su curso, o null si no hay credencial.
+    /// </summary>
+    /// <remarks>
+    /// <b>El título se resuelve del CATÁLOGO y no viaja en <see cref="Certificate"/></b>: el id
+    /// de la credencial está sellado (ADR 0124, HU #45) y meterle un campo al record que se
+    /// sella es tocar lo que se verifica. Es además el camino que ya usaba la verificación
+    /// pública, así que hay uno y no dos.
+    /// </remarks>
+    private async Task<CertificateDto?> ToCertificateDtoAsync(
+        Certificate? certificate,
+        CancellationToken cancellationToken)
+    {
+        if (certificate is null)
+        {
+            return null;
+        }
+
+        var detail = await _catalog.GetCourseAsync(certificate.CourseId, cancellationToken);
+        return new CertificateDto(
+            Id: certificate.Id,
+            StudentName: certificate.StudentName,
+            // Vacío y no el id: el diploma lo imprime, y un identificador interno donde va el
+            // nombre del curso se ve peor que un hueco.
+            CourseTitle: detail?.Course.Title ?? string.Empty,
+            IssuedAt: certificate.IssuedAt,
+            VerifyUrl: certificate.VerifyUrl);
+    }
+
+    private static ProgressResponse ToProgressDto(CourseProgress progress, CertificateDto? certificate) => new(
         CourseId: progress.CourseId,
         CompletedLessonIds: progress.CompletedLessonIds,
         Percent: progress.Percent,
         LastLessonId: progress.LastLessonId,
         Completed: progress.Percent >= 100,
-        Certificate: certificate is null
-            ? null
-            : new CertificateDto(certificate.Id, certificate.StudentName, certificate.IssuedAt, certificate.VerifyUrl));
+        Certificate: certificate);
 
     // ── Request DTOs (binding de los módulos course-catalog + course-player) ──
 
@@ -570,7 +739,16 @@ public sealed class AcademyController : ControllerBase
     public sealed record StudentRequest(string Name, string Email);
 
     /// <summary>POST /api/academy/enroll — curso + alumno.</summary>
-    public sealed record EnrollRequest(string CourseId, StudentRequest? Student);
+    /// <summary>
+    /// <c>POST /enroll</c> — curso + alumno + el plan que eligió.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>PlanId</c> faltaba, y era plata</b> (#102): la UI lo manda desde siempre y
+    /// System.Text.Json descarta sin decir nada los miembros que no mapea, así que el alumno
+    /// elegía un plan y se le cobraba el precio líder del curso. Llega el CÓDIGO del plan y
+    /// nunca su monto — el total lo resuelve el motor desde el catálogo.
+    /// </remarks>
+    public sealed record EnrollRequest(string CourseId, StudentRequest? Student, string? PlanId = null);
 
     /// <summary>POST /api/academy/confirm — la inscripción a capturar.</summary>
     public sealed record ConfirmEnrollRequest(string OrderRef);
@@ -617,10 +795,21 @@ public sealed class AcademyController : ControllerBase
 
     // ── Response DTOs (JSON estable para la UI) ────────────────────────
 
+    /// <summary>
+    /// Un curso para la tarjeta y la ficha.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>Subtitle</c> es la clave que la UI lee</b> y <c>Summary</c> se conserva (#102). La
+    /// app cae a <c>description</c> si falta, y en el LISTADO `description` va nula, así que la
+    /// segunda línea de cada tarjeta salía vacía — se veía, y se veía mal. Van las dos por la
+    /// misma convención que `CoverImageUrl`/`Cover` de aquí al lado: renombrar rompería a
+    /// cualquier consumidor no descubierto, y el coste de duplicar una cadena es cero.
+    /// </remarks>
     public sealed record CourseDto(
         string Id,
         string Title,
         string Summary,
+        string Subtitle,
         string Category,
         string Level,
         string InstructorName,
@@ -641,6 +830,21 @@ public sealed class AcademyController : ControllerBase
 
     public sealed record ResourceDto(string Title, string Url, string Kind);
 
+    /// <summary>
+    /// Una lección del temario.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>Preview</c> es la clave que la UI lee</b> (#102): sin ella ninguna lección era
+    /// reproducible sin matricularse, que es el gancho comercial de la ficha.
+    ///
+    /// <para><b><c>Kind</c> se DERIVA, no se inventa</b>: una lección con video es
+    /// <c>video</c> y una sin él es <c>reading</c>. La UI pinta un icono por tipo y sin el
+    /// campo pintaba «video» en todas, incluidas las que no lo son. No se emite
+    /// <c>allowAssignment</c> —la entrega de tareas que la UI sabe mostrar— porque eso no es
+    /// derivable de nada: no existe en <c>CourseLesson</c> ni en el schema, y emitir un
+    /// <c>false</c> fijo diría «este curso no tiene tareas» sobre uno que quizá las tenga.
+    /// </para>
+    /// </remarks>
     public sealed record LessonDto(
         string Id,
         string Title,
@@ -649,7 +853,9 @@ public sealed class AcademyController : ControllerBase
         string? VideoRef,
         string ContentItemId,
         IReadOnlyList<ResourceDto> Resources,
-        bool IsPreview);
+        bool IsPreview,
+        bool Preview,
+        string Kind);
 
     public sealed record ModuleDto(
         string Id,
@@ -665,8 +871,23 @@ public sealed class AcademyController : ControllerBase
         string? AvatarUrl,
         string? Avatar);
 
+    /// <summary>
+    /// Un plan de pago del curso.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>Id</c> es la clave que la UI lee</b>, y su ausencia no era cosmética (#102): el
+    /// normalizador inventaba <c>plan-&lt;random&gt;</c> EN CADA RENDER, así que la selección
+    /// del plan era inestable y el <c>planId</c> que la app manda al matricularse era basura —
+    /// justo el campo que ahora decide cuánto se cobra.
+    ///
+    /// <para>No se emiten <c>description</c>, <c>perks[]</c> ni <c>featured</c>, que la UI
+    /// también sabe pintar: no existen en <c>CoursePricingPlan</c> ni los produce
+    /// <c>CoursePricingRules</c>. Inventarle viñetas a un plan de pago es escribir una oferta
+    /// comercial que nadie autoró.</para>
+    /// </remarks>
     public sealed record PlanDto(
         string Code,
+        string Id,
         string Label,
         decimal Total,
         decimal Amount,
@@ -677,11 +898,20 @@ public sealed class AcademyController : ControllerBase
         int InstallmentCount,
         string InstallmentFormatted);
 
+    /// <summary>
+    /// La ficha completa del curso.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>Outcomes</c> va también en la RAÍZ</b> (#102): la UI lo lee ahí y el borde sólo lo
+    /// emitía dentro de <c>course</c>, así que «Lo que aprenderás» salía vacío siempre. Se
+    /// conserva en los dos sitios porque el listado también lleva <c>CourseDto</c>.
+    /// </remarks>
     public sealed record CourseDetailResponse(
         CourseDto Course,
         IReadOnlyList<ModuleDto> Modules,
         InstructorDto Instructor,
-        IReadOnlyList<PlanDto> Plans);
+        IReadOnlyList<PlanDto> Plans,
+        IReadOnlyList<string> Outcomes);
 
     public sealed record EnrolledResponse(bool Enrolled, string? EnrollmentId);
 
@@ -694,7 +924,20 @@ public sealed class AcademyController : ControllerBase
 
     public sealed record ConfirmEnrollResponse(string Status, string EnrollmentId, string CourseId);
 
-    public sealed record CertificateDto(string Id, string StudentName, DateTimeOffset IssuedAt, string VerifyUrl);
+    /// <summary>
+    /// La credencial de quien la obtuvo.
+    /// </summary>
+    /// <remarks>
+    /// <b>Lleva <c>CourseTitle</c> desde #102</b>: la UI lo imprime en el diploma y el DTO
+    /// público ya lo emitía, así que el privado era el único que no sabía de qué curso era la
+    /// credencial que enseña.
+    /// </remarks>
+    public sealed record CertificateDto(
+        string Id,
+        string StudentName,
+        string CourseTitle,
+        DateTimeOffset IssuedAt,
+        string VerifyUrl);
 
     public sealed record ProgressResponse(
         string CourseId,
@@ -728,8 +971,29 @@ public sealed class AcademyController : ControllerBase
     public sealed record VerifyCertificateResponse(bool Valid, PublicCertificateDto? Certificate);
 
     /// <summary>Una fila del panel del instructor: el curso + sus métricas (alumnos/ingresos/rating).</summary>
+    /// <summary>
+    /// Una fila de la consola del instructor: el curso y sus métricas.
+    /// </summary>
+    /// <remarks>
+    /// <b>Los campos del curso van APLANADOS además de anidados</b> (#102), y no era
+    /// cosmético: la UI lee <c>id</c> y <c>title</c> en la raíz de cada fila, no encontraba el
+    /// id, y su normalizador devolvía <c>null</c> POR CADA FILA — con la lista vacía, la
+    /// consola entera caía al mock y encendía el cartel de «datos de ejemplo» aunque el
+    /// servidor tuviera los cursos reales.
+    ///
+    /// <para><b>Lo que esta respuesta sigue SIN poder emitir</b>, y por eso la consola no queda
+    /// completa con este arreglo: <c>students[]</c> (la lista de alumnos matriculados, no su
+    /// número) y <c>questions[]</c> (las preguntas del foro). No existen en ningún seam —ni
+    /// <c>ICourseCatalogProvider</c> ni <c>IEnrollmentMetrics</c> los producen— y fabricarlos
+    /// aquí sería inventar alumnos. Son trabajo de seam, anotado en #102.</para>
+    /// </remarks>
     public sealed record InstructorCourseDto(
         CourseDto Course,
+        string Id,
+        string Title,
+        decimal Price,
+        string PriceFormatted,
+        int StudentCount,
         int Students,
         decimal Revenue,
         string RevenueFormatted,
@@ -742,6 +1006,33 @@ public sealed class AcademyController : ControllerBase
         int TotalStudents,
         decimal TotalRevenue,
         string TotalRevenueFormatted);
+
+    /// <summary>Una fila de «mi aprendizaje»: el curso y por dónde va el alumno.</summary>
+    public sealed record EnrolledCourseDto(
+        string EnrollmentId,
+        CourseDto Course,
+        int Percent,
+        int LessonCount,
+        int CompletedCount,
+        DateTimeOffset LastActivityAt,
+        bool Completed);
+
+    /// <summary>
+    /// Una ruta de aprendizaje: varios cursos con un hilo. <b>Hoy no se emite ninguna</b> — el
+    /// tipo existe para que la forma de la respuesta sea estable el día que haya de dónde
+    /// sacarlas.
+    /// </summary>
+    public sealed record LearningPathDto(
+        string Id,
+        string Title,
+        string Description,
+        IReadOnlyList<string> CourseIds,
+        int Percent);
+
+    /// <summary>GET /api/academy/learning — { enrollments, paths }.</summary>
+    public sealed record LearningResponse(
+        IReadOnlyList<EnrolledCourseDto> Enrollments,
+        IReadOnlyList<LearningPathDto> Paths);
 
     /// <summary>POST /api/academy/course — { courseId } del curso publicado.</summary>
     public sealed record PublishCourseResponse(string CourseId);
