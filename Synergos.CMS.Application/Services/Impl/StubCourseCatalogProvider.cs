@@ -59,7 +59,7 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     // contador compartido haría que los ids saltaran según qué otro test corrió antes.
     private int _publishedCounter;
 
-    private readonly ICatalogIndex<AcademyDemoSeed.SeedCourse> _index;
+    private readonly ICatalogIndex<CourseSummary> _index;
 
     /// <summary>
     /// Ctor de 1 argumento. <b>Se conserva tal cual a propósito:</b> lo usa la factory
@@ -70,11 +70,11 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     /// silencio y con los tests en verde (los tests cablean la inyección ellos mismos).
     /// </summary>
     public StubCourseCatalogProvider(IContentStream contentStream)
-        : this(contentStream, new InMemoryCatalogIndex<AcademyDemoSeed.SeedCourse>(Descriptor, CatalogSettings.Unpaged))
+        : this(contentStream, new InMemoryCatalogIndex<CourseSummary>(Descriptor, CatalogSettings.Unpaged))
     {
     }
 
-    internal StubCourseCatalogProvider(IContentStream contentStream, ICatalogIndex<AcademyDemoSeed.SeedCourse> index)
+    internal StubCourseCatalogProvider(IContentStream contentStream, ICatalogIndex<CourseSummary> index)
     {
         _contentStream = contentStream ?? throw new ArgumentNullException(nameof(contentStream));
         _index = index ?? throw new ArgumentNullException(nameof(index));
@@ -95,22 +95,31 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     ///
     /// <para>El resumen pesa lo mínimo: es prosa larga que casa por accidente y no debe
     /// desplazar nunca a un título.</para>
+    ///
+    /// <para><b>Está tipado sobre <see cref="CourseSummary"/> —el tipo del CONTRATO— y no
+    /// sobre el del seed, y ésa es la razón por la que existe uno solo.</b> Cuando el
+    /// catálogo pasó a poder salir del contenido del CMS
+    /// (<c>Synergos:Catalog:Sources:Academy = cms</c>), un descriptor atado a
+    /// <c>SeedCourse</c> habría obligado a la otra fuente a declarar el suyo: dos
+    /// descriptores, y la búsqueda comportándose distinto según el flag. Eso es una
+    /// regresión que sólo aparece al mover una línea de configuración, que es la peor forma
+    /// de aparecer. Es la misma regla que ya aplicó Eventos.</para>
     /// </remarks>
-    internal static CatalogDescriptor<AcademyDemoSeed.SeedCourse> Descriptor { get; } = new(
+    internal static CatalogDescriptor<CourseSummary> Descriptor { get; } = new(
         idOf: c => c.Id,
         searchFields: new[]
         {
-            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(5, c => c.Title),
-            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(3, c => AcademyDemoSeed.InstructorById(c.InstructorId).Name),
-            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(2, c => c.Category),
-            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(1, c => c.Summary),
+            new CatalogSearchField<CourseSummary>(5, c => c.Title),
+            new CatalogSearchField<CourseSummary>(3, c => c.InstructorName),
+            new CatalogSearchField<CourseSummary>(2, c => c.Category),
+            new CatalogSearchField<CourseSummary>(1, c => c.Summary),
         },
         // El orden histórico: mejor calificados primero.
         defaultOrder: courses => courses.OrderByDescending(c => c.Rating).ThenBy(c => c.Title, StringComparer.Ordinal),
-        filters: new CatalogFilter<AcademyDemoSeed.SeedCourse>[]
+        filters: new CatalogFilter<CourseSummary>[]
         {
-            new CatalogTermFilter<AcademyDemoSeed.SeedCourse>("category", "Escuela", c => new[] { c.Category }),
-            new CatalogTermFilter<AcademyDemoSeed.SeedCourse>("level", "Nivel", c => new[] { c.Level }),
+            new CatalogTermFilter<CourseSummary>("category", "Escuela", c => new[] { c.Category }),
+            new CatalogTermFilter<CourseSummary>("level", "Nivel", c => new[] { c.Level }),
         });
 
     public async Task<CourseSearchResult> SearchAsync(CourseQuery query, CancellationToken cancellationToken = default)
@@ -137,11 +146,10 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
         // del instructor que acaba de publicar. Take explícito + Unpaged en el ctor porque
         // esta seam promete TODOS los cursos que casan, no una página.
         var result = _index.Search(
-            AllCourses().ToList(),
+            AllCourses().Select(ToSummary).ToList(),
             new CatalogQuery(Text: query.Text, Filters: filters.Count > 0 ? filters : null, Take: int.MaxValue));
 
-        var matched = result.Items.Select(ToSummary).ToList();
-        return new CourseSearchResult(matched, result.Total);
+        return new CourseSearchResult(result.Items, result.Total);
     }
 
     public async Task<CourseDetail?> GetCourseAsync(string courseId, CancellationToken cancellationToken = default)
