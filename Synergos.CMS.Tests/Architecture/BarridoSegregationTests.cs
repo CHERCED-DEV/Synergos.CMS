@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Synergos.Bff.Core;
 using Synergos.Bff.Tienda.Clients;
@@ -108,6 +109,45 @@ public sealed class BarridoSegregationTests
         Assert.True(registrado,
             "AddSagaMachinery no registró DeliverySweeper: los orquestadores arrancarían sanos, "
             + "pasarían su /health y nadie volvería por un aviso colgado.");
+    }
+
+    [Fact]
+    public void Todo_orquestador_levanta_el_ARRIENDO_de_la_compensacion()
+    {
+        // Misma forma que el de arriba y por el mismo motivo (#34): un orquestador al que se le
+        // olvidara el arriendo arrancaría sano, pasaría su /health, y compensaría dos veces el día
+        // que alguien levante una segunda réplica. Que sea el registro COMPARTIDO el que lo pone
+        // es lo que hace que no se pueda olvidar en uno solo.
+        //
+        // Se RESUELVE el motor en vez de mirar el descriptor: lo que hay que defender no es que
+        // exista una línea, es que la máquina se pueda construir entera. Con el arriendo sin
+        // registrar, esto revienta acá — y hoy reventaría en la primera compensación, que es la
+        // petición que menos conviene que sea la primera en descubrirlo.
+        var raiz = Path.Combine(Path.GetTempPath(), "syn-gate-arriendo-" + Guid.NewGuid().ToString("n"));
+        try
+        {
+            var builder = WebApplication.CreateBuilder();
+            builder.Configuration["tienda:Storage:Root"] = raiz;
+            builder.AddSagaMachinery<PurchaseSaga, TiendaCompensationExecutor>(
+                new SagaVocabulary("tienda", "la compra"), TiendaCapabilities.Cart);
+
+            // Lo único que pone el dominio, igual que en su Program.cs: el ejecutor sabe deshacer
+            // los kinds de Tienda y para eso necesita sus clientes. Todo lo demás lo tiene que
+            // haber puesto el registro compartido, que es lo que se está comprobando.
+            builder.Services.AddSingleton<TiendaCapabilities>();
+
+            using var proveedor = builder.Services.BuildServiceProvider();
+
+            Assert.IsType<FileSystemSagaLease>(proveedor.GetRequiredService<ISagaLease>());
+            Assert.NotNull(proveedor.GetRequiredService<SagaEngine<PurchaseSaga>>());
+        }
+        finally
+        {
+            if (Directory.Exists(raiz))
+            {
+                try { Directory.Delete(raiz, recursive: true); } catch { /* best-effort */ }
+            }
+        }
     }
 
     [Fact]
