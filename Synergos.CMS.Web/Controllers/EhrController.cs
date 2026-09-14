@@ -683,7 +683,7 @@ public sealed class EhrController : ControllerBase
         Id: p.Id, Name: p.FullName, Document: p.DocumentId, Sex: NormalizeSex(p.Gender),
         Age: p.AgeYears, Phone: p.Phone, Email: p.Email, BloodType: p.BloodType,
         Problems: p.ChronicConditions, Allergies: p.Allergies,
-        PrimaryDoctorId: p.PrimaryDoctorId ?? string.Empty, Active: true,
+        PrimaryDoctorId: p.PrimaryDoctorId ?? string.Empty, Active: null,
         City: p.City, AvatarUrl: p.AvatarUrl);
 
     // El registro modela el sexo como texto libre ("Masculino"/"Femenino"/…); la UI
@@ -701,7 +701,7 @@ public sealed class EhrController : ControllerBase
 
     private static DoctorDto ToDoctorDto(MedicalDoctor d) => new(
         Id: d.Id, Name: d.FullName, Specialty: d.Specialty, License: d.LicenseNumber,
-        Phone: string.Empty, Email: string.Empty, AcceptingPatients: true,
+        Phone: string.Empty, Email: string.Empty, AcceptingPatients: null,
         Rating: d.Rating, YearsExperience: d.YearsExperience, AvatarUrl: d.AvatarUrl,
         WorkingDays: d.WorkingDays.Select(w => (int)w).ToList(),
         SlotStartHour: d.SlotStartHour, SlotEndHour: d.SlotEndHour, SlotMinutes: d.SlotMinutes);
@@ -773,13 +773,10 @@ public sealed class EhrController : ControllerBase
         Flag: r.Flag, Date: r.ResultedAtUtc.ToString("yyyy-MM-dd"), Released: true,
         Comment: r.Notes ?? string.Empty);
 
-    /// <summary>Farmacia de la demo (el seam no modela la farmacia dispensadora aún).</summary>
-    private const string DemoPharmacy = "Farmacia Synergos";
-
     private static MedicationDto ToMedicationDto(EhrMedication m) => new(
         Id: m.MedicationId, PatientId: m.PatientId, Drug: m.MedicationName,
         Dose: m.Dosage, Frequency: m.Frequency, Instructions: m.Instructions ?? string.Empty,
-        Pharmacy: DemoPharmacy, RefillsLeft: m.RefillsRemaining ?? 0, RefillStatus: null);
+        Pharmacy: null, RefillsLeft: m.RefillsRemaining ?? 0, RefillStatus: null);
 
     // Mapea el estado del seam (pending|approved|denied) al lifecycle que espera la UI.
     private static string RefillLifecycleStatus(string seamStatus) => seamStatus switch
@@ -847,7 +844,7 @@ public sealed class EhrController : ControllerBase
             Subject: ThreadSubject(t.ContextRef),
             LastMessage: last,
             LastAtUtc: t.LastMessageAt.UtcDateTime,
-            Unread: 0,
+            Unread: null,
             Messages: messages);
     }
 
@@ -859,7 +856,7 @@ public sealed class EhrController : ControllerBase
         Subject: ThreadSubject(s.ContextRef),
         LastMessage: s.LastMessagePreview,
         LastAtUtc: s.LastMessageAt.UtcDateTime,
-        Unread: 0,
+        Unread: null,
         Messages: Array.Empty<ThreadMessageDto>());
 
     private static BillingDto ToBillingDto(EhrBillingStatement s)
@@ -1045,18 +1042,52 @@ public sealed class EhrController : ControllerBase
 
     // ── Response DTOs (JSON estable para la UI) ────────────────────────
 
+    /// <summary>
+    /// La ficha demográfica del paciente hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><see cref="Active"/> sale siempre <c>null</c>, y <c>null</c> es «no consta»</b>
+    /// (HU #111). Decía <c>true</c> — una constante — para todo paciente del padrón: la UI lo
+    /// documenta como «tiene un episodio de atención abierto», y eso es un hecho clínico que
+    /// este borde no sabe. <see cref="IPatientRegistry"/> no modela episodios ni altas, así que
+    /// <c>true</c> no era una lectura sino una afirmación fabricada — y <c>false</c> lo sería
+    /// igual. Es el criterio de #106: si el valor entero de un campo es ser cierto, no se
+    /// rellena.</para>
+    /// <para><b>Nulo no es lo mismo que <c>false</c></b>, y por eso el tipo es <c>bool?</c> y no
+    /// se quita la clave: «no lo sabemos» y «este paciente no está activo» son dos respuestas
+    /// distintas, y si se ven iguales el arreglo no sirve de nada.</para>
+    /// <para><b>Disparador para volver a emitirlo</b>: que <see cref="IPatientRegistry"/> —o un
+    /// seam de episodios de atención— sepa decir si el paciente tiene uno abierto.</para>
+    /// </remarks>
     public sealed record PatientDto(
         string Id, string Name, string Document, string Sex,
         int Age, string Phone, string Email, string BloodType,
         IReadOnlyList<string> Problems, IReadOnlyList<string> Allergies,
-        string PrimaryDoctorId, bool Active,
+        string PrimaryDoctorId, bool? Active,
         string City, string? AvatarUrl);
 
     public sealed record PatientsResponse(IReadOnlyList<PatientDto> Patients);
 
+    /// <summary>
+    /// Un médico del directorio hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><see cref="AcceptingPatients"/> sale siempre <c>null</c></b> (HU #111). Decía
+    /// <c>true</c> para todos: «este médico acepta pacientes nuevos», dicho por un borde que no
+    /// tiene de dónde saberlo — <see cref="MedicalDoctor"/> modela agenda (días, franja, slot)
+    /// pero no si el profesional cerró su lista. Un paciente que elige médico por ese dato lo
+    /// está eligiendo por una constante.</para>
+    /// <para><b><c>null</c> ≠ <c>false</c></b>: cerrar la lista de un médico que sí recibe es
+    /// tan falso como lo contrario, así que la ausencia tiene su propio valor y la clave se
+    /// conserva.</para>
+    /// <para><b>Disparador</b>: que <see cref="IDoctorDirectory"/> sepa decir si el médico
+    /// admite pacientes nuevos.</para>
+    /// <para><see cref="Phone"/> y <see cref="Email"/> salen vacíos por la misma razón —el seam
+    /// no los trae— pero ahí la cadena vacía ya dice «no hay», no afirma un teléfono.</para>
+    /// </remarks>
     public sealed record DoctorDto(
         string Id, string Name, string Specialty, string License,
-        string Phone, string Email, bool AcceptingPatients,
+        string Phone, string Email, bool? AcceptingPatients,
         double Rating, int YearsExperience, string? AvatarUrl,
         IReadOnlyList<int> WorkingDays, int SlotStartHour, int SlotEndHour, int SlotMinutes);
 
@@ -1246,9 +1277,26 @@ public sealed class EhrController : ControllerBase
 
     public sealed record LabResultsResponse(IReadOnlyList<LabResultDto> Results);
 
+    /// <summary>
+    /// Una medicación activa del paciente.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><see cref="Pharmacy"/> sale siempre <c>null</c>, y es el peor de los cuatro
+    /// campos que la HU #111 vino a quitar</b>: decía «Farmacia Synergos» —una constante del
+    /// fichero, <c>DemoPharmacy</c>— al lado del nombre de un medicamento real, en la pantalla
+    /// desde la que alguien sale a recogerlo. El error de los otros tres se queda en la
+    /// pantalla; éste <b>manda a una persona a un sitio</b>.</para>
+    /// <para>No hay seam del que salga: <see cref="IClinicalMedicationService"/> deriva la
+    /// medicación activa de las recetas vivas y ni el medicamento ni la receta
+    /// (<see cref="IClinicalPrescriptionService"/>) modelan farmacia dispensadora. Un nombre de
+    /// farmacia cuyo valor entero es ser cierto no se rellena; sin dato, se dice que no hay
+    /// dato (<c>CLAUDE.md</c> §5, <c>feedback_gethashcode_is_not_a_seed</c>).</para>
+    /// <para><b>Disparador</b>: que el seam de medicación —o un eRx/pharmacy real detrás de
+    /// él— traiga la farmacia dispensadora de cada orden.</para>
+    /// </remarks>
     public sealed record MedicationDto(
         string Id, string PatientId, string Drug, string Dose, string Frequency,
-        string Instructions, string Pharmacy, int RefillsLeft, string? RefillStatus);
+        string Instructions, string? Pharmacy, int RefillsLeft, string? RefillStatus);
 
     public sealed record MedicationsResponse(IReadOnlyList<MedicationDto> Medications);
 
@@ -1273,9 +1321,28 @@ public sealed class EhrController : ControllerBase
     public sealed record ThreadMessageDto(
         string Id, string Author, string Body, DateTime CreatedAtUtc, bool Outgoing);
 
+    /// <summary>
+    /// Un hilo de la bandeja clínica hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><see cref="Unread"/> sale siempre <c>null</c>, y <c>null</c> NO es cero</b>
+    /// (HU #111). Decía <c>0</c> —constante en los dos mappers— así que el contador de sin-leer
+    /// de la bandeja <b>no podía mostrar nada nunca</b>, y lo que el JSON afirmaba no era «no
+    /// sé»: era <b>«no tienes mensajes sin leer»</b>, que es la afirmación contraria y es la que
+    /// hace que el paciente no abra el mensaje de su médico.</para>
+    /// <para><b>No hay de dónde sacarlo, y el seam lo dice de frente</b>:
+    /// <see cref="IMessagingService"/> declara en su propio contrato «sin typing, sin grupos,
+    /// <b>sin read-receipts</b>». Sin saber qué leyó cada participante y cuándo, un contador de
+    /// no leídos no se deriva: se inventa. Derivarlo de <c>MessageCount</c> —que es lo que
+    /// tienta, y lo que hace el <c>unreadMessages</c> del home— cuenta los mensajes propios del
+    /// paciente como sin leer.</para>
+    /// <para><b>Disparador</b>: que <see cref="IMessagingService"/> registre lectura por
+    /// participante (un <c>lastReadAt</c> por hilo, o un <c>MarkReadAsync</c>). Ese día la clave
+    /// recupera su forma sin tener que reinventarla.</para>
+    /// </remarks>
     public sealed record ThreadDto(
         string Id, string Participant, string Subject, string LastMessage,
-        DateTime LastAtUtc, int Unread, IReadOnlyList<ThreadMessageDto> Messages);
+        DateTime LastAtUtc, int? Unread, IReadOnlyList<ThreadMessageDto> Messages);
 
     public sealed record ThreadEnvelope(ThreadDto Thread);
 
