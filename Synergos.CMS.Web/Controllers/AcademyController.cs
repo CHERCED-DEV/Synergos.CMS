@@ -249,7 +249,12 @@ public sealed class AcademyController : ControllerBase
             Instructor: instructor,
             Plans: plans,
             // También en la RAÍZ, que es donde la UI lo lee. Dentro de `course` se conserva.
-            Outcomes: detail.Outcomes));
+            Outcomes: detail.Outcomes,
+            // Y la descripción, por lo mismo y en la línea de al lado — que es donde se quedó
+            // sin arreglar. El normalizador la lee en la raíz y, si falta, cae a `subtitle`:
+            // así que la ficha de TODO curso llevaba el resumen corto donde va la descripción
+            // autorada, sin que nada fallara. Es el gemelo exacto de `outcomes` (#102).
+            Description: detail.Description));
     }
 
     // ── 3. Enroll ──────────────────────────────────────────────────────
@@ -301,7 +306,7 @@ public sealed class AcademyController : ControllerBase
     }
 
     // ── 3b. Learning (mi aprendizaje) ──────────────────────────────────
-    // GET /api/academy/learning?student= → { enrollments:[...], paths:[] }
+    // GET /api/academy/learning → { enrollments:[...], paths:[] }   🔒 sesión
     /// <summary>
     /// Lo que el alumno está cursando, con su avance.
     /// </summary>
@@ -316,18 +321,23 @@ public sealed class AcademyController : ControllerBase
     /// seam ni en el schema: no hay de dónde sacarla. Devolver el array vacío hace que la UI
     /// no pinte la sección, que es la verdad; fabricar rutas agrupando por categoría le pondría
     /// nombre de producto a un <c>GROUP BY</c>.</para>
+    ///
+    /// <para><b>Quién es el alumno sale de la SESIÓN, y este endpoint nació sin eso</b> (#102).
+    /// Se escribió con un <c>?student=</c> en el mismo controller cuya cabecera explica, doce
+    /// líneas más arriba, que ese parámetro se había quitado justamente porque «leer el progreso
+    /// ajeno ya era un IDOR». Anónimo y enumerable por correo: se pedía la dirección de
+    /// cualquiera y salía su expediente —qué cursa, cuánto lleva, cuándo entró por última vez—.
+    /// Cerrar un agujero en tres endpoints y reabrirlo al escribir el cuarto es lo que pasa
+    /// cuando la regla vive en la costumbre y no en un test: <c>AcademyControllerAuthTests</c>
+    /// cubría <c>progress</c> y <c>certificate</c>, y nadie escribió el de éste.</para>
     /// </remarks>
     [HttpGet("learning")]
-    public async Task<IActionResult> Learning(
-        [FromQuery] string? student,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> Learning(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(student))
-        {
-            return BadRequest(new { error = "student es requerido." });
-        }
+        var (denied, student) = RequireStudent();
+        if (denied is not null) { return denied; }
 
-        var enrollments = await _enrollments.GetEnrollmentsAsync(student.Trim(), cancellationToken);
+        var enrollments = await _enrollments.GetEnrollmentsAsync(student, cancellationToken);
 
         var rows = new List<EnrolledCourseDto>(enrollments.Count);
         foreach (var e in enrollments)
@@ -951,7 +961,8 @@ public sealed class AcademyController : ControllerBase
         IReadOnlyList<ModuleDto> Modules,
         InstructorDto Instructor,
         IReadOnlyList<PlanDto> Plans,
-        IReadOnlyList<string> Outcomes);
+        IReadOnlyList<string> Outcomes,
+        string Description);
 
     public sealed record EnrolledResponse(bool Enrolled, string? EnrollmentId);
 

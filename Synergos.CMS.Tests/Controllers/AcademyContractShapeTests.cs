@@ -89,16 +89,20 @@ public class AcademyContractShapeTests
                 InstallmentFormatted: "3 x $64.800"),
             "id", "code", "label", "total");
 
-    [Fact] // normalizeDetail lee `outcomes` en la RAÍZ, no dentro de `course`
-    public void La_ficha_emite_outcomes_en_la_raiz()
+    [Fact] // normalizeDetail lee `outcomes` y `description` en la RAÍZ, no dentro de `course`
+    public void La_ficha_emite_outcomes_y_description_en_la_raiz()
         => AssertHas(
             new AcademyController.CourseDetailResponse(
                 Course: Course(),
                 Modules: Array.Empty<AcademyController.ModuleDto>(),
                 Instructor: new AcademyController.InstructorDto("ins", "Elena", "", "", null, null),
                 Plans: Array.Empty<AcademyController.PlanDto>(),
-                Outcomes: new[] { "Construir un flujo de caja" }),
-            "course", "modules", "instructor", "plans", "outcomes");
+                Outcomes: new[] { "Construir un flujo de caja" },
+                Description: "Un curso de finanzas para quien nunca abrió una hoja de cálculo."),
+            // `description` se quedó sin emitir cuando se subió `outcomes`, en la línea de al
+            // lado. El normalizador cae a `course.subtitle` si falta, así que la ficha de TODO
+            // curso pintaba el resumen corto donde va la descripción, sin fallar (#102).
+            "course", "modules", "instructor", "plans", "outcomes", "description");
 
     [Fact] // normalizeCertificate lee `courseTitle` — el diploma lo imprime
     public void La_credencial_emite_courseTitle()
