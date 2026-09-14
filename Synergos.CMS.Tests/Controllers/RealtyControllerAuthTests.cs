@@ -187,7 +187,7 @@ public sealed class RealtyControllerAuthTests
         Anonimo();
 
         var result = await BuildSut().Listings(
-            null, null, null, null, null, null, default);
+            null, null, null, null, null, null, null, null, null, default);
 
         Assert.IsNotType<UnauthorizedObjectResult>(result);
     }
