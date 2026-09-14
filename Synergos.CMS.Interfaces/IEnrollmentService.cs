@@ -73,6 +73,22 @@ public sealed record Certificate(
     string VerifyUrl);
 
 /// <summary>
+/// Una matrícula ACTIVA del alumno, con su avance. Es la fila de «mi aprendizaje».
+/// </summary>
+/// <remarks>
+/// <b>Junta matrícula y progreso a propósito</b>: por separado obligarían a quien las pinte a
+/// pedir el progreso curso por curso, y esa pantalla lista todos los del alumno de una.
+/// <see cref="LastActivityAt"/> es la fecha de la matrícula mientras nadie registre la última
+/// lección vista — está declarado aquí para que quien lo lea no lo tome por lo que no es.
+/// </remarks>
+public sealed record StudentEnrollment(
+    string EnrollmentId,
+    string CourseId,
+    int Percent,
+    int CompletedCount,
+    DateTimeOffset LastActivityAt);
+
+/// <summary>
 /// Servicio de matrícula + progreso del dominio Educación (LMS). Es el MOTOR
 /// transaccional del enrollment, calcando <see cref="IReservationService"/> de
 /// Hoteles (Hold→pay→Confirm) y <see cref="IShopOrderService"/> de Tienda:
@@ -97,9 +113,29 @@ public interface IEnrollmentService
     /// orden + sesión + monto (matrícula <see cref="EnrollmentStatus.PendingPayment"/>).
     /// Si es gratis, crea la matrícula <see cref="EnrollmentStatus.Active"/>
     /// inmediatamente (sin pago). Lanza <see cref="ArgumentException"/> si el
-    /// curso no existe o el alumno es inválido.
+    /// curso no existe, el alumno es inválido o el plan no existe.
     /// </summary>
-    Task<CourseEnrollmentResult> EnrollAsync(string courseId, Student student, CancellationToken cancellationToken = default);
+    /// <param name="planCode">
+    /// El plan que eligió el alumno (<see cref="CoursePricingPlan.Code"/>), o null para el
+    /// precio del curso.
+    /// </param>
+    /// <remarks>
+    /// <b>Llega el CÓDIGO del plan, nunca su monto</b>, y eso es lo mismo que hace el curso:
+    /// el total se resuelve desde el catálogo. Aceptar el monto dejaría que quien llama se
+    /// ponga el precio que quiera — es el «no se confía en el cliente» de arriba aplicado a la
+    /// otra mitad de la decisión.
+    ///
+    /// <para><b>Un código que no existe se RECHAZA, no cae al precio del curso</b> (defecto
+    /// #102). Caer es exactamente el defecto que esto viene a arreglar con otro nombre: el
+    /// alumno elige «Plan Premium con mentoría», se le cobra el precio líder y nada falla. Es
+    /// plata y se nota al instante —falla delante de quien está comprando y se arregla
+    /// eligiendo otra vez—, así que falla a la vista.</para>
+    /// </remarks>
+    Task<CourseEnrollmentResult> EnrollAsync(
+        string courseId,
+        Student student,
+        string? planCode = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Captura el pago de una inscripción pendiente y activa la matrícula.
@@ -116,6 +152,21 @@ public interface IEnrollmentService
     /// — nunca lanza por estado vacío.
     /// </summary>
     Task<CourseProgress> GetProgressAsync(string courseId, string student, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Todas las matrículas ACTIVAS del alumno con su avance. Sin ninguna devuelve <c>[]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Faltaba, y por eso «mi aprendizaje» no se podía servir</b> (#102). El seam sabía
+    /// contestar «¿cómo va este alumno en ESTE curso?» (<see cref="GetProgressAsync"/>), que
+    /// obliga a conocer el curso de antemano; la pantalla que lista lo que alguien está
+    /// cursando necesita la pregunta al revés.
+    ///
+    /// <para><b>Sólo las ACTIVAS</b>: una matrícula en <c>PendingPayment</c> es un carrito
+    /// abandonado, y ponerla entre «mis cursos» le diría al alumno que tiene acceso a algo que
+    /// no pagó.</para>
+    /// </remarks>
+    Task<IReadOnlyList<StudentEnrollment>> GetEnrollmentsAsync(string student, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Marca una lección como completada y recalcula el % sobre el total de

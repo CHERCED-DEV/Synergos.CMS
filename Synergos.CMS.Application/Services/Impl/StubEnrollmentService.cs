@@ -126,7 +126,11 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
-    public async Task<CourseEnrollmentResult> EnrollAsync(string courseId, Student student, CancellationToken cancellationToken = default)
+    public async Task<CourseEnrollmentResult> EnrollAsync(
+        string courseId,
+        Student student,
+        string? planCode = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(student);
         if (string.IsNullOrWhiteSpace(student.Name) || string.IsNullOrWhiteSpace(student.Email))
@@ -145,8 +149,16 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         var studentName = student.Name.Trim();
         var studentEmail = student.Email.Trim();
 
-        // Rama gratis: matrícula Active inmediata, sin sesión de pago.
-        if (course.IsFree)
+        // El plan que eligió el alumno, con su total resuelto DESDE EL CATÁLOGO — igual que el
+        // precio del curso. Se resuelve antes de ramificar por gratis/pago: un código
+        // inexistente tiene que rechazarse aunque el curso sea gratuito, o la validación
+        // dependería de un dato que el alumno no controla.
+        var plan = ResolvePlan(detail, planCode);
+        var total = plan?.Total ?? course.Price;
+
+        // Rama gratis: matrícula Active inmediata, sin sesión de pago. Mira el TOTAL y no
+        // `course.IsFree`, porque con un plan elegido el que manda es el del plan.
+        if (total <= 0m)
         {
             var freeEnrollment = CreateEnrollment(
                 course.Id, studentName, studentEmail, EnrollmentStatus.Active,
@@ -168,14 +180,16 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         var session = await _payments.CreateSessionAsync(
             new PaymentSessionRequest(
                 OrderReference: orderRef,
-                Amount: course.Price,
+                Amount: total,
                 Currency: course.Currency,
                 Items: new[]
                 {
                     new PaymentLineItem(
                         Sku: course.Id,
-                        Description: $"Inscripción: {course.Title}",
-                        UnitPrice: course.Price,
+                        Description: plan is null
+                            ? $"Inscripción: {course.Title}"
+                            : $"Inscripción: {course.Title} — {plan.Label}",
+                        UnitPrice: total,
                         Quantity: 1),
                 },
                 CustomerEmail: studentEmail,
@@ -188,14 +202,18 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
 
         var pending = CreateEnrollment(
             course.Id, studentName, studentEmail, EnrollmentStatus.PendingPayment,
-            orderRef: orderRef, paymentSessionId: session.SessionId, total: course.Price, currency: course.Currency);
+            orderRef: orderRef, paymentSessionId: session.SessionId, total: total, currency: course.Currency);
         await WriteEnrollmentAsync(pending, cancellationToken);
 
         return new CourseEnrollmentResult(
             Enrolled: false,
             OrderRef: orderRef,
             PaymentSessionId: session.SessionId,
-            Amount: course.Price,
+            // El TOTAL, no el precio de lista. Era la tercera vez que `course.Price` se colaba
+            // en este mismo método: la sesión de pago ya se abría por el total del plan y el
+            // expediente ya lo guardaba, pero esto es lo que la pantalla MUESTRA — se cobraban
+            // 345.600 y se anunciaban 320.000.
+            Amount: total,
             Currency: course.Currency,
             EnrollmentId: pending.EnrollmentId);
     }
@@ -245,6 +263,45 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
 
         var totalLessons = await ResolveTotalLessonsAsync(courseId, cancellationToken);
         return await BuildProgressAsync(courseId, student, totalLessons, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<StudentEnrollment>> GetEnrollmentsAsync(
+        string student,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(student))
+        {
+            return Array.Empty<StudentEnrollment>();
+        }
+
+        var email = student.Trim();
+        var mine = (await LoadAllEnrollmentsAsync(cancellationToken))
+            // Sólo las ACTIVAS: una en PendingPayment es un carrito abandonado, y ponerla entre
+            // «mis cursos» le diría al alumno que tiene acceso a algo que no pagó.
+            .Where(e => e.Status == EnrollmentStatus.Active
+                && string.Equals(e.StudentEmail, email, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(e => e.CreatedAt)
+            .ToList();
+
+        var rows = new List<StudentEnrollment>(mine.Count);
+        foreach (var enrollment in mine)
+        {
+            // El progreso se resuelve curso por curso porque es donde vive: el avance depende
+            // del temario, y el temario lo tiene el catálogo, no la matrícula.
+            var totalLessons = await ResolveTotalLessonsAsync(enrollment.CourseId, cancellationToken);
+            var progress = await BuildProgressAsync(enrollment.CourseId, email, totalLessons, cancellationToken);
+
+            rows.Add(new StudentEnrollment(
+                EnrollmentId: enrollment.EnrollmentId,
+                CourseId: enrollment.CourseId,
+                Percent: progress.Percent,
+                CompletedCount: progress.CompletedLessonIds.Count,
+                // La fecha de la MATRÍCULA, no la de la última lección: nadie registra cuándo
+                // se vio cada una, y devolver «hoy» diría que el alumno estuvo activo hoy.
+                LastActivityAt: enrollment.CreatedAt));
+        }
+
+        return rows;
     }
 
     public async Task<CourseProgress> MarkLessonAsync(string courseId, string lessonId, string student, CancellationToken cancellationToken = default)
@@ -481,6 +538,34 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
             && (string.Equals(e.StudentEmail, student, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(e.StudentName, student, StringComparison.OrdinalIgnoreCase)));
         return match?.EnrollmentId;
+    }
+
+    /// <summary>
+    /// El plan que eligió el alumno, o null si no eligió ninguno.
+    /// </summary>
+    /// <remarks>
+    /// <b>Un código que no existe se RECHAZA</b> (defecto #102). Caer al precio del curso es el
+    /// defecto original con otro nombre: el alumno elige «3 cuotas», se le cobra el contado, y
+    /// nada falla — ni en el cobro, ni en el expediente, ni en un log. Es plata, y un error que
+    /// se nota al instante y se arregla eligiendo otra vez tiene que fallar a la vista.
+    ///
+    /// <para>Se compara sin distinguir mayúsculas porque el código es un identificador de
+    /// catálogo (<c>full</c>, <c>emi-3</c>) que viaja por una URL y por un formulario, no una
+    /// contraseña.</para>
+    /// </remarks>
+    private static CoursePricingPlan? ResolvePlan(CourseDetail detail, string? planCode)
+    {
+        var code = planCode?.Trim();
+        if (string.IsNullOrEmpty(code))
+        {
+            return null;
+        }
+
+        var plan = detail.Plans?.FirstOrDefault(p =>
+            string.Equals(p.Code, code, StringComparison.OrdinalIgnoreCase));
+
+        return plan ?? throw new ArgumentException(
+            $"El plan '{code}' no existe para el curso '{detail.Course.Id}'.", nameof(planCode));
     }
 
     private PersistedEnrollment CreateEnrollment(
