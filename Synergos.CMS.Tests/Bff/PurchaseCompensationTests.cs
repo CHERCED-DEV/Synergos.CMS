@@ -5,6 +5,8 @@ using Synergos.Bff.Core;
 using Synergos.Bff.Tienda.Clients;
 using Synergos.Bff.Tienda.Domain;
 using Synergos.Core;
+using Synergos.Shared;
+using Pagos = Synergos.Api.Payments;
 
 namespace Synergos.CMS.Tests.Bff;
 
@@ -65,9 +67,13 @@ public sealed class PurchaseCompensationTests
         }
 
         public CapacidadesFalsas Falla(string patron, HttpStatusCode codigo, string code)
+            => Falla(patron, codigo, code, "guionado");
+
+        public CapacidadesFalsas Falla(string patron, HttpStatusCode codigo, string code, string detalle)
             => Cuando(patron, _ => new HttpResponseMessage(codigo)
             {
-                Content = new StringContent($$"""{"code":"{{code}}","detail":"guionado"}""",
+                Content = new StringContent(
+                    System.Text.Json.JsonSerializer.Serialize(new { code, detail = detalle }),
                     System.Text.Encoding.UTF8, "application/problem+json"),
             });
 
@@ -271,6 +277,90 @@ public sealed class PurchaseCompensationTests
         Assert.Equal(SagaStatus.Compensated, ctx.Flow.Get("compra-1").Value.Status);
         // Y no se llegó a tocar plata: es para lo que sirve apartar antes de cobrar.
         Assert.Equal(0, caps.Veces("POST", "/v1/payments"));
+    }
+
+    // ── La rama del pago fallido, ejercitada por un rechazo DE VERDAD ────────
+
+    /// <summary>
+    /// Lo que el adaptador de Wompi contesta de verdad, ya traducido a HTTP.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Sin esto, la rama «el pago falló, soltá el stock» sólo la había tocado un doble
+    /// que decía lo que el test le dictaba.</b> Un proveedor que siempre dice que sí —y los dos
+    /// que había lo hacían— deja la compensación sin ejercitar: se prueba que el motor sabe
+    /// deshacer, no que llegue a hacerlo con lo que la pasarela contesta.</para>
+    ///
+    /// <para><b>Y NO toca la red</b>: el adaptador rechaza una moneda que Wompi no cobra antes de
+    /// salir, así que el rechazo es suyo de verdad y el test sigue sin depender de nadie. Pasa
+    /// por las tres piezas reales —el adaptador, <c>PaymentRules</c> y el mapeo a HTTP de
+    /// <c>Synergos.Shared</c>—, que son exactamente las que están entre la pasarela y esta
+    /// saga.</para>
+    /// </remarks>
+    private static async Task<(HttpStatusCode Estado, string Code, string Detalle)> RechazoRealDeLaPasarela()
+    {
+        var opciones = new Pagos.Transport.WompiOptions
+        {
+            ApiKey = "prv_test_0123456789",
+            PublicKey = "pub_test_abcdefghij",
+            IntegritySecret = "test_integrity_ZYX987",
+        };
+
+        var proveedor = new Pagos.Transport.WompiPaymentProvider(
+            new HttpClient(new PasarelaInalcanzable()) { BaseAddress = new Uri("https://sandbox.ejemplo.co/v1/") },
+            Options.Create(opciones),
+            NullLogger<Pagos.Transport.WompiPaymentProvider>.Instance);
+
+        var intento = await proveedor.AuthorizeAsync(
+            Money.Of(120m, "USD"), Ref.Create("identity.member", "u-1"));
+
+        var rechazo = Pagos.Domain.PaymentRules.FromAttempt(intento, "la autorización");
+        Assert.NotNull(rechazo);
+
+        return ((HttpStatusCode)RejectionResults.StatusCodeFor(rechazo!.Kind), rechazo.Code, rechazo.Message);
+    }
+
+    private sealed class PasarelaInalcanzable : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            => throw new InvalidOperationException(
+                "El rechazo tiene que producirlo el adaptador por sí mismo, sin red.");
+    }
+
+    [Fact]
+    public async Task Un_rechazo_DE_VERDAD_de_la_pasarela_suelta_los_tres_apartados()
+    {
+        // El fixture EXIGE la regla: el guion no dice qué contesta el pago, lo dice el adaptador
+        // real. Si alguien clasificara ese rechazo como transitorio, o le cambiara el código, este
+        // test lo vería — y el que usa un literal escrito a mano, no.
+        var (estado, code, detalle) = await RechazoRealDeLaPasarela();
+        var caps = Feliz().Falla("POST /v1/payments", estado, code, detalle);
+        var ctx = Nuevo(caps);
+
+        var r = await Comprar(ctx.Flow);
+
+        Assert.Equal("payments.payment_declined", r.Rejection!.Code);
+        Assert.Equal(HttpStatusCode.Conflict, estado);
+
+        // No se reintenta: un «no» firme del medio de pago no cambia porque se insista.
+        Assert.False(r.Rejection.IsTransient);
+
+        // Y lo que importa del dominio: la mercancía vuelve. Sin esto, tres apartados quedan
+        // bloqueando existencias de otros compradores hasta que venzan por TTL.
+        Assert.Equal(1, caps.Veces("POST", "/holds/sh-1/release"));
+        Assert.Equal(1, caps.Veces("POST", "/holds/sh-2/release"));
+        Assert.Equal(1, caps.Veces("POST", "/holds/sh-3/release"));
+        Assert.Equal(SagaStatus.Compensated, ctx.Flow.Get("compra-1").Value.Status);
+    }
+
+    [Fact]
+    public async Task El_motivo_DEL_PROVEEDOR_llega_hasta_quien_compra()
+    {
+        // «Fondos insuficientes» lleva a una acción y «el pago falló» no lleva a ninguna. El
+        // motivo cruza tres saltos —adaptador, capacidad, orquestador— y en cualquiera de ellos
+        // se puede perder sin que nada falle.
+        var (_, _, detalle) = await RechazoRealDeLaPasarela();
+
+        Assert.Contains("USD", detalle, StringComparison.Ordinal);
     }
 
     [Fact]
