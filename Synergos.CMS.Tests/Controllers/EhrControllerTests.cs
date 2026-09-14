@@ -108,6 +108,18 @@ public sealed class EhrControllerTests
             StartUtc: inicio, EndUtc: inicio.AddMinutes(30), Status: status, ReservationId: "res-1");
     }
 
+    private static MedicalDoctor Medico(string id = "doc-1") => new(
+        Id: id, FullName: "Dra. Ana Rojas", Specialty: "Medicina interna",
+        LicenseNumber: "RM-1234", Rating: 4.8, YearsExperience: 12, AvatarUrl: null,
+        WorkingDays: new[] { DayOfWeek.Monday, DayOfWeek.Wednesday },
+        SlotStartHour: 8, SlotEndHour: 16, SlotMinutes: 30);
+
+    private static EhrMedication Medicamento(string id = "med-1") => new(
+        MedicationId: id, PatientId: "pat-1", MedicationName: "Losartán",
+        Dosage: "50 mg", Frequency: "cada 12 h", Instructions: "Con alimento.",
+        PrescribedByDoctorId: "doc-1", PrescribedByDoctorName: "Dra. Ana Rojas",
+        PrescribedAtUtc: new DateTime(2026, 1, 2), Status: "active", RefillsRemaining: 2);
+
     private void PadronDevuelve(EhrPatient? p) =>
         _patients.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(p);
 
@@ -246,6 +258,154 @@ public sealed class EhrControllerTests
 
         Assert.Equal(new[] { "obesidad" }, body.GetProperty("conditions").EnumerateArray().Select(c => c.GetString()));
         Assert.Equal(new[] { "polen" }, body.GetProperty("allergies").EnumerateArray().Select(c => c.GetString()));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // 1.bis · #111 — las cuatro CONSTANTES que afirmaban un hecho
+    // ══════════════════════════════════════════════════════════════════════════════
+    //
+    // Mismo criterio que #106 —si el valor entero de un campo es ser cierto, no se rellena— y
+    // distinta forma del defecto, que es lo que cambia los tests. En #106 el valor VARIABA
+    // (`GetHashCode()`, aleatorio por proceso); aquí no variaba nada: cuatro literales escritos
+    // a mano. Una constante no se delata reiniciando el servidor, así que hay que mirarla de
+    // dos maneras:
+    //
+    //  1. LA CLAVE ESTÁ Y VALE `null`. No basta con «no es la constante»: `null` y la
+    //     afirmación contraria (`0` sin-leer, `false` no-acepta-pacientes) no son lo mismo, y
+    //     si se ven iguales el arreglo no sirve de nada. Por eso se afirma sobre el
+    //     `ValueKind` de la clave SERIALIZADA y no sobre el DTO.
+    //  2. NO SE REFABRICA DE LO QUE HAY A MANO. Quitar una constante deja un hueco, y el hueco
+    //     tienta a rellenarlo con lo primero que esté cerca: el identificador (lo de #106) o
+    //     —en el contador de sin-leer— el número de mensajes del hilo. Contra lo primero va la
+    //     invariancia respecto al id, con ids de LONGITUDES DISTINTAS (si no, una derivación de
+    //     `id.Length` pasa en verde); contra lo segundo, un fixture con mensajes de verdad: con
+    //     un hilo vacío, `0`, `MessageCount` y «no se sabe» valen todos lo mismo y el test no
+    //     prueba nada.
+
+    [Fact] // El peor de los cuatro: una constante que manda a una persona a un sitio.
+    public async Task Medications_NoDeclaraFarmacia_PorqueEsteBordeNoSabeDondeSeDispensa()
+    {
+        _medications.GetActiveForPatientAsync("pat-1", Arg.Any<CancellationToken>())
+            .Returns(new[] { Medicamento() });
+
+        var m = Json(await BuildSut().Medications("pat-1", default)).GetProperty("medications")[0];
+
+        // Decía «Farmacia Synergos» al lado de un medicamento real, en la pantalla desde la que
+        // alguien sale a recogerlo. Ningún seam trae la farmacia dispensadora.
+        Assert.True(m.TryGetProperty("pharmacy", out var farmacia));
+        Assert.Equal(JsonValueKind.Null, farmacia.ValueKind);
+    }
+
+    [Fact] // …y el hueco tampoco se rellena con el identificador.
+    public async Task Medications_LaFarmacia_NoSeDerivaDelIdentificador()
+    {
+        var respuestas = new List<string>();
+        foreach (var id in DieciseisIds())
+        {
+            _medications.GetActiveForPatientAsync("pat-1", Arg.Any<CancellationToken>())
+                .Returns(new[] { Medicamento(id: id) });
+            respuestas.Add(Raw(await BuildSut().Medications("pat-1", default))
+                .Replace(id, "{ID}", StringComparison.Ordinal));
+        }
+
+        Assert.Single(respuestas.Distinct(StringComparer.Ordinal));
+    }
+
+    [Fact] // «Este médico acepta pacientes nuevos», dicho por quien no tiene cómo saberlo.
+    public async Task Doctors_NoDeclaraSiAceptaPacientesNuevos()
+    {
+        _doctors.ListAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { Medico() });
+
+        var d = Json(await BuildSut().Doctors(null, default)).GetProperty("doctors")[0];
+
+        // `null` y `false` no son lo mismo: cerrarle la lista a un médico que sí recibe es tan
+        // falso como abrírsela al que no.
+        Assert.True(d.TryGetProperty("acceptingPatients", out var acepta));
+        Assert.Equal(JsonValueKind.Null, acepta.ValueKind);
+    }
+
+    [Fact]
+    public async Task Doctors_LaFichaDelMedico_NoSeDerivaDelIdentificador()
+    {
+        var respuestas = new List<string>();
+        foreach (var id in DieciseisIds())
+        {
+            _doctors.ListAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                .Returns(new[] { Medico(id: id) });
+            respuestas.Add(Raw(await BuildSut().Doctors(null, default))
+                .Replace(id, "{ID}", StringComparison.Ordinal));
+        }
+
+        Assert.Single(respuestas.Distinct(StringComparer.Ordinal));
+    }
+
+    [Fact] // El contador de sin-leer no podía mostrar nada nunca: era la constante 0.
+    public async Task Messages_NoDeclaraCuantosSinLeer_PorqueElSeamNoRegistraLectura()
+    {
+        // EL FIXTURE TIENE QUE EXIGIR LA REGLA: el hilo trae TRES mensajes. Con un hilo vacío,
+        // `0` (la constante de antes), `MessageCount` (la refabricación que tienta) y «no se
+        // sabe» darían todos lo mismo y el test pasaría con el defecto puesto.
+        _messaging.GetInboxAsync("pat-1", Arg.Any<CancellationToken>())
+            .Returns(new[] { Resumen("t-1", "clinical:advice:pat-1", mensajes: 3) });
+        _messaging.GetThreadAsync("t-1", Arg.Any<CancellationToken>()).Returns(new MessageThread(
+            ThreadId: "t-1", ContextRef: "clinical:advice:pat-1",
+            Participants: new[] { "pat-1", "doc-1" },
+            Messages: new[]
+            {
+                new ThreadMessage("m-1", "doc-1", "Sus resultados están listos.", DateTimeOffset.UnixEpoch),
+                new ThreadMessage("m-2", "pat-1", "Gracias, ¿los reviso con usted?", DateTimeOffset.UnixEpoch.AddHours(1)),
+                new ThreadMessage("m-3", "doc-1", "Sí, en la cita del jueves.", DateTimeOffset.UnixEpoch.AddHours(2)),
+            },
+            CreatedAt: DateTimeOffset.UnixEpoch, LastMessageAt: DateTimeOffset.UnixEpoch.AddHours(2)));
+
+        var hilo = Json(await BuildSut().Messages("pat-1", default)).GetProperty("threads")[0];
+
+        // `0` no decía «no sé»: decía «no tienes mensajes sin leer», que es la afirmación
+        // contraria y es la que hace que el paciente no abra el mensaje de su médico.
+        Assert.True(hilo.TryGetProperty("unread", out var sinLeer));
+        Assert.Equal(JsonValueKind.Null, sinLeer.ValueKind);
+    }
+
+    [Fact] // El mismo hueco por el otro mapper — el del hilo que ya no se rehidrata.
+    public async Task Messages_HiloNoRehidratable_TampocoDeclaraCuantosSinLeer()
+    {
+        // Aquí la refabricación está aún más a mano: el resumen TRAE `MessageCount` (7).
+        _messaging.GetInboxAsync("pat-1", Arg.Any<CancellationToken>())
+            .Returns(new[] { Resumen("t-1", "clinical:result:pat-1", mensajes: 7) });
+        _messaging.GetThreadAsync("t-1", Arg.Any<CancellationToken>()).Returns((MessageThread?)null);
+
+        var hilo = Json(await BuildSut().Messages("pat-1", default)).GetProperty("threads")[0];
+
+        Assert.True(hilo.TryGetProperty("unread", out var sinLeer));
+        Assert.Equal(JsonValueKind.Null, sinLeer.ValueKind);
+    }
+
+    [Fact] // «Este paciente está activo» — un episodio de atención abierto que nadie registró.
+    public async Task Patients_NoDeclaraSiElPacienteEstaActivo()
+    {
+        _patients.SearchAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { Paciente() });
+
+        var p = Json(await BuildSut().Patients(null, default)).GetProperty("patients")[0];
+
+        Assert.True(p.TryGetProperty("active", out var activo));
+        Assert.Equal(JsonValueKind.Null, activo.ValueKind);
+    }
+
+    [Fact]
+    public async Task Patients_LaFichaDelPaciente_NoSeDerivaDelIdentificador()
+    {
+        var respuestas = new List<string>();
+        foreach (var id in DieciseisIds())
+        {
+            _patients.SearchAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                .Returns(new[] { Paciente(id: id) });
+            respuestas.Add(Raw(await BuildSut().Patients(null, default))
+                .Replace(id, "{ID}", StringComparison.Ordinal));
+        }
+
+        Assert.Single(respuestas.Distinct(StringComparer.Ordinal));
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
