@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,8 +34,10 @@ public sealed class CertificateVerificationEndpointTests
     private readonly ICertificateService _certificates = Substitute.For<ICertificateService>();
     private readonly IPriceFormatter _priceFormatter = Substitute.For<IPriceFormatter>();
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
+    private readonly IEnrollmentMetrics _metrics = Substitute.For<IEnrollmentMetrics>();
 
-    private AcademyController BuildSut() => new(_catalog, _enrollments, _certificates, _priceFormatter, _gate);
+    private AcademyController BuildSut()
+        => new(_catalog, _enrollments, _certificates, _priceFormatter, _gate, _metrics);
 
     private const string ValidId = "cert-0123456789abcdef0123456789abcdef";
 

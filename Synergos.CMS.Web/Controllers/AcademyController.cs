@@ -1,3 +1,4 @@
+﻿using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
@@ -37,18 +38,30 @@ public sealed class AcademyController : ControllerBase
     private readonly IPriceFormatter _priceFormatter;
     private readonly IMemberAccessGate _gate;
 
+    /// <summary>
+    /// La cara de LECTURA del motor de matrícula: cuántos alumnos y —desde #107— quiénes.
+    /// </summary>
+    /// <remarks>
+    /// Se inyecta aparte del catálogo aunque el catálogo ya la componga para las métricas:
+    /// colgar el listado de alumnos de <c>InstructorCoursesResult</c> era lo cómodo y metería
+    /// datos personales dentro del seam que sirve el catálogo PÚBLICO.
+    /// </remarks>
+    private readonly IEnrollmentMetrics _metrics;
+
     public AcademyController(
         ICourseCatalogProvider catalog,
         IEnrollmentService enrollments,
         ICertificateService certificates,
         IPriceFormatter priceFormatter,
-        IMemberAccessGate gate)
+        IMemberAccessGate gate,
+        IEnrollmentMetrics metrics)
     {
         _catalog = catalog;
         _enrollments = enrollments;
         _certificates = certificates;
         _priceFormatter = priceFormatter;
         _gate = gate;
+        _metrics = metrics;
     }
 
 
@@ -574,9 +587,36 @@ public sealed class AcademyController : ControllerBase
             RevenueFormatted: _priceFormatter.Format(ic.Metrics.Revenue, ic.Metrics.Currency),
             Rating: ic.Metrics.Rating)).ToList();
 
+        // Y QUIÉNES son esos alumnos, no sólo cuántos (#107). La consola listaba su portafolio y
+        // no sabía nombrar a una sola persona: el conteo es un número hasta que se puede
+        // contestar «¿quién se quedó en la lección 2?».
+        //
+        // El título del curso se pone AQUÍ y no en el seam: ya está resuelto en esta misma
+        // vuelta, y pedírselo al motor de matrícula lo obligaría a consultar el catálogo por
+        // fila para un dato que es de presentación.
+        var students = new List<InstructorStudentDto>();
+        foreach (var ic in result.Courses)
+        {
+            foreach (var row in await _metrics.GetCourseRosterAsync(ic.Course.Id, cancellationToken))
+            {
+                students.Add(new InstructorStudentDto(
+                    Id: row.StudentId,
+                    Name: row.StudentName,
+                    CourseId: ic.Course.Id,
+                    CourseTitle: ic.Course.Title,
+                    Percent: row.Percent,
+                    // Fecha SIN hora, y no es cosmético: la celda pinta el valor CRUDO
+                    // (`{{ row.enrolledAt }}`, sin pasar por formatDate como sí hace
+                    // `lastActivityAt`), así que un ISO completo sacaría la T y el desfase
+                    // horario a la tabla. Es la forma que el mock ya usa.
+                    EnrolledAt: row.EnrolledAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+            }
+        }
+
         return Ok(new InstructorCoursesResponse(
             Instructor: result.InstructorId,
             Courses: courses,
+            Students: students,
             TotalStudents: result.TotalStudents,
             TotalRevenue: result.TotalRevenue,
             TotalRevenueFormatted: _priceFormatter.Format(result.TotalRevenue, result.Currency)));
@@ -981,11 +1021,27 @@ public sealed class AcademyController : ControllerBase
     /// consola entera caía al mock y encendía el cartel de «datos de ejemplo» aunque el
     /// servidor tuviera los cursos reales.
     ///
-    /// <para><b>Lo que esta respuesta sigue SIN poder emitir</b>, y por eso la consola no queda
-    /// completa con este arreglo: <c>students[]</c> (la lista de alumnos matriculados, no su
-    /// número) y <c>questions[]</c> (las preguntas del foro). No existen en ningún seam —ni
-    /// <c>ICourseCatalogProvider</c> ni <c>IEnrollmentMetrics</c> los producen— y fabricarlos
-    /// aquí sería inventar alumnos. Son trabajo de seam, anotado en #102.</para>
+    /// <para><b><c>students[]</c> ya se emite</b> (#107): <c>IEnrollmentMetrics</c> aprendió a
+    /// listar el curso, no sólo a contarlo. Va en la RAÍZ de la respuesta y no dentro de cada
+    /// fila, que es donde la UI la lee — la consola tiene una pestaña «Alumnos» transversal a
+    /// todo el portafolio, no una sublista por curso.</para>
+    ///
+    /// <para><b><c>questions[]</c> NO se emite, y es una decisión, no un pendiente</b> (#107).
+    /// Nadie puede escribir una pregunta ni responderla: del otro lado <c>postQuestion()</c>
+    /// empuja a un <c>signal</c> local y la acción «Responder» pone un booleano en memoria —
+    /// ninguna de las dos toca la red. Emitir la lista sería servir una lectura cuyo único
+    /// camino de escritura es un mock, o sea un buzón decorativo. Y el sitio correcto tampoco
+    /// sería un seam nuevo: una pregunta sobre una lección es un comentario, y el almacén de
+    /// comentarios ya existe (<c>ICommentWriter</c>, ADR 0038 + ADR 0100) con hilo, moderación y
+    /// cola; lo que falta ahí es que el sujeto de un <c>Comment</c> deje de ser un
+    /// <c>int NodeId</c> —una lección no es un nodo de Umbraco, es un <c>ContentItemId</c> del
+    /// <c>IContentStream</c>— y eso toca Blogs. <b>Disparador para revisarlo:</b> el día que una
+    /// pregunta salga del navegador.</para>
+    ///
+    /// <para><b>Y tampoco se emite <c>questions: []</c>.</b> Una lista vacía dice «no hay
+    /// preguntas» cuando la verdad es «esto no existe», y congelaría la clave en la línea base
+    /// de G-6 como si cruzara. El normalizador del cliente trata igual la clave ausente y la
+    /// lista vacía, así que decir la verdad no cuesta nada.</para>
     /// </remarks>
     public sealed record InstructorCourseDto(
         CourseDto Course,
@@ -999,10 +1055,49 @@ public sealed class AcademyController : ControllerBase
         string RevenueFormatted,
         double Rating);
 
-    /// <summary>GET /api/academy/instructor/courses — { courses:[...] } + totales del panel.</summary>
+    /// <summary>
+    /// Un alumno matriculado, tal como lo lista la consola del instructor.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>No lleva el correo</b> (#107), y el seam que lo produce
+    /// (<see cref="CourseRosterEntry"/>) tampoco lo tiene, así que no es un olvido del mapeo.
+    /// La consola pinta cuatro columnas —Alumno / Curso / Progreso / Inscrito— y no tiene una
+    /// sola acción que use una dirección: no hay contactar, ni exportar, ni escribir. Lo que se
+    /// estaría emitiendo a cambio de una segunda línea de texto es la lista de correos de la
+    /// escuela entera en un <c>GET</c>. Es la decisión de #47 (el comprador viaja seudonimizado)
+    /// y la de <c>GovController</c> con <c>OpenedBy</c> («no tiene por qué salir del servidor»),
+    /// aplicada acá.</para>
+    ///
+    /// <para><b><see cref="Id"/> es ese seudónimo</b> —SHA-256 del correo normalizado, el mismo
+    /// que Tienda, Eventos y la visita al inmueble— y <b>no se pinta</b>: no es una de las
+    /// columnas. Ésa es la otra mitad de #47, donde el identificador opaco del comprador acabó
+    /// en pantalla; acá se evita antes de que pase. Hace falta igual, porque el normalizador
+    /// descarta la fila sin <c>id</c> y porque dos personas se llaman igual.</para>
+    ///
+    /// <para><b>Consecuencia declarada:</b> la sub-línea que la celda «Alumno» pinta bajo el
+    /// nombre queda vacía. Es lo correcto — el dato no está — y lo que sobra es el hueco, que se
+    /// limpia del lado de la UI.</para>
+    /// </remarks>
+    public sealed record InstructorStudentDto(
+        string Id,
+        string Name,
+        string CourseId,
+        string CourseTitle,
+        int Percent,
+        string EnrolledAt);
+
+    /// <summary>
+    /// GET /api/academy/instructor/courses — { courses, students } + totales del panel.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>students</c> va en la raíz</b>: el normalizador lo lee ahí, y con las tres listas
+    /// vacías (<c>courses</c>, <c>students</c>, <c>questions</c>) devuelve <c>null</c> y la
+    /// consola entera cae al mock con el cartel de «datos de ejemplo» encendido.
+    /// </remarks>
     public sealed record InstructorCoursesResponse(
         string Instructor,
         IReadOnlyList<InstructorCourseDto> Courses,
+        IReadOnlyList<InstructorStudentDto> Students,
         int TotalStudents,
         decimal TotalRevenue,
         string TotalRevenueFormatted);
