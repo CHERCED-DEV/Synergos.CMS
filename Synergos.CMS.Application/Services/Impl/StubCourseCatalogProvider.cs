@@ -175,10 +175,11 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
                     .ToList()))
             .ToList();
 
-        // Planes de precio: contado + (para los de pago) un plan de 3 cuotas con
-        // recargo del 8% (regla de negocio aislada — análoga a la política de
-        // cancelación de Hoteles). Los gratuitos solo tienen "inscripción gratis".
-        var plans = BuildPlans(course);
+        // Planes de precio: contado + (para los de pago) un plan de 3 cuotas con recargo.
+        // La regla vive en CoursePricingRules desde que apareció su segundo consumidor (el
+        // catálogo servido del CMS): copiada, el mismo curso ofrecería cuotas distintas
+        // según de dónde salga.
+        var plans = CoursePricingRules.Build(course.Price, AcademyDemoSeed.Currency);
 
         return new CourseDetail(
             Course: ToSummary(course),
@@ -411,23 +412,4 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
         LessonCount: c.LessonCount,
         DurationMinutes: c.DurationMinutes);
 
-    private static IReadOnlyList<CoursePricingPlan> BuildPlans(AcademyDemoSeed.SeedCourse c)
-    {
-        if (c.IsFree)
-        {
-            return new[]
-            {
-                new CoursePricingPlan("free", "Inscripción gratuita", 0m, AcademyDemoSeed.Currency, 1),
-            };
-        }
-
-        // Contado (1 cuota) + 3 cuotas con recargo del 8% (EMI). El recargo se
-        // redondea a entero (patrón visual COP, sin decimales).
-        var installmentTotal = decimal.Round(c.Price * 1.08m, 0, MidpointRounding.AwayFromZero);
-        return new[]
-        {
-            new CoursePricingPlan("full", "Pago de contado", c.Price, AcademyDemoSeed.Currency, 1),
-            new CoursePricingPlan("emi-3", "3 cuotas", installmentTotal, AcademyDemoSeed.Currency, 3),
-        };
-    }
 }
