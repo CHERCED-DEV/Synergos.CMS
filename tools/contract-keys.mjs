@@ -150,7 +150,11 @@ function recogerClaves(fuente, claves) {
 
 
     // Los `record` de respuesta: cada parámetro es una clave del JSON.
-    for (const m of src.matchAll(/record\s+\w+\s*\(([\s\S]*?)\)\s*;/g)) {
+                // `)` seguido de `;` O de `{`: un record puede llevar cuerpo
+            // (`record X(...) { ... }`), y exigir el `;` lo dejaba invisible. Es el caso de
+            // BookAppointmentBody, que declara `Slot` y además un helper para leerlo — el gate
+            // lo denunciaba como cuerpo no declarado.
+for (const m of src.matchAll(/record\s+\w+\s*\(([\s\S]*?)\)\s*[;{]/g)) {
         for (const p of m[1].split(',')) {
             // Una clave explícita gana sobre el nombre del parámetro — es como se renombra
             // sin tocar C#, y es la forma que toma una deriva de verdad.
