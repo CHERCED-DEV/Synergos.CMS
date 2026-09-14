@@ -1,4 +1,4 @@
-using Synergos.CMS.Interfaces;
+﻿using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
@@ -50,6 +50,14 @@ internal static class AcademyDemoSeed
     /// Cursos sembrados: 4 cursos en 3 categorías (Desarrollo / Diseño / Datos),
     /// con niveles, precios (incluye uno gratis), instructor, módulos y lecciones.
     /// </summary>
+    /// <remarks>
+    /// <b>Cada uno lleva su fecha de publicación ESCRITA</b> (#102), en cuatro meses
+    /// distintos y no en orden de declaración. No es lo mismo que derivarla: esto es el
+    /// catálogo de DEMO, así que la fecha es un dato autorado como el precio o el rating, y
+    /// el orden «Más recientes» que sale de ella es el que alguien escribió a propósito.
+    /// Derivarla del id o de la posición en esta lista sí habría sido inventarla — daría un
+    /// orden estable y falso, que es peor que uno que no cambia.
+    /// </remarks>
     public static readonly IReadOnlyList<SeedCourse> Courses = new[]
     {
         new SeedCourse(
@@ -63,6 +71,7 @@ internal static class AcademyDemoSeed
             CoverImageUrl: "/media/academy/courses/clean-architecture.jpg",
             Price: 320_000m,
             Rating: 4.8,
+            PublishedAt: new DateOnly(2026, 2, 17),
             Outcomes: new[]
             {
                 "Separar dominio, aplicación e infraestructura sin acoplar capas.",
@@ -102,6 +111,7 @@ internal static class AcademyDemoSeed
             CoverImageUrl: "/media/academy/courses/design-systems.jpg",
             Price: 240_000m,
             Rating: 4.6,
+            PublishedAt: new DateOnly(2026, 4, 3),
             Outcomes: new[]
             {
                 "Modelar tokens semánticos que aguanten un rebrand completo.",
@@ -138,6 +148,7 @@ internal static class AcademyDemoSeed
             CoverImageUrl: "/media/academy/courses/ml-applied.jpg",
             Price: 480_000m,
             Rating: 4.9,
+            PublishedAt: new DateOnly(2026, 6, 11),
             Outcomes: new[]
             {
                 "Construir un pipeline de datos reproducible.",
@@ -177,6 +188,7 @@ internal static class AcademyDemoSeed
             CoverImageUrl: "/media/academy/courses/git-fundamentals.jpg",
             Price: 0m,
             Rating: 4.5,
+            PublishedAt: new DateOnly(2025, 11, 24),
             Outcomes: new[]
             {
                 "Hacer commits atómicos con mensajes claros.",
@@ -221,6 +233,8 @@ internal static class AcademyDemoSeed
         string? CoverImageUrl,
         decimal Price,
         double Rating,
+        // Cuándo se publicó. Dato autorado de la demo, no derivado (ver arriba).
+        DateOnly PublishedAt,
         IReadOnlyList<string> Outcomes,
         IReadOnlyList<SeedModule> Modules)
     {

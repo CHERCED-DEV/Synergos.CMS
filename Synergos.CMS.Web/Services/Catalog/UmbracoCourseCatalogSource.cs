@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Models;
@@ -188,7 +188,21 @@ public sealed class UmbracoCourseCatalogSource : ICatalogSource<AuthoredCourse>
             // tiene ninguna, y dejar que se lo ponga a mano es dejar que se ponga 5.
             Rating: 0d,
             LessonCount: lessonCount,
-            DurationMinutes: durationMinutes);
+            DurationMinutes: durationMinutes,
+            // Lo que llega aquí está PUBLICADO, y no por convención: esta fuente recorre el
+            // caché de contenido publicado, así que un coursePage guardado sin publicar no
+            // aparece en `ResolveNodes`. Decirlo explícitamente es lo que evita que el otro
+            // lado lo suponga — su normalizador degrada a «publicado» cuando la clave falta,
+            // que es lo mismo pero sin que nadie lo haya decidido (#102).
+            Status: CourseStatuses.Published,
+            // `UpdateDate` en el caché publicado es la fecha de la ÚLTIMA publicación del
+            // nodo, no la de la primera: Umbraco no expone la primera por aquí. Para ordenar
+            // «Más recientes» es dato de verdad —y es lo que la Tienda ya hace en
+            // `DefaultShopQuery`—, y para etiquetar «publicado el» dice la última vez que se
+            // publicó, que también es cierto. **Disparador** para dejar de usarla: que
+            // alguien necesite la fecha de la PRIMERA publicación, que hay que guardar
+            // (campo del schema o histórico) porque no se deduce de aquí.
+            PublishedAt: DateOnly.FromDateTime(node.UpdateDate));
 
         var detail = new CourseDetail(
             Course: summary,

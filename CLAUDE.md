@@ -426,6 +426,23 @@ Las que salieron de construir el árbol de servicios (§0.B):
   trinquete de G-6 como si cruzara. Se escribe la decisión y el
   disparador en el `record`, que es donde la va a leer la próxima
   auditoría.
+- `feedback_an_omitted_key_can_be_an_assertion` — **una clave que no se emite no
+  siempre deja un hueco: cuando el otro lado la resuelve con un valor por DEFECTO, la
+  omisión pasa a AFIRMAR ese valor, y lo afirma el borde sin haberlo decidido.** Educación
+  no emitía `status` en la fila del instructor y `readCourseStatus` cae a `'published'`:
+  la píldora decía «Publicado» de todo curso y el KPI contaba «N publicados / N en total»
+  pasara lo que pasara (#102). Es el escalón de arriba de
+  `feedback_contract_shape_needs_its_own_test` —allá la clave que falta deja una pantalla
+  pobre, acá deja una pantalla que MIENTE— y el primo de
+  `feedback_a_derived_fallback_must_never_overwrite_what_arrived`, con el relleno del otro
+  lado de la red. **Cómo se decide cuáles son ésas:** se mira el normalizador del
+  consumidor, no el DTO — si el fallback de una clave es un valor del vocabulario (y no
+  `null`, `''` o `[]`), omitirla es tomar la decisión por él. **Y G-6 no las caza**: cruza
+  por CONTROLLER entero, así que `status` ya cruzaba por el acuse de `/confirm` mientras
+  faltaba en la consola. **El fixture tiene que llevar el caso que el default NO produce**
+  —un borrador y un publicado—: con todos publicados, emitir la clave o no da el mismo
+  JSON. **Y la mutación es escribir el default en el mapeo** (`Status: Published`), que es
+  literalmente lo que la omisión hacía, sólo que delegado.
 - `feedback_a_derived_fallback_must_never_overwrite_what_arrived` — **un campo que se
   DERIVA para los casos en que no llega no puede pisar el que llegó.** La dirección de un
   inmueble se rellenaba con «{barrio}, {ciudad}» y el borde no declaraba `address`, así que
@@ -590,7 +607,8 @@ node tools/contract-keys.mjs --ui-path=/tmp/ui   # o SYNERGOS_UI_PATH
 Cruza **la forma del JSON** de cada controller contra las claves que lee su app del
 catálogo — la superficie que no miraba nadie, y por la que doce claves de Academy se
 desviaron sin que nada se pusiera rojo: el normalizador del cliente es defensivo, así
-que una clave que falta **degrada en silencio**. Es un **trinquete** contra
+que una clave que falta **degrada en silencio** — y a veces ni siquiera degrada:
+**afirma**. Ver `feedback_an_omitted_key_can_be_an_assertion` en §5. Es un **trinquete** contra
 `tools/contract-keys.baseline.json`, como el presupuesto de tamaño del repo hermano: no
 falla por deuda vieja, sólo el día que algo que hoy cruza deja de cruzar. Se regenera
 con `--actualizar` y el diff va en el commit que lo causó.

@@ -168,11 +168,20 @@ public sealed class AcademyController : ControllerBase
     /// Ordena el catálogo según el desplegable.
     /// </summary>
     /// <remarks>
-    /// <b><c>newest</c> NO se puede servir y cae al orden por defecto</b>, que es «mejor
-    /// calificados primero»: <see cref="CourseSummary"/> no lleva fecha de publicación, y
-    /// ninguna de las dos fuentes la produce. Inventar una —del id, del orden del seed— daría
-    /// un orden estable y falso, que es peor que uno que no cambia. Darle dato de verdad es
-    /// trabajo de seam, anotado en #102.
+    /// <b><c>newest</c> ya ordena de verdad</b> (#102). Era una opción MUERTA: el desplegable
+    /// la ofrecía, el valor llegaba hasta aquí, cruzaba el gate de claves y caía al
+    /// <c>_</c> — contra el mock reordenaba y contra el servidor real no hacía nada, que es
+    /// la forma del defecto de la Tienda (el mock describiendo un servidor que no existe).
+    /// Lo que faltaba era el dato, y es el mismo que le faltaba a la píldora «Estado»:
+    /// <see cref="CourseSummary.PublishedAt"/>.
+    ///
+    /// <para><b>Los cursos sin fecha van al final, no al principio</b>. Nulo es «no consta»
+    /// —son los que ya estaban en el overlay durable antes de que el campo existiera— y un
+    /// «no consta» no puede encabezar «Más recientes». Sale solo de ordenar descendente sobre
+    /// un <c>DateOnly?</c>, pero está dicho porque es una decisión y no un efecto.</para>
+    ///
+    /// <para>Los empates los rompe el título, como los otros tres órdenes: la fecha es de día
+    /// entero (ver <see cref="CourseSummary.PublishedAt"/>), así que empatar es normal.</para>
     /// </remarks>
     private static IReadOnlyList<CourseSummary> ApplySort(IReadOnlyList<CourseSummary> courses, string? sort)
         => (sort ?? string.Empty).Trim().ToLowerInvariant() switch
@@ -180,6 +189,7 @@ public sealed class AcademyController : ControllerBase
             "price-asc" => courses.OrderBy(c => c.Price).ThenBy(c => c.Title, StringComparer.Ordinal).ToList(),
             "price-desc" => courses.OrderByDescending(c => c.Price).ThenBy(c => c.Title, StringComparer.Ordinal).ToList(),
             "rating" => courses.OrderByDescending(c => c.Rating).ThenBy(c => c.Title, StringComparer.Ordinal).ToList(),
+            "newest" => courses.OrderByDescending(c => c.PublishedAt).ThenBy(c => c.Title, StringComparer.Ordinal).ToList(),
             _ => courses,
         };
 
@@ -587,6 +597,11 @@ public sealed class AcademyController : ControllerBase
             // normalizador descartaba la fila entera.
             Id: ic.Course.Id,
             Title: ic.Course.Title,
+            // Se PASA lo que dice el catálogo; no se afirma aquí. Escribir "published" en
+            // esta línea sería el mismo defecto que ya había del otro lado, con la ventaja
+            // de que al menos allá era el fallback de un normalizador defensivo (#102).
+            Status: ic.Course.Status,
+            PublishedAt: ic.Course.PublishedAt,
             Price: ic.Course.Price,
             PriceFormatted: ic.Course.IsFree
                 ? "Gratis"
@@ -1053,11 +1068,27 @@ public sealed class AcademyController : ControllerBase
     /// preguntas» cuando la verdad es «esto no existe», y congelaría la clave en la línea base
     /// de G-6 como si cruzara. El normalizador del cliente trata igual la clave ausente y la
     /// lista vacía, así que decir la verdad no cuesta nada.</para>
+    ///
+    /// <para><b><c>status</c> y <c>publishedAt</c> son datos del catálogo, no de este
+    /// mapeo</b> (#102). Faltaban las dos, y la que dolía era la primera: el normalizador del
+    /// otro lado degrada a <c>published</c> cuando la clave no está, así que la píldora
+    /// «Estado» decía «Publicado» de todo y el KPI «Cursos publicados» contaba el total — una
+    /// afirmación que nadie había hecho, sostenida por un valor por defecto. Vienen de
+    /// <see cref="CourseSummary.Status"/> / <see cref="CourseSummary.PublishedAt"/>, que es
+    /// donde cada fuente dice lo que sabe.</para>
+    ///
+    /// <para><b><c>publishedAt</c> puede venir nulo</b>, y eso significa «no consta» — los
+    /// cursos que ya estaban en el overlay durable antes de que el campo existiera. La UI lo
+    /// lee (<c>normalizeInstructorCourse</c>) y hoy no lo pinta en ninguna columna; se emite
+    /// igual porque es la clave que declara su modelo y porque es cierto. Lo que de verdad lo
+    /// consume está de este lado: <c>sort=newest</c>.</para>
     /// </remarks>
     public sealed record InstructorCourseDto(
         CourseDto Course,
         string Id,
         string Title,
+        string Status,
+        DateOnly? PublishedAt,
         decimal Price,
         string PriceFormatted,
         int StudentCount,
