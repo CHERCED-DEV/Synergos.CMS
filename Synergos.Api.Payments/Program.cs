@@ -89,13 +89,14 @@ builder.Services.AddSingleton<IPaymentProvider>(sp =>
 });
 builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
     new FileIdempotencyLedger(sp.GetRequiredService<IOptions<PaymentStorageOptions>>().Value.Root));
+builder.Services.AddSingleton<WebhookVerifier>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<PaymentService>();
 
 var app = builder.Build();
 
 app.UseCorrelation();
-app.UseSharedKeyAuth(app.Configuration["Payments:ApiKey"]);
+app.UseSharedKeyAuth(app.Configuration["Payments:ApiKey"], "/v1/webhooks");
 app.MapPaymentEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

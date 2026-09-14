@@ -31,6 +31,9 @@ public sealed class PaymentProviderOutcomeTests
         private readonly Dictionary<string, string> _k = new(StringComparer.Ordinal);
 
         public Pagos.Payment? Find(string id) => _p.GetValueOrDefault(id);
+
+        public Pagos.Payment? FindByProviderReference(string providerReference)
+            => _p.Values.FirstOrDefault(x => x.ProviderReference == providerReference);
         public IReadOnlyList<Pagos.Payment> ForSubject(Ref forWhat) => _p.Values.Where(x => x.For == forWhat).ToList();
         public void Put(Pagos.Payment payment) => _p[payment.Id] = payment;
 
