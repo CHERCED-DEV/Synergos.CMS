@@ -909,6 +909,22 @@ public sealed class AcademyController : ControllerBase
     /// derivable de nada: no existe en <c>CourseLesson</c> ni en el schema, y emitir un
     /// <c>false</c> fijo diría «este curso no tiene tareas» sobre uno que quizá las tenga.
     /// </para>
+    ///
+    /// <para><b>Y esto es lo que esa decisión APAGA, que es la mitad que faltaba escrita</b>
+    /// (#102). No es un campo cosmético: <c>readBoolean(value['allowAssignment'])</c> da
+    /// <c>false</c> para toda lección, así que <b>la pestaña «Tarea» del aula no aparece
+    /// nunca</b> — no es que se vea vacía, es que no existe. La diferencia con
+    /// <c>questions[]</c> —donde el consumidor del otro lado es local y decorativo— es que
+    /// aquí hay una funcionalidad entera del reproductor a la que no se puede llegar. Se deja
+    /// así igualmente: emitir un <c>false</c> constante apagaría lo mismo y además afirmaría
+    /// algo, y un <c>true</c> constante abriría una pestaña sin nada detrás.</para>
+    ///
+    /// <para><b>Disparador para que deje de estar apagada:</b> que una lección pueda DECLARAR
+    /// que pide entrega. Eso es un campo de <c>elementCourseLesson</c> (schema uSync) leído
+    /// por <c>UmbracoCourseCatalogSource</c> y un campo en <see cref="CourseLesson"/>; y en
+    /// cuanto la entrega exista de verdad, además, alguien tiene que recibirla y calificarla,
+    /// que es trabajo de otro seam. Lo que NO hace falta es tocar esta línea antes de que
+    /// exista el dato.</para>
     /// </remarks>
     public sealed record LessonDto(
         string Id,
