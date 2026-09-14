@@ -62,7 +62,8 @@ public sealed class PaymentService
             var payment = new Payment(
                 id, forWhat, payer, amount,
                 referencia is null ? PaymentStatus.Failed : PaymentStatus.Authorized,
-                _provider.Name, referencia, Array.Empty<Refund>(), Now);
+                _provider.Name, referencia, Array.Empty<Refund>(), Now,
+                CapturedAtUtc: null, ActionUrl: intento.ActionUrl);
 
             _payments.Put(payment);
             _idempotency.Remember("payment", key, id);

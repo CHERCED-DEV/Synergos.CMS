@@ -150,7 +150,17 @@ function entornoExtra(proyecto, disponibles) {
       '      # cualquier otro nombre y sin credencial la capacidad RECHAZA cada cobro a',
       '      # gritos. Lo que no existe es el stub sirviendo en silencio.',
       '      Payments__Provider: \${PAYMENTS_PROVIDER:-logging}',
+      '',
+      '      # Las cuatro credenciales de Wompi. Son cuatro y hacen cosas distintas:',
+      '      # privada (consultas y devoluciones), publica (viaja en la URL del',
+      '      # checkout), integridad (firma la transaccion) y eventos (verifica el',
+      '      # webhook). La capacidad dice CUAL falta, no «no esta configurado».',
       '      Payments__wompi__ApiKey: \${PAYMENTS_WOMPI_API_KEY:-}',
+      '      Payments__wompi__PublicKey: \${PAYMENTS_WOMPI_PUBLIC_KEY:-}',
+      '      Payments__wompi__IntegritySecret: \${PAYMENTS_WOMPI_INTEGRITY_SECRET:-}',
+      '      Payments__wompi__EventsSecret: \${PAYMENTS_WOMPI_EVENTS_SECRET:-}',
+      '      Payments__wompi__BaseUrl: \${PAYMENTS_WOMPI_BASE_URL:-https://sandbox.wompi.co/v1/}',
+      '      Payments__wompi__RedirectUrl: \${PAYMENTS_WOMPI_REDIRECT_URL:-}',
     ].join('\n');
   }
 
