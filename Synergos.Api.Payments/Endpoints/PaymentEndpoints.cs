@@ -1,5 +1,6 @@
 using Synergos.Api.Payments.Contracts;
 using Synergos.Api.Payments.Domain;
+using Synergos.Api.Payments.Transport;
 using Synergos.Core;
 using Synergos.Shared;
 
@@ -55,6 +56,25 @@ public static class PaymentEndpoints
             if (!TryMoney(req.Amount, out var amount, out var badMoney)) return badMoney!;
 
             return (await svc.RefundPaymentAsync(id, amount, req.Reason, key, ct)).Map(PaymentResponse.From).ToHttp();
+        });
+
+        // El camino de vuelta: lo que la pasarela cuenta de un cobro suyo.
+        //
+        // Es el ÚNICO endpoint que no va detrás de la llave compartida, porque quien lo llama es
+        // un tercero que no la tiene. Lo que lo protege es la firma — y sin ella cualquiera que
+        // supiera la URL marcaría un cobro como pagado y el pedido saldría.
+        app.MapPost("/v1/webhooks/wompi", async (
+            HttpRequest http, WebhookVerifier verificador, PaymentService svc, CancellationToken ct) =>
+        {
+            // El cuerpo se lee crudo: la firma cubre los bytes exactos, y deserializar y volver a
+            // serializar cambia espacios y orden. Un verificador que firma sobre el objeto
+            // reconstruido falla de una forma que parece intermitente.
+            using var lector = new StreamReader(http.Body);
+            var cuerpo = await lector.ReadToEndAsync(ct);
+
+            return await WebhookHandler.HandleAsync(
+                new WebhookHeaders(http.Headers["X-Event-Checksum"].FirstOrDefault()),
+                cuerpo, verificador, svc, ct);
         });
 
         return app;

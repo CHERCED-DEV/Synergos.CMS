@@ -37,5 +37,12 @@ public sealed record PaymentResponse(
         p.AuthorizedAtUtc, p.CapturedAtUtc, p.ActionUrl);
 }
 
+/// <summary>
+/// Lo que se le contesta a la pasarela cuando su evento no cambia ningún cobro.
+/// </summary>
+/// <param name="Matched">Si el evento encontró a qué cobro se refería.</param>
+/// <param name="Why">Por qué no, dicho donde se puede ver y no solo en un log.</param>
+public sealed record WebhookAck(bool Matched, string Why);
+
 /// <summary>Una porción de una lista, con su total.</summary>
 public sealed record PageResponse<T>(IReadOnlyList<T> Items, int Total, int Offset, bool HasMore);

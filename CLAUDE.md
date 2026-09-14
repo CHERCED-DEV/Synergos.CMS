@@ -126,7 +126,7 @@ Synergos.CMS/
 ├── Synergos.Shared/             fontanería de host. Llave compartida, Rejection→HTTP,
 │                                libro de idempotencia, JsonCollectionStore, correlación.
 │                                Solo puede referenciar Core — UNA flecha.
-├── Synergos.Api.*/              LAS 20 CAPACIDADES, agnósticas. 136 endpoints.
+├── Synergos.Api.*/              LAS 20 CAPACIDADES, agnósticas. 137 endpoints.
 │     Sessions · Booking · Identity · Audit · Notifications · Documents ·
 │     Catalog · Pricing · Cart · Orders · Payments · Inventory · Workflow ·
 │     Messaging · Signing · Consent · Engagement · Geo · Fulfillment · Moderation
@@ -164,7 +164,7 @@ Synergos.CMS/
 | "¿Cómo se deshace lo que ya se hizo?" | `Synergos.CMS.Web/docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `Synergos.CMS.Web/docs/product/10-promocion-bff-core.md` |
 | "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
-| "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; la única excepción son los cinco de `Api.Notifications/Transport/`, que son fallos de la firma del webhook y no reglas de negocio |
+| "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
 
 > **La forma de `window.synergos` se declara en TRES sitios, y hay gate** (#88,
 > `ContractsIndexTests`): los `record` de `IHostBridgeContextBuilder.cs` que el CMS **emite**, las
@@ -713,11 +713,11 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (136 endpoints, 234 códigos
+**Construido y verificado:** 20 capacidades (137 endpoints, 241 códigos
 de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 2888 tests, gates de
 segregación y molde en verde.
 
-> **Los 234 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
+> **Los 241 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
 > y nadie la había vuelto a contar. Cuenta los códigos **literales distintos**
 > que las veinte construyen —el primer argumento de un `Rejection.*`, con
 > `{CodePrefix}` resuelto—, y por eso **excluye dos cosas que sí existen**: los
@@ -1031,6 +1031,19 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > rendirse, se libera una intención que nadie pagó—. **Lo que falta para que
   > un comprador pueda pagar es que alguien LEA el `actionUrl`** que la
   > capacidad ya emite: el camino de escritura existe y el consumidor no.
+  >
+  > **Y el desenlace también llega solo, por `POST /v1/webhooks/wompi`**, que es
+  > el segundo endpoint del árbol de servicios fuera de la llave compartida
+  > —quien lo llama es un tercero que no la tiene— y lo único que lo protege es
+  > la firma: sin verificarla, cualquiera que sepa la URL marca un cobro como
+  > pagado y el pedido sale. **No lleva llave de idempotencia y no la
+  > necesita**: quien llama es el proveedor y no hay cabecera que exigirle, así
+  > que lo que hace de llave es el estado —sólo se avanza desde `Authorized`—,
+  > y eso es además lo que impide que un reenvío tardío retroceda un cobro ya
+  > capturado. Hay gate (`WebhookGateTests`), y **vigila las dos capacidades
+  > que reciben eventos**: mide que el verificador esté ENCHUFADO y no que
+  > exista, que es justo lo que `Api.Notifications` descubrió mutando el suyo
+  > —quitó la llamada del lambda y no falló ni un test—.
 - **La saga que nunca confirmó ya se abandona** (HU #29, parcial): el
   barrido de `Bff.Core` da por muerta la que lleva más de
   `Sweep:AbandonAfterMinutes` en `Running` y deshace lo hecho. Cero lo
