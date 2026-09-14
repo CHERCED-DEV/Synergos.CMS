@@ -215,9 +215,14 @@ Forzarlos ahí sería meter un sustantivo de negocio dentro de una capacidad agn
 
 **Academia y eventos (3)** — `StubCourseCatalogProvider` · `StubEnrollmentService` ·
 `StubEventTicketingService`.
-Academia es **el único vertical con catálogo y sin ninguna superficie CMS**: no existe
-`coursePage`, así que un editor no puede publicar un curso ni con el flag puesto. Su destino es
-familia B —una rebanada de contenido, como las ADR 0117/0118/0119/0123— **no una capacidad**.
+Academia **ya tiene su rebanada de contenido** (#100), que es la que este párrafo daba por
+pendiente. Decía que «no existe `coursePage`», y eso era falso ya entonces: el DocType existía
+con sus 16 campos de ficha. Lo que faltaba era **el currículum** —módulos y lecciones—, y sin él
+un curso autorado no se podía cursar, así que la conclusión práctica sí se sostenía aunque la
+razón estuviera mal. Hoy `coursePage` lleva su temario (`elementCourseModule` /
+`elementCourseLesson`) y `UmbracoCourseCatalogSource` lo sirve con
+`Synergos:Catalog:Sources:Academy = cms`, con el seed de demo de default. Era familia B —una
+rebanada de contenido, como las ADR 0117/0118/0119/0123— **no una capacidad**, y ya está hecha.
 El ticketing y la matrícula son motores transaccionales con pago: irían a `Bff.Eventos` y
 `Bff.Academy`. **`StubEventTicketingService` ya está cableado** (HU #35): pasa a familia A con
 destino `Bff.Eventos`, activable con `Synergos:Eventos:Mode=Bff` y con el stub de default. Y

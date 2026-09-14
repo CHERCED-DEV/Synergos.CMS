@@ -51,9 +51,32 @@ public sealed partial class SeamComposer
         // Singletons — el estado (matrículas + progreso + lecciones sembradas +
         // cursos publicados + timelines) vive en el proceso, igual que el resto de
         // stubs del motor.
+        // De dónde salen los cursos: el seed de demo o el CONTENIDO que autoró el editor
+        // (coursePage + su currículum). Calco del registro de Eventos y de Tienda — mismo flag,
+        // mismo rollback de una línea sin redeploy (`Synergos:Catalog:Sources:Academy = demo`).
+        //
+        // Singleton por lo mismo que la fuente de Eventos: UmbracoCourseCatalogSource sólo
+        // sostiene IUmbracoContextAccessor (un ACCESSOR, que resuelve el contexto por llamada),
+        // IOptionsMonitor e ILogger. Ninguno es Scoped, así que no hay dependencia cautiva.
+        services.AddSingleton<UmbracoCourseCatalogSource>(sp =>
+            ActivatorUtilities.CreateInstance<UmbracoCourseCatalogSource>(sp));
+        services.AddSingleton<ICatalogSource<AuthoredCourse>>(sp =>
+            sp.GetRequiredService<UmbracoCourseCatalogSource>());
+
+        // Las DOS implementaciones se registran por su tipo concreto, y `ICourseCatalogProvider`
+        // apunta a la que el flag elija. Es lo que permite que la property injection de
+        // EnrollmentMetrics (abajo) aterrice en la instancia que de verdad sirve el catálogo.
         services.AddSingleton<StubCourseCatalogProvider>(sp =>
             new StubCourseCatalogProvider(sp.GetRequiredService<IContentStream>()));
-        services.AddSingleton<ICourseCatalogProvider>(sp => sp.GetRequiredService<StubCourseCatalogProvider>());
+        services.AddSingleton<CatalogCourseCatalogProvider>(sp =>
+            new CatalogCourseCatalogProvider(
+                sp.GetRequiredService<ICatalogSource<AuthoredCourse>>(),
+                sp.GetRequiredService<IJsonEntityStore>(),
+                sp.GetRequiredService<IContentStream>()));
+        services.AddSingleton<ICourseCatalogProvider>(sp =>
+            IsCmsSource(sp, UmbracoCourseCatalogSource.Vertical)
+                ? sp.GetRequiredService<CatalogCourseCatalogProvider>()
+                : (ICourseCatalogProvider)sp.GetRequiredService<StubCourseCatalogProvider>());
         services.AddSingleton<StubEnrollmentService>(sp =>
         {
             // Durabilidad (doc 25): el estado de matrículas + progreso vive tras el store
@@ -67,7 +90,22 @@ public sealed partial class SeamComposer
                 notifier: sp.GetRequiredService<ITransactionalNotifier>());
             // Enchufa la cara de lectura en el catálogo (DIP) para el panel del
             // instructor — se resuelve tras construir ambos singletons.
-            sp.GetRequiredService<StubCourseCatalogProvider>().EnrollmentMetrics = enrollment;
+            //
+            // Va sobre la instancia REGISTRADA como ICourseCatalogProvider, no sobre el stub
+            // por su nombre: con `Sources:Academy = cms` el catálogo es el otro, y enchufarlo
+            // al stub dejaría el panel del instructor en 0 alumnos y $0 — en silencio, y con
+            // los tests en verde, porque los tests cablean la inyección ellos mismos. Es el
+            // modo de fallo que el ctor del stub ya advertía, entrando por otra puerta.
+            // Hay gate (AcademyCatalogSourceTests).
+            switch (sp.GetRequiredService<ICourseCatalogProvider>())
+            {
+                case CatalogCourseCatalogProvider cms:
+                    cms.EnrollmentMetrics = enrollment;
+                    break;
+                case StubCourseCatalogProvider stub:
+                    stub.EnrollmentMetrics = enrollment;
+                    break;
+            }
             return enrollment;
         });
         services.AddSingleton<IEnrollmentService>(sp => sp.GetRequiredService<StubEnrollmentService>());
