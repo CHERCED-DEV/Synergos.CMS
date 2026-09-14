@@ -435,6 +435,27 @@ Las que salieron de construir el árbol de servicios (§0.B):
   eso el orden importa: **lo recibido gana, la derivación es el suelo**. El test lo exige
   con un dato que la derivación NO puede producir: si la calle del fixture se pareciera a
   «{barrio}, {ciudad}», el defecto pasaría en verde.
+- `feedback_gethashcode_is_not_a_seed` — **`GetHashCode()` no es una semilla, y un
+  comentario que lo llame «determinista» es el aviso de que nadie lo comprobó.** En .NET
+  Core el hash de string está **aleatorizado por proceso**: el resumen de salud del EHR
+  derivaba de `person.Id.GetHashCode()` el estado de las vacunas y del cuidado preventivo, y
+  el tablero del día sacaba de ahí si el paciente había llegado antes, así que «Influenza: al
+  día» pasaba a «vencida» en cada reinicio del servidor sin que nadie tocara nada (#106). Es
+  la forma de #72 y #82 — la propiedad que el código anuncia como su razón de ser es la que
+  no cumple— y **no se ve en una pantalla**: el valor es plausible siempre.
+  **Y derivarlo del id de forma de VERDAD determinista tampoco es la salida**: cambia un dato
+  que varía al azar por uno que miente siempre igual. El corte es el de la regla 14 del repo
+  hermano, aplicado a un campo en vez de a un artefacto: **si el valor entero de un campo es
+  ser cierto —un estado de vacunación, el resultado de un tamizaje, un acuse—, no se rellena;
+  sin dato, se dice que no hay dato**, y el `record` deja escrito por qué y cuál es el
+  disparador. Lo que SÍ se puede emitir es lo que se deriva de datos reales de la persona: la
+  recomendación («a los 45 toca tamizaje de colon») sale de la edad y el sexo del padrón; su
+  *estado* exige saber si se lo hizo, y eso aquí no lo sabe nadie.
+  **Cómo se prueba, porque el proceso no se reinicia dentro de un test**: por ausencia de
+  clave (exacto para el defecto tal cual) **y** por invariancia respecto al identificador —N
+  sujetos idénticos salvo el id dan la misma respuesta—, que es lo único que caza una
+  fabricación derivada del id que no sea el id mismo. Los ids del fixture tienen que ser de
+  **longitudes distintas**, o una derivación de `id.Length` pasa en verde.
 - `feedback_restored_mutation_needs_a_touch` — **al mutar un gate, la
   restauración tiene que TOCAR el fichero.** Un `cp`/`mv` devuelve el
   contenido con una fecha ANTERIOR a la de la escritura mutada, así que
