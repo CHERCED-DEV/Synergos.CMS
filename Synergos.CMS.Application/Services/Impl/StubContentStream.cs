@@ -202,7 +202,11 @@ public sealed class StubContentStream : IContentStream
             Body: item.Body?.Trim() ?? string.Empty,
             MediaUrl: string.IsNullOrWhiteSpace(item.MediaUrl) ? null : item.MediaUrl.Trim(),
             CreatedUtc: _utcNow(),
-            Metrics: new ContentMetrics(0, 0, 0));
+            Metrics: new ContentMetrics(0, 0, 0),
+            // El alt lo escribe quien publica y se PERSISTE: derivarlo del cuerpo al
+            // pintar sirve de red, pero si no se guarda, la segunda lectura ya no
+            // distingue el alt que alguien escribió del que inventó el servidor.
+            MediaAlt: string.IsNullOrWhiteSpace(item.MediaAlt) ? null : item.MediaAlt.Trim());
 
         await _store.WriteAsync(_resourceType, id, JsonSerializer.Serialize(created, _json), cancellationToken)
             .ConfigureAwait(false);

@@ -113,6 +113,11 @@ public sealed record ContentStreamPage(
 /// <param name="CreatedUtc">Timestamp UTC de creación.</param>
 /// <param name="Metrics">Métricas agregadas (reacciones, comentarios,
 ///   reposts).</param>
+/// <param name="MediaAlt">Texto alternativo de la media, tal como lo escribió 
+///   quien publicó, o <c>null</c> si no lo escribió nadie. Es un dato del
+///   AUTOR y no se deriva: derivarlo del cuerpo es un apaño razonable para
+///   pintar, pero guardarlo como si fuera suyo hace invisible que nunca lo
+///   escribió — y la a11y del feed depende de que se distinga.</param>
 public sealed record ContentStreamItem(
     string Id,
     string Kind,
@@ -120,7 +125,8 @@ public sealed record ContentStreamItem(
     string Body,
     string? MediaUrl,
     DateTime CreatedUtc,
-    ContentMetrics Metrics);
+    ContentMetrics Metrics,
+    string? MediaAlt = null);
 
 /// <summary>
 /// Autor de un item — proyección liviana del Member para el feed (lo rico vive
@@ -153,4 +159,5 @@ public sealed record NewContentItem(
     string AuthorId,
     string Body,
     string? MediaUrl = null,
-    string Kind = "post");
+    string Kind = "post",
+    string? MediaAlt = null);
