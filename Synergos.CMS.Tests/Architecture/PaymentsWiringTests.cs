@@ -222,6 +222,12 @@ public sealed class PaymentsWiringTests
         // quedó en el expediente, que es lo que alguien va a mirar dentro de un mes.
         Assert.Contains($"\"PaymentStatus\":\"{StubApplicationService.FeeUnavailable}\"",
             expediente, StringComparison.Ordinal);
+
+        // Y AHORA TAMBIÉN SE PUEDE LEER (#116). Escribirlo y no proyectarlo dejaba esto donde
+        // no mira nadie: `CaseDetail` es la única vista que llega a las dos bandejas, y no
+        // declaraba el campo. Mientras el motor de pago vivía en proceso daba igual —contestaba
+        // siempre `Captured`—; con `Api.Payments` detrás, ESTE es el caso que hay que perseguir.
+        Assert.Equal(StubApplicationService.FeeUnavailable, caso.FeeStatus);
     }
 
     [Fact]

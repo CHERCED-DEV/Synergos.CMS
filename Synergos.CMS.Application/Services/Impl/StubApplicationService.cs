@@ -493,7 +493,10 @@ public sealed class StubApplicationService : IApplicationService
         Currency: s.Currency,
         RadicadoAt: s.RadicadoAt,
         Timeline: BuildTimeline(s),
-        Decision: s.Decision);
+        Decision: s.Decision,
+        // El estado del cobro de la tasa, que el agregado guardaba desde la ADR 0116
+        // fase 5 y la proyección no declaraba: se escribía y no lo leía nadie (#116).
+        FeeStatus: s.PaymentStatus);
 
     /// <summary>
     /// Días HÁBILES restantes del término. Terminal ⇒ 0.
