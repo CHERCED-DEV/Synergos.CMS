@@ -73,5 +73,10 @@ public sealed class StubCaseTrackingProvider : ICaseTrackingProvider
         CurrentStage: c.CurrentStage,
         Priority: c.Priority,
         SlaDaysLeft: c.SlaDaysLeft,
-        RadicadoAt: c.RadicadoAt);
+        RadicadoAt: c.RadicadoAt,
+        // La tasa viaja a las dos bandejas: perseguir un cobro que no salió es trabajo
+        // de la cola, y una pendiente que sólo se ve abriendo cada expediente no la
+        // persigue nadie (#116).
+        FeeMinor: c.FeeMinor,
+        FeeStatus: c.FeeStatus);
 }

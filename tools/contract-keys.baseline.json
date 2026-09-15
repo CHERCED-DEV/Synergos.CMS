@@ -225,6 +225,7 @@
     "eligibility",
     "estimatedDays",
     "feeMinor",
+    "feeStatus",
     "fields",
     "form",
     "help",
