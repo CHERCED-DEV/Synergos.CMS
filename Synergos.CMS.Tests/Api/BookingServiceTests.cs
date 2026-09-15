@@ -37,6 +37,7 @@ public sealed class BookingServiceTests
 
         Reservation? IReservationStore.Find(string id) => _v.GetValueOrDefault(id);
         IReadOnlyList<Reservation> IReservationStore.ForResource(string rid) => _v.Values.Where(x => x.ResourceId == rid).ToList();
+        IReadOnlyList<Reservation> IReservationStore.ForWhom(Ref forWhom) => _v.Values.Where(x => x.For == forWhom).ToList();
         public void Put(Reservation x) => _v[x.Id] = x;
 
         public string? Find(string scope, IdempotencyKey key) => _k.GetValueOrDefault($"{scope}|{key.Value}");
@@ -57,9 +58,13 @@ public sealed class BookingServiceTests
 
     private static IdempotencyKey Llave(string s) => IdempotencyKey.Of(s);
 
-    private static Resource RegistrarRecurso(BookingService svc, int capacity = 1, int noticeMinutes = 0)
+    // subjectId es un parámetro y no una constante porque el fixture del listado por actor
+    // necesita DOS recursos distintos: con uno solo, "las reservas de esta persona" y "las
+    // reservas de este recurso" devuelven lo mismo y no filtrar pasaría en verde.
+    private static Resource RegistrarRecurso(
+        BookingService svc, int capacity = 1, int noticeMinutes = 0, string subjectId = "x")
         => svc.RegisterResource(
-            Ref.Create("test.recurso", "x"), capacity, "UTC",
+            Ref.Create("test.recurso", subjectId), capacity, "UTC",
             Array.Empty<OpeningRule>(), new CancellationPolicy(TimeSpan.FromMinutes(noticeMinutes)),
             Llave(Guid.NewGuid().ToString("n"))).Value;
 
@@ -402,8 +407,8 @@ public sealed class BookingServiceTests
             svc.ConfirmHold(h.Value.Id, Llave($"r{i}"));
         }
 
-        var a = svc.ListReservations(recurso.Id, 0, 10).Value.Items.Select(x => x.Id);
-        var b = svc.ListReservations(recurso.Id, 0, 10).Value.Items.Select(x => x.Id);
+        var a = svc.ListReservations(recurso.Id, null, 0, 10).Value.Items.Select(x => x.Id);
+        var b = svc.ListReservations(recurso.Id, null, 0, 10).Value.Items.Select(x => x.Id);
 
         Assert.Equal(a, b);
     }
@@ -420,5 +425,145 @@ public sealed class BookingServiceTests
         svc.ReleaseHold(hold.Value.Id);
 
         Assert.True(svc.ReleaseHold(hold.Value.Id).IsOk);
+    }
+
+    // ── Del actor a sus reservas (HU #124) ──────────────────────────────────
+    //
+    // El simétrico de la HU #25. Allá se cerró "del sujeto a su recurso"; acá faltaba la
+    // dirección que se usa más: "mis citas", "mis visitas", "mis reservas de viaje".
+    //
+    // EL FIXTURE LLEVA DOS ACTORES Y DOS RECURSOS a propósito. Con un solo actor, filtrar y no
+    // filtrar devuelven lo mismo y el defecto pasa en VERDE; con un solo recurso, el filtro por
+    // actor no se distingue del filtro por recurso que ya existía.
+    private static Reservation Reservar(
+        BookingService svc, Resource recurso, Ref para, DateTimeOffset inicio, string semilla)
+    {
+        var hold = svc.CreateHold(recurso.Id, Ventana(inicio, 30), para, null, Llave($"h-{semilla}"));
+        return svc.ConfirmHold(hold.Value.Id, Llave($"r-{semilla}")).Value;
+    }
+
+    private sealed record Agenda(BookingService Svc, Resource Consultorio, Resource Sala, Ref Ana, Ref Beto);
+
+    private static Agenda AgendaCompartida()
+    {
+        var (svc, _) = Nuevo();
+        var consultorio = RegistrarRecurso(svc, capacity: 10, subjectId: "consultorio");
+        var sala = RegistrarRecurso(svc, capacity: 10, subjectId: "sala");
+        var ana = Ref.Create("test.persona", "ana");
+        var beto = Ref.Create("test.persona", "beto");
+
+        Reservar(svc, consultorio, ana, Lunes8.AddHours(2), "ana-consultorio");
+        Reservar(svc, sala, ana, Lunes8.AddHours(4), "ana-sala");
+        Reservar(svc, consultorio, beto, Lunes8.AddHours(3), "beto-consultorio");
+
+        return new Agenda(svc, consultorio, sala, ana, beto);
+    }
+
+    [Fact]
+    public void Un_actor_SIN_reservas_devuelve_vacio_y_no_falla()
+    {
+        // El caso vacío, y la decisión que lo acompaña: un Ref es vocabulario de QUIEN LLAMA y
+        // esta capacidad no puede saber si existe —comprobarlo exigiría interpretarlo—. Así que
+        // "no tiene citas" es la respuesta verdadera. Con not_found, cada portal tendría que
+        // tratar una bandeja vacía como un fallo.
+        var a = AgendaCompartida();
+
+        var res = a.Svc.ListReservations(null, Ref.Create("test.persona", "nadie"), 0, 10);
+
+        Assert.True(res.IsOk);
+        Assert.Empty(res.Value.Items);
+        Assert.Equal(0, res.Value.Total);
+    }
+
+    [Fact]
+    public void Las_reservas_de_un_actor_salen_de_TODOS_sus_recursos()
+    {
+        // El caso feliz, y la razón de ser de la HU: quien pregunta "mis citas" no sabe por qué
+        // recurso preguntar —el identificador del recurso lo genera ESTA capacidad—, y sus citas
+        // no están todas en el mismo. Con las dos de Ana en un solo recurso, barrer recursos de a
+        // uno habría bastado y este endpoint no haría falta.
+        var a = AgendaCompartida();
+
+        var mias = a.Svc.ListReservations(null, a.Ana, 0, 10).Value;
+
+        Assert.Equal(2, mias.Total);
+        Assert.Equal(new[] { a.Consultorio.Id, a.Sala.Id }, mias.Items.Select(r => r.ResourceId));
+        Assert.All(mias.Items, r => Assert.Equal(a.Ana, r.For));
+    }
+
+    [Fact]
+    public void Dos_actores_NO_se_ven_las_reservas()
+    {
+        // El caso filtro. Beto comparte recurso y día con Ana: si el filtro se cayera, su reserva
+        // aparecería en la bandeja de ella. Es el defecto que este test existe para cazar.
+        var a = AgendaCompartida();
+
+        var deBeto = a.Svc.ListReservations(null, a.Beto, 0, 10).Value;
+
+        Assert.Single(deBeto.Items);
+        Assert.Equal(a.Beto, deBeto.Items[0].For);
+        Assert.DoesNotContain(deBeto.Items, r => r.For == a.Ana);
+    }
+
+    [Fact]
+    public void Listar_por_actor_dos_veces_devuelve_lo_MISMO()
+    {
+        // El caso idempotente: una lectura repetida no cambia nada ni devuelve otro orden. Sin
+        // desempate estable la lista "parpadea" sin que nada haya cambiado — y acá importa más
+        // que en el listado por recurso, porque dos reservas de la misma persona en recursos
+        // distintos pueden empezar a la misma hora.
+        var a = AgendaCompartida();
+
+        var una = a.Svc.ListReservations(null, a.Ana, 0, 10).Value.Items.Select(r => r.Id).ToList();
+        var otra = a.Svc.ListReservations(null, a.Ana, 0, 10).Value.Items.Select(r => r.Id).ToList();
+
+        Assert.Equal(una, otra);
+    }
+
+    [Fact]
+    public void Los_dos_filtros_juntos_INTERSECAN()
+    {
+        // Es lo único que pueden significar dos filtros sobre la misma lista. Y el fixture lo
+        // exige: Ana tiene dos reservas y el consultorio tiene dos, así que un OR o un filtro
+        // ignorado devolverían 2 o 3, nunca 1.
+        var a = AgendaCompartida();
+
+        var aqui = a.Svc.ListReservations(a.Consultorio.Id, a.Ana, 0, 10).Value;
+
+        Assert.Single(aqui.Items);
+        Assert.Equal(a.Consultorio.Id, aqui.Items[0].ResourceId);
+        Assert.Equal(a.Ana, aqui.Items[0].For);
+    }
+
+    [Fact]
+    public void Sin_NINGUN_filtro_se_rechaza_nombrando_la_regla_y_no_el_campo()
+    {
+        // Listar todo crece con el almacén y no cabe en una página. El código se llamaba
+        // resource_id_required —el instinto correcto dicho sobre el único filtro que existía—; con
+        // dos filtros ese nombre MENTIRÍA, porque un for también sirve.
+        var a = AgendaCompartida();
+
+        var bad = a.Svc.ListReservations(null, null, 0, 10);
+
+        Assert.False(bad.IsOk);
+        Assert.Equal("booking.filter_required", bad.Rejection!.Code);
+    }
+
+    [Fact]
+    public void El_Ref_se_compara_ENTERO_y_no_por_su_identificador()
+    {
+        // §0.B.13: el Ref se guarda y se devuelve, nunca se ramifica ni se parte. Comparar sólo
+        // el Id haría que dos vocabularios distintos con el mismo identificador —un "1" de salud
+        // y un "1" de viajes— se vieran las reservas. No se nota hasta el segundo dominio, que es
+        // exactamente cuando ya es caro.
+        var (svc, _) = Nuevo();
+        var recurso = RegistrarRecurso(svc, capacity: 10);
+        Reservar(svc, recurso, Ref.Create("salud.paciente", "1"), Lunes8.AddHours(2), "salud");
+        Reservar(svc, recurso, Ref.Create("viajes.huesped", "1"), Lunes8.AddHours(3), "viajes");
+
+        var deSalud = svc.ListReservations(null, Ref.Create("salud.paciente", "1"), 0, 10).Value;
+
+        Assert.Single(deSalud.Items);
+        Assert.Equal("salud.paciente", deSalud.Items[0].For.Kind);
     }
 }
