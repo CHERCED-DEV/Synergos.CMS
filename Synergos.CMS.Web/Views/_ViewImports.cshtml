@@ -3,6 +3,12 @@
 @using Umbraco.Cms.Web.Common.Views
 @using Umbraco.Cms.Core.Models.PublishedContent
 @using Microsoft.AspNetCore.Html
+@* Implícito del SDK Web en la compilación del BUILD, y ausente en la del RUNTIME.
+   Con ModelsMode=InMemoryAuto —el modo del perfil Docker— las vistas se recompilan en
+   caliente sin los implicit usings del proyecto, así que _SynergosBridge.cshtml perdía
+   LogWarning y CUALQUIER página de contenido contestaba 500. No se veía porque nunca
+   hubo contenido que renderizar en ese perfil (#119). *@
+@using Microsoft.Extensions.Logging
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
 @addTagHelper *, Smidge
 @inject Smidge.SmidgeHelper SmidgeHelper
