@@ -441,11 +441,7 @@ public sealed class HttpEventTicketingService : IEventTicketingService
     ///
     /// <para>Nunca el nombre: dos personas se llaman igual.</para>
     /// </remarks>
-    internal static string BuyerId(EventAttendeeInfo comprador)
-    {
-        var correo = (comprador.Email ?? string.Empty).Trim().ToLowerInvariant();
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(correo)))[..16].ToLowerInvariant();
-    }
+    internal static string BuyerId(EventAttendeeInfo comprador) => SeudonimoDePersona.De(comprador.Email);
 
     /// <summary>
     /// La llave de idempotencia: <b>determinista sobre lo que se compra</b>, no sobre cuándo.

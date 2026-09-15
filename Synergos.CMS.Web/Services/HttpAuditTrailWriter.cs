@@ -1,7 +1,5 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
@@ -256,11 +254,12 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
     /// </remarks>
     internal static string Seudonimo(string? actorEmail)
     {
-        var correo = (actorEmail ?? string.Empty).Trim().ToLowerInvariant();
-        if (correo.Length == 0) return ActorDelSistema;
+        // La POLITICA vive aca y no dentro del helper (#120): sin correo, el asiento es del
+        // sistema. Las otras cinco copias guardan la huella del vacio, que es lo correcto para
+        // contar cupo o plata y seria mentira en una bitacora.
+        if ((actorEmail ?? string.Empty).Trim().Length == 0) return ActorDelSistema;
 
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(correo));
-        return Convert.ToHexString(hash)[..16].ToLowerInvariant();
+        return SeudonimoDePersona.De(actorEmail);
     }
 
     private static async Task<ProblemDto> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)

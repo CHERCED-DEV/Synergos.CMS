@@ -462,10 +462,12 @@ public sealed class HttpShopOrderService : IShopOrderService
     /// </remarks>
     internal static string BuyerId(ShopCustomer customer)
     {
+        // La POLITICA vive aca y no dentro del helper (#120): con sesion, el comprador ES su
+        // miembro y no hace falta seudonimo. Ninguna de las otras cinco copias tiene esto, y la
+        // que lo copie sin saberlo pierde la sesion.
         if (customer.MemberKey is Guid k && k != Guid.Empty) return k.ToString("n");
 
-        var correo = (customer.Email ?? string.Empty).Trim().ToLowerInvariant();
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(correo)))[..16].ToLowerInvariant();
+        return SeudonimoDePersona.De(customer.Email);
     }
 
     internal static string SubjectId(ShopCartItem item)
