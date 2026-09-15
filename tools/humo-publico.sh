@@ -59,6 +59,33 @@ else
   falla "la respuesta no parece HTML — puede ser una página de error del proxy"
 fi
 
+# ── 1.bis. Y que ese HTML sea EL SITIO, no el cartel de Umbraco vacío ────────
+#
+# ESTO ES LO QUE DEJABA PASAR UN SERVIDOR NUEVO ENTERO (#114).
+#
+# El schema de uSync NO se importa al arrancar (ADR 0008: el default del paquete
+# es `None` y nadie lo pisa — medido). Un servidor recién montado levanta con
+# Umbraco vacío, y Umbraco vacío no falla: sirve su página «No published
+# content» con **200 y HTML de verdad**. Las dos comprobaciones de arriba pasan,
+# la de la versión pasa, y el despliegue se da por BUENO con el sitio en blanco.
+#
+# Medido en el stack compuesto: `GET /` → 200, 1926 bytes,
+# `<title>Umbraco: No published content</title>`.
+#
+# Es la forma que este repo ya nombró tres veces —arranca verde, contesta
+# /health y pasa la prueba de humo— y la peor de las tres, porque acá lo que
+# queda en pie es una URL pública enseñando el cartel de instalación.
+#
+# Lo que hay que hacer cuando esto se pone rojo está en
+# `docs/despliegue/00-montar-el-entorno.md` §5.bis: correr
+# `tools/importar-schema.sh` en el servidor, una vez.
+if grep --quiet --ignore-case "No published content" /tmp/portada.html 2>/dev/null; then
+  falla "la portada es el cartel de Umbraco VACÍO — el schema de uSync nunca se importó. \
+Corré tools/importar-schema.sh en el servidor (docs/despliegue/00-montar-el-entorno.md §5.bis)"
+else
+  paso "la portada es el sitio, no el cartel de Umbraco vacío"
+fi
+
 # ── 2. La versión que contesta es la que se acaba de subir ───────────────────
 #
 # EL CRITERIO QUE SEPARA "responde" DE "se actualizó". Un reinicio que falla en
