@@ -119,7 +119,7 @@ Synergos.CMS/
 │   │                            + seudónimo único (3, #120)
 │   │                            + portada de arranque (5, #119)
 │   ├── Api/                     tests de reglas y servicio por capacidad
-│   └── Bff/                     la compensación cruzada (144)
+│   └── Bff/                     la compensación cruzada (148)
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
 │
 ├── Synergos.Core/               EL VOCABULARIO. Ref, Money, TimeWindow, Rejection,
@@ -888,6 +888,32 @@ Las que salieron de construir el árbol de servicios (§0.B):
   exactamente esta fila, así que `[]` dice «todavía ninguna», que es cierto. La
   pregunta es la misma de siempre —*¿qué puede llenar esta lista?*— y sólo cambia
   la respuesta.
+- `feedback_an_omission_becomes_a_defect_when_someone_fills_it` — **omitir un campo
+  que la otra punta emite es legítimo hasta que alguien tiene que RELLENAR el hueco;
+  ahí deja de ser un DTO mínimo y pasa a ser una fabricación** (#122). El
+  `QuoteDto` de `Bff.Tienda` no declaraba `Lines`, así que `System.Text.Json`
+  descartaba en silencio los `unitPrice` que `Api.Pricing` ya había mandado, y
+  `PurchaseFlow` escribía `Money.Zero` encima — sobre el campo que `Api.Orders`
+  **congela** a propósito, porque «un pedido es un acuerdo sobre un monto». El
+  pedido quedaba guardado diciendo que cada renglón valía nada.
+  **Lo que lo hacía invisible es que el TOTAL seguía siendo el bueno**: ninguna regla
+  de la capacidad lo rechaza —`CheckTotal` sólo mira signo y moneda, y con razón,
+  porque el impuesto lo pone Pricing—, así que se contestaba **201** y el descuadre
+  sólo aparecía leyendo la factura. Verificado con seis procesos vivos: con el
+  defecto puesto, el mismo almacén guarda `[('camisa',0),('gorra',0)]` con total
+  306 425 y nada falla.
+  **Los 33 campos que ese mismo fichero omite a conciencia son la prueba de que la
+  omisión NO es el criterio** — y de por qué no hay gate de cruce BFF↔capacidad; el
+  argumento medido está en §7. **La pregunta que sí lo caza se hace leyendo:
+  ¿este valor lo estoy inventando porque el DTO de al lado no lo trae?** Si la
+  respuesta es sí, el campo va al DTO; si de verdad no viene, se **rechaza**, no se
+  rellena con cero.
+  **Y el fixture tiene que llevar VARIAS líneas con precios distintos entre sí y
+  distintos del total**: con una sola, el unitario y el total coinciden y el defecto
+  pasa en verde; con cantidades iguales, no se distingue «leí el unitario» de «leí el
+  subtotal». **La mutación que vale no es quitar el campo** —eso rompe el build, que
+  no es un test rojo—: es renombrar la clave serializada con `JsonPropertyName`, que
+  compila y es la forma real de la deriva.
 
 ## 6. Prohibiciones explícitas
 
@@ -1154,6 +1180,8 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
 de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3176 tests, gates de
+**Construido y verificado:** 20 capacidades (137 endpoints, 241 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3173 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
