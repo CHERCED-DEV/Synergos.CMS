@@ -250,25 +250,73 @@ public sealed class ComposeStackTests
         Assert.Contains("al día", salida, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Que el proxy mande el CMS al CMS, y nada más de este fichero.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Lo que había acá contaba rutas, y por eso cementó un defecto</b> (#114). Exigía
+    /// exactamente UNA <c>reverse_proxy</c> hacia el árbol —escrito cuando el webhook era uno solo
+    /// (ADR 0131)— así que cuando la HU #27 añadió el de Wompi en <c>Api.Payments</c>, escribir su
+    /// ruta <b>rompía el build</b> y dejarla sin escribir mandaba el webhook al servicio
+    /// equivocado.</para>
+    ///
+    /// <para>Quién puede entrar al árbol desde fuera lo vigila ahora <c>WebhookGateTests</c>, que
+    /// lo mide por <b>cobertura</b> contra los <c>MapPost("/v1/webhooks/…")</c> que existen y no
+    /// contra un número. Acá queda lo que sigue siendo del compose: que el catch-all vaya al
+    /// CMS.</para>
+    /// </remarks>
     [Fact]
-    public void El_webhook_del_proveedor_es_lo_UNICO_del_arbol_que_el_proxy_deja_entrar()
+    public void El_catch_all_del_proxy_va_al_CMS()
     {
-        // Es alcanzable a la fuerza —lo llama un tercero sin la llave compartida (ADR 0131)— y
-        // lo protege su firma. Cualquier otra ruta del árbol abierta acá sería un descuido.
         var caddy = File.ReadAllText(Path.Combine(RepoRoot(), "Caddyfile"));
 
-        Assert.Contains("/v1/webhooks/*", caddy, StringComparison.Ordinal);
-        Assert.Contains("reverse_proxy api-notifications:8080", caddy, StringComparison.Ordinal);
+        Assert.Contains("reverse_proxy cms:8080", caddy, StringComparison.Ordinal);
+    }
 
-        // Una sola ruta del árbol de servicios: la del webhook. Si aparece otra `reverse_proxy`
-        // hacia `api-*` o `bff-*`, es una capacidad expuesta.
-        var haciaElArbol = Regex.Matches(caddy, @"reverse_proxy\s+(api|bff)-[\w-]+:")
-            .Select(m => m.Value)
+    /// <summary>
+    /// El proxy NO condiciona el tráfico a un endpoint que puede estar rojo por diseño.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Esto tumbó el sitio entero y no se ve sin levantar el stack compuesto</b> (#114).
+    /// El <c>Caddyfile</c> tenía <c>health_uri /_health</c> sobre el CMS. <c>/_health</c> agrega
+    /// las <c>ISchemaHealthProbe</c> y devuelve <b>503 en cuanto UNA está roja</b> — y
+    /// <c>bundle_registry</c> lo está por diseño mientras no se configure el CDN, que es el
+    /// default. Caddy anotaba <c>status code out of tolerances</c>, marcaba el upstream caído, y
+    /// contestaba <b>503 a todo</b> con el CMS vivo detrás.</para>
+    ///
+    /// <para><b>Cada pieza por separado parecía sana</b>, que es la firma de los defectos de este
+    /// tramo: el CMS suelto contesta 200; su contenedor reporta <c>healthy</c> —el
+    /// <c>HEALTHCHECK</c> del <c>Dockerfile</c> va SIN <c>--fail</c> y ahí está escrito el porqué,
+    /// o sea que alguien ya sabía que <c>/_health</c> puede estar rojo sin que pase nada—; y
+    /// ningún gate miraba la combinación de las dos.</para>
+    ///
+    /// <para><b>La ruta se DERIVA del controller</b>, no se escribe acá: el día que
+    /// <c>/_health</c> se llame de otra manera, este gate la sigue. Y se comprueba que de verdad
+    /// sea un endpoint capaz de contestar 503, para no estar prohibiendo una ruta inocente.</para>
+    /// </remarks>
+    [Fact]
+    public void El_proxy_no_cuelga_el_sitio_de_una_probe_opcional()
+    {
+        var controller = File.ReadAllText(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Web", "Controllers", "HealthController.cs"));
+
+        // Que sea lo que creemos que es: una agregación de probes que puede devolver 503.
+        Assert.Contains("Status503ServiceUnavailable", controller, StringComparison.Ordinal);
+
+        var ruta = Regex.Match(controller, @"\[Route\(""([^""]+)""\)\]").Groups[1].Value;
+        Assert.False(string.IsNullOrWhiteSpace(ruta), "No se pudo leer la ruta de HealthController.");
+
+        var caddy = File.ReadAllText(Path.Combine(RepoRoot(), "Caddyfile"));
+        var chequeos = Regex.Matches(caddy, @"^\s*health_uri\s+(\S+)", RegexOptions.Multiline)
+            .Select(m => m.Groups[1].Value.Trim('/'))
             .ToList();
 
-        Assert.True(haciaElArbol.Count == 1,
-            "El proxy solo puede enrutar hacia UNA cosa del árbol de servicios: el webhook. " +
-            $"Encontrado: {string.Join(", ", haciaElArbol)}");
+        Assert.False(chequeos.Contains(ruta.Trim('/'), StringComparer.Ordinal),
+            $"El Caddyfile cuelga el enrutado de `/{ruta.Trim('/')}`, que devuelve 503 en cuanto "
+            + "UNA probe está roja — y `bundle_registry` lo está por diseño mientras no se "
+            + "configure el CDN. Caddy lo lee como «no hay upstream» y contesta 503 A TODO con el "
+            + "CMS vivo detrás (#114). La paciencia del primer arranque se consigue con "
+            + "`lb_try_duration`, no condicionando el sitio a un subsistema opcional.");
     }
 
     /// <summary>
