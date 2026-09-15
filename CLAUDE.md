@@ -498,6 +498,28 @@ Las que salieron de construir el árbol de servicios (§0.B):
   —un borrador y un publicado—: con todos publicados, emitir la clave o no da el mismo
   JSON. **Y la mutación es escribir el default en el mapeo** (`Status: Published`), que es
   literalmente lo que la omisión hacía, sólo que delegado.
+- `feedback_a_two_step_write_must_remember_which_step_landed` — **cuando una escritura
+  son DOS pasos y el primero mueve dinero, quitar la fabricación del segundo no basta:
+  hay que decidir qué hace «reintentar».** `enroll`/`confirm` de Educación inventaban un
+  `MOCK-<ts>`/`ENR-<orderRef>` cuando el borde no contestaba, así que el alumno salía con
+  un número de matrícula que no existe en ninguna parte **y había pagado** (#117). Es la
+  cuarta de la familia de #116 —el `claimId` de la devolución, el `CERT-<random>`, el
+  `CITA-<timestamp>`— y lo que añade es que **la mitad barata del arreglo deja la mitad
+  cara puesta**: sin tocar el asistente de compra, volver a pulsar llamaba otra vez al
+  paso que cobra y abría una segunda orden con su segundo cargo. Tres cortes:
+  **lo que el servidor ya se llevó se lee del carrito persistido y no de un campo del
+  componente** —entre cobrar y confirmar la página puede recargarse—, y sólo cuenta si el
+  monto capturado sigue siendo el total; **el mensaje lo decide lo que QUEDÓ y no lo que
+  falló**, porque «no pudimos completar la compra» dicho a quien acaba de pagar es una
+  invitación a pagar dos veces; y **el paso que se repite tiene que ser el idempotente**
+  —`ConfirmAsync` devuelve la matrícula sin recapturar, `EnrollAsync` abre otra orden—, o
+  lo que hay que arreglar es el borde. **Y el hallazgo que no se ve con la red apagada
+  entera**: la rama GRATIS activa la matrícula en `EnrollAsync` y **nunca pasa por
+  `ConfirmAsync`**, así que el `orderRef` que el cliente se inventaba para ella pedía
+  confirmar una orden inexistente —404— y el `catch` devolvía un id fabricado: **contra
+  un servidor VIVO**, la matrícula gratis quedaba registrada del lado del UI con un id
+  distinto del que este árbol había emitido. El fixture tiene que ser un borde de mentira
+  con la forma del de verdad, apagado **por método y ruta**.
 - `feedback_a_derived_fallback_must_never_overwrite_what_arrived` — **un campo que se
   DERIVA para los casos en que no llega no puede pisar el que llegó.** La dirección de un
   inmueble se rellenaba con «{barrio}, {ciudad}» y el borde no declaraba `address`, así que
@@ -1204,6 +1226,17 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > escribió» y se rescata repitiendo el confirm. El día que exista
   > `Bff.Academy`, su bandera entra en la lista. Hay gate
   > (`PaymentsWiringTests`).
+  >
+  > **Y «se rescata repitiendo el confirm» era una propiedad del motor que NADIE
+  > ejercía** (#117). El asistente de compra del otro árbol no repetía nada: cuando
+  > el confirm no llegaba, su cliente **fabricaba el acuse** —un `ENR-<orderRef>`— y
+  > seguía adelante, así que la ventana no se cerraba nunca y además el alumno se iba
+  > con un identificador que este lado no conoce. Una propiedad correcta de este
+  > árbol cuya única forma de aprovecharse vive en el otro **no está hecha hasta que
+  > el otro la ejerce**: hoy el asistente reconoce el cobro ya capturado, repite
+  > **sólo** el confirm y dice lo que quedó. Es la misma forma que el addendum #111
+  > de `feedback_gethashcode_is_not_a_seed` —el arreglo cruza los dos árboles y hay
+  > que decirlo—, y por eso se anota acá aunque no haya cambiado una línea de C#.
 
   > **El acto administrativo notificado existe para sostener CUÁNDO
   > ACCEDIÓ, no para enviar** (#62). Un correo enviado prueba que salió del
