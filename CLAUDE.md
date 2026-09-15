@@ -450,6 +450,19 @@ Las que salieron de construir el árbol de servicios (§0.B):
   trinquete de G-6 como si cruzara. Se escribe la decisión y el
   disparador en el `record`, que es donde la va a leer la próxima
   auditoría.
+  **Addendum #116 — el espejo: una ESCRITURA cuyo único camino de lectura no existe, y por
+  qué no la ve nadie.** El expediente de Gobierno guardaba el estado del cobro de la tasa
+  desde la ADR 0116 fase 5 y `CaseDetail` —la única proyección que llega a las dos
+  bandejas— no declaraba el campo: se escribía a disco y no salía por ningún endpoint. **Lo
+  que lo escondía no era la falta de tests, era su REPARTO**: los del motor miraban el
+  ALMACÉN («¿quedó escrito que no se pudo cobrar?», y quedaba) y los del borde miraban el
+  RBAC y los códigos de estado. Las dos mitades en verde, y el hueco justo en medio —el sitio
+  que ningún test miraba porque cada uno creía que era del otro—. **La pregunta que lo caza:
+  ¿qué pantalla enseña este campo?** Si la respuesta es «ninguna», el campo no está guardado,
+  está enterrado. Y crecía con el cableado: con el motor de pago en proceso el estado era
+  siempre `Captured` y daba igual; el día que detrás hay una capacidad que puede caerse, ese
+  campo es el ÚNICO rastro de una tasa que nadie cobró. El test que lo cierra es el que cruza
+  las dos mitades: radicar con la pasarela caída y leer el borde.
 - `feedback_a_fabrication_can_be_a_derivation` — **lo fabricado no siempre es una
   constante: DERIVARLO de lo que hay a mano se lee como un dato y miente igual, y encima se
   defiende solo** («sale de la bandeja, no me lo inventé»). El home del portal del paciente
