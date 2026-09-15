@@ -133,6 +133,22 @@ done
 
 LLAVE="${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY — es la llave compartida entre servicios}"
 
+# ⚠️ EL MANIFIESTO SE COMPRUEBA ANTES DE ESCRIBIR NADA, y ausente es un ERROR.
+# Antes esto se miraba a mitad del camino y seguía adelante avisando: publicaba
+# las cinco definiciones, se saltaba los recursos y los precios, y terminaba
+# diciendo «✓ el estado que las capacidades exigen está publicado» — un verde
+# con la mitad del trabajo sin hacer. Y era alcanzable de verdad: el despliegue
+# copiaba `provisionar.sh` al servidor y NO su manifiesto (#114).
+#
+# «No hay entidades todavía» se escribe `[]`. Decirlo no es lo mismo que que el
+# fichero falte, y los dos casos se pueden distinguir, así que se distinguen.
+if [ ! -f "$MANIFIESTO" ]; then
+  echo "✗ no existe el manifiesto $MANIFIESTO." >&2
+  echo "  Ahí se declaran los recursos por médico / inmueble / oferta y sus precios." >&2
+  echo "  Si de verdad no hay ninguno todavía, escribí un fichero con []." >&2
+  exit 1
+fi
+
 faltan=0
 fallos=0
 ok()     { echo "✓ $1"; }
@@ -221,11 +237,6 @@ definicion "$TRACKING_PREFIX.academy" "$(pipeline_json "$TRACKING_PREFIX.academy
 # ── 3. Los recursos y precios POR ENTIDAD ────────────────────────────────────
 echo "── recursos y precios por entidad"
 
-if [ ! -f "$MANIFIESTO" ]; then
-  echo "· sin manifiesto ($MANIFIESTO): no hay entidades que reconciliar."
-  echo "  Los recursos por médico / inmueble / oferta se declaran ahí. Ver la"
-  echo "  cabecera de este script y docs/despliegue/00-montar-el-entorno.md §5.bis."
-else
   # Se lee con `python3` y no con `jq`: el servidor lo trae de fábrica y `jq` no,
   # y `bootstrap-servidor.sh` no lo instala. Un script de despliegue que exige un
   # paquete que el bootstrap no pone es un paso no documentado más.
@@ -296,7 +307,6 @@ else
       *) falla "tipo desconocido en el manifiesto: $tipo" ;;
     esac
   done < <(leer_manifiesto "$MANIFIESTO")
-fi
 
 echo
 if [ "$fallos" -gt 0 ]; then

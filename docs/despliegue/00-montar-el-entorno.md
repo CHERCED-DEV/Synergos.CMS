@@ -419,6 +419,18 @@ El import es un paso, y está en el §5.bis de abajo.
 Un servidor recién montado tiene los procesos arriba y **nada dentro**. Esto es lo que hay que
 hacer una vez, en orden. Nada de esto lo hace el arranque, y ninguno estaba escrito acá.
 
+| Fichero | Dónde corre | Qué hace |
+|---|---|---|
+| `tools/importar-schema.sh` | **el servidor** | importa el árbol de uSync en un contenedor efímero |
+| `tools/provisionar.sh` | **el servidor** | publica definiciones, recursos y precios; reconcilia |
+
+> **Los dos los COPIA el despliegue**, junto con `tools/provisionar.recursos.json`. No es un
+> detalle: los tres del respaldo vivían sólo en el repo y la máquina que había que proteger era la
+> única sin con qué (HU #31), y al escribir estos dos volvió a pasar igual — este documento decía
+> «corré esto en el servidor» y el servidor no los tenía (#114). Hoy hay gate, y lo que decide qué
+> se copia es **la columna «Dónde corre» de las tablas de este documento**: lo que aquí diga «el
+> servidor» tiene que llegar al servidor.
+
 ### 5.bis.1 El schema de uSync
 
 ```bash

@@ -114,7 +114,7 @@ Synergos.CMS/
 ├── Synergos.CMS.Tests/          xUnit — 3097 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
-│   │                            + despliegue (17, ADR 0133)
+│   │                            + despliegue (18, ADR 0133)
 │   │                            + molde del vertical (9, doc 12)
 │   ├── Api/                     tests de reglas y servicio por capacidad
 │   └── Bff/                     la compensación cruzada (144)
