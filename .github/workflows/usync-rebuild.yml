@@ -7,7 +7,9 @@ name: uSync rebuild (DB derivable)
 # el árbol completo. Levanta la aplicación real contra una SQLite vacía,
 # deja que uSync importe todo uSync/v9/ en el arranque, y falla si el
 # import no aplica limpio (0 líneas ERR) y completo (ítems procesados >=
-# archivos trackeados — la medición de referencia es exacta: 880 = 880).
+# archivos trackeados, que se CUENTAN con `git ls-files` en cada corrida —
+# escribir aquí cuántos son deja una cifra que envejece sola: decía 880 con 896
+# en el árbol, #114).
 #
 # La propiedad que protege: una DB vacía + el repo reproducen el entorno.
 # Mientras eso sea verde, la base de datos es DERIVABLE — perder trabajo

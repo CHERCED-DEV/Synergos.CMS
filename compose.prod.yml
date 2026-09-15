@@ -4,7 +4,7 @@
 # esté al día (ComposeStackTests). Editarlo a mano funciona hasta el siguiente
 # `compose-gen`, que lo pisa sin avisar.
 #
-# El producto entero: el CMS, las 20 capacidades, los 2 orquestadores y un proxy.
+# El producto entero: el CMS, las 20 capacidades, los 4 orquestadores y un proxy.
 #
 #   docker compose -f compose.prod.yml up -d
 #
@@ -15,10 +15,11 @@
 #   SYNERGOS_DOMAIN    el dominio publico
 #
 # ⚠️ UNA INSTANCIA POR CAPACIDAD, Y PARADA ANTES DE ARRANQUE.
-# 19 de las 20 capacidades guardan en fichero JSON con un lock de PROCESO. Dos
-# instancias se pisan y NO dan error: corrompen. Un rolling deploy son dos
-# instancias a la vez, asi que el despliegue "normal" de cualquier plataforma
-# moderna rompe esto. Mientras no cambie el almacen (epica #2), no se toca.
+# Casi todas las 20 capacidades guardan en fichero JSON con un lock
+# de PROCESO. Dos instancias se pisan y NO dan error: corrompen. Un rolling
+# deploy son dos instancias a la vez, asi que el despliegue "normal" de
+# cualquier plataforma moderna rompe esto. Mientras no cambie el almacen
+# (epica #2), no se toca.
 
 name: synergos
 
@@ -471,9 +472,9 @@ services:
       Identity__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
       Identity__Storage__Root: /app/data/identity
       # La llave que FIRMA los tokens de identidad (HU #14). NO es
-      # SYNERGOS_API_KEY: la compartida la tienen los 22 servicios y solo dice
-      # «este proceso es de los nuestros». Si con ella se firmaran identidades,
-      # cualquiera de los 22 fabricaria personas.
+      # SYNERGOS_API_KEY: la compartida la tienen TODOS los servicios y solo
+      # dice «este proceso es de los nuestros». Si con ella se firmaran
+      # identidades, cualquiera de ellos fabricaria personas.
       #
       # Sin llave el servicio NO arranca — un Api.Identity que dice emitir
       # identidades y no puede es peor que uno caido, porque parece que funciona.
