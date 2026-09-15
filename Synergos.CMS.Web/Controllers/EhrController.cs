@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Filters;
@@ -717,7 +717,7 @@ public sealed class EhrController : ControllerBase
 
     private static DoctorDto ToDoctorDto(MedicalDoctor d) => new(
         Id: d.Id, Name: d.FullName, Specialty: d.Specialty, License: d.LicenseNumber,
-        Phone: string.Empty, Email: string.Empty, AcceptingPatients: null,
+        Phone: d.Phone, Email: d.Email, AcceptingPatients: d.AcceptingPatients,
         Rating: d.Rating, YearsExperience: d.YearsExperience, AvatarUrl: d.AvatarUrl,
         WorkingDays: d.WorkingDays.Select(w => (int)w).ToList(),
         SlotStartHour: d.SlotStartHour, SlotEndHour: d.SlotEndHour, SlotMinutes: d.SlotMinutes);
@@ -1088,18 +1088,18 @@ public sealed class EhrController : ControllerBase
     /// Un médico del directorio hacia la UI.
     /// </summary>
     /// <remarks>
-    /// <para><b><see cref="AcceptingPatients"/> sale siempre <c>null</c></b> (HU #111). Decía
-    /// <c>true</c> para todos: «este médico acepta pacientes nuevos», dicho por un borde que no
-    /// tiene de dónde saberlo — <see cref="MedicalDoctor"/> modela agenda (días, franja, slot)
-    /// pero no si el profesional cerró su lista. Un paciente que elige médico por ese dato lo
-    /// está eligiendo por una constante.</para>
-    /// <para><b><c>null</c> ≠ <c>false</c></b>: cerrar la lista de un médico que sí recibe es
-    /// tan falso como lo contrario, así que la ausencia tiene su propio valor y la clave se
-    /// conserva.</para>
-    /// <para><b>Disparador</b>: que <see cref="IDoctorDirectory"/> sepa decir si el médico
-    /// admite pacientes nuevos.</para>
-    /// <para><see cref="Phone"/> y <see cref="Email"/> salen vacíos por la misma razón —el seam
-    /// no los trae— pero ahí la cadena vacía ya dice «no hay», no afirma un teléfono.</para>
+    /// <para><b><see cref="AcceptingPatients"/>, <see cref="Phone"/> y <see cref="Email"/> salen
+    /// del seam desde el #118.</b> Hasta entonces el borde los escribía a mano —<c>null</c> y
+    /// dos cadenas vacías— porque <see cref="MedicalDoctor"/> modelaba agenda (días, franja,
+    /// slot) y no contacto. El disparador que estaba escrito aquí era exactamente ése: «que
+    /// <see cref="IDoctorDirectory"/> sepa decir si el médico admite pacientes nuevos». Lo sabe
+    /// cuando el directorio sale del contenido que autoró el editor
+    /// (<c>Synergos:Catalog:Sources:Salud = cms</c>).</para>
+    /// <para><b><c>null</c> ≠ <c>false</c>, y por eso el schema NO usa un <c>Umbraco.TrueFalse</c></b>
+    /// (HU #111): cerrar la lista de un médico que sí recibe es tan falso como lo contrario, y
+    /// un booleano del backoffice vale <c>false</c> sin que nadie lo decida. El campo es un
+    /// desplegable de dos valores donde «sin elegir» sigue siendo «no consta» — que es lo que
+    /// contesta el staff sembrado, porque de él no consta.</para>
     /// </remarks>
     public sealed record DoctorDto(
         string Id, string Name, string Specialty, string License,
