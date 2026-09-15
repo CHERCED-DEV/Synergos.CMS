@@ -21,6 +21,21 @@ public sealed class BundleRegistryProbeTests
         return monitor;
     }
 
+    /// <summary>
+    /// Un import map con algo dentro — lo que el CDN publica cuando está bien.
+    /// </summary>
+    /// <remarks>
+    /// <b>Hace falta en TODO caso sano desde el defecto #126.</b> Resolver un descriptor ya no
+    /// alcanza para reportar salud: sin mapa, el navegador no resuelve los bare specifiers y
+    /// ningún <c>&lt;synergos-*&gt;</c> se registra, con la página en 200. Los cuatro tests que
+    /// afirmaban salud se pusieron rojos al cablearlo, que es como se supo que el probe de verdad
+    /// lo mira.
+    /// </remarks>
+    private static ImportMap MapaSano() => new(new Dictionary<string, string>
+    {
+        ["@angular/core"] = "/cdn-bundles/synergos/runtime/angular/latest/core.js",
+    });
+
     [Fact]
     public async Task StubMode_ReportsHealthy_WithStubMessage()
     {
@@ -54,6 +69,7 @@ public sealed class BundleRegistryProbeTests
             Framework: "angular");
         var client = Substitute.For<IBundleRegistryClient>();
         client.TryResolveAnyAsync(Arg.Any<CancellationToken>()).Returns(descriptor);
+        client.TryGetImportMapAsync(Arg.Any<CancellationToken>()).Returns(MapaSano());
         var settings = new BundleRegistrySettings { Mode = "FileSystem", LocalPath = @"C:\LOCAL_CDN" };
         var probe = new BundleRegistryProbe(client, MonitorFor(settings));
 
@@ -84,6 +100,7 @@ public sealed class BundleRegistryProbeTests
         var client = Substitute.For<IBundleRegistryClient>();
         client.TryResolveAsync("custom-block", Arg.Any<CancellationToken>())
               .Returns(descriptor);
+        client.TryGetImportMapAsync(Arg.Any<CancellationToken>()).Returns(MapaSano());
         var settings = new BundleRegistrySettings
         {
             Mode = "FileSystem",
@@ -112,6 +129,7 @@ public sealed class BundleRegistryProbeTests
             Integrity: null);
         var client = Substitute.For<IBundleRegistryClient>();
         client.TryResolveAnyAsync(Arg.Any<CancellationToken>()).Returns(descriptor);
+        client.TryGetImportMapAsync(Arg.Any<CancellationToken>()).Returns(MapaSano());
         var settings = new BundleRegistrySettings { Mode = "FileSystem", LocalPath = @"C:\LOCAL_CDN" };
         var probe = new BundleRegistryProbe(client, MonitorFor(settings));
 
@@ -174,6 +192,7 @@ public sealed class BundleRegistryProbeTests
             Framework: "angular");
         var client = Substitute.For<IBundleRegistryClient>();
         client.TryResolveAnyAsync(Arg.Any<CancellationToken>()).Returns(descriptor);
+        client.TryGetImportMapAsync(Arg.Any<CancellationToken>()).Returns(MapaSano());
         var settings = new BundleRegistrySettings
         {
             Mode = "Http",
@@ -268,5 +287,86 @@ public sealed class BundleRegistryProbeTests
 
         Assert.True(result.IsHealthy);
         Assert.Contains("stub", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ── El import map (defecto #126) ─────────────────────────────────────────
+
+    [Theory]
+    [InlineData("FileSystem")]
+    [InlineData("Http")]
+    public async Task Con_el_registry_resolviendo_pero_SIN_import_map_reporta_NO_SANO(string modo)
+    {
+        // Éste es el defecto exacto. El registry contesta perfecto —resuelve su descriptor,
+        // con su versión y su integrity— y la página igual sale sin hidratar, porque lo que
+        // falta es el mapa. Antes de #126 esto reportaba SANO.
+        var descriptor = new BundleDescriptor(
+            MainEntryUri: new Uri("https://cdn/synergos-column/angular/latest/main.js"),
+            Dependencies: Array.Empty<Uri>(),
+            Version: "0.1.0",
+            Tag: "synergos-column",
+            Integrity: "sha384-abc123",
+            Framework: "angular");
+        var client = Substitute.For<IBundleRegistryClient>();
+        client.TryResolveAnyAsync(Arg.Any<CancellationToken>()).Returns(descriptor);
+        client.TryGetImportMapAsync(Arg.Any<CancellationToken>()).Returns((ImportMap?)null);
+
+        var settings = new BundleRegistrySettings
+        {
+            Mode = modo,
+            LocalPath = @"C:\LOCAL_CDN",
+            PublicBaseUrl = "https://cdn.example.com",
+        };
+        var probe = new BundleRegistryProbe(client, MonitorFor(settings));
+
+        var result = await probe.CheckAsync();
+
+        Assert.False(result.IsHealthy);
+        Assert.Contains("import map", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        // El mensaje tiene que decir la CONSECUENCIA y no sólo el hecho: quien lea esto a las
+        // 3 AM necesita saber que el sitio se ve bien y no funciona.
+        Assert.Contains("hidrata", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("ausente", result.Details!["importMap"]);
+        // Y deja escrito que el registry SÍ resolvía: si no, alguien va a buscar un CDN caído.
+        Assert.Equal(true, result.Details["resolved"]);
+    }
+
+    [Fact]
+    public async Task Un_import_map_VACIO_no_es_lo_mismo_que_uno_ausente_y_los_dos_son_no_sanos()
+    {
+        // Las dos causas son distintas —«no se pudo preguntar» y «el registry contestó sin
+        // importaciones»— y las dos dejan el sitio sin hidratar. El probe las separa en los
+        // detalles porque llevan a sitios distintos: una es el CDN, la otra es la publicación.
+        var descriptor = new BundleDescriptor(
+            MainEntryUri: new Uri("https://cdn/x/angular/latest/main.js"),
+            Dependencies: Array.Empty<Uri>(),
+            Version: "1.0.0");
+        var client = Substitute.For<IBundleRegistryClient>();
+        client.TryResolveAnyAsync(Arg.Any<CancellationToken>()).Returns(descriptor);
+        client.TryGetImportMapAsync(Arg.Any<CancellationToken>())
+              .Returns(new ImportMap(new Dictionary<string, string>()));
+
+        var probe = new BundleRegistryProbe(
+            client,
+            MonitorFor(new BundleRegistrySettings { Mode = "Http", PublicBaseUrl = "https://cdn.example.com" }));
+
+        var result = await probe.CheckAsync();
+
+        Assert.False(result.IsHealthy);
+        Assert.Equal("vacío", result.Details!["importMap"]);
+    }
+
+    [Fact]
+    public async Task En_modo_Stub_no_se_pregunta_por_el_mapa_y_se_sigue_reportando_SANO()
+    {
+        // Sin CDN no se esperan elementos, así que la ausencia de mapa no es un fallo — la misma
+        // razón por la que el modo Stub nunca sondeó el registry. Confundir «no lo montamos» con
+        // «se cayó» arruina el único indicador que hay.
+        var client = Substitute.For<IBundleRegistryClient>();
+        var probe = new BundleRegistryProbe(client, MonitorFor(new BundleRegistrySettings { Mode = "Stub" }));
+
+        var result = await probe.CheckAsync();
+
+        Assert.True(result.IsHealthy);
+        await client.DidNotReceive().TryGetImportMapAsync(Arg.Any<CancellationToken>());
     }
 }

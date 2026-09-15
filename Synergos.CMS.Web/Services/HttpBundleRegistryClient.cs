@@ -221,6 +221,67 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
         }
     }
 
+    /// <summary>
+    /// El <c>import map</c> del runtime, pedido al CDN y con las URLs reescritas a la base
+    /// pública.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Éste es el que arregla el defecto #126.</b> Su gemelo de filesystem existía
+    /// dentro de una vista, y una vista no puede salir a la red — por eso en modo <c>Http</c> no
+    /// se emitía mapa alguno y ningún <c>&lt;synergos-*&gt;</c> hidrataba, con la página en 200 y
+    /// el SSR entero.</para>
+    ///
+    /// <para><b>Se cachea por tiempo, no para siempre</b>, y ésa es la diferencia con los
+    /// manifiestos. La ruta lleva <c>latest</c>, que por contrato <b>sí</b> cambia de contenido:
+    /// cachearla sin vencimiento serviría el mapa de la publicación anterior después de cada
+    /// despliegue del CDN, apuntando a un runtime retirado. Se reutiliza el mismo
+    /// <c>RefreshSeconds</c> del registry porque los dos vienen de la misma publicación.</para>
+    ///
+    /// <para><b>Y se sirve el último bueno si el CDN deja de contestar</b>, igual que el registry
+    /// y por lo mismo: un CDN que parpadea no puede apagar los elementos de una página que se
+    /// venía sirviendo bien.</para>
+    /// </remarks>
+    public async Task<ImportMap?> TryGetImportMapAsync(CancellationToken ct = default)
+    {
+        var s = _settings.CurrentValue;
+        var url = $"{s.PublicBaseUrl.TrimEnd('/')}/{s.BundlesNamespace}/runtime/{s.DefaultFramework}/{s.DefaultSlot}/import-map.json";
+
+        var vigente = _mapa;
+        if (vigente is not null
+            && _clock.GetUtcNow() - _mapaCargadoUtc < TimeSpan.FromSeconds(Math.Max(1, s.RefreshSeconds)))
+        {
+            return vigente;
+        }
+
+        try
+        {
+            var json = await _http.GetByteArrayAsync(url, ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(json);
+
+            if (!doc.RootElement.TryGetProperty("imports", out var imports)
+                || imports.ValueKind != JsonValueKind.Object)
+            {
+                _logger.LogWarning("El import map de {Url} no trae un objeto «imports».", url);
+                return vigente;
+            }
+
+            _mapa = new ImportMap(
+                FileSystemBundleRegistryClient.LeerImports(imports, s.PublicBaseUrl));
+            _mapaCargadoUtc = _clock.GetUtcNow();
+            return _mapa;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            _logger.LogWarning(ex,
+                "No se pudo leer el import map de {Url}. Se sigue con el anterior ({Estado})",
+                url, vigente is null ? "no hay" : "vigente");
+            return vigente;
+        }
+    }
+
+    private volatile ImportMap? _mapa;
+    private DateTimeOffset _mapaCargadoUtc = DateTimeOffset.MinValue;
+
     private async Task<Snapshot?> DescargarRegistryAsync(BundleRegistrySettings s, CancellationToken ct)
     {
         var url = $"{s.PublicBaseUrl.TrimEnd('/')}/{s.BundlesNamespace}/{s.RegistryFileName}";
