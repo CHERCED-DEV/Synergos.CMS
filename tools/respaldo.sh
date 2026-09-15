@@ -14,7 +14,8 @@
 #
 #   ./respaldo.sh [destino]
 #
-# Sin argumento, escribe en $SYNERGOS_BACKUP_DIR o /var/backups/synergos.
+# Sin argumento, escribe en $SYNERGOS_BACKUP_DIR o /var/backups/synergos. Y si
+# hay destino remoto configurado, se la lleva fuera cifrada (enviar-respaldo.sh).
 #
 # ── EN FRÍO, y no es una preferencia ─────────────────────────────────────────
 #
@@ -55,6 +56,24 @@ set -euo pipefail
 DIR="${SYNERGOS_DIR:-/opt/synergos}"
 DESTINO="${1:-${SYNERGOS_BACKUP_DIR:-/var/backups/synergos}}"
 COMPOSE="docker compose --file $DIR/compose.prod.yml --project-directory $DIR"
+AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Lo dispara `cron`, que no hereda el entorno de nadie.
+if [ -f "$DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091,SC1090
+  . "$DIR/.env"
+  set +a
+fi
+
+# Cuántos días se quedan las copias EN EL SERVIDOR. Es otra decisión que la de
+# fuera —y más corta— porque cumplen cosas distintas: la local es la que se
+# restaura rápido cuando alguien se lleva por delante una tabla esta mañana; la
+# de fuera es el archivo. Guardar meses de datos personales en el mismo disco
+# que ya se está protegiendo no añade seguridad, sólo añade dónde perderlos.
+LOCAL_DIAS="${SYNERGOS_RESPALDO_LOCAL_DIAS:-7}"
+MINIMO="${SYNERGOS_RESPALDO_MINIMO:-3}"
+REMOTO="${SYNERGOS_RESPALDO_DESTINO:-}"
 
 # La marca de tiempo va en UTC: un servidor que cambia de zona no puede hacer
 # que dos copias parezcan la misma ni que la de ayer parezca la de mañana.
@@ -132,7 +151,38 @@ chmod 600 "$ARCHIVO"   # datos personales: no legible por cualquiera del servido
 
 echo "✓ $ARCHIVO ($(du -h "$ARCHIVO" | cut -f1))"
 
+# ── Fuera de la máquina ──────────────────────────────────────────────────────
+if [ -n "$REMOTO" ]; then
+  # Si esto falla, el respaldo ENTERO falla. Terminar en verde habiendo dejado
+  # la copia en el disco que venía a proteger es la forma exacta de creer que
+  # hay respaldo y no tenerlo — y un `cron` nocturno que sale 0 no lo mira
+  # nadie nunca más.
+  "$AQUI/enviar-respaldo.sh" "$ARCHIVO"
+else
+  echo
+  echo "  ⚠️ ESTA COPIA NO SALIÓ DEL SERVIDOR, así que NO es un respaldo: no"
+  echo "     protege del caso que duele, que es perder la máquina. Poné"
+  echo "     SYNERGOS_RESPALDO_DESTINO y SYNERGOS_RESPALDO_LLAVE_PUBLICA en"
+  echo "     $DIR/.env (ver .env.example)."
+fi
+
+# ── Y lo que borra las de acá ────────────────────────────────────────────────
+#
+# Se poda al final, nunca antes del envío: podar primero es cómo se acaba sin
+# copias la noche en que el envío falla. Y el piso de $MINIMO es lo que impide
+# que un respaldo que lleva días sin correr se lleve por delante la última
+# buena — el fallo silencioso de toda retención por edad.
+echo "  podando las locales (más de $LOCAL_DIAS días, nunca menos de $MINIMO)…"
+i=0
+while read -r viejo; do
+  [ -n "$viejo" ] || continue
+  i=$((i + 1))
+  [ "$i" -le "$MINIMO" ] && continue
+  if [ -n "$(find "$viejo" -maxdepth 0 -mtime "+$LOCAL_DIAS" 2>/dev/null)" ]; then
+    rm -f "$viejo" && echo "  · $(basename "$viejo") — borrada"
+  fi
+done < <(ls -1 "$DESTINO"/synergos-datos-*.tar.gz 2>/dev/null | sort --reverse)
+
 echo
-echo "  Restaurar:  ./restaurar.sh $ARCHIVO"
-echo "  ⚠️ Esta copia NO está fuera del servidor todavía. Una copia que muere"
-echo "     con la máquina no protege de perder la máquina."
+echo "  Restaurar acá:    ./restaurar.sh $ARCHIVO"
+echo "  Probar de verdad: ./prueba-restauracion.sh"
