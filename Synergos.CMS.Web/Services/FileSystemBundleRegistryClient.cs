@@ -108,10 +108,12 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
     /// misma ruta, misma reescritura. Lo único que cambia es <b>quién</b> lo hace, y eso es lo
     /// que permite que el gemelo HTTP exista: una vista no puede salir a la red.</para>
     ///
-    /// <para><b>La ruta lleva el framework</b>, y hoy sale de <c>DefaultFramework</c> en vez de
-    /// estar cableada a <c>angular</c> como estaba en la vista. Sigue siendo <b>un</b> mapa: el
-    /// día que se publiquen dos frameworks a la vez hará falta componerlos, y eso lo decide
-    /// CHERCED-DEV/Synergos.UI#42. Queda dicho para que no se lea como resuelto.</para>
+    /// <para><b>Se COMPONEN todos los frameworks que el registry declara</b> (#127). Esto leía
+    /// sólo el de <c>DefaultFramework</c>, y con dos frameworks publicando eso deja a uno de los
+    /// dos sin resolver sus bare specifiers: el navegador lee <b>el primer</b> import map de la
+    /// página e ignora los siguientes, así que no hay forma de arreglarlo emitiendo otro. La
+    /// lista de frameworks sale de las claves de <c>implementations</c> del registry, no de una
+    /// lista a mano — ver <see cref="ImportMapComposer"/>.</para>
     ///
     /// <para><b>El slot es <c>latest</c> a propósito y NO se cachea.</b> Es la única ruta mutable
     /// del CDN —lo contrario de los manifiestos, que se cachean para siempre porque su ruta lleva
@@ -125,35 +127,79 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
         var s = _settings.CurrentValue;
         if (string.IsNullOrWhiteSpace(s.LocalPath)) return Task.FromResult<ImportMap?>(null);
 
-        var ruta = Path.Combine(
-            s.LocalPath, s.BundlesNamespace, "runtime", s.DefaultFramework, s.DefaultSlot, "import-map.json");
+        var frameworks = FrameworksDelRegistry(s.DefaultFramework);
+        var leidos = new List<(string, IReadOnlyDictionary<string, string>)>();
 
-        if (!File.Exists(ruta))
+        foreach (var framework in frameworks)
         {
-            _logger.LogWarning(
-                "No hay import map en {Ruta}. Sin él ningún <synergos-*> resuelve sus bare "
-                + "specifiers y no se registra ninguno.", ruta);
-            return Task.FromResult<ImportMap?>(null);
-        }
+            var ruta = Path.Combine(
+                s.LocalPath, s.BundlesNamespace, "runtime", framework, s.DefaultSlot, "import-map.json");
 
-        try
-        {
-            using var doc = JsonDocument.Parse(File.ReadAllText(ruta));
-            if (!doc.RootElement.TryGetProperty("imports", out var imports)
-                || imports.ValueKind != JsonValueKind.Object)
+            if (!File.Exists(ruta))
             {
-                _logger.LogWarning("El import map de {Ruta} no trae un objeto «imports».", ruta);
-                return Task.FromResult<ImportMap?>(null);
+                // Un framework declarado sin mapa publicado NO tumba a los demás: se emite lo que
+                // hay y el probe lo reporta. Tumbarlos convertiría una publicación a medias de un
+                // framework en una página entera sin hidratar.
+                _logger.LogWarning(
+                    "El registry declara «{Framework}» y no hay import map en {Ruta}. Sus elementos "
+                    + "no van a resolver sus bare specifiers.", framework, ruta);
+                continue;
             }
 
-            var mapa = LeerImports(imports, s.PublicBaseUrl);
-            return Task.FromResult<ImportMap?>(new ImportMap(mapa));
+            try
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(ruta));
+                if (!doc.RootElement.TryGetProperty("imports", out var imports)
+                    || imports.ValueKind != JsonValueKind.Object)
+                {
+                    _logger.LogWarning("El import map de {Ruta} no trae un objeto «imports».", ruta);
+                    continue;
+                }
+
+                leidos.Add((framework, LeerImports(imports, s.PublicBaseUrl)));
+            }
+            catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(ex, "No se pudo leer el import map de {Ruta}.", ruta);
+            }
         }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+
+        if (leidos.Count == 0)
         {
-            _logger.LogWarning(ex, "No se pudo leer el import map de {Ruta}.", ruta);
+            _logger.LogWarning(
+                "No hay ningún import map bajo {Base}. Sin él ningún <synergos-*> resuelve sus "
+                + "bare specifiers y no se registra ninguno.",
+                Path.Combine(s.LocalPath, s.BundlesNamespace, "runtime"));
             return Task.FromResult<ImportMap?>(null);
         }
+
+        var (mapa, conflicto) = ImportMapComposer.Componer(leidos);
+        if (conflicto is not null)
+        {
+            _logger.LogError("No se pudo componer el import map. {Conflicto}", conflicto);
+            return Task.FromResult<ImportMap?>(null);
+        }
+
+        return Task.FromResult(mapa);
+    }
+
+    /// <summary>
+    /// Los frameworks que el registry declara. Si todavía no hay snapshot, el configurado.
+    /// </summary>
+    /// <remarks>
+    /// El respaldo NO es un default silencioso: sin snapshot no se sabe nada del catálogo, y servir
+    /// cero mapas dejaría la página sin hidratar por no haber leído aún un fichero. Con snapshot
+    /// manda el disco, siempre.
+    /// </remarks>
+    private IReadOnlyList<string> FrameworksDelRegistry(string porDefecto)
+    {
+        var snap = _snapshot;
+        if (snap is null) return new[] { porDefecto };
+
+        var declarados = ImportMapComposer.FrameworksDeclarados(
+            snap.ByTag.Values.Select(e => e.Implementations?.Keys ?? Enumerable.Empty<string>()));
+
+        return declarados.Count > 0 ? declarados : new[] { porDefecto };
     }
 
     /// <summary>
