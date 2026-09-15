@@ -168,9 +168,9 @@ function entornoExtra(proyecto, disponibles) {
     return [
       '',
       '      # La llave que FIRMA los tokens de identidad (HU #14). NO es',
-      '      # SYNERGOS_API_KEY: la compartida la tienen los 22 servicios y solo dice',
-      '      # «este proceso es de los nuestros». Si con ella se firmaran identidades,',
-      '      # cualquiera de los 22 fabricaria personas.',
+      '      # SYNERGOS_API_KEY: la compartida la tienen TODOS los servicios y solo',
+      '      # dice «este proceso es de los nuestros». Si con ella se firmaran',
+      '      # identidades, cualquiera de ellos fabricaria personas.',
       '      #',
       '      # Sin llave el servicio NO arranca — un Api.Identity que dice emitir',
       '      # identidades y no puede es peor que uno caido, porque parece que funciona.',
@@ -262,6 +262,14 @@ function generar() {
   const proyectos = servicios(RAIZ);
   if (proyectos.length === 0) throw new Error('compose-gen: no se encontró ningún servicio');
 
+  // Las cifras de la cabecera se DERIVAN de lo que hay en el disco. Escritas a
+  // mano decían «20 capacidades, 2 orquestadores» con cuatro orquestadores ya
+  // construidos: Bff.Eventos y Bff.Viajes entraron y nadie volvió a esa línea
+  // (#114). Es la misma razón por la que la matriz de imágenes tampoco se
+  // escribe: una lista a mano se desincroniza el día que nadie mira.
+  const capacidades = proyectos.filter((p) => p.startsWith('Synergos.Api.'));
+  const orquestadores = proyectos.filter((p) => p.startsWith('Synergos.Bff.'));
+
   // `Api.Notifications` recibe el webhook del proveedor de correo (ADR 0131), y
   // es lo UNICO del arbol de servicios alcanzable desde fuera. Se busca en vez
   // de cablearse para que el dia que cambie de nombre esto falle acá y no en
@@ -278,7 +286,7 @@ function generar() {
 # esté al día (ComposeStackTests). Editarlo a mano funciona hasta el siguiente
 # \`compose-gen\`, que lo pisa sin avisar.
 #
-# El producto entero: el CMS, las 20 capacidades, los 2 orquestadores y un proxy.
+# El producto entero: el CMS, las ${capacidades.length} capacidades, los ${orquestadores.length} orquestadores y un proxy.
 #
 #   docker compose -f compose.prod.yml up -d
 #
@@ -289,10 +297,11 @@ function generar() {
 #   SYNERGOS_DOMAIN    el dominio publico
 #
 # ⚠️ UNA INSTANCIA POR CAPACIDAD, Y PARADA ANTES DE ARRANQUE.
-# 19 de las 20 capacidades guardan en fichero JSON con un lock de PROCESO. Dos
-# instancias se pisan y NO dan error: corrompen. Un rolling deploy son dos
-# instancias a la vez, asi que el despliegue "normal" de cualquier plataforma
-# moderna rompe esto. Mientras no cambie el almacen (epica #2), no se toca.
+# Casi todas las ${capacidades.length} capacidades guardan en fichero JSON con un lock
+# de PROCESO. Dos instancias se pisan y NO dan error: corrompen. Un rolling
+# deploy son dos instancias a la vez, asi que el despliegue "normal" de
+# cualquier plataforma moderna rompe esto. Mientras no cambie el almacen
+# (epica #2), no se toca.
 
 name: synergos
 
