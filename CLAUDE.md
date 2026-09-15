@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3088 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3097 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,10 +111,11 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3088 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3097 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (14, ADR 0133)
+│   │                            + molde del vertical (9, doc 12)
 │   ├── Api/                     tests de reglas y servicio por capacidad
 │   └── Bff/                     la compensación cruzada (144)
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
@@ -164,6 +165,7 @@ Synergos.CMS/
 | "¿Cómo se deshace lo que ya se hizo?" | `Synergos.CMS.Web/docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `Synergos.CMS.Web/docs/product/10-promocion-bff-core.md` |
 | "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
+| "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — los tres ejes, las dos formas del eje transaccional y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`) |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
 
 > **La forma de `window.synergos` se declara en TRES sitios, y hay gate** (#88,
@@ -617,6 +619,29 @@ Las que salieron de construir el árbol de servicios (§0.B):
   llega al fichero. **Lo que lo caza es contar la LLAMADA y no la mención**
   (`grep -c 'UseStoreWriteGate('` por fichero, que da `0` en uno de veinte), y por eso el gate
   de cableado se mutó a propósito contra ese mismo hueco antes de darlo por bueno.
+- `feedback_a_vertical_is_three_axes_and_only_one_crosses` — **un vertical son
+  TRES ejes y sólo el de en medio cruza al otro árbol**, así que «cablear un
+  vertical» nunca quiere decir moverlo entero. El **catálogo** —lo que se
+  muestra— sale del contenido de Umbraco y cablearlo a `Api.Catalog` es un
+  RETROCESO: el dato ya tiene dueño, y meter una ida a la red le quita además
+  al editor la superficie donde publica. La **transacción** —lo que se mueve y
+  no se deshace solo— es lo único que cruza. El **artefacto** —la entrada con
+  su QR, el diploma, el expediente, el RMA— se queda acá, porque el firmante
+  vive de este lado y porque una prueba tiene que poder verse con el otro árbol
+  caído. Confundir el primero con el segundo es el error caro de la épica; el
+  tercero es el que se parte por accidente al cablear.
+- `feedback_the_switch_count_tells_the_form` — **el número de INTERRUPTORES
+  dice si alguien contestó bien la primera de las tres preguntas**, y se lee del
+  disco. En la forma directa va uno **por capacidad** —Gobierno tiene tres
+  porque notificar es `Api.Messaging` y decidir es `Api.Workflow`, y juntarlas
+  obligaría a encender las dos para probar una—; en la orquestada va uno **por
+  flujo**, porque el ORDEN entre los pasos es precisamente lo que el orquestador
+  aporta. Así que **dos capacidades colgando de un solo interruptor `Api` es la
+  huella de haber mirado «cuántos pasos compone» en vez de «¿hay algo que
+  deshacer?»** — el error que §11 documenta cuatro veces, ahora con gate
+  (`MoldeDelVerticalTests`). La salida no es siempre «hacelo `Bff`»: si de
+  verdad no hay nada que deshacer, son dos capacidades independientes y llevan
+  dos interruptores. Ver `docs/product/12-el-molde-de-un-vertical.md`.
 
 ## 6. Prohibiciones explícitas
 
@@ -645,7 +670,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3088 tests):
+# Suite completa (3097 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -866,7 +891,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 241 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3088 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3097 tests, gates de
 segregación y molde en verde.
 
 > **Los 241 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
