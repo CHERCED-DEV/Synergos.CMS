@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Proxies.Impl;
 using Synergos.CMS.Application.Services.Impl;
@@ -100,6 +100,11 @@ public sealed partial class SeamComposer
         services.AddTransient<SchemaBlockDefaults>();
         services.AddTransient<DevMediaFactory>();
         services.AddTransient<DevContentFiller>();
+        // #119 — la portada de arranque. Es el único paso del despliegue que faltaba entre
+        // «los 26 contenedores están sanos» y «el sitio enseña algo»: sin ella Umbraco sirve
+        // su cartel «No published content» con 200. Nada corre en boot (ADR 0013): lo invoca
+        // POST /dev/seed-portada, que devuelve 404 sin el flag.
+        services.AddTransient<StarterPortadaSeeder>();
         // Tooling dev-only: crea los member groups de dominio (funcionario/organizador/
         // doctor…) y los asigna. Sin esto, las consolas que T2-Gov/T2-Eventos/T9/T7
         // cerraron por rol quedan correctas pero IMPOSIBLES de demostrar.
