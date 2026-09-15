@@ -124,15 +124,33 @@ public sealed class PaymentsWiringTests
         Assert.Contains("Llave(nombres, request.OrderReference)", codigo, StringComparison.Ordinal);
     }
 
+    /// <summary>A la capacidad no le viaja el correo de quien paga.</summary>
+    /// <remarks>
+    /// <para>Api.Payments cuenta plata; no necesita saber quién es. Es lo mismo que ya hacen el
+    /// cliente de visitas (#33a), el de la tienda (#47) y el asiento de auditoría (#15).</para>
+    ///
+    /// <para><b>Esta comprobación cambió de forma con la HU #14, y conviene saber por qué.</b>
+    /// Afirmaba el literal <c>payerId = Seudonimo(</c>, que era la implementación de entonces:
+    /// el pagador SIEMPRE era la huella del correo. Hoy, con sesión detrás, es el
+    /// <c>MemberKey</c> —que es igual de opaco y además es la forma de sujeto que este lado
+    /// firma, así que el token puede probarlo—. El literal se movió; <b>la propiedad no</b>, y es
+    /// la propiedad lo que hay que vigilar: que el correo no salga de esta máquina. Un gate
+    /// clavado a la forma de una implementación se pone rojo cuando la implementación mejora, y
+    /// entonces alguien lo relaja en vez de leerlo.</para>
+    /// </remarks>
     [Fact]
     public void A_la_capacidad_NO_le_viaja_el_correo_de_quien_paga()
     {
-        // Api.Payments cuenta plata; no necesita saber quién es. Es lo mismo que ya hacen el
-        // cliente de visitas (#33a), el de la tienda (#47) y el asiento de auditoría (#15).
         var codigo = CodigoDelCliente();
 
-        Assert.Contains("payerId = Seudonimo(", codigo, StringComparison.Ordinal);
+        // Lo que se manda sale de una función, y esa función decide entre MemberKey y huella.
+        Assert.Contains("payerId = pagador", codigo, StringComparison.Ordinal);
+        Assert.Contains("var pagador = PayerId(request)", codigo, StringComparison.Ordinal);
+
+        // Y ninguno de los dos caminos es el correo en crudo.
+        Assert.Contains("Seudonimo(request.CustomerEmail", codigo, StringComparison.Ordinal);
         Assert.DoesNotContain("payerId = request.CustomerEmail", codigo, StringComparison.Ordinal);
+        Assert.DoesNotContain("payerId = pagador ?? request.CustomerEmail", codigo, StringComparison.Ordinal);
     }
 
     [Fact]

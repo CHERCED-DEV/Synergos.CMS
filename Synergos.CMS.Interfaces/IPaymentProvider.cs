@@ -131,6 +131,20 @@ public sealed record PaymentLineItem(string Sku, string Description, decimal Uni
 ///   <c>"pse"</c>, <c>"nequi"</c>, <c>"bancolombia"</c>. No todos los
 ///   proveedores tienen todos, y de esto depende cuál de las tres formas de
 ///   <see cref="PaymentAction"/> va a devolver el adapter.</param>
+/// <param name="PayerMemberKey">
+///   El <c>MemberKey</c> de quien paga, <b>cuando hay sesión</b>. Nulo en el pago de invitado.
+///   <para><b>Por qué hace falta y por qué no basta con el correo</b> (HU #14). Un correo tecleado
+///   en un formulario no lo ha comprobado nadie: pedir un token de identidad para él haría que la
+///   capacidad anotara <c>IdentityToken</c> sobre alguien que no verificó nadie — el defecto #42
+///   con la firma tapándolo mejor. El <c>MemberKey</c> sí es la identidad de confianza-servidor, y
+///   es exactamente la forma de sujeto que este lado firma.</para>
+///   <para><b>La costura se ensancha al encontrarse con la red</b>
+///   (<c>feedback_a_seam_widens_when_it_meets_the_network</c>). Nació para proveedores que
+///   resolvían el cobro DENTRO del proceso, y a ésos no les hacía falta saber quién pagaba. Desde
+///   que detrás hay una capacidad que guarda un <c>Payer</c>, el llamador sabe algo —que quien
+///   paga es un miembro— que la costura tiraba. Es aditivo y opcional a propósito: los ocho
+///   consumidores que no tienen sesión que ofrecer siguen compilando y comportándose igual.</para>
+/// </param>
 public sealed record PaymentSessionRequest(
     string OrderReference,
     decimal Amount,
@@ -141,7 +155,8 @@ public sealed record PaymentSessionRequest(
     IReadOnlyDictionary<string, string>? Metadata = null,
     string? Vertical = null,
     string? CountryCode = null,
-    string? PreferredMethod = null);
+    string? PreferredMethod = null,
+    Guid? PayerMemberKey = null);
 
 /// <summary>
 /// Sesión de pago abierta.

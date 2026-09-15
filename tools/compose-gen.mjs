@@ -161,7 +161,7 @@ function entornoExtra(proyecto, disponibles) {
       '      Payments__wompi__EventsSecret: \${PAYMENTS_WOMPI_EVENTS_SECRET:-}',
       '      Payments__wompi__BaseUrl: \${PAYMENTS_WOMPI_BASE_URL:-https://sandbox.wompi.co/v1/}',
       '      Payments__wompi__RedirectUrl: \${PAYMENTS_WOMPI_REDIRECT_URL:-}',
-    ].join('\n');
+    ].join('\n') + entornoIdentidad(proyecto);
   }
 
   if (proyecto.endsWith('.Identity')) {
@@ -221,6 +221,14 @@ function entornoExtra(proyecto, disponibles) {
   // Fallback: quien verifica tokens y no tiene bloque propio se lleva sólo la llave.
   // Va al FINAL a proposito — puesto arriba se comia el bloque de Api.Workflow, que
   // ademas de la llave necesita su postura de roles.
+  //
+  // Y el reverso muerde igual: una capacidad CON bloque propio que empiece a verificar
+  // tokens no llega nunca hasta aca, asi que su `return` se come la llave en silencio.
+  // Paso con Api.Payments al cablearle identidad (HU #14): el bloque de Wompi retornaba
+  // antes y el compose la dejaba sin `IdentityTokens__Keys` — o sea arrancando bien y
+  // rechazando el primer token que le presentaran. Por eso los bloques propios de quien
+  // verifica CONCATENAN entornoIdentidad() en vez de devolver a secas. Lo caza el gate
+  // de IdentityGateTests, que deriva la lista del disco y no de aca.
   return entornoIdentidad(proyecto);
 }
 
