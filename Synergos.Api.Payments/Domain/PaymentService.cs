@@ -35,8 +35,18 @@ public sealed class PaymentService
 
     private DateTimeOffset Now => _clock.GetUtcNow();
 
+    /// <summary>Autoriza un cobro.</summary>
+    /// <param name="assertion">
+    /// Con qué se afirmó la identidad de quien paga, <b>ya resuelto por el borde</b>.
+    /// <para>Va SIN valor por defecto a propósito: un default aquí lo escribiría un llamador que
+    /// no lo pensó, y «CmsSession» no es una respuesta neutra —significa «nos fiamos de quien
+    /// llama»—. Una clave omitida que el otro lado resuelve con un default deja de ser un hueco y
+    /// pasa a AFIRMAR (<c>feedback_an_omitted_key_can_be_an_assertion</c>), y sobre quién movió
+    /// plata eso es exactamente lo que no puede pasar.</para>
+    /// </param>
     public async Task<Result<Payment>> AuthorizeAsync(
-        Ref forWhat, Ref payer, Money amount, IdempotencyKey key, CancellationToken ct = default)
+        Ref forWhat, Ref payer, Money amount, IdentityAssertion assertion,
+        IdempotencyKey key, CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -63,7 +73,11 @@ public sealed class PaymentService
                 id, forWhat, payer, amount,
                 referencia is null ? PaymentStatus.Failed : PaymentStatus.Authorized,
                 _provider.Name, referencia, Array.Empty<Refund>(), Now,
-                CapturedAtUtc: null, ActionUrl: intento.ActionUrl);
+                CapturedAtUtc: null, ActionUrl: intento.ActionUrl,
+                // Se guarda TAMBIÉN cuando el cobro falla. Un intento rechazado sin saber quién
+                // lo hizo es la mitad de un rastro: el registro existe justamente para poder
+                // contestar «quién intentó pagar esto», y eso no depende de que saliera bien.
+                PaidWith: assertion);
 
             _payments.Put(payment);
             _idempotency.Remember("payment", key, id);

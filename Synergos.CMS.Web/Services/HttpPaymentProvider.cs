@@ -62,6 +62,9 @@ public sealed class HttpPaymentProvider : IPaymentProvider
     /// <summary>Cabecera de la llave compartida.</summary>
     public const string ApiKeyHeader = "X-Synergos-Key";
 
+    /// <summary>Cabecera con la que viaja la identidad verificable de quien paga (HU #14).</summary>
+    public const string IdentityHeader = "X-Synergos-Identity";
+
     /// <summary>Cliente nombrado del seam completo (<c>Synergos:Payments:Mode=Api</c>).</summary>
     public const string SeamClientName = "synergos-api-payments";
 
@@ -78,17 +81,20 @@ public sealed class HttpPaymentProvider : IPaymentProvider
     private readonly string _cliente;
     private readonly Func<PaymentWireKinds> _nombres;
     private readonly ILogger<HttpPaymentProvider> _log;
+    private readonly IIdentityTokenIssuer? _identidad;
 
     public HttpPaymentProvider(
         IHttpClientFactory clientes,
         string clienteNombrado,
         Func<PaymentWireKinds> nombres,
-        ILogger<HttpPaymentProvider> log)
+        ILogger<HttpPaymentProvider> log,
+        IIdentityTokenIssuer? identity = null)
     {
         _clientes = clientes;
         _cliente = clienteNombrado;
         _nombres = nombres;
         _log = log;
+        _identidad = identity;
     }
 
     /// <inheritdoc />
@@ -125,6 +131,7 @@ public sealed class HttpPaymentProvider : IPaymentProvider
         }
 
         var nombres = _nombres();
+        var pagador = PayerId(request);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, "v1/payments")
         {
@@ -133,11 +140,18 @@ public sealed class HttpPaymentProvider : IPaymentProvider
                 forKind = nombres.SubjectKind,
                 forId = request.OrderReference,
                 payerKind = nombres.PayerKind,
-                payerId = Seudonimo(request.CustomerEmail ?? request.OrderReference),
+                payerId = pagador,
                 amount = new { amount = request.Amount, currency = request.Currency.Trim().ToUpperInvariant() },
+                // El SUELO, siempre, y no se puede omitir: sin afirmacion la capacidad rechaza
+                // con `payments.access_requires_identity`, y declarar algo mas fuerte sin
+                // presentarlo lo rechaza con `identity.assertion_not_proven` — y hace bien.
+                // Quien sube esto a IdentityToken es Api.Payments, tras verificar el token.
+                assertion = IdentityAssertions.CmsSession,
             }, options: Json),
         };
         req.Headers.TryAddWithoutValidation("Idempotency-Key", Llave(nombres, request.OrderReference));
+
+        await PresentarIdentidadAsync(req, request, pagador, cancellationToken).ConfigureAwait(false);
 
         using var res = await Enviar(req, cancellationToken).ConfigureAwait(false);
 
@@ -401,6 +415,58 @@ public sealed class HttpPaymentProvider : IPaymentProvider
     /// ser anonimato: es no esparcir lo que no hace falta esparcir.
     /// </remarks>
     private static string Seudonimo(string quien) => SeudonimoDePersona.De(quien);
+
+    /// <summary>Quién paga, en el vocabulario del árbol de servicios.</summary>
+    /// <remarks>
+    /// <para><b>El <c>MemberKey</c> cuando hay sesión, y el seudónimo del correo si no.</b> La
+    /// política vive acá y no dentro del helper (#120): con sesión, quien paga ES su miembro y no
+    /// hace falta seudónimo. Es la misma decisión que <c>HttpShopOrderService.BuyerId</c>.</para>
+    ///
+    /// <para><b>Y es lo que hace que el token sea prueba y no adorno</b>: la capacidad rechaza un
+    /// token que nombre a otro (<c>token_subject_mismatch</c>), así que el sujeto que se firma
+    /// tiene que ser EXACTAMENTE este valor. Presentar un token del miembro mientras viaja el
+    /// seudónimo de su correo no daría un cobro peor firmado: daría un rechazo.</para>
+    ///
+    /// <para><b>Los cobros anteriores no se tocan.</b> Un pagador con sesión que ya pagó quedó
+    /// anotado con el seudónimo de su correo, y eso sigue diciendo la verdad sobre sí mismo. Es
+    /// el mismo criterio que el <c>PaidWith</c> nulo: lo viejo no se reescribe para que parezca
+    /// nuevo.</para>
+    /// </remarks>
+    internal static string PayerId(PaymentSessionRequest request)
+        => request.PayerMemberKey is Guid k && k != Guid.Empty
+            ? k.ToString("n")
+            : Seudonimo(request.CustomerEmail ?? request.OrderReference);
+
+    /// <summary>
+    /// Presenta la identidad de quien paga, <b>sólo si hay sesión detrás</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Sin <c>MemberKey</c> no se pide token, y no es pereza.</b> En el pago de invitado
+    /// el pagador es el seudónimo de un correo que alguien escribió en un formulario y que no ha
+    /// comprobado nadie: pedir un token para él haría que la capacidad anotara
+    /// <c>IdentityToken</c> sobre una identidad que no verificó nadie — el defecto #42, ahora con
+    /// la firma de por medio para taparlo mejor.</para>
+    ///
+    /// <para><b>El emisor NUNCA lanza</b>, así que sin <c>Api.Identity</c> esto es <c>null</c> y
+    /// el cobro sale declarando <c>CmsSession</c>, que es lo que se hacía antes. Un trámite no se
+    /// cae porque la identidad esté caída — y acá menos, porque el motor ya decidió que la
+    /// radicación no se aborta si la tasa no sale.</para>
+    /// </remarks>
+    private async Task PresentarIdentidadAsync(
+        HttpRequestMessage req, PaymentSessionRequest request, string pagador, CancellationToken ct)
+    {
+        if (_identidad is null) return;
+        if (request.PayerMemberKey is not Guid miembro || miembro == Guid.Empty) return;
+
+        var nombres = _nombres();
+        var token = await _identidad.IssueAsync(
+            new IdentitySubject(nombres.PayerKind, pagador, Array.Empty<string>()), ct).ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            req.Headers.TryAddWithoutValidation(IdentityHeader, token);
+        }
+    }
 
     /// <summary>
     /// El <c>actionUrl</c> de la capacidad, leído (#27).

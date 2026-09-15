@@ -774,6 +774,23 @@ Las que salieron de construir el árbol de servicios (§0.B):
   orquestador necesite saber **CÓMO** se identificó la persona y no sólo quién es; y ni
   siquiera entonces se propaga — se cita lo que el otro registro dice que fue
   (`Cart.OpenedWith`), guardado como afirmación **de segunda mano**.
+- `feedback_a_generator_branch_that_returns_early_swallows_the_shared_tail` — **un
+  generador con un `return` por caso especial se come, en silencio, todo lo que el caso
+  general reparte después — y lo que se pierde no falla: queda MAL CONFIGURADO.**
+  `tools/compose-gen.mjs` reparte la llave de verificación de identidad en su fallback, al
+  final y a propósito (puesto arriba se comía el bloque de `Api.Workflow`, y eso ya estaba
+  escrito). Al cablearle identidad a `Api.Payments` (HU #14) resultó que **tiene bloque
+  propio** —el de Wompi— cuyo `return` sale antes, así que el compose la dejaba sin
+  `IdentityTokens__Keys`: un servidor bien configurado arrancando verde, contestando
+  `/health` y **rechazando el primer token que le presenten**, que es la forma de fallo que
+  este repo ya pagó en el defecto #83 y con la llave de firma de `Api.Identity`. El comentario
+  del fichero avisaba de la mitad —«no lo pongas arriba»— y no de la otra: **el reverso muerde
+  igual, y muerde al que AÑADE una capacidad al grupo**, no al que toca el generador. Por eso
+  los bloques propios de quien verifica **concatenan** la cola compartida en vez de devolver a
+  secas. **Y lo que lo cazó no fue leer el generador: fue que el gate DERIVA la misma lista
+  del disco, por su cuenta.** Dos derivaciones independientes de la misma verdad que tienen
+  que coincidir es lo único que distingue «el generador lo reparte» de «el generador cree que
+  lo reparte» — un gate que leyera el generador habría confirmado el defecto.
 - `feedback_a_state_with_no_writer_cannot_be_tested_through_the_seam` — **un valor del
   vocabulario al que NINGÚN camino del código llega no se prueba: se anota.** Al cortar la
   matrícula duplicada (#121) la regla correcta era «sólo una matrícula ACTIVA bloquea», que
@@ -1413,6 +1430,49 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > radicar no compone una saga —el motor decide no abortar el trámite si la
   > captura no sale—, así que es el único consumidor que puede hablarle a la
   > capacidad hoy. Es la misma forma que `Synergos:Gob:Notifications:Mode`.
+  >
+  > **Y por eso mismo es el único que PRESENTA identidad** (HU #14, lo que
+  > quedaba). Con la llave compartida sola, cualquier servicio que pudiera
+  > hablarle a `Api.Payments` escribía un cobro a nombre de quien quisiera —
+  > el defecto #72 sobre el registro de quién movió plata, que es de los que
+  > alguien cita en una disputa. Hoy la capacidad **verifica el token en local
+  > y guarda `PaidWith`**, y ese campo **sale por `PaymentResponse`**: una
+  > escritura sin camino de lectura está enterrada, no guardada (#116).
+  >
+  > **El `payerId` pasó a ser el `MemberKey` cuando hay sesión**, y no es
+  > cosmético: la capacidad rechaza un token que nombre a otro
+  > (`token_subject_mismatch`), así que el sujeto firmado tiene que ser
+  > **exactamente** lo que viaja como pagador. Firmar el miembro mientras
+  > viaja la huella de su correo no daría un cobro peor firmado: daría un
+  > rechazo. **Sin sesión no se pide token** —el correo de un pago de invitado
+  > no lo comprobó nadie, y firmarlo sería el #42 con la firma tapándolo
+  > mejor— y los cobros anteriores conservan su huella y su `PaidWith` nulo,
+  > que es la verdad sobre ellos.
+  >
+  > **Para eso hubo que ensanchar la costura**
+  > (`feedback_a_seam_widens_when_it_meets_the_network`):
+  > `PaymentSessionRequest` no sabía decir «quien paga es un miembro» porque
+  > nació para proveedores que cobraban DENTRO del proceso, a los que no les
+  > hacía falta. Lleva `PayerMemberKey`, aditivo y opcional — los otros siete
+  > consumidores compilan y se comportan igual.
+  >
+  > **Y destapó que el generador del compose se comía la llave.**
+  > `Api.Payments` tiene bloque propio (el de Wompi) y ese `return` salía
+  > **antes** del fallback que reparte `IdentityTokens__Keys`, así que el
+  > despliegue la habría dejado sin llave: arrancando bien y rechazando el
+  > primer token que le presentaran. Es el reverso exacto del tropiezo que el
+  > propio fichero ya documentaba para `Api.Workflow`. Lo cazó
+  > `IdentityGateTests`, que **deriva la lista del disco** y no del generador
+  > — dos derivaciones independientes que tienen que coincidir.
+  >
+  > Verificado con los dos procesos vivos: declarar `IdentityToken` sin
+  > presentarlo se rechaza (`assertion_not_proven`); **presentándolo, la
+  > capacidad sube la afirmación sola** aunque el CMS declare `CmsSession`; el
+  > token de otro sujeto se rechaza (`token_subject_mismatch`); sin afirmación
+  > ninguna se rechaza (`payments.access_requires_identity`); y **sin llave de
+  > verificación arranca igual** —el camino del clon limpio— pero un token
+  > presentado ahí se **rechaza** (`token_not_verifiable`), no se ignora. Hay
+  > gate (`PaymentsIdentityTests`).
   >
   > **Y el `actionUrl` ya tiene lector.** Lo emitía `Api.Payments` desde la
   > HU #27 sin consumidor, y sin él no se cobra con checkout hospedado: la

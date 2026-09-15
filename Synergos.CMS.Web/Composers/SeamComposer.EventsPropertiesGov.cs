@@ -495,6 +495,10 @@ public sealed partial class SeamComposer
             // antes de llamar: por eso la llave de idempotencia existe antes que el estado.
             () => new PaymentWireKinds(
                 opciones.CurrentValue.CaseKind, opciones.CurrentValue.CitizenKind, "gov"),
-            sp.GetRequiredService<ILogger<HttpPaymentProvider>>());
+            sp.GetRequiredService<ILogger<HttpPaymentProvider>>(),
+            // Quien paga la tasa se PRESENTA, ya no solo se declara (HU #14). Siempre registrado
+            // —Stub o Http segun Synergos:Identity:Mode—, y el Stub devuelve null, que es lo que
+            // deja el cobro saliendo con CmsSession como hacia antes.
+            sp.GetRequiredService<IIdentityTokenIssuer>());
     }
 }

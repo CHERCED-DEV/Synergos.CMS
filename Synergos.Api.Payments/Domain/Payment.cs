@@ -42,6 +42,17 @@ public sealed record Refund(string Id, Money Amount, string? Reason, DateTimeOff
 /// <param name="ActionUrl">
 /// A dónde hay que mandar al comprador para que pague, cuando el medio lo exige.
 /// </param>
+/// <param name="PaidWith">
+/// Con qué se afirmó la identidad de quien paga — <b>lo resuelve esta capacidad</b>, nunca el
+/// llamador (HU #14).
+/// <para><b>Nulo es «no consta», y es la verdad sobre los cobros anteriores a esto.</b>
+/// Rellenarlos con <c>CmsSession</c> inventaría una comprobación que nadie hizo: el defecto #42
+/// sobre el registro de quién movió plata, que es de los que alguien va a citar el día que haya
+/// una disputa. Siguen siendo válidos; lo que no son es prueba de quién pagó.</para>
+/// <para><b>Y no es un campo que el llamador pueda escribir.</b> Lo que manda va en el cuerpo
+/// como <c>assertion</c> y lo único que se le acepta sin prueba es el suelo; lo que se guarda
+/// acá es lo que la capacidad pudo comprobar.</para>
+/// </param>
 public sealed record Payment(
     string Id,
     Ref For,
@@ -53,7 +64,8 @@ public sealed record Payment(
     IReadOnlyList<Refund> Refunds,
     DateTimeOffset AuthorizedAtUtc,
     DateTimeOffset? CapturedAtUtc = null,
-    string? ActionUrl = null)
+    string? ActionUrl = null,
+    IdentityAssertion? PaidWith = null)
 {
     /// <summary>Lo ya devuelto.</summary>
     public Money Refunded => Money.Sum(Refunds.Select(r => r.Amount), Amount.Currency);
