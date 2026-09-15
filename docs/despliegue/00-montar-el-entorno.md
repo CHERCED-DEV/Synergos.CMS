@@ -397,7 +397,135 @@ da 502.
 
 ---
 
-## 6. La cuenta
+## 6. El respaldo — que es el único que se puede comprobar de antemano
+
+Todo lo demás de esta guía se nota cuando falla. Esto no: un respaldo roto **se ve exactamente
+igual que uno bueno** hasta el día en que hace falta, y ese día ya no hay margen. Por eso la parte
+importante de esta sección no es crear la copia; es el **ensayo**.
+
+### Las tres piezas
+
+| Fichero | Dónde corre | Qué hace |
+|---|---|---|
+| `tools/respaldo.sh` | **el servidor** (cron diario, 04:10 UTC) | para, copia los volúmenes en frío, arranca |
+| `tools/enviar-respaldo.sh` | **el servidor** | cifra, sube al destino remoto, poda lo vencido |
+| `tools/restaurar.sh` | **el servidor** | devuelve los volúmenes; exige `--si-estoy-seguro` |
+| `tools/prueba-restauracion.sh` | **NO el servidor** | trae, descifra, restaura aparte y **lee los datos** |
+
+`tools/bootstrap-servidor.sh` deja el cron puesto. El despliegue copia los tres primeros al
+servidor — antes no lo hacía, y la máquina que había que proteger era justo la única que no tenía
+con qué.
+
+### 6.1 Crear la llave, una sola vez y **no en el servidor**
+
+```bash
+age-keygen -o identidad.txt      # en TU máquina
+```
+
+Imprime dos cosas: un fichero `identidad.txt` (la **privada**) y una línea `age1…` (la **pública**).
+
+- La **pública** va en el `.env` del servidor. No es un secreto: con ella sólo se puede *escribir*
+  un respaldo.
+- La **privada** se guarda donde guardás lo que no se regenera, y **no se copia al servidor**.
+
+> **Por qué asimétrica y no una contraseña.** Con la privada fuera de la máquina, el servidor puede
+> escribir respaldos y **no puede leer los que ya mandó**. Con una contraseña simétrica, quien se
+> lleva el servidor se lleva el histórico entero — que es bastante más de lo que hay vivo en la
+> máquina en ese momento.
+>
+> **Y el precio, que hay que saberlo:** si se pierde la privada, los respaldos son ruido. Un
+> respaldo ilegible y uno que no existe se ven **igual** desde el bucket. Lo único que distingue
+> los dos casos es correr el ensayo.
+
+### 6.2 El destino, en el `.env` del servidor
+
+Un remoto de `rclone`, así que el proveedor es tuyo: S3, R2, B2, un SFTP a otra máquina o un disco
+montado son el mismo comando. Los nombres exactos y el ejemplo completo están en `.env.example`;
+lo mínimo es:
+
+```
+SYNERGOS_RESPALDO_DESTINO=respaldos:mi-bucket/prod
+SYNERGOS_RESPALDO_LLAVE_PUBLICA=age1…
+RCLONE_CONFIG_RESPALDOS_TYPE=s3
+RCLONE_CONFIG_RESPALDOS_ACCESS_KEY_ID=…
+RCLONE_CONFIG_RESPALDOS_SECRET_ACCESS_KEY=…
+```
+
+> **Con el destino vacío el respaldo sigue corriendo y DICE que lo que dejó no es un respaldo.** Es
+> deliberado: un clon limpio y una máquina de desarrollo tienen que poder copiar sus volúmenes sin
+> cuenta de nada, igual que el default `Stub` de todos los cableados del producto.
+>
+> **Lo que sí revienta es estar configurado a medias** — destino puesto y llave sin poner, por
+> ejemplo—, y revienta **antes de tocar nada**. Es la forma del defecto #56 (el modo `Http` del CDN
+> sin URL): arrancar verde, contestar que todo va bien y fallar el día que alguien lo necesita.
+>
+> La credencial del bucket debería poder **escribir** y no **leer**. Y borrar sólo si querés que la
+> poda la haga el servidor; si no, dejale la caducidad al bucket.
+
+### 6.3 Cuánto duran — es una decisión de privacidad, no de disco
+
+Dentro van **direcciones de entrega y nombres de pacientes**.
+
+| | por defecto | qué lo borra |
+|---|---|---|
+| Fuera del servidor | `SYNERGOS_RESPALDO_RETENCION_DIAS=30` | `enviar-respaldo.sh`, después de comprobar que la de hoy llegó |
+| En el servidor | `SYNERGOS_RESPALDO_LOCAL_DIAS=7` | `respaldo.sh`, al final de cada corrida |
+| Piso, en los dos | `SYNERGOS_RESPALDO_MINIMO=3` | nada: son las que sobreviven siempre |
+
+- **No existe «para siempre»**: el `0` se rechaza. Guardar indefinidamente un archivo con los datos
+  personales de todo el producto es una decisión que nadie tomó y que dentro de dos años es una
+  filtración esperando a que alguien encuentre la credencial.
+- **30 días fuera** es suficiente para notar al volver de vacaciones algo que empezó a corromperse
+  hace tres semanas, y poco para que eso viva años en el disco de un tercero. Con un respaldo
+  diario son **30 copias completas** allá; la cuenta hay que hacerla.
+- **7 días en el servidor**, que cumple otra cosa: es la que se restaura rápido cuando alguien se
+  lleva por delante algo esta mañana. Meses de datos personales en el mismo disco que se está
+  protegiendo no añaden seguridad, sólo añaden dónde perderlos.
+- **El piso de 3 no es paranoia.** La retención por edad a secas vacía el destino el día que el
+  respaldo lleva más de 30 días sin correr — o sea que el cron que se rompió y nadie vio se lleva
+  por delante la última copia buena, en silencio, justo el día que hace falta.
+
+### 6.4 El ensayo — **esto es lo que cierra el asunto**
+
+```bash
+export SYNERGOS_RESPALDO_DESTINO=respaldos:mi-bucket/prod
+export SYNERGOS_RESPALDO_IDENTIDAD=~/llaves/identidad.txt
+export RCLONE_CONFIG_RESPALDOS_...       # de sólo lectura basta
+./tools/prueba-restauracion.sh
+```
+
+Trae la copia **del remoto**, la descifra, la restaura sobre un proyecto de compose **aparte**,
+levanta el producto en la versión que escribió esos datos y **le pide los datos de vuelta** por
+HTTP. Al terminar borra los volúmenes del ensayo: dejarlos sería una segunda copia de datos
+personales que nadie decidió.
+
+Se niega a correr si el proyecto de ensayo es el de producción, y si la identidad está dentro de
+`/opt/synergos`.
+
+> **Por qué no basta con mirar que el fichero llegó.** Se levantó `Api.Audit` sobre un almacén
+> ilegible para medirlo: **`/health` contesta 200 y la lectura contesta 500.** Un humo de salud da
+> por buena esa restauración. Es el defecto #82 tal cual —la bitácora guardaba sus asientos y
+> devolvía 500 en toda lectura tras un reinicio— y ningún `tar -t` ni ningún `sha256` lo habría
+> visto: los bytes estaban perfectos.
+>
+> Y hay un escalón más: un almacén que se lee **a medias** contesta **200 con menos registros**,
+> porque el conversor es tolerante. Por eso el ensayo no mira sólo el código de estado: exige que
+> **vuelvan datos**. Un sistema recién instalado contesta 200 a las dieciocho colecciones.
+
+### 6.5 Lo que el respaldo **no** lleva, dicho de frente
+
+**El `.env` del servidor.** Ahí viven la llave compartida de las 22, la de firma de identidad, las
+de la pasarela y la del correo. Meterlas en la copia convertiría el respaldo en el objeto más
+valioso del producto y a la identidad de `age` en la llave de todo — es un problema de custodia de
+secretos disfrazado de copia de datos, con 30 copias diarias de blanco.
+
+Casi todo eso se regenera. **Uno no:** `Synergos:Academy:CertificateSigningSecret`. Sin él —o sin
+el llavero `cms-dpkeys`, que **sí** va en la copia— los diplomas ya emitidos dejan de verificar, y
+el propio código lo deja escrito en el log al pasar. Guardalo donde guardás la identidad de `age`.
+
+---
+
+## 7. La cuenta
 
 | | |
 |---|---|
