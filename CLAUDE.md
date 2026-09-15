@@ -750,6 +750,30 @@ Las que salieron de construir el árbol de servicios (§0.B):
   capacidades no cuenta para ninguna** — `/v1/holds` es de `Api.Booking` y de
   `Api.Inventory`, y contarla daría por conectada una a la que nadie habla.
   Al escribirlo, la frase decía siete y eran **nueve**.
+- `feedback_an_orchestrator_cites_a_record_it_does_not_relay_a_credential` — **una
+  credencial no cruza un orquestador: lo que cruza es la CITA de un registro que otra
+  capacidad ya verificó.** Propagar el `X-Synergos-Identity` del CMS a través de un `Bff.*`
+  suena a la salida barata y tiene la forma equivocada, porque **un token es una credencial
+  con RELOJ y una saga es trabajo con DURACIÓN**. Los tres síntomas, que conviene saber
+  reconocer en cualquier otro sitio donde alguien quiera reenviar un bearer: (a) **vence a
+  media saga**, y lo que compensa —un barrido, horas después, sin nadie al teclado— llegaría
+  sin firmar mientras el paso que no movió nada llegó firmado, o sea la afirmación fuerte
+  donde no hace falta y ninguna donde la plata vuelve; (b) **para que sobreviva hay que
+  GUARDARLO**, y ahí el almacén de sagas —que se respalda— pasa a ser un llavero, que es la
+  misma forma que el repo ya rechazó para el `.env` del servidor; y (c) **el sujeto no
+  cuadra**, porque los pasos de una saga nombran a sujetos distintos y un token sólo prueba
+  uno, así que lo propagado acabaría siendo identidad **para un campo** con aspecto de estar
+  resuelto. La salida es la que `Bff.Tienda` ya tenía sin que nadie la hubiera nombrado:
+  **leer al comprador del dueño de la canasta** en vez de aceptarlo en el cuerpo. Un registro
+  no vence, no es secreto y lo relee cualquiera. **Y el corolario que decide trabajo:** una
+  capacidad a la que sólo se llega por orquestador **no lleva puerta de identidad** — sería
+  un campo que nadie puede llenar, o sea `feedback_no_read_without_a_write_path` por el lado
+  de la escritura. **Dónde se revierte esto en silencio, y por eso el gate mira ahí:** no en
+  el cable —añadir una cabecera se ve— sino en el `record` de la saga, donde guardar el token
+  se lee como añadir un campo. El disparador para reabrirlo: que una capacidad detrás de un
+  orquestador necesite saber **CÓMO** se identificó la persona y no sólo quién es; y ni
+  siquiera entonces se propaga — se cita lo que el otro registro dice que fue
+  (`Cart.OpenedWith`), guardado como afirmación **de segunda mano**.
 - `feedback_a_state_with_no_writer_cannot_be_tested_through_the_seam` — **un valor del
   vocabulario al que NINGÚN camino del código llega no se prueba: se anota.** Al cortar la
   matrícula duplicada (#121) la regla correcta era «sólo una matrícula ACTIVA bloquea», que
@@ -1897,23 +1921,105 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > | `Documents` | `Owner` | sólo nombrada por Gobierno, como adjunto por referencia |
   > | ~~`Cart`~~ | `Owner` | **hecho** — el CMS, directo (`POST /v1/carts`) |
   > | `Orders` | `Buyer` | **`Bff.Tienda`** |
-  > | `Payments` | `Payer` | **los tres orquestadores** |
+  > | `Payments` | `Payer` | **los tres orquestadores** — y el CMS, **directo**, para la tasa de un trámite (#27) |
+  >
+  > **Esa última fila decía sólo «los tres orquestadores», y le faltaba el
+  > consumidor que importaba.** Desde la HU #27 el CMS le habla a
+  > `Api.Payments` **sin orquestador en medio** para cobrar la tasa de un
+  > trámite (`HttpPaymentProvider`), y ése es justamente el único que puede
+  > presentar identidad sin depender de la decisión de abajo. Es la misma
+  > forma que ya costó tres veces: una lista escrita de memoria en vez de
+  > medida contra el fichero.
   >
   > Y para las tres de abajo el actor **no es un seudónimo opaco**: con
   > sesión iniciada es el `memberKey`, que es exactamente la forma de
   > sujeto que el CMS ya firma (el seudónimo de #47 sustituye al **correo**,
-  > no al identificador). Así que su disparador no es un cableado que
-  > falte: es **extender `Synergos:Identity:Mode=Api` más allá de
-  > Gobierno**, y para `Orders` y `Payments` además decidir si el
-  > orquestador **propaga** la cabecera — que hoy no la propaga nadie, no
-  > está escrito en ninguna parte que deba, y **es la decisión que queda
-  > pendiente**: la canasta se pudo hacer sin tomarla porque el CMS la llama
-  > directo.
+  > no al identificador).
   >
   > Las tres de arriba sí esperan su primer consumidor, y conviene que sea
   > entonces: se verifica contra un llamador real y no contra un fake, que
   > es lo que hacía que #72 tocara —`Api.Audit` acababa de estrenar
   > consumidor con #15—.
+
+  > **El orquestador NO propaga la cabecera, y la decisión ya está tomada**
+  > (HU #14, lo que quedaba). La pregunta era si `Bff.*` debía reenviar el
+  > `X-Synergos-Identity` del CMS para que `Api.Orders` y `Api.Payments`
+  > supieran quién actuó. **No**, y no por dificultad: **propagar tiene la
+  > forma equivocada.** Un token es una credencial CON RELOJ; una saga es
+  > trabajo CON DURACIÓN, y las dos cosas no componen.
+  >
+  > **Uno: el token vence y la saga le sobrevive.** Quince minutos de
+  > vigencia; `Sweep:AbandonAfterMinutes` se mide en decenas, y compensar lo
+  > hace un barrido horas después **sin nadie al teclado**. Propagar daría un
+  > `authorize` firmado y un `void` o un `refund` sin firmar: la afirmación
+  > presente justo donde no pasó nada irreversible y ausente justo donde la
+  > plata vuelve. Eso es **peor** que no tener ninguna — el asiento fuerte del
+  > primer paso hace leer el débil del último como una degradación que alguien
+  > eligió.
+  >
+  > **Dos: para que sobreviviera habría que GUARDARLO.** El barrido no tiene
+  > a quién pedirle uno nuevo, así que la única salida sería persistir la
+  > credencial en la saga. Eso pone un bearer en el disco del orquestador, por
+  > cada saga, en un almacén que **se respalda** — la misma forma que este
+  > repo ya rechazó para el `.env` del servidor: custodia de secretos
+  > disfrazada de copia de datos. Y no se lee como «reenviar una credencial»:
+  > se lee como añadirle un campo a un `record`. Por eso el gate mira **el
+  > almacén y no sólo el cable**.
+  >
+  > **Tres: el sujeto no cuadraría igual.** Lo que vuelve prueba a un token es
+  > que la capacidad rechaza el que nombra a otro (`token_subject_mismatch`),
+  > y los pasos de una saga nombran a sujetos **distintos**: `authorize` al
+  > pagador, `hold` a `tienda.compra/{sagaId}`, el pedido al comprador. Un
+  > token reenviado sólo puede probar uno. Propagar no sería «identidad para
+  > `Payments`»: sería identidad para **un campo**, con el resto igual que
+  > antes y con el aspecto de estar resuelto.
+  >
+  > **Lo que se hace en vez de eso, y ya estaba a medio construir: DERIVAR.**
+  > `Bff.Tienda` no le cree al llamador quién compra — lee el dueño de la
+  > canasta de `Api.Cart` (`PurchaseFlow`), y ese dueño se estableció
+  > presentando un token verificado (séptima rebanada). O sea que el comprador
+  > que llega a `Api.Orders` y a `Api.Payments` **ya está anclado, sin que
+  > ninguna credencial cruce el orquestador**. La diferencia es ésa:
+  > **reenviar una credencial** contra **citar un registro**. Una credencial
+  > vence, hay que custodiarla y sólo prueba un sujeto; un registro no vence,
+  > no es secreto y lo relee cualquiera que tenga la llave compartida. La
+  > regla, entonces: **un orquestador nunca nombra a una persona por su propia
+  > palabra — la nombra citando el registro de una capacidad que ya la
+  > verificó.**
+  >
+  > **Y eso decide que `Api.Orders` y `Api.Payments` hoy NO llevan puerta de
+  > identidad por ahí**: sería abrirles un campo que nadie puede llenar —el
+  > único que las llama por esa vía es un orquestador que, por esta decisión,
+  > no presenta— y un `PaidWith` que dijera siempre lo mismo es
+  > `feedback_no_read_without_a_write_path` por el lado de la escritura. La
+  > excepción es el cobro que **no** pasa por orquestador —la tasa de un
+  > trámite (#27)—, y ése sí se cableó: ver más abajo.
+  >
+  > **Lo que queda abierto, nombrado en vez de dado por hecho:** Tienda pudo
+  > anclarse porque tiene una canasta —un registro con dueño verificado,
+  > anterior a la compra—. **Salud, Eventos y Viajes no tienen ninguno**: se
+  > entra al flujo nombrando al paciente, al comprador o al viajero, y no hay
+  > registro previo que citar. Darles uno es trabajo de verdad —¿dónde vive el
+  > «carrito» de una cita?—, no un cableado.
+  >
+  > **El disparador para reabrir esto**, escrito para no tener que adivinarlo:
+  > el día que una capacidad detrás de un orquestador necesite saber **CÓMO**
+  > se identificó la persona y no sólo quién es. Ahí citar el registro deja de
+  > alcanzar, porque la afirmación vive en la capacidad de al lado — y lo que
+  > corresponde **sigue sin ser propagar**: es que el orquestador cite lo que
+  > aquel registro dice que fue (`Cart.OpenedWith`) y que la capacidad lo
+  > guarde como afirmación **de segunda mano**, distinta de la que ella misma
+  > verificó.
+  >
+  > Hay gate (`PropagacionDeIdentidadTests`), escrito **estando en verde** —
+  > que es cuando es gratis, como el de «ninguna capacidad llama a otra»
+  > (#49)— y con cuatro dientes: que ningún `Bff.*` nombre la cabecera, que
+  > **ninguna saga guarde algo con pinta de credencial** (por donde se
+  > revierte esto en silencio), que Tienda **siga derivando** al comprador de
+  > la canasta, y que la lista de los tres que todavía nombran por su palabra
+  > sea exacta **en los dos sentidos**: uno nuevo rompe el build, y uno que
+  > deje de estarlo también — para que esta sección se mueva en el mismo
+  > commit en vez de quedarse diciendo que falta algo que ya está hecho.
 
   > **La canasta ya no se cree de quién es** (HU #14, séptima rebanada).
   > `POST /v1/carts` es el **único** endpoint de `Api.Cart` donde el
