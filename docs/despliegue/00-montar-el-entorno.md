@@ -466,21 +466,123 @@ Es la vía de escape que ADR 0008 deja prevista —con ADR sucesor— y no compr
 Así que **ADR 0008 se queda como está**, y lo que cambia es que el import deja de ser un ritual de
 backoffice imposible en un VPS sin pantalla: es un comando.
 
-### 5.bis.2 El contenido — ⚠️ hoy NO HAY NINGUNO, y con esto el sitio sigue en blanco
+### 5.bis.2 El contenido — la portada de arranque
 
-Con el schema importado, la portada **sigue diciendo «No published content»**. No es un fallo del
-import: es que `uSync/v9/Content/` **no existe en el repo**. El mapa de `CLAUDE.md` §2 lo lista y
-ADR 0129 decidió versionarlo, pero la carpeta está vacía —comprobado también contra `master`— así
-que no hay ni un nodo de contenido que importar.
+Con el schema importado, la portada **sigue diciendo «No published content»** hasta que alguien
+publique un nodo. No es un fallo del import: es que `uSync/v9/Content/` **está vacía en el repo**
+—comprobado también contra `master`— así que no hay ni un nodo que importar. Y encender
+`Synergos:DevSeed:Enabled` tampoco la crea sola: lo que se siembra en el arranque son datos de
+dominio (hilos de blogs, correspondencia de Gobierno), nunca contenido — eso es ADR 0013 y así
+tiene que seguir.
 
-Y **el seeder tampoco lo crea**: encendiendo `Synergos:DevSeed:Enabled` se siembran datos de
-dominio (hilos de blogs, correspondencia de Gobierno) y la portada sigue igual. Medido.
+Hasta la HU [#119](../../../../issues/119) ahí se acababa el documento: «alguien tiene que
+autorarlo a mano». **Hoy hay herramienta**, y el camino entero es éste — cuatro pasos, y **los
+tres primeros corren en la máquina de desarrollo, no en el servidor**:
 
-O sea: **hoy no hay un camino de un clon limpio a una portada publicada.** Alguien tiene que
-autorar el árbol de contenido en el backoffice una primera vez; a partir de ahí el
-`ExportOnSave` de ADR 0129 lo deja en `uSync/v9/Content/` y el servidor siguiente lo recibe con
-el paso 5.bis.1. Eso es trabajo de contenido, no de despliegue, y por eso está nombrado acá en
-vez de dado por hecho.
+| | Dónde corre | Qué hace |
+|---|---|---|
+| 1 | **desarrollo** | `POST /dev/seed-portada` crea la portada de arranque |
+| 2 | **desarrollo** | el arquitecto la ajusta en el backoffice hasta que sea la suya |
+| 3 | **desarrollo** | uSync exporta al guardar → `uSync/v9/Content/` → commit |
+| 4 | **el servidor** | `tools/importar-schema.sh` (paso 5.bis.1) la trae con el resto |
+
+> **Por qué el rodeo, y no un comando en el servidor.** El flag de DevSeed **viene apagado en
+> producción** y hay gate que lo vigila ([#113](../../../../issues/113)), así que en el servidor
+> ese endpoint contesta 404 — y eso es lo correcto, no un obstáculo: son catorce endpoints
+> `[AllowAnonymous]` y uno de ellos borra el árbol de contenido entero. Sembrar donde se edita y
+> **transportar el resultado como XML versionado** es además lo que hace que el siguiente
+> servidor, y el de después, arranquen con la misma portada sin que nadie repita nada.
+
+#### 1 · Sembrarla
+
+Con el CMS de desarrollo levantado y `Synergos:DevSeed:Enabled` en `true`:
+
+```bash
+curl -X POST http://localhost:5000/dev/seed-portada
+# {"siteRootId":1463,"outcome":"Created","detail":"created"}
+```
+
+Crea **un `siteRoot` en la raíz del árbol** —no bajo un `platformRoot`, que es el wrapper
+opcional para agrupar varios sitios— y le pone de cuerpo tres bandas del Layout Composer: un
+hero, una rejilla de tres tarjetas y un bloque de texto. Las dos primeras son elementos del
+catálogo CDN (`elementSynHeroBanner`, `elementSynFeatureGrid`) y **traen fallback SSR** (ADR
+0012), así que la portada se ve entera **con el CDN sin configurar**, que es el estado de un
+servidor recién montado.
+
+**Es idempotente, y de la forma que importa.** Correrla otra vez no duplica nada — pero lo que
+de verdad protege es el paso 2: si el `siteRoot` ya tiene cuerpo, **no lo toca** y contesta
+`AlreadyAuthored`. Sembrar encima se llevaría por delante lo que acabás de ajustar, justo antes
+de exportarlo.
+
+| outcome | qué pasó |
+|---|---|
+| `Created` | no había `siteRoot`; se creó con su portada |
+| `Filled` | había uno sin cuerpo; se le puso la portada, **sin pisarle la marca** |
+| `AlreadyAuthored` | ya había portada. No se tocó nada |
+| `RootAlreadyTaken` | la raíz la ocupa otro nodo. **No siembra**, y dice cuál |
+| `MissingContentTypes` | el schema no está importado. Dice cuál falta |
+
+> **Lo de `RootAlreadyTaken` costó una medición.** Si en el árbol ya hay un raíz —el
+> `platformRoot` del andamio de la vitrina, por ejemplo— crear un `siteRoot` al lado **no pone
+> la portada en `/`**: Umbraco resuelve `/` al primer raíz, así que quedaría en `/inicio` y la
+> herramienta habría contestado «creada» con la portada invisible. Verificado en vivo, que es
+> como se vio. Hoy no siembra y dice qué hay ocupando la raíz.
+
+> **No confundir con `POST /dev/seed-synergos-identity`**, que arma el andamio de la vitrina
+> SynergosLabs (`platformRoot` → `siteRoot` → tres páginas que luego puebla
+> `POST /dev/fill-synergos-pages`). Es otra cosa y mucho más grande. De paso quedó arreglado:
+> **llevaba roto** —no ponía las dos obligatorias de `compBranding` en el `platformRoot`, así
+> que el publish se caía y no creaba nada— **y lo contestaba con un 200** y un `success:false`
+> adentro, que desde un script no se lee como un fallo. Hoy sale con 409 y es idempotente.
+
+Un fallo sale con **409**, no con 200 — la herramienta anterior contestaba `200` con
+`success:false` y por eso llevaba rota sin que nadie lo notara.
+
+#### 2 · Ajustarla
+
+En el backoffice, sobre ese nodo. Es contenido normal: cambiar textos, arrastrar bloques, añadir
+páginas hijas, poner la marca. Lo que queda acá es lo que va a ver la gente — la siembra sólo
+evita empezar con una página en blanco.
+
+#### 3 · Exportarla y commitearla
+
+`ExportOnSave` está en `All` y el `ContentHandler` encendido (ADR 0129), así que **guardar ya
+exporta**: aparece `Synergos.CMS.Web/uSync/v9/Content/<nodo>.config`. Ese fichero **lo commitea
+el arquitecto**, no un agente — el contenido editorial no se autora escribiendo XML.
+
+```bash
+git add Synergos.CMS.Web/uSync/v9/Content
+node tools/usync-audit.mjs      # pasa: el check 9 sólo rechaza el árbol del seeder de pruebas
+```
+
+#### 4 · Y el servidor la recibe
+
+Con el `Content/` commiteado, el paso 5.bis.1 deja de traer sólo el schema. Medido contra una
+base limpia: el import pasa de **896** ítems a **897**, y `GET /` sirve la portada sin que nadie
+siembre nada en el servidor.
+
+> **Qué se verificó de verdad, y con qué.** El ciclo completo se corrió con el proceso vivo,
+> perfil `Docker`, base SQLite limpia y el árbol de uSync importado entero: `/` en blanco (200,
+> 1926 bytes, cartel de Umbraco) → sembrar → `/` con la portada (200, 19802 bytes) → sembrar otra
+> vez (`AlreadyAuthored`, la página no cambia) → export a `Content/inicio.config` → **base nueva
+> desde cero importando ese fichero** → `/` sirve la portada sin sembrar. Hay gate
+> (`tools/humo-portada.mjs`, workflow `humo-portada.yml`), y es el único del repo que **pide la
+> página**.
+>
+> **Y lo que NO se pudo ejecutar, dicho en vez de afirmado:** el paso 4 se reprodujo
+> importando el `Content/` exportado contra una base nueva **con la aplicación directamente**,
+> no con `tools/importar-schema.sh` — ese script necesita el demonio de Docker, que el
+> contenedor donde se escribió esto no tiene. Lo que hace el script es levantar un contenedor
+> efímero para correr ese mismo import, así que lo verificado es el import; lo que queda sin
+> ejercitar es su envoltorio, igual que ya decía §5.bis.3.
+>
+> **Lo que ese gate destapó la primera vez que se corrió, y que ningún otro veía:** con la
+> portada puesta, `/` contestaba **500**. `_SynergosBridge.cshtml` usa `LogWarning` sin el
+> `@using` de `Microsoft.Extensions.Logging`, y las vistas de este proyecto se compilan
+> **siempre en caliente** (`RazorCompileOnBuild=false`, porque `ModelsMode=InMemoryAuto`), donde
+> no llegan los implicit usings del SDK. O sea que **ninguna página de contenido renderizaba**
+> desde el 2026-09-05, con la suite entera en verde. No lo vio nadie porque no había contenido
+> que renderizar: el hueco de abajo tapaba el de arriba.
 
 ### 5.bis.3 El estado que las capacidades exigen
 

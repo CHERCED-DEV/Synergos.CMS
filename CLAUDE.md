@@ -117,6 +117,7 @@ Synergos.CMS/
 │   │                            + despliegue (18, ADR 0133)
 │   │                            + molde del vertical (10, doc 12)
 │   │                            + seudónimo único (3, #120)
+│   │                            + portada de arranque (5, #119)
 │   ├── Api/                     tests de reglas y servicio por capacidad
 │   └── Bff/                     la compensación cruzada (144)
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
@@ -820,6 +821,40 @@ Las que salieron de construir el árbol de servicios (§0.B):
   valores donde «sin elegir» sigue siendo «no consta», que es la misma decisión
   que #111 tomó en el TIPO (`bool?`) aplicada al editor. Y la regla para saber
   cuáles son ésas es la de siempre: se mira qué pasa si nadie lo toca.
+- `feedback_a_build_that_compiles_no_view` — **en este repo un `dotnet build`
+  verde NO dice que las vistas compilen, y ningún test de la suite lo dice
+  tampoco.** `RazorCompileOnBuild=false` y `RazorCompileOnPublish=false` están
+  puestos a propósito (`ModelsMode=InMemoryAuto`), así que **toda vista se
+  compila en caliente, en todos los entornos** — y esa compilación NO lleva los
+  implicit usings que el SDK Web le da al proyecto. Una vista que usa un método
+  de extensión sin su `@using` compila en el build y **revienta al servirla**:
+  el arreglo del defecto #92 dejó `_SynergosBridge.cshtml` así y **ninguna
+  página de contenido renderizó durante diez días**, con la suite entera en verde.
+  **Lo que lo escondía era otro hueco**: sin portada publicada, `/` servía el
+  cartel de Umbraco vacío y `_Layout` no se invocaba nunca — el hueco de abajo
+  tapaba el de arriba, así que cerrar uno es la forma de encontrar el otro. Lo
+  único que lo caza es **pedir la página** (`tools/humo-portada.mjs`), y por eso
+  ese gate existe aunque tarde tres minutos.
+- `feedback_a_seeder_is_idempotent_when_it_refuses_to_overwrite` — **para una
+  herramienta que siembra lo que luego se edita, «idempotente» no es «no
+  duplica»: es «no PISA».** Sembrar dos veces creando un segundo nodo es
+  molesto y se ve; sembrar encima de lo que el arquitecto acaba de ajustar en el
+  backoffice —justo antes de exportarlo— se lleva el trabajo **en silencio**. Y
+  el test que lo exige no puede comprobar «no se creó otro»: tiene que comprobar
+  que **no se llamó a guardar**, porque un seeder que reescribe lo mismo pasa el
+  primer criterio y falla el que importa. El corolario del mismo tamaño: lo que
+  la herramienta rellena, lo rellena **sólo si está vacío**.
+- `feedback_a_dev_tool_that_answers_200_with_success_false_is_broken_forever` —
+  **una herramienta que reporta su fallo dentro de un 200 lleva rota desde el día
+  que se escribió y nadie lo sabe.** `POST /dev/seed-synergos-identity` contestaba
+  `{"success":false,"detail":"platform-save-failed:FailedPublishContentInvalid"}`
+  con código **200** —no ponía `brandKey`/`brandDisplayName`, obligatorias de
+  `compBranding`, en el `platformRoot`— y encima **no estaba nombrada en ningún
+  documento**, así que nadie tenía por qué correrla y descubrirlo. Las dos mitades
+  hacen falta: un fallo sale con 4xx, **y** el documento que manda correr un
+  endpoint se cruza contra el controller que lo declara (`PortadaDeArranqueTests`).
+  Un camino escrito que nadie cruza contra el código es una hora perdida para
+  quien lo siga.
 
 ## 6. Prohibiciones explícitas
 
@@ -862,6 +897,22 @@ dotnet build Synergos.Bff.Tienda/Synergos.Bff.Tienda.csproj -v quiet
 # uSync Import: lo hace el arquitecto manualmente desde backoffice —
 # agente NO ejecuta import desde CLI ni toca la DB.
 ```
+
+### Los dos gates que ARRANCAN la aplicación — necesitan el SDK, y valen lo que tardan
+
+```bash
+node tools/usync-rebuild-check.mjs   # ADR 0128: base vacía + XML = entorno completo (~2 min)
+node tools/humo-portada.mjs          # #119: base vacía + XML + siembra = portada SERVIDA (~3 min)
+```
+
+**El segundo es el único del repo que PIDE LA PÁGINA**, y por eso existe: las vistas
+de este proyecto se compilan **siempre en caliente** —`RazorCompileOnBuild=false`,
+obligado por `ModelsMode=InMemoryAuto`— así que **un `dotnet build` verde no dice
+nada sobre si una vista compila**. Lo comprobado: el arreglo del defecto #92 dejó
+`_SynergosBridge.cshtml` sin el `@using` de `Microsoft.Extensions.Logging` y toda
+página de contenido pasó a contestar 500 durante diez días, con la suite entera en
+verde. Los dos aceptan `--no-build` si ya compilaste, y **avisan** de los `.cshtml`
+que el import ensucia en vez de restaurarlos.
 
 ### Los gates de Node — corren sin SDK .NET
 
@@ -1141,11 +1192,28 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 > máquina nueva se habría puesto **verde con el sitio en blanco**. Hoy
 > `humo-publico.sh` lo distingue.
 >
-> **Lo que sigue sin existir es el CONTENIDO**: `uSync/v9/Content/` está vacía
-> —comprobado también contra `master`— y el seeder no crea portada, así que hoy
-> **no hay camino de un clon limpio a una portada publicada**. Es trabajo de
-> contenido, no de despliegue, y por eso queda nombrado en vez de dado por
-> hecho.
+> **Y el CONTENIDO ya tiene camino** (#119). Esta nota decía que no lo había, y era
+> cierto: `uSync/v9/Content/` sigue vacía en el repo —el agente no la autora, ADR
+> 0129— y nada la crea al arrancar —ADR 0013—. Lo que faltaba era la **herramienta**
+> que respeta las dos: `POST /dev/seed-portada` siembra en desarrollo una portada de
+> arranque compuesta con el Layout Composer, el arquitecto la ajusta, uSync la
+> exporta al guardar y el XML entra al repo por su mano. El servidor la recibe con
+> `importar-schema.sh`, sin sembrar nada. Los cuatro pasos están en
+> `docs/despliegue/00-montar-el-entorno.md` §5.bis.2.
+>
+> **Es idempotente de la forma que importa**: con portada puesta no la duplica ni la
+> reescribe —contesta `AlreadyAuthored`—, porque pisar lo que el arquitecto acaba de
+> ajustar, justo antes de exportarlo, es peor daño que un nodo de más.
+>
+> **Y hay gate que PIDE LA PÁGINA** (`tools/humo-portada.mjs`, workflow
+> `humo-portada.yml`): arranca la app contra una base limpia, siembra y hace `GET /`.
+> Es el único del repo que lo hace, y la primera vez que se corrió destapó que **el
+> sitio entero estaba caído**: `_SynergosBridge.cshtml` usaba `LogWarning` sin su
+> `@using`, y con `RazorCompileOnBuild=false` (obligado por `ModelsMode=InMemoryAuto`)
+> las vistas se compilan **siempre en caliente**, donde no llegan los implicit usings
+> del SDK. Diez días con toda página de contenido en 500, la suite en verde y el gate
+> de #92 confirmando que la línea estaba escrita — porque **no había contenido que
+> renderizar**: el hueco de la portada tapaba el de la vista.
 
 **Lo que NO está:**
 
