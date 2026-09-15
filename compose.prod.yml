@@ -57,6 +57,22 @@ services:
     networks: [interna]
     environment:
       ASPNETCORE_ENVIRONMENT: Docker
+
+      # La siembra de desarrollo, APAGADA — y va acá y no sólo en el perfil.
+      #
+      # appsettings.Docker.json la trae encendida, y ASPNETCORE_ENVIRONMENT
+      # Docker es justo el perfil con el que corre PRODUCCION: los catorce
+      # endpoints de DevController son [AllowAnonymous], así que
+      # POST /dev/clear-all-content quedaba alcanzable desde internet, sin
+      # autenticar, para borrar el contenido entero (#113).
+      #
+      # El XML-doc del controller dice «no-op en prod» — cierto si el flag esta
+      # off, y el despliegue no lo apagaba. Es la forma de #72 y #82: la
+      # propiedad que el codigo anuncia como su salvaguarda es la que no se
+      # cumple. Lo apaga el despliegue porque el despliegue es quien sabe que
+      # esto es produccion; el perfil lo sigue trayendo encendido para que un
+      # docker compose de desarrollo siga sirviendo la siembra.
+      Synergos__DevSeed__Enabled: "false"
       Umbraco__CMS__Global__UmbracoApplicationUrl: "https://${SYNERGOS_DOMAIN}/"
       Synergos__Notifications__PublicBaseUrl: "https://${SYNERGOS_DOMAIN}"
       Synergos__Cart__SecretKey: ${SYNERGOS_CART_SECRET:?falta SYNERGOS_CART_SECRET}

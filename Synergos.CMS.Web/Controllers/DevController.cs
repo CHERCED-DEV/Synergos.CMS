@@ -8,9 +8,24 @@ namespace Synergos.CMS.Web.Controllers;
 
 /// <summary>
 /// Dev-only endpoints para content seeding y smoke-test. Todos gated
-/// por <c>Synergos:DevSeed:Enabled=true</c>. Retornan 404 cuando el
-/// flag está off (no-op en prod).
+/// por <c>Synergos:DevSeed:Enabled=true</c>: retornan 404 con el flag off.
 /// </summary>
+/// <remarks>
+/// <b>Esto decía «no-op en prod» y no era verdad</b> (#113). La frase es cierta
+/// condicionalmente —con el flag off no pasa nada— y describía un perfil de
+/// producción que <b>no existía</b>: <c>appsettings.Docker.json</c> trae el flag
+/// encendido y <c>ASPNETCORE_ENVIRONMENT: Docker</c> es justo con lo que corre el
+/// despliegue. Como estos catorce endpoints son <c>[AllowAnonymous]</c>, eso dejaba
+/// <c>POST /dev/clear-all-content</c> alcanzable desde internet, sin autenticar.
+/// <para>Hoy lo apaga el despliegue —<c>compose.prod.yml</c>, generado— y hay gate
+/// (<c>ComposeStackTests.El_perfil_de_produccion_NO_trae_la_siembra_encendida</c>).
+/// El perfil sigue trayéndolo encendido a propósito, para que un
+/// <c>docker compose</c> de desarrollo siga sirviendo la siembra: quien sabe que
+/// esto es producción es el despliegue, no el perfil.</para>
+/// <para><b>Y la salvaguarda NO es la autenticación</b>: es el flag. Un arreglo que
+/// dejara el flag encendido y tapara los endpoints con auth deja la siembra viva en
+/// producción, que es la otra mitad del problema.</para>
+/// </remarks>
 [ApiController]
 [Route("dev")]
 [AllowAnonymous]
