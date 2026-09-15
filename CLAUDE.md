@@ -616,7 +616,7 @@ donde había una calle, así que la ficha se veía bien y el comprador tocaba el
 cuadras. Un campo derivado que pisa uno recibido no se detecta mirando la pantalla.
 
 Por eso G-7 es **error y no trinquete**: una clave que se manda a una ruta y cuyo record no
-la declara no tiene lectura inocente. Hoy ligan 58 claves en 22 rutas.
+la declara no tiene lectura inocente. Hoy ligan 57 claves en 22 rutas.
 
 > **Lo que G-7 no ve, y lo dice al correr**: los cuerpos que construye una función
 > (`postJson(url, toCourseDraftWire(body))`) quedan fuera, porque seguirla exige resolver su
