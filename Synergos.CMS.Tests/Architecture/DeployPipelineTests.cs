@@ -359,6 +359,79 @@ public sealed class DeployPipelineTests
         Assert.Contains("provisionar.sh", doc, StringComparison.Ordinal);
     }
 
+    // ── Lo que hay que correr en el servidor tiene que LLEGAR al servidor ──
+
+    /// <summary>
+    /// Todo script que el documento manda correr en el servidor está en la lista que se copia.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Ya pasó dos veces, y las dos en silencio.</b> Los tres del respaldo vivían sólo en
+    /// el repo, así que la máquina que había que proteger era la única sin con qué respaldarse
+    /// (HU #31). Y al escribir la siembra volvió a pasar igual: el §5.bis dice «corré
+    /// <c>tools/importar-schema.sh</c> en el servidor» y ni el script ni el manifiesto de
+    /// <c>provisionar.sh</c> se copiaban (#114).</para>
+    ///
+    /// <para><b>No falla: FALTA.</b> El despliegue termina en verde, el sitio contesta, y el
+    /// operador descubre el hueco cuando abre una sesión SSH y el fichero no está — o peor, con
+    /// <c>provisionar.sh</c>, que sin su manifiesto publicaba las definiciones, se saltaba los
+    /// recursos y decía «✓ el estado que las capacidades exigen está publicado». Hoy un manifiesto
+    /// ausente es un error y «no hay entidades» se escribe <c>[]</c>.</para>
+    ///
+    /// <para><b>Se deriva de la columna «Dónde corre» del documento, y no hay segunda lista.</b>
+    /// Lo que define «va al servidor» es que el propio documento lo declare, así que las
+    /// exclusiones no se escriben acá: <c>humo-publico.sh</c> dice «el runner» y
+    /// <c>prueba-restauracion.sh</c> dice «NO el servidor», y con eso quedan fuera solas. Una
+    /// lista de exenciones dentro del gate sería el mismo problema en dos sitios — y una exención
+    /// que sobra deja de leerse, como ya dice la lista de permisos de salida de una capacidad.</para>
+    /// </remarks>
+    [Fact]
+    public void Lo_que_se_corre_en_el_servidor_se_COPIA_al_servidor()
+    {
+        var doc = Leer("docs", "despliegue", "00-montar-el-entorno.md");
+        var deploy = Leer(".github", "workflows", "deploy.yml");
+
+        // La columna «Dónde corre» de las tablas del documento. Es la DECLARACIÓN, no una
+        // heurística sobre los bloques de código: parsear los comandos deja fuera los que se
+        // corren por cron —`respaldo.sh` no lo teclea nadie— y mete los que se corren desde acá.
+        var filas = Regex.Matches(doc, @"(?m)^\|\s*`tools/([a-z0-9-]+\.sh)`\s*\|([^|]*)\|");
+
+        var mandados = filas
+            .Where(m => m.Groups[2].Value.Contains("**el servidor**", StringComparison.Ordinal))
+            .Select(m => m.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(mandados.Count >= 4,
+            $"Sólo se encontraron {mandados.Count} scripts declarados «**el servidor**» en las "
+            + "tablas de docs/despliegue/00-montar-el-entorno.md. El descubrimiento está roto y "
+            + "este gate estaría vigilando el vacío.");
+
+        var faltan = mandados
+            .Where(s => !deploy.Contains($"tools/{s}", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(faltan.Count == 0,
+            "El documento manda correr esto en el servidor y el despliegue NO lo copia: "
+            + string.Join(", ", faltan) + "." + Environment.NewLine
+            + "No falla —el despliegue queda verde— : FALTA, y se descubre cuando alguien entra "
+            + "por SSH y el fichero no está. Ya pasó con los tres del respaldo (HU #31) y con los "
+            + "dos de la siembra (#114). Se añade al `scp` de .github/workflows/deploy.yml, o se "
+            + "cambia la columna «Dónde corre» del documento si de verdad no va allí.");
+
+        // El otro lado del mismo criterio, y el que tiene consecuencia: el ensayo de restauración
+        // se declara «NO el servidor» porque necesita la llave PRIVADA de age. Copiarlo invita a
+        // dejar la llave en la máquina, y ahí el respaldo asimétrico deja de servir para lo único
+        // que lo justifica — que quien se lleve el servidor no pueda leer el histórico que ya
+        // mandó. La columna lo dice; esto lo hace cumplir.
+        Assert.DoesNotContain("tools/prueba-restauracion.sh", deploy, StringComparison.Ordinal);
+
+        // El manifiesto no es un script y sin él `provisionar.sh` no tiene entidades que
+        // reconciliar, así que va explícito: es el dato del que vive el script que sí se copia.
+        Assert.True(deploy.Contains("tools/provisionar.recursos.json", StringComparison.Ordinal),
+            "El despliegue copia `provisionar.sh` y no su manifiesto. Sin él el script no tiene "
+            + "recursos ni precios que publicar, y lo que hace falta sembrar no se siembra.");
+    }
+
     [Fact]
     public void El_humo_distingue_el_sitio_del_cartel_de_Umbraco_VACIO()
     {
