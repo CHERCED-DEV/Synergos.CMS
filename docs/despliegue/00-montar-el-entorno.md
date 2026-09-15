@@ -391,11 +391,84 @@ dar error**. El despliegue que cualquier plataforma moderna hace por defecto rom
 
 ### El primer arranque tarda, y es normal
 
-Umbraco se instala desatendido e importa 880 ítems de uSync — unos 74 s medidos en CI (ADR 0128).
-**Es lo que hace que no haya que correr el import a mano.** Durante ese rato el proxy espera; no
-da 502.
+Umbraco **se instala** desatendido: crea sus tablas y su usuario sin que nadie toque el
+backoffice. Eso sí es automático, y durante ese rato el proxy reintenta en vez de dar 502.
+
+> ### ⚠️ Lo que este documento decía y era falso (#114)
+>
+> Decía que el arranque *«importa 880 ítems de uSync — **es lo que hace que no haya que correr el
+> import a mano**»*. **No lo hace.** ADR 0008 fija que el import NO ocurre al arrancar: el default
+> del paquete es `None` y no hay una sola línea en el repo que lo pise — ni en C#, ni en
+> `appsettings*.json`, ni en `compose.prod.yml`.
+>
+> Medido contra una base vacía, el arranque dice `uSync: Startup Complete 0ms` — o sea **cero**
+> ítems. La prueba de que ya se sabía está en el propio gate de CI:
+> `tools/usync-rebuild-check.mjs` inyecta `uSync__Settings__ImportAtStartup=All` por variable de
+> entorno, precisamente **porque la app no lo hace sola**.
+>
+> Y un Umbraco vacío no falla: sirve su cartel «No published content» con **200 y HTML de
+> verdad**. Antes de #114 el humo daba eso por bueno, así que el primer despliegue de un servidor
+> nuevo se habría puesto **verde con el sitio en blanco**.
+
+El import es un paso, y está en el §5.bis de abajo.
 
 ---
+
+## 5.bis. El estado que hay que sembrar, UNA VEZ
+
+Un servidor recién montado tiene los procesos arriba y **nada dentro**. Esto es lo que hay que
+hacer una vez, en orden. Nada de esto lo hace el arranque, y ninguno estaba escrito acá.
+
+### 5.bis.1 El schema de uSync
+
+```bash
+tools/importar-schema.sh          # en el servidor, con el stack levantado
+```
+
+Para el CMS, importa en un contenedor efímero y lo vuelve a levantar. Es **idempotente** —uSync
+compara y aplica lo que difiere— y comprueba lo mismo que el gate de reconstrucción: que termine,
+sin líneas `[ERR]`, y que procese al menos tantos ítems como ficheros `.config` hay. Medido en el
+stack compuesto: **896 ítems, 355 cambios, 0 errores, ~28 s**.
+
+> **Para el CMS a propósito, y no es prudencia.** La primera versión de este script importaba con
+> el CMS arriba y se midió qué pasa: **dos Umbraco sobre la misma base se matan por MainDom**. El
+> que entra se lo queda, el que servía el sitio se apaga solo —«Application is shutting down»,
+> exit 0, sin un error— y el import se cae con él. Es la misma regla de «una instancia, y parada
+> antes de arranque» que el compose ya declara para las capacidades.
+
+#### Por qué no se activa el import en el arranque y ya
+
+Se consideró, y se descartó con dos razones — ninguna de las dos es «lo dice el ADR».
+
+**`ImportAtStartup=All` revierte el trabajo editorial en cada reinicio.** `appsettings.json` tiene
+encendidos `ContentHandler` y `MediaHandler` (ADR 0129), así que `All` re-importa el contenido del
+repo **en cada arranque**. Un `restart`, un despliegue, un reinicio del servidor — y lo que un
+editor publicó vuelve atrás, en silencio y sin error. Se cambiaría «el primer despliegue necesita
+un comando» por «cada reinicio es una vuelta atrás editorial», que es peor y además del tipo que
+no se nota.
+
+**`ImportAtStartup=Settings` no resuelve el problema que venía a resolver.** Trae el schema y deja
+el sitio sin contenido, o sea exactamente el mismo cartel de «No published content» en la portada.
+Es la vía de escape que ADR 0008 deja prevista —con ADR sucesor— y no compra nada aquí.
+
+Así que **ADR 0008 se queda como está**, y lo que cambia es que el import deja de ser un ritual de
+backoffice imposible en un VPS sin pantalla: es un comando.
+
+### 5.bis.2 El contenido — ⚠️ hoy NO HAY NINGUNO, y con esto el sitio sigue en blanco
+
+Con el schema importado, la portada **sigue diciendo «No published content»**. No es un fallo del
+import: es que `uSync/v9/Content/` **no existe en el repo**. El mapa de `CLAUDE.md` §2 lo lista y
+ADR 0129 decidió versionarlo, pero la carpeta está vacía —comprobado también contra `master`— así
+que no hay ni un nodo de contenido que importar.
+
+Y **el seeder tampoco lo crea**: encendiendo `Synergos:DevSeed:Enabled` se siembran datos de
+dominio (hilos de blogs, correspondencia de Gobierno) y la portada sigue igual. Medido.
+
+O sea: **hoy no hay un camino de un clon limpio a una portada publicada.** Alguien tiene que
+autorar el árbol de contenido en el backoffice una primera vez; a partir de ahí el
+`ExportOnSave` de ADR 0129 lo deja en `uSync/v9/Content/` y el servidor siguiente lo recibe con
+el paso 5.bis.1. Eso es trabajo de contenido, no de despliegue, y por eso está nombrado acá en
+vez de dado por hecho.
 
 ## 6. El respaldo — que es el único que se puede comprobar de antemano
 

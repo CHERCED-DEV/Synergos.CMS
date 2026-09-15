@@ -66,13 +66,20 @@ SYNERGOS_TAG="$SHA" $COMPOSE up --detach --remove-orphans
 
 # ── Esperar a que estén sanos ────────────────────────────────────────────────
 #
-# El primer arranque instala Umbraco desatendido e importa 880 ítems de uSync —
-# unos 74 s medidos en CI (ADR 0128). Esperar poco convierte un arranque lento
-# en un despliegue "fallido" que en realidad iba bien.
+# El primer arranque instala Umbraco desatendido —crea tablas y usuario— y
+# compila los modelos: son minutos, no segundos. Esperar poco convierte un
+# arranque lento en un despliegue "fallido" que en realidad iba bien.
+#
+# ⚠️ Lo que este comentario decía y era falso (#114): que el arranque «importa
+# 880 ítems de uSync». NO los importa — ADR 0008 deja `ImportAtStartup` en
+# `None` y nadie lo pisa; medido contra una base vacía, el arranque dice
+# `uSync: Startup Complete 0ms`. El import es un paso aparte y tiene su
+# herramienta: `tools/importar-schema.sh`
+# (docs/despliegue/00-montar-el-entorno.md §5.bis).
 # El estado se lee con `docker inspect` y NO con `docker compose ps --format`:
 # el `--format` de compose v2 sólo acepta `table` y `json`, no plantillas Go.
 # Escrito con una plantilla, no falla — devuelve la plantilla como texto, el
-# `awk` no encuentra nada raro, y el bucle da por sanas a las 23 en el primer
+# `awk` no encuentra nada raro, y el bucle da por sanas a todas en el primer
 # intento. Un chequeo que siempre pasa es peor que no tenerlo.
 estado() {
   local ids
@@ -105,7 +112,7 @@ done
 # El fallo silencioso que esto caza: una imagen no se pudo bajar, Docker reusa
 # la que ya tenía, el contenedor arranca, todo reporta sano — y está corriendo
 # la versión anterior. Sano no es actualizado.
-echo "── comprobando que las 23 corren la etiqueta pedida…"
+echo "── comprobando que todas corren la etiqueta pedida…"
 IDS="$(SYNERGOS_TAG="$SHA" $COMPOSE ps --quiet)"
 # shellcheck disable=SC2086
 VIEJAS="$(docker inspect --format '{{.Name}} {{.Config.Image}}' $IDS \
