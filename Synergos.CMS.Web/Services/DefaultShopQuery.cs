@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
@@ -70,8 +69,13 @@ public sealed class DefaultShopQuery : IShopQuery
             });
         }
 
-        // Sort
-        var withPrice = products.Select(p => (Product: p, Price: ParsePrice(p)));
+        // Un producto cuyo precio no se puede leer NO se lista: cero es un precio válido y no
+        // falla en ninguna parte hasta que alguien compra (#123). Se filtra ANTES de ordenar —
+        // con el respaldo a 0m, `price-asc` lo ponía primero.
+        var withPrice = products
+            .Select(p => (Product: p, Price: ParsePrice(p)))
+            .Where(x => x.Price is not null)
+            .Select(x => (x.Product, Price: x.Price!.Value));
         var sortBy = (request.SortBy ?? "name").ToLowerInvariant();
         var sorted = sortBy switch
         {
@@ -110,7 +114,15 @@ public sealed class DefaultShopQuery : IShopQuery
         var match = scopeRoots
             .SelectMany(r => r.DescendantsOrSelfOfType(ProductPageAlias))
             .FirstOrDefault(p => string.Equals(p.Value<string>("productSku"), sku, StringComparison.OrdinalIgnoreCase));
-        return match is null ? null : Project(match, ParsePrice(match));
+        if (match is null)
+        {
+            return null;
+        }
+
+        // Mismo criterio que el listado: sin precio legible el producto no existe para la
+        // vitrina. Devolver la ficha con Price = 0 es lo que dejaba comprar a cero (#123).
+        var price = ParsePrice(match);
+        return price is null ? null : Project(match, price.Value);
     }
 
     // ── Internals ────────────────────────────────────────────────────────────
@@ -137,9 +149,25 @@ public sealed class DefaultShopQuery : IShopQuery
             CategoryName: categoryName);
     }
 
-    private static decimal ParsePrice(IPublishedContent product)
+    /// <summary>
+    /// El precio del producto, o <c>null</c> si su <c>productPriceBase</c> no es inequívocamente
+    /// uno. <b>Null es «no se sabe», y el producto no se lista.</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>Devolvía <c>decimal</c> con respaldo a <c>0m</c> (#123), así que <c>"49.000"</c> se
+    /// listaba a 49 y <c>"$89000"</c> a cero. La regla de qué texto es un precio vive en
+    /// <see cref="PrecioAutorado"/>; lo que se decide acá es que un producto sin precio legible
+    /// no se sirve — <b>la misma política que <c>UmbracoProductCatalogSource</c></b>, porque son
+    /// las dos caras de la misma vitrina y que una liste lo que la otra omite sería peor que la
+    /// duplicación.</para>
+    ///
+    /// <para><b>Y aquí el cero además reordenaba la lista:</b> este precio es la clave de
+    /// <c>price-asc</c>, así que un producto ilegible se iba de cabeza al primer puesto, que es
+    /// donde más se mira.</para>
+    /// </remarks>
+    private static decimal? ParsePrice(IPublishedContent product)
     {
         var raw = product.Value<string>("productPriceBase");
-        return decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var price) ? price : 0m;
+        return PrecioAutorado.EsInequivoco(raw, out var price) && price > 0m ? price : null;
     }
 }

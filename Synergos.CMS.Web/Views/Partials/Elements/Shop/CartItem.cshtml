@@ -31,9 +31,15 @@
         string.IsNullOrWhiteSpace(variant) ? null : $"syn-cart-item--{variant}",
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
-    // unitPrice es un string editor-facing: si es un decimal crudo lo formateamos
-    // es-CO vía IPriceFormatter; si ya viene con formato, se muestra tal cual.
-    var unitPriceDisplay = decimal.TryParse(unitPrice, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var unitPriceVal)
+    // unitPrice es un string editor-facing: si es un monto INEQUÍVOCO lo formateamos es-CO vía
+    // IPriceFormatter; si no, se muestra tal cual lo tecleó el editor.
+    //
+    // Misma regla que el catálogo y el carrito (#123). Con el TryParse anterior —Number +
+    // InvariantCulture— un "49.000" salía como "$ 49": ahí el punto es separador DECIMAL, así
+    // que el bloque REESCRIBÍA el precio del editor dividido por mil. La política acá es la
+    // contraria a la de la ficha: no se omite nada, porque este texto es todo lo que hay y
+    // mostrarlo crudo no inventa ningún número.
+    var unitPriceDisplay = Synergos.CMS.Web.Services.PrecioAutorado.EsInequivoco(unitPrice, out var unitPriceVal)
         ? PriceFormatter.Format(unitPriceVal)
         : unitPrice;
 }
