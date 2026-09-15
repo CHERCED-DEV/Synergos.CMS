@@ -141,12 +141,23 @@ Synergos.CMS/
 ```
 
 > **El árbol de servicios está construido y el producto ya lo consume**, aunque
-> con todos los interruptores apagados por defecto. El CMS habla hoy con **siete**
+> con todos los interruptores apagados por defecto. El CMS habla hoy con **nueve**
 > capacidades —`Sessions`, `Booking`, `Workflow`, `Messaging`, `Signing`,
-> `Identity` y `Audit`— y con los cuatro orquestadores. Esta línea decía «UNA»
-> desde antes de las HU #24, #25, #33a, #35, #36, #40, #44, #45, #46, #62 y #15:
-> un agente que la leyera concluía que no había nada cableado y proponía de cero
-> lo que ya existe. Ver §11, que es donde está el detalle.
+> `Identity`, `Audit`, `Cart` y `Payments`— y con los cuatro orquestadores. Esta
+> línea decía «UNA» desde antes de las HU #24, #25, #33a, #35, #36, #40, #44,
+> #45, #46, #62 y #15: un agente que la leyera concluía que no había nada
+> cableado y proponía de cero lo que ya existe. Ver §11, que es donde está el
+> detalle.
+>
+> **Y decía «siete» cuando ya eran nueve** (#114) — le faltaban `Cart`, de la
+> séptima rebanada de la HU #14, y `Payments`, del cobro de la tasa de un
+> trámite (#27): las dos entradas después de la última vez que alguien contó a
+> mano. **Hoy la frase se DERIVA y hay gate** (`CapacidadesConectadasTests`):
+> cruza las rutas `/v1/` que declara cada `Synergos.Api.*` contra las que piden
+> los clientes HTTP del CMS que algún composer registra, y exige que esta frase
+> las **nombre** una por una, no que acierte la cifra. Una cifra correcta con la
+> lista incompleta es peor que una cifra equivocada: la lista es lo que alguien
+> lee para saber qué ya existe antes de proponerlo de cero.
 
 ## 3. Dónde está la verdad
 
@@ -642,6 +653,20 @@ Las que salieron de construir el árbol de servicios (§0.B):
   (`MoldeDelVerticalTests`). La salida no es siempre «hacelo `Bff`»: si de
   verdad no hay nada que deshacer, son dos capacidades independientes y llevan
   dos interruptores. Ver `docs/product/12-el-molde-de-un-vertical.md`.
+- `feedback_a_named_list_beats_a_count` — **cuando una frase de la guía dice
+  «el CMS habla con N capacidades» y las NOMBRA, el gate tiene que derivar
+  la LISTA, no la cifra.** Un gate que cuadre sólo el número se conforma con
+  una lista incompleta, y la lista es lo que alguien lee para saber qué ya
+  existe antes de proponerlo de cero — que es exactamente el daño que esa
+  frase causó diciendo «UNA» durante once HU. Se deriva **por ruta**: un
+  cliente HTTP no nombra a su capacidad —su URL llega por configuración— así
+  que lo único que la identifica es qué `/v1/…` pide, cruzado contra lo que
+  declara cada `Endpoints/`. Dos cortes que hacen falta: se exige que el
+  cliente esté **CABLEADO** (una clase que ningún composer registra no es una
+  conexión, es código que nadie ejecuta), y **una ruta que declaran dos
+  capacidades no cuenta para ninguna** — `/v1/holds` es de `Api.Booking` y de
+  `Api.Inventory`, y contarla daría por conectada una a la que nadie habla.
+  Al escribirlo, la frase decía siete y eran **nueve**.
 
 ## 6. Prohibiciones explícitas
 
