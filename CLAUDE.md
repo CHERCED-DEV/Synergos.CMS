@@ -853,7 +853,7 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   uno**, porque una cabecera que dice «(14)» sobre trece filas pasa el
   recuento y deja un stub que nadie va a tomar — es la tabla que se lee
   para elegir el siguiente trabajo, no la rejilla del inventario.
-  De los 13, **once** están hechos: la tienda compra contra `Bff.Tienda`
+  De los 13, **trece** están hechos: la tienda compra contra `Bff.Tienda`
   (`Synergos:Tienda:Mode=Bff`, HU #24), la cita clínica agenda contra
   `Bff.Salud` (`Synergos:Salud:Mode=Bff`, HU #25), la visita al inmueble
   aparta cupo **directo contra `Api.Booking`, sin orquestador**
@@ -862,12 +862,12 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   expediente decide contra `Api.Workflow`**, también directo
   (`Synergos:Gob:Mode=Api`, HU #44) — y **el acto administrativo se pone
   en conocimiento contra `Api.Messaging`**, por su propio interruptor
-  (`Synergos:Gob:Notifications:Mode=Api`, HU #62). El default sigue
-  siendo `Stub` —`Local` en el de notificaciones— en todos. **Faltan
-  dos**, y los dos por lo mismo: `StubPaymentProvider` y
-  `StubApplicationService` → `Api.Payments`. **Ya no están bloqueados**: #27
-  entregó el adaptador y decidió lo que los tenía parados —quién cobra—, así
-  que lo que queda es el cableado, que es trabajo y no una espera.
+  (`Synergos:Gob:Notifications:Mode=Api`, HU #62) — y **el cobro va a
+  `Api.Payments`**, por dos interruptores (`Synergos:Payments:Mode=Api`
+  para el seam entero, `Synergos:Gob:Payments:Mode=Api` para la tasa de un
+  trámite, #27). El default sigue siendo `Stub` —`Local` en el de
+  notificaciones y en el de la tasa, `Engine` en el del seam— en todos.
+  **Faltan cero**: la familia A está cableada entera.
 
   > **`StubApplicationService` NO espera un orquestador, y el mapa se
   > equivocó con el mismo filtro por CUARTA vez.** Decía «con pago de por
@@ -887,6 +887,50 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   >
   > **Y eso deja a `Bff.Gob` sin razón para existir hoy** — que es la
   > consecuencia que importa, porque #15 estaba bloqueada esperándolo.
+
+  > **Y el cobro son DOS interruptores porque son dos alcances, no dos
+  > capacidades** (#27, la parte que quedó viva). `Synergos:Payments:Mode=Api`
+  > cambia el seam ENTERO —los ocho consumidores del motor en proceso— y **se
+  > niega a cablear** si Tienda, Salud, Eventos o Viajes siguen comprando de
+  > este lado: esos flujos apartan, cobran y confirman en varios pasos, y el CMS
+  > no tiene dónde anotar una compensación pendiente. Con plata de verdad
+  > detrás, eso es stock apartado que nadie suelta y cobros sin pedido — el
+  > atajo que `ShopWiringTests` vigila en compilación, dicho ahora en tiempo de
+  > arranque.
+  >
+  > **La tasa de un trámite no espera a eso, y por eso tiene el suyo**:
+  > radicar no compone una saga —el motor decide no abortar el trámite si la
+  > captura no sale—, así que es el único consumidor que puede hablarle a la
+  > capacidad hoy. Es la misma forma que `Synergos:Gob:Notifications:Mode`.
+  >
+  > **Y el `actionUrl` ya tiene lector.** Lo emitía `Api.Payments` desde la
+  > HU #27 sin consumidor, y sin él no se cobra con checkout hospedado: la
+  > transacción nace cuando el comprador la completa, así que una sesión con
+  > acción pendiente no tiene nada que capturar. `HttpPaymentProvider` lo
+  > traduce a `RequiresAction` + `PaymentAction.Redirect`, y la radicación
+  > **no captura** en ese caso — capturar igual dejaba escrito en el
+  > expediente un rechazo que nadie dio. **Lo que falta es enseñárselo a
+  > quien paga**, y eso vive en el otro árbol: ninguna pantalla lee todavía
+  > esa redirección.
+  >
+  > **Y un hallazgo de camino: la tasa pendiente no se puede LEER.** El
+  > expediente guarda `PaymentStatus` desde siempre y **ninguna superficie lo
+  > devuelve** —`CaseDetail` no lo declara, así que la bandeja del ciudadano y
+  > la cola del funcionario no lo ven—. Con el motor en proceso daba igual,
+  > porque siempre decía `Captured`; con la capacidad detrás, un
+  > `Unavailable` es exactamente el caso que alguien tendría que perseguir, y
+  > queda escrito donde nadie mira. Es una escritura sin camino de lectura, el
+  > espejo de `feedback_no_read_without_a_write_path`. No se arregla acá: sacarlo
+  > cruza el DTO del borde y la pantalla del otro árbol.
+  >
+  > **Lo que esa guarda NO cubre, y va dicho**: la matrícula de Educación
+  > (`StubEnrollmentService`) también compone y no tiene bandera que mirar,
+  > porque `Bff.Academy` no existe. Va en el orden correcto —abre la sesión,
+  > guarda la matrícula pendiente y captura en un confirm aparte, que es
+  > idempotente—, así que la ventana es «capturado y la activación no se
+  > escribió» y se rescata repitiendo el confirm. El día que exista
+  > `Bff.Academy`, su bandera entra en la lista. Hay gate
+  > (`PaymentsWiringTests`).
 
   > **El acto administrativo notificado existe para sostener CUÁNDO
   > ACCEDIÓ, no para enviar** (#62). Un correo enviado prueba que salió del
@@ -1104,9 +1148,12 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > quien constata que la plata se movió es capturar, que contesta
   > *transitorio* mientras la transacción no exista o siga `PENDING`. Eso
   > encaja con la máquina de sagas sin tocarla —capturar se reintenta; al
-  > rendirse, se libera una intención que nadie pagó—. **Lo que falta para que
-  > un comprador pueda pagar es que alguien LEA el `actionUrl`** que la
-  > capacidad ya emite: el camino de escritura existe y el consumidor no.
+  > rendirse, se libera una intención que nadie pagó—. **El `actionUrl` ya lo
+  > lee alguien**: `HttpPaymentProvider` lo traduce a `RequiresAction` +
+  > `PaymentAction.Redirect` y con eso el CMS deja de capturar una intención
+  > que nadie completó (#27). **Lo que sigue faltando es enseñárselo a quien
+  > paga**, y eso vive en el otro árbol: ninguna pantalla lee todavía esa
+  > redirección.
   >
   > **Y el desenlace también llega solo, por `POST /v1/webhooks/wompi`**, que es
   > el segundo endpoint del árbol de servicios fuera de la llave compartida
