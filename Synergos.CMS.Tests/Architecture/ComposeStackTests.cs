@@ -94,9 +94,29 @@ public sealed class ComposeStackTests
             Directory.EnumerateFiles(Path.Combine(RepoRoot(), "tools"), "*.sh")
                 .Select(File.ReadAllText));
 
+        // LA ÚNICA EXCEPCIÓN, con su razón al lado y con la guarda debajo: las
+        // `RCLONE_CONFIG_*` del respaldo (HU #31) las lee `rclone` de su propio entorno, no
+        // nuestro código. Escribirlas en un script sólo para que este gate las viera sería
+        // reenviar a rclone lo que rclone ya lee — ceremonia que además obligaría a mantener la
+        // lista de opciones de cada proveedor.
+        //
+        // Va por PREFIJO y no por lista de nombres: el remoto se llama como el arquitecto
+        // quiera, y las opciones dependen del backend que elija.
         var huerfanas = VariablesDocumentadas()
+            .Where(v => !v.StartsWith("RCLONE_CONFIG_", StringComparison.Ordinal))
             .Where(v => !consumidores.Any(c => c.Contains("${" + v, StringComparison.Ordinal)))
             .ToList();
+
+        // Y la exención no puede sobrevivir a la herramienta que la justifica. Si mañana el envío
+        // deja de usar `rclone`, esas variables pasan a no consumirlas nadie y este gate tiene que
+        // volver a verlas — un permiso que sobra deja de leerse (es el argumento de la lista de
+        // `HttpClient` del gate #49).
+        if (VariablesDocumentadas().Any(v => v.StartsWith("RCLONE_CONFIG_", StringComparison.Ordinal)))
+        {
+            Assert.Contains("rclone",
+                File.ReadAllText(Path.Combine(RepoRoot(), "tools", "enviar-respaldo.sh")),
+                StringComparison.Ordinal);
+        }
 
         Assert.True(huerfanas.Count == 0,
             $"`.env.example` declara variables que no consume ni compose.prod.yml ni ningún "
