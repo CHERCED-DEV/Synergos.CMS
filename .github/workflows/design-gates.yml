@@ -20,22 +20,42 @@ name: Design gates (anti-drift)
 on:
   pull_request:
     paths:
+      # Lo que LEEN los cuatro gates de este workflow. Cruzado por
+      # `DisparadoresDeGatesTests` contra los `join(…, 'Synergos.CMS.Web', …)`
+      # de cada script — una lista a mano acá se desvía en silencio, y ya pasó:
+      # `Controllers/**` faltaba, así que un PR que tocaba SÓLO un controller no
+      # disparaba G-6 ni G-7, que son justo los dos que miran controllers (#128).
       - 'Synergos.CMS.Web/Views/**'
       - 'Synergos.CMS.Web/wwwroot/css/**'
       - 'Synergos.CMS.Web/uSync/v9/ContentTypes/**'
+      - 'Synergos.CMS.Web/Controllers/**'
+      # Y los propios gates: tocar uno, o su línea base, tiene que correrlo.
       - 'tools/check-css-parity.mjs'
       - 'tools/css-parity-allowlist.txt'
+      - 'tools/contract-keys.mjs'
+      - 'tools/contract-keys.baseline.json'
+      - 'tools/contract-bodies.mjs'
       - '.github/workflows/design-gates.yml'
   push:
     branches:
       - main
       - master
     paths:
+      # Lo que LEEN los cuatro gates de este workflow. Cruzado por
+      # `DisparadoresDeGatesTests` contra los `join(…, 'Synergos.CMS.Web', …)`
+      # de cada script — una lista a mano acá se desvía en silencio, y ya pasó:
+      # `Controllers/**` faltaba, así que un PR que tocaba SÓLO un controller no
+      # disparaba G-6 ni G-7, que son justo los dos que miran controllers (#128).
       - 'Synergos.CMS.Web/Views/**'
       - 'Synergos.CMS.Web/wwwroot/css/**'
       - 'Synergos.CMS.Web/uSync/v9/ContentTypes/**'
+      - 'Synergos.CMS.Web/Controllers/**'
+      # Y los propios gates: tocar uno, o su línea base, tiene que correrlo.
       - 'tools/check-css-parity.mjs'
       - 'tools/css-parity-allowlist.txt'
+      - 'tools/contract-keys.mjs'
+      - 'tools/contract-keys.baseline.json'
+      - 'tools/contract-bodies.mjs'
       - '.github/workflows/design-gates.yml'
 
 jobs:

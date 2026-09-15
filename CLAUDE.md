@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3242 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3244 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3242 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3244 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (18, ADR 0133)
@@ -807,6 +807,28 @@ Las que salieron de construir el árbol de servicios (§0.B):
   `Error`, los dos con `Layout = null`, o sea sin heredar el `<head>` que traía el
   mapa—. Con la lista a mano de los dos que ya se sabían, los otros dos seguirían
   ahí.
+- `feedback_a_gate_runs_when_what_it_READS_changes` — **un gate que no se dispara en el
+  cambio que lo necesita no falla: se SALTA, y en la lista de checks un «skipped» se lee
+  igual que un «no aplica».** `design-gates.yml` corre G-6 y G-7 —los dos que cruzan
+  `Synergos.CMS.Web/Controllers/` contra el repo hermano— y su filtro `paths:` **no
+  nombraba esa carpeta**, así que un PR que tocaba sólo un controller no disparaba ninguno
+  de los dos (#128). Los siete defectos de contrato de #102–#110 vivían todos en un
+  controller, y G-7 se escribió como **error y no trinquete** por lo caros que fueron: un
+  gate con esa severidad que no corre es peor que no tenerlo, porque da sensación de
+  cobertura. **Ningún test lo habría visto de forma natural**: el filtro y el script viven
+  en ficheros y lenguajes distintos, y nada cruzaba «qué lee» contra «cuándo corre» — la
+  forma de `feedback_a_generator_branch_that_returns_early_swallows_the_shared_tail`, con
+  las dos piezas bien escritas y el REPARTO mal. **Añadir la ruta arregla hoy; derivarla
+  arregla la próxima**, y por eso el gate parsea los `join(…, 'Synergos.CMS.Web', …)` de
+  cada script —sobre la fuente SIN comentarios, que si no mide la prosa— y cruza **en los
+  dos sentidos**: una carpeta leída y no nombrada rompe el build, y una nombrada que nadie
+  lee también, porque una ruta que sobra convierte el filtro en ruido.
+  **Y el segundo diente destapó su propio punto ciego al primer intento**: marcó
+  `uSync/**` como ruta muerta porque quien la lee es `validate-cms-contracts.mjs`, que vive
+  en el repo HERMANO y el gate se saltaba. La salida fácil era quitar ese diente; la
+  honesta fue declarar qué lee cada script remoto **con su razón al lado**, y escribir el
+  riesgo que eso deja —si el hermano deja de leer uSync, esto se queda diciendo que sí—
+  en vez de insinuar que el cruce es completo.
 - `feedback_a_named_list_beats_a_count` — **cuando una frase de la guía dice
   «el CMS habla con N capacidades» y las NOMBRA, el gate tiene que derivar
   la LISTA, no la cifra.** Un gate que cuadre sólo el número se conforma con
@@ -1054,7 +1076,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3242 tests):
+# Suite completa (3244 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -1350,7 +1372,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3242 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3244 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
