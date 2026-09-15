@@ -158,6 +158,47 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         var plan = ResolvePlan(detail, planCode);
         var total = plan?.Total ?? course.Price;
 
+        // ─────────────────────────────────────────────────────────────────────────────────
+        // NADIE SE MATRICULA DOS VECES AL MISMO CURSO — Y «DOS VECES» NO ES «YA EXISTE» (#121).
+        //
+        // `POST /academy/enroll` no lleva llave de idempotencia, así que un enroll que sale del
+        // servidor y cuya respuesta se pierde se repite al volver a pulsar. En la rama GRATIS eso
+        // dejaba DOS matrículas activas del mismo alumno al mismo curso, permanentes y sin que
+        // nada fallara; en la de pago abría una segunda sesión de cobro para un curso que el
+        // alumno YA TIENE, o sea le dejaba pagar dos veces lo mismo.
+        //
+        // La propiedad es del NEGOCIO y no del transporte —nadie se matricula dos veces al mismo
+        // curso—, así que se resuelve por el par (alumno, curso) y no exigiéndole una cabecera al
+        // llamador: una llave de idempotencia le pasa al cliente la responsabilidad de acordarse,
+        // y el cliente es exactamente quien acaba de perder la respuesta.
+        //
+        // ⚠️ Y `Cancelled` NO bloquea, que es la mitad fina: encontrar un registro no significa
+        // «esto ya pasó». Quien se dio de baja y quiere volver tiene que poder — es la lección del
+        // defecto #41, donde encontrar la llave de idempotencia encerraba al comprador cuya compra
+        // anterior se había deshecho entera.
+        //
+        // `PendingPayment` tampoco bloquea, y va dicho en vez de omitido: devolver la matrícula
+        // pendiente devolvería su sesión de cobro, que puede estar muerta, y dejaría al alumno
+        // encerrado sin forma de pagar. Un segundo pendiente es ruido —sólo uno se confirma— y no
+        // daño. El día que las sesiones se puedan revalidar, esto se revisa.
+        // ─────────────────────────────────────────────────────────────────────────────────
+        var yaMatriculado = (await LoadAllEnrollmentsAsync(cancellationToken)).FirstOrDefault(e =>
+            e.Status == EnrollmentStatus.Active
+            && string.Equals(e.CourseId, course.Id, StringComparison.Ordinal)
+            && string.Equals(e.StudentEmail, studentEmail, StringComparison.OrdinalIgnoreCase));
+
+        if (yaMatriculado is not null)
+        {
+            // Se re-emite el aviso por la MISMA razón que `ConfirmAsync` cuando ya está activa: el
+            // ledger del dispatcher deduplica (un hecho → un aviso), así que es inofensivo, y
+            // rescata el caso en que el primero no llegó a notificar.
+            await NotifyActiveAsync(yaMatriculado, course.Title, cancellationToken);
+            return new CourseEnrollmentResult(
+                Enrolled: true,
+                EnrollmentId: yaMatriculado.EnrollmentId,
+                Currency: yaMatriculado.Currency);
+        }
+
         // Rama gratis: matrícula Active inmediata, sin sesión de pago. Mira el TOTAL y no
         // `course.IsFree`, porque con un plan elegido el que manda es el del plan.
         if (total <= 0m)

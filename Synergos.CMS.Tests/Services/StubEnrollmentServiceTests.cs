@@ -117,6 +117,126 @@ public class StubEnrollmentServiceTests
         Assert.Equal(FreeCourse, Assert.Single(mine).CourseId);
     }
 
+    /// <summary>
+    /// Matricularse dos veces al mismo curso deja UNA matrícula, no dos.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Qué cierra</b> (#121). <c>POST /academy/enroll</c> no lleva llave de idempotencia,
+    /// así que un enroll que sale del servidor y cuya respuesta se pierde se repite al volver a
+    /// pulsar. Hasta #117 eso ni llegaba —el cliente fabricaba el acuse—; hoy llega.</para>
+    ///
+    /// <para><b>EL FIXTURE USA EL CURSO GRATIS A PROPÓSITO, Y ES LA MITAD QUE CUESTA.</b> La rama
+    /// gratis activa la matrícula EN EL ACTO y nunca pasa por <c>ConfirmAsync</c>, así que el
+    /// segundo enroll dejaba una segunda matrícula <b>Active</b>, permanente. Con un curso de
+    /// pago el segundo se queda en <c>PendingPayment</c> —sólo uno se confirma— y el defecto
+    /// pasaría en VERDE.</para>
+    ///
+    /// <para>Y se comprueba el <b>identificador</b>, no sólo la cuenta: devolver una matrícula
+    /// nueva que apunte a la misma persona seguiría partiendo el expediente en dos.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Enroll_DosVeces_AlMismoCursoGratis_DejaUNA()
+    {
+        var (svc, _) = Make();
+        var juan = StudentJuan();
+
+        var primera = await svc.EnrollAsync(FreeCourse, juan);
+        var segunda = await svc.EnrollAsync(FreeCourse, juan);
+
+        Assert.True(primera.Enrolled);
+        Assert.True(segunda.Enrolled);
+        Assert.Equal(primera.EnrollmentId, segunda.EnrollmentId);
+
+        var mine = await svc.GetEnrollmentsAsync(juan.Email);
+        Assert.Equal(FreeCourse, Assert.Single(mine).CourseId);
+    }
+
+    /// <summary>
+    /// Quien YA tiene el curso activo no abre una segunda sesión de cobro.
+    /// </summary>
+    /// <remarks>
+    /// <b>Esto es plata</b> (#121): sin el corte, matricularse de nuevo a un curso de pago que ya
+    /// se tiene abría una sesión nueva y dejaba pagar dos veces lo mismo. El curso se activa
+    /// primero confirmando, que es el único camino por el que un curso de pago llega a
+    /// <c>Active</c>.
+    /// </remarks>
+    [Fact]
+    public async Task Enroll_CuandoYaEstaActivo_NoAbreOtraSesionDeCobro()
+    {
+        var pagos = new ContandoSesiones();
+        var (svc, _) = Make(pagos);
+        var juan = StudentJuan();
+
+        var primera = await svc.EnrollAsync(PaidCourse, juan);
+        await svc.ConfirmAsync(primera.OrderRef!);             // → Active
+        Assert.Equal(1, pagos.Sesiones);
+
+        var segunda = await svc.EnrollAsync(PaidCourse, juan);
+
+        Assert.Equal(1, pagos.Sesiones);                       // NO se abrió otra
+        Assert.Equal(primera.EnrollmentId, segunda.EnrollmentId);
+    }
+
+    /// <summary>
+    /// Sólo una matrícula ACTIVA bloquea: una pendiente de pago no encierra al alumno.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El alcance del corte, escrito en vez de omitido</b> (#121). Devolver la matrícula
+    /// pendiente devolvería su sesión de cobro, que puede estar muerta, y dejaría al alumno sin
+    /// forma de pagar. Un segundo pendiente es ruido —sólo uno se confirma— y no daño, así que se
+    /// prefiere el ruido al encierro. El día que las sesiones se puedan revalidar, esto se
+    /// revisa.</para>
+    ///
+    /// <para><b>Y la otra mitad NO se puede probar por la costura, que es un hallazgo en sí</b>:
+    /// el corte mira <c>Active</c> y por tanto <c>Cancelled</c> tampoco bloquea —la lección del
+    /// defecto #41, donde encontrar un registro encerraba a quien lo había deshecho—. Pero
+    /// <b>NADA en el repo pone una matrícula en <c>Cancelled</c></b>: <c>IEnrollmentService</c> no
+    /// tiene <c>CancelAsync</c> y ningún código asigna ese estado. Es un valor del vocabulario sin
+    /// camino de entrada — el espejo de <c>feedback_no_read_without_a_write_path</c>. Se deja
+    /// escrito acá en vez de fabricar el estado con un doble, que probaría el doble y no la
+    /// regla.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Enroll_ConUnaPendienteDePago_NoQuedaEncerrado()
+    {
+        var pagos = new ContandoSesiones();
+        var (svc, _) = Make(pagos);
+        var juan = StudentJuan();
+
+        await svc.EnrollAsync(PaidCourse, juan);   // → PendingPayment
+        await svc.EnrollAsync(PaidCourse, juan);   // sigue pudiendo intentar pagar
+
+        Assert.Equal(2, pagos.Sesiones);
+        Assert.Empty(await svc.GetEnrollmentsAsync(juan.Email));   // ninguna activa todavía
+    }
+
+    /// <summary>Un proveedor que cuenta cuántas sesiones de cobro se abrieron.</summary>
+    private sealed class ContandoSesiones : IPaymentProvider
+    {
+        private readonly StubPaymentProvider _real = new();
+        public int Sesiones { get; private set; }
+
+        public string ProviderKey => _real.ProviderKey;
+
+        public Task<PaymentSession> CreateSessionAsync(PaymentSessionRequest request, CancellationToken cancellationToken = default)
+        {
+            Sesiones++;
+            return _real.CreateSessionAsync(request, cancellationToken);
+        }
+
+        public Task<PaymentOutcome> GetStatusAsync(string sessionId, CancellationToken cancellationToken = default)
+            => _real.GetStatusAsync(sessionId, cancellationToken);
+
+        public Task<PaymentOutcome> CaptureAsync(string sessionId, decimal? amount = null, CancellationToken cancellationToken = default)
+            => _real.CaptureAsync(sessionId, amount, cancellationToken);
+
+        public Task<PaymentOutcome> VoidAsync(string sessionId, CancellationToken cancellationToken = default)
+            => _real.VoidAsync(sessionId, cancellationToken);
+
+        public Task<PaymentOutcome> RefundAsync(string sessionId, decimal? amount = null, CancellationToken cancellationToken = default)
+            => _real.RefundAsync(sessionId, amount, cancellationToken);
+    }
+
     [Fact] // empty: un alumno sin matrículas no lanza
     public async Task GetEnrollments_SinMatriculas_DevuelveVacio()
         => Assert.Empty(await Make().Svc.GetEnrollmentsAsync("nadie@synergos.co"));
