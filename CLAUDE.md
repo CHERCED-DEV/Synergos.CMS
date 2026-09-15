@@ -1185,14 +1185,77 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   orquestadores, no uno elegido a dedo**; que coincidan sobre el mismo
   envío no manda dos correos, porque la capacidad rechaza el reintento
   simultáneo (`retry_in_flight`).
-- **Las copias existen pero NO salen del servidor** (HU #31).
-  `tools/respaldo.sh` copia en frío los volúmenes de datos —la lista sale
-  del compose, no de una lista a mano— y `tools/restaurar.sh` los
-  devuelve, exigiendo `--si-estoy-seguro` porque pisa lo vivo. Hay gate
-  (`RespaldoTests`). **Lo que falta es llevárselas fuera de la máquina**:
-  una copia que muere con el disco no protege de perder el disco. Y dónde
-  viven y cuánto duran es decisión de privacidad — llevan direcciones de
-  entrega y nombres de pacientes.
+- **Las copias YA salen del servidor, cifradas, y hay un ensayo que las
+  restaura de verdad** (HU #31). `tools/respaldo.sh` copia en frío —la lista
+  sale del compose, no de una lista a mano—, `tools/enviar-respaldo.sh` las
+  cifra con `age` y las sube a un remoto de `rclone`, `tools/restaurar.sh`
+  las devuelve exigiendo `--si-estoy-seguro`, y `tools/prueba-restauracion.sh`
+  las trae del remoto, las descifra, las restaura sobre un proyecto APARTE y
+  **le pide los datos de vuelta por HTTP**. Hay gate (`RespaldoTests`), y el
+  cron lo pone `bootstrap-servidor.sh`.
+
+  > **Escribir la copia y leerla son dos trabajos, y el segundo es el que
+  > vale.** Se midió levantando `Api.Audit` sobre un almacén ilegible:
+  > **`/health` contesta 200 y la lectura 500** — o sea que un humo de salud
+  > da por buena una restauración inservible. Es el defecto #82 tal cual, y
+  > ningún `tar -t` ni ningún `sha256` lo habría visto, porque los bytes
+  > estaban perfectos. Y hay un escalón más: un almacén que se lee A MEDIAS
+  > contesta **200 con menos registros**, porque el conversor es tolerante,
+  > así que el ensayo no mira el código de estado sino que exige que
+  > **vuelvan datos**. Una instalación nueva contesta 200 a las dieciocho
+  > colecciones.
+
+  > **El respaldo del producto no llevaba el producto, y no fallaba.** El
+  > filtro era `grep -E -- '-data$'`, que INCLUYE: copiaba `caddy-data`
+  > —certificados que Caddy vuelve a pedir solos— y dejaba fuera `cms-db`
+  > (la base de Umbraco), `cms-media` (la biblioteca), `cms-appdata` y
+  > `cms-dpkeys`. Sin ese último no se puede descifrar la llave de firma de
+  > los diplomas al restaurar, y el propio código avisa de que «los
+  > certificados ya emitidos dejarán de verificar». Hoy el default es
+  > INCLUIR y lo que se excluye se nombra con su razón: **con un filtro que
+  > incluye, el volumen que nadie recordó se pierde en silencio; con uno que
+  > excluye, se copia de más.** El gate cruza la lista de exclusiones contra
+  > el compose. Y los tres scripts del servidor **tampoco llegaban al
+  > servidor**: el despliegue copiaba sólo `deploy-remoto.sh`, así que la
+  > máquina que había que proteger era la única sin con qué respaldarse.
+
+  > **Cifrado ASIMÉTRICO, y la mitad que importa es cuál llave NO está
+  > acá.** El servidor tiene la pública: puede escribir respaldos y **no
+  > puede leer los que ya mandó**. Con una contraseña simétrica, quien se
+  > lleva la máquina se lleva el histórico entero, que es bastante más que
+  > lo que hay vivo en ella en ese momento. **No hay modo «sin cifrar»** —el
+  > modo sin cifrar es el que alguien deja puesto «por ahora»— y por eso
+  > `enviar-respaldo.sh` falla **antes de mover un byte** si le falta la
+  > llave o el destino: es la forma del #56 y la de la llave de firma de
+  > `Api.Identity`. Lo que NO falla es no estar configurado en absoluto: ahí
+  > `respaldo.sh` dice a gritos que lo que dejó **no es un respaldo**, que
+  > es el otro modo de fallar bien. El precio de la asimetría está dicho: si
+  > se pierde la identidad los respaldos son ruido, y **uno ilegible y uno
+  > que no existe se ven igual desde el bucket**. Lo único que distingue los
+  > dos casos es correr el ensayo.
+
+  > **La retención está escrita y no admite «para siempre»**: 30 días fuera,
+  > 7 en el servidor, y un piso de 3 copias que sobreviven pase lo que pase.
+  > El `0` se **rechaza** — guardar indefinidamente un archivo con los datos
+  > personales de todo el producto es una decisión que nadie tomó. Se poda
+  > **después** de comprobar que la de hoy llegó (podar antes es cómo se
+  > acaba con cero copias la noche en que el envío falla), la edad sale del
+  > sello del NOMBRE y no de la fecha del objeto remoto (copiar un bucket a
+  > otro le pone a todo la fecha de hoy), y el piso de 3 es lo que impide
+  > que un cron roto durante un mes se lleve por delante la última copia
+  > buena, en silencio.
+
+  > **Lo que el respaldo NO lleva, y es deliberado: el `.env` del
+  > servidor.** Meter ahí la llave compartida, la de identidad, la de la
+  > pasarela y la del correo convertiría la copia en el objeto más valioso
+  > del producto y a la identidad de `age` en la llave de todo — custodia de
+  > secretos disfrazada de copia de datos. Casi todo eso se regenera; **uno
+  > no**: `Synergos:Academy:CertificateSigningSecret`, sin el cual los
+  > diplomas ya emitidos dejan de verificar. Va donde va la identidad.
+  >
+  > **Lo que queda es del arquitecto y no es código**: qué proveedor y qué
+  > bucket, y crear la llave. Ver `docs/despliegue/00-montar-el-entorno.md`
+  > §6.
 - **19 capacidades sobre fichero JSON** con `lock` de proceso. Una sola
   instancia por capacidad; dos réplicas se pisan. Está dicho de frente
   en `JsonCollectionStore` y es la primera razón para cambiar de almacén.
