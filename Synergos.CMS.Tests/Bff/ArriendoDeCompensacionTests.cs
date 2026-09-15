@@ -24,11 +24,19 @@ namespace Synergos.CMS.Tests.Bff;
 /// <c>CLAUDE.md</c> §11 da para tocarlo.</para>
 ///
 /// <para><b>DOS almacenes sobre el mismo directorio, y eso ES el fixture.</b> Un proceso se simula
-/// con su propia instancia de <see cref="FileSystemSagaStore{TSaga}"/> porque el caché de
-/// <c>JsonCollectionStore</c> vive en la instancia: dos instancias son dos cachés, que es la única
-/// diferencia que importa entre un proceso y otro. Con un solo almacén compartido los dos motores
-/// verían el mismo diccionario y <b>el defecto no se reproduce</b> — el test pasaría en verde sin
-/// arriendo y no probaría nada (la lección de <c>AbandonoTests</c>, con otro disfraz).</para>
+/// con su propia instancia de <see cref="FileSystemSagaStore{TSaga}"/> y su propio motor: lo que
+/// se reproduce es que dos barridos independientes miran el mismo directorio a la vez. Con un solo
+/// motor compartido los dos pasos irían por el mismo <c>lock</c> y <b>el defecto no se
+/// reproduce</b> — el test pasaría en verde sin arriendo y no probaría nada (la lección de
+/// <c>AbandonoTests</c>, con otro disfraz).</para>
+///
+/// <para><b>Lo que ya NO hace falta simular es el caché</b> (#112). Esta nota decía que dos
+/// instancias eran dos cachés y que ésa era «la única diferencia que importa entre un proceso y
+/// otro». Era cierto y dejó de serlo: <c>JsonCollectionStore</c> guarda un fichero por documento y
+/// relee el disco en cada lectura, así que una réplica ya no puede decidir contra la foto de su
+/// arranque. El arriendo <b>sigue haciendo falta</b> por lo otro, que es lo que el caché nunca
+/// tapó: dos barridos que miran el disco <i>en el mismo instante</i> ven los dos la misma
+/// compensación pendiente.</para>
 /// </remarks>
 public sealed class ArriendoDeCompensacionTests : IDisposable
 {
@@ -312,13 +320,17 @@ public sealed class ArriendoDeCompensacionTests : IDisposable
         var uno = Levantar(contador);
         var otro = Levantar(contador);
 
-        // ⚠️ EL FIXTURE: el segundo lee ANTES de que exista la saga, así que su caché queda
-        // cargado y VACÍO. Sin esta lectura, su primera consulta bajaría al disco y encontraría la
-        // saga igual — el test pasaría en verde sin releer y no probaría nada.
+        // ⚠️ EL FIXTURE, y lo que cambió con el #112. El segundo lee ANTES de que exista la saga:
+        // con el almacén anterior eso le dejaba el caché cargado y VACÍO, y ahí estaba el defecto
+        // —la réplica barría contra la foto de su arranque y no compensaba nada de lo que no vio
+        // nacer—. Hoy el almacén es un fichero por documento y NO cachea, así que la lectura
+        // previa ya no envenena nada y la segunda réplica ve la saga en cuanto está en el disco.
+        // Se deja la lectura puesta a propósito: es la secuencia que reproducía el defecto, y que
+        // ahora salga bien es el resultado, no la ausencia de prueba.
         Assert.Null(otro.Almacen.Find("compra-10"));
 
         uno.Almacen.Put(Deshaciendose("compra-10"));
-        Assert.Empty(otro.Almacen.WithPendingCompensations());   // no la ve: es la foto vieja
+        Assert.Single(otro.Almacen.WithPendingCompensations());   // la ve: ya no hay foto vieja
 
         var barrido = new CompensationSweeper<PurchaseSaga>(
             new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
