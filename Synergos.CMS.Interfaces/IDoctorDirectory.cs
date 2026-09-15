@@ -1,4 +1,4 @@
-namespace Synergos.CMS.Interfaces;
+﻿namespace Synergos.CMS.Interfaces;
 
 /// <summary>
 /// Directorio de médicos/staff del dashboard clínico EHR-lite (OLA 5). Alimenta
@@ -20,12 +20,26 @@ public interface IDoctorDirectory
 }
 
 /// <summary>
-/// Médico del EHR-lite con especialidad y disponibilidad de agenda. Datos de DEMO.
+/// Un profesional del directorio, con su especialidad y su disponibilidad de agenda.
 /// </summary>
+/// <remarks>
+/// <b>El <see cref="Id"/> es el SUJETO, y no el recurso.</b> Es lo que viaja como
+/// <c>professionalId</c> hacia <c>Bff.Salud</c>; el identificador del recurso de
+/// <c>Api.Booking</c> lo genera la capacidad y se resuelve con
+/// <c>GET /v1/resources?subjectKind=&amp;subjectId=</c> (HU #25). Ninguna convención de este
+/// lado puede acertarlo, y ya costó una vuelta entera intentarlo.
+/// </remarks>
 /// <param name="WorkingDays">Días laborables (DayOfWeek) en que atiende.</param>
 /// <param name="SlotStartHour">Hora local de inicio de atención (0-23).</param>
 /// <param name="SlotEndHour">Hora local de fin de atención (0-23).</param>
 /// <param name="SlotMinutes">Duración de cada slot, en minutos.</param>
+/// <param name="Phone">Teléfono del consultorio, o vacío si no consta.</param>
+/// <param name="Email">Correo del consultorio, o vacío si no consta.</param>
+/// <param name="AcceptingPatients">
+/// Si admite pacientes nuevos. <b><c>null</c> es «no consta», y no «no»</b> (#111): cerrarle
+/// la lista a quien sí recibe es tan falso como abrírsela a quien no. El directorio sembrado
+/// no lo sabe y lo deja en <c>null</c>; el autorado lo dice sólo cuando el editor lo eligió.
+/// </param>
 public sealed record MedicalDoctor(
     string Id,
     string FullName,
@@ -37,4 +51,7 @@ public sealed record MedicalDoctor(
     IReadOnlyList<DayOfWeek> WorkingDays,
     int SlotStartHour,
     int SlotEndHour,
-    int SlotMinutes);
+    int SlotMinutes,
+    string Phone = "",
+    string Email = "",
+    bool? AcceptingPatients = null);

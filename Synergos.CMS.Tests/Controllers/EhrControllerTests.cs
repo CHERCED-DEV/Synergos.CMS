@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -108,11 +108,16 @@ public sealed class EhrControllerTests
             StartUtc: inicio, EndUtc: inicio.AddMinutes(30), Status: status, ReservationId: "res-1");
     }
 
-    private static MedicalDoctor Medico(string id = "doc-1") => new(
+    private static MedicalDoctor Medico(
+        string id = "doc-1",
+        string phone = "",
+        string email = "",
+        bool? admitePacientes = null) => new(
         Id: id, FullName: "Dra. Ana Rojas", Specialty: "Medicina interna",
         LicenseNumber: "RM-1234", Rating: 4.8, YearsExperience: 12, AvatarUrl: null,
         WorkingDays: new[] { DayOfWeek.Monday, DayOfWeek.Wednesday },
-        SlotStartHour: 8, SlotEndHour: 16, SlotMinutes: 30);
+        SlotStartHour: 8, SlotEndHour: 16, SlotMinutes: 30,
+        Phone: phone, Email: email, AcceptingPatients: admitePacientes);
 
     private static EhrMedication Medicamento(string id = "med-1") => new(
         MedicationId: id, PatientId: "pat-1", MedicationName: "Losartán",
@@ -316,8 +321,8 @@ public sealed class EhrControllerTests
         Assert.Single(respuestas.Distinct(StringComparer.Ordinal));
     }
 
-    [Fact] // «Este médico acepta pacientes nuevos», dicho por quien no tiene cómo saberlo.
-    public async Task Doctors_NoDeclaraSiAceptaPacientesNuevos()
+    [Fact] // De quien no consta, no se afirma: sigue viajando `null` y no `false`.
+    public async Task Doctors_DeQuienNoConsta_NoDeclaraSiAceptaPacientesNuevos()
     {
         _doctors.ListAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(new[] { Medico() });
@@ -325,9 +330,37 @@ public sealed class EhrControllerTests
         var d = Json(await BuildSut().Doctors(null, default)).GetProperty("doctors")[0];
 
         // `null` y `false` no son lo mismo: cerrarle la lista a un médico que sí recibe es tan
-        // falso como abrírsela al que no.
+        // falso como abrírsela al que no. El staff sembrado no lo sabe, así que dice que no lo
+        // sabe — y el que SÍ lo sabe lo dice, que es el test de abajo.
         Assert.True(d.TryGetProperty("acceptingPatients", out var acepta));
         Assert.Equal(JsonValueKind.Null, acepta.ValueKind);
+    }
+
+    /// <summary>
+    /// Lo que el seam sí sabe, el borde lo dice — y no lo vuelve a escribir a mano (#118).
+    /// </summary>
+    /// <remarks>
+    /// <b>El fixture lleva el caso que el default NO produce.</b> Hasta el #118 el borde
+    /// escribía <c>null</c> y dos cadenas vacías porque <c>MedicalDoctor</c> no traía contacto;
+    /// ahora lo trae cuando el profesional se autoró en el CMS. Con un solo médico «no consta»,
+    /// pasar el dato del seam o volver a fabricarlo da EXACTAMENTE el mismo JSON, así que la
+    /// regla sólo se exige con uno que diga que NO admite y con un teléfono escrito: son los
+    /// valores que ninguna constante produce.
+    /// </remarks>
+    [Fact]
+    public async Task Doctors_ElContactoYLaListaAbierta_SalenDelSeamYNoDelBorde()
+    {
+        _doctors.ListAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new[]
+            {
+                Medico(phone: "+57 604 448 0901", email: "ana.rios@example.co", admitePacientes: false),
+            });
+
+        var d = Json(await BuildSut().Doctors(null, default)).GetProperty("doctors")[0];
+
+        Assert.Equal("+57 604 448 0901", d.GetProperty("phone").GetString());
+        Assert.Equal("ana.rios@example.co", d.GetProperty("email").GetString());
+        Assert.Equal(JsonValueKind.False, d.GetProperty("acceptingPatients").ValueKind);
     }
 
     [Fact]
