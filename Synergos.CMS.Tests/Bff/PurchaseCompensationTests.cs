@@ -150,10 +150,40 @@ public sealed class PurchaseCompensationTests
                   {"subjectKind":"tienda.producto","subjectId":"p-3","quantity":4}]}
         """;
 
+    /// <summary>
+    /// La cotización de esa canasta, <b>con un precio distinto por línea</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Los tres precios son distintos entre sí y distintos del total y del subtotal</b>,
+    /// y eso es lo que hace que el defecto #122 no pueda pasar en verde. Con una sola línea, el
+    /// precio unitario y el total coinciden; con tres líneas al mismo precio, leer el precio de
+    /// la línea equivocada da el mismo número. Acá 20 000 · 15 000 · 11 250 no se parecen a
+    /// nada: ni a 100 000 (el subtotal), ni a 119 000 (el total), ni entre sí.</para>
+    ///
+    /// <para><b>Y las cantidades también son distintas</b> (2 · 1 · 4), porque los subtotales
+    /// (40 000 · 15 000 · 45 000) son lo único que distingue «leí el precio unitario» de «leí el
+    /// subtotal de la línea».</para>
+    /// </remarks>
+    private const string CotizacionDeTres = """
+        {"lines":[{"subjectKind":"tienda.producto","subjectId":"p-1","quantity":2,
+                   "unitPrice":{"amount":20000,"currency":"COP"},
+                   "subtotal":{"amount":40000,"currency":"COP"},"tax":{"amount":7600,"currency":"COP"}},
+                  {"subjectKind":"tienda.producto","subjectId":"p-2","quantity":1,
+                   "unitPrice":{"amount":15000,"currency":"COP"},
+                   "subtotal":{"amount":15000,"currency":"COP"},"tax":{"amount":2850,"currency":"COP"}},
+                  {"subjectKind":"tienda.producto","subjectId":"p-3","quantity":4,
+                   "unitPrice":{"amount":11250,"currency":"COP"},
+                   "subtotal":{"amount":45000,"currency":"COP"},"tax":{"amount":8550,"currency":"COP"}}],
+         "subtotal":{"amount":100000,"currency":"COP"},
+         "discount":{"amount":0,"currency":"COP"},
+         "tax":{"amount":19000,"currency":"COP"},
+         "total":{"amount":119000,"currency":"COP"}}
+        """;
+
     private static CapacidadesFalsas Feliz() => new CapacidadesFalsas()
         .Ok("GET /v1/carts/c1", CanastaDeTres)
         .Ok("POST /v1/carts/c1/checkout", """{"id":"c1","ownerKind":"tienda.comprador","ownerId":"u-1","checkedOut":true,"open":false,"lines":[]}""")
-        .Ok("POST /v1/quotes", """{"subtotal":{"amount":100000,"currency":"COP"},"tax":{"amount":19000,"currency":"COP"},"total":{"amount":119000,"currency":"COP"}}""")
+        .Ok("POST /v1/quotes", CotizacionDeTres)
         // Tres productos, tres ítems de existencias, tres apartados distintos.
         .Secuencia("GET /v1/items",
             """{"id":"i-1","subjectKind":"tienda.producto","subjectId":"p-1","onHand":10,"available":10}""",
@@ -240,6 +270,110 @@ public sealed class PurchaseCompensationTests
         Assert.Empty(confirmada.Value.Pending());
         Assert.Equal(3, comprada.Value.Holds.Count);
         Assert.Equal(3, ctx.Caps.Veces("POST", "/consume"));
+    }
+
+    // ── El precio de cada línea (#122) ──────────────────────────────────────
+
+    /// <summary>Los precios unitarios que el pedido llevó, por sujeto.</summary>
+    private static Dictionary<string, decimal> PreciosDelPedido(CapacidadesFalsas caps)
+    {
+        var cuerpo = caps.Llamadas
+            .Single(l => l.Method == "POST" && l.Path.EndsWith("/v1/orders", StringComparison.Ordinal)).Body!;
+        using var doc = System.Text.Json.JsonDocument.Parse(cuerpo);
+        return doc.RootElement.GetProperty("lines").EnumerateArray().ToDictionary(
+            l => l.GetProperty("subjectId").GetString()!,
+            l => l.GetProperty("unitPrice").GetProperty("amount").GetDecimal(),
+            StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task El_pedido_lleva_el_precio_que_cotizo_Pricing_y_no_ceros()
+    {
+        // El defecto #122: `QuoteDto` no declaraba `Lines`, así que System.Text.Json descartaba
+        // en silencio unos precios que YA habían llegado, y el flujo escribía Money.Zero encima.
+        // El total quedaba bien —ninguna regla de Api.Orders lo rechaza— así que el pedido se
+        // guardaba diciendo que cada renglón valía nada, y sólo se veía al mirar la factura.
+        var ctx = Nuevo(Feliz());
+
+        await Comprar(ctx.Flow);
+
+        var precios = PreciosDelPedido(ctx.Caps);
+        Assert.Equal(20000m, precios["p-1"]);
+        Assert.Equal(15000m, precios["p-2"]);
+        Assert.Equal(11250m, precios["p-3"]);
+    }
+
+    [Fact]
+    public async Task El_precio_se_cruza_por_SUJETO_y_no_por_posicion()
+    {
+        // Api.Pricing devuelve hoy las líneas en el mismo orden que la petición, y eso no está
+        // escrito en ningún contrato. Un cruce posicional desalineado no deja un hueco: le pone
+        // a cada línea el precio de OTRA, que es peor que el cero porque es plausible.
+        //
+        // Las cantidades de la cotización siguen siendo las que le corresponden a cada sujeto:
+        // lo único que cambia es el orden.
+        var alReves = """
+            {"lines":[{"subjectKind":"tienda.producto","subjectId":"p-3","quantity":4,
+                       "unitPrice":{"amount":11250,"currency":"COP"}},
+                      {"subjectKind":"tienda.producto","subjectId":"p-2","quantity":1,
+                       "unitPrice":{"amount":15000,"currency":"COP"}},
+                      {"subjectKind":"tienda.producto","subjectId":"p-1","quantity":2,
+                       "unitPrice":{"amount":20000,"currency":"COP"}}],
+             "subtotal":{"amount":100000,"currency":"COP"},
+             "tax":{"amount":19000,"currency":"COP"},
+             "total":{"amount":119000,"currency":"COP"}}
+            """;
+        var ctx = Nuevo(Feliz().Ok("POST /v1/quotes", alReves));
+
+        await Comprar(ctx.Flow);
+
+        var precios = PreciosDelPedido(ctx.Caps);
+        Assert.Equal(20000m, precios["p-1"]);
+        Assert.Equal(15000m, precios["p-2"]);
+        Assert.Equal(11250m, precios["p-3"]);
+    }
+
+    [Fact]
+    public async Task Una_cotizacion_sin_lineas_aborta_ANTES_de_apartarle_mercancia_a_nadie()
+    {
+        // Sin dato, se dice que no hay dato. Rellenar con cero —o con el promedio— sería el
+        // defecto disfrazado de tolerancia. Y se rechaza en el paso 2, cuando todavía no hay
+        // nada que deshacer: ni un apartado, ni un pedido, ni una autorización.
+        //
+        // El JSON es exactamente la forma que la capacidad NO manda: es el que este fixture
+        // tenía escrito antes de #122, o sea el que hacía verde el defecto.
+        var caps = Feliz().Ok("POST /v1/quotes",
+            """{"subtotal":{"amount":100000,"currency":"COP"},"tax":{"amount":19000,"currency":"COP"},"total":{"amount":119000,"currency":"COP"}}""");
+        var ctx = Nuevo(caps);
+
+        var r = await Comprar(ctx.Flow);
+
+        Assert.Equal("tienda.quote_without_lines", r.Rejection!.Code);
+        Assert.Equal(0, caps.Veces("POST", "/holds"));
+        Assert.Equal(0, caps.Veces("POST", "/v1/orders"));
+        Assert.Equal(0, caps.Veces("POST", "/v1/payments"));
+    }
+
+    [Fact]
+    public async Task Una_linea_de_la_canasta_que_la_cotizacion_no_trae_tambien_aborta()
+    {
+        // El caso de en medio: vienen líneas, pero no las de esta canasta. Sin este corte, la
+        // línea huérfana volvería a necesitar un relleno, que es de donde salió #122.
+        var incompleta = """
+            {"lines":[{"subjectKind":"tienda.producto","subjectId":"p-1","quantity":2,
+                       "unitPrice":{"amount":20000,"currency":"COP"}}],
+             "subtotal":{"amount":40000,"currency":"COP"},
+             "tax":{"amount":7600,"currency":"COP"},
+             "total":{"amount":47600,"currency":"COP"}}
+            """;
+        var caps = Feliz().Ok("POST /v1/quotes", incompleta);
+        var ctx = Nuevo(caps);
+
+        var r = await Comprar(ctx.Flow);
+
+        Assert.Equal("tienda.quote_without_lines", r.Rejection!.Code);
+        Assert.Contains("p-2", r.Rejection!.Message, StringComparison.Ordinal);
+        Assert.Equal(0, caps.Veces("POST", "/v1/orders"));
     }
 
     // ── Lo que Tienda estresa y Salud no ────────────────────────────────────
