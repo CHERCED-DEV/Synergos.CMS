@@ -33,7 +33,7 @@ verticales construidos, contra el disco:
 | Vertical | DocType que lo sostiene | Controller(s) | Catálogo | Interruptor(es) | Valor cableado | Destino | Cliente `Http*` | Gate | Claves G-6 |
 |---|---|---|---|---|---|---|---|---|---:|
 | **Tienda** | `productpage`, `productcategorypage` | `ShopCatalogController`, `ShopController` (1 612 L) | `Catalog:Sources:Shop` | `Synergos:Tienda:Mode` | `Bff` | `Bff.Tienda` | `HttpShopOrderService` | `ShopWiringTests` | 64 |
-| **Salud** | **ninguno** | `EhrController`, `HealthcareApiController` (1 587 L) | **ninguno** | `Synergos:Salud:Mode` | `Bff` | `Bff.Salud` | `HttpClinicalSchedulingService` | `SaludWiringTests` | 96 |
+| **Salud** | `professionalPage` | `EhrController`, `HealthcareApiController` (1 587 L) | `Catalog:Sources:Salud` | `Synergos:Salud:Mode` | `Bff` | `Bff.Salud` | `HttpClinicalSchedulingService` | `SaludWiringTests` | 96 |
 | **Realty** | `propertylisting` | `RealtyController` (1 032 L) | `Catalog:Sources:Realty` | `Synergos:Realty:Mode` | `Api` | `Api.Booking` | `HttpVisitSchedulingService` | `RealtyWiringTests` | 69 |
 | **Gobierno** | `tramitepage` | `GovController` (1 065 L) | `Catalog:Sources:Gov` | `Gob:Mode` · `Gob:Notifications:Mode` · `Gob:Payments:Mode` | `Api` ×3 | `Api.Workflow` · `Api.Messaging` · `Api.Payments` | `HttpCaseWorkflowService` · `HttpGovActNotificationService` · `HttpPaymentProvider` | `GobWiringTests`, `GovNotificationWiringTests`, `PaymentsWiringTests` | 65 |
 | **Eventos** | `eventpage` | `EventosController` (1 021 L) | `Catalog:Sources:Events` | `Synergos:Eventos:Mode` | `Bff` | `Bff.Eventos` | `HttpEventTicketingService` | `EventosWiringTests` | 68 |
@@ -67,8 +67,9 @@ proceso por una ida a la red **y** le quita al editor la superficie donde public
 —`El_catalogo_de_un_vertical_NO_sale_a_la_red`— y mide lo inequívoco: un `HttpClient` dentro de
 un `Umbraco*Source`.
 
-Seis de los ocho verticales tienen este eje. **Salud no**, y eso es un hallazgo, no una omisión
-del molde (§7).
+**Los siete verticales construidos tienen este eje.** Salud fue el último y era un hallazgo de
+haber medido, no una omisión del molde: se cerró en el #118 (§7.2). El octavo —Social— no lo tiene
+porque no tiene ninguno de los tres: no está construido.
 
 ### Eje 2 — la TRANSACCIÓN: lo que se mueve y no se deshace solo. **Es lo que cruza.**
 
@@ -167,7 +168,8 @@ así que un curso autorado no se podía cursar; hizo falta `elementCourseModule`
 ### 5.2 La fuente de contenido y su interruptor
 
 `Umbraco<X>CatalogSource` + `<X>ContentRules` + `Synergos:Catalog:Sources:<X>`, con `demo` de
-default. Gate: `El_catalogo_de_un_vertical_NO_sale_a_la_red`.
+default. Gates: `El_catalogo_de_un_vertical_NO_sale_a_la_red` (no salir a la red) y
+`Cada_vertical_tiene_su_EJE_1` (tenerlo, y no sólo tenerlo bien).
 
 ### 5.3 El seam, en `Synergos.CMS.Interfaces`
 
@@ -295,7 +297,11 @@ Todo lo de aquí abajo ya se hizo, y cada línea costó una ola.
 5. **No adivinar el identificador del recurso con una convención.** Lo genera la capacidad, así
    que ninguna convención del CMS puede acertarlo. Se resuelve preguntando por el sujeto
    (`GET /v1/resources?subjectKind=&subjectId=`). `SaludSettings` tuvo un `ResourceIdPrefix` y
-   costó una vuelta entera.
+   costó una vuelta entera. **Y desde el #118 tampoco se escribe a mano en el backoffice**: un
+   campo del DocType para teclearlo sería lo mismo con otra cara y peor, porque lo teclearía un
+   editor. Hay gate sobre el XML (`El_schema_del_profesional_NO_lleva_el_identificador_del_recurso`);
+   sobre la prosa no servía — la prosa ya lo decía en `SaludSettings` y el campo habría entrado
+   igual.
 6. **No dejar dos relojes sobre el mismo apartado.** El barrido del CMS vence sus propias
    reservas; `Api.Booking` vence las suyas. Si el cliente cableado creara además una reserva local,
    ganaría el que corriera antes.
@@ -329,20 +335,31 @@ Es «una lista sacada de la cabeza en vez de medida contra el fichero» —lo qu
 documenta cuatro veces— dentro del gate que existe para que no se pierda el rastro. No se borra
 aquel test: cubre los **dos** árboles y esto solo cubre el CMS. Lo que se cierra es su hueco.
 
-### 7.2 Salud no tiene el primer eje, y **el molde tiene razón**
+### 7.2 Salud no tenía el primer eje — **cerrado, y el gate ya lo exige** (#118)
 
-Es el único vertical **sin DocType y sin fuente de contenido**: el paciente, el profesional y la
-agenda salen de stubs sembrados en C#, así que publicar un médico exige un despliegue. Es
-exactamente lo que le pasaba a Educación antes del #100.
+Al medir era el único vertical **sin DocType y sin fuente de contenido**: el paciente, el
+profesional y la agenda salían de stubs sembrados en C#, así que publicar un médico exigía un
+despliegue. Exactamente lo que le pasaba a Educación antes del #100.
 
-¿Molde mal o vertical mal? **Vertical.** Y el disparador para arreglarlo ya está escrito en el
-doc 11: el destino real del EHR-lite es **un EHR externo**, no una capacidad nuestra, así que lo
-que falta no es `Catalog:Sources:Salud` sino decidir si el directorio de profesionales —que sí es
-contenido editorial, como un `instructorPage`— se autora acá mientras tanto. **No se arregla en
-este ticket** porque toca schema y el ticket dice que no se escribe XML de uSync; queda anotado.
+¿Molde mal o vertical mal? **Vertical**, y así se resolvió. La decisión que faltaba —«el
+directorio de profesionales sí es contenido editorial, como un `instructorPage`»— se tomó: hoy
+hay `professionalPage`, `UmbracoProfessionalDirectorySource` + `ProfessionalContentRules`, y
+`Synergos:Catalog:Sources:Salud` con `demo` de default. **Lo que sigue en pie es el resto del
+párrafo**: el destino del EHR-lite es un EHR externo y el paciente y la agenda NO se autoran acá.
+El eje 1 de un vertical es su **objeto central**, y el de Salud es el profesional.
 
-> Por eso el gate **no** exige el eje 1: exigirlo hoy dejaría el build rojo por una decisión de
-> producto que nadie ha tomado, y un gate siempre rojo deja de leerse.
+> Y por eso el gate ya **sí** exige el eje 1 a los siete
+> (`Cada_vertical_tiene_su_EJE_1`). La excepción existía porque exigirlo dejaba el build rojo por
+> una decisión de producto que nadie había tomado, y un gate siempre rojo deja de leerse. Tomada
+> la decisión, la excepción se fue con ella — que es la mitad de lo que valía el ticket.
+>
+> **El cruce es por COMPOSER y no por nombre**, porque los dos ejes hablan vocabularios distintos
+> —el interruptor dice `Tienda`, `Gob`, `Viajes`, `Eventos` y la fuente dice `Shop`, `Gov`,
+> `Booking`, `Events`— y escribir a mano esa tabla de siete filas es lo que §2 dice que congela un
+> error. Lo que sí está en el disco es que el composer parcial **es** el cableado del vertical.
+> **Lo que ese corte no ve, dicho para que nadie confíe de más**: dentro de un composer que
+> cablea varios verticales —hoy sólo `SeamComposer.EventsPropertiesGov.cs`— el gate cuenta, no
+> empareja.
 
 ### 7.3 Dos puntos de cableado son anteriores al molde
 

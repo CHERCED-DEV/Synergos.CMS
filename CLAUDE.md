@@ -115,7 +115,7 @@ Synergos.CMS/
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (18, ADR 0133)
-│   │                            + molde del vertical (9, doc 12)
+│   │                            + molde del vertical (10, doc 12)
 │   │                            + seudónimo único (3, #120)
 │   ├── Api/                     tests de reglas y servicio por capacidad
 │   └── Bff/                     la compensación cruzada (144)
@@ -753,6 +753,35 @@ Las que salieron de construir el árbol de servicios (§0.B):
   caso bonito —`ToHexString(hash)[..16])`, el único que NO había que vigilar— y no la forma
   que tenían cuatro de las seis copias. Lo destapó **mutar con el caso feo del repo y no con
   el bonito**, que es lo que ya decía `feedback_a_gate_that_parses_source_needs_its_own_mutations`.
+- `feedback_every_authored_field_needs_a_reader` — **un DocType y la fuente que
+  lo lee se cruzan en las DOS direcciones, y cada una tapa un defecto
+  distinto** (#118). Un campo que el schema declara y la fuente no lee es
+  MOBILIARIO: el editor escribe el teléfono del consultorio, guarda, publica, y
+  no sale en ningún lado — sin error y sin log, porque nadie preguntó por él. Un
+  alias que la fuente lee y el schema no declara es peor y se ve todavía menos:
+  `IPublishedContent.Value<T>("noExiste")` **no lanza**, devuelve el default del
+  tipo, así que un profesional entero sale sin especialidad y sin horario y la
+  ficha se ve «vacía» en vez de «rota». Es la forma de
+  `feedback_contract_shape_needs_its_own_test` un escalón antes del JSON: el
+  contrato de aquí es entre el editor y el código, y el eslabón —el nombre del
+  alias, escrito dos veces— no lo comprueba ningún compilador. **Se cruza por
+  nombre de alias y sólo los del prefijo del vertical**: los heredados de las
+  compositions no están en `GenericProperties`, y la fuente también lee campos
+  del siteRoot. **Y lleva red de seguridad**: si uno de los dos
+  descubrimientos deja de ver, las dos listas salen vacías y el cruce pasa en
+  verde sin mirar nada.
+- **Addendum a `feedback_an_omitted_key_can_be_an_assertion`: un
+  `Umbraco.TrueFalse` es un default escrito en el SCHEMA** (#118). Allá la
+  decisión la tomaba el normalizador del consumidor; acá la toma el editor de
+  Umbraco, que guarda `false` para todo nodo que nadie tocó. «Este médico no
+  admite pacientes nuevos», afirmado sobre los cien profesionales que el editor
+  aún no revisó, manda a alguien a buscar consulta a otra parte teniendo una
+  disponible — y es exactamente el campo que la HU #111 sacó del borde por
+  fabricarlo. **Cuando la ausencia tiene que poder distinguirse de la
+  afirmación contraria, el campo NO es un booleano**: es un desplegable de dos
+  valores donde «sin elegir» sigue siendo «no consta», que es la misma decisión
+  que #111 tomó en el TIPO (`bool?`) aplicada al editor. Y la regla para saber
+  cuáles son ésas es la de siempre: se mira qué pasa si nadie lo toca.
 
 ## 6. Prohibiciones explícitas
 
@@ -2117,6 +2146,45 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > ascenso sea manual es deliberado, igual que en Eventos. Y el instructor
   > sigue siendo tres campos del curso, no una entidad con ficha: el día que
   > haya un `instructorPage`, su id deja de derivarse del nombre.
+
+- **Y el directorio de profesionales de Salud también** (#118,
+  `Synergos:Catalog:Sources:Salud = cms`, con el staff sembrado de default).
+  Salud era **el último vertical sin el EJE 1 del molde** —doc 12 §7.2 lo
+  nombraba como hallazgo de haber medido—: el profesional salía de
+  `StubDoctorDirectory`, sembrado en C#, así que dar de alta un médico era un
+  cambio de código y un despliegue. Hoy hay `professionalPage`,
+  `UmbracoProfessionalDirectorySource` + `ProfessionalContentRules` y
+  `CatalogDoctorDirectory`. **Con eso los SIETE verticales cumplen el eje 1 y
+  el gate del molde ya lo exige** (`Cada_vertical_tiene_su_EJE_1`): la
+  excepción existía porque exigirlo dejaba el build rojo por una decisión de
+  producto que nadie había tomado, y se fue con la decisión.
+
+  > **Lo que NO se autora, y es el resto del hallazgo que sigue en pie**: el
+  > paciente y la agenda. El destino del EHR-lite es un EHR externo, no una
+  > capacidad nuestra. El eje 1 de un vertical es su **objeto central**, y el
+  > de Salud es el profesional.
+  >
+  > **Esta fuente no siembra, al revés que la de Educación**, y por eso es más
+  > corta: un profesional no referencia cuerpos en otro almacén, así que no hay
+  > `ContentItemId` que resolver. El gate lo exige igual —`IContentStream` y
+  > `CreateAsync` fuera de la fuente— para que el día que haya algo que sembrar
+  > no se resuelva por el camino corto.
+  >
+  > **El schema NO lleva el identificador del recurso de `Api.Booking`, y hay
+  > gate sobre el XML.** Lo que viaja es el slug como `professionalId`; el
+  > recurso lo resuelve el BFF con
+  > `GET /v1/resources?subjectKind=&subjectId=` (#25). Un campo en el DocType
+  > para teclearlo sería `SaludSettings.ResourceIdPrefix` otra vez y peor,
+  > porque lo teclearía un editor — y sobre la prosa no servía vigilarlo: la
+  > prosa ya lo decía en `SaludSettings` y el campo habría entrado igual.
+  >
+  > **Tres campos que el borde escribía a mano ya salen del seam.** `DoctorDto`
+  > emitía `acceptingPatients: null` y dos cadenas vacías, con el `<remarks>` de
+  > la HU #111 nombrando el disparador —«que `IDoctorDirectory` sepa decir si el
+  > médico admite pacientes nuevos»—. Eso es justo lo que
+  > `feedback_a_fabrication_can_be_a_derivation` avisa que **blinda** un defecto
+  > si se queda escrito: se arregló en vez de dejarlo nombrado. `null` sigue
+  > siendo «no consta» para el staff sembrado, que de verdad no lo sabe.
 
 - **Cuatro orquestadores sin construir**: Realty, Gob, Academy, Social.
   `Bff.Eventos` (HU #35) y `Bff.Viajes` (HU #36) ya están, y ninguno de los

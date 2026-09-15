@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace Synergos.CMS.Tests.Architecture;
 
@@ -472,6 +472,87 @@ public sealed class MoldeDelVerticalTests
             + string.Join("; ", mal)
             + ". El molde comprueba la FORMA; lo que el vertical rechaza y por qué lo tiene que "
             + "escribir él.");
+    }
+
+    /// <summary>
+    /// Los SIETE verticales tienen el eje 1: su catálogo sale del contenido del CMS.
+    /// </summary>
+    /// <remarks>
+    /// <b>Este gate no existía, y el doc 12 §7.2 explicaba por qué</b>: Salud era el único
+    /// vertical sin DocType y sin fuente de contenido —el profesional salía de un stub sembrado
+    /// en C#, así que dar de alta un médico era un cambio de código y un despliegue— y exigirlo
+    /// habría dejado el build rojo por una decisión de producto que nadie había tomado. Un gate
+    /// siempre rojo deja de leerse. La decisión se tomó en el #118 y la excepción se fue con
+    /// ella.
+    ///
+    /// <para><b>El cruce es por COMPOSER, y conviene saber por qué no es por nombre.</b> Los dos
+    /// ejes hablan vocabularios distintos: el interruptor dice <c>Tienda</c>, <c>Gob</c>,
+    /// <c>Viajes</c>, <c>Eventos</c> y la fuente dice <c>Shop</c>, <c>Gov</c>, <c>Booking</c>,
+    /// <c>Events</c>. Escribir a mano esa tabla de siete filas es exactamente lo que §2 dice que
+    /// congela un error. Lo que sí está en el disco es que <b>el composer parcial ES el cableado
+    /// del vertical</b>: los puntos de Academy viven en <c>SeamComposer.Academy.cs</c> y su
+    /// fuente también. Así que se agrupa por fichero y se exige que registre al menos tantas
+    /// fuentes distintas como verticales cablea.</para>
+    ///
+    /// <para><b>Y lo que ese corte NO ve, dicho para que nadie confíe de más:</b> dentro de un
+    /// composer que cablea varios verticales —hoy sólo <c>SeamComposer.EventsPropertiesGov.cs</c>,
+    /// con tres— el gate cuenta, no empareja. Tres fuentes y tres verticales cruzan aunque
+    /// estuvieran mal repartidos. Afinarlo exigiría la tabla de nombres que este comentario acaba
+    /// de descartar; se queda escrito porque un gate que se cree más listo de lo que es es peor
+    /// que no tenerlo.</para>
+    ///
+    /// <para><b>Se vio en rojo</b> quitándole a <c>SeamComposer.PlatformAndHealthcare.cs</c> el
+    /// registro de <c>UmbracoProfessionalDirectorySource</c>, que es el árbol tal como estaba
+    /// antes del #118: «Salud (SeamComposer.PlatformAndHealthcare.cs): 1 vertical, 0 fuentes».</para>
+    /// </remarks>
+    [Fact]
+    public void Cada_vertical_tiene_su_EJE_1()
+    {
+        var fuentes = Directory
+            .EnumerateFiles(Dir("Synergos.CMS.Web", "Services", "Catalog"), "Umbraco*.cs")
+            .Select(Path.GetFileNameWithoutExtension)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Select(n => n!)
+            .ToList();
+
+        Assert.True(fuentes.Count >= 6,
+            "El descubrimiento de fuentes de catálogo no ve nada (" + fuentes.Count + "): "
+            + "si se movieron de carpeta, este test pasa en verde sin mirar nada.");
+
+        var sinEje1 = new List<string>();
+
+        foreach (var grupo in DelMolde()
+                     .Where(p => VerticalesConocidos.Contains(p.Vertical, StringComparer.Ordinal))
+                     .GroupBy(p => p.Composer, StringComparer.Ordinal))
+        {
+            var verticales = grupo
+                .Select(p => p.Vertical)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(v => v, StringComparer.Ordinal)
+                .ToList();
+
+            // Vale cualquiera de las dos formas de elegir la fuente: `IsCmsSource(sp, X.Vertical)`
+            // —la de cinco— y la lectura directa de `Sources` de la Tienda, que es anterior al
+            // ayudante. Lo que las dos comparten, y es lo que se mide, es NOMBRAR la fuente.
+            var codigo = SinComentarios(Dir("Synergos.CMS.Web", "Composers", grupo.Key));
+            var registradas = fuentes
+                .Where(f => Regex.IsMatch(codigo, @"\b" + f + @"\b"))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            if (registradas.Count < verticales.Count)
+            {
+                sinEje1.Add($"{string.Join(" + ", verticales)} ({grupo.Key}): "
+                    + $"{verticales.Count} vertical(es), {registradas.Count} fuente(s)");
+            }
+        }
+
+        Assert.True(sinEje1.Count == 0,
+            "Estos verticales no tienen el eje 1 del molde: " + string.Join("; ", sinEje1)
+            + ". El catálogo de un vertical lo autora un editor y lo sirve el árbol de contenido "
+            + "(doc 12 §3): un DocType, un Umbraco<X>Source, sus <X>ContentRules y un "
+            + "Synergos:Catalog:Sources:<X> que vale demo o cms. Sin él, dar de alta el objeto "
+            + "central del vertical es un cambio de código y un despliegue.");
     }
 
     [Fact]
