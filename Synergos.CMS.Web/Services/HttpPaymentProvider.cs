@@ -1,8 +1,6 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Synergos.CMS.Interfaces;
@@ -402,11 +400,7 @@ public sealed class HttpPaymentProvider : IPaymentProvider
     /// capacidad —que cuenta plata, no personas— no acumule direcciones de correo. No pretende
     /// ser anonimato: es no esparcir lo que no hace falta esparcir.
     /// </remarks>
-    private static string Seudonimo(string quien)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(quien.Trim().ToLowerInvariant()));
-        return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
-    }
+    private static string Seudonimo(string quien) => SeudonimoDePersona.De(quien);
 
     /// <summary>
     /// El <c>actionUrl</c> de la capacidad, leído (#27).

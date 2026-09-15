@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3117 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3120 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,11 +111,12 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3117 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3120 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (18, ADR 0133)
 │   │                            + molde del vertical (9, doc 12)
+│   │                            + seudónimo único (3, #120)
 │   ├── Api/                     tests de reglas y servicio por capacidad
 │   └── Bff/                     la compensación cruzada (144)
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
@@ -726,6 +727,32 @@ Las que salieron de construir el árbol de servicios (§0.B):
   capacidades no cuenta para ninguna** — `/v1/holds` es de `Api.Booking` y de
   `Api.Inventory`, y contarla daría por conectada una a la que nadie habla.
   Al escribirlo, la frase decía siete y eran **nueve**.
+- `feedback_the_same_algorithm_is_not_the_same_thing` — **lo que decide si dos trozos
+  de código son el mismo son el SUJETO y la POLÍTICA, no el algoritmo**, y por eso una
+  promoción se mide leyendo los seis sitios y no contándolos. El seudónimo de una persona
+  estaba escrito **seis** veces con tres nombres —`Seudonimo`, `BuyerId`, `TravellerId`— y
+  en `Web/Services/` el MISMO `SHA256` truncado sirve además para otras tres cosas: la
+  huella del cuerpo de un acto administrativo, una llave de idempotencia y la firma de un
+  webhook. Tragárselas todas en un helper llamado «seudónimo» habría sido **peor que las
+  seis copias**: el día que una necesite cambiar, cambian las otras (#120).
+  **Y lo que de verdad arregla la promoción no es la duplicación: son las VARIACIONES.**
+  Dos de las seis no hacían lo mismo —la bitácora devuelve el actor del sistema sin correo,
+  la tienda prefiere el `MemberKey`— y eso **no se ve leyendo una copia**: la séptima que
+  alguien escriba copia la que tenga más cerca y hereda o pierde una variación sin saberlo.
+  **Las variaciones NO se meten dentro del helper**, que haría un helper con banderas y
+  escondería las políticas donde nadie las lee: el helper hace una cosa y cada política se
+  queda en su sitio.
+  **Y hay un efecto secundario que hay que esperar: se pondrán rojos los gates que miraban
+  la IMPLEMENTACIÓN donde vivía.** Dos lo hicieron —`AuditWiringTests` y `ViajesWiringTests`
+  pedían `SHA256.HashData` dentro de *su* fichero— y **eso no es una regresión**: es un gate
+  siguiendo a un fichero en vez de a una propiedad, y se arregla haciéndolo seguir la
+  propiedad (que el consumidor no lo calcule, y que quien lo calcula no use `GetHashCode`).
+  Es el primo de `feedback_a_fixture_built_on_a_neighbouring_defect_expires_with_it`.
+  **Y al escribir el gate nuevo, su primera versión pasó en VERDE con el defecto puesto**:
+  el regex `ToHexString\([^)]*\)\[\.\.16\]` no cruza paréntesis anidados, así que veía el
+  caso bonito —`ToHexString(hash)[..16])`, el único que NO había que vigilar— y no la forma
+  que tenían cuatro de las seis copias. Lo destapó **mutar con el caso feo del repo y no con
+  el bonito**, que es lo que ya decía `feedback_a_gate_that_parses_source_needs_its_own_mutations`.
 
 ## 6. Prohibiciones explícitas
 
@@ -754,7 +781,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3117 tests):
+# Suite completa (3120 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -975,7 +1002,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 241 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3117 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3120 tests, gates de
 segregación y molde en verde.
 
 > **Los 241 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

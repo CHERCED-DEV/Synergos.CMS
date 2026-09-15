@@ -275,13 +275,32 @@ public sealed class AuditWiringTests
     [Fact]
     public void El_seudonimo_no_depende_del_proceso()
     {
+        // ─────────────────────────────────────────────────────────────────────────────────
+        // ESTE GATE MIRABA EL FICHERO DONDE EL CÓDIGO VIVÍA, NO LA PROPIEDAD (#120).
+        //
+        // Comprobaba `SHA256.HashData` dentro de `HttpAuditTrailWriter` porque ahí estaba
+        // escrito el seudónimo. Al promoverlo —seis copias con tres nombres, cinco
+        // consumidores por encima del umbral de §0.B.17— el gate se puso rojo sin que nada
+        // se hubiera roto: seguía a un fichero en vez de a la propiedad.
+        //
+        // Hoy son dos afirmaciones y ninguna depende de dónde esté el código: que la
+        // bitácora NO calcule el seudónimo por su cuenta, y que quien lo calcula no use
+        // `GetHashCode`. La segunda es la que importa — .NET lo aleatoriza por proceso, así
+        // que la misma persona sería un actor distinto tras cada reinicio y la bitácora
+        // dejaría de agrupar, sin que nada fallara.
+        // ─────────────────────────────────────────────────────────────────────────────────
         var e = Escritor();
         var i = e.IndexOf("string Seudonimo(", StringComparison.Ordinal);
         Assert.True(i > 0, "Se renombró el seudónimo: revisar este gate.");
 
         var cuerpo = e[i..Math.Min(e.Length, i + 600)];
-        Assert.Contains("SHA256.HashData", cuerpo, StringComparison.Ordinal);
+        Assert.Contains("SeudonimoDePersona.De(", cuerpo, StringComparison.Ordinal);
         Assert.DoesNotContain("GetHashCode", cuerpo, StringComparison.Ordinal);
+
+        var helper = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Web", "Services", "SeudonimoDePersona.cs"));
+        Assert.Contains("SHA256.HashData", helper, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetHashCode", helper, StringComparison.Ordinal);
     }
 
     /// <summary>
