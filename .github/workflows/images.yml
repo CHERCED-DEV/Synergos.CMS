@@ -1,11 +1,14 @@
 name: Imágenes (GHCR)
 
-# HU #17 — construir las 23 imágenes con UNA sola forma, y publicarlas.
+# HU #17 — construir TODAS las imágenes con UNA sola forma, y publicarlas.
 #
 # La matriz NO se escribe acá. Se deriva de `tools/service-matrix.mjs`, que la
 # lee del disco: una lista a mano se desincroniza el día que nadie mira —
-# alguien añade Synergos.Api.Invoicing, el CI sigue verde construyendo las 22
-# de siempre, y la capacidad nueva no existe en producción. No falla: FALTA.
+# alguien añade Synergos.Api.Invoicing, el CI sigue verde construyendo las de
+# siempre, y la capacidad nueva no existe en producción. No falla: FALTA.
+#
+# Y por eso este fichero tampoco lleva cuántas son: una cifra en un comentario
+# es una segunda lista a mano, con el mismo problema y sin el gate (#114).
 # `ContainerBuildTests` vigila que el script y la realidad no se separen.
 #
 # El repo es público, así que GHCR y los minutos salen gratis y sin tope.
@@ -45,7 +48,7 @@ jobs:
           echo "### Servicios a construir" >> "$GITHUB_STEP_SUMMARY"
           node tools/service-matrix.mjs --list | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
 
-  # ── Las 22 del árbol de servicios ─────────────────────────────────────────
+  # ── Las del árbol de servicios ────────────────────────────────────────────
   servicios:
     name: ${{ matrix.servicio }}
     needs: matriz
@@ -54,7 +57,7 @@ jobs:
       contents: read
       packages: write
     strategy:
-      fail-fast: false          # que una rota no oculte el estado de las otras 21
+      fail-fast: false          # que una rota no oculte el estado de las demás
       matrix:
         servicio: ${{ fromJson(needs.matriz.outputs.servicios) }}
 
@@ -87,7 +90,7 @@ jobs:
           build-args: PROJECT=${{ matrix.servicio }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ env.REGISTRY }}/${{ steps.nombre.outputs.imagen }}:${{ github.sha }}
-          # El caché es por servicio: 22 servicios compartiendo una entrada se
+          # El caché es por servicio: todos compartiendo una entrada se
           # pisarían y ninguno acertaría nunca.
           cache-from: type=gha,scope=${{ matrix.servicio }}
           cache-to: type=gha,mode=max,scope=${{ matrix.servicio }}
@@ -134,7 +137,7 @@ jobs:
   # como la carpeta; `ContainerBuildTests` vigila el .csproj, pero sólo levantar
   # el contenedor demuestra que la suposición aguanta.
   #
-  # Se prueban DOS —una capacidad y un orquestador— y no las 22: son la misma
+  # Se prueban DOS —una capacidad y un orquestador— y no todas: son la misma
   # imagen parametrizada, así que la 3ª no aporta información que la 2ª no diera.
   arranca:
     name: Arranca y contesta /health

@@ -15,9 +15,12 @@
  *   2. Cero líneas [ERR] en el log — un import que "termina" con errores
  *      adentro es el peor resultado: parece verde y dejó huecos.
  *   3. `processed >= archivos .config TRACKEADOS`. No es una heurística: en
- *      la medición de referencia fueron exactamente 880 = 880. Si uSync se
- *      salta una carpeta entera (el modo de falla que importa), este número
- *      se desploma. Se cuentan los trackeados en git, no el filesystem:
+ *      la medición de referencia los dos números fueron IGUALES — el conteo se
+ *      hace en cada corrida y no se escribe acá, porque una cifra en un
+ *      comentario envejece sola (llegó a decir 880 con 896 en el árbol).
+ *      Si uSync se salta una carpeta entera —el modo de falla que importa—,
+ *      este número se desploma. Se cuentan los trackeados en git, no el
+ *      filesystem:
  *      la máquina del arquitecto puede tener export sin commitear todavía
  *      —contenido del seeder, por ejemplo— y eso inflaría el conteo.
  *

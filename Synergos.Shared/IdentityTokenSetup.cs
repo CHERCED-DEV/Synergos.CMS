@@ -20,7 +20,7 @@ namespace Synergos.Shared;
 /// </remarks>
 public static class IdentityTokenSetup
 {
-    /// <summary>El nombre de la sección, idéntico en los 22 servicios.</summary>
+    /// <summary>El nombre de la sección, idéntico en todos los servicios.</summary>
     public const string Section = "IdentityTokens";
 
     /// <param name="builder">El host.</param>
