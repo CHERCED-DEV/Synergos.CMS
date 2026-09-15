@@ -36,6 +36,7 @@ public sealed class PaymentEngineCoexistenceTests
     private const string Proveedor = "Synergos:Payments:Provider";
     private const string Router = "Synergos:Payments:Routing:Enabled";
     private const string Tienda = "Synergos:Tienda:Mode";
+    private const string Modo = "Synergos:Payments:Mode";
 
     [Fact]
     public void Con_la_tienda_cableada_Y_llaves_reales_acá_el_arranque_FALLA()
@@ -58,6 +59,19 @@ public sealed class PaymentEngineCoexistenceTests
         // `Provider` dejaría esa puerta abierta — y es la puerta que el propio composer usa.
         Assert.Throws<InvalidOperationException>(() => SeamComposer.ExigirUnaSolaPlomeria(
             Config((Tienda, "Bff"), (Publica, "pub_prod_real"), (Integridad, "prod_integrity"), (Router, "true"))));
+    }
+
+    [Fact]
+    public void Con_el_SEAM_contra_la_capacidad_unas_llaves_aqui_tampoco_valen()
+    {
+        // #27, la parte que quedó viva. Con Synergos:Payments:Mode=Api este lado NO COBRA: el
+        // seam se lo pide a Api.Payments. Unas llaves de Wompi aquí no cobrarían nada — se
+        // quedarían calladas, y una config que parece hacer algo y no hace nada es el mismo
+        // defecto de `Provider=Wompi` sirviendo el stub, sólo que al revés.
+        var malo = Assert.Throws<InvalidOperationException>(() => SeamComposer.ExigirUnaSolaPlomeria(
+            Config((Modo, "Api"), (Publica, "pub_prod_real"), (Integridad, "prod_integrity"), (Proveedor, "Wompi"))));
+
+        Assert.Contains("Api.Payments", malo.Message, StringComparison.Ordinal);
     }
 
     [Fact]

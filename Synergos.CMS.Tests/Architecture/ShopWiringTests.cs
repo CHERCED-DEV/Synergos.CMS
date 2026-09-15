@@ -87,6 +87,17 @@ public sealed class ShopWiringTests
             // segunda capacidad. El día que le entre un cobro, aquel gate cae antes que éste.
             if (Path.GetFileName(f) == "HttpVisitSchedulingService.cs") continue;
 
+            // Y la del seam de pago (#27). `HttpPaymentProvider` ES el proveedor de pago: toca
+            // UNA capacidad —Api.Payments— y no sabe qué se está comprando, así que no compone
+            // nada que haya que deshacer. Quien podría componer es su LLAMADOR, y eso no se
+            // decide en el código sino en el despliegue: por eso el composer se niega a cablear
+            // `Synergos:Payments:Mode=Api` mientras Tienda, Salud, Eventos o Viajes sigan
+            // comprando con el motor en proceso. Lo vigila PaymentsWiringTests, en sus dos
+            // mitades — que el cliente siga tocando una sola capacidad, y que la guarda siga
+            // puesta. El día que cualquiera de las dos caiga, esta exención tapa justo lo que
+            // este gate existe para impedir.
+            if (Path.GetFileName(f) == "HttpPaymentProvider.cs") continue;
+
             var codigo = SinComentarios(f);
             foreach (var ruta in Prohibidas)
             {
