@@ -86,7 +86,49 @@ public sealed partial class SeamComposer
             }
         });
 
-        if (routingEnabled)
+        // #27, la parte que quedó viva — el seam entero contra la capacidad.
+        //
+        // `Synergos:Payments:Mode=Api` quita el motor de pago de este lado: el CMS deja de tener
+        // pasarela y le pide los cobros a Api.Payments. Es lo que cierra la decisión de la HU #27
+        // —«Api.Payments es lo único que mueve plata de verdad»— para los verticales que todavía
+        // cobran en proceso.
+        //
+        // El default es Engine y no es una transición: el motor en proceso es lo que permite
+        // levantar el repo entero sin ningún servicio.
+        if (string.Equals(builder.Config["Synergos:Payments:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        {
+            // Y NO se enciende mientras alguien orqueste de este lado. Revienta al cablear, como
+            // ExigirUnaSolaPlomeria y por lo mismo.
+            ExigirQueNadieOrqueste(builder.Config);
+
+            var payBase = builder.Config["Synergos:Payments:BaseUrl"];
+            var payKey = builder.Config["Synergos:Payments:ApiKey"];
+            var payTimeout = int.TryParse(builder.Config["Synergos:Payments:TimeoutSeconds"], out var pt) && pt > 0 ? pt : 30;
+
+            services.AddHttpClient(HttpPaymentProvider.SeamClientName, http =>
+            {
+                var url = string.IsNullOrWhiteSpace(payBase) ? "http://127.0.0.1:5204/" : payBase;
+                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+                http.Timeout = TimeSpan.FromSeconds(payTimeout);
+                if (!string.IsNullOrWhiteSpace(payKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpPaymentProvider.ApiKeyHeader, payKey);
+                }
+            })
+            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+
+            services.AddSingleton<IPaymentProvider>(sp =>
+            {
+                var opciones = sp.GetRequiredService<IOptionsMonitor<PaymentsSettings>>();
+                return new HttpPaymentProvider(
+                    sp.GetRequiredService<IHttpClientFactory>(),
+                    HttpPaymentProvider.SeamClientName,
+                    () => new PaymentWireKinds(
+                        opciones.CurrentValue.SubjectKind, opciones.CurrentValue.PayerKind, "cms"),
+                    sp.GetRequiredService<ILogger<HttpPaymentProvider>>());
+            });
+        }
+        else if (routingEnabled)
         {
             services.AddSingleton<IPaymentProvider>(sp =>
             {
@@ -174,7 +216,15 @@ public sealed partial class SeamComposer
     {
         var tiendaCableada = string.Equals(
             config["Synergos:Tienda:Mode"], "Bff", StringComparison.OrdinalIgnoreCase);
-        if (!tiendaCableada) return;
+
+        // Y el seam entero contra la capacidad cuenta igual (#27, la parte que quedó viva): con
+        // Synergos:Payments:Mode=Api este lado no cobra, así que unas llaves de Wompi aquí no
+        // cobrarían tampoco — se quedarían calladas. Una config que no hace nada y parece que sí
+        // es el mismo defecto de `Provider=Wompi` sirviendo el stub, sólo que al revés.
+        var seamCableado = string.Equals(
+            config["Synergos:Payments:Mode"], "Api", StringComparison.OrdinalIgnoreCase);
+
+        if (!tiendaCableada && !seamCableado) return;
 
         var tieneLlaves = !string.IsNullOrWhiteSpace(config["Synergos:Payments:WompiPublicKey"])
             && !string.IsNullOrWhiteSpace(config["Synergos:Payments:WompiIntegritySecret"]);
@@ -186,7 +236,8 @@ public sealed partial class SeamComposer
         if (!loPuedeElegir) return;
 
         throw new InvalidOperationException(
-            "Synergos:Tienda:Mode=Bff manda la plata al orquestador, y este despliegue tiene "
+            "La plata la mueve Api.Payments en este despliegue —Synergos:Tienda:Mode=Bff, o "
+            + "Synergos:Payments:Mode=Api— y ADEMÁS tiene "
             + "ADEMÁS llaves reales de Wompi del lado del CMS "
             + "(Synergos:Payments:WompiPublicKey + WompiIntegritySecret, con "
             + "Synergos:Payments:Provider=Wompi o Routing:Enabled=true). Las dos mitades cobrarían, "
@@ -194,6 +245,66 @@ public sealed partial class SeamComposer
             + "defecto #57, que no falla a la vista. Desde la HU #27 la plata la mueve "
             + "Api.Payments: quitá las llaves de acá (Payments__wompi__* van en la capacidad) o "
             + "volvé la tienda a Synergos:Tienda:Mode=Stub.");
+    }
+
+    /// <summary>
+    /// Los verticales que ORQUESTAN de este lado cuando están en su motor en proceso.
+    /// </summary>
+    /// <remarks>
+    /// Cada uno compone varios pasos que pueden fallar a la mitad —apartar, cobrar, confirmar— y
+    /// el CMS no tiene dónde anotar una compensación pendiente. Es lo que
+    /// <c>ShopWiringTests</c> defiende en compilación.
+    /// </remarks>
+    private static readonly (string Flag, string Cableado, string Que)[] Orquestadores =
+    {
+        ("Synergos:Tienda:Mode", "Bff", "la tienda"),
+        ("Synergos:Salud:Mode", "Bff", "la cita clínica"),
+        ("Synergos:Eventos:Mode", "Bff", "la compra de entradas"),
+        ("Synergos:Viajes:Mode", "Bff", "la reserva de viaje"),
+    };
+
+    /// <summary>
+    /// Que con el seam contra la capacidad no quede nadie orquestando de este lado (#27).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es la condición de la excepción, no una precaución.</b> Hablarle a
+    /// <c>Api.Payments</c> de frente está bien mientras el llamador sea un solo paso. Con
+    /// <c>Tienda:Mode=Stub</c> el que llama es <c>StubShopOrderService</c>, que aparta stock,
+    /// cobra y crea el pedido: si el cobro sale y el pedido no, hay plata movida sin nada que la
+    /// deshaga, y el CMS no tiene libro de compensaciones. Ése es exactamente el atajo que
+    /// <c>ShopWiringTests</c> existe para impedir — sólo que ese gate mira el código y esto mira
+    /// el despliegue, que es donde se decide con qué motor corre cada vertical.</para>
+    ///
+    /// <para><b>Revienta al arrancar y no en el primer cobro</b>, que es la forma de #56 y la de
+    /// la llave de firma de <c>Api.Identity</c>: un despliegue que arranca verde, contesta
+    /// <c>/health</c> y pasa la prueba de humo <b>parece uno bueno</b>, y lo desmiente la primera
+    /// persona que compra.</para>
+    ///
+    /// <para><b>Lo que esta guarda NO cubre, y va dicho:</b> la matrícula de Educación
+    /// (<c>StubEnrollmentService</c>) también compone —abre la sesión, guarda la matrícula
+    /// pendiente y captura en un confirm aparte— y no tiene interruptor que mirar porque
+    /// <c>Bff.Academy</c> no existe. Va en el orden correcto (cerrar puertas al final) y su
+    /// confirm es idempotente, así que la ventana es «capturado y la activación no se escribió»,
+    /// que se rescata repitiendo el confirm. El día que exista <c>Bff.Academy</c>, su bandera
+    /// entra en la lista de arriba.</para>
+    /// </remarks>
+    internal static void ExigirQueNadieOrqueste(IConfiguration config)
+    {
+        var enProceso = Orquestadores
+            .Where(o => !string.Equals(config[o.Flag], o.Cableado, StringComparison.OrdinalIgnoreCase))
+            .Select(o => $"{o.Que} ({o.Flag}={o.Cableado})")
+            .ToList();
+
+        if (enProceso.Count == 0) return;
+
+        throw new InvalidOperationException(
+            "Synergos:Payments:Mode=Api le pide los cobros a Api.Payments, y estos verticales "
+            + "siguen orquestando con el motor en proceso: " + string.Join(", ", enProceso)
+            + ". Cada uno aparta, cobra y confirma en varios pasos que pueden fallar a la mitad, y "
+            + "el CMS no tiene dónde anotar una compensación pendiente: con plata de verdad detrás "
+            + "queda stock apartado que nadie suelta y cobros sin pedido. O se cablean contra su "
+            + "orquestador, o el seam se queda en Synergos:Payments:Mode=Engine. Para cobrar sólo "
+            + "la tasa de un trámite —que NO orquesta— está Synergos:Gob:Payments:Mode=Api.");
     }
 
     /// <summary>Clave del proveedor Wompi. Es la misma que devuelve su <c>ProviderKey</c>.</summary>

@@ -68,6 +68,15 @@ public sealed class StubApplicationService : IApplicationService
     private const int SeedSequenceFloor = 1006;
 
     private readonly ITramiteCatalogProvider _catalog;
+    /// <summary>
+    /// Lo que queda escrito cuando no se pudo saber si la tasa se cobró.
+    /// </summary>
+    /// <remarks>
+    /// No es ninguno de los <c>PaymentStatus</c> a propósito: los siete nombran algo que SE SABE
+    /// que pasó, y esto nombra lo contrario. <c>Failed</c> afirmaría un rechazo que nadie dio.
+    /// </remarks>
+    public const string FeeUnavailable = "Unavailable";
+
     private readonly IGovFeeCalculator _fees;
     private readonly IPaymentProvider _payments;
     private readonly IAuditTrailWriter? _audit;
@@ -168,40 +177,69 @@ public sealed class StubApplicationService : IApplicationService
         var radicado = NextRadicado(occurred);
 
         // Tasa OPCIONAL: solo abre sesión de pago si el trámite cobra (Fee > 0).
+        //
+        // LA LLAVE DE IDEMPOTENCIA DEL COBRO ES EL RADICADO, y por eso se acuña arriba, antes de
+        // hablar con nadie: un reintento tras un timeout encuentra el cobro que él mismo creó en
+        // vez de cobrar dos veces (feedback_idempotency_before_state). Al revés —acuñarlo después
+        // de saber si el pago salió— cada reintento sería un cobro nuevo.
         string? paymentSessionId = null;
         string? paymentStatus = null;
         if (!quote.Exempt && quote.Amount > 0m)
         {
-            var session = await _payments.CreateSessionAsync(
-                new PaymentSessionRequest(
-                    OrderReference: radicado,
-                    Amount: quote.Amount,
-                    Currency: quote.Currency,
-                    Items: new[]
-                    {
-                        new PaymentLineItem(
-                            Sku: summary.Id,
-                            Description: $"Tasa — {summary.Name}",
-                            UnitPrice: quote.Amount,
-                            Quantity: 1),
-                    },
-                    CustomerEmail: citizen.Email.Trim(),
-                    Vertical: "gov"),
-                cancellationToken);
-            paymentSessionId = session.SessionId;
+            // NO SE ABORTA EL TRÁMITE SI LA TASA NO SALE. En un servicio público, perder la
+            // radicación de un ciudadano porque su banco tardó es peor que arrastrar una tasa
+            // pendiente — y eso deja de ser un comentario el día que detrás hay una pasarela de
+            // verdad (#27): con el motor en proceso esto no podía fallar, y con Api.Payments sí.
+            // Lo que se propaga es la cancelación: si quien pidió se fue, no hay trámite que
+            // salvar.
+            try
+            {
+                var session = await _payments.CreateSessionAsync(
+                    new PaymentSessionRequest(
+                        OrderReference: radicado,
+                        Amount: quote.Amount,
+                        Currency: quote.Currency,
+                        Items: new[]
+                        {
+                            new PaymentLineItem(
+                                Sku: summary.Id,
+                                Description: $"Tasa — {summary.Name}",
+                                UnitPrice: quote.Amount,
+                                Quantity: 1),
+                        },
+                        CustomerEmail: citizen.Email.Trim(),
+                        Vertical: "gov"),
+                    cancellationToken);
+                paymentSessionId = string.IsNullOrWhiteSpace(session.SessionId) ? null : session.SessionId;
+                paymentStatus = session.Status.ToString();
 
-            // Se CAPTURA la tasa. Antes se abría la sesión y no se volvía a
-            // hablar con el motor de pago nunca: ni captura, ni consulta, ni
-            // persistencia del id. El expediente se radicaba exista o no el
-            // cobro, y nadie podía saberlo después.
-            //
-            // No se aborta el trámite si la captura no sale: en un servicio
-            // público, perder la radicación de un ciudadano porque su banco
-            // tardó es peor que arrastrar una tasa pendiente. Se REGISTRA el
-            // estado y el expediente queda marcado.
-            var capture = await _payments.CaptureAsync(
-                session.SessionId, cancellationToken: cancellationToken);
-            paymentStatus = capture.Status.ToString();
+                // Se CAPTURA la tasa. Antes se abría la sesión y no se volvía a
+                // hablar con el motor de pago nunca: ni captura, ni consulta, ni
+                // persistencia del id. El expediente se radicaba exista o no el
+                // cobro, y nadie podía saberlo después.
+                //
+                // SÓLO desde Authorized, y eso importa con checkout hospedado: ahí la transacción
+                // nace cuando el ciudadano la completa, así que la sesión vuelve pidiendo que se
+                // le mande a pagar (RequiresAction) y no hay nada que capturar todavía. Capturar
+                // igual dejaría escrito un fallo que nadie causó.
+                if (paymentSessionId is not null && session.Status == PaymentStatus.Authorized)
+                {
+                    var capture = await _payments.CaptureAsync(
+                        paymentSessionId, cancellationToken: cancellationToken);
+                    paymentStatus = capture.Status.ToString();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                // «No sé» no es «no». El expediente queda marcado con que la tasa no se pudo
+                // cobrar, que es la verdad sobre él, y la entidad decide qué hacer con la
+                // pendiente. Escribir Failed aquí diría que el banco rechazó, que es otra cosa.
+                paymentStatus = FeeUnavailable;
+            }
         }
 
         // `with` y NO `new GovCitizen(...)`: reconstruir por posición TIRA en silencio todo
