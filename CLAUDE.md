@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3149 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3152 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3149 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3152 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (18, ADR 0133)
@@ -749,6 +749,22 @@ Las que salieron de construir el árbol de servicios (§0.B):
   capacidades no cuenta para ninguna** — `/v1/holds` es de `Api.Booking` y de
   `Api.Inventory`, y contarla daría por conectada una a la que nadie habla.
   Al escribirlo, la frase decía siete y eran **nueve**.
+- `feedback_a_state_with_no_writer_cannot_be_tested_through_the_seam` — **un valor del
+  vocabulario al que NINGÚN camino del código llega no se prueba: se anota.** Al cortar la
+  matrícula duplicada (#121) la regla correcta era «sólo una matrícula ACTIVA bloquea», que
+  deja fuera a `Cancelled` por la lección del defecto #41 —encontrar un registro no significa
+  «esto ya pasó», y quien se dio de baja tiene que poder volver—. Pero **nada en el repo pone
+  una matrícula en `Cancelled`**: `IEnrollmentService` no tiene `CancelAsync` y ningún código
+  asigna ese estado. Es el **espejo** de `feedback_no_read_without_a_write_path`: allá una
+  escritura sin camino de lectura, acá un **estado sin camino de entrada**.
+  **Lo que NO se hace es fabricar el estado con un doble para tener el test en verde**: eso
+  prueba el doble y no la regla, y deja un test que afirma que el sistema hace algo que no
+  puede hacer —la forma de la regla 10 del repo hermano, un fixture que describe un servidor
+  que no existe—. Se escribe la rama correcta, se prueba **la mitad alcanzable** (acá: que una
+  pendiente de pago tampoco encierre) y el hueco queda nombrado en el `<remarks>` del test,
+  que es donde lo va a leer quien añada `CancelAsync`.
+  **Cómo se caza, y es una línea**: `grep` del valor del enum por el árbol sin los tests. Si
+  sólo aparece en su propia declaración, nadie lo escribe nunca.
 - `feedback_the_same_algorithm_is_not_the_same_thing` — **lo que decide si dos trozos
   de código son el mismo son el SUJETO y la POLÍTICA, no el algoritmo**, y por eso una
   promoción se mide leyendo los seis sitios y no contándolos. El seudónimo de una persona
@@ -832,7 +848,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3149 tests):
+# Suite completa (3152 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -1053,7 +1069,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 241 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3149 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3152 tests, gates de
 segregación y molde en verde.
 
 > **Los 241 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
