@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Synergos.Api.Booking.Domain;
+using Synergos.Core;
 using Synergos.Shared;
 
 namespace Synergos.Api.Booking.Storage;
@@ -28,6 +29,22 @@ public interface IReservationStore
 {
     Reservation? Find(string id);
     IReadOnlyList<Reservation> ForResource(string resourceId);
+
+    /// <summary>Las reservas tomadas para un <see cref="Ref"/>, sea cual sea el recurso.</summary>
+    /// <remarks>
+    /// <para>El simétrico de <see cref="ForResource"/>: uno contesta «la agenda de este
+    /// consultorio», el otro «las citas de esta persona». Faltaba, y sin él la única forma de
+    /// contestar la segunda era barrer los recursos de a uno preguntando por cada agenda — o sea
+    /// que el llamador tenía que saber de antemano por dónde buscar lo que vino a buscar.</para>
+    ///
+    /// <para><b>No hay índice, y es a propósito.</b> Un mapa <c>Ref → reservas</c> sería una
+    /// segunda verdad que se desincroniza en cada cancelación, y esta capacidad existe para no
+    /// tener dos. El coste está medido y escrito en
+    /// <see cref="Domain.BookingService.ListReservations"/>: es el MISMO recorrido que
+    /// <see cref="ForResource"/> ya hacía.</para>
+    /// </remarks>
+    IReadOnlyList<Reservation> ForWhom(Ref forWhom);
+
     void Put(Reservation reservation);
 }
 
@@ -66,6 +83,12 @@ public sealed class FileSystemReservationStore : IReservationStore
     public Reservation? Find(string id) => _store.Find(id);
     public IReadOnlyList<Reservation> ForResource(string resourceId)
         => _store.Where(r => string.Equals(r.ResourceId, resourceId, StringComparison.Ordinal));
+
+    // El Ref se compara ENTERO y por igualdad de valor: no se mira su Kind ni se parte su Id.
+    // Comparar sólo el Id haría que dos vocabularios distintos con el mismo identificador —un
+    // "1" de salud y un "1" de viajes— se vieran las reservas (§0.B.13).
+    public IReadOnlyList<Reservation> ForWhom(Ref forWhom) => _store.Where(r => r.For == forWhom);
+
     public void Put(Reservation reservation) => _store.Put(reservation);
 }
 
