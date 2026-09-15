@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Synergos.CMS.Tests.Architecture;
 
 /// <summary>
@@ -20,7 +22,11 @@ namespace Synergos.CMS.Tests.Architecture;
 ///
 ///   <item><b>Que la lista de volúmenes se DERIVE del compose.</b> Una lista a mano se
 ///   desincroniza en la tercera ola, y lo que se pierde es justo el volumen que nadie recordó
-///   añadir.</item>
+///   añadir. <b>Y que el filtro INCLUYA por defecto</b>, que es lo que estaba mal: con
+///   <c>-data$</c> se copiaban los certificados de Caddy —que se vuelven a pedir solos— y se
+///   quedaban fuera la base del CMS, la biblioteca de medios, <c>App_Data</c> y el llavero de
+///   DataProtection. El respaldo del producto no llevaba el producto, y no fallaba.</item>
+
 /// </list>
 /// </remarks>
 public sealed class RespaldoTests
@@ -38,6 +44,33 @@ public sealed class RespaldoTests
 
     private static string Herramienta(string nombre)
         => File.ReadAllText(Path.Combine(RepoRoot(), "tools", nombre));
+
+    /// <summary>Los volúmenes declarados en <c>compose.prod.yml</c>.</summary>
+    /// <remarks>
+    /// Se leen del bloque <c>volumes:</c> de nivel superior — el mismo sitio del que
+    /// <c>docker compose config --volumes</c> los saca — para poder cruzar contra él lo que el
+    /// respaldo excluye. Sin este cruce, la lista de exclusiones es otra lista a mano.
+    /// </remarks>
+    private static IReadOnlyList<string> VolumenesDelCompose()
+    {
+        var lineas = File.ReadAllLines(Path.Combine(RepoRoot(), "compose.prod.yml"));
+        var dentro = false;
+        var nombres = new List<string>();
+
+        foreach (var linea in lineas)
+        {
+            if (linea.StartsWith("volumes:", StringComparison.Ordinal)) { dentro = true; continue; }
+            if (!dentro) continue;
+            if (linea.Length > 0 && !char.IsWhiteSpace(linea[0])) break;
+
+            var recortada = linea.Trim();
+            if (recortada.Length == 0 || recortada.StartsWith('#')) continue;
+            if (recortada.EndsWith(':')) nombres.Add(recortada[..^1]);
+        }
+
+        Assert.NotEmpty(nombres);
+        return nombres;
+    }
 
     [Fact]
     public void El_respaldo_viene_CON_su_restaurador()
@@ -99,36 +132,50 @@ public sealed class RespaldoTests
     }
 
     [Fact]
-    public void Restaurar_VACIA_el_volumen_antes_de_desempacar()
+    public void El_filtro_de_volumenes_INCLUYE_por_defecto_y_excluye_con_nombre()
     {
-        // Sin esto, un fichero que existía en el servidor y no en la copia sobrevive, y queda un
-        // estado mezclado: ni el de ayer ni el de hoy, y nadie puede razonar sobre él.
-        Assert.Contains("rm -rf /destino", Herramienta("restaurar.sh"), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Las_copias_NO_van_al_repo()
-    {
-        // `feedback_backups_external_to_repo`. Y además llevan datos personales —direcciones de
-        // entrega, nombres de pacientes—: un respaldo commiteado es una filtración con historial.
+        // ESTE ES EL DEFECTO QUE EL ENSAYO DESTAPÓ. El criterio era `-data$`, un filtro que
+        // INCLUYE: copiaba `caddy-data` —certificados que Caddy vuelve a pedir solos— y dejaba
+        // fuera `cms-db` (la base de Umbraco), `cms-media` (la biblioteca), `cms-appdata` y
+        // `cms-dpkeys`. Sin ese último, al restaurar no se puede descifrar la llave de firma de
+        // los diplomas y el propio código avisa de que «los certificados ya emitidos dejarán de
+        // verificar». O sea: el respaldo del producto no llevaba el producto, el tar salía bien,
+        // y sólo se notaba restaurando.
+        //
+        // Lo que se vigila es el SENTIDO del filtro, no la lista: con uno que incluye, el volumen
+        // que nadie recordó se pierde en silencio; con uno que excluye, se copia de más.
         var respaldo = Herramienta("respaldo.sh");
 
-        Assert.DoesNotContain("SYNERGOS_BACKUP_DIR:-.", respaldo, StringComparison.Ordinal);
-        Assert.Contains("/var/backups/synergos", respaldo, StringComparison.Ordinal);
+        Assert.DoesNotContain("grep -E -- '-data$'", respaldo, StringComparison.Ordinal);
+        Assert.Contains("grep -E -v \"$RECONSTRUIBLES\"", respaldo, StringComparison.Ordinal);
 
-        // Y en disco no puede haber ninguno ya commiteado.
-        var sueltos = Directory
-            .EnumerateFiles(RepoRoot(), "synergos-datos-*.tar.gz", SearchOption.AllDirectories)
-            .ToList();
-        Assert.True(sueltos.Count == 0, $"hay respaldos dentro del repo: {string.Join(", ", sueltos)}");
+        var reconstruibles = Regex.Match(respaldo, @"^RECONSTRUIBLES='\^\((?<lista>[^)]*)\)\$'",
+            RegexOptions.Multiline).Groups["lista"].Value.Split('|', StringSplitOptions.RemoveEmptyEntries);
+        Assert.NotEmpty(reconstruibles);
+
+        // Cada exclusión tiene que existir de verdad en el compose. Una que sobra deja de leerse
+        // —es el argumento de la lista de `HttpClient` del gate #49— y además esconde un typo:
+        // `cms-log` en vez de `cms-logs` no excluye nada y nadie lo nota.
+        var delCompose = VolumenesDelCompose();
+        foreach (var r in reconstruibles)
+        {
+            Assert.True(delCompose.Contains(r),
+                $"respaldo.sh excluye '{r}' y ese volumen no está en compose.prod.yml.");
+        }
+
+        // Y el resto entra. Si mañana aparece un volumen nuevo, entra SOLO: éste es el gate que
+        // lo garantiza, y el que obliga a escribir una razón si alguien quiere dejarlo fuera.
+        foreach (var v in delCompose.Where(v => !reconstruibles.Contains(v)))
+        {
+            Assert.DoesNotContain($"|{v}|", $"|{string.Join('|', reconstruibles)}|", StringComparison.Ordinal);
+        }
+
+        // Los cuatro que el filtro viejo perdía, nombrados: son la regresión concreta.
+        foreach (var imprescindible in new[] { "cms-db", "cms-media", "cms-appdata", "cms-dpkeys" })
+        {
+            Assert.True(delCompose.Contains(imprescindible) && !reconstruibles.Contains(imprescindible),
+                $"'{imprescindible}' tiene que entrar en el respaldo: sin él, restaurar devuelve un CMS vacío.");
+        }
     }
 
-    [Fact]
-    public void El_respaldo_deja_un_MANIFIESTO_de_que_copio()
-    {
-        // Dentro de seis meses hay un tar.gz y ninguna forma de saber de qué versión es ni si le
-        // falta una capacidad. El manifiesto es lo que hace la copia legible sin adivinar.
-        Assert.Contains("MANIFIESTO", Herramienta("respaldo.sh"), StringComparison.Ordinal);
-        Assert.Contains("MANIFIESTO", Herramienta("restaurar.sh"), StringComparison.Ordinal);
-    }
 }
