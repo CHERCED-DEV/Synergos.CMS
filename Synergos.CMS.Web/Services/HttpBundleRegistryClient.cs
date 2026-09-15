@@ -244,7 +244,6 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
     public async Task<ImportMap?> TryGetImportMapAsync(CancellationToken ct = default)
     {
         var s = _settings.CurrentValue;
-        var url = $"{s.PublicBaseUrl.TrimEnd('/')}/{s.BundlesNamespace}/runtime/{s.DefaultFramework}/{s.DefaultSlot}/import-map.json";
 
         var vigente = _mapa;
         if (vigente is not null
@@ -253,30 +252,70 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
             return vigente;
         }
 
-        try
-        {
-            var json = await _http.GetByteArrayAsync(url, ct).ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(json);
+        var frameworks = await FrameworksDelRegistryAsync(s, ct).ConfigureAwait(false);
+        var leidos = new List<(string, IReadOnlyDictionary<string, string>)>();
 
-            if (!doc.RootElement.TryGetProperty("imports", out var imports)
-                || imports.ValueKind != JsonValueKind.Object)
+        foreach (var framework in frameworks)
+        {
+            var url = $"{s.PublicBaseUrl.TrimEnd('/')}/{s.BundlesNamespace}/runtime/{framework}/{s.DefaultSlot}/import-map.json";
+
+            try
             {
-                _logger.LogWarning("El import map de {Url} no trae un objeto «imports».", url);
-                return vigente;
-            }
+                var json = await _http.GetByteArrayAsync(url, ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
 
-            _mapa = new ImportMap(
-                FileSystemBundleRegistryClient.LeerImports(imports, s.PublicBaseUrl));
-            _mapaCargadoUtc = _clock.GetUtcNow();
-            return _mapa;
+                if (!doc.RootElement.TryGetProperty("imports", out var imports)
+                    || imports.ValueKind != JsonValueKind.Object)
+                {
+                    _logger.LogWarning("El import map de {Url} no trae un objeto «imports».", url);
+                    continue;
+                }
+
+                leidos.Add((framework, FileSystemBundleRegistryClient.LeerImports(imports, s.PublicBaseUrl)));
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+            {
+                // Uno caído no tumba a los demás, por la misma razón que en el gemelo de disco.
+                _logger.LogWarning(ex, "No se pudo leer el import map de {Url}.", url);
+            }
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+
+        if (leidos.Count == 0)
         {
-            _logger.LogWarning(ex,
-                "No se pudo leer el import map de {Url}. Se sigue con el anterior ({Estado})",
-                url, vigente is null ? "no hay" : "vigente");
+            _logger.LogWarning(
+                "Ningún import map respondió bajo {Base}. Se sigue con el anterior ({Estado})",
+                $"{s.PublicBaseUrl.TrimEnd('/')}/{s.BundlesNamespace}/runtime/",
+                vigente is null ? "no hay" : "vigente");
             return vigente;
         }
+
+        var (compuesto, conflicto) = ImportMapComposer.Componer(leidos);
+        if (conflicto is not null)
+        {
+            // NO se conserva el anterior: si el conflicto es real, el mapa vigente también lo
+            // estaba sirviendo mal. Se para y el probe lo dice.
+            _logger.LogError("No se pudo componer el import map. {Conflicto}", conflicto);
+            return null;
+        }
+
+        _mapa = compuesto;
+        _mapaCargadoUtc = _clock.GetUtcNow();
+        return _mapa;
+    }
+
+    /// <summary>
+    /// Los frameworks que el registry declara. Sin snapshot, el configurado.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> FrameworksDelRegistryAsync(
+        BundleRegistrySettings s, CancellationToken ct)
+    {
+        var snap = await ObtenerSnapshotAsync(s, ct).ConfigureAwait(false);
+        if (snap is null) return new[] { s.DefaultFramework };
+
+        var declarados = ImportMapComposer.FrameworksDeclarados(
+            snap.PorTag.Values.Select(e => e.Implementations?.Keys ?? Enumerable.Empty<string>()));
+
+        return declarados.Count > 0 ? declarados : new[] { s.DefaultFramework };
     }
 
     private volatile ImportMap? _mapa;
