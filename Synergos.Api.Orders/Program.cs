@@ -34,6 +34,14 @@ var app = builder.Build();
 
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Orders:ApiKey"]);
+
+// Un solo escritor por capacidad, aunque corran varias réplicas (#112). Sube a proceso
+// cruzado el `lock` que el servicio ya tenía dentro: con el almacén en un fichero por
+// documento, lo que queda por serializar es leer-decidir-escribir sobre el MISMO.
+app.UseStoreWriteGate(
+    app.Services.GetRequiredService<IOptions<OrderStorageOptions>>().Value.Root,
+    OrderRules.CodePrefix,
+    app.Configuration.GetValue<int?>("Orders:Storage:WriteGateSeconds"));
 app.MapOrderEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
