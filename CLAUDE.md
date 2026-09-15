@@ -482,6 +482,41 @@ Las que salieron de construir el árbol de servicios (§0.B):
   hay tercera opción que no sea dejarlo escrito y hecho.
   **El fixture tiene que llevar hilos de VARIOS mensajes**: con uno por hilo la suma y el
   conteo de hilos dan el mismo número y la fabricación pasa en verde.
+  **Addendum #123 — el blindaje también funciona hacia ARRIBA: arreglar UNA copia y escribir
+  el defecto de las otras es la forma más eficaz de dejarlas vivas.** Aquí no fue un gemelo,
+  fueron cinco. `UmbracoProductCatalogSource.TryParsePrice` arregló su lado, y su `<remarks>`
+  dejó escrito «el código viejo hace `decimal.TryParse(…, InvariantCulture) ? price : 0m`» y
+  «verificado en vivo: el Tote salió a 49» — un diagnóstico exacto, con la medición hecha,
+  sobre código que seguía corriendo en el carrito, el listado, la ficha, el bloque de línea y
+  el `ld+json`. Dos fuentes más lo copiaron *como prosa* («misma trampa que costó dinero en
+  Tienda, misma regla») y volvieron a escribir la regla a mano en vez de compartirla, así que
+  al final había **tres copias buenas y cinco malas de lo mismo**. La pregunta que lo caza no
+  es «¿está identificado?» sino **¿cuántos sitios leen este dato?** — y se contesta con un
+  `grep` del ALIAS del campo, que es literal, no del nombre de la función, que cada copia
+  elige distinto (`TryParsePrice`, `TryParsePriceFrom`, `ParsePrice`, un `decimal.TryParse`
+  suelto en una vista). Y lo que reemplaza a la nota no es otra nota: es un gate que vaya por
+  el alias.
+- `feedback_a_failed_tryparse_is_not_a_value` — **un `TryParse` que devuelve `false` no
+  autoriza a inventar el valor: el respaldo a `0m` convierte «no se pudo leer» en «vale
+  cero», y cero es un precio VÁLIDO que no falla en ninguna parte hasta que alguien compra.**
+  Es `feedback_an_omitted_key_can_be_an_assertion` aplicado a un parseo en vez de a una clave
+  del contrato, y el disparador se reconoce en la firma: **un método de lectura que devuelve
+  el tipo del dato en vez de un `bool` no tiene forma de decir «no se sabe»**, así que
+  devuelve algo (`ParsePrice(...) → decimal` era exactamente eso). El arreglo es que la
+  ausencia sea una propiedad del TIPO —`bool TryX(..., out)` o `decimal?`— y que **cada
+  llamador decida qué significa**, porque no es lo mismo en todos: el catálogo omite el
+  producto, Eventos y Educación tratan el vacío como gratis, el carrito omite la línea, la
+  ficha no pinta ni precio ni botón de comprar, y el bloque editorial muestra el texto crudo.
+  **Y hay un caso peor que el cero: el que SÍ parsea.** `"49.000"` con `NumberStyles.Number`
+  e `InvariantCulture` da **49**, porque ahí el punto es separador decimal — un precio
+  plausible equivocado por 1000× que ninguna guarda de «> 0» ve, y que el propio producto
+  fabrica, porque `EsCoPriceFormatter` pinta `"$ 49.000"` en toda la tienda y el editor copia
+  de la pantalla al TextBox. Por eso la regla no es «que parsee» sino **que sea inequívoco**:
+  solo dígitos ASCII, `NumberStyles.None`.
+  **Cómo se prueba, y es la mitad que cuesta**: el fixture tiene que llevar **los dos** casos
+  —uno con símbolo (`"$89000"`, que caía a cero) y uno con separador de miles (`"49.000"`,
+  que daba 49)—. Con `"89000"` a secas el parser viejo y el nuevo dan el mismo número y el
+  defecto pasa en VERDE.
 - `feedback_an_omitted_key_can_be_an_assertion` — **una clave que no se emite no
   siempre deja un hueco: cuando el otro lado la resuelve con un valor por DEFECTO, la
   omisión pasa a AFIRMAR ese valor, y lo afirma el borde sin haberlo decidido.** Educación

@@ -66,8 +66,12 @@
             var name = page.Value<string>("productName") ?? page.Name;
             var sku = page.Value<string>("productSku");
             var description = page.Value<string>("productDescription");
+            // Misma regla que el catálogo y el carrito (#123). Aquí el `> 0` de abajo YA
+            // tapaba el "$89000" → 0m; lo que no veía es el "49.000" → 49, que salía a
+            // schema.org como una oferta de 49 pesos — un precio anunciado públicamente, en
+            // el sitio donde el que lo lee es un buscador y no una persona que pueda extrañarse.
             var priceRaw = page.Value<string>("productPriceBase");
-            var price = decimal.TryParse(priceRaw, NumberStyles.Number, CultureInfo.InvariantCulture, out var pp) ? pp : 0m;
+            var hasPrice = Synergos.CMS.Web.Services.PrecioAutorado.EsInequivoco(priceRaw, out var price);
             var currency = page.Value<string>("productCurrency");
             if (string.IsNullOrWhiteSpace(currency)) currency = "USD";
             var inStock = page.Value<bool>("productInStock");
@@ -80,7 +84,7 @@
             if (!string.IsNullOrWhiteSpace(sku)) sb.Append($",\"sku\":{Json(sku)}");
             if (!string.IsNullOrWhiteSpace(description)) sb.Append($",\"description\":{Json(description)}");
             if (!string.IsNullOrWhiteSpace(primaryImg)) sb.Append($",\"image\":{Json(primaryImg)}");
-            if (price > 0)
+            if (hasPrice && price > 0)
             {
                 var availability = inStock
                     ? "https://schema.org/InStock"
