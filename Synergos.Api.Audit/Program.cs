@@ -38,6 +38,14 @@ var app = builder.Build();
 
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Audit:ApiKey"]);
+
+// Un solo escritor por capacidad, aunque corran varias réplicas (#112). Sube a proceso
+// cruzado el `lock` que el servicio ya tenía dentro: con el almacén en un fichero por
+// documento, lo que queda por serializar es leer-decidir-escribir sobre el MISMO.
+app.UseStoreWriteGate(
+    app.Services.GetRequiredService<IOptions<AuditStorageOptions>>().Value.Root,
+    AuditRules.CodePrefix,
+    app.Configuration.GetValue<int?>("Audit:Storage:WriteGateSeconds"));
 app.MapAuditEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

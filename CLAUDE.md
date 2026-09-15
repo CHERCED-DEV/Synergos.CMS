@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3071 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3088 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3071 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3088 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (14, ADR 0133)
@@ -541,6 +541,82 @@ Las que salieron de construir el árbol de servicios (§0.B):
   que no existe. Es el primo del «una mutación cuyo BUILD falló no es una
   mutación» del repo hermano: ahí la mutación nunca se aplicó, acá
   **nunca se quitó**.
+- `feedback_a_store_that_rewrites_the_whole_collection_has_no_document_grain` —
+  **un almacén cuya unidad de escritura es la COLECCIÓN no protege un documento: protege
+  la foto de quien escribió último.** `JsonCollectionStore` guardaba un JSON por colección
+  y `Put` lo reescribía entero desde el caché del proceso, así que dos réplicas no se
+  pisaban «un pedido»: la segunda **borraba el almacén de la primera**, sin excepción y sin
+  log (#112). No se lee en el código como un defecto —se lee como «un diccionario
+  persistido»— y **el caché es lo que lo hace invisible**: mientras el proceso vive, todas
+  sus lecturas salen de memoria, así que una réplica nunca ve lo que la otra escribió ni
+  descubre que se lo comió. Es la misma sombra del #82 y del addendum #111 de
+  `feedback_a_seam_widens_when_it_meets_the_network`: lo que se mide mal no es la regla, es
+  **la granularidad**. La pregunta que lo caza: *¿cuánto se reescribe para cambiar una
+  cosa?* Un fichero por documento no es una optimización — es lo único que hace que dos
+  documentos sean independientes, y el árbol del CMS ya lo había aprendido
+  (`FileSystemJsonEntityStore`: «1 archivo por entidad»).
+- `feedback_a_lock_moves_out_of_the_process_it_does_not_get_replaced` —
+  **la exclusión que un proceso resuelve con `lock` no se arregla borrando el `lock`: se
+  SUBE a donde los dos la ven, y con ella aparece un estado que hay que nombrar antes.**
+  Leer-decidir-escribir son tres pasos con la regla del negocio en medio, así que ningún
+  almacén lo puede cerrar solo — por eso #30 subió la suma a dentro de la capacidad y por
+  eso acá el cerrojo sube al borde. **Esperar el turno es `Unavailable` y no `Conflict`**,
+  igual que `notifications.retry_in_flight`: no es que no se pueda, es que otro está en
+  curso, y con `Conflict` un orquestador deshace una saga sana por quince milisegundos de
+  cola. Decidir eso **en el primer incidente** es decidirlo mirando un log.
+  **Addendum #112 — dos colas, UN presupuesto.** Al subir el cerrojo quedan dos esperas en
+  fila —el semáforo de hilos del proceso y el cerrojo entre procesos— y darle a cada una la
+  espera configurada deja a quien llama esperando **el doble**. Eso no se lee como «ocupado»,
+  se lee como **colgado**: el llamador se va por su propio plazo antes de ver el 503, así que
+  el rechazo transitorio —que existe justamente para que se reintente en vez de deshacer una
+  saga sana— **no llega nunca**, y el síntoma es «el servicio se puso lento» (el mismo disfraz
+  de `feedback_a_seam_widens_when_it_meets_the_network`). El reloj arranca al entrar y las dos
+  colas comen del mismo. Y aun con el presupuesto gastado **se intenta el cerrojo una vez**:
+  rendirse sin mirar rechaza un turno que puede estar libre. El test que lo caza tiene que
+  hacer cola **las dos veces** —dos llamadas a la MISMA instancia con el fichero tomado por
+  otra—, porque con instancias distintas sólo se hace cola una vez y el defecto pasa en verde.
+- `feedback_a_file_lock_is_released_by_the_kernel_a_lease_is_not` — **elegir entre cerrojo
+  y arriendo es elegir quién limpia cuando el dueño se muere.** Un arriendo (`ISagaLease`,
+  #34) **tiene que vencer**, porque lo toma un barrido que puede morirse a media
+  compensación y nadie lo soltaría — y por eso arrastra el caso feo: la vuelta que tarda
+  más que su vencimiento y deja entrar a otro *mientras todavía escribe*. Un cerrojo de
+  fichero (`FileShare.None` → `flock`) lo suelta **el núcleo** al morir el proceso: sin
+  reloj, sin marca colgada, sin robo. El arriendo sigue siendo lo correcto donde el trabajo
+  dura y es reanudable; el cerrojo, donde el trabajo es una petición. Y los dos van **donde
+  los dos los ven** (`feedback_sweep_lease_where_both_see_it`): un `Mutex` con nombre NO
+  sirve — en Unix .NET lo resuelve en un temporal del usuario, así que dos contenedores
+  sobre el mismo volumen tendrían uno cada uno y los dos se creerían dueños.
+- `feedback_a_fixture_built_on_a_neighbouring_defect_expires_with_it` — **un test que para
+  montar su escenario AFIRMA el síntoma de un defecto que vive en otra pieza se pone rojo el
+  día que esa pieza se arregla, y eso no es una regresión: es la prueba de que se arregló.**
+  `ArriendoDeCompensacionTests` escribía `Assert.Empty(otro.WithPendingCompensations())` con
+  el comentario «no la ve: es la foto vieja» — cierto entonces, y falso desde que el almacén
+  relee. Lo que hay que hacer **no es quitar la línea** (deja el fixture sin decir qué
+  reproduce) ni relajar el test: es **escribir la verdad nueva y por qué cambió**, y volver a
+  preguntarse si el sujeto del test sigue haciendo falta — acá sí, porque el arriendo nunca
+  estuvo tapando el caché: tapa que dos barridos miren el disco *en el mismo instante*. Es el
+  primo de «un test que codifica el defecto convierte el arreglo en una regresión» (#57), con
+  el defecto una pieza más allá.
+- `feedback_docs_written_ahead_of_the_code_are_a_defect_with_a_clean_face` — **una sesión que
+  se corta deja el árbol en un estado que NINGÚN gate mira: código a medias con documentación
+  que ya lo da por hecho.** Acá el `<remarks>` de `StoreWriteGate` afirmaba que
+  «`JsonCollectionStore` pasó a un fichero por documento» y `AlmacenPorDocumentoTests` probaba
+  ese reparto — con el almacén **sin tocar**, reescribiendo la colección entera desde su caché.
+  Es peor que una guía desactualizada: una desactualizada se queda corta y ésta **afirma de
+  más**, así que el siguiente agente lee la mitad segura y construye encima. Lo que lo destapa
+  no es leer el `<remarks>` —suena bien— sino **correr la suite antes de tocar nada**: los tres
+  tests rojos nombraban la pieza que faltaba. De ahí las dos reglas: **la primera orden de un
+  trabajo heredado es medir el árbol, no continuarlo**, y ante la incoherencia hay **dos
+  salidas honestas y ninguna intermedia** — escribir el código que la prosa promete, o borrar
+  la promesa y los tests que la sostienen.
+  **Y su forma más fina: una MUTACIÓN que se quedó puesta.** `Api.Inventory` tenía el
+  comentario del turno de escritura y **no la llamada** — la sesión anterior la había quitado
+  para ver el gate en rojo y se cortó antes de restaurarla. El comentario afirmaba el cableado
+  que no estaba, así que `grep` sobre la explicación decía «19 de 19». Es el reverso de
+  `feedback_restored_mutation_needs_a_touch`: allá la restauración no llega al binario, acá no
+  llega al fichero. **Lo que lo caza es contar la LLAMADA y no la mención**
+  (`grep -c 'UseStoreWriteGate('` por fichero, que da `0` en uno de veinte), y por eso el gate
+  de cableado se mutó a propósito contra ese mismo hueco antes de darlo por bueno.
 
 ## 6. Prohibiciones explícitas
 
@@ -569,7 +645,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3071 tests):
+# Suite completa (3088 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -790,7 +866,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 241 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3071 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3088 tests, gates de
 segregación y molde en verde.
 
 > **Los 241 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -805,11 +881,14 @@ segregación y molde en verde.
 > llevan prefijo fijo —`identity.token_expired`, `token_malformed`,
 > `token_unknown_key`, `token_subject_mismatch`, `assertion_not_proven` y
 > `token_not_verifiable`—, así que se pueden contar y esta guía decía «con ellos
-> serían 240». Pero hay **dos más que llevan el prefijo de quien llama**:
+> serían 240». Pero hay **tres más que llevan el prefijo de quien llama**:
 > `{prefijo}.idempotency_key_required`, que emiten las **19** capacidades que
-> exigen la cabecera, y `{prefijo}.access_requires_identity`, que emite quien
+> exigen la cabecera; `{prefijo}.access_requires_identity`, que emite quien
 > deje la afirmación sin declarar —hoy `Api.Audit` y `Api.Consent`;
-> `Api.Messaging` declara el suyo y `Api.Workflow` no puede llegar ahí—. Sumarlo
+> `Api.Messaging` declara el suyo y `Api.Workflow` no puede llegar ahí—; y
+> `{prefijo}.store_busy` (#112), que emite el turno de escritura de las
+> diecinueve que guardan por `JsonCollectionStore` cuando la réplica de al lado
+> no soltó el turno a tiempo. Sumarlo
 > todo no da una cifra estable: da **una función de quién llama**, que cambia
 > cuando una capacidad empieza a exigir una llave sin que nadie escriba un
 > `Rejection` nuevo. Por eso el criterio cuenta **el árbol de las capacidades**
@@ -1256,9 +1335,96 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > **Lo que queda es del arquitecto y no es código**: qué proveedor y qué
   > bucket, y crear la llave. Ver `docs/despliegue/00-montar-el-entorno.md`
   > §6.
-- **19 capacidades sobre fichero JSON** con `lock` de proceso. Una sola
-  instancia por capacidad; dos réplicas se pisan. Está dicho de frente
-  en `JsonCollectionStore` y es la primera razón para cambiar de almacén.
+- **19 capacidades sobre fichero JSON, y ya aguanta una segunda réplica**
+  (#112). Esta línea decía «una sola instancia por capacidad; dos réplicas se
+  pisan… es la primera razón para cambiar de almacén», y llevaba olas
+  diciéndolo. Lo que se pisaba no era «un documento»: `Put` reescribía el mapa
+  ENTERO desde el caché de su proceso, así que **la réplica que escribía
+  segunda borraba la colección de la primera** — sin excepción y sin log, y eso
+  incluía las sagas de `Bff.Core`, que es el único sitio del repo que ya estaba
+  **diseñado** para dos réplicas (`FileSystemSagaLease`, #34). Hoy el almacén es
+  **un fichero por documento, sin caché de colección**, que es lo que el árbol
+  del CMS ya había aprendido en `FileSystemJsonEntityStore`; y lo que ningún
+  almacén podía arreglar solo —leer-decidir-escribir el MISMO documento desde
+  dos procesos— lo cierra `StoreWriteGate`, que sube a proceso cruzado el
+  `lock (_gate)` de capacidad entera que los dieciocho servicios ya tenían. Hay
+  gates (`AlmacenPorDocumentoTests`, `TurnoDeEscrituraTests`,
+  `TurnoDeEscrituraWiringTests`).
+
+  > **Lo que esto NO convierte en una base de datos.** Sigue siendo un
+  > fichero por documento, así que (a) **listar una colección cuesta N
+  > lecturas** —no hay índice, y `Where` recorre el directorio entero—, y
+  > (b) **un escritor a la vez por capacidad**, que era ya la regla en
+  > proceso y ahora lo es entre réplicas. Los dos disparadores están
+  > escritos y son medibles: el día que una colección crezca hasta que
+  > listar duela, o el día que una capacidad necesite dos escrituras de
+  > verdad simultáneas, **ése** es el momento de cambiar de almacén — y no
+  > antes, porque hasta ahí el coste es una tecnología entera a cambio de
+  > nada. `Api.Sessions` es la única sin turno, y no es olvido: su almacén
+  > AÑADE líneas a un fichero por día y nunca lee-modifica-escribe, que es
+  > el único patrón que ya era seguro entre réplicas.
+  >
+  > **Y el turno vive en el BORDE, no en cada servicio**, que es la
+  > decisión discutible y por eso está escrita: hay 59 `lock (_gate)` en
+  > dieciocho servicios y ponerles el rechazo por ocupación a los 59 es
+  > donde se olvida uno. El precio es que sólo cubre lo que entra por HTTP.
+  > Hoy alcanza porque **ningún GET de las veinte escribe** —comprobado
+  > recorriendo los 49, y hay gate— y ninguna capacidad tiene un proceso de
+  > fondo que guarde por `JsonCollectionStore`. El día que una lo tenga,
+  > esto no la cubre.
+  >
+  > **Lo anterior se migra solo y el fichero viejo NO se borra.** Son las
+  > mismas entidades cambiadas de sitio, así que no hay nada que inventar
+  > —la diferencia con lo que #44 decidió sobre los expedientes—, y se deja
+  > el `{nombre}.json` donde está porque el despliegue tiene vuelta atrás
+  > automática (ADR 0133): una versión anterior que arrancara sin él
+  > serviría la capacidad **vacía**, en silencio.
+  > **Y lo que esa vuelta atrás LEE queda dicho, porque media migración
+  > entendida es peor que ninguna**: la versión anterior lee el
+  > `{nombre}.json` tal como lo dejó el momento de migrar, o sea **sin lo
+  > escrito después**. La vuelta atrás recupera el servicio, no los datos de
+  > mientras — y eso es una decisión, no un descuido: escribir en los dos
+  > formatos a la vez habría dejado dos verdades sobre el mismo documento y
+  > ninguna forma de saber cuál gana.
+  >
+  > **El objetivo es ACTIVO-ACTIVO, y por eso la respuesta no fue un
+  > interruptor de «sólo una escribe».** Dos réplicas sirven a la vez y las
+  > dos escriben; lo que se serializa es el turno, no el servicio. Con
+  > activo-pasivo habría bastado con que la pasiva no aceptara escrituras
+  > —más barato— y habría dejado sin resolver el caso que de verdad duele:
+  > **una réplica que se está apagando y otra que ya arrancó**, que es
+  > exactamente lo que pasa en cada despliegue con parada-antes-de-arranque
+  > (ADR 0133) si el arranque se adelanta un segundo.
+  >
+  > **Un directorio no tiene orden, así que el almacén deja de fingir que lo
+  > tiene**: `All` y `Where` devuelven por identificador. No es cosmético —
+  > sin un orden igual en las dos réplicas, dos consultas idénticas contra
+  > réplicas distintas paginan distinto y una página 2 se salta filas. Quien
+  > necesita orden de negocio ya lo dice (por fecha, por puntaje); se
+  > recorrieron los veintitantos sitios que listan y **todos** lo decían.
+  >
+  > **Lo que queda ABIERTO, y no se tapa: los cuatro orquestadores.** Sus
+  > sagas también viven en un `JsonCollectionStore`, así que **heredan la
+  > mitad del almacén** —dos réplicas que avanzan sagas distintas ya no se
+  > borran— y **no tienen turno de escritura**: dos que avancen la MISMA
+  > saga a la vez siguen pudiendo perder una escritura. No se les cableó y
+  > no es un olvido — dentro de un paso de saga hay llamadas HTTP a las
+  > capacidades, así que un turno de orquestador entero dejaría toda compra
+  > haciendo cola detrás de la que está esperando a la pasarela, que es
+  > cambiar un defecto raro por uno seguro. Lo que ahí corresponde es un
+  > turno **por saga**, del tamaño de `ISagaLease` (#34), y es otro trabajo.
+  > Hoy lo que los protege es que `SagaEngine` resuelve la llave de
+  > idempotencia antes de abrir y que compensar va bajo arriendo.
+  >
+  > **Verificado con procesos vivos, que es donde se vio** (§10.6): dos
+  > `Api.Inventory` sobre el mismo volumen, 400 ajustes RELATIVOS disparados
+  > de a dos contra las dos réplicas a la vez. **Sin turno: 400 respuestas
+  > 200 y 268 unidades** —132 escrituras perdidas, sin una sola excepción y
+  > sin un log—. **Con turno: 400 y 400.** Ningún test lo habría visto: los
+  > dos procesos existen o no existen. Y de paso quedó comprobado que el
+  > cerrojo es de verdad del sistema —un `flock` desde un python ajeno le
+  > saca el turno a la capacidad, que contesta `inventory.store_busy` con
+  > 503 y `transient: true`, mientras los `GET` siguen pasando en 12 ms—.
 - **Ya se puede seguir una saga por los seis servicios** (HU #28), aunque
   todavía no con trazas de verdad. Un identificador opaco nace en el borde
   —o se genera si nadie lo manda—, viaja en `X-Correlation-Id` por cada
