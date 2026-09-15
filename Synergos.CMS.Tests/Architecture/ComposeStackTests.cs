@@ -251,6 +251,50 @@ public sealed class ComposeStackTests
             $"Encontrado: {string.Join(", ", haciaElArbol)}");
     }
 
+    /// <summary>
+    /// El perfil que despliega producción NO puede traer la siembra de desarrollo encendida.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Estaba encendida, y los endpoints que ese flag protege son anónimos</b> (#113).
+    /// Cuatro piezas que por separado parecían inocentes: <c>appsettings.Docker.json</c> trae
+    /// <c>DevSeed.Enabled = true</c>, <c>compose.prod.yml</c> corre con
+    /// <c>ASPNETCORE_ENVIRONMENT: Docker</c> —o sea que <b>ése</b> es el perfil de producción—,
+    /// nadie lo pisaba, y <c>DevController</c> es <c>[AllowAnonymous]</c>. Resultado:
+    /// <c>POST /dev/clear-all-content</c> alcanzable desde internet, sin autenticar, para
+    /// borrar el contenido entero.</para>
+    ///
+    /// <para><b>Y el propio controller declaraba la salvaguarda que no tenía</b>: su XML-doc
+    /// dice «no-op en prod», que es cierto <i>si</i> el flag está off y asume un perfil de
+    /// producción que no existía. Es la forma de #72 y #82 — la propiedad que el código
+    /// anuncia como su razón de estar a salvo es justo la que no se cumple.</para>
+    ///
+    /// <para><b>Por qué no lo vio nadie:</b> las verificaciones en vivo de este repo se
+    /// hicieron con procesos SUELTOS, y esto sólo existe en el stack COMPUESTO. Ningún gate
+    /// miraba qué flags trae encendidos el perfil que se despliega — se comprobó con
+    /// <c>grep -rn "DevSeed" Architecture/</c>, que daba cero.</para>
+    ///
+    /// <para>Se mide sobre el compose SIN comentarios, porque la prosa de arriba nombra el
+    /// flag para explicarlo y un gate que se dispara con su propia documentación se acaba
+    /// desactivando — la lección que este mismo fichero ya aprendió con <c>localhost</c>.</para>
+    /// </remarks>
+    [Fact]
+    public void El_perfil_de_produccion_NO_trae_la_siembra_encendida()
+    {
+        var compose = ComposeSinComentarios();
+
+        Assert.Contains("Synergos__DevSeed__Enabled:", compose, StringComparison.Ordinal);
+
+        var linea = compose.Split('\n')
+            .Single(l => l.Contains("Synergos__DevSeed__Enabled:", StringComparison.Ordinal));
+
+        Assert.True(
+            linea.Contains("\"false\"", StringComparison.OrdinalIgnoreCase)
+            || linea.Contains(": false", StringComparison.OrdinalIgnoreCase),
+            $"El despliegue tiene que APAGAR la siembra, y la línea dice: {linea.Trim()}. "
+            + "Los endpoints de DevController son [AllowAnonymous] y uno de ellos borra todo "
+            + "el contenido: encendida en producción es un borrado anónimo desde internet (#113).");
+    }
+
     private static string CorrerNode(string script, params string[] args)
     {
         var psi = new System.Diagnostics.ProcessStartInfo
