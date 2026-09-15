@@ -433,6 +433,22 @@ services:
       Synergos__Identity__BaseUrl: "http://api-identity:8080"
       Synergos__Identity__ApiKey: \${SYNERGOS_API_KEY}
 
+      # Contra quien se cobra (#27). SON DOS interruptores y son dos ALCANCES:
+      # Synergos__Payments__Mode cambia el seam ENTERO —los ocho consumidores del
+      # motor en proceso— y el CMS SE NIEGA A ARRANCAR con el puesto en Api si
+      # Tienda, Salud, Eventos o Viajes siguen comprando de este lado: esos
+      # flujos apartan, cobran y confirman en varios pasos y aqui no hay donde
+      # anotar una compensacion pendiente. La tasa de un tramite va por el suyo
+      # —Synergos__Gob__Payments__Mode— porque radicar NO compone: el motor
+      # decide no abortar el tramite si la captura no sale.
+      Synergos__Payments__Mode: \${SYNERGOS_PAYMENTS_MODE:-Engine}
+      Synergos__Payments__BaseUrl: "http://api-payments:8080"
+      Synergos__Payments__ApiKey: \${SYNERGOS_API_KEY}
+
+      Synergos__Gob__Payments__Mode: \${SYNERGOS_GOB_PAYMENTS_MODE:-Local}
+      Synergos__Gob__Payments__BaseUrl: "http://api-payments:8080"
+      Synergos__Gob__Payments__ApiKey: \${SYNERGOS_API_KEY}
+
       Synergos__Gob__Mode: \${SYNERGOS_GOB_MODE:-Stub}
       Synergos__Gob__BaseUrl: "http://api-workflow:8080"
       Synergos__Gob__ApiKey: \${SYNERGOS_API_KEY}
