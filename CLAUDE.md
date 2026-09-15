@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3236 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3242 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3236 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3242 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (18, ADR 0133)
@@ -1054,7 +1054,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3236 tests):
+# Suite completa (3242 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -1350,7 +1350,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3236 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3242 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -2854,6 +2854,33 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > intento**: `PageBare.cshtml` y `Error.cshtml` pintan Block Grid con
   > `Layout = null`, así que no heredaban el `<head>` de `_Layout` y nunca
   > tuvieron mapa — ni en producción ni en desarrollo.
+  >
+  > **Y el mapa se COMPONE por framework, no se elige** (#127). El navegador lee
+  > **el primer** `<script type="importmap">` de la página e **ignora los
+  > siguientes**: no se acumulan, no se funden, y uno presente no se corrige con
+  > otro después. Así que con dos frameworks publicando, servir el de uno deja al
+  > otro sin resolver sus bare specifiers — el defecto #126 otra vez, esta vez a
+  > mitad de página. Se componen **todos los que el registry declara** (las claves
+  > de `implementations`, derivadas del disco y no una lista a mano), y no los de
+  > la página: un import map sólo **declara** correspondencias, así que las
+  > entradas de un framework que nadie usa cuestan unos cientos de bytes de HTML y
+  > **cero peticiones** — y saber qué elementos trae la página exigiría conocerlos
+  > antes de renderizar el `<head>`, que es justo lo que no se sabe ahí.
+  >
+  > **El mismo specifier con la MISMA URL no es conflicto** —`rxjs` puede salir del
+  > mismo sitio para dos frameworks— y se deduplica. Con URLs **distintas** se
+  > **para**: elegir uno en silencio deja al otro framework cargando el runtime
+  > equivocado, y eso no se lee como «el mapa está mal» sino como «ese elemento
+  > está roto», que manda a alguien a depurar el elemento. Es la decisión de
+  > `PaymentEngineCoexistenceTests` aplicada a otra cosa — cuando dos piezas se
+  > contradicen sobre un hecho, servir una de las dos es peor que parar.
+  >
+  > **Y lo que NO hace falta, medido y escrito para que nadie lo proponga de
+  > cero**: un «helper por framework» para el `<script>` del elemento.
+  > `DefaultSynHostEmitter` emite `<script src="…" type="module" defer>` y sus
+  > dependencias, y ya — un custom element de React o de Svelte arranca igual. La
+  > palabra `Framework` aparece **una sola vez** en ese fichero y es un comentario
+  > que dice «Framework-agnostic». Lo que es del framework es el mapa.
 
   > **Y son las DOS, no una** (#56). Poner el modo y olvidar la URL ya no pasa
   > en silencio: el compose la manda **presente y vacía** —que pisa el default
