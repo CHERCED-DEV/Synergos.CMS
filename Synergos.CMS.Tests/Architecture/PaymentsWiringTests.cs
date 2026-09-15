@@ -314,4 +314,49 @@ public sealed class PaymentsWiringTests
         public Task<PaymentOutcome> RefundAsync(string sessionId, decimal? amount = null, CancellationToken cancellationToken = default)
             => Task.FromResult(new PaymentOutcome(sessionId, PaymentStatus.Refunded));
     }
+
+    /// <summary>
+    /// La guarda se LLAMA desde el composer — no basta con que exista.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Este gate se escribió porque el resto de este fichero pasaba en verde con la
+    /// guarda DESENCHUFADA.</b> Comentando la llamada en <c>SeamComposer.PaymentEngine.cs</c>,
+    /// los 26 tests de pagos, tienda y coexistencia seguían pasando: los demás invocan
+    /// <c>ExigirQueNadieOrqueste</c> <b>directamente</b>, así que prueban la REGLA y no el
+    /// CABLEADO — y lo que decide es lo que hay entre los dos.</para>
+    ///
+    /// <para>Es la tercera vez que este repo tropieza con la misma forma, y ya está escrita en
+    /// <c>CLAUDE.md</c> §5: <c>feedback_an_exemption_needs_a_signature_behind_it</c> dice que el
+    /// gate tiene que medir que la pieza esté <b>ENCHUFADA</b> y no que exista — <c>Api.Notifications</c>
+    /// quitó la verificación de firma de su lambda y no falló ni un test. Y la rebanada 5 de la
+    /// HU #14 lo dice igual: «el gate mira el CABLEADO, no la regla».</para>
+    ///
+    /// <para>Se mide sobre la fuente sin comentarios, porque la prosa de arriba nombra la guarda
+    /// para explicarla — un gate que se dispara con su propia documentación se acaba desactivando.
+    /// Y se exige que la llamada esté <b>dentro</b> de la rama que enciende el modo <c>Api</c>: una
+    /// llamada suelta en otro sitio del fichero pasaría el <c>Contains</c> sin proteger nada.</para>
+    /// </remarks>
+    [Fact]
+    public void La_guarda_se_LLAMA_desde_el_composer_y_no_solo_existe()
+    {
+        var composer = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Web", "Composers", "SeamComposer.PaymentEngine.cs"));
+
+        var enciendeApi = composer.IndexOf("\"Synergos:Payments:Mode\"", StringComparison.Ordinal);
+        Assert.True(enciendeApi >= 0, "El composer ya no lee Synergos:Payments:Mode — ¿se movió el cableado?");
+
+        var declara = composer.IndexOf("void ExigirQueNadieOrqueste", StringComparison.Ordinal);
+        Assert.True(declara >= 0, "La guarda ya no se declara en este fichero.");
+
+        // La LLAMADA: la declaración no cuenta, y tiene que estar entre el `if` del modo y el
+        // cuerpo de la guarda — o sea dentro de la rama que enciende el cableado.
+        var llamada = composer.IndexOf("ExigirQueNadieOrqueste(", enciendeApi, StringComparison.Ordinal);
+
+        Assert.True(
+            llamada >= 0 && llamada < declara,
+            "La guarda existe pero NADIE la llama al cablear. Comentar esa línea deja el modo Api "
+            + "encendido sobre un vertical que orquesta de este lado —plata real detrás de una saga "
+            + "que el CMS no sabe deshacer— y el resto de los tests siguen verdes, porque invocan "
+            + "la guarda directamente. Un gate que mide la regla y no el cableado no vigila nada.");
+    }
 }
