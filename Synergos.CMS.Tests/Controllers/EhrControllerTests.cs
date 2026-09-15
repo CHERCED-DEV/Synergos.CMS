@@ -731,8 +731,14 @@ public sealed class EhrControllerTests
         Assert.Equal(36_000L, statement.GetProperty("lines")[0].GetProperty("amountMinor").GetInt64());
     }
 
-    [Fact] // filtro: el home sólo cuenta como no leídos los mensajes CLÍNICOS.
-    public async Task PortalHome_LosNoLeidos_SoloCuentanLosClinicos()
+    // El home NO cuenta «sin leer»: no hay read-receipts en `IMessagingService`, así que
+    // no hay nada que contar. Lo que había era una DERIVACIÓN —la suma de `MessageCount`
+    // de los hilos clínicos— que se leía como un dato: contaba como sin leer los mensajes
+    // que el propio paciente escribió. El fixture lo exige con hilos de VARIOS mensajes,
+    // porque con un mensaje por hilo la suma y el conteo de hilos dan lo mismo y la
+    // fabricación pasaría en verde.
+    [Fact] // #116 — nulo es «no consta», y NO es «no tienes mensajes sin leer».
+    public async Task PortalHome_LosSinLeer_NoSeFabrican()
     {
         PadronDevuelve(Paciente());
         CitasDelPacienteDevuelven();
@@ -744,7 +750,46 @@ public sealed class EhrControllerTests
 
         var body = Json(await BuildSut().PortalHome("pat-1", default));
 
-        Assert.Equal(3, body.GetProperty("unreadMessages").GetInt32());
+        // La clave se conserva DECLARADA —quitarla dejaría al normalizador del cliente
+        // reponiendo su propio default— y sale nula.
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("unreadMessages").ValueKind);
+    }
+
+    [Fact] // filtro: la tarjeta de mensajes cuenta CONVERSACIONES clínicas, que sí es un hecho.
+    public async Task PortalHome_LaTarjetaDeMensajes_CuentaHilosClinicos()
+    {
+        PadronDevuelve(Paciente());
+        CitasDelPacienteDevuelven();
+        _messaging.GetInboxAsync("pat-1", Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            Resumen("t-1", "clinical:advice:pat-1", mensajes: 3),
+            Resumen("t-2", "clinical:advice:pat-1", mensajes: 4),
+            Resumen("t-3", "shop:order:o-9", mensajes: 5),
+        });
+
+        var body = Json(await BuildSut().PortalHome("pat-1", default));
+
+        var tarjeta = body.GetProperty("cards").EnumerateArray()
+            .Single(c => c.GetProperty("kind").GetString() == "message");
+        // DOS conversaciones clínicas, no SIETE mensajes ni los doce de la bandeja entera.
+        Assert.Equal("Tienes 2 conversaciones con tu equipo de salud.",
+            tarjeta.GetProperty("detail").GetString());
+    }
+
+    [Fact] // vacío: sin hilos clínicos no hay tarjeta de mensajes que enseñar.
+    public async Task PortalHome_SinHilosClinicos_NoHayTarjetaDeMensajes()
+    {
+        PadronDevuelve(Paciente());
+        CitasDelPacienteDevuelven();
+        _messaging.GetInboxAsync("pat-1", Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            Resumen("t-2", "shop:order:o-9", mensajes: 5),
+        });
+
+        var body = Json(await BuildSut().PortalHome("pat-1", default));
+
+        Assert.DoesNotContain(body.GetProperty("cards").EnumerateArray(),
+            c => c.GetProperty("kind").GetString() == "message");
     }
 
     [Fact] // filtro: el e-Check-In aparece dentro de 48 h y NO antes.
