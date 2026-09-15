@@ -1209,6 +1209,18 @@ git clone --depth 1 https://github.com/cherced-dev/synergos.ui /tmp/ui
 Los dos pasan hoy. El primero sale con **avisos** `[W4]` —entradas del registry
 sin su espejo en `ELEMENT_CONFIG_FIELDS`— que son avisos y no errores: sale 0.
 
+> ⚠️ **Y esta frase estuvo MINTIENDO, que es peor que el rojo.** `validate-cms-contracts.mjs`
+> salía con **exit 1** y dos errores `[E2]` —`elementCourseLesson` y `elementCourseModule`—
+> desde la HU #100, mientras acá decía «los dos pasan hoy». Un element type nuevo que no monta
+> web component tiene que anotarse en `CMS_INTERNAL_ALIASES`, **una lista que vive en el repo
+> HERMANO** (`Synergos.UI/tools/validate-cms-contracts.mjs`); es el paso 7b del molde
+> (doc 12), y nadie fue.
+>
+> **La forma del defecto, para reconocerla:** un paso del molde que se cumple en el OTRO repo
+> no lo recuerda nadie, y una guía que afirma verde apaga la única señal que quedaba. Lo
+> destapó **correr el gate**, no leerlo — que es lo mismo que enseñó el `| jq length` del CDN
+> más abajo en esta sección.
+
 Son **deuda conocida y declarada**: el propio `design-gates.yml` explica que
 con la bandera estricta puesta ese job llevaba rojo en `master` cuatro
 corridas seguidas, y que un gate siempre rojo deja de leerse.
@@ -1315,8 +1327,6 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3225 tests, gates de
-**Construido y verificado:** 20 capacidades (137 endpoints, 241 códigos
 de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3225 tests, gates de
 segregación y molde en verde.
 
