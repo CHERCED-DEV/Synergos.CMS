@@ -1011,6 +1011,53 @@ la declara no tiene lectura inocente. Hoy ligan 57 claves en 22 rutas.
 > (`postJson(url, toCourseDraftWire(body))`) quedan fuera, porque seguirla exige resolver su
 > return. Los lista en cada corrida en vez de contarlos como cubiertos.
 
+> **Y lo que G-6 y G-7 no miran NINGUNO de los dos: el salto BFF↔capacidad.** Los dos cruzan
+> el CMS con el UI. Un `Synergos.Bff.*/Clients/*Dtos.cs` que no declara lo que la capacidad
+> emite tiene la forma exacta de G-7 y se escapa entero — es lo que pasó en el **#122**, donde
+> `QuoteDto` no declaraba `Lines` y el pedido se guardaba con `UnitPrice: 0` en cada renglón
+> con el dato ya cruzado el cable.
+>
+> **Se midió si el mismo cruce se puede aplicar acá, y la respuesta es distinta según la
+> dirección. Va escrita porque es el segundo defecto que entra por este hueco.**
+>
+> **La dirección de la RESPUESTA —lo que la capacidad emite ↔ lo que el DTO declara— no
+> admite gate, y no por falta de mapeo.** El mapeo es lo BARATO acá: `Post<QuoteDto>(Pricing,
+> "v1/quotes", …)` nombra la ruta, y el `Endpoints/` de la capacidad la liga a su
+> `QuoteResponse` — o sea que se deriva por ruta, como `CapacidadesConectadasTests`, sin la
+> tabla a mano que a G-6 le costó un verde falso. Lo que no admite gate es el **criterio**:
+> un DTO de orquestador declara *sólo lo que usa* a propósito, y medido sobre `Bff.Tienda` eso
+> son **33 campos omitidos a conciencia** (4 de `CartResponse`, 1 de `QuoteResponse`, 3 de
+> `StockItemResponse`, 4 de `StockHoldResponse`, 5 de `OrderResponse`, 9 de `PaymentResponse`
+> y 7 de `ShipmentResponse`), con el defecto siendo **uno** de los 34. Exigir que se declare
+> todo son 33 exenciones en un solo orquestador — el muro de excepciones que deja de leerse—.
+> Y un **trinquete** contra una línea base es peor, no mejor: se pondría rojo el día que una
+> capacidad **agrega** un campo, que es el caso legítimo que el diseño busca, y se quedaría
+> verde sobre #122, que estaba en la línea base desde el primer día. **Un trinquete que
+> distingue al revés que el defecto no es un gate barato: es uno que enseña a ignorarlo.**
+>
+> **La dirección de la PETICIÓN —lo que el BFF manda ↔ lo que el `*Request` declara— sí
+> admite gate**, y es la de G-7 tal cual: ahí no hay suelo de ruido, porque toda clave que se
+> manda y no se declara la tira `System.Text.Json` en silencio. **Hoy no se escribe porque no
+> hay qué cazar**: son **diez cuerpos distintos** en los cuatro orquestadores —`/v1/quotes`,
+> `/v1/orders`, `/v1/payments`, `…/refund`, `/v1/holds`, `/v1/items/{id}/holds`,
+> `…/adjust`, `/v1/shipments`, `/v1/grants/check` y los `null` de los POST sin cuerpo— y se
+> cruzaron **a mano, uno por uno, contra su record**: ligan los diez. Escribir un parser de
+> objetos anónimos anidados para vigilar diez llamadas que ya se leyeron es la abstracción
+> prematura de §6.
+>
+> **Los dos disparadores, para que esto no se relea como «se decidió que no»:**
+> **(a)** el día que aparezca el PRIMER descuadre de petición —una clave mandada que ningún
+> `*Request` declara—, se escribe el gate en vez de arreglar la llamada sola; **(b)** el día
+> que exista el quinto orquestador (Realty, Gob, Academy o Social), porque cruzar a mano deja
+> de ser fiable mucho antes de volverse imposible, y eso no se nota: se nota cuando alguien ya
+> confió en el cruce que no hizo.
+>
+> **Y lo que de verdad cazaba #122 no es ninguno de los dos cruces: es la FABRICACIÓN.**
+> Omitir `Lines` era inocente hasta que alguien tuvo que rellenar el hueco con
+> `Money.Zero`. La pregunta que lo encuentra —y que se hace leyendo, no corriendo— es
+> **¿este campo lo estoy inventando porque el DTO de al lado no lo trae?**; ver
+> `feedback_an_omission_becomes_a_defect_when_someone_fills_it` en §5.
+
 Y el de las claves de respuesta:
 
 ```bash
