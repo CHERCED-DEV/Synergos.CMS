@@ -470,6 +470,50 @@ autorar el árbol de contenido en el backoffice una primera vez; a partir de ah�
 el paso 5.bis.1. Eso es trabajo de contenido, no de despliegue, y por eso está nombrado acá en
 vez de dado por hecho.
 
+### 5.bis.3 El estado que las capacidades exigen
+
+```bash
+tools/provisionar.sh --verificar   # qué falta, sin escribir nada
+tools/provisionar.sh               # lo publica
+```
+
+Cuatro cosas, y las cuatro se rechazan con su motivo si faltan —`definition_not_found`,
+`resource_not_found`, `price_not_found`— así que **no fallan al arrancar: fallan la primera vez
+que alguien intenta usar la función**. El script está en `tools/provisionar.sh` y su cabecera
+explica cada una.
+
+| | qué publica | de qué sirve |
+|---|---|---|
+| Gobierno | la definición del trámite en `Api.Workflow` | sin ella no se decide ningún expediente |
+| Seguimiento | las **cuatro** definiciones de pipeline | sin ellas no avanza ningún pedido |
+| Salud · Propiedades · Viajes | los recursos de `Api.Booking` | sin ellos no se agenda ni se aparta |
+| Viajes | los precios de `Api.Pricing` | sin ellos no se cotiza una oferta |
+
+> **Ojo con las tres de la última fila: son por ENTIDAD, no por producto.** Un recurso por médico,
+> uno por inmueble que acepte visitas, uno por oferta de viaje. Eso **no es bootstrap**: es una
+> obligación permanente que crece con el catálogo cada vez que se da de alta un médico o se
+> publica un inmueble. `provisionar.sh` siembra las que conoce y **reconcilia**, pero el día que
+> el catálogo salga de Umbraco en vez de del stub, esto tiene que pasar a ser un seam del alta —
+> está escrito en la cabecera del script, con el disparador.
+
+**Las entidades se declaran en `tools/provisionar.recursos.json`**, y de ahí salen los recursos y
+los precios. Dos cosas que hay que saber al escribirlo, porque las dos las destapó correr esto
+contra las capacidades vivas y **ninguna de las dos falla a la vista**:
+
+- **Una entrada `precio` tiene que traer su `amount`, y numérico.** Si falta, el script se planta
+  y lo dice. No se publica a cero: una oferta a cero **se vende gratis** y no hay nada que falle
+  —ni al desplegar, ni al cotizar— hasta que alguien compra.
+- **Cambiar un precio y volver a correr el script SÍ lo cambia**, porque su llave de idempotencia
+  lleva el monto dentro. Antes no: la capacidad consulta su libro antes de aplicar nada y devolvía
+  la tarifa anterior contestando 200. Republicar lo mismo sigue sin cambiar nada.
+
+> Verificado contra `Api.Workflow`, `Api.Booking` y `Api.Pricing` levantados de verdad: las tres
+> pasadas —`--verificar` en seco, publicar, y publicar otra vez— dejan **un** recurso por sujeto y
+> **un** precio, y la segunda no toca nada. Lo que NO se pudo ejecutar acá es
+> `importar-schema.sh`, que necesita el demonio de Docker.
+
+---
+
 ## 6. El respaldo — que es el único que se puede comprobar de antemano
 
 Todo lo demás de esta guía se nota cuando falla. Esto no: un respaldo roto **se ve exactamente

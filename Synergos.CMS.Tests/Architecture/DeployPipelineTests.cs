@@ -254,7 +254,7 @@ public sealed class DeployPipelineTests
         // Sin `set -e`, un `docker compose pull` que falla no detiene el script: se sigue al
         // `down`, y el sitio se cae para desplegar algo que no se pudo bajar.
         foreach (var script in new[] { "deploy-remoto.sh", "humo-publico.sh", "bootstrap-servidor.sh",
-                                       "importar-schema.sh" })
+                                       "importar-schema.sh", "provisionar.sh" })
         {
             var ruta = Path.Combine(RepoRoot(), "tools", script);
             Assert.True(File.Exists(ruta), $"Falta tools/{script}");
@@ -356,6 +356,7 @@ public sealed class DeployPipelineTests
         var doc = File.ReadAllText(Path.Combine(RepoRoot(), "docs", "despliegue", "00-montar-el-entorno.md"));
 
         Assert.Contains("importar-schema.sh", doc, StringComparison.Ordinal);
+        Assert.Contains("provisionar.sh", doc, StringComparison.Ordinal);
     }
 
     [Fact]
