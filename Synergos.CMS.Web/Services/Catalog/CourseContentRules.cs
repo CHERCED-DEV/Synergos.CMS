@@ -76,11 +76,16 @@ public static class CourseContentRules
     /// El precio, o <c>false</c> si el texto no es INEQUÍVOCAMENTE uno. Vacío vale 0 (gratis).
     /// </summary>
     /// <remarks>
-    /// <b>La misma trampa que ya costó dinero en Tienda y en Eventos, la misma regla.</b>
-    /// <c>coursePriceFrom</c> es un <c>Umbraco.TextBox</c>, así que el editor teclea texto
-    /// libre — y <c>"180.000"</c> SÍ parsea en InvariantCulture, porque ahí el punto es
-    /// separador DECIMAL: da <b>180</b>. No es un fallo de parseo sino un precio plausible
-    /// equivocado por 1000×, y ninguna guarda de «&gt; 0» lo ve.
+    /// <b>La misma trampa que ya costó dinero en Tienda y en Eventos, y desde #123 la MISMA
+    /// función:</b> <see cref="PrecioAutorado"/>. <c>coursePriceFrom</c> es un
+    /// <c>Umbraco.TextBox</c>, así que el editor teclea texto libre — y <c>"180.000"</c> SÍ
+    /// parsea en InvariantCulture, porque ahí el punto es separador DECIMAL: da <b>180</b>. No
+    /// es un fallo de parseo sino un precio plausible equivocado por 1000×, y ninguna guarda de
+    /// «&gt; 0» lo ve.
+    ///
+    /// <para>El <b>vacío</b> se resuelve acá y no en el helper: en Educación un curso sin precio
+    /// es gratuito, en Tienda un producto sin precio no se sirve. Es la misma política que
+    /// Eventos y la contraria a la de mercancía (#120).</para>
     ///
     /// <para><b>Y aquí se OMITE el curso</b>, no se sirve en 0: un 0 se pinta como
     /// <i>Gratis</i>, y el motor de matrícula resuelve el precio real DESDE EL CATÁLOGO como
@@ -98,8 +103,7 @@ public static class CourseContentRules
             return true;
         }
 
-        return value.All(char.IsAsciiDigit)
-            && decimal.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out price);
+        return PrecioAutorado.EsInequivoco(value, out price);
     }
 
     /// <summary>

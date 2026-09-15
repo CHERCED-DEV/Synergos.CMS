@@ -222,37 +222,23 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
     /// <remarks>
     /// <b>Ésta es la trampa que puede costar dinero de verdad, y exige más que un TryParse.</b>
     /// <c>productPriceBase</c> es <c>Umbraco.TextBox</c> (cambiar su tipo exige Key nueva +
-    /// migrar los nodos, así que no se toca), o sea que el editor teclea texto libre.
+    /// migrar los nodos, así que no se toca), o sea que el editor teclea texto libre. Los dos
+    /// agujeros del <c>TryParse</c> de siempre —el <c>"$89000"</c> que cae a cero y el
+    /// <c>"49.000"</c> que da 49— están explicados en <see cref="PrecioAutorado"/>, que es
+    /// desde #123 el único sitio donde se decide si un texto es un precio.
     ///
-    /// <para>El código viejo hace <c>decimal.TryParse(raw, …, InvariantCulture) ? price : 0m</c>
-    /// y tiene DOS agujeros, no uno:</para>
-    /// <list type="number">
-    ///   <item>El conocido: <c>"$89000"</c> no parsea → fallback SILENCIOSO a <c>0m</c> →
-    ///   mercancía comprable a precio CERO.</item>
-    ///   <item><b>El peor, y el que de verdad ocurre en Colombia:</b> <c>"49.000"</c> SÍ
-    ///   parsea — en InvariantCulture el punto es separador DECIMAL, así que da <b>49</b>. El
-    ///   editor escribe 49 mil pesos y la tienda lo vende por 49. No es un fallo de parseo:
-    ///   es un precio plausible equivocado por 1000×, y ninguna guarda de "&gt; 0" lo ve.
-    ///   Verificado en vivo: el Tote salió a 49.</item>
-    /// </list>
-    ///
-    /// <para>Por eso no basta con parsear: el formato tiene que ser <b>inequívoco</b>. COP no
-    /// usa centavos en la práctica, así que la regla es <b>solo dígitos</b> — cualquier punto,
-    /// coma, símbolo o espacio se RECHAZA y se loguea. Que falte una ficha se ve al instante;
-    /// un cero o un 1000× no se ven hasta que llega el extracto.</para>
+    /// <para><b>Lo que se decide ACÁ es la política, y no es la misma que la de al lado.</b> En
+    /// mercancía el cero no es «gratis», es «nadie le puso precio», así que se exige
+    /// <c>&gt; 0</c> y el producto se OMITE. Eventos y Educación tratan el vacío como legítimo
+    /// sobre el mismo texto; por eso esa exigencia se quedó fuera del helper y no entró como
+    /// una bandera (#120). Que falte una ficha se ve al instante; un cero o un 1000× no se ven
+    /// hasta que llega el extracto.</para>
     /// </remarks>
     private bool TryParsePrice(IPublishedContent product, string sku, out decimal price)
     {
-        price = 0m;
         var raw = product.Value<string>("productPriceBase")?.Trim();
 
-        // Solo dígitos: ni "49.000" (que parsearía a 49) ni "$49000" ni "49,000".
-        var unambiguous = !string.IsNullOrEmpty(raw) && raw.All(char.IsAsciiDigit);
-
-        if (unambiguous
-            && decimal.TryParse(raw, System.Globalization.NumberStyles.None,
-                System.Globalization.CultureInfo.InvariantCulture, out price)
-            && price > 0m)
+        if (PrecioAutorado.EsInequivoco(raw, out price) && price > 0m)
         {
             return true;
         }
