@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3169 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3176 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3169 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3176 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (18, ADR 0133)
@@ -855,6 +855,39 @@ Las que salieron de construir el árbol de servicios (§0.B):
   endpoint se cruza contra el controller que lo declara (`PortadaDeArranqueTests`).
   Un camino escrito que nadie cruza contra el código es una hora perdida para
   quien lo siga.
+- `feedback_a_rejection_named_after_a_field_expires_at_the_second_field` — **un
+  código de rechazo que nombra un CAMPO caduca el día que aparece el segundo, y
+  el que caduca no falla: MIENTE.** `GET /v1/reservations` exigía `resourceId` y
+  rechazaba con `booking.resource_id_required` — el instinto correcto («sin
+  filtro esto es un volcado del almacén») dicho sobre el único filtro que
+  existía. Al añadir el filtro por actor (#124) ese nombre pasa a afirmar que
+  hace falta `resourceId` cuando un `for` también sirve, y **un código de
+  rechazo es contrato**: es lo que un orquestador compara y lo que alguien
+  escribe en un `if`. La regla es la misma que
+  `feedback_an_omitted_key_can_be_an_assertion` un escalón más arriba —allá
+  afirmaba un valor, acá afirma cuál es el remedio—, y la salida es nombrar **la
+  regla y no el campo**: `filter_required`. La pregunta que lo caza, y se hace
+  al AÑADIR y no al escribir: *¿este código sigue siendo verdad con el campo que
+  acabo de meter?* **Y no lo ve ningún gate**: `ApiMoldTests` cuenta los códigos
+  literales del árbol —la cifra se movió de 241 a 242 y eso fue todo lo que se
+  puso rojo—, así que un código que miente cuenta igual que uno que no.
+- `feedback_an_empty_list_is_honest_when_something_could_have_filled_it` —
+  **la respuesta a «no hay nada» depende de QUIÉN generó el identificador por el
+  que preguntan, y es el corte que decide entre `not_found` y `[]`.** Un
+  `resourceId` lo generó la capacidad, así que preguntar por uno que no existe es
+  un error del llamador y vale la pena nombrarlo; un `Ref` es vocabulario de
+  QUIEN LLAMA y la capacidad **no puede** saber si existe —comprobarlo exigiría
+  interpretarlo, que es §0.B.13—, así que «esta persona no tiene reservas» es la
+  respuesta verdadera y la lista vacía es honesta. Devolver `not_found` obligaría
+  a cada portal a tratar una bandeja vacía como un fallo, que es como se acaba
+  enseñando un error a quien simplemente todavía no reservó.
+  **Y esto NO contradice el «tampoco se emite `[]`» de
+  `feedback_no_read_without_a_write_path`: lo AFILA.** Lo que distingue los dos
+  casos es si existe un camino de ESCRITURA. Allá no lo había, así que `[]` decía
+  «no hay» cuando la verdad era «esto no existe»; acá confirmar un hold crea
+  exactamente esta fila, así que `[]` dice «todavía ninguna», que es cierto. La
+  pregunta es la misma de siempre —*¿qué puede llenar esta lista?*— y sólo cambia
+  la respuesta.
 
 ## 6. Prohibiciones explícitas
 
@@ -883,7 +916,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3169 tests):
+# Suite completa (3176 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -1119,11 +1152,11 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (137 endpoints, 241 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3169 tests, gates de
+**Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3176 tests, gates de
 segregación y molde en verde.
 
-> **Los 241 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
+> **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
 > y nadie la había vuelto a contar. Cuenta los códigos **literales distintos**
 > que las veinte construyen —el primer argumento de un `Rejection.*`, con
 > `{CodePrefix}` resuelto—, y por eso **excluye dos cosas que sí existen**: los
