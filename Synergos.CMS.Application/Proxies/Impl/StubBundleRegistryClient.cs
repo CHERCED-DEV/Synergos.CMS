@@ -51,4 +51,18 @@ public sealed class StubBundleRegistryClient : IBundleRegistryClient
     /// </remarks>
     public Task<BundleDescriptor?> TryResolveAnyAsync(CancellationToken ct = default)
         => Task.FromResult<BundleDescriptor?>(null);
+
+    /// <summary>
+    /// <c>null</c>: sin registry no hay mapa que pedir.
+    /// </summary>
+    /// <remarks>
+    /// <b>Y devolver un mapa vacío sería peor que no devolverlo</b> (#126). Un
+    /// <c>ImportMap</c> con cero entradas significa «el registry contestó y no declara
+    /// importaciones»; el stub no ha preguntado nada. Con el vacío, la vista emitiría un
+    /// <c>&lt;script type="importmap"&gt;{"imports":{}}&lt;/script&gt;</c> que le dice al
+    /// navegador que el mapa ya está puesto — y un mapa presente y vacío no se puede corregir
+    /// con otro después: sólo se lee el primero.
+    /// </remarks>
+    public Task<ImportMap?> TryGetImportMapAsync(CancellationToken ct = default)
+        => Task.FromResult<ImportMap?>(null);
 }

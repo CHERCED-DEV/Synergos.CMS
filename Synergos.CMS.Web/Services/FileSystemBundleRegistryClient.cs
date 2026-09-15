@@ -98,6 +98,92 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
     /// <summary>Cuántos elementos se prueban antes de declarar que el registry no sirve ninguno.</summary>
     private const int MaxSondeos = 5;
 
+    /// <summary>
+    /// El <c>import map</c> del runtime, leído del disco y con las URLs reescritas a la base
+    /// pública.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Esto vivía en <c>_SynHostRuntime.cshtml</c></b> (#126) — una vista leyendo del
+    /// disco con <c>File.ReadAllText</c> y reescribiendo hosts con una regex. Se mudó tal cual:
+    /// misma ruta, misma reescritura. Lo único que cambia es <b>quién</b> lo hace, y eso es lo
+    /// que permite que el gemelo HTTP exista: una vista no puede salir a la red.</para>
+    ///
+    /// <para><b>La ruta lleva el framework</b>, y hoy sale de <c>DefaultFramework</c> en vez de
+    /// estar cableada a <c>angular</c> como estaba en la vista. Sigue siendo <b>un</b> mapa: el
+    /// día que se publiquen dos frameworks a la vez hará falta componerlos, y eso lo decide
+    /// CHERCED-DEV/Synergos.UI#42. Queda dicho para que no se lea como resuelto.</para>
+    ///
+    /// <para><b>El slot es <c>latest</c> a propósito y NO se cachea.</b> Es la única ruta mutable
+    /// del CDN —lo contrario de los manifiestos, que se cachean para siempre porque su ruta lleva
+    /// la versión exacta—. Cachearla serviría el mapa de la publicación anterior después de un
+    /// despliegue del CDN, y un mapa viejo apunta a un runtime que ya no está: los elementos
+    /// dejarían de hidratar sin que nada fallara. El <c>FileSystemWatcher</c> no cubre esto
+    /// porque sólo vigila el registry.</para>
+    /// </remarks>
+    public Task<ImportMap?> TryGetImportMapAsync(CancellationToken ct = default)
+    {
+        var s = _settings.CurrentValue;
+        if (string.IsNullOrWhiteSpace(s.LocalPath)) return Task.FromResult<ImportMap?>(null);
+
+        var ruta = Path.Combine(
+            s.LocalPath, s.BundlesNamespace, "runtime", s.DefaultFramework, s.DefaultSlot, "import-map.json");
+
+        if (!File.Exists(ruta))
+        {
+            _logger.LogWarning(
+                "No hay import map en {Ruta}. Sin él ningún <synergos-*> resuelve sus bare "
+                + "specifiers y no se registra ninguno.", ruta);
+            return Task.FromResult<ImportMap?>(null);
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(ruta));
+            if (!doc.RootElement.TryGetProperty("imports", out var imports)
+                || imports.ValueKind != JsonValueKind.Object)
+            {
+                _logger.LogWarning("El import map de {Ruta} no trae un objeto «imports».", ruta);
+                return Task.FromResult<ImportMap?>(null);
+            }
+
+            var mapa = LeerImports(imports, s.PublicBaseUrl);
+            return Task.FromResult<ImportMap?>(new ImportMap(mapa));
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "No se pudo leer el import map de {Ruta}.", ruta);
+            return Task.FromResult<ImportMap?>(null);
+        }
+    }
+
+    /// <summary>
+    /// Pasa los <c>imports</c> publicados a URLs servibles, cambiando el host de publicación por
+    /// la base pública.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La reescritura es la de la vista, con una diferencia</b> (#126): sólo se toca lo
+    /// que tiene host. El <c>^https?://[^/]+</c> original no distinguía —daba igual porque todo
+    /// lo publicado lo lleva— pero aplicado a una entrada ya relativa la habría dejado intacta
+    /// por casualidad, no por decisión. Acá una entrada relativa se conserva tal cual, que es lo
+    /// correcto: ya está servida desde donde toca.</para>
+    /// </remarks>
+    internal static IReadOnlyDictionary<string, string> LeerImports(JsonElement imports, string publicBaseUrl)
+    {
+        var baseLimpia = (publicBaseUrl ?? string.Empty).TrimEnd('/');
+        var mapa = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var prop in imports.EnumerateObject())
+        {
+            var url = prop.Value.GetString() ?? string.Empty;
+            mapa[prop.Name] = Uri.TryCreate(url, UriKind.Absolute, out var abs)
+                && (abs.Scheme == Uri.UriSchemeHttp || abs.Scheme == Uri.UriSchemeHttps)
+                    ? baseLimpia + abs.PathAndQuery
+                    : url;
+        }
+
+        return mapa;
+    }
+
     public Task<BundleDescriptor?> TryResolveAsync(string elementKey, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(elementKey)) return Task.FromResult<BundleDescriptor?>(null);

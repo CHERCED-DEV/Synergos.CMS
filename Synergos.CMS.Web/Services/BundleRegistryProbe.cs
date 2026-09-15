@@ -121,6 +121,42 @@ public sealed class BundleRegistryProbe : ISchemaHealthProbe
                     ?? (porTagConcreto ? probeTag : null)
                     ?? "un elemento";
 
+                // ── El import map ───────────────────────────────────────────────────
+                //
+                // Resolver un descriptor NO alcanza para decir que el sitio sirve elementos
+                // (defecto #126). El navegador necesita además el import map, y sin él los
+                // <script type="module"> se escriben igual y ninguno carga: la página contesta
+                // 200 con el SSR entero y todo lo interactivo muerto.
+                //
+                // Que esto se vigile ACÁ y no al cablear es deliberado. Al arrancar no se puede
+                // saber: el CDN puede estar bien en el arranque y caerse después, que es
+                // precisamente cuando hace falta enterarse. Y tampoco se puede reventar el
+                // render —una página que devuelve 500 porque el CDN parpadeó es peor que una
+                // sin hidratar—, así que lo que corresponde es que el indicador de salud lo
+                // diga. Es lo que #114 dejó escrito: arrancar no es estar listo.
+                var mapa = await _client.TryGetImportMapAsync(ct);
+                if (mapa is null || mapa.Imports.Count == 0)
+                {
+                    return new SchemaHealthResult(
+                        Name: ProbeName,
+                        IsHealthy: false,
+                        Message: $"Modo {mode}: el registry resolvió {queResolvio} pero NO hay "
+                               + $"import map en {donde}. Los <script type=\"module\"> de los "
+                               + "elementos se emiten igual y el navegador no puede resolver sus "
+                               + "bare specifiers, así que ningún <synergos-*> se registra: la "
+                               + "página sale en 200 con el SSR entero y nada hidrata. Se espera "
+                               + $"en {s.BundlesNamespace}/runtime/{s.DefaultFramework}/{s.DefaultSlot}/import-map.json.",
+                        Details: new Dictionary<string, object?>
+                        {
+                            ["mode"] = mode,
+                            ["origen"] = donde,
+                            ["resolved"] = true,
+                            // Las dos cosas que significan algo distinto: no se pudo preguntar,
+                            // o el registry contestó y no declara ninguna importación.
+                            ["importMap"] = mapa is null ? "ausente" : "vacío",
+                        });
+                }
+
                 var hasIntegrity = !string.IsNullOrWhiteSpace(descriptor.Integrity);
                 return new SchemaHealthResult(
                     Name: ProbeName,
@@ -137,6 +173,7 @@ public sealed class BundleRegistryProbe : ISchemaHealthProbe
                         ["framework"] = descriptor.Framework,
                         ["version"] = descriptor.Version,
                         ["integrity"] = hasIntegrity ? "present" : "missing",
+                        ["importMap"] = $"{mapa.Imports.Count} imports",
                         ["resolved"] = true,
                     });
             }

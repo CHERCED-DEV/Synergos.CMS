@@ -47,4 +47,25 @@ public sealed class FakeBundleRegistryClient : IBundleRegistryClient
         VecesQueSePidioCualquiera++;
         return Task.FromResult(Cualquiera ?? _resolver("(cualquiera)"));
     }
+
+    /// <summary>Cuántas veces se pidió el import map.</summary>
+    public int VecesQueSePidioElMapa { get; private set; }
+
+    /// <summary>
+    /// Lo que devuelve <see cref="TryGetImportMapAsync"/>. <c>null</c> por defecto, que es lo que
+    /// pasa sin CDN.
+    /// </summary>
+    /// <remarks>
+    /// <b>Se distingue «no hay» de «vacío»</b> (#126), porque en el borde significan cosas
+    /// distintas: <c>null</c> es que no se pudo preguntar y un <see cref="ImportMap"/> con cero
+    /// entradas es que el registry contestó sin importaciones. Un fake que los confundiera dejaría
+    /// sin poder probarse justo la rama que causó el defecto.
+    /// </remarks>
+    public ImportMap? Mapa { get; init; }
+
+    public Task<ImportMap?> TryGetImportMapAsync(CancellationToken ct = default)
+    {
+        VecesQueSePidioElMapa++;
+        return Task.FromResult(Mapa);
+    }
 }
