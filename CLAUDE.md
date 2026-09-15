@@ -114,7 +114,7 @@ Synergos.CMS/
 ├── Synergos.CMS.Tests/          xUnit — 3097 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
-│   │                            + despliegue (14, ADR 0133)
+│   │                            + despliegue (17, ADR 0133)
 │   │                            + molde del vertical (9, doc 12)
 │   ├── Api/                     tests de reglas y servicio por capacidad
 │   └── Bff/                     la compensación cruzada (144)
@@ -403,6 +403,17 @@ Las que salieron de construir el árbol de servicios (§0.B):
   contenido en otro almacén, la clave de siembra lleva la huella del texto
   (o se edita y no se ve), y el mapping es DURABLE (o cada arranque duplica
   el feed entero, creciendo para siempre sin que nada falle).
+  **Addendum #114 — lo mismo vale para una LLAVE DE IDEMPOTENCIA, y ahí es
+  peor.** El script de aprovisionamiento publicaba la tarifa de una oferta con
+  la llave `provisionar:precio:{kind}:{id}`, derivada sólo del sujeto; y
+  `SetPrice` mira el libro de idempotencia **antes que nada** y devuelve el
+  precio anterior. O sea que cambiar el monto en el manifiesto y volver a
+  correr el script **no hacía nada**, contestando 200 y diciendo «puesto». La
+  idempotencia y la huella no se estorban: **la llave lleva el valor dentro**,
+  y así republicar lo mismo sigue siendo un no-op y cambiarlo se ve. La
+  pregunta que lo caza: *¿qué pasa si el dato cambia y la llave no?* — y no se
+  ve leyendo el script: se vio mirando el almacén de la capacidad viva después
+  de arreglar otra cosa.
 - `feedback_property_injection_breaks_at_two_impls` — inyectar por propiedad
   resolviendo un TIPO CONCRETO se rompe en silencio el día que hay dos
   implementaciones detrás de la seam: la dependencia aterriza en la que no
@@ -653,6 +664,24 @@ Las que salieron de construir el árbol de servicios (§0.B):
   (`MoldeDelVerticalTests`). La salida no es siempre «hacelo `Bff`»: si de
   verdad no hay nada que deshacer, son dos capacidades independientes y llevan
   dos interruptores. Ver `docs/product/12-el-molde-de-un-vertical.md`.
+- `feedback_bash_ifs_whitespace_shifts_fields` — **un separador que bash
+  considera «whitespace» —espacio, TABULADOR, salto de línea— colapsa las
+  rachas aunque se pida `IFS=$'\t'`, así que una línea con campos VACÍOS
+  corre todos los siguientes.** El aprovisionamiento leía su manifiesto
+  separado por tabuladores; una entrada de tipo `precio` no lleva `capacity`
+  ni `timeZoneId`, así que sus campos se corrían dos puestos, el monto
+  llegaba vacío y un `${monto:-0}` lo publicaba **a cero**: cada oferta de
+  viaje, gratis, con la capacidad contestando **201** (#114). Se usa `0x1F`,
+  que no es IFS whitespace. **Y el default no es inocente**: un campo de
+  dinero ausente se RECHAZA, porque «cero» es un precio válido y no falla en
+  ninguna parte hasta que alguien compra — es
+  `feedback_an_omitted_key_can_be_an_assertion` en un script de shell.
+  **Cómo se prueba, y es la mitad que cuesta**: el fixture tiene que llevar
+  la entrada CON el hueco; con todos los campos llenos, el tabulador y el
+  `0x1F` dan el mismo resultado y la prueba pasa en verde con el defecto
+  puesto. Y se prueba **ejecutando** el lector —el script trae
+  `--autoprueba` y el gate lo corre—, no leyéndolo: una regex sobre el
+  `IFS=` no sabe cuáles de los siete campos pueden venir vacíos.
 - `feedback_a_named_list_beats_a_count` — **cuando una frase de la guía dice
   «el CMS habla con N capacidades» y las NOMBRA, el gate tiene que derivar
   la LISTA, no la cifra.** Un gate que cuadre sólo el número se conforma con
@@ -964,6 +993,35 @@ imágenes por SHA a GHCR, `compose.prod.yml`, `tools/bootstrap-servidor.sh`,
 (contra la URL pública, no contra el runner) y vuelta atrás automática. El
 workflow **se salta solo** mientras falten `DEPLOY_HOST` / `SYNERGOS_DOMAIN`.
 Lo que falta es que el arquitecto cree el VPS — decisión de compra, no código.
+
+> **Arrancar no es estar listo, y eso faltaba escrito** (#114). Un servidor con
+> los 26 contenedores sanos no sirve todavía: hay que sembrar **el schema** y
+> **el estado que las capacidades exigen**, y ninguna de las dos cosas la hace
+> el arranque. Los dos pasos están en `docs/despliegue/00-montar-el-entorno.md`
+> §5.bis, con una herramienta cada uno — `tools/importar-schema.sh` y
+> `tools/provisionar.sh --verificar` / `tools/provisionar.sh` — y los dos son
+> idempotentes.
+>
+> **El schema NO se importa al arrancar, y cuatro documentos decían que sí.**
+> ADR 0008 deja `ImportAtStartup` en `None` y nadie lo pisa; medido contra una
+> base vacía, el arranque dice `uSync: Startup Complete 0ms`. Se consideró
+> encenderlo y se descartó por una razón viva, no por el ADR: con
+> `ContentHandler` encendido (ADR 0129), `All` **revierte en cada arranque lo
+> que un editor publicó**, en silencio. Hay gate
+> (`DeployPipelineTests.El_import_de_uSync_NO_ocurre_al_arrancar`), y vigila el
+> HECHO y no la prosa: el día que alguien lo encienda, se pone rojo y nombra los
+> dos ficheros que hay que reescribir a la vez.
+>
+> **Y un Umbraco vacío no falla**: sirve «No published content» con 200 y HTML
+> de verdad, así que el humo lo daba por bueno y el primer despliegue de una
+> máquina nueva se habría puesto **verde con el sitio en blanco**. Hoy
+> `humo-publico.sh` lo distingue.
+>
+> **Lo que sigue sin existir es el CONTENIDO**: `uSync/v9/Content/` está vacía
+> —comprobado también contra `master`— y el seeder no crea portada, así que hoy
+> **no hay camino de un clon limpio a una portada publicada**. Es trabajo de
+> contenido, no de despliegue, y por eso queda nombrado en vez de dado por
+> hecho.
 
 **Lo que NO está:**
 
