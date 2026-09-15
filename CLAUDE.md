@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3225 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3236 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3225 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3236 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (18, ADR 0133)
@@ -784,6 +784,29 @@ Las que salieron de construir el árbol de servicios (§0.B):
   puesto. Y se prueba **ejecutando** el lector —el script trae
   `--autoprueba` y el gate lo corre—, no leyéndolo: una regex sobre el
   `IFS=` no sabe cuáles de los siete campos pueden venir vacíos.
+- `feedback_a_seam_that_a_view_bypasses_is_not_a_seam` — **una costura que existe y
+  que la VISTA se salta no está protegiendo nada, y lo que se salta se ve en
+  producción y no en la máquina de quien lo escribió.** El `<script
+  type="importmap">` lo armaba un Razor leyendo un fichero del disco, teniendo
+  `IBundleRegistryClient` al lado; en el contenedor ese directorio no está montado,
+  así que no salía mapa y **ningún `<synergos-*>` se registraba**, con la página en
+  200 y el SSR entero (#126). **Tres cosas que no se deducen leyendo el código:**
+  (a) **el reparto de los tests es lo que lo escondía** —los del cliente miraban el
+  cliente, los del cableado miraban el cableado, y nadie miraba **el HTML que
+  recibe el navegador**: las dos mitades en verde y el hueco justo en medio, como
+  el addendum #116 de `feedback_no_read_without_a_write_path`—; (b) **las vistas de
+  este repo NO se compilan en el build** (`ModelsMode=InMemoryAuto` fuerza
+  `RazorCompileOnBuild=false`), así que una suite verde no dice **nada** sobre lo
+  que un Razor hace, y por eso lo que vigila la vista tiene que leer su FUENTE, con
+  los comentarios quitados —este gate y la vista nombran `File.ReadAllText` para
+  contar qué pasó, y sin quitarlos el gate se engaña con su propia explicación—;
+  (c) **el desarrollo lo tapaba**, porque el directorio sí existe en la máquina del
+  arquitecto. La pregunta que lo caza: *¿qué hay en esta vista que sólo funcione
+  donde la escribieron?* **Y el gate no enumeró los layouts: derivó cuáles pintan
+  Block Grid**, y por eso encontró **dos** que nadie había nombrado —`PageBare` y
+  `Error`, los dos con `Layout = null`, o sea sin heredar el `<head>` que traía el
+  mapa—. Con la lista a mano de los dos que ya se sabían, los otros dos seguirían
+  ahí.
 - `feedback_a_named_list_beats_a_count` — **cuando una frase de la guía dice
   «el CMS habla con N capacidades» y las NOMBRA, el gate tiene que derivar
   la LISTA, no la cifra.** Un gate que cuadre sólo el número se conforma con
@@ -1031,7 +1054,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3225 tests):
+# Suite completa (3236 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -1327,7 +1350,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3225 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3236 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -2806,8 +2829,31 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > confirmaba otra cosa. Se corrigió ejecutándolo, que es la única forma de
   > saberlo — mirarlo no lo dice.
   Lo que falta es que el despliegue configure `SYNERGOS_CDN_MODE=Http` +
-  `SYNERGOS_CDN_URL` (ver `.env.example`). Es una decisión de entorno del
-  arquitecto, no trabajo pendiente de código. Ver §9 y ADR 0132.
+  `SYNERGOS_CDN_URL` (ver `.env.example`). Ver §9 y ADR 0132.
+
+  > **Esta línea decía «decisión de entorno del arquitecto, NO trabajo pendiente
+  > de código», y era falso** (#126). Encender esas dos variables dejaba el sitio
+  > **sin hidratar ni un solo elemento**: el `<script type="importmap">` lo armaba
+  > `_SynHostRuntime.cshtml` leyendo
+  > `{LocalPath}/{ns}/runtime/angular/latest/import-map.json` **del disco**, y en
+  > la imagen de producción no hay ningún `/cdn` montado —el compose monta cinco
+  > volúmenes y ninguno es ése—. Los `<script type="module">` que arma
+  > `DefaultSynHostEmitter` salían escritos y el navegador no podía resolver
+  > `@angular/core`, así que ningún `<synergos-*>` se registraba: **200, el SSR
+  > entero, y todo lo interactivo muerto**.
+  >
+  > **Lo tapaba el desarrollo**: en la máquina del arquitecto `C:\LOCAL_CDN`
+  > existe, así que el mapa salía y el defecto sólo aparecía en el contenedor. Es
+  > la regla 3 del `CLAUDE.md` del repo hermano con otra cara.
+  >
+  > Hoy el mapa lo da la seam —`IBundleRegistryClient.TryGetImportMapAsync`, con
+  > sus tres adaptadores— que es lo que ADR 0012 manda: el contrato del CDN se
+  > **consume**, no se relee del disco. Y el probe lo exige: en modo `FileSystem`
+  > u `Http`, resolver un descriptor **ya no alcanza** para reportar salud. Hay
+  > gate (`ImportMapEmissionTests`), y **encontró dos huecos más al primer
+  > intento**: `PageBare.cshtml` y `Error.cshtml` pintan Block Grid con
+  > `Layout = null`, así que no heredaban el `<head>` de `_Layout` y nunca
+  > tuvieron mapa — ni en producción ni en desarrollo.
 
   > **Y son las DOS, no una** (#56). Poner el modo y olvidar la URL ya no pasa
   > en silencio: el compose la manda **presente y vacía** —que pisa el default

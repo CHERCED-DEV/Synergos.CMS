@@ -1,49 +1,30 @@
 @*
-    Emite el <script type="importmap"> del runtime Angular para los Web Components
-    de la CDN (SynHost / elementSyn*). Sin esto, los <script type="module"> de los
-    componentes no resuelven los bare specifiers (@@angular/*, @@synergos/*, rxjs) y
-    el custom element nunca se registra (no hidrata).
+    Emite el <script type="importmap"> que los Web Components de la CDN (SynHost /
+    elementSyn*) necesitan para resolver sus bare specifiers (@@angular/*,
+    @@synergos/*, rxjs). Sin esto, los <script type="module"> se escriben igual y el
+    navegador no puede cargarlos: el custom element nunca se registra, o sea NO HIDRATA.
 
-    Lee el import-map.json real del CDN local y reescribe el host de prod
-    (https://synergos-static-local/...) por la base pública servida (/cdn-bundles).
-    Debe ir en el <head>, ANTES de cualquier <script type="module">.
+    Va en el <head>, ANTES de cualquier <script type="module">.
+
+    EL MAPA LO DA LA SEAM, NO EL DISCO (defecto #126). Esto leía
+    {LocalPath}/{ns}/runtime/angular/latest/import-map.json con File.ReadAllText, y en
+    la imagen de producción no hay ningún /cdn montado — el compose monta cinco
+    volúmenes y ninguno es ése. Así que con Mode=Http el fichero no existía, no se
+    emitía mapa, y todo lo interactivo del sitio estaba muerto con la página en 200.
+    Leer del disco algo que IBundleRegistryClient ya sabe pedir por la red es
+    exactamente lo que ADR 0012 prohíbe.
 *@
-@using Microsoft.Extensions.Configuration
-@inject IConfiguration Configuration
+@using Synergos.CMS.Interfaces
+@inject IBundleRegistryClient BundleRegistry
 @{
-    var localPath = Configuration["Synergos:BundleRegistry:LocalPath"];
-    var ns = Configuration["Synergos:BundleRegistry:BundlesNamespace"] ?? "synergos";
-    var publicBase = (Configuration["Synergos:BundleRegistry:PublicBaseUrl"] ?? "/cdn-bundles").TrimEnd('/');
-    string? importMapJson = null;
-    if (!string.IsNullOrWhiteSpace(localPath))
-    {
-        var mapPath = System.IO.Path.Combine(localPath, ns, "runtime", "angular", "latest", "import-map.json");
-        if (System.IO.File.Exists(mapPath))
-        {
-            try
-            {
-                using var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(mapPath));
-                if (doc.RootElement.TryGetProperty("imports", out var imports))
-                {
-                    var sb = new System.Text.StringBuilder("{\"imports\":{");
-                    var first = true;
-                    foreach (var prop in imports.EnumerateObject())
-                    {
-                        var url = System.Text.RegularExpressions.Regex.Replace(
-                            prop.Value.GetString() ?? string.Empty, "^https?://[^/]+", publicBase);
-                        if (!first) { sb.Append(','); }
-                        sb.Append('"').Append(prop.Name).Append("\":\"").Append(url).Append('"');
-                        first = false;
-                    }
-                    sb.Append("}}");
-                    importMapJson = sb.ToString();
-                }
-            }
-            catch { importMapJson = null; }
-        }
-    }
+    // Serializar acá y no traer JSON desde la seam es deliberado: un mapa que viaja
+    // como texto se emite con Html.Raw sin que nadie lo mire.
+    var mapa = await BundleRegistry.TryGetImportMapAsync(Context.RequestAborted);
+    var importMapJson = mapa is null
+        ? null
+        : System.Text.Json.JsonSerializer.Serialize(new { imports = mapa.Imports });
 }
-@if (!string.IsNullOrWhiteSpace(importMapJson))
+@if (importMapJson is not null)
 {
     <script type="importmap">@Html.Raw(importMapJson)</script>
 }
