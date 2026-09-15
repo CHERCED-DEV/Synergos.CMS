@@ -208,7 +208,11 @@ public sealed class StubApplicationService : IApplicationService
                                 Quantity: 1),
                         },
                         CustomerEmail: citizen.Email.Trim(),
-                        Vertical: "gov"),
+                        Vertical: "gov",
+                        // Quien paga, cuando hay sesion detras (HU #14). Nulo en el autoservicio
+                        // de invitado, y ahi nulo es la verdad: el correo lo escribio alguien en
+                        // un formulario y no lo comprobo nadie.
+                        PayerMemberKey: citizen.MemberKey),
                     cancellationToken);
                 paymentSessionId = string.IsNullOrWhiteSpace(session.SessionId) ? null : session.SessionId;
                 paymentStatus = session.Status.ToString();

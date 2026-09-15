@@ -125,7 +125,12 @@ public sealed partial class SeamComposer
                     HttpPaymentProvider.SeamClientName,
                     () => new PaymentWireKinds(
                         opciones.CurrentValue.SubjectKind, opciones.CurrentValue.PayerKind, "cms"),
-                    sp.GetRequiredService<ILogger<HttpPaymentProvider>>());
+                    sp.GetRequiredService<ILogger<HttpPaymentProvider>>(),
+                    // El mismo emisor que la tasa: quien decide si se presenta identidad es el
+                    // proveedor —solo con MemberKey detras— y no el composer. Cablear uno si y
+                    // otro no dejaria el mismo tipo comportandose distinto segun por donde se
+                    // construyo, que es como se esconde un defecto detras de una seam.
+                    sp.GetRequiredService<IIdentityTokenIssuer>());
             });
         }
         else if (routingEnabled)

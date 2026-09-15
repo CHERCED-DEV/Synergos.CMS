@@ -91,6 +91,20 @@ builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
     new FileIdempotencyLedger(sp.GetRequiredService<IOptions<PaymentStorageOptions>>().Value.Root));
 builder.Services.AddSingleton<WebhookVerifier>();
 builder.Services.AddSingleton(TimeProvider.System);
+
+// El verificador de tokens de identidad (HU #14). NO obligatorio: un clon limpio arranca sin
+// llave y el cobro se sigue autorizando con CmsSession, que es lo que hacia siempre.
+//
+// Lo que NO pasa sin llave es aceptar un token a ciegas: si alguien presenta uno y este servicio
+// no puede comprobarlo, se RECHAZA. Ignorarlo dejaria que alguien mandara cualquier cosa y
+// siguiera adelante como si no hubiera mandado nada, que es peor que no aceptar tokens.
+//
+// QUIEN PAGA se comprueba, no se cree. Con la llave compartida sola, cualquier servicio que
+// pueda hablar con esta capacidad escribe un cobro a nombre de quien quiera — y un movimiento de
+// plata atribuido a quien no lo hizo es de los registros que alguien cita en una disputa.
+// Verificacion LOCAL, sin preguntarle a Api.Identity: una capacidad no llama a otra (#49) y
+// hacerlo la volveria el punto unico de fallo de las veinte.
+builder.AddIdentityTokens(required: false);
 builder.Services.AddSingleton<PaymentService>();
 
 var app = builder.Build();
