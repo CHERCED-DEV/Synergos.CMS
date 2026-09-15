@@ -609,6 +609,19 @@ Las que salieron de construir el árbol de servicios (§0.B):
   tiene que exigirlo poniendo **el mismo valor inventado en los dos sitios** —
   con valores distintos, las dos comparaciones rechazan y el test no prueba
   nada.
+  **Addendum #14 — cómo se cuela ESTO en un gate nuevo, escrito por alguien que
+  acababa de leer esta misma regla.** El gate de identidad de `Api.Payments`
+  afirmaba que `PaymentEndpoints.cs` dijera `IdentityAssertions.Resolve` en alguna
+  parte. Al mutarlo —cambiando la llamada del lambda por «créele al llamador»—
+  **pasó en verde**, porque el helper `Afirmacion()` seguía veinte líneas más abajo
+  con esa cadena dentro. O sea: la afirmación medía que el fichero CONTUVIERA la
+  pieza, que es literalmente lo que esta regla prohíbe. **Lo que lo hace fácil de
+  cometer es que el helper y su llamada viven en el mismo fichero**, así que
+  `Contains` sobre el fichero entero se lee como «lo usa». El corte que lo arregla
+  es recortar **el cuerpo del endpoint** —de su `MapPost` al siguiente— y buscar
+  ahí la LLAMADA; el mismo movimiento que contar `UseStoreWriteGate(` por fichero
+  en vez de la mención. Y no se ve leyendo el gate: **sólo lo destapa mutarlo**,
+  que es para lo que existe la disciplina.
 - `feedback_restored_mutation_needs_a_touch` — **al mutar un gate, la
   restauración tiene que TOCAR el fichero.** Un `cp`/`mv` devuelve el
   contenido con una fecha ANTERIOR a la de la escritura mutada, así que

@@ -196,14 +196,47 @@ public sealed class PaymentsIdentityTests
         var programa = Fuente("Synergos.Api.Payments", "Program.cs");
         Assert.Contains("AddIdentityTokens", programa, StringComparison.Ordinal);
 
-        var endpoints = Fuente("Synergos.Api.Payments", "Endpoints", "PaymentEndpoints.cs");
-        Assert.Contains("IdentityAssertions.Resolve", endpoints, StringComparison.Ordinal);
+        // Se mira el CUERPO del endpoint que autoriza, no el fichero entero.
+        //
+        // Esta distinción no es teórica: la primera versión de este gate afirmaba que el fichero
+        // dijera «IdentityAssertions.Resolve» en alguna parte, y al mutarlo —reemplazando la
+        // llamada del lambda por «créele al llamador»— pasó en VERDE, porque el helper
+        // Afirmacion() seguía ahí abajo con esa cadena dentro. Es exactamente lo que
+        // Api.Notifications descubrió quitando la llamada de su lambda sin que fallara un test
+        // (feedback_an_exemption_needs_a_signature_behind_it): un gate que mide que la pieza
+        // EXISTA y no que esté ENCHUFADA no vigila nada.
+        var autoriza = CuerpoDelEndpointQueAutoriza();
+
+        Assert.Contains("Afirmacion(identidad, http, payer", autoriza, StringComparison.Ordinal);
+
+        // Y que lo resuelto DECIDA: sin esto se podría resolver y seguir igual.
+        Assert.Contains("if (assertion is null) return", autoriza, StringComparison.Ordinal);
+        Assert.Contains("assertion.Value", autoriza, StringComparison.Ordinal);
 
         var dominio = Fuente("Synergos.Api.Payments", "Domain", "Payment.cs");
         Assert.Contains("PaidWith", dominio, StringComparison.Ordinal);
 
         var servicio = Fuente("Synergos.Api.Payments", "Domain", "PaymentService.cs");
         Assert.Contains("PaidWith: assertion", servicio, StringComparison.Ordinal);
+    }
+
+    /// <summary>El cuerpo del <c>MapPost("/v1/payments")</c>, hasta el siguiente endpoint.</summary>
+    /// <remarks>
+    /// Recortar hace falta porque el fichero entero incluye el helper que resuelve la afirmación,
+    /// así que buscar ahí confunde «lo llama» con «lo tiene escrito». El corte va hasta el
+    /// siguiente <c>app.Map</c>, que es donde empieza otro endpoint.
+    /// </remarks>
+    private static string CuerpoDelEndpointQueAutoriza()
+    {
+        var endpoints = Fuente("Synergos.Api.Payments", "Endpoints", "PaymentEndpoints.cs");
+
+        var abre = endpoints.IndexOf("app.MapPost(\"/v1/payments\"", StringComparison.Ordinal);
+        Assert.True(abre >= 0, "No se encontró el MapPost de /v1/payments: revisar este gate.");
+
+        var cierra = endpoints.IndexOf("app.Map", abre + 1, StringComparison.Ordinal);
+        Assert.True(cierra > abre, "No se encontró el final del endpoint: revisar este gate.");
+
+        return endpoints[abre..cierra];
     }
 
     /// <summary>
