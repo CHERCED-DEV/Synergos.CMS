@@ -288,7 +288,9 @@ public sealed class EhrController : ControllerBase
         var inbox = await _messaging.GetInboxAsync(patient, cancellationToken);
         var statement = await _billing.GetForPatientAsync(patient, cancellationToken);
 
-        var unreadMessages = inbox.Where(t => IsClinicalContext(t.ContextRef)).Sum(t => t.MessageCount);
+        // Las conversaciones CLÍNICAS del paciente. No es un contador de «sin leer» y no
+        // se puede convertir en uno: ver la nota de PortalHomeResponse.UnreadMessages.
+        var clinicalThreads = inbox.Count(t => IsClinicalContext(t.ContextRef));
         var balanceMinor = statement is null ? 0L : (long)decimal.Truncate(Math.Max(0m, statement.Balance));
         var currency = statement?.Currency ?? "COP";
 
@@ -333,12 +335,17 @@ public sealed class EhrController : ControllerBase
                 Tone: abnormal > 0 ? "warning" : "success"));
         }
 
-        if (unreadMessages > 0)
+        if (clinicalThreads > 0)
         {
             cards.Add(new HomeCardDto(
                 Id: "card-messages", Kind: "message",
                 Title: "Mensajes de tu equipo de salud",
-                Detail: $"Tienes {unreadMessages} mensaje(s) en tu bandeja.",
+                // CONVERSACIONES y no «mensajes sin leer»: lo primero es un hecho del
+                // almacén, lo segundo exige saber qué leyó el paciente y eso aquí no lo
+                // sabe nadie. La tarjeta invita a abrir la bandeja; no cuenta pendientes.
+                Detail: clinicalThreads == 1
+                    ? "Tienes una conversación con tu equipo de salud."
+                    : $"Tienes {clinicalThreads} conversaciones con tu equipo de salud.",
                 Action: "messages", ActionLabel: "Abrir mensajes", Tone: "brand"));
         }
 
@@ -364,7 +371,7 @@ public sealed class EhrController : ControllerBase
             NextAppointment: next is null ? null : ToAppointmentDto(next),
             BalanceMinor: balanceMinor,
             Currency: currency,
-            UnreadMessages: unreadMessages,
+            UnreadMessages: null,
             PendingCheckins: pendingCheckins));
     }
 
@@ -1221,13 +1228,33 @@ public sealed class EhrController : ControllerBase
         string Id, string Kind, string Title, string Detail,
         string? Action, string? ActionLabel, string Tone);
 
+    /// <summary>
+    /// El home del portal del paciente.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><see cref="UnreadMessages"/> sale siempre <c>null</c>, y <c>null</c> NO es
+    /// cero</b> (HU #116). Es el gemelo exacto de <see cref="ThreadDto.Unread"/> —la nota de
+    /// ese record explica el porqué entero— y se quedó fuera de #111 porque aquí la cifra no
+    /// era una constante: se DERIVABA, sumando <c>MessageCount</c> de los hilos clínicos. Una
+    /// derivación de lo que hay a mano se lee como un dato y es una fabricación igual: contaba
+    /// como «sin leer» los mensajes que el propio paciente escribió.</para>
+    /// <para><b>No hay de dónde sacarlo</b>: <c>IMessagingService</c> declara en su contrato
+    /// «sin read-receipts». Emitir <c>0</c> sería peor que omitirlo, porque <c>0</c> no dice
+    /// «no sé»: dice <b>«no tienes mensajes sin leer»</b>, que es la afirmación contraria y la
+    /// que hace que nadie abra el mensaje de su médico. La clave se conserva declarada para que
+    /// el día que exista el seam recupere su forma sin reinventarla.</para>
+    /// <para><b>Disparador</b>: que <c>IMessagingService</c> registre lectura por participante
+    /// (un <c>lastReadAt</c> por hilo, o un <c>MarkReadAsync</c>).</para>
+    /// <para>La tarjeta de mensajes del home <b>no depende de esto</b>: cuenta CONVERSACIONES
+    /// clínicas, que sí es un hecho del almacén.</para>
+    /// </remarks>
     public sealed record PortalHomeResponse(
         PatientDto Patient,
         IReadOnlyList<HomeCardDto> Cards,
         AppointmentDto? NextAppointment,
         long BalanceMinor,
         string Currency,
-        int UnreadMessages,
+        int? UnreadMessages,
         int PendingCheckins);
 
     /// <summary>

@@ -450,6 +450,23 @@ Las que salieron de construir el árbol de servicios (§0.B):
   trinquete de G-6 como si cruzara. Se escribe la decisión y el
   disparador en el `record`, que es donde la va a leer la próxima
   auditoría.
+- `feedback_a_fabrication_can_be_a_derivation` — **lo fabricado no siempre es una
+  constante: DERIVARLO de lo que hay a mano se lee como un dato y miente igual, y encima se
+  defiende solo** («sale de la bandeja, no me lo inventé»). El home del portal del paciente
+  llamaba «mensajes sin leer» a la SUMA de los mensajes de cada hilo clínico —los que el
+  propio paciente escribió incluidos—, con `IMessagingService` declarando en su contrato que
+  no tiene read-receipts. Es el escalón que le faltaba al addendum #111 de
+  `feedback_gethashcode_is_not_a_seed`: allí lo fabricado era un `0` y un `true`, que se ven
+  raros; una suma de cosas reales no se ve rara nunca.
+  **Y la parte que más cuesta: NOMBRAR el defecto en un comentario no lo arregla — lo
+  BLINDA.** La HU #111 arregló el `unread` de cada hilo y escribió en su `<remarks>`, con
+  todas las letras, que derivarlo de `MessageCount` «es lo que tienta, y lo que hace el
+  `unreadMessages` del home». Se quedó ahí una HU entera: la nota convierte el defecto en algo
+  *identificado*, y lo identificado la siguiente auditoría lo lee y pasa de largo. Si el
+  comentario nombra un gemelo vivo, o se arregla en el mismo commit o se abre el ticket — no
+  hay tercera opción que no sea dejarlo escrito y hecho.
+  **El fixture tiene que llevar hilos de VARIOS mensajes**: con uno por hilo la suma y el
+  conteo de hilos dan el mismo número y la fabricación pasa en verde.
 - `feedback_an_omitted_key_can_be_an_assertion` — **una clave que no se emite no
   siempre deja un hueco: cuando el otro lado la resuelve con un valor por DEFECTO, la
   omisión pasa a AFIRMAR ese valor, y lo afirma el borde sin haberlo decidido.** Educación
