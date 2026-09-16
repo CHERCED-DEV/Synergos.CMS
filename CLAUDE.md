@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3244 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3248 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3244 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3248 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (18, ADR 0133)
@@ -1076,7 +1076,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3244 tests):
+# Suite completa (3248 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -1372,7 +1372,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3244 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3248 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -2896,6 +2896,31 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > está roto», que manda a alguien a depurar el elemento. Es la decisión de
   > `PaymentEngineCoexistenceTests` aplicada a otra cosa — cuando dos piezas se
   > contradicen sobre un hecho, servir una de las dos es peor que parar.
+  >
+  > **Pero PARAR no es tirar el mapa que ya funcionaba, y esto decía lo contrario.**
+  > El razonamiento de #127 era «si el conflicto es real, el vigente también lo
+  > estaba sirviendo mal», y **se desmiente solo**: un mapa vigente sólo puede
+  > existir si cuando se compuso NO tenía conflicto —con conflicto, `Componer`
+  > devuelve `null` y no hay vigente—. O sea que el conflicto es siempre NUEVO, lo
+  > introduce quien acaba de empezar a publicar, y tirar el bueno convierte «los
+  > elementos del framework nuevo no hidratan» en **«no hidrata nada»**, el que ya
+  > funcionaba incluido: una publicación del otro árbol apagando el sitio entero.
+  > Hoy se conserva el vigente y el probe lo dice; en arranque en frío no hay nada
+  > que conservar y se devuelve `null`, que es la verdad.
+  >
+  > **Y el caso es inminente, no hipotético** (`Synergos.UI#58`): el runtime de
+  > Angular publica hoy `@synergos/core` y `@synergos/shared` —nombres
+  > **agnósticos**— apuntando a `/synergos/runtime/angular/…`, medido contra el CDN
+  > vivo. El día que una segunda plataforma publique su mapa con esos mismos
+  > nombres, colisionan. La salida vive en el otro árbol y cuesta dos entradas más
+  > en un JSON generado: Angular publica el nombre agnóstico **y** el suyo
+  > calificado —mismo destino, así que se deduplica— y las plataformas nuevas
+  > publican sólo el calificado.
+  >
+  > **Lo que esto enseña, y por eso está acá:** una regla puede vivir en un árbol y
+  > su CAUSA en el otro. El gate de quien vigila no protege a quien rompe — el test
+  > del compositor llevaba meses verde con este fixture exacto, y la consecuencia
+  > se escribía en el repo de al lado.
   >
   > **Y lo que NO hace falta, medido y escrito para que nadie lo proponga de
   > cero**: un «helper por framework» para el `<script>` del elemento.

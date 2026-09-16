@@ -292,10 +292,28 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
         var (compuesto, conflicto) = ImportMapComposer.Componer(leidos);
         if (conflicto is not null)
         {
-            // NO se conserva el anterior: si el conflicto es real, el mapa vigente también lo
-            // estaba sirviendo mal. Se para y el probe lo dice.
-            _logger.LogError("No se pudo componer el import map. {Conflicto}", conflicto);
-            return null;
+            // SE CONSERVA EL ANTERIOR, y esto decía lo contrario.
+            //
+            // El razonamiento de #127 era «si el conflicto es real, el mapa vigente también lo
+            // estaba sirviendo mal». **Se desmiente solo**: un mapa vigente sólo puede existir si
+            // cuando se compuso NO tenía conflicto —con conflicto, `Componer` habría devuelto
+            // `null` y no habría vigente—. O sea que el conflicto es siempre NUEVO: lo introduce
+            // un framework que acaba de empezar a publicar.
+            //
+            // Y tirar el bueno convierte «los elementos del framework nuevo no hidratan» en «NO
+            // HIDRATA NADA», el que ya funcionaba incluido. Eso no es fallar a la vista: es apagar
+            // el sitio entero por una publicación que ni siquiera es la que se está sirviendo.
+            //
+            // El caso está medido y es inminente (Synergos.UI#58): el runtime de Angular publica
+            // hoy `@synergos/core` y `@synergos/shared` —nombres AGNÓSTICOS— apuntando a
+            // `/synergos/runtime/angular/…`. El día que una segunda plataforma publique su mapa
+            // con esos mismos nombres, colisionan.
+            //
+            // En arranque en frío no hay vigente y se devuelve `null` igual, que es la verdad.
+            _logger.LogError(
+                "No se pudo componer el import map; se sigue con el anterior ({Estado}). {Conflicto}",
+                vigente is null ? "no hay" : "vigente", conflicto);
+            return vigente;
         }
 
         _mapa = compuesto;

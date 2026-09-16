@@ -395,6 +395,74 @@ public sealed class HttpBundleRegistryClientTests
     }
 
     /// <summary>Un <see cref="IOptionsMonitor{T}"/> que no cambia — no hace falta más acá.</summary>
+    // ── El conflicto de specifiers no puede apagar lo que ya servía (Synergos.UI#58) ──
+
+    /// <summary>Un registry con DOS frameworks, para poder provocar la colisión.</summary>
+    private const string RegistryDosFrameworks = """
+    {
+      "generated": "2026-09-16T00:00:00.000Z", "version": "0.2.0", "baseUrl": "/synergos",
+      "elements": [
+        { "name": "badge", "alias": "elementSynBadge", "tag": "synergos-badge", "tier": "primitive",
+          "implementations": { "angular": { "latest": "0.1.0" } } },
+        { "name": "chip", "alias": "elementSynChip", "tag": "synergos-chip", "tier": "primitive",
+          "implementations": { "react": { "latest": "0.1.0" } } }
+      ]
+    }
+    """;
+
+    [Fact]
+    public async Task Con_dos_frameworks_que_colisionan_se_CONSERVA_el_mapa_que_ya_funcionaba()
+    {
+        // El caso medido contra el CDN vivo: el runtime de Angular publica
+        // `@synergos/core` —nombre AGNÓSTICO— apuntando a /runtime/angular/. El día
+        // que una segunda plataforma publique ese mismo nombre, colisionan.
+        //
+        // Antes de este arreglo el cliente devolvía `null`, así que la vista no
+        // emitía NINGÚN import map y no hidrataba nada — Angular incluido. Una
+        // publicación de React apagando el sitio entero.
+        var cdn = new CdnFalso()
+            .Con("/synergos/registry.json", RegistryDosFrameworks)
+            .Con("/synergos/runtime/angular/latest/import-map.json",
+                """{ "imports": { "@synergos/core": "/synergos/runtime/angular/21.1.6/sg-core.js" } }""");
+
+        var (cliente, _, reloj) = Nuevo(cdn: cdn);
+
+        // Primera vuelta: sólo Angular tiene mapa publicado, así que no hay conflicto.
+        var bueno = await cliente.TryGetImportMapAsync();
+        Assert.NotNull(bueno);
+        Assert.Equal("/synergos/runtime/angular/21.1.6/sg-core.js", bueno!.Imports["@synergos/core"]);
+
+        // Ahora React publica el SUYO, con el mismo nombre agnóstico y otro destino.
+        cdn.Con("/synergos/runtime/react/latest/import-map.json",
+            """{ "imports": { "@synergos/core": "/synergos/runtime/react/18.3.1/sg-core.js" } }""");
+        reloj.Avanzar(TimeSpan.FromMinutes(5));
+
+        var trasElConflicto = await cliente.TryGetImportMapAsync();
+
+        // Lo que ya funcionaba sigue funcionando. React no hidrata —nunca lo hizo—
+        // y el probe lo dice, pero el sitio no se apaga.
+        Assert.NotNull(trasElConflicto);
+        Assert.Equal("/synergos/runtime/angular/21.1.6/sg-core.js",
+            trasElConflicto!.Imports["@synergos/core"]);
+    }
+
+    [Fact]
+    public async Task En_arranque_en_frio_un_conflicto_SI_deja_sin_mapa_y_eso_es_la_verdad()
+    {
+        // Sin vuelta previa no hay nada bueno que conservar. Inventar uno sería peor:
+        // serviría el runtime de una plataforma a los elementos de la otra.
+        var cdn = new CdnFalso()
+            .Con("/synergos/registry.json", RegistryDosFrameworks)
+            .Con("/synergos/runtime/angular/latest/import-map.json",
+                """{ "imports": { "@synergos/core": "/a/sg-core.js" } }""")
+            .Con("/synergos/runtime/react/latest/import-map.json",
+                """{ "imports": { "@synergos/core": "/b/sg-core.js" } }""");
+
+        var (cliente, _, _) = Nuevo(cdn: cdn);
+
+        Assert.Null(await cliente.TryGetImportMapAsync());
+    }
+
     private sealed class StaticOptionsMonitor<T> : IOptionsMonitor<T>
     {
         public StaticOptionsMonitor(T value) => CurrentValue = value;
