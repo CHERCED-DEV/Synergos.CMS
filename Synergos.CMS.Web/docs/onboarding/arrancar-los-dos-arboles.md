@@ -90,7 +90,27 @@ Contesta `{"outcome":"Created"}` la primera vez y `AlreadyAuthored` después —
 
 ## 4. Enchufar el CMS al CDN
 
-Y acá está la trampa que cuesta una tarde:
+**Si corrés en `Development` y clonaste los dos repos hermanos, esto ya está
+hecho y podés saltar al paso 5.** El default apunta a `../../Synergos.UI/public`
+—relativa, resuelta contra la raíz de contenido del proyecto Web, así que vale
+igual en Windows, en Linux y en CI— y el modo es `FileSystem`: con el paso 1
+hecho, el sitio hidrata sin una sola variable de entorno.
+
+Hasta el 2026-09-16 ese default decía `C:\LOCAL_CDN` y **no fallaba en ninguna
+otra máquina**: servía la portada en 200, con el SSR entero, sin import map y sin
+un solo `<script type="module">` — o sea idéntica a una que funciona, y muerta
+(#132). Hoy `Mode=FileSystem` sin esa carpeta —o con una carpeta que no trae
+`synergos/registry.json`, que es el hermano clonado y sin construir— **no
+arranca**, y el mensaje dice contra qué ruta absoluta resolvió y las dos salidas:
+
+```bash
+# levantar el CMS SIN CDN (backoffice, contenido, todo menos hidratar)
+Synergos__BundleRegistry__Mode=Stub
+```
+
+El resto de esta sección es para el otro camino: servir el CDN por HTTP, que es
+lo que hace falta con `npm run dev:cdn` (el ciclo editor→navegador) y lo que usa
+el despliegue. Y acá está la trampa que cuesta una tarde:
 
 ```bash
 # ✅ LO QUE FUNCIONA — son claves de configuración de .NET
@@ -177,6 +197,7 @@ producto** y la página lo dice: ahí no hay tema del CMS ni contenido real.
 | `MissingContentTypes` al sembrar | el import no terminó | Lo mismo |
 | Un elemento hidrata y otro no | el import map no trae el runtime de ese framework | `npm run build:cdn` de nuevo; `humo-conectado` lo nombra |
 | `npm run build:cdn` sale con 1 | el presupuesto de tamaño | Mirá **qué** creció, no el techo |
+| El CMS no arranca y habla de `LocalPath` | `Mode=FileSystem` y el hermano no está construido ahí | `npm run build:cdn`, o `Synergos__BundleRegistry__Mode=Stub` |
 
 ## Lo que este camino NO cubre
 

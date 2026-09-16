@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3252 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3257 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3252 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3257 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (18, ADR 0133)
@@ -1098,6 +1098,36 @@ Las que salieron de construir el árbol de servicios (§0.B):
   subtotal». **La mutación que vale no es quitar el campo** —eso rompe el build, que
   no es un test rojo—: es renombrar la clave serializada con `JsonPropertyName`, que
   compila y es la forma real de la deriva.
+- `feedback_a_default_path_of_one_machine_is_half_the_defect` — **una ruta por defecto
+  que sólo existe en la máquina de quien la escribió es la mitad barata; la cara es que
+  el modo SIGA CORRIENDO contra ella.** `appsettings.Development.json` traía
+  `C:\LOCAL_CDN` en los dos sitios del CDN de disco y `appsettings.Docker.json`
+  declaraba `Mode=FileSystem` contra un `/cdn` que la imagen no monta; en las dos, un
+  arranque fuera de esa máquina servía la portada en **200 con el SSR entero, sin
+  import map y con cero `<script type="module">`** — el defecto #126 exacto, en el modo
+  que se usa para desarrollar (#132). Medido con la misma portada, cambiando sólo la
+  ruta: **21 577 bytes / 23 entradas / 2 scripts** contra **19 785 / ninguna / 0**, los
+  mismos dos números que `humo-conectado` midió para el nombre de variable equivocado.
+  **Y no era transitorio: era permanente.** `InitialLoad` ve la carpeta ausente, escribe
+  un `LogWarning` y **vuelve sin cargar nada y sin dejar vigilante** —el
+  `FileSystemWatcher` sólo se engancha si la carpeta estaba—, así que el estado del
+  disco EN EL ARRANQUE decide para siempre. Cuando el mundo decide al arrancar, se dice
+  al arrancar: el modo lanza, como `ExigirUrlPublicaAbsoluta` en `Http` (#56).
+  **Lo que reemplaza a la ruta de una máquina es una RELATIVA AL REPO, y hay que decir
+  contra qué se resuelve**: contra la raíz de **contenido**, nunca contra el directorio
+  de trabajo —`dotnet run` lo deja en el proyecto y `dotnet exec bin/…/Web.dll` donde se
+  tecleó—, o es el mismo defecto con otra cara. Y se resuelve **antes de enlazar
+  opciones**, porque lo leen dos: el composer para decidir si lanzar, y el cliente por
+  `IOptions`; resuelto en uno, el otro habla de otra carpeta.
+  **Dos cortes que costaron su mutación.** Uno: **no se rechaza toda ruta absoluta** —el
+  `/cdn` de la imagen es un contrato, no una máquina—; lo que las distingue es que
+  nombren un usuario o una unidad. Dos: **lanzar sin decir cómo salir es un peaje**, así
+  que el mensaje nombra las dos salidas (construir el hermano, o `Mode=Stub`), y por eso
+  se distingue «la carpeta no está» de «está y no trae el registry»: el remedio es
+  distinto. **Ningún test lo veía** porque ninguno lee los `appsettings` — y los del
+  probe usaban `C:\LOCAL_CDN` **como literal de fixture**, o sea el defecto escrito en
+  los tests como si fuera lo normal. Hay gate (`RaizDelCdnTests`), y es el gemelo del
+  `rutas-hermanas` del repo hermano, que ya vigilaba esto de su lado.
 
 ## 6. Prohibiciones explícitas
 
@@ -1126,7 +1156,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3252 tests):
+# Suite completa (3257 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -1178,6 +1208,18 @@ montar nada aparte. Sus cuatro dientes, y qué caza cada uno:
 > los DataTypes a medias, un desplegable guarda una cadena plana y **toda página
 > de contenido contesta 500** — con una traza que apunta a la vista y no al orden
 > de arranque.
+
+> **Y en `Development` no hace falta ninguna variable** (#132). El default de
+> `Synergos:BundleRegistry` es `FileSystem` contra `../../Synergos.UI/public`
+> —relativa, resuelta contra la raíz de CONTENIDO y no contra el directorio de
+> trabajo—, así que con el hermano construido al lado el sitio hidrata solo:
+> medido, 21 577 bytes con import map de 23 entradas y sus dos
+> `<script type="module">`. Antes decía `C:\LOCAL_CDN`, que existe en una sola
+> máquina, y eso **no fallaba**: servía 19 785 bytes sin mapa y sin un script — o
+> sea idéntica a la buena, y muerta. Hoy `Mode=FileSystem` sin carpeta (o con una
+> carpeta sin `synergos/registry.json`) **lanza al cablear** y el mensaje nombra
+> las dos salidas; para levantar el CMS sin CDN,
+> `Synergos:BundleRegistry:Mode=Stub`.
 
 **De dos clones a una portada que hidrata** está escrito paso a paso en
 `Synergos.CMS.Web/docs/onboarding/arrancar-los-dos-arboles.md`.
@@ -1456,7 +1498,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3252 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3257 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
