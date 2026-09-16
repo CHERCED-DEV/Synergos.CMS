@@ -1,0 +1,94 @@
+name: Humo conectado (los DOS árboles)
+
+# El único gate que mira los dos árboles juntos: que la página que sirve el CMS
+# traiga lo que hace falta para que el CDN HIDRATE lo que el SSR pintó.
+#
+# `humo-portada.yml` llega hasta «la portada se sirve» y ahí para — con el
+# registry sin CDN, la página sale con sus <synergos-*> y sin un solo <script>,
+# que es exactamente como se ve una que funciona y una que no. Lo que este gate
+# añade es lo que el defecto #126 costó: sin <script type="importmap"> el
+# navegador no resuelve un solo bare import, así que ningún customElements.define
+# ocurre y la página contesta 200 con el SSR entero y muerta.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# POR QUÉ NO LLEVA FILTRO `paths:`, que es la decisión discutible.
+#
+# El defecto #128 de este repo: un gate que no se dispara en el cambio que lo
+# necesita no falla, se SALTA — y en la lista de checks un «skipped» se lee igual
+# que un «no aplica». Lo que este gate lee es «qué HTML sale por la puerta», y eso
+# lo puede romper una vista, un composer, un cliente del registry, el schema, un
+# appsettings o una publicación del repo hermano. Un filtro que intentara
+# enumerarlo se equivocaría, y se equivocaría en silencio, que es justo el defecto.
+#
+# El precio es unos minutos por PR. El precio del otro lado ya está medido: diez
+# días con toda página de contenido en 500 (#92) y el sitio entero sin hidratar
+# en producción (#126), las dos veces con la suite en verde.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Y NECESITA AL HERMANO CONSTRUIDO. No basta con hacerle checkout: `public/` es
+# salida de build. Por eso este workflow lo construye — y de paso es la única
+# comprobación de CI de que el camino de entrada del hermano funciona en una
+# máquina que no es la de nadie (Synergos.UI#70).
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: humo-conectado-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conectado:
+    name: SSR + import map + bundles servidos
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout del CMS
+        uses: actions/checkout@v4
+        with:
+          path: Synergos.CMS
+
+      # El hermano es público, así que sin `token:` — ver Synergos.UI#14.
+      - name: Checkout del UI (hermano)
+        uses: actions/checkout@v4
+        with:
+          repository: cherced-dev/Synergos.UI
+          path: Synergos.UI
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # `npm run setup` instala la raíz Y cada plataforma: el repo hermano no usa
+      # workspaces y cada una tiene su propio lock (Synergos.UI#70).
+      - name: Construir el CDN
+        working-directory: Synergos.UI
+        run: |
+          npm run setup
+          npm run build:cdn
+
+      - name: Pedir la página con el CDN enchufado
+        working-directory: Synergos.CMS
+        run: node tools/humo-conectado.mjs --log humo-conectado.log
+
+      - name: Subir log de la aplicación
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: humo-conectado-log
+          path: Synergos.CMS/humo-conectado.log
+          retention-days: 14
