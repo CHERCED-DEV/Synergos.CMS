@@ -109,6 +109,21 @@ public sealed partial class SeamComposer
         var bundleRegistryMode = builder.Config["Synergos:BundleRegistry:Mode"] ?? "Stub";
         if (string.Equals(bundleRegistryMode, "FileSystem", StringComparison.OrdinalIgnoreCase))
         {
+            // Antes de registrar nada: sin una carpeta que exista este modo no carga NADA y no
+            // lo vuelve a intentar —InitialLoad escribe un warning, vuelve, y el
+            // FileSystemWatcher sólo se engancha si la carpeta estaba ahí—, así que el estado
+            // del disco al arrancar decide para siempre. Medido: la portada sale en 200 con el
+            // SSR entero, sin import map y sin un solo <script type="module"> — o sea idéntica a
+            // una que funciona, y muerta (#132, la forma del #126). Mismo trato que la URL base
+            // del modo Http (#56) y que la llave de firma de Api.Identity.
+            //
+            // Program.cs ya resolvió el relativo contra la raíz de contenido, así que lo que se
+            // lee acá es la ruta absoluta de verdad.
+            RaizDelCdnLocal.Exigir(
+                builder.Config["Synergos:BundleRegistry:LocalPath"],
+                builder.Config["Synergos:BundleRegistry:BundlesNamespace"] ?? "synergos",
+                builder.Config["Synergos:BundleRegistry:RegistryFileName"] ?? "registry.json");
+
             services.AddSingleton<IBundleRegistryClient, FileSystemBundleRegistryClient>();
         }
         else if (string.Equals(bundleRegistryMode, "Http", StringComparison.OrdinalIgnoreCase))
