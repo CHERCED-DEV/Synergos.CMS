@@ -55,6 +55,41 @@ public sealed class ImportMapComposerTests
     }
 
     [Fact]
+    public void La_convencion_del_repo_hermano_COMPONE_lo_que_este_test_ya_rechazaba()
+    {
+        // El fixture es literalmente lo que `Synergos.UI` publica desde su #58, y por eso está
+        // acá: la REGLA vive en este árbol y la CAUSA en el otro, así que el test de la colisión
+        // llevaba meses verde mientras el repo hermano publicaba exactamente el caso que rechaza
+        // — nombres AGNÓSTICOS (`@synergos/core`) con destinos ESPECÍFICOS de Angular.
+        //
+        // La salida que tomó el hermano sale de la regla de arriba: Angular publica el alias
+        // heredado Y su gemelo calificado apuntando al MISMO fichero —así se deduplica— y toda
+        // plataforma nueva publica sólo el suyo. El alias no se retira nunca mientras haya
+        // bundles publicados que lo importen por nombre.
+        //
+        // Sin este test, lo único que dice que la convención funciona vive en el otro repo.
+        var (mapa, conflicto) = ImportMapComposer.Componer(new[]
+        {
+            Mapa("angular",
+                ("@synergos/core", "/synergos/runtime/angular/21.1.6/sg-core.js"),
+                ("@synergos/angular-core", "/synergos/runtime/angular/21.1.6/sg-core.js"),
+                ("rxjs", "/synergos/runtime/angular/21.1.6/rxjs.js")),
+            Mapa("react",
+                ("@synergos/react-core", "/synergos/runtime/react/1.0.0/sg-core.js"),
+                ("react", "/synergos/runtime/react/1.0.0/react.js")),
+        });
+
+        Assert.Null(conflicto);
+        Assert.NotNull(mapa);
+
+        // El alias heredado sigue resolviendo — es lo que importan los 127 bundles ya publicados.
+        Assert.Equal("/synergos/runtime/angular/21.1.6/sg-core.js", mapa!.Imports["@synergos/core"]);
+        // Y los dos calificados conviven, que es lo que el nombre agnóstico impedía.
+        Assert.Equal("/synergos/runtime/angular/21.1.6/sg-core.js", mapa.Imports["@synergos/angular-core"]);
+        Assert.Equal("/synergos/runtime/react/1.0.0/sg-core.js", mapa.Imports["@synergos/react-core"]);
+    }
+
+    [Fact]
     public void El_mismo_specifier_con_URLS_DISTINTAS_para_el_mapa_y_nombra_a_los_dos()
     {
         // El único caso que no se puede resolver solo. Elegir uno en silencio deja al otro
