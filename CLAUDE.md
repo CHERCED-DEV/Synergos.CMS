@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3248 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3252 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3248 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3252 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (18, ADR 0133)
@@ -1022,6 +1022,35 @@ Las que salieron de construir el árbol de servicios (§0.B):
   exactamente esta fila, así que `[]` dice «todavía ninguna», que es cierto. La
   pregunta es la misma de siempre —*¿qué puede llenar esta lista?*— y sólo cambia
   la respuesta.
+- `feedback_a_clock_test_measures_a_property_it_cannot_own` — **un test que
+  comprueba una propiedad TEMPORAL con un reloj de pared no falla por el código
+  que vigila: falla por la máquina, y eso enseña a ignorar un rojo.** El de «las
+  dos colas del turno de escritura comen del mismo presupuesto» afirmaba «esperó
+  menos de 1800 ms con 1000 de presupuesto» —un margen de 1,8×—, se cayó en una
+  corrida de la suite entera y pasó suelto y en la siguiente (#125). Este repo ya
+  tiene escrito que **«flake» no es una causa raíz**, y el precio es exacto: el
+  día que ese test se caiga **por el defecto**, nadie lo va a mirar.
+  **La salida NO es subir el margen** —eso lo convierte en un test que no prueba
+  nada— ni tampoco «medir el número de esperas», que fue el instinto: acá las dos
+  esperas OCURREN las dos y son legítimas; lo que el defecto hacía era
+  **reiniciar el reloj** entre ellas. El corte que sí funciona es **convertir el
+  plazo en un TIPO** —creado una vez al entrar, con `Restante(ahora)` y
+  `Agotado(ahora)` puros— y **dejar que el llamador lo pase**, porque entonces un
+  test puede entrar con un presupuesto **ya gastado** y afirmar lo que importa
+  sin depender de cuánto tarde la máquina.
+  **Y el reloj no desaparece del todo: cambia de MARGEN, y ahí está la mitad que
+  cuesta.** Queda un test que cronometra —hace falta, porque la propiedad es
+  temporal— pero con el presupuesto gastado bueno y roto se llevan **10×** en vez
+  de 1,8×: medido, 5005 ms contra un margen de 500. Un margen de 25× contra el
+  caso bueno no es «subir el margen»: es haber cambiado el escenario para que la
+  diferencia entre correcto y roto no quepa dentro del ruido.
+  **Lo que no se puede perder al hacerlo**: la mutación original —recalcular el
+  límite después del semáforo— tiene que seguir poniéndolo rojo. Un test
+  determinista que ya no caza el defecto es peor que uno flaky.
+  **Y hace falta el test espejo**: con el presupuesto gastado y el cerrojo
+  **libre**, tiene que ENTRAR. Sin él, un turno que se rindiera sin intentar el
+  fichero pasaría el primero en verde — y rendirse sin mirar rechaza con un 503
+  un cerrojo que el de al lado acaba de soltar.
 - `feedback_an_omission_becomes_a_defect_when_someone_fills_it` — **omitir un campo
   que la otra punta emite es legítimo hasta que alguien tiene que RELLENAR el hueco;
   ahí deja de ser un DTO mínimo y pasa a ser una fabricación** (#122). El
@@ -1076,7 +1105,7 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3248 tests):
+# Suite completa (3252 tests):
 dotnet test Synergos.CMS.sln -v quiet
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
@@ -1372,7 +1401,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3248 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3252 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

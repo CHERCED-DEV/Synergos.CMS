@@ -119,13 +119,29 @@ public sealed class StoreWriteGate
     /// se llevó la espera entera, rendirse sin mirar rechazaría un cerrojo que puede estar libre
     /// —el de al lado soltó mientras hacíamos cola— con un 503 que no le corresponde a nadie.</para>
     /// </remarks>
-    public async Task<IDisposable?> TryEnterAsync(CancellationToken ct = default)
-    {
-        var limite = DateTime.UtcNow + _espera;
+    public Task<IDisposable?> TryEnterAsync(CancellationToken ct = default)
+        => TryEnterAsync(Presupuesto.Desde(DateTime.UtcNow, _espera), ct);
 
-        var resto = limite - DateTime.UtcNow;
-        if (!await _local.WaitAsync(resto > TimeSpan.Zero ? resto : TimeSpan.Zero, ct)
-                .ConfigureAwait(false))
+    /// <summary>
+    /// El mismo turno, con el presupuesto ya creado.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Existe para que la propiedad se pueda probar CONTANDO y no cronometrando</b>
+    /// (#125). El test que vigilaba «las dos colas comen del mismo presupuesto» medía un reloj de
+    /// pared —«esperó menos de 1800 ms con 1000 de presupuesto»— y se caía bajo carga de la
+    /// máquina, no por el código que vigila. Un test de reloj que falla intermitente es cómo se
+    /// aprende a ignorar un rojo, y este repo ya tiene escrito que «flake» no es una causa raíz:
+    /// el día que se cayera por el defecto, nadie lo iba a mirar.</para>
+    ///
+    /// <para>Con el presupuesto como PARÁMETRO, un test puede entrar con uno <b>ya gastado</b> y
+    /// afirmar lo que de verdad importa —que se rinde sin volver a hacer cola— sin depender de
+    /// cuánto tarde la máquina. Y la mutación sigue funcionando, que es la mitad que cuenta:
+    /// volver a crear el presupuesto después del semáforo deja ese test esperando el presupuesto
+    /// entero.</para>
+    /// </remarks>
+    internal async Task<IDisposable?> TryEnterAsync(Presupuesto presupuesto, CancellationToken ct)
+    {
+        if (!await _local.WaitAsync(presupuesto.Restante(DateTime.UtcNow), ct).ConfigureAwait(false))
         {
             return null;
         }
@@ -150,7 +166,7 @@ public sealed class StoreWriteGate
                 {
                 }
 
-                if (DateTime.UtcNow >= limite)
+                if (presupuesto.Agotado(DateTime.UtcNow))
                 {
                     _local.Release();
                     return null;
@@ -163,6 +179,41 @@ public sealed class StoreWriteGate
             _local.Release();
             throw;
         }
+    }
+
+    /// <summary>
+    /// El plazo de la espera, creado UNA vez al entrar y consultado por las dos colas.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es la regla del <c>&lt;remarks&gt;</c> de <see cref="TryEnterAsync(CancellationToken)"/>
+    /// vuelta un TIPO: mientras el límite era una variable local recalculable, «las dos colas
+    /// comen del mismo presupuesto» era una propiedad que sólo un cronómetro podía comprobar.
+    /// Acá <c>Restante</c> y <c>Agotado</c> son funciones puras del instante que se les pasa, así
+    /// que la regla se prueba sin reloj de pared (#125).</para>
+    ///
+    /// <para><b><c>Restante</c> nunca es negativo</b>: <c>SemaphoreSlim.WaitAsync</c> lanza con un
+    /// <c>TimeSpan</c> negativo que no sea <c>-1</c>, así que un presupuesto agotado tiene que
+    /// dar cero —«no esperes»— y no «espera para siempre», que es lo que significaría <c>-1</c> y
+    /// es exactamente el fallo que nadie vería.</para>
+    /// </remarks>
+    internal readonly struct Presupuesto
+    {
+        private readonly DateTime _limite;
+
+        private Presupuesto(DateTime limite) => _limite = limite;
+
+        public static Presupuesto Desde(DateTime ahora, TimeSpan espera) => new(ahora + espera);
+
+        /// <summary>Un presupuesto que ya se gastó. Para los tests de la regla.</summary>
+        public static Presupuesto Gastado(DateTime ahora) => new(ahora);
+
+        public TimeSpan Restante(DateTime ahora)
+        {
+            var resto = _limite - ahora;
+            return resto > TimeSpan.Zero ? resto : TimeSpan.Zero;
+        }
+
+        public bool Agotado(DateTime ahora) => ahora >= _limite;
     }
 
     private sealed class Turno : IDisposable
