@@ -120,4 +120,58 @@ public sealed class ImportMapComposerTests
 
         Assert.Equal(new[] { "angular" }, declarados);
     }
+
+    // ── Qué hace el cliente HTTP con un conflicto (Synergos.UI#58) ───────────
+
+    [Fact]
+    public void Un_conflicto_NUEVO_no_puede_tirar_el_mapa_que_ya_funcionaba()
+    {
+        // Esto es una regla sobre el CLIENTE y se afirma acá porque es donde se
+        // razona la composición. El cliente conserva el vigente; este test fija el
+        // PORQUÉ, que es lo que se me fue en #127:
+        //
+        // un mapa vigente sólo puede existir si cuando se compuso NO tenía conflicto
+        // —con conflicto, `Componer` devuelve null y no hay vigente que guardar—.
+        // Luego todo conflicto es NUEVO, lo introduce quien acaba de publicar, y
+        // tirar el bueno apaga también a quien ya funcionaba.
+        var soloAngular = ImportMapComposer.Componer(new[]
+        {
+            Mapa("angular", ("@synergos/core", "/synergos/runtime/angular/21.1.6/sg-core.js")),
+        });
+        Assert.Null(soloAngular.Conflicto);
+        Assert.NotNull(soloAngular.Mapa);
+
+        // Y el día que llega la segunda plataforma con el MISMO nombre agnóstico:
+        var conLaSegunda = ImportMapComposer.Componer(new[]
+        {
+            Mapa("angular", ("@synergos/core", "/synergos/runtime/angular/21.1.6/sg-core.js")),
+            Mapa("react", ("@synergos/core", "/synergos/runtime/react/18.3.1/sg-core.js")),
+        });
+        Assert.NotNull(conLaSegunda.Conflicto);
+        Assert.Null(conLaSegunda.Mapa);
+
+        // La conclusión que el cliente tiene que respetar: había uno bueno antes,
+        // así que hay algo que conservar. Si `Componer` pudiera devolver conflicto
+        // sobre un conjunto de UNA plataforma, esta regla no se sostendría.
+        Assert.NotNull(soloAngular.Mapa);
+    }
+
+    [Fact]
+    public void El_nombre_calificado_por_framework_es_lo_que_evita_el_conflicto()
+    {
+        // La salida de Synergos.UI#58, probada acá para que el otro árbol tenga
+        // contra qué escribirla: Angular publica el nombre agnóstico Y el suyo
+        // calificado —el mismo destino, así que se deduplica— y las plataformas
+        // nuevas publican sólo el calificado. Nunca colisionan.
+        var (mapa, conflicto) = ImportMapComposer.Componer(new[]
+        {
+            Mapa("angular",
+                ("@synergos/core", "/synergos/runtime/angular/21.1.6/sg-core.js"),
+                ("@synergos/angular-core", "/synergos/runtime/angular/21.1.6/sg-core.js")),
+            Mapa("react", ("@synergos/react-core", "/synergos/runtime/react/18.3.1/sg-core.js")),
+        });
+
+        Assert.Null(conflicto);
+        Assert.Equal(3, mapa!.Imports.Count);
+    }
 }
