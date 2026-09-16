@@ -1186,7 +1186,16 @@ registry en `Stub` la página sale con sus `<synergos-*>` y sin un solo
 `<script>`, que es exactamente como se ve una que funciona y una que no.
 
 Levanta él solo un estático sobre `../Synergos.UI/public`, así que no hace falta
-montar nada aparte. Sus cuatro dientes, y qué caza cada uno:
+montar nada aparte. **Y corre en CI** (`humo-conectado.yml`), que hace checkout
+del hermano, lo **construye** —`public/` es salida de build, no basta con
+clonarlo— y pide la página. **Sin filtro `paths:` a propósito**: lo que este gate
+lee es «qué HTML sale por la puerta», y eso lo rompe una vista, un composer, un
+cliente del registry, el schema o un `appsettings`; un filtro que intentara
+enumerarlo se equivocaría **en silencio**, que es el defecto #128. El precio del
+otro lado ya está medido dos veces: diez días con toda página de contenido en 500
+(#92) y el sitio entero sin hidratar (#126), las dos con la suite en verde.
+
+Sus cuatro dientes, y qué caza cada uno:
 
 | | |
 |---|---|
