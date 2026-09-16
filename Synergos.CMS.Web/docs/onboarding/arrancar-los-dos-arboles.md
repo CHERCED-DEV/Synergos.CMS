@@ -42,9 +42,17 @@ arrancar el CMS primero sólo sirve para verlo a medias.
 
 ```bash
 cd Synergos.UI
-npm install && npm install --prefix platforms/angular && npm install --prefix platforms/preact
+npm run setup              # npm ci en la raíz Y en cada plataforma — hacen falta TRES
 npm run build:cdn          # compila las dos plataformas, sus runtimes, publica y mide
 ```
+
+> **`npm run setup` no es opcional y `npm ci` a secas no alcanza.** Ese repo no
+> usa workspaces: cada plataforma tiene su propio `package.json` y su propio
+> `package-lock.json`. Sin el `setup`, `npm test` moría con
+> `Cannot find module 'sass'` y una traza de `ngtsc.mjs` que no sugiere en ningún
+> momento que falte instalar (Synergos.UI#70). Hoy `pretest`/`prebuild` lo
+> comprueban y dicen qué teclear; la lista de plataformas se deriva del disco, así
+> que la tercera entra sola.
 
 Termina en `✓ listo en <repo>/public`. Ahí dentro está `synergos/registry.json`,
 un `synergos/<elemento>/<framework>/…` por bundle y `synergos/runtime/<framework>/`
