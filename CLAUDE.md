@@ -955,6 +955,27 @@ Las que salieron de construir el árbol de servicios (§0.B):
   valores donde «sin elegir» sigue siendo «no consta», que es la misma decisión
   que #111 tomó en el TIPO (`bool?`) aplicada al editor. Y la regla para saber
   cuáles son ésas es la de siempre: se mira qué pasa si nadie lo toca.
+- `feedback_the_two_trees_connect_only_where_someone_asks_for_the_page` —
+  **el CMS y el CDN se pueden tener los dos verdes y no estar conectados, y el
+  HTML de una página desconectada es indistinguible del de una buena.** Sin
+  `<script type="importmap">` el navegador no resuelve un solo bare import: ningún
+  bundle arranca, ningún `customElements.define` ocurre, y la página sale **200 con
+  el SSR entero** —el contenido pintado, los `<synergos-*>` en su sitio— y muerta.
+  Es el defecto #126, y lo que lo vuelve regla es **por dónde se llega**: no por un
+  fallo, sino por una **variable de entorno con el nombre de otra capa**.
+  `SYNERGOS_CDN_MODE` / `SYNERGOS_CDN_URL` sólo existen dentro de `compose.yml`,
+  que las traduce a `Synergos__BundleRegistry__*`; un `dotnet run` las ignora **sin
+  quejarse**. Medido con la misma portada, cambiando sólo el nombre: **21.595 bytes
+  con un import map de 23 entradas contra 19.785 sin import map**. El repo hermano
+  las documentaba así en dos ficheros, o sea que la guía era la causa.
+  **Y la mitad que no se ve: un mapa INCOMPLETO es peor que uno ausente.** Con dos
+  frameworks publicando y el mapa de uno, la mitad de los elementos hidrata y la
+  otra mitad no — nadie reporta una página que «se ve bien». Por eso el gate
+  (`tools/humo-conectado.mjs`) deriva del registry **cuántos** frameworks hay y
+  exige una entrada por cada uno, en vez de comprobar que el mapa exista.
+  **El tell, para reconocerlo sin este caso delante:** un gate que se detiene en
+  «la página se sirve». Servir es la mitad; la otra es que traiga con qué
+  ejecutarse, y eso sólo se ve pidiendo la página con el otro árbol enchufado.
 - `feedback_a_build_that_compiles_no_view` — **en este repo un `dotnet build`
   verde NO dice que las vistas compilen, y ningún test de la suite lo dice
   tampoco.** `RazorCompileOnBuild=false` y `RazorCompileOnPublish=false` están
@@ -1125,7 +1146,41 @@ dotnet build Synergos.Bff.Tienda/Synergos.Bff.Tienda.csproj -v quiet
 ```bash
 node tools/usync-rebuild-check.mjs   # ADR 0128: base vacía + XML = entorno completo (~2 min)
 node tools/humo-portada.mjs          # #119: base vacía + XML + siembra = portada SERVIDA (~3 min)
+node tools/humo-conectado.mjs        # …y CONECTADA al CDN del repo hermano (~3 min)
 ```
+
+**El tercero es el único que mira los DOS árboles juntos**, y mira la propiedad
+que ninguno de los otros puede: que la página traiga lo que hace falta para que
+el CDN **hidrate** lo que el SSR pintó. `humo-portada` para justo antes — con el
+registry en `Stub` la página sale con sus `<synergos-*>` y sin un solo
+`<script>`, que es exactamente como se ve una que funciona y una que no.
+
+Levanta él solo un estático sobre `../Synergos.UI/public`, así que no hace falta
+montar nada aparte. Sus cuatro dientes, y qué caza cada uno:
+
+| | |
+|---|---|
+| hay `<script type="importmap">` | sin él **nada hidrata** — 200, el SSR entero y muerto (#126) |
+| resuelve hacia **cada** framework del registry | con el mapa de uno solo, medio sitio hidrata y la página se ve igual de bien |
+| cada `<synergos-*>` tiene su `<script type="module">` | un tag sin bundle es un hueco que el SSR disimula |
+| cada bundle contesta 200 | un `<script>` a un 404 se ve en el HTML igual que uno bueno |
+
+> **Y la causa más fácil de cometer es una variable de entorno.**
+> `SYNERGOS_CDN_MODE` / `SYNERGOS_CDN_URL` **sólo existen dentro de
+> `compose.yml`**, que las traduce; un `dotnet run` las ignora en silencio. Las
+> claves de verdad son `Synergos__BundleRegistry__Mode` y
+> `Synergos__BundleRegistry__PublicBaseUrl`. Medido con la misma portada: **21.595
+> bytes con import map de 23 entradas contra 19.785 SIN import map**. El repo
+> hermano las documentaba mal en dos sitios y se corrigió.
+>
+> **El otro tropiezo, y cuesta tres corridas averiguarlo**: sembrar la portada
+> ANTES de que el import de uSync termine (`uSync: Startup Complete`) la crea con
+> los DataTypes a medias, un desplegable guarda una cadena plana y **toda página
+> de contenido contesta 500** — con una traza que apunta a la vista y no al orden
+> de arranque.
+
+**De dos clones a una portada que hidrata** está escrito paso a paso en
+`Synergos.CMS.Web/docs/onboarding/arrancar-los-dos-arboles.md`.
 
 **El segundo es el único del repo que PIDE LA PÁGINA**, y por eso existe: las vistas
 de este proyecto se compilan **siempre en caliente** —`RazorCompileOnBuild=false`,
