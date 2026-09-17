@@ -26,6 +26,7 @@ namespace Synergos.CMS.Tests.Architecture;
 /// nadie regenere el compose. El servicio nuevo simplemente <i>no se despliega</i>. No falla —
 /// falta.</para>
 /// </remarks>
+[Collection(ComposeExclusivo.Nombre)]
 public sealed class ComposeStackTests
 {
     private static string RepoRoot()

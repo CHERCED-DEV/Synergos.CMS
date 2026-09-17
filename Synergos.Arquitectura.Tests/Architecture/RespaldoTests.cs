@@ -42,6 +42,7 @@ namespace Synergos.CMS.Tests.Architecture;
 ///   apuntara al vivo no sería un ensayo, sería el incidente.</item>
 /// </list>
 /// </remarks>
+[Collection(ComposeExclusivo.Nombre)]
 public sealed class RespaldoTests
 {
     private static string RepoRoot()
