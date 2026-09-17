@@ -64,14 +64,53 @@
 
 set -euo pipefail
 
+# ── El intérprete ────────────────────────────────────────────────────────────
+#
+# `python3` a secas NO alcanza, y el modo de fallo es de los que más caro salen:
+# en Windows el alias de ejecución de la Microsoft Store SE LLAMA `python3`, está
+# en el PATH, imprime «no se encontró Python» y SALE CON 0. El lector recibe cero
+# líneas, la autoprueba acusa al lector —«los campos se corren, una oferta se
+# publica a CERO»— y el defecto de verdad es que en esa máquina no hay intérprete.
+# Un fallo que se presenta como éxito, y encima culpando a otro.
+#
+# Por eso no se busca por nombre: se PRUEBA que el candidato ejecuta de verdad. En
+# el servidor `python3` viene de fábrica y gana en la primera vuelta, así que esto
+# no cambia nada allá — cambia que en una máquina sin intérprete el mensaje diga
+# ESO, en vez de mandar a alguien a depurar un lector que está bien.
+PYTHON=""
+for candidato in python3 python py; do
+  command -v "$candidato" >/dev/null 2>&1 || continue
+  if [ "$("$candidato" -c 'print("syn-ok")' 2>/dev/null || true)" = "syn-ok" ]; then
+    PYTHON="$candidato"
+    break
+  fi
+done
+
+if [ -z "$PYTHON" ]; then
+  echo "provisionar: no hay un Python que EJECUTE (se probaron python3, python, py)." >&2
+  echo "  Esto no dice nada sobre el lector del manifiesto: dice que falta el intérprete." >&2
+  echo "  En Windows, 'python3' suele ser el alias de la Microsoft Store, que no ejecuta" >&2
+  echo "  nada y devuelve 0. Desactivalo en Configuración > Alias de ejecución de aplicaciones," >&2
+  echo "  o instalá Python. En el servidor viene de fábrica." >&2
+  exit 1
+fi
+
 # ── El manifiesto ────────────────────────────────────────────────────────────
 #
 # Una línea por entrada, con los siete campos SIEMPRE presentes —vacíos los que
 # no apliquen— y 0x1F entre ellos. Ver el aviso de más abajo sobre por qué no es
 # un tabulador.
 leer_manifiesto() {
-  python3 - "$1" <<'PY'
+  "$PYTHON" - "$1" <<'PY'
 import json, sys
+
+# Sin esto el ÚLTIMO campo de cada línea llega con un \r pegado, y sólo en Windows:
+# la salida estándar de Python va en modo texto y traduce \n a \r\n. El separador de
+# campos es 0x1F, así que el \r no rompe la división —se cuela DENTRO del último
+# valor— y `moneda` pasa a valer "COP\r". Es el mismo defecto de forma que el de los
+# tabuladores que documenta este fichero: no falla, contamina un campo.
+sys.stdout.reconfigure(newline='\n')
+
 for e in json.load(open(sys.argv[1], encoding='utf-8')):
     print('\x1f'.join(str(e.get(k, '')) for k in
                       ('tipo', 'subjectKind', 'subjectId', 'capacity',
