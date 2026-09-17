@@ -17,10 +17,31 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { servicios } from './service-matrix.mjs';
+import { servicios, descubrir } from './service-matrix.mjs';
 
 const RAIZ = process.cwd();
 const DESTINO = join(RAIZ, 'compose.prod.yml');
+
+/**
+ * `Synergos.Api.Booking` → `backend/capacidades/Synergos.Api.Booking` (#136).
+ *
+ * El backend dejó de estar plano en la raíz, así que la ruta de un servicio ya no
+ * es su nombre. Se resuelve con el MISMO descubrimiento que produce la lista
+ * —`descubrir()` de `service-matrix.mjs`— y no con una tabla de carpetas padre:
+ * dos derivaciones de la misma verdad se desvían, una sola no puede.
+ *
+ * Lanza si el nombre no existe. La alternativa —devolver la ruta plana de antes—
+ * dejaría el `readFileSync` fallando con un ENOENT que apunta al fichero y no a
+ * la causa, y peor: un `catch` alrededor lo convertiría en un servicio generado
+ * sin su bloque de identidad, que arranca verde y rechaza el primer token.
+ */
+function rutaDe(nombre) {
+  const encontrado = descubrir(RAIZ).find((s) => s.nombre === nombre);
+  if (!encontrado) {
+    throw new Error(`compose-gen: no existe el proyecto ${nombre} en el árbol`);
+  }
+  return encontrado.ruta;
+}
 const CHECK = process.argv.includes('--check');
 
 /**
@@ -42,7 +63,7 @@ const CHECK = process.argv.includes('--check');
  * `required: true` y tiene su propio bloque, con `:?` porque sin llave no arranca.
  */
 function verificaIdentidad(proyecto) {
-  const programa = readFileSync(join(RAIZ, proyecto, 'Program.cs'), 'utf8');
+  const programa = readFileSync(join(RAIZ, rutaDe(proyecto), 'Program.cs'), 'utf8');
   return /AddIdentityTokens\(required:\s*false\)/.test(programa);
 }
 
@@ -70,7 +91,7 @@ const imagen = (proyecto) => `\${SYNERGOS_REGISTRY}/${proyecto.toLowerCase()}:\$
  * orquestador arranca sano, pasa su /health, y falla TODAS las sagas.
  */
 function capacidadesDe(proyecto) {
-  const programa = readFileSync(join(RAIZ, proyecto, 'Program.cs'), 'utf8');
+  const programa = readFileSync(join(RAIZ, rutaDe(proyecto), 'Program.cs'), 'utf8');
 
   // `SaludCapabilities.Consent` → `consent`. El identificador de la constante y
   // su valor coinciden en las veinte; si algun dia dejaran de coincidir, la

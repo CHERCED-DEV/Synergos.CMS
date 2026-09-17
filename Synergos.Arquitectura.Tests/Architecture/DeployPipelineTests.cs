@@ -42,7 +42,7 @@ public sealed class DeployPipelineTests
     }
 
     private static string Leer(params string[] partes)
-        => File.ReadAllText(Path.Combine(new[] { RepoRoot() }.Concat(partes).ToArray()));
+        => File.ReadAllText(Proyectos.Ruta(partes));
 
     /// <summary>El fichero sin comentarios — no se mide la prosa que explica la regla.</summary>
     /// <remarks>
@@ -51,7 +51,7 @@ public sealed class DeployPipelineTests
     /// que se dispara con lo que lo explica termina desactivado.
     /// </remarks>
     private static string SinComentarios(params string[] partes)
-        => string.Join('\n', File.ReadAllLines(Path.Combine(new[] { RepoRoot() }.Concat(partes).ToArray()))
+        => string.Join('\n', File.ReadAllLines(Proyectos.Ruta(partes))
             .Select(l => l.TrimStart())
             .Where(l => !l.StartsWith('#') && !l.StartsWith("//", StringComparison.Ordinal)));
 

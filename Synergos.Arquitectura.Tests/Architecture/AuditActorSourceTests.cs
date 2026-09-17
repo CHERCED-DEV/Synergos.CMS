@@ -34,7 +34,7 @@ public sealed class AuditActorSourceTests
     /// <summary>El fichero sin comentarios: la prosa explica el código, no lo es.</summary>
     private static string SinComentarios(params string[] partes)
     {
-        var ruta = Path.Combine(new[] { RepoRoot() }.Concat(partes).ToArray());
+        var ruta = Proyectos.Ruta(partes);
         Assert.True(File.Exists(ruta), $"No existe {ruta}: revisar este gate.");
 
         return string.Join('\n', File.ReadAllLines(ruta).Select(l =>

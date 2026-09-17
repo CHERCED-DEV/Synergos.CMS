@@ -62,7 +62,7 @@ public sealed class PaymentsIdentityTests
     }
 
     private static string Fuente(params string[] partes)
-        => SinComentarios(Path.Combine(new[] { RepoRoot() }.Concat(partes).ToArray()));
+        => SinComentarios(Proyectos.Ruta(partes));
 
     private static string Emisor() => Fuente("Synergos.CMS.Web", "Services", "HttpPaymentProvider.cs");
 

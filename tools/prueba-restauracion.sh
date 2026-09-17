@@ -242,7 +242,9 @@ done
 echo "── 5. leyendo los datos de vuelta"
 RUTAS=""
 SIN_LECTURA=""
-for d in "$REPO"/Synergos.Api.*; do
+# Las capacidades ya no están planas en la raíz (#136): se BUSCAN por su
+# Endpoints/, que es la propiedad que este bucle necesita, en vez de por su sitio.
+for d in $(find "$REPO" -type d -name "Synergos.Api.*" -not -path "*/bin/*" -not -path "*/obj/*" | sort); do
   [ -d "$d/Endpoints" ] || continue
   svc="$(basename "$d" | sed 's/^Synergos\.//' | tr '.' '-' | tr '[:upper:]' '[:lower:]')"
   cols="$(grep -rhoE 'MapGet\("/v1/[a-z-]+"' "$d/Endpoints/" 2>/dev/null \

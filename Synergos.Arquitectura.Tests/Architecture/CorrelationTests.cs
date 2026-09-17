@@ -34,7 +34,7 @@ public sealed class CorrelationTests
     }
 
     private static IEnumerable<(string Nombre, string Codigo)> Hosts()
-        => Directory.EnumerateDirectories(RepoRoot())
+        => Proyectos.Directorios()
             .Where(d => Path.GetFileName(d).StartsWith("Synergos.Api.", StringComparison.Ordinal)
                      || Path.GetFileName(d).StartsWith("Synergos.Bff.", StringComparison.Ordinal))
             .Select(d => (Dir: d, Programa: Path.Combine(d, "Program.cs")))
@@ -96,7 +96,7 @@ public sealed class CorrelationTests
         // aislados: el problema de partida con un paso más de trabajo. Va en AddSagaMachinery,
         // que es donde se crean TODOS los clientes de TODOS los orquestadores.
         var maquinaria = File.ReadAllText(
-            Path.Combine(RepoRoot(), "Synergos.Bff.Core", "SagaMachinery.cs"));
+            Proyectos.Dir("Synergos.Bff.Core", "SagaMachinery.cs"));
 
         Assert.Contains("AddHttpMessageHandler<CorrelationHandler>()", maquinaria, StringComparison.Ordinal);
     }
@@ -196,7 +196,7 @@ public sealed class CorrelationTests
 
         // …y lo que se acepta de la red pasa por el recorte. Se comprueba sobre el fichero para
         // no exponer un privado solo por el test.
-        var fuente = File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.Shared", "Correlation.cs"));
+        var fuente = File.ReadAllText(Proyectos.Dir("Synergos.Shared", "Correlation.cs"));
         Assert.Contains("IsAsciiLetterOrDigit", fuente, StringComparison.Ordinal);
         Assert.Contains("Take(32)", fuente, StringComparison.Ordinal);
     }
@@ -261,7 +261,7 @@ public sealed class CorrelationTests
     {
         // La forma directa del mismo gate, sobre la fuente: un diccionario en el BeginScope es el
         // defecto de arriba escrito otra vez.
-        var fuente = File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.Shared", "Correlation.cs"));
+        var fuente = File.ReadAllText(Proyectos.Dir("Synergos.Shared", "Correlation.cs"));
         var codigo = string.Join('\n', fuente.Split('\n').Where(l => !l.TrimStart().StartsWith("///", StringComparison.Ordinal)));
 
         Assert.DoesNotContain("BeginScope(new Dictionary", codigo, StringComparison.Ordinal);

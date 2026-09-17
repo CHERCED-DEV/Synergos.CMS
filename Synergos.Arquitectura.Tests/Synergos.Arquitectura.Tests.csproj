@@ -33,9 +33,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Synergos.CMS.Web\Synergos.CMS.Web.csproj" />
-    <ProjectReference Include="..\Synergos.Shared\Synergos.Shared.csproj" />
-    <ProjectReference Include="..\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
-    <ProjectReference Include="..\Synergos.Bff.Tienda\Synergos.Bff.Tienda.csproj" />
+    <ProjectReference Include="..\backend\nucleo\Synergos.Shared\Synergos.Shared.csproj" />
+    <ProjectReference Include="..\backend\orquestadores\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
+    <ProjectReference Include="..\backend\orquestadores\Synergos.Bff.Tienda\Synergos.Bff.Tienda.csproj" />
   </ItemGroup>
 
 </Project>

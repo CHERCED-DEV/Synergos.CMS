@@ -36,7 +36,7 @@ public sealed class ApiMoldTests
 
     /// <summary>Los directorios de las capacidades: <c>Synergos.Api.*</c>.</summary>
     private static IReadOnlyList<(string Name, string Dir)> Capacidades()
-        => Directory.EnumerateDirectories(RepoRoot(), "Synergos.Api.*")
+        => Proyectos.Todos("Synergos.Api.")
             .Select(d => (Name: Path.GetFileName(d), Dir: d))
             .OrderBy(x => x.Name, StringComparer.Ordinal)
             .ToList();
@@ -204,7 +204,7 @@ public sealed class ApiMoldTests
         var mapa = new Dictionary<string, string>(StringComparer.Ordinal);
 
         var raices = Capacidades().Select(c => c.Dir)
-            .Append(Path.Combine(RepoRoot(), "Synergos.Shared"));
+            .Append(Proyectos.Dir("Synergos.Shared"));
 
         foreach (var fichero in raices.SelectMany(Fuentes))
         {
@@ -432,7 +432,7 @@ public sealed class ApiMoldTests
     [Fact]
     public void Lo_que_CLAUDE_md_dice_de_los_codigos_de_Shared_se_cuenta_contra_Shared()
     {
-        var shared = Path.Combine(RepoRoot(), "Synergos.Shared");
+        var shared = Proyectos.Dir("Synergos.Shared");
         var ficheros = Directory.EnumerateFiles(shared, "*.cs", SearchOption.AllDirectories).ToList();
 
         var prefijoIdentidad = ficheros

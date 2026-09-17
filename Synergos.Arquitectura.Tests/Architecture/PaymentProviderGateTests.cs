@@ -29,7 +29,7 @@ public sealed class PaymentProviderGateTests
     }
 
     private static string Programa()
-        => File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.Api.Payments", "Program.cs"));
+        => File.ReadAllText(Proyectos.Dir("Synergos.Api.Payments", "Program.cs"));
 
     [Fact]
     public void Todo_proveedor_declara_si_mueve_plata()
@@ -37,7 +37,7 @@ public sealed class PaymentProviderGateTests
         // Sin esta declaración, distinguir «cobra» de «finge» exigiría leer el nombre — que es
         // exactamente lo que falló la vez pasada.
         var fuentes = Directory
-            .EnumerateFiles(Path.Combine(RepoRoot(), "Synergos.Api.Payments"), "*.cs", SearchOption.AllDirectories)
+            .EnumerateFiles(Proyectos.Dir("Synergos.Api.Payments"), "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                      && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
 
@@ -147,7 +147,7 @@ public sealed class PaymentProviderGateTests
     /// <summary>Las fuentes de la capacidad, sin lo que genera el compilador.</summary>
     private static IEnumerable<string> Fuentes()
         => Directory
-            .EnumerateFiles(Path.Combine(RepoRoot(), "Synergos.Api.Payments"), "*.cs", SearchOption.AllDirectories)
+            .EnumerateFiles(Proyectos.Dir("Synergos.Api.Payments"), "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                      && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
 

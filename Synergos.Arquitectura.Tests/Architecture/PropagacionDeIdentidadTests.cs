@@ -121,7 +121,7 @@ public sealed class PropagacionDeIdentidadTests
     /// <summary>Todos los .cs de un proyecto, saltándose lo generado.</summary>
     private static IReadOnlyList<string> FuentesDe(string proyecto)
     {
-        var raiz = Path.Combine(RepoRoot(), proyecto);
+        var raiz = Proyectos.Dir(proyecto);
         Assert.True(Directory.Exists(raiz), $"No existe {proyecto}: revisar este gate.");
 
         var fuentes = Directory.EnumerateFiles(raiz, "*.cs", SearchOption.AllDirectories)
@@ -256,8 +256,7 @@ public sealed class PropagacionDeIdentidadTests
     [Fact]
     public void La_tienda_deriva_al_comprador_de_la_canasta()
     {
-        var contratos = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Bff.Tienda", "Contracts", "TiendaContracts.cs"));
+        var contratos = SinComentarios(Proyectos.Dir("Synergos.Bff.Tienda", "Contracts", "TiendaContracts.cs"));
 
         var peticion = contratos
             .Split('\n')
@@ -273,8 +272,7 @@ public sealed class PropagacionDeIdentidadTests
             + "devuelve el defecto #42 una capa más allá — quien llame nombra a quien quiera y "
             + "eso llega hasta el Payer de Api.Payments sin que nada falle.");
 
-        var flujo = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Bff.Tienda", "Domain", "PurchaseFlow.cs"));
+        var flujo = SinComentarios(Proyectos.Dir("Synergos.Bff.Tienda", "Domain", "PurchaseFlow.cs"));
 
         Assert.Contains("cart.Value.OwnerKind", flujo, StringComparison.Ordinal);
         Assert.Contains("cart.Value.OwnerId", flujo, StringComparison.Ordinal);
@@ -316,7 +314,7 @@ public sealed class PropagacionDeIdentidadTests
 
         foreach (var proyecto in Orquestadores.Where(p => p != "Synergos.Bff.Core"))
         {
-            var contratos = Path.Combine(RepoRoot(), proyecto, "Contracts");
+            var contratos = Proyectos.Dir(proyecto, "Contracts");
             if (!Directory.Exists(contratos)) continue;
 
             var nombra = Directory.EnumerateFiles(contratos, "*.cs", SearchOption.AllDirectories)

@@ -48,7 +48,7 @@ public sealed class ShopWiringTests
 
     private static IEnumerable<string> FuentesDelCms()
         => new[] { "Synergos.CMS.Web", "Synergos.CMS.Application", "Synergos.CMS.Interfaces" }
-            .Select(p => Path.Combine(RepoRoot(), p))
+            .Select(p => Proyectos.Dir(p))
             .Where(Directory.Exists)
             .SelectMany(d => Directory.EnumerateFiles(d, "*.cs", SearchOption.AllDirectories))
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)

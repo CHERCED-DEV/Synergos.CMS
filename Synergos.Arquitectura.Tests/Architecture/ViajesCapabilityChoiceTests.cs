@@ -66,7 +66,7 @@ public sealed class ViajesCapabilityChoiceTests
 
     private static IReadOnlyList<string> FuentesDelOrquestador()
     {
-        var raiz = Path.Combine(RepoRoot(), "Synergos.Bff.Viajes");
+        var raiz = Proyectos.Dir("Synergos.Bff.Viajes");
         var ficheros = Directory.EnumerateFiles(raiz, "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                      && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
@@ -127,8 +127,7 @@ public sealed class ViajesCapabilityChoiceTests
     [Fact]
     public void Cada_compensacion_que_cambia_de_caracter_tiene_SUS_DOS_formas()
     {
-        var codigo = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Bff.Viajes", "Domain", "Saga.cs"));
+        var codigo = SinComentarios(Proyectos.Dir("Synergos.Bff.Viajes", "Domain", "Saga.cs"));
 
         foreach (var kind in new[]
                  {
@@ -141,8 +140,7 @@ public sealed class ViajesCapabilityChoiceTests
 
         // Y el ejecutor sabe hacer las cuatro: declararlas sin ejecutarlas dejaría la
         // compensación cayendo en `unknown_compensation` hasta rendirse.
-        var ejecutor = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Bff.Viajes", "Domain", "ViajesCompensationExecutor.cs"));
+        var ejecutor = SinComentarios(Proyectos.Dir("Synergos.Bff.Viajes", "Domain", "ViajesCompensationExecutor.cs"));
 
         foreach (var kind in new[]
                  {

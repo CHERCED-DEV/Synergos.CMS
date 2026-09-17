@@ -42,8 +42,7 @@ public sealed class WorkflowRoleSourceTests
         }));
     }
 
-    private static string Endpoints() => SinComentarios(Path.Combine(
-        RepoRoot(), "Synergos.Api.Workflow", "Endpoints", "WorkflowEndpoints.cs"));
+    private static string Endpoints() => SinComentarios(Proyectos.Dir("Synergos.Api.Workflow", "Endpoints", "WorkflowEndpoints.cs"));
 
     /// <summary>
     /// El endpoint LEE la cabecera y deja que el dominio decida de dónde salen los roles.
@@ -89,7 +88,7 @@ public sealed class WorkflowRoleSourceTests
     {
         Assert.Contains("WorkflowRoleOptions", Endpoints(), StringComparison.Ordinal);
 
-        var programa = SinComentarios(Path.Combine(RepoRoot(), "Synergos.Api.Workflow", "Program.cs"));
+        var programa = SinComentarios(Proyectos.Dir("Synergos.Api.Workflow", "Program.cs"));
         Assert.Contains("Configure<WorkflowRoleOptions>(", programa, StringComparison.Ordinal);
         Assert.Contains("AddIdentityTokens(", programa, StringComparison.Ordinal);
 

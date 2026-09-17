@@ -50,7 +50,7 @@ jobs:
 
   # ── Las del árbol de servicios ────────────────────────────────────────────
   servicios:
-    name: ${{ matrix.servicio }}
+    name: ${{ matrix.servicio.nombre }}
     needs: matriz
     runs-on: ubuntu-latest
     permissions:
@@ -80,20 +80,22 @@ jobs:
       # son PascalCase. Sin esto falla al empujar, no al construir — o sea,
       # tarde.
       - id: nombre
-        run: echo "imagen=$(echo '${{ github.repository_owner }}/${{ matrix.servicio }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+        run: echo "imagen=$(echo '${{ github.repository_owner }}/${{ matrix.servicio.nombre }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Construir y publicar
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.service
-          build-args: PROJECT=${{ matrix.servicio }}
+          build-args: |
+            PROJECT=${{ matrix.servicio.nombre }}
+            PROJECT_DIR=${{ matrix.servicio.ruta }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ env.REGISTRY }}/${{ steps.nombre.outputs.imagen }}:${{ github.sha }}
           # El caché es por servicio: todos compartiendo una entrada se
           # pisarían y ninguno acertaría nunca.
-          cache-from: type=gha,scope=${{ matrix.servicio }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.servicio }}
+          cache-from: type=gha,scope=${{ matrix.servicio.nombre }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.servicio.nombre }}
 
   # ── El CMS, que ya tenía su Dockerfile ────────────────────────────────────
   cms:
@@ -145,7 +147,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        servicio: [Synergos.Api.Booking, Synergos.Bff.Tienda]
+        servicio:
+          - { nombre: Synergos.Api.Booking, ruta: backend/capacidades/Synergos.Api.Booking }
+          - { nombre: Synergos.Bff.Tienda, ruta: backend/orquestadores/Synergos.Bff.Tienda }
 
     steps:
       - uses: actions/checkout@v4
@@ -156,10 +160,12 @@ jobs:
         with:
           context: .
           file: Dockerfile.service
-          build-args: PROJECT=${{ matrix.servicio }}
+          build-args: |
+            PROJECT=${{ matrix.servicio.nombre }}
+            PROJECT_DIR=${{ matrix.servicio.ruta }}
           load: true
           tags: prueba:local
-          cache-from: type=gha,scope=${{ matrix.servicio }}
+          cache-from: type=gha,scope=${{ matrix.servicio.nombre }}
 
       # ── La llave, una vez, para todos los pasos que levanten algo ─────────
       #
@@ -174,7 +180,7 @@ jobs:
       # hablaba de otra cosa. Lo destapó CI, no un test local.
       - id: llave
         run: |
-          NOMBRE=$(echo '${{ matrix.servicio }}' | sed 's/^Synergos\.\(Api\|Bff\)\.//')
+          NOMBRE=$(echo '${{ matrix.servicio.nombre }}' | sed 's/^Synergos\.\(Api\|Bff\)\.//')
           echo "par=${NOMBRE}__ApiKey=llave-de-prueba-que-no-protege-nada" >> "$GITHUB_OUTPUT"
 
       - name: Levantar y preguntar
@@ -184,13 +190,13 @@ jobs:
             prueba:local
           for i in $(seq 1 30); do
             if curl --silent --fail --output /dev/null http://localhost:8080/health; then
-              echo "✓ ${{ matrix.servicio }} contesta /health"
+              echo "✓ ${{ matrix.servicio.nombre }} contesta /health"
               docker rm --force prueba
               exit 0
             fi
             sleep 2
           done
-          echo "✗ ${{ matrix.servicio }} NO contestó /health en 60s"
+          echo "✗ ${{ matrix.servicio.nombre }} NO contestó /health en 60s"
           docker logs prueba
           docker rm --force prueba
           exit 1
@@ -208,7 +214,7 @@ jobs:
           sleep 8
 
           if [ "$(docker inspect --format '{{.State.Running}}' sinllave)" = "true" ]; then
-            echo "✗ ${{ matrix.servicio }} arrancó SIN llave compartida: quedaría abierta"
+            echo "✗ ${{ matrix.servicio.nombre }} arrancó SIN llave compartida: quedaría abierta"
             docker logs sinllave
             docker rm --force sinllave
             exit 1

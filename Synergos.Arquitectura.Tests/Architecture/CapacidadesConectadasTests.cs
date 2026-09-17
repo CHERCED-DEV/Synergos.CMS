@@ -96,8 +96,8 @@ public sealed class CapacidadesConectadasTests
         var mapa = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         var declara = new Regex(@"\.Map(?:Get|Post|Delete|Put|Patch|Methods)\(\s*""(/v1/[^""]*)""", RegexOptions.Compiled);
 
-        foreach (var proyecto in Directory.EnumerateDirectories(raiz, "Synergos.Api.*")
-                     .Concat(Directory.EnumerateDirectories(raiz, "Synergos.Bff.*"))
+        foreach (var proyecto in Proyectos.Todos("Synergos.Api.")
+                     .Concat(Proyectos.Todos("Synergos.Bff."))
                      .Where(d => !d.EndsWith(".Core", StringComparison.Ordinal)))
         {
             var familias = new HashSet<string>(StringComparer.Ordinal);

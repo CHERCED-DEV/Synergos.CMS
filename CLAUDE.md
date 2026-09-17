@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3266 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3268 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2239 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 394 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 396 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -134,36 +134,52 @@ Synergos.CMS/
 │   ├── Controllers/ Services/   el borde y los seams del árbol del CMS
 │   └── Dto/ Filters/ Proxies/   …y su fontanería
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
+├── Synergos.Arquitectura.Tests/ LOS GATES: segregación (17) + molde (12)
+│   └── Architecture/            + capas (8) + imagen de contenedor (6)
+│                                + compose (12) + despliegue (18, ADR 0133)
+│                                + molde del vertical (10, doc 12)
+│                                + seudónimo único (3, #120)
+│                                + portada de arranque (5, #119)
+│                                Único que ve los DOS árboles — va en la raíz
+│                                justamente para que esa excepción se lea.
 │
-├── Synergos.Core/               EL VOCABULARIO. Ref, Money, TimeWindow, Rejection,
-│                                Result, IdempotencyKey, Actor, Page,
-│                                IdentityAssertion.
-│                                CERO referencias. No sabe qué es ASP.NET.
-├── Synergos.Shared/             fontanería de host. Llave compartida, Rejection→HTTP,
-│                                libro de idempotencia, JsonCollectionStore, correlación.
-│                                Solo puede referenciar Core — UNA flecha.
-├── Synergos.Api.*/              LAS 20 CAPACIDADES, agnósticas. 137 endpoints.
-│     Sessions · Booking · Identity · Audit · Notifications · Documents ·
-│     Catalog · Pricing · Cart · Orders · Payments · Inventory · Workflow ·
-│     Messaging · Signing · Consent · Engagement · Geo · Fulfillment · Moderation
-├── Synergos.Bff.Core/           la máquina de sagas: deshacer, reintentar,
-│                                rendirse, avisar. Promovida al segundo consumidor;
-│                                el TERCERO (Eventos) y el CUARTO (Viajes)
-│                                entraron sin tocarla.
-├── Synergos.Bff.*/              LOS ORQUESTADORES. Salud, Tienda, Eventos y
-│                                Viajes construidos; faltan Realty, Gob,
-│                                Academy, Social.
-├── Synergos.Servicios.Tests/    xUnit — las veinte capacidades y los cuatro
-│   ├── Api/                     orquestadores. NO ve el CMS, y ésa es la
-│   ├── Bff/                     propiedad: la separación de §0.B.11 la impone
-│   └── Core/                    el compilador y no una convención.
-└── Synergos.Arquitectura.Tests/ LOS GATES: segregación (17) + molde (12)
-    └── Architecture/            + capas (8) + imagen de contenedor (6)
-                                 + compose (12) + despliegue (18, ADR 0133)
-                                 + molde del vertical (10, doc 12)
-                                 + seudónimo único (3, #120)
-                                 + portada de arranque (5, #119)
+└── backend/                     EL BACKEND PURO (#136). Nada de acá sabe qué es
+    │                            Umbraco, y el CMS no referencia nada de acá.
+    ├── nucleo/
+    │   ├── Synergos.Core/       EL VOCABULARIO. Ref, Money, TimeWindow,
+    │   │                        Rejection, Result, IdempotencyKey, Actor,
+    │   │                        Page, IdentityAssertion.
+    │   │                        CERO referencias. No sabe qué es ASP.NET.
+    │   └── Synergos.Shared/     fontanería de host. Llave compartida,
+    │                            Rejection→HTTP, libro de idempotencia,
+    │                            JsonCollectionStore, correlación.
+    │                            Solo puede referenciar Core — UNA flecha.
+    ├── capacidades/             LAS 20 CAPACIDADES, agnósticas. 137 endpoints.
+    │     Sessions · Booking · Identity · Audit · Notifications · Documents ·
+    │     Catalog · Pricing · Cart · Orders · Payments · Inventory · Workflow ·
+    │     Messaging · Signing · Consent · Engagement · Geo · Fulfillment ·
+    │     Moderation
+    ├── orquestadores/
+    │   ├── Synergos.Bff.Core/   la máquina de sagas: deshacer, reintentar,
+    │   │                        rendirse, avisar. Promovida al segundo
+    │   │                        consumidor; el TERCERO (Eventos) y el CUARTO
+    │   │                        (Viajes) entraron sin tocarla.
+    │   └── Synergos.Bff.*/      Salud, Tienda, Eventos y Viajes construidos;
+    │                            faltan Realty, Gob, Academy, Social.
+    └── Synergos.Servicios.Tests/  xUnit — las veinte capacidades y los cuatro
+        ├── Api/                   orquestadores. NO ve el CMS, y ésa es la
+        ├── Bff/                   propiedad: la separación de §0.B.11 la
+        └── Core/                  impone el compilador, no una convención.
 ```
+
+> **La ruta de un proyecto NO es su nombre, y hay gate** (`RutasDeProyectoTests`, #136). Un
+> gate que necesite la fuente de una capacidad la pide por nombre —`Proyectos.Dir(
+> "Synergos.Api.Booking", "Domain")`— y `Proyectos` la encuentra en el disco. Escribir la ruta
+> a mano **funciona hoy y se rompe en la próxima reorganización**, con el coste pagado por
+> quien mueva y no por quien lo escribió; y descubrir proyectos con
+> `Directory.EnumerateDirectories(RepoRoot())` es peor, porque devuelve UNA carpeta y el gate
+> **pasa en verde sin mirar nada** — medido: con eso puesto, `ComposeStackTests` da 12/12 sobre
+> una lista vacía.
 
 > **El árbol de servicios está construido y el producto ya lo consume**, aunque
 > con todos los interruptores apagados por defecto. El CMS habla hoy con **nueve**
@@ -1250,6 +1266,46 @@ Las que salieron de construir el árbol de servicios (§0.B):
   **Ojo con el SDK**: `dotnet new sln` en el SDK 10 crea un **`.slnx`** (XML), que
   un Visual Studio viejo no abre. Va con `--format sln`.
 
+- `feedback_a_path_is_not_a_name_and_a_flat_tree_hides_it` — **mientras un árbol
+  es plano, la RUTA de un proyecto es su NOMBRE, y todo el mundo escribe la
+  primera creyendo escribir el segundo. El día que se reorganiza, no falla una
+  cosa: fallan treinta y ocho.** Medido (#136): mover el backend a
+  `backend/{nucleo,capacidades,orquestadores}/` dejó **38 rutas equivocadas** en
+  los gates, más el Dockerfile de servicio, el generador del compose, la matriz
+  de imágenes del CI y el ensayo de restauración.
+  **Y el arreglo NO es reescribir los 38 literales**: eso escribe la disposición
+  nueva en 38 sitios, o sea la misma deuda con otro valor. Es **invertir la
+  dependencia**: un gate no necesita saber DÓNDE está un proyecto, necesita su
+  fuente — así que pregunta por nombre (`Proyectos.Dir("Synergos.Api.Booking",
+  "Domain")`) y una sola clase lo encuentra en el disco. La próxima
+  reorganización cuesta **cero**.
+  **El modo de fallo que importa no es el rojo: es el VERDE.** Cinco gates
+  descubrían los servicios con `Directory.EnumerateDirectories(RepoRoot())` +
+  filtro por prefijo. Tras el movimiento eso devuelve **una** carpeta —`backend`—
+  el filtro no casa con nada y el gate **pasa sin mirar un solo proyecto**.
+  Medido con la mutación puesta: `ComposeStackTests` da **12/12 en verde sobre
+  una lista vacía**. Un rojo se arregla; un verde sobre el vacío se hereda.
+  **Cómo se cierra, y son los dos dientes de `RutasDeProyectoTests`**: se prohíbe
+  construir la ruta a mano **y** descubrir enumerando la raíz. Se parsea la fuente
+  **sin comentarios**, porque los `<remarks>` que explican la prohibición citan las
+  formas prohibidas — un gate que se engaña con su propia explicación es
+  `feedback_a_gate_that_parses_source_needs_its_own_mutations`. Y sólo se prohíbe
+  para las familias que **se movieron**: `Synergos.CMS.*` sigue en la raíz, así que
+  nombrarla ahí no es un defecto — un gate que pide un cambio que no arregla nada
+  se desactiva.
+  **Tres cosas del camino que no se deducen leyendo.** Una: `COPY` de Docker **no
+  expande shell**, así que dentro de la capa de restore no hay forma de derivar la
+  ruta del nombre sin copiar la fuente entera — que es justo lo que esa capa existe
+  para no hacer. Se pasan los dos (`PROJECT`, `PROJECT_DIR`) **con una guarda que
+  los cruza** (`basename $PROJECT_DIR == $PROJECT`), porque un descuadre produciría
+  una imagen con el nombre de un servicio y **la fuente de otro**: arranca,
+  contesta `/health` y sirve el dominio equivocado. Dos: los `paths:` de los nueve
+  workflows **no hubo que tocarlos**, porque todos nombran `Synergos.CMS.Web/**`,
+  que no se movió — la mitad del susto de «62 líneas de workflows» era ruido del
+  `grep`. Tres: `compose.prod.yml` sale **byte-idéntico**, porque la topología
+  desplegada va por nombre de imagen y no por ruta; que no cambie es la
+  comprobación de que el movimiento es del árbol y no del producto.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1281,12 +1337,17 @@ carpeta anidada con ese nombre).
 
 **La integradora conserva el nombre `Synergos.CMS.sln` a propósito**: es el que nombran el
 workflow de CI, los gates que suben buscando la raíz del repo y esta guía. Renombrarla habría
-sido el cambio más visible y el menos útil — lo que molestaba no era el nombre, era abrir 34
-proyectos para tocar una vista. Dentro va agrupada en cinco **carpetas de solución** (Producto
-web · Núcleo compartido · Capacidades · Orquestadores · Tests del backend), que son virtuales:
-**no se movió una sola carpeta del disco**, porque ~153 sitios cablean rutas de proyecto
-—59 gates, 10 herramientas de Node, el compose, 62 líneas de workflows y el despliegue— y ese
-trabajo no compra nada que estas cuatro soluciones no den ya.
+sido el cambio más visible y el menos útil. Dentro va agrupada en cinco **carpetas de solución**
+(Producto web · Núcleo compartido · Capacidades · Orquestadores · Tests del backend), que
+reflejan el árbol del disco desde el #136.
+
+**Y el disco SÍ se movió** (#136): el backend vive en
+`backend/{nucleo,capacidades,orquestadores}/` y el producto web se queda en la raíz. Lo que eso
+compra sobre las carpetas virtuales es que **la disposición deja de ser una convención**: hoy se
+ve en un `ls` en qué árbol estás, que es lo primero que §0 pide antes de tocar nada. Costó ~153
+sitios con ruta cableada, y el arreglo **no fue reescribir 153 literales**: ver la nota de §2
+sobre `Proyectos` — los gates pasaron a preguntar por NOMBRE, así que la próxima reorganización
+cuesta cero.
 
 **`Synergos.Servicios.Tests` vive SÓLO en la integradora, y no es un olvido**: referencia
 capacidades Y orquestadores, así que meterlo en una de las dos parciales arrastraría el otro
@@ -1304,13 +1365,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3266 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3268 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2239
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 394
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 396
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -1326,8 +1387,8 @@ dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v qu
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj --filter "FullyQualifiedName~Architecture"
 
 # Una capacidad o un orquestador, sueltos:
-dotnet build Synergos.Api.Booking/Synergos.Api.Booking.csproj -v quiet
-dotnet build Synergos.Bff.Tienda/Synergos.Bff.Tienda.csproj -v quiet
+dotnet build backend/capacidades/Synergos.Api.Booking/Synergos.Api.Booking.csproj -v quiet
+dotnet build backend/orquestadores/Synergos.Bff.Tienda/Synergos.Bff.Tienda.csproj -v quiet
 
 # uSync Import: lo hace el arquitecto manualmente desde backoffice —
 # agente NO ejecuta import desde CLI ni toca la DB.
@@ -1669,7 +1730,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3266 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3268 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

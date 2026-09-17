@@ -41,7 +41,7 @@ public sealed class BarridoSegregationTests
     }
 
     private static IReadOnlyList<(string Ruta, string Texto)> Fuentes(string proyecto)
-        => Directory.EnumerateFiles(Path.Combine(RepoRoot(), proyecto), "*.cs", SearchOption.AllDirectories)
+        => Directory.EnumerateFiles(Proyectos.Dir(proyecto), "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                      && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
             .Select(f => (Path.GetRelativePath(RepoRoot(), f), File.ReadAllText(f)))
@@ -157,7 +157,7 @@ public sealed class BarridoSegregationTests
         // la capacidad en proceso, la capacidad sería una carpeta con ínfulas. La comprobación va
         // sobre el csproj porque una referencia de ensamblado es lo único que lo permitiría, y es
         // exactamente lo que alguien añadiría «para no tener que serializar».
-        var csproj = File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.Bff.Core", "Synergos.Bff.Core.csproj"));
+        var csproj = File.ReadAllText(Proyectos.Dir("Synergos.Bff.Core", "Synergos.Bff.Core.csproj"));
 
         Assert.DoesNotContain("Synergos.Api.", csproj, StringComparison.Ordinal);
     }

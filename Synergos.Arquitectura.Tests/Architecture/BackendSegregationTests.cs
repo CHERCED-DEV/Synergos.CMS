@@ -126,7 +126,7 @@ public sealed class BackendSegregationTests
         // pueden usar su vocabulario en vez de copiarlo. El CMS no lo referencia a propósito
         // (CLAUDE.md §11), así que exigirle que no declare un `Actor` propio sería exigirle que
         // no tenga uno. Y el proyecto de tests declara dobles: es su trabajo.
-        foreach (var raiz in Directory.EnumerateDirectories(RepoRoot())
+        foreach (var raiz in Proyectos.Directorios()
                      .Where(d => Path.GetFileName(d).StartsWith("Synergos.Api.", StringComparison.Ordinal)
                               || Path.GetFileName(d).StartsWith("Synergos.Bff.", StringComparison.Ordinal)
                               || Path.GetFileName(d) == "Synergos.Shared"))

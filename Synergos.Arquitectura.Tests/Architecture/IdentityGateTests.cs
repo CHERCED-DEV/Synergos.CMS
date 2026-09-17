@@ -46,8 +46,7 @@ public sealed class IdentityGateTests
 
     private static string Acuse()
     {
-        var codigo = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Messaging", "Endpoints", "MessagingEndpoints.cs"));
+        var codigo = SinComentarios(Proyectos.Dir("Synergos.Api.Messaging", "Endpoints", "MessagingEndpoints.cs"));
 
         var desde = codigo.IndexOf("/v1/messages/{id}/acknowledge", StringComparison.Ordinal);
         Assert.True(desde > 0, "El endpoint del acuse cambió de forma: revisar este gate.");
@@ -90,8 +89,7 @@ public sealed class IdentityGateTests
     /// </summary>
     private static string Consentimiento(string ruta)
     {
-        var codigo = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Consent", "Endpoints", "ConsentEndpoints.cs"));
+        var codigo = SinComentarios(Proyectos.Dir("Synergos.Api.Consent", "Endpoints", "ConsentEndpoints.cs"));
 
         var desde = codigo.IndexOf(ruta, StringComparison.Ordinal);
         Assert.True(desde > 0, $"El endpoint {ruta} cambió de forma: revisar este gate.");
@@ -148,8 +146,7 @@ public sealed class IdentityGateTests
     [Fact]
     public void El_consentimiento_no_reimplementa_la_regla_de_la_afirmacion()
     {
-        var codigo = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Consent", "Endpoints", "ConsentEndpoints.cs"));
+        var codigo = SinComentarios(Proyectos.Dir("Synergos.Api.Consent", "Endpoints", "ConsentEndpoints.cs"));
 
         Assert.Contains("IdentityAssertions.Resolve(", codigo, StringComparison.Ordinal);
         Assert.Contains("IdentityTokens.HeaderName", codigo, StringComparison.Ordinal);
@@ -170,8 +167,8 @@ public sealed class IdentityGateTests
     public void La_seccion_del_token_es_la_MISMA_en_todos()
     {
         var raiz = RepoRoot();
-        var hosts = Directory.EnumerateDirectories(raiz, "Synergos.Api.*")
-            .Concat(Directory.EnumerateDirectories(raiz, "Synergos.Bff.*"))
+        var hosts = Proyectos.Todos("Synergos.Api.")
+            .Concat(Proyectos.Todos("Synergos.Bff."))
             .Select(d => Path.Combine(d, "Program.cs"))
             .Where(File.Exists)
             .ToList();
@@ -269,10 +266,8 @@ public sealed class IdentityGateTests
     [Fact]
     public void Ningun_endpoint_que_escribe_se_queda_fuera()
     {
-        var endpoints = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Consent", "Endpoints", "ConsentEndpoints.cs"));
-        var servicio = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Consent", "Domain", "ConsentService.cs"));
+        var endpoints = SinComentarios(Proyectos.Dir("Synergos.Api.Consent", "Endpoints", "ConsentEndpoints.cs"));
+        var servicio = SinComentarios(Proyectos.Dir("Synergos.Api.Consent", "Domain", "ConsentService.cs"));
 
         var rutas = System.Text.RegularExpressions.Regex
             .Matches(endpoints, @"app\.MapPost\(""(?<ruta>[^""]+)""")
@@ -329,8 +324,7 @@ public sealed class IdentityGateTests
     /// <summary>El cuerpo del endpoint de <c>Api.Cart</c> que abre una canasta.</summary>
     private static string AbrirCanasta()
     {
-        var codigo = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Cart", "Endpoints", "CartEndpoints.cs"));
+        var codigo = SinComentarios(Proyectos.Dir("Synergos.Api.Cart", "Endpoints", "CartEndpoints.cs"));
 
         var desde = codigo.IndexOf("MapPost(\"/v1/carts\"", StringComparison.Ordinal);
         Assert.True(desde > 0, "Cambió la ruta de abrir canasta: revisar este gate.");
@@ -375,12 +369,10 @@ public sealed class IdentityGateTests
     [Fact]
     public void La_canasta_guarda_con_que_se_afirmo_su_dueno()
     {
-        var dominio = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Cart", "Domain", "Cart.cs"));
+        var dominio = SinComentarios(Proyectos.Dir("Synergos.Api.Cart", "Domain", "Cart.cs"));
         Assert.Contains("IdentityAssertion? OpenedWith", dominio, StringComparison.Ordinal);
 
-        var servicio = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Cart", "Domain", "CartService.cs"));
+        var servicio = SinComentarios(Proyectos.Dir("Synergos.Api.Cart", "Domain", "CartService.cs"));
 
         // La canasta nueva lleva la afirmación RESUELTA, no una constante: con una constante, una
         // abierta presentando token quedaría anotada como si sólo la respaldara nuestra palabra.
@@ -401,8 +393,7 @@ public sealed class IdentityGateTests
     [Fact]
     public void La_canasta_no_reimplementa_la_regla_de_la_afirmacion()
     {
-        var codigo = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Cart", "Endpoints", "CartEndpoints.cs"));
+        var codigo = SinComentarios(Proyectos.Dir("Synergos.Api.Cart", "Endpoints", "CartEndpoints.cs"));
 
         Assert.Contains("IdentityAssertions.Resolve(", codigo, StringComparison.Ordinal);
         Assert.Contains("IdentityTokens.HeaderName", codigo, StringComparison.Ordinal);
@@ -433,9 +424,9 @@ public sealed class IdentityGateTests
     public void Ningun_endpoint_de_la_canasta_que_atribuye_se_queda_fuera()
     {
         var raiz = RepoRoot();
-        var endpoints = SinComentarios(Path.Combine(raiz, "Synergos.Api.Cart", "Endpoints", "CartEndpoints.cs"));
-        var servicio = SinComentarios(Path.Combine(raiz, "Synergos.Api.Cart", "Domain", "CartService.cs"));
-        var contratos = SinComentarios(Path.Combine(raiz, "Synergos.Api.Cart", "Contracts", "CartContracts.cs"));
+        var endpoints = SinComentarios(Proyectos.Dir("Synergos.Api.Cart", "Endpoints", "CartEndpoints.cs"));
+        var servicio = SinComentarios(Proyectos.Dir("Synergos.Api.Cart", "Domain", "CartService.cs"));
+        var contratos = SinComentarios(Proyectos.Dir("Synergos.Api.Cart", "Contracts", "CartContracts.cs"));
 
         // 1) Qué contratos de PETICIÓN dejan que el llamador nombre al dueño.
         var nombranDuenio = System.Text.RegularExpressions.Regex
@@ -505,7 +496,7 @@ public sealed class IdentityGateTests
     {
         var raiz = RepoRoot();
 
-        var verifican = Directory.EnumerateDirectories(raiz, "Synergos.Api.*")
+        var verifican = Proyectos.Todos("Synergos.Api.")
             .Select(d => (Proyecto: Path.GetFileName(d), Programa: Path.Combine(d, "Program.cs")))
             .Where(x => File.Exists(x.Programa))
             .Where(x => SinComentarios(x.Programa).Contains("AddIdentityTokens(", StringComparison.Ordinal))
@@ -560,8 +551,7 @@ public sealed class IdentityGateTests
     [Fact]
     public void El_mensaje_RESUELVE_quien_lo_escribe()
     {
-        var texto = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Messaging", "Endpoints", "MessagingEndpoints.cs"));
+        var texto = SinComentarios(Proyectos.Dir("Synergos.Api.Messaging", "Endpoints", "MessagingEndpoints.cs"));
 
         var i = texto.IndexOf("MapPost(\"/v1/threads/{id}/messages\"", StringComparison.Ordinal);
         Assert.True(i > 0, "Cambió la ruta de publicar mensaje: revisar este gate.");
@@ -587,12 +577,10 @@ public sealed class IdentityGateTests
     [Fact]
     public void El_mensaje_guarda_con_que_se_afirmo_su_autor()
     {
-        var dominio = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Messaging", "Domain", "Thread.cs"));
+        var dominio = SinComentarios(Proyectos.Dir("Synergos.Api.Messaging", "Domain", "Thread.cs"));
         Assert.Contains("IdentityAssertion? PostedWith", dominio, StringComparison.Ordinal);
 
-        var servicio = SinComentarios(Path.Combine(
-            RepoRoot(), "Synergos.Api.Messaging", "Domain", "MessagingService.cs"));
+        var servicio = SinComentarios(Proyectos.Dir("Synergos.Api.Messaging", "Domain", "MessagingService.cs"));
 
         // El acuse automático del autor lleva la afirmación RESUELTA, no una constante: con una
         // constante, un mensaje escrito presentando token quedaría anotado como si sólo lo

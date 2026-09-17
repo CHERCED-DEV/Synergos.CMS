@@ -33,16 +33,45 @@ const raiz = process.cwd();
  * excluirla por "no tiene punto de entrada" es una propiedad que se mantiene sola.
  */
 export function servicios(dir = raiz) {
-  return readdirSync(dir, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .filter((n) => n.startsWith('Synergos.Api.') || n.startsWith('Synergos.Bff.'))
-    .filter((n) => existsSync(join(dir, n, 'Program.cs')))
-    .sort();
+  return descubrir(dir).map((s) => s.nombre);
+}
+
+/**
+ * Lo mismo, pero con la RUTA al lado — que es lo que necesita `Dockerfile.service`
+ * desde el #136, porque el backend ya no está plano en la raíz.
+ *
+ * Devuelve `{ nombre, ruta }` con la ruta RELATIVA a la raíz del repo y con `/`
+ * siempre, porque quien la consume es Docker y no el sistema de ficheros local.
+ *
+ * La búsqueda es recursiva y NO enumera `backend/{nucleo,capacidades,orquestadores}`:
+ * una lista de carpetas padre acá sería el mismo defecto que este fichero existe
+ * para evitar, un nivel más arriba — alguien añade `backend/verticales/` y el CI
+ * sigue verde construyendo las 22 de siempre.
+ */
+export function descubrir(dir = raiz, prefijo = '') {
+  const salida = [];
+
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (!e.isDirectory()) continue;
+    // Ni la salida del build ni el legado (§6).
+    if (['bin', 'obj', 'node_modules', '_archive', '.git'].includes(e.name)) continue;
+
+    const rel = prefijo ? `${prefijo}/${e.name}` : e.name;
+
+    if ((e.name.startsWith('Synergos.Api.') || e.name.startsWith('Synergos.Bff.'))
+        && existsSync(join(dir, e.name, 'Program.cs'))) {
+      salida.push({ nombre: e.name, ruta: rel });
+      continue;   // un servicio no contiene otro
+    }
+
+    salida.push(...descubrir(join(dir, e.name), rel));
+  }
+
+  return salida.sort((a, b) => a.nombre.localeCompare(b.nombre, 'en'));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const lista = servicios();
+  const lista = descubrir();
 
   if (lista.length === 0) {
     // Un descubrimiento roto dejaría el workflow "verde" construyendo cero
@@ -51,5 +80,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   }
 
-  console.log(process.argv.includes('--list') ? lista.join('\n') : JSON.stringify(lista));
+  // El JSON lleva la RUTA además del nombre: el workflow le pasa las dos a
+  // `Dockerfile.service`, que cruza que concuerden antes de construir.
+  console.log(process.argv.includes('--list')
+    ? lista.map((s) => `${s.nombre}  ${s.ruta}`).join('\n')
+    : JSON.stringify(lista));
 }

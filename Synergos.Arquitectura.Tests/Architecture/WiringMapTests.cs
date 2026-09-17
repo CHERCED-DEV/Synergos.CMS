@@ -52,6 +52,19 @@ public sealed class WiringMapTests
 
     private static string MapaPath() => Path.Combine(RepoRoot(), "docs", "product", "11-mapa-del-cableado.md");
 
+    /// <summary>
+    /// ¿Existe el proyecto al que apunta un destino del mapa?
+    /// </summary>
+    /// <remarks>
+    /// Antes era <c>Directory.Exists(Path.Combine(raiz, destino))</c>, que daba la respuesta
+    /// correcta mientras el árbol fue plano. Desde el #136 el backend vive en
+    /// <c>backend/{capacidades,orquestadores}/</c>, así que ese <c>Exists</c> devolvía
+    /// <c>false</c> para los once destinos reales del mapa y el gate acusaba de inexistentes a
+    /// capacidades que están construidas — un rojo que apunta al sitio equivocado.
+    /// </remarks>
+    private static bool Existe(string proyecto)
+        => Proyectos.Nombres(proyecto).Contains(proyecto, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Los <c>Stub*.cs</c> que hay de verdad en el disco.</summary>
     private static IReadOnlyList<string> StubsEnDisco()
         => Directory.EnumerateFiles(
@@ -410,7 +423,7 @@ public sealed class WiringMapTests
         var raiz = RepoRoot();
         var malos = Mapa()
             .Where(e => e.Destino is not null)
-            .Where(e => !Directory.Exists(Path.Combine(raiz, e.Destino!))
+            .Where(e => !Existe(e.Destino!)
                      && !OrquestadoresPendientes.Contains(e.Destino, StringComparer.Ordinal))
             .Select(e => $"{e.Stub} → {e.Destino}")
             .ToList();

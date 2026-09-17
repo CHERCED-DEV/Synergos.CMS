@@ -27,7 +27,7 @@ public sealed class TurnoDeEscrituraWiringTests
     }
 
     private static IEnumerable<(string Nombre, string Programa, string Codigo)> Capacidades()
-        => Directory.EnumerateDirectories(RepoRoot())
+        => Proyectos.Directorios()
             .Where(d => Path.GetFileName(d).StartsWith("Synergos.Api.", StringComparison.Ordinal))
             .Select(d => (Nombre: Path.GetFileName(d), Dir: d))
             .Where(x => File.Exists(Path.Combine(x.Dir, "Program.cs")))
@@ -105,7 +105,7 @@ public sealed class TurnoDeEscrituraWiringTests
 
         foreach (var (nombre, _, _) in Capacidades())
         {
-            var dir = Path.Combine(RepoRoot(), nombre, "Endpoints");
+            var dir = Proyectos.Dir(nombre, "Endpoints");
             if (!Directory.Exists(dir)) continue;
 
             foreach (var fichero in Directory.EnumerateFiles(dir, "*.cs"))

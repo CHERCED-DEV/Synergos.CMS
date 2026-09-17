@@ -12,7 +12,9 @@
 # paquete del sistema, o arreglar el healthcheck, hay que acordarse de
 # veintidós sitios — y el que se olvide no rompe el build, rompe en producción.
 #
-#   docker build -f Dockerfile.service --build-arg PROJECT=Synergos.Api.Booking .
+#   docker build -f Dockerfile.service \
+#     --build-arg PROJECT=Synergos.Api.Booking \
+#     --build-arg PROJECT_DIR=backend/capacidades/Synergos.Api.Booking .
 #
 # Lo que hace uniforme esto es el molde (doc 08 §4): las 22 referencian Core y
 # Shared, las 22 exponen /health, las 22 arrancan con `dotnet <Proyecto>.dll`.
@@ -21,34 +23,50 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 ARG PROJECT
+ARG PROJECT_DIR
 
 # ─────────────────────────── build ───────────────────────────
 # SDK 10 porque global.json lo pinea (rollForward latestFeature), aunque los
 # proyectos targeteen net8.0. Igual que el Dockerfile del CMS.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG PROJECT
+ARG PROJECT_DIR
 WORKDIR /src
 
 # Restore en su propia capa. Se copian SOLO los .csproj primero: mientras no
 # cambien ellos ni la lista central de paquetes, Docker reusa el caché y se
 # saltea bajar NuGet — que multiplicado por 22 imágenes es la diferencia entre
 # un CI de minutos y uno de media hora.
+#
+# DOS ARGUMENTOS DESDE EL #136, y con una guarda que los cruza. El backend vive
+# en `backend/{nucleo,capacidades,orquestadores}/`, así que la ruta de un
+# servicio ya no es su nombre, y `COPY` no expande shell: no hay forma de
+# derivar una de la otra dentro de esta capa sin copiar la fuente entera, que es
+# justamente lo que la capa existe para no hacer. Dos argumentos que tienen que
+# estar de acuerdo son un riesgo de deriva, así que el riesgo se cierra donde se
+# puede: `PROJECT_DIR` tiene que terminar en `PROJECT` o la imagen NO se
+# construye. Sin eso, un descuadre produciría una imagen con el nombre de un
+# servicio y la fuente de otro — que arranca, contesta `/health` y sirve el
+# dominio equivocado.
+#
+# Los dos los deriva del disco `tools/service-matrix.mjs`; nadie los teclea.
 COPY global.json Directory.Build.props Directory.Packages.props ./
-COPY Synergos.Core/Synergos.Core.csproj Synergos.Core/
-COPY Synergos.Shared/Synergos.Shared.csproj Synergos.Shared/
-COPY Synergos.Bff.Core/Synergos.Bff.Core.csproj Synergos.Bff.Core/
-COPY ${PROJECT}/${PROJECT}.csproj ${PROJECT}/
-RUN dotnet restore ${PROJECT}/${PROJECT}.csproj
+COPY backend/nucleo/Synergos.Core/Synergos.Core.csproj backend/nucleo/Synergos.Core/
+COPY backend/nucleo/Synergos.Shared/Synergos.Shared.csproj backend/nucleo/Synergos.Shared/
+COPY backend/orquestadores/Synergos.Bff.Core/Synergos.Bff.Core.csproj backend/orquestadores/Synergos.Bff.Core/
+COPY ${PROJECT_DIR}/${PROJECT}.csproj ${PROJECT_DIR}/
+RUN test "$(basename "${PROJECT_DIR}")" = "${PROJECT}" \
+      || { echo "PROJECT=${PROJECT} no concuerda con PROJECT_DIR=${PROJECT_DIR}"; exit 1; } \
+    && dotnet restore ${PROJECT_DIR}/${PROJECT}.csproj
 
 # Core y Shared van siempre; Bff.Core sólo lo usan los orquestadores, pero
 # copiarlo a todas cuesta unos kilobytes y evita ramificar este fichero por
 # tipo de servicio — que es justo lo que se quería no hacer.
-COPY Synergos.Core/ Synergos.Core/
-COPY Synergos.Shared/ Synergos.Shared/
-COPY Synergos.Bff.Core/ Synergos.Bff.Core/
-COPY ${PROJECT}/ ${PROJECT}/
+COPY backend/nucleo/ backend/nucleo/
+COPY backend/orquestadores/Synergos.Bff.Core/ backend/orquestadores/Synergos.Bff.Core/
+COPY ${PROJECT_DIR}/ ${PROJECT_DIR}/
 
-RUN dotnet publish ${PROJECT}/${PROJECT}.csproj \
+RUN dotnet publish ${PROJECT_DIR}/${PROJECT}.csproj \
         --configuration Release \
         --no-restore \
         --output /app/publish
@@ -56,6 +74,7 @@ RUN dotnet publish ${PROJECT}/${PROJECT}.csproj \
 # ────────────────────────── runtime ──────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 ARG PROJECT
+ARG PROJECT_DIR
 WORKDIR /app
 
 # curl es sólo para el HEALTHCHECK; la imagen aspnet no lo trae.

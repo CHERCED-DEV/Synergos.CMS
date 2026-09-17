@@ -46,7 +46,7 @@ public sealed class EventTicketIssuanceTests
     {
         var raiz = RepoRoot();
         var ficheros = proyectos
-            .SelectMany(p => Directory.EnumerateFiles(Path.Combine(raiz, p), "*.cs", SearchOption.AllDirectories))
+            .SelectMany(p => Directory.EnumerateFiles(Proyectos.Dir(p), "*.cs", SearchOption.AllDirectories))
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                 && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
             .ToList();

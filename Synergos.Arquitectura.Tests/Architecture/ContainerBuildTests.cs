@@ -20,6 +20,15 @@ namespace Synergos.CMS.Tests.Architecture;
 /// </remarks>
 public sealed class ContainerBuildTests
 {
+    /// <summary>Una fila del JSON de <c>tools/service-matrix.mjs</c>.</summary>
+    /// <remarks>
+    /// Lleva la RUTA además del nombre desde el #136: el backend ya no está plano, así que
+    /// <c>Dockerfile.service</c> necesita las dos y las cruza (<c>basename ruta == nombre</c>)
+    /// antes de construir — un descuadre produciría una imagen con el nombre de un servicio y
+    /// la fuente de otro, que arranca y contesta <c>/health</c>.
+    /// </remarks>
+    private sealed record ServicioDeLaMatriz(string nombre, string ruta);
+
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -33,11 +42,11 @@ public sealed class ContainerBuildTests
 
     /// <summary>Los servicios que la matriz debería producir, calculados igual que el script.</summary>
     private static IReadOnlyList<string> Servicios()
-        => Directory.EnumerateDirectories(RepoRoot())
+        => Proyectos.Directorios()
             .Select(Path.GetFileName)
             .Where(n => n!.StartsWith("Synergos.Api.", StringComparison.Ordinal)
                      || n.StartsWith("Synergos.Bff.", StringComparison.Ordinal))
-            .Where(n => File.Exists(Path.Combine(RepoRoot(), n!, "Program.cs")))
+            .Where(n => File.Exists(Proyectos.Dir(n!, "Program.cs")))
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList()!;
 
@@ -60,7 +69,7 @@ public sealed class ContainerBuildTests
         // por nombre exigiría acordarse de la excepción; se excluye por «no tiene punto de
         // entrada», que es una propiedad que se mantiene sola.
         Assert.DoesNotContain("Synergos.Bff.Core", Servicios());
-        Assert.False(File.Exists(Path.Combine(RepoRoot(), "Synergos.Bff.Core", "Program.cs")),
+        Assert.False(File.Exists(Proyectos.Dir("Synergos.Bff.Core", "Program.cs")),
             "Si Bff.Core llegara a tener Program.cs, dejaría de ser una biblioteca y este gate " +
             "estaría mintiendo sobre por qué la excluye.");
     }
@@ -75,7 +84,10 @@ public sealed class ContainerBuildTests
         Assert.True(File.Exists(script), $"Falta {script}: el workflow deriva la matriz de ahí.");
 
         var salida = CorrerNode(script);
-        var delScript = JsonSerializer.Deserialize<string[]>(salida)!;
+        // El JSON de `service-matrix.mjs` lleva la RUTA además del nombre desde el #136:
+        // `Dockerfile.service` necesita las dos y las cruza antes de construir.
+        var delScript = JsonSerializer.Deserialize<ServicioDeLaMatriz[]>(salida)!
+            .Select(s => s.nombre).ToArray();
 
         Assert.Equal(Servicios(), delScript);
     }
@@ -90,7 +102,7 @@ public sealed class ContainerBuildTests
 
         foreach (var s in Servicios())
         {
-            var csproj = Path.Combine(RepoRoot(), s, $"{s}.csproj");
+            var csproj = Proyectos.Dir(s, $"{s}.csproj");
             if (!File.Exists(csproj)) { malos.Add($"{s} → falta {s}.csproj"); continue; }
 
             var m = Regex.Match(File.ReadAllText(csproj), @"<AssemblyName>\s*([^<]+?)\s*</AssemblyName>");

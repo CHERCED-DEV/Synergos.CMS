@@ -50,7 +50,7 @@ public sealed class WebhookGateTests
     }
 
     private static IEnumerable<(string Nombre, string Dir)> Capacidades()
-        => Directory.EnumerateDirectories(RepoRoot(), "Synergos.Api.*")
+        => Proyectos.Todos("Synergos.Api.")
             .Select(d => (Path.GetFileName(d), d))
             .OrderBy(x => x.Item1, StringComparer.Ordinal);
 

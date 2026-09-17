@@ -216,14 +216,16 @@ public sealed class CifrasDeClaudeMdTests
     /// La frase es el ancla, igual que arriba: reescribirla rompe el gate y obliga a mirar el
     /// número, que es justo cuando conviene mirarlo.
     /// </remarks>
-    private static readonly (string Plantilla, string Carpeta, string Patron)[] Schema =
+    private static readonly (string Plantilla, string? Carpeta, string Patron)[] Schema =
     {
         ("Compositions ({0} archivos)", "Synergos.CMS.Web/uSync/v9/ContentTypes", "*.config"),
         ("{0} archivos (", "Synergos.CMS.Web/uSync/v9/DataTypes", "*.config"),
         ("({0} DTSelect*)", "Synergos.CMS.Web/uSync/v9/DataTypes", "DTSelect*.config"),
         ("en-US ({0} keys)", "Synergos.CMS.Web/uSync/v9/Dictionary", "*.config"),
         ("Razor template registry ({0})", "Synergos.CMS.Web/uSync/v9/Templates", "*.config"),
-        ("LAS {0} CAPACIDADES", ".", "Synergos.Api.*"),
+        // La raíz ya no tiene las capacidades (#136): se cuentan por NOMBRE de proyecto, que es
+        // lo que la frase de §2 dice, en vez de por «cuántas carpetas hay en tal sitio».
+        ("LAS {0} CAPACIDADES", null, "Synergos.Api."),
     };
 
     /// <summary>
@@ -256,16 +258,22 @@ public sealed class CifrasDeClaudeMdTests
 
         foreach (var (plantilla, carpeta, patron) in Schema)
         {
-            var dir = Path.Combine(raiz, carpeta.Replace('/', Path.DirectorySeparatorChar));
-
-            var cuantos = patron.EndsWith(".config", StringComparison.Ordinal)
-                ? Directory.EnumerateFiles(dir, patron).Count()
-                : Directory.EnumerateDirectories(dir, patron).Count();
+            // `carpeta` en null significa «esto no es una carpeta, es una familia de
+            // PROYECTOS»: desde el #136 las capacidades no están en un sitio del que se
+            // puedan contar como subdirectorios, y contarlas por nombre es además lo que la
+            // frase de §2 afirma.
+            var cuantos = carpeta is null
+                ? Proyectos.Nombres(patron).Count
+                : patron.EndsWith(".config", StringComparison.Ordinal)
+                    ? Directory.EnumerateFiles(
+                        Path.Combine(raiz, carpeta.Replace('/', Path.DirectorySeparatorChar)), patron).Count()
+                    : Directory.EnumerateDirectories(
+                        Path.Combine(raiz, carpeta.Replace('/', Path.DirectorySeparatorChar)), patron).Count();
 
             // Sin esto, una carpeta movida dejaría el conteo en cero y el build se arreglaría
             // escribiendo «(0)» en la guía.
             Assert.True(cuantos > 0,
-                $"No se encontró nada para «{plantilla}» en {carpeta} ({patron}). Si se movió, "
+                $"No se encontró nada para «{plantilla}» en {carpeta ?? patron} ({patron}). Si se movió, "
                 + "mové también su cifra en CLAUDE.md §2 — y este gate.");
 
             var frase = string.Format(System.Globalization.CultureInfo.InvariantCulture, plantilla, cuantos);

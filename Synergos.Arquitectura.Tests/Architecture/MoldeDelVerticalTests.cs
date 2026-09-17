@@ -84,7 +84,7 @@ public sealed class MoldeDelVerticalTests
         return dir!.FullName;
     }
 
-    private static string Dir(params string[] partes) => Path.Combine([RepoRoot(), .. partes]);
+    private static string Dir(params string[] partes) => Proyectos.Ruta(partes);
 
     /// <summary>El fichero SIN comentarios.</summary>
     /// <remarks>

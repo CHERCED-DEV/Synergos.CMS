@@ -53,11 +53,11 @@ public sealed class ComposeStackTests
 
     /// <summary>Los servicios desplegables, calculados como los calcula el generador.</summary>
     private static IReadOnlyList<string> Servicios()
-        => Directory.EnumerateDirectories(RepoRoot())
+        => Proyectos.Directorios()
             .Select(Path.GetFileName)
             .Where(n => n!.StartsWith("Synergos.Api.", StringComparison.Ordinal)
                      || n.StartsWith("Synergos.Bff.", StringComparison.Ordinal))
-            .Where(n => File.Exists(Path.Combine(RepoRoot(), n!, "Program.cs")))
+            .Where(n => File.Exists(Proyectos.Dir(n!, "Program.cs")))
             .Select(n => n!.Replace("Synergos.", "").Replace(".", "-").ToLowerInvariant())
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
