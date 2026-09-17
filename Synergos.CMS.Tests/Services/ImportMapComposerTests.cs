@@ -1,4 +1,3 @@
-using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Tests.Services;

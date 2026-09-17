@@ -1,4 +1,4 @@
-﻿namespace Synergos.CMS.Interfaces;
+namespace Synergos.CMS.Interfaces;
 
 /// <summary>
 /// Directorio de médicos/staff del dashboard clínico EHR-lite (OLA 5). Alimenta

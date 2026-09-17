@@ -2,7 +2,7 @@ namespace Synergos.CMS.Interfaces;
 
 /// <summary>
 /// Puerto de almacenamiento opaco y GENÉRICO de entidades JSON, keyed por
-/// <paramref name="resourceType"/> + clave. Es la generalización de los stores
+/// <c>resourceType</c> + clave. Es la generalización de los stores
 /// dedicados que T1/T3 y el fan-out de Booking probaron por separado (órdenes de
 /// Tienda, sesiones de pago, reservas, órdenes de viaje): los cuatro tenían la MISMA
 /// forma y la misma implementación FileSystem duplicada. Regla de oro del doc 25:

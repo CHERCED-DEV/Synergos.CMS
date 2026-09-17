@@ -1274,15 +1274,17 @@ public sealed class DevContentFiller
     /// el hub, la vitrina y la cifra de marketing se enteran solos. Si alguien vuelve a
     /// escribir una lista paralela, esta nota es la que hay que citarle.
     /// </summary>
+    /// <param name="Tagline">Copy del hub (card del launcher).</param>
+    /// <param name="Blurb">Copy de la vitrina — más corto y en clave de venta.</param>
+    /// <param name="Icon">
+    /// Modificador CSS de la card SSR (<c>syn-launcher__card--{Icon}</c>). NO es el icono del
+    /// componente Angular: ese lo resuelve un <c>@switch</c> por <c>id</c> desde a70b6b3.
+    /// </param>
     private sealed record Vertical(
         string Slug,
         string Name,
-        /// Copy del hub (card del launcher).
         string Tagline,
-        /// Copy de la vitrina — más corto y en clave de venta.
         string Blurb,
-        /// Modificador CSS de la card SSR (`syn-launcher__card--{Icon}`). NO es el icono del
-        /// componente Angular: ese lo resuelve un @switch por `id` desde a70b6b3.
         string Icon,
         string Industry,
         string Persona,
@@ -3028,8 +3030,8 @@ public sealed class DevContentFiller
         }
 
         var consultoria = SeedProductCategory(bookingId, "Consultoría", "Sesiones con especialistas.", details);
-        var espacios    = SeedProductCategory(bookingId, "Espacios", "Salas y recursos reservables.", details);
-        var bienestar   = SeedProductCategory(bookingId, "Bienestar", "Servicios de bienestar y cuidado.", details);
+        var espacios = SeedProductCategory(bookingId, "Espacios", "Salas y recursos reservables.", details);
+        var bienestar = SeedProductCategory(bookingId, "Bienestar", "Servicios de bienestar y cuidado.", details);
 
         if (consultoria > 0)
         {
@@ -3540,8 +3542,8 @@ public sealed class DevContentFiller
         }
 
         var apartamentos = SeedProductCategory(propiedadesId, "Apartamentos", "Vivienda vertical con amenidades.", details);
-        var casas        = SeedProductCategory(propiedadesId, "Casas", "Vivienda unifamiliar con espacio propio.", details);
-        var comercial    = SeedProductCategory(propiedadesId, "Comercial", "Locales y oficinas para tu negocio.", details);
+        var casas = SeedProductCategory(propiedadesId, "Casas", "Vivienda unifamiliar con espacio propio.", details);
+        var comercial = SeedProductCategory(propiedadesId, "Comercial", "Locales y oficinas para tu negocio.", details);
 
         if (apartamentos > 0)
         {

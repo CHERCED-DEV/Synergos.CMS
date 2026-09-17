@@ -18,11 +18,25 @@
     <!--
       NoWarn:
         1591   missing XML doc comment (acepta sin docs en types públicos)
+        1573   <param> ausente para algún parámetro de un miembro YA documentado.
+               Es la misma decisión que 1591 un escalón abajo, y en un repo de
+               `record` posicionales es la que decide si la documentación se lee
+               o no: acá un DTO se explica en su <summary>/<remarks> —POR QUÉ
+               existe el campo, qué defecto cierra— y 1573 exige además una línea
+               por cada parámetro, incluida la que sólo puede decir «el id».
+               Medido al arreglar el #110 de PropertyDraft: documentar UN campo
+               subió la cifra de 287 a 308, porque documentar uno los exige todos.
+               Trescientas líneas de ruido alrededor de la que sí dice algo es
+               cómo se deja de leer la que sí dice algo. Lo que NO se acepta es
+               documentación que el compilador DESCARTA —CS1587 y CS1734 siguen
+               siendo errores por TreatWarningsAsErrors—, que es el defecto de
+               verdad de esta familia: en el #134 había cuatro sitios con
+               `///` sobre un parámetro posicional, y el compilador los tiraba.
         NU1902 Umbraco.Cms 13.13.1 vulnerabilidad moderate conocida, aceptada en
                ADR 0001 (memoria project_umbraco_version_pin). Sin patch en
                branch 13.x; upgrade a 14+ requiere ADR nuevo.
     -->
-    <NoWarn>$(NoWarn);1591;NU1902</NoWarn>
+    <NoWarn>$(NoWarn);1591;1573;NU1902</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup>

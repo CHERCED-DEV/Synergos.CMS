@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;

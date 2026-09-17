@@ -20,7 +20,11 @@ public sealed class NotificationServiceTests
         private DateTimeOffset _now;
         public RelojFalso(DateTimeOffset inicio) => _now = inicio;
         public override DateTimeOffset GetUtcNow() => _now;
-        public async Task Avanzar(TimeSpan d) => _now += d;
+        // void, como los otros nueve relojes de prueba del repo. Estuvo `async Task` y sus dos
+        // llamadores no lo esperaban: funcionaba por accidente —el cuerpo corre síncrono antes de
+        // devolver la Task— y el día que alguien metiera un `await` dentro, el reloj habría dejado
+        // de avanzar en esos dos sitios EN SILENCIO (#134).
+        public void Avanzar(TimeSpan d) => _now += d;
     }
 
     /// <summary>Transporte que cuenta lo que sale y puede fallar a pedido.</summary>

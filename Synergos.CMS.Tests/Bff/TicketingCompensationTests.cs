@@ -6,7 +6,6 @@ using Synergos.Bff.Core;
 using Synergos.Bff.Eventos.Clients;
 using Synergos.Bff.Eventos.Domain;
 using Synergos.Core;
-using Compensation = Synergos.Bff.Core.Compensation;
 
 namespace Synergos.CMS.Tests.Bff;
 

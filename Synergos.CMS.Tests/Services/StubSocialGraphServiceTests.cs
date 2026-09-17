@@ -1,8 +1,5 @@
-using System.Linq;
-using System.Threading.Tasks;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 
@@ -89,7 +86,7 @@ public class StubSocialGraphServiceTests
         Assert.True(second.Following);
         Assert.Equal(first.FolloweeFollowers, second.FolloweeFollowers);
         var followers = await svc.GetFollowersAsync("act-mateo");
-        Assert.Single(followers.Where(f => f == "act-dup"));
+        Assert.Single(followers, f => f == "act-dup");
     }
 
     [Fact] // idempotent: unfollow de quien no se sigue no lanza

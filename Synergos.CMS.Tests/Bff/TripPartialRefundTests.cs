@@ -142,7 +142,9 @@ public sealed class TripPartialRefundTests
             new ViajesCompensationExecutor(api), reloj, NullLogger<Compensator<TripSaga>>.Instance);
         var aviso = new CompensationAlert(fabrica, vocabulario, Options.Create(new AlertOptions
         {
-            ToKind = "viajes.guardia", ToId = "operaciones", Address = "guardia@ejemplo.co",
+            ToKind = "viajes.guardia",
+            ToId = "operaciones",
+            Address = "guardia@ejemplo.co",
             TemplateKey = "viajes.compensacion.colgada",
         }));
         var motor = new SagaEngine<TripSaga>(sagas, comp, aviso, ArriendoDePrueba.Nuevo(), vocabulario, reloj,

@@ -1,4 +1,4 @@
-﻿using System.Text.Encodings.Web;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
@@ -26,7 +26,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// suficiente para demo; un adapter real delega a OMS/mediación. Time source
 /// inyectable para determinismo en tests (ADR 0075).
 /// </remarks>
-public sealed class StubReturnService : IReturnService
+public sealed class StubReturnService : IReturnService, IDisposable
 {
     private static readonly IReadOnlyDictionary<ShopReturnStatus, ShopReturnStatus[]> LegalTransitions =
         new Dictionary<ShopReturnStatus, ShopReturnStatus[]>
@@ -54,6 +54,9 @@ public sealed class StubReturnService : IReturnService
 
     // Serializa el read-modify-write. lock{} no sirve: el cuerpo hace await.
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
 
     /// <remarks>
     /// <b>Ya NO recibe un <c>IPaymentProvider</c></b> (#57): la devolución se la pide al seam de

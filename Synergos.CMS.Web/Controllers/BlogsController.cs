@@ -454,7 +454,7 @@ public sealed class BlogsController : ControllerBase
         var dto = await ToDmThreadDto(thread, from, cancellationToken);
         // El mensaje RECIÉN añadido, que es lo que la app lee para pintar la burbuja
         // confirmada. Devolver sólo el hilo la dejaba sintetizándola en local.
-        return Ok(new ThreadResponse(Thread: dto, Message: dto.Messages.LastOrDefault()));
+        return Ok(new ThreadResponse(Thread: dto, Message: dto.Messages.Count > 0 ? dto.Messages[^1] : null));
     }
 
     // ── 9. Notificaciones ──────────────────────────────────────────
@@ -936,7 +936,7 @@ public sealed class BlogsController : ControllerBase
     /// </summary>
     private static AuthorDto? OtherParticipant(IReadOnlyList<AuthorDto> participants, string viewerId)
         => participants.FirstOrDefault(p => !string.Equals(p.Id, viewerId, StringComparison.OrdinalIgnoreCase))
-           ?? participants.FirstOrDefault();
+           ?? (participants.Count > 0 ? participants[0] : null);
 
     /// <summary>
     /// El peso de reacciones de cada post del lote, resuelto de una vez.

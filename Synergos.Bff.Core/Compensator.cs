@@ -4,6 +4,28 @@ using Synergos.Core;
 namespace Synergos.Bff.Core;
 
 /// <summary>
+/// El retroceso entre intentos de una compensación. Vive FUERA del tipo genérico a propósito.
+/// </summary>
+/// <remarks>
+/// No depende de la saga, así que escribirlo dentro de <see cref="Compensator{TSaga}"/> obligaba
+/// a todo llamador a teclear un argumento de tipo que no cambia el resultado
+/// —<c>Compensator&lt;AppointmentSaga&gt;.Backoff(1)</c>—, que es exactamente lo que CA1000
+/// señala: parece que la espera depende del dominio, y no depende (#134).
+/// </remarks>
+public static class Compensator
+{
+    /// <summary>
+    /// Espera antes del intento <paramref name="attempts"/>: 1, 2, 4… minutos, con techo.
+    /// </summary>
+    /// <remarks>
+    /// Retroceso exponencial y no reintento inmediato: la causa habitual de que una compensación
+    /// falle es que la capacidad está caída, y martillearla no la levanta — solo alarga la caída.
+    /// </remarks>
+    public static TimeSpan Backoff(int attempts)
+        => TimeSpan.FromMinutes(Math.Min(60, Math.Pow(2, Math.Min(attempts, 6))));
+}
+
+/// <summary>
 /// Cómo el dominio deshace lo que el dominio hizo.
 /// </summary>
 /// <remarks>
@@ -53,16 +75,6 @@ public sealed class Compensator<TSaga> where TSaga : ISaga
         _log = log;
     }
 
-    /// <summary>
-    /// Espera antes del intento <paramref name="attempts"/>: 1, 2, 4… minutos, con techo.
-    /// </summary>
-    /// <remarks>
-    /// Retroceso exponencial y no reintento inmediato: la causa habitual de que una compensación
-    /// falle es que la capacidad está caída, y martillearla no la levanta — solo alarga la caída.
-    /// </remarks>
-    public static TimeSpan Backoff(int attempts)
-        => TimeSpan.FromMinutes(Math.Min(60, Math.Pow(2, Math.Min(attempts, 6))));
-
     /// <summary>Intenta una compensación. Devuelve cómo queda.</summary>
     public async Task<Compensation> TryAsync(TSaga saga, Compensation pendiente, CancellationToken ct)
     {
@@ -102,6 +114,6 @@ public sealed class Compensator<TSaga> where TSaga : ISaga
 
         _log.LogWarning("Compensación {Kind} de la saga {Saga} falló ({Error}); reintento {N}.",
             pendiente.Kind, saga.Id, resultado, intentos);
-        return pendiente with { Attempts = intentos, LastError = resultado.ToString(), NextAttemptUtc = ahora + Backoff(intentos) };
+        return pendiente with { Attempts = intentos, LastError = resultado.ToString(), NextAttemptUtc = ahora + Compensator.Backoff(intentos) };
     }
 }

@@ -176,8 +176,13 @@ public sealed class PropertyContentRulesTests
     {
         var content = Content() with
         {
-            AreaM2 = 92, Beds = 3, Baths = 2, Parking = 1, Stratum = 5,
-            Age = " 5 años ", Floor = "Penthouse",
+            AreaM2 = 92,
+            Beds = 3,
+            Baths = 2,
+            Parking = 1,
+            Stratum = 5,
+            Age = " 5 años ",
+            Floor = "Penthouse",
         };
 
         var specs = Build(content)!.Specs;

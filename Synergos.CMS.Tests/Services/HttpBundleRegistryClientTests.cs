@@ -394,7 +394,6 @@ public sealed class HttpBundleRegistryClientTests
         Assert.Null(d!.Integrity);
     }
 
-    /// <summary>Un <see cref="IOptionsMonitor{T}"/> que no cambia — no hace falta más acá.</summary>
     // ── El conflicto de specifiers no puede apagar lo que ya servía (Synergos.UI#58) ──
 
     /// <summary>Un registry con DOS frameworks, para poder provocar la colisión.</summary>
@@ -463,6 +462,7 @@ public sealed class HttpBundleRegistryClientTests
         Assert.Null(await cliente.TryGetImportMapAsync());
     }
 
+    /// <summary>Un <see cref="IOptionsMonitor{T}"/> que no cambia — no hace falta más acá.</summary>
     private sealed class StaticOptionsMonitor<T> : IOptionsMonitor<T>
     {
         public StaticOptionsMonitor(T value) => CurrentValue = value;

@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 
 namespace Synergos.CMS.Tests.Architecture;
 
@@ -98,7 +98,7 @@ public sealed class MoldeDelVerticalTests
         {
             var t = l.TrimStart();
             if (t.StartsWith("//", StringComparison.Ordinal)
-                || t.StartsWith("*", StringComparison.Ordinal)
+                || t.StartsWith('*')
                 || t.StartsWith("/*", StringComparison.Ordinal))
             {
                 return string.Empty;
@@ -197,7 +197,7 @@ public sealed class MoldeDelVerticalTests
         var composers = Composers();
         var clientes = ClientesHttp();
         var pocos = Directory.EnumerateFiles(Dir("Synergos.CMS.Application", "Configuration"), "*Settings.cs")
-            .ToDictionary(Path.GetFileNameWithoutExtension!, f => File.ReadAllText(f), StringComparer.Ordinal);
+            .ToDictionary(f => Path.GetFileNameWithoutExtension(f)!, f => File.ReadAllText(f), StringComparer.Ordinal);
 
         var encontrados = new List<Punto>();
 

@@ -156,7 +156,7 @@ public sealed class EventContentRulesTests
             },
             Cop);
 
-        Assert.Equal("general", Assert.Single(result.Value.Where(t => t.Featured)).Code);
+        Assert.Equal("general", Assert.Single(result.Value, t => t.Featured).Code);
         Assert.Contains(result.Issues, i => i.Level == EventContentIssueLevel.Warning);
     }
 

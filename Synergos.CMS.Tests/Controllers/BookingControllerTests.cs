@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;

@@ -1,4 +1,4 @@
-﻿using Synergos.CMS.Interfaces;
+using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 

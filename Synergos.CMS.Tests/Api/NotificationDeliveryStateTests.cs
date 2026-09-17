@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Synergos.Api.Notifications.Domain;
 using Synergos.Api.Notifications.Endpoints;
-using Synergos.Api.Notifications.Transport;
 using Synergos.Api.Notifications.Storage;
+using Synergos.Api.Notifications.Transport;
 using Synergos.Core;
 using Synergos.Shared;
 

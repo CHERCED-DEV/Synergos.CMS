@@ -2,7 +2,7 @@ namespace Synergos.CMS.Interfaces;
 
 /// <summary>
 /// Candado de idempotencia GENÉRICO y domain-neutral: reclama de forma ATÓMICA y
-/// exclusiva una <paramref name="key"/> dentro de un <paramref name="scope"/>. Es la
+/// exclusiva una <c>key</c> dentro de un <c>scope</c>. Es la
 /// generalización del ledger que T3 introdujo para el webhook de pago (su primer
 /// consumidor); T4 (notificaciones) es el segundo — el mismo razonamiento de fan-out que
 /// llevó a <see cref="IJsonEntityStore"/> (ADR 0105).

@@ -50,7 +50,7 @@ public sealed class LockingAppointmentScheduler : IAppointmentScheduler
         {
             // read-check-write atómico por-doctor.
             var existing = await ReadForDoctorAsync(request.DoctorKey, cancellationToken).ConfigureAwait(false);
-            if (_scheduling.HasConflict(existing, request.StartUtc, request.EndUtc, _settings.Value.MaxOverbookingMinutes))
+            if (AppointmentSchedulingService.HasConflict(existing, request.StartUtc, request.EndUtc, _settings.Value.MaxOverbookingMinutes))
             {
                 return new AppointmentBookResult(false, null, "overbooking-conflict");
             }

@@ -19,14 +19,14 @@ public sealed class EventosCompensationExecutor : ICompensationExecutor<Ticketin
 
     public EventosCompensationExecutor(EventosCapabilities caps) => _caps = caps;
 
-    public async Task<Rejection?> UndoAsync(TicketingSaga saga, Compensation pendiente, CancellationToken ct)
-        => pendiente.Kind switch
+    public async Task<Rejection?> UndoAsync(TicketingSaga saga, Compensation pending, CancellationToken ct)
+        => pending.Kind switch
         {
-            EventosCompensations.ReleaseSeatHold => await Envolver(_caps.ReleaseAforoAsync(pendiente.TargetId, ct)),
-            EventosCompensations.RestockSeats => await RestockAsync(saga, pendiente, ct),
-            EventosCompensations.VoidPayment => await Envolver(_caps.VoidAsync(pendiente.TargetId, ct)),
-            EventosCompensations.RefundPayment => await RefundAsync(saga, pendiente, ct),
-            _ => Rejection.Invalid("eventos.unknown_compensation", $"No sé deshacer {pendiente.Kind}."),
+            EventosCompensations.ReleaseSeatHold => await Envolver(_caps.ReleaseAforoAsync(pending.TargetId, ct)),
+            EventosCompensations.RestockSeats => await RestockAsync(saga, pending, ct),
+            EventosCompensations.VoidPayment => await Envolver(_caps.VoidAsync(pending.TargetId, ct)),
+            EventosCompensations.RefundPayment => await RefundAsync(saga, pending, ct),
+            _ => Rejection.Invalid("eventos.unknown_compensation", $"No sé deshacer {pending.Kind}."),
         };
 
     /// <summary>

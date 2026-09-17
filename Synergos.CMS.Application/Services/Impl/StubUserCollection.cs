@@ -35,7 +35,10 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// (<c>user-collections</c>): compartirlo con otro motor mezclaría documentos
 /// de forma distinta bajo la misma clave.</para>
 /// </remarks>
-public sealed class StubUserCollection : IUserCollection
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Naming", "CA1711:Identifiers should not have incorrect suffix",
+    Justification = "El sufijo describe lo que la seam ES para el dominio —un feed de contenido, una colección del usuario—, no una herencia de System.IO.Stream ni de ICollection. Renombrar una costura viva por una guía de nomenclatura cuesta más de lo que aclara (#134).")]
+public sealed class StubUserCollection : IUserCollection, IDisposable
 {
     /// <summary>Familia de entidades en el store genérico (→ App_Data/syn-user-collections/).</summary>
     public const string DefaultResourceType = "user-collections";
@@ -54,6 +57,9 @@ public sealed class StubUserCollection : IUserCollection
     // porque el cuerpo hace await; SemaphoreSlim es el equivalente async —
     // mismo criterio que StubOrderTrackingService.
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
 
     public StubUserCollection()
         : this(null)

@@ -178,7 +178,7 @@ public sealed class ComposeStackTests
 
         // Cada bloque `ports:` va precedido del servicio al que pertenece; se cuenta cuántos hay
         // y se exige que sea exactamente uno.
-        var bloques = Regex.Matches(texto, @"^\s{4}ports:", RegexOptions.Multiline).Count;
+        var bloques = Regex.Count(texto, @"^\s{4}ports:", RegexOptions.Multiline);
 
         Assert.True(bloques == 1,
             $"Hay {bloques} bloques `ports:` y debería haber UNO (el del proxy). " +

@@ -162,6 +162,9 @@ public sealed class UmbracoStayContentSource : ICatalogSource<StayDetail>
     /// la ficha saldría con etiquetas en blanco —o con la clave cruda, según el proveedor— en
     /// esa ventana.
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Globalization", "CA1304:Specify CultureInfo",
+        Justification = "La sobrecarga SIN CultureInfo resuelve la cultura de la PETICIÓN, que es exactamente lo que se quiere: las etiquetas del Dictionary siguen al idioma de la página que se está pintando (es-CO / en-US). Fijar una cultura las congelaría a una — sería el defecto, no el arreglo (#134).")]
     private StaySpecLabels ResolveSpecLabels()
     {
         var dictionary = _dictionaryFactory.CreateDictionary();
@@ -177,6 +180,9 @@ public sealed class UmbracoStayContentSource : ICatalogSource<StayDetail>
     /// <summary>
     /// Los nombres de los cuatro ejes de reseñas, del Dictionary uSync con respaldo en es-CO.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Globalization", "CA1304:Specify CultureInfo",
+        Justification = "La sobrecarga SIN CultureInfo resuelve la cultura de la PETICIÓN, que es exactamente lo que se quiere: las etiquetas del Dictionary siguen al idioma de la página que se está pintando (es-CO / en-US). Fijar una cultura las congelaría a una — sería el defecto, no el arreglo (#134).")]
     private StayReviewLabels ResolveReviewLabels()
     {
         var dictionary = _dictionaryFactory.CreateDictionary();

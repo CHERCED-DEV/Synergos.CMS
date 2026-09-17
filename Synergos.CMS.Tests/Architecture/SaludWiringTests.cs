@@ -55,7 +55,7 @@ public sealed class SaludWiringTests
             .Select(l =>
             {
                 var t = l.TrimStart();
-                if (t.StartsWith("//", StringComparison.Ordinal) || t.StartsWith("*", StringComparison.Ordinal))
+                if (t.StartsWith("//", StringComparison.Ordinal) || t.StartsWith('*'))
                 {
                     return string.Empty;
                 }

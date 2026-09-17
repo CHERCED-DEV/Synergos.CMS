@@ -1,5 +1,4 @@
 using System.Globalization;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Constants;

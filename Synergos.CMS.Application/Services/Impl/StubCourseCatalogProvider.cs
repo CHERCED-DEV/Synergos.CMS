@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
@@ -326,8 +326,8 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
             CoverImageUrl: draft.CoverImageUrl,
             Price: Math.Max(0m, draft.Price),
             Rating: 0.0, // sin reseñas todavía
-            // Publicar ES el acto que le pone fecha: no se hereda de nada ni se deja sin
-            // poner, porque de éste sí se sabe (#102).
+                         // Publicar ES el acto que le pone fecha: no se hereda de nada ni se deja sin
+                         // poner, porque de éste sí se sabe (#102).
             PublishedAt: DateOnly.FromDateTime(_now().UtcDateTime),
             Outcomes: draft.Outcomes ?? Array.Empty<string>(),
             Modules: seedModules);

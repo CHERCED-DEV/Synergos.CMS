@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Filters;

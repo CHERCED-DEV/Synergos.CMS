@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
-using Modelo = Synergos.Api.Engagement.Domain;
 using Synergos.Core;
 using Synergos.Shared;
+using Modelo = Synergos.Api.Engagement.Domain;
 
 namespace Synergos.Api.Engagement.Storage;
 

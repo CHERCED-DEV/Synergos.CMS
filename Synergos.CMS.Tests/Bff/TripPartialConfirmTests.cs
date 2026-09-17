@@ -161,7 +161,9 @@ public sealed class TripPartialConfirmTests
             new ViajesCompensationExecutor(api), reloj, NullLogger<Compensator<TripSaga>>.Instance);
         var aviso = new CompensationAlert(fabrica, vocabulario, Options.Create(new AlertOptions
         {
-            ToKind = "viajes.guardia", ToId = "operaciones", Address = "guardia@ejemplo.co",
+            ToKind = "viajes.guardia",
+            ToId = "operaciones",
+            Address = "guardia@ejemplo.co",
             TemplateKey = "viajes.compensacion.colgada",
         }));
         var motor = new SagaEngine<TripSaga>(sagas, comp, aviso, ArriendoDePrueba.Nuevo(), vocabulario, reloj,
@@ -210,7 +212,7 @@ public sealed class TripPartialConfirmTests
 
         var holds = r.Value.Holds;
         Assert.Equal(2, holds.Count(h => h.ReservationId is not null));
-        Assert.Single(holds.Where(h => h.Unfulfilled));
+        Assert.Single(holds, h => h.Unfulfilled);
         Assert.Equal("auto-1", holds.Single(h => h.Unfulfilled).ProductRef);
 
         Assert.Equal(SagaStatus.Completed, sagas.Find("v-1")!.Status);

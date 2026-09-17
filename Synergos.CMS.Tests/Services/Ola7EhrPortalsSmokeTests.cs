@@ -1,9 +1,5 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 
@@ -53,7 +49,7 @@ public class Ola7EhrPortalsSmokeTests
     {
         var (meds, messaging, audit, _) = MakeMedication();
         var active = await meds.GetActiveForPatientAsync("pat-jorge-medina");
-        var med = active.First();
+        var med = active[0];
 
         var refill = await meds.RequestRefillAsync(new RefillRequest("pat-jorge-medina", med.MedicationId, "Se me acaba"));
 
@@ -131,7 +127,7 @@ public class Ola7EhrPortalsSmokeTests
 
         // Genera un refill dirigido a Carlos Mejía (prescriptor de Jorge).
         var active = await meds.GetActiveForPatientAsync("pat-jorge-medina");
-        await meds.RequestRefillAsync(new RefillRequest("pat-jorge-medina", active.First().MedicationId));
+        await meds.RequestRefillAsync(new RefillRequest("pat-jorge-medina", active[0].MedicationId));
 
         var queue = await inBasket.GetForProviderAsync("doc-carlos-mejia");
 
@@ -157,7 +153,7 @@ public class Ola7EhrPortalsSmokeTests
         var inBasket = new StubEhrInBasketService(results, meds, messaging, patients);
 
         var active = await meds.GetActiveForPatientAsync("pat-jorge-medina");
-        await meds.RequestRefillAsync(new RefillRequest("pat-jorge-medina", active.First().MedicationId));
+        await meds.RequestRefillAsync(new RefillRequest("pat-jorge-medina", active[0].MedicationId));
 
         var onlyRefills = await inBasket.GetForProviderAsync("doc-carlos-mejia", "refill");
 

@@ -1,4 +1,4 @@
-﻿using System.Text.Encodings.Web;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
@@ -21,7 +21,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// <see cref="ConfirmAsync"/> es idempotente. El adapter real (PMS/DB) implementa la
 /// misma seam y se registra en su lugar vía el composer sin tocar el motor.
 /// </remarks>
-public sealed class StubReservationService : IReservationService
+public sealed class StubReservationService : IReservationService, IDisposable
 {
     /// <summary>
     /// Ventana de hold por defecto: 15 min para completar checkout/pago antes de que
@@ -44,6 +44,9 @@ public sealed class StubReservationService : IReservationService
     // Serializa el read-modify-write de Confirm/Cancel/Expire (single-instance): sin
     // lock{} porque el cuerpo hace await; SemaphoreSlim es el equivalente async.
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
 
     /// <summary>
     /// Default ctor — hold window de 15 min, reloj real y backing store en memoria.

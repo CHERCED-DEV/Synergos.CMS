@@ -6,7 +6,6 @@ using Synergos.Bff.Core;
 using Synergos.Bff.Viajes.Clients;
 using Synergos.Bff.Viajes.Domain;
 using Synergos.Core;
-using Compensation = Synergos.Bff.Core.Compensation;
 
 namespace Synergos.CMS.Tests.Bff;
 
@@ -311,7 +310,7 @@ public sealed class TripCompensationTests
         var saga = ctx.Sagas.Find("viaje-1")!;
         Assert.Equal(4, saga.Compensations.Count);   // tres apartados + la autorización
         Assert.Equal(3, saga.Compensations.Count(c => c.Kind == ViajesCompensations.ReleaseBookingHold));
-        Assert.Single(saga.Compensations.Where(c => c.Kind == ViajesCompensations.VoidPayment));
+        Assert.Single(saga.Compensations, c => c.Kind == ViajesCompensations.VoidPayment);
 
         // ARMADA no es PENDIENTE: nada se ejecutó, la saga va perfectamente.
         Assert.Equal(SagaStatus.Running, saga.Status);
@@ -489,10 +488,10 @@ public sealed class TripCompensationTests
     /// veces y el viaje quedaría con un vuelo y sin hotel — creyendo que tiene los tres.
     /// </remarks>
     [Fact]
-    public void Cada_item_lleva_su_propia_llave()
+    public async Task Cada_item_lleva_su_propia_llave()
     {
         var ctx = Nuevo(FelizEstricto());
-        Reservar(ctx.Flow).GetAwaiter().GetResult();
+        await Reservar(ctx.Flow);
 
         var llaves = ctx.Caps.Llamadas
             .Where(l => l.Path.EndsWith("/v1/holds", StringComparison.Ordinal))

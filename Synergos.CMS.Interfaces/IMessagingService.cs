@@ -30,6 +30,9 @@ public interface IMessagingService
     /// no crea un hilo paralelo. Lanza <see cref="ArgumentException"/> si
     /// falta algún dato o si from == to.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Naming", "CA1716:Identifiers should not match keywords",
+        Justification = "La regla protege a consumidores en otros lenguajes (`to`, `date` son palabras reservadas en VB). Este repo es C# y un solo despliegue: el nombre del par from/to es lo que hace legible la ventana, y renombrarlo a `toDate` la empeora (#134).")]
     Task<MessageThread> StartThreadAsync(
         string contextRef,
         string from,

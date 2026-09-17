@@ -135,7 +135,11 @@ public sealed class HttpHotelBookingServiceTests
         RatePlanCode: "FLEX",
         CheckIn: Entrada,
         CheckOut: Salida,
-        Rooms: new[] { new RoomOccupancy(2, null) },
+        // ChildAges vacío y no `null`: el seam lo declara NO anulable y los dos productores reales
+        // —BookingController con `?? Array.Empty<int>()` y TravelController con BuildChildAges—
+        // nunca emiten null. Un fixture que describe algo que producción no puede producir prueba
+        // otra cosa (#134).
+        Rooms: new[] { new RoomOccupancy(2, Array.Empty<int>()) },
         GuestName: "Ana Huésped",
         GuestEmail: "ana@ejemplo.co",
         TotalPrice: 999_999m,

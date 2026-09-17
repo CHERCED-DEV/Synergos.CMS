@@ -36,7 +36,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// Se recorre en cada llamada a propósito — en este repo una caché se entrega
 /// junto con su invalidador y su consumidor, nunca antes.</para>
 /// </remarks>
-public sealed class StubReactionService : IReactionService
+public sealed class StubReactionService : IReactionService, IDisposable
 {
     /// <summary>Familia de entidades en el store genérico (→ App_Data/syn-social-reactions/).</summary>
     public const string DefaultResourceType = "social-reactions";
@@ -52,6 +52,9 @@ public sealed class StubReactionService : IReactionService
 
     // Serializa el read-modify-write del toggle. lock{} no sirve: el cuerpo hace await.
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
 
     public StubReactionService()
         : this(null, null)

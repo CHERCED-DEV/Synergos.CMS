@@ -1,8 +1,4 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using Synergos.CMS.Application.Services.Impl;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 

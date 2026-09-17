@@ -33,7 +33,7 @@ namespace Synergos.CMS.Web.Services;
 /// <para>La llave se resuelve <b>perezosamente</b> y se cachea: cero I/O en el arranque
 /// (ADR 0013). Va cifrada porque <see cref="IJsonEntityStore"/> guarda JSON en claro.</para>
 /// </remarks>
-public sealed class TicketSigningKeyProvider
+public sealed class TicketSigningKeyProvider : IDisposable
 {
     private const string ResourceType = "keys";
     /// <summary>Clave fija: es UNA llave, no una colección — se recupera por nombre.</summary>
@@ -46,6 +46,9 @@ public sealed class TicketSigningKeyProvider
     private readonly IOptions<EventsSettings> _options;
     private readonly ILogger<TicketSigningKeyProvider> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _gate.Dispose();
     private byte[]? _cached;
 
     public TicketSigningKeyProvider(

@@ -32,7 +32,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// dominio se leyera contra el pipeline de otro: "enviado" convertido en
 /// "matriculado" sin que nada falle.</para>
 /// </remarks>
-public sealed class StubOrderTrackingService : IOrderTrackingService
+public sealed class StubOrderTrackingService : IOrderTrackingService, IDisposable
 {
     /// <summary>Etapa inicial del pipeline de Tienda — la siembra <c>StubShopOrderService</c> al confirmar.</summary>
     public const string StagePaid = "paid";
@@ -61,6 +61,9 @@ public sealed class StubOrderTrackingService : IOrderTrackingService
     // el cuerpo hace await; SemaphoreSlim es el equivalente async — mismo
     // criterio que StubPaymentProvider.
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
 
     public StubOrderTrackingService()
         : this(null, null)

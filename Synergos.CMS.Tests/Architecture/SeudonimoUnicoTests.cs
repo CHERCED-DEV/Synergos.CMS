@@ -61,7 +61,7 @@ public sealed class SeudonimoUnicoTests
         => string.Join('\n', File.ReadAllLines(ruta).Select(l =>
         {
             var t = l.TrimStart();
-            return t.StartsWith("//", StringComparison.Ordinal) || t.StartsWith("*", StringComparison.Ordinal)
+            return t.StartsWith("//", StringComparison.Ordinal) || t.StartsWith('*')
                 ? string.Empty
                 : l;
         }));

@@ -508,7 +508,7 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
     /// no «la entrada, sea cual sea». Con otro <c>entryScript</c> se cae al cálculo local, que sí
     /// sabe hashear el fichero correcto. Un SRI equivocado no degrada el elemento: lo borra.
     /// </remarks>
-    private string? LoadPublishedIntegrity(string bundleDir, string entryScript)
+    private static string? LoadPublishedIntegrity(string bundleDir, string entryScript)
     {
         if (!string.Equals(entryScript, "main.js", StringComparison.Ordinal)) return null;
 

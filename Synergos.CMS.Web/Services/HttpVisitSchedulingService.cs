@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
@@ -300,7 +299,7 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
     /// </remarks>
     private static string Seudonimo(string email) => SeudonimoDePersona.De(email);
 
-    private async Task<ProblemaDto?> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
+    private static async Task<ProblemaDto?> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
     {
         try { return await res.Content.ReadFromJsonAsync<ProblemaDto>(Json, ct).ConfigureAwait(false); }
         catch (Exception ex) when (ex is JsonException or NotSupportedException) { return null; }

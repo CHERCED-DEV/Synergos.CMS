@@ -472,7 +472,7 @@ public sealed class BackendSegregationTests
         {
             var t = line.TrimStart();
             if (t.StartsWith("//", StringComparison.Ordinal)
-                || t.StartsWith("*", StringComparison.Ordinal)
+                || t.StartsWith('*')
                 || t.StartsWith("/*", StringComparison.Ordinal))
             {
                 continue;

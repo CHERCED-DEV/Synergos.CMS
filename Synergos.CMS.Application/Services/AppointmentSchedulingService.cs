@@ -20,7 +20,7 @@ public sealed class AppointmentSchedulingService
     /// supera la tolerancia <paramref name="maxOverbookingMinutes"/> (0 = sin
     /// overbooking, cualquier solape es conflicto).
     /// </summary>
-    public bool HasConflict(
+    public static bool HasConflict(
         IEnumerable<AppointmentSlot> existing, DateTime startUtc, DateTime endUtc, int maxOverbookingMinutes)
     {
         var tolerance = TimeSpan.FromMinutes(Math.Max(0, maxOverbookingMinutes));

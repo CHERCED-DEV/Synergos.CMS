@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -6,7 +5,6 @@ using NSubstitute;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 using Synergos.CMS.Web.Services;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Controllers;
 

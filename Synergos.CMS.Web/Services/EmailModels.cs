@@ -1,4 +1,4 @@
-﻿namespace Synergos.CMS.Web.Services;
+namespace Synergos.CMS.Web.Services;
 
 /// <summary>
 /// View models para los email templates Razor (Ola 82).

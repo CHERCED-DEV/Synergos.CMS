@@ -1,20 +1,13 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
-using Synergos.CMS.Application.Proxies.Impl;
-using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
-using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
-using Synergos.CMS.Web.Services.Catalog;
-using Umbraco.Cms.Core.Composing;
-using Umbraco.Cms.Core.Notifications;
-using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Composers;
 
 public sealed partial class SeamComposer
 {
-    private void ComposeFormsSearchAndMemberAdmin(IUmbracoBuilder builder)
+    private static void ComposeFormsSearchAndMemberAdmin(IUmbracoBuilder builder)
     {
         var services = builder.Services;
 

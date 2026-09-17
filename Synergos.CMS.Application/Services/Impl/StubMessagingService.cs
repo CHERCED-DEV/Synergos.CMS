@@ -39,7 +39,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// verificar antes si el hilo ya tiene mensajes — ver
 /// <see cref="BlogsDemoSeeder"/>.</para>
 /// </remarks>
-public sealed class StubMessagingService : IMessagingService
+public sealed class StubMessagingService : IMessagingService, IDisposable
 {
     /// <summary>Familia de entidades en el store genérico (→ App_Data/syn-social-messages/).</summary>
     public const string DefaultResourceType = "social-messages";
@@ -56,6 +56,9 @@ public sealed class StubMessagingService : IMessagingService
 
     // Serializa el read-modify-write del append. lock{} no sirve: el cuerpo hace await.
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
 
     public StubMessagingService()
         : this(null)

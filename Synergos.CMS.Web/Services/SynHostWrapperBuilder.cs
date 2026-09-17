@@ -64,10 +64,10 @@ public static class SynHostWrapperBuilder
         // wrapper entirely — the custom element carries its own
         // semantics and we avoid DOM pollution.
         var needsWrapper = modifiers.Count > 0 || attrs.Length > 0;
-        if (!needsWrapper) return new SynHostWrapper(string.Empty, string.Empty, IsNoOp:true);
+        if (!needsWrapper) return new SynHostWrapper(string.Empty, string.Empty, IsNoOp: true);
 
         modifiers.Insert(0, "syn-host");
-        return new SynHostWrapper(string.Join(' ', modifiers), attrs.ToString(), IsNoOp:false);
+        return new SynHostWrapper(string.Join(' ', modifiers), attrs.ToString(), IsNoOp: false);
     }
 
     private static string? Val(IPublishedElement model, string alias)

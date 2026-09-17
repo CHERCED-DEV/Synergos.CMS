@@ -1,13 +1,9 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
-using System.Threading;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Controllers;
 
@@ -58,7 +54,7 @@ public sealed class GovTimelineContractTests
         _gate.CurrentMemberKey.Returns(Ciudadano);
     }
 
-    private CaseDetail Expediente() => new(
+    private static CaseDetail Expediente() => new(
         CaseId: "case-1001",
         Radicado: "SG-2026-001001",
         TramiteId: "tr-1",

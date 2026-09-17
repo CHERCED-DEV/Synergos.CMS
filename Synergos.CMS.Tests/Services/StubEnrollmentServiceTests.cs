@@ -1,9 +1,5 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 
@@ -211,9 +207,12 @@ public class StubEnrollmentServiceTests
     }
 
     /// <summary>Un proveedor que cuenta cuántas sesiones de cobro se abrieron.</summary>
-    private sealed class ContandoSesiones : IPaymentProvider
+    private sealed class ContandoSesiones : IPaymentProvider, IDisposable
     {
         private readonly StubPaymentProvider _real = new();
+
+        /// <inheritdoc />
+        public void Dispose() => _real.Dispose();
         public int Sesiones { get; private set; }
 
         public string ProviderKey => _real.ProviderKey;
@@ -356,7 +355,7 @@ public class StubEnrollmentServiceTests
     {
         var (svc, catalog) = Make();
         var detail = await catalog.GetCourseAsync(PaidCourse);
-        var lessonId = detail!.Modules.First().Lessons.First().Id;
+        var lessonId = detail!.Modules[0].Lessons[0].Id;
 
         var first = await svc.MarkLessonAsync(PaidCourse, lessonId, "juan@synergos.co");
         var second = await svc.MarkLessonAsync(PaidCourse, lessonId, "juan@synergos.co");
@@ -370,7 +369,7 @@ public class StubEnrollmentServiceTests
     {
         var (svc, catalog) = Make();
         var detail = await catalog.GetCourseAsync(PaidCourse);
-        var lessonId = detail!.Modules.First().Lessons.First().Id;
+        var lessonId = detail!.Modules[0].Lessons[0].Id;
 
         await svc.MarkLessonAsync(PaidCourse, lessonId, "juan@synergos.co");
 
@@ -388,7 +387,7 @@ public class StubEnrollmentServiceTests
     {
         var (svc, catalog) = Make();
         var detail = await catalog.GetCourseAsync(PaidCourse);
-        var lessonId = detail!.Modules.First().Lessons.First().Id;
+        var lessonId = detail!.Modules[0].Lessons[0].Id;
         await svc.MarkLessonAsync(PaidCourse, lessonId, "juan@synergos.co");
 
         Assert.Null(await svc.GetCertificateAsync(PaidCourse, "juan@synergos.co"));

@@ -683,7 +683,7 @@ public sealed class GovController : ControllerBase
             Pattern: f.Pattern);
     }
 
-    private ApplicationSummaryDto ToApplicationSummaryDto(CaseDetail c) => new(
+    private static ApplicationSummaryDto ToApplicationSummaryDto(CaseDetail c) => new(
         Id: c.CaseId,
         Reference: c.Radicado,
         ServiceId: c.TramiteId,

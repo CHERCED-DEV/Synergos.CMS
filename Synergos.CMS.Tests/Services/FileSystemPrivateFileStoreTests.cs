@@ -1,7 +1,4 @@
-using System;
-using System.IO;
 using System.Text;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -9,7 +6,6 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Web.Services;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 

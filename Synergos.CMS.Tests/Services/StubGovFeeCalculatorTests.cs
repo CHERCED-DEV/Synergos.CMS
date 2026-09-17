@@ -1,5 +1,4 @@
 using Synergos.CMS.Application.Services.Impl;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 

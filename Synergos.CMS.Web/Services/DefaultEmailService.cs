@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
-using UmbracoMail = Umbraco.Cms.Core.Mail;
 using UmbracoEmail = Umbraco.Cms.Core.Models.Email;
+using UmbracoMail = Umbraco.Cms.Core.Mail;
 
 namespace Synergos.CMS.Web.Services;
 

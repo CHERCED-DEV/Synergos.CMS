@@ -1,4 +1,4 @@
-﻿namespace Synergos.CMS.Application.Configuration;
+namespace Synergos.CMS.Application.Configuration;
 
 /// <summary>
 /// POCO tipado bindeado de <c>Synergos:Payments</c> (T3, doc 25). Gobierna la

@@ -1,11 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 
@@ -135,7 +129,7 @@ public class CatalogSocialProofEnrichmentTests
         var enriched = Enrich(new[] { Product("SKU-1"), Product("SKU-2") }, bySku);
 
         Assert.Equal(5d, enriched[0].Rating);
-        Assert.Equal(1, enriched[0].Reviews.Count);
+        Assert.Single(enriched[0].Reviews);
         Assert.Equal(2d, enriched[1].Rating);
         Assert.Equal(2, enriched[1].Reviews.Count);
     }

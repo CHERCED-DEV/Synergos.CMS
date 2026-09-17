@@ -30,6 +30,9 @@ namespace Synergos.CMS.Interfaces;
 /// (Application sin Umbraco) + ADR 0075 (seam con tests).
 /// </para>
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Naming", "CA1711:Identifiers should not have incorrect suffix",
+    Justification = "El sufijo describe lo que la seam ES para el dominio —un feed de contenido, una colección del usuario—, no una herencia de System.IO.Stream ni de ICollection. Renombrar una costura viva por una guía de nomenclatura cuesta más de lo que aclara (#134).")]
 public interface IContentStream
 {
     /// <summary>

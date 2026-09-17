@@ -164,6 +164,9 @@ public sealed class UmbracoPropertyCatalogSource : ICatalogSource<PropertyDetail
     /// la ficha saldría con etiquetas en blanco —o con la clave cruda, según el proveedor— en
     /// esa ventana.
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Globalization", "CA1304:Specify CultureInfo",
+        Justification = "La sobrecarga SIN CultureInfo resuelve la cultura de la PETICIÓN, que es exactamente lo que se quiere: las etiquetas del Dictionary siguen al idioma de la página que se está pintando (es-CO / en-US). Fijar una cultura las congelaría a una — sería el defecto, no el arreglo (#134).")]
     private PropertySpecLabels ResolveSpecLabels()
     {
         var dictionary = _dictionaryFactory.CreateDictionary();

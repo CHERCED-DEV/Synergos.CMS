@@ -55,7 +55,8 @@ public static class HostBridgeFallback
     /// El mismo snapshot ya serializado en camelCase. Se computa una vez —
     /// es constante — y lo consumen el partial Razor y el endpoint CSP-strict.
     /// </summary>
-    public static readonly string Json = JsonSerializer.Serialize(
-        Context,
-        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    private static readonly JsonSerializerOptions _camelCase =
+        new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    public static readonly string Json = JsonSerializer.Serialize(Context, _camelCase);
 }

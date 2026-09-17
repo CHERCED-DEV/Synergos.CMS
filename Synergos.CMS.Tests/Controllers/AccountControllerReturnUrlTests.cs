@@ -16,7 +16,7 @@ namespace Synergos.CMS.Tests.Controllers;
 /// tras un login legítimo (open redirect → ayuda al phishing).
 /// La regla en sí se testea en <c>LocalReturnUrlTests</c>.
 /// </summary>
-public sealed class AccountControllerReturnUrlTests
+public sealed class AccountControllerReturnUrlTests : IDisposable
 {
     private const string Email = "member@synergos.test";
     private const string Password = "pw";
@@ -31,6 +31,9 @@ public sealed class AccountControllerReturnUrlTests
     private readonly IBrandingProvider _branding = Substitute.For<IBrandingProvider>();
     private readonly IMemberTwoFactorService _twoFactor = Substitute.For<IMemberTwoFactorService>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+
+    /// <inheritdoc />
+    public void Dispose() => _cache.Dispose();
 
     private AccountController BuildSut() =>
         new(_authService,

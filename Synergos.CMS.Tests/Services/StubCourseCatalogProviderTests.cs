@@ -1,10 +1,6 @@
-﻿using System;
-using System.Linq;
-using System.Threading.Tasks;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 
@@ -157,7 +153,7 @@ public class StubCourseCatalogProviderTests
         var detail = await Make(stream).GetCourseAsync("dev-clean-architecture");
 
         Assert.NotNull(detail);
-        var firstLesson = detail!.Modules.First().Lessons.First();
+        var firstLesson = detail!.Modules[0].Lessons[0];
 
         // El ContentItemId apunta a un item REAL del stream (no es el lessonId).
         var item = await stream.GetItemAsync(firstLesson.ContentItemId);

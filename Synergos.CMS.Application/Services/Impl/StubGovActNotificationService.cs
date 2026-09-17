@@ -17,7 +17,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// notificaciones que se pierde al reiniciar no sirve para lo único que existe: sostener que un
 /// término empezó.</para>
 /// </remarks>
-public sealed class StubGovActNotificationService : IGovActNotificationService
+public sealed class StubGovActNotificationService : IGovActNotificationService, IDisposable
 {
     /// <summary>Familia de entidades en el store genérico (→ App_Data/syn-gov-notifications/).</summary>
     public const string ResourceType = "gov-notifications";
@@ -31,6 +31,9 @@ public sealed class StubGovActNotificationService : IGovActNotificationService
     private readonly IJsonEntityStore _store;
     private readonly Func<DateTimeOffset> _now;
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
 
     public StubGovActNotificationService(IJsonEntityStore store, Func<DateTimeOffset>? now = null)
     {

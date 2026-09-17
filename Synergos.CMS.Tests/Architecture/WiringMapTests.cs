@@ -300,9 +300,22 @@ public sealed class WiringMapTests
     /// <summary>Las cifras de esta prosa se escriben con letra, así que se comparan con letra.</summary>
     private static string Palabra(int n) => n switch
     {
-        0 => "cero", 1 => "uno", 2 => "dos", 3 => "tres", 4 => "cuatro", 5 => "cinco",
-        6 => "seis", 7 => "siete", 8 => "ocho", 9 => "nueve", 10 => "diez", 11 => "once",
-        12 => "doce", 13 => "trece", 14 => "catorce", 15 => "quince",
+        0 => "cero",
+        1 => "uno",
+        2 => "dos",
+        3 => "tres",
+        4 => "cuatro",
+        5 => "cinco",
+        6 => "seis",
+        7 => "siete",
+        8 => "ocho",
+        9 => "nueve",
+        10 => "diez",
+        11 => "once",
+        12 => "doce",
+        13 => "trece",
+        14 => "catorce",
+        15 => "quince",
         _ => n.ToString(System.Globalization.CultureInfo.InvariantCulture),
     };
 

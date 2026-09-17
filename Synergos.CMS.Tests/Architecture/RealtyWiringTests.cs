@@ -43,7 +43,7 @@ public sealed class RealtyWiringTests
                 var t = l.TrimStart();
                 if (t.StartsWith("//", StringComparison.Ordinal)
                     || t.StartsWith("///", StringComparison.Ordinal)
-                    || t.StartsWith("*", StringComparison.Ordinal))
+                    || t.StartsWith('*'))
                 {
                     return string.Empty;
                 }

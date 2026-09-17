@@ -1,4 +1,4 @@
-﻿using System.Text.Encodings.Web;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
@@ -22,7 +22,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// sin un PSP real. Los adapters reales (Wompi/PayU/Mercado Pago) implementan la misma
 /// seam y se registran en su lugar vía el composer (Ola B) sin tocar el motor.
 /// </remarks>
-public sealed class StubPaymentProvider : IPaymentProvider
+public sealed class StubPaymentProvider : IPaymentProvider, IDisposable
 {
     private static readonly JsonSerializerOptions _json = new()
     {
@@ -38,6 +38,9 @@ public sealed class StubPaymentProvider : IPaymentProvider
     // Serializa el read-modify-write de Capture/Refund (single-instance). No se puede
     // usar lock{} porque el cuerpo hace await; SemaphoreSlim es el equivalente async.
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
 
     /// <summary>
     /// Ctor con dependencias OPCIONALES: <paramref name="store"/> null → backing store

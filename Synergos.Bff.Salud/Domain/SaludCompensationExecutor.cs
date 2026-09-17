@@ -19,13 +19,13 @@ public sealed class SaludCompensationExecutor : ICompensationExecutor<Appointmen
 
     public SaludCompensationExecutor(SaludCapabilities caps) => _caps = caps;
 
-    public async Task<Rejection?> UndoAsync(AppointmentSaga saga, Compensation pendiente, CancellationToken ct)
-        => pendiente.Kind switch
+    public async Task<Rejection?> UndoAsync(AppointmentSaga saga, Compensation pending, CancellationToken ct)
+        => pending.Kind switch
         {
-            SaludCompensations.ReleaseBookingHold => await Envolver(_caps.ReleaseHoldAsync(pendiente.TargetId, ct)),
-            SaludCompensations.VoidPayment => await Envolver(_caps.VoidAsync(pendiente.TargetId, ct)),
-            SaludCompensations.RefundPayment => await RefundAsync(saga, pendiente, ct),
-            _ => Rejection.Invalid("salud.unknown_compensation", $"No sé deshacer {pendiente.Kind}."),
+            SaludCompensations.ReleaseBookingHold => await Envolver(_caps.ReleaseHoldAsync(pending.TargetId, ct)),
+            SaludCompensations.VoidPayment => await Envolver(_caps.VoidAsync(pending.TargetId, ct)),
+            SaludCompensations.RefundPayment => await RefundAsync(saga, pending, ct),
+            _ => Rejection.Invalid("salud.unknown_compensation", $"No sé deshacer {pending.Kind}."),
         };
 
     /// <summary>

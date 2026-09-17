@@ -267,8 +267,12 @@ public sealed class StayContentRulesTests
     {
         var content = Content() with
         {
-            ReviewAverage = 8.6m, ReviewCount = 120,
-            ScoreCleanliness = 8.8m, ScoreLocation = 0m, ScoreService = 8.5m, ScoreValue = 0m,
+            ReviewAverage = 8.6m,
+            ReviewCount = 120,
+            ScoreCleanliness = 8.8m,
+            ScoreLocation = 0m,
+            ScoreService = 8.5m,
+            ScoreValue = 0m,
         };
 
         var reviews = Build(content)!.Reviews;
@@ -283,7 +287,9 @@ public sealed class StayContentRulesTests
         // inventar reputación. La propiedad NO se pierde — sale sin bloque de reseñas.
         var content = Content() with
         {
-            ReviewAverage = 9.2m, ReviewCount = 0, ReviewHighlight = "Impecable",
+            ReviewAverage = 9.2m,
+            ReviewCount = 0,
+            ReviewHighlight = "Impecable",
             ScoreCleanliness = 9.4m,
         };
 
@@ -315,8 +321,12 @@ public sealed class StayContentRulesTests
         // derivarla sería inventar un número con pinta de dato.
         var content = Content() with
         {
-            ReviewAverage = 0m, ReviewCount = 200,
-            ScoreCleanliness = 9m, ScoreLocation = 9m, ScoreService = 9m, ScoreValue = 9m,
+            ReviewAverage = 0m,
+            ReviewCount = 200,
+            ScoreCleanliness = 9m,
+            ScoreLocation = 9m,
+            ScoreService = 9m,
+            ScoreValue = 9m,
         };
 
         var result = StayContentRules.BuildStay(content, SpecLabels, ReviewLabels);

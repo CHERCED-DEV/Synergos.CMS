@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
@@ -47,7 +46,7 @@ namespace Synergos.CMS.Web.Services;
 /// ya no es el vigente, y nadie se enteraría — el mismo criterio que la HU #27 aplicó a los
 /// cobros.</para>
 /// </remarks>
-public sealed class HttpCaseWorkflowService : ICaseWorkflowService
+public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
 {
     /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
     public const string ApiKeyHeader = "X-Synergos-Key";
@@ -83,6 +82,9 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService
     private readonly IIdentityTokenIssuer _identidad;
     private readonly Func<DateTimeOffset> _now;
     private readonly SemaphoreSlim _defGate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _defGate.Dispose();
     private DefinitionDto? _definition;
 
     public HttpCaseWorkflowService(

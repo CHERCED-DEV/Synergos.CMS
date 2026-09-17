@@ -616,7 +616,7 @@ public sealed class PurchaseCompensationTests
         {
             caps.Ok($"POST /v1/items/{i}/adjust", $$"""{"id":"{{i}}","subjectKind":"tienda.producto","subjectId":"p","onHand":10,"available":10}""");
         }
-        ctx.Reloj.Avanzar(Compensator<PurchaseSaga>.Backoff(1) + TimeSpan.FromSeconds(1));
+        ctx.Reloj.Avanzar(Compensator.Backoff(1) + TimeSpan.FromSeconds(1));
         await ctx.Motor.CompensateAsync("compra-1", "barrido", CancellationToken.None);
 
         Assert.Equal(SagaStatus.Compensated, ctx.Flow.Get("compra-1").Value.Status);
@@ -681,7 +681,7 @@ public sealed class PurchaseCompensationTests
         await Confirmar(ctx.Flow);
         for (var i = 1; i <= Compensator<PurchaseSaga>.MaxAttempts; i++)
         {
-            ctx.Reloj.Avanzar(Compensator<PurchaseSaga>.Backoff(i) + TimeSpan.FromSeconds(1));
+            ctx.Reloj.Avanzar(Compensator.Backoff(i) + TimeSpan.FromSeconds(1));
             await ctx.Motor.CompensateAsync("compra-1", "barrido", CancellationToken.None);
         }
 
@@ -712,7 +712,7 @@ public sealed class PurchaseCompensationTests
         await Confirmar(ctx.Flow);
         for (var i = 1; i <= Compensator<PurchaseSaga>.MaxAttempts; i++)
         {
-            ctx.Reloj.Avanzar(Compensator<PurchaseSaga>.Backoff(i) + TimeSpan.FromSeconds(1));
+            ctx.Reloj.Avanzar(Compensator.Backoff(i) + TimeSpan.FromSeconds(1));
             await ctx.Motor.CompensateAsync("compra-1", "barrido", CancellationToken.None);
         }
 

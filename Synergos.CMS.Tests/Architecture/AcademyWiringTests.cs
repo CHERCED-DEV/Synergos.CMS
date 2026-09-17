@@ -27,7 +27,7 @@ public sealed class AcademyWiringTests
         return string.Join('\n', File.ReadAllLines(ruta).Select(l =>
         {
             var t = l.TrimStart();
-            if (t.StartsWith("//", StringComparison.Ordinal) || t.StartsWith("*", StringComparison.Ordinal)
+            if (t.StartsWith("//", StringComparison.Ordinal) || t.StartsWith('*')
                 || t.StartsWith("///", StringComparison.Ordinal))
             {
                 return string.Empty;

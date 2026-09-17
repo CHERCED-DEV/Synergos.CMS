@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Synergos.CMS.Application.Configuration;
-using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Retention;
 

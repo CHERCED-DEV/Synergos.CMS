@@ -202,7 +202,7 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
             Price: price,
             Brand: product.Value<string>("productBrand") ?? string.Empty,
             Category: categoryName,
-            ImageUrl: images.FirstOrDefault() ?? string.Empty,
+            ImageUrl: images.Count > 0 ? images[0] : string.Empty,
             // Rating y reviews son UGC DERIVADO, no contenido editorial: un editor no autora
             // la review de un comprador. Salen en cero hasta que ICatalogSocialProof exista.
             Rating: 0d,

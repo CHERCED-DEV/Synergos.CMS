@@ -68,7 +68,7 @@ public sealed class PaymentProviderGateTests
 
         // Después de descartar el caso "logging", lo único que se puede construir es el que
         // rechaza. Si apareciera otro `new LoggingPaymentProvider` más abajo, esta cuenta sube.
-        var vecesStub = Regex.Matches(programa, @"new LoggingPaymentProvider\(").Count;
+        var vecesStub = Regex.Count(programa, @"new LoggingPaymentProvider\(");
         Assert.True(vecesStub == 1,
             $"LoggingPaymentProvider se construye {vecesStub} veces en la selección. Solo puede ser "
             + "una: la rama explícita de desarrollo. Cualquier otra es el stub sirviendo en silencio.");
@@ -165,7 +165,7 @@ public sealed class PaymentProviderGateTests
         {
             var t = line.TrimStart();
             if (t.StartsWith("//", StringComparison.Ordinal)
-                || t.StartsWith("*", StringComparison.Ordinal)
+                || t.StartsWith('*')
                 || t.StartsWith("/*", StringComparison.Ordinal))
             {
                 sb.AppendLine();

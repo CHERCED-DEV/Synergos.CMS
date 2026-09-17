@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;

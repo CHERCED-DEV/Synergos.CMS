@@ -160,7 +160,7 @@ public sealed class FileSystemSagaLease : ISagaLease
     }
 
     /// <summary>Saca de en medio un arriendo vencido. <c>false</c> si otro llegó primero.</summary>
-    private bool Robar(string ruta)
+    private static bool Robar(string ruta)
     {
         var muerto = ruta + "." + Guid.NewGuid().ToString("n") + ".vencido";
         try

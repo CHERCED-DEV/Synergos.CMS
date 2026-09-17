@@ -1,13 +1,9 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
-using System.Threading;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Controllers;
 
@@ -56,7 +52,7 @@ public sealed class GovFeeStatusContractTests
         ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
     };
 
-    private CaseDetail Expediente(decimal tasa, string? estadoDelCobro) => new(
+    private static CaseDetail Expediente(decimal tasa, string? estadoDelCobro) => new(
         CaseId: "case-2001",
         Radicado: "SG-2026-002001",
         TramiteId: "tr-matricula",
@@ -135,7 +131,7 @@ public sealed class GovFeeStatusContractTests
     }
 
     [Fact] // happy: y la COLA también, que es donde se persigue un cobro que no salió.
-    public void LaColaDelFuncionario_TraeElEstadoDelCobro()
+    public async Task LaColaDelFuncionario_TraeElEstadoDelCobro()
     {
         SesionDeFuncionario();
         _tracking.GetQueueAsync(null, null, Arg.Any<CancellationToken>()).Returns(new[]
@@ -147,7 +143,7 @@ public sealed class GovFeeStatusContractTests
                 "Ana Ruiz", CaseStatus.EnRevision, "En revisión", CasePriority.Normal, 5, Radicacion),
         });
 
-        var cases = Json(BuildSut().Queue(null, null, default).GetAwaiter().GetResult())
+        var cases = Json(await BuildSut().Queue(null, null, default))
             .GetProperty("cases");
 
         Assert.Equal("unavailable", cases[0].GetProperty("feeStatus").GetString());
@@ -158,7 +154,7 @@ public sealed class GovFeeStatusContractTests
     }
 
     [Fact] // happy: y el expediente del funcionario, donde se decide.
-    public void ElExpedienteDelFuncionario_TraeElEstadoDelCobro()
+    public async Task ElExpedienteDelFuncionario_TraeElEstadoDelCobro()
     {
         SesionDeFuncionario();
         _tracking.GetCaseAsync("case-2001", Arg.Any<CancellationToken>())
@@ -167,7 +163,7 @@ public sealed class GovFeeStatusContractTests
         _notifications.GetForCaseAsync("case-2001", Arg.Any<CancellationToken>())
             .Returns(Array.Empty<GovActNotification>());
 
-        var app = Json(BuildSut().Case("case-2001", default).GetAwaiter().GetResult())
+        var app = Json(await BuildSut().Case("case-2001", default))
             .GetProperty("case").GetProperty("application");
 
         Assert.Equal("unavailable", app.GetProperty("feeStatus").GetString());

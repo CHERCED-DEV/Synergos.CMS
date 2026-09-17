@@ -1,4 +1,4 @@
-﻿using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Configuration;
 using Umbraco.Cms.Core.Composing;
 
 namespace Synergos.CMS.Web.Composers;

@@ -122,6 +122,25 @@ public sealed record PropertyGeo(double Lat, double Lng);
 /// cero; el resto de campos son metadatos de la ficha. La galería son URLs de las
 /// fotos ya subidas (el media-uploader del wizard resuelve el almacenamiento).
 /// </summary>
+/// <param name="Address">
+/// La dirección legible del inmueble, tal como la escribió quien publica.
+///
+/// <para><b>No es que faltara: es que se FABRICABA</b> (#110). El wizard la pide en el paso
+/// de ubicación y la manda (<c>address</c>), el borde no la declaraba, y los dos
+/// catálogos rellenaban <c>Location.Address</c> con <c>«{barrio}, {ciudad}»</c>. Por eso
+/// no se vio nunca: la ficha no salía vacía, salía con algo que PARECE una dirección —
+/// «Chicó, Bogotá» donde el agente escribió «Cra 11 #93-45». Un campo vacío se reporta;
+/// uno plausible y equivocado lo lee un comprador y va a tocar el timbre a otra parte.</para>
+///
+/// <para>Es el gemelo del pin que se tiraba a (0,0) (#103) en este mismo endpoint y de la
+/// dirección de entrega descartada en la Tienda (#104), con el agravante de la máscara.
+/// Lo escrito GANA; la derivación se queda como respaldo para las fichas anteriores y
+/// para quien publique sin dirección.</para>
+///
+/// <para>Este texto vivía como <c>///</c> sobre el parámetro posicional, donde el compilador
+/// lo DESCARTA (CS1587): la explicación del defecto que este campo existe para cerrar no
+/// llegaba ni a la documentación ni a IntelliSense (#134).</para>
+/// </param>
 public sealed record PropertyDraft(
     string Title,
     string Type,
@@ -139,22 +158,6 @@ public sealed record PropertyDraft(
     string? Currency = null,
     string? AgentName = null,
     string? AgentPhone = null,
-    /// <summary>
-    /// La dirección legible del inmueble, tal como la escribió quien publica.
-    /// </summary>
-    /// <remarks>
-    /// <b>No es que faltara: es que se FABRICABA</b> (#110). El wizard la pide en el paso
-    /// de ubicación y la manda (<c>address</c>), el borde no la declaraba, y los dos
-    /// catálogos rellenaban <c>Location.Address</c> con <c>«{barrio}, {ciudad}»</c>. Por eso
-    /// no se vio nunca: la ficha no salía vacía, salía con algo que PARECE una dirección —
-    /// «Chicó, Bogotá» donde el agente escribió «Cra 11 #93-45». Un campo vacío se reporta;
-    /// uno plausible y equivocado lo lee un comprador y va a tocar el timbre a otra parte.
-    ///
-    /// Es el gemelo del pin que se tiraba a (0,0) (#103) en este mismo endpoint y de la
-    /// dirección de entrega descartada en la Tienda (#104), con el agravante de la máscara.
-    /// Lo escrito GANA; la derivación se queda como respaldo para las fichas anteriores y
-    /// para quien publique sin dirección.
-    /// </remarks>
     string? Address = null);
 
 /// <summary>

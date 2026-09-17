@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 
@@ -45,9 +40,12 @@ public class StubEventTicketingServiceTests
     /// Hace falta porque el comprador no sale del resultado del checkout: sale del
     /// <c>CustomerEmail</c> con el que se abre la sesión, que es a quien le llega el acuse.
     /// </remarks>
-    private sealed class PagosQueRecuerdan : IPaymentProvider
+    private sealed class PagosQueRecuerdan : IPaymentProvider, IDisposable
     {
         private readonly StubPaymentProvider _real = new();
+
+        /// <inheritdoc />
+        public void Dispose() => _real.Dispose();
 
         public string ProviderKey => _real.ProviderKey;
 
@@ -369,7 +367,7 @@ public class StubEventTicketingServiceTests
         // entra con el TOKEN FIRMADO, no con el id. Que el QR emitido por una instancia
         // valga en otra es justo lo que el generador anterior NO cumplía: derivaba de
         // String.GetHashCode(), randomizado por proceso.
-        var ticket = confirmation.Tickets.First();
+        var ticket = confirmation.Tickets[0];
         Assert.Equal("invalid", afterRestart.MarkCheckedIn(ticket.Id)); // el id no es credencial
         Assert.Equal("valid", afterRestart.MarkCheckedIn(ticket.Qr));
         Assert.Equal("already-used", afterRestart.MarkCheckedIn(ticket.Qr));

@@ -1,4 +1,4 @@
-﻿namespace Synergos.CMS.Interfaces;
+namespace Synergos.CMS.Interfaces;
 
 /// <summary>
 /// Ciclo de vida de una orden del marketplace (dominio Tienda). <see cref="Pending"/>

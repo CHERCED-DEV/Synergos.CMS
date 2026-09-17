@@ -1,4 +1,4 @@
-﻿namespace Synergos.CMS.Interfaces;
+namespace Synergos.CMS.Interfaces;
 
 /// <summary>
 /// Ciclo de vida de una matrícula del dominio Educación (LMS). Calca

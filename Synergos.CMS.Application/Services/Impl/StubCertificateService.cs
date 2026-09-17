@@ -40,7 +40,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 ///
 /// <para>ADR 0075 (seam con tests canónicos).</para>
 /// </remarks>
-public sealed class StubCertificateService : ICertificateService
+public sealed class StubCertificateService : ICertificateService, IDisposable
 {
     /// <summary>Familia de entidades en el store genérico (→ App_Data/syn-certificates/).</summary>
     private const string ResourceType = "certificates";
@@ -59,6 +59,9 @@ public sealed class StubCertificateService : ICertificateService
 
     // Serializa el read-modify-write de la emisión. lock{} no sirve: el cuerpo hace await.
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
 
     public StubCertificateService(
         ICourseCatalogProvider catalog,

@@ -49,7 +49,7 @@ public sealed class AdminAntiforgeryTests
             foreach (var form in PostForms(source))
             {
                 checkedForms++;
-                var tokens = Regex.Matches(form.Body, @"@Html\.AntiForgeryToken\(\)").Count;
+                var tokens = Regex.Count(form.Body, @"@Html\.AntiForgeryToken\(\)");
                 var suppressed = form.OpeningTag.Contains(@"asp-antiforgery=""false""", StringComparison.Ordinal);
                 var hasAction = form.OpeningTag.Contains("action=", StringComparison.Ordinal);
 

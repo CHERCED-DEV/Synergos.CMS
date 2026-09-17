@@ -40,7 +40,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// case-insensitive: dos ids que difieran solo en mayúsculas caerían en el mismo
 /// documento. Los actores del proyecto son minúsculas (<c>act-elena</c>).</para>
 /// </remarks>
-public sealed class StubSocialGraphService : ISocialGraphService
+public sealed class StubSocialGraphService : ISocialGraphService, IDisposable
 {
     /// <summary>Familia de entidades en el store genérico (→ App_Data/syn-social-graph/).</summary>
     public const string DefaultResourceType = "social-graph";
@@ -57,6 +57,9 @@ public sealed class StubSocialGraphService : ISocialGraphService
     // Serializa el read-modify-write de follow/unfollow. lock{} no sirve: el
     // cuerpo hace await.
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
 
     public StubSocialGraphService()
         : this(null, null)

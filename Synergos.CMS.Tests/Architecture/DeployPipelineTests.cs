@@ -53,7 +53,7 @@ public sealed class DeployPipelineTests
     private static string SinComentarios(params string[] partes)
         => string.Join('\n', File.ReadAllLines(Path.Combine(new[] { RepoRoot() }.Concat(partes).ToArray()))
             .Select(l => l.TrimStart())
-            .Where(l => !l.StartsWith('#') && !l.StartsWith("//")));
+            .Where(l => !l.StartsWith('#') && !l.StartsWith("//", StringComparison.Ordinal)));
 
     // ── El humo ─────────────────────────────────────────────────────────────
 

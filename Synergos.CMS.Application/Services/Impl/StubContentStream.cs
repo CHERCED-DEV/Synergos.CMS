@@ -40,6 +40,9 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// puntuales. No se cachea a propósito: en este repo una caché se entrega junto
 /// con su invalidador y su consumidor, nunca antes.</para>
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Naming", "CA1711:Identifiers should not have incorrect suffix",
+    Justification = "El sufijo describe lo que la seam ES para el dominio —un feed de contenido, una colección del usuario—, no una herencia de System.IO.Stream ni de ICollection. Renombrar una costura viva por una guía de nomenclatura cuesta más de lo que aclara (#134).")]
 public sealed class StubContentStream : IContentStream
 {
     private const string CursorPrefix = "off:";
@@ -142,7 +145,7 @@ public sealed class StubContentStream : IContentStream
                 items = Enumerable.Empty<ContentStreamItem>();
                 break;
 
-            // ForYou: ranked = cronológico en el stub (todo el conjunto).
+                // ForYou: ranked = cronológico en el stub (todo el conjunto).
         }
 
         var ordered = items.ToList();

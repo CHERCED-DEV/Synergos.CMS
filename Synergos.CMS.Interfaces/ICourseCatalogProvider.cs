@@ -1,4 +1,4 @@
-﻿namespace Synergos.CMS.Interfaces;
+namespace Synergos.CMS.Interfaces;
 
 /// <summary>
 /// Filtros de la búsqueda del catálogo de cursos (dominio Educación — LMS).

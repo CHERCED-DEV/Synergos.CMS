@@ -3,7 +3,6 @@ using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
-using Umbraco.Cms.Core.DependencyInjection;
 
 namespace Synergos.CMS.Web.Composers;
 

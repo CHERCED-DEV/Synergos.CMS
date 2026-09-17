@@ -40,7 +40,7 @@ namespace Synergos.CMS.Web.Services;
 /// <para>La llave se resuelve <b>perezosamente</b> y se cachea: cero I/O en el arranque
 /// (ADR 0013). Va cifrada porque <see cref="IJsonEntityStore"/> guarda JSON en claro.</para>
 /// </remarks>
-public sealed class CertificateSigningKeyProvider
+public sealed class CertificateSigningKeyProvider : IDisposable
 {
     private const string ResourceType = "keys";
 
@@ -54,6 +54,9 @@ public sealed class CertificateSigningKeyProvider
     private readonly IOptions<AcademySettings> _options;
     private readonly ILogger<CertificateSigningKeyProvider> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _gate.Dispose();
     private byte[]? _cached;
 
     public CertificateSigningKeyProvider(

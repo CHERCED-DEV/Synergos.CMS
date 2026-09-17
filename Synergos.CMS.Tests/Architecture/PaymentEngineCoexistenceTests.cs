@@ -135,7 +135,7 @@ public sealed class PaymentEngineCoexistenceTests
         var sinComentarios = string.Join('\n', fuente
             .Split('\n')
             .Select(l => l.TrimStart().StartsWith("//", StringComparison.Ordinal)
-                      || l.TrimStart().StartsWith("*", StringComparison.Ordinal)
+                      || l.TrimStart().StartsWith('*')
                       || l.TrimStart().StartsWith("/*", StringComparison.Ordinal)
                 ? string.Empty
                 : (l.IndexOf("//", StringComparison.Ordinal) is var i && i >= 0 ? l[..i] : l)));

@@ -1,4 +1,4 @@
-﻿namespace Synergos.CMS.Application.Configuration;
+namespace Synergos.CMS.Application.Configuration;
 
 /// <summary>
 /// Resuelve —y exige— la carpeta del disco de la que sale el CDN cuando el registry corre en

@@ -164,7 +164,7 @@ public sealed class ApiMoldTests
     {
         var cuantos = Capacidades()
             .SelectMany(c => Fuentes(c.Dir))
-            .Sum(f => Regex.Matches(SinComentarios(f), @"\.Map(Get|Post|Delete|Put|Patch)\(").Count);
+            .Sum(f => Regex.Count(SinComentarios(f), @"\.Map(Get|Post|Delete|Put|Patch)\("));
 
         // Sin esto, un descubrimiento roto dejaría el assert de abajo comparando contra cero.
         Assert.True(cuantos > 100, $"Se contaron {cuantos} endpoints: el descubrimiento está roto.");
@@ -370,7 +370,7 @@ public sealed class ApiMoldTests
         //
         // Por eso se exige UNICIDAD y no presencia. `feedback_a_named_list_beats_a_count`
         // aplicado al propio gate: un número correcto con un gemelo al lado engaña igual.
-        var ocurrencias = Regex.Matches(claude, @"\d+ códigos\s+de rechazo\)").Count;
+        var ocurrencias = Regex.Count(claude, @"\d+ códigos\s+de rechazo\)");
 
         Assert.True(ocurrencias == 1,
             $"La frase «N códigos de rechazo)» aparece {ocurrencias} veces en CLAUDE.md y tiene "
@@ -390,8 +390,16 @@ public sealed class ApiMoldTests
     /// </summary>
     private static string Palabra(int n) => n switch
     {
-        1 => "Uno", 2 => "Dos", 3 => "Tres", 4 => "Cuatro", 5 => "Cinco", 6 => "Seis",
-        7 => "Siete", 8 => "Ocho", 9 => "Nueve", 10 => "Diez",
+        1 => "Uno",
+        2 => "Dos",
+        3 => "Tres",
+        4 => "Cuatro",
+        5 => "Cinco",
+        6 => "Seis",
+        7 => "Siete",
+        8 => "Ocho",
+        9 => "Nueve",
+        10 => "Diez",
         _ => n.ToString(System.Globalization.CultureInfo.InvariantCulture),
     };
 

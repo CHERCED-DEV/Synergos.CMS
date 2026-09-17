@@ -34,7 +34,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// haría que un documento se leyera contra la forma de otro dominio, y una
 /// deserialización que "casi" encaja no falla — devuelve otra cosa en silencio.</para>
 /// </remarks>
-public sealed class StubVisitSchedulingService : IVisitSchedulingService
+public sealed class StubVisitSchedulingService : IVisitSchedulingService, IDisposable
 {
     /// <summary>PaymentSessionId neutro: la visita NO se cobra (spec §1).</summary>
     private const string FreeVisitPaymentSession = "visit-free";
@@ -59,6 +59,9 @@ public sealed class StubVisitSchedulingService : IVisitSchedulingService
     // porque el cuerpo hace await; SemaphoreSlim es el equivalente async — mismo
     // criterio que StubOrderTrackingService.
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
 
     public StubVisitSchedulingService(IReservationService reservations)
         : this(reservations, null)

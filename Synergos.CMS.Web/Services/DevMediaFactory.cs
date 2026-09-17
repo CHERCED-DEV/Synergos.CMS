@@ -43,10 +43,10 @@ public sealed class DevMediaFactory
     // Carpetas de Media bajo la raíz. Cada media se coloca en la carpeta de su uso
     // (directiva del arquitecto: "las imágenes deben ir en carpetas dentro de media").
     private const string FolderIlustraciones = "Ilustraciones"; // blog headers, splits, features (ilustraciones reales)
-    private const string FolderHeroes        = "Heroes";        // banners hero (gradiente limpio on-brand)
-    private const string FolderProductos     = "Productos";     // imágenes de producto (gradiente limpio, sin foto real)
-    private const string FolderAvatares      = "Avatares";      // avatares de autor (gradiente limpio)
-    private const string FolderMarca         = "Marca";         // logos / isotipos / OG image
+    private const string FolderHeroes = "Heroes";        // banners hero (gradiente limpio on-brand)
+    private const string FolderProductos = "Productos";     // imágenes de producto (gradiente limpio, sin foto real)
+    private const string FolderAvatares = "Avatares";      // avatares de autor (gradiente limpio)
+    private const string FolderMarca = "Marca";         // logos / isotipos / OG image
 
     // ───────────────────────────── Mapeo imagen → contenido ─────────────────────────────
     // Nombre-de-nodo (lo que pasa DevContentFiller) → ilustración premium real del kit
@@ -61,26 +61,26 @@ public sealed class DevMediaFactory
         // ── Cabeceras de blog (key = "Blog {title}", lo que pasa SeedPost) ──────────────
         // Mapeo temático directo; cero reuso del mismo asset entre posts.
         ["Blog Un motor, mil productos: la idea detrás de SynergosLabs"] = "imgs/infofeat 1.png", // cubos 3D componibles = un motor
-        ["Blog Lanzamos los verticales: Blogs y Tienda"]                 = "imgs/infofeat 6.png", // columnas + puente = dos verticales conectados
-        ["Blog Componer en vez de programar: el editor visual"]          = "imgs/infofeat 4.png", // bombillo + engranaje = construir/componer
-        ["Blog Arquitectura por capas: el grafo de dependencias"]        = "imgs/infofeat 2.png", // red de nodos = grafo de dependencias
-        ["Blog Identidad por siteRoot: una marca, mil caras"]            = "imgs/mision 2.png",   // personas + piezas = una marca encaja en muchas
-        ["Blog CDN híbrida: componentes Angular sobre SSR"]              = "imgs/mision 1.png",   // bombillo + engranaje + chart = innovación técnica
+        ["Blog Lanzamos los verticales: Blogs y Tienda"] = "imgs/infofeat 6.png", // columnas + puente = dos verticales conectados
+        ["Blog Componer en vez de programar: el editor visual"] = "imgs/infofeat 4.png", // bombillo + engranaje = construir/componer
+        ["Blog Arquitectura por capas: el grafo de dependencias"] = "imgs/infofeat 2.png", // red de nodos = grafo de dependencias
+        ["Blog Identidad por siteRoot: una marca, mil caras"] = "imgs/mision 2.png",   // personas + piezas = una marca encaja en muchas
+        ["Blog CDN híbrida: componentes Angular sobre SSR"] = "imgs/mision 1.png",   // bombillo + engranaje + chart = innovación técnica
 
         // ── Ilustraciones in-article (los nombres cortos que pasa BuildArticle) ─────────
         // Coherentes con la cabecera del mismo post.
         ["Blog Motor Componible"] = "imgs/infofeat 1.png", // cubos 3D = núcleo componible
-        ["Blog Verticales"]       = "imgs/infofeat 6.png", // puente entre columnas = verticales
-        ["Blog Editor Visual"]    = "imgs/infofeat 4.png", // ideas/construir = editor
-        ["Blog Arquitectura"]     = "imgs/infofeat 2.png", // red de nodos = grafo
-        ["Blog Identidad"]        = "imgs/mision 2.png",   // encaje de piezas = identidad
-        ["Blog CDN"]              = "imgs/mision 1.png",   // innovación técnica = distribución híbrida
+        ["Blog Verticales"] = "imgs/infofeat 6.png", // puente entre columnas = verticales
+        ["Blog Editor Visual"] = "imgs/infofeat 4.png", // ideas/construir = editor
+        ["Blog Arquitectura"] = "imgs/infofeat 2.png", // red de nodos = grafo
+        ["Blog Identidad"] = "imgs/mision 2.png",   // encaje de piezas = identidad
+        ["Blog CDN"] = "imgs/mision 1.png",   // innovación técnica = distribución híbrida
 
         // ── Splits / feature-media de las páginas de marca (azul/blanco sobre claro) ────
-        ["Synergos Capas"]       = "imgs/infofeat 6.png", // columnas + puente = arquitectura por capas
-        ["Synergos Proposito"]   = "imgs/infofeat 4.png", // bombillo + engranaje = propósito
+        ["Synergos Capas"] = "imgs/infofeat 6.png", // columnas + puente = arquitectura por capas
+        ["Synergos Proposito"] = "imgs/infofeat 4.png", // bombillo + engranaje = propósito
         ["Synergos Polimorfico"] = "imgs/infofeat 1.png", // cubos 3D = polimórfico / muchos productos
-        ["Synergos Branding"]    = "imgs/mision 2.png",   // piezas + handshake = tu marca encaja
+        ["Synergos Branding"] = "imgs/mision 2.png",   // piezas + handshake = tu marca encaja
     };
 
     private readonly IMediaService _mediaService;
@@ -182,7 +182,7 @@ public sealed class DevMediaFactory
     // mapeado a una ilustración real). Ilustraciones reales → Ilustraciones; heroes →
     // Heroes; productos → Productos; avatares → Avatares; el resto (logos de clientes,
     // etc.) → Ilustraciones por defecto.
-    private string ResolveFolderName(string name)
+    private static string ResolveFolderName(string name)
     {
         if (RealAssets.ContainsKey(name)) { return FolderIlustraciones; }
         if (name.StartsWith("Producto ", StringComparison.Ordinal)) { return FolderProductos; }
@@ -212,9 +212,7 @@ public sealed class DevMediaFactory
         {
             using var stream = System.IO.File.OpenRead(realPath);
             var fileName = Slug(name) + Path.GetExtension(realPath);
-            return UpsertMedia(name, altText, fileName, stream, folderId,
-                "[DevMedia] ilustración real para '{Name}' ({Path}) en carpeta {Folder}.",
-                realPath);
+            return UpsertMedia(name, altText, fileName, stream, folderId, realPath);
         }
 
         // Sin ilustración real → gradiente LIMPIO on-brand (sin texto). Aviso explícito
@@ -222,13 +220,13 @@ public sealed class DevMediaFactory
         WarnIfNeedsRealMedia(name);
         var png = GenerateGradientPng(hexFrom, hexTo, width, height);
         using var ms = new MemoryStream(png);
-        return UpsertMedia(name, altText, Slug(name) + ".png", ms, folderId, null, null);
+        return UpsertMedia(name, altText, Slug(name) + ".png", ms, folderId, null);
     }
 
     private Guid GetOrCreateFromBytes(string name, string altText, byte[] png, int folderId)
     {
         using var ms = new MemoryStream(png);
-        return UpsertMedia(name, altText, Slug(name) + ".png", ms, folderId, null, null);
+        return UpsertMedia(name, altText, Slug(name) + ".png", ms, folderId, null);
     }
 
     /// <summary>
@@ -239,7 +237,7 @@ public sealed class DevMediaFactory
     /// correcta vía Move (no destructivo). Si no existe, lo crea ya dentro de la carpeta.
     /// </summary>
     private Guid UpsertMedia(string name, string altText, string fileName, Stream file, int parentId,
-        string? logTemplate, string? logPath)
+        string? logPath)
     {
         var existing = FindMediaByName(name);
         if (existing is not null)
@@ -251,7 +249,12 @@ public sealed class DevMediaFactory
             // Reubica a la carpeta correcta si quedó en otra ubicación (p.ej. en la raíz
             // de una corrida previa). Move es no destructivo y preserva la Key.
             if (existing.ParentId != parentId) { _mediaService.Move(existing, parentId); }
-            if (logTemplate is not null) { _logger.LogInformation(logTemplate, name, logPath, MoveTargetName(parentId)); }
+            if (logPath is not null)
+            {
+                _logger.LogInformation(
+                    "[DevMedia] ilustración real para '{Name}' ({Path}) en carpeta {Folder}.",
+                    name, logPath, MoveTargetName(parentId));
+            }
             return existing.Key;
         }
 
@@ -260,7 +263,12 @@ public sealed class DevMediaFactory
             _contentTypeBaseServiceProvider, "umbracoFile", fileName, file);
         media.SetValue("altDefault", altText); // synImage.altDefault es Variations=Nothing
         _mediaService.Save(media);
-        if (logTemplate is not null) { _logger.LogInformation(logTemplate, name, logPath, MoveTargetName(parentId)); }
+        if (logPath is not null)
+        {
+            _logger.LogInformation(
+                "[DevMedia] ilustración real para '{Name}' ({Path}) en carpeta {Folder}.",
+                name, logPath, MoveTargetName(parentId));
+        }
         return media.Key;
     }
 

@@ -1,9 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
-using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 

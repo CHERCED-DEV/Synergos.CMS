@@ -73,7 +73,7 @@ public sealed class PrecioUnicoTests
         {
             var t = l.TrimStart();
             return t.StartsWith("//", StringComparison.Ordinal)
-                || t.StartsWith("*", StringComparison.Ordinal)
+                || t.StartsWith('*')
                 || t.StartsWith("@*", StringComparison.Ordinal)
                 ? string.Empty
                 : l;

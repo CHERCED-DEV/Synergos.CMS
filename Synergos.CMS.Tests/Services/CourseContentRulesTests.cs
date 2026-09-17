@@ -1,8 +1,5 @@
-using System;
-using System.Linq;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services.Catalog;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 

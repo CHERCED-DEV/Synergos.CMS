@@ -174,7 +174,7 @@ public sealed class CompensationTests
 
         for (var i = 1; i <= Compensator<AppointmentSaga>.MaxAttempts; i++)
         {
-            ctx.Reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(i) + TimeSpan.FromSeconds(1));
+            ctx.Reloj.Avanzar(Compensator.Backoff(i) + TimeSpan.FromSeconds(1));
             await ctx.Motor.CompensateAsync(id, "barrido", CancellationToken.None);
         }
 
@@ -294,7 +294,7 @@ public sealed class CompensationTests
         await motor.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
         var sinEsperar = caps.Veces("GET", "/v1/payments/pg1");
 
-        reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(1) + TimeSpan.FromSeconds(1));
+        reloj.Avanzar(Compensator.Backoff(1) + TimeSpan.FromSeconds(1));
         await motor.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
         var trasEsperar = caps.Veces("GET", "/v1/payments/pg1");
 
@@ -318,7 +318,7 @@ public sealed class CompensationTests
 
         // Payments vuelve.
         caps.Ok("GET /v1/payments/pg1", """{"id":"pg1","status":"Captured","amount":{"amount":50000,"currency":"COP"},"refundable":{"amount":50000,"currency":"COP"}}""");
-        reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(1) + TimeSpan.FromSeconds(1));
+        reloj.Avanzar(Compensator.Backoff(1) + TimeSpan.FromSeconds(1));
         await motor.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
 
         var saga = flow.Get(agendada.Value.Id).Value;
@@ -341,7 +341,7 @@ public sealed class CompensationTests
 
         for (var i = 1; i < Compensator<AppointmentSaga>.MaxAttempts + 2; i++)
         {
-            reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(i) + TimeSpan.FromSeconds(1));
+            reloj.Avanzar(Compensator.Backoff(i) + TimeSpan.FromSeconds(1));
             await motor.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
         }
 
@@ -376,12 +376,12 @@ public sealed class CompensationTests
     // tengan una compensación pendiente", y eso describe a toda cita sana esperando confirmación.
 
     [Fact]
-    public void Una_cita_recien_agendada_NO_es_trabajo_para_el_barrido()
+    public async Task Una_cita_recien_agendada_NO_es_trabajo_para_el_barrido()
     {
         // Sus compensaciones están ARMADAS, no pendientes: son el seguro, no la tarea. Ejecutarlas
         // suelta el cupo y libera el cobro de una cita que no tiene ningún problema.
         var ctx = Nuevo(Feliz());
-        var agendada = Agendar(ctx.Flow).GetAwaiter().GetResult();
+        var agendada = await Agendar(ctx.Flow);
 
         Assert.Equal(SagaStatus.Running, agendada.Value.Status);
         Assert.Equal(2, agendada.Value.Pending().Count);       // armadas
@@ -495,7 +495,7 @@ public sealed class CompensationTests
         var agendada = await Agendar(ctx.Flow);
         await ctx.Flow.ConfirmAsync(agendada.Value.Id, CancellationToken.None);
 
-        ctx.Reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(1) + TimeSpan.FromSeconds(1));
+        ctx.Reloj.Avanzar(Compensator.Backoff(1) + TimeSpan.FromSeconds(1));
         await ctx.Motor.CompensateAsync(agendada.Value.Id, "barrido", CancellationToken.None);
 
         Assert.Equal(SagaStatus.Compensating, ctx.Flow.Get(agendada.Value.Id).Value.Status);
@@ -618,7 +618,7 @@ public sealed class CompensationTests
         await ctx.Flow.RetryStuckAsync("saga-1", CancellationToken.None);
         for (var i = 1; i <= Compensator<AppointmentSaga>.MaxAttempts; i++)
         {
-            ctx.Reloj.Avanzar(Compensator<AppointmentSaga>.Backoff(i) + TimeSpan.FromSeconds(1));
+            ctx.Reloj.Avanzar(Compensator.Backoff(i) + TimeSpan.FromSeconds(1));
             await ctx.Motor.CompensateAsync("saga-1", "barrido", CancellationToken.None);
         }
 

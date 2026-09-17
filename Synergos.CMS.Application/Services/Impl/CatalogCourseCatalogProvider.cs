@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Synergos.CMS.Application.Configuration;
@@ -33,7 +33,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// <para>Lógica pura: cero <c>Umbraco.Cms.*</c> y cero <c>Microsoft.AspNetCore.*</c>
 /// (ADR 0002). La única clase que toca Umbraco es la fuente que se le inyecta.</para>
 /// </remarks>
-public sealed class CatalogCourseCatalogProvider : ICourseCatalogProvider
+public sealed class CatalogCourseCatalogProvider : ICourseCatalogProvider, IDisposable
 {
     /// <summary>Familia del store para los cursos publicados por instructores.</summary>
     public const string ResourceType = "course-catalog";
@@ -57,6 +57,9 @@ public sealed class CatalogCourseCatalogProvider : ICourseCatalogProvider
     private readonly IContentStream _contentStream;
     private readonly ICatalogIndex<CourseSummary> _index;
     private readonly SemaphoreSlim _seedGate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _seedGate.Dispose();
 
     /// <summary>
     /// Cara de LECTURA del motor de matrícula para el panel del instructor. Opcional

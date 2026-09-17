@@ -1,7 +1,7 @@
 using Synergos.Bff.Core;
-using Compensation = Synergos.Bff.Core.Compensation;
 using Synergos.Bff.Tienda.Clients;
 using Synergos.Core;
+using Compensation = Synergos.Bff.Core.Compensation;
 
 namespace Synergos.Bff.Tienda.Domain;
 

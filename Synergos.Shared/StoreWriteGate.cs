@@ -57,7 +57,7 @@ namespace Synergos.Shared;
 /// servido: en Unix .NET lo resuelve en un temporal del usuario, así que dos contenedores sobre
 /// el mismo volumen tendrían un mutex cada uno y los dos se creerían dueños.</para>
 /// </remarks>
-public sealed class StoreWriteGate
+public sealed class StoreWriteGate : IDisposable
 {
     /// <summary>Cuánto se espera al de al lado antes de rendirse.</summary>
     /// <remarks>
@@ -77,6 +77,9 @@ public sealed class StoreWriteGate
     // él: si `FileShare.None` se implementara por descriptor y no por fichero, dos hilos de acá
     // pasarían los dos. Este semáforo hace que esa duda no importe.
     private readonly SemaphoreSlim _local = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _local.Dispose();
 
     public StoreWriteGate(string root, string codePrefix, int? segundos = null)
     {

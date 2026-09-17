@@ -41,7 +41,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// ser PEREZOSA: cero I/O en el ctor (ADR 0013), y no pisa un lead sembrado que el
 /// agente ya avanzó en una corrida anterior — solo escribe el que no existe.</para>
 /// </remarks>
-public sealed class StubLeadCaptureService : ILeadCaptureService
+public sealed class StubLeadCaptureService : ILeadCaptureService, IDisposable
 {
     private const string DefaultAgent = "agente-desconocido";
 
@@ -64,6 +64,9 @@ public sealed class StubLeadCaptureService : ILeadCaptureService
     // Serializa el read-modify-write del avance y la siembra perezosa. lock{} no
     // sirve: el cuerpo hace await. No es reentrante — nadie lo toma dos veces.
     private readonly SemaphoreSlim _mutate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _mutate.Dispose();
     private volatile bool _seeded;
 
     public StubLeadCaptureService()

@@ -1,8 +1,5 @@
-using System;
-using System.Linq;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 
@@ -45,7 +42,7 @@ public class StubMortgageCalculatorTests
     public void Calculate_Schedule_ClosesAtZeroBalance()
     {
         var result = Make().Calculate(250_000_000m, 50_000_000m, 60, 0.10m);
-        Assert.Equal(0m, result.Schedule.Last().Balance);
+        Assert.Equal(0m, result.Schedule[^1].Balance);
     }
 
     [Fact] // filter (degenerado de tasa): tasa cero → cuota = capital / plazo, sin interés

@@ -19,15 +19,15 @@ public sealed class TiendaCompensationExecutor : ICompensationExecutor<PurchaseS
 
     public TiendaCompensationExecutor(TiendaCapabilities caps) => _caps = caps;
 
-    public async Task<Rejection?> UndoAsync(PurchaseSaga saga, Compensation pendiente, CancellationToken ct)
-        => pendiente.Kind switch
+    public async Task<Rejection?> UndoAsync(PurchaseSaga saga, Compensation pending, CancellationToken ct)
+        => pending.Kind switch
         {
-            TiendaCompensations.ReleaseStockHold => await Envolver(_caps.ReleaseStockAsync(pendiente.TargetId, ct)),
-            TiendaCompensations.RestockItem => await RestockAsync(saga, pendiente, ct),
-            TiendaCompensations.CancelOrder => await CancelOrderAsync(pendiente, ct),
-            TiendaCompensations.VoidPayment => await Envolver(_caps.VoidAsync(pendiente.TargetId, ct)),
-            TiendaCompensations.RefundPayment => await RefundAsync(saga, pendiente, ct),
-            _ => Rejection.Invalid("tienda.unknown_compensation", $"No sé deshacer {pendiente.Kind}."),
+            TiendaCompensations.ReleaseStockHold => await Envolver(_caps.ReleaseStockAsync(pending.TargetId, ct)),
+            TiendaCompensations.RestockItem => await RestockAsync(saga, pending, ct),
+            TiendaCompensations.CancelOrder => await CancelOrderAsync(pending, ct),
+            TiendaCompensations.VoidPayment => await Envolver(_caps.VoidAsync(pending.TargetId, ct)),
+            TiendaCompensations.RefundPayment => await RefundAsync(saga, pending, ct),
+            _ => Rejection.Invalid("tienda.unknown_compensation", $"No sé deshacer {pending.Kind}."),
         };
 
     /// <summary>

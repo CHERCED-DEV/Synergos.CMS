@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -1383,8 +1383,11 @@ public sealed class ShopCatalogController : ControllerBase
     // ── OLA 1 Tienda T0 — wishlist / tracking / devoluciones / mensajes ──
 
     /// <summary>POST /api/shop/wishlist — agregar un ítem a una lista del usuario.</summary>
-    // Owner se conserva por compatibilidad del contrato UI pero el servidor lo IGNORA:
-    // el dueño es el member de la sesión (ver WishlistAdd). Mismo trato que Orders da a Customer.
+    /// <remarks>
+    /// <c>Owner</c> se conserva por compatibilidad del contrato UI pero el servidor lo IGNORA:
+    /// el dueño es el member de la sesión (ver <c>WishlistAdd</c>). Mismo trato que Orders da a
+    /// <c>Customer</c>.
+    /// </remarks>
     /// <param name="ProductId">
     /// Alias de <paramref name="ItemRef"/>: es la clave con la que la UI manda el producto.
     /// </param>

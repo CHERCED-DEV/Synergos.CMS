@@ -5,7 +5,7 @@ using Synergos.Shared;
 namespace Synergos.Api.Payments.Domain;
 
 /// <summary>Compone las reglas de <see cref="PaymentRules"/> con el almacén y el proveedor.</summary>
-public sealed class PaymentService
+public sealed class PaymentService : IDisposable
 {
     private readonly IPaymentStore _payments;
     private readonly IPaymentProvider _provider;
@@ -24,6 +24,9 @@ public sealed class PaymentService
     /// <c>lock</c>.
     /// </remarks>
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    /// <inheritdoc />
+    public void Dispose() => _gate.Dispose();
 
     public PaymentService(IPaymentStore payments, IPaymentProvider provider, IIdempotencyLedger idempotency, TimeProvider clock)
     {

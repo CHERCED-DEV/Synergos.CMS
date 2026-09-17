@@ -20,14 +20,14 @@ public sealed class ViajesCompensationExecutor : ICompensationExecutor<TripSaga>
 
     public ViajesCompensationExecutor(ViajesCapabilities caps) => _caps = caps;
 
-    public async Task<Rejection?> UndoAsync(TripSaga saga, Compensation pendiente, CancellationToken ct)
-        => pendiente.Kind switch
+    public async Task<Rejection?> UndoAsync(TripSaga saga, Compensation pending, CancellationToken ct)
+        => pending.Kind switch
         {
-            ViajesCompensations.ReleaseBookingHold => await Envolver(_caps.ReleaseHoldAsync(pendiente.TargetId, ct)),
-            ViajesCompensations.CancelReservation => await Envolver(_caps.CancelReservationAsync(pendiente.TargetId, ct)),
-            ViajesCompensations.VoidPayment => await Envolver(_caps.VoidAsync(pendiente.TargetId, ct)),
-            ViajesCompensations.RefundPayment => await RefundAsync(saga, pendiente, ct),
-            _ => Rejection.Invalid("viajes.unknown_compensation", $"No sé deshacer {pendiente.Kind}."),
+            ViajesCompensations.ReleaseBookingHold => await Envolver(_caps.ReleaseHoldAsync(pending.TargetId, ct)),
+            ViajesCompensations.CancelReservation => await Envolver(_caps.CancelReservationAsync(pending.TargetId, ct)),
+            ViajesCompensations.VoidPayment => await Envolver(_caps.VoidAsync(pending.TargetId, ct)),
+            ViajesCompensations.RefundPayment => await RefundAsync(saga, pending, ct),
+            _ => Rejection.Invalid("viajes.unknown_compensation", $"No sé deshacer {pending.Kind}."),
         };
 
     /// <summary>

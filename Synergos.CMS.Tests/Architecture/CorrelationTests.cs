@@ -1,6 +1,6 @@
-using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Net.Http.Headers;
+using Microsoft.Extensions.Logging;
 using Synergos.CMS.Web.Middlewares;
 using Synergos.Shared;
 

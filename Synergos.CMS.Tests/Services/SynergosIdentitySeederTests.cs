@@ -1,12 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Synergos.CMS.Web.Services;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Services;
 

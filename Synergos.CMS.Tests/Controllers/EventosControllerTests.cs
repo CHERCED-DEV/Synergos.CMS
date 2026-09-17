@@ -1,11 +1,7 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
-using Xunit;
 
 namespace Synergos.CMS.Tests.Controllers;
 

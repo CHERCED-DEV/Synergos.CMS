@@ -33,6 +33,9 @@ public interface IClinicalSchedulingService
     /// Lista las citas de una fecha (zona del consultorio), opcionalmente filtradas
     /// por médico, ordenadas por hora ascendente. Vacío si no hay.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Naming", "CA1716:Identifiers should not match keywords",
+        Justification = "La regla protege a consumidores en otros lenguajes (`to`, `date` son palabras reservadas en VB). Este repo es C# y un solo despliegue: el nombre del par from/to es lo que hace legible la ventana, y renombrarlo a `toDate` la empeora (#134).")]
     Task<IReadOnlyList<ClinicalAppointment>> GetByDateAsync(DateOnly date, string? doctorId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -51,6 +54,9 @@ public interface IClinicalSchedulingService
     /// citas de siempre» es una promesa mucho más cara de sostener para un PMS real, y nadie la
     /// necesita.</para>
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Naming", "CA1716:Identifiers should not match keywords",
+        Justification = "La regla protege a consumidores en otros lenguajes (`to`, `date` son palabras reservadas en VB). Este repo es C# y un solo despliegue: el nombre del par from/to es lo que hace legible la ventana, y renombrarlo a `toDate` la empeora (#134).")]
     Task<IReadOnlyList<ClinicalAppointment>> GetForPatientAsync(
         string patientId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
 }

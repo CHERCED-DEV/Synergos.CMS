@@ -79,10 +79,10 @@ public sealed class DefaultShopQuery : IShopQuery
         var sortBy = (request.SortBy ?? "name").ToLowerInvariant();
         var sorted = sortBy switch
         {
-            "price-asc"  => withPrice.OrderBy(x => x.Price).ThenBy(x => x.Product.Name, StringComparer.OrdinalIgnoreCase),
+            "price-asc" => withPrice.OrderBy(x => x.Price).ThenBy(x => x.Product.Name, StringComparer.OrdinalIgnoreCase),
             "price-desc" => withPrice.OrderByDescending(x => x.Price).ThenBy(x => x.Product.Name, StringComparer.OrdinalIgnoreCase),
-            "newest"     => withPrice.OrderByDescending(x => x.Product.UpdateDate).ThenBy(x => x.Product.Name, StringComparer.OrdinalIgnoreCase),
-            _            => withPrice.OrderBy(x => x.Product.Name, StringComparer.OrdinalIgnoreCase),
+            "newest" => withPrice.OrderByDescending(x => x.Product.UpdateDate).ThenBy(x => x.Product.Name, StringComparer.OrdinalIgnoreCase),
+            _ => withPrice.OrderBy(x => x.Product.Name, StringComparer.OrdinalIgnoreCase),
         };
 
         var maxItems = request.MaxItems > 0 ? request.MaxItems : 12;
