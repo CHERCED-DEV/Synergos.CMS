@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    LOS GATES. Es el único proyecto que mira los DOS árboles, y por eso está solo: la regla
+    §0.B.11 dice que el CMS y las capacidades se hablan sólo por HTTP, y comprobar esa regla
+    exige poder ver los dos lados. Separarlo hace que esa excepción sea UNA y esté nombrada,
+    en vez de una nota dentro del proyecto de tests del CMS (#135).
+
+    Y referencia MUCHO MENOS de lo que parece: 46 de los 57 gates no usan un solo tipo de
+    producción — leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
+    .mjs, un compose o un appsettings, ninguno de los cuales tiene tipos. Las cuatro
+    referencias de abajo son las de los once que sí instancian algo.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Synergos.CMS.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="NSubstitute" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Synergos.CMS.Web\Synergos.CMS.Web.csproj" />
+    <ProjectReference Include="..\Synergos.Shared\Synergos.Shared.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Tienda\Synergos.Bff.Tienda.csproj" />
+  </ItemGroup>
+
+</Project>

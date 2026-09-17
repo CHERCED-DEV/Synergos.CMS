@@ -34,8 +34,27 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3259 passing**. Memoria `feedback_tests_after_full_migration`
-   (status: superseded). En el árbol de servicios el gate es más duro:
+   **3266 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
+
+   | suite | tests | qué referencia |
+   |---|---:|---|
+   | `Synergos.CMS.Tests` | 2239 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
+   | `Synergos.Arquitectura.Tests` | 394 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+
+   **El reparto ES la regla, no organización.** Antes había un solo proyecto con
+   **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
+   grafo de producción ya estaba limpio —`Synergos.CMS.Web` depende de
+   `Application` e `Interfaces` y de nada más— pero abrir la solución arrastraba
+   el backend entero por la vía de los tests. Hoy la suite del CMS **no puede**
+   tocar una capacidad aunque alguien quiera: se lo impide el compilador.
+   Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
+   con su nombre, en vez de ser una nota dentro del de al lado.
+   **46 de los 57 gates no usan un solo tipo de producción**: leen la FUENTE del
+   disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
+   `appsettings` — ninguno de los cuales tiene tipos.
+   Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
 10. **GUIDs verificados cuádruple** antes de cualquier XML uSync
@@ -111,15 +130,9 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3259 tests passing (gate liftado ADR 0075)
-│   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
-│   │                            + imagen de contenedor (6) + compose (12)
-│   │                            + despliegue (18, ADR 0133)
-│   │                            + molde del vertical (10, doc 12)
-│   │                            + seudónimo único (3, #120)
-│   │                            + portada de arranque (5, #119)
-│   ├── Api/                     tests de reglas y servicio por capacidad
-│   └── Bff/                     la compensación cruzada (148)
+├── Synergos.CMS.Tests/          xUnit — SÓLO el CMS. Referencia UN proyecto (#135)
+│   ├── Controllers/ Services/   el borde y los seams del árbol del CMS
+│   └── Dto/ Filters/ Proxies/   …y su fontanería
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
 │
 ├── Synergos.Core/               EL VOCABULARIO. Ref, Money, TimeWindow, Rejection,
@@ -137,9 +150,19 @@ Synergos.CMS/
 │                                rendirse, avisar. Promovida al segundo consumidor;
 │                                el TERCERO (Eventos) y el CUARTO (Viajes)
 │                                entraron sin tocarla.
-└── Synergos.Bff.*/              LOS ORQUESTADORES. Salud, Tienda, Eventos y
-                                 Viajes construidos; faltan Realty, Gob,
-                                 Academy, Social.
+├── Synergos.Bff.*/              LOS ORQUESTADORES. Salud, Tienda, Eventos y
+│                                Viajes construidos; faltan Realty, Gob,
+│                                Academy, Social.
+├── Synergos.Servicios.Tests/    xUnit — las veinte capacidades y los cuatro
+│   ├── Api/                     orquestadores. NO ve el CMS, y ésa es la
+│   ├── Bff/                     propiedad: la separación de §0.B.11 la impone
+│   └── Core/                    el compilador y no una convención.
+└── Synergos.Arquitectura.Tests/ LOS GATES: segregación (17) + molde (12)
+    └── Architecture/            + capas (8) + imagen de contenedor (6)
+                                 + compose (12) + despliegue (18, ADR 0133)
+                                 + molde del vertical (10, doc 12)
+                                 + seudónimo único (3, #120)
+                                 + portada de arranque (5, #119)
 ```
 
 > **El árbol de servicios está construido y el producto ya lo consume**, aunque
@@ -1182,6 +1205,51 @@ Las que salieron de construir el árbol de servicios (§0.B):
   nuevos puede ponerlo rojo en una máquina y no en otra, y la salida es entrar
   a `NoWarn` **con su razón al lado**.
 
+- `feedback_the_test_project_is_where_a_clean_graph_gets_dirty` — **un grafo de
+  producción impecable no dice nada sobre lo que arrastra abrir la solución: el
+  proyecto de TESTS es por donde los dos árboles se vuelven a pegar, y ahí nadie
+  mira.** Medido (#135): `Synergos.CMS.Web` referencia **dos** proyectos
+  —`Application` e `Interfaces`— y cero capacidades; los dos árboles eran
+  **disjuntos**. Y sin embargo `Synergos.CMS.Tests` referenciaba **28**, o sea
+  las veinte capacidades, los cinco orquestadores, `Core` y `Shared`: el único
+  sitio del repo que los unía. El síntoma que llegó no fue un fallo, fue una
+  **percepción** —«para levantar esto hay que levantar todas las APIs»— y era
+  razonable, porque el Explorador de soluciones enseña 34 proyectos planos y no
+  enseña el grafo.
+  **La salida no es relajar la referencia: es partir el proyecto por la pregunta
+  que cada test contesta.** Tres suites —CMS, Servicios y Arquitectura— y la del
+  CMS pasó de 28 referencias a **una**. Lo que gana no es orden: es que la
+  separación de §0.B.11 la impone **el compilador** en vez de una convención.
+  **Y la excepción queda NOMBRADA en vez de escondida.** Comprobar que los dos
+  árboles están separados exige poder ver los dos, así que la exención existe —
+  pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
+  un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
+  lo hace baratísimo: **46 de los 57 gates no usan un solo tipo de producción**
+  —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
+  `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
+  **cuatro** cosas y no veintiocho.
+  **Lo que cuesta el corte, y ninguna de las tres se deduce leyendo:** (a) las
+  supresiones de nivel de ENSAMBLADO (`CA1707` por los nombres con guion bajo de
+  xUnit) se quedan en el proyecto viejo y el nuevo nace con **1886 errores** de
+  nomenclatura, así que ese fichero vive una vez y se **enlaza**; (b) los
+  `InternalsVisibleTo` nombran al ensamblado, no a la carpeta, y hay que mover
+  cada uno **a quien de verdad usa ese internal** —el presupuesto de
+  `StoreWriteGate` lo usa Servicios, el cableado del composer lo usan los
+  gates—; (c) un gate que cuenta **su propio** `Assembly.GetTypes()` deja de ver
+  el 88 % de la suite, y copiarlo tres veces sería el defecto que ese gate existe
+  para cerrar: se **enlaza** y cada copia mide su ensamblado contra su fila,
+  cuadrando además el total contra la suma.
+  **Y las soluciones parciales necesitan su propia regla, que es #133
+  generalizada**: toda solución es **cerrada bajo `ProjectReference`** —si lista
+  un proyecto, lista aquello a lo que apunta— porque `dotnet build` resuelve por
+  RUTA y compila igual mientras Visual Studio da un NU1105. Con una sola solución
+  eso fue un defecto; con cuatro, es inevitable sin gate. El segundo diente hace
+  falta igual: **las parciales tienen que ser estrictamente menores** que la
+  integradora, o la salida barata del primero es meterlo todo en las cuatro y
+  perder lo único que las parciales compran.
+  **Ojo con el SDK**: `dotnet new sln` en el SDK 10 crea un **`.slnx`** (XML), que
+  un Visual Studio viejo no abre. Va con `--format sln`.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1202,6 +1270,31 @@ Las que salieron de construir el árbol de servicios (§0.B):
 Los paths son relativos a la raíz del repo (que ES `Synergos.CMS/`; no hay
 carpeta anidada con ese nombre).
 
+### CUATRO soluciones, y cuál abrir (#135)
+
+| solución | proyectos | para qué |
+|---|---:|---|
+| `Synergos.Web.sln` | 5 | el producto web y sus tests. **No arrastra el backend.** |
+| `Synergos.Apis.sln` | 22 | `Core` + `Shared` + las veinte capacidades |
+| `Synergos.Bff.sln` | 7 | `Core` + `Shared` + `Bff.Core` + los cuatro orquestadores |
+| `Synergos.CMS.sln` | 34 | **la integradora** — lo lanza todo junto, y es la que corre CI |
+
+**La integradora conserva el nombre `Synergos.CMS.sln` a propósito**: es el que nombran el
+workflow de CI, los gates que suben buscando la raíz del repo y esta guía. Renombrarla habría
+sido el cambio más visible y el menos útil — lo que molestaba no era el nombre, era abrir 34
+proyectos para tocar una vista. Dentro va agrupada en cinco **carpetas de solución** (Producto
+web · Núcleo compartido · Capacidades · Orquestadores · Tests del backend), que son virtuales:
+**no se movió una sola carpeta del disco**, porque ~153 sitios cablean rutas de proyecto
+—59 gates, 10 herramientas de Node, el compose, 62 líneas de workflows y el despliegue— y ese
+trabajo no compra nada que estas cuatro soluciones no den ya.
+
+**`Synergos.Servicios.Tests` vive SÓLO en la integradora, y no es un olvido**: referencia
+capacidades Y orquestadores, así que meterlo en una de las dos parciales arrastraría el otro
+grupo. Hay gate, y es la regla de #133 generalizada: **toda solución es CERRADA bajo
+`ProjectReference`** —si lista un proyecto, lista aquello a lo que apunta— y las tres parciales
+son **estrictamente menores** que la integradora, para que la salida barata (meterlo todo en
+las cuatro) no pase. Mutado en los dos sentidos antes de darlo por bueno.
+
 ```bash
 # TODO el árbol compila en CERO avisos, y desde el #134 un aviso ES un error
 # (TreatWarningsAsErrors en Directory.Build.props). Si tu SDK saca uno que acá
@@ -1211,8 +1304,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3259 tests):
+# Las tres suites (3266 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
+
+# …o una sola, que es lo que hace el corte del #135 útil en el día a día:
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2239
+dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 394
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -1571,7 +1669,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3259 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3266 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

@@ -56,7 +56,12 @@ public sealed class CifrasDeClaudeMdTests
         ("despliegue ({0}, ADR 0133)", new[] { "DeployPipelineTests" }, null),
         ("molde del vertical ({0}, doc 12)", new[] { "MoldeDelVerticalTests" }, null),
         ("portada de arranque ({0}, #119)", new[] { "PortadaDeArranqueTests" }, null),
-        ("la compensación cruzada ({0})", Array.Empty<string>(), "Synergos.CMS.Tests.Bff"),
+        // «la compensación cruzada (148)» SALIÓ de esta lista con el #135, y no para pasar el
+        // gate: esos tests se mudaron a `Synergos.Servicios.Tests` y este ensamblado ya no los
+        // ve por reflexión. Lo que los cubre ahora es MÁS fuerte, no menos — la tabla de suites
+        // de §0.A.9, que cuenta el ENSAMBLADO ENTERO desde dentro (SuiteCountTests, enlazado en
+        // las tres) en vez de una carpeta. Contarlos acá con un grep habría sido peor que no
+        // contarlos: un grep no puede resolver las filas de un [MemberData].
     };
 
     private static string RepoRoot()

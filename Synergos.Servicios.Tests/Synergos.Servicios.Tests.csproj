@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Los tests del ÁRBOL DE SERVICIOS: las veinte capacidades y los cuatro orquestadores.
+    No ve el CMS, y ésa es la propiedad: §0.B.11 dice que los dos árboles se hablan SOLO por
+    HTTP, así que un test de una capacidad que pudiera tocar un tipo de Umbraco sería la
+    primera grieta. Acá la separación la impone el compilador y no una convención.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- Los namespaces se conservan (Synergos.CMS.Tests.Api/.Bff) para no reescribir 48
+         ficheros por un cambio de carpeta: en C# el namespace no tiene que casar con el
+         ensamblado, y moverlos habría mezclado el traslado con un renombrado masivo. -->
+    <RootNamespace>Synergos.CMS.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="NSubstitute" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- El gate de la cifra vive UNA vez y se enlaza en las tres suites: cada una cuenta SU
+         ensamblado y comprueba SU línea de CLAUDE.md. Tres copias del fichero serían tres
+         sitios que se desvían por separado, que es el defecto que ese gate existe para cerrar. -->
+    <Compile Include="..\Synergos.Arquitectura.Tests\SuiteCountTests.cs" Link="SuiteCountTests.cs" />
+    <!-- Las convenciones de la suite (CA1707 por los nombres con guion bajo de xUnit, etc.)
+         son de NIVEL DE ENSAMBLADO: viven una vez y se enlazan, o cada proyecto nuevo nace
+         con mil ochocientos errores de nomenclatura y alguien los apaga por su cuenta. -->
+    <Compile Include="..\Synergos.Arquitectura.Tests\GlobalSuppressions.cs" Link="GlobalSuppressions.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Synergos.Core\Synergos.Core.csproj" />
+    <ProjectReference Include="..\Synergos.Shared\Synergos.Shared.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Audit\Synergos.Api.Audit.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Booking\Synergos.Api.Booking.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Cart\Synergos.Api.Cart.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Catalog\Synergos.Api.Catalog.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Consent\Synergos.Api.Consent.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Documents\Synergos.Api.Documents.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Engagement\Synergos.Api.Engagement.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Fulfillment\Synergos.Api.Fulfillment.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Geo\Synergos.Api.Geo.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Identity\Synergos.Api.Identity.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Inventory\Synergos.Api.Inventory.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Messaging\Synergos.Api.Messaging.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Moderation\Synergos.Api.Moderation.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Notifications\Synergos.Api.Notifications.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Orders\Synergos.Api.Orders.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Payments\Synergos.Api.Payments.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Pricing\Synergos.Api.Pricing.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Sessions\Synergos.Api.Sessions.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Signing\Synergos.Api.Signing.csproj" />
+    <ProjectReference Include="..\Synergos.Api.Workflow\Synergos.Api.Workflow.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Eventos\Synergos.Bff.Eventos.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Salud\Synergos.Bff.Salud.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Tienda\Synergos.Bff.Tienda.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Viajes\Synergos.Bff.Viajes.csproj" />
+  </ItemGroup>
+
+</Project>

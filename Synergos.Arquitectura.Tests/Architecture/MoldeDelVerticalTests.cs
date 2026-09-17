@@ -457,7 +457,7 @@ public sealed class MoldeDelVerticalTests
         // —renombrar el cliente a `HttpCertificateIdSignerX` seguía conteniendo el nombre viejo—.
         // Es el punto ciego que feedback_a_gate_that_parses_source_needs_its_own_mutations
         // describe: sale un número plausible y nadie lo cruza.
-        var arch = Directory.EnumerateFiles(Dir("Synergos.CMS.Tests", "Architecture"), "*.cs")
+        var arch = Directory.EnumerateFiles(Dir("Synergos.Arquitectura.Tests", "Architecture"), "*.cs")
             .Where(f => !f.EndsWith("MoldeDelVerticalTests.cs", StringComparison.Ordinal))
             .Select(SinComentarios)
             .ToList();

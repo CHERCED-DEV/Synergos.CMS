@@ -17,7 +17,7 @@
          implementación, no una superficie. Se abre a los tests para poder probar «las dos
          colas comen del mismo presupuesto» CONTANDO y no cronometrando (#125) — el test
          anterior medía un reloj de pared y fallaba bajo carga de la máquina. -->
-    <InternalsVisibleTo Include="Synergos.CMS.Tests" />
+    <InternalsVisibleTo Include="Synergos.Servicios.Tests" />
   </ItemGroup>
 
   <ItemGroup>

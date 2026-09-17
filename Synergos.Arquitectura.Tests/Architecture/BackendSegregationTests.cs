@@ -600,7 +600,14 @@ public sealed class BackendSegregationTests
         // de un adapter en Web/Services — la forma de HttpSearchAnalyticsStore.
         var offenders = Projects()
             .Where(p => p.Name.StartsWith("Synergos.CMS.", StringComparison.Ordinal)
-                     && p.Name != "Synergos.CMS.Tests")   // los tests sí pueden levantarlas
+                     // Los tests sí pueden levantarlas, y desde el #135 los EXENTOS son
+                     // dos, no uno: Servicios.Tests (que prueba las veinte por dentro) y
+                     // Arquitectura.Tests (que comprueba la separación, y para eso tiene
+                     // que poder ver los dos lados). `Synergos.CMS.Tests` YA NO lo está —
+                     // referencia un solo proyecto — y por eso sale de la lista: una
+                     // exención que sobra deja de leerse.
+                     && p.Name != "Synergos.Servicios.Tests"
+                     && p.Name != "Synergos.Arquitectura.Tests")
             .Select(p => (p.Name, Bad: p.ProjectRefs.Where(EsDelOtroArbol).ToList()))
             .Where(x => x.Bad.Count > 0)
             .Select(x => $"{x.Name} → {string.Join(", ", x.Bad)}")
