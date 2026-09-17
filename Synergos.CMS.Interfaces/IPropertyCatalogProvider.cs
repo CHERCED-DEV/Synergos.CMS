@@ -6,13 +6,21 @@ namespace Synergos.CMS.Interfaces;
 /// (null = sin filtro) y se combinan en AND. Lo arma la barra de filtros del
 /// módulo Angular <c>module-realty-portal</c> (doc propiedades-app-spec §2).
 /// </summary>
+/// <param name="Operation">
+/// Venta o arriendo, en el vocabulario del dominio (<c>venta</c> | <c>arriendo</c>). Es el
+/// PRIMER filtro que usa quien busca vivienda —los dos universos no se mezclan nunca— y sin
+/// él la barra de operación del portal no filtraba nada: el cliente lo manda en TODAS las
+/// búsquedas y el borde lo descartaba. Null = sin filtro. Opcional y al final para no tocar
+/// a los llamadores existentes.
+/// </param>
 public sealed record PropertyQuery(
     string? Text = null,
     string? Type = null,
     decimal? MinPrice = null,
     decimal? MaxPrice = null,
     int? Beds = null,
-    string? Location = null);
+    string? Location = null,
+    string? Operation = null);
 
 /// <summary>
 /// Resumen de un listado para la grilla de resultados + el pin del mapa (lo que
@@ -130,7 +138,24 @@ public sealed record PropertyDraft(
     int Stratum = 0,
     string? Currency = null,
     string? AgentName = null,
-    string? AgentPhone = null);
+    string? AgentPhone = null,
+    /// <summary>
+    /// La dirección legible del inmueble, tal como la escribió quien publica.
+    /// </summary>
+    /// <remarks>
+    /// <b>No es que faltara: es que se FABRICABA</b> (#110). El wizard la pide en el paso
+    /// de ubicación y la manda (<c>address</c>), el borde no la declaraba, y los dos
+    /// catálogos rellenaban <c>Location.Address</c> con <c>«{barrio}, {ciudad}»</c>. Por eso
+    /// no se vio nunca: la ficha no salía vacía, salía con algo que PARECE una dirección —
+    /// «Chicó, Bogotá» donde el agente escribió «Cra 11 #93-45». Un campo vacío se reporta;
+    /// uno plausible y equivocado lo lee un comprador y va a tocar el timbre a otra parte.
+    ///
+    /// Es el gemelo del pin que se tiraba a (0,0) (#103) en este mismo endpoint y de la
+    /// dirección de entrega descartada en la Tienda (#104), con el agravante de la máscara.
+    /// Lo escrito GANA; la derivación se queda como respaldo para las fichas anteriores y
+    /// para quien publique sin dirección.
+    /// </remarks>
+    string? Address = null);
 
 /// <summary>
 /// Catálogo de listados del vertical Propiedades. Es la pieza del MOTOR que

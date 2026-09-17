@@ -391,13 +391,372 @@ dar error**. El despliegue que cualquier plataforma moderna hace por defecto rom
 
 ### El primer arranque tarda, y es normal
 
-Umbraco se instala desatendido e importa 880 ítems de uSync — unos 74 s medidos en CI (ADR 0128).
-**Es lo que hace que no haya que correr el import a mano.** Durante ese rato el proxy espera; no
-da 502.
+Umbraco **se instala** desatendido: crea sus tablas y su usuario sin que nadie toque el
+backoffice. Eso sí es automático, y durante ese rato el proxy reintenta en vez de dar 502.
+
+> ### ⚠️ Lo que este documento decía y era falso (#114)
+>
+> Decía que el arranque *«importa 880 ítems de uSync — **es lo que hace que no haya que correr el
+> import a mano**»*. **No lo hace.** ADR 0008 fija que el import NO ocurre al arrancar: el default
+> del paquete es `None` y no hay una sola línea en el repo que lo pise — ni en C#, ni en
+> `appsettings*.json`, ni en `compose.prod.yml`.
+>
+> Medido contra una base vacía, el arranque dice `uSync: Startup Complete 0ms` — o sea **cero**
+> ítems. La prueba de que ya se sabía está en el propio gate de CI:
+> `tools/usync-rebuild-check.mjs` inyecta `uSync__Settings__ImportAtStartup=All` por variable de
+> entorno, precisamente **porque la app no lo hace sola**.
+>
+> Y un Umbraco vacío no falla: sirve su cartel «No published content» con **200 y HTML de
+> verdad**. Antes de #114 el humo daba eso por bueno, así que el primer despliegue de un servidor
+> nuevo se habría puesto **verde con el sitio en blanco**.
+
+El import es un paso, y está en el §5.bis de abajo.
 
 ---
 
-## 6. La cuenta
+## 5.bis. El estado que hay que sembrar, UNA VEZ
+
+Un servidor recién montado tiene los procesos arriba y **nada dentro**. Esto es lo que hay que
+hacer una vez, en orden. Nada de esto lo hace el arranque, y ninguno estaba escrito acá.
+
+| Fichero | Dónde corre | Qué hace |
+|---|---|---|
+| `tools/importar-schema.sh` | **el servidor** | importa el árbol de uSync en un contenedor efímero |
+| `tools/provisionar.sh` | **el servidor** | publica definiciones, recursos y precios; reconcilia |
+
+> **Los dos los COPIA el despliegue**, junto con `tools/provisionar.recursos.json`. No es un
+> detalle: los tres del respaldo vivían sólo en el repo y la máquina que había que proteger era la
+> única sin con qué (HU #31), y al escribir estos dos volvió a pasar igual — este documento decía
+> «corré esto en el servidor» y el servidor no los tenía (#114). Hoy hay gate, y lo que decide qué
+> se copia es **la columna «Dónde corre» de las tablas de este documento**: lo que aquí diga «el
+> servidor» tiene que llegar al servidor.
+
+### 5.bis.1 El schema de uSync
+
+```bash
+tools/importar-schema.sh          # en el servidor, con el stack levantado
+```
+
+Para el CMS, importa en un contenedor efímero y lo vuelve a levantar. Es **idempotente** —uSync
+compara y aplica lo que difiere— y comprueba lo mismo que el gate de reconstrucción: que termine,
+sin líneas `[ERR]`, y que procese al menos tantos ítems como ficheros `.config` hay. Medido en el
+stack compuesto: **896 ítems, 355 cambios, 0 errores, ~28 s**.
+
+> **Para el CMS a propósito, y no es prudencia.** La primera versión de este script importaba con
+> el CMS arriba y se midió qué pasa: **dos Umbraco sobre la misma base se matan por MainDom**. El
+> que entra se lo queda, el que servía el sitio se apaga solo —«Application is shutting down»,
+> exit 0, sin un error— y el import se cae con él. Es la misma regla de «una instancia, y parada
+> antes de arranque» que el compose ya declara para las capacidades.
+
+#### Por qué no se activa el import en el arranque y ya
+
+Se consideró, y se descartó con dos razones — ninguna de las dos es «lo dice el ADR».
+
+**`ImportAtStartup=All` revierte el trabajo editorial en cada reinicio.** `appsettings.json` tiene
+encendidos `ContentHandler` y `MediaHandler` (ADR 0129), así que `All` re-importa el contenido del
+repo **en cada arranque**. Un `restart`, un despliegue, un reinicio del servidor — y lo que un
+editor publicó vuelve atrás, en silencio y sin error. Se cambiaría «el primer despliegue necesita
+un comando» por «cada reinicio es una vuelta atrás editorial», que es peor y además del tipo que
+no se nota.
+
+**`ImportAtStartup=Settings` no resuelve el problema que venía a resolver.** Trae el schema y deja
+el sitio sin contenido, o sea exactamente el mismo cartel de «No published content» en la portada.
+Es la vía de escape que ADR 0008 deja prevista —con ADR sucesor— y no compra nada aquí.
+
+Así que **ADR 0008 se queda como está**, y lo que cambia es que el import deja de ser un ritual de
+backoffice imposible en un VPS sin pantalla: es un comando.
+
+### 5.bis.2 El contenido — la portada de arranque
+
+Con el schema importado, la portada **sigue diciendo «No published content»** hasta que alguien
+publique un nodo. No es un fallo del import: es que `uSync/v9/Content/` **está vacía en el repo**
+—comprobado también contra `master`— así que no hay ni un nodo que importar. Y encender
+`Synergos:DevSeed:Enabled` tampoco la crea sola: lo que se siembra en el arranque son datos de
+dominio (hilos de blogs, correspondencia de Gobierno), nunca contenido — eso es ADR 0013 y así
+tiene que seguir.
+
+Hasta la HU [#119](../../../../issues/119) ahí se acababa el documento: «alguien tiene que
+autorarlo a mano». **Hoy hay herramienta**, y el camino entero es éste — cuatro pasos, y **los
+tres primeros corren en la máquina de desarrollo, no en el servidor**:
+
+| | Dónde corre | Qué hace |
+|---|---|---|
+| 1 | **desarrollo** | `POST /dev/seed-portada` crea la portada de arranque |
+| 2 | **desarrollo** | el arquitecto la ajusta en el backoffice hasta que sea la suya |
+| 3 | **desarrollo** | uSync exporta al guardar → `uSync/v9/Content/` → commit |
+| 4 | **el servidor** | `tools/importar-schema.sh` (paso 5.bis.1) la trae con el resto |
+
+> **Por qué el rodeo, y no un comando en el servidor.** El flag de DevSeed **viene apagado en
+> producción** y hay gate que lo vigila ([#113](../../../../issues/113)), así que en el servidor
+> ese endpoint contesta 404 — y eso es lo correcto, no un obstáculo: son catorce endpoints
+> `[AllowAnonymous]` y uno de ellos borra el árbol de contenido entero. Sembrar donde se edita y
+> **transportar el resultado como XML versionado** es además lo que hace que el siguiente
+> servidor, y el de después, arranquen con la misma portada sin que nadie repita nada.
+
+#### 1 · Sembrarla
+
+Con el CMS de desarrollo levantado y `Synergos:DevSeed:Enabled` en `true`:
+
+```bash
+curl -X POST http://localhost:5000/dev/seed-portada
+# {"siteRootId":1463,"outcome":"Created","detail":"created"}
+```
+
+Crea **un `siteRoot` en la raíz del árbol** —no bajo un `platformRoot`, que es el wrapper
+opcional para agrupar varios sitios— y le pone de cuerpo tres bandas del Layout Composer: un
+hero, una rejilla de tres tarjetas y un bloque de texto. Las dos primeras son elementos del
+catálogo CDN (`elementSynHeroBanner`, `elementSynFeatureGrid`) y **traen fallback SSR** (ADR
+0012), así que la portada se ve entera **con el CDN sin configurar**, que es el estado de un
+servidor recién montado.
+
+**Es idempotente, y de la forma que importa.** Correrla otra vez no duplica nada — pero lo que
+de verdad protege es el paso 2: si el `siteRoot` ya tiene cuerpo, **no lo toca** y contesta
+`AlreadyAuthored`. Sembrar encima se llevaría por delante lo que acabás de ajustar, justo antes
+de exportarlo.
+
+| outcome | qué pasó |
+|---|---|
+| `Created` | no había `siteRoot`; se creó con su portada |
+| `Filled` | había uno sin cuerpo; se le puso la portada, **sin pisarle la marca** |
+| `AlreadyAuthored` | ya había portada. No se tocó nada |
+| `RootAlreadyTaken` | la raíz la ocupa otro nodo. **No siembra**, y dice cuál |
+| `MissingContentTypes` | el schema no está importado. Dice cuál falta |
+
+> **Lo de `RootAlreadyTaken` costó una medición.** Si en el árbol ya hay un raíz —el
+> `platformRoot` del andamio de la vitrina, por ejemplo— crear un `siteRoot` al lado **no pone
+> la portada en `/`**: Umbraco resuelve `/` al primer raíz, así que quedaría en `/inicio` y la
+> herramienta habría contestado «creada» con la portada invisible. Verificado en vivo, que es
+> como se vio. Hoy no siembra y dice qué hay ocupando la raíz.
+
+> **No confundir con `POST /dev/seed-synergos-identity`**, que arma el andamio de la vitrina
+> SynergosLabs (`platformRoot` → `siteRoot` → tres páginas que luego puebla
+> `POST /dev/fill-synergos-pages`). Es otra cosa y mucho más grande. De paso quedó arreglado:
+> **llevaba roto** —no ponía las dos obligatorias de `compBranding` en el `platformRoot`, así
+> que el publish se caía y no creaba nada— **y lo contestaba con un 200** y un `success:false`
+> adentro, que desde un script no se lee como un fallo. Hoy sale con 409 y es idempotente.
+
+Un fallo sale con **409**, no con 200 — la herramienta anterior contestaba `200` con
+`success:false` y por eso llevaba rota sin que nadie lo notara.
+
+#### 2 · Ajustarla
+
+En el backoffice, sobre ese nodo. Es contenido normal: cambiar textos, arrastrar bloques, añadir
+páginas hijas, poner la marca. Lo que queda acá es lo que va a ver la gente — la siembra sólo
+evita empezar con una página en blanco.
+
+#### 3 · Exportarla y commitearla
+
+`ExportOnSave` está en `All` y el `ContentHandler` encendido (ADR 0129), así que **guardar ya
+exporta**: aparece `Synergos.CMS.Web/uSync/v9/Content/<nodo>.config`. Ese fichero **lo commitea
+el arquitecto**, no un agente — el contenido editorial no se autora escribiendo XML.
+
+```bash
+git add Synergos.CMS.Web/uSync/v9/Content
+node tools/usync-audit.mjs      # pasa: el check 9 sólo rechaza el árbol del seeder de pruebas
+```
+
+#### 4 · Y el servidor la recibe
+
+Con el `Content/` commiteado, el paso 5.bis.1 deja de traer sólo el schema. Medido contra una
+base limpia: el import pasa de **896** ítems a **897**, y `GET /` sirve la portada sin que nadie
+siembre nada en el servidor.
+
+> **Qué se verificó de verdad, y con qué.** El ciclo completo se corrió con el proceso vivo,
+> perfil `Docker`, base SQLite limpia y el árbol de uSync importado entero: `/` en blanco (200,
+> 1926 bytes, cartel de Umbraco) → sembrar → `/` con la portada (200, 19802 bytes) → sembrar otra
+> vez (`AlreadyAuthored`, la página no cambia) → export a `Content/inicio.config` → **base nueva
+> desde cero importando ese fichero** → `/` sirve la portada sin sembrar. Hay gate
+> (`tools/humo-portada.mjs`, workflow `humo-portada.yml`), y es el único del repo que **pide la
+> página**.
+>
+> **Y lo que NO se pudo ejecutar, dicho en vez de afirmado:** el paso 4 se reprodujo
+> importando el `Content/` exportado contra una base nueva **con la aplicación directamente**,
+> no con `tools/importar-schema.sh` — ese script necesita el demonio de Docker, que el
+> contenedor donde se escribió esto no tiene. Lo que hace el script es levantar un contenedor
+> efímero para correr ese mismo import, así que lo verificado es el import; lo que queda sin
+> ejercitar es su envoltorio, igual que ya decía §5.bis.3.
+>
+> **Lo que ese gate destapó la primera vez que se corrió, y que ningún otro veía:** con la
+> portada puesta, `/` contestaba **500**. `_SynergosBridge.cshtml` usa `LogWarning` sin el
+> `@using` de `Microsoft.Extensions.Logging`, y las vistas de este proyecto se compilan
+> **siempre en caliente** (`RazorCompileOnBuild=false`, porque `ModelsMode=InMemoryAuto`), donde
+> no llegan los implicit usings del SDK. O sea que **ninguna página de contenido renderizaba**
+> desde el 2026-09-05, con la suite entera en verde. No lo vio nadie porque no había contenido
+> que renderizar: el hueco de abajo tapaba el de arriba.
+
+### 5.bis.3 El estado que las capacidades exigen
+
+```bash
+tools/provisionar.sh --verificar   # qué falta, sin escribir nada
+tools/provisionar.sh               # lo publica
+```
+
+Cuatro cosas, y las cuatro se rechazan con su motivo si faltan —`definition_not_found`,
+`resource_not_found`, `price_not_found`— así que **no fallan al arrancar: fallan la primera vez
+que alguien intenta usar la función**. El script está en `tools/provisionar.sh` y su cabecera
+explica cada una.
+
+| | qué publica | de qué sirve |
+|---|---|---|
+| Gobierno | la definición del trámite en `Api.Workflow` | sin ella no se decide ningún expediente |
+| Seguimiento | las **cuatro** definiciones de pipeline | sin ellas no avanza ningún pedido |
+| Salud · Propiedades · Viajes | los recursos de `Api.Booking` | sin ellos no se agenda ni se aparta |
+| Viajes | los precios de `Api.Pricing` | sin ellos no se cotiza una oferta |
+
+> **Ojo con las tres de la última fila: son por ENTIDAD, no por producto.** Un recurso por médico,
+> uno por inmueble que acepte visitas, uno por oferta de viaje. Eso **no es bootstrap**: es una
+> obligación permanente que crece con el catálogo cada vez que se da de alta un médico o se
+> publica un inmueble. `provisionar.sh` siembra las que conoce y **reconcilia**, pero el día que
+> el catálogo salga de Umbraco en vez de del stub, esto tiene que pasar a ser un seam del alta —
+> está escrito en la cabecera del script, con el disparador.
+
+**Las entidades se declaran en `tools/provisionar.recursos.json`**, y de ahí salen los recursos y
+los precios. Dos cosas que hay que saber al escribirlo, porque las dos las destapó correr esto
+contra las capacidades vivas y **ninguna de las dos falla a la vista**:
+
+- **Una entrada `precio` tiene que traer su `amount`, y numérico.** Si falta, el script se planta
+  y lo dice. No se publica a cero: una oferta a cero **se vende gratis** y no hay nada que falle
+  —ni al desplegar, ni al cotizar— hasta que alguien compra.
+- **Cambiar un precio y volver a correr el script SÍ lo cambia**, porque su llave de idempotencia
+  lleva el monto dentro. Antes no: la capacidad consulta su libro antes de aplicar nada y devolvía
+  la tarifa anterior contestando 200. Republicar lo mismo sigue sin cambiar nada.
+
+> Verificado contra `Api.Workflow`, `Api.Booking` y `Api.Pricing` levantados de verdad: las tres
+> pasadas —`--verificar` en seco, publicar, y publicar otra vez— dejan **un** recurso por sujeto y
+> **un** precio, y la segunda no toca nada. Lo que NO se pudo ejecutar acá es
+> `importar-schema.sh`, que necesita el demonio de Docker.
+
+---
+
+## 6. El respaldo — que es el único que se puede comprobar de antemano
+
+Todo lo demás de esta guía se nota cuando falla. Esto no: un respaldo roto **se ve exactamente
+igual que uno bueno** hasta el día en que hace falta, y ese día ya no hay margen. Por eso la parte
+importante de esta sección no es crear la copia; es el **ensayo**.
+
+### Las tres piezas
+
+| Fichero | Dónde corre | Qué hace |
+|---|---|---|
+| `tools/respaldo.sh` | **el servidor** (cron diario, 04:10 UTC) | para, copia los volúmenes en frío, arranca |
+| `tools/enviar-respaldo.sh` | **el servidor** | cifra, sube al destino remoto, poda lo vencido |
+| `tools/restaurar.sh` | **el servidor** | devuelve los volúmenes; exige `--si-estoy-seguro` |
+| `tools/prueba-restauracion.sh` | **NO el servidor** | trae, descifra, restaura aparte y **lee los datos** |
+
+`tools/bootstrap-servidor.sh` deja el cron puesto. El despliegue copia los tres primeros al
+servidor — antes no lo hacía, y la máquina que había que proteger era justo la única que no tenía
+con qué.
+
+### 6.1 Crear la llave, una sola vez y **no en el servidor**
+
+```bash
+age-keygen -o identidad.txt      # en TU máquina
+```
+
+Imprime dos cosas: un fichero `identidad.txt` (la **privada**) y una línea `age1…` (la **pública**).
+
+- La **pública** va en el `.env` del servidor. No es un secreto: con ella sólo se puede *escribir*
+  un respaldo.
+- La **privada** se guarda donde guardás lo que no se regenera, y **no se copia al servidor**.
+
+> **Por qué asimétrica y no una contraseña.** Con la privada fuera de la máquina, el servidor puede
+> escribir respaldos y **no puede leer los que ya mandó**. Con una contraseña simétrica, quien se
+> lleva el servidor se lleva el histórico entero — que es bastante más de lo que hay vivo en la
+> máquina en ese momento.
+>
+> **Y el precio, que hay que saberlo:** si se pierde la privada, los respaldos son ruido. Un
+> respaldo ilegible y uno que no existe se ven **igual** desde el bucket. Lo único que distingue
+> los dos casos es correr el ensayo.
+
+### 6.2 El destino, en el `.env` del servidor
+
+Un remoto de `rclone`, así que el proveedor es tuyo: S3, R2, B2, un SFTP a otra máquina o un disco
+montado son el mismo comando. Los nombres exactos y el ejemplo completo están en `.env.example`;
+lo mínimo es:
+
+```
+SYNERGOS_RESPALDO_DESTINO=respaldos:mi-bucket/prod
+SYNERGOS_RESPALDO_LLAVE_PUBLICA=age1…
+RCLONE_CONFIG_RESPALDOS_TYPE=s3
+RCLONE_CONFIG_RESPALDOS_ACCESS_KEY_ID=…
+RCLONE_CONFIG_RESPALDOS_SECRET_ACCESS_KEY=…
+```
+
+> **Con el destino vacío el respaldo sigue corriendo y DICE que lo que dejó no es un respaldo.** Es
+> deliberado: un clon limpio y una máquina de desarrollo tienen que poder copiar sus volúmenes sin
+> cuenta de nada, igual que el default `Stub` de todos los cableados del producto.
+>
+> **Lo que sí revienta es estar configurado a medias** — destino puesto y llave sin poner, por
+> ejemplo—, y revienta **antes de tocar nada**. Es la forma del defecto #56 (el modo `Http` del CDN
+> sin URL): arrancar verde, contestar que todo va bien y fallar el día que alguien lo necesita.
+>
+> La credencial del bucket debería poder **escribir** y no **leer**. Y borrar sólo si querés que la
+> poda la haga el servidor; si no, dejale la caducidad al bucket.
+
+### 6.3 Cuánto duran — es una decisión de privacidad, no de disco
+
+Dentro van **direcciones de entrega y nombres de pacientes**.
+
+| | por defecto | qué lo borra |
+|---|---|---|
+| Fuera del servidor | `SYNERGOS_RESPALDO_RETENCION_DIAS=30` | `enviar-respaldo.sh`, después de comprobar que la de hoy llegó |
+| En el servidor | `SYNERGOS_RESPALDO_LOCAL_DIAS=7` | `respaldo.sh`, al final de cada corrida |
+| Piso, en los dos | `SYNERGOS_RESPALDO_MINIMO=3` | nada: son las que sobreviven siempre |
+
+- **No existe «para siempre»**: el `0` se rechaza. Guardar indefinidamente un archivo con los datos
+  personales de todo el producto es una decisión que nadie tomó y que dentro de dos años es una
+  filtración esperando a que alguien encuentre la credencial.
+- **30 días fuera** es suficiente para notar al volver de vacaciones algo que empezó a corromperse
+  hace tres semanas, y poco para que eso viva años en el disco de un tercero. Con un respaldo
+  diario son **30 copias completas** allá; la cuenta hay que hacerla.
+- **7 días en el servidor**, que cumple otra cosa: es la que se restaura rápido cuando alguien se
+  lleva por delante algo esta mañana. Meses de datos personales en el mismo disco que se está
+  protegiendo no añaden seguridad, sólo añaden dónde perderlos.
+- **El piso de 3 no es paranoia.** La retención por edad a secas vacía el destino el día que el
+  respaldo lleva más de 30 días sin correr — o sea que el cron que se rompió y nadie vio se lleva
+  por delante la última copia buena, en silencio, justo el día que hace falta.
+
+### 6.4 El ensayo — **esto es lo que cierra el asunto**
+
+```bash
+export SYNERGOS_RESPALDO_DESTINO=respaldos:mi-bucket/prod
+export SYNERGOS_RESPALDO_IDENTIDAD=~/llaves/identidad.txt
+export RCLONE_CONFIG_RESPALDOS_...       # de sólo lectura basta
+./tools/prueba-restauracion.sh
+```
+
+Trae la copia **del remoto**, la descifra, la restaura sobre un proyecto de compose **aparte**,
+levanta el producto en la versión que escribió esos datos y **le pide los datos de vuelta** por
+HTTP. Al terminar borra los volúmenes del ensayo: dejarlos sería una segunda copia de datos
+personales que nadie decidió.
+
+Se niega a correr si el proyecto de ensayo es el de producción, y si la identidad está dentro de
+`/opt/synergos`.
+
+> **Por qué no basta con mirar que el fichero llegó.** Se levantó `Api.Audit` sobre un almacén
+> ilegible para medirlo: **`/health` contesta 200 y la lectura contesta 500.** Un humo de salud da
+> por buena esa restauración. Es el defecto #82 tal cual —la bitácora guardaba sus asientos y
+> devolvía 500 en toda lectura tras un reinicio— y ningún `tar -t` ni ningún `sha256` lo habría
+> visto: los bytes estaban perfectos.
+>
+> Y hay un escalón más: un almacén que se lee **a medias** contesta **200 con menos registros**,
+> porque el conversor es tolerante. Por eso el ensayo no mira sólo el código de estado: exige que
+> **vuelvan datos**. Un sistema recién instalado contesta 200 a las dieciocho colecciones.
+
+### 6.5 Lo que el respaldo **no** lleva, dicho de frente
+
+**El `.env` del servidor.** Ahí viven la llave compartida de las 22, la de firma de identidad, las
+de la pasarela y la del correo. Meterlas en la copia convertiría el respaldo en el objeto más
+valioso del producto y a la identidad de `age` en la llave de todo — es un problema de custodia de
+secretos disfrazado de copia de datos, con 30 copias diarias de blanco.
+
+Casi todo eso se regenera. **Uno no:** `Synergos:Academy:CertificateSigningSecret`. Sin él —o sin
+el llavero `cms-dpkeys`, que **sí** va en la copia— los diplomas ya emitidos dejan de verificar, y
+el propio código lo deja escrito en el log al pasar. Guardalo donde guardás la identidad de `age`.
+
+---
+
+## 7. La cuenta
 
 | | |
 |---|---|

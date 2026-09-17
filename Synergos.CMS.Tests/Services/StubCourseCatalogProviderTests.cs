@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Xunit;
@@ -27,6 +28,14 @@ public class StubCourseCatalogProviderTests
     private static StubCourseCatalogProvider Make(IContentStream? stream = null)
         => new(stream ?? ContentStream());
 
+    /// <summary>El mismo catálogo, con el reloj fijado para poder afirmar una fecha.</summary>
+    private static StubCourseCatalogProvider MakeAt(DateTimeOffset now, IContentStream? stream = null)
+        => new(
+            stream ?? ContentStream(),
+            new InMemoryCatalogIndex<CourseSummary>(
+                StubCourseCatalogProvider.Descriptor, CatalogSettings.Unpaged),
+            () => now);
+
     [Fact] // empty: filtro sin matches → lista vacía (no lanza)
     public async Task Search_NoMatch_ReturnsEmpty()
     {
@@ -34,6 +43,30 @@ public class StubCourseCatalogProviderTests
 
         Assert.Empty(result.Courses);
         Assert.Equal(0, result.Total);
+    }
+
+    /// <summary>
+    /// Buscar por el APELLIDO del instructor encuentra sus cursos.
+    /// </summary>
+    /// <remarks>
+    /// <b>El descriptor declara esto como intención explícita</b> —«buscar "Elena" y
+    /// encontrar sus cursos es intención real y hay que preservarla»— y no lo vigilaba nadie:
+    /// los tests de búsqueda cubrían texto, categoría y nivel, y el campo del instructor es
+    /// justo el que no se resuelve leyendo una propiedad sino componiendo dos datos.
+    ///
+    /// <para><b>El fixture EXIGE la regla y por eso usa el apellido.</b> "Restrepo" aparece
+    /// UNA sola vez en todo el seed, en el <c>Name</c> del instructor: no está en ningún
+    /// título, resumen ni categoría. Con "Elena" el test también pasaría si el campo
+    /// desapareciera del descriptor y el nombre casara por accidente en alguna prosa — un
+    /// verde que no prueba nada.</para>
+    /// </remarks>
+    [Fact] // filter: el instructor es un campo buscable, no un dato de la tarjeta
+    public async Task Search_ByInstructorSurname_FindsTheirCourses()
+    {
+        var result = await Make().SearchAsync(new CourseQuery(Text: "Restrepo"));
+
+        Assert.NotEmpty(result.Courses);
+        Assert.All(result.Courses, c => Assert.Equal("Elena Restrepo", c.InstructorName));
     }
 
     [Fact] // happy: sin filtros devuelve el catálogo sembrado, ordenado por rating
@@ -181,4 +214,70 @@ public class StubCourseCatalogProviderTests
 
     private static int AcademyTotalLessons()
         => CountLessonsAsync().GetAwaiter().GetResult();
+
+    // ── Estado y fecha de publicación (#102) ───────────────────────────────────
+
+    /// <summary>
+    /// Cada curso del catálogo de demo lleva su fecha de publicación, y son distintas.
+    /// </summary>
+    /// <remarks>
+    /// <b>La segunda mitad es la que importa.</b> Sin fechas DISTINTAS, «Más recientes» en el
+    /// borde ordenaría igual que no ordenar y el desplegable seguiría siendo decorativo
+    /// contra el catálogo de demo — que es el que corre en un clon limpio y en la
+    /// verificación de cualquiera. Que estén escritas y no derivadas es deliberado: esto es
+    /// el catálogo de demo, así que la fecha es dato autorado como el precio.
+    /// </remarks>
+    [Fact]
+    public async Task Search_CadaCursoSembradoLlevaSuFechaDePublicacion()
+    {
+        var result = await Make().SearchAsync(new CourseQuery());
+
+        Assert.All(result.Courses, c => Assert.NotNull(c.PublishedAt));
+        Assert.Equal(
+            result.Courses.Count,
+            result.Courses.Select(c => c.PublishedAt).Distinct().Count());
+    }
+
+    [Fact] // happy: lo que sirve este catálogo está publicado, y lo dice
+    public async Task Search_LoQueSeSirveEstaPublicado()
+    {
+        var result = await Make().SearchAsync(new CourseQuery());
+
+        Assert.NotEmpty(result.Courses);
+        Assert.All(result.Courses, c => Assert.Equal(CourseStatuses.Published, c.Status));
+    }
+
+    /// <summary>
+    /// Publicar desde el panel FECHA el curso con el día en que se publicó.
+    /// </summary>
+    /// <remarks>
+    /// Es el único de los tres casos en que la fecha se sabe con certeza: es ahora. No se
+    /// hereda del seed ni se deja sin poner — un curso recién publicado que apareciera en «no
+    /// consta» caería al final de «Más recientes», que es justo lo contrario de lo que es.
+    /// </remarks>
+    [Fact]
+    public async Task PublishCourse_FechaElCursoConElDiaDeLaPublicacion()
+    {
+        var provider = MakeAt(new DateTimeOffset(2026, 9, 14, 11, 30, 0, TimeSpan.Zero));
+
+        var published = await provider.PublishCourseAsync(new CourseDraft(
+            Title: "Angular moderno",
+            Summary: "Signals y zoneless",
+            Description: "",
+            School: "",
+            Category: "Desarrollo",
+            Level: "Intermedio",
+            InstructorId: "ins-elena",
+            Price: 300_000m,
+            Modules: new[]
+            {
+                new CourseDraftModule("Fundamentos", new[]
+                {
+                    new CourseDraftLesson("Signals", null, 12),
+                }),
+            }));
+
+        Assert.Equal(new DateOnly(2026, 9, 14), published.Course.PublishedAt);
+        Assert.Equal(CourseStatuses.Published, published.Course.Status);
+    }
 }

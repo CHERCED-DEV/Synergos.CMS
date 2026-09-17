@@ -85,6 +85,7 @@ public sealed class CatalogPropertyCatalogProvider : IPropertyCatalogProvider
             .Where(l => query.MinPrice is null || l.Price >= query.MinPrice.Value)
             .Where(l => query.MaxPrice is null || l.Price <= query.MaxPrice.Value)
             .Where(l => MatchesLocation(l, query.Location))
+            .Where(l => MatchesOperation(l, query.Operation))
             .ToList();
 
         var filters = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
@@ -218,9 +219,14 @@ public sealed class CatalogPropertyCatalogProvider : IPropertyCatalogProvider
             ImageUrl: gallery.Count > 0 ? gallery[0] : string.Empty,
             Featured: false);
 
-        var address = neighborhood.Length > 0 && city.Length > 0
+        // Lo que escribió quien publica gana. La derivación sigue detrás para las fichas
+        // anteriores a #110 y para quien publique sin dirección; lo que NO puede volver a
+        // pasar es que pise una calle real con «{barrio}, {ciudad}», que parece una
+        // dirección y no lleva a ninguna puerta.
+        var derivada = neighborhood.Length > 0 && city.Length > 0
             ? $"{neighborhood}, {city}"
             : neighborhood.Length > 0 ? neighborhood : city;
+        var address = string.IsNullOrWhiteSpace(draft.Address) ? derivada : draft.Address.Trim();
 
         return new PropertyDetail(
             Summary: summary,
@@ -236,6 +242,20 @@ public sealed class CatalogPropertyCatalogProvider : IPropertyCatalogProvider
             AgentName: string.IsNullOrWhiteSpace(draft.AgentName) ? string.Empty : draft.AgentName.Trim(),
             AgentPhone: string.IsNullOrWhiteSpace(draft.AgentPhone) ? string.Empty : draft.AgentPhone.Trim());
     }
+
+    /// <summary>
+    /// ¿Este inmueble es de la operación buscada? Igualdad exacta case-insensitive sobre el
+    /// vocabulario del dominio (<c>venta</c>|<c>arriendo</c>); vacío = sin filtro.
+    /// </summary>
+    /// <remarks>
+    /// Va acotando el UNIVERSO junto al precio y la ubicación, y no como faceta del
+    /// descriptor: los conteos de tipo/ciudad/habitaciones tienen que contar DENTRO de la
+    /// operación elegida. Un chip "Apartamento (12)" que cuenta los de venta mientras miras
+    /// arriendos es peor que no tener conteo.
+    /// </remarks>
+    private static bool MatchesOperation(PropertyListing listing, string? operation)
+        => string.IsNullOrWhiteSpace(operation)
+            || string.Equals(listing.Operation?.Trim(), operation.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private static bool MatchesLocation(PropertyListing listing, string? location)
     {

@@ -30,6 +30,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>@Model.SeoTitle</title>
     @await Html.PartialAsync("_BrandThemeStyle", brandThemeModel)
+    @* #126 — esta página pinta el Block Grid con Layout=null, así que NO hereda el <head>
+       de _Layout: sin esto, un <synergos-*> en una landing bare se emitía sin import map y
+       no hidrataba nunca, ni siquiera en desarrollo. *@
+    @await Html.PartialAsync("_SynHostRuntime")
 </head>
 <body class="syn-page syn-page--bare">
     @if (sections != null && sections.Any())

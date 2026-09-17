@@ -97,6 +97,9 @@ public sealed class TripPartialRefundTests
         private readonly Dictionary<string, TripSaga> _todas = new(StringComparer.Ordinal);
         public TripSaga? Find(string id) => _todas.TryGetValue(id, out var s) ? s : null;
         public void Put(TripSaga saga) => _todas[saga.Id] = saga;
+
+        // Un fake en memoria no tiene caché que vaciar: la verdad ES el diccionario (#34).
+        public void Invalidate() { }
         public IReadOnlyList<TripSaga> All() => _todas.Values.ToList();
         public IReadOnlyList<TripSaga> WithPendingCompensations()
             => _todas.Values.Where(s => s.Compensations.Any(c => c.IsPending)).ToList();
@@ -142,7 +145,7 @@ public sealed class TripPartialRefundTests
             ToKind = "viajes.guardia", ToId = "operaciones", Address = "guardia@ejemplo.co",
             TemplateKey = "viajes.compensacion.colgada",
         }));
-        var motor = new SagaEngine<TripSaga>(sagas, comp, aviso, vocabulario, reloj,
+        var motor = new SagaEngine<TripSaga>(sagas, comp, aviso, ArriendoDePrueba.Nuevo(), vocabulario, reloj,
             NullLogger<SagaEngine<TripSaga>>.Instance);
 
         return (new TripFlow(api, motor, reloj, NullLogger<TripFlow>.Instance), caps, sagas);

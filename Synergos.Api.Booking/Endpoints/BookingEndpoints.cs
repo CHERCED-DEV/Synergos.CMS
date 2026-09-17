@@ -130,15 +130,23 @@ public static class BookingEndpoints
         app.MapGet("/v1/reservations/{id}", (string id, BookingService svc) =>
             svc.GetReservation(id).Map(ReservationResponse.From).ToHttp());
 
-        app.MapGet("/v1/reservations", (string? resourceId, int? offset, int? limit, BookingService svc) =>
+        // Se lista por recurso, por actor, o por los dos. Sin ninguno de los dos se rechaza —la
+        // razón, la asimetría del vacío y lo que esta HU NO contesta están en ListReservations.
+        //
+        // forKind/forId se parsean acá y no se dejan caer en Ref.TryCreate a secas: con la mitad
+        // puesta —forKind sin forId— TryCreate devuelve null igual que si no viniera ninguno, así
+        // que el llamador que se equivocó en un campo recibiría "hace falta filtrar" en vez de
+        // "te falta la otra mitad". Es la misma forma que /v1/resources le dio a subjectKind.
+        app.MapGet("/v1/reservations", (string? resourceId, string? forKind, string? forId, int? offset, int? limit, BookingService svc) =>
         {
-            if (string.IsNullOrWhiteSpace(resourceId))
+            Ref? forWhom = null;
+            if (forKind is not null || forId is not null)
             {
-                // Sin filtro, esto sería un volcado del almacén entero por HTTP.
-                return Invalid("resource_id_required", "Hace falta resourceId.");
+                forWhom = Ref.TryCreate(forKind, forId);
+                if (forWhom is null) return Invalid("bad_for", "Para buscar por actor hacen falta forKind y forId.");
             }
 
-            return svc.ListReservations(resourceId!, Math.Max(0, offset ?? 0), QueryWindow.Limit(limit))
+            return svc.ListReservations(resourceId, forWhom, Math.Max(0, offset ?? 0), QueryWindow.Limit(limit))
                 .Map(p => ToPage(p.Map(ReservationResponse.From)))
                 .ToHttp();
         });

@@ -63,12 +63,14 @@ public sealed class CatalogPropertyCatalogProviderTests
     private static PropertyDraft Draft(
         string title = "Casa en Laureles",
         decimal price = 620_000_000m,
-        PropertyGeo? geo = null)
+        PropertyGeo? geo = null,
+        string? address = null)
         => new(
             Title: title, Type: "casa", Operation: "venta", Price: price,
             Beds: 4, Baths: 3, Area: 180, City: "Medellín",
             Geo: geo ?? new PropertyGeo(6.2447, -75.5916),
-            Gallery: Array.Empty<string>(), Description: "Casa amplia", Neighborhood: "Laureles");
+            Gallery: Array.Empty<string>(), Description: "Casa amplia", Neighborhood: "Laureles",
+            Address: address);
 
     // ── Búsqueda ─────────────────────────────────────────────────────────────
 
@@ -198,6 +200,44 @@ public sealed class CatalogPropertyCatalogProviderTests
         await sut.PublishListingAsync(Draft());
 
         Assert.Single((await sut.SearchAsync(new PropertyQuery())).Listings);
+    }
+
+    [Fact]
+    public async Task La_direccion_que_ESCRIBE_el_agente_gana_sobre_la_derivada()
+    {
+        // La calle NO se parece a «{barrio}, {ciudad}» a propósito: con una que sí se
+        // pareciera, el defecto —rellenar con la derivada— pasaría en verde (#110).
+        var sut = Build(new InMemoryJsonEntityStore());
+
+        var published = await sut.PublishListingAsync(Draft(address: "Cra 11 #93-45"));
+
+        Assert.Equal("Cra 11 #93-45", published.Location.Address);
+        Assert.Equal("Laureles", published.Location.Neighborhood);
+        Assert.Equal("Medellín", published.Location.City);
+    }
+
+    [Fact]
+    public async Task La_direccion_SOBREVIVE_a_releer_la_ficha_publicada()
+    {
+        // Lo que ve el comprador sale del almacén, no de lo que devolvió publicar: si la
+        // dirección no se persistiera, este test sería el único que la vería.
+        var store = new InMemoryJsonEntityStore();
+        var published = await Build(store).PublishListingAsync(Draft(address: "Cra 11 #93-45"));
+
+        var releida = await Build(store).GetListingAsync(published.Summary.Id);
+
+        Assert.Equal("Cra 11 #93-45", releida!.Location.Address);
+    }
+
+    [Fact]
+    public async Task Publicar_SIN_direccion_conserva_la_derivada_de_barrio_y_ciudad()
+    {
+        // Las fichas anteriores a #110 no llevan calle y el respaldo es lo que tienen.
+        var sut = Build(new InMemoryJsonEntityStore());
+
+        var published = await sut.PublishListingAsync(Draft());
+
+        Assert.Equal("Laureles, Medellín", published.Location.Address);
     }
 
     [Fact]

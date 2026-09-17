@@ -24,13 +24,27 @@ const DESTINO = join(RAIZ, 'compose.prod.yml');
 const CHECK = process.argv.includes('--check');
 
 /**
- * Las capacidades que VERIFICAN tokens de identidad (HU #14, rebanada 3).
+ * Si esta capacidad VERIFICA tokens de identidad (HU #14), leido de su `Program.cs`.
  *
- * Es una lista y no «todas» a proposito: una capacidad que no lee la cabecera no
- * gana nada teniendo la llave, y tenerla la pondria a un descuido de empezar a
- * creerse tokens que nadie decidio que aceptara. Se anade cuando se cablea, no antes.
+ * Sigue sin ser «todas» a proposito: una capacidad que no lee la cabecera no gana
+ * nada teniendo la llave, y tenerla la pondria a un descuido de empezar a creerse
+ * tokens que nadie decidio que aceptara. Lo que cambia es COMO se sabe cuales son.
+ *
+ * ERA UNA LISTA A MANO, Y YA SE HABIA DESINCRONIZADO: decia dos —Messaging y
+ * Workflow— cuando eran cuatro. `Api.Consent` (rebanada 5) y `Api.Audit` (#72)
+ * cablearon el verificador y nadie volvio a mirar esta linea, asi que el compose no
+ * les pasaba la llave. Y eso NO falla al arrancar: la capacidad sirve y RECHAZA el
+ * primer token que alguien le presente, o sea un servidor bien configurado
+ * comportandose como uno sin llave — el sintoma que el comentario de abajo llama de
+ * los peores de diagnosticar. Es el mismo error que ya costo el defecto #83.
+ *
+ * `required: false` distingue a quien VERIFICA de quien EMITE: `Api.Identity` pide
+ * `required: true` y tiene su propio bloque, con `:?` porque sin llave no arranca.
  */
-const VERIFICAN_IDENTIDAD = new Set(['Synergos.Api.Messaging', 'Synergos.Api.Workflow']);
+function verificaIdentidad(proyecto) {
+  const programa = readFileSync(join(RAIZ, proyecto, 'Program.cs'), 'utf8');
+  return /AddIdentityTokens\(required:\s*false\)/.test(programa);
+}
 
 /** `Synergos.Api.Booking` → `api-booking`. Docker no quiere mayúsculas ni puntos. */
 const nombreServicio = (proyecto) =>
@@ -70,7 +84,7 @@ function capacidadesDe(proyecto) {
 
 /** La llave con la que una capacidad VERIFICA tokens de identidad, si los verifica. */
 function entornoIdentidad(proyecto) {
-  if (!VERIFICAN_IDENTIDAD.has(proyecto)) return '';
+  if (!verificaIdentidad(proyecto)) return '';
   return [
     '',
     '      # La llave con la que se COMPRUEBAN los tokens (HU #14). La misma que firma y',
@@ -136,17 +150,27 @@ function entornoExtra(proyecto, disponibles) {
       '      # cualquier otro nombre y sin credencial la capacidad RECHAZA cada cobro a',
       '      # gritos. Lo que no existe es el stub sirviendo en silencio.',
       '      Payments__Provider: \${PAYMENTS_PROVIDER:-logging}',
+      '',
+      '      # Las cuatro credenciales de Wompi. Son cuatro y hacen cosas distintas:',
+      '      # privada (consultas y devoluciones), publica (viaja en la URL del',
+      '      # checkout), integridad (firma la transaccion) y eventos (verifica el',
+      '      # webhook). La capacidad dice CUAL falta, no «no esta configurado».',
       '      Payments__wompi__ApiKey: \${PAYMENTS_WOMPI_API_KEY:-}',
-    ].join('\n');
+      '      Payments__wompi__PublicKey: \${PAYMENTS_WOMPI_PUBLIC_KEY:-}',
+      '      Payments__wompi__IntegritySecret: \${PAYMENTS_WOMPI_INTEGRITY_SECRET:-}',
+      '      Payments__wompi__EventsSecret: \${PAYMENTS_WOMPI_EVENTS_SECRET:-}',
+      '      Payments__wompi__BaseUrl: \${PAYMENTS_WOMPI_BASE_URL:-https://sandbox.wompi.co/v1/}',
+      '      Payments__wompi__RedirectUrl: \${PAYMENTS_WOMPI_REDIRECT_URL:-}',
+    ].join('\n') + entornoIdentidad(proyecto);
   }
 
   if (proyecto.endsWith('.Identity')) {
     return [
       '',
       '      # La llave que FIRMA los tokens de identidad (HU #14). NO es',
-      '      # SYNERGOS_API_KEY: la compartida la tienen los 22 servicios y solo dice',
-      '      # «este proceso es de los nuestros». Si con ella se firmaran identidades,',
-      '      # cualquiera de los 22 fabricaria personas.',
+      '      # SYNERGOS_API_KEY: la compartida la tienen TODOS los servicios y solo',
+      '      # dice «este proceso es de los nuestros». Si con ella se firmaran',
+      '      # identidades, cualquiera de ellos fabricaria personas.',
       '      #',
       '      # Sin llave el servicio NO arranca — un Api.Identity que dice emitir',
       '      # identidades y no puede es peor que uno caido, porque parece que funciona.',
@@ -197,6 +221,14 @@ function entornoExtra(proyecto, disponibles) {
   // Fallback: quien verifica tokens y no tiene bloque propio se lleva sólo la llave.
   // Va al FINAL a proposito — puesto arriba se comia el bloque de Api.Workflow, que
   // ademas de la llave necesita su postura de roles.
+  //
+  // Y el reverso muerde igual: una capacidad CON bloque propio que empiece a verificar
+  // tokens no llega nunca hasta aca, asi que su `return` se come la llave en silencio.
+  // Paso con Api.Payments al cablearle identidad (HU #14): el bloque de Wompi retornaba
+  // antes y el compose la dejaba sin `IdentityTokens__Keys` — o sea arrancando bien y
+  // rechazando el primer token que le presentaran. Por eso los bloques propios de quien
+  // verifica CONCATENAN entornoIdentidad() en vez de devolver a secas. Lo caza el gate
+  // de IdentityGateTests, que deriva la lista del disco y no de aca.
   return entornoIdentidad(proyecto);
 }
 
@@ -238,6 +270,14 @@ function generar() {
   const proyectos = servicios(RAIZ);
   if (proyectos.length === 0) throw new Error('compose-gen: no se encontró ningún servicio');
 
+  // Las cifras de la cabecera se DERIVAN de lo que hay en el disco. Escritas a
+  // mano decían «20 capacidades, 2 orquestadores» con cuatro orquestadores ya
+  // construidos: Bff.Eventos y Bff.Viajes entraron y nadie volvió a esa línea
+  // (#114). Es la misma razón por la que la matriz de imágenes tampoco se
+  // escribe: una lista a mano se desincroniza el día que nadie mira.
+  const capacidades = proyectos.filter((p) => p.startsWith('Synergos.Api.'));
+  const orquestadores = proyectos.filter((p) => p.startsWith('Synergos.Bff.'));
+
   // `Api.Notifications` recibe el webhook del proveedor de correo (ADR 0131), y
   // es lo UNICO del arbol de servicios alcanzable desde fuera. Se busca en vez
   // de cablearse para que el dia que cambie de nombre esto falle acá y no en
@@ -254,7 +294,7 @@ function generar() {
 # esté al día (ComposeStackTests). Editarlo a mano funciona hasta el siguiente
 # \`compose-gen\`, que lo pisa sin avisar.
 #
-# El producto entero: el CMS, las 20 capacidades, los 2 orquestadores y un proxy.
+# El producto entero: el CMS, las ${capacidades.length} capacidades, los ${orquestadores.length} orquestadores y un proxy.
 #
 #   docker compose -f compose.prod.yml up -d
 #
@@ -265,10 +305,11 @@ function generar() {
 #   SYNERGOS_DOMAIN    el dominio publico
 #
 # ⚠️ UNA INSTANCIA POR CAPACIDAD, Y PARADA ANTES DE ARRANQUE.
-# 19 de las 20 capacidades guardan en fichero JSON con un lock de PROCESO. Dos
-# instancias se pisan y NO dan error: corrompen. Un rolling deploy son dos
-# instancias a la vez, asi que el despliegue "normal" de cualquier plataforma
-# moderna rompe esto. Mientras no cambie el almacen (epica #2), no se toca.
+# Casi todas las ${capacidades.length} capacidades guardan en fichero JSON con un lock
+# de PROCESO. Dos instancias se pisan y NO dan error: corrompen. Un rolling
+# deploy son dos instancias a la vez, asi que el despliegue "normal" de
+# cualquier plataforma moderna rompe esto. Mientras no cambie el almacen
+# (epica #2), no se toca.
 
 name: synergos
 
@@ -307,6 +348,22 @@ services:
     networks: [interna]
     environment:
       ASPNETCORE_ENVIRONMENT: Docker
+
+      # La siembra de desarrollo, APAGADA — y va acá y no sólo en el perfil.
+      #
+      # appsettings.Docker.json la trae encendida, y ASPNETCORE_ENVIRONMENT
+      # Docker es justo el perfil con el que corre PRODUCCION: los catorce
+      # endpoints de DevController son [AllowAnonymous], así que
+      # POST /dev/clear-all-content quedaba alcanzable desde internet, sin
+      # autenticar, para borrar el contenido entero (#113).
+      #
+      # El XML-doc del controller dice «no-op en prod» — cierto si el flag esta
+      # off, y el despliegue no lo apagaba. Es la forma de #72 y #82: la
+      # propiedad que el codigo anuncia como su salvaguarda es la que no se
+      # cumple. Lo apaga el despliegue porque el despliegue es quien sabe que
+      # esto es produccion; el perfil lo sigue trayendo encendido para que un
+      # docker compose de desarrollo siga sirviendo la siembra.
+      Synergos__DevSeed__Enabled: "false"
       Umbraco__CMS__Global__UmbracoApplicationUrl: "https://\${SYNERGOS_DOMAIN}/"
       Synergos__Notifications__PublicBaseUrl: "https://\${SYNERGOS_DOMAIN}"
       Synergos__Cart__SecretKey: \${SYNERGOS_CART_SECRET:?falta SYNERGOS_CART_SECRET}
@@ -392,6 +449,22 @@ services:
       Synergos__Identity__Mode: \${SYNERGOS_IDENTITY_MODE:-Stub}
       Synergos__Identity__BaseUrl: "http://api-identity:8080"
       Synergos__Identity__ApiKey: \${SYNERGOS_API_KEY}
+
+      # Contra quien se cobra (#27). SON DOS interruptores y son dos ALCANCES:
+      # Synergos__Payments__Mode cambia el seam ENTERO —los ocho consumidores del
+      # motor en proceso— y el CMS SE NIEGA A ARRANCAR con el puesto en Api si
+      # Tienda, Salud, Eventos o Viajes siguen comprando de este lado: esos
+      # flujos apartan, cobran y confirman en varios pasos y aqui no hay donde
+      # anotar una compensacion pendiente. La tasa de un tramite va por el suyo
+      # —Synergos__Gob__Payments__Mode— porque radicar NO compone: el motor
+      # decide no abortar el tramite si la captura no sale.
+      Synergos__Payments__Mode: \${SYNERGOS_PAYMENTS_MODE:-Engine}
+      Synergos__Payments__BaseUrl: "http://api-payments:8080"
+      Synergos__Payments__ApiKey: \${SYNERGOS_API_KEY}
+
+      Synergos__Gob__Payments__Mode: \${SYNERGOS_GOB_PAYMENTS_MODE:-Local}
+      Synergos__Gob__Payments__BaseUrl: "http://api-payments:8080"
+      Synergos__Gob__Payments__ApiKey: \${SYNERGOS_API_KEY}
 
       Synergos__Gob__Mode: \${SYNERGOS_GOB_MODE:-Stub}
       Synergos__Gob__BaseUrl: "http://api-workflow:8080"

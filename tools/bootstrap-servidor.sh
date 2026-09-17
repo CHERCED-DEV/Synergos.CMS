@@ -29,7 +29,10 @@ DIR="/opt/synergos"
 echo "══ 1. Paquetes base"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update --quiet
-apt-get install --yes --no-install-recommends ca-certificates curl gnupg ufw
+# `age` y `rclone` son del respaldo (HU #31): cifrar en origen y llevárselo
+# fuera. Van acá y no dentro de un contenedor a propósito — el respaldo tiene
+# que poder correr aunque el stack esté caído, que es justo cuando hace falta.
+apt-get install --yes --no-install-recommends ca-certificates curl gnupg ufw age rclone
 
 echo "══ 2. Docker"
 if command -v docker >/dev/null 2>&1; then
@@ -103,7 +106,35 @@ ENV
   echo "   .env creado con llaves nuevas. FALTA: SYNERGOS_DOMAIN y las de Resend."
 fi
 
-echo "══ 5. Firewall"
+echo "══ 5. El respaldo, programado"
+#
+# Un script de respaldo que nadie corre es un fichero. Y sin corridas no hay
+# retención: lo que borra las copias viejas es la corrida siguiente.
+#
+# 04:10 UTC porque `respaldo.sh` PARA LOS SERVICIOS para copiar en frío (el
+# `lock` de proceso de JsonCollectionStore no admite copiar en caliente), así
+# que esto es una caída corta programada, no una tarea invisible.
+install -o "$USUARIO" -g "$USUARIO" -m 755 -d /var/backups/synergos
+chmod 700 /var/backups/synergos   # datos personales: sólo el dueño
+
+cat > /etc/cron.d/synergos-respaldo <<CRON
+# Respaldo diario (HU #31). Lo deja en /var/backups/synergos y —si $DIR/.env
+# tiene SYNERGOS_RESPALDO_DESTINO— se lo lleva fuera cifrado.
+#
+# Si el envío falla, esto termina en ERROR y cron manda el correo de la salida.
+# Terminar en verde habiendo dejado la copia en el disco que venía a proteger
+# es cómo se cree que hay respaldo sin tenerlo.
+SHELL=/bin/bash
+10 4 * * * $USUARIO $DIR/respaldo.sh >> /var/log/synergos-respaldo.log 2>&1
+CRON
+chmod 644 /etc/cron.d/synergos-respaldo
+touch /var/log/synergos-respaldo.log
+chown "$USUARIO:$USUARIO" /var/log/synergos-respaldo.log
+echo "   diario a las 04:10 UTC → /var/backups/synergos"
+echo "   ⚠ Sin SYNERGOS_RESPALDO_DESTINO en $DIR/.env eso NO sale del servidor,"
+echo "     y una copia que muere con el disco no protege de perder el disco."
+
+echo "══ 6. Firewall"
 ufw allow 22/tcp   >/dev/null
 ufw allow 80/tcp   >/dev/null
 ufw allow 443/tcp  >/dev/null
@@ -111,7 +142,7 @@ ufw --force enable >/dev/null
 echo "   22, 80 y 443 abiertos."
 echo "   ⚠ Cerrar 80/443 a los rangos de Cloudflare va DESPUÉS de que el DNS apunte."
 
-echo "══ 6. SSH sin contraseña"
+echo "══ 7. SSH sin contraseña"
 sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 systemctl reload ssh 2>/dev/null || systemctl reload sshd
 
@@ -122,3 +153,7 @@ echo "  2. Los secretos en GitHub: DEPLOY_HOST=$(curl --silent --max-time 5 ifco
 echo "     DEPLOY_USER=$USUARIO, DEPLOY_SSH_KEY=<la privada>"
 echo "  3. La variable SYNERGOS_DOMAIN en GitHub (Variables, no Secrets)"
 echo "  4. El DNS de Cloudflare apuntando acá, en naranja"
+echo "  5. El respaldo FUERA de la máquina: SYNERGOS_RESPALDO_DESTINO y"
+echo "     SYNERGOS_RESPALDO_LLAVE_PUBLICA en $DIR/.env (ver .env.example)."
+echo "     Y después, el ensayo: tools/prueba-restauracion.sh — que NO se corre"
+echo "     acá, porque la llave privada no vive en el servidor."

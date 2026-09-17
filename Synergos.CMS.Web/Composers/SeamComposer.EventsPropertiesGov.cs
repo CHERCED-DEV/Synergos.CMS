@@ -314,11 +314,41 @@ public sealed partial class SeamComposer
         // Durabilidad (doc 25): los expedientes viven tras el store genérico
         // (resourceType "gov-cases") → un trámite radicado y sus decisiones sobreviven un
         // reinicio. El seed es seed-if-absent para no pisar las mutaciones reales.
+        //
+        // Contra quién se cobra la TASA (#27). Va por SU PROPIO interruptor
+        // —Synergos:Gob:Payments:Mode— y no por el del seam, que cambia los ocho consumidores del
+        // motor y sólo se puede encender con Tienda/Salud/Eventos/Viajes ya cableados contra su
+        // orquestador. Radicar NO compone una saga —el propio motor decide no abortar el trámite
+        // si la captura no sale—, así que es el único consumidor que puede hablarle a la
+        // capacidad hoy. La sección se ENLAZA, como las otras cuatro.
+        services.Configure<GovFeeSettings>(builder.Config.GetSection("Synergos:Gob:Payments"));
+
+        if (string.Equals(builder.Config["Synergos:Gob:Payments:Mode"], "Api",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            var feeBase = builder.Config["Synergos:Gob:Payments:BaseUrl"];
+            var feeKey = builder.Config["Synergos:Gob:Payments:ApiKey"];
+            var feeTimeout = int.TryParse(
+                builder.Config["Synergos:Gob:Payments:TimeoutSeconds"], out var ft) && ft > 0 ? ft : 30;
+
+            services.AddHttpClient(HttpPaymentProvider.GovFeeClientName, http =>
+            {
+                var url = string.IsNullOrWhiteSpace(feeBase) ? "http://127.0.0.1:5204/" : feeBase;
+                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
+                http.Timeout = TimeSpan.FromSeconds(feeTimeout);
+                if (!string.IsNullOrWhiteSpace(feeKey))
+                {
+                    http.DefaultRequestHeaders.Add(HttpPaymentProvider.ApiKeyHeader, feeKey);
+                }
+            })
+            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+        }
+
         services.AddSingleton<StubApplicationService>(sp =>
             new StubApplicationService(
                 sp.GetRequiredService<ITramiteCatalogProvider>(),
                 sp.GetRequiredService<IGovFeeCalculator>(),
-                sp.GetRequiredService<IPaymentProvider>(),
+                CobradorDeLaTasa(sp),
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 null,
                 sp.GetRequiredService<IJsonEntityStore>(),
@@ -434,5 +464,41 @@ public sealed partial class SeamComposer
         // dominios), igual que BlogsDemoSeedHostedService. Idempotente.
         services.AddHostedService<GovCorrespondenceSeedHostedService>();
 
+    }
+
+    /// <summary>
+    /// Quién cobra la tasa de un trámite (#27).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es un método con nombre y no el lambda del registro</b>, igual que
+    /// <c>SelectSingleProvider</c> y por lo mismo: qué proveedor termina cobrando es exactamente
+    /// la decisión que hay que poder verificar.</para>
+    ///
+    /// <para><b><c>Local</c> resuelve el seam registrado, sea el que sea.</b> No construye el
+    /// motor en proceso a mano: si el despliegue ya puso <c>Synergos:Payments:Mode=Api</c>, la
+    /// tasa va por la capacidad sin tener que decirlo dos veces — y si no, cobra con el motor,
+    /// que es lo que hacía antes de esta HU.</para>
+    /// </remarks>
+    internal static IPaymentProvider CobradorDeLaTasa(IServiceProvider sp)
+    {
+        var opciones = sp.GetRequiredService<IOptionsMonitor<GovFeeSettings>>();
+
+        if (!string.Equals(opciones.CurrentValue.Mode, "Api", StringComparison.OrdinalIgnoreCase))
+        {
+            return sp.GetRequiredService<IPaymentProvider>();
+        }
+
+        return new HttpPaymentProvider(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            HttpPaymentProvider.GovFeeClientName,
+            // El sujeto del cobro es el EXPEDIENTE y su id es el radicado, que el motor acuña
+            // antes de llamar: por eso la llave de idempotencia existe antes que el estado.
+            () => new PaymentWireKinds(
+                opciones.CurrentValue.CaseKind, opciones.CurrentValue.CitizenKind, "gov"),
+            sp.GetRequiredService<ILogger<HttpPaymentProvider>>(),
+            // Quien paga la tasa se PRESENTA, ya no solo se declara (HU #14). Siempre registrado
+            // —Stub o Http segun Synergos:Identity:Mode—, y el Stub devuelve null, que es lo que
+            // deja el cobro saliendo con CmsSession como hacia antes.
+            sp.GetRequiredService<IIdentityTokenIssuer>());
     }
 }

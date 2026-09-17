@@ -91,6 +91,7 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         string eventId,
         IReadOnlyList<EventCheckoutItem> items,
         IReadOnlyList<EventAttendeeInfo> attendees,
+        EventBuyerInfo? buyer = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(eventId)) throw new ArgumentException("El evento es obligatorio.", nameof(eventId));
@@ -108,7 +109,12 @@ public sealed class HttpEventTicketingService : IEventTicketingService
                 nameof(attendees));
         }
 
-        var comprador = attendees[0];
+        // Quien compra, que no tiene por qué ir (#107). Acá pesa más que en el motor en proceso:
+        // de él sale el SEUDÓNIMO que viaja al orquestador y la llave de idempotencia de la
+        // compra, así que con el comprador equivocado las dos identifican a otra persona.
+        var comprador = buyer is not null && !string.IsNullOrWhiteSpace(buyer.Email)
+            ? new EventAttendeeInfo(buyer.Name, buyer.Email)
+            : attendees[0];
         if (string.IsNullOrWhiteSpace(comprador.Name) || string.IsNullOrWhiteSpace(comprador.Email))
         {
             throw new ArgumentException("El nombre y el email del comprador son obligatorios.", nameof(attendees));
@@ -435,11 +441,7 @@ public sealed class HttpEventTicketingService : IEventTicketingService
     ///
     /// <para>Nunca el nombre: dos personas se llaman igual.</para>
     /// </remarks>
-    internal static string BuyerId(EventAttendeeInfo comprador)
-    {
-        var correo = (comprador.Email ?? string.Empty).Trim().ToLowerInvariant();
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(correo)))[..16].ToLowerInvariant();
-    }
+    internal static string BuyerId(EventAttendeeInfo comprador) => SeudonimoDePersona.De(comprador.Email);
 
     /// <summary>
     /// La llave de idempotencia: <b>determinista sobre lo que se compra</b>, no sobre cuándo.

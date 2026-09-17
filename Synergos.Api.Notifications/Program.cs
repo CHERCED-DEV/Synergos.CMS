@@ -56,6 +56,14 @@ var app = builder.Build();
 
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Notifications:ApiKey"], "/v1/webhooks");
+
+// Un solo escritor por capacidad, aunque corran varias réplicas (#112). Sube a proceso
+// cruzado el `lock` que el servicio ya tenía dentro: con el almacén en un fichero por
+// documento, lo que queda por serializar es leer-decidir-escribir sobre el MISMO.
+app.UseStoreWriteGate(
+    app.Services.GetRequiredService<IOptions<NotificationStorageOptions>>().Value.Root,
+    NotificationRules.CodePrefix,
+    app.Configuration.GetValue<int?>("Notifications:Storage:WriteGateSeconds"));
 app.MapNotificationEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

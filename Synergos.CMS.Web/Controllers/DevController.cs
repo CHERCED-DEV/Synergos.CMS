@@ -8,9 +8,24 @@ namespace Synergos.CMS.Web.Controllers;
 
 /// <summary>
 /// Dev-only endpoints para content seeding y smoke-test. Todos gated
-/// por <c>Synergos:DevSeed:Enabled=true</c>. Retornan 404 cuando el
-/// flag está off (no-op en prod).
+/// por <c>Synergos:DevSeed:Enabled=true</c>: retornan 404 con el flag off.
 /// </summary>
+/// <remarks>
+/// <b>Esto decía «no-op en prod» y no era verdad</b> (#113). La frase es cierta
+/// condicionalmente —con el flag off no pasa nada— y describía un perfil de
+/// producción que <b>no existía</b>: <c>appsettings.Docker.json</c> trae el flag
+/// encendido y <c>ASPNETCORE_ENVIRONMENT: Docker</c> es justo con lo que corre el
+/// despliegue. Como estos catorce endpoints son <c>[AllowAnonymous]</c>, eso dejaba
+/// <c>POST /dev/clear-all-content</c> alcanzable desde internet, sin autenticar.
+/// <para>Hoy lo apaga el despliegue —<c>compose.prod.yml</c>, generado— y hay gate
+/// (<c>ComposeStackTests.El_perfil_de_produccion_NO_trae_la_siembra_encendida</c>).
+/// El perfil sigue trayéndolo encendido a propósito, para que un
+/// <c>docker compose</c> de desarrollo siga sirviendo la siembra: quien sabe que
+/// esto es producción es el despliegue, no el perfil.</para>
+/// <para><b>Y la salvaguarda NO es la autenticación</b>: es el flag. Un arreglo que
+/// dejara el flag encendido y tapara los endpoints con auth deja la siembra viva en
+/// producción, que es la otra mitad del problema.</para>
+/// </remarks>
 [ApiController]
 [Route("dev")]
 [AllowAnonymous]
@@ -23,6 +38,7 @@ public sealed class DevController : ControllerBase
     private readonly DevMemberRoleSeeder _roleSeeder;
     private readonly DevProductReviewSeeder _reviewSeeder;
     private readonly DevPaidOrderSeeder _paidOrderSeeder;
+    private readonly StarterPortadaSeeder _portadaSeeder;
     private readonly ILogger<DevController> _logger;
 
     public DevController(
@@ -33,6 +49,7 @@ public sealed class DevController : ControllerBase
         DevMemberRoleSeeder roleSeeder,
         DevProductReviewSeeder reviewSeeder,
         DevPaidOrderSeeder paidOrderSeeder,
+        StarterPortadaSeeder portadaSeeder,
         ILogger<DevController> logger)
     {
         _settings = settings.Value;
@@ -42,6 +59,7 @@ public sealed class DevController : ControllerBase
         _roleSeeder = roleSeeder;
         _reviewSeeder = reviewSeeder;
         _paidOrderSeeder = paidOrderSeeder;
+        _portadaSeeder = portadaSeeder;
         _logger = logger;
     }
 
@@ -66,6 +84,43 @@ public sealed class DevController : ControllerBase
         return products == 0
             ? Conflict(new { error = "El catálogo no devolvió productos; no se sembró nada." })
             : Ok(new { products, reviews });
+    }
+
+    /// <summary>
+    /// Crea la <b>portada de arranque</b>: el <c>siteRoot</c> publicado que hace que
+    /// <c>GET /</c> deje de servir el cartel «No published content».
+    /// <c>POST /dev/seed-portada</c>
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el último hueco del camino de un clon limpio a un sitio visible (#119). El
+    /// schema lo trae <c>tools/importar-schema.sh</c> y el estado de las capacidades
+    /// <c>tools/provisionar.sh</c>; el contenido no lo traía nadie, porque
+    /// <c>uSync/v9/Content/</c> está vacía y sembrar en boot está prohibido (ADR 0013).</para>
+    ///
+    /// <para><b>Se siembra en DESARROLLO, no en el servidor.</b> El flag de DevSeed viene
+    /// apagado en producción (#113, hay gate), así que acá esto contesta 404 y eso es lo
+    /// correcto: el camino es sembrar en local → revisar → exportar con uSync → commitear
+    /// <c>uSync/v9/Content/</c> → importar en el servidor. Ver
+    /// <c>docs/despliegue/00-montar-el-entorno.md</c> §5.bis.2.</para>
+    ///
+    /// <para><b>Idempotente y no destructivo</b>: si el <c>siteRoot</c> ya tiene cuerpo,
+    /// contesta <c>already-authored</c> y no toca nada — sembrar encima se llevaría por
+    /// delante lo que el arquitecto acaba de autorar, justo antes de exportarlo.</para>
+    /// </remarks>
+    [HttpPost("seed-portada")]
+    public IActionResult SeedPortada()
+    {
+        if (!_settings.Enabled) return NotFound();
+
+        _logger.LogInformation("DevSeed endpoint invocado (seed-portada).");
+        var result = _portadaSeeder.Seed();
+
+        // Un fallo NO sale con 200. El seeder de identidad contestaba 200 con
+        // success:false y por eso nadie vio que llevaba roto: «no se pudo» y «ya estaba»
+        // se leen igual desde un script.
+        return result.Success
+            ? Ok(new { result.SiteRootId, outcome = result.Outcome.ToString(), result.Detail })
+            : Conflict(new { outcome = result.Outcome.ToString(), error = result.Detail });
     }
 
     [HttpPost("seed-test-site")]
@@ -95,13 +150,25 @@ public sealed class DevController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Crea el ANDAMIO de la vitrina SynergosLabs (platformRoot → siteRoot → 3 páginas
+    /// vacías) que <c>POST /dev/fill-synergos-pages</c> puebla después. Idempotente.
+    /// </summary>
+    /// <remarks>
+    /// <b>No es la portada de arranque</b> — ésa es <c>POST /dev/seed-portada</c>, la que
+    /// nombra <c>docs/despliegue/00-montar-el-entorno.md</c> §5.bis.2.
+    /// <para>Devolvía <c>200</c> con <c>success:false</c> adentro, y encima llevaba roto:
+    /// el publish del <c>platformRoot</c> se caía por dos obligatorias sin poner (#119). Un
+    /// fallo dentro de un 200 no se lee como fallo desde un script ni desde un navegador,
+    /// así que ahora sale con <c>409</c>.</para>
+    /// </remarks>
     [HttpPost("seed-synergos-identity")]
     public IActionResult SeedSynergosIdentity()
     {
         if (!_settings.Enabled) return NotFound();
         _logger.LogInformation("SynergosSeed endpoint invocado.");
         var result = _identitySeeder.Seed();
-        return Ok(result);
+        return result.Success ? Ok(result) : Conflict(result);
     }
 
     [HttpPost("fill-synergos-pages")]

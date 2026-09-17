@@ -3,11 +3,17 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # LO QUE SE ALCANZA DESDE INTERNET, Y NADA MÁS.
 #
-# Dos rutas. Todo lo demás —las 20 capacidades y los 2 orquestadores— vive en
-# la red interna de Docker y ni siquiera publica un puerto: no hay nada que
-# bloquear porque no hay nada expuesto.
+# Un puñado de rutas, y se DERIVAN: una por cada webhook que el árbol expone,
+# más el catch-all del CMS. Todo lo demás —las 20 capacidades y los 4
+# orquestadores— vive en la red interna de Docker y ni siquiera publica un
+# puerto: no hay nada que bloquear porque no hay nada expuesto.
 #
-# Caddy y no nginx por brevedad: con 23 servicios detrás, un fichero de veinte
+# «Se derivan» no es una forma de hablar: `WebhookGateTests` cruza este fichero
+# contra los `MapPost("/v1/webhooks/…")` que existen, en las dos direcciones —
+# un webhook sin ruta acá rompe el build, y una ruta acá hacia algo que no es un
+# webhook, también.
+#
+# Caddy y no nginx por brevedad: con 26 piezas detrás, un fichero de treinta
 # líneas que se lee entero vale más que uno de doscientos que nadie relee.
 # Y saca los certificados solo.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -15,28 +21,71 @@
 {$SYNERGOS_DOMAIN} {
 	encode zstd gzip
 
-	# ── El camino de vuelta del proveedor de correo ───────────────────────────
+	# ── Los caminos de vuelta de los proveedores ──────────────────────────────
 	#
-	# Es el ÚNICO endpoint del árbol de servicios alcanzable desde fuera, y es a
-	# la fuerza: lo llama un tercero que no tiene la llave compartida (ADR 0131).
-	# Lo que lo protege es su firma, verificada dentro de Api.Notifications.
+	# Son los ÚNICOS endpoints del árbol de servicios alcanzables desde fuera, y
+	# es a la fuerza: los llama un tercero que no tiene la llave compartida
+	# (ADR 0131 para el correo, HU #27 para el cobro). Lo que los protege es su
+	# firma, verificada dentro de cada capacidad — y eso lo vigila
+	# `WebhookGateTests`.
 	#
-	# Va PRIMERO porque Caddy evalúa por especificidad y esta ruta tiene que
-	# ganarle al catch-all de abajo.
-	handle /v1/webhooks/* {
+	# ⚠️ UNA RUTA POR WEBHOOK, Y NUNCA EL COMODÍN.
+	#
+	# Esto decía `handle /v1/webhooks/*` hacia `api-notifications` de cuando el
+	# webhook era uno solo. La HU #27 añadió el de Wompi en `Api.Payments` y
+	# nadie volvió acá: `POST /v1/webhooks/wompi` llegaba a `Api.Notifications`,
+	# que no lo mapea, así que el proveedor recibía **404 del servicio
+	# equivocado** y nada fallaba ruidosamente (#114). Un cobro confirmado que no
+	# llega se lee como «el pedido no salió», que no apunta a ninguna parte — la
+	# forma exacta de #57.
+	#
+	# Van PRIMERO porque Caddy evalúa `handle` por especificidad de la ruta y
+	# éstas tienen que ganarle al catch-all de abajo.
+	handle /v1/webhooks/resend {
 		reverse_proxy api-notifications:8080
+	}
+
+	handle /v1/webhooks/wompi {
+		reverse_proxy api-payments:8080
+	}
+
+	# Y un webhook que NO tenga ruta muere acá, no en el CMS.
+	#
+	# Sin esto cae al catch-all y lo contesta Umbraco con su 404 — un 404 de una
+	# página, con su HTML, que un proveedor registra como «la URL existe pero
+	# rechaza». El gate impide llegar a esto, pero si alguna vez se llega, que
+	# sea a la vista.
+	handle /v1/webhooks/* {
+		respond "webhook sin ruta en el proxy" 404
 	}
 
 	# ── Todo lo demás es el CMS ───────────────────────────────────────────────
 	handle {
 		reverse_proxy cms:8080 {
-			# El primer arranque instala Umbraco desatendido e importa 880 ítems
-			# de uSync — unos 74s medidos en CI (ADR 0128). Sin esta paciencia,
-			# el proxy devuelve 502 durante ese rato y parece que el despliegue
-			# falló cuando en realidad está poblándose.
-			health_uri /_health
-			health_interval 10s
-			health_timeout 5s
+			# ⚠️ NADA DE `health_uri /_health` ACÁ, Y ESTO COSTÓ EL SITIO ENTERO.
+			#
+			# Esto tenía un chequeo activo contra `/_health`, y `/_health`
+			# devuelve **503 en cuanto UNA probe está roja** — incluida
+			# `bundle_registry`, que está roja POR DISEÑO mientras no se
+			# configure el CDN, que es el caso por defecto. Caddy lo leía como
+			# «no hay upstream», así que el portero contestaba **503 a todo**
+			# con el CMS perfectamente vivo detrás (#114).
+			#
+			# No se ve sin levantar el stack COMPUESTO: el CMS suelto contesta
+			# 200, su contenedor reporta `healthy` —el HEALTHCHECK del
+			# Dockerfile va sin `--fail` justamente por esto, y ahí está escrito
+			# el porqué— y ningún gate miraba la combinación. Medido: Caddy
+			# anota `status code out of tolerances` y `no upstreams available`,
+			# y `GET /` da 503 con 0 bytes.
+			#
+			# La paciencia del primer arranque —Umbraco se instala desatendido y
+			# tarda— se consigue REINTENTANDO mientras el destino no escuche, que
+			# es lo que se quería, y no condicionando el tráfico a que un
+			# subsistema OPCIONAL esté verde. `/_health` sigue siendo la señal de
+			# readiness para el operador y para el humo; lo que deja de ser es un
+			# interruptor de encendido del sitio.
+			lb_try_duration 30s
+			lb_try_interval 1s
 
 			# La IP real del visitante. Sin esto, el CMS ve la del proxy y todo
 			# rastro de acceso —incluido el acuse de la HU #13— apunta al mismo

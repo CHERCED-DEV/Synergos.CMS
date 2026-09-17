@@ -359,6 +359,24 @@ public sealed class ApiMoldTests
             + $"{codigos.Count} códigos literales distintos. La cifra se cuenta, no se recuerda: "
             + "decía 195 y llevaba sin contarse desde que se escribió (#52).");
 
+        // ⚠️ UN `Contains` NO PUEDE VER UN GEMELO QUE SE CONTRADICE, Y ESO YA PASÓ.
+        //
+        // Una integración dejó las DOS mitades de un conflicto committeadas, una al lado de la
+        // otra: «137 endpoints, 242 códigos» en una línea y «137 endpoints, 241 códigos» en la
+        // siguiente. El `Contains` de arriba lo satisface la línea correcta, así que el gate
+        // pasaba en verde con la guía diciendo dos cosas distintas del mismo hecho — que es
+        // LITERALMENTE lo que la nota de §11 dice que quiso evitar: «tener la cifra en dos
+        // sitios y vigilar uno solo es cómo se acaba discutiendo cuál de los dos está mal».
+        //
+        // Por eso se exige UNICIDAD y no presencia. `feedback_a_named_list_beats_a_count`
+        // aplicado al propio gate: un número correcto con un gemelo al lado engaña igual.
+        var ocurrencias = Regex.Matches(claude, @"\d+ códigos\s+de rechazo\)").Count;
+
+        Assert.True(ocurrencias == 1,
+            $"La frase «N códigos de rechazo)» aparece {ocurrencias} veces en CLAUDE.md y tiene "
+            + "que aparecer UNA. Dos menciones son dos verdades sobre el mismo hecho, y la que "
+            + "nadie mira es la que se queda mintiendo.");
+
         var cabecera = $"**Los {codigos.Count} se cuentan";
 
         Assert.True(claude.Contains(cabecera, StringComparison.Ordinal),

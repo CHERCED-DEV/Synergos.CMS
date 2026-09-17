@@ -59,6 +59,21 @@ public sealed record CaseDecision(
 /// hay). Es lo que la bandeja del ciudadano (seguimiento) y el detalle del funcionario
 /// renderizan.
 /// </summary>
+/// <remarks>
+/// <para><b><see cref="FeeStatus"/> existe porque el expediente lo ESCRIBÍA y nadie podía
+/// LEERLO</b> (HU #116). El agregado guarda el estado del cobro de la tasa desde la ADR 0116
+/// fase 5, y esta proyección —la única que llega a las dos bandejas— no lo declaraba: una
+/// escritura sin camino de lectura, el espejo de
+/// <c>feedback_no_read_without_a_write_path</c>. Con el motor de pago en proceso daba igual,
+/// porque contestaba siempre <c>Captured</c>; con <c>Api.Payments</c> detrás, un
+/// <c>Unavailable</c> es exactamente el caso que alguien tendría que perseguir y quedaba
+/// escrito donde no mira nadie.</para>
+/// <para><b><c>null</c> es «no consta», y hay que leerlo junto a <see cref="FeeMinor"/>.</b>
+/// Un trámite EXENTO (<c>FeeMinor == 0</c>) no abre sesión de cobro y por eso no tiene
+/// estado; un expediente con tasa y sin estado es uno anterior a la ADR 0116 fase 5, y de
+/// ése la verdad es que no se sabe. Rellenarlo con <c>Captured</c> diría que se cobró, que
+/// es la afirmación que nadie hizo.</para>
+/// </remarks>
 public sealed record CaseDetail(
     string CaseId,
     string Radicado,
@@ -75,12 +90,19 @@ public sealed record CaseDetail(
     string Currency,
     DateTimeOffset RadicadoAt,
     IReadOnlyList<CaseTimelineEntry> Timeline,
-    CaseDecision? Decision);
+    CaseDecision? Decision,
+    string? FeeStatus = null);
 
 /// <summary>
 /// Ítem de la bandeja (cola) — la forma compacta del expediente para listar. El
 /// ciudadano ve los suyos; el funcionario ve la cola de trabajo con prioridad + SLA.
 /// </summary>
+/// <remarks>
+/// <see cref="FeeStatus"/> viaja también en la forma compacta, y no por simetría: la cola del
+/// funcionario es donde se PERSIGUE una tasa que no se cobró, y una tasa pendiente que sólo
+/// se ve abriendo el expediente uno por uno no la persigue nadie (#116). Misma lectura que en
+/// <see cref="CaseDetail.FeeStatus"/>: <c>null</c> es «no consta».
+/// </remarks>
 public sealed record CaseInboxItem(
     string CaseId,
     string Radicado,
@@ -90,7 +112,9 @@ public sealed record CaseInboxItem(
     string CurrentStage,
     CasePriority Priority,
     int SlaDaysLeft,
-    DateTimeOffset RadicadoAt);
+    DateTimeOffset RadicadoAt,
+    decimal FeeMinor = 0m,
+    string? FeeStatus = null);
 
 /// <summary>
 /// Seguimiento de expedientes del vertical Gobierno (doc gobierno.md §4). Es la pieza

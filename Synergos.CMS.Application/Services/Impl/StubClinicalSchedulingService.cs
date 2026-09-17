@@ -178,6 +178,21 @@ public sealed class StubClinicalSchedulingService : IClinicalSchedulingService
         return Task.FromResult<IReadOnlyList<ClinicalAppointment>>(matches);
     }
 
+    public Task<IReadOnlyList<ClinicalAppointment>> GetForPatientAsync(
+        string patientId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default)
+    {
+        var matches = _appointments.Values
+            .Where(a => string.Equals(a.PatientId, patientId, StringComparison.Ordinal))
+            .Where(a =>
+            {
+                var dia = DateOnly.FromDateTime(a.StartUtc);
+                return dia >= from && dia <= to;
+            })
+            .OrderBy(a => a.StartUtc)
+            .ToList();
+        return Task.FromResult<IReadOnlyList<ClinicalAppointment>>(matches);
+    }
+
     // ── Semilla de citas demo (no pasa por el motor — son históricas/agendadas) ──
     private void SeedDemoAppointments()
     {

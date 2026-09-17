@@ -1,8 +1,6 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
@@ -300,11 +298,7 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
     /// capacidad —que solo cuenta cupo— no acumule direcciones de correo. No pretende ser
     /// anonimato: es no esparcir lo que no hace falta esparcir.
     /// </remarks>
-    private static string Seudonimo(string email)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(email.Trim().ToLowerInvariant()));
-        return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
-    }
+    private static string Seudonimo(string email) => SeudonimoDePersona.De(email);
 
     private async Task<ProblemaDto?> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
     {

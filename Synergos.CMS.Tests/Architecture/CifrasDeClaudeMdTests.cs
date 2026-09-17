@@ -54,6 +54,8 @@ public sealed class CifrasDeClaudeMdTests
         ("imagen de contenedor ({0})", new[] { "ContainerBuildTests" }, null),
         ("compose ({0})", new[] { "ComposeStackTests" }, null),
         ("despliegue ({0}, ADR 0133)", new[] { "DeployPipelineTests" }, null),
+        ("molde del vertical ({0}, doc 12)", new[] { "MoldeDelVerticalTests" }, null),
+        ("portada de arranque ({0}, #119)", new[] { "PortadaDeArranqueTests" }, null),
         ("la compensación cruzada ({0})", Array.Empty<string>(), "Synergos.CMS.Tests.Bff"),
     };
 

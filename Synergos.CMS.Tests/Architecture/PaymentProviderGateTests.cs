@@ -103,4 +103,78 @@ public sealed class PaymentProviderGateTests
         Assert.Matches(@"pedido\.Length == 0", programa);
         Assert.Contains("LoggingPaymentProvider", programa, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Que nadie salga del asíncrono a la fuerza (HU #27).
+    /// </summary>
+    /// <remarks>
+    /// <para>La costura se hizo asíncrona porque una pasarela vive al otro lado de la red. El
+    /// atajo que quedaba abierto era <c>.Result</c> o <c>GetAwaiter().GetResult()</c> dentro de
+    /// un proveedor, y con el cerrojo del servicio alrededor eso bloquea un hilo del pool
+    /// <b>durante toda la llamada</b>: unas pocas pasarelas lentas a la vez dejan el proceso sin
+    /// hilos con los que contestar.</para>
+    ///
+    /// <para><b>No se nota como un problema de pagos.</b> Se nota como que el servicio «se puso
+    /// lento», que es la peor pista posible — y es reversible de una línea, así que la
+    /// prohibición tiene que estar escrita en algo que rompa el build.</para>
+    /// </remarks>
+    [Fact]
+    public void Nadie_bloquea_un_hilo_esperando_a_la_pasarela()
+    {
+        var malas = new List<string>();
+
+        foreach (var f in Fuentes())
+        {
+            var n = 0;
+            foreach (var linea in SinComentarios(f).Split('\n'))
+            {
+                n++;
+                if (Regex.IsMatch(linea, @"\.GetAwaiter\(\)\s*\.GetResult\(\)")
+                    || Regex.IsMatch(linea, @"\)\s*\.Result\b")
+                    || Regex.IsMatch(linea, @"\bTask\.(Wait|WaitAll|WaitAny)\b"))
+                {
+                    malas.Add($"{Path.GetFileName(f)}:{n} → {linea.Trim()}");
+                }
+            }
+        }
+
+        Assert.True(malas.Count == 0,
+            "Api.Payments espera a la pasarela sin bloquear hilos. Un sync-over-async acá "
+            + "vacía el pool mientras el cerrojo del servicio sigue tomado." + Environment.NewLine
+            + string.Join(Environment.NewLine, malas));
+    }
+
+    /// <summary>Las fuentes de la capacidad, sin lo que genera el compilador.</summary>
+    private static IEnumerable<string> Fuentes()
+        => Directory
+            .EnumerateFiles(Path.Combine(RepoRoot(), "Synergos.Api.Payments"), "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                     && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+
+    /// <summary>
+    /// Quita comentarios para no medir la prosa que documenta la regla.
+    /// </summary>
+    /// <remarks>
+    /// El repo ya se tropezó dos veces con un gate que pasaba en verde porque la explicación
+    /// citaba justo lo que él prohibía (#29 y el de #33a). Medir prosa es no medir nada.
+    /// </remarks>
+    private static string SinComentarios(string file)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var line in File.ReadLines(file))
+        {
+            var t = line.TrimStart();
+            if (t.StartsWith("//", StringComparison.Ordinal)
+                || t.StartsWith("*", StringComparison.Ordinal)
+                || t.StartsWith("/*", StringComparison.Ordinal))
+            {
+                sb.AppendLine();
+                continue;
+            }
+
+            var i = line.IndexOf("//", StringComparison.Ordinal);
+            sb.AppendLine(i >= 0 ? line[..i] : line);
+        }
+        return sb.ToString();
+    }
 }

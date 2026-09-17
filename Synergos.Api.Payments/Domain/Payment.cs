@@ -39,6 +39,20 @@ public sealed record Refund(string Id, Money Amount, string? Reason, DateTimeOff
 /// <param name="Refunds">Las devoluciones aplicadas.</param>
 /// <param name="AuthorizedAtUtc">Cuándo se autorizó.</param>
 /// <param name="CapturedAtUtc">Cuándo se capturó.</param>
+/// <param name="ActionUrl">
+/// A dónde hay que mandar al comprador para que pague, cuando el medio lo exige.
+/// </param>
+/// <param name="PaidWith">
+/// Con qué se afirmó la identidad de quien paga — <b>lo resuelve esta capacidad</b>, nunca el
+/// llamador (HU #14).
+/// <para><b>Nulo es «no consta», y es la verdad sobre los cobros anteriores a esto.</b>
+/// Rellenarlos con <c>CmsSession</c> inventaría una comprobación que nadie hizo: el defecto #42
+/// sobre el registro de quién movió plata, que es de los que alguien va a citar el día que haya
+/// una disputa. Siguen siendo válidos; lo que no son es prueba de quién pagó.</para>
+/// <para><b>Y no es un campo que el llamador pueda escribir.</b> Lo que manda va en el cuerpo
+/// como <c>assertion</c> y lo único que se le acepta sin prueba es el suelo; lo que se guarda
+/// acá es lo que la capacidad pudo comprobar.</para>
+/// </param>
 public sealed record Payment(
     string Id,
     Ref For,
@@ -49,7 +63,9 @@ public sealed record Payment(
     string? ProviderReference,
     IReadOnlyList<Refund> Refunds,
     DateTimeOffset AuthorizedAtUtc,
-    DateTimeOffset? CapturedAtUtc = null)
+    DateTimeOffset? CapturedAtUtc = null,
+    string? ActionUrl = null,
+    IdentityAssertion? PaidWith = null)
 {
     /// <summary>Lo ya devuelto.</summary>
     public Money Refunded => Money.Sum(Refunds.Select(r => r.Amount), Amount.Currency);
@@ -58,13 +74,6 @@ public sealed record Payment(
     public Money Refundable => Status == PaymentStatus.Captured ? Amount - Refunded : Money.Zero(Amount.Currency);
 }
 
-/// <summary>
-/// El medio de pago de verdad.
-/// </summary>
-/// <remarks>
-/// Es la costura hacia el mundo: una pasarela, un banco, un botón. El servicio no sabe cuál — y
-/// por eso esta API se puede probar y desplegar sin ninguno.
-/// </remarks>
 /// <summary>Las cuatro formas en que termina una operación con el medio de pago.</summary>
 /// <remarks>
 /// <para><b>Que sean cuatro y no un booleano es el punto</b> (HU #27). Con <c>bool</c>, «el banco
@@ -99,11 +108,28 @@ public enum PaymentOutcome
 /// El motivo <b>del proveedor</b>, tal cual. «Fondos insuficientes» lleva a una acción y «el pago
 /// falló» no lleva a ninguna: por eso viaja y no se resume.
 /// </param>
-public sealed record PaymentAttempt(PaymentOutcome Outcome, string? Reference, string? Reason)
+/// <param name="ActionUrl">
+/// A dónde hay que mandar al comprador, cuando el medio de pago lo exige.
+/// </param>
+/// <remarks>
+/// <para><b><see cref="ActionUrl"/> existe porque sin él no se puede cobrar</b> (HU #27). Los dos
+/// proveedores que había —los dos de mentira— resolvían el cobro dentro del proceso, así que la
+/// costura no tenía por dónde devolver «y ahora el comprador tiene que ir acá». Una pasarela
+/// real de este mercado sí lo necesita: el checkout hospedado de Wompi es lo que cubre tarjeta,
+/// PSE, Nequi y efectivo con un solo flujo, y es también lo que deja los datos de tarjeta fuera
+/// de nuestros servidores.</para>
+///
+/// <para><b>Se emite aunque todavía nadie lo lea</b>, y eso es deuda declarada y no un descuido:
+/// el camino de ESCRITURA es real —lo produce el adaptador— y quien falta es el consumidor, o
+/// sea el orquestador que se lo entregue al comprador. Es lo que impide que hoy un demo de venta
+/// corra de punta a punta con Wompi puesto.</para>
+/// </remarks>
+public sealed record PaymentAttempt(PaymentOutcome Outcome, string? Reference, string? Reason, string? ActionUrl = null)
 {
     public bool IsOk => Outcome == PaymentOutcome.Ok;
 
-    public static PaymentAttempt Ok(string? reference = null) => new(PaymentOutcome.Ok, reference, null);
+    public static PaymentAttempt Ok(string? reference = null, string? actionUrl = null)
+        => new(PaymentOutcome.Ok, reference, null, actionUrl);
 
     public static PaymentAttempt Declined(string reason) => new(PaymentOutcome.Declined, null, reason);
 
@@ -112,6 +138,22 @@ public sealed record PaymentAttempt(PaymentOutcome Outcome, string? Reference, s
     public static PaymentAttempt NotConfigured(string reason) => new(PaymentOutcome.NotConfigured, null, reason);
 }
 
+/// <summary>
+/// El medio de pago de verdad.
+/// </summary>
+/// <remarks>
+/// <para>Es la costura hacia el mundo: una pasarela, un banco, un botón. El servicio no sabe cuál
+/// — y por eso esta API se puede probar y desplegar sin ninguno.</para>
+///
+/// <para><b>Las cuatro operaciones son asíncronas, y no por estilo</b> (HU #27). Una pasarela
+/// vive al otro lado de la red: la costura nació síncrona porque los dos únicos implementadores
+/// escribían en un log, y el día que apareció uno que habla HTTP quedaban dos salidas. La que
+/// no se tomó es <c>.Result</c> dentro del proveedor — bloquea un hilo del pool por cada cobro
+/// en vuelo, y el <c>lock</c> del servicio lo mantenía bloqueado durante toda la llamada, así
+/// que bastaban unas pocas pasarelas lentas a la vez para dejar el proceso sin hilos con los
+/// que contestar. Un deadlock por inanición no se parece a un problema de pagos: se parece a
+/// que el servicio «se puso lento», que es la peor pista posible.</para>
+/// </remarks>
 public interface IPaymentProvider
 {
     /// <summary>Cómo se llama, para dejarlo en el rastro.</summary>
@@ -128,14 +170,14 @@ public interface IPaymentProvider
     bool MuevePlata { get; }
 
     /// <summary>Reserva el cupo.</summary>
-    PaymentAttempt Authorize(Money amount, Ref payer);
+    Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, CancellationToken ct = default);
 
     /// <summary>Mueve la plata.</summary>
-    PaymentAttempt Capture(string providerReference, Money amount);
+    Task<PaymentAttempt> CaptureAsync(string providerReference, Money amount, CancellationToken ct = default);
 
     /// <summary>Devuelve plata ya capturada.</summary>
-    PaymentAttempt Refund(string providerReference, Money amount);
+    Task<PaymentAttempt> RefundAsync(string providerReference, Money amount, CancellationToken ct = default);
 
     /// <summary>Libera una autorización sin cobrar.</summary>
-    PaymentAttempt Void(string providerReference);
+    Task<PaymentAttempt> VoidAsync(string providerReference, CancellationToken ct = default);
 }

@@ -150,7 +150,21 @@ public sealed partial class SeamComposer
         // Singletons — el estado (citas creadas, encuentros, recetas) vive en el proceso,
         // igual que el resto de stubs del motor.
         services.AddSingleton<IPatientRegistry, StubPatientRegistry>();
-        services.AddSingleton<IDoctorDirectory, StubDoctorDirectory>();
+        // De dónde salen los profesionales: el staff sembrado o el CONTENIDO que autoró el
+        // editor (professionalPage). Es el EJE 1 del molde (doc 12 §3), y Salud era el único
+        // vertical que no lo tenía: dar de alta un médico era un cambio de código y un
+        // despliegue (#118). Mismo flag y mismo rollback de una línea sin redespliegue que las
+        // otras cinco fuentes — `Synergos:Catalog:Sources:Salud = demo`.
+        //
+        // Singleton por lo mismo que las otras: UmbracoProfessionalDirectorySource sólo sostiene
+        // IUmbracoContextAccessor (un ACCESSOR, que resuelve el contexto por llamada),
+        // IOptionsMonitor e ILogger. Ninguno es Scoped, así que no hay dependencia cautiva.
+        services.AddSingleton<ICatalogSource<MedicalDoctor>>(sp =>
+            ActivatorUtilities.CreateInstance<UmbracoProfessionalDirectorySource>(sp));
+        services.AddSingleton<IDoctorDirectory>(sp =>
+            IsCmsSource(sp, UmbracoProfessionalDirectorySource.Vertical)
+                ? new CatalogDoctorDirectory(sp.GetRequiredService<ICatalogSource<MedicalDoctor>>())
+                : new StubDoctorDirectory());
         services.AddSingleton<IClinicalRecordService, StubClinicalRecordService>();
         services.AddSingleton<IClinicalPrescriptionService, StubClinicalPrescriptionService>();
         // HU #25 — contra quién agenda la cita. Dos orígenes, mismo contrato, elegidos por

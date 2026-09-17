@@ -285,4 +285,119 @@ public class StubReturnServiceTests
         Assert.Equal(refunded1.UpdatedAt, refunded2.UpdatedAt);
         Assert.Equal(ShopReturnStatus.Refunded, refunded2.Status);
     }
+
+    // ── CanRequestAsync: el veredicto que la UI dejó de deducir (#34) ──────────
+
+    [Fact] // empty: sin devoluciones previas, una línea de una orden pagada SÍ se puede
+    public async Task CanRequest_PaidOrderNoClaims_ReturnsNone()
+    {
+        var h = new Harness();
+        var order = await h.PaidOrderAsync();
+
+        Assert.Equal(ShopReturnBlock.None, await h.Returns.CanRequestAsync(order.OrderRef, LineLaptop));
+    }
+
+    [Fact] // happy: el veredicto y lo que RequestAsync hace de verdad COINCIDEN
+    public async Task CanRequest_AgreesWithRequest_OnEveryInput()
+    {
+        var h = new Harness();
+        var order = await h.PaidOrderAsync();
+
+        // Ésta es la prueba que justifica la HU entera: si el veredicto dijera que
+        // sí y el POST rechazara (o al revés), tendríamos otra vez dos reglas — que
+        // es exactamente lo que pasó con la copia de la UI (#33).
+        foreach (var (orderRef, lineId) in new[]
+                 {
+                     (order.OrderRef, LineLaptop),          // se puede
+                     ("ord_inexistente", LineLaptop),       // orden que no existe
+                     (order.OrderRef, "linea-ajena"),       // línea que no es suya
+                 })
+        {
+            var verdict = await h.Returns.CanRequestAsync(orderRef, lineId);
+            var accepted = true;
+            try
+            {
+                await h.Returns.RequestAsync(orderRef, lineId, "llegó dañado");
+            }
+            catch (ArgumentException)
+            {
+                accepted = false;
+            }
+
+            Assert.Equal(verdict == ShopReturnBlock.None, accepted);
+        }
+    }
+
+    [Fact] // filter: cada negativa trae SU motivo, no un booleano
+    public async Task CanRequest_Blocked_NamesTheReason()
+    {
+        var h = new Harness();
+        var order = await h.PaidOrderAsync();
+
+        Assert.Equal(
+            ShopReturnBlock.OrderNotFound,
+            await h.Returns.CanRequestAsync("ord_inexistente", LineLaptop));
+        Assert.Equal(
+            ShopReturnBlock.LineNotInOrder,
+            await h.Returns.CanRequestAsync(order.OrderRef, "producto-de-otro-pedido"));
+
+        // Sin pagar: el checkout deja la orden en Pending hasta el confirm.
+        var sinPagar = await h.Orders.CheckoutAsync(
+            new[] { new ShopCartItem("tec-laptop-pro-14", "tec-laptop-pro-14-16-512", 1) },
+            Customer());
+        Assert.Equal(
+            ShopReturnBlock.OrderNotPaid,
+            await h.Returns.CanRequestAsync(sinPagar.OrderRef, LineLaptop));
+    }
+
+    [Fact] // EL matiz: un reclamo vivo es «no» para el veredicto y ÉXITO para el POST
+    public async Task CanRequest_AlreadyOpen_BlocksButRequestStaysIdempotent()
+    {
+        var h = new Harness();
+        var order = await h.PaidOrderAsync();
+        var primero = await h.Returns.RequestAsync(order.OrderRef, LineLaptop, "llegó dañado");
+
+        // Para OFRECER el botón: no, ya hay uno.
+        Assert.Equal(
+            ShopReturnBlock.AlreadyOpen,
+            await h.Returns.CanRequestAsync(order.OrderRef, LineLaptop));
+
+        // Para ESCRIBIR: sí, y devuelve el mismo — es lo que hace seguro un doble
+        // clic. Las dos cosas son correctas y por eso lo compartido es la búsqueda,
+        // no la conclusión.
+        var repetido = await h.Returns.RequestAsync(order.OrderRef, LineLaptop, "llegó dañado");
+        Assert.Equal(primero.RmaId, repetido.RmaId);
+    }
+
+    [Fact] // idempotent: preguntar no cambia nada — ni escribe, ni audita, ni lanza
+    public async Task CanRequest_IsAPureQuery()
+    {
+        var h = new Harness();
+        var order = await h.PaidOrderAsync();
+        var asientosAntes = h.Audit.Events.Count;
+
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.Equal(ShopReturnBlock.None, await h.Returns.CanRequestAsync(order.OrderRef, LineLaptop));
+        }
+        // Ni con entradas basura: un veredicto que lanza obligaría a envolverlo en
+        // try/catch en el controlador, y el historial entero caería por una línea.
+        Assert.Equal(ShopReturnBlock.OrderNotFound, await h.Returns.CanRequestAsync("", LineLaptop));
+        Assert.Equal(ShopReturnBlock.LineNotInOrder, await h.Returns.CanRequestAsync(order.OrderRef, ""));
+
+        Assert.Empty(await h.Returns.GetForOrderAsync(order.OrderRef));
+        Assert.Equal(asientosAntes, h.Audit.Events.Count);
+    }
+
+    [Fact] // un rechazo previo REABRE la puerta: es el único desenlace que lo hace
+    public async Task CanRequest_AfterRejection_AllowsAgain()
+    {
+        var h = new Harness();
+        var order = await h.PaidOrderAsync();
+        var rma = await h.Returns.RequestAsync(order.OrderRef, LineLaptop, "llegó dañado");
+
+        await h.Returns.AdvanceAsync(rma.RmaId, ShopReturnStatus.Rejected);
+
+        Assert.Equal(ShopReturnBlock.None, await h.Returns.CanRequestAsync(order.OrderRef, LineLaptop));
+    }
 }

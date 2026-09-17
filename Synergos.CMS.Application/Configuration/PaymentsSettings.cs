@@ -1,4 +1,4 @@
-namespace Synergos.CMS.Application.Configuration;
+﻿namespace Synergos.CMS.Application.Configuration;
 
 /// <summary>
 /// POCO tipado bindeado de <c>Synergos:Payments</c> (T3, doc 25). Gobierna la
@@ -15,6 +15,58 @@ public sealed class PaymentsSettings
     /// config, la demo corre siempre con el stub durable.
     /// </summary>
     public string Provider { get; init; } = "Stub";
+
+    // ── Contra QUIÉN cobra el seam (#27, la parte que quedó viva) ──────
+
+    /// <summary>
+    /// <c>Engine</c> (default, el motor en proceso de la ADR 0116) o <c>Api</c>
+    /// (<c>Synergos.Api.Payments</c>, directo).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Esto NO es <see cref="Provider"/>, y confundirlos sería el defecto #57 otra
+    /// vez.</b> <see cref="Provider"/> elige qué pasarela usa el motor <i>de este lado</i>;
+    /// esto elige <b>si hay motor de este lado</b>. Desde la HU #27 la plata la mueve
+    /// <c>Api.Payments</c> y las dos mitades no pueden cobrar de verdad a la vez.</para>
+    ///
+    /// <para><b>El default es <c>Engine</c> y no es una transición</b>: el motor en proceso es
+    /// lo que permite levantar el repo entero sin ningún servicio, igual que el stub lo es en
+    /// los otros cinco verticales.</para>
+    ///
+    /// <para><b>Y <c>Api</c> se niega al CABLEAR si algún vertical que orquesta de este lado
+    /// sigue en su motor en proceso</b> —Tienda, Salud, Eventos, Viajes—. Esos flujos componen
+    /// varios pasos que pueden fallar a la mitad, y el CMS no tiene dónde anotar una
+    /// compensación pendiente: con plata de verdad detrás sería stock apartado que nadie suelta
+    /// y cobros sin pedido. Es lo mismo que <c>ShopWiringTests</c> defiende en compilación, dicho
+    /// en tiempo de arranque.</para>
+    /// </remarks>
+    public string Mode { get; init; } = "Engine";
+
+    /// <summary>Dónde vive <c>Api.Payments</c>. Sólo se usa con <see cref="Mode"/> = <c>Api</c>.</summary>
+    public string BaseUrl { get; init; } = "http://127.0.0.1:5204/";
+
+    /// <summary>La llave compartida servicio↔servicio. Sin ella la capacidad responde 401.</summary>
+    public string ApiKey { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Con qué <c>Kind</c> se nombra AQUELLO que se cobra.
+    /// </summary>
+    /// <remarks>
+    /// Viaja opaco: la capacidad lo guarda y lo devuelve, y no ramifica sobre él
+    /// (<c>CLAUDE.md</c> §13). El <c>Id</c> es la referencia de orden que trae quien cobra.
+    /// </remarks>
+    public string SubjectKind { get; init; } = "cms.orden";
+
+    /// <summary>Con qué <c>Kind</c> se nombra a quien paga.</summary>
+    public string PayerKind { get; init; } = "cms.pagador";
+
+    /// <summary>
+    /// Segundos de espera. Cobrar no es una consulta auxiliar.
+    /// </summary>
+    /// <remarks>
+    /// Cortarlo pronto es peor que esperar: un timeout no dice «no se cobró», dice «no sé», y
+    /// con un cobro en vuelo ésa es la peor respuesta posible.
+    /// </remarks>
+    public int TimeoutSeconds { get; init; } = 30;
 
     /// <summary>
     /// Secreto compartido para verificar la firma HMAC del webhook entrante (esquema

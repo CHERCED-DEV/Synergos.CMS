@@ -157,6 +157,24 @@ public sealed class HttpClinicalSchedulingService : IClinicalSchedulingService
         return Task.FromResult<IReadOnlyList<ClinicalAppointment>>(Array.Empty<ClinicalAppointment>());
     }
 
+    /// <summary>
+    /// Las citas de un paciente. <b>Vacío, por la misma decisión que <see cref="GetByDateAsync"/></b>
+    /// — <c>Bff.Salud</c> resuelve una cita por id y no lista, ni por fecha ni por paciente.
+    /// </summary>
+    /// <remarks>
+    /// <b>Lo que cambia con este método no es la respuesta: es cuántas veces se pregunta</b>
+    /// (HU #111). Antes el borde barría 91 días llamando a <see cref="GetByDateAsync"/> uno por
+    /// uno, así que este hueco se atravesaba noventa y una veces por carga de ficha para dar la
+    /// misma lista vacía. Ahora el hueco está en UN sitio y dice por qué, que es donde lo va a
+    /// leer quien escriba el listado en el orquestador.
+    /// </remarks>
+    public Task<IReadOnlyList<ClinicalAppointment>> GetForPatientAsync(
+        string patientId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default)
+    {
+        _log.LogDebug("Bff.Salud no lista citas por paciente todavía; la ficha sale sin citas.");
+        return Task.FromResult<IReadOnlyList<ClinicalAppointment>>(Array.Empty<ClinicalAppointment>());
+    }
+
     // ── El cable ────────────────────────────────────────────────────────────
 
     private async Task<AppointmentDto> EnviarAsync(HttpRequestMessage req, string key, CancellationToken ct)

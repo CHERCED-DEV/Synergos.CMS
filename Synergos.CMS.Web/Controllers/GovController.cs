@@ -304,7 +304,9 @@ public sealed class GovController : ControllerBase
             CurrentStage: detail.CurrentStage,
             Timeline: detail.Timeline.Select(ToTimelineDto).ToList(),
             Documents: detail.Documents.Select(ToDocumentDto).ToList(),
-            Messages: messages)));
+            Messages: messages,
+            FeeMinor: ToFeeMinor(detail.FeeMinor),
+            FeeStatus: ToFeeStatusSlug(detail.FeeStatus))));
     }
 
     // ── 7. Adjuntar un documento al expediente (T6 — bytes de verdad) ───
@@ -688,7 +690,9 @@ public sealed class GovController : ControllerBase
         ServiceName: c.TramiteName,
         Status: GovStatusSlugs.ToSlug(c.Status),
         SubmittedAt: c.RadicadoAt,
-        CurrentStage: c.CurrentStage);
+        CurrentStage: c.CurrentStage,
+        FeeMinor: ToFeeMinor(c.FeeMinor),
+        FeeStatus: ToFeeStatusSlug(c.FeeStatus));
 
     private static ApplicationSummaryDto ToApplicationSummaryFromInbox(CaseInboxItem i) => new(
         Id: i.CaseId,
@@ -697,7 +701,30 @@ public sealed class GovController : ControllerBase
         ServiceName: i.TramiteName,
         Status: GovStatusSlugs.ToSlug(i.Status),
         SubmittedAt: i.RadicadoAt,
-        CurrentStage: i.CurrentStage);
+        CurrentStage: i.CurrentStage,
+        FeeMinor: ToFeeMinor(i.FeeMinor),
+        FeeStatus: ToFeeStatusSlug(i.FeeStatus));
+
+    private static long ToFeeMinor(decimal fee) => (long)decimal.Truncate(Math.Max(0m, fee));
+
+    /// <summary>
+    /// El estado del cobro de la tasa como lo lee la UI, o <c>null</c> cuando no consta.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>No inventa ninguno.</b> Traduce el nombre que el agregado guardó
+    /// (<c>CaseState.PaymentStatus</c> — los de <c>PaymentStatus</c> más el
+    /// <c>Unavailable</c> de <c>StubApplicationService</c>) al slug en minúsculas que usa el
+    /// resto de este borde. Lo que no reconoce baja a minúsculas y sale tal cual: es el mismo
+    /// valor con otra caja, no un relleno. Una tasa exenta no abre sesión y llega en blanco,
+    /// y en blanco se queda.</para>
+    /// </remarks>
+    private static string? ToFeeStatusSlug(string? raw) => string.IsNullOrWhiteSpace(raw)
+        ? null
+        : raw.Trim() switch
+        {
+            "RequiresAction" => "requires-action",
+            var other => other.ToLowerInvariant(),
+        };
 
     /// <summary>
     /// Un acto notificado, hacia la UI.
@@ -738,7 +765,9 @@ public sealed class GovController : ControllerBase
         Status: GovStatusSlugs.ToSlug(i.Status),
         SubmittedAt: i.RadicadoAt,
         Priority: i.Priority.ToString().ToLowerInvariant(),
-        SlaDaysLeft: i.SlaDaysLeft);
+        SlaDaysLeft: i.SlaDaysLeft,
+        FeeMinor: ToFeeMinor(i.FeeMinor),
+        FeeStatus: ToFeeStatusSlug(i.FeeStatus));
 
     // El detalle del funcionario muestra las respuestas con su ETIQUETA humana (no el
     // fieldId), resolviéndolas contra la definición del formulario del trámite. Si el
@@ -758,7 +787,9 @@ public sealed class GovController : ControllerBase
                 CitizenName: c.Citizen.Name,
                 Status: GovStatusSlugs.ToSlug(c.Status),
                 SubmittedAt: c.RadicadoAt,
-                CurrentStage: c.CurrentStage),
+                CurrentStage: c.CurrentStage,
+                FeeMinor: ToFeeMinor(c.FeeMinor),
+                FeeStatus: ToFeeStatusSlug(c.FeeStatus)),
             Answers: c.FormData
                 .Select(kv => new AnswerDto(labels.GetValueOrDefault(kv.Key, kv.Key), kv.Value))
                 .ToList(),
@@ -797,12 +828,30 @@ public sealed class GovController : ControllerBase
             ? null
             : $"/api/gov/document/{Uri.EscapeDataString(d.CaseId)}/{Uri.EscapeDataString(d.Id)}");
 
+    /// <summary>
+    /// Un hito del timeline, hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Un hito <c>pending</c> sale SIN fecha, y ésa es la corrección.</b>
+    /// <see cref="CaseTimelineEntry.Date"/> no es anulable, así que el motor rellena los hitos
+    /// que todavía no ocurrieron con la fecha de RADICACIÓN — un valor de relleno que hacia
+    /// fuera se lee como un hecho. El ciudadano veía «Decisión · 24 de junio de 2026» sobre una
+    /// decisión que nadie ha tomado, y en un expediente administrativo una fecha que no ocurrió
+    /// es lo único que no se puede enseñar: de fechas así dependen los términos.</para>
+    ///
+    /// <para>La UI ya lo contempla —<c>date: entry.date ? formatDate(entry.date) : undefined</c>—
+    /// y su modelo lo dice con todas las letras («may be empty for pending nodes»). Lo que
+    /// faltaba era que el borde emitiera el vacío en vez de un relleno.</para>
+    /// </remarks>
     private static TimelineDto ToTimelineDto(CaseTimelineEntry e) => new(
         Id: e.Id,
         Label: e.Label,
-        Date: e.Date,
+        Date: IsPending(e.State) ? null : e.Date,
         State: e.State,
         Note: e.Note);
+
+    private static bool IsPending(string? state)
+        => string.Equals(state?.Trim(), "pending", StringComparison.OrdinalIgnoreCase);
 
     // Resuelve el ciudadano desde las respuestas del formulario (once-only lo prellena):
     // nombre + correo + documento + teléfono si el trámite los pidió.
@@ -945,6 +994,14 @@ public sealed class GovController : ControllerBase
 
     public sealed record FormResponse(FormDto Form);
 
+    /// <summary>
+    /// La forma compacta de un expediente hacia la carpeta del ciudadano.
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="FeeStatus"/> y <c>null</c></b>: ver la nota de <see cref="CaseDto"/>. Se
+    /// emite SIEMPRE declarada aunque a veces sea nula, porque una clave que a veces no está
+    /// deja al normalizador del otro lado poniendo su propio valor (#116).
+    /// </remarks>
     public sealed record ApplicationSummaryDto(
         string Id,
         string Reference,
@@ -952,13 +1009,20 @@ public sealed class GovController : ControllerBase
         string ServiceName,
         string Status,
         DateTimeOffset SubmittedAt,
-        string CurrentStage);
+        string CurrentStage,
+        long FeeMinor = 0,
+        string? FeeStatus = null);
 
     public sealed record ApplicationResponse(ApplicationSummaryDto Application);
 
     public sealed record ApplicationsResponse(IReadOnlyList<ApplicationSummaryDto> Applications);
 
-    public sealed record TimelineDto(string Id, string Label, DateTimeOffset Date, string State, string Note);
+    /// <summary>
+    /// Un hito del expediente. <see cref="Date"/> es <c>null</c> cuando el hito todavía no
+    /// ocurrió — ver <c>ToTimelineDto</c>: una fecha de relleno en un hito pendiente se lee
+    /// como un hecho, y acá los hechos con fecha sostienen términos.
+    /// </summary>
+    public sealed record TimelineDto(string Id, string Label, DateTimeOffset? Date, string State, string Note);
 
     public sealed record DocumentDto(
         string Id,
@@ -981,7 +1045,9 @@ public sealed class GovController : ControllerBase
         string CurrentStage,
         IReadOnlyList<TimelineDto> Timeline,
         IReadOnlyList<DocumentDto> Documents,
-        IReadOnlyList<MessageDto> Messages);
+        IReadOnlyList<MessageDto> Messages,
+        long FeeMinor = 0,
+        string? FeeStatus = null);
 
     public sealed record ApplicationDetailResponse(ApplicationDetailDto Application);
 
@@ -995,7 +1061,9 @@ public sealed class GovController : ControllerBase
         string Status,
         DateTimeOffset SubmittedAt,
         string Priority,
-        int SlaDaysLeft);
+        int SlaDaysLeft,
+        long FeeMinor = 0,
+        string? FeeStatus = null);
 
     public sealed record QueueResponse(IReadOnlyList<QueueCaseDto> Cases);
 
@@ -1006,12 +1074,27 @@ public sealed class GovController : ControllerBase
         string CitizenName,
         string Status,
         DateTimeOffset SubmittedAt,
-        string CurrentStage);
+        string CurrentStage,
+        long FeeMinor = 0,
+        string? FeeStatus = null);
 
     public sealed record AnswerDto(string Label, string Value);
 
     public sealed record DecisionDto(string Outcome, string Note, DateTimeOffset DecidedAtUtc, string DecidedBy);
 
+    /// <summary>
+    /// El expediente entero hacia la cara del funcionario.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El estado de la tasa (<c>application.feeStatus</c>) se emite desde #116.</b> El
+    /// expediente lo guardaba desde la ADR 0116 fase 5 y ninguna superficie lo devolvía, así
+    /// que un cobro que no salió quedaba escrito donde no mira nadie — una escritura sin camino
+    /// de lectura. Con el motor en proceso daba igual (decía siempre <c>Captured</c>); con
+    /// <c>Api.Payments</c> detrás, <c>unavailable</c> es el caso que hay que perseguir.</para>
+    /// <para><b><c>null</c> es «no consta» y no «cobrada»</b>, y se lee junto a <c>feeMinor</c>:
+    /// sin tasa no hay cobro que tener estado; con tasa y sin estado, el expediente es anterior
+    /// al campo. Los dos casos son verdad y ninguno se rellena.</para>
+    /// </remarks>
     public sealed record CaseDto(
         CaseApplicationDto Application,
         IReadOnlyList<AnswerDto> Answers,

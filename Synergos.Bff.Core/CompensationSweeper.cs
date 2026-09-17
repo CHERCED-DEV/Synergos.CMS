@@ -53,15 +53,7 @@ public sealed class CompensationSweeper<TSaga> : BackgroundService where TSaga :
                 using var scope = _scopes.CreateScope();
                 var engine = scope.ServiceProvider.GetRequiredService<SagaEngine<TSaga>>();
 
-                // NeedsSweep y no "tiene pendientes": una saga rendida y ya avisada sigue siendo
-                // una fila de la vista de operación, pero no hay nada que el barrido pueda hacer
-                // por ella hasta que una persona pida el reintento.
-                foreach (var saga in engine.PendingCompensations().Where(s => s.NeedsSweep()))
-                {
-                    await engine.CompensateAsync(saga.Id, "reintento del barrido", stoppingToken);
-                }
-
-                await AbandonarLasQueNuncaConfirmaronAsync(engine, stoppingToken);
+                await UnaVueltaAsync(engine, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -75,6 +67,33 @@ public sealed class CompensationSweeper<TSaga> : BackgroundService where TSaga :
     }
 
     private TimeSpan Cadencia => TimeSpan.FromSeconds(Math.Max(5, _opciones.CurrentValue.IntervalSeconds));
+
+    /// <summary>
+    /// Una vuelta: relee el almacén, reintenta lo pendiente y abandona lo que nunca confirmó.
+    /// </summary>
+    /// <remarks>
+    /// Público a propósito, como el de los avisos: <b>las reglas están acá y el
+    /// <see cref="BackgroundService"/> es solo el reloj</b>. Un barrido cuyas decisiones sólo se
+    /// puedan observar esperando a que un lazo de fondo dé una vuelta se prueba con esperas, y un
+    /// test con esperas falla por lento el día que menos conviene.
+    /// </remarks>
+    public async Task UnaVueltaAsync(SagaEngine<TSaga> engine, CancellationToken ct)
+    {
+        // Se relee el almacén al empezar la vuelta (#34). Sin esto, una réplica barre contra la
+        // foto de su arranque: no ve lo que la otra empezó a deshacer y sigue creyendo pendiente
+        // lo que la otra ya ejecutó.
+        engine.Refrescar();
+
+        // NeedsSweep y no "tiene pendientes": una saga rendida y ya avisada sigue siendo una fila
+        // de la vista de operación, pero no hay nada que el barrido pueda hacer por ella hasta que
+        // una persona pida el reintento.
+        foreach (var saga in engine.PendingCompensations().Where(s => s.NeedsSweep()))
+        {
+            await engine.CompensateAsync(saga.Id, "reintento del barrido", ct);
+        }
+
+        await AbandonarLasQueNuncaConfirmaronAsync(engine, ct);
+    }
 
     /// <summary>
     /// Da por muerta la saga que empezó y nunca confirmó, y deshace lo que había hecho.
@@ -152,6 +171,25 @@ public sealed class SweepOptions
     /// </remarks>
     public DateTimeOffset? FechaDeAbandono(DateTimeOffset ahora)
         => AbandonAfterMinutes <= 0 ? null : ahora - TimeSpan.FromMinutes(AbandonAfterMinutes);
+
+    /// <summary>
+    /// Cuánto dura el arriendo de una saga mientras se la compensa (#34). <b>Default 300 s.</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Los dos extremos hacen daño, y no el mismo.</b> Corto de más, el de al lado se lo
+    /// roba mientras la primera vuelta todavía está hablando con las capacidades, y la
+    /// compensación se ejecuta dos veces — que es el defecto que el arriendo viene a cerrar.
+    /// Largo de más, un proceso que se murió a media compensación deja esa saga esperando todo
+    /// ese rato.</para>
+    ///
+    /// <para><b>Por qué cinco minutos y no un minuto.</b> Una vuelta compensa TODAS las
+    /// compensaciones de una saga, y una compra admite hasta cincuenta líneas; con el timeout de
+    /// diez segundos por capacidad, una vuelta contra un tercero que no contesta se va muy por
+    /// encima de la cadencia del barrido. El piso duro está en
+    /// <see cref="FileSystemSagaLease.MinimoSegundos"/>: bajarlo por configuración no sirve para
+    /// que la compensación sea más rápida, sólo para que se duplique.</para>
+    /// </remarks>
+    public int CompensationLeaseSeconds { get; set; } = 300;
 
     /// <summary>
     /// Cuántas veces se reintenta un aviso colgado antes de rendirse. <b>Cero lo apaga.</b>
