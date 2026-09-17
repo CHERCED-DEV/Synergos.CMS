@@ -396,3 +396,41 @@ suite de servicios, y la carpeta anidada de §4.2 que §7 dice con todas las let
   `Synergos.Bff.sln` compilan en 0 avisos y 0 errores, y las tres suites corren verdes. Falta una
   pasada con el CMS parado.
 - **H5 sigue sin tocarse**, y es la decisión de §4.3, no un olvido.
+
+### Hallazgo posterior al cierre — el sitio público estaba caído
+
+Al devolver el CMS tras el build completo apareció que **`/` devolvía 500, y ya lo hacía antes**
+(medido como control antes de pararlo). Dos defectos encadenados, los dos de la misma familia:
+las vistas se compilan **en caliente** y el compilador de runtime lee sus opciones del
+`deps.json`, donde viaja `warningsAsErrors: true` desde el #134.
+
+| Vista | Diagnóstico |
+|---|---|
+| `PlatformRoot.cshtml:25` | `CS0618` — `GetDictionaryValue(string, string)` obsoleto → `GetDictionaryValueOrDefault` |
+| `AppLauncher.cshtml:7,15` | `CS8669` — anotación nullable fuera de contexto |
+
+**El segundo no es de esa vista.** En el `deps.json` viaja `warningsAsErrors` pero **no viaja
+`nullable`**, así que cualquier vista con un `object?` compila sin contexto nullable, da `CS8669`
+y el trinquete la asciende a error. Medido: **88 de las 91 vistas `SynHost`** usan
+`Dictionary<string, object?>`, y unas **100 vistas** en total llevan anotaciones. Las que no se
+rendericen hoy están armadas para mañana.
+
+Se arregló lo justo para levantar la portada (commit `f280a0ee`), verificado **pidiendo la
+página**: 200, import map con el runtime de Angular, `<synergos-app-launcher>` montado, su bundle
+con SRI, cero `undefined`/`NaN`/`[object Object]`. Backoffice 200.
+
+**Lo que queda por decidir, y no se toca sin ADR:** si el barrido de las ~100 se hace por vista
+(`#nullable enable`) o tocando el trinquete. `Directory.Build.props` dice en su cabecera que
+modificarlo exige ADR.
+
+**Y la moraleja es la del §7 de `CLAUDE.md`, otra vez:** las cuatro soluciones compilaban en 0
+avisos y las tres suites daban 3272 en verde **con el sitio público entero caído**. Un build
+verde no dice nada sobre si una vista compila.
+
+**Cómo arrancar el CMS en esta máquina** (el `.exe` pelado no arranca, y ninguna de las dos está
+en `appsettings.json`):
+
+```
+ASPNETCORE_ENVIRONMENT=Development            # la cadena de conexión vive solo en appsettings.Development.json
+Synergos__BundleRegistry__LocalPath=C:\LOCAL_CDN   # el default del #132 es ../../Synergos.UI/public, que acá no existe
+```
