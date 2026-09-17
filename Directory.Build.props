@@ -10,7 +10,23 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!--
+      El build sale en CERO avisos desde el #134, así que tratarlos como errores es GRATIS
+      hoy — y es el único trinquete que nadie puede olvidar de correr. Un contador de avisos
+      contra una línea base sería el trinquete equivocado acá: se pondría rojo el día que
+      alguien añade un fichero legítimo y verde sobre todo lo que ya estaba, que es
+      «distinguir al revés que el defecto».
+
+      El precio va dicho y no escondido: `global.json` pide 10.0.202 con
+      `rollForward: latestFeature`, así que un SDK más nuevo con analizadores nuevos puede
+      poner el build rojo en una máquina y no en otra. La salida es la de siempre en este
+      fichero — entrar a `NoWarn` CON SU RAZÓN AL LADO, como 1591, 1573 y NU1902 — y es
+      preferible a que el aviso entre sin que nadie lo vea, que es lo que costó 643.
+
+      `WarningsAsErrors` se queda para que la lista de los cuatro nullability siga escrita:
+      son los que NO se negocian aunque alguien apague la bandera de arriba para depurar.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsAsErrors>CS8600;CS8602;CS8603;CS8618</WarningsAsErrors>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>

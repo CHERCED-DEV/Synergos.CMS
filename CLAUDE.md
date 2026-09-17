@@ -1150,6 +1150,38 @@ Las que salieron de construir el árbol de servicios (§0.B):
   signo cambiado — una entrada muerta rompe la carga del IDE, y escribir la lista a mano en
   el gate sería una tercera copia de algo que ya está en dos sitios.
 
+- `feedback_a_build_with_643_warnings_hides_the_644th` — **un log de build con
+  cientos de avisos no es deuda cosmética: es una señal apagada, y lo que entra
+  por ahí no se ve nunca.** `dotnet build -t:Rebuild` salía con 0 errores y
+  **643 avisos únicos** (#134); dentro había siete defectos de verdad que nadie
+  había mirado. El más fino: `RelojFalso.Avanzar` de `NotificationServiceTests`
+  era `async Task` —el ÚNICO de los diez relojes de prueba del repo que no es
+  `void`— así que sus dos llamadores no lo esperaban y **funcionaba por
+  accidente**, porque el cuerpo corre síncrono antes de devolver la `Task`. Es
+  la misma forma que este fichero ya tiene escrita sobre un gate siempre rojo
+  («deja de leerse»), aplicada al build.
+  **Y la familia más grande resultó ser documentación que el compilador TIRA.**
+  Cuatro sitios escribían `///` sobre un parámetro posicional de un `record`
+  (CS1587), donde no se emite nada: uno eran las **17 líneas** que explican el
+  defecto #110 sobre `PropertyDraft.Address` —el campo que existe para
+  cerrarlo—, invisibles en la documentación y en IntelliSense. Escribir la
+  explicación no basta: hay que escribirla **donde el compilador la recoge**
+  (`<param>`), y el aviso que lo decía llevaba sepultado bajo los otros 642.
+  **Lo que NO se hace es apagar la familia entera.** CS1573 sí entra a `NoWarn`
+  —medido: documentar UN campo subió la cifra de 287 a 308, porque documentar
+  uno los exige TODOS, y trescientas líneas de `<param name="Id">El id.</param>`
+  es cómo se deja de leer la que sí dice algo— y CS1587/CS1734 **se quedan como
+  errores**, que son los que marcan documentación descartada. La distinción es
+  la de siempre: una convención que sobra se declara con su razón; una que
+  miente se arregla.
+  **El trinquete es `TreatWarningsAsErrors=true` y no un contador contra una
+  línea base**: con cero avisos es gratis, no hay gate aparte que olvidar, y un
+  contador se pondría rojo el día que alguien añade un fichero legítimo y verde
+  sobre todo lo que ya estaba — distinguir al revés que el defecto. El precio
+  está escrito en `Directory.Build.props`: un SDK más nuevo con analizadores
+  nuevos puede ponerlo rojo en una máquina y no en otra, y la salida es entrar
+  a `NoWarn` **con su razón al lado**.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1171,7 +1203,9 @@ Los paths son relativos a la raíz del repo (que ES `Synergos.CMS/`; no hay
 carpeta anidada con ese nombre).
 
 ```bash
-# Application compila clean (sin warnings CS):
+# TODO el árbol compila en CERO avisos, y desde el #134 un aviso ES un error
+# (TreatWarningsAsErrors en Directory.Build.props). Si tu SDK saca uno que acá
+# no sale, NO lo ignores: entra a NoWarn con su razón al lado, como 1591/1573.
 dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
