@@ -34,7 +34,7 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   Tests project: **3257 passing**. Memoria `feedback_tests_after_full_migration`
+   Tests project: **3259 passing**. Memoria `feedback_tests_after_full_migration`
    (status: superseded). En el árbol de servicios el gate es más duro:
    además de tests, **mutación de cada gate** y **verificación con
    procesos reales** cuando el cambio cruza servicios.
@@ -111,7 +111,7 @@ Synergos.CMS/
 │       ├── Content/             contenido editorial autorado (ADR 0129) — lo exporta
 │       │                        uSync al guardar; el agente NO lo autora
 │       └── Media/               nodos de la biblioteca (binarios en wwwroot/media/)
-├── Synergos.CMS.Tests/          xUnit — 3257 tests passing (gate liftado ADR 0075)
+├── Synergos.CMS.Tests/          xUnit — 3259 tests passing (gate liftado ADR 0075)
 │   ├── Architecture/            LOS GATES: segregación (17) + molde (12) + capas (8)
 │   │                            + imagen de contenedor (6) + compose (12)
 │   │                            + despliegue (18, ADR 0133)
@@ -1129,6 +1129,27 @@ Las que salieron de construir el árbol de servicios (§0.B):
   los tests como si fuera lo normal. Hay gate (`RaizDelCdnTests`), y es el gemelo del
   `rutas-hermanas` del repo hermano, que ya vigilaba esto de su lado.
 
+- `feedback_the_verification_command_can_be_the_one_that_hides_it` — **cuando el comando
+  que la guía manda correr para verificar es el que tapa el defecto, no hay disciplina que
+  lo encuentre: hay que mirar con la OTRA herramienta.** `Synergos.CMS.sln` listaba **23**
+  proyectos con **32** en disco, y los nueve ausentes —todos capacidades— los **referencia**
+  `Synergos.CMS.Tests`. Abrir la solución en Visual Studio daba **nueve NU1105**; desde la
+  CLI, `dotnet build` y `dotnet test Synergos.CMS.sln` salían en verde con 3.257 pasando,
+  porque **MSBuild resuelve un `ProjectReference` por RUTA y no por pertenencia a la
+  solución** — los compila transitivamente y nadie se entera (#133).
+  Es la forma de #126 y #92 **con los papeles cambiados**: allá el desarrollo tapaba lo que
+  el contenedor veía, acá la CLI tapa lo que ve el IDE. Y **crece sola**, que es lo que la
+  vuelve regla: las capacidades entraron de a una a lo largo de muchas HU, la `.sln` se
+  actualizó las once primeras veces y dejó de actualizarse; el daño no llegó de golpe, se
+  acumuló sin que ninguna corrida lo delatara.
+  **La pregunta que lo caza: ¿qué herramienta mira este artefacto que nosotros no usamos
+  nunca?** Un `.sln`, un `.editorconfig`, un `launchSettings.json` son ficheros que la CLI
+  lee a medias o ignora, así que su deriva no aparece en ninguna corrida. **Y el cruce se
+  hace en los DOS sentidos y derivando las dos listas del disco**: lo que existe y la
+  solución no lista es el defecto, y lo que la solución lista y no existe es el mismo con el
+  signo cambiado — una entrada muerta rompe la carga del IDE, y escribir la lista a mano en
+  el gate sería una tercera copia de algo que ya está en dos sitios.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1156,8 +1177,17 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Suite completa (3257 tests):
+# Suite completa (3259 tests):
 dotnet test Synergos.CMS.sln -v quiet
+
+> **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
+> `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
+> transitivamente lo que la `.sln` no lista y sale verde igual. La solución llegó a
+> declarar **23** proyectos con **32** en disco: los nueve que faltaban eran
+> capacidades que el proyecto de tests referencia, y **Visual Studio daba nueve
+> NU1105** mientras la CLI decía que todo bien. Es la forma de #126 y #92 con los
+> papeles cambiados —acá el que ve es el IDE y el que tapa es la CLI—. Hay gate
+> (`SolucionCompletaTests`), y cruza en los dos sentidos.
 
 # LOS GATES DE ARQUITECTURA — corren solos dentro de la suite, pero
 # conviene correrlos aparte al tocar el árbol de servicios:
@@ -1507,7 +1537,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3257 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3259 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
