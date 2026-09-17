@@ -64,18 +64,17 @@ public static class RaizDelCdnLocal
     /// si lanzar leyendo la configuración, y el cliente la lee por <c>IOptions</c>. Si se
     /// resolviera en uno de los dos, el otro seguiría viendo el relativo y los dos hablarían de
     /// carpetas distintas.</para>
+    ///
+    /// <para><b>Delega en <see cref="RutaRelativaAlContenido.Resolver"/> desde el #137</b>, cuando
+    /// el certificado de desarrollo y el buzón de correo necesitaron lo mismo. Se conserva este
+    /// nombre porque es el que leen el composer del CDN y sus tests: lo que se promovió es el
+    /// algoritmo, no la política de este seam.</para>
     /// </remarks>
     /// <param name="localPath">Lo que trae la configuración, tal cual.</param>
     /// <param name="raizDelContenido">La raíz de contenido de la aplicación.</param>
     /// <returns>La ruta absoluta, o cadena vacía si no hay nada configurado.</returns>
     public static string Resolver(string? localPath, string raizDelContenido)
-    {
-        var crudo = localPath?.Trim();
-        if (string.IsNullOrWhiteSpace(crudo)) return string.Empty;
-        if (Path.IsPathRooted(crudo)) return Path.GetFullPath(crudo);
-        if (string.IsNullOrWhiteSpace(raizDelContenido)) return crudo;
-        return Path.GetFullPath(Path.Combine(raizDelContenido, crudo));
-    }
+        => RutaRelativaAlContenido.Resolver(localPath, raizDelContenido);
 
     /// <summary>
     /// Exige que la raíz ya resuelta exista <b>y traiga el registry</b>. Lanza <b>al cablear</b>.

@@ -110,3 +110,13 @@ tools/verify-ui/results/
 tools/verify-ui/.pw-artifacts/
 tools/verify-ui/.pw-report/
 tools/verify-ui/VEREDICTO-ui.md
+
+# El certificado de desarrollo (#137). La LLAVE PRIVADA no entra al repo jamás:
+# se crea en cada máquina con `node tools/cert-dev.mjs`. Hay gate que comprueba
+# que esta carpeta siga ignorada — un secreto que depende de que nadie escriba
+# `git add -A` no está protegido, está de suerte.
+certs/
+
+# El buzón de correo de desarrollo: Umbraco escribe ahí los .eml en vez de
+# enviarlos (SpecifiedPickupDirectory). Salida, no fuente.
+.maildrop/

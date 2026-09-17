@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3268 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3279 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2239 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2247 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 396 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 399 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -1168,6 +1168,50 @@ Las que salieron de construir el árbol de servicios (§0.B):
   los tests como si fuera lo normal. Hay gate (`RaizDelCdnTests`), y es el gemelo del
   `rutas-hermanas` del repo hermano, que ya vigilaba esto de su lado.
 
+- `feedback_a_census_entry_is_how_a_defect_survives_its_own_gate` — **declarar una
+  excepción con su razón es lo correcto cuando de verdad es una excepción, y es
+  cómo un defecto sobrevive al gate que lo vio.** El #132 escribió
+  `RaizDelCdnTests` contra las rutas de una máquina de los `appsettings`, recorrió
+  el JSON entero con el criterio correcto —agnóstico del literal— y encontró
+  **tres** que no eran del CDN: las dos del certificado de Kestrel
+  (`C:\LOCAL_CDN\synergos-dev.crt`) y el buzón de correo
+  (`C:\Users\HITMA\Desktop\…`). Las declaró en su censo con un razonamiento que
+  sigue siendo correcto —«si faltan, Kestrel no arranca y el envío falla; fallar a
+  la vista es lo contrario de servir una página muerta»— y con un
+  **«alguien tendrá que decidir dónde viven»** al final. Nadie fue, cinco tickets,
+  hasta que alguien clonó el repo (#137).
+  Es `feedback_a_fabrication_can_be_a_derivation` aplicado a un CENSO en vez de a
+  un `<remarks>`: **lo identificado la auditoría siguiente lo lee y pasa de
+  largo**, y un censo lo blinda mejor que un comentario porque además *parece* la
+  forma correcta de dejarlo — tiene su razón al lado y su gate alrededor.
+  **Lo que distingue una excepción legítima de un defecto blindado es si su razón
+  contesta «por qué esto NO se arregla» o «por qué esto no se arregló TODAVÍA».**
+  La primera es una decisión; la segunda es un ticket sin abrir, y ahí la línea
+  del censo tiene que ser el ticket.
+  **Y la mitad que el censo no vio, que es la que hacía caro el defecto: nada en
+  el repo CREABA ese certificado.** «Falla a la vista» era cierto y no servía,
+  porque el mensaje de .NET dice «no se encontró el fichero» y ningún documento
+  nombraba la dependencia — o sea una dependencia obligatoria sin camino para
+  obtenerla, que no se ve en ningún fichero porque **la ausencia de una
+  herramienta no está escrita en ninguna parte**. La pregunta que lo caza:
+  *¿quién crea esto que la configuración da por hecho?*
+  **Y el segundo diente del censo es lo que hace que esto se cierre solo**: una
+  entrada declarada que ya no corresponde **rompe el build**, así que el commit
+  que arregla las rutas está obligado a vaciar el censo en vez de dejarlo
+  afirmando que las tres siguen ahí. Un censo vigilado en un solo sentido habría
+  quedado mintiendo.
+  **Y al arreglarlo casi escribí la copia que este fichero prohíbe**: mi primer
+  gate recorría los `appsettings` con un criterio nuevo —`NombraUnaMaquina`— que
+  era el regex del #132 reinventado. Dos gates con el mismo criterio es
+  `feedback_the_same_algorithm_is_not_the_same_thing`: el día que uno se afine, el
+  otro miente. Lo que de verdad faltaba era **otra pregunta** —no «¿nombra una
+  máquina?» sino «¿lo que esa carpeta contiene puede llegar a GitHub?»—, porque
+  el arreglo **crea** un riesgo que no existía: la llave privada pasó de vivir
+  fuera del árbol a vivir dentro. Ese gate le pregunta a **git**
+  (`git check-ignore`) y no al texto del `.gitignore`, que pasaría en verde con la
+  línea comentada, con un `!certs/` más abajo o con el fichero renombrado — y
+  distingue la salida **128** («no pude preguntar») de la 0, porque tratar «no sé»
+  como «está protegida» es el verde sobre el vacío de siempre.
 - `feedback_the_verification_command_can_be_the_one_that_hides_it` — **cuando el comando
   que la guía manda correr para verificar es el que tapa el defecto, no hay disciplina que
   lo encuentre: hay que mirar con la OTRA herramienta.** `Synergos.CMS.sln` listaba **23**
@@ -1365,13 +1409,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3268 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3279 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2239
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2247
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 396
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 399
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -1730,7 +1774,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3268 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3279 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

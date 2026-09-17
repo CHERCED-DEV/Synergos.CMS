@@ -32,6 +32,42 @@ lo que funcionaba. Ése es el defecto #126 y es la razón de que exista
 | **.NET SDK** | el de `global.json` (hoy 10.0.202). Los tests además piden los **runtimes 8.0** — `dotnet-install.sh --runtime dotnet` y `--runtime aspnetcore` |
 | **Node** | 20+ |
 | **Los dos clones**, hermanos | `Synergos.CMS/` y `Synergos.UI/` en la misma carpeta padre. Si no lo están, todo acepta `--cms-path` / `--cdn-path` |
+| **El certificado de desarrollo** | `node tools/cert-dev.mjs`, una vez por máquina — ver abajo |
+
+### El certificado de desarrollo, una vez por máquina
+
+El perfil de arranque sirve `https://synergos.local:5001`, así que Kestrel necesita un par
+certificado + llave. **Se crea, no se descarga:**
+
+```bash
+node tools/cert-dev.mjs
+```
+
+Lo deja en `certs/`, que está en `.gitignore` — **la llave privada no entra al repo jamás**, y hay
+gate que lo comprueba preguntándole a git en vez de buscar la línea (`LlaveDelCertificadoTests`).
+Cubre `synergos.local`, `*.synergos.local` y `localhost`; el comodín es lo que evita tener que
+enumerar los diez hostnames de vertical que siembra el contenido de demo.
+
+Después hay que **confiarlo** en el almacén del sistema y que `synergos.local` resuelva a
+`127.0.0.1` en el fichero `hosts`. El propio script imprime los tres comandos, uno por sistema.
+
+> **Hasta el #137 esto no estaba escrito en ninguna parte, y era peor que estar mal.** El
+> `appsettings.Development.json` apuntaba a `C:\LOCAL_CDN\synergos-dev.crt` —una carpeta de UNA
+> máquina— y **nada en el repo creaba ese fichero**: medido con un `grep` de `synergos-dev`,
+> `dev-certs` y `openssl` sobre el árbol entero, las únicas dos menciones eran las que lo
+> consumen. Un clon nuevo se encontraba con Kestrel pidiendo un fichero inexistente, con un
+> mensaje que no dice cómo crearlo, sobre una dependencia que ningún documento nombraba.
+>
+> **Y el gate del #132 lo había VISTO.** Su censo declaraba las tres rutas de máquina del fichero
+> —las dos del certificado y el buzón de correo— con su razón escrita y un «alguien tendrá que
+> decidir dónde viven». El razonamiento era correcto; el efecto fue el contrario: **nombrar el
+> defecto en un censo no lo arregla, lo blinda**, porque lo identificado la auditoría siguiente lo
+> lee y pasa de largo. Cinco tickets. Hoy el censo está **vacío** y su segundo diente —una entrada
+> declarada que ya no corresponde rompe el build— es lo que obliga a vaciarlo en el mismo commit.
+
+Si preferís levantar el CMS **sólo por HTTP**, quitá la sección `Kestrel:Endpoints:Https` de
+`appsettings.Development.json`. El arranque falla a la vista si la sección está y el par no —y el
+mensaje nombra las dos salidas—, en vez de dejar que Kestrel diga «no se encontró el fichero».
 
 ---
 

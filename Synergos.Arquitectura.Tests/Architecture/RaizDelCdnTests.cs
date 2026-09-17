@@ -59,21 +59,28 @@ public sealed class RaizDelCdnTests
     /// está, también — una excepción que sobra deja de leerse.
     /// </summary>
     /// <remarks>
-    /// Las tres son de <b>Development</b> y ninguna tiene la forma del defecto que este gate
-    /// existe para cazar: las dos del certificado hacen que <b>Kestrel no arranque</b> si faltan,
-    /// y el buzón de correo de desarrollo hace que <b>el envío falle</b>. Fallar a la vista es
-    /// justo lo contrario de servir una página muerta. Quedan anotadas porque siguen siendo rutas
-    /// de una máquina y alguien tendrá que decidir dónde viven — ver #132.
+    /// <para><b>Está VACÍO desde el #137, y cómo llegó a estarlo es la lección.</b> El #132 declaró
+    /// acá tres entradas —las dos del certificado de Kestrel y el buzón de correo— con su razón
+    /// escrita: «ninguna tiene la forma del defecto que este gate existe para cazar: si faltan,
+    /// Kestrel no arranca y el envío falla; fallar a la vista es lo contrario de servir una página
+    /// muerta. <b>Quedan anotadas porque alguien tendrá que decidir dónde viven</b>». El
+    /// razonamiento era correcto y la consecuencia fue la contraria de la que buscaba.</para>
+    ///
+    /// <para><b>Nombrar el defecto en un censo no lo arregla: lo BLINDA</b>
+    /// (<c>feedback_a_fabrication_can_be_a_derivation</c>). La declaración convirtió
+    /// <c>C:\LOCAL_CDN\synergos-dev.crt</c> en algo <i>identificado</i>, y lo identificado la
+    /// auditoría siguiente lo lee y pasa de largo — cinco tickets, hasta que alguien clonó el repo
+    /// y Kestrel no levantó. Y la mitad que el censo no vio: <b>nada creaba ese certificado</b>, así
+    /// que «falla a la vista» era cierto y no servía, porque el mensaje de .NET no dice cómo
+    /// arreglarlo y ningún documento nombraba la dependencia.</para>
+    ///
+    /// <para>Las tres son hoy relativas al repo y las resuelve <c>Program.cs</c> contra la raíz de
+    /// contenido. <b>El censo se conserva vacío a propósito</b>: el día que de verdad haga falta una
+    /// ruta de máquina, va acá con su razón — y el segundo diente (una entrada declarada que ya no
+    /// corresponde rompe el build) es lo que acaba de obligar a este commit a tocar este fichero en
+    /// vez de dejarlo diciendo que las tres siguen ahí.</para>
     /// </remarks>
-    private static readonly Dictionary<string, string> DeclaradasDeUnaMaquina = new()
-    {
-        ["Kestrel:Endpoints:Https:Certificate:Path"] =
-            "certificado de desarrollo del arquitecto; sin él Kestrel no arranca — falla a la vista",
-        ["Kestrel:Endpoints:Https:Certificate:KeyPath"] =
-            "la llave del anterior, mismo trato",
-        ["Umbraco:CMS:Global:Smtp:PickupDirectoryLocation"] =
-            "buzón de correo de desarrollo; sin él el envío falla — falla a la vista",
-    };
+    private static readonly Dictionary<string, string> DeclaradasDeUnaMaquina = [];
 
     /// <summary>Recorre un JSON de configuración devolviendo (clave, valor) de cada cadena.</summary>
     private static IEnumerable<(string Clave, string Valor)> Cadenas(JsonElement nodo, string prefijo = "")

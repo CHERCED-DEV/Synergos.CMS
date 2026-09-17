@@ -17,16 +17,52 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 // Va acá, y no dentro del composer ni del cliente, porque lo leen LOS DOS: el composer decide si
 // lanzar mirando la configuración y el cliente la recibe por IOptions. Resuelto en uno solo, el
 // otro seguiría viendo el relativo y los dos hablarían de carpetas distintas.
+//
+// ── Y desde el #137 lo mismo para el CERTIFICADO y el BUZÓN de correo ──
+//
+// Las tres familias comparten el defecto, no sólo el algoritmo: `appsettings.Development.json`
+// traía `C:\LOCAL_CDN\synergos-dev.crt` y `C:\Users\HITMA\Desktop\synergos-maildrop`, que son
+// rutas de UNA máquina en un fichero versionado. El gate del #132 no las vio porque perseguía las
+// claves del BundleRegistry en vez del literal; hoy el gate recorre TODAS las claves de todos los
+// appsettings y estas tres se resuelven por el mismo camino.
+//
+// Kestrel lee su certificado al construir el host, antes de que corra un solo composer, así que la
+// resolución tiene que pasar ACÁ o no pasa: puesta en un composer llegaría tarde y .NET habría
+// buscado ya la ruta relativa contra el cwd.
 {
     var raiz = builder.Environment.ContentRootPath;
     var resueltas = new Dictionary<string, string?>();
-    foreach (var clave in new[] { "Synergos:BundleRegistry:LocalPath", "Synergos:LocalCdn:LocalPath" })
+
+    var relativas = new[]
+    {
+        "Synergos:BundleRegistry:LocalPath",
+        "Synergos:LocalCdn:LocalPath",
+        "Umbraco:CMS:Global:Smtp:PickupDirectoryLocation",
+    }.Concat(CertificadoDeDesarrollo.Claves);
+
+    foreach (var clave in relativas)
     {
         var crudo = builder.Configuration[clave];
         if (string.IsNullOrWhiteSpace(crudo)) continue;
-        resueltas[clave] = RaizDelCdnLocal.Resolver(crudo, raiz);
+        resueltas[clave] = RutaRelativaAlContenido.Resolver(crudo, raiz);
     }
     if (resueltas.Count > 0) builder.Configuration.AddInMemoryCollection(resueltas);
+
+    // El par del HTTPS: si el appsettings lo declara, tiene que estar. Se exige ACÁ y no se deja
+    // fallar a Kestrel porque su mensaje dice «no se encontró el fichero» y el de acá dice qué
+    // teclear — que es toda la diferencia cuando la dependencia no la nombra ningún documento.
+    if (!string.IsNullOrWhiteSpace(builder.Configuration[CertificadoDeDesarrollo.Claves[0]]))
+    {
+        CertificadoDeDesarrollo.Exigir(
+            builder.Configuration[CertificadoDeDesarrollo.Claves[0]],
+            builder.Configuration[CertificadoDeDesarrollo.Claves[1]]);
+    }
+
+    // El buzón sí se CREA en vez de exigirse: es salida de desarrollo, como una carpeta de logs, y
+    // un `SpecifiedPickupDirectory` hacia una carpeta ausente falla al MANDAR el primer correo —
+    // o sea lejos de acá y con una traza que habla de SMTP.
+    var buzon = resueltas.GetValueOrDefault("Umbraco:CMS:Global:Smtp:PickupDirectoryLocation");
+    if (!string.IsNullOrWhiteSpace(buzon)) Directory.CreateDirectory(buzon);
 }
 
 builder.CreateUmbracoBuilder()
