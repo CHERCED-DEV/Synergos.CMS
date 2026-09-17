@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3279 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3280 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2247 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 399 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 400 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -1168,6 +1168,40 @@ Las que salieron de construir el árbol de servicios (§0.B):
   los tests como si fuera lo normal. Hay gate (`RaizDelCdnTests`), y es el gemelo del
   `rutas-hermanas` del repo hermano, que ya vigilaba esto de su lado.
 
+- `feedback_a_key_in_the_wrong_section_is_a_key_nobody_reads` — **el binder de
+  .NET descarta en SILENCIO lo que no mapea, así que una clave de configuración
+  en la sección equivocada no falla: deja al servidor comportándose como uno sin
+  configurar.** `appsettings.Development.json` y `appsettings.Docker.json`
+  declaraban `Umbraco:CMS:Global:UmbracoApplicationUrl`, y esa clave vive en
+  `WebRouting` —`Global` tiene dieciséis propiedades y ninguna es ésa—, así que
+  el `KeepAliveJob` escribía «No umbracoApplicationUrl for service (yet), skip»
+  **cada sesenta segundos** y nadie lo relacionaba con una clave que estaba, con
+  su valor correcto, a la vista en el fichero (#138). Lo mismo con
+  `Umbraco:CMS:RuntimeMode`, que va en `Runtime:Mode`.
+  Es la familia del compose de `Api.Identity` —«nombraba `Identity__Tokens__*` de
+  cuando la sección era propia»— y el disparador es el mismo: **una sección que se
+  renombró o se partió en una versión anterior**.
+  **Lo que lo escondía es de quién es la señal.** Esos ficheros declaran su
+  `$schema`, y el schema **sí** sabe dónde va cada clave — pero lo consume el IDE
+  para autocompletar, y **un IDE no falla un build**. Es #133 otra vez: un
+  artefacto que mira una herramienta que no usamos para verificar, así que su
+  deriva no aparece en ninguna corrida. La pregunta que lo caza es la de #133
+  —*¿qué herramienta mira este fichero que nosotros no usamos nunca?*— y la
+  respuesta trae el regalo: **cuando el vendedor publica el schema, no hay lista
+  que escribir**; las 245 propiedades y su sitio ya están en el repo.
+  **Y el corte que costó su mutación: se cruza por RUTA, no por NOMBRE.** Medido
+  con el defecto puesto: un cruce que recolecte los 245 nombres y compruebe
+  pertenencia **caza `RuntimeMode`** —ese nombre literal no existe, la propiedad
+  se llama `Mode`— y **pierde `UmbracoApplicationUrl`**, que SÍ es una propiedad
+  que el schema conoce, sólo que de otro padre. O sea que el gate barato habría
+  cazado el inocuo y dejado pasar el que tenía el síntoma vivo. Hay que resolver
+  los `$ref` y descender el árbol a la par que el JSON, con red de seguridad
+  —«se cruzaron menos de N claves»— porque el schema envuelve casi todo y un
+  descenso que no los resuelva se para en el primer nivel y **pasa en verde sin
+  mirar nada**.
+  **Y el mensaje dice DÓNDE sí vive la clave**, que cuesta lo mismo de calcular y
+  ahorra la búsqueda: un rojo que sólo dice «no existe» manda a alguien a leer un
+  schema de 245 propiedades.
 - `feedback_a_census_entry_is_how_a_defect_survives_its_own_gate` — **declarar una
   excepción con su razón es lo correcto cuando de verdad es una excepción, y es
   cómo un defecto sobrevive al gate que lo vio.** El #132 escribió
@@ -1409,13 +1443,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3279 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3280 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2247
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 399
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 400
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -1774,7 +1808,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3279 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3280 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
