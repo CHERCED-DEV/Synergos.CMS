@@ -195,6 +195,74 @@ producto** y la página lo dice: ahí no hay tema del CMS ni contenido real.
 
 ---
 
+## Si tu clon viene de ANTES del #136
+
+Esto no es para un clon limpio —ahí no pasa— sino para una copia que ya existía
+cuando el backend se movió a `backend/{nucleo,capacidades,orquestadores}/`. Con
+**291 renombres** en un commit, traer los cambios **no alcanza**: el árbol queda
+bien y las herramientas siguen leyendo el de antes.
+
+El síntoma es desconcertante y no apunta a la causa: Visual Studio da **nueve
+NU1105** nombrando rutas planas —`Synergos.CMS\Synergos.Api.Workflow\…`— que ya
+**no existen en ningún fichero del disco**. Comprobado: en `master`,
+`Synergos.CMS.Tests.csproj` declara **una** `ProjectReference` y ninguna
+capacidad, y nada del árbol nombra `..\Synergos.Api.*`.
+
+Dos sitios guardan el estado viejo, y ninguno se limpia solo:
+
+1. **Las carpetas del backend viejo siguen en pie.** `git reset --hard` **no
+   borra un directorio que contenga ficheros ignorados**, y `bin/` y `obj/` lo
+   están (`.gitignore` líneas 2-3). Medido reproduciendo el movimiento en un
+   repo de prueba: tras el reset, `Synergos.Api.Vieja/obj/project.assets.json`
+   —con las rutas de antes dentro— **sobrevive**.
+2. **`.vs/ProjectEvaluation/*.projects.v*.cache`**, donde Visual Studio guarda
+   el grafo de proyectos evaluado. Con 291 renombres de golpe no lo invalida, así
+   que sigue creyendo que el proyecto de tests pide nueve capacidades y NuGet
+   contesta lo único que puede.
+
+Con Visual Studio **cerrado**, y en este orden:
+
+```powershell
+# 1. bin/ y obj/ de todo el árbol — esto es lo que vacía las carpetas huérfanas
+Get-ChildItem -Recurse -Directory -Include bin,obj | Remove-Item -Recurse -Force
+
+# 2. ahora sí: las carpetas del backend viejo, que quedaron VACÍAS
+git clean -nd            # en seco. Tiene que listar sólo carpetas del backend viejo
+git clean -fd            # y entonces se van
+
+# 3. el caché del IDE
+Remove-Item -Recurse -Force .vs -ErrorAction SilentlyContinue
+
+# 4. que NuGet reconstruya el grafo — si esto sale limpio, era el IDE
+dotnet restore Synergos.CMS.sln
+```
+
+> **El orden de 1 y 2 no es cosmético, y está medido.** `git clean -nd` **no ve**
+> la carpeta huérfana mientras tenga el `obj/` dentro: lo único que queda ahí
+> está ignorado, así que git la considera ignorada entera y la calla. Después de
+> borrar `bin`/`obj` la carpeta queda vacía y entonces sí la lista — **sin `-x`**.
+
+> ⚠️ **Nunca `git clean -xfd` en este repo.** Medido en el mismo repo de prueba:
+> con `-x`, git ofrece llevarse **`Synergos.CMS.Web/`** entera, y ahí dentro está
+> `umbraco/Data/` con la SQLite de desarrollo, que está ignorada a propósito y no
+> se puede recuperar de ningún sitio. `-fd` sin `-x` no la toca — comprobado.
+
+Para saber que quedó, sin abrir el IDE:
+
+```powershell
+# UNA línea, la de Synergos.CMS.Web
+Select-String -Path Synergos.CMS.Tests\Synergos.CMS.Tests.csproj -Pattern "ProjectReference"
+
+# y el backend donde vive hoy
+Test-Path backend\capacidades\Synergos.Api.Workflow\Synergos.Api.Workflow.csproj
+```
+
+**Y para trabajar el CMS, abrí `Synergos.Web.sln`** (cinco proyectos) en vez de la
+integradora — ver §7 de `CLAUDE.md`. Sirve además de prueba: esa solución no lista
+ninguna capacidad, así que un NU1105 de `Api.Workflow` ahí es imposible.
+
+---
+
 ## Lo que se rompe seguido
 
 | Síntoma | Causa | Arreglo |
@@ -206,6 +274,7 @@ producto** y la página lo dice: ahí no hay tema del CMS ni contenido real.
 | Un elemento hidrata y otro no | el import map no trae el runtime de ese framework | `npm run build:cdn` de nuevo; `humo-conectado` lo nombra |
 | `npm run build:cdn` sale con 1 | el presupuesto de tamaño | Mirá **qué** creció, no el techo |
 | El CMS no arranca y habla de `LocalPath` | `Mode=FileSystem` y el hermano no está construido ahí | `npm run build:cdn`, o `Synergos__BundleRegistry__Mode=Stub` |
+| Nueve NU1105 con rutas del backend PLANO, y `git status` limpio | caché de `obj/` y de `.vs` del árbol de antes del #136 | La sección de arriba — y comprobá que ninguna de esas rutas exista |
 
 ## Lo que este camino NO cubre
 
