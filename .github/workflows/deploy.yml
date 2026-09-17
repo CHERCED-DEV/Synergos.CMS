@@ -179,12 +179,28 @@ jobs:
           USUARIO: ${{ secrets.DEPLOY_USER }}
           SHA: ${{ steps.sha.outputs.valor }}
         run: |
+          # Los del respaldo (HU #31) van con el despliegue porque NO ESTABAN
+          # LLEGANDO AL SERVIDOR: `respaldo.sh` vivía sólo en el repo, así que
+          # la máquina que había que proteger era justo la única que no tenía
+          # con qué. Se copian los tres del camino del servidor; el ensayo de
+          # restauración NO, y eso es deliberado: necesita la llave privada, y
+          # la llave privada no vive acá.
+          #
+          # Y los de la siembra (#114) volvieron a caer en lo MISMO: el doc dice
+          # «corré esto en el servidor» y el servidor no tenía ni el script ni
+          # su manifiesto. Hoy la lista la cruza un gate contra los comandos que
+          # el documento manda correr allí, con las exclusiones nombradas y
+          # razonadas — una lista a mano se desincroniza el día que nadie mira,
+          # y ésta ya se desincronizó dos veces.
           scp -i ~/.ssh/id_deploy -o BatchMode=yes \
             compose.prod.yml Caddyfile tools/deploy-remoto.sh \
+            tools/respaldo.sh tools/enviar-respaldo.sh tools/restaurar.sh \
+            tools/importar-schema.sh tools/provisionar.sh \
+            tools/provisionar.recursos.json \
             "$USUARIO@$HOST:/opt/synergos/"
 
           ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$USUARIO@$HOST" \
-            "chmod +x /opt/synergos/deploy-remoto.sh && /opt/synergos/deploy-remoto.sh $SHA"
+            "chmod +x /opt/synergos/*.sh && /opt/synergos/deploy-remoto.sh $SHA"
 
       # ── 5. El humo, desde fuera ──────────────────────────────────────────
       - id: humo

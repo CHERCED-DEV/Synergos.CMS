@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -25,6 +24,11 @@ namespace Synergos.CMS.Web.Services;
 ///
 /// SKUs huérfanos (producto eliminado) se omiten silenciosamente y se
 /// limpian de la cookie en el siguiente write.
+///
+/// <para><b>Y una línea cuyo precio no se puede leer también se omite</b> —con un log de
+/// Error, que ésa sí hay que verla—, nunca se cobra en cero. La regla de qué texto es un
+/// precio vive en <see cref="PrecioAutorado"/> y el porqué de omitir en
+/// <see cref="ShopLinePricing"/> (#123).</para>
 /// </remarks>
 public sealed class DefaultCartService : ICartService
 {
@@ -35,16 +39,19 @@ public sealed class DefaultCartService : ICartService
     private readonly CartSettings _settings;
     private readonly byte[] _secretKey;
     private readonly ICartAbandonmentTracker _abandonmentTracker;
+    private readonly ILogger<DefaultCartService> _logger;
 
     public DefaultCartService(
         IHttpContextAccessor httpContextAccessor,
         IUmbracoContextAccessor umbracoContextAccessor,
         IOptions<CartSettings> settings,
-        ICartAbandonmentTracker abandonmentTracker)
+        ICartAbandonmentTracker abandonmentTracker,
+        ILogger<DefaultCartService> logger)
     {
         _httpContextAccessor = httpContextAccessor;
         _umbracoContextAccessor = umbracoContextAccessor;
         _settings = settings.Value;
+        _logger = logger;
         _secretKey = Encoding.UTF8.GetBytes(string.IsNullOrWhiteSpace(_settings.SecretKey)
             ? "synergos-dev-secret-change-me"
             : _settings.SecretKey);
@@ -268,16 +275,22 @@ public sealed class DefaultCartService : ICartService
             }
             var name = product.Value<string>("productName") ?? product.Name ?? item.Sku;
             var priceRaw = product.Value<string>("productPriceBase");
-            if (!decimal.TryParse(priceRaw, NumberStyles.Number, CultureInfo.InvariantCulture, out var unitPrice))
+
+            // La línea se OMITE cuando el precio no se puede leer; NUNCA cae a 0m. El porqué
+            // —y las tres opciones que se miraron— está en ShopLinePricing (#123). En silencio
+            // sí sería un defecto, así que se loguea como Error con el texto que hay que
+            // arreglar: es lo único que le dice a alguien que ese producto dejó de venderse.
+            if (!ShopLinePricing.TryUnitPrice(
+                    priceRaw, product.Value<string>("productVariantsJson"), item.VariantSku, out var unitPrice))
             {
-                unitPrice = 0m;
+                _logger.LogError(
+                    "DefaultCartService: el SKU '{Sku}' tiene productPriceBase='{Raw}', que no es un precio "
+                    + "inequívoco. La LÍNEA SE OMITE del carrito (no se cobra en cero). Formato esperado: SOLO "
+                    + "DÍGITOS, sin puntos ni símbolos (ej. 89000, no \"89.000\" — eso se cobraría a 89 pesos).",
+                    item.Sku, priceRaw);
+                continue;
             }
-            // Apply variant priceDelta if applicable
-            if (!string.IsNullOrWhiteSpace(item.VariantSku))
-            {
-                var variantsJson = product.Value<string>("productVariantsJson");
-                unitPrice += GetVariantPriceDelta(variantsJson, item.VariantSku);
-            }
+
             var lineTotal = unitPrice * item.Quantity;
             subtotal += lineTotal;
             itemCount += item.Quantity;
@@ -295,28 +308,6 @@ public sealed class DefaultCartService : ICartService
         }
 
         return new Cart(lines, subtotal, _settings.Currency, itemCount);
-    }
-
-    private static decimal GetVariantPriceDelta(string? variantsJson, string variantSku)
-    {
-        if (string.IsNullOrWhiteSpace(variantsJson)) return 0m;
-        try
-        {
-            using var doc = JsonDocument.Parse(variantsJson);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array) return 0m;
-            foreach (var v in doc.RootElement.EnumerateArray())
-            {
-                if (!v.TryGetProperty("sku", out var skuEl) || skuEl.ValueKind != JsonValueKind.String) continue;
-                if (!string.Equals(skuEl.GetString(), variantSku, StringComparison.OrdinalIgnoreCase)) continue;
-                if (v.TryGetProperty("priceDelta", out var deltaEl) && deltaEl.TryGetDecimal(out var delta))
-                {
-                    return delta;
-                }
-                return 0m;
-            }
-        }
-        catch { /* malformed JSON → ignore */ }
-        return 0m;
     }
 
     private sealed record RawCartItemDto(string Sku, string? VariantSku, int Quantity);

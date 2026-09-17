@@ -52,6 +52,12 @@ public sealed class HttpShopOrderService : IShopOrderService
     /// <summary>Ídem para la canasta.</summary>
     public const string CartClientName = "synergos-api-cart";
 
+    /// <summary>Cabecera con la que viaja la identidad verificable de quien compra.</summary>
+    public const string IdentityHeader = "X-Synergos-Identity";
+
+    /// <summary>Prefijo de los rechazos que hablan del token y no del negocio.</summary>
+    internal const string IdentityCodePrefix = "identity.";
+
     /// <summary>El <c>Kind</c> con el que esta tienda nombra a su comprador.</summary>
     internal const string BuyerKind = "tienda.comprador";
 
@@ -64,15 +70,18 @@ public sealed class HttpShopOrderService : IShopOrderService
     private readonly IHttpClientFactory _clients;
     private readonly IOptionsMonitor<TiendaSettings> _settings;
     private readonly ILogger<HttpShopOrderService> _log;
+    private readonly IIdentityTokenIssuer _identidad;
 
     public HttpShopOrderService(
         IHttpClientFactory clients,
         IOptionsMonitor<TiendaSettings> settings,
-        ILogger<HttpShopOrderService> log)
+        ILogger<HttpShopOrderService> log,
+        IIdentityTokenIssuer identity)
     {
         _clients = clients;
         _settings = settings;
         _log = log;
+        _identidad = identity;
     }
 
     // ── Comprar ─────────────────────────────────────────────────────────────
@@ -93,7 +102,7 @@ public sealed class HttpShopOrderService : IShopOrderService
         // que esta HU tiene que hacer imposible.
         var key = IdempotencyKeyFor(buyerId, items);
 
-        var cartId = await AbrirCanastaAsync(buyerId, items, key, cancellationToken).ConfigureAwait(false);
+        var cartId = await AbrirCanastaAsync(customer, buyerId, items, key, cancellationToken).ConfigureAwait(false);
 
         var compra = await ComprarAsync(cartId, key, cancellationToken).ConfigureAwait(false);
 
@@ -109,8 +118,23 @@ public sealed class HttpShopOrderService : IShopOrderService
             Currency: compra.Total.Currency);
     }
 
+    /// <summary>Abre la canasta y le pone las líneas.</summary>
+    /// <remarks>
+    /// <para><b>Abrir NOMBRA al comprador, así que se presenta identidad</b> (HU #14). Lo que se
+    /// declara es siempre el suelo —<c>CmsSession</c>, o sea «nos fiamos de quien llama»— y quien
+    /// la sube a <c>IdentityToken</c> es <c>Api.Cart</c> tras verificar el token. Escribirlo acá
+    /// porque el despliegue <i>sepa</i> emitir sería el defecto #42 con otro disfraz: la fuerza de
+    /// una afirmación es la de lo que alguien comprobó.</para>
+    ///
+    /// <para><b>Y sólo se presenta si hay SESIÓN.</b> Con <c>MemberKey</c>, el dueño de la canasta
+    /// es la llave del Member, que es exactamente la forma de sujeto que este lado firma. En el
+    /// checkout de invitado el dueño es un seudónimo del correo (defecto #47) y <b>nadie ha
+    /// comprobado que ese correo sea de quien lo escribió</b>: pedir un token para él haría que la
+    /// capacidad anotara <c>IdentityToken</c> sobre una identidad que no verificó nadie — el mismo
+    /// defecto #42, ahora con la firma de por medio para taparlo mejor.</para>
+    /// </remarks>
     private async Task<string> AbrirCanastaAsync(
-        string buyerId, IReadOnlyList<ShopCartItem> items, string key, CancellationToken ct)
+        ShopCustomer customer, string buyerId, IReadOnlyList<ShopCartItem> items, string key, CancellationToken ct)
     {
         var cart = _clients.CreateClient(CartClientName);
 
@@ -118,9 +142,30 @@ public sealed class HttpShopOrderService : IShopOrderService
         // había en vez de abrir una segunda con las mismas líneas.
         using var abrir = new HttpRequestMessage(HttpMethod.Post, "v1/carts")
         {
-            Content = JsonContent.Create(new { ownerKind = BuyerKind, ownerId = buyerId }),
+            Content = JsonContent.Create(new
+            {
+                ownerKind = BuyerKind,
+                ownerId = buyerId,
+                // El SUELO, siempre. No se puede omitir: sin afirmación la capacidad rechaza con
+                // `cart.access_requires_identity`, y mandar algo más fuerte sin presentarlo lo
+                // rechaza con `identity.assertion_not_proven` — y hace bien.
+                assertion = IdentityAssertions.CmsSession,
+            }),
         };
         abrir.Headers.Add("Idempotency-Key", key);
+
+        if (customer.MemberKey is Guid miembro && miembro != Guid.Empty)
+        {
+            // El emisor NUNCA lanza: sin Api.Identity esto es null y la canasta se abre
+            // declarando, que es lo que se hacía antes de la HU #14.
+            var token = await _identidad.IssueAsync(
+                new IdentitySubject(BuyerKind, buyerId, Array.Empty<string>()), ct).ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                abrir.Headers.TryAddWithoutValidation(IdentityHeader, token);
+            }
+        }
 
         var creada = await EnviarAsync<CartDto>(cart, abrir, "abrir la canasta", ct).ConfigureAwait(false);
 
@@ -320,6 +365,27 @@ public sealed class HttpShopOrderService : IShopOrderService
                 throw new InvalidOperationException("No pudimos procesar tu compra. No se te cobró.");
             }
 
+            // UN RECHAZO DE IDENTIDAD NO SE DEGRADA A UN REINTENTO SIN FIRMA, y es una decisión,
+            // no un olvido (HU #14). La bitácora SÍ se repite sin firmar, porque allá perder un
+            // asiento es peor que un asiento débil: un rastro que falta no se nota. Acá es al
+            // revés. Una canasta abierta sin comprobar quedaría atribuida a un miembro por la
+            // sola palabra de quien llamó, nadie audita una canasta y vence sola a los siete
+            // días: el hueco sería permanente y nadie lo vería nunca. Fallar se ve —lo ve quien
+            // está comprando, en ese momento— y se arregla poniendo la llave o apagando el modo.
+            //
+            // Y es un defecto de DESPLIEGUE, no del comprador: igual que el 401, se grita en el
+            // log con el nombre de lo que falta y afuera sale un mensaje que no le echa encima un
+            // problema que no puede resolver.
+            if (problema.Code?.StartsWith(IdentityCodePrefix, StringComparison.Ordinal) == true)
+            {
+                _log.LogError(
+                    "Tienda rechazó {Que} por identidad ({Code}): {Detalle}. Si es "
+                    + "identity.token_not_verifiable, a Api.Cart le falta IdentityTokens:Keys — la "
+                    + "MISMA llave con la que firma Api.Identity.",
+                    queHacia, problema.Code, problema.Detail ?? "-");
+                throw new InvalidOperationException("No pudimos procesar tu compra. No se te cobró.");
+            }
+
             _log.LogWarning("Tienda rechazó {Que} con {Status} ({Code}): {Detalle}",
                 queHacia, (int)res.StatusCode, problema.Code ?? "-", problema.Detail ?? "-");
 
@@ -396,10 +462,12 @@ public sealed class HttpShopOrderService : IShopOrderService
     /// </remarks>
     internal static string BuyerId(ShopCustomer customer)
     {
+        // La POLITICA vive aca y no dentro del helper (#120): con sesion, el comprador ES su
+        // miembro y no hace falta seudonimo. Ninguna de las otras cinco copias tiene esto, y la
+        // que lo copie sin saberlo pierde la sesion.
         if (customer.MemberKey is Guid k && k != Guid.Empty) return k.ToString("n");
 
-        var correo = (customer.Email ?? string.Empty).Trim().ToLowerInvariant();
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(correo)))[..16].ToLowerInvariant();
+        return SeudonimoDePersona.De(customer.Email);
     }
 
     internal static string SubjectId(ShopCartItem item)

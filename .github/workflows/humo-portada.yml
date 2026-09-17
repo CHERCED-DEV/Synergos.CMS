@@ -1,0 +1,82 @@
+name: Humo de portada (el sitio se VE)
+
+# #119 — el gate de HTML SERVIDO, que es el que faltaba.
+#
+# usync-audit.yml valida la FORMA del XML. usync-rebuild.yml valida que Umbraco
+# lo ACEPTA — y su propia cabecera dice que deja fuera «el comportamiento
+# runtime… eso es de los tests xUnit y del gate de HTML servido». Éste es ese
+# gate: arranca la aplicación real, siembra la portada de arranque y PIDE LA
+# PÁGINA.
+#
+# Por qué hace falta uno que pida la página, con el caso que pasó por el hueco:
+# las vistas de este proyecto se compilan SIEMPRE en caliente
+# (RazorCompileOnBuild=false, porque ModelsMode=InMemoryAuto), así que un build
+# verde no dice nada sobre si una vista compila. El arreglo del defecto #92 dejó
+# _SynergosBridge.cshtml sin el @using de Microsoft.Extensions.Logging y CUALQUIER
+# página de contenido pasó a contestar 500 — diez días, con la suite entera en
+# verde y el gate de #92 confirmando que la línea estaba escrita. No lo vio nadie
+# porque no había contenido que renderizar: uSync/v9/Content/ está vacía.
+#
+# Corre en cada PR que toque las vistas, el tooling de portada o el schema: son
+# las tres formas de romper que este gate ve y ningún otro.
+
+on:
+  pull_request:
+    paths:
+      - 'Synergos.CMS.Web/Views/**'
+      - 'Synergos.CMS.Web/Services/StarterPortadaSeeder.cs'
+      - 'Synergos.CMS.Web/Controllers/DevController.cs'
+      - 'Synergos.CMS.Web/uSync/**'
+      - 'tools/humo-portada.mjs'
+      - '.github/workflows/humo-portada.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'Synergos.CMS.Web/Views/**'
+      - 'Synergos.CMS.Web/Services/StarterPortadaSeeder.cs'
+      - 'Synergos.CMS.Web/Controllers/DevController.cs'
+      - 'Synergos.CMS.Web/uSync/**'
+      - 'tools/humo-portada.mjs'
+      - '.github/workflows/humo-portada.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: humo-portada-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portada:
+    name: clon limpio → portada sembrada → portada SERVIDA
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # global.json pinea SDK 10.x (rollForward latestFeature) y los proyectos
+      # targetean net8.0 — mismos dos SDK que build-test.yml.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Sembrar la portada y pedir la página
+        run: node tools/humo-portada.mjs --log humo-portada.log
+
+      - name: Subir log de la aplicación
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: humo-portada-log
+          path: humo-portada.log
+          retention-days: 14

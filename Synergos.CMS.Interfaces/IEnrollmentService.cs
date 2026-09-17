@@ -1,4 +1,4 @@
-namespace Synergos.CMS.Interfaces;
+﻿namespace Synergos.CMS.Interfaces;
 
 /// <summary>
 /// Ciclo de vida de una matrícula del dominio Educación (LMS). Calca
@@ -73,6 +73,22 @@ public sealed record Certificate(
     string VerifyUrl);
 
 /// <summary>
+/// Una matrícula ACTIVA del alumno, con su avance. Es la fila de «mi aprendizaje».
+/// </summary>
+/// <remarks>
+/// <b>Junta matrícula y progreso a propósito</b>: por separado obligarían a quien las pinte a
+/// pedir el progreso curso por curso, y esa pantalla lista todos los del alumno de una.
+/// <see cref="LastActivityAt"/> es la fecha de la matrícula mientras nadie registre la última
+/// lección vista — está declarado aquí para que quien lo lea no lo tome por lo que no es.
+/// </remarks>
+public sealed record StudentEnrollment(
+    string EnrollmentId,
+    string CourseId,
+    int Percent,
+    int CompletedCount,
+    DateTimeOffset LastActivityAt);
+
+/// <summary>
 /// Servicio de matrícula + progreso del dominio Educación (LMS). Es el MOTOR
 /// transaccional del enrollment, calcando <see cref="IReservationService"/> de
 /// Hoteles (Hold→pay→Confirm) y <see cref="IShopOrderService"/> de Tienda:
@@ -97,9 +113,29 @@ public interface IEnrollmentService
     /// orden + sesión + monto (matrícula <see cref="EnrollmentStatus.PendingPayment"/>).
     /// Si es gratis, crea la matrícula <see cref="EnrollmentStatus.Active"/>
     /// inmediatamente (sin pago). Lanza <see cref="ArgumentException"/> si el
-    /// curso no existe o el alumno es inválido.
+    /// curso no existe, el alumno es inválido o el plan no existe.
     /// </summary>
-    Task<CourseEnrollmentResult> EnrollAsync(string courseId, Student student, CancellationToken cancellationToken = default);
+    /// <param name="planCode">
+    /// El plan que eligió el alumno (<see cref="CoursePricingPlan.Code"/>), o null para el
+    /// precio del curso.
+    /// </param>
+    /// <remarks>
+    /// <b>Llega el CÓDIGO del plan, nunca su monto</b>, y eso es lo mismo que hace el curso:
+    /// el total se resuelve desde el catálogo. Aceptar el monto dejaría que quien llama se
+    /// ponga el precio que quiera — es el «no se confía en el cliente» de arriba aplicado a la
+    /// otra mitad de la decisión.
+    ///
+    /// <para><b>Un código que no existe se RECHAZA, no cae al precio del curso</b> (defecto
+    /// #102). Caer es exactamente el defecto que esto viene a arreglar con otro nombre: el
+    /// alumno elige «Plan Premium con mentoría», se le cobra el precio líder y nada falla. Es
+    /// plata y se nota al instante —falla delante de quien está comprando y se arregla
+    /// eligiendo otra vez—, así que falla a la vista.</para>
+    /// </remarks>
+    Task<CourseEnrollmentResult> EnrollAsync(
+        string courseId,
+        Student student,
+        string? planCode = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Captura el pago de una inscripción pendiente y activa la matrícula.
@@ -116,6 +152,21 @@ public interface IEnrollmentService
     /// — nunca lanza por estado vacío.
     /// </summary>
     Task<CourseProgress> GetProgressAsync(string courseId, string student, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Todas las matrículas ACTIVAS del alumno con su avance. Sin ninguna devuelve <c>[]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Faltaba, y por eso «mi aprendizaje» no se podía servir</b> (#102). El seam sabía
+    /// contestar «¿cómo va este alumno en ESTE curso?» (<see cref="GetProgressAsync"/>), que
+    /// obliga a conocer el curso de antemano; la pantalla que lista lo que alguien está
+    /// cursando necesita la pregunta al revés.
+    ///
+    /// <para><b>Sólo las ACTIVAS</b>: una matrícula en <c>PendingPayment</c> es un carrito
+    /// abandonado, y ponerla entre «mis cursos» le diría al alumno que tiene acceso a algo que
+    /// no pagó.</para>
+    /// </remarks>
+    Task<IReadOnlyList<StudentEnrollment>> GetEnrollmentsAsync(string student, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Marca una lección como completada y recalcula el % sobre el total de
@@ -137,6 +188,45 @@ public interface IEnrollmentService
 public sealed record CourseEnrollmentStats(int Students, decimal Revenue);
 
 /// <summary>
+/// Un alumno matriculado en un curso, tal como lo ve el instructor en su consola: quién es y
+/// por dónde va. Es la FILA, no el conteo.
+/// </summary>
+/// <remarks>
+/// <para><b>No lleva el correo del alumno, y eso es el tipo diciéndolo</b> (#107). La consola
+/// pinta cuatro columnas —Alumno / Curso / Progreso / Inscrito— y <b>no tiene una sola acción
+/// que use una dirección</b>: no hay contactar, ni exportar, ni escribir. Emitirlo sería poner
+/// la lista de correos de la escuela entera al alcance de un <c>GET</c> a cambio de una segunda
+/// línea de texto. Es la decisión que este repo ya tomó dos veces —el comprador que viaja
+/// seudonimizado hacia el orquestador (defecto #47) y el <c>OpenedBy</c> que
+/// <c>GovController</c> no mapea «antes de que pase»— aplicada acá.</para>
+///
+/// <para><b>Y se aplica en el TIPO y no en el mapeo del DTO</b> a propósito: si el correo
+/// llegara hasta el borde, dejarlo fuera sería una convención que la próxima fila lo olvida.
+/// Sin campo, emitirlo vuelve a ser una decisión. Es el mismo corte con el que
+/// <see cref="ICommentReader"/> existe separado de <see cref="ICommentWriter"/>.</para>
+///
+/// <para><b><see cref="StudentId"/> es un seudónimo, no una dirección y no el nombre.</b> El
+/// mismo que usan Tienda, Eventos y la visita al inmueble (#33a): SHA-256 del correo
+/// normalizado, 16 hex — inventar un tercero haría que el mismo alumno fuera dos personas según
+/// por dónde entró. No es anonimato (un correo conocido se vuelve a hashear y comparar): es no
+/// esparcir lo que no hace falta esparcir. Y no vale el nombre: dos personas se llaman igual.
+/// </para>
+///
+/// <para><b><see cref="StudentName"/> SÍ va</b>, que es lo que el instructor lee. Ponerle el
+/// seudónimo ahí sería la otra mitad de #47, donde el identificador opaco del comprador acabó
+/// pintado en pantalla.</para>
+///
+/// <para><b>El día que la consola tenga una acción de contactar</b>, lo que hace falta es un
+/// CANAL y no una dirección: <c>Api.Messaging</c> está construida y Gobierno ya la usa.</para>
+/// </remarks>
+public sealed record CourseRosterEntry(
+    string StudentId,
+    string StudentName,
+    string CourseId,
+    int Percent,
+    DateTimeOffset EnrolledAt);
+
+/// <summary>
 /// Cara de LECTURA del motor de matrícula para el panel del instructor
 /// (performance/revenue) — seam ISP-clean separado del flujo transaccional de
 /// <see cref="IEnrollmentService"/>. Lo COMPONE el catálogo para armar las
@@ -152,4 +242,28 @@ public interface IEnrollmentMetrics
     /// acumulado de las matrículas de pago). Curso sin matrículas → ceros; nunca lanza.
     /// </summary>
     Task<CourseEnrollmentStats> GetCourseStatsAsync(string courseId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Los alumnos matriculados en un curso con su avance — la LISTA, no el conteo. Curso sin
+    /// matrículas (o inexistente) → <c>[]</c>; nunca lanza.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Faltaba, y por eso la consola del instructor no podía servir <c>students[]</c></b>
+    /// (#102 → #107). El motor sabía contestar «¿CUÁNTOS hay en este curso?»
+    /// (<see cref="GetCourseStatsAsync"/>) y «¿cómo va ESTE alumno?»
+    /// (<see cref="IEnrollmentService.GetProgressAsync"/>), y nadie sabía contestar «quiénes
+    /// están y por dónde van» — que es lo único que convierte un número en trabajo.</para>
+    ///
+    /// <para><b>Sólo las ACTIVAS</b>, igual que <see cref="GetCourseStatsAsync"/>: una matrícula
+    /// en <see cref="EnrollmentStatus.PendingPayment"/> no es un alumno, es un carrito
+    /// abandonado. Y tienen que ser el mismo criterio o la consola diría «42 alumnos» encima de
+    /// 39 filas.</para>
+    ///
+    /// <para>Va en esta cara y no en <see cref="IEnrollmentService"/> porque es LECTURA del
+    /// panel del instructor, que es lo que este seam declara ser. Y no en
+    /// <c>ICourseCatalogProvider</c> —que ya compone este seam para las métricas y era lo
+    /// cómodo— porque metería datos personales de alumnos dentro del seam que sirve el catálogo
+    /// público.</para>
+    /// </remarks>
+    Task<IReadOnlyList<CourseRosterEntry>> GetCourseRosterAsync(string courseId, CancellationToken cancellationToken = default);
 }

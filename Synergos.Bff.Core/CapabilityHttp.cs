@@ -10,7 +10,7 @@ namespace Synergos.Bff.Core;
 /// <remarks>
 /// <b>El rechazo de la capacidad se PRESERVA</b> en vez de aplanarse a "falló". Es lo que
 /// permite que el orquestador decida distinto ante <c>booking.at_capacity</c> (avisar y ofrecer
-/// otra hora) que ante <c>payments.declined</c> (pedir otro medio de pago) — y sobre todo, que
+/// otra hora) que ante <c>payments.payment_declined</c> (pedir otro medio de pago) — y sobre todo, que
 /// distinga un <c>Unavailable</c> —reintentable— de un <c>Conflict</c>, que no lo es.
 /// </remarks>
 public static class CapabilityHttp

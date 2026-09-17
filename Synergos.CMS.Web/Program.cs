@@ -1,9 +1,33 @@
-using Microsoft.Extensions.FileProviders;
+﻿using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Web.Middlewares;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+
+// ── La raíz del CDN local, resuelta ANTES de que nadie enlace opciones (#132) ──
+//
+// Las dos rutas del CDN de disco se pueden escribir RELATIVAS —y el default de Development lo
+// es, `../../Synergos.UI/public`, que es la disposición de repos hermanos que documenta
+// docs/onboarding/arrancar-los-dos-arboles.md—. Se resuelven contra la raíz de CONTENIDO, no
+// contra el directorio de trabajo: `dotnet run` lo deja en el proyecto y `dotnet exec
+// bin/…/Web.dll` lo deja donde se tecleó, así que un default que dependiera del `cwd` sería el
+// mismo defecto con otra cara.
+//
+// Va acá, y no dentro del composer ni del cliente, porque lo leen LOS DOS: el composer decide si
+// lanzar mirando la configuración y el cliente la recibe por IOptions. Resuelto en uno solo, el
+// otro seguiría viendo el relativo y los dos hablarían de carpetas distintas.
+{
+    var raiz = builder.Environment.ContentRootPath;
+    var resueltas = new Dictionary<string, string?>();
+    foreach (var clave in new[] { "Synergos:BundleRegistry:LocalPath", "Synergos:LocalCdn:LocalPath" })
+    {
+        var crudo = builder.Configuration[clave];
+        if (string.IsNullOrWhiteSpace(crudo)) continue;
+        resueltas[clave] = RaizDelCdnLocal.Resolver(crudo, raiz);
+    }
+    if (resueltas.Count > 0) builder.Configuration.AddInMemoryCollection(resueltas);
+}
 
 builder.CreateUmbracoBuilder()
     .AddBackOffice()

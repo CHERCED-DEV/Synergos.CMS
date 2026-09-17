@@ -148,20 +148,25 @@ public sealed class StubReturnService : IReturnService
             throw new ArgumentException("El motivo de la devolución es obligatorio.", nameof(reason));
         }
 
-        var order = await _orders.GetOrderAsync(orderRef.Trim(), cancellationToken)
-            ?? throw new ArgumentException("Orden no encontrada.", nameof(orderRef));
-        if (order.Status != OrderStatus.Paid)
+        // La MISMA resolución que responde CanRequestAsync (#34). No se repiten
+        // las comprobaciones acá: dos copias dentro del propio servidor se ven
+        // igual de autorizadas, y la de la UI ya demostró cómo se desvían (#33).
+        var (block, order, line, lineRef) = await ResolveAsync(orderRef, lineId, cancellationToken)
+            .ConfigureAwait(false);
+        switch (block)
         {
-            throw new ArgumentException(
-                $"Solo se puede devolver sobre una orden pagada (estado actual {order.Status}).", nameof(orderRef));
+            case ShopReturnBlock.OrderNotFound:
+                throw new ArgumentException("Orden no encontrada.", nameof(orderRef));
+            case ShopReturnBlock.OrderNotPaid:
+                throw new ArgumentException(
+                    $"Solo se puede devolver sobre una orden pagada (estado actual {order!.Status}).", nameof(orderRef));
+            case ShopReturnBlock.LineNotInOrder:
+                throw new ArgumentException(
+                    $"La línea '{lineId}' no está en la orden {order!.OrderRef}.", nameof(lineId));
         }
-
-        var line = ResolveLine(order, lineId.Trim())
-            ?? throw new ArgumentException(
-                $"La línea '{lineId}' no está en la orden {order.OrderRef}.", nameof(lineId));
-        var lineRef = string.IsNullOrWhiteSpace(line.VariantId)
-            ? line.ProductId
-            : $"{line.ProductId}/{line.VariantId}";
+        // Resuelto sin bloqueo ⇒ la orden y la línea están.
+        var paidOrder = order!;
+        var returnLine = line!;
 
         ShopReturnCase rma;
         await _mutate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -169,11 +174,15 @@ public sealed class StubReturnService : IReturnService
         {
             // Idempotente por (orden + línea): un caso NO rechazado ya abierto
             // se devuelve tal cual — no se duplican RMAs de la misma línea.
+            //
+            // **Acá un caso abierto es ÉXITO y en CanRequestAsync es un NO**, y la
+            // diferencia es deliberada: reintentar la misma solicitud tiene que
+            // devolver el mismo RMA (es lo que hace seguro un doble clic), pero
+            // OFRECER el botón sobre una línea que ya tiene reclamo sería invitar
+            // a abrir uno que no se va a abrir. Por eso lo compartido es la
+            // BÚSQUEDA, no lo que cada quien concluye de ella.
             var all = await LoadAllAsync(cancellationToken).ConfigureAwait(false);
-            var existing = all.FirstOrDefault(c =>
-                string.Equals(c.OrderRef, order.OrderRef, StringComparison.Ordinal)
-                && string.Equals(c.LineRef, lineRef, StringComparison.OrdinalIgnoreCase)
-                && c.Status != ShopReturnStatus.Rejected);
+            var existing = FindLiveCase(all, paidOrder.OrderRef, lineRef);
             if (existing is not null)
             {
                 return existing;
@@ -182,12 +191,12 @@ public sealed class StubReturnService : IReturnService
             var at = _now();
             rma = new ShopReturnCase(
                 RmaId: $"rma_{Guid.NewGuid():N}",
-                OrderRef: order.OrderRef,
+                OrderRef: paidOrder.OrderRef,
                 LineRef: lineRef,
-                ProductName: line.ProductName,
-                Quantity: line.Quantity,
-                RefundAmount: line.LineTotal,
-                Currency: line.Currency,
+                ProductName: returnLine.ProductName,
+                Quantity: returnLine.Quantity,
+                RefundAmount: returnLine.LineTotal,
+                Currency: returnLine.Currency,
                 Reason: reason.Trim(),
                 Status: ShopReturnStatus.Requested,
                 RequestedAt: at,
@@ -202,8 +211,8 @@ public sealed class StubReturnService : IReturnService
 
         await AuditAsync(
             id: rma.RmaId,
-            actorEmail: order.CustomerEmail,
-            actorName: order.CustomerName,
+            actorEmail: paidOrder.CustomerEmail,
+            actorName: paidOrder.CustomerName,
             action: "shop.return-requested",
             resource: $"{rma.OrderRef}/{rma.LineRef}",
             detail: $"RMA {rma.RmaId} solicitado: {rma.Reason}",
@@ -299,6 +308,84 @@ public sealed class StubReturnService : IReturnService
             .ThenBy(c => c.RmaId, StringComparer.Ordinal)
             .ToList();
     }
+
+    /// <inheritdoc />
+    public async Task<ShopReturnBlock> CanRequestAsync(
+        string orderRef,
+        string lineId,
+        CancellationToken cancellationToken = default)
+    {
+        var (block, order, _, lineRef) = await ResolveAsync(orderRef, lineId, cancellationToken)
+            .ConfigureAwait(false);
+        if (block != ShopReturnBlock.None)
+        {
+            return block;
+        }
+
+        // Sin tomar el semáforo: es una lectura y no decide ninguna escritura —
+        // quien escribe vuelve a mirar DENTRO del lock, que es donde importa.
+        var all = await LoadAllAsync(cancellationToken).ConfigureAwait(false);
+        return FindLiveCase(all, order!.OrderRef, lineRef) is null
+            ? ShopReturnBlock.None
+            : ShopReturnBlock.AlreadyOpen;
+    }
+
+    /// <summary>
+    /// La regla, en UN sitio: existe la orden, está pagada y la línea es suya.
+    /// Devuelve además lo ya resuelto para que quien escribe no lo busque otra vez.
+    /// </summary>
+    private async Task<(ShopReturnBlock Block, ShopOrder? Order, ShopOrderLine? Line, string LineRef)> ResolveAsync(
+        string orderRef,
+        string lineId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(orderRef))
+        {
+            return (ShopReturnBlock.OrderNotFound, null, null, string.Empty);
+        }
+        if (string.IsNullOrWhiteSpace(lineId))
+        {
+            return (ShopReturnBlock.LineNotInOrder, null, null, string.Empty);
+        }
+
+        var order = await _orders.GetOrderAsync(orderRef.Trim(), cancellationToken).ConfigureAwait(false);
+        if (order is null)
+        {
+            return (ShopReturnBlock.OrderNotFound, null, null, string.Empty);
+        }
+        if (order.Status != OrderStatus.Paid)
+        {
+            // El pedido viaja igual: quien lanza necesita nombrar el estado actual.
+            return (ShopReturnBlock.OrderNotPaid, order, null, string.Empty);
+        }
+
+        var line = ResolveLine(order, lineId.Trim());
+        if (line is null)
+        {
+            return (ShopReturnBlock.LineNotInOrder, order, null, string.Empty);
+        }
+
+        return (ShopReturnBlock.None, order, line, LineRefOf(line));
+    }
+
+    /// <summary>La forma canónica de nombrar una línea: `productId` o `productId/variantId`.</summary>
+    private static string LineRefOf(ShopOrderLine line)
+        => string.IsNullOrWhiteSpace(line.VariantId)
+            ? line.ProductId
+            : $"{line.ProductId}/{line.VariantId}";
+
+    /// <summary>
+    /// El RMA vivo de esa línea, si lo hay. Un rechazo NO cuenta: es el único
+    /// desenlace que habilita volver a pedirla.
+    /// </summary>
+    private static ShopReturnCase? FindLiveCase(
+        IEnumerable<ShopReturnCase> all,
+        string orderRef,
+        string lineRef)
+        => all.FirstOrDefault(c =>
+            string.Equals(c.OrderRef, orderRef, StringComparison.Ordinal)
+            && string.Equals(c.LineRef, lineRef, StringComparison.OrdinalIgnoreCase)
+            && c.Status != ShopReturnStatus.Rejected);
 
     private static ShopOrderLine? ResolveLine(ShopOrder order, string lineId)
         => order.Lines.FirstOrDefault(l =>

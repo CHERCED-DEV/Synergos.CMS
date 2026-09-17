@@ -1,0 +1,33 @@
+[
+  {
+    "_": "Las entidades que necesitan cupo o precio en una capacidad. Es un EJEMPLO con la forma; lo de verdad lo escribe quien da de alta médicos, inmuebles u ofertas. Ver la cabecera de provisionar.sh: esto no es bootstrap, crece con el catálogo."
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "salud.profesional",
+    "subjectId": "doc-demo-1",
+    "capacity": 1,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "realty.listado",
+    "subjectId": "listado-demo-1",
+    "capacity": 1,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "estandar/flexible",
+    "capacity": 10,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa",
+    "subjectId": "estandar/flexible",
+    "amount": 320000,
+    "currency": "COP"
+  }
+]

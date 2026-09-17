@@ -272,4 +272,19 @@ public sealed class HttpClinicalSchedulingServiceTests
 
         Assert.Empty(citas);
     }
+
+    [Fact]
+    public async Task La_agenda_por_paciente_sale_vacia_SIN_salir_a_la_red()
+    {
+        // Misma decisión anotada que por fecha —Bff.Salud no lista— y lo que cambia con la HU
+        // #111 es que el hueco se atraviesa UNA vez y no noventa y una: antes la ficha del
+        // paciente barría 91 días llamando a `GetByDateAsync` para recibir 91 listas vacías.
+        var bff = Feliz();
+
+        var citas = await Nuevo(bff).GetForPatientAsync(
+            "pac-1", new DateOnly(2026, 7, 11), new DateOnly(2026, 9, 9));
+
+        Assert.Empty(citas);
+        Assert.Empty(bff.Llamadas);
+    }
 }

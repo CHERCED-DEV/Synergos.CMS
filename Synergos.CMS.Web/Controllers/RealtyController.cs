@@ -106,6 +106,10 @@ public sealed class RealtyController : ControllerBase
     // ── 1. Search facetado (home del dominio: lista + mapa) ─────────────
     // GET /api/realty/listings?q=&type=&minPrice=&maxPrice=&beds=&location=
     //   → { listings:[...], facets:[...] }
+    // El cliente (`toSearchQuery`) manda NUEVE parámetros y la acción declaraba SEIS:
+    // `operation`, `sort` y `bounds` entraban y se perdían en silencio — un [FromQuery]
+    // ausente no falla, devuelve todo. Y `operation` viaja en TODAS las búsquedas: elegir
+    // "Arriendo" seguía devolviendo apartamentos de venta a 850 millones.
     [HttpGet("listings")]
     public async Task<IActionResult> Listings(
         [FromQuery] string? q,
@@ -114,16 +118,86 @@ public sealed class RealtyController : ControllerBase
         [FromQuery] decimal? maxPrice,
         [FromQuery] int? beds,
         [FromQuery] string? location,
+        [FromQuery] string? operation,
+        [FromQuery] string? sort,
+        [FromQuery] string? bounds,
         CancellationToken cancellationToken)
     {
         var result = await _catalog.SearchAsync(
-            new PropertyQuery(q, type, minPrice, maxPrice, beds, location),
+            // Vocabulario: la UI habla sale/rent y el dominio venta/arriendo. La traducción
+            // de ENTRADA vive aquí, igual que la de salida (MapOperation).
+            new PropertyQuery(q, type, minPrice, maxPrice, beds, location, MapOperationToDomain(operation)),
             cancellationToken);
 
+        // El recorte por viewport ("buscar al mover el mapa") se aplica DESPUÉS de las
+        // facetas a propósito: mover el mapa no debe reescribir los conteos de la columna
+        // de filtros, que describen el universo buscado y no el trozo que se ve.
+        var listings = ApplyBounds(result.Listings, bounds);
+
         return Ok(new ListingsResponse(
-            Listings: result.Listings.Select(ToListingDto).ToList(),
-            Facets: result.Facets.Select(ToFacetDto).ToList()));
+            Listings: SortListings(listings.Select(ToListingDto).ToList(), sort),
+            Facets: result.Facets.Select(ToFacetDto).ToList(),
+            // Contrato UI (SearchResult.total): cuántos coinciden. La UI caía a
+            // `listings.length`, que es lo mismo hoy y deja de serlo el día que haya página.
+            Total: listings.Count));
     }
+
+    /// <summary>
+    /// Recorta el resultado al rectángulo visible del mapa (<c>sur,oeste,norte,este</c>,
+    /// tal como lo serializa el cliente). Un valor ilegible NO vacía la búsqueda: se ignora.
+    /// </summary>
+    /// <remarks>
+    /// Un inmueble sin geocodificar (0,0) queda fuera de cualquier viewport real, que es lo
+    /// correcto: no se puede pintar un pin donde no hay coordenada.
+    /// </remarks>
+    private static IReadOnlyList<PropertyListing> ApplyBounds(IReadOnlyList<PropertyListing> listings, string? bounds)
+    {
+        if (string.IsNullOrWhiteSpace(bounds))
+        {
+            return listings;
+        }
+
+        var parts = bounds.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length != 4)
+        {
+            return listings;
+        }
+
+        var parsed = new double[4];
+        for (var i = 0; i < 4; i++)
+        {
+            if (!double.TryParse(parts[i], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out parsed[i]))
+            {
+                return listings;
+            }
+        }
+
+        var (south, west, north, east) = (parsed[0], parsed[1], parsed[2], parsed[3]);
+        return listings
+            .Where(l => l.Lat >= south && l.Lat <= north && l.Lng >= west && l.Lng <= east)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Ordena según el vocabulario que declara la UI (<c>SortKey</c>: relevance |
+    /// price-asc | price-desc | newest | area-desc), documentado allí como
+    /// "Maps 1:1 to the API `sort` param".
+    /// </summary>
+    /// <remarks>
+    /// <c>newest</c> NO se puede servir: <see cref="PropertyListing"/> no lleva fecha de
+    /// publicación (la UI lee <c>publishedAt</c> y el borde no la tiene). Conserva el orden
+    /// del proveedor en vez de inventar uno — degradar por AUSENCIA, nunca reordenar por un
+    /// criterio que no es el pedido.
+    /// </remarks>
+    private static IReadOnlyList<ListingDto> SortListings(List<ListingDto> dtos, string? sort)
+        => (sort ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "price-asc" => dtos.OrderBy(d => d.Price).ToList(),
+            "price-desc" => dtos.OrderByDescending(d => d.Price).ToList(),
+            "area-desc" => dtos.OrderByDescending(d => d.AreaM2).ToList(),
+            _ => dtos,
+        };
 
     // ── 2. Ficha de propiedad (PDP) ─────────────────────────────────────
     // GET /api/realty/listing/{id} → { listing, specs, gallery:[...], location }
@@ -163,22 +237,29 @@ public sealed class RealtyController : ControllerBase
     [HttpPost("visit")]
     public async Task<IActionResult> Visit([FromBody] VisitRequest? request, CancellationToken cancellationToken)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.ListingId) || string.IsNullOrWhiteSpace(request.Slot))
+        if (request is null || string.IsNullOrWhiteSpace(request.ListingId))
         {
-            return BadRequest(new { error = "listingId y slot son requeridos." });
+            return BadRequest(new { error = "listingId es requerido." });
         }
         if (request.Contact is null)
         {
             return BadRequest(new { error = "contact es requerido." });
         }
 
+        var listingId = request.ListingId.Trim();
+        var (slotId, slotError) = await ResolveSlotAsync(listingId, request.Slot, cancellationToken);
+        if (slotId is null)
+        {
+            return BadRequest(new { error = slotError });
+        }
+
         VisitResult result;
         try
         {
             result = await _visits.BookAsync(
-                request.ListingId.Trim(),
-                request.Slot.Trim(),
-                new VisitContact(request.Contact.Name, request.Contact.Email, request.Contact.Phone),
+                listingId,
+                slotId,
+                new VisitContact(request.Contact.Name ?? string.Empty, request.Contact.Email ?? string.Empty, request.Contact.Phone),
                 cancellationToken);
         }
         catch (ArgumentException ex)
@@ -190,8 +271,79 @@ public sealed class RealtyController : ControllerBase
             return Conflict(new { error = ex.Message });
         }
 
-        return Ok(new VisitResponse(new VisitDto(result.VisitId, result.Status)));
+        var slot = await FindSlotAsync(listingId, slotId, cancellationToken);
+        return Ok(new VisitResponse(new VisitDto(
+            VisitId: result.VisitId,
+            Status: result.Status,
+            // Contrato UI (Visit): la confirmación lee `id`, `listingId` y `slot:{date,time}`.
+            // Sin `id` su normalizador devolvía null y daba la cita por caída aunque el slot
+            // hubiera quedado apartado de verdad. `mode` NO se emite: BookAsync no lo
+            // guarda (VisitContact no lo lleva), y devolverlo diría que quedó registrado.
+            Id: result.VisitId,
+            ListingId: listingId,
+            Slot: slot is null ? null : new VisitSlotDto(
+                slot.StartUtc.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                slot.StartUtc.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)))));
     }
+
+    /// <summary>
+    /// Resuelve el slot que la UI pide al id que la agenda del agente conoce.
+    /// </summary>
+    /// <remarks>
+    /// <b>El cliente manda un OBJETO</b> —<c>slot: { date, time }</c>, porque elige una
+    /// franja en un calendario— y este borde declaraba un <c>string</c>: System.Text.Json
+    /// no puede meter un objeto en una cadena, así que la petición moría en el binding con
+    /// un 400 ANTES de entrar al método. Agendar una visita fallaba el 100 % de las veces,
+    /// y no se veía porque el cliente lo tapa con una cita inventada y un "visita
+    /// confirmada" — alguien se presenta en la propiedad y no hay nadie.
+    /// <para>Se aceptan las DOS formas: la cadena (el id de slot, consumers previos) y el
+    /// objeto, que se casa contra <see cref="IVisitSchedulingService.GetSlotsAsync"/> por
+    /// fecha y hora. Una franja que la agenda no tiene se RECHAZA con su motivo; inventarle
+    /// un id sería agendar una visita a una hora en la que no atiende nadie.</para>
+    /// </remarks>
+    private async Task<(string? slotId, string? error)> ResolveSlotAsync(
+        string listingId,
+        System.Text.Json.JsonElement slot,
+        CancellationToken cancellationToken)
+    {
+        if (slot.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            var raw = slot.GetString();
+            return string.IsNullOrWhiteSpace(raw)
+                ? (null, "slot es requerido.")
+                : (raw.Trim(), null);
+        }
+
+        if (slot.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            return (null, "slot es requerido.");
+        }
+
+        var date = ReadSlotPart(slot, "date");
+        var time = ReadSlotPart(slot, "time");
+        if (string.IsNullOrWhiteSpace(date) || string.IsNullOrWhiteSpace(time))
+        {
+            return (null, "slot.date y slot.time son requeridos.");
+        }
+
+        var match = (await _visits.GetSlotsAsync(listingId, cancellationToken))
+            .FirstOrDefault(s =>
+                string.Equals(s.StartUtc.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture), date, StringComparison.Ordinal)
+                && string.Equals(s.StartUtc.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture), time, StringComparison.Ordinal));
+
+        return match is null
+            ? (null, $"El agente no atiende visitas el {date} a las {time}.")
+            : (match.Id, null);
+    }
+
+    private static string? ReadSlotPart(System.Text.Json.JsonElement slot, string name)
+        => slot.TryGetProperty(name, out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String
+            ? value.GetString()?.Trim()
+            : null;
+
+    private async Task<Interfaces.VisitSlot?> FindSlotAsync(string listingId, string slotId, CancellationToken cancellationToken)
+        => (await _visits.GetSlotsAsync(listingId, cancellationToken))
+            .FirstOrDefault(s => string.Equals(s.Id, slotId, StringComparison.OrdinalIgnoreCase));
 
     // ── 4. Calculadora de hipoteca (puro/determinista) ──────────────────
     // POST /api/realty/mortgage { price, downPayment, termMonths, annualRate }
@@ -245,7 +397,7 @@ public sealed class RealtyController : ControllerBase
         {
             result = await _leads.CaptureAsync(
                 request.ListingId.Trim(),
-                new VisitContact(request.Contact.Name, request.Contact.Email, request.Contact.Phone),
+                new VisitContact(request.Contact.Name ?? string.Empty, request.Contact.Email ?? string.Empty, request.Contact.Phone),
                 request.Message ?? string.Empty,
                 cancellationToken);
         }
@@ -386,7 +538,27 @@ public sealed class RealtyController : ControllerBase
         }
 
         var leads = await _leads.GetForAgentAsync(agent, cancellationToken);
-        return Ok(new AgentLeadsResponse(leads.Select(ToAgentLeadDto).ToList()));
+
+        // El título del inmueble NO vive en AgentLead (solo su id) y la tarjeta del CRM lo
+        // lee: sin él, TODAS las filas decían "Inmueble". Se resuelve una vez por inmueble
+        // distinto contra el catálogo.
+        var titles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var listingId in leads.Select(l => l.ListingId)
+                     .Where(id => !string.IsNullOrWhiteSpace(id))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var listing = await _catalog.GetListingAsync(listingId, cancellationToken);
+            if (listing is not null)
+            {
+                titles[listingId] = listing.Summary.Title;
+            }
+        }
+
+        return Ok(new AgentLeadsResponse(
+            leads.Select(l => ToAgentLeadDto(
+                l,
+                l.ListingId is not null && titles.TryGetValue(l.ListingId, out var title) ? title : string.Empty))
+                .ToList()));
     }
 
     // POST /api/realty/lead/{id}/advance { status } → { leadId, status }
@@ -415,7 +587,7 @@ public sealed class RealtyController : ControllerBase
             return NotFound(new { error = ex.Message });
         }
 
-        return Ok(new AdvanceLeadResponse(result.LeadId, result.Status.ToString()));
+        return Ok(new AdvanceLeadResponse(result.LeadId, MapLeadStatus(result.Status), result.Status.ToString()));
     }
 
     // ── 11. Publicar inmueble (agente, wizard SH-6 — doc §7) ────────────
@@ -434,14 +606,24 @@ public sealed class RealtyController : ControllerBase
         PropertyDetail published;
         try
         {
-            published = await _catalog.PublishListingAsync(request.ToDraft(), cancellationToken);
+            published = await _catalog.PublishListingAsync(
+                request.ToDraft(MapOperationToDomain(request.Operation)),
+                cancellationToken);
         }
         catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
 
-        return Ok(new PublishListingResponse(published.Summary.Id));
+        return Ok(new PublishListingResponse(
+            ListingId: published.Summary.Id,
+            // Contrato UI (PublishListingResult): id | status. Sin `id` el normalizador del
+            // wizard devolvía null y daba el POST por caído aunque el inmueble YA estuviera
+            // publicado — el agente veía un id inventado y su inmueble sí existía.
+            Id: published.Summary.Id,
+            // Publicado = activo. `PropertyListing` no lleva estado de ciclo de vida
+            // (reservado/vendido) todavía; emitir otra cosa sería inventarlo.
+            Status: "active"));
     }
 
     // ── Mappers a DTOs JSON estables ────────────────────────────────────
@@ -490,6 +672,23 @@ public sealed class RealtyController : ControllerBase
 
     // ── Helpers de reshape (vocabulario + derivaciones para la UI) ──────
 
+    /// <summary>
+    /// Mapea la operación del vocabulario de la UI (<c>sale</c>/<c>rent</c>) al del dominio
+    /// (<c>venta</c>/<c>arriendo</c>). Es la inversa de <see cref="MapOperation"/>, y hace
+    /// falta en las DOS puertas de entrada: el filtro del search y el borrador que publica
+    /// el agente. Sin ella, un inmueble publicado desde el wizard quedaba guardado como
+    /// "sale" —fuera del vocabulario del catálogo— y ningún filtro de operación lo
+    /// encontraba. Vacío o desconocido = sin traducir (no se inventa una operación).
+    /// </summary>
+    private static string? MapOperationToDomain(string? operation) =>
+        (operation ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "sale" => "venta",
+            "rent" => "arriendo",
+            "" => null,
+            _ => operation!.Trim().ToLowerInvariant(),
+        };
+
     /// <summary>Mapea la operación es-CO al vocabulario que la UI espera (sale/rent).</summary>
     private static string MapOperation(string operation) =>
         (operation ?? string.Empty).Trim().ToLowerInvariant() switch
@@ -503,42 +702,98 @@ public sealed class RealtyController : ControllerBase
         Id: s.Id,
         Label: s.Label,
         Criteria: SearchCriteria.From(s.Criteria),
-        SavedAt: s.SavedAt);
+        SavedAt: s.SavedAt,
+        // Contrato UI (SavedSearch): `createdAt` (ISO corta) y `operation`. Sin `createdAt`
+        // la tarjeta rellenaba con la fecha de HOY, así que toda búsqueda guardada decía
+        // haberse guardado hoy. `savedAt` se conserva para consumers previos.
+        CreatedAt: s.SavedAt.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+        Operation: MapOperation(s.Criteria.Operation ?? string.Empty));
 
-    private static AgentLeadDto ToAgentLeadDto(AgentLead l) => new(
+    private static AgentLeadDto ToAgentLeadDto(AgentLead l, string listingTitle = "") => new(
         LeadId: l.LeadId,
         AgentId: l.AgentId,
         ListingId: l.ListingId,
+        ListingTitle: listingTitle,
         Name: l.Name,
         Email: l.Email,
         Phone: l.Phone,
         Message: l.Message,
-        Status: l.Status.ToString(),
+        Status: MapLeadStatus(l.Status),
+        StatusName: l.Status.ToString(),
         CreatedAt: l.CreatedAt);
+
+    /// <summary>
+    /// Traduce el estado del lead al vocabulario del tablero de la UI
+    /// (<c>new|contacted|visit|won|lost</c>). El dominio lo nombra en es-CO y la UI no lo
+    /// reconocía: su normalizador cae a <c>new</c> ante cualquier valor desconocido, así
+    /// que TODO lead —incluidos los ya contactados— aparecía en la columna "Nuevo" y el
+    /// agente los volvía a llamar.
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="LeadStatus.Cerrado"/> no tiene traducción, y no se le inventa una.</b>
+    /// El tablero distingue ganado de perdido y el dominio no: emitir <c>won</c> le pondría
+    /// un resultado comercial que nadie registró. Sale como <c>closed</c>, que la UI aún no
+    /// conoce — cerrar ese hueco es partir <c>Cerrado</c> en dos estados (decisión de
+    /// negocio) o que el tablero acepte <c>closed</c>, y las dos cosas se deciden fuera de
+    /// un mapper.
+    /// </remarks>
+    private static string MapLeadStatus(LeadStatus status) => status switch
+    {
+        LeadStatus.Nuevo => "new",
+        LeadStatus.Contactado => "contacted",
+        LeadStatus.Visita => "visit",
+        LeadStatus.Cerrado => "closed",
+        _ => "new",
+    };
 
     // ── Request DTOs (binding del módulo Angular) ───────────────────────
 
-    public sealed record ContactRequest(string Name, string Email, string? Phone);
+    public sealed record ContactRequest(string? Name, string? Email, string? Phone);
 
-    public sealed record VisitRequest(string ListingId, string Slot, ContactRequest Contact);
+    /// <summary>
+    /// La solicitud de visita. <c>slot</c> se declara como <see cref="System.Text.Json.JsonElement"/>
+    /// porque el contrato tiene DOS formas vivas: el objeto <c>{ date, time }</c> que manda la
+    /// UI y la cadena con el id de slot de los consumers previos. Tipar una sola de las dos
+    /// hace que la otra muera en el binding, con un 400 que el llamador no puede distinguir
+    /// de "el servidor no está".
+    /// </summary>
+    public sealed record VisitRequest(
+        string? ListingId,
+        System.Text.Json.JsonElement Slot,
+        ContactRequest? Contact,
+        string? Mode = null);
 
     public sealed record MortgageRequest(decimal Price, decimal DownPayment, int TermMonths, decimal AnnualRate);
 
-    public sealed record LeadRequest(string ListingId, ContactRequest Contact, string? Message);
+    public sealed record LeadRequest(string? ListingId, ContactRequest? Contact, string? Message);
 
     /// <summary>Criterios de búsqueda (espejo JSON de <see cref="PropertyQuery"/>).</summary>
+    /// <summary>
+    /// Criterios de búsqueda (espejo JSON de <see cref="PropertyQuery"/>).
+    /// </summary>
+    /// <remarks>
+    /// <b>El texto llegaba por <c>q</c> y este record solo declaraba <c>text</c></b>, así
+    /// que guardar "apartamentos en Chicó" guardaba una búsqueda SIN texto: re-ejecutarla
+    /// devolvía el catálogo entero y la alerta avisaba de inmuebles que nadie pidió. Se
+    /// emiten y se aceptan las dos claves; <c>q</c> gana cuando viene.
+    /// </remarks>
     public sealed record SearchCriteria(
         string? Text = null,
+        string? Q = null,
         string? Type = null,
         decimal? MinPrice = null,
         decimal? MaxPrice = null,
         int? Beds = null,
-        string? Location = null)
+        string? Location = null,
+        string? Operation = null)
     {
-        public PropertyQuery ToQuery() => new(Text, Type, MinPrice, MaxPrice, Beds, Location);
+        private string? Termino => string.IsNullOrWhiteSpace(Q) ? Text : Q;
+
+        public PropertyQuery ToQuery() =>
+            new(Termino, Type, MinPrice, MaxPrice, Beds, Location, MapOperationToDomain(Operation));
 
         public static SearchCriteria From(PropertyQuery q) =>
-            new(q.Text, q.Type, q.MinPrice, q.MaxPrice, q.Beds, q.Location);
+            new(q.Text, q.Text, q.Type, q.MinPrice, q.MaxPrice, q.Beds, q.Location, MapOperation(q.Operation ?? string.Empty));
     }
 
     /// <summary>
@@ -562,41 +817,71 @@ public sealed class RealtyController : ControllerBase
 
     public sealed record GeoRequest(double Lat, double Lng);
 
+    /// <summary>
+    /// El borrador del wizard SH-6.
+    /// </summary>
+    /// <remarks>
+    /// <b>El pin del mapa llegaba PLANO y se tiraba.</b> El paso de ubicación manda
+    /// <c>lat</c> y <c>lng</c> en la raíz; este record solo declaraba <c>geo:{lat,lng}</c>,
+    /// así que <c>ToDraft</c> publicaba en <c>(0, 0)</c> — la isla Null, frente a África.
+    /// El inmueble quedaba publicado, buscable y <b>sin pin en el mapa</b>, sin que nada
+    /// fallara: exactamente el modo de fallo que <c>CLAUDE.md</c> nombra para este vertical.
+    /// <para>Igual con el área: la UI manda <c>areaBuilt</c> (área construida, la cifra
+    /// grande de la tarjeta) y el record solo tenía <c>area</c> → todo inmueble publicado
+    /// salía con 0 m².</para>
+    /// <para>Las claves nuevas GANAN sobre las anidadas/legacy solo cuando vienen; ninguna
+    /// se quita.</para>
+    /// </remarks>
     public sealed record PublishListingRequest(
-        string? Title,
-        string? Type,
-        string? Operation,
-        decimal Price,
-        int Beds,
-        int Baths,
-        int Area,
-        string? City,
-        GeoRequest? Geo,
-        IReadOnlyList<string>? Gallery,
-        string? Description,
-        string? Neighborhood,
-        int Stratum,
-        string? Currency,
-        string? AgentName,
-        string? AgentPhone)
+        string? Title = null,
+        string? Type = null,
+        string? Operation = null,
+        decimal Price = 0m,
+        int Beds = 0,
+        int Baths = 0,
+        int Area = 0,
+        int AreaBuilt = 0,
+        string? City = null,
+        GeoRequest? Geo = null,
+        double? Lat = null,
+        double? Lng = null,
+        IReadOnlyList<string>? Gallery = null,
+        string? Description = null,
+        string? Neighborhood = null,
+        int Stratum = 0,
+        string? Currency = null,
+        string? AgentName = null,
+        string? AgentPhone = null,
+        // La dirección que escribe quien publica. La ficha la pinta (`LocationDto.Address`) y
+        // este record no la recibía: el inmueble salía con barrio y ciudad y sin calle (#110).
+        string? Address = null)
     {
-        public PropertyDraft ToDraft() => new(
+        /// <summary>El área construida, venga plana (<c>areaBuilt</c>) o legacy (<c>area</c>).</summary>
+        public int BuiltArea => AreaBuilt > 0 ? AreaBuilt : Area;
+
+        /// <summary>El pin, venga plano (<c>lat</c>/<c>lng</c>) o anidado (<c>geo</c>).</summary>
+        public PropertyGeo Pin => new(Lat ?? Geo?.Lat ?? 0d, Lng ?? Geo?.Lng ?? 0d);
+
+        public PropertyDraft ToDraft(string? operation = null) => new(
             Title: Title ?? string.Empty,
             Type: Type ?? string.Empty,
-            Operation: Operation ?? string.Empty,
+            // La operación se guarda en el vocabulario del DOMINIO: el wizard manda
+            // sale/rent y guardarlo crudo dejaba el inmueble fuera de todo filtro.
+            Operation: operation ?? Operation ?? string.Empty,
             Price: Price,
             Beds: Beds,
             Baths: Baths,
-            Area: Area,
+            Area: BuiltArea,
             City: City ?? string.Empty,
-            Geo: new PropertyGeo(Geo?.Lat ?? 0d, Geo?.Lng ?? 0d),
+            Geo: Pin,
             Gallery: Gallery ?? Array.Empty<string>(),
             Description: Description ?? string.Empty,
             Neighborhood: Neighborhood,
             Stratum: Stratum,
             Currency: Currency,
             AgentName: AgentName,
-            AgentPhone: AgentPhone);
+            AgentPhone: AgentPhone,
+            Address: Address);
     }
 
     // ── Response DTOs (JSON estable para la UI) ─────────────────────────
@@ -636,7 +921,8 @@ public sealed class RealtyController : ControllerBase
 
     public sealed record ListingsResponse(
         IReadOnlyList<ListingDto> Listings,
-        IReadOnlyList<FacetDto> Facets);
+        IReadOnlyList<FacetDto> Facets,
+        int Total);
 
     public sealed record SpecDto(string Label, string Value);
 
@@ -671,7 +957,16 @@ public sealed class RealtyController : ControllerBase
         LocationDto Location,
         AgentDto Agent);
 
-    public sealed record VisitDto(string VisitId, string Status);
+    public sealed record VisitSlotDto(string Date, string Time);
+
+    // Contrato UI (Visit): id | listingId | slot{date,time} | status. `visitId` se conserva
+    // para consumers previos y porta el mismo id.
+    public sealed record VisitDto(
+        string VisitId,
+        string Status,
+        string Id,
+        string ListingId,
+        VisitSlotDto? Slot);
 
     public sealed record VisitResponse(VisitDto Visit);
 
@@ -697,7 +992,9 @@ public sealed class RealtyController : ControllerBase
         string Id,
         string Label,
         SearchCriteria Criteria,
-        DateTimeOffset SavedAt);
+        DateTimeOffset SavedAt,
+        string CreatedAt,
+        string Operation);
 
     public sealed record SavedResponse(
         IReadOnlyList<string> Favorites,
@@ -713,16 +1010,22 @@ public sealed class RealtyController : ControllerBase
         string LeadId,
         string AgentId,
         string ListingId,
+        // Contrato UI (AgentLead.listingTitle): resuelto contra el catálogo; vacío cuando
+        // el inmueble ya no está.
+        string ListingTitle,
         string Name,
         string Email,
         string? Phone,
         string Message,
+        // Vocabulario de la UI (new|contacted|visit|closed). `statusName` conserva el
+        // nombre es-CO del dominio para consumers previos.
         string Status,
+        string StatusName,
         DateTimeOffset CreatedAt);
 
     public sealed record AgentLeadsResponse(IReadOnlyList<AgentLeadDto> Leads);
 
-    public sealed record AdvanceLeadResponse(string LeadId, string Status);
+    public sealed record AdvanceLeadResponse(string LeadId, string Status, string StatusName);
 
-    public sealed record PublishListingResponse(string ListingId);
+    public sealed record PublishListingResponse(string ListingId, string Id, string Status);
 }

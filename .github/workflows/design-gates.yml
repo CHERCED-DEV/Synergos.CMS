@@ -20,22 +20,42 @@ name: Design gates (anti-drift)
 on:
   pull_request:
     paths:
+      # Lo que LEEN los cuatro gates de este workflow. Cruzado por
+      # `DisparadoresDeGatesTests` contra los `join(…, 'Synergos.CMS.Web', …)`
+      # de cada script — una lista a mano acá se desvía en silencio, y ya pasó:
+      # `Controllers/**` faltaba, así que un PR que tocaba SÓLO un controller no
+      # disparaba G-6 ni G-7, que son justo los dos que miran controllers (#128).
       - 'Synergos.CMS.Web/Views/**'
       - 'Synergos.CMS.Web/wwwroot/css/**'
       - 'Synergos.CMS.Web/uSync/v9/ContentTypes/**'
+      - 'Synergos.CMS.Web/Controllers/**'
+      # Y los propios gates: tocar uno, o su línea base, tiene que correrlo.
       - 'tools/check-css-parity.mjs'
       - 'tools/css-parity-allowlist.txt'
+      - 'tools/contract-keys.mjs'
+      - 'tools/contract-keys.baseline.json'
+      - 'tools/contract-bodies.mjs'
       - '.github/workflows/design-gates.yml'
   push:
     branches:
       - main
       - master
     paths:
+      # Lo que LEEN los cuatro gates de este workflow. Cruzado por
+      # `DisparadoresDeGatesTests` contra los `join(…, 'Synergos.CMS.Web', …)`
+      # de cada script — una lista a mano acá se desvía en silencio, y ya pasó:
+      # `Controllers/**` faltaba, así que un PR que tocaba SÓLO un controller no
+      # disparaba G-6 ni G-7, que son justo los dos que miran controllers (#128).
       - 'Synergos.CMS.Web/Views/**'
       - 'Synergos.CMS.Web/wwwroot/css/**'
       - 'Synergos.CMS.Web/uSync/v9/ContentTypes/**'
+      - 'Synergos.CMS.Web/Controllers/**'
+      # Y los propios gates: tocar uno, o su línea base, tiene que correrlo.
       - 'tools/check-css-parity.mjs'
       - 'tools/css-parity-allowlist.txt'
+      - 'tools/contract-keys.mjs'
+      - 'tools/contract-keys.baseline.json'
+      - 'tools/contract-bodies.mjs'
       - '.github/workflows/design-gates.yml'
 
 jobs:
@@ -109,3 +129,29 @@ jobs:
       - name: Registry ↔ DocTypes (E1/E2)
         working-directory: Synergos.UI
         run: node tools/validate-cms-contracts.mjs
+
+      # G-6 · la FORMA del JSON de los controllers contra lo que leen las apps.
+      #
+      # El de arriba cruza el registry del CDN contra los DocTypes; éste cruza otra superficie
+      # que no miraba nadie: las claves que cada controller emite contra las que su app lee.
+      # Doce de Academy se desviaron sin que nada se pusiera rojo (#102), porque el
+      # normalizador del cliente es defensivo y una clave que falta degrada EN SILENCIO.
+      #
+      # Es un TRINQUETE contra una línea base versionada, así que no falla por deuda vieja:
+      # sólo el día que algo que HOY cruza deja de cruzar.
+      - name: Claves CMS ↔ UI (G-6)
+        working-directory: Synergos.CMS
+        run: node tools/contract-keys.mjs --ui-path="$GITHUB_WORKSPACE/Synergos.UI"
+
+      # G-7 · los CUERPOS DE PETICIÓN, cruzados por ruta.
+      #
+      # G-6 mira lo que el borde EMITE; éste, lo que la app MANDA — y ahí estuvo lo caro en los
+      # ocho verticales auditados, sin excepción: un campo que el record no declara lo descarta
+      # System.Text.Json sin decir nada (el dato se pierde) o revienta el binding entero (400),
+      # y las dos cosas las tapa el catch del cliente.
+      #
+      # Es ERROR y no trinquete: una clave que se manda a una ruta y su record no declara no
+      # tiene lectura inocente.
+      - name: Cuerpos de petición CMS ↔ UI (G-7)
+        working-directory: Synergos.CMS
+        run: node tools/contract-bodies.mjs --ui-path="$GITHUB_WORKSPACE/Synergos.UI"

@@ -247,11 +247,17 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, IC
     /// Vacío es legítimo y vale 0 (evento gratuito o sin precio publicado aún).
     /// </summary>
     /// <remarks>
-    /// <b>Misma trampa que costó dinero en Tienda, misma regla.</b> <c>eventPriceFrom</c> es
-    /// <c>Umbraco.TextBox</c>, así que el editor teclea texto libre — y <c>"180.000"</c> SÍ
-    /// parsea en InvariantCulture, porque ahí el punto es separador DECIMAL: da <b>180</b>. El
-    /// editor escribe 180 mil pesos y la agenda anuncia "desde $180". No es un fallo de parseo
-    /// sino un precio plausible equivocado por 1000×, y ninguna guarda de "&gt; 0" lo ve.
+    /// <b>Misma trampa que costó dinero en Tienda, y desde #123 la MISMA función:</b>
+    /// <see cref="PrecioAutorado"/>. <c>eventPriceFrom</c> es <c>Umbraco.TextBox</c>, así que el
+    /// editor teclea texto libre — y <c>"180.000"</c> SÍ parsea en InvariantCulture, porque ahí
+    /// el punto es separador DECIMAL: da <b>180</b>. El editor escribe 180 mil pesos y la agenda
+    /// anuncia "desde $180". No es un fallo de parseo sino un precio plausible equivocado por
+    /// 1000×, y ninguna guarda de "&gt; 0" lo ve.
+    ///
+    /// <para><b>Lo que NO subió al helper es el vacío</b>, y es la política que distingue esta
+    /// fuente de la de Tienda: acá el campo es opcional, así que sin texto vale 0. En mercancía
+    /// el mismo vacío omite el producto. Una bandera en el helper para elegir entre las dos sería
+    /// esconder la decisión donde nadie la lee (#120).</para>
     ///
     /// <para><b>Por qué se OMITE el evento en vez de emitirlo en 0</b>, que es una decisión y no
     /// un calco automático: aquí el precio es de exhibición ("desde $X") y el cobro real sale
@@ -271,9 +277,7 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, IC
             return true;
         }
 
-        // Solo dígitos: ni "180.000" (que parsearía a 180) ni "$180000" ni "180,000".
-        if (raw.All(char.IsAsciiDigit)
-            && decimal.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out priceFrom))
+        if (PrecioAutorado.EsInequivoco(raw, out priceFrom))
         {
             return true;
         }

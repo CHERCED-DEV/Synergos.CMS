@@ -16,6 +16,11 @@ using Synergos.Shared;
 // Api.Pricing en el momento de mirar; congelarlo acá lo haría envejecer dentro
 // de la canasta y alguien pagaría un precio que ya no existe.
 //
+// DE QUIEN ES LA CANASTA se comprueba, no se cree (HU #14): abrir acepta
+// X-Synergos-Identity, lo verifica EN LOCAL y guarda con qué se afirmó. Local y no
+// preguntandole a Api.Identity, porque una capacidad no llama a otra y porque eso
+// la volveria el punto unico de fallo de las veinte.
+//
 // Y NO llama a Orders al cerrar: si lo hiciera tendría que conocer el modelo de
 // pedido de cada negocio. Devuelve la canasta cerrada; el orden de los pasos es
 // del BFF.
@@ -33,10 +38,25 @@ builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<CartService>();
 
+// El verificador de tokens de identidad (HU #14). NO obligatorio: un clon limpio arranca sin
+// llave y la canasta sigue abriéndose con CmsSession, que es lo que hacía siempre.
+//
+// Lo que NO pasa sin llave es aceptar un token a ciegas: si alguien presenta uno y este servicio
+// no puede comprobarlo, se RECHAZA. Ignorarlo sería peor que no aceptar tokens.
+builder.AddIdentityTokens(required: false);
+
 var app = builder.Build();
 
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Cart:ApiKey"]);
+
+// Un solo escritor por capacidad, aunque corran varias réplicas (#112). Sube a proceso
+// cruzado el `lock` que el servicio ya tenía dentro: con el almacén en un fichero por
+// documento, lo que queda por serializar es leer-decidir-escribir sobre el MISMO.
+app.UseStoreWriteGate(
+    app.Services.GetRequiredService<IOptions<CartStorageOptions>>().Value.Root,
+    CartRules.CodePrefix,
+    app.Configuration.GetValue<int?>("Cart:Storage:WriteGateSeconds"));
 app.MapCartEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

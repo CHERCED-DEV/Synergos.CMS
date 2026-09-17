@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Synergos.CMS.Tests.Architecture;
 
 /// <summary>
@@ -251,11 +253,193 @@ public sealed class DeployPipelineTests
     {
         // Sin `set -e`, un `docker compose pull` que falla no detiene el script: se sigue al
         // `down`, y el sitio se cae para desplegar algo que no se pudo bajar.
-        foreach (var script in new[] { "deploy-remoto.sh", "humo-publico.sh", "bootstrap-servidor.sh" })
+        foreach (var script in new[] { "deploy-remoto.sh", "humo-publico.sh", "bootstrap-servidor.sh",
+                                       "importar-schema.sh", "provisionar.sh" })
         {
             var ruta = Path.Combine(RepoRoot(), "tools", script);
             Assert.True(File.Exists(ruta), $"Falta tools/{script}");
             Assert.Contains("set -euo pipefail", File.ReadAllText(ruta), StringComparison.Ordinal);
         }
+    }
+
+    // ── El import de uSync: un paso, y que los documentos no digan otra cosa ─
+
+    /// <summary>
+    /// Ficheros de configuración que la APP lee al arrancar — los que deciden si importa sola.
+    /// </summary>
+    private static IEnumerable<string> ConfiguracionDeLaApp()
+    {
+        yield return Path.Combine(RepoRoot(), "compose.prod.yml");
+
+        // Sólo los appsettings que la app CARGA de verdad: `appsettings.json` y sus variantes
+        // por entorno. Los `appsettings-schema*.json` quedan fuera y no es una exención de
+        // conveniencia — son el JSON Schema que publican los paquetes para el IntelliSense del
+        // editor: DESCRIBEN la opción (con su default `None`) y no la ponen, ASP.NET no los
+        // carga nunca, y ninguno es editable por nosotros. Sin este corte el gate se dispara con
+        // la documentación de uSync y acusa a la app de algo que la app no hace, que es la clase
+        // de gate que alguien acaba borrando en vez de arreglar.
+        var cargados = new Regex(@"^appsettings(\.[A-Za-z0-9_]+)?\.json$");
+        var vistos = 0;
+
+        foreach (var f in Directory.EnumerateFiles(
+                     Path.Combine(RepoRoot(), "Synergos.CMS.Web"), "appsettings*.json")
+                     .Where(f => cargados.IsMatch(Path.GetFileName(f))))
+        {
+            vistos++;
+            yield return f;
+        }
+
+        // Una red de seguridad contra el corte de arriba: si el filtro dejara de casar, el gate
+        // pasaría en verde sin haber mirado ninguna configuración.
+        Assert.True(vistos > 0,
+            "No se encontró ningún appsettings cargable en Synergos.CMS.Web: el filtro de este "
+            + "gate dejó de casar y estaría vigilando el vacío.");
+        foreach (var f in Directory.EnumerateFiles(
+                     Path.Combine(RepoRoot(), "Synergos.CMS.Web"), "*.cs", SearchOption.AllDirectories)
+                     .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                              && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)))
+        {
+            yield return f;
+        }
+    }
+
+    /// <summary>
+    /// La app NO importa uSync al arrancar, y si algún día lo hiciera hay cuatro sitios que
+    /// cambiar a la vez.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Cuatro documentos afirmaban lo contrario</b> (#114): el doc del despliegue
+    /// —«importa 880 ítems… <i>es lo que hace que no haya que correr el import a mano</i>»—,
+    /// <c>deploy-remoto.sh</c>, el <c>Caddyfile</c> y, por arrastre, lo que el operador espera.
+    /// Medido contra una base vacía, el arranque dice <c>uSync: Startup Complete 0ms</c>. La
+    /// prueba de que ya se sabía la da el propio gate de CI: <c>usync-rebuild-check.mjs</c>
+    /// inyecta <c>ImportAtStartup=All</c> por variable de entorno <b>porque la app no lo
+    /// hace</b>.</para>
+    ///
+    /// <para><b>Y un Umbraco vacío no falla</b>: sirve «No published content» con 200 y HTML de
+    /// verdad, así que el humo lo daba por bueno. Un servidor nuevo se habría desplegado en verde
+    /// con el sitio en blanco — la forma que este repo ya nombró tres veces.</para>
+    ///
+    /// <para><b>Por qué no se activa y ya:</b> <c>appsettings.json</c> tiene encendidos
+    /// <c>ContentHandler</c> y <c>MediaHandler</c> (ADR 0129), así que <c>All</c> re-importaría el
+    /// contenido del repo <b>en cada arranque</b> y cada reinicio sería una vuelta atrás
+    /// editorial, en silencio. Y <c>Settings</c> —la vía de escape que ADR 0008 deja prevista— no
+    /// resuelve nada: deja el sitio con schema y sin contenido, o sea el mismo cartel.</para>
+    ///
+    /// <para>El gate no vigila la prosa de los documentos, que es infinita: vigila <b>el hecho</b>
+    /// del que la prosa hablaba. Si alguien enciende el import, esto se pone rojo y el mensaje
+    /// dice qué hay que revisar.</para>
+    /// </remarks>
+    [Fact]
+    public void El_import_de_uSync_NO_ocurre_al_arrancar()
+    {
+        var encendido = ConfiguracionDeLaApp()
+            .Where(f => File.ReadAllText(f).Contains("ImportAtStartup", StringComparison.Ordinal))
+            .Select(f => Path.GetRelativePath(RepoRoot(), f))
+            .ToList();
+
+        Assert.True(encendido.Count == 0,
+            $"Algo le dice a la app que importe uSync al arrancar: {string.Join(", ", encendido)}. "
+            + "ADR 0008 lo prohíbe y hay una razón viva: con ContentHandler encendido (ADR 0129), "
+            + "importar en cada arranque REVIERTE lo que un editor publicó, en silencio. "
+            + "Si de verdad se decide cambiarlo, va con ADR sucesor y hay que reescribir "
+            + "docs/despliegue/00-montar-el-entorno.md §5.bis y tools/deploy-remoto.sh, que hoy "
+            + "dicen que es un paso a mano.");
+    }
+
+    [Fact]
+    public void El_paso_del_import_tiene_herramienta_y_esta_documentado()
+    {
+        // La otra mitad: si el import es un paso, tiene que estar escrito DONDE se monta el
+        // servidor. Antes no aparecía en ninguna parte, y el doc que debía nombrarlo afirmaba
+        // justo lo contrario.
+        var doc = File.ReadAllText(Path.Combine(RepoRoot(), "docs", "despliegue", "00-montar-el-entorno.md"));
+
+        Assert.Contains("importar-schema.sh", doc, StringComparison.Ordinal);
+        Assert.Contains("provisionar.sh", doc, StringComparison.Ordinal);
+    }
+
+    // ── Lo que hay que correr en el servidor tiene que LLEGAR al servidor ──
+
+    /// <summary>
+    /// Todo script que el documento manda correr en el servidor está en la lista que se copia.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Ya pasó dos veces, y las dos en silencio.</b> Los tres del respaldo vivían sólo en
+    /// el repo, así que la máquina que había que proteger era la única sin con qué respaldarse
+    /// (HU #31). Y al escribir la siembra volvió a pasar igual: el §5.bis dice «corré
+    /// <c>tools/importar-schema.sh</c> en el servidor» y ni el script ni el manifiesto de
+    /// <c>provisionar.sh</c> se copiaban (#114).</para>
+    ///
+    /// <para><b>No falla: FALTA.</b> El despliegue termina en verde, el sitio contesta, y el
+    /// operador descubre el hueco cuando abre una sesión SSH y el fichero no está — o peor, con
+    /// <c>provisionar.sh</c>, que sin su manifiesto publicaba las definiciones, se saltaba los
+    /// recursos y decía «✓ el estado que las capacidades exigen está publicado». Hoy un manifiesto
+    /// ausente es un error y «no hay entidades» se escribe <c>[]</c>.</para>
+    ///
+    /// <para><b>Se deriva de la columna «Dónde corre» del documento, y no hay segunda lista.</b>
+    /// Lo que define «va al servidor» es que el propio documento lo declare, así que las
+    /// exclusiones no se escriben acá: <c>humo-publico.sh</c> dice «el runner» y
+    /// <c>prueba-restauracion.sh</c> dice «NO el servidor», y con eso quedan fuera solas. Una
+    /// lista de exenciones dentro del gate sería el mismo problema en dos sitios — y una exención
+    /// que sobra deja de leerse, como ya dice la lista de permisos de salida de una capacidad.</para>
+    /// </remarks>
+    [Fact]
+    public void Lo_que_se_corre_en_el_servidor_se_COPIA_al_servidor()
+    {
+        var doc = Leer("docs", "despliegue", "00-montar-el-entorno.md");
+        var deploy = Leer(".github", "workflows", "deploy.yml");
+
+        // La columna «Dónde corre» de las tablas del documento. Es la DECLARACIÓN, no una
+        // heurística sobre los bloques de código: parsear los comandos deja fuera los que se
+        // corren por cron —`respaldo.sh` no lo teclea nadie— y mete los que se corren desde acá.
+        var filas = Regex.Matches(doc, @"(?m)^\|\s*`tools/([a-z0-9-]+\.sh)`\s*\|([^|]*)\|");
+
+        var mandados = filas
+            .Where(m => m.Groups[2].Value.Contains("**el servidor**", StringComparison.Ordinal))
+            .Select(m => m.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(mandados.Count >= 4,
+            $"Sólo se encontraron {mandados.Count} scripts declarados «**el servidor**» en las "
+            + "tablas de docs/despliegue/00-montar-el-entorno.md. El descubrimiento está roto y "
+            + "este gate estaría vigilando el vacío.");
+
+        var faltan = mandados
+            .Where(s => !deploy.Contains($"tools/{s}", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(faltan.Count == 0,
+            "El documento manda correr esto en el servidor y el despliegue NO lo copia: "
+            + string.Join(", ", faltan) + "." + Environment.NewLine
+            + "No falla —el despliegue queda verde— : FALTA, y se descubre cuando alguien entra "
+            + "por SSH y el fichero no está. Ya pasó con los tres del respaldo (HU #31) y con los "
+            + "dos de la siembra (#114). Se añade al `scp` de .github/workflows/deploy.yml, o se "
+            + "cambia la columna «Dónde corre» del documento si de verdad no va allí.");
+
+        // El otro lado del mismo criterio, y el que tiene consecuencia: el ensayo de restauración
+        // se declara «NO el servidor» porque necesita la llave PRIVADA de age. Copiarlo invita a
+        // dejar la llave en la máquina, y ahí el respaldo asimétrico deja de servir para lo único
+        // que lo justifica — que quien se lleve el servidor no pueda leer el histórico que ya
+        // mandó. La columna lo dice; esto lo hace cumplir.
+        Assert.DoesNotContain("tools/prueba-restauracion.sh", deploy, StringComparison.Ordinal);
+
+        // El manifiesto no es un script y sin él `provisionar.sh` no tiene entidades que
+        // reconciliar, así que va explícito: es el dato del que vive el script que sí se copia.
+        Assert.True(deploy.Contains("tools/provisionar.recursos.json", StringComparison.Ordinal),
+            "El despliegue copia `provisionar.sh` y no su manifiesto. Sin él el script no tiene "
+            + "recursos ni precios que publicar, y lo que hace falta sembrar no se siembra.");
+    }
+
+    [Fact]
+    public void El_humo_distingue_el_sitio_del_cartel_de_Umbraco_VACIO()
+    {
+        // Sin esto el humo da por bueno un servidor sin schema: Umbraco vacío contesta 200 con
+        // `<html>` de verdad, así que las dos comprobaciones que había pasaban. Medido en el
+        // stack compuesto: 200, 1926 bytes, `<title>Umbraco: No published content</title>`.
+        var humo = Leer("tools", "humo-publico.sh");
+
+        Assert.Contains("No published content", humo, StringComparison.Ordinal);
     }
 }

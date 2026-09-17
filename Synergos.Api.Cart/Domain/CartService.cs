@@ -21,7 +21,18 @@ public sealed class CartService
 
     private DateTimeOffset Now => _clock.GetUtcNow();
 
-    public Result<Cart> Open(Ref owner, TimeSpan? ttl, IdempotencyKey key)
+    /// <summary>Abre una canasta a nombre de <paramref name="owner"/>.</summary>
+    /// <param name="assertion">
+    /// Con qué se afirmó que el dueño es el dueño — ya <b>resuelto</b> por el borde (HU #14).
+    /// Acá llega el veredicto, nunca lo que declaró el llamador: mezclarlos sería devolverle al
+    /// que llama la potestad de decir con qué fuerza se le creyó.
+    /// </param>
+    /// <remarks>
+    /// <b>La llave se resuelve antes que nada</b> (<c>CLAUDE.md</c> §0.B.16), así que un reintento
+    /// devuelve la canasta que ya existe <b>con la afirmación que tuvo</b>. Re-anotarla con la del
+    /// reintento reescribiría un hecho pasado por un detalle del transporte.
+    /// </remarks>
+    public Result<Cart> Open(Ref owner, TimeSpan? ttl, IdempotencyKey key, IdentityAssertion assertion)
     {
         lock (_gate)
         {
@@ -37,7 +48,7 @@ public sealed class CartService
             if (motivo is not null) return Result.Rejected<Cart>(motivo);
 
             var id = Guid.NewGuid().ToString("n");
-            var cart = new Cart(id, owner, Array.Empty<CartLine>(), Now, Now + vigencia);
+            var cart = new Cart(id, owner, Array.Empty<CartLine>(), Now, Now + vigencia, false, assertion);
             _carts.Put(cart);
             _idempotency.Remember("cart", key, id);
             return Result.Ok(cart);

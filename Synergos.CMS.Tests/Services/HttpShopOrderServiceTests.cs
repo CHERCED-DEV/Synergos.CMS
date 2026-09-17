@@ -33,6 +33,9 @@ public sealed class HttpShopOrderServiceTests
 
         public List<(string Method, string Path, string? Key)> Llamadas { get; } = new();
 
+        /// <summary>Qué identidad se presentó en cada llamada, si se presentó alguna (HU #14).</summary>
+        public List<(string Path, string? Identidad)> Identidades { get; } = new();
+
         /// <summary>Lo que se manda, para poder mirar por dónde viajaba un dato personal (#47).</summary>
         public List<string> Cuerpos { get; } = new();
 
@@ -69,6 +72,9 @@ public sealed class HttpShopOrderServiceTests
             var clave = $"{req.Method.Method} {path}";
             req.Headers.TryGetValues("Idempotency-Key", out var k);
             Llamadas.Add((req.Method.Method, path, k?.FirstOrDefault()));
+
+            req.Headers.TryGetValues(HttpShopOrderService.IdentityHeader, out var id);
+            Identidades.Add((path, id?.FirstOrDefault()));
 
             if (req.Content is not null)
             {
@@ -113,10 +119,26 @@ public sealed class HttpShopOrderServiceTests
         .Ok("GET /v1/purchases/p-1", CompraOk)
         .Ok("POST /v1/purchases/p-1/confirm", CompraOk.Replace("\"Running\"", "\"Completed\""));
 
-    private static HttpShopOrderService Nuevo(ServiciosFalsos svc)
+    /// <summary>Un emisor de identidad que se puede apagar, para probar los dos caminos.</summary>
+    private sealed class EmisorFalso : IIdentityTokenIssuer
+    {
+        private readonly string? _token;
+        public EmisorFalso(string? token) => _token = token;
+
+        public List<IdentitySubject> Pedidos { get; } = new();
+
+        public Task<string?> IssueAsync(IdentitySubject subject, CancellationToken cancellationToken = default)
+        {
+            Pedidos.Add(subject);
+            return Task.FromResult(_token);
+        }
+    }
+
+    private static HttpShopOrderService Nuevo(ServiciosFalsos svc, IIdentityTokenIssuer? identidad = null)
         => new(new FabricaFalsa(svc),
                new Monitor<TiendaSettings>(new TiendaSettings { Mode = "Bff", Carrier = "servientrega" }),
-               NullLogger<HttpShopOrderService>.Instance);
+               NullLogger<HttpShopOrderService>.Instance,
+               identidad ?? new EmisorFalso(null));
 
     private static readonly IReadOnlyList<ShopCartItem> UnItem = new[] { new ShopCartItem("sku-1", null, 2) };
     private static readonly ShopCustomer Ana = new("Ana", "ana@ejemplo.co");
@@ -404,5 +426,116 @@ public sealed class HttpShopOrderServiceTests
         var orden = await Nuevo(svc).GetOrderAsync("p-1");
 
         Assert.Equal(OrderStatus.Cancelled, orden!.Status);
+    }
+
+    // ── La identidad de quien compra (HU #14) ───────────────────────────────
+
+    /// <summary>
+    /// Abrir la canasta declara SIEMPRE el suelo, y nunca más que eso.
+    /// </summary>
+    /// <remarks>
+    /// <c>CmsSession</c> significa «nos fiamos de quien llama», o sea la AUSENCIA de comprobación.
+    /// Escribir <c>IdentityToken</c> porque este despliegue sepa emitir tokens sería guardar como
+    /// hecho lo que nadie verificó — el defecto #42. Quien lo sube es <c>Api.Cart</c>, y sólo tras
+    /// comprobar la firma.
+    /// </remarks>
+    [Fact]
+    public async Task Abrir_la_canasta_declara_el_SUELO_y_nunca_mas()
+    {
+        var svc = Feliz();
+
+        await Nuevo(svc, new EmisorFalso("t-firmado")).CheckoutAsync(
+            UnItem, new ShopCustomer("Ana", "ana@ejemplo.co", Guid.NewGuid()));
+
+        var cuerpo = svc.Cuerpos[0];
+
+        Assert.Contains("\"assertion\":\"CmsSession\"", cuerpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("IdentityToken", cuerpo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Con_sesion_se_PRESENTA_el_token_y_el_sujeto_es_el_dueno_de_la_canasta()
+    {
+        // Es lo único que vuelve el token prueba y no adorno: la capacidad rechaza uno que nombre
+        // a otro (token_subject_mismatch), así que firmar por un sujeto distinto del dueño no
+        // fallaría acá — fallaría allá, y dejaría de poder comprarse.
+        var svc = Feliz();
+        var emisor = new EmisorFalso("t-firmado");
+        var miembro = Guid.NewGuid();
+
+        await Nuevo(svc, emisor).CheckoutAsync(UnItem, new ShopCustomer("Ana", "ana@ejemplo.co", miembro));
+
+        var sujeto = Assert.Single(emisor.Pedidos);
+        Assert.Equal(miembro.ToString("n"), sujeto.Id);
+        Assert.Equal(HttpShopOrderService.BuyerId(new ShopCustomer("Ana", "ana@ejemplo.co", miembro)), sujeto.Id);
+
+        // Y la cabecera VIAJÓ: pedir el token y no presentarlo dejaría el cableado muerto sin que
+        // nada lo notara — la capacidad seguiría creyendo de quién es la canasta.
+        Assert.Equal("t-firmado", svc.Identidades.Single(i => i.Path == "/v1/carts").Identidad);
+    }
+
+    /// <summary>
+    /// Un comprador INVITADO no consigue token, por más que el despliegue sepa emitirlos.
+    /// </summary>
+    /// <remarks>
+    /// Su identificador es un seudónimo de un correo que escribió en un formulario y que nadie
+    /// comprobó. Pedir un token para él haría que <c>Api.Cart</c> anotara <c>IdentityToken</c>
+    /// sobre una identidad que nadie verificó: el defecto #42, con la firma tapándolo mejor.
+    /// </remarks>
+    [Fact]
+    public async Task El_invitado_NO_consigue_token_aunque_el_despliegue_sepa_emitir()
+    {
+        var emisor = new EmisorFalso("t-firmado");
+
+        var svc = Feliz();
+
+        await Nuevo(svc, emisor).CheckoutAsync(UnItem, Ana);
+
+        Assert.Empty(emisor.Pedidos);
+        Assert.Null(svc.Identidades.Single(i => i.Path == "/v1/carts").Identidad);
+    }
+
+    [Fact]
+    public async Task Sin_emisor_se_compra_igual_declarando()
+    {
+        // Api.Identity caída no puede parar la tienda: sin token se sigue declarando, que es lo
+        // que se hacía antes de la HU #14.
+        var svc = Feliz();
+
+        var r = await Nuevo(svc, new EmisorFalso(null)).CheckoutAsync(
+            UnItem, new ShopCustomer("Ana", "ana@ejemplo.co", Guid.NewGuid()));
+
+        Assert.Equal("p-1", r.OrderRef);
+    }
+
+    /// <summary>
+    /// Un rechazo por identidad NO se reintenta sin firma: falla, y a la vista.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es la decisión opuesta a la de la bitácora, y a propósito.</b> Allá el asiento se
+    /// repite sin firmar porque perder un rastro es peor que un rastro débil — un hueco no se
+    /// nota. Acá una canasta abierta sin comprobar quedaría atribuida a un miembro por la sola
+    /// palabra de quien llamó, nadie audita una canasta y vence sola: el hueco sería permanente y
+    /// silencioso.</para>
+    ///
+    /// <para>Y sale como defecto de DESPLIEGUE, igual que el 401: el comprador no puede hacer
+    /// nada con «a Api.Cart le falta la llave de verificación».</para>
+    /// </remarks>
+    [Fact]
+    public async Task Un_rechazo_por_identidad_NO_se_reintenta_sin_firma()
+    {
+        var svc = Feliz().Falla("POST /v1/carts", HttpStatusCode.BadRequest,
+            "identity.token_not_verifiable",
+            "Se presentó un token de identidad y este servicio no tiene llave para comprobarlo.");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Nuevo(svc, new EmisorFalso("t-firmado")).CheckoutAsync(
+                UnItem, new ShopCustomer("Ana", "ana@ejemplo.co", Guid.NewGuid())));
+
+        Assert.Contains("No se te cobró", ex.Message, StringComparison.Ordinal);
+
+        // UNA sola vez: sin esto, «no se reintenta» sería una frase y no un hecho.
+        Assert.Equal(1, svc.Veces("POST", "/v1/carts"));
+        Assert.Equal(0, svc.Veces("POST", "/v1/purchases"));
     }
 }

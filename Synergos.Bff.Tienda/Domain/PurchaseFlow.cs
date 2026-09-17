@@ -91,6 +91,12 @@ public sealed class PurchaseFlow
         if (!quote.IsOk) return Result.Rejected<PurchaseSaga>(quote.Rejection!);
         var total = Money.Of(quote.Value.Total.Amount, quote.Value.Total.Currency);
 
+        // Y el precio de CADA LÍNEA, que viene en la misma respuesta. Se resuelve acá y no al
+        // registrar el pedido para que una cotización sin líneas aborte antes de apartarle
+        // mercancía a nadie: en este punto todavía no hay nada que deshacer.
+        var cotizadas = Cotizar(cart.Value.Lines, quote.Value);
+        if (!cotizadas.IsOk) return Result.Rejected<PurchaseSaga>(cotizadas.Rejection!);
+
         var saga = new PurchaseSaga(sagaId, buyer, cartId, SagaStatus.Running,
             Array.Empty<StockHold>(), null, null, null, total,
             Array.Empty<Compensation>(), null, _clock.GetUtcNow());
@@ -123,11 +129,7 @@ public sealed class PurchaseFlow
 
         // 4. El pedido. Se registra ANTES de cobrar para que el cobro tenga a qué referirse:
         //    un movimiento de plata sin pedido al lado no se puede conciliar.
-        var lineas = cart.Value.Lines
-            .Select(l => (Line: l, UnitPrice: Money.Zero(total.Currency)))
-            .ToList();
-
-        var order = await _caps.PlaceOrderAsync(buyer, lineas, total, saga.KeyFor("order"), ct);
+        var order = await _caps.PlaceOrderAsync(buyer, cotizadas.Value, total, saga.KeyFor("order"), ct);
         if (!order.IsOk) return await AbortarAsync(saga, order.Rejection!, "no se pudo registrar el pedido", ct);
 
         saga = saga with
@@ -277,6 +279,57 @@ public sealed class PurchaseFlow
 
     public IReadOnlyList<PurchaseSaga> PendingCompensations() => _sagas.PendingCompensations();
 
+    /// <summary>
+    /// Le pone a cada línea de la canasta <b>el precio que cotizó <c>Api.Pricing</c></b>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Antes escribía <c>Money.Zero</c> y el dato ya había llegado</b> (#122). El precio
+    /// unitario lo sabe sólo <c>Api.Pricing</c> —el catálogo del CMS no lo conoce y la canasta
+    /// guarda cantidades, no plata— y <c>Api.Orders</c> lo congela por línea a propósito, porque
+    /// «un pedido es un acuerdo sobre un monto». Con ceros, el pedido quedaba guardado diciendo
+    /// que cada renglón valía nada: el total seguía siendo el bueno, así que ninguna regla
+    /// fallaba, ningún test se ponía rojo y el descuadre sólo aparecía al mirar la factura.</para>
+    ///
+    /// <para><b>Se cruza por SUJETO y no por posición.</b> La respuesta viene hoy en el mismo
+    /// orden que la petición, pero eso no está escrito en ningún contrato, y un cruce posicional
+    /// que se desalinee no falla: le pone a cada línea el precio de otra, que es peor que el
+    /// cero —es un número plausible—. El sujeto es único dentro de una canasta
+    /// (<c>Api.Cart.SetLine</c> reemplaza la línea del mismo sujeto), así que identifica sin
+    /// ambigüedad.</para>
+    ///
+    /// <para><b>Y una línea sin precio se RECHAZA, no se rellena.</b> Es la regla de siempre:
+    /// sin dato se dice que no hay dato. Rellenarla con cero o con el promedio devolvería el
+    /// defecto disfrazado de tolerancia.</para>
+    /// </remarks>
+    private static Result<IReadOnlyList<(CartLineDto Line, Money UnitPrice)>> Cotizar(
+        IReadOnlyList<CartLineDto> lineas, QuoteDto quote)
+    {
+        if (quote.Lines is null || quote.Lines.Count == 0)
+        {
+            return Rejection.Invalid("tienda.quote_without_lines",
+                "La cotización llegó sin líneas: no se sabe a cuánto va cada renglón del pedido.");
+        }
+
+        var precios = new Dictionary<(string Kind, string Id), MoneyDto>();
+        foreach (var l in quote.Lines)
+        {
+            precios.TryAdd((l.SubjectKind, l.SubjectId), l.UnitPrice);
+        }
+
+        var salida = new List<(CartLineDto, Money)>(lineas.Count);
+        foreach (var linea in lineas)
+        {
+            if (!precios.TryGetValue((linea.SubjectKind, linea.SubjectId), out var precio))
+            {
+                return Rejection.Invalid("tienda.quote_without_lines",
+                    $"La cotización no trae precio para {linea.SubjectKind}/{linea.SubjectId}.");
+            }
+            salida.Add((linea, Money.Of(precio.Amount, precio.Currency)));
+        }
+
+        return Result.Ok<IReadOnlyList<(CartLineDto, Money)>>(salida);
+    }
+
     /// <summary>Lo que una canasta tiene que cumplir para poder comprarse.</summary>
     private static Rejection? Revisar(CartDto cart)
     {
@@ -302,7 +355,7 @@ public sealed class PurchaseFlow
     /// <remarks>
     /// <b>Se devuelve el rechazo de la capacidad y no uno propio</b>: quien llamó necesita saber
     /// si fue <c>inventory.out_of_stock</c> —ofrecer menos unidades— o
-    /// <c>payments.declined</c> —pedir otro medio de pago—, y aplanarlos a «no se pudo comprar»
+    /// <c>payments.payment_declined</c> —pedir otro medio de pago—, y aplanarlos a «no se pudo comprar»
     /// deja al cliente sin nada que hacer.
     /// </remarks>
     private async Task<Result<PurchaseSaga>> AbortarAsync(

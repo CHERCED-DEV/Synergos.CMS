@@ -25,17 +25,20 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
     private readonly ISagaStore<TSaga> _sagas;
     private readonly Compensator<TSaga> _compensator;
     private readonly CompensationAlert _alert;
+    private readonly ISagaLease _arriendos;
     private readonly SagaVocabulary _vocabulary;
     private readonly TimeProvider _clock;
     private readonly ILogger<SagaEngine<TSaga>> _log;
 
     public SagaEngine(
         ISagaStore<TSaga> sagas, Compensator<TSaga> compensator, CompensationAlert alert,
-        SagaVocabulary vocabulary, TimeProvider clock, ILogger<SagaEngine<TSaga>> log)
+        ISagaLease arriendos, SagaVocabulary vocabulary, TimeProvider clock,
+        ILogger<SagaEngine<TSaga>> log)
     {
         _sagas = sagas;
         _compensator = compensator;
         _alert = alert;
+        _arriendos = arriendos;
         _vocabulary = vocabulary;
         _clock = clock;
         _log = log;
@@ -126,6 +129,18 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
     /// <summary>Las sagas que están deshaciendo algo — la vista de operación.</summary>
     public IReadOnlyList<TSaga> PendingCompensations() => _sagas.WithPendingCompensations();
 
+    /// <summary>
+    /// Olvida lo que el almacén tenga en memoria antes de mirar qué hay que hacer (#34).
+    /// </summary>
+    /// <remarks>
+    /// <b>Lo llama el barrido al empezar cada vuelta</b>, y no el resto del mundo. Una réplica que
+    /// nunca relee ve la foto de su arranque: no se enteraría de una saga que la otra empezó a
+    /// deshacer, ni de que una compensación que ella tiene por pendiente ya la ejecutó alguien. Lo
+    /// primero la deja mirando a otro lado; lo segundo es el defecto de este ticket con un minuto
+    /// de retraso.
+    /// </remarks>
+    public void Refrescar() => _sagas.Invalidate();
+
     /// <summary>Las que empezaron antes de <paramref name="limite"/> y siguen sin cerrar (HU #29).</summary>
     public IReadOnlyList<TSaga> StartedBefore(DateTimeOffset limite) => _sagas.StartedBefore(limite);
 
@@ -145,6 +160,47 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
     /// </remarks>
     public async Task<Result<TSaga>> CompensateAsync(string sagaId, string reason, CancellationToken ct)
     {
+        using var arriendo = _arriendos.TryAcquire(sagaId);
+        if (arriendo is null) return EnCurso(sagaId);
+
+        return await CompensarAsync(sagaId, reason, ct);
+    }
+
+    /// <summary>
+    /// Que alguien más la está deshaciendo AHORA. Transitorio, no un no rotundo (#34).
+    /// </summary>
+    /// <remarks>
+    /// <b>Unavailable y no Conflict</b>, igual que el <c>retry_in_flight</c> de
+    /// <c>Api.Notifications</c>: no es que la compensación no se pueda hacer, es que el otro
+    /// intento está en curso. La diferencia importa porque quien recibe un transitorio vuelve —el
+    /// barrido en la siguiente vuelta, la persona pulsando otra vez— y quien recibe un conflicto
+    /// entiende que no hay nada que volver a intentar.
+    /// </remarks>
+    private Rejection EnCurso(string sagaId)
+    {
+        _log.LogDebug("La saga {Saga} ya la está deshaciendo alguien; esta vuelta la deja pasar.", sagaId);
+        return Rejection.Unavailable($"{_vocabulary.Origin}.compensation_in_flight",
+            $"Otro barrido está deshaciendo {_vocabulary.Noun}. Se reintenta en la siguiente vuelta.");
+    }
+
+    /// <summary>
+    /// El cuerpo de la compensación. <b>Asume el arriendo tomado</b> por quien llama.
+    /// </summary>
+    /// <remarks>
+    /// Separado de <see cref="CompensateAsync"/> porque <see cref="RetryStuckAsync"/> también
+    /// necesita el arriendo —para su propia lectura-modificación-escritura, que es la misma
+    /// carrera— y el arriendo <b>no es reentrante</b>: es un fichero, y pedirlo dos veces desde el
+    /// mismo hilo se bloquearía a sí mismo. Un arriendo reentrante tendría que llevar cuenta de
+    /// quién lo pidió dentro del proceso, y eso es justo lo que no sirve entre procesos.
+    /// </remarks>
+    private async Task<Result<TSaga>> CompensarAsync(string sagaId, string reason, CancellationToken ct)
+    {
+        // Bajo arriendo se lee del DISCO, no del caché. Entre la lista del barrido y este momento,
+        // la otra réplica pudo haber ejecutado y escrito; sin esta relectura el arriendo evitaría
+        // que las dos compensaran a la vez y la segunda lo haría un minuto después, leyendo su
+        // propia copia de un trabajo que ya está hecho.
+        _sagas.Invalidate();
+
         var saga = _sagas.Find(sagaId);
         if (saga is null) return NotFound(sagaId);
 
@@ -204,6 +260,14 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
     /// </remarks>
     public async Task<Result<TSaga>> RetryStuckAsync(string sagaId, CancellationToken ct)
     {
+        // El arriendo se toma ACÁ y no dentro de la compensación: lo que hay debajo es una
+        // lectura-modificación-escritura —poner los intentos a cero y rearmar el aviso— y si un
+        // barrido escribe en medio, el reintento que pidió una persona se pierde sin decir nada.
+        using var arriendo = _arriendos.TryAcquire(sagaId);
+        if (arriendo is null) return EnCurso(sagaId);
+
+        _sagas.Invalidate();
+
         var saga = _sagas.Find(sagaId);
         if (saga is null) return NotFound(sagaId);
 
@@ -226,7 +290,9 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
 
         _sagas.Put(saga);
 
-        return await CompensateAsync(sagaId, "reintento pedido por una persona", ct);
+        // Sin volver a pedir el arriendo: ya lo tiene esta llamada, y el de fichero no es
+        // reentrante — pedirlo otra vez sería quedarse esperando a sí mismo.
+        return await CompensarAsync(sagaId, "reintento pedido por una persona", ct);
     }
 
     /// <summary>Manda el aviso y deja anotado en la saga qué pasó con él.</summary>

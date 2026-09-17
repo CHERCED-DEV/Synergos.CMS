@@ -43,6 +43,14 @@ var app = builder.Build();
 
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Consent:ApiKey"]);
+
+// Un solo escritor por capacidad, aunque corran varias réplicas (#112). Sube a proceso
+// cruzado el `lock` que el servicio ya tenía dentro: con el almacén en un fichero por
+// documento, lo que queda por serializar es leer-decidir-escribir sobre el MISMO.
+app.UseStoreWriteGate(
+    app.Services.GetRequiredService<IOptions<ConsentStorageOptions>>().Value.Root,
+    ConsentRules.CodePrefix,
+    app.Configuration.GetValue<int?>("Consent:Storage:WriteGateSeconds"));
 app.MapConsentEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

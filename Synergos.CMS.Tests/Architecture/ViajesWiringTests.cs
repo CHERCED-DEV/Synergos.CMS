@@ -250,8 +250,22 @@ public sealed class ViajesWiringTests
         Assert.Contains("ViajesWire.TravellerId(guest.Email)", carrito, StringComparison.Ordinal);
         Assert.DoesNotContain("travellerId = guest.Email", carrito, StringComparison.Ordinal);
 
-        // Y el pseudónimo es un hash, no el correo recortado.
-        Assert.Contains("SHA256.HashData", Cable(), StringComparison.Ordinal);
+        // Y el seudónimo es un hash, no el correo recortado.
+        //
+        // ⚠️ La comprobación mira el HELPER y no `ViajesWire`, desde que el seudónimo se promovió
+        // (#120): estaba escrito seis veces con tres nombres y hoy se calcula en un solo sitio.
+        // Este gate pedía `SHA256.HashData` dentro de `ViajesWire` y se puso rojo al promoverlo
+        // sin que nada se hubiera roto — seguía a un FICHERO en vez de a la propiedad, igual que
+        // el gemelo de `AuditWiringTests`. Lo que hay que sostener es que Viajes no se lo calcule
+        // por su cuenta y que quien lo calcula use un hash estable entre procesos.
+        Assert.Contains("SeudonimoDePersona.De(", Cable(), StringComparison.Ordinal);
+
+        // SIN comentarios: el propio helper EXPLICA en su prosa por qué `GetHashCode` no sirve,
+        // así que leerlo entero hace fallar la comprobación de abajo por la razón equivocada.
+        var helper = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.CMS.Web", "Services", "SeudonimoDePersona.cs"));
+        Assert.Contains("SHA256.HashData", helper, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetHashCode", helper, StringComparison.Ordinal);
     }
 
     /// <summary>La sección se ENLAZA, o el Kind del viajero se queda en su default en silencio.</summary>

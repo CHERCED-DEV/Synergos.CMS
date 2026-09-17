@@ -51,12 +51,12 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
 | Stub | Destino | A qué nivel, y por qué | Estado |
 |---|---|---|---|
 | `StubShopOrderService` | `Bff.Tienda` `POST /v1/purchases` | **Orquestador.** Reservar + cobrar + crear pedido pueden fallar a la mitad; si el cobro falla hay que soltar el stock. Contra las capacidades sueltas, el CMS reimplementaría la máquina de sagas — y peor, porque no tiene dónde anotar una compensación pendiente | **HU #24** |
-| `StubPaymentProvider` | `Api.Payments` `/v1/payments` | **Capacidad.** Ya hay `RoutingPaymentProvider` + `WompiPaymentProvider` delante; el stub es el respaldo cuando no hay credencial. Bloqueado por la misma HU que hace que `Api.Payments` cobre de verdad | épica #2 |
+| `StubPaymentProvider` | `Api.Payments` `/v1/payments` | **Capacidad.** Ya hay `RoutingPaymentProvider` + `WompiPaymentProvider` delante; el stub es el respaldo cuando no hay credencial. **Hoy hay una tercera opción y es la buena**: con `Synergos:Payments:Mode=Api` el CMS **deja de tener motor de pago** y se lo pide a la capacidad, que es lo que decidió #27 —«`Api.Payments` es lo único que mueve plata de verdad»—. Cobrar es un paso que dice NO solo (`payment_declined`) y el cliente no sabe qué se compra, así que no compone nada que deshacer. **Y el modo se NIEGA a cablear** mientras Tienda, Salud, Eventos o Viajes sigan comprando con el motor en proceso: ahí quien compone es el LLAMADOR, y con plata real detrás queda stock apartado que nadie suelta. El motor en proceso (ADR 0116) se conserva — es el camino del clon limpio | **#27** |
 | `StubCaseWorkflowService` | `Api.Workflow` `/v1/instances/{id}/fire` | **Capacidad.** Una transición de estado es un paso que dice NO solo (`transition_not_allowed`). La tabla de transiciones vivía en C# dentro del stub, que es justo lo que `Api.Workflow` existe para no repetir por dominio | **HU #44** |
 | `StubCertificateService` | `Api.Signing` `POST /v1/seals` — **NO `/v1/signatures`** | **Capacidad.** El motivo sigue en pie: el HMAC local (ADR 0124) guarda su llave y **no sabe retirarla**, y la capacidad sí. Lo que no encajaba era el endpoint: el token de `/v1/signatures` **vence** (≤365 d), **no es determinista** y **publica el payload** —o sea el alumno— dentro del id que se imprime. El **sello** (#45) es la operación que faltaba: determinista, sin vencimiento, opaca, y se comprueba **contra el sujeto**. El firmante local **se conserva** verificando los ids anteriores, o cada QR ya impreso dejaría de valer | **HU #45** |
 | `StubOrderTrackingService` | `Api.Workflow` | **Capacidad.** Un timeline es una máquina de estados con otro nombre. Las cuatro instancias (tienda / viaje / eventos / academia) usan **una definición cada una** — compartirla las haría leer «enviado» donde dice «matriculado». El CMS conserva su almacén como modelo de LECTURA: con la capacidad caída el timeline se sigue viendo, y sólo se para avanzarlo | **HU #46** |
 | `StubReturnService` | `Bff.Tienda` `POST /v1/purchases/{id}/refund` | **Orquestador, y esta fila tenía mal la razón** (#57). Decía «dos pasos con plata en medio»; mirando el código el segundo paso es una escritura LOCAL y un reembolso **no se compensa**. La pregunta que decide no es «¿qué hay que deshacer?» sino **«¿quién tiene la plata?»** — y con la tienda cableada la tiene el orquestador, porque el `PaymentSessionId` que conoce el CMS es el de la saga | **#57** |
-| `StubApplicationService` | `Api.Payments` `/v1/payments` | **Capacidad, NO orquestador — y el mapa se equivocó con el mismo filtro por CUARTA vez.** Decía «con pago de por medio», que suena a saga; el propio código dice lo contrario, y con la razón escrita: «**no se aborta el trámite si la captura no sale** — en un servicio público, perder la radicación de un ciudadano porque su banco tardó es peor que arrastrar una tasa pendiente». Si no se aborta, **no hay nada que deshacer**, y un orquestador sería la máquina de compensar sin compensación. Lo que sí falta es que la tasa la cobre la capacidad, y eso lo frena #27 — el mismo bloqueo que `StubPaymentProvider`, no un `Bff.Gob` inexistente | bloqueado por #27 |
+| `StubApplicationService` | `Api.Payments` `/v1/payments` | **Capacidad, NO orquestador — y el mapa se equivocó con el mismo filtro por CUARTA vez.** Decía «con pago de por medio», que suena a saga; el propio código dice lo contrario, y con la razón escrita: «**no se aborta el trámite si la captura no sale** — en un servicio público, perder la radicación de un ciudadano porque su banco tardó es peor que arrastrar una tasa pendiente». Si no se aborta, **no hay nada que deshacer**, y un orquestador sería la máquina de compensar sin compensación. Va por **su propio interruptor** (`Synergos:Gob:Payments:Mode=Api`) y no por el del seam: radicar es el único consumidor del motor que NO compone, así que no espera a que los cuatro verticales se cablen. Y esa frase dejó de ser un comentario — la tasa va en `try`/`catch`, y cuando no se sabe queda escrito `Unavailable`, que no es `Failed`: `Failed` diría que el banco rechazó | **#27** |
 | `StubClinicalSchedulingService` | `Bff.Salud` `POST /v1/appointments` | **Orquestador.** Apartar el cupo + cobrar el copago + avisar, con compensación si el copago falla. Ver la corrección de abajo | **HU #25** |
 | `StubEventTicketingService` | `Bff.Eventos` `POST /v1/ticketing` | **Orquestador.** Aforo + cobro pueden fallar a la mitad. La compra se parte: el orquestador mueve aforo y plata, y **el artefacto se queda acá** —la entrada, su QR, su portador, el check-in— porque el firmante vive de este lado | **HU #35** |
 | `StubHotelBookingService` | `Bff.Viajes` `POST /v1/trips` | **Orquestador.** Apartar, cobrar y confirmar pueden fallar a la mitad. Las **dos** vías: la reserva de hotel y el carrito multi-producto, que además pide confirmación PARCIAL y **ordena la devolución** de lo que no se cumplió — el orquestador cotiza el viaje entero y no sabe cuánto vale el ítem caído | **HU #36 + #40** |
@@ -122,8 +122,12 @@ hay que deshacer; contra la capacidad cuando es un solo paso que puede decir NO 
    evapora si se tarda**: cada consumidor que se cablea por separado se lo lleva consigo, y al
    final no quedó nada que mover de una vez. Lo que queda de #33 es otra cosa —qué se hace con
    el motor en proceso y con su barredor de holds, que corre siempre— y está anotado allí.
-3. **`StubPaymentProvider`** — mientras no cobre, ningún demo de venta corre de punta a punta.
-   Va tercero y no primero porque lo que falta es una credencial, no un cliente HTTP.
+3. ~~**`StubPaymentProvider`**~~ — **hecho** (#27), y con él el último de la familia A. Decía que
+   «lo que falta es una credencial, no un cliente HTTP», y era media verdad: el cliente HTTP sí
+   faltaba, sólo que de este lado. La credencial vive en la capacidad (`PAYMENTS_WOMPI_*`) y lo
+   que aporta este repo es dejar de tener motor propio cuando se le dice. Sigue sin correr un
+   demo de venta de punta a punta con Wompi puesto, y ahora por una razón más pequeña: **nadie
+   le enseña el `actionUrl` al comprador**, y esa pantalla vive en `Synergos.UI`.
 
 ---
 
@@ -215,9 +219,14 @@ Forzarlos ahí sería meter un sustantivo de negocio dentro de una capacidad agn
 
 **Academia y eventos (3)** — `StubCourseCatalogProvider` · `StubEnrollmentService` ·
 `StubEventTicketingService`.
-Academia es **el único vertical con catálogo y sin ninguna superficie CMS**: no existe
-`coursePage`, así que un editor no puede publicar un curso ni con el flag puesto. Su destino es
-familia B —una rebanada de contenido, como las ADR 0117/0118/0119/0123— **no una capacidad**.
+Academia **ya tiene su rebanada de contenido** (#100), que es la que este párrafo daba por
+pendiente. Decía que «no existe `coursePage`», y eso era falso ya entonces: el DocType existía
+con sus 16 campos de ficha. Lo que faltaba era **el currículum** —módulos y lecciones—, y sin él
+un curso autorado no se podía cursar, así que la conclusión práctica sí se sostenía aunque la
+razón estuviera mal. Hoy `coursePage` lleva su temario (`elementCourseModule` /
+`elementCourseLesson`) y `UmbracoCourseCatalogSource` lo sirve con
+`Synergos:Catalog:Sources:Academy = cms`, con el seed de demo de default. Era familia B —una
+rebanada de contenido, como las ADR 0117/0118/0119/0123— **no una capacidad**, y ya está hecha.
 El ticketing y la matrícula son motores transaccionales con pago: irían a `Bff.Eventos` y
 `Bff.Academy`. **`StubEventTicketingService` ya está cableado** (HU #35): pasa a familia A con
 destino `Bff.Eventos`, activable con `Synergos:Eventos:Mode=Bff` y con el stub de default. Y

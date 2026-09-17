@@ -1,3 +1,4 @@
+﻿using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Filters;
@@ -122,12 +123,19 @@ public sealed class EhrController : ControllerBase
         // Citas del paciente: filtra de la agenda viva (sin fecha → todas).
         var appointments = await CollectPatientAppointmentsAsync(id, cancellationToken);
 
+        // `history` es la LISTA DE NOTAS, no el resumen. La pestaña «Notas» de la historia
+        // clínica lee `chart.history[]`; mientras esta clave llevó el resumen (un objeto), esa
+        // pestaña salía VACÍA contra el servidor y llena contra el mock — o sea que el clínico
+        // veía notas de ejemplo donde debía ver las del paciente. El resumen no se pierde: pasa
+        // a `clinicalHistory`, porque el mismo nombre no puede significar dos cosas.
+        var notes = encounters.Select(ToEncounterDto).ToList();
         return Ok(new PatientChartResponse(
             Patient: ToPatientDto(patient),
-            History: history is null ? null : ToHistoryDto(history),
-            Encounters: encounters.Select(ToEncounterDto).ToList(),
+            History: notes,
+            Encounters: notes,
             Prescriptions: prescriptions.Select(ToPrescriptionDto).ToList(),
-            Appointments: appointments.Select(ToAppointmentDto).ToList()));
+            Appointments: appointments.Select(ToAppointmentDto).ToList(),
+            ClinicalHistory: history is null ? null : ToHistoryDto(history)));
     }
 
     // ── 3. Doctores ────────────────────────────────────────────────────
@@ -161,9 +169,9 @@ public sealed class EhrController : ControllerBase
         {
             return BadRequest(new { error = "patientId, doctorId y slot son requeridos." });
         }
-        if (body.Slot is not { } slot)
+        if (body.ResolveSlotUtc() is not { } slot)
         {
-            return BadRequest(new { error = "slot (fecha/hora UTC) es requerido y debe ser válido." });
+            return BadRequest(new { error = "slot (fecha/hora UTC, o { date, time }) es requerido y debe ser válido." });
         }
 
         try
@@ -203,16 +211,12 @@ public sealed class EhrController : ControllerBase
                     ReasonForVisit: body.ReasonForVisit ?? string.Empty,
                     Soap: new SoapNote(
                         Subjective: body.Soap.Subjective ?? string.Empty,
-                        Objective: body.Soap.Objective ?? string.Empty,
+                        Objective: body.Soap.ObjectiveText(),
                         Assessment: body.Soap.Assessment ?? string.Empty,
                         Plan: body.Soap.Plan ?? string.Empty,
-                        Vitals: body.Soap.Vitals is null
-                            ? null
-                            : new ClinicalVitals(
-                                body.Soap.Vitals.SystolicMmHg, body.Soap.Vitals.DiastolicMmHg,
-                                body.Soap.Vitals.HeartRateBpm, body.Soap.Vitals.TemperatureC,
-                                body.Soap.Vitals.WeightKg, body.Soap.Vitals.HeightCm,
-                                body.Soap.Vitals.GlucoseMgDl, body.Soap.Vitals.OxygenSaturationPct)),
+                        // Los signos vitales salen de `objective` cuando llega como objeto —que es
+                        // como este mismo borde los DEVUELVE— y de `vitals` cuando vienen aparte.
+                        Vitals: body.Soap.ResolveVitals()),
                     DiagnosisCode: body.DiagnosisCode),
                 cancellationToken);
             return Ok(new EncounterEnvelope(ToEncounterDto(encounter)));
@@ -240,8 +244,8 @@ public sealed class EhrController : ControllerBase
                     PatientId: body.PatientId.Trim(),
                     DoctorId: (body.DoctorId ?? string.Empty).Trim(),
                     Items: body.Items.Select(i => new EhrPrescriptionItem(
-                        MedicationName: i.MedicationName ?? string.Empty,
-                        Dosage: i.Dosage ?? string.Empty,
+                        MedicationName: i.ResolveDrug(),
+                        Dosage: i.ResolveDose(),
                         Frequency: i.Frequency ?? string.Empty,
                         DurationDays: i.DurationDays,
                         Instructions: i.Instructions)).ToList(),
@@ -284,7 +288,9 @@ public sealed class EhrController : ControllerBase
         var inbox = await _messaging.GetInboxAsync(patient, cancellationToken);
         var statement = await _billing.GetForPatientAsync(patient, cancellationToken);
 
-        var unreadMessages = inbox.Where(t => IsClinicalContext(t.ContextRef)).Sum(t => t.MessageCount);
+        // Las conversaciones CLÍNICAS del paciente. No es un contador de «sin leer» y no
+        // se puede convertir en uno: ver la nota de PortalHomeResponse.UnreadMessages.
+        var clinicalThreads = inbox.Count(t => IsClinicalContext(t.ContextRef));
         var balanceMinor = statement is null ? 0L : (long)decimal.Truncate(Math.Max(0m, statement.Balance));
         var currency = statement?.Currency ?? "COP";
 
@@ -329,12 +335,17 @@ public sealed class EhrController : ControllerBase
                 Tone: abnormal > 0 ? "warning" : "success"));
         }
 
-        if (unreadMessages > 0)
+        if (clinicalThreads > 0)
         {
             cards.Add(new HomeCardDto(
                 Id: "card-messages", Kind: "message",
                 Title: "Mensajes de tu equipo de salud",
-                Detail: $"Tienes {unreadMessages} mensaje(s) en tu bandeja.",
+                // CONVERSACIONES y no «mensajes sin leer»: lo primero es un hecho del
+                // almacén, lo segundo exige saber qué leyó el paciente y eso aquí no lo
+                // sabe nadie. La tarjeta invita a abrir la bandeja; no cuenta pendientes.
+                Detail: clinicalThreads == 1
+                    ? "Tienes una conversación con tu equipo de salud."
+                    : $"Tienes {clinicalThreads} conversaciones con tu equipo de salud.",
                 Action: "messages", ActionLabel: "Abrir mensajes", Tone: "brand"));
         }
 
@@ -351,7 +362,7 @@ public sealed class EhrController : ControllerBase
         cards.Add(new HomeCardDto(
             Id: "card-reminder-health", Kind: "reminder",
             Title: "Cuidado preventivo",
-            Detail: "Revisa tus vacunas y tamizajes al día en tu resumen de salud.",
+            Detail: "Revisa qué tamizajes te corresponden en tu resumen de salud.",
             Action: "health", ActionLabel: "Ver mi salud", Tone: "neutral"));
 
         return Ok(new PortalHomeResponse(
@@ -360,7 +371,7 @@ public sealed class EhrController : ControllerBase
             NextAppointment: next is null ? null : ToAppointmentDto(next),
             BalanceMinor: balanceMinor,
             Currency: currency,
-            UnreadMessages: unreadMessages,
+            UnreadMessages: null,
             PendingCheckins: pendingCheckins));
     }
 
@@ -395,14 +406,16 @@ public sealed class EhrController : ControllerBase
     [HttpPost("refill")]
     public async Task<IActionResult> Refill([FromBody] RefillBody? body, CancellationToken cancellationToken)
     {
-        if (body is null || string.IsNullOrWhiteSpace(body.Patient) || string.IsNullOrWhiteSpace(body.MedId))
+        var refillPatient = body?.ResolvePatient() ?? string.Empty;
+        var refillMedication = body?.ResolveMedication() ?? string.Empty;
+        if (string.IsNullOrEmpty(refillPatient) || string.IsNullOrEmpty(refillMedication))
         {
-            return BadRequest(new { error = "patient y medId son requeridos." });
+            return BadRequest(new { error = "patientId (patient) y medicationId (medId) son requeridos." });
         }
         try
         {
             var refill = await _medications.RequestRefillAsync(
-                new RefillRequest(body.Patient.Trim(), body.MedId.Trim(), body.Note),
+                new RefillRequest(refillPatient, refillMedication, body!.Note),
                 cancellationToken);
             // La UI lee `status` top-level (requested|approved|denied); el seam usa
             // 'pending' para una solicitud recién creada → 'requested'.
@@ -443,9 +456,10 @@ public sealed class EhrController : ControllerBase
     [HttpPost("message")]
     public async Task<IActionResult> SendMessage([FromBody] SendMessageBody? body, CancellationToken cancellationToken)
     {
-        if (body is null || string.IsNullOrWhiteSpace(body.From) || string.IsNullOrWhiteSpace(body.Body))
+        var sender = body?.ResolveFrom() ?? string.Empty;
+        if (string.IsNullOrEmpty(sender) || string.IsNullOrWhiteSpace(body!.Body))
         {
-            return BadRequest(new { error = "from y body son requeridos." });
+            return BadRequest(new { error = "user (from) y body son requeridos." });
         }
 
         try
@@ -454,7 +468,7 @@ public sealed class EhrController : ControllerBase
             if (!string.IsNullOrWhiteSpace(body.ThreadId))
             {
                 // Respuesta a un hilo existente.
-                thread = await _messaging.ReplyAsync(body.ThreadId.Trim(), body.From.Trim(), body.Body, cancellationToken);
+                thread = await _messaging.ReplyAsync(body.ThreadId.Trim(), sender, body.Body, cancellationToken);
             }
             else
             {
@@ -463,10 +477,10 @@ public sealed class EhrController : ControllerBase
                     return BadRequest(new { error = "to (o threadId) es requerido para iniciar un hilo." });
                 }
                 // Nuevo hilo clínico: contexto namespaced para que el In Basket lo reconozca.
-                var contextRef = $"{ClinicalMessageContext}:msg:{body.From.Trim()}:{body.To.Trim()}";
-                thread = await _messaging.StartThreadAsync(contextRef, body.From.Trim(), body.To.Trim(), body.Body, cancellationToken);
+                var contextRef = $"{ClinicalMessageContext}:msg:{sender}:{body.To.Trim()}";
+                thread = await _messaging.StartThreadAsync(contextRef, sender, body.To.Trim(), body.Body, cancellationToken);
             }
-            return Ok(new ThreadEnvelope(ToThreadDto(thread, body.From.Trim())));
+            return Ok(new ThreadEnvelope(ToThreadDto(thread, sender)));
         }
         catch (ArgumentException ex)
         {
@@ -492,18 +506,30 @@ public sealed class EhrController : ControllerBase
     [HttpPost("order")]
     public async Task<IActionResult> PlaceOrder([FromBody] PlaceOrderBody? body, CancellationToken cancellationToken)
     {
-        if (body is null
-            || string.IsNullOrWhiteSpace(body.Patient)
-            || string.IsNullOrWhiteSpace(body.Provider)
-            || string.IsNullOrWhiteSpace(body.Type)
-            || string.IsNullOrWhiteSpace(body.Detail))
+        var orderPatient = body?.ResolvePatient() ?? string.Empty;
+        var orderType = body?.ResolveType() ?? string.Empty;
+        if (string.IsNullOrEmpty(orderPatient)
+            || string.IsNullOrEmpty(orderType)
+            || string.IsNullOrWhiteSpace(body!.Detail))
         {
-            return BadRequest(new { error = "patient, provider, type y detail son requeridos." });
+            return BadRequest(new { error = "patientId (patient), kind (type) y detail son requeridos." });
         }
+
+        // El prescriptor no viaja desde la UI. En vez de inventarlo, se resuelve al médico
+        // tratante del padrón; si el paciente no tiene, se dice, porque una orden clínica sin
+        // quien la firma no es una orden.
+        var orderProvider = string.IsNullOrWhiteSpace(body.Provider)
+            ? ((await _patients.GetAsync(orderPatient, cancellationToken))?.PrimaryDoctorId ?? string.Empty)
+            : body.Provider.Trim();
+        if (string.IsNullOrWhiteSpace(orderProvider))
+        {
+            return BadRequest(new { error = "provider es requerido: el paciente no tiene médico tratante registrado." });
+        }
+
         try
         {
             var order = await _orders.PlaceAsync(
-                new PlaceOrderRequest(body.Patient.Trim(), body.Provider.Trim(), body.Type.Trim(), body.Detail),
+                new PlaceOrderRequest(orderPatient, orderProvider, orderType, body.Detail),
                 cancellationToken);
             return Ok(new OrderEnvelope(ToOrderDto(order)));
         }
@@ -532,6 +558,12 @@ public sealed class EhrController : ControllerBase
 
     // 17. Tablero clínico del día (schedule board con máquina de estados)
     // GET /api/ehr/schedule?date= → { slots:[...] } (deriva de la agenda viva)
+    //
+    // `checkedInAhead` NO se emite (HU #106). Que el paciente llegara antes de su hora es un
+    // HECHO —lo sabe recepción, no este borde—, y salía de `a.Id.GetHashCode() % 2`: cara o
+    // cruz, y encima distinta en cada arranque del proceso porque el hash de string está
+    // aleatorizado. El día que la agenda registre la llegada (un `CheckedInAtUtc` en
+    // `ClinicalAppointment`), la clave vuelve con el dato detrás.
     [HttpGet("schedule")]
     public async Task<IActionResult> Schedule([FromQuery] string? date, CancellationToken cancellationToken)
     {
@@ -550,8 +582,7 @@ public sealed class EhrController : ControllerBase
                 DurationMin: Math.Max(0, (int)(a.EndUtc - a.StartUtc).TotalMinutes),
                 Reason: string.IsNullOrWhiteSpace(a.Specialty) ? "Consulta" : a.Specialty,
                 Type: "in-person",
-                State: DeriveScheduleState(a.StartUtc, a.EndUtc, now),
-                CheckedInAhead: (Math.Abs(a.Id.GetHashCode()) % 2) == 0))
+                State: DeriveScheduleState(a.StartUtc, a.EndUtc, now)))
             .ToList();
         return Ok(new ScheduleResponse(slots));
     }
@@ -572,39 +603,49 @@ public sealed class EhrController : ControllerBase
         }
         var history = await _records.GetHistoryAsync(patient, cancellationToken);
 
-        // Condiciones/alergias son datos REALES del registro; vacunas y cuidado
-        // preventivo se derivan de forma determinista (capa demo, coherente con la
-        // tarjeta "Cuidado preventivo" del home).
+        // Condiciones y alergias son datos REALES del registro clínico.
+        //
+        // Vacunas y cuidado preventivo NO se fabrican, y es el criterio de fondo de esta
+        // superficie: **si el valor entero de un campo es ser cierto —el estado de una
+        // vacuna, el resultado de un tamizaje— no se rellena; sin dato, se dice que no hay
+        // dato.** Una lista de alergias o de vacunas es aquello sobre lo que alguien decide
+        // qué recetar, así que un valor plausible e inventado ahí no es un hueco cosmético:
+        // es una decisión clínica tomada sobre algo que nadie comprobó.
+        //
+        // Hasta la HU #106 las dos salían de `person.Id.GetHashCode()` bajo un comentario que
+        // las llamaba «deterministas». En .NET Core el hash de string está **aleatorizado por
+        // proceso**, así que «Influenza: al día» pasaba a «vencida» en cada reinicio del
+        // servidor sin que nadie tocara nada — el código afirmaba justo la propiedad que no
+        // cumplía, que es la forma de #72 y #82. Y derivarlo del id de forma de verdad
+        // determinista TAMPOCO es la salida: cambia un dato que varía al azar por uno que
+        // miente siempre igual.
         var conditions = (history?.ActiveProblems?.Count > 0 ? history.ActiveProblems : person.ChronicConditions)
             ?? Array.Empty<string>();
         var allergies = (history?.Allergies?.Count > 0 ? history.Allergies : person.Allergies)
             ?? Array.Empty<string>();
 
-        var seed = Math.Abs(person.Id.GetHashCode());
-        var immunizations = new List<ImmunizationDto>
-        {
-            new($"imm-flu-{person.Id}", "Influenza (anual)", ClinicRelDate(-8 - (seed % 4)), (seed % 3) == 0 ? "due" : "complete"),
-            new($"imm-covid-{person.Id}", "COVID-19 (refuerzo)", ClinicRelDate(-14 - (seed % 6)), (seed % 2) == 0 ? "complete" : "due"),
-            new($"imm-tdap-{person.Id}", "Tétanos/difteria (Td)", ClinicRelDate(-60 - (seed % 24)), person.AgeYears >= 50 ? "overdue" : "complete"),
-        };
+        // Cuidado preventivo: se emite QUÉ le corresponde a esta persona —eso se deriva de su
+        // edad y su sexo, que son datos del padrón— y NO se emite en qué estado va ni para
+        // cuándo, porque eso exige saber si se lo hizo, y aquí no lo sabe nadie.
         var maintenance = new List<HealthMaintenanceDto>();
         if (person.AgeYears >= 45)
         {
             maintenance.Add(new($"pm-colon-{person.Id}", "Tamizaje de colon",
-                "Colonoscopia o prueba de sangre oculta según riesgo.", person.AgeYears >= 50 ? "overdue" : "due", ClinicRelDate(-2)));
+                "Colonoscopia o prueba de sangre oculta según riesgo."));
         }
+        // Control de presión: le corresponde a toda persona adulta, no se deriva de nada más.
         maintenance.Add(new($"pm-bp-{person.Id}", "Control de presión arterial",
-            "Toma de presión en consulta de control.", (seed % 2) == 0 ? "due" : "complete", ClinicRelDate(1)));
+            "Toma de presión en consulta de control."));
         if (string.Equals(person.Gender, "F", StringComparison.OrdinalIgnoreCase) && person.AgeYears >= 40)
         {
             maintenance.Add(new($"pm-mammo-{person.Id}", "Mamografía",
-                "Tamizaje de mama bienal.", "due", ClinicRelDate(3)));
+                "Tamizaje de mama bienal."));
         }
 
         return Ok(new HealthSummaryResponse(
             Conditions: conditions,
             Allergies: allergies,
-            Immunizations: immunizations,
+            Immunizations: Array.Empty<ImmunizationDto>(),
             Maintenance: maintenance));
     }
 
@@ -621,29 +662,34 @@ public sealed class EhrController : ControllerBase
         return "scheduled";
     }
 
-    // Fecha relativa (meses respecto a hoy UTC) en formato yyyy-MM-dd para la demo.
-    private static string ClinicRelDate(int months)
-        => DateTime.UtcNow.AddMonths(months).ToString("yyyy-MM-dd");
-
     private static bool IsClinicalContext(string contextRef)
         => !string.IsNullOrEmpty(contextRef)
             && (string.Equals(contextRef, ClinicalMessageContext, StringComparison.Ordinal)
                 || contextRef.StartsWith($"{ClinicalMessageContext}:", StringComparison.Ordinal));
 
+    /// <summary>Días hacia atrás y hacia delante que cubre la ficha del paciente.</summary>
+    private const int VentanaAtrasDias = 30;
+    private const int VentanaAdelanteDias = 60;
+
+    /// <summary>
+    /// Las citas del paciente alrededor de hoy — <b>UNA pregunta al seam, no noventa y una</b>.
+    /// </summary>
+    /// <remarks>
+    /// Esto barría la ventana día a día con <c>GetByDateAsync</c>, filtrando por paciente de
+    /// este lado: 91 llamadas por carga, y lo llaman <c>patient/{id}</c> <b>y</b>
+    /// <c>portal/home</c>. Contra el stub en memoria no se nota; contra
+    /// <see cref="Synergos.CMS.Web.Services.HttpClinicalSchedulingService"/> son 91 viajes para
+    /// traer lo mismo. La pregunta siempre fue una sola —«las citas de esta persona en esta
+    /// ventana»— y ahora el seam la sabe contestar (HU #111).
+    /// </remarks>
     private async Task<IReadOnlyList<ClinicalAppointment>> CollectPatientAppointmentsAsync(string patientId, CancellationToken cancellationToken)
     {
-        // La agenda se consulta por fecha; barre una ventana razonable alrededor de
-        // hoy para reunir las citas del paciente sin un seam de "por paciente"
-        // (mantiene ISP en el seam de agenda). Suficiente para la demo.
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var result = new List<ClinicalAppointment>();
-        for (var offset = -30; offset <= 60; offset++)
-        {
-            var day = today.AddDays(offset);
-            var dayAppts = await _scheduling.GetByDateAsync(day, doctorId: null, cancellationToken);
-            result.AddRange(dayAppts.Where(a => string.Equals(a.PatientId, patientId, StringComparison.Ordinal)));
-        }
-        return result.OrderBy(a => a.StartUtc).ToList();
+        var citas = await _scheduling.GetForPatientAsync(
+            patientId, today.AddDays(-VentanaAtrasDias), today.AddDays(VentanaAdelanteDias), cancellationToken);
+        // El seam promete orden ascendente; la «próxima cita» del home depende de él, así que
+        // se ordena igual — cuesta nada y un adapter que no cumpla no lo estropea en silencio.
+        return citas.OrderBy(a => a.StartUtc).ToList();
     }
 
     private static DateOnly ParseDateOrToday(string? date)
@@ -653,7 +699,7 @@ public sealed class EhrController : ControllerBase
         Id: p.Id, Name: p.FullName, Document: p.DocumentId, Sex: NormalizeSex(p.Gender),
         Age: p.AgeYears, Phone: p.Phone, Email: p.Email, BloodType: p.BloodType,
         Problems: p.ChronicConditions, Allergies: p.Allergies,
-        PrimaryDoctorId: p.PrimaryDoctorId ?? string.Empty, Active: true,
+        PrimaryDoctorId: p.PrimaryDoctorId ?? string.Empty, Active: null,
         City: p.City, AvatarUrl: p.AvatarUrl);
 
     // El registro modela el sexo como texto libre ("Masculino"/"Femenino"/…); la UI
@@ -671,7 +717,7 @@ public sealed class EhrController : ControllerBase
 
     private static DoctorDto ToDoctorDto(MedicalDoctor d) => new(
         Id: d.Id, Name: d.FullName, Specialty: d.Specialty, License: d.LicenseNumber,
-        Phone: string.Empty, Email: string.Empty, AcceptingPatients: true,
+        Phone: d.Phone, Email: d.Email, AcceptingPatients: d.AcceptingPatients,
         Rating: d.Rating, YearsExperience: d.YearsExperience, AvatarUrl: d.AvatarUrl,
         WorkingDays: d.WorkingDays.Select(w => (int)w).ToList(),
         SlotStartHour: d.SlotStartHour, SlotEndHour: d.SlotEndHour, SlotMinutes: d.SlotMinutes);
@@ -743,13 +789,10 @@ public sealed class EhrController : ControllerBase
         Flag: r.Flag, Date: r.ResultedAtUtc.ToString("yyyy-MM-dd"), Released: true,
         Comment: r.Notes ?? string.Empty);
 
-    /// <summary>Farmacia de la demo (el seam no modela la farmacia dispensadora aún).</summary>
-    private const string DemoPharmacy = "Farmacia Synergos";
-
     private static MedicationDto ToMedicationDto(EhrMedication m) => new(
         Id: m.MedicationId, PatientId: m.PatientId, Drug: m.MedicationName,
         Dose: m.Dosage, Frequency: m.Frequency, Instructions: m.Instructions ?? string.Empty,
-        Pharmacy: DemoPharmacy, RefillsLeft: m.RefillsRemaining ?? 0, RefillStatus: null);
+        Pharmacy: null, RefillsLeft: m.RefillsRemaining ?? 0, RefillStatus: null);
 
     // Mapea el estado del seam (pending|approved|denied) al lifecycle que espera la UI.
     private static string RefillLifecycleStatus(string seamStatus) => seamStatus switch
@@ -817,7 +860,7 @@ public sealed class EhrController : ControllerBase
             Subject: ThreadSubject(t.ContextRef),
             LastMessage: last,
             LastAtUtc: t.LastMessageAt.UtcDateTime,
-            Unread: 0,
+            Unread: null,
             Messages: messages);
     }
 
@@ -829,7 +872,7 @@ public sealed class EhrController : ControllerBase
         Subject: ThreadSubject(s.ContextRef),
         LastMessage: s.LastMessagePreview,
         LastAtUtc: s.LastMessageAt.UtcDateTime,
-        Unread: 0,
+        Unread: null,
         Messages: Array.Empty<ThreadMessageDto>());
 
     private static BillingDto ToBillingDto(EhrBillingStatement s)
@@ -852,36 +895,215 @@ public sealed class EhrController : ControllerBase
         return new BillingDto(statement);
     }
 
+    // ── Lectura tolerante del cuerpo (ADR 0083: la UI es la fuente del contrato) ──
+    //
+    // Los cuerpos de abajo declaran DOS juegos de claves: el que este borde estrenó y el que
+    // la UI manda. No es cortesía — `System.Text.Json` DESCARTA en silencio lo que no mapea,
+    // así que una clave que falta no es un error visible: es un campo vacío corriente abajo,
+    // o un 400 constante que el cliente tapa con su valor optimista. Se prefiere siempre la
+    // clave de la UI y se cae a la legacy.
+
+    private static readonly JsonSerializerOptions VitalsJson = new(JsonSerializerDefaults.Web);
+
+    private static string FirstNonBlank(string? preferred, string? legacy)
+    {
+        if (!string.IsNullOrWhiteSpace(preferred)) { return preferred.Trim(); }
+        return string.IsNullOrWhiteSpace(legacy) ? string.Empty : legacy.Trim();
+    }
+
+    /// <summary>
+    /// El inicio del slot, venga como instante ISO o como el objeto <c>{ date, time }</c> que
+    /// este mismo borde devuelve en <see cref="AppointmentDto.Slot"/>.
+    /// </summary>
+    private static DateTime? ReadSlot(JsonElement? slot)
+    {
+        if (slot is not { } value)
+        {
+            return null;
+        }
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            return value.TryGetDateTime(out var instant) ? instant : null;
+        }
+        if (value.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var date = value.TryGetProperty("date", out var d) && d.ValueKind == JsonValueKind.String
+            ? d.GetString()
+            : null;
+        var time = value.TryGetProperty("time", out var t) && t.ValueKind == JsonValueKind.String
+            ? t.GetString()
+            : null;
+        if (string.IsNullOrWhiteSpace(date))
+        {
+            return null;
+        }
+
+        // Sin hora, el slot es el arranque del día; la agenda rechazará lo que no sea suyo.
+        var composed = string.IsNullOrWhiteSpace(time) ? date : $"{date}T{time}";
+        return DateTime.TryParse(
+            composed,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+            out var parsed)
+            ? parsed
+            : null;
+    }
+
     // ── Request bodies (binding del módulo UI) ─────────────────────────
 
-    public sealed record BookAppointmentBody(string PatientId, string DoctorId, DateTime? Slot);
+    /// <summary>
+    /// Reservar una cita. <see cref="Slot"/> admite <b>las dos formas</b>: el instante ISO que
+    /// usaba el contrato original (<c>"2026-09-18T08:00:00Z"</c>) y el objeto
+    /// <c>{ date, time }</c> que manda la UI, que es el que el propio borde DEVUELVE en
+    /// <c>AppointmentDto.Slot</c>.
+    /// </summary>
+    /// <remarks>
+    /// Con <c>DateTime?</c> a secas, el objeto de la UI hacía reventar a
+    /// <c>System.Text.Json</c> y la petición salía <b>400 siempre</b>. No se veía porque el
+    /// cliente de la UI envuelve el fallo y devuelve la cita optimista que ya tenía en
+    /// pantalla: el paciente leía «cita agendada» y no había ninguna.
+    /// </remarks>
+    public sealed record BookAppointmentBody(string PatientId, string DoctorId, JsonElement? Slot)
+    {
+        /// <summary>El inicio del slot, venga como instante o como <c>{date,time}</c>.</summary>
+        public DateTime? ResolveSlotUtc() => ReadSlot(Slot);
+    }
 
+    /// <summary>
+    /// Signos vitales de la petición. Lleva <b>los dos juegos de nombres</b>: los del seam
+    /// (<c>systolicMmHg</c>…) y los que emite y lee la UI (<c>systolic</c>…). Todos opcionales:
+    /// lo que no llegue queda nulo, que es distinto de cero.
+    /// </summary>
     public sealed record VitalsBody(
-        double? SystolicMmHg, double? DiastolicMmHg, double? HeartRateBpm, double? TemperatureC,
-        double? WeightKg, double? HeightCm, double? GlucoseMgDl, double? OxygenSaturationPct);
+        double? SystolicMmHg = null, double? DiastolicMmHg = null, double? HeartRateBpm = null,
+        double? TemperatureC = null, double? WeightKg = null, double? HeightCm = null,
+        double? GlucoseMgDl = null, double? OxygenSaturationPct = null,
+        double? Systolic = null, double? Diastolic = null, double? HeartRate = null,
+        double? Temperature = null, double? Weight = null, double? Height = null,
+        double? Glucose = null)
+    {
+        public ClinicalVitals ToClinicalVitals() => new(
+            Systolic ?? SystolicMmHg, Diastolic ?? DiastolicMmHg,
+            HeartRate ?? HeartRateBpm, Temperature ?? TemperatureC,
+            Weight ?? WeightKg, Height ?? HeightCm,
+            Glucose ?? GlucoseMgDl, OxygenSaturationPct);
+    }
 
-    public sealed record SoapBody(string? Subjective, string? Objective, string? Assessment, string? Plan, VitalsBody? Vitals);
+    /// <summary>
+    /// La nota SOAP de la petición.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><c>objective</c> admite texto Y objeto</b>, porque el propio borde lo DEVUELVE
+    /// como objeto: <c>SoapDto.Objective</c> es un <see cref="VitalsDto"/>. Tipado como
+    /// <c>string?</c>, el cuerpo que la UI construye a partir de lo que este mismo controller le
+    /// dio hacía reventar a <c>System.Text.Json</c> y <c>POST /encounter</c> salía <b>400
+    /// siempre</b> — y el clínico veía su nota en pantalla igual, porque el cliente cae a la
+    /// versión optimista. Una nota clínica que se da por guardada y no se guardó es el peor de
+    /// los fallos silenciosos de esta superficie.</para>
+    ///
+    /// <para>Los signos vitales se leen de <c>objective</c> cuando viene como objeto y de
+    /// <c>vitals</c> cuando viene aparte; la clave legacy se conserva.</para>
+    /// </remarks>
+    public sealed record SoapBody(
+        string? Subjective,
+        JsonElement? Objective,
+        string? Assessment,
+        string? Plan,
+        VitalsBody? Vitals)
+    {
+        /// <summary>El texto libre del objetivo, si <c>objective</c> llegó como cadena.</summary>
+        public string ObjectiveText()
+            => Objective is { ValueKind: JsonValueKind.String } text ? text.GetString() ?? string.Empty : string.Empty;
+
+        /// <summary>Los signos vitales: de <c>objective</c> si es objeto, si no de <c>vitals</c>.</summary>
+        public ClinicalVitals? ResolveVitals()
+        {
+            if (Objective is { ValueKind: JsonValueKind.Object } obj)
+            {
+                var fromObjective = obj.Deserialize<VitalsBody>(VitalsJson);
+                if (fromObjective is not null)
+                {
+                    return fromObjective.ToClinicalVitals();
+                }
+            }
+            return Vitals?.ToClinicalVitals();
+        }
+    }
 
     public sealed record AddEncounterBody(string PatientId, SoapBody Soap, string? DoctorId, string? ReasonForVisit, string? DiagnosisCode);
 
-    public sealed record PrescriptionItemBody(string? MedicationName, string? Dosage, string? Frequency, int DurationDays, string? Instructions);
+    /// <summary>
+    /// Una línea de la receta. <c>drug</c>/<c>dose</c> son las claves que la UI manda —y que el
+    /// borde ya devuelve en <see cref="PrescriptionItemDto"/>—; <c>medicationName</c>/<c>dosage</c>
+    /// se conservan. Sin las primeras, la receta se guardaba <b>sin nombre de medicamento</b>:
+    /// <c>System.Text.Json</c> descarta lo que no mapea y nadie se entera.
+    /// </summary>
+    public sealed record PrescriptionItemBody(
+        string? MedicationName = null,
+        string? Dosage = null,
+        string? Frequency = null,
+        int DurationDays = 0,
+        string? Instructions = null,
+        string? Drug = null,
+        string? Dose = null)
+    {
+        public string ResolveDrug() => FirstNonBlank(Drug, MedicationName);
+        public string ResolveDose() => FirstNonBlank(Dose, Dosage);
+    }
 
     public sealed record AddPrescriptionBody(string PatientId, IReadOnlyList<PrescriptionItemBody> Items, string? DoctorId, string? EncounterId);
 
     // ── Response DTOs (JSON estable para la UI) ────────────────────────
 
+    /// <summary>
+    /// La ficha demográfica del paciente hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><see cref="Active"/> sale siempre <c>null</c>, y <c>null</c> es «no consta»</b>
+    /// (HU #111). Decía <c>true</c> — una constante — para todo paciente del padrón: la UI lo
+    /// documenta como «tiene un episodio de atención abierto», y eso es un hecho clínico que
+    /// este borde no sabe. <see cref="IPatientRegistry"/> no modela episodios ni altas, así que
+    /// <c>true</c> no era una lectura sino una afirmación fabricada — y <c>false</c> lo sería
+    /// igual. Es el criterio de #106: si el valor entero de un campo es ser cierto, no se
+    /// rellena.</para>
+    /// <para><b>Nulo no es lo mismo que <c>false</c></b>, y por eso el tipo es <c>bool?</c> y no
+    /// se quita la clave: «no lo sabemos» y «este paciente no está activo» son dos respuestas
+    /// distintas, y si se ven iguales el arreglo no sirve de nada.</para>
+    /// <para><b>Disparador para volver a emitirlo</b>: que <see cref="IPatientRegistry"/> —o un
+    /// seam de episodios de atención— sepa decir si el paciente tiene uno abierto.</para>
+    /// </remarks>
     public sealed record PatientDto(
         string Id, string Name, string Document, string Sex,
         int Age, string Phone, string Email, string BloodType,
         IReadOnlyList<string> Problems, IReadOnlyList<string> Allergies,
-        string PrimaryDoctorId, bool Active,
+        string PrimaryDoctorId, bool? Active,
         string City, string? AvatarUrl);
 
     public sealed record PatientsResponse(IReadOnlyList<PatientDto> Patients);
 
+    /// <summary>
+    /// Un médico del directorio hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><see cref="AcceptingPatients"/>, <see cref="Phone"/> y <see cref="Email"/> salen
+    /// del seam desde el #118.</b> Hasta entonces el borde los escribía a mano —<c>null</c> y
+    /// dos cadenas vacías— porque <see cref="MedicalDoctor"/> modelaba agenda (días, franja,
+    /// slot) y no contacto. El disparador que estaba escrito aquí era exactamente ése: «que
+    /// <see cref="IDoctorDirectory"/> sepa decir si el médico admite pacientes nuevos». Lo sabe
+    /// cuando el directorio sale del contenido que autoró el editor
+    /// (<c>Synergos:Catalog:Sources:Salud = cms</c>).</para>
+    /// <para><b><c>null</c> ≠ <c>false</c>, y por eso el schema NO usa un <c>Umbraco.TrueFalse</c></b>
+    /// (HU #111): cerrar la lista de un médico que sí recibe es tan falso como lo contrario, y
+    /// un booleano del backoffice vale <c>false</c> sin que nadie lo decida. El campo es un
+    /// desplegable de dos valores donde «sin elegir» sigue siendo «no consta» — que es lo que
+    /// contesta el staff sembrado, porque de él no consta.</para>
+    /// </remarks>
     public sealed record DoctorDto(
         string Id, string Name, string Specialty, string License,
-        string Phone, string Email, bool AcceptingPatients,
+        string Phone, string Email, bool? AcceptingPatients,
         double Rating, int YearsExperience, string? AvatarUrl,
         IReadOnlyList<int> WorkingDays, int SlotStartHour, int SlotEndHour, int SlotMinutes);
 
@@ -925,20 +1147,80 @@ public sealed class EhrController : ControllerBase
 
     public sealed record AppointmentEnvelope(AppointmentDto Appointment);
 
+    /// <summary>
+    /// La historia clínica del paciente hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="History"/> es la lista de notas</b> —lo que lee <c>chart.history[]</c>— y
+    /// <b><see cref="ClinicalHistory"/> es el resumen</b> (motivo, problemas activos, alergias,
+    /// basales). Antes las dos cosas compartían la clave <c>history</c> y ganaba el resumen, así
+    /// que la pestaña «Notas» del clínico llegaba vacía. El resumen no se quitó: se le dio nombre
+    /// propio, que es lo único que permite emitir las dos.
+    /// </remarks>
     public sealed record PatientChartResponse(
         PatientDto Patient,
-        HistoryDto? History,
+        IReadOnlyList<EncounterDto> History,
         IReadOnlyList<EncounterDto> Encounters,
         IReadOnlyList<PrescriptionDto> Prescriptions,
-        IReadOnlyList<AppointmentDto> Appointments);
+        IReadOnlyList<AppointmentDto> Appointments,
+        HistoryDto? ClinicalHistory = null);
 
     // ── OLA 7 · Request bodies ──────────────────────────────────────────
 
-    public sealed record RefillBody(string Patient, string MedId, string? Note);
+    /// <summary>
+    /// Solicitud de resurtido. <c>patientId</c>/<c>medicationId</c> son las claves de la UI
+    /// —y las que el borde devuelve en <see cref="RefillDto"/>—; <c>patient</c>/<c>medId</c>
+    /// se conservan. Con sólo las segundas declaradas, el cuerpo de la UI llegaba <b>vacío</b>
+    /// y el endpoint contestaba 400 <b>siempre</b>; el paciente veía «Solicitada» porque el
+    /// cliente marca optimista antes de llamar.
+    /// </summary>
+    public sealed record RefillBody(
+        string? Patient = null,
+        string? MedId = null,
+        string? Note = null,
+        string? PatientId = null,
+        string? MedicationId = null)
+    {
+        public string ResolvePatient() => FirstNonBlank(PatientId, Patient);
+        public string ResolveMedication() => FirstNonBlank(MedicationId, MedId);
+    }
 
-    public sealed record SendMessageBody(string From, string? To, string Body, string? ThreadId);
+    /// <summary>
+    /// Enviar un mensaje al equipo de salud. <c>user</c> es quien escribe según la UI;
+    /// <c>from</c> se conserva. Sin <c>user</c>, el remitente llegaba nulo y el endpoint
+    /// contestaba 400 siempre.
+    /// </summary>
+    public sealed record SendMessageBody(
+        string? From = null,
+        string? To = null,
+        string? Body = null,
+        string? ThreadId = null,
+        string? User = null)
+    {
+        public string ResolveFrom() => FirstNonBlank(User, From);
+    }
 
-    public sealed record PlaceOrderBody(string Patient, string Provider, string Type, string Detail);
+    /// <summary>
+    /// Colocar una orden clínica. <c>patientId</c> y <c>kind</c> son las claves de la UI;
+    /// <c>patient</c>/<c>type</c> se conservan.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>provider</c> no viaja desde la UI y no se inventa</b>: se resuelve al médico
+    /// tratante del paciente (<c>EhrPatient.PrimaryDoctorId</c>), que es un dato del padrón y
+    /// no una constante de relleno. Si el paciente no tiene tratante, el endpoint lo dice
+    /// —400— en vez de atribuirle la orden a nadie.
+    /// </remarks>
+    public sealed record PlaceOrderBody(
+        string? Patient = null,
+        string? Provider = null,
+        string? Type = null,
+        string? Detail = null,
+        string? PatientId = null,
+        string? Kind = null)
+    {
+        public string ResolvePatient() => FirstNonBlank(PatientId, Patient);
+        public string ResolveType() => FirstNonBlank(Kind, Type);
+    }
 
     // ── OLA 7 · Response DTOs ───────────────────────────────────────────
 
@@ -946,24 +1228,77 @@ public sealed class EhrController : ControllerBase
         string Id, string Kind, string Title, string Detail,
         string? Action, string? ActionLabel, string Tone);
 
+    /// <summary>
+    /// El home del portal del paciente.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><see cref="UnreadMessages"/> sale siempre <c>null</c>, y <c>null</c> NO es
+    /// cero</b> (HU #116). Es el gemelo exacto de <see cref="ThreadDto.Unread"/> —la nota de
+    /// ese record explica el porqué entero— y se quedó fuera de #111 porque aquí la cifra no
+    /// era una constante: se DERIVABA, sumando <c>MessageCount</c> de los hilos clínicos. Una
+    /// derivación de lo que hay a mano se lee como un dato y es una fabricación igual: contaba
+    /// como «sin leer» los mensajes que el propio paciente escribió.</para>
+    /// <para><b>No hay de dónde sacarlo</b>: <c>IMessagingService</c> declara en su contrato
+    /// «sin read-receipts». Emitir <c>0</c> sería peor que omitirlo, porque <c>0</c> no dice
+    /// «no sé»: dice <b>«no tienes mensajes sin leer»</b>, que es la afirmación contraria y la
+    /// que hace que nadie abra el mensaje de su médico. La clave se conserva declarada para que
+    /// el día que exista el seam recupere su forma sin reinventarla.</para>
+    /// <para><b>Disparador</b>: que <c>IMessagingService</c> registre lectura por participante
+    /// (un <c>lastReadAt</c> por hilo, o un <c>MarkReadAsync</c>).</para>
+    /// <para>La tarjeta de mensajes del home <b>no depende de esto</b>: cuenta CONVERSACIONES
+    /// clínicas, que sí es un hecho del almacén.</para>
+    /// </remarks>
     public sealed record PortalHomeResponse(
         PatientDto Patient,
         IReadOnlyList<HomeCardDto> Cards,
         AppointmentDto? NextAppointment,
         long BalanceMinor,
         string Currency,
-        int UnreadMessages,
+        int? UnreadMessages,
         int PendingCheckins);
 
+    /// <summary>
+    /// Una fila del tablero del día. <b>Sin <c>checkedInAhead</c></b>: ver la nota del endpoint
+    /// <c>schedule</c> — si el paciente llegó antes es un hecho, y este borde no lo sabe.
+    /// </summary>
     public sealed record ScheduleSlotDto(
         string AppointmentId, string PatientId, string PatientName, string DoctorId, string DoctorName,
-        string Time, int DurationMin, string Reason, string Type, string State, bool CheckedInAhead);
+        string Time, int DurationMin, string Reason, string Type, string State);
 
     public sealed record ScheduleResponse(IReadOnlyList<ScheduleSlotDto> Slots);
 
+    /// <summary>
+    /// Una vacuna aplicada. <b>Este borde no construye ninguna</b> y <c>immunizations</c> sale
+    /// siempre vacío (HU #106).
+    /// </summary>
+    /// <remarks>
+    /// <para>No es un hueco disimulado: la lista vacía dice la verdad —el EHR <b>no guarda
+    /// registro de vacunación de nadie</b>, así que para todo paciente hay cero— y la UI la
+    /// pinta como «Sin vacunas registradas». Lo que había antes era otra cosa: tres vacunas
+    /// inventadas con fecha y estado derivados de <c>person.Id.GetHashCode()</c>, o sea un
+    /// carné de vacunas que cambiaba de contenido en cada reinicio del servidor. Un estado de
+    /// vacunación cuyo valor entero es ser cierto no se rellena — es aquello sobre lo que
+    /// alguien decide qué recetar.</para>
+    /// <para><b>Disparador para volver a llenarla</b>: que exista un seam de vacunación en
+    /// <c>Synergos.CMS.Interfaces</c> —un <c>IImmunizationRegistry</c>, o vacunas dentro de
+    /// <see cref="IClinicalRecordService"/>— que sepa decir qué se aplicó y cuándo. El
+    /// <c>record</c> se conserva declarado para que ese día la clave recupere su forma sin
+    /// tener que reinventarla.</para>
+    /// </remarks>
     public sealed record ImmunizationDto(string Id, string Name, string Date, string Status);
 
-    public sealed record HealthMaintenanceDto(string Id, string Name, string Detail, string Status, string DueDate);
+    /// <summary>
+    /// Una recomendación de cuidado preventivo: QUÉ le corresponde a esta persona.
+    /// </summary>
+    /// <remarks>
+    /// <b>Sin <c>status</c> ni <c>dueDate</c></b> (HU #106). El <i>qué</i> se deriva de la edad
+    /// y el sexo del padrón —tamizaje de colon, mamografía—, y eso es una guía clínica, no un
+    /// invento. El <i>estado</i> (<c>due</c>/<c>overdue</c>/<c>complete</c>) y la <i>fecha</i>
+    /// exigen saber si la persona se lo hizo, y aquí no lo sabe nadie: salían de
+    /// <c>person.Id.GetHashCode()</c>. <b>Disparador</b>: un seam que registre tamizajes
+    /// realizados; hasta entonces se emite la recomendación y nada más.
+    /// </remarks>
+    public sealed record HealthMaintenanceDto(string Id, string Name, string Detail);
 
     public sealed record HealthSummaryResponse(
         IReadOnlyList<string> Conditions,
@@ -971,6 +1306,21 @@ public sealed class EhrController : ControllerBase
         IReadOnlyList<ImmunizationDto> Immunizations,
         IReadOnlyList<HealthMaintenanceDto> Maintenance);
 
+    /// <summary>
+    /// Un resultado de laboratorio hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="Released"/> sale en <c>true</c> constante, y NO es de la familia que la HU
+    /// #111 vino a quitar</b> — está escrito porque es la primera pregunta que va a hacerse quien
+    /// audite este fichero después. Ahí <c>true</c> no afirma un hecho que nadie comprobó: es un
+    /// <b>invariante del seam</b>. <see cref="EhrLabResult"/> se documenta como «un resultado de
+    /// laboratorio <i>liberado</i>» y la única puerta por la que entra uno es
+    /// <c>IClinicalResultsProvider.ReleaseResultAsync</c>, así que todo lo que sale de
+    /// <c>GetForPatientAsync</c> está liberado por construcción. La UI usa la clave para decidir
+    /// qué ve el paciente, así que el día que el seam empiece a devolver resultados sin liberar
+    /// —un LIS real puede— esto pasa a ser una fabricación y el campo tiene que salir del
+    /// registro, no de aquí.
+    /// </remarks>
     public sealed record LabResultDto(
         string Id, string PatientId, string Panel, string Name,
         string Value, string Unit, double? RefLow, double? RefHigh,
@@ -978,9 +1328,26 @@ public sealed class EhrController : ControllerBase
 
     public sealed record LabResultsResponse(IReadOnlyList<LabResultDto> Results);
 
+    /// <summary>
+    /// Una medicación activa del paciente.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><see cref="Pharmacy"/> sale siempre <c>null</c>, y es el peor de los cuatro
+    /// campos que la HU #111 vino a quitar</b>: decía «Farmacia Synergos» —una constante del
+    /// fichero, <c>DemoPharmacy</c>— al lado del nombre de un medicamento real, en la pantalla
+    /// desde la que alguien sale a recogerlo. El error de los otros tres se queda en la
+    /// pantalla; éste <b>manda a una persona a un sitio</b>.</para>
+    /// <para>No hay seam del que salga: <see cref="IClinicalMedicationService"/> deriva la
+    /// medicación activa de las recetas vivas y ni el medicamento ni la receta
+    /// (<see cref="IClinicalPrescriptionService"/>) modelan farmacia dispensadora. Un nombre de
+    /// farmacia cuyo valor entero es ser cierto no se rellena; sin dato, se dice que no hay
+    /// dato (<c>CLAUDE.md</c> §5, <c>feedback_gethashcode_is_not_a_seed</c>).</para>
+    /// <para><b>Disparador</b>: que el seam de medicación —o un eRx/pharmacy real detrás de
+    /// él— traiga la farmacia dispensadora de cada orden.</para>
+    /// </remarks>
     public sealed record MedicationDto(
         string Id, string PatientId, string Drug, string Dose, string Frequency,
-        string Instructions, string Pharmacy, int RefillsLeft, string? RefillStatus);
+        string Instructions, string? Pharmacy, int RefillsLeft, string? RefillStatus);
 
     public sealed record MedicationsResponse(IReadOnlyList<MedicationDto> Medications);
 
@@ -1005,9 +1372,28 @@ public sealed class EhrController : ControllerBase
     public sealed record ThreadMessageDto(
         string Id, string Author, string Body, DateTime CreatedAtUtc, bool Outgoing);
 
+    /// <summary>
+    /// Un hilo de la bandeja clínica hacia la UI.
+    /// </summary>
+    /// <remarks>
+    /// <para><b><see cref="Unread"/> sale siempre <c>null</c>, y <c>null</c> NO es cero</b>
+    /// (HU #111). Decía <c>0</c> —constante en los dos mappers— así que el contador de sin-leer
+    /// de la bandeja <b>no podía mostrar nada nunca</b>, y lo que el JSON afirmaba no era «no
+    /// sé»: era <b>«no tienes mensajes sin leer»</b>, que es la afirmación contraria y es la que
+    /// hace que el paciente no abra el mensaje de su médico.</para>
+    /// <para><b>No hay de dónde sacarlo, y el seam lo dice de frente</b>:
+    /// <see cref="IMessagingService"/> declara en su propio contrato «sin typing, sin grupos,
+    /// <b>sin read-receipts</b>». Sin saber qué leyó cada participante y cuándo, un contador de
+    /// no leídos no se deriva: se inventa. Derivarlo de <c>MessageCount</c> —que es lo que
+    /// tienta, y lo que hace el <c>unreadMessages</c> del home— cuenta los mensajes propios del
+    /// paciente como sin leer.</para>
+    /// <para><b>Disparador</b>: que <see cref="IMessagingService"/> registre lectura por
+    /// participante (un <c>lastReadAt</c> por hilo, o un <c>MarkReadAsync</c>). Ese día la clave
+    /// recupera su forma sin tener que reinventarla.</para>
+    /// </remarks>
     public sealed record ThreadDto(
         string Id, string Participant, string Subject, string LastMessage,
-        DateTime LastAtUtc, int Unread, IReadOnlyList<ThreadMessageDto> Messages);
+        DateTime LastAtUtc, int? Unread, IReadOnlyList<ThreadMessageDto> Messages);
 
     public sealed record ThreadEnvelope(ThreadDto Thread);
 

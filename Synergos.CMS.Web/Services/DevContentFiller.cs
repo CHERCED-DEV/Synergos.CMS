@@ -32,7 +32,9 @@ public sealed class DevContentFiller
     // campo estático corren en orden textual y `Verticals` se declara más abajo.
     private static string VerticalCount =>
         Verticals.Length.ToString(System.Globalization.CultureInfo.InvariantCulture);
-    private static readonly Guid SectionContentAreaKey = new("3525d41c-ae84-47ac-9297-2148f6a4aae8");
+    // El GUID vive en LayoutComposerKeys: tres copias de la Key de un area es cómo una se
+    // queda atrás y una página publica vacía sin que nada falle.
+    private static readonly Guid SectionContentAreaKey = LayoutComposerKeys.SectionContentArea;
     // Áreas de elementLayout3Col (de DTBlockGridSections) — col1/col2/col3.
     private static readonly Guid Col1AreaKey = new("b3141704-5e2d-4adf-9c83-654377a9717f");
     private static readonly Guid Col2AreaKey = new("316ace81-08bb-4688-a54b-930b8378d9e7");

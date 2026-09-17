@@ -1,4 +1,4 @@
-using Synergos.CMS.Interfaces;
+﻿using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
@@ -23,7 +23,10 @@ internal sealed record PersistedOrder(
     IReadOnlyList<PersistedOrderLine> Lines,
     DateTimeOffset CreatedAt,
     OrderStatus Status = OrderStatus.Pending,
-    Guid? OwnerMemberKey = null);
+    Guid? OwnerMemberKey = null,
+    // La dirección que se capturó al hacer checkout. Se guarda porque quien la necesita es
+    // el confirm, y entre los dos pasos el cliente no la vuelve a mandar.
+    ShopShippingAddress? ShipTo = null);
 
 internal sealed record PersistedOrderLine(
     string ProductId,

@@ -33,6 +33,9 @@ public sealed class LlaveDeIdempotenciaTests
 
         public PurchaseSaga? Find(string id) => _sagas.TryGetValue(id, out var s) ? s : null;
         public void Put(PurchaseSaga saga) => _sagas[saga.Id] = saga;
+
+        // Un fake en memoria no tiene caché que vaciar: la verdad ES el diccionario (#34).
+        public void Invalidate() { }
         public IReadOnlyList<PurchaseSaga> WithPendingCompensations() => Array.Empty<PurchaseSaga>();
         public IReadOnlyList<PurchaseSaga> StartedBefore(DateTimeOffset l) => Array.Empty<PurchaseSaga>();
         public int Cuantas => _sagas.Count;
@@ -65,6 +68,7 @@ public sealed class LlaveDeIdempotenciaTests
             new Compensator<PurchaseSaga>(new NoDeshaceNada(), TimeProvider.System,
                 NullLogger<Compensator<PurchaseSaga>>.Instance),
             new CompensationAlert(new SinRed(), vocabulario, Options.Create(new AlertOptions())),
+            ArriendoDePrueba.Nuevo(),
             vocabulario,
             TimeProvider.System,
             NullLogger<SagaEngine<PurchaseSaga>>.Instance);

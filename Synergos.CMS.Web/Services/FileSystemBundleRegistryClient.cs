@@ -98,6 +98,138 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
     /// <summary>Cuántos elementos se prueban antes de declarar que el registry no sirve ninguno.</summary>
     private const int MaxSondeos = 5;
 
+    /// <summary>
+    /// El <c>import map</c> del runtime, leído del disco y con las URLs reescritas a la base
+    /// pública.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Esto vivía en <c>_SynHostRuntime.cshtml</c></b> (#126) — una vista leyendo del
+    /// disco con <c>File.ReadAllText</c> y reescribiendo hosts con una regex. Se mudó tal cual:
+    /// misma ruta, misma reescritura. Lo único que cambia es <b>quién</b> lo hace, y eso es lo
+    /// que permite que el gemelo HTTP exista: una vista no puede salir a la red.</para>
+    ///
+    /// <para><b>Se COMPONEN todos los frameworks que el registry declara</b> (#127). Esto leía
+    /// sólo el de <c>DefaultFramework</c>, y con dos frameworks publicando eso deja a uno de los
+    /// dos sin resolver sus bare specifiers: el navegador lee <b>el primer</b> import map de la
+    /// página e ignora los siguientes, así que no hay forma de arreglarlo emitiendo otro. La
+    /// lista de frameworks sale de las claves de <c>implementations</c> del registry, no de una
+    /// lista a mano — ver <see cref="ImportMapComposer"/>.</para>
+    ///
+    /// <para><b>El slot es <c>latest</c> a propósito y NO se cachea.</b> Es la única ruta mutable
+    /// del CDN —lo contrario de los manifiestos, que se cachean para siempre porque su ruta lleva
+    /// la versión exacta—. Cachearla serviría el mapa de la publicación anterior después de un
+    /// despliegue del CDN, y un mapa viejo apunta a un runtime que ya no está: los elementos
+    /// dejarían de hidratar sin que nada fallara. El <c>FileSystemWatcher</c> no cubre esto
+    /// porque sólo vigila el registry.</para>
+    /// </remarks>
+    public Task<ImportMap?> TryGetImportMapAsync(CancellationToken ct = default)
+    {
+        var s = _settings.CurrentValue;
+        if (string.IsNullOrWhiteSpace(s.LocalPath)) return Task.FromResult<ImportMap?>(null);
+
+        var frameworks = FrameworksDelRegistry(s.DefaultFramework);
+        var leidos = new List<(string, IReadOnlyDictionary<string, string>)>();
+
+        foreach (var framework in frameworks)
+        {
+            var ruta = Path.Combine(
+                s.LocalPath, s.BundlesNamespace, "runtime", framework, s.DefaultSlot, "import-map.json");
+
+            if (!File.Exists(ruta))
+            {
+                // Un framework declarado sin mapa publicado NO tumba a los demás: se emite lo que
+                // hay y el probe lo reporta. Tumbarlos convertiría una publicación a medias de un
+                // framework en una página entera sin hidratar.
+                _logger.LogWarning(
+                    "El registry declara «{Framework}» y no hay import map en {Ruta}. Sus elementos "
+                    + "no van a resolver sus bare specifiers.", framework, ruta);
+                continue;
+            }
+
+            try
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(ruta));
+                if (!doc.RootElement.TryGetProperty("imports", out var imports)
+                    || imports.ValueKind != JsonValueKind.Object)
+                {
+                    _logger.LogWarning("El import map de {Ruta} no trae un objeto «imports».", ruta);
+                    continue;
+                }
+
+                leidos.Add((framework, LeerImports(imports, s.PublicBaseUrl)));
+            }
+            catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(ex, "No se pudo leer el import map de {Ruta}.", ruta);
+            }
+        }
+
+        if (leidos.Count == 0)
+        {
+            _logger.LogWarning(
+                "No hay ningún import map bajo {Base}. Sin él ningún <synergos-*> resuelve sus "
+                + "bare specifiers y no se registra ninguno.",
+                Path.Combine(s.LocalPath, s.BundlesNamespace, "runtime"));
+            return Task.FromResult<ImportMap?>(null);
+        }
+
+        var (mapa, conflicto) = ImportMapComposer.Componer(leidos);
+        if (conflicto is not null)
+        {
+            _logger.LogError("No se pudo componer el import map. {Conflicto}", conflicto);
+            return Task.FromResult<ImportMap?>(null);
+        }
+
+        return Task.FromResult(mapa);
+    }
+
+    /// <summary>
+    /// Los frameworks que el registry declara. Si todavía no hay snapshot, el configurado.
+    /// </summary>
+    /// <remarks>
+    /// El respaldo NO es un default silencioso: sin snapshot no se sabe nada del catálogo, y servir
+    /// cero mapas dejaría la página sin hidratar por no haber leído aún un fichero. Con snapshot
+    /// manda el disco, siempre.
+    /// </remarks>
+    private IReadOnlyList<string> FrameworksDelRegistry(string porDefecto)
+    {
+        var snap = _snapshot;
+        if (snap is null) return new[] { porDefecto };
+
+        var declarados = ImportMapComposer.FrameworksDeclarados(
+            snap.ByTag.Values.Select(e => e.Implementations?.Keys ?? Enumerable.Empty<string>()));
+
+        return declarados.Count > 0 ? declarados : new[] { porDefecto };
+    }
+
+    /// <summary>
+    /// Pasa los <c>imports</c> publicados a URLs servibles, cambiando el host de publicación por
+    /// la base pública.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La reescritura es la de la vista, con una diferencia</b> (#126): sólo se toca lo
+    /// que tiene host. El <c>^https?://[^/]+</c> original no distinguía —daba igual porque todo
+    /// lo publicado lo lleva— pero aplicado a una entrada ya relativa la habría dejado intacta
+    /// por casualidad, no por decisión. Acá una entrada relativa se conserva tal cual, que es lo
+    /// correcto: ya está servida desde donde toca.</para>
+    /// </remarks>
+    internal static IReadOnlyDictionary<string, string> LeerImports(JsonElement imports, string publicBaseUrl)
+    {
+        var baseLimpia = (publicBaseUrl ?? string.Empty).TrimEnd('/');
+        var mapa = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var prop in imports.EnumerateObject())
+        {
+            var url = prop.Value.GetString() ?? string.Empty;
+            mapa[prop.Name] = Uri.TryCreate(url, UriKind.Absolute, out var abs)
+                && (abs.Scheme == Uri.UriSchemeHttp || abs.Scheme == Uri.UriSchemeHttps)
+                    ? baseLimpia + abs.PathAndQuery
+                    : url;
+        }
+
+        return mapa;
+    }
+
     public Task<BundleDescriptor?> TryResolveAsync(string elementKey, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(elementKey)) return Task.FromResult<BundleDescriptor?>(null);

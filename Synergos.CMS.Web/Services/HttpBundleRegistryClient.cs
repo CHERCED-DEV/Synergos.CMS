@@ -221,6 +221,124 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
         }
     }
 
+    /// <summary>
+    /// El <c>import map</c> del runtime, pedido al CDN y con las URLs reescritas a la base
+    /// pública.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Éste es el que arregla el defecto #126.</b> Su gemelo de filesystem existía
+    /// dentro de una vista, y una vista no puede salir a la red — por eso en modo <c>Http</c> no
+    /// se emitía mapa alguno y ningún <c>&lt;synergos-*&gt;</c> hidrataba, con la página en 200 y
+    /// el SSR entero.</para>
+    ///
+    /// <para><b>Se cachea por tiempo, no para siempre</b>, y ésa es la diferencia con los
+    /// manifiestos. La ruta lleva <c>latest</c>, que por contrato <b>sí</b> cambia de contenido:
+    /// cachearla sin vencimiento serviría el mapa de la publicación anterior después de cada
+    /// despliegue del CDN, apuntando a un runtime retirado. Se reutiliza el mismo
+    /// <c>RefreshSeconds</c> del registry porque los dos vienen de la misma publicación.</para>
+    ///
+    /// <para><b>Y se sirve el último bueno si el CDN deja de contestar</b>, igual que el registry
+    /// y por lo mismo: un CDN que parpadea no puede apagar los elementos de una página que se
+    /// venía sirviendo bien.</para>
+    /// </remarks>
+    public async Task<ImportMap?> TryGetImportMapAsync(CancellationToken ct = default)
+    {
+        var s = _settings.CurrentValue;
+
+        var vigente = _mapa;
+        if (vigente is not null
+            && _clock.GetUtcNow() - _mapaCargadoUtc < TimeSpan.FromSeconds(Math.Max(1, s.RefreshSeconds)))
+        {
+            return vigente;
+        }
+
+        var frameworks = await FrameworksDelRegistryAsync(s, ct).ConfigureAwait(false);
+        var leidos = new List<(string, IReadOnlyDictionary<string, string>)>();
+
+        foreach (var framework in frameworks)
+        {
+            var url = $"{s.PublicBaseUrl.TrimEnd('/')}/{s.BundlesNamespace}/runtime/{framework}/{s.DefaultSlot}/import-map.json";
+
+            try
+            {
+                var json = await _http.GetByteArrayAsync(url, ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+
+                if (!doc.RootElement.TryGetProperty("imports", out var imports)
+                    || imports.ValueKind != JsonValueKind.Object)
+                {
+                    _logger.LogWarning("El import map de {Url} no trae un objeto «imports».", url);
+                    continue;
+                }
+
+                leidos.Add((framework, FileSystemBundleRegistryClient.LeerImports(imports, s.PublicBaseUrl)));
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+            {
+                // Uno caído no tumba a los demás, por la misma razón que en el gemelo de disco.
+                _logger.LogWarning(ex, "No se pudo leer el import map de {Url}.", url);
+            }
+        }
+
+        if (leidos.Count == 0)
+        {
+            _logger.LogWarning(
+                "Ningún import map respondió bajo {Base}. Se sigue con el anterior ({Estado})",
+                $"{s.PublicBaseUrl.TrimEnd('/')}/{s.BundlesNamespace}/runtime/",
+                vigente is null ? "no hay" : "vigente");
+            return vigente;
+        }
+
+        var (compuesto, conflicto) = ImportMapComposer.Componer(leidos);
+        if (conflicto is not null)
+        {
+            // SE CONSERVA EL ANTERIOR, y esto decía lo contrario.
+            //
+            // El razonamiento de #127 era «si el conflicto es real, el mapa vigente también lo
+            // estaba sirviendo mal». **Se desmiente solo**: un mapa vigente sólo puede existir si
+            // cuando se compuso NO tenía conflicto —con conflicto, `Componer` habría devuelto
+            // `null` y no habría vigente—. O sea que el conflicto es siempre NUEVO: lo introduce
+            // un framework que acaba de empezar a publicar.
+            //
+            // Y tirar el bueno convierte «los elementos del framework nuevo no hidratan» en «NO
+            // HIDRATA NADA», el que ya funcionaba incluido. Eso no es fallar a la vista: es apagar
+            // el sitio entero por una publicación que ni siquiera es la que se está sirviendo.
+            //
+            // El caso está medido y es inminente (Synergos.UI#58): el runtime de Angular publica
+            // hoy `@synergos/core` y `@synergos/shared` —nombres AGNÓSTICOS— apuntando a
+            // `/synergos/runtime/angular/…`. El día que una segunda plataforma publique su mapa
+            // con esos mismos nombres, colisionan.
+            //
+            // En arranque en frío no hay vigente y se devuelve `null` igual, que es la verdad.
+            _logger.LogError(
+                "No se pudo componer el import map; se sigue con el anterior ({Estado}). {Conflicto}",
+                vigente is null ? "no hay" : "vigente", conflicto);
+            return vigente;
+        }
+
+        _mapa = compuesto;
+        _mapaCargadoUtc = _clock.GetUtcNow();
+        return _mapa;
+    }
+
+    /// <summary>
+    /// Los frameworks que el registry declara. Sin snapshot, el configurado.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> FrameworksDelRegistryAsync(
+        BundleRegistrySettings s, CancellationToken ct)
+    {
+        var snap = await ObtenerSnapshotAsync(s, ct).ConfigureAwait(false);
+        if (snap is null) return new[] { s.DefaultFramework };
+
+        var declarados = ImportMapComposer.FrameworksDeclarados(
+            snap.PorTag.Values.Select(e => e.Implementations?.Keys ?? Enumerable.Empty<string>()));
+
+        return declarados.Count > 0 ? declarados : new[] { s.DefaultFramework };
+    }
+
+    private volatile ImportMap? _mapa;
+    private DateTimeOffset _mapaCargadoUtc = DateTimeOffset.MinValue;
+
     private async Task<Snapshot?> DescargarRegistryAsync(BundleRegistrySettings s, CancellationToken ct)
     {
         var url = $"{s.PublicBaseUrl.TrimEnd('/')}/{s.BundlesNamespace}/{s.RegistryFileName}";

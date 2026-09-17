@@ -1,4 +1,6 @@
-﻿using System.Text.Encodings.Web;
+﻿using System.Security.Cryptography;
+using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Synergos.CMS.Interfaces;
 
@@ -126,7 +128,11 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
-    public async Task<CourseEnrollmentResult> EnrollAsync(string courseId, Student student, CancellationToken cancellationToken = default)
+    public async Task<CourseEnrollmentResult> EnrollAsync(
+        string courseId,
+        Student student,
+        string? planCode = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(student);
         if (string.IsNullOrWhiteSpace(student.Name) || string.IsNullOrWhiteSpace(student.Email))
@@ -145,8 +151,57 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         var studentName = student.Name.Trim();
         var studentEmail = student.Email.Trim();
 
-        // Rama gratis: matrícula Active inmediata, sin sesión de pago.
-        if (course.IsFree)
+        // El plan que eligió el alumno, con su total resuelto DESDE EL CATÁLOGO — igual que el
+        // precio del curso. Se resuelve antes de ramificar por gratis/pago: un código
+        // inexistente tiene que rechazarse aunque el curso sea gratuito, o la validación
+        // dependería de un dato que el alumno no controla.
+        var plan = ResolvePlan(detail, planCode);
+        var total = plan?.Total ?? course.Price;
+
+        // ─────────────────────────────────────────────────────────────────────────────────
+        // NADIE SE MATRICULA DOS VECES AL MISMO CURSO — Y «DOS VECES» NO ES «YA EXISTE» (#121).
+        //
+        // `POST /academy/enroll` no lleva llave de idempotencia, así que un enroll que sale del
+        // servidor y cuya respuesta se pierde se repite al volver a pulsar. En la rama GRATIS eso
+        // dejaba DOS matrículas activas del mismo alumno al mismo curso, permanentes y sin que
+        // nada fallara; en la de pago abría una segunda sesión de cobro para un curso que el
+        // alumno YA TIENE, o sea le dejaba pagar dos veces lo mismo.
+        //
+        // La propiedad es del NEGOCIO y no del transporte —nadie se matricula dos veces al mismo
+        // curso—, así que se resuelve por el par (alumno, curso) y no exigiéndole una cabecera al
+        // llamador: una llave de idempotencia le pasa al cliente la responsabilidad de acordarse,
+        // y el cliente es exactamente quien acaba de perder la respuesta.
+        //
+        // ⚠️ Y `Cancelled` NO bloquea, que es la mitad fina: encontrar un registro no significa
+        // «esto ya pasó». Quien se dio de baja y quiere volver tiene que poder — es la lección del
+        // defecto #41, donde encontrar la llave de idempotencia encerraba al comprador cuya compra
+        // anterior se había deshecho entera.
+        //
+        // `PendingPayment` tampoco bloquea, y va dicho en vez de omitido: devolver la matrícula
+        // pendiente devolvería su sesión de cobro, que puede estar muerta, y dejaría al alumno
+        // encerrado sin forma de pagar. Un segundo pendiente es ruido —sólo uno se confirma— y no
+        // daño. El día que las sesiones se puedan revalidar, esto se revisa.
+        // ─────────────────────────────────────────────────────────────────────────────────
+        var yaMatriculado = (await LoadAllEnrollmentsAsync(cancellationToken)).FirstOrDefault(e =>
+            e.Status == EnrollmentStatus.Active
+            && string.Equals(e.CourseId, course.Id, StringComparison.Ordinal)
+            && string.Equals(e.StudentEmail, studentEmail, StringComparison.OrdinalIgnoreCase));
+
+        if (yaMatriculado is not null)
+        {
+            // Se re-emite el aviso por la MISMA razón que `ConfirmAsync` cuando ya está activa: el
+            // ledger del dispatcher deduplica (un hecho → un aviso), así que es inofensivo, y
+            // rescata el caso en que el primero no llegó a notificar.
+            await NotifyActiveAsync(yaMatriculado, course.Title, cancellationToken);
+            return new CourseEnrollmentResult(
+                Enrolled: true,
+                EnrollmentId: yaMatriculado.EnrollmentId,
+                Currency: yaMatriculado.Currency);
+        }
+
+        // Rama gratis: matrícula Active inmediata, sin sesión de pago. Mira el TOTAL y no
+        // `course.IsFree`, porque con un plan elegido el que manda es el del plan.
+        if (total <= 0m)
         {
             var freeEnrollment = CreateEnrollment(
                 course.Id, studentName, studentEmail, EnrollmentStatus.Active,
@@ -168,14 +223,16 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         var session = await _payments.CreateSessionAsync(
             new PaymentSessionRequest(
                 OrderReference: orderRef,
-                Amount: course.Price,
+                Amount: total,
                 Currency: course.Currency,
                 Items: new[]
                 {
                     new PaymentLineItem(
                         Sku: course.Id,
-                        Description: $"Inscripción: {course.Title}",
-                        UnitPrice: course.Price,
+                        Description: plan is null
+                            ? $"Inscripción: {course.Title}"
+                            : $"Inscripción: {course.Title} — {plan.Label}",
+                        UnitPrice: total,
                         Quantity: 1),
                 },
                 CustomerEmail: studentEmail,
@@ -188,14 +245,18 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
 
         var pending = CreateEnrollment(
             course.Id, studentName, studentEmail, EnrollmentStatus.PendingPayment,
-            orderRef: orderRef, paymentSessionId: session.SessionId, total: course.Price, currency: course.Currency);
+            orderRef: orderRef, paymentSessionId: session.SessionId, total: total, currency: course.Currency);
         await WriteEnrollmentAsync(pending, cancellationToken);
 
         return new CourseEnrollmentResult(
             Enrolled: false,
             OrderRef: orderRef,
             PaymentSessionId: session.SessionId,
-            Amount: course.Price,
+            // El TOTAL, no el precio de lista. Era la tercera vez que `course.Price` se colaba
+            // en este mismo método: la sesión de pago ya se abría por el total del plan y el
+            // expediente ya lo guardaba, pero esto es lo que la pantalla MUESTRA — se cobraban
+            // 345.600 y se anunciaban 320.000.
+            Amount: total,
             Currency: course.Currency,
             EnrollmentId: pending.EnrollmentId);
     }
@@ -245,6 +306,45 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
 
         var totalLessons = await ResolveTotalLessonsAsync(courseId, cancellationToken);
         return await BuildProgressAsync(courseId, student, totalLessons, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<StudentEnrollment>> GetEnrollmentsAsync(
+        string student,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(student))
+        {
+            return Array.Empty<StudentEnrollment>();
+        }
+
+        var email = student.Trim();
+        var mine = (await LoadAllEnrollmentsAsync(cancellationToken))
+            // Sólo las ACTIVAS: una en PendingPayment es un carrito abandonado, y ponerla entre
+            // «mis cursos» le diría al alumno que tiene acceso a algo que no pagó.
+            .Where(e => e.Status == EnrollmentStatus.Active
+                && string.Equals(e.StudentEmail, email, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(e => e.CreatedAt)
+            .ToList();
+
+        var rows = new List<StudentEnrollment>(mine.Count);
+        foreach (var enrollment in mine)
+        {
+            // El progreso se resuelve curso por curso porque es donde vive: el avance depende
+            // del temario, y el temario lo tiene el catálogo, no la matrícula.
+            var totalLessons = await ResolveTotalLessonsAsync(enrollment.CourseId, cancellationToken);
+            var progress = await BuildProgressAsync(enrollment.CourseId, email, totalLessons, cancellationToken);
+
+            rows.Add(new StudentEnrollment(
+                EnrollmentId: enrollment.EnrollmentId,
+                CourseId: enrollment.CourseId,
+                Percent: progress.Percent,
+                CompletedCount: progress.CompletedLessonIds.Count,
+                // La fecha de la MATRÍCULA, no la de la última lección: nadie registra cuándo
+                // se vio cada una, y devolver «hoy» diría que el alumno estuvo activo hoy.
+                LastActivityAt: enrollment.CreatedAt));
+        }
+
+        return rows;
     }
 
     public async Task<CourseProgress> MarkLessonAsync(string courseId, string lessonId, string student, CancellationToken cancellationToken = default)
@@ -346,6 +446,95 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
             .ToList();
 
         return new CourseEnrollmentStats(active.Count, active.Sum(e => e.Total));
+    }
+
+    public async Task<IReadOnlyList<CourseRosterEntry>> GetCourseRosterAsync(
+        string courseId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(courseId))
+        {
+            return Array.Empty<CourseRosterEntry>();
+        }
+
+        var id = courseId.Trim();
+        // El MISMO filtro que GetCourseStatsAsync —sólo las activas— y no por simetría estética:
+        // si el listado contara una PendingPayment que el conteo no cuenta, la consola diría
+        // «42 alumnos» encima de 39 filas y nadie sabría cuál de los dos está mal.
+        var active = (await LoadAllEnrollmentsAsync(cancellationToken))
+            .Where(e => e.Status == EnrollmentStatus.Active
+                        && string.Equals(e.CourseId, id, StringComparison.OrdinalIgnoreCase))
+            // Los últimos en matricularse primero (como «mi aprendizaje»), con desempate por
+            // id: el orden en que el store enumera los ficheros no está garantizado, y sin
+            // desempate dos llamadas seguidas podrían devolver la misma lista barajada.
+            .OrderByDescending(e => e.CreatedAt)
+            .ThenBy(e => e.EnrollmentId, StringComparer.Ordinal)
+            .ToList();
+
+        if (active.Count == 0)
+        {
+            return Array.Empty<CourseRosterEntry>();
+        }
+
+        // El temario se resuelve UNA vez por curso: todas las filas son del mismo curso, así que
+        // preguntarlo por alumno sería el mismo viaje al catálogo repetido N veces.
+        var totalLessons = await ResolveTotalLessonsAsync(id, cancellationToken);
+
+        var rows = new List<CourseRosterEntry>(active.Count);
+        foreach (var enrollment in active)
+        {
+            var progress = await BuildProgressAsync(
+                id, enrollment.StudentEmail, totalLessons, cancellationToken);
+
+            rows.Add(new CourseRosterEntry(
+                StudentId: StudentPseudonym(enrollment.StudentEmail),
+                StudentName: DisplayName(enrollment.StudentName),
+                CourseId: enrollment.CourseId,
+                Percent: progress.Percent,
+                // La fecha de la MATRÍCULA, que es lo que la columna «Inscrito» dice ser. No hay
+                // registro de cuándo se vio cada lección, así que cualquier otra cosa sería
+                // inventada — la misma advertencia que lleva StudentEnrollment.LastActivityAt.
+                EnrolledAt: enrollment.CreatedAt));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Quién es el alumno, para un tercero que lo mira: un seudónimo, no su dirección.
+    /// </summary>
+    /// <remarks>
+    /// <b>SHA-256 del correo normalizado, 16 hex — la MISMA receta</b> que usan Tienda, Eventos
+    /// y la visita al inmueble (#33a, defecto #47). Inventar una cuarta haría que el mismo
+    /// alumno fuera dos personas distintas según por dónde entró.
+    /// <para><b>No es anonimato y no hay que venderlo como tal</b>: un correo conocido se vuelve
+    /// a hashear y comparar. Es no esparcir lo que no hace falta esparcir — la consola del
+    /// instructor no tiene una sola acción que use una dirección.</para>
+    /// <para>Las otras tres copias de esta receta viven en <c>Synergos.CMS.Web</c> y no se
+    /// pueden compartir desde aquí (Application no referencia Web, ADR 0002). Promoverla a un
+    /// sitio común es trabajo aparte, anotado en #107.</para>
+    /// </remarks>
+    private static string StudentPseudonym(string? email)
+    {
+        var correo = (email ?? string.Empty).Trim().ToLowerInvariant();
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(correo)))[..16]
+            .ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// El nombre visible del alumno, o vacío si lo que hay no es un nombre.
+    /// </summary>
+    /// <remarks>
+    /// <b>Un valor con arroba se descarta</b>, que es el mismo guardarraíl que
+    /// <c>PublicHolderName</c> aplica al portador de un certificado público. Sin él, una
+    /// matrícula creada con el correo en el campo del nombre publicaría la dirección por la
+    /// puerta de al lado — justo lo que este listado decidió no emitir. Vacío es la verdad («no
+    /// consta»), y quien lo pinta ya escribe «Estudiante» cuando falta.
+    /// </remarks>
+    private static string DisplayName(string? studentName)
+    {
+        var name = (studentName ?? string.Empty).Trim();
+        return name.Contains('@', StringComparison.Ordinal) ? string.Empty : name;
     }
 
     // ── Persistencia (deserialización defensiva) ───────────────────────
@@ -481,6 +670,34 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
             && (string.Equals(e.StudentEmail, student, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(e.StudentName, student, StringComparison.OrdinalIgnoreCase)));
         return match?.EnrollmentId;
+    }
+
+    /// <summary>
+    /// El plan que eligió el alumno, o null si no eligió ninguno.
+    /// </summary>
+    /// <remarks>
+    /// <b>Un código que no existe se RECHAZA</b> (defecto #102). Caer al precio del curso es el
+    /// defecto original con otro nombre: el alumno elige «3 cuotas», se le cobra el contado, y
+    /// nada falla — ni en el cobro, ni en el expediente, ni en un log. Es plata, y un error que
+    /// se nota al instante y se arregla eligiendo otra vez tiene que fallar a la vista.
+    ///
+    /// <para>Se compara sin distinguir mayúsculas porque el código es un identificador de
+    /// catálogo (<c>full</c>, <c>emi-3</c>) que viaja por una URL y por un formulario, no una
+    /// contraseña.</para>
+    /// </remarks>
+    private static CoursePricingPlan? ResolvePlan(CourseDetail detail, string? planCode)
+    {
+        var code = planCode?.Trim();
+        if (string.IsNullOrEmpty(code))
+        {
+            return null;
+        }
+
+        var plan = detail.Plans?.FirstOrDefault(p =>
+            string.Equals(p.Code, code, StringComparison.OrdinalIgnoreCase));
+
+        return plan ?? throw new ArgumentException(
+            $"El plan '{code}' no existe para el curso '{detail.Course.Id}'.", nameof(planCode));
     }
 
     private PersistedEnrollment CreateEnrollment(

@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
@@ -59,7 +59,7 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     // contador compartido haría que los ids saltaran según qué otro test corrió antes.
     private int _publishedCounter;
 
-    private readonly ICatalogIndex<AcademyDemoSeed.SeedCourse> _index;
+    private readonly ICatalogIndex<CourseSummary> _index;
 
     /// <summary>
     /// Ctor de 1 argumento. <b>Se conserva tal cual a propósito:</b> lo usa la factory
@@ -70,15 +70,26 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     /// silencio y con los tests en verde (los tests cablean la inyección ellos mismos).
     /// </summary>
     public StubCourseCatalogProvider(IContentStream contentStream)
-        : this(contentStream, new InMemoryCatalogIndex<AcademyDemoSeed.SeedCourse>(Descriptor, CatalogSettings.Unpaged))
+        : this(contentStream, new InMemoryCatalogIndex<CourseSummary>(Descriptor, CatalogSettings.Unpaged))
     {
     }
 
-    internal StubCourseCatalogProvider(IContentStream contentStream, ICatalogIndex<AcademyDemoSeed.SeedCourse> index)
+    /// <param name="now">
+    /// Reloj de la publicación de un curso del panel. Opcional para no tocar el ctor público,
+    /// que es el que el composer usa (ver arriba); los tests lo fijan para poder afirmar la
+    /// fecha sin depender del día en que corran.
+    /// </param>
+    internal StubCourseCatalogProvider(
+        IContentStream contentStream,
+        ICatalogIndex<CourseSummary> index,
+        Func<DateTimeOffset>? now = null)
     {
         _contentStream = contentStream ?? throw new ArgumentNullException(nameof(contentStream));
         _index = index ?? throw new ArgumentNullException(nameof(index));
+        _now = now ?? (() => DateTimeOffset.UtcNow);
     }
+
+    private readonly Func<DateTimeOffset> _now;
 
     // Vista unificada del catálogo: cursos sembrados + publicados en runtime.
     private IEnumerable<AcademyDemoSeed.SeedCourse> AllCourses()
@@ -95,22 +106,31 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     ///
     /// <para>El resumen pesa lo mínimo: es prosa larga que casa por accidente y no debe
     /// desplazar nunca a un título.</para>
+    ///
+    /// <para><b>Está tipado sobre <see cref="CourseSummary"/> —el tipo del CONTRATO— y no
+    /// sobre el del seed, y ésa es la razón por la que existe uno solo.</b> Cuando el
+    /// catálogo pasó a poder salir del contenido del CMS
+    /// (<c>Synergos:Catalog:Sources:Academy = cms</c>), un descriptor atado a
+    /// <c>SeedCourse</c> habría obligado a la otra fuente a declarar el suyo: dos
+    /// descriptores, y la búsqueda comportándose distinto según el flag. Eso es una
+    /// regresión que sólo aparece al mover una línea de configuración, que es la peor forma
+    /// de aparecer. Es la misma regla que ya aplicó Eventos.</para>
     /// </remarks>
-    internal static CatalogDescriptor<AcademyDemoSeed.SeedCourse> Descriptor { get; } = new(
+    internal static CatalogDescriptor<CourseSummary> Descriptor { get; } = new(
         idOf: c => c.Id,
         searchFields: new[]
         {
-            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(5, c => c.Title),
-            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(3, c => AcademyDemoSeed.InstructorById(c.InstructorId).Name),
-            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(2, c => c.Category),
-            new CatalogSearchField<AcademyDemoSeed.SeedCourse>(1, c => c.Summary),
+            new CatalogSearchField<CourseSummary>(5, c => c.Title),
+            new CatalogSearchField<CourseSummary>(3, c => c.InstructorName),
+            new CatalogSearchField<CourseSummary>(2, c => c.Category),
+            new CatalogSearchField<CourseSummary>(1, c => c.Summary),
         },
         // El orden histórico: mejor calificados primero.
         defaultOrder: courses => courses.OrderByDescending(c => c.Rating).ThenBy(c => c.Title, StringComparer.Ordinal),
-        filters: new CatalogFilter<AcademyDemoSeed.SeedCourse>[]
+        filters: new CatalogFilter<CourseSummary>[]
         {
-            new CatalogTermFilter<AcademyDemoSeed.SeedCourse>("category", "Escuela", c => new[] { c.Category }),
-            new CatalogTermFilter<AcademyDemoSeed.SeedCourse>("level", "Nivel", c => new[] { c.Level }),
+            new CatalogTermFilter<CourseSummary>("category", "Escuela", c => new[] { c.Category }),
+            new CatalogTermFilter<CourseSummary>("level", "Nivel", c => new[] { c.Level }),
         });
 
     public async Task<CourseSearchResult> SearchAsync(CourseQuery query, CancellationToken cancellationToken = default)
@@ -137,11 +157,10 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
         // del instructor que acaba de publicar. Take explícito + Unpaged en el ctor porque
         // esta seam promete TODOS los cursos que casan, no una página.
         var result = _index.Search(
-            AllCourses().ToList(),
+            AllCourses().Select(ToSummary).ToList(),
             new CatalogQuery(Text: query.Text, Filters: filters.Count > 0 ? filters : null, Take: int.MaxValue));
 
-        var matched = result.Items.Select(ToSummary).ToList();
-        return new CourseSearchResult(matched, result.Total);
+        return new CourseSearchResult(result.Items, result.Total);
     }
 
     public async Task<CourseDetail?> GetCourseAsync(string courseId, CancellationToken cancellationToken = default)
@@ -167,10 +186,11 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
                     .ToList()))
             .ToList();
 
-        // Planes de precio: contado + (para los de pago) un plan de 3 cuotas con
-        // recargo del 8% (regla de negocio aislada — análoga a la política de
-        // cancelación de Hoteles). Los gratuitos solo tienen "inscripción gratis".
-        var plans = BuildPlans(course);
+        // Planes de precio: contado + (para los de pago) un plan de 3 cuotas con recargo.
+        // La regla vive en CoursePricingRules desde que apareció su segundo consumidor (el
+        // catálogo servido del CMS): copiada, el mismo curso ofrecería cuotas distintas
+        // según de dónde salga.
+        var plans = CoursePricingRules.Build(course.Price, AcademyDemoSeed.Currency);
 
         return new CourseDetail(
             Course: ToSummary(course),
@@ -306,6 +326,9 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
             CoverImageUrl: draft.CoverImageUrl,
             Price: Math.Max(0m, draft.Price),
             Rating: 0.0, // sin reseñas todavía
+            // Publicar ES el acto que le pone fecha: no se hereda de nada ni se deja sin
+            // poner, porque de éste sí se sabe (#102).
+            PublishedAt: DateOnly.FromDateTime(_now().UtcDateTime),
             Outcomes: draft.Outcomes ?? Array.Empty<string>(),
             Modules: seedModules);
 
@@ -401,25 +424,10 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
         IsFree: c.IsFree,
         Rating: c.Rating,
         LessonCount: c.LessonCount,
-        DurationMinutes: c.DurationMinutes);
+        DurationMinutes: c.DurationMinutes,
+        // Todo lo que este catálogo sirve está publicado: el seed ES el catálogo de demo y
+        // lo que publica un instructor entra publicado. No hay un tercer caso que ocultar.
+        Status: CourseStatuses.Published,
+        PublishedAt: c.PublishedAt);
 
-    private static IReadOnlyList<CoursePricingPlan> BuildPlans(AcademyDemoSeed.SeedCourse c)
-    {
-        if (c.IsFree)
-        {
-            return new[]
-            {
-                new CoursePricingPlan("free", "Inscripción gratuita", 0m, AcademyDemoSeed.Currency, 1),
-            };
-        }
-
-        // Contado (1 cuota) + 3 cuotas con recargo del 8% (EMI). El recargo se
-        // redondea a entero (patrón visual COP, sin decimales).
-        var installmentTotal = decimal.Round(c.Price * 1.08m, 0, MidpointRounding.AwayFromZero);
-        return new[]
-        {
-            new CoursePricingPlan("full", "Pago de contado", c.Price, AcademyDemoSeed.Currency, 1),
-            new CoursePricingPlan("emi-3", "3 cuotas", installmentTotal, AcademyDemoSeed.Currency, 3),
-        };
-    }
 }

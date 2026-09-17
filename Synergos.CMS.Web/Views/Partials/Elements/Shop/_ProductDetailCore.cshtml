@@ -35,8 +35,14 @@
 
     var sku = product.Value<string>("productSku") ?? string.Empty;
     var name = product.Value<string>("productName") ?? product.Name ?? sku;
+    // El precio se lee con la MISMA regla que el catálogo y el carrito (#123):
+    // `Synergos.CMS.Web.Services.PrecioAutorado`. Aquí `false` no puede omitir la ficha —la
+    // ficha ES la página—, así que la política es la otra mitad de la misma decisión: sin
+    // precio legible NO se pinta precio y NO se pinta el botón de comprar. Pintar "$ 0" o
+    // "$ 49" sobre un "49.000" es lo que dejaba al comprador tocar «Añadir» a un precio que
+    // nadie autoró.
     var priceRaw = product.Value<string>("productPriceBase");
-    var price = decimal.TryParse(priceRaw, NumberStyles.Number, CultureInfo.InvariantCulture, out var p) ? p : 0m;
+    var hasPrice = Synergos.CMS.Web.Services.PrecioAutorado.EsInequivoco(priceRaw, out var price) && price > 0m;
     var inStock = product.Value<bool>("productInStock");
     var images = Synergos.CMS.Web.Services.MediaPickerReader.ReadMedia(product, "productImages");
     var variantsJson = product.Value<string>("productVariantsJson");
@@ -99,9 +105,12 @@
     </header>
 
     <section class="syn-product__pricing">
-        <p class="syn-product__price" data-price="@price.ToString(CultureInfo.InvariantCulture)">
-            @PriceFormatter.Format(price, currency)
-        </p>
+        @if (hasPrice)
+        {
+            <p class="syn-product__price" data-price="@price.ToString(CultureInfo.InvariantCulture)">
+                @PriceFormatter.Format(price, currency)
+            </p>
+        }
         @*
             Badge de descuento (precio tachado): REQUIERE un campo de schema
             `productPriceCompareAt` que NO existe hoy. Markup intencionalmente
@@ -136,7 +145,11 @@
         </section>
     }
 
-    @if (inStock)
+    @*
+        Sin precio legible no hay botón: el carrito omitiría la línea de todos modos (#123),
+        así que dejarlo sería un «Añadir» que no añade nada y no dice por qué.
+    *@
+    @if (inStock && hasPrice)
     {
         <button type="button" class="syn-product__add-to-cart" data-action="add-to-cart" data-sku="@sku">
             @Umbraco.GetDictionaryValue("Shop.Product.AddToCart")

@@ -308,6 +308,12 @@ public sealed class IdentityGateTests
     }
 
     /// <summary>Si ese método del servicio toca el almacén.</summary>
+    /// <remarks>
+    /// Se busca <c>.Put(</c> y no <c>_store.Put(</c>: cada capacidad le pone a su almacén el
+    /// nombre de lo que guarda —<c>_store</c> en el consentimiento, <c>_carts</c> en la canasta—,
+    /// así que atarse a uno haría que este gate diera por lectura todo lo que escribe en la
+    /// siguiente. Es el mismo error de enumerar en vez de medir, un piso más abajo.
+    /// </remarks>
     private static bool Escribe(string servicio, string metodo)
     {
         var i = servicio.IndexOf($" {metodo}(", StringComparison.Ordinal);
@@ -315,7 +321,228 @@ public sealed class IdentityGateTests
 
         var fin = servicio.IndexOf("\n    public ", i + 1, StringComparison.Ordinal);
         var cuerpo = fin > i ? servicio[i..fin] : servicio[i..];
-        return cuerpo.Contains("_store.Put(", StringComparison.Ordinal);
+        return cuerpo.Contains(".Put(", StringComparison.Ordinal);
+    }
+
+    // ── La canasta (HU #14) ─────────────────────────────────────────────────
+
+    /// <summary>El cuerpo del endpoint de <c>Api.Cart</c> que abre una canasta.</summary>
+    private static string AbrirCanasta()
+    {
+        var codigo = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.Api.Cart", "Endpoints", "CartEndpoints.cs"));
+
+        var desde = codigo.IndexOf("MapPost(\"/v1/carts\"", StringComparison.Ordinal);
+        Assert.True(desde > 0, "Cambió la ruta de abrir canasta: revisar este gate.");
+
+        var hasta = codigo.IndexOf("        });", desde, StringComparison.Ordinal);
+        Assert.True(hasta > desde, "No se pudo delimitar el endpoint de abrir canasta: revisar este gate.");
+        return codigo[desde..hasta];
+    }
+
+    /// <summary>
+    /// Abrir una canasta RESUELVE quién es su dueño; no se cree lo declarado (HU #14).
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el único endpoint de la canasta en el que el llamador <b>nombra a una persona</b>.
+    /// Hasta esta rebanada, cualquiera con la llave compartida abría canastas a nombre de quien
+    /// quisiera — el defecto #42 sobre el dato que decide de quién es lo que se va a comprar.</para>
+    ///
+    /// <para>El gate mira el <b>cableado</b>, no la regla: los tests del resolutor compartido y
+    /// los del servicio pasan en verde con el borde desconectado, y el que decide es lo que hay
+    /// entre los dos. Es la lección que costó una mutación entera en la rebanada 5.</para>
+    /// </remarks>
+    [Fact]
+    public void La_canasta_RESUELVE_la_identidad_de_su_dueno()
+    {
+        var cuerpo = AbrirCanasta();
+
+        Assert.Contains("Afirmacion(identidad, http", cuerpo, StringComparison.Ordinal);
+
+        // Y lo que baja al servicio es lo RESUELTO. `req.Assertion` es lo que dijo el llamador:
+        // puede leerse, pero no puede ser lo que se guarda.
+        Assert.Contains("assertion.Value", cuerpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("req.Assertion)", cuerpo, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Y la canasta GUARDA con qué se afirmó que su dueño es su dueño.
+    /// </summary>
+    /// <remarks>
+    /// Sin esto el arreglo sería invisible: las canastas nuevas valdrían más que las viejas y nada
+    /// lo diría. Es la mitad que faltó en #42 y que #72 tuvo que añadir después.
+    /// </remarks>
+    [Fact]
+    public void La_canasta_guarda_con_que_se_afirmo_su_dueno()
+    {
+        var dominio = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.Api.Cart", "Domain", "Cart.cs"));
+        Assert.Contains("IdentityAssertion? OpenedWith", dominio, StringComparison.Ordinal);
+
+        var servicio = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.Api.Cart", "Domain", "CartService.cs"));
+
+        // La canasta nueva lleva la afirmación RESUELTA, no una constante: con una constante, una
+        // abierta presentando token quedaría anotada como si sólo la respaldara nuestra palabra.
+        Assert.Contains("Now + vigencia, false, assertion)", servicio, StringComparison.Ordinal);
+        Assert.DoesNotContain("IdentityAssertion.", servicio, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// La canasta no reimplementa la regla de la afirmación, ni sale a preguntarla.
+    /// </summary>
+    /// <remarks>
+    /// La regla de «sólo se acepta a la baja» vive en <c>Synergos.Shared</c> porque la comparten
+    /// las capacidades que aceptan identidad; una copia local se desviaría de la original el día
+    /// que la original cambie, y en silencio, porque las dos compilan. Y verificar es LOCAL:
+    /// preguntarle a <c>Api.Identity</c> abriría una flecha capacidad→capacidad (#49) y la
+    /// convertiría en el punto único de fallo de las veinte.
+    /// </remarks>
+    [Fact]
+    public void La_canasta_no_reimplementa_la_regla_de_la_afirmacion()
+    {
+        var codigo = SinComentarios(Path.Combine(
+            RepoRoot(), "Synergos.Api.Cart", "Endpoints", "CartEndpoints.cs"));
+
+        Assert.Contains("IdentityAssertions.Resolve(", codigo, StringComparison.Ordinal);
+        Assert.Contains("IdentityTokens.HeaderName", codigo, StringComparison.Ordinal);
+
+        // Y NO decide por su cuenta qué se acepta sin prueba: eso es de la regla compartida.
+        Assert.DoesNotContain("assertion_not_proven", codigo, StringComparison.Ordinal);
+        Assert.DoesNotContain("HttpClient", codigo, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Todo endpoint de la canasta que ESCRIBE y NOMBRA a una persona resuelve identidad.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Se mide, no se enumera</b>, que es la lección del defecto #83 y de «los seis de
+    /// <c>Synergos.Shared</c>»: una lista escrita a mano es exacta el día que se escribe y nada la
+    /// vuelve a mirar. Acá se cruzan dos medidas contra el disco —qué contratos de petición dejan
+    /// al llamador nombrar al <b>dueño</b>, y qué endpoints tocan el almacén— y la obligación sale
+    /// de la intersección.</para>
+    ///
+    /// <para><b>Y son las DOS condiciones, no una.</b> «Escribe» solo no sirve acá: poner una
+    /// línea escribe y no nombra a nadie —lo que su cuerpo nombra es el producto, el OBJETO de la
+    /// operación—, así que exigirle una afirmación no añadiría ninguna prueba y sólo movería el
+    /// campo de sitio. Que alguien pueda tocar la canasta de otro si adivina su identificador es
+    /// una pregunta distinta —autorizar, no atribuir— y es el mismo reparto que <c>CLAUDE.md</c>
+    /// §11 hace al explicar por qué trece capacidades no tienen nada que comprobar.</para>
+    /// </remarks>
+    [Fact]
+    public void Ningun_endpoint_de_la_canasta_que_atribuye_se_queda_fuera()
+    {
+        var raiz = RepoRoot();
+        var endpoints = SinComentarios(Path.Combine(raiz, "Synergos.Api.Cart", "Endpoints", "CartEndpoints.cs"));
+        var servicio = SinComentarios(Path.Combine(raiz, "Synergos.Api.Cart", "Domain", "CartService.cs"));
+        var contratos = SinComentarios(Path.Combine(raiz, "Synergos.Api.Cart", "Contracts", "CartContracts.cs"));
+
+        // 1) Qué contratos de PETICIÓN dejan que el llamador nombre al dueño.
+        var nombranDuenio = System.Text.RegularExpressions.Regex
+            .Matches(contratos, @"record\s+(?<tipo>\w*Request)\s*\((?<args>[^)]*)\)")
+            .Where(m => m.Groups["args"].Value.Contains("OwnerKind", StringComparison.Ordinal)
+                        && m.Groups["args"].Value.Contains("OwnerId", StringComparison.Ordinal))
+            .Select(m => m.Groups["tipo"].Value)
+            .ToList();
+
+        Assert.True(nombranDuenio.Count > 0,
+            "Ningún contrato de petición de la canasta nombra al dueño: o cambiaron de nombre esos "
+            + "campos, o este gate se quedó vigilando el vacío.");
+
+        // 2) Qué endpoints tocan el almacén, deducido del servicio al que llaman.
+        var rutas = System.Text.RegularExpressions.Regex
+            .Matches(endpoints, @"app\.MapPost\(""(?<ruta>[^""]+)""")
+            .Select(m => m.Groups["ruta"].Value)
+            .ToList();
+
+        Assert.NotEmpty(rutas);
+        var comprobados = 0;
+
+        foreach (var ruta in rutas)
+        {
+            var i = endpoints.IndexOf($"MapPost(\"{ruta}\"", StringComparison.Ordinal);
+            var fin = endpoints.IndexOf("app.Map", i + 1, StringComparison.Ordinal);
+            var cuerpo = fin > i ? endpoints[i..fin] : endpoints[i..];
+
+            var llamadas = System.Text.RegularExpressions.Regex
+                .Matches(cuerpo, @"svc\.(?<metodo>[A-Z]\w*)\(")
+                .Select(m => m.Groups["metodo"].Value)
+                .Distinct()
+                .ToList();
+
+            if (!llamadas.Any(m => Escribe(servicio, m))) continue;
+            if (!nombranDuenio.Any(t => cuerpo.Contains(t, StringComparison.Ordinal))) continue;
+
+            comprobados++;
+            Assert.True(cuerpo.Contains("Afirmacion(identidad, http", StringComparison.Ordinal),
+                $"'{ruta}' escribe ({string.Join(", ", llamadas)}) nombrando al dueño y no resuelve "
+                + "identidad: la capacidad vuelve a creerle al llamador de quién es la canasta.");
+        }
+
+        Assert.True(comprobados >= 1,
+            $"El gate encontró {comprobados} endpoints que escriben nombrando al dueño; era al "
+            + "menos uno —abrir la canasta—. Si no encuentra ninguno, no vigila nada.");
+    }
+
+    /// <summary>
+    /// Toda capacidad que VERIFICA identidad recibe la llave en el despliegue — medido.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Este gate existe porque la lista del generador ya se había desincronizado.</b>
+    /// <c>tools/compose-gen.mjs</c> llevaba a mano las capacidades que verifican tokens y decía
+    /// dos cuando eran cuatro: <c>Api.Consent</c> (rebanada 5) y <c>Api.Audit</c> (#72) llamaban a
+    /// <c>AddIdentityTokens</c> y el compose no les pasaba la llave. Eso no falla al arrancar — la
+    /// capacidad sirve y RECHAZA el primer token que alguien le presente, o sea un despliegue con
+    /// la llave bien puesta comportándose como uno sin llave, que es el síntoma que el gate de al
+    /// lado llama de los peores de diagnosticar.</para>
+    ///
+    /// <para><b>Y no se enumera: se deriva del disco</b>, igual que el generador deriva todo lo
+    /// demás. Una lista escrita a mano es exacta el día que se escribe — el mismo error que el
+    /// defecto #83 y que «los seis de <c>Synergos.Shared</c>».</para>
+    /// </remarks>
+    [Fact]
+    public void Toda_capacidad_que_verifica_identidad_recibe_la_llave_en_el_despliegue()
+    {
+        var raiz = RepoRoot();
+
+        var verifican = Directory.EnumerateDirectories(raiz, "Synergos.Api.*")
+            .Select(d => (Proyecto: Path.GetFileName(d), Programa: Path.Combine(d, "Program.cs")))
+            .Where(x => File.Exists(x.Programa))
+            .Where(x => SinComentarios(x.Programa).Contains("AddIdentityTokens(", StringComparison.Ordinal))
+            .Select(x => x.Proyecto!)
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(verifican.Count >= 6,
+            $"Sólo {verifican.Count} capacidades cablean tokens de identidad; eran seis al escribir "
+            + "esto (Identity, Messaging, Workflow, Consent, Audit y la canasta). Si el "
+            + "descubrimiento se rompe, este gate pasa vigilando cero.");
+
+        var compose = File.ReadAllLines(Path.Combine(raiz, "compose.prod.yml"));
+
+        foreach (var proyecto in verifican)
+        {
+            var servicio = proyecto.Replace("Synergos.", string.Empty, StringComparison.Ordinal)
+                .Replace(".", "-", StringComparison.Ordinal).ToLowerInvariant();
+
+            Assert.True(Bloque(compose, servicio).Contains("IdentityTokens__Keys", StringComparison.Ordinal),
+                $"'{servicio}' verifica tokens de identidad y el compose no le pasa "
+                + "IdentityTokens__Keys. Arrancaría sin poder verificar y rechazaría el primer "
+                + "token que le presenten: un servidor bien configurado que se comporta como uno "
+                + "sin llave. Se deriva en tools/compose-gen.mjs.");
+        }
+    }
+
+    /// <summary>El bloque de un servicio dentro del compose, de su cabecera a la siguiente.</summary>
+    private static string Bloque(string[] compose, string servicio)
+    {
+        var i = Array.FindIndex(compose, l => l == $"  {servicio}:");
+        Assert.True(i >= 0, $"El compose no tiene un servicio '{servicio}': se regenera con tools/compose-gen.mjs.");
+
+        var fin = Array.FindIndex(compose, i + 1, l =>
+            l.Length > 2 && l[0] == ' ' && l[1] == ' ' && l[2] != ' ' && l.TrimEnd().EndsWith(':'));
+
+        return string.Join('\n', fin > i ? compose[i..fin] : compose[i..]);
     }
 
     /// <summary>

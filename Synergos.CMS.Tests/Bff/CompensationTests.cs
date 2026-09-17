@@ -110,6 +110,9 @@ public sealed class CompensationTests
             => _s.Values.Where(x => x.Status == SagaStatus.Running && x.StartedAtUtc < limite).ToList();
 
         public void Put(AppointmentSaga saga) => _s[saga.Id] = saga;
+
+        // Un fake en memoria no tiene caché que vaciar: la verdad ES el diccionario (#34).
+        public void Invalidate() { }
     }
 
     private static readonly DateTimeOffset Ahora = new(2026, 3, 2, 10, 0, 0, TimeSpan.Zero);
@@ -156,7 +159,7 @@ public sealed class CompensationTests
         var vocabulario = new SagaVocabulary("salud", "la cita");
         var comp = new Compensator<AppointmentSaga>(new SaludCompensationExecutor(api), reloj, NullLogger<Compensator<AppointmentSaga>>.Instance);
         var aviso = new CompensationAlert(fabrica, vocabulario, Options.Create(alertas ?? Guardia()));
-        var motor = new SagaEngine<AppointmentSaga>(sagas, comp, aviso, vocabulario, reloj,
+        var motor = new SagaEngine<AppointmentSaga>(sagas, comp, aviso, ArriendoDePrueba.Nuevo(), vocabulario, reloj,
             NullLogger<SagaEngine<AppointmentSaga>>.Instance);
         return new Contexto(
             new AppointmentFlow(api, motor, reloj, NullLogger<AppointmentFlow>.Instance),

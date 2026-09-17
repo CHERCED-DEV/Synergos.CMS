@@ -115,4 +115,34 @@ public static class PaymentRules
                 $"Se pidió devolver {amount} y solo quedan {payment.Refundable} devolubles de {payment.Amount}.")
             : null;
     }
+
+    /// <summary>
+    /// Si lo que el proveedor cuenta de un cobro se puede anotar.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La idempotencia va ANTES que el estado, y acá no hay llave que resolver: la
+    /// resuelve el propio estado.</b> Un webhook se reentrega hasta ver un 2xx, así que el mismo
+    /// <c>APPROVED</c> llega varias veces; y llega además <b>fuera de orden</b>, porque nada
+    /// garantiza que el <c>PENDING</c> se entregue antes que el desenlace. Por eso solo se avanza
+    /// desde <see cref="PaymentStatus.Authorized"/>: desde cualquier otro sitio el evento se acusa
+    /// y no se aplica. Al revés —aplicar siempre lo último que llegue— un reenvío tardío
+    /// retrocedería un cobro ya capturado, y eso no falla: se guarda.</para>
+    ///
+    /// <para><c>null</c> significa «anótalo»; un rechazo, «no lo anotes y di por qué».</para>
+    /// </remarks>
+    public static Rejection? CheckProviderEvent(Payment payment, PaymentStatus destino, long centavosDelProveedor)
+    {
+        if (payment.Status != PaymentStatus.Authorized) return null;   // ya resuelto: se acusa y no se toca
+
+        if (destino != PaymentStatus.Captured) return null;
+
+        var esperados = (long)Math.Round(payment.Amount.Amount * 100m, 0, MidpointRounding.AwayFromZero);
+        if (centavosDelProveedor == esperados) return null;
+
+        // La firma de integridad cubre el monto TAL COMO SE ENVIÓ, así que un error de centavos
+        // produce una transacción impecable por la cifra equivocada. Dejarla pasar acá sería
+        // despachar un pedido cobrando cien veces menos, y se descubriría cuadrando la caja.
+        return Rejection.Conflict($"{CodePrefix}.provider_amount_mismatch",
+            $"El proveedor dice {centavosDelProveedor} centavos y el cobro era de {esperados}.");
+    }
 }

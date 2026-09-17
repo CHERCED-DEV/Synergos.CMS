@@ -1,7 +1,5 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -136,11 +134,7 @@ internal sealed class ViajesWire
     /// en crudo lo dejaría escrito en el disco de otro servicio — lo mismo que se corrigió en la
     /// HU #35 tras verlo con los procesos vivos, y lo que costó el defecto #47 en la tienda.
     /// </remarks>
-    public static string TravellerId(string? guestEmail)
-    {
-        var correo = (guestEmail ?? string.Empty).Trim().ToLowerInvariant();
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(correo)))[..16].ToLowerInvariant();
-    }
+    public static string TravellerId(string? guestEmail) => SeudonimoDePersona.De(guestEmail);
 
     private sealed record ProblemDto
     {

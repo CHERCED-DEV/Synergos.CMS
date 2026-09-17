@@ -47,7 +47,7 @@ public sealed class CartServiceTests
     private static IdempotencyKey Llave(string s) => IdempotencyKey.Of(s);
 
     private static Modelo.Cart Abierta(Modelo.CartService svc, string llave = "c1", TimeSpan? ttl = null)
-        => svc.Open(Duenio, ttl, Llave(llave)).Value;
+        => svc.Open(Duenio, ttl, Llave(llave), IdentityAssertion.CmsSession).Value;
 
     [Fact]
     public void Poner_la_misma_linea_dos_veces_REEMPLAZA_y_no_suma()
@@ -83,8 +83,8 @@ public sealed class CartServiceTests
     {
         var (svc, store, _) = Nuevo();
 
-        var a = svc.Open(Duenio, null, Llave("misma"));
-        var b = svc.Open(Duenio, null, Llave("misma"));
+        var a = svc.Open(Duenio, null, Llave("misma"), IdentityAssertion.CmsSession);
+        var b = svc.Open(Duenio, null, Llave("misma"), IdentityAssertion.CmsSession);
 
         Assert.Equal(a.Value.Id, b.Value.Id);
         Assert.Equal(1, store.Cuantas);
@@ -191,8 +191,8 @@ public sealed class CartServiceTests
     {
         var (svc, _, _) = Nuevo();
 
-        Assert.Equal("cart.bad_ttl", svc.Open(Duenio, TimeSpan.Zero, Llave("k1")).Rejection!.Code);
-        Assert.Equal("cart.bad_ttl", svc.Open(Duenio, Modelo.CartRules.MaxTtl + TimeSpan.FromDays(1), Llave("k2")).Rejection!.Code);
+        Assert.Equal("cart.bad_ttl", svc.Open(Duenio, TimeSpan.Zero, Llave("k1"), IdentityAssertion.CmsSession).Rejection!.Code);
+        Assert.Equal("cart.bad_ttl", svc.Open(Duenio, Modelo.CartRules.MaxTtl + TimeSpan.FromDays(1), Llave("k2"), IdentityAssertion.CmsSession).Rejection!.Code);
     }
 
     [Fact]
@@ -208,7 +208,7 @@ public sealed class CartServiceTests
     {
         var (svc, _, _) = Nuevo();
         Abierta(svc, "c1");
-        svc.Open(Ref.Create("identity.member", "m-2"), null, Llave("c2"));
+        svc.Open(Ref.Create("identity.member", "m-2"), null, Llave("c2"), IdentityAssertion.CmsSession);
 
         var mias = svc.ListForOwner(Duenio, 0, 10);
 
