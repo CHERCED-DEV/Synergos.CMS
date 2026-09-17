@@ -19,7 +19,8 @@
 //   node tools/service-matrix.mjs --list     → uno por línea, para leerlo
 //
 import { readdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const raiz = process.cwd();
 
@@ -70,7 +71,13 @@ export function descubrir(dir = raiz, prefijo = '') {
   return salida.sort((a, b) => a.nombre.localeCompare(b.nombre, 'en'));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// `file://${process.argv[1]}` NO sirve para esto y el fallo es silencioso: en Windows
+// `argv[1]` trae barras invertidas (`C:\...\tools\service-matrix.mjs`) y `import.meta.url`
+// es `file:///C:/.../tools/service-matrix.mjs`, así que nunca igualan y el bloque entero
+// —incluida la red de seguridad de abajo— deja de correr con exit 0. En Linux sí igualaba,
+// que es por qué el CI no lo veía y el rojo salía solo en la máquina del arquitecto.
+// Comparar rutas ya resueltas es lo que hacen los otros siete `.mjs` de esta carpeta.
+if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
   const lista = descubrir();
 
   if (lista.length === 0) {

@@ -148,22 +148,79 @@ public sealed class ContainerBuildTests
         Assert.Contains("VOLUME /app/data", texto, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void La_red_de_seguridad_del_script_se_dispara_cuando_no_descubre_nada()
+    {
+        // El script tiene escrito «un gate que no puede fallar es peor que no tener gate», y su
+        // red —salir con 1 si la lista sale vacía— vivía DENTRO del bloque de entrada CLI. Ese
+        // bloque no corría en Windows, así que la red era código muerto: salida vacía y exit 0,
+        // que es exactamente el «verde construyendo cero imágenes» que existe para impedir.
+        //
+        // Este gate la ejerce de verdad: corre el script sobre un árbol donde NO hay servicios.
+        // Si alguien vuelve a romper el guard de entrada, acá se ve — y se ve con el mensaje del
+        // script, no con un error de parseo tres capas más arriba.
+        var script = Path.Combine(RepoRoot(), "tools", "service-matrix.mjs");
+        var vacio = Path.Combine(Path.GetTempPath(), "syn-matriz-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(vacio);
+
+        try
+        {
+            var (codigo, salida, error) = CorrerNodeEn(script, vacio);
+
+            Assert.True(codigo == 1,
+                $"El script salió con {codigo} sobre un árbol SIN servicios. Tiene que salir con 1: " +
+                $"un descubrimiento roto que sale con 0 deja el workflow construyendo cero imágenes. " +
+                $"stdout={salida.Length} bytes, stderr={error}");
+
+            Assert.Contains("no se encontró NINGÚN servicio", error, StringComparison.Ordinal);
+            Assert.True(string.IsNullOrWhiteSpace(salida),
+                "Sin servicios no hay JSON que imprimir; algo salió por stdout igual.");
+        }
+        finally
+        {
+            Directory.Delete(vacio, recursive: true);
+        }
+    }
+
     private static string CorrerNode(string script)
+    {
+        var (codigo, salida, error) = CorrerNodeEn(script, RepoRoot());
+
+        Assert.True(codigo == 0, $"service-matrix.mjs salió con {codigo}: {error}");
+
+        // Se comprueba ANTES de deserializar y por separado. Con la salida vacía, el
+        // `JsonException` que salta después no nombra nada: dice «the input does not contain any
+        // JSON tokens» y deja al que lo lee buscando un fichero corrupto que no existe. La causa
+        // real —el script no llegó a imprimir— tiene que decirla el gate.
+        Assert.False(string.IsNullOrWhiteSpace(salida),
+            "service-matrix.mjs salió con 0 pero no imprimió nada. Casi siempre es el guard de " +
+            "entrada CLI: si no reconoce que se lo invocó a él, no corre su bloque —ni su red de " +
+            "seguridad— y devuelve 0 como si todo estuviera bien.");
+
+        return salida;
+    }
+
+    private static (int Codigo, string Salida, string Error) CorrerNodeEn(string script, string dir)
     {
         using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
         {
             FileName = "node",
             ArgumentList = { script },
-            WorkingDirectory = RepoRoot(),
+            WorkingDirectory = dir,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // Node imprime UTF-8. Sin decirlo, .NET decodifica con la página de códigos de la
+            // consola y «no se encontró NINGÚN servicio» llega como mojibake: el gate no puede
+            // comparar contra el mensaje del script, y cuando falle de verdad, lo que se lea en
+            // el log tampoco va a ser lo que la herramienta dijo.
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         })!;
 
         var salida = p.StandardOutput.ReadToEnd();
         var error = p.StandardError.ReadToEnd();
         p.WaitForExit();
 
-        Assert.True(p.ExitCode == 0, $"service-matrix.mjs salió con {p.ExitCode}: {error}");
-        return salida;
+        return (p.ExitCode, salida, error);
     }
 }
