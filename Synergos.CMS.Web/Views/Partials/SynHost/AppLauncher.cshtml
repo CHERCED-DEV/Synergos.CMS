@@ -1,6 +1,12 @@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+// Las vistas se compilan EN CALIENTE (RazorCompileOnBuild=false, obligado por
+// ModelsMode=InMemoryAuto) y el compilador de runtime lee sus opciones del deps.json,
+// donde viaja `warningsAsErrors: true` — pero NO viaja `nullable`. Así que cada `object?`
+// de aquí abajo da CS8669 («anotación fuera de contexto nullable»), el trinquete del #134
+// lo asciende a error, y la vista devuelve 500 con el build entero en verde.
+#nullable enable
     // apps: JSON array de dominios. Se DESERIALIZA a JsonElement (como FeatureGrid
     // con itemsJson) para que el emitter lo serialice como array anidado en config
     // — el componente Angular (normalizeApps) requiere un array, no un string.

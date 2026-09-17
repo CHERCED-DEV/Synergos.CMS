@@ -22,7 +22,7 @@
 
     var welcomeMessage = !string.IsNullOrWhiteSpace(Model.WelcomeMessage)
         ? Model.WelcomeMessage
-        : Umbraco.GetDictionaryValue("Platform.WelcomeFallback",
+        : Umbraco.GetDictionaryValueOrDefault("Platform.WelcomeFallback",
             "Un solo motor, un solo schema — múltiples productos sobre el mismo core.");
 
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
