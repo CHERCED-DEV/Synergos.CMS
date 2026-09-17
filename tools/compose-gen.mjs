@@ -579,7 +579,18 @@ if (CHECK) {
   let actual = '';
   try { actual = readFileSync(DESTINO, 'utf-8'); } catch { /* no existe */ }
 
-  if (actual !== generado) {
+  // El fin de línea NO es contenido acá, y compararlo crudo hacía que el gate acusara de
+  // «no está al día» a un fichero que lo estaba. En un checkout Windows con `core.autocrlf`
+  // el fichero en disco es CRLF y este generador emite LF: difieren en un byte por línea y
+  // en ninguno de los que importan. Medido: `tr -d '\r'` sobre el comiteado daba un fichero
+  // IDÉNTICO al generado, y aun así el gate salía rojo en cada corrida.
+  //
+  // Se normaliza SOLO el salto de línea, a propósito. Cualquier otra tolerancia —espacios,
+  // orden, mayúsculas— dejaría pasar justo lo que este gate existe para cazar: un servicio
+  // que se añadió y que nadie regeneró, y que por eso no se despliega.
+  const sinCR = (t) => t.replace(/\r\n/g, '\n');
+
+  if (sinCR(actual) !== sinCR(generado)) {
     console.error(
       '[compose-gen] ✗ compose.prod.yml no está al día.\n' +
       '  → Corré: node tools/compose-gen.mjs\n' +

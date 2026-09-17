@@ -363,7 +363,63 @@ public sealed class ComposeStackTests
             + "el contenido: encendida en producción es un borrado anónimo desde internet (#113).");
     }
 
+    [Fact]
+    public void El_check_ignora_el_fin_de_linea_pero_NO_el_contenido()
+    {
+        // Las dos direcciones, porque arreglar una sin la otra es peor que el defecto.
+        //
+        // El gate de arriba comparaba las cadenas crudas. En un checkout Windows con
+        // `core.autocrlf` el fichero en disco es CRLF y el generador emite LF, así que salía
+        // rojo SIEMPRE — acusando de «el servicio nuevo no se despliega», que es un cargo serio,
+        // sobre un fichero que estaba al día. Un gate que grita en cada corrida deja de leerse, y
+        // entonces no protege de nada.
+        //
+        // Pero la tolerancia tiene que parar en el fin de línea. Si se relaja de más, deja pasar
+        // exactamente lo que existe para cazar. Por eso acá se comprueban las dos.
+        var script = Path.Combine(RepoRoot(), "tools", "compose-gen.mjs");
+        var destino = Path.Combine(RepoRoot(), "compose.prod.yml");
+        var original = File.ReadAllBytes(destino);
+
+        try
+        {
+            var texto = File.ReadAllText(destino);
+            var lf = texto.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+            // (1) Solo LF → al día.
+            File.WriteAllText(destino, lf);
+            Assert.Equal(0, CodigoDeNode(script, "--check"));
+
+            // (2) Solo CRLF, mismo contenido → también al día. Es el caso que estaba rojo.
+            File.WriteAllText(destino, lf.Replace("\n", "\r\n", StringComparison.Ordinal));
+            Assert.Equal(0, CodigoDeNode(script, "--check"));
+
+            // (3) Un servicio de menos → rojo. Es el defecto de verdad: alguien añade una
+            //     capacidad, nadie regenera, y el servicio nuevo no se despliega.
+            var corte = lf.LastIndexOf("\n  api-", StringComparison.Ordinal);
+            Assert.True(corte > 0, "No se encontró ningún servicio 'api-*' que quitar del compose.");
+            File.WriteAllText(destino, lf[..corte] + "\n");
+            Assert.Equal(1, CodigoDeNode(script, "--check"));
+        }
+        finally
+        {
+            File.WriteAllBytes(destino, original);
+        }
+
+        Assert.Equal(original, File.ReadAllBytes(destino));
+    }
+
     private static string CorrerNode(string script, params string[] args)
+    {
+        var (codigo, salida, error) = EjecutarNode(script, args);
+
+        Assert.True(codigo == 0, $"{Path.GetFileName(script)} salió con {codigo}:{Environment.NewLine}{error}{salida}");
+        return salida;
+    }
+
+    private static int CodigoDeNode(string script, params string[] args)
+        => EjecutarNode(script, args).Codigo;
+
+    private static (int Codigo, string Salida, string Error) EjecutarNode(string script, params string[] args)
     {
         var psi = new System.Diagnostics.ProcessStartInfo
         {
@@ -371,6 +427,10 @@ public sealed class ComposeStackTests
             WorkingDirectory = RepoRoot(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // Node imprime UTF-8; sin esto se decodifica con la página de códigos de la consola
+            // y lo que se lee en el log no es lo que la herramienta dijo.
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         psi.ArgumentList.Add(script);
         foreach (var a in args) psi.ArgumentList.Add(a);
@@ -380,7 +440,6 @@ public sealed class ComposeStackTests
         var error = p.StandardError.ReadToEnd();
         p.WaitForExit();
 
-        Assert.True(p.ExitCode == 0, $"{Path.GetFileName(script)} salió con {p.ExitCode}:{Environment.NewLine}{error}{salida}");
-        return salida;
+        return (p.ExitCode, salida, error);
     }
 }
