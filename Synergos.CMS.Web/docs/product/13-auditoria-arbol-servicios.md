@@ -1,7 +1,9 @@
 # 13 — Auditoría del árbol de servicios
 
-> **Estado: medido contra el disco. Sin código todavía.** Cinco hallazgos, cuatro de ellos
-> con issue por abrir. El árbol quedó byte a byte como se encontró.
+> **Estado: cerrada. Los cuatro defectos arreglados, cada uno con su gate visto en rojo.**
+> Las tres suites quedan verdes en la máquina del arquitecto por primera vez desde el #136, y
+> `compose.prod.yml` sale byte-idéntico — la topología desplegada no se movió. Lo que queda
+> abierto está en §6.
 >
 > Alcance: `backend/nucleo/`, `backend/capacidades/` (20) y `backend/orquestadores/` (5).
 > El árbol del CMS (`Synergos.CMS.*`) queda fuera: son dos árboles con reglas distintas.
@@ -359,3 +361,38 @@ Ninguno se codifica antes de abrir su issue (`ticket-first.yml` lo rechaza).
 
 **Las fases 1–4 no cambian la topología desplegada**, así que `compose.prod.yml` debe salir
 byte-idéntico — y desde la fase 3, eso por fin se puede comprobar.
+
+---
+
+## 5.bis Lo que se ejecutó, y lo que apareció al ejecutarlo
+
+Las cinco fases salieron en el orden propuesto. Lo que no estaba en el plan es lo que vale la
+pena leer:
+
+| Commit | Qué | Lo que no estaba previsto |
+|---|---|---|
+| `1d14d16c` | H2 · guard CLI → `fileURLToPath` | El gate existente moría con un `JsonException` que no nombraba nada: ahora comprueba la salida vacía **antes** de deserializar. Y el runner decodificaba la salida de node con la página de códigos de la consola, no UTF-8. |
+| `74ee075e` | H3 · `--check` normaliza el fin de línea | — |
+| `38be68df` | Los cuatro que tocan `compose.prod.yml` corren en serie | **El gate de H3 tiene que mutar el fichero real** —`--check` lee una ruta fija— y xUnit paraleliza entre clases: otras tres lo leen. Salió un rojo **intermitente**, en una clase ajena al cambio, que desaparecía al repetir. Se vio antes de subirlo; cinco corridas verdes tras serializarlas. |
+| `2f377da6` | H4 · el intérprete se prueba, no se busca por nombre | **Había un segundo defecto debajo del primero.** Con el lector ya corriendo, la salida de Python en Windows traducía `\n` a `\r\n`: como el separador es 0x1F, el `\r` no rompía la división — se colaba dentro del último valor y `moneda` pasaba a valer `COP\r`. |
+| `9f7fd911` | H1 · la ausencia deja de valer cero | La regla **baja al servicio** en vez de quedarse en el borde. Ahí arriba no llega ningún test de esta suite —ninguna capacidad tiene tests de endpoint— y montar infraestructura HTTP sería un paquete NuGet nuevo, que §6 sujeta a ADR. Ese reparto **era** el hueco, así que moverla es parte del arreglo y no una preferencia. |
+
+Los cinco gates se vieron en rojo con su defecto reintroducido y se restauraron tocando el
+fichero. Dos de las mutaciones **no llegaron a aplicarse** al primer intento —el patrón no
+casaba por el fin de línea— y la suite salió verde: una corrida verde sobre una mutación que no
+entró no prueba nada, y se repitieron hasta verlas rojas de verdad.
+
+**Cifras que se movieron:** 3268 → 3272 tests (+2 en servicios, +2 en arquitectura), 242 → 243
+códigos de rechazo, y dos rutas de `CLAUDE.md` que no existen desde el #136 — el comando de la
+suite de servicios, y la carpeta anidada de §4.2 que §7 dice con todas las letras que no existe.
+
+## 6. Lo que queda abierto
+
+- **Los cinco issues no están abiertos.** El conector de GitHub pide autenticación que esta
+  sesión no puede dar, y `gh` no está instalado. Los cuerpos quedaron redactados; los commits
+  referencian este documento en vez de un número.
+- **El build de las cuatro soluciones a la vez no se pudo verificar.** `Synergos.CMS.Web` estaba
+  corriendo y bloquea los DLL de `Interfaces` y `Application`. `Synergos.Apis.sln` y
+  `Synergos.Bff.sln` compilan en 0 avisos y 0 errores, y las tres suites corren verdes. Falta una
+  pasada con el CMS parado.
+- **H5 sigue sin tocarse**, y es la decisión de §4.3, no un olvido.
