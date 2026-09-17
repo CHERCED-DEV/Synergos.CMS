@@ -220,32 +220,59 @@ Dos sitios guardan el estado viejo, y ninguno se limpia solo:
    que sigue creyendo que el proyecto de tests pide nueve capacidades y NuGet
    contesta lo único que puede.
 
-Con Visual Studio **cerrado**, y en este orden:
+Con Visual Studio **cerrado**:
 
 ```powershell
-# 1. bin/ y obj/ de todo el árbol — esto es lo que vacía las carpetas huérfanas
+# 1. bin/ y obj/ de todo el árbol — esto es lo que VACÍA las carpetas huérfanas
 Get-ChildItem -Recurse -Directory -Include bin,obj | Remove-Item -Recurse -Force
 
-# 2. ahora sí: las carpetas del backend viejo, que quedaron VACÍAS
-git clean -nd            # en seco. Tiene que listar sólo carpetas del backend viejo
-git clean -fd            # y entonces se van
+# 2. las huérfanas se identifican POR NOMBRE en la raíz, no con git clean
+$viejas = Get-ChildItem -Directory | Where-Object {
+    $_.Name -like 'Synergos.Api.*' -or $_.Name -like 'Synergos.Bff.*' -or
+    $_.Name -eq 'Synergos.Core'    -or $_.Name -eq 'Synergos.Shared'
+}
 
-# 3. el caché del IDE
+# GUARDA: ninguna puede tener un solo fichero dentro. Si alguna no da 0, PARÁ
+$viejas | ForEach-Object {
+    $n = (Get-ChildItem $_.FullName -Recurse -File -Force | Measure-Object).Count
+    '{0,-34} {1} ficheros' -f $_.Name, $n
+}
+
+# y sólo si todas dieron 0
+$viejas | Remove-Item -Recurse -Force
+
+# 3. el caché del grafo del IDE
 Remove-Item -Recurse -Force .vs -ErrorAction SilentlyContinue
 
 # 4. que NuGet reconstruya el grafo — si esto sale limpio, era el IDE
 dotnet restore Synergos.CMS.sln
 ```
 
-> **El orden de 1 y 2 no es cosmético, y está medido.** `git clean -nd` **no ve**
-> la carpeta huérfana mientras tenga el `obj/` dentro: lo único que queda ahí
-> está ignorado, así que git la considera ignorada entera y la calla. Después de
-> borrar `bin`/`obj` la carpeta queda vacía y entonces sí la lista — **sin `-x`**.
+> ⚠️ **NO se usa `git clean` para esto, y la primera versión de esta sección sí
+> lo hacía.** El razonamiento parecía correcto —«las huérfanas quedan vacías, así
+> que `clean -fd` se lleva justo ésas»— y en una copia de trabajo real la lista
+> incluye **mucho más**: medido en la máquina del arquitecto, `git clean -nd`
+> proponía borrar **193 carpetas de `wwwroot/media/`** (los binarios de toda la
+> biblioteca) y **131 ficheros de `uSync/v9/Content/`** (contenido editorial
+> exportado y sin commitear). Están ahí porque son **untracked y no ignorados**,
+> así que `-fd` no los distingue de una carpeta vacía del backend viejo.
+>
+> **Lo que lo hizo fácil de cometer**: se comprobó en un repo de prueba que
+> reproducía el movimiento del #136 y **no tenía ni media ni contenido autorado**
+> — un fixture que describe un árbol que no existe (regla 10 del repo hermano).
+> Y el `-nd` en seco es lo único que lo atajó.
+>
+> Con `-x` es peor todavía: ofrece llevarse `Synergos.CMS.Web/` **entera**, con
+> `umbraco/Data/` y la SQLite de desarrollo dentro, que está ignorada a propósito
+> y no se recupera de ningún sitio.
+>
+> Por eso la identificación va **por nombre y con una guarda que cuenta
+> ficheros**: lo que se borra son dieciocho carpetas que tienen que estar vacías,
+> y si alguna no lo está, el paso se para en vez de decidir por su cuenta.
 
-> ⚠️ **Nunca `git clean -xfd` en este repo.** Medido en el mismo repo de prueba:
-> con `-x`, git ofrece llevarse **`Synergos.CMS.Web/`** entera, y ahí dentro está
-> `umbraco/Data/` con la SQLite de desarrollo, que está ignorada a propósito y no
-> se puede recuperar de ningún sitio. `-fd` sin `-x` no la toca — comprobado.
+> **Y el orden de 1 y 2 importa, aunque ya no se use `git clean`**: mientras la
+> carpeta huérfana tenga el `obj/` dentro, no está vacía. Borrar `bin`/`obj`
+> primero es lo que la deja en cero y hace que la guarda signifique algo.
 
 Para saber que quedó, sin abrir el IDE:
 
