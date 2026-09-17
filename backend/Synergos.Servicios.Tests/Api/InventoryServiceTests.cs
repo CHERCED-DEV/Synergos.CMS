@@ -94,6 +94,46 @@ public sealed class InventoryServiceTests
     private static string Declarar(Modelo.InventoryService svc, int onHand, string llave)
         => svc.Declare(Producto, onHand, Array.Empty<Modelo.StockUnit>(), Llave(llave)).Value.Id;
 
+    // ── No haber contado no es haber contado cero ───────────────────────────
+
+    [Fact]
+    public void Declarar_SIN_onHand_se_rechaza_y_no_deja_nada_escrito()
+    {
+        // El defecto: el borde hacía `req.OnHand ?? 0` y esta regla sólo miraba el negativo, así
+        // que un POST sin `onHand` creaba el ítem afirmando que se contó y no había nada — con
+        // 201. Y era irreversible por la puerta que lo creó: `subject_taken` bloquea volver a
+        // declarar el mismo Ref.
+        //
+        // Ningún test lo vio porque TODOS entran por acá con el valor explícito (el helper es
+        // `ConExistencias(int onHand)`) y el `?? 0` vivía una capa más arriba, donde esta suite no
+        // llega: ninguna capacidad tiene tests de endpoint. Las dos mitades en verde y el hueco
+        // justo en la costura. Por eso la regla se bajó al servicio: para que caiga de este lado.
+        var (svc, store) = Nuevo();
+
+        var r = svc.Declare(Producto, onHand: null, Array.Empty<Modelo.StockUnit>(), Llave("d1"));
+
+        Assert.False(r.IsOk);
+        Assert.Equal("inventory.onhand_required", r.Rejection!.Code);
+
+        // Y no basta con que rechace: no puede haber dejado el ítem a medias, porque entonces el
+        // segundo intento —el que sí trae el conteo— chocaría con `subject_taken`.
+        Assert.Null(store.FindBySubject(Producto));
+    }
+
+    [Fact]
+    public void Declarar_CERO_a_proposito_sigue_valiendo()
+    {
+        // La otra dirección, y no es ceremonia: «tengo este producto y no me queda ninguno» es una
+        // declaración legítima y frecuente. Si el arreglo la prohibiera, habría cambiado un
+        // defecto que miente por uno que estorba, y nadie lo notaría hasta el primer agotado.
+        var (svc, _) = Nuevo();
+
+        var r = svc.Declare(Producto, onHand: 0, Array.Empty<Modelo.StockUnit>(), Llave("d1"));
+
+        Assert.True(r.IsOk);
+        Assert.Equal(0, r.Value.OnHand);
+    }
+
     /// <summary>
     /// Lanza <paramref name="cuantos"/> escritores de verdad y los suelta a la vez.
     /// </summary>

@@ -34,13 +34,13 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3270 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3272 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2239 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
+   | `Synergos.Servicios.Tests` | 635 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 398 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
@@ -333,7 +333,7 @@ Dos escrituras obligatorias **en el mismo commit** que las enseñó:
 ### 4.2 Cambio de runtime C# / Razor
 
 1. Seguir el grafo de dependencias estricto.
-2. `dotnet build Synergos.CMS/Synergos.CMS.Web/Synergos.CMS.Web.csproj
+2. `dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj
     -v quiet --no-dependencies` — esperar 0 CS errors. Los
    warnings MSB3021 de file-locks son esperados mientras el Web
    corre (PID locking DLLs).
@@ -1306,6 +1306,40 @@ Las que salieron de construir el árbol de servicios (§0.B):
   desplegada va por nombre de imagen y no por ruta; que no cambie es la
   comprobación de que el movimiento es del árbol y no del producto.
 
+- `feedback_a_coalesced_absence_asserts_when_the_rule_only_guards_the_sign` —
+  **un `?? 0` en el borde no es inofensivo por sí solo ni dañino por sí solo: lo
+  decide la regla que hay debajo. Si la regla mira sólo el signo, la ausencia
+  entra por el hueco convertida en una afirmación.** Medido en `Api.Inventory`:
+  el borde hacía `req.OnHand ?? 0` y `Declare` rechazaba los negativos y aceptaba
+  el cero, así que un `POST /v1/items` **sin** `onHand` creaba el ítem afirmando
+  «conté y no hay ninguna» y contestaba **201**. El contrato dice en su propio
+  XML-doc que `onHand` es absoluto —«conté y hay 47»—, o sea que omitirlo es
+  exactamente no haber contado. Y era irreversible por la puerta que lo creó:
+  `subject_taken` bloquea volver a declarar el mismo `Ref`.
+  **El `?? 0` NO es el defecto, y por eso no se barre con un grep.** De los 21 del
+  árbol, **19** son `Math.Max(0, offset ?? 0)` de paginación —no mandar offset sí
+  significa primera página— y otro es `req.Quantity ?? 0` en el carrito, donde
+  `CheckQuantity` rechaza `<= 0` con el comentario que nombra este mismo riesgo.
+  Lo que separa a los inofensivos del defecto es **si la regla de abajo rechaza el
+  valor inventado**. Un gate que prohibiera el patrón marcaría veinte falsos.
+  **La contradicción interna es el olor que sí se puede buscar**: la misma
+  capacidad, en el mismo fichero y sesenta líneas más abajo, ya trataba esta
+  ausencia al revés — `/adjust` rechaza con `adjust_required` y con
+  `ambiguous_adjust`. Dos semánticas para el mismo nombre de campo dentro de un
+  servicio es la señal, y se ve leyendo el fichero entero en vez de la línea.
+  **Y el reparto es la razón de que nadie lo viera.** `InventoryServiceTests` tiene
+  cuarenta y pico de casos y todos entran por `svc.Declare(subject, onHand, …)` con
+  el valor explícito; el `?? 0` vivía una capa más arriba, donde esta suite **no
+  llega**: ninguna capacidad tiene tests de endpoint. Las dos mitades en verde y el
+  hueco justo en la costura.
+  **Por eso el arreglo baja la regla al servicio en vez de ponerla en el borde**,
+  aunque su hermano `/adjust` decida arriba: ahí es donde §0.B dice que la
+  capacidad dice NO, y es el único lado donde el gate puede vivir sin meter
+  infraestructura de test HTTP que hoy no existe. Y el gate va en **las dos
+  direcciones** —nulo se rechaza, cero explícito se sigue aceptando—, porque
+  declarar «no me queda ninguna» es legítimo y prohibirlo habría cambiado un
+  defecto que miente por uno que estorba.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1365,12 +1399,12 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3270 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3272 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2239
-dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 635
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 398
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
@@ -1729,11 +1763,11 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3270 tests, gates de
+**Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3272 tests, gates de
 segregación y molde en verde.
 
-> **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
+> **Los 243 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
 > y nadie la había vuelto a contar. Cuenta los códigos **literales distintos**
 > que las veinte construyen —el primer argumento de un `Rejection.*`, con
 > `{CodePrefix}` resuelto—, y por eso **excluye dos cosas que sí existen**: los

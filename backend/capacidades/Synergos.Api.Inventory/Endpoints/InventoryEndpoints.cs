@@ -24,7 +24,10 @@ public static class InventoryEndpoints
                 units.Add(new StockUnit(u.Code!.Trim(), u.Row, u.Column));
             }
 
-            return svc.Declare(subject, req.OnHand ?? 0, units, key).Match(
+            // Acá había un `?? 0`, y convertía «no dije cuántas hay» en «conté y hay cero». La
+            // ausencia viaja ENTERA al servicio: quien decide qué significa no haber contado es
+            // la capacidad, no el ruteo. Ver InventoryService.Declare.
+            return svc.Declare(subject, req.OnHand, units, key).Match(
                 i => Results.Created($"/v1/items/{i.Id}", StockItemResponse.From(i, clock.GetUtcNow())),
                 bad => bad.ToProblem());
         });
