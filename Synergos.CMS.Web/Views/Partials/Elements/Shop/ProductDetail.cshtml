@@ -22,6 +22,8 @@
 @using Umbraco.Cms.Core.Web
 @inject IUmbracoContextAccessor UmbracoContextAccessor
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var sku = Model.Value<string>("productSku");
     if (string.IsNullOrWhiteSpace(sku)) { return; }
     var showVariantPicker = Model.Value<bool>("showVariantPicker");

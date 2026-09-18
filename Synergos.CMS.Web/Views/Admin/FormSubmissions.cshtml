@@ -4,6 +4,8 @@
 *@
 @using Synergos.CMS.Interfaces
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     Layout = null;
     var pageData = ViewData["Page"] as FormSubmissionsPage
         ?? new FormSubmissionsPage(Array.Empty<FormSubmissionListItem>(), 1, 25, 0);

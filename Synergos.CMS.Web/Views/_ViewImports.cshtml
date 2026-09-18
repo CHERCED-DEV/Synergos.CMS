@@ -12,3 +12,16 @@
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
 @addTagHelper *, Smidge
 @inject Smidge.SmidgeHelper SmidgeHelper
+
+@* LA OTRA diferencia BUILD vs RUNTIME, y esta tumba el sitio entero (#134).
+
+   El compilador de runtime lee sus opciones del deps.json, donde viaja
+   `warningsAsErrors: true` — pero NO viaja `nullable`. Así que una vista con un
+   `object?` se compila SIN contexto nullable, da CS8669 («anotación fuera de
+   contexto»), el trinquete lo asciende a error, y la página contesta 500 con el
+   build entero en verde: `dotnet build` SÍ tiene contexto nullable, así que ahí
+   no se ve nunca.
+
+   No se arregla acá: probado, un `#nullable enable` en este fichero se emite como
+   texto literal y no llega al C# generado. Va DENTRO del primer bloque de código de
+   cada vista que use anotaciones, y lo vigila NullableEnVistasTests. *@

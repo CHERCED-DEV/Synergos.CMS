@@ -5,6 +5,8 @@
 *@
 @using Synergos.CMS.Interfaces
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     Layout = null;
     var pageData = ViewData["Page"] as PendingCommentsPage
         ?? new PendingCommentsPage(Array.Empty<Comment>(), 1, 25, 0);

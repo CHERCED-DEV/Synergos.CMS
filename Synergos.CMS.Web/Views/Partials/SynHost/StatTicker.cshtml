@@ -17,6 +17,8 @@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var statValue = Model.Value<string>("statValue");
     var statLabel = Model.Value<string>("statLabel");
     var statPrefix = Model.Value<string>("statPrefix");

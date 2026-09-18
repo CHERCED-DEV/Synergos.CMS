@@ -5,6 +5,8 @@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var platforms = Model.Value<IEnumerable<string>>("platforms");
     var shareLink = Model.Value<Link>("shareLink");
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)

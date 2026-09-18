@@ -27,7 +27,12 @@
    resuelve al NAMESPACE en vez de al helper: `Umbraco.GetDictionaryValue` peta con
    CS0234 (ADR 0059). Los partials con @model de un tipo Umbraco no lo notan porque el
    SDK les pone la base por defecto. Hay que declararla a mano. *@
-@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<(Synergos.CMS.Interfaces.ProductSummary Product, string Classes, string? Url, bool ShowPrice, bool ShowAddToCart, string HeadingTag)>
+@* Sin `?` en el argumento de tipo A PROPÓSITO: Razor emite `@inherits` en la DECLARACIÓN
+   DE LA CLASE, antes del cuerpo, así que ningún `#nullable enable` escrito dentro de la
+   vista llega a tiempo — y sin contexto la anotación da CS8669, que el runtime asciende a
+   error (ver Views/_ViewImports.cshtml). No se pierde nada: las anotaciones se borran en
+   ejecución y estas vistas no se compilan en el build. *@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<(Synergos.CMS.Interfaces.ProductSummary Product, string Classes, string Url, bool ShowPrice, bool ShowAddToCart, string HeadingTag)>
 @inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @{
     var p = Model.Product;

@@ -19,6 +19,8 @@
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.FormsSettings> FormsOptions
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var endpoint = Model.Value<string>("formEndpoint");
     var internalKey = Model.Value<string>("formInternalKey");
     var fields = Model.Value<BlockListModel>("fields");

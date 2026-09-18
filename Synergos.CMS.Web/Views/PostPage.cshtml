@@ -16,6 +16,8 @@
 @inject Synergos.CMS.Interfaces.IBlogQuery BlogQuery
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.BlogSettings> BlogOptions
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     Layout = "_Layout";
     if (Model is null) { return; }
 

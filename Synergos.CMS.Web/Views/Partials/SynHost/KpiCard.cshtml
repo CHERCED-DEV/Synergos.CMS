@@ -17,6 +17,8 @@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var kpiLabel = Model.Value<string>("kpiLabel");
     var kpiValue = Model.Value<string>("kpiValue");
     var kpiTrend = Model.Value<string>("kpiTrend");

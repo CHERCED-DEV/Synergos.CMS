@@ -3,6 +3,8 @@
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var title = Model.Value<string>("headingTitle");
     if (string.IsNullOrWhiteSpace(title)) { return; }
     var subtitle = Model.Value<string>("headingSubtitle");

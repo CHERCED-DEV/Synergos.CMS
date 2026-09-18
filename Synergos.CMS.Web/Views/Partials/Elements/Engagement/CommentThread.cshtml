@@ -19,6 +19,8 @@
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CommentsSettings> CommentsOptions
 @inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var settings = CommentsOptions.Value;
     var heading = Model.Value<string>("heading")
         ?? ("Comentarios");

@@ -34,6 +34,8 @@
 @using Synergos.CMS.Application.Dto.Responses
 @model BrandThemeStyleModel
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     if (Model is null) { return; }
     var theme = Model.Theme;
     var variant = Model.PageThemeVariant ?? "light";

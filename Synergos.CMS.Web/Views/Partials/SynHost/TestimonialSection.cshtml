@@ -16,6 +16,8 @@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     // El componente Angular lee config.items como ARRAY (m(config.items) exige
     // Array.isArray), así que parseamos el JSON del editor a un JsonElement
     // (array real) antes de meterlo en Props; el emitter lo serializa como array.

@@ -20,6 +20,8 @@
 @inject IOptions<CdnSettings> CdnSettings
 @inject ILoggerFactory LoggerFactory
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var src = Model.Value<string>("scriptSrc");
     if (string.IsNullOrWhiteSpace(src))
     {

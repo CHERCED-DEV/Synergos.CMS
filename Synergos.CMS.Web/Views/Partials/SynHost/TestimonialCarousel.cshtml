@@ -1,6 +1,8 @@
 ﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     // El componente Angular (sg-testimonial-carousel) lee config.testimonials como
     // ARRAY (normalizeTestimonials exige Array.isArray) con claves quote/author/role/
     // avatar/rating — el contrato de la UI es la fuente de verdad. Parseamos el JSON

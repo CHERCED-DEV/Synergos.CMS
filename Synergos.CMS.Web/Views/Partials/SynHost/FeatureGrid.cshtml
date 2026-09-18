@@ -16,6 +16,8 @@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     object? items = null;
     var itemsJson = Model.Value<string>("itemsJson");
     if (!string.IsNullOrWhiteSpace(itemsJson))

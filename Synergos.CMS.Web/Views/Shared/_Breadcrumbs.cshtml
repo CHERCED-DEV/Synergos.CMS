@@ -11,6 +11,8 @@
 @using Umbraco.Cms.Core.Models.PublishedContent
 @using Umbraco.Extensions
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     if (Model is null) { return; }
     var trail = Model.AncestorsOrSelf()
         .Reverse()

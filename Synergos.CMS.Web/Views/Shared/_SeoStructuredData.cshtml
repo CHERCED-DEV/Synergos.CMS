@@ -17,8 +17,15 @@
 @using System.Globalization
 @using Umbraco.Cms.Core.Models.PublishedContent
 @using Umbraco.Extensions
-@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent?>
+@* Sin `?` en el argumento de tipo A PROPÓSITO: Razor emite `@inherits` en la DECLARACIÓN
+   DE LA CLASE, antes del cuerpo, así que ningún `#nullable enable` escrito dentro de la
+   vista llega a tiempo — y sin contexto la anotación da CS8669, que el runtime asciende a
+   error (ver Views/_ViewImports.cshtml). No se pierde nada: las anotaciones se borran en
+   ejecución y estas vistas no se compilan en el build. *@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var page = Model;
     if (page is null) { return; }
 

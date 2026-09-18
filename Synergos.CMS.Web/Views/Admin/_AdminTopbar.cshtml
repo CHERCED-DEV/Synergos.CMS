@@ -7,6 +7,8 @@
         pendientes para mostrar como badge en "Moderación".
 *@
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var currentSection = ViewData["AdminCurrentSection"] as string ?? "";
     var moderatorName = ViewData["ModeratorName"] as string ?? "—";
     var pendingCount = ViewData["AdminPendingCount"] as int? ?? 0;

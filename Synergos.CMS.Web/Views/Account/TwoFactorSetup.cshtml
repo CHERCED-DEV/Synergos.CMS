@@ -6,6 +6,8 @@
     sin cambios.
 *@
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     Layout = null;
     var isEnabled = ViewData["IsEnabled"] as bool? ?? false;
     var secret = ViewData["SecretBase32"] as string;

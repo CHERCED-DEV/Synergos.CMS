@@ -22,6 +22,8 @@
 @using Umbraco.Extensions
 @inject ILoggerFactory LoggerFactory
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     const string ReusableBlockAlias = "reusableBlock";
     var element = Model.Content;
     var snippet = element.Value<IPublishedContent>("snippet");
