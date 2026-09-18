@@ -23,6 +23,7 @@
     var statLabel = Model.Value<string>("statLabel");
     var statPrefix = Model.Value<string>("statPrefix");
     var statSuffix = Model.Value<string>("statSuffix");
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["statValue"] = statValue,

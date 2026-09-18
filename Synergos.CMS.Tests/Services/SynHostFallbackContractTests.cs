@@ -41,6 +41,34 @@ public sealed class SynHostFallbackContractTests
         "Synhost.Kpi.Trend.Flat",
     };
 
+    /// <summary>
+    /// Las posiciones del <c>(</c> de cualquier acceso al diccionario, sea la sobrecarga que sea.
+    /// </summary>
+    /// <remarks>
+    /// Antes se buscaba el literal <c>"GetDictionaryValue("</c>, y eso ató estos dos gates al
+    /// NOMBRE de una sobrecarga: cuando las 206 llamadas migraron a
+    /// <c>GetDictionaryValueOrDefault</c> —obligadas, porque la vieja está <c>[Obsolete]</c> y en
+    /// caliente eso es un 500— el patrón dejó de casar y los dos se pusieron rojos sin que ninguna
+    /// vista hubiera cambiado de comportamiento. Lo que vigilan es el ACCESO al diccionario, no
+    /// cómo se llama hoy el método.
+    /// </remarks>
+    private static IEnumerable<int> Accesos(string texto)
+    {
+        const string raiz = "GetDictionaryValue";
+        var i = 0;
+        while (true)
+        {
+            var k = texto.IndexOf(raiz, i, StringComparison.Ordinal);
+            if (k < 0) yield break;
+
+            var tras = k + raiz.Length;
+            if (texto.AsSpan(tras).StartsWith("OrDefault", StringComparison.Ordinal)) tras += "OrDefault".Length;
+            if (tras < texto.Length && texto[tras] == '(') yield return tras;
+
+            i = k + raiz.Length;
+        }
+    }
+
     // ── CSS ──────────────────────────────────────────────────────────
 
     [Fact]
@@ -163,7 +191,8 @@ public sealed class SynHostFallbackContractTests
         foreach (var alias in ClavesDeDictionary)
         {
             Assert.True(
-                partials.Any(p => p.Contains($"GetDictionaryValue(\"{alias}\"", StringComparison.Ordinal)),
+                partials.Any(p => Accesos(p).Any(k =>
+                    p.AsSpan(k).StartsWith($"(\"{alias}\"", StringComparison.Ordinal))),
                 $"La clave '{alias}' está en uSync pero ningún partial de SynHost la lee.");
         }
     }
@@ -218,13 +247,13 @@ public sealed class SynHostFallbackContractTests
                 var index = partial.IndexOf(literal, StringComparison.Ordinal);
                 if (index < 0) continue;
 
-                // Único uso permitido: el altText de GetDictionaryValue, que es
-                // el default cuando la clave todavía no se importó al DB.
+                // Único uso permitido: el texto por defecto del accesor de diccionario, que
+                // es lo que se sirve cuando la clave todavía no se importó al DB.
                 var before = partial[..index];
-                var call = before.LastIndexOf("GetDictionaryValue(", StringComparison.Ordinal);
+                var call = Accesos(before).DefaultIfEmpty(-1).Max();
                 Assert.True(
                     call >= 0 && !before[call..].Contains(')'),
-                    $"{name}.cshtml usa el literal '{literal}' fuera de GetDictionaryValue.");
+                    $"{name}.cshtml usa el literal '{literal}' fuera del accesor de diccionario.");
             }
         }
     }

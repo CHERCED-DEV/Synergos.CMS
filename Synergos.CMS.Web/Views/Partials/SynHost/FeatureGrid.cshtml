@@ -28,10 +28,12 @@
     var theme = Model.Value<string>("theme");
     var cols = Model.Value<int>("columns");
     var headingText = Model.Value<string>("headingText");
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["headingText"] = headingText,
         ["items"] = items,
+#nullable enable
         ["columns"] = cols > 0 ? cols : (object?)null,
         ["theme"] = string.IsNullOrWhiteSpace(theme) ? null : theme,
     };
@@ -40,7 +42,7 @@
         itemsJson: itemsJson,
         columns: cols > 0 ? cols.ToString(System.Globalization.CultureInfo.InvariantCulture) : null,
         theme: theme,
-        ariaLabel: Umbraco.GetDictionaryValue("Synhost.Features.Aria", "Características"));
+        ariaLabel: Umbraco.GetDictionaryValueOrDefault("Synhost.Features.Aria", "Características"));
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "feature-grid",
         Props: props,

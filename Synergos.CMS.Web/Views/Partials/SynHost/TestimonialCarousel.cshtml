@@ -20,6 +20,7 @@
     // el default del componente. El componente pausa en hover/focus y respeta reduced-motion.
     var intervalStr = Model.Value<string>("autoplayInterval");
     var autoplayOff = int.TryParse(intervalStr, out var iv) && iv == 0;
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["testimonials"] = testimonials,

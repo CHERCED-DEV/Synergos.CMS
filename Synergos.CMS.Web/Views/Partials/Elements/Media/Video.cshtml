@@ -9,6 +9,7 @@
     var mediaRef = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("mediaReference");
     if (mediaRef == null) { return; }
     var autoplay = Model.Value<bool>("videoAutoplay");
+#nullable enable
     var showControls = Model.Value<bool?>("videoShowControls") ?? true;
     var loop = Model.Value<bool>("videoLoop");
     var variant = Model.Value<string>("variantKey");

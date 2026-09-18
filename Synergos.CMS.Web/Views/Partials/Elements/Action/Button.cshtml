@@ -48,6 +48,7 @@
           + $">{fallbackLabel}</a>"
         : $"<button type=\"button\" class=\"{fallbackClasses}\">{fallbackLabel}</button>";
 
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["label"] = label,

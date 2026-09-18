@@ -28,6 +28,7 @@
     }
     var theme = Model.Value<string>("theme");
     var headingText = Model.Value<string>("headingText");
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["headingText"] = headingText,
@@ -38,7 +39,7 @@
         heading: headingText,
         itemsJson: itemsJson,
         theme: theme,
-        ariaLabel: Umbraco.GetDictionaryValue("Synhost.Faq.Aria", "Preguntas frecuentes"));
+        ariaLabel: Umbraco.GetDictionaryValueOrDefault("Synhost.Faq.Aria", "Preguntas frecuentes"));
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "faq-section",
         Props: props,

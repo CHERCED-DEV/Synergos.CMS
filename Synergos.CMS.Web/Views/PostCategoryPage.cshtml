@@ -48,7 +48,7 @@
 
     @if (visible.Count == 0)
     {
-        <p class="syn-post-category__empty">@Umbraco.GetDictionaryValue("blog.empty", "Aún no hay artículos.")</p>
+        <p class="syn-post-category__empty">@Umbraco.GetDictionaryValueOrDefault("blog.empty", "Aún no hay artículos.")</p>
     }
     else
     {
@@ -85,18 +85,18 @@
 
         @if (hasPrev || hasNext)
         {
-            <nav class="syn-post-category__pagination" aria-label="@Umbraco.GetDictionaryValue("blog.pagination", "Paginación")">
+            <nav class="syn-post-category__pagination" aria-label="@Umbraco.GetDictionaryValueOrDefault("blog.pagination", "Paginación")">
                 @if (hasPrev)
                 {
                     <a class="syn-post-category__pagination-prev" href="@baseUrl?page=@(pageNumber - 1)" rel="prev">
-                        @Umbraco.GetDictionaryValue("blog.previous", "Anteriores")
+                        @Umbraco.GetDictionaryValueOrDefault("blog.previous", "Anteriores")
                     </a>
                 }
                 <span class="syn-post-category__pagination-current">@pageNumber</span>
                 @if (hasNext)
                 {
                     <a class="syn-post-category__pagination-next" href="@baseUrl?page=@(pageNumber + 1)" rel="next">
-                        @Umbraco.GetDictionaryValue("blog.next", "Siguientes")
+                        @Umbraco.GetDictionaryValueOrDefault("blog.next", "Siguientes")
                     </a>
                 }
             </nav>

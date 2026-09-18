@@ -25,7 +25,7 @@
 
     var heading = !string.IsNullOrWhiteSpace(Model.PageHeading)
         ? Model.PageHeading
-        : Umbraco.GetDictionaryValue("Search.Heading", "Buscar");
+        : Umbraco.GetDictionaryValueOrDefault("Search.Heading", "Buscar");
     var intro = Model.PageIntro;
 
     Synergos.CMS.Interfaces.SearchResponse? response = null;
@@ -58,21 +58,21 @@
 
     <form class="syn-search__form" action="@basePath" method="get" role="search">
         <label for="syn-search-input" class="syn-search__label">
-            @Umbraco.GetDictionaryValue("Search.Label", "Buscar en el sitio")
+            @Umbraco.GetDictionaryValueOrDefault("Search.Label", "Buscar en el sitio")
         </label>
         <input id="syn-search-input"
                class="syn-search__input"
                type="search"
                name="q"
                value="@q"
-               placeholder="@Umbraco.GetDictionaryValue("Search.Placeholder", "Buscar…")"
+               placeholder="@Umbraco.GetDictionaryValueOrDefault("Search.Placeholder", "Buscar…")"
                autocomplete="off" />
         @if (!string.IsNullOrWhiteSpace(docTypeFilter))
         {
             <input type="hidden" name="docType" value="@docTypeFilter" />
         }
         <button type="submit" class="syn-search__submit">
-            @Umbraco.GetDictionaryValue("Search.Button", "Buscar")
+            @Umbraco.GetDictionaryValueOrDefault("Search.Button", "Buscar")
         </button>
     </form>
 
@@ -82,13 +82,13 @@
             @if (response.TotalEstimated == 0)
             {
                 <p class="syn-search__no-results">
-                    @Umbraco.GetDictionaryValue("Search.NoResults", "Sin resultados para \"{query}\".")
+                    @Umbraco.GetDictionaryValueOrDefault("Search.NoResults", "Sin resultados para \"{query}\".")
                         .Replace("{query}", q)
                 </p>
             }
             else
             {
-                var resultCountTemplate = Umbraco.GetDictionaryValue("Search.ResultCount", "{n} resultados");
+                var resultCountTemplate = Umbraco.GetDictionaryValueOrDefault("Search.ResultCount", "{n} resultados");
                 <p class="syn-search__count">
                     @resultCountTemplate.Replace("{n}", response.TotalEstimated.ToString())
                     <span class="syn-search__elapsed">(@response.ElapsedMilliseconds ms)</span>
@@ -116,18 +116,18 @@
 
             @if (totalPages > 1)
             {
-                <nav class="syn-search__pagination" aria-label="@Umbraco.GetDictionaryValue("Search.Pagination", "Paginación de resultados")">
+                <nav class="syn-search__pagination" aria-label="@Umbraco.GetDictionaryValueOrDefault("Search.Pagination", "Paginación de resultados")">
                     @if (pageNumber > 1)
                     {
                         <a class="syn-search__pagination-prev" rel="prev" href="@PaginationHref(pageNumber - 1)">
-                            @Umbraco.GetDictionaryValue("Search.Previous", "Anteriores")
+                            @Umbraco.GetDictionaryValueOrDefault("Search.Previous", "Anteriores")
                         </a>
                     }
                     <span class="syn-search__pagination-current">@pageNumber / @totalPages</span>
                     @if (pageNumber < totalPages)
                     {
                         <a class="syn-search__pagination-next" rel="next" href="@PaginationHref(pageNumber + 1)">
-                            @Umbraco.GetDictionaryValue("Search.Next", "Siguientes")
+                            @Umbraco.GetDictionaryValueOrDefault("Search.Next", "Siguientes")
                         </a>
                     }
                 </nav>

@@ -27,6 +27,7 @@
     var theme = Model.Value<string>("theme");
     var mediaAlt = Model.Value<string>("mediaAlt");
     var headingText = Model.Value<string>("headingText");
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["imageSrc"] = mediaRef?.Url(),
@@ -43,7 +44,7 @@
         imageAlt: string.IsNullOrWhiteSpace(mediaAlt) ? mediaRef?.Value<string>("altDefault") : mediaAlt,
         mediaPosition: pos,
         theme: theme,
-        ariaLabel: Umbraco.GetDictionaryValue("Synhost.MediaText.Aria", "Contenido con imagen"));
+        ariaLabel: Umbraco.GetDictionaryValueOrDefault("Synhost.MediaText.Aria", "Contenido con imagen"));
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "media-text",
         Props: props,

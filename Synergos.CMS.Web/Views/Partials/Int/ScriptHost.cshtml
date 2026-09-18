@@ -29,6 +29,7 @@
     }
 
     bool allowed = false;
+#nullable enable
     string? blockedReason = null;
     if (!Uri.TryCreate(src, UriKind.Absolute, out var scriptUri))
     {

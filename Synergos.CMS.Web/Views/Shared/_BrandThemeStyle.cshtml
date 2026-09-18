@@ -41,6 +41,7 @@
     var variant = Model.PageThemeVariant ?? "light";
 
     var rootVars = new List<string>();
+#nullable enable
     void Add(string name, string? value)
     {
         if (!string.IsNullOrWhiteSpace(value))
@@ -50,6 +51,7 @@
     }
     // Parsea un hex (#RRGGBB / #RGB) a triplete "R G B" para los channels
     // theme-aware. Devuelve null si no es hex válido (mantiene el default).
+#nullable enable
     string? RgbTriplet(string? hex)
     {
         if (string.IsNullOrWhiteSpace(hex)) { return null; }

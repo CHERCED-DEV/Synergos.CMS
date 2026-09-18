@@ -34,6 +34,7 @@
     var canonicalHost = siteRoot?.Value<string>("canonicalHostname");
     var siteUrl = !string.IsNullOrWhiteSpace(canonicalHost) ? $"https://{canonicalHost}" : null;
 
+#nullable enable
     string Json(object? value) => System.Text.Json.JsonSerializer.Serialize(value);
     string AbsoluteUrl(string path)
     {
@@ -50,6 +51,7 @@
             var excerpt = page.Value<string>("excerpt");
             var heroImage = page.Value<IPublishedContent>("heroImage");
             var heroUrl = heroImage?.Url(mode: UrlMode.Absolute);
+#nullable enable
             DateTime? publishDate = DateTime.TryParse(page.Value<string>("publishDate"), out var pd) ? pd : page.CreateDate;
             var modifiedDate = page.UpdateDate;
             var pageUrl = AbsoluteUrl(page.Url());

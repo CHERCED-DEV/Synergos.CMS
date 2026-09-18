@@ -22,6 +22,7 @@
     var title = Model.Value<string>("title");
     var subtitle = Model.Value<string>("subtitle");
     var ctaLabel = Model.Value<string>("ctaLabel");
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["title"] = title,
@@ -37,7 +38,7 @@
         imageAlt: media?.Value<string>("altDefault"),
         ctaLabel: string.IsNullOrWhiteSpace(ctaLabel) ? ctaLink?.Name : ctaLabel,
         ctaUrl: ctaLink?.Url,
-        ariaLabel: Umbraco.GetDictionaryValue("Synhost.Hero.Aria", "Sección destacada"));
+        ariaLabel: Umbraco.GetDictionaryValueOrDefault("Synhost.Hero.Aria", "Sección destacada"));
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "hero-banner",
         Props: props,

@@ -8,6 +8,7 @@
 #nullable enable
     var videoFile = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("videoFile");
     var posterImage = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("posterImage");
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["videoUrl"] = videoFile?.Url(mode: Umbraco.Cms.Core.Models.UrlMode.Absolute),

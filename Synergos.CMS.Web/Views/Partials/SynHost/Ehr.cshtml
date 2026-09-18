@@ -19,6 +19,7 @@
     var patient = Model.Value<string>("patient");
     if (string.IsNullOrWhiteSpace(patient)) { patient = "pat-jorge-medina"; }
 
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["apiBase"] = apiBase,

@@ -10,6 +10,7 @@
     var currency = Model.Value<string>("currency");
     if (string.IsNullOrWhiteSpace(currency)) { currency = "COP"; }
 
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["apiBase"] = apiBase,

@@ -11,6 +11,7 @@
 // El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
 #nullable enable
     var avatarImage = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("avatarImage");
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["avatarSrc"] = avatarImage?.Url(mode: Umbraco.Cms.Core.Models.UrlMode.Absolute),

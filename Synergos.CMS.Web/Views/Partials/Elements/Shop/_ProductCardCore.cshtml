@@ -22,7 +22,7 @@
     resuelve un SKU que puede no existir. Aquí el producto ya viene resuelto.
 *@
 @using System.Globalization
-@model (Synergos.CMS.Interfaces.ProductSummary Product, string Classes, string? Url, bool ShowPrice, bool ShowAddToCart, string HeadingTag)
+@model (Synergos.CMS.Interfaces.ProductSummary Product, string Classes, string Url, bool ShowPrice, bool ShowAddToCart, string HeadingTag)
 @* Con un @model de TUPLA la vista no hereda de UmbracoViewPage, y entonces `Umbraco`
    resuelve al NAMESPACE en vez de al helper: `Umbraco.GetDictionaryValue` peta con
    CS0234 (ADR 0059). Los partials con @model de un tipo Umbraco no lo notan porque el

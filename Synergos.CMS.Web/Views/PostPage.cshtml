@@ -24,7 +24,9 @@
     var title = Model.Name;
     var excerpt = Model.Excerpt;
     var heroImage = Model.HeroImage;
+#nullable enable
     DateTime? publishDate = DateTime.TryParse(Model.PublishDate, out var pd) ? pd : null;
+#nullable enable
     int? readTimeMinutes = int.TryParse(Model.ReadTimeMinutes, out var rt) ? rt : null;
     var sections = Model.Sections;
     var category = Model.Parent as PostCategoryPage;
@@ -36,7 +38,7 @@
     var authorName = !string.IsNullOrWhiteSpace(author?.AuthorName) ? author.AuthorName : author?.Name;
     var tags = Model.Tags;
 }
-<div class="syn-reading-progress" role="progressbar" aria-label="@Umbraco.GetDictionaryValue("blog.readingprogress", "Progreso de lectura")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+<div class="syn-reading-progress" role="progressbar" aria-label="@Umbraco.GetDictionaryValueOrDefault("blog.readingprogress", "Progreso de lectura")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
     <div class="syn-reading-progress__bar"></div>
 </div>
 <div class="syn-post-layout">
@@ -108,14 +110,14 @@
 
         @* Share social fijo (ADR 0021). El partial lee URL+título del nodo actual. *@
         <div class="syn-post__share">
-            <span class="syn-post__share-label">@Umbraco.GetDictionaryValue("blog.share", "Compartir")</span>
+            <span class="syn-post__share-label">@Umbraco.GetDictionaryValueOrDefault("blog.share", "Compartir")</span>
             @await Html.PartialAsync("Elements/Corp/SocialShare", Model)
         </div>
     </article>
 
     <aside class="syn-post__sidebar">
-        <nav class="syn-post__toc" aria-label="@Umbraco.GetDictionaryValue("blog.onthispage", "En esta página")">
-            <p class="syn-post__toc-title">@Umbraco.GetDictionaryValue("blog.onthispage", "En esta página")</p>
+        <nav class="syn-post__toc" aria-label="@Umbraco.GetDictionaryValueOrDefault("blog.onthispage", "En esta página")">
+            <p class="syn-post__toc-title">@Umbraco.GetDictionaryValueOrDefault("blog.onthispage", "En esta página")</p>
         </nav>
     </aside>
 </div>
@@ -127,7 +129,7 @@
 @if (related.Count > 0)
 {
     <aside class="syn-post__related">
-        <h2 class="syn-post__related-title">@Umbraco.GetDictionaryValue("blog.relatedposts", "Artículos relacionados")</h2>
+        <h2 class="syn-post__related-title">@Umbraco.GetDictionaryValueOrDefault("blog.relatedposts", "Artículos relacionados")</h2>
         <ul class="syn-post__related-items">
             @foreach (var rel in related)
             {

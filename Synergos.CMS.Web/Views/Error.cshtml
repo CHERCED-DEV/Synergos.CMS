@@ -51,16 +51,16 @@
         {
             <form class="syn-error__search" action="/search" method="get" role="search">
                 <label for="syn-error-search-input" class="syn-error__search-label">
-                    @Umbraco.GetDictionaryValue("Error.SearchLabel", "¿Buscabas algo?")
+                    @Umbraco.GetDictionaryValueOrDefault("Error.SearchLabel", "¿Buscabas algo?")
                 </label>
                 <input id="syn-error-search-input"
                        class="syn-error__search-input"
                        type="search"
                        name="q"
-                       placeholder="@Umbraco.GetDictionaryValue("Search.Placeholder", "Buscar…")"
+                       placeholder="@Umbraco.GetDictionaryValueOrDefault("Search.Placeholder", "Buscar…")"
                        autocomplete="off" />
                 <button type="submit" class="syn-error__search-submit">
-                    @Umbraco.GetDictionaryValue("Search.Button", "Buscar")
+                    @Umbraco.GetDictionaryValueOrDefault("Search.Button", "Buscar")
                 </button>
             </form>
         }
@@ -68,7 +68,7 @@
         @if (Model.ShowHomeLink)
         {
             <a class="syn-error__home" href="@Model.HomeUrl">
-                @Umbraco.GetDictionaryValue("Error.BackToHome", "Volver al inicio")
+                @Umbraco.GetDictionaryValueOrDefault("Error.BackToHome", "Volver al inicio")
             </a>
         }
     </main>

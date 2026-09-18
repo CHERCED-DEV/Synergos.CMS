@@ -60,7 +60,7 @@
                     <form method="post" action="/admin/webhooks/test/comment">
                         @Html.AntiForgeryToken()
                         <button type="submit" class="syn-admin__action syn-admin__action--approve">
-                            🚀 @Umbraco.GetDictionaryValue("admin.action.test", "Disparar test")
+                            🚀 @Umbraco.GetDictionaryValueOrDefault("admin.action.test", "Disparar test")
                         </button>
                     </form>
                 </section>
@@ -76,7 +76,7 @@
                     <form method="post" action="/admin/webhooks/test/form">
                         @Html.AntiForgeryToken()
                         <button type="submit" class="syn-admin__action syn-admin__action--approve">
-                            🚀 @Umbraco.GetDictionaryValue("admin.action.test", "Disparar test")
+                            🚀 @Umbraco.GetDictionaryValueOrDefault("admin.action.test", "Disparar test")
                         </button>
                     </form>
                 </section>
@@ -92,7 +92,7 @@
                     <form method="post" action="/admin/webhooks/test/cart">
                         @Html.AntiForgeryToken()
                         <button type="submit" class="syn-admin__action syn-admin__action--approve">
-                            🚀 @Umbraco.GetDictionaryValue("admin.action.test", "Disparar test")
+                            🚀 @Umbraco.GetDictionaryValueOrDefault("admin.action.test", "Disparar test")
                         </button>
                     </form>
                 </section>

@@ -12,6 +12,7 @@
     // el componente Angular resuelve sus defaults (degrada con grace).
     var config = Model.Value<string>("config");
 
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["apiBase"] = apiBase,

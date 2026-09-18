@@ -9,7 +9,7 @@
     var displayName = ViewData["DisplayName"] as string ?? "—";
     var roles = ViewData["Roles"] as IReadOnlyCollection<string> ?? Array.Empty<string>();
     var messageCode = ViewData["MessageCode"] as string;
-    var title = Umbraco.GetDictionaryValue("Account.Profile.Title", "Mi perfil");
+    var title = Umbraco.GetDictionaryValueOrDefault("Account.Profile.Title", "Mi perfil");
 }
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">
@@ -26,9 +26,9 @@
             {
                 var (kind, msg) = messageCode switch
                 {
-                    "password-changed" => ("success", Umbraco.GetDictionaryValue("Account.Profile.Msg.PasswordChanged", "Contraseña actualizada.")),
-                    "current-password-wrong" => ("error", Umbraco.GetDictionaryValue("Account.Profile.Msg.CurrentPasswordWrong", "La contraseña actual no es correcta.")),
-                    "weak-password" => ("error", Umbraco.GetDictionaryValue("Account.Profile.Msg.WeakPassword", "La nueva contraseña no cumple los requisitos.")),
+                    "password-changed" => ("success", Umbraco.GetDictionaryValueOrDefault("Account.Profile.Msg.PasswordChanged", "Contraseña actualizada.")),
+                    "current-password-wrong" => ("error", Umbraco.GetDictionaryValueOrDefault("Account.Profile.Msg.CurrentPasswordWrong", "La contraseña actual no es correcta.")),
+                    "weak-password" => ("error", Umbraco.GetDictionaryValueOrDefault("Account.Profile.Msg.WeakPassword", "La nueva contraseña no cumple los requisitos.")),
                     _ => ("info", messageCode),
                 };
                 <p class="syn-account__feedback syn-account__feedback--@kind"
@@ -38,21 +38,21 @@
 
             <section class="syn-account__info">
                 <dl>
-                    <dt>@Umbraco.GetDictionaryValue("Account.Profile.NameLabel", "Nombre")</dt>
+                    <dt>@Umbraco.GetDictionaryValueOrDefault("Account.Profile.NameLabel", "Nombre")</dt>
                     <dd>@displayName</dd>
                     @if (roles.Count > 0)
                     {
-                        <dt>@Umbraco.GetDictionaryValue("Account.Profile.RolesLabel", "Roles")</dt>
+                        <dt>@Umbraco.GetDictionaryValueOrDefault("Account.Profile.RolesLabel", "Roles")</dt>
                         <dd>@string.Join(", ", roles)</dd>
                     }
                 </dl>
             </section>
 
             <section class="syn-account__change-password">
-                <h2>@Umbraco.GetDictionaryValue("Account.Profile.ChangePasswordHeading", "Cambiar contraseña")</h2>
+                <h2>@Umbraco.GetDictionaryValueOrDefault("Account.Profile.ChangePasswordHeading", "Cambiar contraseña")</h2>
                 <form class="syn-account__form" action="/account/profile/password" method="post" novalidate>
                     <div class="syn-account__field">
-                        <label for="syn-pwd-current">@Umbraco.GetDictionaryValue("Account.Profile.CurrentPasswordLabel", "Contraseña actual")</label>
+                        <label for="syn-pwd-current">@Umbraco.GetDictionaryValueOrDefault("Account.Profile.CurrentPasswordLabel", "Contraseña actual")</label>
                         <input id="syn-pwd-current"
                                type="password"
                                name="currentPassword"
@@ -61,7 +61,7 @@
                                aria-required="true" />
                     </div>
                     <div class="syn-account__field">
-                        <label for="syn-pwd-new">@Umbraco.GetDictionaryValue("Account.Profile.NewPasswordLabel", "Nueva contraseña")</label>
+                        <label for="syn-pwd-new">@Umbraco.GetDictionaryValueOrDefault("Account.Profile.NewPasswordLabel", "Nueva contraseña")</label>
                         <input id="syn-pwd-new"
                                type="password"
                                name="newPassword"
@@ -71,7 +71,7 @@
                                minlength="8" />
                     </div>
                     <button type="submit" class="syn-account__submit">
-                        @Umbraco.GetDictionaryValue("Account.Profile.ChangePasswordSubmit", "Actualizar contraseña")
+                        @Umbraco.GetDictionaryValueOrDefault("Account.Profile.ChangePasswordSubmit", "Actualizar contraseña")
                     </button>
                 </form>
             </section>
@@ -79,7 +79,7 @@
             <form class="syn-account__logout" action="/account/logout" method="post">
                 <input type="hidden" name="returnUrl" value="/" />
                 <button type="submit" class="syn-account__logout-button">
-                    @Umbraco.GetDictionaryValue("Account.Profile.Logout", "Cerrar sesión")
+                    @Umbraco.GetDictionaryValueOrDefault("Account.Profile.Logout", "Cerrar sesión")
                 </button>
             </form>
         </div>

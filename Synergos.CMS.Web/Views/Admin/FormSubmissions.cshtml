@@ -10,7 +10,9 @@
     var pageData = ViewData["Page"] as FormSubmissionsPage
         ?? new FormSubmissionsPage(Array.Empty<FormSubmissionListItem>(), 1, 25, 0);
     var formKeyFilter = ViewData["FormKeyFilter"] as string;
+#nullable enable
     var fromUtc = ViewData["FromUtc"] as DateTime?;
+#nullable enable
     var toUtc = ViewData["ToUtc"] as DateTime?;
     var formKeys = ViewData["FormKeys"] as IReadOnlyList<string> ?? Array.Empty<string>();
     string AppendFilters(string baseHref)
@@ -82,15 +84,15 @@
                     <span class="syn-admin__filter-label">Por página</span>
                     <input type="number" name="pageSize" value="@pageData.PageSize" min="5" max="200" />
                 </label>
-                <button type="submit" class="syn-admin__filter-submit">@Umbraco.GetDictionaryValue("admin.action.applyfilters", "Aplicar filtros")</button>
+                <button type="submit" class="syn-admin__filter-submit">@Umbraco.GetDictionaryValueOrDefault("admin.action.applyfilters", "Aplicar filtros")</button>
                 @if (HasFilters)
                 {
-                    <a href="/admin/forms" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar")</a>
+                    <a href="/admin/forms" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValueOrDefault("admin.action.clear", "Limpiar")</a>
                 }
                 @{
                     var exportHref = AppendFilters("/admin/forms/export");
                 }
-                <a href="@exportHref" class="syn-admin__filter-export" download>⬇ @Umbraco.GetDictionaryValue("admin.action.export", "Exportar CSV")</a>
+                <a href="@exportHref" class="syn-admin__filter-export" download>⬇ @Umbraco.GetDictionaryValueOrDefault("admin.action.export", "Exportar CSV")</a>
             </form>
 
             @if (pageData.Items.Count == 0)

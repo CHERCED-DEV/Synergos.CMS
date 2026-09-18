@@ -8,6 +8,7 @@
 // El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
 #nullable enable
     var policyLink = Model.Value<Link>("policyLink");
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["bannerText"] = Model.Value<string>("bannerText"),

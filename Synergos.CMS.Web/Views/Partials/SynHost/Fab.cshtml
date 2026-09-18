@@ -5,6 +5,7 @@
 // El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
 #nullable enable
     var actionLink = Model.Value<Link>("actionLink");
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["iconKey"] = Model.Value<string>("iconKey"),

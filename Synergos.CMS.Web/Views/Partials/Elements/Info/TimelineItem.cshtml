@@ -9,6 +9,7 @@
     if (string.IsNullOrWhiteSpace(title)) { return; }
     var subtitle = Model.Value<string>("headingSubtitle");
     var body = Model.Value<string>("textBody");
+#nullable enable
     var date = Model.Value<DateTime?>("contentDate");
     var dateLabel = Model.Value<string>("contentDateLabel");
     var variant = Model.Value<string>("variantKey");

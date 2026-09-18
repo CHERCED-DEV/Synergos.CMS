@@ -41,6 +41,7 @@
     // Resolver el IPublishedContent del producto por SKU. Mismo patrón que
     // DefaultShopQuery (la seam IShopQuery devuelve ProductSummary, sin el
     // content tipado que el core consume). Sin tree-walk si no hay contexto.
+#nullable enable
     IPublishedContent? product = null;
     if (UmbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext) && umbracoContext.Content is not null)
     {

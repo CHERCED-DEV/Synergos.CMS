@@ -24,6 +24,7 @@
     var kpiTrend = Model.Value<string>("kpiTrend");
     var kpiDelta = Model.Value<string>("kpiDelta");
     var kpiPeriod = Model.Value<string>("kpiPeriod");
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["kpiLabel"] = kpiLabel,
@@ -34,9 +35,9 @@
     };
     var trendLabel = SynHostFallbackBuilder.TrendKey(kpiTrend) switch
     {
-        "up" => Umbraco.GetDictionaryValue("Synhost.Kpi.Trend.Up", "Tendencia al alza"),
-        "down" => Umbraco.GetDictionaryValue("Synhost.Kpi.Trend.Down", "Tendencia a la baja"),
-        "flat" => Umbraco.GetDictionaryValue("Synhost.Kpi.Trend.Flat", "Tendencia estable"),
+        "up" => Umbraco.GetDictionaryValueOrDefault("Synhost.Kpi.Trend.Up", "Tendencia al alza"),
+        "down" => Umbraco.GetDictionaryValueOrDefault("Synhost.Kpi.Trend.Down", "Tendencia a la baja"),
+        "flat" => Umbraco.GetDictionaryValueOrDefault("Synhost.Kpi.Trend.Flat", "Tendencia estable"),
         _ => null,
     };
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(

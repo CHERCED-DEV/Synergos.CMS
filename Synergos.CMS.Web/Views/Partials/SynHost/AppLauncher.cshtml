@@ -18,6 +18,7 @@
         catch (System.Text.Json.JsonException) { apps = null; }
     }
 
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["apps"] = apps,

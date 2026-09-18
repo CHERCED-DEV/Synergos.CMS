@@ -7,7 +7,7 @@
     Layout = null;
     var recoveryCodes = ViewData["RecoveryCodes"] as IReadOnlyList<string>
         ?? Array.Empty<string>();
-    var title = Umbraco.GetDictionaryValue("Account.TwoFactor.ConfirmedTitle", "2FA activado");
+    var title = Umbraco.GetDictionaryValueOrDefault("Account.TwoFactor.ConfirmedTitle", "2FA activado");
 }
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">

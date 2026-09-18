@@ -7,7 +7,7 @@
 @{
     Layout = null;
     var email = ViewData["Email"] as string;
-    var title = Umbraco.GetDictionaryValue("Account.Registered.Title", "Revisa tu email");
+    var title = Umbraco.GetDictionaryValueOrDefault("Account.Registered.Title", "Revisa tu email");
 }
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">
@@ -24,19 +24,19 @@
                 @if (!string.IsNullOrWhiteSpace(email))
                 {
                     @Html.Raw(string.Format(
-                        Umbraco.GetDictionaryValue("Account.Registered.IntroWithEmail",
+                        Umbraco.GetDictionaryValueOrDefault("Account.Registered.IntroWithEmail",
                             "Te enviamos un email a <strong>{0}</strong> con un link para activar tu cuenta. Revisa tu bandeja de entrada (y la carpeta de spam)."),
                         System.Net.WebUtility.HtmlEncode(email)))
                 }
                 else
                 {
-                    @Umbraco.GetDictionaryValue("Account.Registered.Intro",
+                    @Umbraco.GetDictionaryValueOrDefault("Account.Registered.Intro",
                         "Te enviamos un email con un link para activar tu cuenta. Revisa tu bandeja de entrada (y la carpeta de spam).")
                 }
             </p>
             <p class="syn-account__alt">
                 <a href="/account/login">
-                    @Umbraco.GetDictionaryValue("Account.BackToLogin", "Volver al login")
+                    @Umbraco.GetDictionaryValueOrDefault("Account.BackToLogin", "Volver al login")
                 </a>
             </p>
         </div>
