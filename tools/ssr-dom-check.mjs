@@ -68,7 +68,7 @@
  */
 
 import { spawn, execSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, createWriteStream, existsSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -177,7 +177,16 @@ writeFileSync(
   'utf8');
 
 const logPath = opt('--log', join(tmp, 'ssr-dom.log'));
-const appLog = createWriteStream(logPath);
+
+// Se escribe SÍNCRONO, y no es manía. Con un `createWriteStream` el log de esta corrida no
+// existía NUNCA: la ruta del timeout global —la única en la que alguien va a querer leerlo—
+// hacía `fail()`, `cleanup()` y `process.exit(1)` sin cerrar el stream, así que lo pendiente se
+// perdía y el fichero ni llegaba a crearse. El gate decía «revisa <log>» sobre algo que no
+// estaba. Un diagnóstico que sólo sobrevive al camino feliz no es un diagnóstico.
+writeFileSync(logPath, '', 'utf8');
+const appLog = {
+  write: (t) => { try { appendFileSync(logPath, t, 'utf8'); } catch { /* el log no tumba el gate */ } },
+};
 log(`DB temporal: ${dbPath}`);
 log(`log completo: ${logPath}`);
 
@@ -355,9 +364,14 @@ function domFormCount(chrome, html, name) {
 }
 
 // ── Ejecución ───────────────────────────────────────────────────────────────
-function cleanup() {
+function cleanup({ conservar = false } = {}) {
   try { child.kill(); } catch { /* ya murió */ }
-  if (!KEEP) { try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ } }
+
+  // Y NO se borra cuando algo falló. El `rmSync` se llevaba el directorio entero —log incluido—
+  // justo después de que el mensaje mandara a leerlo: la instrucción del propio gate era
+  // imposible de seguir por diseño. En verde sí se limpia, que es cuando no hay nada que mirar.
+  if (KEEP || conservar) return;
+  try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
 }
 
 async function waitReady(base) {
@@ -517,7 +531,7 @@ async function main() {
 
 const timer = setTimeout(() => {
   fail(`timeout global (${TIMEOUT_MS / 1000}s) — revisa ${logPath}`);
-  cleanup();
+  cleanup({ conservar: true });
   process.exit(1);
 }, TIMEOUT_MS);
 
@@ -525,9 +539,9 @@ main()
   .catch((e) => fail(e.message))
   .finally(() => {
     clearTimeout(timer);
-    appLog.end();
-    cleanup();
+    cleanup({ conservar: problems.length > 0 });
     if (problems.length) {
+      console.error(`[ssr-dom] el log de la app queda en ${logPath}`);
       console.error(`\n[ssr-dom] ✗ ${problems.length} problema(s) en el HTML servido.`);
       process.exit(1);
     }
