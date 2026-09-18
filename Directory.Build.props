@@ -48,9 +48,17 @@
                siendo errores por TreatWarningsAsErrors—, que es el defecto de
                verdad de esta familia: en el #134 había cuatro sitios con
                `///` sobre un parámetro posicional, y el compilador los tiraba.
-        NU1902 Umbraco.Cms 13.13.1 vulnerabilidad moderate conocida, aceptada en
-               ADR 0001 (memoria project_umbraco_version_pin). Sin patch en
-               branch 13.x; upgrade a 14+ requiere ADR nuevo.
+        NU1902 UNA moderate de Umbraco.Cms sin patch en NINGUNA version:
+               GHSA-54mj-vcvj-q3v5 (subida de ficheros arbitraria), que el propio
+               ADR 0001 nombra. Aceptada ahi.
+
+               Y ojo con la frase que habia aca antes, porque costo cuatro meses:
+               decia «sin patch en branch 13.x» de TODO el NU1902, y era falsa. El
+               otro NU1902 —GHSA-2qjj-h6wp-c7h7, open redirect en Surface
+               Controllers— estaba parcheado en 13.14.0 desde mayo, y la razon
+               escrita al lado lo tapo. Un censo con su razon al lado blinda lo que
+               nombra: si cae otra moderate bajo esta linea, se COMPRUEBA si tiene
+               patch antes de aceptarla.
     -->
     <NoWarn>$(NoWarn);1591;1573;NU1902</NoWarn>
   </PropertyGroup>

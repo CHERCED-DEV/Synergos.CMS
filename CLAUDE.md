@@ -95,12 +95,22 @@
 
 ## 1. Umbraco 13 LTS pinned
 
-Umbraco 13.13.1 — **no upgrade** a 14+ sin ADR nuevo. La razón:
+Umbraco 13.15.1 — **no upgrade** a 14+ sin ADR nuevo. La razón:
 Umbraco 14+ descontinuó Macros, cambió el editor de Block Grid a
 Lit/TS, y requiere .NET 9+. Ver ADR 0001.
 
-NU1902 (vulnerabilidad moderate) es un conocido-sin-patch dentro
-del branch 13.x. Aceptado.
+**Subida de parche dentro del pin, 2026-09-17**: 13.13.1 → 13.15.1.
+La forzó `GHSA-wr57-hqmp-fgvh` (severidad ALTA, publicada ese mismo
+día): la Delivery API filtra contenido protegido por Public Access al
+expandir un Content Picker. Parcheada en 13.15.1, así que se cierra
+sin salir del pin — y acá la Delivery API ni siquiera está habilitada.
+De paso cerró el open redirect `GHSA-2qjj-h6wp-c7h7`, parcheado desde
+13.14.0.
+
+Queda **una** moderate sin patch en ninguna versión —
+`GHSA-54mj-vcvj-q3v5`— y ésa es la que sigue bajo `NoWarn NU1902`.
+La frase que había acá decía que NU1902 entero era «sin patch en
+13.x», y esa razón tapó el open redirect cuatro meses.
 
 ## 2. Mapa del proyecto
 
