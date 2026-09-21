@@ -31,4 +31,51 @@
     <ProjectReference Include="..\Synergos.CMS.Interfaces\Synergos.CMS.Interfaces.csproj" />
   </ItemGroup>
 
+  <!--
+    EL TRINQUETE DEL #134 NO CRUZA A LAS VISTAS, Y ESO NO ES RELAJARLO (#151).
+
+    `TreatWarningsAsErrors` vale para lo que el build COMPILA. Las vistas de este
+    proyecto no son eso: `ModelsMode=InMemoryAuto` obliga a `RazorCompileOnBuild=false`
+    —está diez líneas más arriba— así que TODA vista se compila en caliente, al
+    servirla, por el compilador de Razor en runtime. Y ese compilador no lee este
+    fichero: arma sus `CSharpCompilationOptions` desde el bloque `compilationOptions`
+    del `deps.json`, donde el SDK copia `$(TreatWarningsAsErrors)` tal cual
+    (`Microsoft.NET.PreserveCompilationContext.targets`, target
+    `ComputeDependencyFileCompilerOptions`).
+
+    El resultado medido: desde el #134, CUALQUIER aviso en CUALQUIER vista devuelve
+    500. Con la portada sembrada, `/` contestaba 500 por dos avisos de
+    `Views/Partials/SynHost/HeroBanner.cshtml` — un `object?` (CS8669) y un
+    `GetDictionaryValue(string, string)` obsoleto (CS0618). Quitando este único
+    booleano del `deps.json`: 19 785 bytes con su cuerpo.
+
+    POR QUÉ SE QUITA EN VEZ DE ARREGLAR LAS VISTAS. Dos razones medidas, no de gusto:
+
+    · Es un trinquete SIN MEDICIÓN. `dotnet build` compila cero vistas, así que
+      ningún build puede ver lo que este booleano castiga. Un gate que sólo puede
+      descubrirse con un 500 en producción distingue al revés que el defecto — lo
+      mismo que #128, donde el gate no corría en el cambio que lo necesitaba.
+
+    · No son dos líneas. Medido sobre las 401 vistas: 188 llamadas al
+      `GetDictionaryValue` de dos argumentos en 40 ficheros, y 109 vistas con
+      anotaciones nullable. Y lo segundo NO se puede arreglar: `Nullable` no está en
+      la lista que el SDK propaga al `deps.json` —`TreatWarningsAsErrors` sí—, así que
+      las vistas se compilan SIEMPRE con el contexto nullable apagado mientras el
+      proyecto lo tiene encendido. Un `object?` en una vista es CS8669 para siempre.
+      O sea: la propagación está a medias, y a medias es peor que ninguna.
+
+    Lo que SÍ vigila las vistas es pedir la página — `tools/humo-portada.mjs` y
+    `tools/humo-conectado.mjs` (#92, #119, #126). Este booleano no las vigilaba: las
+    apagaba.
+
+    Hay gate sobre el ARTEFACTO y no sobre este comentario: `ConfiguracionDelBuildTests`
+    lee el `deps.json` generado. Si alguien borra este target, se pone rojo.
+  -->
+  <Target Name="LasVistasNoHeredanElTrinqueteDeAvisos"
+          AfterTargets="ComputeDependencyFileCompilerOptions">
+    <ItemGroup>
+      <DependencyFileCompilerOptions TreatWarningsAsErrors="false" />
+    </ItemGroup>
+  </Target>
+
 </Project>

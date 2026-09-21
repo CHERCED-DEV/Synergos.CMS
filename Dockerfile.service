@@ -50,7 +50,11 @@ WORKDIR /src
 # dominio equivocado.
 #
 # Los dos los deriva del disco `tools/service-matrix.mjs`; nadie los teclea.
-COPY global.json Directory.Build.props Directory.Packages.props ./
+# `.editorconfig` va en esta lista desde el #151. Ahí viven ocho severidades que
+# desde el #134 `TreatWarningsAsErrors` convierte en errores: sin él, medido
+# sobre `Synergos.Api.Consent`, la imagen falla con 6 CA1848 + 2 CS1574 +
+# 2 CA1873. Las 26 imágenes llevaban un mes sin construirse por esto.
+COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
 COPY backend/nucleo/Synergos.Core/Synergos.Core.csproj backend/nucleo/Synergos.Core/
 COPY backend/nucleo/Synergos.Shared/Synergos.Shared.csproj backend/nucleo/Synergos.Shared/
 COPY backend/orquestadores/Synergos.Bff.Core/Synergos.Bff.Core.csproj backend/orquestadores/Synergos.Bff.Core/

@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3283 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3286 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2247 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 403 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 406 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3283**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3286**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -163,6 +163,7 @@ Synergos.CMS/
 │                                + molde del vertical (10, doc 12)
 │                                + seudónimo único (3, #120)
 │                                + portada de arranque (5, #119)
+│                                + configuración del build (3, #151)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1468,6 +1469,57 @@ Las que salieron de construir el árbol de servicios (§0.B):
   arnés son AFIRMACIONES (el pin, las cifras, las rutas), y lo que se queda es quien
   las cruzaba. Las dos mitades en verde y el hueco justo en medio.
 
+- `feedback_a_severity_travels_further_than_its_exemption` — **una severidad de
+  compilación viaja a artefactos que el build nunca compila, y su exención NO viaja con
+  ella: lo que sale de ahí no es un build más estricto, es uno con OTRAS reglas** (#151).
+  El #134 puso `TreatWarningsAsErrors=true` con el árbol en cero avisos, así que era
+  gratis — y previó **dos** precios, los dos locales («un SDK más nuevo puede ponerlo rojo
+  en una máquina y no en otra») y el #149 añadió el tercero, global («la base de avisos se
+  baja en el restore»). El cuarto no lo vio nadie, y es el que rompió el producto **dos
+  veces a la vez**:
+  **(a) La imagen.** Los dos `Dockerfile` copian a su capa de restore los ficheros de
+  configuración **uno por uno** —`global.json`, `Directory.Build.props`,
+  `Directory.Packages.props`— y **`.editorconfig` no estaba**. Ahí viven ocho severidades
+  (`CS1574`, `CA1848`, `CA1873`, `CA1305`, `CA1859`, `CA1861`, `CA1805`, `IDE0011`), así
+  que la imagen se compilaba con ocho diagnósticos MÁS que el repo. Antes del #134 eso
+  sólo producía avisos que nadie leía; después, **las 26 imágenes dejaron de
+  construirse** — medido moviendo el fichero y reconstruyendo en Release:
+  `Synergos.CMS.Interfaces` da **8 CS1574** y `Synergos.Api.Consent` **6 CA1848 + 2 CS1574
+  + 2 CA1873**, los mismos errores fichero por fichero que el CI.
+  **(b) Las vistas.** El SDK copia `$(TreatWarningsAsErrors)` al bloque
+  `compilationOptions` del `deps.json`
+  (`Microsoft.NET.PreserveCompilationContext.targets`), y de ahí saca sus opciones el
+  compilador de Razor **en caliente** — que acá es el único que hay
+  (`RazorCompileOnBuild=false`). Resultado: **toda página de contenido en 500** desde el
+  #134, por dos avisos de un partial. Medido: `/` contestaba 500 por un `object?`
+  (CS8669) y un `GetDictionaryValue(string, string)` obsoleto (CS0618) de
+  `SynHost/HeroBanner.cshtml`; cambiando **ese único booleano** del `deps.json`, sin tocar
+  una línea de Razor, **19 785 bytes con su cuerpo**.
+  **Y la propagación a las vistas está A MEDIAS, que es lo que decide el arreglo.**
+  `Nullable` **no** está en la lista que el SDK propaga y `TreatWarningsAsErrors` **sí**,
+  así que las vistas se compilan siempre con el contexto nullable apagado mientras el
+  proyecto lo tiene encendido: un `object?` en un `.cshtml` es CS8669 **para siempre**, en
+  109 de las 401 vistas. Arreglarlas no era una opción; quitar la propagación, sí. **Un
+  trinquete que el build no puede medir no es severidad: es una trampa** — sólo se
+  descubre con un 500, que es distinguir al revés que el defecto (#128).
+  **Cómo se caza, y la pregunta se hace al AÑADIR la severidad**: *¿qué otras
+  compilaciones se hacen con este árbol, y les llega también lo que las exime?* Se
+  contesta con un `grep` de los `COPY` de cada Dockerfile y con un `jq` del `deps.json`
+  — las dos son un minuto, y ninguna se le ocurre a quien acaba de dejar el build en
+  verde.
+  **Y el gate va sobre los ARTEFACTOS, no sobre el `.csproj` ni sobre la prosa**
+  (`ConfiguracionDelBuildTests`): cruza los `COPY` de los dos Dockerfile contra los
+  ficheros de configuración que existen en la raíz —**en los dos sentidos**, que uno
+  copiado y ausente rompe la imagen en el `COPY`— y lee el `deps.json` generado. Se
+  parsea el Dockerfile **sin comentarios**, porque los comentarios que explican por qué
+  `.editorconfig` está en la lista lo nombran: medido, con la línea `COPY` mutada y el
+  comentario intacto, un gate que leyera el fichero entero pasaría en verde.
+  **La cuarta cara, que no la cierra nada de esto**: la señal existía y estaba roja.
+  `humo-portada` y `humo-conectado` llevaban **quince días y seis commits** en rojo en
+  `master`, y `images.yml` un mes. Este fichero ya tiene escrito que «un gate siempre
+  rojo deja de leerse»; el precio esta vez fue el sitio entero caído mientras las tres
+  suites pasaban.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1527,13 +1579,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3283 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3286 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2247
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 403
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 406
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -1892,7 +1944,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3283 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3286 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

@@ -34,6 +34,29 @@
       ENCENDIDA (es el default, y por eso no se declara): apagarla convertiría el único
       aviso que nadie de este repo puede prever en uno que nadie va a ver nunca.
 
+      Y hay un TERCER precio, que es el que costó el #151 y que los dos de arriba no
+      cubren: esta bandera **VIAJA a compilaciones que este build no hace**, y a ninguna
+      de ellas le llega la configuración que la vuelve inofensiva.
+
+        · A la IMAGEN. Los dos `Dockerfile` copian a su capa de restore los ficheros de
+          configuración UNO POR UNO, y `.editorconfig` —donde viven ocho severidades— no
+          estaba en la lista. Medido reproduciendo el CI en local: sin ese fichero,
+          `Synergos.CMS.Interfaces` da 8 CS1574 y `Synergos.Api.Consent` 6 CA1848 + 2
+          CS1574 + 2 CA1873. Las 26 imágenes llevaban un mes sin construirse.
+
+        · A las VISTAS. El SDK copia `$(TreatWarningsAsErrors)` al bloque
+          `compilationOptions` del `deps.json`, que es de donde el compilador de Razor EN
+          CALIENTE saca sus opciones — y acá toda vista se compila en caliente
+          (`RazorCompileOnBuild=false`, obligado por `ModelsMode=InMemoryAuto`). O sea que
+          desde el #134 cualquier aviso en cualquier `.cshtml` devolvía 500, y ningún
+          `dotnet build` podía verlo porque compila cero vistas. `Synergos.CMS.Web.csproj`
+          lo desactiva para esa propagación SOLA, con el razonamiento al lado.
+
+      La regla que queda, y se hace al AÑADIR una severidad y no al escribirla: ¿QUÉ otras
+      compilaciones se hacen con este árbol, y les llega también lo que las exime? Una
+      severidad que viaja sin su exención no endurece nada — compila con otras reglas.
+      Hay gate (`ConfiguracionDelBuildTests`), y mide los dos artefactos, no esta prosa.
+
       `WarningsAsErrors` se queda para que la lista de los cuatro nullability siga escrita:
       son los que NO se negocian aunque alguien apague la bandera de arriba para depurar.
     -->

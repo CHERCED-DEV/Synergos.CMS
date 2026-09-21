@@ -20,7 +20,13 @@ WORKDIR /src
 
 # Restore en su propia capa: mientras no cambien los .csproj ni la lista
 # central de paquetes, Docker reusa el caché y se saltea bajar Umbraco.
-COPY global.json Directory.Build.props Directory.Packages.props ./
+# `.editorconfig` va en esta lista y NO es cosmético: ahí viven ocho severidades
+# —CS1574, CA1848, CA1873, CA1305, CA1859, CA1861, CA1805, IDE0011— y desde el
+# #134 `TreatWarningsAsErrors` las convierte en errores. Sin él la imagen NO se
+# construye: medido, 8 CS1574 en `Synergos.CMS.Interfaces` (#151). Antes del
+# #134 faltaba igual y sólo producía avisos que nadie leía, así que el defecto
+# entró sin tocar este fichero.
+COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
 COPY Synergos.CMS.Interfaces/Synergos.CMS.Interfaces.csproj Synergos.CMS.Interfaces/
 COPY Synergos.CMS.Application/Synergos.CMS.Application.csproj Synergos.CMS.Application/
 COPY Synergos.CMS.Web/Synergos.CMS.Web.csproj Synergos.CMS.Web/
