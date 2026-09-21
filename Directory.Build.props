@@ -23,6 +23,17 @@
       fichero — entrar a `NoWarn` CON SU RAZÓN AL LADO, como 1591, 1573 y NU1902 — y es
       preferible a que el aviso entre sin que nadie lo vea, que es lo que costó 643.
 
+      Y hay un SEGUNDO precio que el de arriba no cubre, porque no depende de esta máquina
+      ni de ninguna: `NuGetAudit` cruza las dependencias contra la base de avisos que se
+      baja EN EL RESTORE, así que este trinquete se pone rojo el día que alguien PUBLICA un
+      aviso, sin que nadie toque un commit — y se pone rojo en todas las máquinas a la vez.
+      Pasó con NU1903 (GHSA-wr57-hqmp-fgvh) sobre Umbraco: el árbol entero compilaba en
+      cero avisos y el build estaba rojo. Eso NO es motivo para apagar `NuGetAudit`: es la
+      señal haciendo su trabajo. La salida se decide mirando si el aviso tiene parche dentro
+      de la rama clavada — ver la nota de NU1902/NU1903 más abajo. Y la auditoría se queda
+      ENCENDIDA (es el default, y por eso no se declara): apagarla convertiría el único
+      aviso que nadie de este repo puede prever en uno que nadie va a ver nunca.
+
       `WarningsAsErrors` se queda para que la lista de los cuatro nullability siga escrita:
       son los que NO se negocian aunque alguien apague la bandera de arriba para depurar.
     -->
@@ -48,9 +59,21 @@
                siendo errores por TreatWarningsAsErrors—, que es el defecto de
                verdad de esta familia: en el #134 había cuatro sitios con
                `///` sobre un parámetro posicional, y el compilador los tiraba.
-        NU1902 Umbraco.Cms 13.13.1 vulnerabilidad moderate conocida, aceptada en
-               ADR 0001 (memoria project_umbraco_version_pin). Sin patch en
-               branch 13.x; upgrade a 14+ requiere ADR nuevo.
+        NU1902 Umbraco.Cms vulnerabilidad MODERATE conocida, aceptada en ADR 0001
+               (memoria project_umbraco_version_pin). Es GHSA-54mj-vcvj-q3v5, y su
+               rango vulnerable es `(, 16.3.3]`: o sea que NO hay una versión de la
+               rama 13 que lo cierre — habría que irse a 16+, que es el upgrade a
+               mayor que ADR 0001 prohíbe sin ADR nuevo. Su razón contesta «por qué
+               esto NO se arregla», que es lo que distingue una exención legítima.
+
+               Y NU1903 NO está en esta lista, a propósito. Cuando apareció
+               —GHSA-wr57-hqmp-fgvh, HIGH, rango `[12.0.0, 13.15.1)`— tenía parche
+               DENTRO de la rama clavada, así que silenciarlo habría contestado «por
+               qué esto no se arregló TODAVÍA», que es un ticket sin abrir disfrazado
+               de exención (feedback_a_census_entry_is_how_a_defect_survives_its_own_gate).
+               Se subió la versión. La regla, para el próximo: antes de escribir un
+               NU19xx acá se mira el rango vulnerable del aviso contra las versiones
+               publicadas de la rama; si alguna lo cierra, esto no es su sitio.
     -->
     <NoWarn>$(NoWarn);1591;1573;NU1902</NoWarn>
   </PropertyGroup>

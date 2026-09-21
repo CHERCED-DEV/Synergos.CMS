@@ -356,12 +356,15 @@ public sealed class CifrasDeClaudeMdTests
     /// elementos había el día de esa decisión no está desviado, está fechado, y reescribirlo sería
     /// falsificarlo. La frontera es «¿esto afirma el presente?», no una lista de rutas.</para>
     ///
-    /// <para>Fuera queda también el catálogo de <c>synergos-architect</c>, que se declara
-    /// <c>AUTO-GENERATED</c>: a mano no se toca. Y ahí hay un hallazgo aparte, en #86 — su
-    /// generador vive en el repo hermano y escribe a <c>&lt;padre&gt;/.claude/skills/…</c>, no al
-    /// que este repo versiona, así que en la disposición que §7 prescribe <b>no puede
-    /// refrescarlo</b>. Un fichero rotulado auto-generado que nadie puede regenerar se lee como
-    /// fresco y no lo está.</para>
+    /// <para><b>El catálogo de <c>synergos-architect</c> ya no está en este repo</b> (#141). El
+    /// arnés entero vive en <c>Synergos.Fabrica</c>, fijado por SHA en <c>arnes.lock.json</c>, así
+    /// que este gate no lo ve ni tiene por qué. Lo que aquel hallazgo del #86 describía —su
+    /// generador vivía en el repo HERMANO y escribía a <c>&lt;padre&gt;/.claude/skills/…</c>, no
+    /// al que ningún repo versionaba, así que <b>nadie podía refrescarlo</b>— quedó cerrado
+    /// borrando el generador: un fichero rotulado <c>AUTO-GENERATED</c> que nadie regenera se lee
+    /// como fresco y no lo está, y era la causa de que afirmara 122 sobre un cuerpo de 130. Hoy
+    /// el catálogo se declara como la FOTO fechada que es, y lo reemplaza el MCP
+    /// <c>synergos-catalogo</c> (HU #143), que deriva del disco en cada consulta.</para>
     /// </remarks>
     [Fact]
     public void La_cuenta_de_elementos_del_CDN_vive_en_un_solo_sitio()

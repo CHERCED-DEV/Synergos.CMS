@@ -18,10 +18,15 @@ dotnet build Synergos.CMS.sln
 ```
 
 **Expected output:**
-- 4 projects built successfully.
-- `0 errors`.
-- Exactly **1 warning**: `NU1902` on `Umbraco.Cms` 13.x (known advisory,
-  see ADR 0001). Any other warning is a real finding — treat it as such.
+- 34 projects built successfully (the integrating solution — see `CLAUDE.md` §7
+  for the other three).
+- `0 errors` **and `0 warnings`**.
+
+This section said «exactly 1 warning: `NU1902`» until #149, and that stopped
+being true at #134: `NU1902` went into `NoWarn` (with its reason) and
+`TreatWarningsAsErrors=true` went on, so **any** warning is now an error and a
+clean build prints zero of both. A doc that tells you to expect one warning
+teaches you to skim past the line that matters.
 
 ## Run (dev)
 
@@ -68,7 +73,8 @@ find . -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
 
 | Warning | Source | Action |
 |---------|--------|--------|
-| `NU1902` — moderate advisory on `Umbraco.Cms` | Umbraco 13.x, no patch yet | Accept. See ADR 0001. |
+| `NU1902` — moderate advisory on `Umbraco.Cms` | `GHSA-54mj-vcvj-q3v5`; vulnerable range `(, 16.3.3]`, so **no** 13.x release closes it | Accept — suppressed centrally (`NoWarn=NU1902`). See ADR 0001. |
+| `NU1903` — **high** advisory on `Umbraco.Cms` | `GHSA-wr57-hqmp-fgvh`; vulnerable range `[12.0.0, 13.15.1)` | **Fixed, not suppressed** — pin moved to 13.16.2 (#149). A NuGet advisory with a patch inside the pinned branch never belongs in `NoWarn`. |
 | `CS1591` — missing XML doc on public type | Analyzer | Suppressed centrally (`NoWarn=1591`). |
 | `IDE0005` — unused using | Analyzer | Fix immediately — this is on as an error-level by project policy. |
 

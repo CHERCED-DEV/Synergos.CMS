@@ -1,0 +1,19 @@
+{
+  "$comentario": [
+    "El arnés vive en UN repo (CHERCED-DEV/Synergos.CMS#141) y acá se FIJA por SHA.",
+    "Por qué un pin y no 'la última': un arnés que se actualiza solo cambia el",
+    "comportamiento del agente entre dos corridas del mismo PR, y eso no se lee como",
+    "'cambió el arnés' — se lee como 'el agente es inconsistente'.",
+    "Por qué es un FICHERO y no la instalación: un plugin se instala por máquina, así",
+    "que CI no lo tiene. CI clona el sha que dice esto. Sin eso, el gate de la HU #142",
+    "sólo correría donde ya estaba bien.",
+    "Se actualiza a mano y el diff va en el commit que lo causó — como cualquier lock."
+  ],
+  "arnes": {
+    "nombre": "synergos-fabrica",
+    "repo": "https://github.com/CHERCED-DEV/Synergos.Fabrica.git",
+    "sha": "5190a95cfe1fe4eb93ec01d9f52350f0ce1b73cd",
+    "marketplace": "synergos-fabrica",
+    "plugin": "synergos-fabrica"
+  }
+}
