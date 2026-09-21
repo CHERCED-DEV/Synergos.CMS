@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3285 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3283 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2247 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 405 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 403 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -121,7 +121,9 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que faltan hasta las 3285 de hoy son el gate que esta misma HU escribió.
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3283**: el #141
+> se llevó dos de esos cinco al sacar el arnés de este repo — ver
+> `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
 ## 2. Mapa del proyecto
 
@@ -1441,6 +1443,30 @@ Las que salieron de construir el árbol de servicios (§0.B):
   sería peor que la cifra vieja — sería falsear lo que alguien midió. El censo sólo
   lleva a los que dicen «la versión clavada ES».
 
+- `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach` —
+  **promover algo a un repo compartido no sólo mueve el fichero: mueve todo lo que
+  ese fichero AFIRMABA fuera del alcance de los gates de acá, y eso no falla — deja
+  de vigilarse.** El #141 sacó el arnés a `Synergos.Fabrica`, y con él se fueron dos
+  filas del censo de `VersionDeUmbracoTests`: las dos frases de
+  `synergos-guardrails` que afirman el pin de Umbraco. El gate no las puede leer
+  desde otro repo, así que **el pin volvió a estar afirmado en un sitio que nadie
+  cruza** — que es literalmente el defecto que el #149 acababa de medir, reintroducido
+  por el commit que venía a mejorar las cosas.
+  **Lo único que lo destapó fue el segundo diente del censo**: una entrada que ya no
+  corresponde ROMPE, así que el commit que borró las copias estuvo obligado a mirar.
+  Sin esa mitad, el gate habría seguido en verde vigilando dos ficheros ausentes —
+  `feedback_a_census_entry_is_how_a_defect_survives_its_own_gate` con el fichero ido
+  en vez de la razón caducada.
+  **La pregunta que se hace ANTES de promover, y no después:** *¿qué gate de este
+  repo lee lo que me estoy llevando?* Cada uno de ésos se queda sin sujeto, y hay
+  exactamente dos salidas honestas: que el repo de destino herede la comprobación
+  —con su ticket y su número, no con una intención—, o quedarse. Lo que no vale es
+  borrar la fila y seguir: una cobertura que se pierde en silencio se pierde el día
+  que hacía falta.
+  **Y el reparto es el mismo defecto de siempre visto de lado**: lo que se lleva el
+  arnés son AFIRMACIONES (el pin, las cifras, las rutas), y lo que se queda es quien
+  las cruzaba. Las dos mitades en verde y el hueco justo en medio.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1500,13 +1526,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3285 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3283 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2247
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 405
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 403
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -1865,7 +1891,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3285 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3283 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

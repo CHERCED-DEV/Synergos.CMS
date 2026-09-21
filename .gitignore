@@ -97,8 +97,12 @@ Thumbs.db
 *~
 
 # ───────────────────────── Claude Code harness ───────────────────────
-# .claude local sigue ignorado (settings, worktrees), MENOS las skills:
-# compartidas al remoto para que las sesiones desde la tablet las tengan.
+# .claude local sigue ignorado (settings, worktrees). La excepción de `skills/` se
+# CONSERVA aunque ya no haya skills acá: el arnés se mudó a Synergos.Fabrica (#141) y
+# lo que queda versionado es el README que dice adónde se fue — quien clone y no
+# encuentre skills tiene que poder leer por qué sin salir del repo.
+# Y es donde iría una skill PROPIA de este repo, si alguna vez hace falta una que no
+# tenga sentido en el otro árbol.
 .claude/*
 !.claude/skills/
 

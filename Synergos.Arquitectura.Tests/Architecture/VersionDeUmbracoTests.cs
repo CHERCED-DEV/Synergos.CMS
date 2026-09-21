@@ -70,17 +70,26 @@ public sealed class VersionDeUmbracoTests
             "the pin is now `{0}`",
             "la nota que enmienda la Decision tiene que nombrar el pin vigente"
         },
-        {
-            ".claude/skills/synergos-guardrails/SKILL.md",
-            "**{0}, NO upgrade a 14+**",
-            "§7 la afirma, y es la skill que se lee ANTES de proponer cualquier cambio"
-        },
-        {
-            ".claude/skills/synergos-guardrails/SKILL.md",
-            "Pinned {0} (ADR 0001)",
-            "la tabla de prohibiciones la repite, y puede desviarse sola de la §7 de arriba"
-        },
     };
+
+    // LAS DOS ENTRADAS QUE SE FUERON, Y POR QUÉ ESTO ES UNA PÉRDIDA DE COBERTURA (#141).
+    //
+    // Hasta el #141 el censo llevaba dos filas más, las dos sobre
+    // `.claude/skills/synergos-guardrails/SKILL.md`: su §7 («**{0}, NO upgrade a 14+**») y la
+    // tabla de prohibiciones que la repite («Pinned {0} (ADR 0001)») — dos afirmaciones del
+    // mismo fichero que pueden desviarse UNA DE OTRA, que es por qué eran dos filas.
+    //
+    // El #141 sacó el arnés de este repo: las skills viven ahora en `Synergos.Fabrica`, fijada
+    // por SHA en `arnes.lock.json`. Este gate ya NO PUEDE VERLAS, y dejar las filas apuntando a
+    // un fichero ausente sería un censo mintiendo — el segundo diente lo rompe a propósito, que
+    // es lo que obligó a tocar esto en el mismo commit que borró las copias.
+    //
+    // Lo que se pierde es real y no se disimula: el pin de Umbraco vuelve a estar afirmado en
+    // un sitio que nadie cruza, que es exactamente el defecto que el #149 midió. Quien lo
+    // recupera es el gate del arnés (HU #142, `gates/arnes-derivado.mjs`): tiene que clonar el
+    // SHA del lock y cruzar esas dos frases contra `Directory.Packages.props` de acá. Queda
+    // escrito con su número porque una pérdida sin ticket es cómo un defecto sobrevive a la
+    // auditoría que lo vio (#137).
 
     private static readonly Regex Pin = new(
         @"<PackageVersion\s+Include=""Umbraco\.Cms""\s+Version=""(?<v>[^""]+)""",
