@@ -139,8 +139,11 @@ Luego **Ctrl+Shift+R** (el runtime es immutable/versionado; F5 sirve cache viejo
 
 ## 7. Umbraco 13 — pinned
 
-- **13.13.1, NO upgrade a 14+** sin ADR nuevo (14+ descontinuó Macros, cambió Block Grid a
+- **13.16.2, NO upgrade a 14+** sin ADR nuevo (14+ descontinuó Macros, cambió Block Grid a
   Lit/TS, requiere .NET 9+). NU1902 (moderate, sin patch en 13.x) es aceptado. → ADR 0001
+- **Lo clavado es la RAMA 13 LTS, no un parche**: subir dentro de 13.x no es el upgrade que
+  ADR 0001 prohíbe. Decía 13.13.1 hasta el #149, que subió el pin porque apareció un aviso
+  **high** con parche dentro de la rama (NU1903). Hay gate (`VersionDeUmbracoTests`).
 - **Sin Management API para contenido** (esa REST es v14+). El contenido se autora
   **server-side** vía `IContentService` / el motor de fill (`POST /dev/fill-synergos-pages`).
   → `synergos-content-fill` · `synergos-cms-author`
@@ -171,7 +174,7 @@ Luego **Ctrl+Shift+R** (el runtime es immutable/versionado; F5 sirve cache viejo
 | Publicar solo bundles de app tras tocar `libs/shared` | Cerrar con `build:runtime`+`publish:runtime` + Ctrl+Shift+R |
 | Commitear la DB / mezclar feature+refactor / skip hooks | DB externa; commits atómicos; hooks siempre |
 | Correr uSync Import o tocar la DB como agente | Lo hace el arquitecto; el agente escribe XML y avisa |
-| Upgrade de Umbraco a 14+ | Pinned 13.13.1 (ADR 0001) |
+| Upgrade de Umbraco a 14+ | Pinned 13.16.2 (ADR 0001) |
 | `.Root()` cuando quieres el siteRoot | `AncestorOrSelf("siteRoot")` (`.Root()` = platformRoot umbrella → barre todos los siteRoots) |
 | 2+ agentes en paralelo sin pedido explícito | Uno, salvo que el arquitecto lo pida |
 

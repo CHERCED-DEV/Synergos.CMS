@@ -16,7 +16,7 @@
 
   <!-- Umbraco CMS (LTS — pinned, see ADR 0001) -->
   <ItemGroup>
-    <PackageVersion Include="Umbraco.Cms" Version="13.13.1" />
+    <PackageVersion Include="Umbraco.Cms" Version="13.16.2" />
   </ItemGroup>
 
   <!-- Globalization (ICU app-local, required by Umbraco for cross-platform) -->

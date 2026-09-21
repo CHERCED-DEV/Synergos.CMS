@@ -52,4 +52,7 @@ dotnet_diagnostic.CA1861.severity  = none      # static readonly array args
 dotnet_diagnostic.CA1873.severity  = none      # lazy logger arg evaluation
 dotnet_diagnostic.CA1805.severity  = none      # explicit default initialization
 dotnet_diagnostic.CS1574.severity  = none      # XML cref not resolved
-dotnet_diagnostic.NU1902.severity  = none      # Umbraco 13.13.1 NU1902 known (ADR 0001)
+# NU1902 = GHSA-54mj-vcvj-q3v5 sobre Umbraco.Cms: moderate, y su rango vulnerable `(, 16.3.3]`
+# no lo cierra ninguna version de la rama 13 (ADR 0001). NO se nombra aca la version clavada:
+# vive en Directory.Packages.props y una copia mas es una copia mas que se desvia.
+dotnet_diagnostic.NU1902.severity  = none      # Umbraco.Cms, sin patch en 13.x (ADR 0001)

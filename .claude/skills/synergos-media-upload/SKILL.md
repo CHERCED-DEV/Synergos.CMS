@@ -270,7 +270,7 @@ Guardar el `mediaKey` para pasarlo a `synergos-cms-author` cuando se necesite.
 
 | Error | Causa probable | Solución |
 |-------|---------------|----------|
-| `404 /security/back-office/token` | URL Management API incorrecta en esta build | Verificar que Umbraco 13.13.1 está activo; probar con swagger en `/umbraco/swagger` |
+| `404 /security/back-office/token` | URL Management API incorrecta en esta build | Verificar que el Umbraco de la versión clavada (`Directory.Packages.props`) está activo; probar con swagger en `/umbraco/swagger` |
 | `401 Unauthorized` | Credenciales incorrectas o sesión expirada | Regenerar token; verificar `UnattendedUserPassword` en appsettings.Development.json |
 | `400 Bad Request` en POST /media | `contentTypeKey` incorrecto o payload malformado | Verificar GUID de synImage (`bcc6d08c-509e-4ab6-8d8b-c00c6199253f`) en uSync |
 | `System.Drawing` no carga | GDI+ no disponible (raro) | Usar fallback SVG (sección 2) |

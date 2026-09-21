@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3280 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3285 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2247 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 400 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 405 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -95,12 +95,33 @@
 
 ## 1. Umbraco 13 LTS pinned
 
-Umbraco 13.13.1 — **no upgrade** a 14+ sin ADR nuevo. La razón:
+Umbraco 13.16.2 — **no upgrade** a 14+ sin ADR nuevo. La razón:
 Umbraco 14+ descontinuó Macros, cambió el editor de Block Grid a
-Lit/TS, y requiere .NET 9+. Ver ADR 0001.
+Lit/TS, y requiere .NET 9+. Ver ADR 0001 y su enmienda.
+
+**Lo que está clavado es la rama 13 LTS, no un parche concreto**, y esa
+distinción costó entenderla: subir DENTRO de 13.x no es el upgrade que
+ADR 0001 prohíbe — lo prohibido es 14+. Esta línea decía **13.13.1**
+desde el andamiaje, y hay gate que la cruza contra
+`Directory.Packages.props` (`VersionDeUmbracoTests`), porque la versión
+estaba escrita a mano en varios sitios y **ninguno los cruzaba**.
 
 NU1902 (vulnerabilidad moderate) es un conocido-sin-patch dentro
-del branch 13.x. Aceptado.
+del branch 13.x. Aceptado. Es `GHSA-54mj-vcvj-q3v5`, y su rango
+vulnerable —`(, 16.3.3]`— es lo que hace verdad ese «sin patch»: no hay
+versión de la rama 13 que lo cierre.
+
+> **Y NU1903 NO se aceptó, que es la mitad que importa** (#149). Apareció
+> `GHSA-wr57-hqmp-fgvh` —**high**, rango `[12.0.0, 13.15.1)`— y con
+> `TreatWarningsAsErrors` puesto desde el #134 **el build se puso rojo sin
+> que nadie tocara un commit**: lo que cambió fue la base de avisos que
+> `NuGetAudit` se baja en el restore, así que se puso rojo en todas las
+> máquinas a la vez y con el árbol entero compilando en cero avisos.
+> Tenía parche **dentro de la rama clavada**, así que la salida no era
+> `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
+> Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
+> las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
+> que faltan hasta las 3285 de hoy son el gate que esta misma HU escribió.
 
 ## 2. Mapa del proyecto
 
@@ -1384,6 +1405,42 @@ Las que salieron de construir el árbol de servicios (§0.B):
   desplegada va por nombre de imagen y no por ruta; que no cambie es la
   comprobación de que el movimiento es del árbol y no del producto.
 
+- `feedback_a_red_build_can_arrive_without_a_commit` — **`TreatWarningsAsErrors`
+  cruzado con `NuGetAudit` hace que el color del build deje de ser una propiedad
+  del repo: la base de avisos se baja EN EL RESTORE, así que el día que alguien
+  publica un aviso el build se pone rojo en todas las máquinas a la vez, sin que
+  nadie toque un commit** (#149). El #134 dejó escrito el precio que sí previó
+  —«un SDK más nuevo con analizadores nuevos puede ponerlo rojo en una máquina y
+  no en otra»— y ése tiene la forma contraria: es local y se diagnostica mirando
+  la máquina. Éste es global y **no se diagnostica mirando nada del árbol**: el
+  código compilaba en cero avisos, las 3280 pasaban, y `dotnet build` salía con
+  un error sobre un paquete que nadie había tocado en meses.
+  **La salida NO es apagar la auditoría** —sería cambiar el único aviso que nadie
+  del repo puede prever por uno que nadie va a ver nunca— **y tampoco es `NoWarn`
+  por defecto.** Se decide con una pregunta que se contesta en dos minutos y con
+  datos, no leyendo: **¿el rango vulnerable del aviso lo cierra alguna versión
+  publicada de la rama que tengo clavada?** El índice de vulnerabilidades de NuGet
+  lo dice —es el mismo que usa la auditoría, así que no hay que creerle a nadie—
+  y la lista de versiones también:
+  `curl -s https://api.nuget.org/v3-flatcontainer/<paquete>/index.json`.
+  Si **sí** la cierra, se sube y punto: silenciarlo escribiría una razón que
+  contesta «por qué esto no se arregló TODAVÍA», que es un ticket sin abrir
+  disfrazado de exención —`feedback_a_census_entry_is_how_a_defect_survives_its_own_gate`—.
+  Si **no**, ahí sí entra a `NoWarn` con su razón, como NU1902, cuyo rango
+  `(, 16.3.3]` de verdad no lo cierra ningún 13.x.
+  **Y lo que el susto destapó no era la versión: era que estaba escrita a mano en
+  SIETE sitios y ninguno los cruzaba.** Las tres suites pasaban en verde con
+  `Directory.Packages.props` ya en 13.16.2 y `CLAUDE.md` §1, la skill de
+  guardrails y la tabla de la ADR todavía diciendo 13.13.1 — o sea que la guía
+  que alguien lee ANTES de tocar nada mentía y nada se ponía rojo. Hay gate
+  (`VersionDeUmbracoTests`), y su primer diente es el que faltaba desde el
+  andamiaje: **ADR 0001 prohíbe 14+ y eso era prosa**, así que un `Version="14.0.0"`
+  compilaba. **El corte que hace útil al segundo diente es distinguir AFIRMAR de
+  NARRAR**: el `CHANGELOG` y la ADR 0093 nombran la versión vieja porque describen
+  mediciones hechas contra ella, y reescribir eso para que cuadre con el pin de hoy
+  sería peor que la cifra vieja — sería falsear lo que alguien midió. El censo sólo
+  lleva a los que dicen «la versión clavada ES».
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1443,13 +1500,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3280 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3285 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2247
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 400
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 405
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -1808,7 +1865,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3280 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3285 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
