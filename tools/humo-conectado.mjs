@@ -62,7 +62,7 @@
 
 import { spawn, execSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, mkdtempSync, statSync, createWriteStream } from 'node:fs';
+import { createReadStream, existsSync, mkdtempSync, readFileSync, statSync, createWriteStream } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -307,11 +307,43 @@ try {
 } finally {
   child.kill('SIGKILL');
   servidor?.close();
-  appLog.end();
+}
+
+/**
+ * Vuelca el final del log de la aplicación cuando el gate falla.
+ *
+ * Existe porque el fallo más caro de este gate es el que NO deja pista: cuando el
+ * proceso se muere al arrancar, lo único que dice la corrida es «el proceso murió
+ * (exit null)», y lo que explica por qué está en un fichero que en CI queda como
+ * ARTEFACTO — o sea a un login y tres clics de distancia, o inalcanzable para quien
+ * lee el log desde fuera. Medido: el #151 estuvo cuatro días descrito como «hay que
+ * mirar el contenido de ese log de 423 bytes» sin que nadie lo mirara.
+ *
+ * Se vuelca SÓLO al fallar: en verde son cientos de líneas de arranque de Umbraco que
+ * taparían el resultado, que es justo lo que esta función existe para evitar.
+ */
+async function volcarLog(etiqueta, ruta, stream, lineas = 40) {
+  // `end()` vacía lo pendiente de forma asíncrona, así que leer sin esperar puede
+  // dar un fichero truncado — y un log truncado al diagnosticar un arranque que se
+  // muere es exactamente el dato que falta.
+  await new Promise((r) => {
+    const t = setTimeout(r, 2000);
+    stream.once('close', () => { clearTimeout(t); r(); });
+    stream.end();
+  });
+
+  if (!existsSync(ruta)) { console.error(`[${etiqueta}] no hay log que volcar en ${ruta}`); return; }
+  const todo = readFileSync(ruta, 'utf8').split('\n');
+  const cola = todo.slice(-lineas).join('\n').trim();
+  console.error(`[${etiqueta}] ── últimas ${Math.min(lineas, todo.length)} líneas de ${ruta} ──`);
+  console.error(cola || '(vacío)');
+  console.error(`[${etiqueta}] ── fin del log ──`);
 }
 
 if (fallos > 0) {
+  await volcarLog('humo-conectado', logPath, appLog);
   console.error(`[humo-conectado] ${fallos} fallo(s) — log: ${logPath}`);
   process.exit(1);
 }
+appLog.end();
 console.log('[humo-conectado] ✓ los dos árboles conectan: SSR + import map + bundles servidos');

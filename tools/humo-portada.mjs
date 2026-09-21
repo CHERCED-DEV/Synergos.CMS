@@ -41,7 +41,7 @@
  */
 
 import { spawn, execSync } from 'node:child_process';
-import { mkdtempSync, rmSync, createWriteStream, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, createWriteStream, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -202,7 +202,6 @@ try {
 } catch (e) {
   falla(e.message);
 } finally {
-  appLog.end();
   child.kill();
   await new Promise((r) => {
     const hard = setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* ya murió */ } }, 8000);
@@ -222,9 +221,34 @@ try {
   }
 } catch { /* sin git no hay aviso */ }
 
+
+/**
+ * Igual que en `humo-conectado.mjs`, y por la misma razón: el fallo más caro de este
+ * gate es el que no deja pista. Sin esto, una corrida de CI dice «el proceso murió
+ * (exit null)» y lo que lo explica se queda dentro del temporal del runner, que se
+ * borra con la máquina. Los dos gates son gemelos y el volcado también — escribirlo
+ * en uno y dejar nota en el otro es cómo un defecto identificado sobrevive (§5).
+ */
+async function volcarLog(etiqueta, ruta, stream, lineas = 40) {
+  await new Promise((r) => {
+    const t = setTimeout(r, 2000);
+    stream.once('close', () => { clearTimeout(t); r(); });
+    stream.end();
+  });
+
+  if (!existsSync(ruta)) { console.error(`[${etiqueta}] no hay log que volcar en ${ruta}`); return; }
+  const todo = readFileSync(ruta, 'utf8').split('\n');
+  const cola = todo.slice(-lineas).join('\n').trim();
+  console.error(`[${etiqueta}] ── últimas ${Math.min(lineas, todo.length)} líneas de ${ruta} ──`);
+  console.error(cola || '(vacío)');
+  console.error(`[${etiqueta}] ── fin del log ──`);
+}
+
 if (fallos > 0) {
+  await volcarLog('humo-portada', logPath, appLog);
   console.error(`[humo-portada] ✗ ${fallos} fallo(s) — se conserva ${tmp}`);
   process.exit(1);
 }
+appLog.end();
 try { rmSync(tmp, { recursive: true, force: true }); } catch { /* temp del SO */ }
 log('✓ hay camino: clon limpio → schema → portada sembrada → portada SERVIDA');
