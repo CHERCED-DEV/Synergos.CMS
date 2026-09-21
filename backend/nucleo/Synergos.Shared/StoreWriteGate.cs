@@ -36,7 +36,7 @@ namespace Synergos.Shared;
 /// <c>JsonCollectionStore</c>. El día que una lo tenga, esto no la cubre y hay que volver acá.</para>
 ///
 /// <para><b>Se cierra con un cerrojo del sistema de ficheros y no con un arriendo con
-/// vencimiento</b>, al revés que <see cref="ISagaLease"/> — y la diferencia está en quién muere.
+/// vencimiento</b>, al revés que <c>ISagaLease</c> — y la diferencia está en quién muere.
 /// Un arriendo necesita vencer porque lo toma un barrido que puede morirse a media compensación y
 /// nadie lo soltaría. Un cerrojo de fichero lo suelta <b>el núcleo</b> cuando el proceso muere,
 /// así que no hay marca colgada que robar ni reloj que ajustar — y sobre todo no existe el caso

@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3283 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3290 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2247 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 403 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 410 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3283**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3290**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -163,6 +163,7 @@ Synergos.CMS/
 │                                + molde del vertical (10, doc 12)
 │                                + seudónimo único (3, #120)
 │                                + portada de arranque (5, #119)
+│                                + política de build en la imagen (7, #156)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1467,6 +1468,39 @@ Las que salieron de construir el árbol de servicios (§0.B):
   arnés son AFIRMACIONES (el pin, las cifras, las rutas), y lo que se queda es quien
   las cruzaba. Las dos mitades en verde y el hueco justo en medio.
 
+- `feedback_a_policy_split_in_two_files_travels_as_one_or_not_at_all` — **cuando la
+  política de build vive en DOS ficheros y el contexto de la imagen se escribe a
+  mano, el contenedor compila bajo reglas MÁS DURAS que ninguna máquina — y el
+  síntoma no dice «falta un fichero», dice «el código está roto».** `.editorconfig`
+  trae nueve severidades, `Directory.Build.props` trae
+  `TreatWarningsAsErrors`, y el `COPY` de los dos Dockerfiles nombraba tres ficheros
+  y no el cuarto: **26 de 26 imágenes en rojo durante cuatro días**, con las tres
+  suites en verde y `dotnet build` en 0/0 en cualquier portátil (#156).
+  **Lo que ningún test puede ver es el CONTEXTO de build**, que sólo existe dentro de
+  `docker build`: es #133 y #126 con un tercer reparto —allá el que veía era el IDE y
+  el que tapaba la CLI; acá el que ve es el contenedor y el que tapa es todo lo demás—.
+  **Los dos Dockerfiles tenían la misma omisión y consecuencias distintas, y eso sólo
+  se ve midiendo los dos**: sin `.editorconfig` el web publica en cero avisos, y las
+  veinte capacidades y los cuatro orquestadores **no compilan** —12 CA1848 y 4 CA1873,
+  los cuatro sitios en `Synergos.Shared`, que es lo que las 22 imágenes compilan—. O
+  sea que arreglar sólo lo que rompía al web habría desbloqueado **una de veintiséis**.
+  **Y la supresión es lo que dejó pudrirse quince crefs detrás de ella**, así que
+  copiar el fichero sin limpiarlos habría puesto las 26 en verde escondiéndolos otra
+  vez: la salida barata y la peor. De los quince, **cuatro apuntaban HACIA ARRIBA** —
+  `Synergos.Shared` citando `ISagaLease` de `Bff.Core`, `Interfaces` citando
+  `Application`—, y eso no es un despiste de documentación: es alguien que pensó la
+  dependencia prohibida y la escribió **en el único sitio donde cabía**, porque
+  `IDE0005` está en `warning` y el `using` habría roto el build.
+  **El fixpoint hay que iterarlo**: el primer build se para en la capa de abajo, así
+  que las de arriba nunca compilan y sus crefs no aparecen — 9 → 14 → 15.
+  **Y el gate se derivó con la pregunta, no con la lista**: «qué ficheros lee el
+  toolchain» se puede escribir (es un hecho de .NET) y **no alcanza**, porque no ve el
+  que no está en ella. Obligarse a explicar **cada** fichero de la raíz —o lo lee el
+  compilador, o va al censo con su razón— es lo que hizo aparecer `.globalconfig`, que
+  no se me habría ocurrido. El censo es de **patrones** y no de nombres: un `.sln`
+  nuevo no pide línea nueva y un fichero de un tipo que nadie censó sí. Hay gate
+  (`PoliticaDeBuildEnLaImagenTests`).
+
 - `feedback_half_a_build_policy_is_worse_than_none` — **una propiedad de MSBuild puede
   salir del proyecto por un canal que transmite MEDIA política, y la mitad que llega es
   la que prohíbe.** `TreatWarningsAsErrors` (#134) se escribe en
@@ -1556,13 +1590,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3283 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3290 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2247
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 403
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 410
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -1947,7 +1981,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3283 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3290 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

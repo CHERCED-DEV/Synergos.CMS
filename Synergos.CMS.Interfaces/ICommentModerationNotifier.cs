@@ -4,7 +4,7 @@ namespace Synergos.CMS.Interfaces;
 /// Seam de notificación al equipo moderador cuando un comentario
 /// nuevo queda pendiente de aprobación. Permite que el sitio
 /// adopte cualquier canal (email, Slack, webhook, queue) sin
-/// acoplar a <see cref="ICommentRepository"/> ni al
+/// acoplar a <see cref="ICommentReader"/> / <see cref="ICommentWriter"/> ni al
 /// <c>CommentsController</c>.
 /// </summary>
 /// <remarks>

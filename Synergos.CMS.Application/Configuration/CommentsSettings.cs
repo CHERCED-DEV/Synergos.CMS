@@ -22,7 +22,7 @@ public sealed class CommentsSettings
     public int MaxBodyLengthChars { get; init; } = 2000;
 
     /// <summary>
-    /// Si true, comentarios nuevos quedan con <see cref="Comment.Approved"/>
+    /// Si true, comentarios nuevos quedan con <see cref="Synergos.CMS.Interfaces.Comment.Approved"/>
     /// false y NO aparecen en el render hasta que un moderator los
     /// aprueba (manualmente vía edición del JSON o adapter custom).
     /// Default false — los sitios sin moderación tienen comments

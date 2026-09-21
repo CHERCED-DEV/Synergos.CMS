@@ -51,7 +51,17 @@ dotnet_diagnostic.CA1859.severity  = none      # devolver concrete type
 dotnet_diagnostic.CA1861.severity  = none      # static readonly array args
 dotnet_diagnostic.CA1873.severity  = none      # lazy logger arg evaluation
 dotnet_diagnostic.CA1805.severity  = none      # explicit default initialization
-dotnet_diagnostic.CS1574.severity  = none      # XML cref not resolved
+# CS1574 (cref que no resuelve) NO está silenciado, y estuvo: esa línea decía
+# `dotnet_diagnostic.CS1574.severity = none  # XML cref not resolved`, y detrás se pudrieron
+# QUINCE crefs sin que nadie lo supiera — cinco nombres viejos de después de un rename, cuatro
+# referencias hacia arriba que el grafo de dependencias prohíbe, dos miembros de otro record sin
+# calificar, uno heredado de una interfaz base (un cref no las busca) y tres imports ausentes.
+# Lo destapó que el CONTENEDOR sí los veía: este fichero no viajaba en el `COPY` del Dockerfile,
+# así que dentro la supresión no existía y `TreatWarningsAsErrors` los convertía en errores. El
+# `COPY` está arreglado, y con él ésta habría vuelto a tapar los quince. Si un cref nuevo pone el
+# build rojo, se arregla el cref: no hay nada que un cref roto diga que valga la señal entera.
+# Un cref a un tipo de OTRA capa se escribe calificado —añadir el `using` lo caza IDE0005, que
+# sí es warning acá—, y a algo que este proyecto no puede ver, con `<c>`.
 # NU1902 = GHSA-54mj-vcvj-q3v5 sobre Umbraco.Cms: moderate, y su rango vulnerable `(, 16.3.3]`
 # no lo cierra ninguna version de la rama 13 (ADR 0001). NO se nombra aca la version clavada:
 # vive en Directory.Packages.props y una copia mas es una copia mas que se desvia.

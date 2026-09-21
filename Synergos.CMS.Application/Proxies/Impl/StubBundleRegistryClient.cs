@@ -21,7 +21,7 @@ namespace Synergos.CMS.Application.Proxies.Impl;
 ///
 /// Deliberate omissions:
 /// <list type="bullet">
-///   <item><b>No logging</b>. Adding <see cref="ILogger{T}"/> would
+///   <item><b>No logging</b>. Adding <c>ILogger&lt;T&gt;</c> would
 ///   pull <c>Microsoft.Extensions.Logging.Abstractions</c> into
 ///   <c>Synergos.CMS.Application</c>, which neither ADR 0002 nor the
 ///   current scope of Ola 6 authorise.</item>

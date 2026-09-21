@@ -120,7 +120,7 @@ public sealed record CaseInboxItem(
 /// Seguimiento de expedientes del vertical Gobierno (doc gobierno.md §4). Es la pieza
 /// del MOTOR que expone el ciclo de vida del expediente a las dos bandejas:
 /// <see cref="GetCaseAsync"/> → expediente + estado + timeline (seguimiento del
-/// ciudadano / detalle del funcionario); <see cref="ListForCitizenAsync"/> → los
+/// ciudadano / detalle del funcionario); <see cref="ListForMemberAsync"/> → los
 /// expedientes del ciudadano; <see cref="GetQueueAsync"/> → la cola del funcionario
 /// filtrada por entidad + estado.
 /// </summary>

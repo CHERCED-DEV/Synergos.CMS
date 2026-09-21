@@ -8,7 +8,7 @@ public enum PaymentStatus
 {
     /// <summary>Sesión creada, aún sin acción del cliente.</summary>
     Pending,
-    /// <summary>Requiere acción del cliente (redirect/3DS) — ver <see cref="PaymentSession.RedirectUrl"/>.</summary>
+    /// <summary>Requiere acción del cliente (redirect/3DS) — ver <see cref="PaymentSession.Action"/>.</summary>
     RequiresAction,
     /// <summary>Autorizada (fondos reservados), pendiente de captura.</summary>
     Authorized,

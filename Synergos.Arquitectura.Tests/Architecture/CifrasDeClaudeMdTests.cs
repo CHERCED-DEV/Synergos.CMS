@@ -56,6 +56,7 @@ public sealed class CifrasDeClaudeMdTests
         ("despliegue ({0}, ADR 0133)", new[] { "DeployPipelineTests" }, null),
         ("molde del vertical ({0}, doc 12)", new[] { "MoldeDelVerticalTests" }, null),
         ("portada de arranque ({0}, #119)", new[] { "PortadaDeArranqueTests" }, null),
+        ("política de build en la imagen ({0}, #156)", new[] { "PoliticaDeBuildEnLaImagenTests" }, null),
         // «la compensación cruzada (148)» SALIÓ de esta lista con el #135, y no para pasar el
         // gate: esos tests se mudaron a `Synergos.Servicios.Tests` y este ensamblado ya no los
         // ve por reflexión. Lo que los cubre ahora es MÁS fuerte, no menos — la tabla de suites

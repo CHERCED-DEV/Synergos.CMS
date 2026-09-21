@@ -9,7 +9,7 @@ namespace Synergos.CMS.Interfaces;
 /// <remarks>
 /// La implementación por defecto vive en
 /// <c>Synergos.CMS.Web.Services.UmbracoMemberRosterReader</c> y
-/// consume <see cref="IMemberService"/> + <see cref="IMemberRoleService"/>
+/// consume <c>IMemberService</c> + <c>IMemberGroupService</c>
 /// internamente.
 ///
 /// Read-only por diseño — el seam NO expone Create/Update/Delete porque

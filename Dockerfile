@@ -20,7 +20,21 @@ WORKDIR /src
 
 # Restore en su propia capa: mientras no cambien los .csproj ni la lista
 # central de paquetes, Docker reusa el caché y se saltea bajar Umbraco.
-COPY global.json Directory.Build.props Directory.Packages.props ./
+#
+# `.editorconfig` va acá y NO es cosmético: con `TreatWarningsAsErrors` puesto, la política de
+# avisos decide si la imagen se construye, y esa política está repartida entre este fichero y
+# `Directory.Build.props`. Faltando uno, el contenedor compila bajo reglas MÁS DURAS que
+# cualquier máquina de desarrollo y que el CI — y el fallo no se lee como «falta un fichero»,
+# se lee como que el código está roto: 26 de 26 imágenes en rojo durante cuatro días con las
+# tres suites en verde.
+#
+# Medido, y acá la respuesta es distinta a la de `Dockerfile.service`: sin este fichero, ESTA
+# imagen publica en cero avisos —lo que la rompía eran quince crefs podridos detrás de la
+# supresión de CS1574, ya limpios y ya sin suprimir—. La de servicio no compila sin él. Copiarlo
+# igual: que hoy no haga falta acá no es una propiedad que nadie esté vigilando, y la novena
+# severidad que alguien escriba en `.editorconfig` vuelve a divergir en silencio.
+# Hay gate (`PoliticaDeBuildEnLaImagenTests`).
+COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
 COPY Synergos.CMS.Interfaces/Synergos.CMS.Interfaces.csproj Synergos.CMS.Interfaces/
 COPY Synergos.CMS.Application/Synergos.CMS.Application.csproj Synergos.CMS.Application/
 COPY Synergos.CMS.Web/Synergos.CMS.Web.csproj Synergos.CMS.Web/

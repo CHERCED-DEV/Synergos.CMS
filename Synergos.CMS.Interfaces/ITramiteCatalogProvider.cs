@@ -46,7 +46,7 @@ public sealed record TramiteFormField(
 
 /// <summary>
 /// Una sección del formulario dinámico — un grupo de campos con título (patrón GOV.UK
-/// "una tarea por sección"). El renderer recorre <see cref="Sections"/> → <see cref="Fields"/>
+/// "una tarea por sección"). El renderer recorre <see cref="TramiteFormDefinition.Sections"/> → <see cref="TramiteFormSection.Fields"/>
 /// en orden sin conocer el trámite concreto.
 /// </summary>
 public sealed record TramiteFormSection(
@@ -74,7 +74,7 @@ public sealed record TramiteStep(string Id, string Title, string Detail);
 /// Ficha completa de un trámite: el resumen + lenguaje claro (descripción) + los
 /// <see cref="Steps"/> (qué pasa) + <see cref="Eligibility"/> (quién puede) +
 /// <see cref="Required"/> (documentos a adjuntar) + la <see cref="FormDefinition"/>
-/// (formulario dinámico seccionado) + la tasa (<see cref="FeeMinor"/> = 0 → gratis). Es
+/// (formulario dinámico seccionado) + la tasa (<see cref="TramiteSummary.FeeMinor"/> = 0 → gratis). Es
 /// lo que la pantalla de ficha renderiza y desde donde el ciudadano hace "Iniciar
 /// trámite".
 /// </summary>

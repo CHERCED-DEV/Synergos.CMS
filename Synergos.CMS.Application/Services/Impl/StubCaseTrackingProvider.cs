@@ -6,7 +6,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// Default <see cref="ICaseTrackingProvider"/> — seguimiento STUB de expedientes del
 /// vertical Gobierno (doc gobierno.md §4). Expone el ciclo de vida del expediente a las
 /// dos bandejas: <see cref="GetCaseAsync"/> → expediente + estado + timeline (seguimiento
-/// del ciudadano / detalle del funcionario); <see cref="ListForCitizenAsync"/> → los
+/// del ciudadano / detalle del funcionario); <see cref="ListForMemberAsync"/> → los
 /// expedientes del ciudadano por email; <see cref="GetQueueAsync"/> → la cola del
 /// funcionario filtrada por entidad + estado, ordenada por prioridad y SLA. El tracking
 /// es el diferenciador del dominio (research GOV.CO: fecha de radicación, etapa, días

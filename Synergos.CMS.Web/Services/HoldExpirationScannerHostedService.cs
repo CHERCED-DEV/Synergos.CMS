@@ -11,7 +11,8 @@ namespace Synergos.CMS.Web.Services;
 /// en checkout dejaría el cupo bloqueado indefinidamente.
 /// </summary>
 /// <remarks>
-/// El motor ya rechaza confirmar un hold vencido in-line (<see cref="StubReservationService"/>);
+/// El motor ya rechaza confirmar un hold vencido in-line
+/// (<see cref="Synergos.CMS.Application.Services.Impl.StubReservationService"/>);
 /// este scanner es el barrido proactivo que libera el inventario aunque el huésped
 /// nunca vuelva. Intervalo fijo (no settings) — el adapter real (PMS/DB) lo
 /// reemplazaría por el TTL nativo del sistema de inventario.

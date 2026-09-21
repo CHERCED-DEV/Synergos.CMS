@@ -39,7 +39,7 @@ public sealed class SearchSettings
 
     /// <summary>
     /// Máximo absoluto de hits que el provider devuelve por query —
-    /// hard cap defensivo, override desde <see cref="SearchRequest.MaxItems"/>
+    /// hard cap defensivo, override desde <see cref="Synergos.CMS.Interfaces.SearchRequest.MaxItems"/>
     /// no puede superarlo. Default 100.
     /// </summary>
     public int MaxHitsHardCap { get; init; } = 100;

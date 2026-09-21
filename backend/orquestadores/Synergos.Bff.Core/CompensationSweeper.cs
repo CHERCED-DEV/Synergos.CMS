@@ -19,7 +19,7 @@ namespace Synergos.Bff.Core;
 /// despierta con una hora de compensaciones atrasadas, y esperar al primer intervalo las dejaría
 /// esperando más.</para>
 ///
-/// <para><b>Lo que NO hace: rendirse en silencio.</b> Tras <see cref="Compensator.MaxAttempts"/>
+/// <para><b>Lo que NO hace: rendirse en silencio.</b> Tras <see cref="CompensationLimits.MaxAttempts"/>
 /// intentos la compensación queda marcada como colgada, la saga pasa a <c>CompensationFailed</c>,
 /// y <see cref="CompensationAlert"/> le avisa a una persona. Una compensación que se da por buena
 /// sin ejecutarse es plata cobrada sin servicio; una que se rinde sin avisar es lo mismo con un

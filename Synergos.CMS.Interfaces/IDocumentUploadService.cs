@@ -33,7 +33,7 @@ public sealed record CitizenDocumentRef(
 /// <c>IFormFile</c></b>: leer el multipart es trabajo del controller (Web), y aquí solo
 /// llegan primitivas.</para>
 /// <para>NO duplica estado: adjunta sobre el agregado de
-/// <see cref="StubApplicationService"/> por composición (DIP). REUSA
+/// <c>StubApplicationService</c> por composición (DIP). REUSA
 /// <see cref="IAuditTrailWriter"/> (ADR 0037): cada subida es un evento append-only
 /// <c>gov.document-upload</c>. Los bytes van a <see cref="IPrivateFileStore"/> (cifrado,
 /// fuera de wwwroot); el adapter real de producción cambia ese almacén por blob storage

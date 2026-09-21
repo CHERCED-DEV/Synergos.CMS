@@ -14,7 +14,9 @@ namespace Synergos.CMS.Web.Services;
 /// ADR 0002).
 ///
 /// Pagination via <c>IMemberService.GetAll(...)</c> — el service maneja el offset
-/// internamente. Roles via <see cref="IMemberService.GetAllRoles(int)"/> por member.
+/// internamente. Roles via <c>GetAllRoles(int)</c> por member — que NO lo declara
+/// <see cref="IMemberService"/>: lo hereda de <c>IMembershipRoleService&lt;IMember&gt;</c>,
+/// y un cref no busca en las interfaces base de una interfaz.
 /// </remarks>
 public sealed class UmbracoMemberRosterReader : IMemberRosterReader
 {

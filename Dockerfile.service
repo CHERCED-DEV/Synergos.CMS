@@ -50,7 +50,16 @@ WORKDIR /src
 # dominio equivocado.
 #
 # Los dos los deriva del disco `tools/service-matrix.mjs`; nadie los teclea.
-COPY global.json Directory.Build.props Directory.Packages.props ./
+# `.editorconfig` viaja con los otros tres, y acá NO es prevención: es obligatorio hoy. La
+# política de avisos está repartida entre él y `Directory.Build.props`, y con
+# `TreatWarningsAsErrors` esa política decide si la imagen se construye. Medido sacándolo del
+# árbol —la condición exacta del contenedor—: las veinte capacidades y los cuatro orquestadores
+# fallan con 12 errores CA1848 y 4 CA1873, los cuatro sitios en `Synergos.Shared`
+# (`Correlation.cs`, `SharedKeyAuth.cs`), que es el proyecto que las 22 compilan. O sea que las
+# 22 imágenes llevaban en rojo por esto ADEMÁS de por los crefs, y limpiar los crefs solo habría
+# dejado el rojo puesto apuntando a un fichero que nadie tocó.
+# Hay gate (`PoliticaDeBuildEnLaImagenTests`).
+COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
 COPY backend/nucleo/Synergos.Core/Synergos.Core.csproj backend/nucleo/Synergos.Core/
 COPY backend/nucleo/Synergos.Shared/Synergos.Shared.csproj backend/nucleo/Synergos.Shared/
 COPY backend/orquestadores/Synergos.Bff.Core/Synergos.Bff.Core.csproj backend/orquestadores/Synergos.Bff.Core/
