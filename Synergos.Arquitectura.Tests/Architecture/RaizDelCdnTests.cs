@@ -241,4 +241,65 @@ public sealed class RaizDelCdnTests
 
         Assert.Equal(declaradas.OrderBy(k => k), normalizadas.OrderBy(k => k));
     }
+
+    /// <summary>
+    /// Las claves cuyo valor la aplicación pasa a <c>Directory.CreateDirectory</c> al arrancar,
+    /// derivadas siguiendo la variable dentro de <c>Program.cs</c>.
+    /// </summary>
+    /// <remarks>
+    /// Se sigue la VARIABLE y no se escribe la clave: el nombre del buzón ya estuvo mal una vez
+    /// (#138, en otra sección) y una lista a mano acá diría que vigila algo que ya no existe.
+    /// </remarks>
+    private static IReadOnlyCollection<string> ClavesQueSeCrean()
+    {
+        var program = SinComentarios(File.ReadAllText(Path.Combine(Web(), "Program.cs")));
+
+        return Regex.Matches(program, @"Directory\.CreateDirectory\(\s*(?<var>[A-Za-z_][A-Za-z0-9_]*)\s*\)")
+            .Select(m => m.Groups["var"].Value)
+            .Select(v => Regex.Match(program, $@"\b(?:var|string\??)\s+{Regex.Escape(v)}\s*=[^;]*?\""(?<clave>[A-Za-z][A-Za-z0-9_:]*)\"""))
+            .Where(m => m.Success)
+            .Select(m => m.Groups["clave"].Value)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void Lo_que_la_aplicacion_CREA_al_arrancar_es_RELATIVO_en_todo_appsettings()
+    {
+        // #151. `appsettings.Docker.json` decia `/app/App_Data/maildrop` y `Program.cs` hace
+        // `Directory.CreateDirectory` sobre eso. DENTRO de la imagen `/app` es el WORKDIR y
+        // funciona; FUERA no existe — y `ASPNETCORE_ENVIRONMENT=Docker` es exactamente lo que
+        // usan los DOS humos, que corren en un runner. Resultado: la aplicacion moria al
+        // arrancar con `UnauthorizedAccessException: Access to the path '/app' is denied`, o sea
+        // el gate que mira los dos arboles en rojo sin llegar a pedir la pagina.
+        //
+        // La regla del #132 —«no se rechaza toda ruta absoluta: `/cdn` es de la IMAGEN, un
+        // contrato»— sigue en pie y tiene un hueco que esto cierra: un contrato de la imagen
+        // vale mientras se lea DENTRO de la imagen. Lo que la aplicacion CREA no tiene esa
+        // salida, porque crear pide permiso de escritura donde la aplicacion este corriendo.
+        //
+        // Una relativa da el MISMO valor dentro (la raiz de contenido es `/app`, por el
+        // `WORKDIR`) y uno que funciona fuera. No hay censo que escribir: el arreglo no deja
+        // excepcion.
+        var claves = ClavesQueSeCrean();
+
+        // Red de seguridad: si seguir la variable deja de funcionar, el cruce de abajo pasaria
+        // en verde sobre una lista vacia — el modo de fallo del #136, que se hereda.
+        Assert.True(
+            claves.Count > 0,
+            "No se dedujo ninguna clave de configuracion que Program.cs cree como directorio: "
+          + "el cruce no esta midiendo nada. Revisa ClavesQueSeCrean().");
+
+        foreach (var (fichero, clave, valor) in TodasLasCadenas())
+        {
+            if (!claves.Contains(clave)) continue;
+
+            Assert.False(
+                Path.IsPathRooted(valor),
+                $"{Path.GetFileName(fichero)} declara `{clave}` = `{valor}`, que es ABSOLUTA, y la "
+              + "aplicacion la CREA al arrancar. Dentro de la imagen funciona porque el WORKDIR es "
+              + "`/app`; fuera —y los dos humos corren `ASPNETCORE_ENVIRONMENT=Docker` en un "
+              + "runner— muere con UnauthorizedAccessException antes de servir nada (#151). "
+              + "Una relativa se resuelve contra la raiz de CONTENIDO y da el mismo valor dentro.");
+        }
+    }
 }
