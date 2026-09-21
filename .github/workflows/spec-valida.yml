@@ -1,0 +1,74 @@
+name: Spec de un vertical (G-8)
+
+# HU #140 · épica #139 · doc 13 §4 y §9.
+#
+# Valida `docs/specs/<vertical>/spec.md` y —para los que declaran `oraculo: si`— mide el plan que
+# el molde DERIVA contra los ficheros que el vertical realmente tiene. Eso es el piloto 0: lo
+# construido es el oráculo, y lo que el plan pierde es un paso que el doc 12 no escribió.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# POR QUÉ NO LLEVA FILTRO `paths:`, que es la misma decisión que `humo-conectado.yml`.
+#
+# El defecto #128: un gate que no se dispara en el cambio que lo necesita no falla, se SALTA — y
+# en la lista de checks un «skipped» se lee igual que un «no aplica». Lo que este gate lee es
+# medio árbol: las veinte capacidades del disco, el registry del repo HERMANO, y las nueve
+# carpetas del molde (uSync, Interfaces, Application/Configuration, Application/Services/Impl,
+# Web/Services, Web/Services/Catalog, Web/Composers, Web/Controllers y los gates). Un filtro que
+# intentara enumerarlo se equivocaría en silencio, que es justo el defecto.
+#
+# El precio son ~40 segundos por PR: no compila nada y no arranca nada.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Y NECESITA AL HERMANO, pero sólo CLONADO y no construido: lo único que lee de allá es
+# `vitals/contracts/src/element-registry.json`, que está versionado. Sin él el validador NO pasa
+# en silencio — rechaza diciendo que no pudo comprobar los elementos, porque dar por bueno lo que
+# no se pudo comprobar es el verde sobre el vacío (la lección del `git check-ignore` del #137).
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: spec-valida-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  spec:
+    name: Cabecera + reusa contra el disco + el oráculo
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout del CMS
+        uses: actions/checkout@v4
+        with:
+          path: Synergos.CMS
+
+      # El hermano es público, así que sin `token:` — ver Synergos.UI#14.
+      - name: Checkout del UI (hermano)
+        uses: actions/checkout@v4
+        with:
+          repository: cherced-dev/Synergos.UI
+          path: Synergos.UI
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Primero la autoprueba: si el LECTOR está roto, todo lo de abajo pasa por la razón
+      # equivocada. Se ejecuta en vez de leerse, que es lo que enseñó el manifiesto del #114 —
+      # una regex sobre el parser no sabe cuáles de sus campos pueden venir vacíos.
+      - name: Autoprueba del validador
+        working-directory: Synergos.CMS
+        run: node tools/spec-valida.mjs --autoprueba
+
+      - name: Validar los specs y medir el oráculo
+        working-directory: Synergos.CMS
+        env:
+          SYNERGOS_UI_PATH: ${{ github.workspace }}/Synergos.UI
+        run: node tools/spec-valida.mjs

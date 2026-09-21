@@ -242,7 +242,9 @@ Synergos.CMS/
 | "¿Cuándo se promueve algo a una capa compartida?" | `Synergos.CMS.Web/docs/product/10-promocion-bff-core.md` |
 | "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — los tres ejes, las dos formas del eje transaccional y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`) |
-| "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — **diseño, nada construido todavía**: el spec como fuente, los doce sub-specs derivados del molde, los dos MCPs que ganan su sitio y el gate del arnés. Sin gate aún, y el propio doc dice por qué |
+| "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los doce sub-specs derivados del molde, los dos MCPs y el gate del arnés. **Ya no es sólo diseño**: el arnés vive en `Synergos.Fabrica` con su `arnes.lock.json` (#141) y el spec tiene formato y validador (#140) |
+| "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
+| "¿El molde da para GENERAR un vertical?" | Todavía no del todo: el piloto 0 midió **71,4 %** sobre Eventos y dejó **cuatro hallazgos**, el grande siendo que **el eje 3 no tiene sub-spec**. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
 
 > **La forma de `window.synergos` se declara en TRES sitios, y hay gate** (#88,
@@ -1520,6 +1522,45 @@ Las que salieron de construir el árbol de servicios (§0.B):
   rojo deja de leerse»; el precio esta vez fue el sitio entero caído mientras las tres
   suites pasaban.
 
+- `feedback_measure_the_generator_at_its_best_or_the_finding_is_yours` — **cuando se mide si un
+  MOLDE da para generar, la cifra depende de lo bien que se haya implementado el molde, no sólo
+  del molde — así que hay que darle su MEJOR versión antes de contar, o la lista de hallazgos es
+  propia y no suya** (#140). El piloto 0 derivó el plan de Eventos y dio **36,8 %** la primera
+  vez, aplicando el doc 12 §5.3 al pie de la letra (`I<X>Service`, en singular y derivado del
+  sustantivo). Con la regla correcta —los seams son **varios, uno por operación**, y el cliente se
+  nombra por el seam que cablea y no por el sustantivo— la misma medición da **71,4 %**. Los 35
+  puntos de diferencia no eran del molde: eran míos.
+  **El tell, y es incómodo porque halaga:** una medición cuyo resultado deja bien a quien mide.
+  Una derivación flaca produce una lista de hallazgos larga y un informe que parece valioso; es
+  abogacía y no medición. La pregunta que lo caza se hace ANTES de publicar la cifra: *¿esto es lo
+  peor que el molde puede hacer, o lo mejor?*
+  **Y lo que queda después de darle su mejor versión es lo que vale**: acá, que **el eje 3 no
+  tiene sub-spec** —cinco de los ocho residuales son suyos— y que `Stub<X>` no es universal cuando
+  la implementación en proceso ES la de verdad (`HmacTicketSigner` no es un doble de nada).
+  **Corolario sobre el UMBRAL, porque este fichero ya dice lo contrario y hay que saber cuándo
+  aplica cada uno.** El #134 eligió trinquete absoluto (`TreatWarningsAsErrors`) **porque hoy se
+  cumplía**: con cero avisos era gratis. Acá el criterio del ticket era «≥ 90 %» y la realidad es
+  71,4 %, así que un umbral absoluto dejaría `master` rojo hasta cerrar cuatro hallazgos — y un
+  gate siempre rojo deja de leerse. La regla que unifica los dos: **un umbral absoluto sólo vale
+  cuando el árbol YA lo cumple; con deuda declarada va una línea base**, vigilada en los dos
+  sentidos para que el commit que arregla esté obligado a moverla.
+  **Y el plan no puede leer las rutas de la cabecera.** Si el spec enumerara sus ficheros, el plan
+  sería igual al spec y el porcentaje no mediría nada — `feedback_contract_shape_needs_its_own_test`
+  aplicado a un generador. Se declaran DECISIONES (qué DocTypes, qué operaciones) y se derivan
+  RUTAS con las reglas de nombre del molde.
+
+- `feedback_a_write_that_validates_after_opening_leaves_zero_bytes` — **`io.open(ruta, 'w', …)` de
+  Python TRUNCA el fichero y después valida sus argumentos, así que un `newline='\n'` —inválido:
+  el valor legal es `'\n'` de verdad, no la secuencia escapada dos veces— deja el fichero en CERO
+  BYTES con una excepción que habla de otra cosa** (`ValueError: illegal newline value`). Costó
+  reescribir entero un `tools/*.mjs` de 500 líneas que aún no estaba commiteado (#140).
+  Es el primo operativo de `feedback_restored_mutation_needs_a_touch`: el fallo no está donde
+  parece, y el árbol queda en un estado que ningún gate mira. **Dos costumbres que lo cierran:**
+  escribir a un temporal y mover, y —la que de verdad salva— **`git add` temprano**, porque lo que
+  el índice tiene se recupera y lo que no, no. Y al restaurar una mutación sobre un fichero
+  **sin commitear**, `git checkout --` es peor que no hacer nada: devuelve el fichero a HEAD, o
+  sea se lleva el trabajo. Se salva con `cp` y se restaura con `cp` + `touch`.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1687,8 +1728,15 @@ un agente en un contenedor sin SDK **sí puede** verificarlos:
 ```bash
 node tools/usync-audit.mjs        # 11 checks de schema uSync
 node tools/check-css-parity.mjs   # G-3: toda clase syn-* emitida tiene CSS
+node tools/spec-valida.mjs --autoprueba   # G-8: el LECTOR del spec, ejecutado (#140)
 (cd Synergos.CMS.Web/docs/contracts/tests && npm ci && npm test)  # contratos
 ```
+
+> **G-8 necesita al hermano CLONADO, no construido**: lo único que lee de allá es
+> `element-registry.json`, que está versionado. Y si no lo encuentra **no pasa en silencio** —
+> rechaza diciendo que no pudo comprobar los elementos del spec:
+> `node tools/spec-valida.mjs --ui-path=/tmp/ui`. La línea base del oráculo se regenera con
+> `--actualizar` y el diff va en el commit que lo causó.
 
 **Y DOS más que sí necesitan al hermano, pero aceptan su ruta** (G-6 y G-7, #102):
 

@@ -138,12 +138,15 @@ puede contradecir la cabecera, y hay gate para eso (§8, diente 4).
 
 ```markdown
 ---
-vertical: social
+vertical: social                        # la palabra del INTERRUPTOR
+sustantivo: Post                        # la del ÁRBOL DE CONTENIDO — no se deduce de la otra
+alias: []                               # los demás sustantivos con que el árbol nombra el vertical
 epica: 11
+oraculo: no                             # `si` sólo en un vertical YA construido (piloto 0)
 ejes:
   catalogo:    { doctype: postpage, fuente: UmbracoSocialCatalogSource, interruptor: "Synergos:Catalog:Sources:Social" }
   transaccion: { forma: ninguna, razon: "no hay nada que deshacer — ver §3" }
-  artefacto:   { que: ninguno }
+  artefacto:   { que: ninguno, razon: "no queda prueba de nada" }
 preguntas:
   deshacer:      no      # → sin orquestador
   recurso_ajeno: no      # → sin cableado
@@ -153,7 +156,9 @@ reusa:
   elementos:   [comments-widget, poll]  # de los 132 del registry
 crea:
   doctypes: [postpage, postcategorypage, authorpage]
-  seams:    []
+  seams:    []                          # uno por OPERACIÓN, con la operación en el nombre
+ui:
+  app: blogs                            # la carpeta del otro árbol
 rechazos: []                            # código · cuándo · transitorio
 ---
 
@@ -163,6 +168,26 @@ rechazos: []                            # código · cuándo · transitorio
 ## Cómo sabemos que quedó bien
 Cada criterio con **la mutación que lo pone en rojo**.
 ```
+
+> **Esa cabecera ganó cuatro campos al construirla** (#140), y los cuatro salieron de que el
+> validador tiene que DERIVAR el plan sin enumerarlo:
+>
+> - **`sustantivo:` y `alias:`** porque un vertical tiene **más de un sustantivo** y ninguno se
+>   deduce del otro: el interruptor dice `Eventos`, el catálogo dice `Event` y el artefacto dice
+>   `Ticket`. Es lo que `Cada_vertical_tiene_su_EJE_1` dejó escrito al **negarse** a escribir la
+>   tabla de siete filas dentro del gate; en el spec no se desvía, porque hay un spec por vertical.
+>   Y `alias:` va con guarda: uno que no case con ningún fichero rompe, porque un censo vigilado
+>   en un solo sentido miente.
+> - **`ui.app:`** porque el plan del CMS no puede predecir cuántos ficheros tiene una app de
+>   Angular, así que nombra la **carpeta** en vez de inventar su contenido.
+> - **`oraculo:`** porque medirse contra el disco sólo tiene sentido en un vertical ya construido,
+>   y una bandera de línea de comandos se olvida.
+>
+> Y **`crea.seams` no es enumeración: es la decisión de qué operaciones tiene el vertical**, igual
+> que `crea.doctypes`. Lo que se deriva de ella son las rutas (`Interfaces/I<S>.cs`,
+> `Impl/Stub<S>.cs`, `Services/Http<S>.cs`). Si la cabecera llevara las rutas, el plan sería igual
+> a la cabecera y la cobertura no mediría nada — la tautología de
+> `feedback_contract_shape_needs_its_own_test`.
 
 Tres cosas de esa cabecera que no son decoración:
 
@@ -374,17 +399,39 @@ ya casi se comete una vez, en el #137, con este mismo criterio.
 Los tres, en orden, y **cada uno es la condición de entrada del siguiente**. Una fábrica que nunca
 produjo nada es un diseño.
 
-### Piloto 0 — Eventos re-derivado. *Lo construido es el oráculo.*
+### Piloto 0 — Eventos re-derivado. *Lo construido es el oráculo.* **CORRIDO (#140).**
 
-Se escribe el spec de un vertical **que ya existe** y se mide cuánto de él reproduce la bajada.
-**No se escribe una línea de producción** y no se toca nada: el entregable es una comparación.
+Se escribió el spec de un vertical **que ya existe** —`docs/specs/eventos/spec.md`, contra el
+disco— y se midió cuánto de él reproduce la bajada. No se tocó una línea de producción.
 
-- **Criterio de salida:** el plan derivado del spec nombra ≥ 90 % de los ficheros reales del
-  vertical Eventos, y **cada fichero que inventa o que se pierde es un hallazgo con su issue**.
-- **Lo que de verdad mide:** si el molde está completo. Si el plan pierde un fichero que Eventos
-  tiene, ese fichero es un paso que el doc 12 no escribió — y saberlo cuesta una tarde en vez de
-  costar el octavo vertical.
-- Riesgo: cero. Coste: bajo.
+**El resultado: 71,4 % (15 de 21), no el 90 % del criterio.** Se reproduce con
+`node tools/spec-valida.mjs --oraculo=eventos`, y lo que falta son **ocho residuales que son
+cuatro hallazgos**:
+
+| # | lo que el oráculo vio | qué le falta al molde |
+|---|---|---|
+| **H1** | cinco de los ocho son del **eje 3** —`EventTicketIssuer`, `EventTicketLedger`, `EventPurchaseNotification`, `TicketSigningKeyProvider`, `EventsSettings`— más su gate `EventTicketIssuanceTests` | **el eje 3 no tiene sub-spec.** El doc 12 §3 lo describe y la tabla de §5 de acá decompone sólo los ejes 1 y 2. Es el hallazgo grande |
+| **H2** | el plan inventa `StubTicketSigner.cs`; el real es `HmacTicketSigner.cs` | **`Stub<X>` no es universal.** Cuando la implementación en proceso ES la de verdad —un firmante HMAC no es un doble— se nombra por lo que hace |
+| **H3** | el plan inventa `SeamComposer.Eventos.cs`; el real es `SeamComposer.EventsPropertiesGov.cs` | el doc 12 §5.5 nombra el composer parcial **en singular por vertical**; el árbol agrupa tres. `Cada_vertical_tiene_su_EJE_1` ya lo tenía escrito («cuenta, no empareja») |
+| **H4** | `EventosSettings` (sección `Synergos:Eventos`) y `EventsSettings` (sección `Synergos:Events`) | **dos secciones de configuración a una letra de distancia** para un vertical, una por eje. El doc 12 §5.4 describe sólo la del eje 2, y un dedazo entre las dos no falla: el binder descarta en silencio (`feedback_a_key_in_the_wrong_section_is_a_key_nobody_reads`) |
+
+**Y el 71,4 % es el número con el molde en su MEJOR versión, no en la peor.** La primera corrida
+dio **36,8 %** derivando los seams del sustantivo, como dice el doc 12 §5.3 (`I<X>Service`, en
+singular). Eso es H1 visto de otra forma: un vertical tiene un seam **por operación** y el nombre
+lleva la operación. Dejar la derivación flaca para engordar la lista de hallazgos habría sido
+abogacía y no medición, así que se le dio al molde la regla correcta y se reportó el residuo.
+
+- **Lo que de verdad midió:** el molde **no está completo**, y eso costó una tarde en vez de
+  costar el octavo vertical — que es exactamente para lo que existía este piloto.
+- **La cifra es un TRINQUETE, no un umbral.** Con 90 % absoluto `master` quedaría rojo hasta que
+  se cierren los cuatro hallazgos, y este repo tiene medido lo que pasa entonces: un gate siempre
+  rojo deja de leerse. Así que va contra `tools/spec-valida.baseline.json` —como
+  `contract-keys.baseline.json`— y falla el día que la deuda **crece**. Vigilado en los dos
+  sentidos: un residual declarado que ya no corresponde también rompe, para que el commit que
+  arregle el molde esté obligado a mover la línea base.
+- Riesgo: cero. Coste: bajo. **Condición de entrada del piloto 1: los cuatro hallazgos cerrados**,
+  porque un lenguaje fuente sobre un compilador incompleto produce planes que parecen buenos y
+  omiten un paso.
 
 ### Piloto 1 — Social, el octavo vertical *(épica #11)*
 
