@@ -1467,6 +1467,36 @@ Las que salieron de construir el árbol de servicios (§0.B):
   arnés son AFIRMACIONES (el pin, las cifras, las rutas), y lo que se queda es quien
   las cruzaba. Las dos mitades en verde y el hueco justo en medio.
 
+- `feedback_half_a_build_policy_is_worse_than_none` — **una propiedad de MSBuild puede
+  salir del proyecto por un canal que transmite MEDIA política, y la mitad que llega es
+  la que prohíbe.** `TreatWarningsAsErrors` (#134) se escribe en
+  `Synergos.CMS.Web.deps.json`, y el compilador que compila las vistas **en caliente** lo
+  lee de ahí. Pero `DependencyContextCompilationOptions` **no tiene campo** para `NoWarn`
+  ni para `Nullable` —no es un olvido, es la forma del tipo—, así que del par que hace
+  vivible al #134 llegó sólo la prohibición: sin `Nullable=enable` el código generado no
+  lleva directiva `#nullable` y **todo `object?` de una vista es CS8669**; sin `NoWarn`,
+  toda API obsoleta es CS0618. Los dos, error. Desde `7485e1f` (17-sep) **toda página con
+  un hero contestaba 500**, con `dotnet build` en 0/0 y las 3290 en verde (#157).
+  **Es el gemelo exacto del #156, escrito el mismo día** —allá la política se partía entre
+  dos ficheros y el `COPY` copiaba uno—, y la lección conjunta es la que vale: *una
+  política que viaja a medias es peor que una que no viaja*.
+  **El tell, y se busca sin leer lógica**: una propiedad del build que acabe en un
+  ARTEFACTO que alguien lee en ejecución. La pregunta es *¿qué más hace falta para que esa
+  propiedad signifique lo que significa en el build, y cabe en el canal?*
+  **El arreglo no baja el trinquete, y hay que PROBAR que no lo baja.** Un `<Target>` que
+  pone la propiedad en `false` justo antes de `GenerateBuildDependencyFile` corre
+  **después** de `Csc`, así que el build sigue rompiendo por un aviso. **La mutación que
+  vale no es quitar el target** —eso sólo reproduce el defecto— sino **meter un aviso de
+  verdad** (`int noSeUsa;`) y ver `error CS0168 · Build FAILED`: si el target hubiera
+  corrido antes, el build saldría **verde con un aviso**, o sea el #134 desactivado en el
+  proyecto más grande del repo, en silencio y con un comentario al lado diciendo que no.
+  **Y lo encontró CORRER `humo-conectado` en local, no leerlo**: en CI moría antes
+  (`exit null`), así que el hallazgo #151 sólo veía «dos workflows en rojo». El gate que
+  faltaba —`tools/compilan-las-vistas.mjs`, §7— salió de preguntar por qué sólo se había
+  visto UNA vista rota: porque pedir la página sólo prueba **las que la portada
+  renderiza**. Compilándolas las 401 aparecieron **tres más**, rotas desde hacía olas — un
+  `@inject` de un tipo borrado y dos de un namespace que no lo tiene.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1625,6 +1655,32 @@ nada sobre si una vista compila**. Lo comprobado: el arreglo del defecto #92 dej
 página de contenido pasó a contestar 500 durante diez días, con la suite entera en
 verde. Los dos aceptan `--no-build` si ya compilaste, y **avisan** de los `.cshtml`
 que el import ensucia en vez de restaurarlos.
+
+> **Y desde el #157 hay un tercero que NO arranca nada y tarda seis segundos**, porque
+> pedir la página tiene un límite que costó tres vistas: **sólo ve las que la portada
+> renderiza**. De las 401 del árbol, la portada toca un puñado.
+>
+> ```bash
+> node tools/compilan-las-vistas.mjs   # las 401, con RazorCompileOnBuild=true (~6 s)
+> ```
+>
+> Le pide al build lo que en el día a día tiene apagado. La **única** exención son los
+> `CS0234` de `Synergos.CMS.Web.PublishedModels`, que no existe en tiempo de build porque
+> lo genera Umbraco en memoria al arrancar — y esa exención es además **el recibo** de que
+> Razor compiló: si no aparece ninguno, el gate falla en vez de decir «las 401 compilan»
+> sin haber compilado ninguna.
+>
+> Al escribirlo encontró **tres vistas en 500 permanente** que ningún humo tocaba:
+> `CommentThread.cshtml` inyectaba `ICommentRepository` —un tipo **borrado** al partirlo en
+> `ICommentReader`/`ICommentWriter`— y `Member/Gate.cshtml` y `Member/Profile.cshtml`
+> inyectaban `IMemberManager` desde `Umbraco.Cms.Web.Common.Security`, que **no lo tiene**
+> (vive en `Umbraco.Cms.Core.Security`; comprobado con una sonda de un tipo, no leyendo).
+> Corre en `build-test.yml`, que es el único sin filtro de `paths` — lo que rompe una vista
+> puede estar en otra capa o en un `.props`, y enumerar eso en un filtro es el #128.
+>
+> **Lo que NO prueba, dicho para no mentir sobre su alcance**: que la vista se RENDERICE.
+> Un `Model.Value<T>("aliasQueNoExiste")` compila y devuelve el default (#118). Para eso
+> siguen estando los dos de arriba.
 
 ### Los gates de Node — corren sin SDK .NET
 

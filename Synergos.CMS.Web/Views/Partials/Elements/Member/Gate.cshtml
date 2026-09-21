@@ -6,7 +6,7 @@
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @using Umbraco.Cms.Core.Models.Blocks
-@inject Umbraco.Cms.Web.Common.Security.IMemberManager MemberManager
+@inject Umbraco.Cms.Core.Security.IMemberManager MemberManager
 @{
     var gatedBlocks = Model.Value<BlockGridModel>("gatedBlocks");
     var prompt = Model.Value<string>("loginPromptMessage");

@@ -7,14 +7,16 @@
     propio form de "responder" (parentId oculto) y cada comentario
     (top o reply) un botón de "me gusta" con su contador.
 
-    Consume ICommentRepository + IMemberAccessGate + IOptions<CommentsSettings>.
+    Consume ICommentReader + IMemberAccessGate + IOptions<CommentsSettings>.
+    (LECTOR y no escritor a propósito: que esta vista no pueda escribir es una
+    propiedad del TIPO, no una convención — ver el corte de ICommentReader/Writer.)
 
     Si CommentsSettings.RequireAuthentication=true (default) y el
     visitante no esta autenticado, los forms se reemplazan por un link a
     /account/login con returnUrl.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
-@inject Synergos.CMS.Interfaces.ICommentRepository CommentsRepo
+@inject Synergos.CMS.Interfaces.ICommentReader CommentsRepo
 @inject Synergos.CMS.Interfaces.IMemberAccessGate MemberGate
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CommentsSettings> CommentsOptions
 @inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor

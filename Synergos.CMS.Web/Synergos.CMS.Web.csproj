@@ -31,4 +31,34 @@
     <ProjectReference Include="..\Synergos.CMS.Interfaces\Synergos.CMS.Interfaces.csproj" />
   </ItemGroup>
 
+  <!--
+    EL BIT DE `warningsAsErrors` NO VIAJA AL COMPILADOR DE VISTAS (#157).
+
+    En ESTE proyecto las vistas se compilan SIEMPRE en caliente: `ModelsMode=InMemoryAuto`
+    fuerza `RazorCompileOnBuild=false`, así que un `dotnet build` verde no dice nada sobre si
+    un `.cshtml` compila (CLAUDE.md §7). Quien las compila en ejecución es el compilador de
+    Umbraco, y lee su política de `Synergos.CMS.Web.deps.json` →
+    `DependencyContextCompilationOptions`.
+
+    Ese canal tiene un hueco de forma: lleva `warningsAsErrors` y **no tiene dónde llevar
+    `NoWarn` ni `Nullable`** — no son campos de ese tipo. Así que el `TreatWarningsAsErrors`
+    del #134 llegaba al compilador en caliente SIN las dos cosas que lo hacen vivible, y todo
+    aviso del código GENERADO pasaba a error: `CS8669` (una anotación `object?` sin contexto
+    `#nullable`, porque `Nullable=enable` no viaja) y `CS0618` (una API obsoleta que `NoWarn`
+    tampoco puede silenciar allí). Medido: desde `7485e1f` (17-sep) toda página con un
+    `<synergos-hero-banner>` contestaba **500**, con `dotnet build` en 0/0 y las 3288 en verde.
+
+    Esto NO baja el trinquete: el `Csc` de este proyecto sigue corriendo con
+    `TreatWarningsAsErrors=true` —el target corre después de compilar— y un aviso sigue
+    rompiendo el build. Lo único que cambia es lo que se ESCRIBE en deps.json.
+
+    Hay gate (`PoliticaDeBuildEnLaImagenTests.El_bit_de_warningsAsErrors_NO_viaja_...`).
+  -->
+  <Target Name="NoPropagarWarningsAsErrorsAlCompiladorEnCaliente"
+          BeforeTargets="GenerateBuildDependencyFile;GeneratePublishDependencyFile">
+    <PropertyGroup>
+      <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    </PropertyGroup>
+  </Target>
+
 </Project>

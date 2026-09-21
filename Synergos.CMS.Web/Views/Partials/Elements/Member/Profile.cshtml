@@ -4,7 +4,7 @@
     y bio (si flags activos). Solo renderea cuando hay member autenticado.
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
-@inject Umbraco.Cms.Web.Common.Security.IMemberManager MemberManager
+@inject Umbraco.Cms.Core.Security.IMemberManager MemberManager
 @{
     var showName = Model.Value<bool>("showDisplayName");
     var showBio = Model.Value<bool>("showBio");

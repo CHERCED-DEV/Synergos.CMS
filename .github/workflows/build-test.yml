@@ -60,6 +60,22 @@ jobs:
           --logger "trx;LogFileName=test-results.trx"
           --results-directory ./TestResults
 
+      # Un `dotnet build` verde NO dice que las vistas compilen: `ModelsMode=InMemoryAuto`
+      # fuerza `RazorCompileOnBuild=false`, asi que las 401 se compilan en caliente, al
+      # servirlas. Este paso las compila a proposito, y tarda ~6 s. Lo que caza —una vista
+      # en 500 permanente— no lo ve ninguno de los 3288 tests. Costo dos veces: #92 (diez
+      # dias con toda pagina de contenido en 500) y #157.
+      #
+      # Va DESPUES de los tests, y no por prioridad: hace `-t:Rebuild`, asi que puesto
+      # arriba dejaria los binarios rehechos bajo los pies del `dotnet test --no-build`.
+      #
+      # Y va en ESTE workflow, que es el unico sin filtro de `paths`, tambien a proposito:
+      # lo que rompe una vista puede ser la vista, un tipo que alguien borro en otra capa,
+      # o una propiedad de MSBuild a tres carpetas de distancia (#157). Un filtro que
+      # intentara enumerar eso se equivocaria en silencio, que es el #128.
+      - name: Las vistas compilan
+        run: node tools/compilan-las-vistas.mjs --configuration Release
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
