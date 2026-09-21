@@ -79,20 +79,80 @@ entre ellas.
 
 ### Eje 3 — el ARTEFACTO: lo que queda como prueba. **Se queda en el CMS.**
 
-La entrada de Eventos con su QR, su portador y su check-in (`EventTicketLedger`); el diploma de
-Educación; el expediente de Gobierno con su radicado y su bandeja; el RMA de Tienda; la agenda de
-visitas de Realty (`VisitAgenda`, derivada acá). Los siete lo tienen.
+**Los siete lo tienen, y ésta es la lista** — que hasta el #153 era una cifra sobre cinco
+ejemplos, o sea `feedback_a_named_list_beats_a_count` en el propio documento que predica medir:
 
-Dos razones, y las dos son consecuencias y no gustos. Una: **el firmante vive de este lado**, así
-que partir el artefacto obligaría a mover la custodia de la llave con él. Dos: **la prueba tiene
-que poder verse con el otro árbol caído** — con `Bff.Eventos` abajo se sigue viendo «mis
-entradas», se sigue transfiriendo y se sigue escaneando en la puerta.
+| vertical | el artefacto | quién lo emite y lo registra | su almacén | ¿lleva sello? |
+|---|---|---|---|---|
+| **Tienda** | el RMA | `StubReturnService` | `IJsonEntityStore` · `returns` | no |
+| **Salud** | la historia clínica y su rastro de versiones | `FileSystemPatientRepository` | **`IPhiStore`** · `patients` + `patient-history` | no |
+| **Realty** | la agenda de visitas | `StubVisitSchedulingService` + `VisitAgenda` (derivada acá) | `IJsonEntityStore` · `realty-visits` — **sólo en modo `Stub`, #158** | no |
+| **Gobierno** (`Gob`) | el expediente con su radicado y su bandeja | `StubApplicationService` | `IJsonEntityStore` · `gov-cases` | no |
+| **Eventos** | la entrada con su QR, su portador y su check-in | `EventTicketIssuer` + `EventTicketLedger` | `IJsonEntityStore` · `event-orders` | **sí** — `ITicketSigner` |
+| **Viajes** | el expediente del viaje | `TravelCartService` | `IJsonEntityStore` · `travel-orders` | no |
+| **Educación** (`Academy`) | el diploma | `StubCertificateService` | `IJsonEntityStore` · `certificates` | **sí** — `ICertificateIdSigner` |
+
+> **La fila de Realty es la única con un ticket dentro, y por eso está ahí.** Su registro y el
+> seam de su eje 2 son **la misma clase**, así que lo durable existe sólo con
+> `Synergos:Realty:Mode=Stub`: `HttpVisitSchedulingService` no guarda nada de este lado. Con el
+> modo encendido y `Api.Booking` caída, la agenda se sigue pintando —es una función pura del id y
+> del reloj— y quien reservó **no ve su visita**: la pantalla se ve bien y está vacía de lo único
+> que fue a buscar. Lo destapó el gate de esta misma HU, al primer arranque (#158).
+
+Dos razones para que se quede acá, y las dos son consecuencias y no gustos. Una: **el firmante
+vive de este lado**, así que partir el artefacto obligaría a mover la custodia de la llave con él.
+Dos: **la prueba tiene que poder verse con el otro árbol caído** — con `Bff.Eventos` abajo se
+sigue viendo «mis entradas», se sigue transfiriendo y se sigue escaneando en la puerta.
 
 > **La regla de reparto que se derivó de esto, y sirve para el octavo:** una lectura que solo
 > MUESTRA se queda de este lado; una lectura que DECIDE sale a preguntar. El timeline de un
 > pedido (#46) se pinta desde el almacén local porque muestra lo que ya pasó; el proceso de un
 > expediente (#44) se lee de la capacidad porque decidir con un proceso que quizá ya no es el
 > vigente es otra cosa.
+
+### 3.1 La CUARTA pregunta, y por qué sólo dos de los siete la contestan que sí
+
+Las tres preguntas de §4 deciden el eje 2. El eje 3 tiene la suya, y es la que separa las dos
+columnas de la derecha de esa tabla:
+
+> **¿alguien de FUERA tiene que poder comprobar esto sin creernos?**
+
+Una entrada la lee un portero que no es nuestro, y un diploma lo lee un empleador que tampoco.
+Los otros cinco artefactos los lee alguien que ya está dentro: el RMA lo mira quien vendió, el
+expediente quien lo radicó y el funcionario, la agenda la inmobiliaria, la historia clínica el
+médico tratante. Ahí el registro durable ES la prueba, y añadirle un sello sería custodiar una
+llave para nadie.
+
+Cuando la respuesta es **sí**, lo que el sello compra está escrito en el propio código, en
+`StubCertificateService`: *«El índice NO es la autoridad; la llave sí […] Quien consiga escribir
+en el almacén puede inventar un fichero con el id que quiera y el nombre de quien quiera; no le
+sirve de nada, porque el id no cuadrará.»* O sea que **el sello es lo único que hace que escribir
+en el almacén no alcance para fabricar el artefacto** — que es la diferencia entre una prueba y
+un registro nuestro.
+
+### 3.2 Las dos invariantes del eje 3, y las dos son medibles
+
+**Una: el artefacto vive FUERA del seam de la transacción, y lo comparten sus dos
+implementaciones.** `EventTicketIssuer` y `EventTicketLedger` no tienen seam y los usan tanto
+`StubEventTicketingService` como `HttpEventTicketingService`. No es orden: el emisor metido dentro
+del motor en proceso **no lo puede usar el cliente cableado**, y la salida obvia —copiarlo— está
+descrita en el `<remarks>` del propio emisor: *«Un QR con dos definiciones es un QR que un día se
+firma de dos maneras.»* Lo destapó cablear Eventos (#35 rebanada 2b): la cara de organizador
+colgaba del motor de compra concreto, así que cambiar por dónde se compra habría dejado la puerta
+leyendo un almacén vacío **sin que nada avisara**.
+
+**Dos: el REGISTRO nunca sale a la red; el SELLO puede.** No hay ni un `Http*` sobre un registro
+de artefacto en los siete —eso es lo que sostiene «verse con el otro árbol caído»— y en cambio
+`HttpCertificateIdSigner` existe desde el #45: lo que Educación mudó a `Api.Signing` fue **la
+custodia de la llave**, no el índice de emitidos. Es el mismo corte de §3 dicho con ficheros.
+
+> **Y los dos que lo tienen lo resolvieron de dos maneras distintas, que es lo que pasa cuando el
+> molde no escribe el paso.** `AcademySettings` lleva la transacción y el sello en **un** POCO y
+> una sección (`Synergos:Academy`); Eventos los lleva en **dos** —`EventosSettings` con
+> `Mode`/`BaseUrl`/… y `EventsSettings` con sólo `TicketSigningSecret`— bajo dos secciones que se
+> diferencian en **una letra**: `Synergos:Eventos` y `Synergos:Events`. Eso no es estilo, es el
+> defecto #154, y su causa es ésta: el sello necesitaba sección propia, el nombre del vertical ya
+> estaba tomado, y le tocó el que quedaba libre.
 
 ## 4. Las dos formas del eje transaccional, y la pregunta que elige
 
@@ -150,7 +210,7 @@ independientes y llevan **dos interruptores**, como Gobierno.
 
 ## 5. El orden en que se escribe un vertical
 
-Ocho pasos. Cada uno toma **una** decisión, y cada decisión tiene quien la comprueba.
+Diez pasos. Cada uno toma **una** decisión, y cada decisión tiene quien la comprueba.
 
 ### 5.1 El objeto central se puede autorar — o se dice por qué no
 
@@ -182,6 +242,11 @@ servicios.
 > su `Reservation` lleva `RoomTypeCode` y `GuestName`, que ninguna capacidad puede guardar. Un
 > seam mal cortado no se nota hasta que hay que cablearlo.
 >
+> **El seam del SELLO no es éste — es §5.8 — y su implementación en proceso NO se llama
+> `Stub<X>`.** Derivar aquí todos los seams del vertical es lo que hace que el plan invente un
+> `StubTicketSigner` que no existe ni debe existir: `HmacTicketSigner` no es un doble de nada, es
+> el firmante de verdad mientras la custodia viva de este lado (#155).
+
 > **Y se corta pensando en la RED aunque todavía no la haya.** `IPaymentProvider` nació síncrona
 > porque sus dos proveedores escribían en un log; la primera pasarela real obligó a subirla entera
 > y el atajo —`.Result` dentro del proveedor— habría vaciado el pool de hilos. Lo mismo con la
@@ -248,7 +313,55 @@ Lo que los siete comparten, medido:
 - **Degradar, no reventar.** Encender el modo sin el servicio arriba tiene que dejar el vertical
   sirviendo catálogo y fichas; lo que se para es la transacción, y se dice.
 
-### 5.7 La pantalla, y las claves que cruzan
+### 5.7 El ARTEFACTO: su emisor, su registro durable y su aviso — **fuera del seam**
+
+Lo que queda como prueba cuando la transacción salió bien (§3). Tres piezas, y la decisión que
+toman es **dónde viven**:
+
+- **el emisor** — los hechos de UN artefacto, sin nada del camino por el que se compró
+  (`EventTicketIssuer`);
+- **el registro durable**, con su `ResourceType` propio sobre `IJsonEntityStore` —o sobre
+  `IPhiStore` si el dato es clínico, como en Salud— y que **no cachea en el proceso**: un reinicio
+  no puede dejar sin verificar algo ya impreso (ADR 0124);
+- **el aviso a quien lo recibe** (`EventPurchaseNotification`), *best-effort*: un correo caído
+  jamás tumba algo ya pagado y persistido.
+
+**Las tres van FUERA del seam de la transacción y las comparten sus dos implementaciones**, y eso
+es §3.2 aplicado: el emisor metido dentro del motor en proceso no lo puede usar el cliente
+cableado, y copiarlo es «un QR con dos definiciones». Es lo que obligó a partirlo dos veces al
+cablear Eventos (#35 rebanada 2b), con el síntoma que nadie habría relacionado: la puerta leyendo
+un almacén vacío sin que nada avisara.
+
+**Y el registro NO tiene cliente `Http*`, nunca.** Es lo único que sostiene la promesa de §3 —que
+la prueba se pueda ver con el otro árbol caído— y es medible: en los siete no hay uno solo. Gates:
+`Cada_vertical_tiene_su_EJE_3` y `El_registro_de_un_artefacto_NO_sale_a_la_red`.
+
+### 5.8 *(condicional)* El SELLO y la custodia de su llave
+
+Sólo si la cuarta pregunta de §3.1 se contesta que **sí**: si alguien de fuera tiene que poder
+comprobar el artefacto sin creernos. Hoy son dos de siete, y las dos piezas son:
+
+- **el seam del sello** en `Synergos.CMS.Interfaces` —`ITicketSigner`, `ICertificateIdSigner`— con
+  un `Sign` y su comprobación al lado, y **la implementación en proceso se llama `Hmac<X>`, no
+  `Stub<X>`**: no es un doble de nada, es la de verdad mientras no se mude la custodia;
+- **la custodia de la llave** en `Synergos.CMS.Web/Services/` —`<X>SigningKeyProvider` + su
+  `Lazy<X>Signer`—: lee el secreto configurado y, si no hay, **genera una llave aleatoria una vez,
+  la cifra con `IDataProtector` y la guarda**. Perder ese volumen invalida todo lo ya emitido, y
+  por eso el respaldo lo nombra (`CLAUDE.md` §11).
+
+**El secreto va en el POCO del vertical, en su MISMA sección.** Es el paso que Eventos no tuvo y
+por eso acabó con `EventsSettings` bajo `Synergos:Events` mientras su transacción vivía en
+`Synergos:Eventos` — dos secciones a una letra de distancia, que es el defecto #154. Educación lo
+hizo bien sin que nadie lo hubiera escrito: `AcademySettings` lleva `CertificateSigningSecret`
+junto a `Mode`/`BaseUrl`/…
+
+**Esto SÍ puede cruzar, y es lo único del eje 3 que puede.** `Synergos:<X>:Mode=Api` cambia el
+firmante por `Http<X>Signer` contra `Api.Signing` (#45) y lo que se gana es **la rotación**: la
+llave local no sabe retirarse. Los ids anteriores se siguen verificando **acá**, por su forma, y
+ni salen a la red — sin eso, cada QR ya impreso dejaría de valer el día del despliegue, y no
+ruidosamente: contestando que la credencial no vale.
+
+### 5.9 La pantalla, y las claves que cruzan
 
 El controller emite el JSON que lee la app del catálogo, y los dos gates cross-repo lo cruzan:
 **G-6** (`tools/contract-keys.mjs`, respuestas) y **G-7** (`tools/contract-bodies.mjs`, cuerpos de
@@ -264,7 +377,7 @@ eso falla a la vista: `System.Text.Json` descarta en silencio lo que no mapea.
 > `ShopController` (110 líneas) en vez de `ShopCatalogController` (1 372) y cruzaba **3 claves de
 > 94**. La guarda rechaza un vertical que cruce menos de una de cada cinco.
 
-### 5.8 El gate del vertical
+### 5.10 El gate del vertical
 
 Lo que el molde comprueba es la **forma**. Lo que el vertical **rechaza y por qué** lo escribe él,
 en su propio `*WiringTests`: que la cita no adivine el identificador del recurso (#25), que la

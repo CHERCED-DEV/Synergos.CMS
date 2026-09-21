@@ -582,4 +582,285 @@ public sealed class MoldeDelVerticalTests
             + ". El catálogo de un vertical sale del contenido de Umbraco "
             + "(Synergos:Catalog:Sources:<X> = demo|cms) y NO de una capacidad.");
     }
+
+    // ── EJE 3 · el ARTEFACTO (doc 12 §3, §5.7 y §5.8) ───────────────────────
+
+    /// <summary>
+    /// El censo del eje 3 vive en la TABLA del doc 12 §3, y este gate la lee.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Por qué el censo es la tabla y no una lista aquí.</b> No hay nada en el disco que
+    /// diga «esta clase es el artefacto de Gobierno»: el nombre no lo delata
+    /// (<c>StubApplicationService</c>) y el <c>ResourceType</c> tampoco pertenece a nadie. Así que
+    /// la atribución es inevitablemente una decisión escrita — y lo que un gate SÍ puede hacer es
+    /// impedir que esa decisión se desvíe, cruzándola contra el disco en los dos sentidos.</para>
+    ///
+    /// <para><b>Y hacía falta:</b> hasta el #153 esa sección nombraba CINCO ejemplos y afirmaba
+    /// «los siete lo tienen» — una cifra sobre una lista incompleta, que es
+    /// <c>feedback_a_named_list_beats_a_count</c> dentro del documento que predica medir. Faltaban
+    /// Salud y Viajes, y el de Salud es el interesante: no guarda por <c>IJsonEntityStore</c> sino
+    /// por <c>IPhiStore</c>, porque el dato es clínico.</para>
+    /// </remarks>
+    [Fact]
+    public void Cada_vertical_tiene_su_EJE_3()
+    {
+        var censo = CensoDelArtefacto();
+
+        Assert.True(censo.Count >= 7,
+            "El censo del eje 3 no se pudo leer del doc 12 §3 (" + censo.Count + " fila(s)): "
+            + "si la tabla se movió o cambió de forma, este gate pasa en verde sin mirar nada.");
+
+        var sinFila = VerticalesConocidos
+            .Where(v => !censo.ContainsKey(v))
+            .ToList();
+
+        Assert.True(sinFila.Count == 0,
+            "Estos verticales no tienen fila en la tabla del eje 3 (doc 12 §3): "
+            + string.Join(", ", sinFila) + ". Un vertical sin artefacto es una DECISIÓN —hay que "
+            + "escribirla con su razón—, no un hueco que se deja en blanco.");
+
+        var sobran = censo.Keys
+            .Where(v => !VerticalesConocidos.Contains(v, StringComparer.Ordinal))
+            .ToList();
+
+        Assert.True(sobran.Count == 0,
+            "La tabla del eje 3 nombra verticales que ya no existen: " + string.Join(", ", sobran)
+            + ". Un censo vigilado en un solo sentido acaba afirmando lo que ya no está (#137).");
+
+        var malas = new List<string>();
+        foreach (var (vertical, fila) in censo.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            var clases = fila.Clases;
+            var fuentes = clases.Select(c => (Clase: c, Ruta: FuenteDe(c))).ToList();
+
+            foreach (var f in fuentes.Where(f => f.Ruta is null))
+            {
+                malas.Add($"{vertical}: «{f.Clase}» no existe en el disco");
+            }
+
+            // Lo que hace que un registro sea un registro es que SOBREVIVA al proceso. Una de las
+            // clases de la fila tiene que tocar un almacén durable; las demás pueden ser
+            // proyecciones (`VisitAgenda`) o el aviso, que no guardan nada.
+            var durables = fuentes
+                .Where(f => f.Ruta is not null)
+                .Where(f => Regex.IsMatch(SinComentarios(f.Ruta!), @"\bIJsonEntityStore\b|\bIPhiStore\b"))
+                .ToList();
+
+            // Y el caso que de verdad muerde, porque pasa el anterior en verde: que el registro
+            // del artefacto SEA el seam del eje 2. Ahí lo durable existe sólo en el modo en
+            // proceso —el cliente cableado no guarda nada de este lado—, así que con el modo
+            // encendido el vertical deja de cumplir la promesa de §3: «la prueba se puede ver con
+            // el otro árbol caído». Se mide cruzando el nombre contra los clientes `Http*` que el
+            // composer de ese vertical registra, sin lista a mano.
+            var cableados = DelMolde()
+                .Where(p => string.Equals(p.Vertical, vertical, StringComparison.Ordinal))
+                .SelectMany(p => p.Clientes)
+                .Select(c => c.StartsWith("Http", StringComparison.Ordinal) ? c[4..] : c)
+                .ToHashSet(StringComparer.Ordinal);
+
+            var fundidas = clases
+                .Select(c => (Clase: c, Desnudo: Regex.Replace(c, "^(Stub|FileSystem|Hmac)", string.Empty)))
+                .Where(x => cableados.Contains(x.Desnudo))
+                .Select(x => x.Clase)
+                .ToList();
+
+            if (fundidas.Count > 0 && !Regex.IsMatch(fila.Fila, @"#\d+"))
+            {
+                malas.Add($"{vertical}: [{string.Join(", ", fundidas)}] es a la vez el registro del "
+                    + "artefacto y el seam del eje 2, así que con el modo cableado no queda nada "
+                    + "de este lado — y la fila no nombra el ticket que lo cierra");
+            }
+
+            // Un eje 3 que no guarda nada NO es un hueco que se deja en blanco: o es una
+            // decisión, o es un ticket. Y la diferencia está escrita
+            // (`feedback_a_census_entry_is_how_a_defect_survives_its_own_gate`): una razón que
+            // contesta «por qué esto no se arregló TODAVÍA» es un ticket sin abrir disfrazado de
+            // exención, así que la fila tiene que NOMBRARLO.
+            if (fuentes.All(f => f.Ruta is not null) && durables.Count == 0
+                && !Regex.IsMatch(fila.Fila, @"#\d+"))
+            {
+                malas.Add($"{vertical}: ninguna de [{string.Join(", ", clases)}] guarda nada "
+                    + "durable y la fila no nombra el ticket que lo cierra");
+            }
+        }
+
+        Assert.True(malas.Count == 0,
+            "El eje 3 de estos verticales no cuadra con el disco: " + string.Join("; ", malas)
+            + ". El artefacto es lo que queda como PRUEBA (doc 12 §3): si no sobrevive al proceso "
+            + "no es una prueba, es una pantalla.");
+    }
+
+    /// <summary>
+    /// El registro de un artefacto NUNCA sale a la red — es lo único que sostiene «la prueba se
+    /// puede ver con el otro árbol caído» (doc 12 §3). El gemelo exacto de
+    /// <see cref="El_catalogo_de_un_vertical_NO_sale_a_la_red"/>, un eje más allá.
+    /// </summary>
+    /// <remarks>
+    /// <para>Lo que SÍ puede cruzar es el <b>sello</b>: <c>HttpCertificateIdSigner</c> existe desde
+    /// el #45 y lo que mudó a <c>Api.Signing</c> fue la CUSTODIA de la llave, no el índice de
+    /// emitidos. Por eso el gate mide el registro y no toca al firmante.</para>
+    ///
+    /// <para><b>Y NO lleva un diente de «tiene gemelo <c>Http*</c>», aunque es lo primero que se
+    /// escribe.</b> Lo tuvo, y su primer arranque marcó a Realty: ahí el registro del artefacto y
+    /// el seam del eje 2 son <b>la misma clase</b> (<c>StubVisitSchedulingService</c>), así que el
+    /// gemelo existe por el eje 2 y el diente no sabe distinguirlo. Un gate que no puede separar
+    /// los dos casos marca el legítimo y enseña a ignorarlo. Lo que ese diente creía medir —que
+    /// con el otro árbol caído quede algo de este lado— es real y en Realty <b>no se cumple</b>;
+    /// va como fila del censo con su ticket, no como falso positivo aquí.</para>
+    /// </remarks>
+    [Fact]
+    public void El_registro_de_un_artefacto_NO_sale_a_la_red()
+    {
+        var censo = CensoDelArtefacto();
+
+        Assert.True(censo.Count >= 7,
+            "El censo del eje 3 no se pudo leer del doc 12 §3 (" + censo.Count + " fila(s)).");
+
+        var mal = new List<string>();
+        foreach (var (vertical, fila) in censo.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            foreach (var clase in fila.Clases)
+            {
+                var ruta = FuenteDe(clase);
+                if (ruta is null) continue;
+
+                if (Regex.IsMatch(SinComentarios(ruta), @"\bHttpClient\b|\bIHttpClientFactory\b"))
+                {
+                    mal.Add($"{vertical}/{clase}");
+                }
+            }
+        }
+
+        Assert.True(mal.Count == 0,
+            "Estos registros de artefacto salen a la red: " + string.Join(", ", mal)
+            + ". El artefacto se queda en el CMS (doc 12 §3): con el otro árbol caído se sigue "
+            + "viendo «mis entradas», se sigue transfiriendo y se sigue escaneando en la puerta.");
+    }
+
+    /// <summary>
+    /// El SELLO (doc 12 §5.8): su implementación en proceso es la de VERDAD —se llama
+    /// <c>Hmac*</c>, no <c>Stub*</c>— y su llave se guarda CIFRADA.
+    /// </summary>
+    /// <remarks>
+    /// <para>Se descubre del disco —todo <c>I*Signer</c> de <c>Interfaces</c>— y no de una lista,
+    /// porque el tercero que aparezca tiene que entrar solo.</para>
+    ///
+    /// <para><b>Lo que mide el cifrado no es que la llave exista.</b> Un
+    /// <c>&lt;X&gt;SigningKeyProvider</c> que generara la llave y la escribiera en claro dejaría
+    /// en el disco del servidor lo único que hace falta para fabricar un diploma con el nombre de
+    /// quien sea — y no fallaría nunca, porque firmaría igual de bien.</para>
+    /// </remarks>
+    [Fact]
+    public void El_sello_de_un_artefacto_guarda_su_llave_cifrada()
+    {
+        var seams = Directory
+            .EnumerateFiles(Dir("Synergos.CMS.Interfaces"), "I*Signer.cs")
+            .Select(Path.GetFileNameWithoutExtension)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Select(n => n!)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(seams.Count >= 2,
+            "El descubrimiento de seams de sello no ve nada (" + seams.Count + "): "
+            + "si se renombraron, este gate pasa en verde sin mirar nada.");
+
+        var mal = new List<string>();
+        foreach (var seam in seams)
+        {
+            var sinI = seam[1..];
+
+            if (FuenteDe("Hmac" + sinI) is null)
+            {
+                mal.Add($"{seam}: no hay Hmac{sinI} — la del proceso es la de VERDAD y se llama así");
+            }
+
+            if (FuenteDe("Stub" + sinI) is not null)
+            {
+                mal.Add($"{seam}: hay un Stub{sinI} — un firmante en proceso no es un doble de nada");
+            }
+        }
+
+        var custodios = Directory
+            .EnumerateFiles(Dir("Synergos.CMS.Web", "Services"), "*SigningKeyProvider.cs")
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(custodios.Count >= 2,
+            "El descubrimiento de custodios de llave no ve nada (" + custodios.Count + ").");
+
+        foreach (var c in custodios)
+        {
+            if (!Regex.IsMatch(SinComentarios(c), @"\bIDataProtector\b|\bIDataProtectionProvider\b"))
+            {
+                mal.Add($"{Path.GetFileName(c)}: guarda la llave SIN cifrar");
+            }
+        }
+
+        Assert.True(mal.Count == 0,
+            "El sello del eje 3 no cumple el molde: " + string.Join("; ", mal)
+            + " (doc 12 §5.8). El sello es lo único que hace que escribir en el almacén no alcance "
+            + "para fabricar el artefacto.");
+    }
+
+    /// <summary>
+    /// La tabla del eje 3 del doc 12 §3, leída: vertical → las clases que su tercera columna
+    /// nombra entre acentos graves.
+    /// </summary>
+    private static IReadOnlyDictionary<string, (IReadOnlyList<string> Clases, string Fila)> CensoDelArtefacto()
+    {
+        var doc = File.ReadAllLines(
+            Dir("Synergos.CMS.Web", "docs", "product", "12-el-molde-de-un-vertical.md"));
+
+        var censo = new Dictionary<string, (IReadOnlyList<string> Clases, string Fila)>(StringComparer.Ordinal);
+
+        // Se recorta la SECCIÓN, no el documento. El doc 12 §2 tiene otra tabla cuyas filas
+        // empiezan igual —`| **Tienda** |`— y cuya tercera columna es el Controller: un parser
+        // que leyera el fichero entero se quedaría con ésa y afirmaría que el artefacto de Tienda
+        // es `ShopController`. Lo destapó el primer arranque del gate, no leerlo.
+        var dentro = false;
+        foreach (var linea in doc)
+        {
+            if (linea.StartsWith("### Eje 3", StringComparison.Ordinal)) { dentro = true; continue; }
+            if (dentro && linea.StartsWith('#')) break;
+            if (!dentro) continue;
+
+            var celdas = linea.Split('|', StringSplitOptions.TrimEntries);
+            // | vacío | vertical | artefacto | quién | almacén | sello | vacío
+            if (celdas.Length < 7) continue;
+
+            var cabecera = celdas[1];
+            var vertical = VerticalesConocidos.FirstOrDefault(v =>
+                cabecera.Contains("`" + v + "`", StringComparison.Ordinal)
+                || cabecera.StartsWith("**" + v + "**", StringComparison.Ordinal));
+            if (vertical is null || censo.ContainsKey(vertical)) continue;
+
+            var clases = Regex.Matches(celdas[3], "`([A-Za-z][A-Za-z0-9_]*)`")
+                .Select(m => m.Groups[1].Value)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (clases.Count == 0) continue;
+
+            censo[vertical] = (clases, linea);
+        }
+
+        return censo;
+    }
+
+    /// <summary>El fichero de una clase del árbol del CMS, o <c>null</c> si no existe.</summary>
+    private static string? FuenteDe(string clase)
+    {
+        foreach (var dir in new[]
+                 {
+                     Dir("Synergos.CMS.Application", "Services", "Impl"),
+                     Dir("Synergos.CMS.Application", "Services"),
+                     Dir("Synergos.CMS.Web", "Services"),
+                 })
+        {
+            var ruta = Path.Combine(dir, clase + ".cs");
+            if (File.Exists(ruta)) return ruta;
+        }
+
+        return null;
+    }
 }

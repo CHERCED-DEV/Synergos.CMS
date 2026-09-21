@@ -206,10 +206,10 @@ Tres cosas de esa cabecera que no son decoración:
 > donde pasó la conversación, y el spec es lo que quedó de ella en una forma que se versiona **con
 > el código que produce**. El issue referencia el spec; el PR referencia el issue.
 
-## 5. La bajada — doce sub-specs, y por qué no son creativos
+## 5. La bajada — catorce sub-specs, y por qué no son creativos
 
 Esto es lo que el arquitecto llamó «los SPs», y lo que hace que la fábrica sea una fábrica: la
-descomposición **no la inventa el agente**. Son los ocho pasos del doc 12 §5, más los dos del otro
+descomposición **no la inventa el agente**. Son los **diez** pasos del doc 12 §5, más los dos del otro
 árbol, más los dos condicionales del doc 08. Cada uno toma una decisión, cabe en un commit atómico,
 y tiene **un gate que ya existe**.
 
@@ -221,16 +221,22 @@ y tiene **un gate que ya existe**.
 | **S4** | `<X>Settings` con `Mode`/`BaseUrl`/`ApiKey`/`TimeoutSeconds` | CMS · Application | `DefaultsDeConfiguracionTests` |
 | **S5** | El interruptor **y el `Configure<>` enlazado** | CMS · Composers | `Cada_punto_de_cableado_ENLAZA_su_seccion` · `El_default_NUNCA_es_el_valor_cableado` |
 | **S6** | El cliente `Http<X>`: llave, correlación, idempotencia, seudónimo | CMS · Web/Services | `…manda_la_llave_compartida` · `…propaga_la_correlacion` |
-| **S7** | Controller + DTOs — las claves que cruzan | CMS · Controllers | **G-6** (`contract-keys`) · **G-7** (`contract-bodies`) |
-| **S8** | El `<X>WiringTests` propio: lo que el vertical **rechaza** | CMS · Arquitectura | `…tiene_un_gate_que_nombra_su_cliente` |
-| **S9** | Elementos UI — **reusar del registry** o, si no hay, crear | UI · apps | `css-parity` · `cdn-size-budget` · `platform-contract` |
-| **S10** | Cliente de la app + normalizadores (en `vitals/`) | UI · apps + vitals | `normalizador-unico` · G-6 · G-7 |
-| **S11** | *(condicional)* capacidad nueva — sólo si pasa el filtro de atomicidad | backend/capacidades | `ApiMoldTests` |
-| **S12** | *(condicional)* orquestador nuevo — sólo si hay algo que deshacer | backend/orquestadores | `BackendSegregationTests` · `BarridoSegregationTests` |
+| **S7** | El artefacto: emisor + registro durable + aviso, **fuera del seam** | CMS · Application | `Cada_vertical_tiene_su_EJE_3` · `El_registro_de_un_artefacto_NO_sale_a_la_red` |
+| **S8** | *(condicional)* el **sello** `I<X>Signer`/`Hmac<X>` + la custodia de su llave | CMS · Interfaces + Web | `El_sello_de_un_artefacto_guarda_su_llave_cifrada` |
+| **S9** | Controller + DTOs — las claves que cruzan | CMS · Controllers | **G-6** (`contract-keys`) · **G-7** (`contract-bodies`) |
+| **S10** | El `<X>WiringTests` propio: lo que el vertical **rechaza** | CMS · Arquitectura | `…tiene_un_gate_que_nombra_su_cliente` |
+| **S11** | Elementos UI — **reusar del registry** o, si no hay, crear | UI · apps | `css-parity` · `cdn-size-budget` · `platform-contract` |
+| **S12** | Cliente de la app + normalizadores (en `vitals/`) | UI · apps + vitals | `normalizador-unico` · G-6 · G-7 |
+| **S13** | *(condicional)* capacidad nueva — sólo si pasa el filtro de atomicidad | backend/capacidades | `ApiMoldTests` |
+| **S14** | *(condicional)* orquestador nuevo — sólo si hay algo que deshacer | backend/orquestadores | `BackendSegregationTests` · `BarridoSegregationTests` |
 
-**S11 y S12 los decide la cabecera del spec, no el agente.** `preguntas.deshacer: no` los apaga, y
-`ejes.transaccion.forma: ninguna` apaga además S3–S6 — que es lo que el doc 12 §8 ya predice de
-Social sin haberlo construido: «Social no tiene eje 2 y hoy no lo pide nadie».
+**Los tres condicionales los decide la cabecera del spec, no el agente.**
+`preguntas.deshacer: no` apaga S13 y S14; `ejes.transaccion.forma: ninguna` apaga además S3–S6
+—que es lo que el doc 12 §8 ya predice de Social sin haberlo construido: «Social no tiene eje 2 y
+hoy no lo pide nadie»—; y a S8 lo enciende `ejes.artefacto.sella: si`, que es la **cuarta**
+pregunta del doc 12 §3.1: *¿alguien de fuera tiene que poder comprobar esto sin creernos?* Hoy la
+contestan que sí **dos de los siete** (Eventos y Educación), y los otros cinco no la contestan mal:
+un sello para quien ya está dentro es custodiar una llave para nadie.
 
 Y la otra mitad de la bajada es `reusa:`, que apaga por **existir**. Medido hoy para Social:
 
@@ -239,9 +245,11 @@ Y la otra mitad de la bajada es `reusa:`, que apaga por **existir**. Medido hoy 
 | S1 DocTypes | `postpage`, `postcategorypage`, `authorpage` **existen** | nada, salvo que el spec pida campos |
 | S2 fuente + interruptor | hay **siete** `Catalog:Sources:*` y **`Social` no está** | **el delta de verdad** |
 | S3–S6 cableado | apagados por la cabecera | — |
-| S7 controller | `BlogsController`, 1 376 líneas, **con 60 claves cruzando G-6** | ajuste, no autoría |
-| S9 elementos | `blogs`, `comments-widget`, `poll`, `social-share`, `share-bar`, `social-proof` **publicados** | reuso |
-| S10 cliente + normalizadores | existen con el controller | ajuste |
+| S7 artefacto | `StubContentStream` (`social-stream`), `StubReactionService`, `StubSocialGraphService` **existen** | ajuste, no autoría |
+| S8 sello | `sella: no` — un post no lo comprueba nadie de fuera | apagado |
+| S9 controller | `BlogsController`, 1 376 líneas, **con 60 claves cruzando G-6** | ajuste, no autoría |
+| S11 elementos | `blogs`, `comments-widget`, `poll`, `social-share`, `share-bar`, `social-proof` **publicados** | reuso |
+| S12 cliente + normalizadores | existen con el controller | ajuste |
 
 O sea que **el octavo vertical no es un vertical entero: es un sub-spec y tres ajustes** — y eso
 no se ve leyendo la épica #11, que habla del dominio. Es el primer resultado útil de la fábrica y
@@ -258,10 +266,15 @@ reparto de trabajo: es también la respuesta a *¿cuánto de esto ya está?*, qu
 
 S1 antes que S2 (una fuente sin DocType no tiene qué leer). S3 antes que S4–S6 (**el seam se corta
 por atomicidad y pensando en la red aunque todavía no la haya** — `IPaymentProvider` nació síncrona
-y la primera pasarela real obligó a subirla entera). S7 después de S6 y **antes** de S10, porque
+y la primera pasarela real obligó a subirla entera). S9 después de S6 y **antes** de S12, porque
 G-6/G-7 cruzan los dos y el lado que se escribe segundo es el que se adapta.
 
-Y una que no está en el doc 12 y sale de la regla 25 del hermano: **S9 empieza consultando el
+S7 después de S6 y **antes** de S9: el artefacto existe antes que la pantalla que lo enseña, y
+—lo que de verdad fija el orden— tiene que estar **fuera** del seam antes de que haya dos
+implementaciones que compartirlo (doc 12 §3.2). S8 pega con S7 cuando se enciende, porque un
+registro que ya se emitió sin sello no se puede sellar hacia atrás sin invalidarlo.
+
+Y una que no está en el doc 12 y sale de la regla 25 del hermano: **S11 empieza consultando el
 registry, no creando.** Ciento treinta y dos elementos publicados; un vertical nuevo que escriba su
 propio acordeón es peso muerto en el CDN y una clase `syn-*` más que `css-parity` tendrá que
 perseguir.
@@ -404,16 +417,17 @@ produjo nada es un diseño.
 Se escribió el spec de un vertical **que ya existe** —`docs/specs/eventos/spec.md`, contra el
 disco— y se midió cuánto de él reproduce la bajada. No se tocó una línea de producción.
 
-**El resultado: 71,4 % (15 de 21), no el 90 % del criterio.** Se reproduce con
-`node tools/spec-valida.mjs --oraculo=eventos`, y lo que falta son **ocho residuales que son
-cuatro hallazgos**:
+**El resultado fue 71,4 % (15 de 21), no el 90 % del criterio** — y **hoy es 95,5 % (21 de 22)**
+desde que el #153 le dio sub-spec al eje 3. Se reproduce con
+`node tools/spec-valida.mjs --oraculo=eventos`. Los ocho residuales de entonces eran **cuatro
+hallazgos**, y así están hoy:
 
 | # | lo que el oráculo vio | qué le falta al molde |
 |---|---|---|
-| **H1** | cinco de los ocho son del **eje 3** —`EventTicketIssuer`, `EventTicketLedger`, `EventPurchaseNotification`, `TicketSigningKeyProvider`, `EventsSettings`— más su gate `EventTicketIssuanceTests` | **el eje 3 no tiene sub-spec.** El doc 12 §3 lo describe y la tabla de §5 de acá decompone sólo los ejes 1 y 2. Es el hallazgo grande |
-| **H2** | el plan inventa `StubTicketSigner.cs`; el real es `HmacTicketSigner.cs` | **`Stub<X>` no es universal.** Cuando la implementación en proceso ES la de verdad —un firmante HMAC no es un doble— se nombra por lo que hace |
+| **H1** ✅ | cinco de los ocho son del **eje 3** —`EventTicketIssuer`, `EventTicketLedger`, `EventPurchaseNotification`, `TicketSigningKeyProvider`, `EventsSettings`— más su gate `EventTicketIssuanceTests` | **el eje 3 no tenía sub-spec.** **Cerrado (#153)**: son S7 (el registro) y S8 (el sello, condicional), y el eje 3 estrena su CUARTA pregunta y sus tres gates. Cinco de los seis salen; el sexto —`EventsSettings`— es H4 |
+| **H2** ✅ a medias | el plan inventa `StubTicketSigner.cs`; el real es `HmacTicketSigner.cs` | **`Stub<X>` no es universal.** El caso del FIRMANTE lo cerró el #153 —S3 ya no se traga el seam del sello y S8 deriva `Hmac<X>`—; el criterio general sigue siendo **#155** |
 | **H3** | el plan inventa `SeamComposer.Eventos.cs`; el real es `SeamComposer.EventsPropertiesGov.cs` | el doc 12 §5.5 nombra el composer parcial **en singular por vertical**; el árbol agrupa tres. `Cada_vertical_tiene_su_EJE_1` ya lo tenía escrito («cuenta, no empareja») |
-| **H4** | `EventosSettings` (sección `Synergos:Eventos`) y `EventsSettings` (sección `Synergos:Events`) | **dos secciones de configuración a una letra de distancia** para un vertical, una por eje. El doc 12 §5.4 describe sólo la del eje 2, y un dedazo entre las dos no falla: el binder descarta en silencio (`feedback_a_key_in_the_wrong_section_is_a_key_nobody_reads`) |
+| **H4** | `EventosSettings` (sección `Synergos:Eventos`) y `EventsSettings` (sección `Synergos:Events`) | **dos secciones de configuración a una letra de distancia** para un vertical, una por eje. El doc 12 §5.4 describe sólo la del eje 2, y un dedazo entre las dos no falla: el binder descarta en silencio (`feedback_a_key_in_the_wrong_section_is_a_key_nobody_reads`). **El #153 le encontró la causa**: el sello necesitaba sección propia, el nombre del vertical ya estaba tomado por el eje 2, y le tocó el que quedaba libre. Sigue abierto en **#154** y es el único residual que queda |
 
 **Y el 71,4 % es el número con el molde en su MEJOR versión, no en la peor.** La primera corrida
 dio **36,8 %** derivando los seams del sustantivo, como dice el doc 12 §5.3 (`I<X>Service`, en
@@ -431,7 +445,14 @@ abogacía y no medición, así que se le dio al molde la regla correcta y se rep
   arregle el molde esté obligado a mover la línea base.
 - Riesgo: cero. Coste: bajo. **Condición de entrada del piloto 1: los cuatro hallazgos cerrados**,
   porque un lenguaje fuente sobre un compilador incompleto produce planes que parecen buenos y
-  omiten un paso.
+  omiten un paso. Van **uno y medio**: H1 cerrado (#153), H2 cerrado para el firmante y abierto
+  como criterio (#155), H3 (#155) y H4 (#154) abiertos.
+
+> **Y el #153 destapó algo que el porcentaje no dice: el oráculo no VEÍA una parte del eje 3.**
+> `ROLES` no conocía `Hmac`, así que `HmacTicketSigner.cs` no entraba en el denominador y la
+> medición salía **mejor de lo que era**. Al añadirlo el disco pasó de 21 ficheros a 22 — o sea
+> que la cifra subió de 71,4 % a 95,5 % **con el denominador creciendo**, no encogiéndolo. Un
+> censo de roles incompleto es la forma que tiene un oráculo de halagar a quien lo escribió.
 
 ### Piloto 1 — Social, el octavo vertical *(épica #11)*
 

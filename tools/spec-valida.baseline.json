@@ -2,19 +2,13 @@
   "objetivo": 0.9,
   "verticales": {
     "eventos": {
-      "cobertura": 0.7143,
-      "reales": 21,
+      "cobertura": 0.9545,
+      "reales": 22,
       "inventados": [
-        "S3 Synergos.CMS.Application/Services/Impl/StubTicketSigner.cs",
         "S5 Synergos.CMS.Web/Composers/SeamComposer.Eventos.cs"
       ],
       "perdidos": [
-        "Synergos.Arquitectura.Tests/Architecture/EventTicketIssuanceTests.cs",
-        "Synergos.CMS.Application/Configuration/EventsSettings.cs",
-        "Synergos.CMS.Application/Services/Impl/EventPurchaseNotification.cs",
-        "Synergos.CMS.Application/Services/Impl/EventTicketIssuer.cs",
-        "Synergos.CMS.Application/Services/Impl/EventTicketLedger.cs",
-        "Synergos.CMS.Web/Services/TicketSigningKeyProvider.cs"
+        "Synergos.CMS.Application/Configuration/EventsSettings.cs"
       ]
     }
   },

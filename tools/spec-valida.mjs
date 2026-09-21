@@ -72,6 +72,13 @@ const FORMAS = ['Api', 'Bff', 'ninguna'];
 const EJES = ['catalogo', 'transaccion', 'artefacto'];
 const PREGUNTAS = ['deshacer', 'recurso_ajeno', 'quien_cobra'];
 
+/**
+ * La CUARTA pregunta (doc 12 §3.1) vive en el eje 3 y no en `preguntas:` a propósito: las tres de
+ * §4 eligen la FORMA del eje 2 y ésta enciende un sub-spec del eje 3. Fundirlas sería el error que
+ * el propio doc 12 §4 documenta cuatro veces.
+ */
+const SELLA = ['si', 'no'];
+
 class Rechazo extends Error {
   constructor(codigo, detalle) {
     super(`${codigo}: ${detalle}`);
@@ -224,7 +231,7 @@ export function elementosPublicados(uiPath) {
 const mayus = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
- * Los doce sub-specs del doc 13 §5, cada uno con la regla de nombre del doc 12 §5.
+ * Los catorce sub-specs del doc 13 §5, cada uno con la regla de nombre del doc 12 §5.
  *
  * Se deriva de DOS palabras —`vertical` (la del interruptor: `Eventos`) y `sustantivo` (la del
  * árbol de contenido: `Event`)— y de las formas de los ejes. Las dos hacen falta y ninguna se
@@ -259,7 +266,13 @@ export function derivarPlan(cab) {
   // `IEventManagementService`, `IEventCatalogProvider`). Así que cuáles hay es una DECISIÓN que
   // la cabecera declara —igual que `crea.doctypes`— y lo que se deriva es su RUTA y su
   // implementación en proceso, con las reglas de nombre del molde.
+  //
+  // Y el seam del SELLO no entra acá aunque el vertical lo declare: es S8, y su implementación en
+  // proceso NO se llama `Stub<X>` (doc 12 §5.3, nota). `HmacTicketSigner` no es un doble de nada,
+  // así que derivarlo por esta rama inventaba un `StubTicketSigner` que no existe ni debe (#155).
+  const sello = (ejes.artefacto ?? {}).sello;
   for (const s of cab.crea?.seams ?? []) {
+    if (sello && String(s) === String(sello)) continue;
     const sin = String(s).replace(/^I/, '');
     paso('S3', `Synergos.CMS.Interfaces/${s}.cs`, 'doc 12 §5.3 — el seam vive en Interfaces');
     paso('S3', `Synergos.CMS.Application/Services/Impl/Stub${sin}.cs`,
@@ -280,25 +293,56 @@ export function derivarPlan(cab) {
     }
   }
 
-  // S7 · doc 12 §5.7 — la pantalla y las claves que cruzan.
-  paso('S7', `Synergos.CMS.Web/Controllers/${V}Controller.cs`, 'doc 12 §5.7');
-  // S8 · doc 12 §5.8 — el gate del vertical.
-  paso('S8', `Synergos.Arquitectura.Tests/Architecture/${V}WiringTests.cs`, 'doc 12 §5.8');
+  // ── S7/S8 · doc 12 §5.7 y §5.8 — el EJE 3, que hasta el #153 el molde no escribía ──────────
+  //
+  // Va aquí y no al final por el orden del doc 13 §5.1: el artefacto existe antes que la pantalla
+  // que lo enseña, y —lo que de verdad lo fija— tiene que estar FUERA del seam de la transacción
+  // antes de que haya dos implementaciones que compartirlo (doc 12 §3.2).
+  //
+  // Qué piezas tiene el artefacto es una DECISIÓN que la cabecera declara, igual que
+  // `crea.doctypes` y `crea.seams`; lo que se deriva es su RUTA y su carpeta. Poner las rutas en
+  // la cabecera sería el plan copiando al spec, y el porcentaje dejaría de medir nada (#140).
+  const art = ejes.artefacto ?? {};
+  const A = art.sustantivo ?? '';
+  for (const pieza of cab.crea?.artefacto ?? []) {
+    paso('S7', `Synergos.CMS.Application/Services/Impl/${pieza}.cs`,
+      'doc 12 §5.7 — el artefacto vive FUERA del seam: lo comparten sus dos implementaciones');
+  }
+  // El gate del artefacto se nombra por su EMISIÓN (`EventTicketIssuanceTests`). `${N}${A}` se
+  // colapsa cuando el artefacto ES el sustantivo del vertical, o saldría `EventEventIssuance`.
+  if (A) {
+    const NA = A === N ? A : `${N}${A}`;
+    paso('S7', `Synergos.Arquitectura.Tests/Architecture/${NA}IssuanceTests.cs`, 'doc 12 §5.7');
+  }
+  // S8 · condicional — lo enciende la CUARTA pregunta (doc 12 §3.1), no `preguntas:`.
+  if (art.sella === 'si' && sello) {
+    const sinI = String(sello).replace(/^I/, '');
+    paso('S8', `Synergos.CMS.Interfaces/${sello}.cs`, 'doc 12 §5.8 — el seam del sello');
+    paso('S8', `Synergos.CMS.Application/Services/Impl/Hmac${sinI}.cs`,
+      'doc 12 §5.8 — la del proceso es la de VERDAD, no un `Stub`');
+    paso('S8', `Synergos.CMS.Web/Services/${A}SigningKeyProvider.cs`,
+      'doc 12 §5.8 — la custodia: la llave, cifrada con IDataProtector');
+  }
 
-  // S9/S10 · doc 13 §5 — el otro árbol. Se nombra la CARPETA: el plan del CMS no predice cuántos
+  // S9 · doc 12 §5.9 — la pantalla y las claves que cruzan.
+  paso('S9', `Synergos.CMS.Web/Controllers/${V}Controller.cs`, 'doc 12 §5.9');
+  // S10 · doc 12 §5.10 — el gate del vertical.
+  paso('S10', `Synergos.Arquitectura.Tests/Architecture/${V}WiringTests.cs`, 'doc 12 §5.10');
+
+  // S11/S12 · doc 13 §5 — el otro árbol. Se nombra la CARPETA: el plan del CMS no predice cuántos
   // ficheros tiene una app de Angular, y fingirlo sería inventar.
   if (cab.ui?.app) {
-    paso('S9', `«UI» platforms/angular/apps/elements/modules/${cab.ui.app}/`, 'doc 13 §5 S9+S10');
+    paso('S11', `«UI» platforms/angular/apps/elements/modules/${cab.ui.app}/`, 'doc 13 §5 S11+S12');
   }
 
-  // S11 · condicional — capacidad nueva sólo si pasa el filtro de atomicidad.
+  // S13 · condicional — capacidad nueva sólo si pasa el filtro de atomicidad.
   for (const c of cab.crea?.capacidades ?? []) {
-    paso('S11', `backend/capacidades/Synergos.${c}/`, 'doc 13 §5 S11 — condicional');
+    paso('S13', `backend/capacidades/Synergos.${c}/`, 'doc 13 §5 S13 — condicional');
   }
-  // S12 · condicional — orquestador sólo si hay algo que deshacer.
+  // S14 · condicional — orquestador sólo si hay algo que deshacer.
   if (forma === 'Bff') {
-    paso('S12', `backend/orquestadores/Synergos.Bff.${V}/`,
-      'doc 13 §5 S12 — `preguntas.deshacer: si` lo enciende');
+    paso('S14', `backend/orquestadores/Synergos.Bff.${V}/`,
+      'doc 13 §5 S14 — `preguntas.deshacer: si` lo enciende');
   }
   return plan;
 }
@@ -318,8 +362,8 @@ const CARPETAS = [
   ['S4', 'Synergos.CMS.Application/Configuration', (n) => n.endsWith('.cs')],
   ['S5', 'Synergos.CMS.Web/Composers', (n) => n.endsWith('.cs')],
   ['S6', 'Synergos.CMS.Web/Services', (n) => n.endsWith('.cs')],
-  ['S7', 'Synergos.CMS.Web/Controllers', (n) => n.endsWith('.cs')],
-  ['S8', 'Synergos.Arquitectura.Tests/Architecture', (n) => n.endsWith('.cs')],
+  ['S9', 'Synergos.CMS.Web/Controllers', (n) => n.endsWith('.cs')],
+  ['S10', 'Synergos.Arquitectura.Tests/Architecture', (n) => n.endsWith('.cs')],
 ];
 
 /**
@@ -328,7 +372,7 @@ const CARPETAS = [
  * (§5.6) y fuente de catálogo (§5.2). Un fichero del vertical cuyo prefijo NO esté acá sale como
  * PERDIDO, y eso es el entregable: un papel que el molde no nombró.
  */
-const ROLES = ['', 'I', 'Stub', 'Http', 'Umbraco'];
+const ROLES = ['', 'I', 'Stub', 'Http', 'Umbraco', 'Hmac', 'Lazy'];
 
 /** ¿El basename es de este vertical? Prefijo tras un rol del molde, sin distinguir mayúsculas. */
 function esDelVertical(base, alias) {
@@ -351,7 +395,7 @@ export function ficherosReales(cab, raiz = RAIZ) {
     }
   }
   const bff = join(raiz, 'backend', 'orquestadores', `Synergos.Bff.${V}`);
-  if (existsSync(bff)) reales.push({ s: 'S12', ruta: `backend/orquestadores/Synergos.Bff.${V}/` });
+  if (existsSync(bff)) reales.push({ s: 'S14', ruta: `backend/orquestadores/Synergos.Bff.${V}/` });
   return { reales, alias };
 }
 
@@ -376,6 +420,30 @@ export function validar(cab, prosa, ctx) {
       if ((v.forma === 'ninguna' || v.que === 'ninguno') && !v.razon) {
         falla('spec.eje_sin_declarar',
           `el eje \`${e}\` es ninguna y no dice por qué — un eje ausente es una decisión, no un hueco`);
+      }
+    }
+  }
+
+  // La CUARTA pregunta (doc 12 §3.1) y lo que enciende. Va en el eje 3 y no en `preguntas:`
+  // porque las tres de §4 eligen la FORMA del eje 2 y ésta enciende S8.
+  const art = (ejes && !Array.isArray(ejes) ? (ejes.artefacto ?? {}) : {});
+  if (art.que !== 'ninguno') {
+    if (art.sella === undefined || art.sella === '') {
+      falla('spec.pregunta_sin_contestar',
+        'falta `ejes.artefacto.sella` — ¿alguien de FUERA tiene que poder comprobar esto sin '
+        + 'creernos? (doc 12 §3.1). Sin contestarla, S8 no se puede ni encender ni apagar');
+    } else if (!SELLA.includes(String(art.sella))) {
+      falla('spec.vocabulario',
+        `\`ejes.artefacto.sella: ${art.sella}\` no es ${SELLA.join(' / ')}`);
+    } else if (String(art.sella) === 'si') {
+      if (!art.sello) {
+        falla('spec.eje_sin_declarar',
+          'con `sella: si` hace falta `sello:` — el NOMBRE del seam que firma, porque de él salen '
+          + 'su `Hmac*` y su custodia (doc 12 §5.8)');
+      }
+      if (!art.sustantivo) {
+        falla('spec.eje_sin_declarar',
+          'con `sella: si` hace falta `sustantivo:` — la custodia se llama `<sustantivo>SigningKeyProvider`');
       }
     }
   }
@@ -534,6 +602,25 @@ function autoprueba() {
     BASE.replace('elementos:   []', 'elementos:   [no-existe]'), 'spec.reusa_inexistente');
   caso('vocabulario', BASE.replace('forma: ninguna, razon', 'forma: Directa, razon'),
     'spec.vocabulario');
+
+  // La CUARTA pregunta (doc 12 §3.1). El fixture BASE tiene el eje 3 en `ninguno` —el caso de
+  // Social—, así que estos cuatro tienen que DARLE un artefacto de verdad primero: con el eje
+  // apagado la comprobación se salta y los cuatro pasarían en verde con la regla quitada.
+  const CON_ARTEFACTO = (extra) => BASE.replace(
+    'artefacto:   { que: ninguno, razon: "no queda prueba de nada" }',
+    `artefacto:   { que: "la entrada con su QR"${extra} }`);
+  caso('el eje 3 existe y NADIE contestó la cuarta pregunta',
+    CON_ARTEFACTO(''), 'spec.pregunta_sin_contestar');
+  caso('`sella` con una tercera palabra',
+    CON_ARTEFACTO(', sella: quizá'), 'spec.vocabulario');
+  caso('`sella: si` sin nombrar el seam que firma',
+    CON_ARTEFACTO(', sella: si, sustantivo: Ticket'), 'spec.eje_sin_declarar');
+  caso('`sella: si` sin sustantivo — la custodia no tendría nombre',
+    CON_ARTEFACTO(', sella: si, sello: ITicketSigner'), 'spec.eje_sin_declarar');
+  caso('un eje 3 bien declarado es válido',
+    CON_ARTEFACTO(', sella: si, sello: ITicketSigner, sustantivo: Ticket'), null);
+  caso('un eje 3 que NO sella también es válido',
+    CON_ARTEFACTO(', sella: no'), null);
   caso('una secuencia de bloque es válida (hace falta para `rechazos:`)',
     BASE.replace('  doctypes: [postpage]',
       '  doctypes: [postpage]\nrechazos:\n  - "social.hilo_cerrado · al comentar · NO transitorio"'),

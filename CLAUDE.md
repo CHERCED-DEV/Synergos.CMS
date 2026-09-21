@@ -160,7 +160,7 @@ Synergos.CMS/
 ├── Synergos.Arquitectura.Tests/ LOS GATES: segregación (17) + molde (12)
 │   └── Architecture/            + capas (8) + imagen de contenedor (6)
 │                                + compose (12) + despliegue (18, ADR 0133)
-│                                + molde del vertical (10, doc 12)
+│                                + molde del vertical (13, doc 12)
 │                                + seudónimo único (3, #120)
 │                                + portada de arranque (5, #119)
 │                                + política de build en la imagen (7, #156)
@@ -241,10 +241,10 @@ Synergos.CMS/
 | "¿Cómo se deshace lo que ya se hizo?" | `Synergos.CMS.Web/docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `Synergos.CMS.Web/docs/product/10-promocion-bff-core.md` |
 | "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
-| "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — los tres ejes, las dos formas del eje transaccional y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`) |
+| "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — **diez** pasos: los tres ejes con su tabla medida, las dos formas del eje transaccional, la CUARTA pregunta del eje 3 (§3.1) y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`, 13) |
 | "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los doce sub-specs derivados del molde, los dos MCPs y el gate del arnés. **Ya no es sólo diseño**: el arnés vive en `Synergos.Fabrica` con su `arnes.lock.json` (#141) y el spec tiene formato y validador (#140) |
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
-| "¿El molde da para GENERAR un vertical?" | Todavía no del todo: el piloto 0 midió **71,4 %** sobre Eventos y dejó **cuatro hallazgos**, el grande siendo que **el eje 3 no tiene sub-spec**. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
+| "¿El molde da para GENERAR un vertical?" | Casi: el piloto 0 midió **71,4 %** sobre Eventos y hoy da **95,5 %** con el eje 3 ya escrito (#153). De los cuatro hallazgos queda **uno y medio** — #154 y el criterio general de #155. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
 
 > **La forma de `window.synergos` se declara en TRES sitios, y hay gate** (#88,
@@ -1533,6 +1533,39 @@ Las que salieron de construir el árbol de servicios (§0.B):
   visto UNA vista rota: porque pedir la página sólo prueba **las que la portada
   renderiza**. Compilándolas las 401 aparecieron **tres más**, rotas desde hacía olas — un
   `@inject` de un tipo borrado y dos de un namespace que no lo tiene.
+
+- `feedback_an_axis_the_mould_does_not_write_gets_solved_twice_differently` — **un eje que el
+  molde describe pero no DESCOMPONE lo resuelve cada vertical a su manera, y las dos formas
+  conviven sin que nada las cruce** (#153). El doc 12 §3 describía el eje 3 —el artefacto: la
+  entrada con su QR, el diploma, el expediente— y su §5 decomponía sólo los ejes 1 y 2, así que
+  **los dos únicos verticales que sellan su artefacto lo cablearon distinto**: `AcademySettings`
+  lleva la transacción y el sello en un POCO y una sección, y Eventos los lleva en dos
+  —`EventosSettings` bajo `Synergos:Eventos` y `EventsSettings` bajo `Synergos:Events`— a **una
+  letra de distancia, donde el binder descarta en silencio** (#154). Eso no es estilo: es la causa
+  del defecto, y se lee al revés de como se encontró — el sello necesitaba sección propia, el
+  nombre del vertical ya estaba tomado, y le tocó el que quedaba libre.
+  **Y la frase que lo tapaba era una CIFRA sobre una lista incompleta**: «los siete lo tienen»
+  escrito debajo de **cinco** ejemplos, o sea `feedback_a_named_list_beats_a_count` dentro del
+  documento que predica medir. Al derivar los siete aparecieron los dos que faltaban, y el
+  interesante es Salud: guarda por **`IPhiStore`** y no por `IJsonEntityStore`, porque el dato es
+  clínico — con la lista a mano ese caso no existía.
+  **Las dos invariantes que el eje sí tenía y nadie había escrito, las dos medibles:** el
+  artefacto vive **FUERA** del seam de la transacción y lo comparten sus dos implementaciones (un
+  emisor dentro del motor en proceso no lo puede usar el cliente cableado, y copiarlo es «un QR
+  con dos definiciones»); y **el REGISTRO nunca sale a la red, el SELLO sí puede** —lo que
+  Educación mudó a `Api.Signing` fue la custodia de la llave, no el índice de emitidos—.
+  **Lo que decide si hace falta sello es una CUARTA pregunta**, hermana de las tres de §4 y
+  separada de ellas: *¿alguien de FUERA tiene que poder comprobar esto sin creernos?* Una entrada
+  la lee un portero que no es nuestro; un RMA lo mira quien vendió. Dos de siete contestan que sí,
+  y para los otros cinco un sello sería custodiar una llave para nadie.
+  **Y el gate que salió de ahí encontró al primer arranque lo que el eje no cumple**: en Realty el
+  registro del artefacto y el seam del eje 2 son **la misma clase**, así que con `Mode=Api` no
+  queda nada de este lado — la agenda se sigue pintando, porque es una función pura, y quien
+  reservó no ve su visita (#158). Dos cortes que costaron su mutación: el diente de «tiene gemelo
+  `Http*`» **se quitó** —marca ese caso legítimo y no sabe distinguirlo, y un gate que marca al
+  bueno enseña a ignorarlo— y en su lugar la fila del censo que no guarda nada **tiene que nombrar
+  su ticket**, porque una razón que contesta «por qué esto no se arregló TODAVÍA» es un ticket sin
+  abrir disfrazado de exención.
 
 - `feedback_measure_the_generator_at_its_best_or_the_finding_is_yours` — **cuando se mide si un
   MOLDE da para generar, la cifra depende de lo bien que se haya implementado el molde, no sólo
