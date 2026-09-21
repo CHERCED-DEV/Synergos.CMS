@@ -7,7 +7,7 @@ oraculo: si            # este spec se mide contra el disco: es el piloto 0
 ejes:
   catalogo:    { doctype: eventpage, fuente: UmbracoEventCatalogSource, interruptor: "Synergos:Catalog:Sources:Events" }
   transaccion: { forma: Bff, interruptor: "Synergos:Eventos:Mode", seam: IEventTicketingService, orquestador: Synergos.Bff.Eventos }
-  artefacto:   { que: "la entrada con su QR, su portador y su check-in" }
+  artefacto:   { que: "la entrada con su QR, su portador y su check-in", sustantivo: Ticket, sella: si, sello: ITicketSigner }   # sella: la lee un portero que no es nuestro (doc 12 §3.1)
 preguntas:
   deshacer:      si          # aforo apartado + cobro autorizado → orquestador
   recurso_ajeno: si          # el aforo lo lleva Api.Inventory
@@ -19,6 +19,7 @@ crea:
   doctypes:    [eventpage, elementeventsession, elementeventtier, elementeventzone, elementsyneventos]
   seams:       [IEventCatalogProvider, IEventTicketingService, IEventManagementService, ITicketSigner]
   capacidades: []
+  artefacto:   [EventTicketIssuer, EventTicketLedger, EventPurchaseNotification]
 ui:
   app: eventos
 rechazos:                                 # leídos de Bff.Eventos/Domain/, no inventados

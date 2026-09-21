@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3287 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3290 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2247 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 407 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 410 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3287**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3290**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -160,7 +160,7 @@ Synergos.CMS/
 ├── Synergos.Arquitectura.Tests/ LOS GATES: segregación (17) + molde (12)
 │   └── Architecture/            + capas (8) + imagen de contenedor (6)
 │                                + compose (12) + despliegue (18, ADR 0133)
-│                                + molde del vertical (10, doc 12)
+│                                + molde del vertical (13, doc 12)
 │                                + seudónimo único (3, #120)
 │                                + portada de arranque (5, #119)
 │                                + configuración del build (3, #151)
@@ -241,10 +241,10 @@ Synergos.CMS/
 | "¿Cómo se deshace lo que ya se hizo?" | `Synergos.CMS.Web/docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `Synergos.CMS.Web/docs/product/10-promocion-bff-core.md` |
 | "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
-| "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — los tres ejes, las dos formas del eje transaccional y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`) |
+| "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — **diez** pasos: los tres ejes con su tabla medida, las dos formas del eje transaccional, la CUARTA pregunta del eje 3 (§3.1) y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`, 13) |
 | "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los doce sub-specs derivados del molde, los dos MCPs y el gate del arnés. **Ya no es sólo diseño**: el arnés vive en `Synergos.Fabrica` con su `arnes.lock.json` (#141) y el spec tiene formato y validador (#140) |
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
-| "¿El molde da para GENERAR un vertical?" | Todavía no del todo: el piloto 0 midió **71,4 %** sobre Eventos y dejó **cuatro hallazgos**, el grande siendo que **el eje 3 no tiene sub-spec**. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
+| "¿El molde da para GENERAR un vertical?" | Casi: el piloto 0 midió **71,4 %** sobre Eventos y hoy da **95,5 %** con el eje 3 ya escrito (#153). De los cuatro hallazgos queda **uno y medio** — #154 y el criterio general de #155. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
 
 > **La forma de `window.synergos` se declara en TRES sitios, y hay gate** (#88,
@@ -1522,6 +1522,39 @@ Las que salieron de construir el árbol de servicios (§0.B):
   rojo deja de leerse»; el precio esta vez fue el sitio entero caído mientras las tres
   suites pasaban.
 
+- `feedback_an_axis_the_mould_does_not_write_gets_solved_twice_differently` — **un eje que el
+  molde describe pero no DESCOMPONE lo resuelve cada vertical a su manera, y las dos formas
+  conviven sin que nada las cruce** (#153). El doc 12 §3 describía el eje 3 —el artefacto: la
+  entrada con su QR, el diploma, el expediente— y su §5 decomponía sólo los ejes 1 y 2, así que
+  **los dos únicos verticales que sellan su artefacto lo cablearon distinto**: `AcademySettings`
+  lleva la transacción y el sello en un POCO y una sección, y Eventos los lleva en dos
+  —`EventosSettings` bajo `Synergos:Eventos` y `EventsSettings` bajo `Synergos:Events`— a **una
+  letra de distancia, donde el binder descarta en silencio** (#154). Eso no es estilo: es la causa
+  del defecto, y se lee al revés de como se encontró — el sello necesitaba sección propia, el
+  nombre del vertical ya estaba tomado, y le tocó el que quedaba libre.
+  **Y la frase que lo tapaba era una CIFRA sobre una lista incompleta**: «los siete lo tienen»
+  escrito debajo de **cinco** ejemplos, o sea `feedback_a_named_list_beats_a_count` dentro del
+  documento que predica medir. Al derivar los siete aparecieron los dos que faltaban, y el
+  interesante es Salud: guarda por **`IPhiStore`** y no por `IJsonEntityStore`, porque el dato es
+  clínico — con la lista a mano ese caso no existía.
+  **Las dos invariantes que el eje sí tenía y nadie había escrito, las dos medibles:** el
+  artefacto vive **FUERA** del seam de la transacción y lo comparten sus dos implementaciones (un
+  emisor dentro del motor en proceso no lo puede usar el cliente cableado, y copiarlo es «un QR
+  con dos definiciones»); y **el REGISTRO nunca sale a la red, el SELLO sí puede** —lo que
+  Educación mudó a `Api.Signing` fue la custodia de la llave, no el índice de emitidos—.
+  **Lo que decide si hace falta sello es una CUARTA pregunta**, hermana de las tres de §4 y
+  separada de ellas: *¿alguien de FUERA tiene que poder comprobar esto sin creernos?* Una entrada
+  la lee un portero que no es nuestro; un RMA lo mira quien vendió. Dos de siete contestan que sí,
+  y para los otros cinco un sello sería custodiar una llave para nadie.
+  **Y el gate que salió de ahí encontró al primer arranque lo que el eje no cumple**: en Realty el
+  registro del artefacto y el seam del eje 2 son **la misma clase**, así que con `Mode=Api` no
+  queda nada de este lado — la agenda se sigue pintando, porque es una función pura, y quien
+  reservó no ve su visita (#158). Dos cortes que costaron su mutación: el diente de «tiene gemelo
+  `Http*`» **se quitó** —marca ese caso legítimo y no sabe distinguirlo, y un gate que marca al
+  bueno enseña a ignorarlo— y en su lugar la fila del censo que no guarda nada **tiene que nombrar
+  su ticket**, porque una razón que contesta «por qué esto no se arregló TODAVÍA» es un ticket sin
+  abrir disfrazado de exención.
+
 - `feedback_measure_the_generator_at_its_best_or_the_finding_is_yours` — **cuando se mide si un
   MOLDE da para generar, la cifra depende de lo bien que se haya implementado el molde, no sólo
   del molde — así que hay que darle su MEJOR versión antes de contar, o la lista de hallazgos es
@@ -1620,13 +1653,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3287 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3290 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2247
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 407
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 410
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -1992,7 +2025,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3287 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3290 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
