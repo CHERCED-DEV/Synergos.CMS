@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
@@ -42,110 +39,40 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class CertificateSigningKeyProvider : IDisposable
 {
-    private const string ResourceType = "keys";
+    private readonly CustodiaDeLlaveDeFirma _custodia;
 
-    /// <summary>Clave fija: es UNA llave, no una colección — se recupera por nombre.</summary>
-    private const string KeyId = "certificate-signing-v1";
-    private const string ProtectorPurpose = "Synergos.Academy.CertificateSigningKey.v1";
-    private const int GeneratedKeyBytes = 32; // 256 bits, el tamaño natural para HMAC-SHA256
-
-    private readonly IJsonEntityStore _store;
-    private readonly IDataProtector _protector;
-    private readonly IOptions<AcademySettings> _options;
-    private readonly ILogger<CertificateSigningKeyProvider> _logger;
-    private readonly SemaphoreSlim _gate = new(1, 1);
-
-    /// <inheritdoc />
-    public void Dispose() => _gate.Dispose();
-    private byte[]? _cached;
-
+    /// <summary>Construye la custodia de esta llave.</summary>
+    /// <param name="store">Dónde se guarda cifrada.</param>
+    /// <param name="dataProtectionProvider">Con qué se cifra.</param>
+    /// <param name="options">La sección del vertical.</param>
+    /// <param name="logger">Dónde se avisa.</param>
     public CertificateSigningKeyProvider(
         IJsonEntityStore store,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<AcademySettings> options,
         ILogger<CertificateSigningKeyProvider> logger)
     {
-        _store = store;
-        _protector = dataProtectionProvider.CreateProtector(ProtectorPurpose);
-        _options = options;
-        _logger = logger;
+        ArgumentNullException.ThrowIfNull(options);
+        _custodia = new CustodiaDeLlaveDeFirma(
+            store,
+            dataProtectionProvider,
+            keyId: "certificate-signing-v1",
+            protectorPurpose: "Synergos.Academy.CertificateSigningKey.v1",
+            secretoConfigurado: () => options.Value.CertificateSigningSecret,
+            sujeto: "Educación",
+            claveDeConfiguracion: "Synergos:Academy:CertificateSigningSecret",
+            consecuenciaDePerderla: "los certificados ya emitidos dejarán de verificar",
+            logger: logger);
     }
 
-    public async Task<byte[]> GetKeyAsync(CancellationToken cancellationToken = default)
-    {
-        if (_cached is not null)
-        {
-            return _cached;
-        }
+    /// <summary>La llave, resuelta una vez y cacheada.</summary>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>Los bytes de la llave.</returns>
+    public Task<byte[]> GetKeyAsync(CancellationToken cancellationToken = default)
+        => _custodia.GetKeyAsync(cancellationToken);
 
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (_cached is not null)
-            {
-                return _cached;
-            }
-
-            var configured = _options.Value.CertificateSigningSecret;
-            if (!string.IsNullOrWhiteSpace(configured))
-            {
-                _cached = Encoding.UTF8.GetBytes(configured);
-                return _cached;
-            }
-
-            // Sin secreto configurado: se reusa el que ya se generó, o se crea uno.
-            var stored = await _store.ReadAsync(ResourceType, KeyId, cancellationToken).ConfigureAwait(false);
-            if (!string.IsNullOrWhiteSpace(stored))
-            {
-                var recovered = TryUnprotect(stored);
-                if (recovered is not null)
-                {
-                    _cached = recovered;
-                    return _cached;
-                }
-                // Llave ilegible (keyring rotado, fichero corrupto): se genera otra. Los
-                // certificados ya emitidos dejan de verificar — se registra fuerte para que
-                // el operador sepa POR QUÉ, en vez de enterarse por un empleador.
-                _logger.LogError(
-                    "Educación: la llave de firma de certificados guardada no se pudo descifrar. Se generará una " +
-                    "nueva y los certificados ya emitidos dejarán de verificar. Configure " +
-                    "Synergos:Academy:CertificateSigningSecret.");
-            }
-
-            var generated = RandomNumberGenerator.GetBytes(GeneratedKeyBytes);
-            await _store.WriteAsync(
-                ResourceType,
-                KeyId,
-                JsonSerializer.Serialize(_protector.Protect(Convert.ToBase64String(generated))),
-                cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation(
-                "Educación: no hay Synergos:Academy:CertificateSigningSecret — se generó una llave de firma de " +
-                "certificados y se guardó cifrada. Configure el secreto para poder rotarlo y compartirlo entre instancias.");
-            _cached = generated;
-            return _cached;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    private byte[]? TryUnprotect(string storedJson)
-    {
-        try
-        {
-            var cipher = JsonSerializer.Deserialize<string>(storedJson);
-            if (string.IsNullOrWhiteSpace(cipher))
-            {
-                return null;
-            }
-            return Convert.FromBase64String(_protector.Unprotect(cipher));
-        }
-        catch (Exception ex) when (ex is CryptographicException or FormatException or JsonException)
-        {
-            return null;
-        }
-    }
+    /// <inheritdoc />
+    public void Dispose() => _custodia.Dispose();
 }
 
 /// <summary>

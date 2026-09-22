@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
@@ -35,108 +32,40 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class TicketSigningKeyProvider : IDisposable
 {
-    private const string ResourceType = "keys";
-    /// <summary>Clave fija: es UNA llave, no una colección — se recupera por nombre.</summary>
-    private const string KeyId = "ticket-signing-v1";
-    private const string ProtectorPurpose = "Synergos.Tickets.SigningKey.v1";
-    private const int GeneratedKeyBytes = 32; // 256 bits, el tamaño natural para HMAC-SHA256
+    private readonly CustodiaDeLlaveDeFirma _custodia;
 
-    private readonly IJsonEntityStore _store;
-    private readonly IDataProtector _protector;
-    private readonly IOptions<TicketSettings> _options;
-    private readonly ILogger<TicketSigningKeyProvider> _logger;
-    private readonly SemaphoreSlim _gate = new(1, 1);
-
-    /// <inheritdoc />
-    public void Dispose() => _gate.Dispose();
-    private byte[]? _cached;
-
+    /// <summary>Construye la custodia de esta llave.</summary>
+    /// <param name="store">Dónde se guarda cifrada.</param>
+    /// <param name="dataProtectionProvider">Con qué se cifra.</param>
+    /// <param name="options">La sección del vertical.</param>
+    /// <param name="logger">Dónde se avisa.</param>
     public TicketSigningKeyProvider(
         IJsonEntityStore store,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<TicketSettings> options,
         ILogger<TicketSigningKeyProvider> logger)
     {
-        _store = store;
-        _protector = dataProtectionProvider.CreateProtector(ProtectorPurpose);
-        _options = options;
-        _logger = logger;
+        ArgumentNullException.ThrowIfNull(options);
+        _custodia = new CustodiaDeLlaveDeFirma(
+            store,
+            dataProtectionProvider,
+            keyId: "ticket-signing-v1",
+            protectorPurpose: "Synergos.Tickets.SigningKey.v1",
+            secretoConfigurado: () => options.Value.SigningSecret,
+            sujeto: "Tickets",
+            claveDeConfiguracion: "Synergos:Eventos:Ticket:SigningSecret",
+            consecuenciaDePerderla: "los QR ya emitidos dejarán de ser válidos",
+            logger: logger);
     }
 
-    public async Task<byte[]> GetKeyAsync(CancellationToken cancellationToken = default)
-    {
-        if (_cached is not null)
-        {
-            return _cached;
-        }
+    /// <summary>La llave, resuelta una vez y cacheada.</summary>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>Los bytes de la llave.</returns>
+    public Task<byte[]> GetKeyAsync(CancellationToken cancellationToken = default)
+        => _custodia.GetKeyAsync(cancellationToken);
 
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (_cached is not null)
-            {
-                return _cached;
-            }
-
-            var configured = _options.Value.SigningSecret;
-            if (!string.IsNullOrWhiteSpace(configured))
-            {
-                _cached = Encoding.UTF8.GetBytes(configured);
-                return _cached;
-            }
-
-            // Sin secreto configurado: se reusa el que ya se generó, o se crea uno.
-            var stored = await _store.ReadAsync(ResourceType, KeyId, cancellationToken).ConfigureAwait(false);
-            if (!string.IsNullOrWhiteSpace(stored))
-            {
-                var recovered = TryUnprotect(stored);
-                if (recovered is not null)
-                {
-                    _cached = recovered;
-                    return _cached;
-                }
-                // Llave ilegible (keyring rotado, fichero corrupto): se genera otra. Las
-                // entradas ya emitidas dejan de validar — se registra fuerte para que el
-                // operador sepa POR QUÉ, en vez de descubrirlo en la puerta del evento.
-                _logger.LogError(
-                    "Tickets: la llave de firma guardada no se pudo descifrar. Se generará una nueva y " +
-                    "los QR ya emitidos dejarán de ser válidos. Configure Synergos:Eventos:Ticket:SigningSecret.");
-            }
-
-            var generated = RandomNumberGenerator.GetBytes(GeneratedKeyBytes);
-            await _store.WriteAsync(
-                ResourceType,
-                KeyId,
-                JsonSerializer.Serialize(_protector.Protect(Convert.ToBase64String(generated))),
-                cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation(
-                "Tickets: no hay Synergos:Eventos:Ticket:SigningSecret — se generó una llave de firma y se guardó cifrada. " +
-                "Configure el secreto para poder rotarlo y compartirlo entre instancias.");
-            _cached = generated;
-            return _cached;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    private byte[]? TryUnprotect(string storedJson)
-    {
-        try
-        {
-            var cipher = JsonSerializer.Deserialize<string>(storedJson);
-            if (string.IsNullOrWhiteSpace(cipher))
-            {
-                return null;
-            }
-            return Convert.FromBase64String(_protector.Unprotect(cipher));
-        }
-        catch (Exception ex) when (ex is CryptographicException or FormatException or JsonException)
-        {
-            return null;
-        }
-    }
+    /// <inheritdoc />
+    public void Dispose() => _custodia.Dispose();
 }
 
 /// <summary>
