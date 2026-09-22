@@ -39,7 +39,7 @@
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2247 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2252 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 411 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -244,7 +244,7 @@ Synergos.CMS/
 | "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — **diez** pasos: los tres ejes con su tabla medida, las dos formas del eje transaccional, la CUARTA pregunta del eje 3 (§3.1) y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`, 13) |
 | "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los doce sub-specs derivados del molde, los dos MCPs y el gate del arnés. **Ya no es sólo diseño**: el arnés vive en `Synergos.Fabrica` con su `arnes.lock.json` (#141) y el spec tiene formato y validador (#140) |
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
-| "¿El molde da para GENERAR un vertical?" | Casi: el piloto 0 midió **71,4 %** sobre Eventos y hoy da **95,5 %** con el eje 3 ya escrito (#153). De los cuatro hallazgos queda **uno y medio** — #154 y el criterio general de #155. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
+| "¿El molde da para GENERAR un vertical?" | Sobre Eventos, **sí**: el piloto 0 midió **71,4 %** y hoy da **100 %** (22/22) con el eje 3 escrito (#153) y su sección arreglada (#154). Lo único que el plan todavía INVENTA es `SeamComposer.<V>.cs`, que es #155. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
 
 > **La forma de `window.synergos` se declara en TRES sitios, y hay gate** (#88,
@@ -1534,16 +1534,67 @@ Las que salieron de construir el árbol de servicios (§0.B):
   renderiza**. Compilándolas las 401 aparecieron **tres más**, rotas desde hacía olas — un
   `@inject` de un tipo borrado y dos de un namespace que no lo tiene.
 
+- `feedback_a_key_the_app_reads_needs_a_path_from_whoever_sets_it` — **una clave de
+  configuración que el código lee, los ADRs documentan y la guía manda poblar puede no tener
+  NINGÚN camino desde el operador hasta el proceso, y eso no falla: el default se queda puesto
+  y todo el mundo cree que lo configuró** (#154). Medido: de las seis propiedades `*Secret*`
+  de los POCOs del CMS, el compose pasaba **una**. Las que faltaban eran las dos de firma —la
+  del QR de las entradas y la del id de los diplomas—, o sea justo las que `CLAUDE.md` §11
+  describe como «lo único que el respaldo no puede regenerar […] va donde va la identidad», que
+  es el `.env` del servidor. Ponerlas ahí **no llegaba al contenedor**.
+  Es el escalón de arriba de `feedback_a_key_in_the_wrong_section_is_a_key_nobody_reads`: allá
+  la sección estaba mal, acá la sección está bien y **falta el transporte**. Y las dos mitades
+  del daño son silenciosas — sin el secreto la llave se genera y se guarda cifrada, así que las
+  entradas siguen firmadas; lo que se pierde es poder ROTARLA y llevarla a otra instalación, y
+  eso no lo nota nadie hasta que hay dos, o hasta que se pierde el volumen y todo QR impreso
+  deja de validar en la puerta del evento.
+  **La pregunta que lo caza, y no se le ocurre a quien acaba de escribir el POCO:** *¿por dónde
+  llega al proceso lo que este tipo lee?* Se contesta con un `grep` del nombre de la propiedad
+  en el generador del compose y en `.env.example` — un minuto— y **las tres capas tienen que
+  nombrarla**: el POCO, el compose y el ejemplo del `.env`.
+  **Y lo que NO se hizo, medido antes de decidirlo:** un gate «toda propiedad `*Secret*` viaja
+  en el compose». De las seis, **tres no deben viajar** —las de Wompi del lado del CMS, que en
+  producción no cobra— así que serían tres exenciones sobre seis: el muro de excepciones que
+  deja de leerse, y ya hay gate que vigila esa ausencia por otra vía
+  (`PaymentEngineCoexistenceTests`).
+
+  **Addendum — renombrar una sección deja huérfano lo que un servidor ya tiene puesto, y hay
+  que PARAR al arrancar.** Mover el secreto de `Synergos:Events` a `Synergos:Eventos:Ticket` es
+  correcto y deja a todo despliegue anterior con una clave que el binder descarta: el POCO cae
+  a su default —cadena vacía, que aquí significa «generá otra llave»— y el operador cree que
+  rotó cuando no tocó nada. Así que el composer **lanza** si la vieja trae valor, con el nombre
+  nuevo en el mensaje. Tres cortes que costaron su mutación: se mira la **sección entera** y no
+  sólo la clave que se movió (`Synergos__Events__ApiKey` dejaría al cliente sin llave, y ése no
+  se me habría ocurrido enumerarlo); se añade a mano la **vecina plana**
+  —`Synergos:Eventos:TicketSigningSecret`, lo que teclea quien lee un documento viejo y corrige
+  la letra— porque vive bajo la sección buena y el barrido de la retirada no la ve; y **vacío
+  NO para**, porque `.env.example` deja la línea vacía a propósito y el compose la pasa
+  presente-y-vacía.
+
+  **Y el segundo addendum es sobre el gate, que se quedó ciego en el MISMO commit.** El diente
+  que comprueba que el rechazo está *enchufado* recorta el cuerpo de `Compose` hasta
+  `"private static void"` —el siguiente miembro— y media hora después pasé el guardia a
+  `internal` para poder probarlo: el corte dejó de encontrar nada. **Lo delató su red de
+  seguridad**, que es para lo que estaba; sin ella habría medido el fichero entero y pasado en
+  verde con la llamada quitada, que es exactamente el addendum #14 de
+  `feedback_an_exemption_needs_a_signature_behind_it`. La lección es la de
+  `feedback_a_path_is_not_a_name_and_a_flat_tree_hides_it` aplicada a un gate: **seguía un
+  MODIFICADOR en vez de una propiedad estructural**; hoy corta por el siguiente miembro de la
+  clase, cualquiera que sea su visibilidad.
+
 - `feedback_an_axis_the_mould_does_not_write_gets_solved_twice_differently` — **un eje que el
   molde describe pero no DESCOMPONE lo resuelve cada vertical a su manera, y las dos formas
   conviven sin que nada las cruce** (#153). El doc 12 §3 describía el eje 3 —el artefacto: la
   entrada con su QR, el diploma, el expediente— y su §5 decomponía sólo los ejes 1 y 2, así que
   **los dos únicos verticales que sellan su artefacto lo cablearon distinto**: `AcademySettings`
-  lleva la transacción y el sello en un POCO y una sección, y Eventos los lleva en dos
+  llevaba la transacción y el sello en un POCO y una sección, y Eventos los llevaba en dos
   —`EventosSettings` bajo `Synergos:Eventos` y `EventsSettings` bajo `Synergos:Events`— a **una
-  letra de distancia, donde el binder descarta en silencio** (#154). Eso no es estilo: es la causa
-  del defecto, y se lee al revés de como se encontró — el sello necesitaba sección propia, el
-  nombre del vertical ya estaba tomado, y le tocó el que quedaba libre.
+  letra de distancia, donde el binder descarta en silencio** (#154). Eso no era estilo: era la
+  causa del defecto, y se lee al revés de como se encontró — el sello necesitaba sección propia,
+  el nombre del vertical ya estaba tomado, y le tocó el que quedaba libre. **Cerrado en el #154**:
+  la del sello va ANIDADA (`Synergos:Eventos:Ticket`) y en su propio POCO, y ahí se vio que la
+  regla que este mismo commit escribió —«mismo POCO, misma sección»— estaba derivada del ÚNICO
+  vertical con un solo eje cableado.
   **Y la frase que lo tapaba era una CIFRA sobre una lista incompleta**: «los siete lo tienen»
   escrito debajo de **cinco** ejemplos, o sea `feedback_a_named_list_beats_a_count` dentro del
   documento que predica medir. Al derivar los siete aparecieron los dos que faltaban, y el
@@ -1669,7 +1720,7 @@ dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2247
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2252
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 411
 

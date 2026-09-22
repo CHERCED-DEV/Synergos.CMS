@@ -147,12 +147,17 @@ de artefacto en los siete —eso es lo que sostiene «verse con el otro árbol c
 custodia de la llave**, no el índice de emitidos. Es el mismo corte de §3 dicho con ficheros.
 
 > **Y los dos que lo tienen lo resolvieron de dos maneras distintas, que es lo que pasa cuando el
-> molde no escribe el paso.** `AcademySettings` lleva la transacción y el sello en **un** POCO y
-> una sección (`Synergos:Academy`); Eventos los lleva en **dos** —`EventosSettings` con
+> molde no escribe el paso.** `AcademySettings` llevaba la transacción y el sello en **un** POCO y
+> una sección (`Synergos:Academy`); Eventos los llevaba en **dos** —`EventosSettings` con
 > `Mode`/`BaseUrl`/… y `EventsSettings` con sólo `TicketSigningSecret`— bajo dos secciones que se
-> diferencian en **una letra**: `Synergos:Eventos` y `Synergos:Events`. Eso no es estilo, es el
+> diferenciaban en **una letra**: `Synergos:Eventos` y `Synergos:Events`. Eso no era estilo, era el
 > defecto #154, y su causa es ésta: el sello necesitaba sección propia, el nombre del vertical ya
 > estaba tomado, y le tocó el que quedaba libre.
+>
+> **Cerrado (#154):** hoy es `Synergos:Eventos:Ticket`, anidada, y §5.8 escribe la regla. Hay gate
+> —`SeccionesDeConfiguracionTests`, trinquete absoluto porque medido daba **cero** pares a esa
+> distancia tras arreglarlo— y el arranque **se niega** si alguien todavía puebla la sección vieja:
+> descartarla en silencio habría generado otra llave y dejado sin validar todo QR ya impreso.
 
 ## 4. Las dos formas del eje transaccional, y la pregunta que elige
 
@@ -349,11 +354,27 @@ comprobar el artefacto sin creernos. Hoy son dos de siete, y las dos piezas son:
   la cifra con `IDataProtector` y la guarda**. Perder ese volumen invalida todo lo ya emitido, y
   por eso el respaldo lo nombra (`CLAUDE.md` §11).
 
-**El secreto va en el POCO del vertical, en su MISMA sección.** Es el paso que Eventos no tuvo y
-por eso acabó con `EventsSettings` bajo `Synergos:Events` mientras su transacción vivía en
-`Synergos:Eventos` — dos secciones a una letra de distancia, que es el defecto #154. Educación lo
-hizo bien sin que nadie lo hubiera escrito: `AcademySettings` lleva `CertificateSigningSecret`
-junto a `Mode`/`BaseUrl`/…
+**El secreto va en su PROPIO POCO, bajo una sección ANIDADA en la del vertical** —
+`Synergos:<X>:<Artefacto>`, como `Synergos:Eventos:Ticket` (#154).
+
+Las dos mitades tienen su razón y ninguna es estilo. **POCO propio** porque el del eje 2 lo recibe
+el cliente `Http<X>`, que no tiene por qué llevar dentro la llave con la que se firma nada: es
+`feedback_pii_decision_lives_in_the_seam_type` aplicado a un secreto —lo que un tipo carga es una
+propiedad del tipo, no una convención que alguien recuerde—. **Sección anidada** por dos cosas: una
+hermana acaba a **una letra** de la del vertical, que es el defecto #154 y era el único par a esa
+distancia entre las 43 secciones que el CMS enlaza; y anidar es lo que **sobrevive al día que el
+sello cruce**, porque entonces hará falta su propio `Mode`/`BaseUrl`/`ApiKey` y `Synergos:<X>:Mode`
+ya es del eje 2. Es la forma que el árbol ya usa para un sub-asunto que se cabla por su cuenta:
+`Synergos:Gob:Notifications` y `Synergos:Gob:Payments`.
+
+> **Esta regla decía otra cosa hasta el #154, y el error se lee bien:** decía «va en el POCO del
+> vertical, en su MISMA sección», derivado de que `AcademySettings` lleva `CertificateSigningSecret`
+> junto a `Mode`/`BaseUrl`/… Eso es cierto **y no prueba nada**, porque en Educación el `Mode` de
+> ese POCO es el **del sello** (HU #45) y su eje 2 no tiene interruptor: un vertical con UN solo eje
+> cableado no distingue las dos formas. Un POCO basta mientras eso sea verdad, y Educación se queda
+> como está —renombrar `Synergos:Academy:CertificateSigningSecret` dejaría huérfano el único secreto
+> que `CLAUDE.md` §11 dice que el respaldo no puede regenerar—. El disparador para partirlo: el día
+> que su matrícula tenga interruptor.
 
 **Esto SÍ puede cruzar, y es lo único del eje 3 que puede.** `Synergos:<X>:Mode=Api` cambia el
 firmante por `Http<X>Signer` contra `Api.Signing` (#45) y lo que se gana es **la rotación**: la

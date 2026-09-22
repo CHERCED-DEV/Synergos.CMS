@@ -86,8 +86,14 @@ public sealed class OptionsComposer : IComposer
 
         // T9 (doc 25) — secreto con el que se firma el QR de las entradas. Vacío NO es
         // "no firmar": el host genera y persiste una llave (ver TicketSigningKeyProvider).
-        builder.Services.Configure<EventsSettings>(
-            builder.Config.GetSection("Synergos:Events"));
+        //
+        // La sección va ANIDADA bajo la del vertical (#154). Antes era `Synergos:Events`,
+        // hermana de `Synergos:Eventos` —la del eje 2— o sea a UNA letra de distancia; y un
+        // dedazo entre las dos no falla, porque el binder descarta en silencio lo que no mapea.
+        // El razonamiento entero está en TicketSettings.
+        ExigirQueNadieUseLaSeccionRetirada(builder.Config);
+        builder.Services.Configure<TicketSettings>(
+            builder.Config.GetSection("Synergos:Eventos:Ticket"));
 
         // ADR 0124 — secreto con el que se deriva el id de los certificados de Educación.
         // Vacío NO es "no firmar": el host genera y persiste una llave cifrada (ver
@@ -158,4 +164,58 @@ public sealed class OptionsComposer : IComposer
         builder.Services.Configure<BlogSettings>(
             builder.Config.GetSection("Synergos:Blog"));
     }
+    /// <summary>
+    /// Falla AL CABLEAR si el despliegue todavía puebla la sección retirada del #154, o su
+    /// vecina plana.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Por qué hace falta, y por qué al arrancar.</b> Renombrar una sección de
+    /// configuración deja huérfano lo que un servidor ya tiene puesto, y eso <b>no falla</b>: el
+    /// binder descarta la clave vieja, el POCO se queda en su default —cadena vacía, que aquí
+    /// significa «genera una llave y guárdala»— y el operador cree que rotó el secreto cuando no
+    /// tocó nada. El síntoma llega meses después, el día que hay dos instancias con volúmenes
+    /// distintos y un QR emitido por una no valida en la otra.</para>
+    ///
+    /// <para><b>Se mira la sección ENTERA y no sólo la clave que se movió.</b> Lo que quedó
+    /// retirado es <c>Synergos:Events</c> completa, así que cualquier cosa debajo es una clave que
+    /// nadie lee; enumerar sólo <c>TicketSigningSecret</c> dejaría pasar el typo que no se me
+    /// ocurra hoy. Y se añade a mano <c>Synergos:Eventos:TicketSigningSecret</c> —la vecina
+    /// PLANA— porque es lo que teclea quien acaba de leer un documento viejo y corrige la letra:
+    /// vive bajo la sección correcta, así que el barrido de la retirada no la ve.</para>
+    ///
+    /// <para>Es la forma del #56 y la de la llave de firma de <c>Api.Identity</c>: arrancar
+    /// verde, contestar <c>/health</c> y desmentirse delante de alguien es el peor de los tres
+    /// modos de fallar.</para>
+    /// </remarks>
+    internal static void ExigirQueNadieUseLaSeccionRetirada(IConfiguration config)
+    {
+        const string Retirada = "Synergos:Events";
+        const string VecinaPlana = "Synergos:Eventos:TicketSigningSecret";
+
+        var puestas = config.GetSection(Retirada)
+            .AsEnumerable(makePathsRelative: false)
+            .Where(par => !string.IsNullOrWhiteSpace(par.Value))
+            .Select(par => par.Key)
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(config[VecinaPlana]))
+        {
+            puestas.Add(VecinaPlana);
+        }
+
+        if (puestas.Count == 0)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "Configuración retirada en el #154: " + string.Join(", ", puestas.Order(StringComparer.Ordinal))
+            + ". El secreto de firma de las entradas vive ahora en "
+            + "`Synergos:Eventos:Ticket:SigningSecret` (variable de entorno "
+            + "`Synergos__Eventos__Ticket__SigningSecret`). Se para al arrancar a propósito: dejar "
+            + "la clave vieja puesta NO falla —el binder la descarta y el host genera otra llave—, "
+            + "así que el QR de las entradas ya emitidas dejaría de validar en la instancia de al "
+            + "lado sin que nada lo dijera.");
+    }
+
 }

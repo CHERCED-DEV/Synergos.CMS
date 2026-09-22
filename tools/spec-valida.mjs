@@ -322,6 +322,12 @@ export function derivarPlan(cab) {
       'doc 12 §5.8 — la del proceso es la de VERDAD, no un `Stub`');
     paso('S8', `Synergos.CMS.Web/Services/${A}SigningKeyProvider.cs`,
       'doc 12 §5.8 — la custodia: la llave, cifrada con IDataProtector');
+    // Y su POCO, que es PROPIO y no un campo del de la transacción (doc 12 §5.8, #154): el
+    // cliente del eje 2 recibe ese POCO y no tiene por qué llevar dentro la llave de firma. Su
+    // sección va anidada —`Synergos:<V>:<A>`— porque una hermana acaba a UNA letra de la del
+    // vertical, que fue el defecto #154.
+    paso('S8', `Synergos.CMS.Application/Configuration/${A}Settings.cs`,
+      'doc 12 §5.8 — el secreto del sello vive en su propio POCO');
   }
 
   // S9 · doc 12 §5.9 — la pantalla y las claves que cruzan.

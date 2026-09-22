@@ -107,7 +107,7 @@ el encargo los listó, pero son dos productos sin relación funcional.
   `SYN-TKT-{eventId}-{ticketId}-v{qrVersion}.{hmac-hex}`, comparación en tiempo constante
   (`CryptographicOperations.FixedTimeEquals`). Llave resuelta por
   `TicketSigningKeyProvider` (`Synergos.CMS.Web/Services/TicketSigningKeyProvider.cs`):
-  `Synergos:Events:TicketSigningSecret` si está configurado, o generada una vez y
+  `Synergos:Eventos:Ticket:SigningSecret` si está configurado, o generada una vez y
   guardada CIFRADA (`IDataProtector`) en `IJsonEntityStore` bajo `ticket-signing-v1` — así
   el QR sobrevive un reinicio (ADR 0110 documenta que esto se verificó reiniciando el CMS
   en vivo). Registrado como `LazyTicketSigner` en `SeamComposer.cs:687`.
@@ -127,7 +127,7 @@ el encargo los listó, pero son dos productos sin relación funcional.
   `eventPage`).
 - **UI/CDN**: mismo `elementSynEventos`; el flujo de checkout/wallet vive en el mismo
   módulo Angular.
-- **Flags**: ninguno propio; depende de `Synergos:Events:TicketSigningSecret` (opcional).
+- **Flags**: ninguno propio; depende de `Synergos:Eventos:Ticket:SigningSecret` (opcional).
 - **Tests**: `StubEventTicketingServiceTests.cs` (14), `HmacTicketSignerTests.cs` (12),
   `TicketSigningKeyProviderTests.cs` (6), más los de auth en
   `EventosControllerTests.cs` (12, ver abajo).

@@ -10,7 +10,7 @@ namespace Synergos.CMS.Web.Services;
 
 /// <summary>
 /// Resuelve la llave con la que se firman los QR de las entradas (T9), en este orden:
-/// el secreto configurado (<c>Synergos:Events:TicketSigningSecret</c>) y, si no hay, una
+/// el secreto configurado (<c>Synergos:Eventos:Ticket:SigningSecret</c>) y, si no hay, una
 /// llave aleatoria generada UNA vez, cifrada con <see cref="IDataProtector"/> y guardada
 /// en <see cref="IJsonEntityStore"/> bajo una clave conocida.
 /// </summary>
@@ -43,7 +43,7 @@ public sealed class TicketSigningKeyProvider : IDisposable
 
     private readonly IJsonEntityStore _store;
     private readonly IDataProtector _protector;
-    private readonly IOptions<EventsSettings> _options;
+    private readonly IOptions<TicketSettings> _options;
     private readonly ILogger<TicketSigningKeyProvider> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -54,7 +54,7 @@ public sealed class TicketSigningKeyProvider : IDisposable
     public TicketSigningKeyProvider(
         IJsonEntityStore store,
         IDataProtectionProvider dataProtectionProvider,
-        IOptions<EventsSettings> options,
+        IOptions<TicketSettings> options,
         ILogger<TicketSigningKeyProvider> logger)
     {
         _store = store;
@@ -78,7 +78,7 @@ public sealed class TicketSigningKeyProvider : IDisposable
                 return _cached;
             }
 
-            var configured = _options.Value.TicketSigningSecret;
+            var configured = _options.Value.SigningSecret;
             if (!string.IsNullOrWhiteSpace(configured))
             {
                 _cached = Encoding.UTF8.GetBytes(configured);
@@ -100,7 +100,7 @@ public sealed class TicketSigningKeyProvider : IDisposable
                 // operador sepa POR QUÉ, en vez de descubrirlo en la puerta del evento.
                 _logger.LogError(
                     "Tickets: la llave de firma guardada no se pudo descifrar. Se generará una nueva y " +
-                    "los QR ya emitidos dejarán de ser válidos. Configure Synergos:Events:TicketSigningSecret.");
+                    "los QR ya emitidos dejarán de ser válidos. Configure Synergos:Eventos:Ticket:SigningSecret.");
             }
 
             var generated = RandomNumberGenerator.GetBytes(GeneratedKeyBytes);
@@ -110,7 +110,7 @@ public sealed class TicketSigningKeyProvider : IDisposable
                 JsonSerializer.Serialize(_protector.Protect(Convert.ToBase64String(generated))),
                 cancellationToken).ConfigureAwait(false);
             _logger.LogInformation(
-                "Tickets: no hay Synergos:Events:TicketSigningSecret — se generó una llave de firma y se guardó cifrada. " +
+                "Tickets: no hay Synergos:Eventos:Ticket:SigningSecret — se generó una llave de firma y se guardó cifrada. " +
                 "Configure el secreto para poder rotarlo y compartirlo entre instancias.");
             _cached = generated;
             return _cached;

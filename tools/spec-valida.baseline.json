@@ -2,15 +2,13 @@
   "objetivo": 0.9,
   "verticales": {
     "eventos": {
-      "cobertura": 0.9545,
+      "cobertura": 1,
       "reales": 22,
       "inventados": [
         "S5 Synergos.CMS.Web/Composers/SeamComposer.Eventos.cs"
       ],
-      "perdidos": [
-        "Synergos.CMS.Application/Configuration/EventsSettings.cs"
-      ]
+      "perdidos": []
     }
   },
-  "generado": "2026-09-21"
+  "generado": "2026-09-22"
 }
