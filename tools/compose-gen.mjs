@@ -359,12 +359,24 @@ function generar() {
 #   SYNERGOS_API_KEY   la llave compartida entre servicios
 #   SYNERGOS_DOMAIN    el dominio publico
 #
-# ⚠️ UNA INSTANCIA POR CAPACIDAD, Y PARADA ANTES DE ARRANQUE.
-# Casi todas las ${capacidades.length} capacidades guardan en fichero JSON con un lock
-# de PROCESO. Dos instancias se pisan y NO dan error: corrompen. Un rolling
-# deploy son dos instancias a la vez, asi que el despliegue "normal" de
-# cualquier plataforma moderna rompe esto. Mientras no cambie el almacen
-# (epica #2), no se toca.
+# ⚠️ PARADA ANTES DE ARRANQUE, Y CADA \`deploy:\` DICE SI ESE SERVICIO ESCALA.
+# Aca decia «UNA INSTANCIA POR CAPACIDAD ... dos instancias se pisan y NO dan
+# error: corrompen», que es la razon de ANTES del #112 — y se quedo puesta cuando
+# el #152 corrigio las ${proyectos.length} copias de esa misma frase que habia mas abajo, una por
+# servicio. La cabecera es lo PRIMERO que alguien lee, asi que la copia que quedo
+# mintiendo fue la que mas se lee: la forma de \`WiringMapTests\` —«el gate solo
+# miraba la tabla y la gente lee el resumen»— cometida por quien acababa de
+# arreglar la tabla.
+#
+# Lo que es verdad hoy: las ${capacidades.length} capacidades ESCALAN —desde el #112 el almacen
+# es un fichero por documento y \`StoreWriteGate\` sube el turno de escritura a
+# proceso cruzado—; los ${orquestadores.length} orquestadores NO, porque les falta el turno POR SAGA
+# (#34); y el CMS tampoco, que escribe SQLite. La razon de cada uno va en su
+# propio bloque \`deploy:\`, y hay gate (\`EscaladoDeReplicasTests\`).
+#
+# Lo que sigue en pie es la PARADA ANTES DE ARRANQUE (ADR 0133): un rolling deploy
+# son dos VERSIONES a la vez, y la vuelta atras lee el almacen tal como lo dejo el
+# momento de migrar.
 
 name: synergos
 
