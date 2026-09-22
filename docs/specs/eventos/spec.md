@@ -20,6 +20,7 @@ crea:
   seams:       [IEventCatalogProvider, IEventTicketingService, IEventManagementService, ITicketSigner]
   capacidades: []
   artefacto:   [EventTicketIssuer, EventTicketLedger, EventPurchaseNotification]
+  composer:    SeamComposer.EventsPropertiesGov   # agrupa tres verticales; el molde no lo predice (#155)
 ui:
   app: eventos
 rechazos:                                 # leídos de Bff.Eventos/Domain/, no inventados

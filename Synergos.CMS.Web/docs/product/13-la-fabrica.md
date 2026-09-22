@@ -425,8 +425,8 @@ hallazgos**, y así están hoy:
 | # | lo que el oráculo vio | qué le falta al molde |
 |---|---|---|
 | **H1** ✅ | cinco de los ocho son del **eje 3** —`EventTicketIssuer`, `EventTicketLedger`, `EventPurchaseNotification`, `TicketSigningKeyProvider`, `EventsSettings`— más su gate `EventTicketIssuanceTests` | **el eje 3 no tenía sub-spec.** **Cerrado (#153)**: son S7 (el registro) y S8 (el sello, condicional), y el eje 3 estrena su CUARTA pregunta y sus tres gates. Cinco de los seis salieron ahí; el sexto —`EventsSettings`— era H4, y con él cerrado el oráculo cruza **22 de 22** |
-| **H2** ✅ a medias | el plan inventa `StubTicketSigner.cs`; el real es `HmacTicketSigner.cs` | **`Stub<X>` no es universal.** El caso del FIRMANTE lo cerró el #153 —S3 ya no se traga el seam del sello y S8 deriva `Hmac<X>`—; el criterio general sigue siendo **#155** |
-| **H3** | el plan inventa `SeamComposer.Eventos.cs`; el real es `SeamComposer.EventsPropertiesGov.cs` | el doc 12 §5.5 nombra el composer parcial **en singular por vertical**; el árbol agrupa tres. `Cada_vertical_tiene_su_EJE_1` ya lo tenía escrito («cuenta, no empareja») |
+| **H2** ✅ | el plan inventa `StubTicketSigner.cs`; el real es `HmacTicketSigner.cs` | **`Stub<X>` no es universal.** El caso del FIRMANTE lo cerró el #153 —S3 ya no se traga el seam del sello y S8 deriva `Hmac<X>`—. **Y el #155 midió que el problema era mayor**: de los **109** seams con implementación, sólo **48** se llaman `Stub<X>`; los otros 61 nombran lo que la implementación ES (`FileSystem*` 19, `Http*` 15, `Default*` 14…). O sea que el doc 12 §5.3 describía la minoría como regla. Hoy lo dice medido, y el gate está donde deja de ser cosmético: §5.8 rompe si aparece un `Stub<X>` de un seam de sello |
+| **H3** ✅ | el plan inventa `SeamComposer.Eventos.cs`; el real es `SeamComposer.EventsPropertiesGov.cs` | el doc 12 §5.5 nombraba el composer parcial **en singular por vertical**; el árbol agrupa tres. `Cada_vertical_tiene_su_EJE_1` ya lo tenía escrito («cuenta, no empareja»). **Cerrado (#155)**: medido, son **once** ficheros para siete verticales y el reparto es acumulación histórica, sin regla que derivar — así que el spec lo **declara** (`crea.composer`) y el molde dice lo único que sí es suyo: **un vertical nuevo estrena el suyo**. No hay gate de agrupamiento porque el árbol lo incumple a propósito |
 | **H4** ✅ | `EventosSettings` (sección `Synergos:Eventos`) y `EventsSettings` (sección `Synergos:Events`) | **dos secciones de configuración a una letra de distancia** para un vertical, una por eje. El doc 12 §5.4 describe sólo la del eje 2, y un dedazo entre las dos no falla: el binder descarta en silencio (`feedback_a_key_in_the_wrong_section_is_a_key_nobody_reads`). **El #153 le encontró la causa**: el sello necesitaba sección propia, el nombre del vertical ya estaba tomado por el eje 2, y le tocó el que quedaba libre. **Cerrado (#154)**: la sección del sello pasó a `Synergos:Eventos:Ticket` —anidada, con la regla en el doc 12 §5.8—, el arranque rechaza la vieja, y hay gate absoluto (cero pares a una edición entre las 43 secciones que el CMS enlaza) |
 
 **Y el 71,4 % es el número con el molde en su MEJOR versión, no en la peor.** La primera corrida
@@ -445,8 +445,15 @@ abogacía y no medición, así que se le dio al molde la regla correcta y se rep
   arregle el molde esté obligado a mover la línea base.
 - Riesgo: cero. Coste: bajo. **Condición de entrada del piloto 1: los cuatro hallazgos cerrados**,
   porque un lenguaje fuente sobre un compilador incompleto produce planes que parecen buenos y
-  omiten un paso. Van **dos y medio**: H1 cerrado (#153), H2 cerrado para el firmante y abierto
-  como criterio (#155), **H4 cerrado (#154)** y H3 abierto (#155). Queda uno de cuatro.
+  omiten un paso. **Los cuatro están cerrados** —H1 (#153), H4 (#154), H2 y H3 (#155)— y el
+  oráculo cruza **22 de 22 · 100 %** con la línea base en `inventados: []` y `perdidos: []`. El
+  piloto 1 está desbloqueado.
+
+> **Lo que el 100 % dice y lo que NO.** Dice que sobre **un** vertical ya construido la bajada se
+> deriva entera del spec sin creatividad: las 22 rutas que Eventos tiene, el plan las nombra. No
+> dice que el molde valga para el octavo —eso es justo lo que el piloto 1 mide— ni que el spec de
+> Eventos sea un plan de trabajo: se escribió **hacia atrás**, contra el disco. Un oráculo al
+> 100 % sobre su propia fuente es la condición mínima para empezar, no el resultado.
 
 > **Y el #153 destapó algo que el porcentaje no dice: el oráculo no VEÍA una parte del eje 3.**
 > `ROLES` no conocía `Hmac`, así que `HmacTicketSigner.cs` no entraba en el denominador y la

@@ -247,6 +247,23 @@ servicios.
 > su `Reservation` lleva `RoomTypeCode` y `GuestName`, que ninguna capacidad puede guardar. Un
 > seam mal cortado no se nota hasta que hay que cablearlo.
 >
+> **`Stub<X>` NO es la regla, y decirlo así costó un hallazgo** (#155). Medido sobre el árbol:
+> de los **109** seams con implementación declarada, sólo **48** la tienen llamada exactamente
+> `Stub<X>` —el 44 %, una mayoría relativa y nada más—. Los otros 61 nombran **lo que la
+> implementación ES**: `FileSystem*` (19) donde persiste, `Http*` (15) cuando cabla, `Default*`
+> (14) cuando no hay nada más filoso que decir, `Catalog*` (6), `InMemory*` (5), `Umbraco*` (5)
+> cuando el dato sale del contenido, `Composite*` (5) cuando abre en abanico, `Hmac*` (2) cuando
+> firma. Esa es la convención de verdad, y este documento describía la minoría como si fuera
+> universal.
+>
+> **Dónde deja de ser cosmético**, que es lo único que hace falta recordar: cuando la
+> implementación en proceso **es** la funcionalidad y no hay nada fuera por lo que pudiera
+> sustituirse. Llamar `Stub` al firmante del QR afirma «esto es un provisional» justo sobre lo
+> que hace válida una entrada en la puerta. Y ojo con el instinto contrario: en este repo `Stub`
+> **tampoco** quiere decir «en memoria» —19 de los 49 son durables (`CLAUDE.md` §11)—, así que
+> renombrar los 48 a otra cosa sería cambiar una convención imprecisa por otra. Lo que sí hay es
+> **gate donde importa**: §5.8 rompe el build si aparece un `Stub<X>` de un seam de sello.
+
 > **El seam del SELLO no es éste — es §5.8 — y su implementación en proceso NO se llama
 > `Stub<X>`.** Derivar aquí todos los seams del vertical es lo que hace que el plan invente un
 > `StubTicketSigner` que no existe ni debe existir: `HmacTicketSigner` no es un doble de nada, es
@@ -286,6 +303,26 @@ else
     services.AddSingleton<IXService, StubXService>();
 }
 ```
+
+> **El composer parcial NO es uno por vertical, y este documento lo mostraba así** (#155). Medido:
+> hay **once** `SeamComposer.*.cs` para siete verticales más la plataforma, y el reparto no
+> responde a ninguna regla — `EventsPropertiesGov` lleva **tres** (Eventos, Realty y Gobierno) en
+> 499 líneas, `Social` tiene 81 y ni siquiera un interruptor. Es acumulación histórica, no
+> diseño, así que **el molde no puede predecir el nombre del fichero**: el spec lo declara
+> (`crea.composer`) y el plan deriva su ruta.
+>
+> **Lo que el molde sí dice: un vertical NUEVO estrena el suyo**, `SeamComposer.<X>.cs`. Agrupar
+> es algo que se hace cuando hay una razón —compartir un cliente, un orden de registro— y no por
+> defecto; un fichero de 499 líneas con tres verticales dentro es el resultado de no haberlo
+> decidido nunca.
+>
+> **Y lo que se midió y NO da para gate**: «cada vertical en un composer» lo incumple el árbol a
+> propósito, y `Cada_vertical_tiene_su_EJE_1` ya lo tenía escrito —*«dentro de un composer que
+> cablea varios verticales el gate CUENTA, no empareja»*—. Lo que sí es cierto hoy, comprobado
+> cliente por cliente, es que **cada punto de cableado se registra en UN solo composer**: los
+> quince `Http*` tienen dueño único. La única apariencia de excepción es `HttpPaymentProvider`,
+> que sale en dos — y son dos clientes nombrados distintos (`GovFeeClientName` y
+> `SeamClientName`) para los dos alcances del cobro (#27), no un registro duplicado.
 
 **El `Configure<>` es el paso que más se ha olvidado: cuatro verticales lo arrastraron** —Tienda
 (#24), Salud (#25), Viajes (#36) y las notificaciones de Gobierno (#62)—. Sin él el cliente

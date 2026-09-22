@@ -4,9 +4,7 @@
     "eventos": {
       "cobertura": 1,
       "reales": 22,
-      "inventados": [
-        "S5 Synergos.CMS.Web/Composers/SeamComposer.Eventos.cs"
-      ],
+      "inventados": [],
       "perdidos": []
     }
   },

@@ -245,7 +245,7 @@ Synergos.CMS/
 | "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — **diez** pasos: los tres ejes con su tabla medida, las dos formas del eje transaccional, la CUARTA pregunta del eje 3 (§3.1) y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`, 13) |
 | "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los doce sub-specs derivados del molde, los dos MCPs y el gate del arnés. **Ya no es sólo diseño**: el arnés vive en `Synergos.Fabrica` con su `arnes.lock.json` (#141) y el spec tiene formato y validador (#140) |
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
-| "¿El molde da para GENERAR un vertical?" | Sobre Eventos, **sí**: el piloto 0 midió **71,4 %** y hoy da **100 %** (22/22) con el eje 3 escrito (#153) y su sección arreglada (#154). Lo único que el plan todavía INVENTA es `SeamComposer.<V>.cs`, que es #155. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
+| "¿El molde da para GENERAR un vertical?" | Sobre Eventos, **sí**: el piloto 0 midió **71,4 %** y hoy da **100 %** (22/22), sin inventar ni perder nada — los cuatro hallazgos cerrados (#153, #154, #155). Eso desbloquea el piloto 1 y **no dice que el molde valga para el octavo**: el spec de Eventos se escribió hacia atrás, contra el disco. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
 
 > **La forma de `window.synergos` se declara en TRES sitios, y hay gate** (#88,
@@ -1522,6 +1522,33 @@ Las que salieron de construir el árbol de servicios (§0.B):
   `master`, y `images.yml` un mes. Este fichero ya tiene escrito que «un gate siempre
   rojo deja de leerse»; el precio esta vez fue el sitio entero caído mientras las tres
   suites pasaban.
+
+- `feedback_a_convention_stated_as_a_rule_is_measured_before_it_is_taught` — **una convención
+  que un documento enseña como regla hay que CONTARLA antes de escribirla, porque la que uno
+  recuerda suele ser la que vio primero** (#155). El doc 12 §5.3 decía que la implementación en
+  proceso de un seam se llama `Stub<X>`. Medido sobre el árbol: de los **109** seams con
+  implementación declarada, **48** la tienen así — el 44 %, una mayoría relativa y nada más. Los
+  otros 61 nombran **lo que la implementación ES**: `FileSystem*` (19) donde persiste, `Http*`
+  (15) cuando cabla, `Default*` (14) cuando no hay nada más filoso que decir, `Catalog*`,
+  `InMemory*`, `Umbraco*`, `Composite*`, `Hmac*`. O sea que el molde describía la minoría como si
+  fuera universal, y un generador que lo aplicara al pie de la letra produciría nombres que
+  mienten.
+  **La salida NO es renombrar los 48**: `Stub` en este repo tampoco quiere decir «en memoria» —19
+  de los 49 son durables— así que sería cambiar una convención imprecisa por otra, en 48 sitios y
+  sin cerrar nada. Se escribe la verdad medida y **el gate va donde deja de ser cosmético**: un
+  `Stub<X>` de un seam de SELLO rompe el build, porque llamar provisional al firmante del QR
+  afirma algo falso sobre lo único que hace válida una entrada en la puerta.
+  **Y el gemelo del mismo ticket enseña cuándo NO hay regla que escribir.** El doc 12 §5.5
+  mostraba el composer parcial como uno por vertical; hay **once** ficheros para siete verticales
+  y `SeamComposer.EventsPropertiesGov` lleva tres en 499 líneas. Eso no es un reparto con criterio
+  que alguien pueda re-derivar: es acumulación. Cuando la medición no encuentra regla, **lo
+  honesto es que el spec lo DECLARE** —igual que declara sus seams— y que el molde diga sólo lo
+  que sí es suyo: un vertical nuevo estrena el suyo, porque agrupar se hace cuando hay una razón y
+  no por defecto. Inventarse un criterio para poder derivarlo habría sido escribir la acumulación
+  como si fuera diseño.
+  **La pregunta que lo caza, y se hace antes de escribir la regla, no después:** *¿cuántos del
+  árbol la cumplen?* Un `grep` y un contador. Las dos veces que este repo enseñó una convención
+  sin contarla —ésta y «los siete lo tienen» del #153— el número estaba mal.
 
 - `feedback_a_key_the_app_reads_needs_a_path_from_whoever_sets_it` — **una clave de
   configuración que el código lee, los ADRs documentan y la guía manda poblar puede no tener

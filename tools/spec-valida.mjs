@@ -284,7 +284,14 @@ export function derivarPlan(cab) {
     // S4 · doc 12 §5.4 — el POCO con los cuatro campos.
     paso('S4', `Synergos.CMS.Application/Configuration/${V}Settings.cs`, 'doc 12 §5.4');
     // S5 · doc 12 §5.5 — el interruptor, y ENLAZAR la sección.
-    paso('S5', `Synergos.CMS.Web/Composers/SeamComposer.${V}.cs`, 'doc 12 §5.5');
+    //
+    // El nombre del composer NO se deriva del vertical, y eso es un hallazgo medido (#155): hay
+    // once ficheros para siete verticales y el reparto es acumulación histórica —`EventsProperties
+    // Gov` lleva tres—, así que no hay regla que aplicar. Se declara, como `crea.seams`. El
+    // default es el del vertical porque **uno nuevo estrena el suyo**: agrupar se hace cuando hay
+    // una razón, no por defecto.
+    const composer = cab.crea?.composer ?? `SeamComposer.${V}`;
+    paso('S5', `Synergos.CMS.Web/Composers/${composer}.cs`, 'doc 12 §5.5');
     // S6 · doc 12 §5.6 — el cliente Http*, que se nombra por el SEAM que cablea y no por el
     // sustantivo: es el mismo hallazgo que S3 visto del otro lado.
     const seam = (ejes.transaccion ?? {}).seam;
