@@ -462,6 +462,68 @@ public sealed class HttpBundleRegistryClientTests
         Assert.Null(await cliente.TryGetImportMapAsync());
     }
 
+    // ── El desempate entre implementaciones (#131) ─────────────────────────
+
+    /// <summary>
+    /// El mismo registry con las implementaciones en OTRO ORDEN tiene que servir el mismo bundle.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es la prueba del defecto #131 y está escrita para no codificarlo: <b>no afirma cuál
+    /// de los dos frameworks se elige</b> —eso es una política del repo hermano y acá sería
+    /// heredarla—, afirma que la respuesta <b>no depende del orden en que venga el JSON</b>. Con
+    /// <c>Keys.FirstOrDefault()</c> sobre un <c>Dictionary</c> ese orden es el de inserción, o sea
+    /// el orden en que el hermano escribió el registry al publicar: republicar cambiaba qué bundle
+    /// recibe el visitante sin que nada fallara.</para>
+    /// <para><b>El fixture necesita las dos cosas</b>: dos implementaciones <b>y</b> que ninguna
+    /// sea la de por defecto. Con <c>angular</c> entre ellas el desempate no ocurre —gana el
+    /// default— y el defecto pasa en verde; que es exactamente el caso real de hoy
+    /// (<c>badge</c> en <c>angular</c> y <c>preact</c>), y por eso todavía no duele.</para>
+    /// </remarks>
+    [Fact]
+    public async Task El_desempate_entre_implementaciones_NO_depende_del_orden_del_registry()
+    {
+        const string Manifiesto =
+            "{ \"tag\": \"synergos-badge\", \"alias\": \"elementSynBadge\", \"framework\": \"preact\","
+            + " \"version\": \"0.1.0\", \"tier\": \"primitive\", \"entryScript\": \"main.js\" }";
+
+        async Task<string?> Servido(string primero, string segundo)
+        {
+            var registry =
+                "{ \"generated\": \"2026-09-22T00:00:00.000Z\", \"version\": \"0.1.0\","
+                + " \"baseUrl\": \"/synergos\", \"elements\": [ {"
+                + " \"name\": \"badge\", \"alias\": \"elementSynBadge\", \"tag\": \"synergos-badge\","
+                + " \"tier\": \"primitive\", \"implementations\": {"
+                + $" \"{primero}\": {{ \"latest\": \"0.1.0\" }},"
+                + $" \"{segundo}\": {{ \"latest\": \"0.1.0\" }} }} }} ] }}";
+
+            var cdn = new CdnFalso().Con("/synergos/registry.json", registry);
+            foreach (var fw in new[] { primero, segundo })
+            {
+                cdn.Con($"/synergos/badge/{fw}/0.1.0/manifest.json", Manifiesto);
+            }
+
+            var ajustes = new BundleRegistrySettings
+            {
+                Mode = "Http",
+                PublicBaseUrl = "https://cdn.ejemplo.co",
+                BundlesNamespace = "synergos",
+                RegistryFileName = "registry.json",
+                // NINGUNA de las dos: es la única forma de que el desempate se ejecute.
+                DefaultFramework = "svelte",
+                DefaultSlot = "latest",
+            };
+
+            var (cliente, _, _) = Nuevo(ajustes, cdn);
+            return (await cliente.TryResolveAsync("synergos-badge"))?.Framework;
+        }
+
+        var enUnOrden = await Servido("preact", "angular");
+        var enElOtro = await Servido("angular", "preact");
+
+        Assert.NotNull(enUnOrden);
+        Assert.Equal(enUnOrden, enElOtro);
+    }
+
     /// <summary>Un <see cref="IOptionsMonitor{T}"/> que no cambia — no hace falta más acá.</summary>
     private sealed class StaticOptionsMonitor<T> : IOptionsMonitor<T>
     {

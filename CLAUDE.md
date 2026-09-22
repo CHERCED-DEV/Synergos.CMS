@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3310 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3313 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2252 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2253 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 425 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 427 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **55 de los 66 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **56 de los 67 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3310**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3313**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -169,6 +169,7 @@ Synergos.CMS/
 │                                + transitoriedad de un rechazo (2, #129)
 │                                + perfil de producción (3, #150)
 │                                + claves de Umbraco en el compose (1, #159)
+│                                + elección de implementación (2, #131)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1370,7 +1371,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **55 de los 66 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **56 de los 67 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -1830,6 +1831,36 @@ Las que salieron de construir el árbol de servicios (§0.B):
   hermano («si el gate tiene varios rechazos en cadena, la mutación tiene que LLEGAR al que se
   quiere probar»), cometida en la primera corrida del gate. El umbral va **debajo** de lo medido.
 
+- `feedback_a_latent_defect_is_a_tie_break_nobody_took` — **un desempate que hoy no se ejecuta no
+  es código muerto: es una decisión que alguien va a heredar del orden de un JSON, y el día que se
+  ejecute no falla — sirve otra cosa** (#131). Los dos clientes del registry preferían el
+  `DefaultFramework` y, si no estaba, tomaban `Implementations.Keys.FirstOrDefault()` — o sea el
+  orden de inserción del `Dictionary`, que sale del orden en que el repo hermano escribió el
+  registry al publicar. **Republicar cambiaba qué bundle recibe el visitante**, sin que nada
+  fallara y sin que nadie lo hubiera decidido; y el síntoma no se lee como «se eligió mal el
+  framework», se lee como «ese elemento se comporta distinto», que manda a depurar el elemento.
+  **Y una de las dos copias afirmaba la propiedad que le faltaba**: «orden no garantizado pero
+  determinista por `StringComparer` del dict construido» — el comparador decide cómo se BUSCA, no
+  cómo se enumera. Un comentario que promete lo que el código no cumple es el aviso de que nadie
+  lo comprobó (`feedback_gethashcode_is_not_a_seed`).
+  **El corte que separa las dos preguntas, y es el que costó pensarlo:** *cuál* framework es mejor
+  es política de quien publica y **no se decide acá** —el ticket tenía razón y el repo hermano ya
+  la tomó: un elemento con varias implementaciones es un **escaparate declarado**
+  (`SHOWCASE_MULTIPLATAFORMA`), no una forma de producto—; pero *que la misma entrada dé la misma
+  salida* es una propiedad del CLIENTE que se debe pase lo que pase. Orden ordinal, dicho como
+  arbitrario y no como preferencia, más un aviso — porque un desempate que ocurre es por
+  definición excepcional.
+  **El test no puede afirmar CUÁL se elige** —eso congelaría acá la política del otro árbol—: afirma
+  **invariancia respecto del orden del JSON**, que sigue siendo cierta bajo cualquier política
+  futura. Y el fixture necesita **las dos condiciones**: dos implementaciones **y** que ninguna sea
+  la de por defecto. Con `angular` entre ellas gana el default, el desempate no se ejecuta y el
+  defecto pasa en verde — que es exactamente el estado real de hoy (`badge` en `angular` y
+  `preact`), y la razón por la que el disparador que el ticket escribió **ya se cumplió** sin que
+  el daño haya llegado.
+  **Y estaba escrito DOS veces con el ticket nombrando una**: la segunda apareció con un `grep`,
+  no leyendo. Mismo sujeto y misma política es la misma cosa, así que se promueve y se cierra con
+  gate que cuente los declarantes — el mismo movimiento del seudónimo (#120).
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1889,13 +1920,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3310 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3313 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2252
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2253
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 425
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 427
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2261,7 +2292,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3310 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3313 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

@@ -334,13 +334,33 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
         return Task.FromResult<BundleDescriptor?>(descriptor);
     }
 
-    private static string? ChooseFramework(RegistryElement element, string defaultFramework)
+    /// <summary>
+    /// Delega en <see cref="EleccionDeImplementacion"/> —la única copia (#131)— y avisa cuando el
+    /// desempate no lo tomó nadie.
+    /// </summary>
+    /// <remarks>
+    /// Acá decía «orden no garantizado pero determinista por <c>StringComparer</c> del dict
+    /// construido», y era FALSO: el comparador decide cómo se BUSCA, no cómo se enumera. Lo que
+    /// enumeraba era el orden de inserción, o sea el orden en que el repo hermano escribió el
+    /// registry al publicar.
+    /// </remarks>
+    private string? ChooseFramework(RegistryElement element, string defaultFramework)
     {
-        if (element.Implementations is null || element.Implementations.Count == 0) return null;
-        if (element.Implementations.ContainsKey(defaultFramework)) return defaultFramework;
-        // Fallback: primer framework disponible (orden no garantizado pero
-        // determinista por StringComparer del dict construido).
-        return element.Implementations.Keys.FirstOrDefault();
+        var (framework, desempatado) = EleccionDeImplementacion.Elegir(element.Implementations, defaultFramework);
+
+        if (desempatado)
+        {
+            _logger.LogWarning(
+                "Bundle {Tag}: el registry trae {Cuantas} implementaciones ({Cuales}) y ninguna es "
+                + "'{PorDefecto}'. Se sirve '{Elegido}' por orden ordinal — arbitrario y estable, "
+                + "no una preferencia. En producto esto no debería pasar: un elemento con varias "
+                + "implementaciones es un escaparate declarado en el repo hermano (#131).",
+                element.Tag, element.Implementations!.Count,
+                string.Join(", ", element.Implementations.Keys.OrderBy(k => k, StringComparer.Ordinal)),
+                defaultFramework, framework);
+        }
+
+        return framework;
     }
 
     /// <summary>

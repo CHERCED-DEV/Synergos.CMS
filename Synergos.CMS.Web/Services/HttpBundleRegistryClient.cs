@@ -519,10 +519,27 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
         return uris;
     }
 
-    private static string? ElegirFramework(RegistryElement el, string porDefecto)
+    /// <summary>
+    /// Delega en <see cref="EleccionDeImplementacion"/> —la única copia (#131)— y avisa cuando el
+    /// desempate no lo tomó nadie.
+    /// </summary>
+    private string? ElegirFramework(RegistryElement el, string porDefecto)
     {
-        if (el.Implementations is null || el.Implementations.Count == 0) return null;
-        return el.Implementations.ContainsKey(porDefecto) ? porDefecto : el.Implementations.Keys.FirstOrDefault();
+        var (framework, desempatado) = EleccionDeImplementacion.Elegir(el.Implementations, porDefecto);
+
+        if (desempatado)
+        {
+            _logger.LogWarning(
+                "Bundle {Tag}: el registry trae {Cuantas} implementaciones ({Cuales}) y ninguna es "
+                + "'{PorDefecto}'. Se sirve '{Elegido}' por orden ordinal — arbitrario y estable, "
+                + "no una preferencia. En producto esto no debería pasar: un elemento con varias "
+                + "implementaciones es un escaparate declarado en el repo hermano (#131).",
+                el.Tag, el.Implementations!.Count,
+                string.Join(", ", el.Implementations.Keys.OrderBy(k => k, StringComparer.Ordinal)),
+                porDefecto, framework);
+        }
+
+        return framework;
     }
 
     private static (string Slot, string? Version) ElegirSlot(RegistryElement el, string framework, string pedido)
