@@ -307,7 +307,7 @@ Synergos.CMS/
 > **El árbol de servicios está construido y el producto ya lo consume**, aunque
 > con todos los interruptores apagados por defecto. El CMS habla hoy con **nueve**
 > capacidades —`Sessions`, `Booking`, `Workflow`, `Messaging`, `Signing`,
-> `Identity`, `Audit`, `Cart` y `Payments`— y con los cuatro orquestadores. Esta
+> `Identity`, `Audit`, `Cart` y `Payments`— y con los cinco orquestadores. Esta
 > línea decía «UNA» desde antes de las HU #24, #25, #33a, #35, #36, #40, #44,
 > #45, #46, #62 y #15: un agente que la leyera concluía que no había nada
 > cableado y proponía de cero lo que ya existe. Ver §11, que es donde está el
