@@ -311,9 +311,17 @@ es mejor que un sitio roto. (El `bootstrap-servidor.sh` del §1.4 ya lo deja pue
 > recibe la llave de despliegue. Está escrito en el workflow para que sea una decisión y no un
 > descuido.
 
-Las credenciales de los servicios (`SYNERGOS_API_KEY`, `SYNERGOS_CART_SECRET`, las tres de Resend)
-**no van acá**: viven en `/opt/synergos/.env`, en el servidor, y nunca salen de ahí. El action no
-las necesita — sólo copia ficheros y ejecuta un script; quien las lee es `docker compose`.
+Las credenciales de los servicios (`SYNERGOS_API_KEY`, `SYNERGOS_CART_SECRET`,
+`SYNERGOS_ADMIN_EMAIL` / `SYNERGOS_ADMIN_PASSWORD`, las tres de Resend) **no van acá**: viven en
+`/opt/synergos/.env`, en el servidor, y nunca salen de ahí. El action no las necesita — sólo copia
+ficheros y ejecuta un script; quien las lee es `docker compose`.
+
+> **Las dos del administrador son obligatorias desde el #150, y el compose lo exige con `:?`** —
+> `docker compose up` falla antes de arrancar un solo contenedor si faltan. Hasta ese ticket la
+> cuenta de administrador del backoffice se creaba con un literal de `appsettings.Docker.json`, que
+> es el perfil con el que corre producción y está versionado en un repo **público**. Si ya
+> desplegaste antes de este commit, **rotar esa clave es lo primero**: mientras el literal siga
+> siendo válido en algún sitio, el resto es cosmético.
 
 Los tres de Resend se sacan en [resend.com](https://resend.com) después de verificar el dominio;
 el webhook apunta a `https://<tu-dominio>/v1/webhooks/resend`.

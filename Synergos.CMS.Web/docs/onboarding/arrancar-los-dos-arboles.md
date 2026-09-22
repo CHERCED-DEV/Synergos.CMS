@@ -109,9 +109,20 @@ El schema vive como XML en `Synergos.CMS.Web/uSync/v9/` y **NO se importa al
 arrancar** (ADR 0008: `ImportAtStartup` está en `None`, y hay gate que lo
 vigila). Se importa a mano, una vez, desde el backoffice:
 
-1. `dotnet run --project Synergos.CMS.Web`
-2. entrás a `/umbraco` (`admin@synergos.local` / `Synergos2026!`)
-3. sección **uSync** → **Import**
+1. exportás la credencial del backoffice — **no está en el repo** (#150), que es
+   público, y el perfil que la traía es el que corre producción:
+
+   ```bash
+   export Umbraco__CMS__Unattended__UnattendedUserEmail='vos@example.com'
+   export Umbraco__CMS__Unattended__UnattendedUserPassword='<la tuya>'
+   ```
+
+   Sin ellas el arranque falla nombrando las tres claves de
+   `Umbraco:CMS:Unattended`. Falla a propósito: con las tres ausentes Umbraco
+   instala igual y deja un administrador al que nadie puede entrar — medido.
+2. `dotnet run --project Synergos.CMS.Web`
+3. entrás a `/umbraco` con esa credencial
+4. sección **uSync** → **Import**
 
 > **Esperá a que el import TERMINE antes de sembrar nada.** El log dice
 > `uSync: Startup Complete`. Sembrar a mitad crea la portada con los DataTypes a

@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3306 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3309 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2252 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 421 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 424 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **53 de los 64 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **54 de los 65 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3306**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3309**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -167,6 +167,7 @@ Synergos.CMS/
 │                                + secciones de configuración (2, #154)
 │                                + escalado de réplicas (6, #152)
 │                                + transitoriedad de un rechazo (2, #129)
+│                                + perfil de producción (3, #150)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1348,7 +1349,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **53 de los 64 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **54 de los 65 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -1746,6 +1747,49 @@ Las que salieron de construir el árbol de servicios (§0.B):
   VECES») y traerlo acá es otro trabajo. Cerrar un ticket con una respuesta fabricada a la mitad
   que no se midió es el defecto que el ticket venía a cerrar, con el sujeto movido.
 
+- `feedback_the_profile_production_runs_with_is_a_development_profile_until_someone_asks` —
+  **`ASPNETCORE_ENVIRONMENT: Docker` hace que producción corra con un `appsettings` que se escribió
+  para desarrollo, y de ahí sale todo lo que ese perfil traiga de más — incluida la CREDENCIAL del
+  administrador, versionada en un repo público** (#150). `appsettings.Docker.json` traía
+  `admin@synergos.local` con su contraseña en claro, y `compose.prod.yml` levanta el CMS con ese
+  perfil: la cuenta de administrador del backoffice del sitio desplegado se creaba con algo que
+  cualquiera puede leer en GitHub. El mismo literal estaba en **siete** sitios; el ticket decía
+  seis, porque la lista estaba escrita a mano (`feedback_a_named_list_beats_a_count` otra vez).
+  **Lo que lo vuelve regla es que ya había pasado y se arregló a medias**: el #113 encontró UNA
+  cosa que ese perfil traía mal para producción —la siembra de desarrollo, con los catorce
+  endpoints `[AllowAnonymous]` de `DevController` alcanzables desde internet— la apagó en el
+  compose, y **no se hizo la pregunta que cierra la familia**: *¿qué MÁS trae este perfil que no
+  sirve para producción?* Arreglar el caso y no la familia es cómo el segundo miembro sobrevive
+  cinco tickets. La pregunta se hace al reutilizar un perfil, no al escribirlo, y se contesta con
+  un `grep` de los nombres que huelen a credencial más una lectura de las banderas que enciende.
+  **Y la parte que no se deduce, que hubo que MEDIR arrancando el proceso** (el ticket pedía
+  «dejando la clave presente y vacía o ausente, según lo que Umbraco tolere»): con la clave vacía
+  y el nombre puesto, Umbraco revienta al arrancar —«*if any of the UnattendedUserName,
+  UnattendedUserEmail, UnattendedUserPassword are set, all of them are required*»—; y con **las
+  tres ausentes NO revienta**, que es el caso peligroso: la instalación desatendida **completa** y
+  deja el administrador con `userPassword = 'default'` y habilitado, o sea **un sitio que contesta
+  200, al que nadie puede entrar y sin instalador que lo arregle**. Así que el `UnattendedUserName`
+  se QUEDA en el perfil, y no por descuido: es lo único que convierte la ausencia de los otros dos
+  en un fallo ruidoso. Es la forma de #56 y de la llave de firma de `Api.Identity` —fallar al
+  cablear y no en la primera petición— aplicada al revés: acá lo que había que conseguir era que
+  **falte** de manera ruidosa.
+  **Lo que NO se escribió, y va dicho porque el ticket lo pedía:** el gate que cruza «toda clave
+  con olor a credencial que el compose no pise **con `:?`**». Medido antes: son **más de cuarenta**
+  exenciones en un solo fichero y todas legítimas —las decenas de `${SYNERGOS_API_KEY}` repetidas
+  son la MISMA variable que el primer servicio ya exige con `:?`, y los ocho `${…:-}` son secretos
+  opcionales a propósito— más cuatro falsos positivos de fábrica (`IdentityTokens__LifetimeMinutes`,
+  `Synergos__Gob__DefinitionKey`, `Payments__wompi__PublicKey`). Eso es el muro que deja de leerse
+  (`feedback_a_gate_that_asks_for_more_than_needed_never_goes_red`). Lo que sí es airtight y es lo
+  que el defecto violaba: **el valor no está ESCRITO**, ni en un `appsettings` ni en un compose.
+  Trinquete absoluto porque hoy se cumple, que es la condición del #134.
+  **Y el corolario operativo: quitar un secreto del repo le quita el secreto a quien ARRANCABA con
+  él.** Los cuatro gates que levantan el CMS de verdad —`usync-rebuild-check`, `humo-portada`,
+  `humo-conectado`, `ssr-dom-check`— arrancan con ese perfil contra una base desechable, así que
+  pasan por la instalación desatendida. Escribirles la credencial a cada uno habría metido cuatro
+  literales nuevos el mismo día que se quitó uno: va en **un** sitio
+  (`tools/credencial-de-prueba.mjs`) y es **aleatoria por corrida**, porque «pero es sólo para los
+  tests» es exactamente el argumento que dejó la de producción en el repo.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1805,13 +1849,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3306 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3309 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2252
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 421
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 424
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2177,7 +2221,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3306 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3309 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -2225,6 +2269,16 @@ imágenes por SHA a GHCR, `compose.prod.yml`, `tools/bootstrap-servidor.sh`,
 (contra la URL pública, no contra el runner) y vuelta atrás automática. El
 workflow **se salta solo** mientras falten `DEPLOY_HOST` / `SYNERGOS_DOMAIN`.
 Lo que falta es que el arquitecto cree el VPS — decisión de compra, no código.
+
+> **Y desde el #150 el despliegue exige DOS secretos más: `SYNERGOS_ADMIN_EMAIL` y
+> `SYNERGOS_ADMIN_PASSWORD`.** Antes la cuenta de administrador del backoffice se
+> creaba con el literal de `appsettings.Docker.json` —el perfil con el que corre
+> producción— publicado en un repo público. Hoy `compose.prod.yml` las pide con
+> `:?`, así que **`docker compose up` falla antes de arrancar un contenedor** si
+> faltan; y el `UnattendedUserName` se queda en el perfil a propósito, porque con
+> las tres ausentes Umbraco instala igual y deja un administrador al que nadie
+> puede entrar. Hay gate (`PerfilDeProduccionTests`). Si alguna vez se desplegó
+> con el literal, **rotarla es lo primero**.
 
 > **Arrancar no es estar listo, y eso faltaba escrito** (#114). Un servidor con
 > los 26 contenedores sanos no sirve todavía: hay que sembrar **el schema** y

@@ -34,10 +34,17 @@ teaches you to skim past the line that matters.
 dotnet run --project Synergos.CMS.Web
 ```
 
-First run triggers the Umbraco install flow at `https://localhost:XXXXX/`.
-Credentials seeded by the template:
-- **Email**: `admin@synergos.local`
-- **Password**: `Synergos2026!`
+First run installs Umbraco unattended and creates the backoffice account. The
+credentials are **not in the repo** (#150) — set them in the environment first:
+
+```bash
+export Umbraco__CMS__Unattended__UnattendedUserEmail='you@example.com'
+export Umbraco__CMS__Unattended__UnattendedUserPassword='<yours>'
+```
+
+Without them the boot fails naming the three `Umbraco:CMS:Unattended` keys —
+Umbraco wants all three or none, and `UnattendedUserName` is already in the
+profile precisely so the absence of the other two is loud rather than silent.
 
 The SQLite database is at `Synergos.CMS.Web/umbraco/Data/Umbraco.sqlite.db`.
 Delete it to reset to pristine state.

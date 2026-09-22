@@ -35,12 +35,22 @@ Expected outcome:
 dotnet run --project Synergos.CMS.Web
 ```
 
-On first run, Umbraco shows its install wizard at `https://localhost:XXXXX/`
-(port assigned by Kestrel — watch the console). Credentials pre-seeded
-by the template:
+On first run, Umbraco installs unattended (port assigned by Kestrel — watch the
+console) and creates the backoffice account from the environment. **The
+credentials are not in the repo** (#150): this repository is public, and the
+profile that carried them is the one production runs with. Set them before the
+first run:
 
-- **Email**: `admin@synergos.local`
-- **Password**: `Synergos2026!`
+```bash
+export Umbraco__CMS__Unattended__UnattendedUserEmail='you@example.com'
+export Umbraco__CMS__Unattended__UnattendedUserPassword='<yours>'
+```
+
+If you skip this, the boot fails and the message names the three
+`Umbraco:CMS:Unattended` keys. That failure is deliberate: with all three
+absent Umbraco installs anyway and leaves an administrator nobody can sign in
+as — a site serving 200 with no way in and no installer left to fix it
+(measured). `UnattendedUserName` therefore stays in the profile.
 
 The backoffice is at `/umbraco`. The database is SQLite, stored under
 `Synergos.CMS.Web/umbraco/Data/Umbraco.sqlite.db` — safe to delete and start

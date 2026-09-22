@@ -358,6 +358,8 @@ function generar() {
 #   SYNERGOS_TAG       el SHA del commit que se despliega — NUNCA \`latest\`
 #   SYNERGOS_API_KEY   la llave compartida entre servicios
 #   SYNERGOS_DOMAIN    el dominio publico
+#   SYNERGOS_ADMIN_EMAIL     el correo del administrador del backoffice
+#   SYNERGOS_ADMIN_PASSWORD  su clave — NO vive en el repo (#150)
 #
 # ⚠️ PARADA ANTES DE ARRANQUE, Y CADA \`deploy:\` DICE SI ESE SERVICIO ESCALA.
 # Aca decia «UNA INSTANCIA POR CAPACIDAD ... dos instancias se pisan y NO dan
@@ -431,6 +433,29 @@ services:
       # esto es produccion; el perfil lo sigue trayendo encendido para que un
       # docker compose de desarrollo siga sirviendo la siembra.
       Synergos__DevSeed__Enabled: "false"
+
+      # La CREDENCIAL DEL ADMINISTRADOR, del entorno y con \`:?\` (#150).
+      #
+      # El #113 apago UNA cosa que el perfil Docker traia mal para produccion —la
+      # siembra de desarrollo, justo arriba— y no se hizo la pregunta que cierra la
+      # familia: que MAS trae ese perfil que no sirve para produccion. La respuesta
+      # incluia la credencial del administrador del backoffice, con su correo, en un
+      # literal versionado en un repo PUBLICO.
+      #
+      # Umbraco no deja medias tintas, y esta medido: si de las tres
+      # —\`UnattendedUserName\`, \`UnattendedUserEmail\`, \`UnattendedUserPassword\`—
+      # esta puesta ALGUNA, las tres son obligatorias, y el arranque revienta con ese
+      # mensaje. Con las tres FUERA el arranque no revienta: instala igual y deja el
+      # administrador con \`userPassword = 'default'\` y HABILITADO, o sea un sitio en
+      # 200 al que nadie puede entrar y sin instalador que lo arregle. Por eso el
+      # NOMBRE se queda en el perfil: es lo que hace ruidosa la ausencia de los otros
+      # dos, en vez de silenciosa.
+      #
+      # Con \`:?\`, \`docker compose up\` falla ANTES de arrancar el contenedor — que es
+      # la unica forma de fallar que no se descubre delante de una persona.
+      Umbraco__CMS__Unattended__UnattendedUserEmail: \${SYNERGOS_ADMIN_EMAIL:?falta SYNERGOS_ADMIN_EMAIL}
+      Umbraco__CMS__Unattended__UnattendedUserPassword: \${SYNERGOS_ADMIN_PASSWORD:?falta SYNERGOS_ADMIN_PASSWORD}
+
       Umbraco__CMS__Global__UmbracoApplicationUrl: "https://\${SYNERGOS_DOMAIN}/"
       Synergos__Notifications__PublicBaseUrl: "https://\${SYNERGOS_DOMAIN}"
       Synergos__Cart__SecretKey: \${SYNERGOS_CART_SECRET:?falta SYNERGOS_CART_SECRET}

@@ -37,9 +37,20 @@ dotnet build   Synergos.CMS.sln
 dotnet run --project Synergos.CMS.Web
 ```
 
-Installer credentials (pre-seeded by the `dotnet new umbraco` template):
-- **Email**: `admin@synergos.local`
-- **Password**: `Synergos2026!`
+Backoffice credentials are **not in the repo** (#150) — this is a public
+repository and `appsettings.Docker.json` is the profile production runs with.
+Set them yourself before the first run; Umbraco creates the account on boot and
+refuses to start if only some of the three are present:
+
+```bash
+export Umbraco__CMS__Unattended__UnattendedUserEmail='you@example.com'
+export Umbraco__CMS__Unattended__UnattendedUserPassword='<yours>'
+dotnet run --project Synergos.CMS.Web
+```
+
+`UnattendedUserName` stays in the profile on purpose: with all three missing
+Umbraco installs anyway and leaves an administrator nobody can sign in as
+(measured), so keeping the name is what makes the other two's absence loud.
 
 Full setup walkthrough: [`docs/onboarding/new-developer-setup.md`](docs/onboarding/new-developer-setup.md).
 

@@ -40,6 +40,25 @@ services:
       # string propio lo silencia. No es un secreto de producción.
       Synergos__Cart__SecretKey: "synergos-docker-local-change-me"
 
+      # ─── La credencial del backoffice, de tu `.env` ────────────────────
+      # Ponelas en un `.env` al lado de este fichero (docker compose lo lee
+      # solo; está en .gitignore):
+      #
+      #   SYNERGOS_ADMIN_EMAIL=vos@example.com
+      #   SYNERGOS_ADMIN_PASSWORD=<una clave tuya>
+      #
+      # No hay default a propósito (#150). Este compose publica el 8080 en
+      # 0.0.0.0 para que la tablet entre, así que una clave escrita en el
+      # repo no es «sólo mi máquina»: es la LAN. Y con `:?` falla acá, antes
+      # de arrancar el contenedor, en vez de instalar Umbraco con una clave
+      # que cualquiera puede leer en GitHub.
+      #
+      # Umbraco exige las tres o ninguna, y con las tres fuera instala igual
+      # dejando un administrador al que nadie puede entrar (medido) — por eso
+      # `UnattendedUserName` se queda en appsettings.Docker.json.
+      Umbraco__CMS__Unattended__UnattendedUserEmail: ${SYNERGOS_ADMIN_EMAIL:?falta SYNERGOS_ADMIN_EMAIL — ponelo en .env}
+      Umbraco__CMS__Unattended__UnattendedUserPassword: ${SYNERGOS_ADMIN_PASSWORD:?falta SYNERGOS_ADMIN_PASSWORD — ponelo en .env}
+
     volumes:
       # Schema uSync como bind, no como volumen: es el source of truth del
       # repo (ADR 0008) y uSync tiene ExportOnSave=All, así que lo que el

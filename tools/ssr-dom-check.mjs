@@ -72,6 +72,7 @@ import { mkdtempSync, mkdirSync, rmSync, createWriteStream, existsSync, writeFil
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { credencialDesatendida } from './credencial-de-prueba.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const WEB = join(ROOT, 'Synergos.CMS.Web');
@@ -187,6 +188,10 @@ const child = spawn('dotnet', [DLL], {
   env: {
     ...process.env,
     ASPNETCORE_ENVIRONMENT: 'Docker',
+    // La base es desechable y la instalación desatendida pide las tres claves.
+    // Desde el #150 el perfil ya no las trae: una clave versionada en un repo
+    // público es la credencial del administrador de producción.
+    ...credencialDesatendida(),
     ASPNETCORE_URLS: 'http://127.0.0.1:0',
     ConnectionStrings__umbracoDbDSN:
       `Data Source=${dbPath};Cache=Shared;Foreign Keys=True;Pooling=True`,

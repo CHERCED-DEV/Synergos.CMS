@@ -43,7 +43,11 @@ public sealed class ClavesDeUmbracoTests
     private static string Esquema()
         => Proyectos.Dir("Synergos.CMS.Web", "appsettings-schema.Umbraco.Cms.json");
 
-    private static IReadOnlyList<string> Appsettings()
+    /// <summary>
+    /// Los <c>appsettings*.json</c> de configuración — <c>internal</c> porque los consume también
+    /// <c>PerfilDeProduccionTests</c> (#150), y dos descubrimientos de la misma verdad se desvían.
+    /// </summary>
+    internal static IReadOnlyList<string> Appsettings()
         => Directory.EnumerateFiles(
                 Proyectos.Dir("Synergos.CMS.Web"), "appsettings*.json", SearchOption.TopDirectoryOnly)
             // Los `appsettings-schema*.json` son EL schema, no configuración.
@@ -51,7 +55,7 @@ public sealed class ClavesDeUmbracoTests
             .OrderBy(p => p, StringComparer.Ordinal)
             .ToList();
 
-    private static JsonDocument Abrir(string ruta)
+    internal static JsonDocument Abrir(string ruta)
         => JsonDocument.Parse(
             File.ReadAllText(ruta),
             new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });

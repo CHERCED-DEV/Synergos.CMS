@@ -41,8 +41,14 @@ backoffice y de las notificaciones no llevan a ningún lado.
 Después, desde la tablet:
 
 - Sitio: `http://TU-IP:8080`
-- Backoffice: `http://TU-IP:8080/umbraco` (`admin@synergos.local` /
-  `Synergos2026!`, igual que en Development)
+- Backoffice: `http://TU-IP:8080/umbraco`, con la credencial que pusiste en el
+  `.env` (`SYNERGOS_ADMIN_EMAIL` / `SYNERGOS_ADMIN_PASSWORD`)
+
+La credencial **no está en el repo** (#150), y acá importa más que en
+`dotnet run`: este compose publica el 8080 en `0.0.0.0` para que la tablet
+entre, así que una clave escrita en el repo no es «sólo mi máquina», es la LAN.
+El compose las pide con `:?`, así que `docker compose up` falla antes de
+arrancar el contenedor si faltan.
 
 Windows Firewall va a pedir permiso la primera vez que algo entre al 8080;
 hay que aceptarlo **para redes privadas**.
