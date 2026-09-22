@@ -5061,6 +5061,49 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > si se queda escrito: se arregló en vez de dejarlo nombrado. `null` sigue
   > siendo «no consta» para el staff sembrado, que de verdad no lo sabe.
 
+- **Y el feed de Social también, que es el OCTAVO vertical** (#146,
+  `Synergos:Catalog:Sources:Social = cms`, con el seed de demo de default). Es el
+  **piloto 1 de la fábrica** (épica #139): el primer vertical cuyo spec se escribió
+  ANTES del código — `docs/specs/social/spec.md`.
+
+  > **La predicción del ticket falló, y ése era su resultado valioso.** Daba Social
+  > por «un sub-spec y tres ajustes» leyendo que faltaba el interruptor. Al medir
+  > aparecieron **DOS lectores de «un post»**: `DefaultBlogQuery`, que lee `postPage`
+  > desde siempre y sirve las vistas Razor —listados, RSS, sitemap, tag page—, y
+  > `IContentStream`, que sirve **la app social entera** (`BlogsController`: el feed,
+  > el detalle, explore, guardados) y traía **cinco posts cableados en C#**. O sea
+  > que la mitad editorial ya salía del CMS y la mitad que el producto usa exigía un
+  > despliegue.
+  >
+  > **Y el eje 1 de Social NO es «un `Umbraco*Source` más»**, que es el sub-spec que
+  > el molde ganó (doc 13 §5.bis): su almacén **lo comparte Educación** —el `Kind` de
+  > `IContentStream` existe para eso, y el #100 siembra ahí los cuerpos de las
+  > lecciones— y **el producto escribe en él** (`CreateAsync`). Las siete fuentes
+  > anteriores sirven una colección propia y de sólo lectura.
+  >
+  > **Por eso se SIEMBRA y no se reemplaza.** Las otras dos salidas —un adaptador que
+  > sirva el feed del árbol de contenido, o partir el `Kind`— obligan a contestar qué
+  > pasa con lo que alguien publicó desde la app, y ésa es una pregunta de producto.
+  > Sembrar la esquiva y reusa una mecánica probada: huella del contenido en la clave
+  > (o editar no se ve) y mapping durable (o cada arranque re-siembra el feed entero).
+  >
+  > **El AUTOR viaja con el post, y eso fue medio hallazgo.** `StubContentStream`
+  > resuelve el autor con `SocialDemoSeed.AuthorById`, que ante un id desconocido
+  > devuelve el id **como handle y como nombre**. Sembrar sin traerse el `authorPage`
+  > habría firmado cada tarjeta con «autor-camila-rios» — y eso no se lee como un
+  > defecto: se lee como un handle. El decorador lo repone **al leer** y no sólo al
+  > sembrar, porque el mapping sobrevive al reinicio y la caché de autores no.
+  >
+  > **Sin eje 2 y sin eje 3, y las dos son decisiones**: publicar un post es una
+  > escritura local —nada que deshacer— y nadie de fuera necesita comprobarlo sin
+  > creernos (la CUARTA pregunta, doc 12 §3.1). El paywall de la épica #11 sí tendría
+  > eje 2 y es otra HU. Hay gate (`SocialWiringTests`), y uno de sus dientes es que
+  > **no** aparezca un `Synergos:Social:Mode` por arrastre del copiar-pegar.
+  >
+  > **Lo que NO se hizo**: reponer el autor en `ISocialProfileProjection` —el perfil
+  > de un autor autorado sigue saliendo del seed—, y cablear `Api.Moderation` o
+  > `Api.Engagement`, que siguen esperando primer consumidor real.
+
 - **Cuatro orquestadores sin construir**: Realty, Gob, Academy, Social.
   `Bff.Eventos` (HU #35) y `Bff.Viajes` (HU #36) ya están, y ninguno de los
   dos necesitó una capacidad nueva ni un endpoint nuevo — que es la
