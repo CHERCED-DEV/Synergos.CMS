@@ -352,6 +352,17 @@ Lo que los siete comparten, medido:
   tal —un correo conocido se puede volver a hashear— es no esparcir lo que no hace falta esparcir.
   `Bff.Tienda` era el último que mandaba el correo entero y se corrigió en el #47, que además
   destapó que el listado devolvía ese identificador como si fuera el correo.
+- **El rechazo se LEE, no se deduce del código de estado.** Si algo se puede volver a intentar lo
+  dice la capacidad en su bandera `transient`, y sólo ella: el mismo 503 puede ser
+  `{prefijo}.store_busy` —quince milisegundos de cola detrás del turno de escritura, #112— o una
+  caída de verdad, y el #112 eligió `Unavailable` y no `Conflict` justo para que un orquestador no
+  deshiciera una saga sana. Una tabla de códigos del lado del CMS desharía esa decisión sin
+  enterarse. Se lee con `RechazoDelArbolDeServicios`, que es el único sitio del CMS que nombra esa
+  clave; lo que sí es de cada cliente es **cómo presentar** el fallo —un 404 es «no existe», un 401
+  nombra la llave compartida, un 409 sube como rechazo de negocio con su motivo— y eso se queda en
+  el cliente. Gate: `TransitoriedadTests` (#129).
+  **Y un cuerpo que no se puede leer es «no consta», nunca «firme»**: tratarlo como rechazo firme
+  convierte cualquier intermediario que devuelva HTML en «el banco dijo que no».
 - **Degradar, no reventar.** Encender el modo sin el servicio arriba tiene que dejar el vertical
   sirviendo catálogo y fichas; lo que se para es la transacción, y se dice.
 

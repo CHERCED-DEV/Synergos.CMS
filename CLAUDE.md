@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3304 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3306 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2252 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 419 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 421 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **52 de los 63 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **53 de los 64 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3304**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3306**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -166,6 +166,7 @@ Synergos.CMS/
 │                                + configuración del build (3, #151)
 │                                + secciones de configuración (2, #154)
 │                                + escalado de réplicas (6, #152)
+│                                + transitoriedad de un rechazo (2, #129)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1347,7 +1348,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **52 de los 63 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **53 de los 64 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -1711,6 +1712,40 @@ Las que salieron de construir el árbol de servicios (§0.B):
   **sin commitear**, `git checkout --` es peor que no hacer nada: devuelve el fichero a HEAD, o
   sea se lleva el trabajo. Se salva con `cp` y se restaura con `cp` + `touch`.
 
+- `feedback_a_rule_written_inside_its_only_obedient_copy_is_a_rule_nobody_reads` — **una regla
+  escrita en el `<remarks>` del único sitio que la cumple no se difunde: se ENTIERRA, y encima
+  parece difundida porque quien la lee la está leyendo ya cumplida.** `HttpPaymentProvider` decía
+  con todas las letras *«se mira esa bandera y no el código de estado: repetir aquí la tabla de
+  códigos sería una segunda verdad que se desincroniza»* — el razonamiento correcto, completo, y
+  **dentro del único de los quince clientes que lo aplicaba** (#129). Los otros catorce no la
+  desobedecen: no la ven. Es `feedback_a_fabrication_can_be_a_derivation` addendum #123 con el
+  sujeto cambiado —allá lo blindado era un defecto, acá una regla buena— y con la misma salida:
+  **lo que reemplaza a la nota no es otra nota, es un TIPO** (`RechazoDelArbolDeServicios`, el
+  único sitio del CMS que nombra `transient`) **más un gate que cuente los declarantes**. El tell
+  se busca con un `grep`, no leyendo: un `<remarks>` que explica por qué NO hacer algo, dentro de
+  un fichero que no lo hace. Si la razón vale para sus vecinos, está en el sitio equivocado.
+  **Y el corolario que decide cuánto trabajo es:** el trinquete sale **absoluto** porque hoy ya se
+  cumple —cero clientes nombran un código de transitoriedad— que es la condición del #134; con un
+  solo infractor habría sido línea base (#140).
+
+- `feedback_a_finding_names_a_symptom_with_a_verb_and_the_verb_is_measured_first` — **un hallazgo
+  dice «catorce clientes DECIDEN si reintentar mirando el código», y el verbo es lo primero que
+  hay que medir: si se le cree, el arreglo se escribe catorce veces sobre una decisión que nadie
+  tomó.** Medido rama por rama (#129): **cero** de los quince tiene bucle de reintento, y lo que
+  los catorce deciden no es *si volver a intentar* sino **cómo PRESENTAR el fallo** —un 404 es «no
+  existe», un 401 nombra la llave compartida, un 409 sube como rechazo de negocio con su motivo—,
+  que es correcto y es de cada cliente. Un 503 ya cae al camino de infraestructura, que es donde
+  debe caer. Creerle al verbo habría metido una política de reintentos **inventada** en catorce
+  ficheros, con el agravante de que a un `store_busy` (#112) hay que reintentarlo y a una pasarela
+  caída no, y ninguno de los catorce tiene con qué distinguirlos.
+  Es el hermano de `feedback_measure_the_generator_at_its_best_or_the_finding_is_yours` por el
+  otro lado: allá medir mal INFLA la lista de hallazgos, acá creerle al hallazgo infla el arreglo.
+  **Y lo que queda después de medir se escribe como pregunta abierta, no se rellena**: quién
+  reintenta —el cliente o quien lo llama— el CMS no lo tiene decidido; el árbol de servicios sí
+  («la capacidad sabe QUÉ está colgado y CÓMO se reintenta; el orquestador, CUÁNDO y CUÁNTAS
+  VECES») y traerlo acá es otro trabajo. Cerrar un ticket con una respuesta fabricada a la mitad
+  que no se midió es el defecto que el ticket venía a cerrar, con el sujeto movido.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1770,13 +1805,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3304 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3306 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2252
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 419
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 421
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2142,7 +2177,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3304 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3306 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

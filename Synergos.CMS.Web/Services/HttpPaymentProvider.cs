@@ -160,7 +160,7 @@ public sealed class HttpPaymentProvider : IPaymentProvider
             return new PaymentSession(cobro.Id, EstadoDe(cobro), AccionDe(cobro), ProviderKey);
         }
 
-        var problema = await LeerProblemaAsync(res, cancellationToken).ConfigureAwait(false);
+        var problema = await RechazoDelArbolDeServicios.LeerAsync(res, cancellationToken).ConfigureAwait(false);
         GritarSiEsLaLlave(res, "autorizar el cobro");
 
         // Un rechazo FIRME del medio de pago es una respuesta, no un fallo: se devuelve como
@@ -170,7 +170,7 @@ public sealed class HttpPaymentProvider : IPaymentProvider
         {
             _log.LogWarning(
                 "Api.Payments rechazó el cobro de {Orden}: {Code} — {Detalle}",
-                request.OrderReference, problema?.Code ?? "-", problema?.Detail ?? "-");
+                request.OrderReference, problema.Codigo ?? "-", problema.Motivo ?? "-");
 
             // Sin identificador a propósito: la capacidad no lo devuelve en un rechazo, y
             // fabricar uno dejaría en el expediente una sesión que no se puede consultar.
@@ -305,7 +305,7 @@ public sealed class HttpPaymentProvider : IPaymentProvider
         if (res.StatusCode == HttpStatusCode.NotFound) return null;
         if (!res.IsSuccessStatusCode)
         {
-            var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
+            var problema = await RechazoDelArbolDeServicios.LeerAsync(res, ct).ConfigureAwait(false);
             GritarSiEsLaLlave(res, "consultar el cobro");
             throw Caida("consultar el cobro", res, problema);
         }
@@ -334,13 +334,13 @@ public sealed class HttpPaymentProvider : IPaymentProvider
 
         if (res.StatusCode == HttpStatusCode.NotFound) return NoExiste(sessionId);
 
-        var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
+        var problema = await RechazoDelArbolDeServicios.LeerAsync(res, ct).ConfigureAwait(false);
         GritarSiEsLaLlave(res, queHacia);
 
         if (!EsRechazoFirme(res, problema)) throw Caida(queHacia, res, problema);
 
         var actual = await BuscarAsync(sessionId, ct).ConfigureAwait(false);
-        var motivo = problema?.Detail ?? $"Api.Payments rechazó {queHacia}.";
+        var motivo = problema.Motivo ?? $"Api.Payments rechazó {queHacia}.";
         return actual is null
             ? NoExiste(sessionId) with { FailureReason = motivo }
             : Resultado(actual) with { FailureReason = motivo };
@@ -350,37 +350,29 @@ public sealed class HttpPaymentProvider : IPaymentProvider
         => await res.Content.ReadFromJsonAsync<CobroDto>(Json, ct).ConfigureAwait(false)
            ?? throw new InvalidOperationException("Api.Payments contestó sin cuerpo.");
 
-    private static async Task<ProblemaDto?> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
-    {
-        try { return await res.Content.ReadFromJsonAsync<ProblemaDto>(Json, ct).ConfigureAwait(false); }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException or HttpRequestException)
-        {
-            return null;
-        }
-    }
-
     /// <summary>
     /// Si lo que contestó la capacidad es un «no» del medio de pago y no un «no sé».
     /// </summary>
     /// <remarks>
     /// <para>La capacidad ya hizo esa distinción por nosotros (<c>PaymentRules.FromAttempt</c>):
     /// un rechazo firme sale como <c>Conflict</c> y marcado <c>transient: false</c>; una caída de
-    /// la pasarela y una credencial que falta salen como <c>Unavailable</c> y transitorias. Se
-    /// mira <b>esa bandera</b> y no el código de estado: repetir aquí la tabla de códigos sería
-    /// una segunda verdad que se desincroniza.</para>
+    /// la pasarela y una credencial que falta salen como <c>Unavailable</c> y transitorias.</para>
     ///
-    /// <para>Si el cuerpo no se puede leer, <b>es «no sé»</b>: tratarlo como rechazo firme
-    /// convertiría cualquier intermediario que devuelva HTML en «el banco dijo que no».</para>
+    /// <para><b>Esa parte ya no vive acá</b> (#129): la lee <see cref="RechazoDelArbolDeServicios"/>,
+    /// que es el único sitio del CMS que nombra la bandera. Escribirla de nuevo aquí sería la
+    /// segunda verdad que este mismo comentario avisaba de no escribir — y estuvo catorce
+    /// clientes sin que nadie la aplicara por estar escrita dentro del único que la cumplía.</para>
+    ///
+    /// <para>Lo que se queda es el corte <b>4xx</b>, porque sí es de este cliente: un 5xx firme
+    /// sigue siendo un fallo del servicio y no «el banco dijo que no».</para>
     /// </remarks>
-    private static bool EsRechazoFirme(HttpResponseMessage res, ProblemaDto? problema)
-        => problema is not null
-           && problema.Transient == false
-           && (int)res.StatusCode is >= 400 and < 500;
+    private static bool EsRechazoFirme(HttpResponseMessage res, RechazoDelArbolDeServicios problema)
+        => problema.EsFirme && (int)res.StatusCode is >= 400 and < 500;
 
     private static InvalidOperationException Caida(
-        string queHacia, HttpResponseMessage res, ProblemaDto? problema)
+        string queHacia, HttpResponseMessage res, RechazoDelArbolDeServicios problema)
         => new($"Api.Payments no pudo {queHacia} ({(int)res.StatusCode}"
-               + (problema?.Code is { Length: > 0 } c ? $", {c}" : string.Empty) + ").");
+               + (problema.Codigo is { Length: > 0 } c ? $", {c}" : string.Empty) + ").");
 
     /// <summary>
     /// Un 401 es la llave, y sólo un 401.
@@ -523,6 +515,4 @@ public sealed class HttpPaymentProvider : IPaymentProvider
     private sealed record CobroDto(
         string Id, string Status, MontoDto? Amount, MontoDto? Refunded, MontoDto? Refundable,
         string? ActionUrl);
-
-    private sealed record ProblemaDto(string? Code, string? Detail, bool? Transient);
 }
