@@ -68,30 +68,40 @@ namespace Synergos.CMS.Tests.Architecture;
 public sealed class PoliticaDeBuildEnLaImagenTests
 {
     /// <summary>
-    /// Los ficheros que MSBuild y Roslyn leen <b>implícitamente</b> de la raíz al compilar.
+    /// Los ficheros que MSBuild y Roslyn leen <b>implícitamente</b> de la raíz al compilar, y
+    /// <b>qué se pierde la imagen si falta cada uno</b>.
     /// </summary>
     /// <remarks>
-    /// Esta lista es un hecho de .NET y no de este repo, que es lo que hace legítimo
-    /// escribirla — pero no alcanza sola, porque no ve un fichero de política cuyo nombre no
-    /// esté acá. Ese hueco lo cierra <see cref="NoAfectanALaCompilacion"/>: todo fichero de la
-    /// raíz tiene que estar en UNA de las dos listas, así que el que no conozco rompe el build
-    /// y obliga a decidir. Sólo se exige lo que <b>existe</b> en disco: nombrar un
-    /// <c>Directory.Build.targets</c> que nadie escribió pondría un <c>COPY</c> muerto, que
-    /// hace fallar a <c>docker build</c> con un mensaje que no dice nada.
+    /// <para>Esta lista es un hecho de .NET y no de este repo —MSBuild, Roslyn y NuGet leen
+    /// estos nombres y no otros—, que es lo que hace legítimo escribirla. Pero no alcanza sola,
+    /// porque no ve un fichero de política cuyo nombre no esté acá. Ese hueco lo cierra
+    /// <see cref="NoAfectanALaCompilacion"/>: todo fichero de la raíz tiene que estar en UNA de
+    /// las dos listas, así que el que no conozco rompe el build y obliga a decidir.</para>
+    ///
+    /// <para>Sólo se exige lo que <b>existe</b> en disco: nombrar un
+    /// <c>Directory.Build.targets</c> que nadie escribió pondría un <c>COPY</c> muerto, que hace
+    /// fallar a <c>docker build</c> con un mensaje que no dice nada.</para>
+    ///
+    /// <para><b>La razón de cada uno va en la fila y no en un comentario</b>, y es lo que el
+    /// mensaje del rojo imprime: un gate que sólo dice «falta `.editorconfig` en el COPY» manda
+    /// a alguien a averiguar por qué importaba, que es la media hora que este defecto ya costó.
+    /// Viene del gate gemelo que la rama de la fábrica escribió en paralelo
+    /// (<c>ConfiguracionDelBuildTests</c>, retirado al rebasar: dos gates con el mismo criterio
+    /// es <c>feedback_the_same_algorithm_is_not_the_same_thing</c>).</para>
     /// </remarks>
-    private static readonly string[] LeidosPorElToolchain =
+    private static readonly (string Fichero, string Porque)[] LeidosPorElToolchain =
     [
-        "Directory.Build.props",
-        "Directory.Build.targets",
-        "Directory.Build.rsp",
-        "Directory.Packages.props",
-        "Directory.Solution.props",
-        "global.json",
-        ".editorconfig",
-        ".globalconfig",
-        "nuget.config",
-        "NuGet.config",
-        "NuGet.Config",
+        ("global.json",              "clava el SDK — sin él la imagen compila con otro compilador"),
+        ("Directory.Build.props",    "propiedades comunes: Nullable, TreatWarningsAsErrors, NoWarn"),
+        ("Directory.Build.targets",  "targets comunes, si algún día existen"),
+        ("Directory.Build.rsp",      "opciones de línea de comando de MSBuild, si algún día existen"),
+        ("Directory.Packages.props", "versiones centralizadas — sin él el restore no resuelve"),
+        ("Directory.Solution.props", "propiedades por solución, si algún día existen"),
+        (".editorconfig",            "NUEVE severidades de diagnóstico; sin él la imagen no construye (#156)"),
+        (".globalconfig",            "severidades de analizador fuera de .editorconfig, si algún día existe"),
+        ("nuget.config",             "fuentes de paquetes, si algún día existen"),
+        ("NuGet.config",             "el mismo, con la mayúscula que usa Windows"),
+        ("NuGet.Config",             "el mismo, con la grafía que escribe Visual Studio"),
     ];
 
     /// <summary>
@@ -158,37 +168,34 @@ public sealed class PoliticaDeBuildEnLaImagenTests
 
     /// <summary>Lo que un Dockerfile copia a la RAÍZ del contexto de build.</summary>
     /// <remarks>
-    /// Sólo interesan los orígenes sin <c>/</c>: los de la raíz. Un
-    /// <c>COPY Synergos.CMS.Web/ …</c> no entra, y un <c>COPY --from=build …</c> tampoco —
-    /// ése copia de otra etapa, no del contexto, así que no puede traer un fichero de política.
+    /// <para>Se ancla en el destino <c>./</c> —la capa de restore, que es la que lleva la
+    /// configuración a la raíz del contexto— en vez de descartar orígenes por su forma. Es más
+    /// estrecho y dice mejor lo que mide: un <c>COPY Synergos.CMS.Web/ Synergos.CMS.Web/</c> no
+    /// entra porque su destino no es la raíz, no porque su origen lleve una barra. Viene del
+    /// gate gemelo de la rama de la fábrica.</para>
+    ///
+    /// <para>Un <c>COPY --from=build …</c> queda fuera por el mismo criterio y además porque
+    /// copia de otra ETAPA y no del contexto, así que no puede traer un fichero de política.</para>
     /// </remarks>
     private static IReadOnlySet<string> CopiadosDeLaRaiz(string dockerfile)
     {
-        var copiados = new HashSet<string>(StringComparer.Ordinal);
+        var sinComentarios = string.Join('\n', SinComentarios(dockerfile));
 
-        foreach (var linea in SinComentarios(dockerfile))
-        {
-            var t = linea.Trim();
-            if (!t.StartsWith("COPY ", StringComparison.Ordinal)) continue;
-            if (t.Contains("--from=", StringComparison.Ordinal)) continue;
-
-            foreach (var arg in t[5..].Split(' ', StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (arg.StartsWith("--", StringComparison.Ordinal)) continue;
-                if (arg.Contains('/', StringComparison.Ordinal)) continue;
-                if (arg.Contains('$', StringComparison.Ordinal)) continue;
-                copiados.Add(arg);
-            }
-        }
-
-        return copiados;
+        return Regex.Matches(
+                sinComentarios,
+                @"^\s*COPY\s+(?<args>[^\r\n]+?)\s+\./\s*$",
+                RegexOptions.Multiline,
+                TimeSpan.FromSeconds(2))
+            .SelectMany(m => m.Groups["args"].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .Where(a => !a.StartsWith("--", StringComparison.Ordinal))
+            .ToHashSet(StringComparer.Ordinal);
     }
 
-    /// <summary>Los ficheros de política que EXISTEN en la raíz.</summary>
-    private static IReadOnlyList<string> PoliticaEnDisco()
+    /// <summary>Los ficheros de política que EXISTEN en la raíz, con su razón.</summary>
+    private static IReadOnlyList<(string Fichero, string Porque)> PoliticaEnDisco()
         => LeidosPorElToolchain
-            .Where(n => File.Exists(Path.Combine(Raiz(), n)))
-            .OrderBy(n => n, StringComparer.Ordinal)
+            .Where(v => File.Exists(Path.Combine(Raiz(), v.Fichero)))
+            .OrderBy(v => v.Fichero, StringComparer.Ordinal)
             .ToList();
 
     [Fact]
@@ -226,11 +233,15 @@ public sealed class PoliticaDeBuildEnLaImagenTests
         foreach (var dockerfile in DockerfilesQueCompilan())
         {
             var copiados = CopiadosDeLaRaiz(dockerfile);
-            var faltan = politica.Where(p => !copiados.Contains(p)).ToList();
+            var faltan = politica.Where(p => !copiados.Contains(p.Fichero)).ToList();
+
+            // La RAZÓN de cada uno entra en el mensaje: un rojo que sólo nombra el fichero manda
+            // a alguien a averiguar por qué importaba, que es media hora que este defecto ya costó.
+            var detalle = string.Join(" · ", faltan.Select(f => $"`{f.Fichero}` ({f.Porque})"));
 
             Assert.True(
                 faltan.Count == 0,
-                $"«{Path.GetFileName(dockerfile)}» compila .NET y no copia {string.Join(", ", faltan)}. " +
+                $"«{Path.GetFileName(dockerfile)}» compila .NET y no copia {detalle}. " +
                 "La política de avisos de este repo está repartida entre Directory.Build.props y " +
                 ".editorconfig, y con TreatWarningsAsErrors puesto esa política DECIDE si la " +
                 "imagen se construye: faltando uno, el contenedor compila bajo reglas más duras " +
@@ -246,7 +257,7 @@ public sealed class PoliticaDeBuildEnLaImagenTests
         // El diente de vuelta, y cierra la salida barata del de arriba: escribir el nombre en el
         // COPY sin que el fichero esté. `docker build` falla ahí con un mensaje que no nombra la
         // causa, y falla DESPUÉS de subir el contexto entero.
-        var conocidos = LeidosPorElToolchain.ToHashSet(StringComparer.Ordinal);
+        var conocidos = LeidosPorElToolchain.Select(v => v.Fichero).ToHashSet(StringComparer.Ordinal);
 
         foreach (var dockerfile in DockerfilesQueCompilan())
         {
@@ -270,7 +281,7 @@ public sealed class PoliticaDeBuildEnLaImagenTests
         // LeidosPorElToolchain. `.globalconfig` es el caso de manual, y no se me habría ocurrido
         // sin esta pregunta. Por eso el criterio es «todo fichero de la raíz se explica», que
         // obliga a decidir en vez de a acordarse.
-        var conocidos = LeidosPorElToolchain.ToHashSet(StringComparer.Ordinal);
+        var conocidos = LeidosPorElToolchain.Select(v => v.Fichero).ToHashSet(StringComparer.Ordinal);
 
         var huerfanos = Directory.EnumerateFiles(Raiz(), "*", SearchOption.TopDirectoryOnly)
             .Select(Path.GetFileName)
@@ -378,34 +389,47 @@ public sealed class PoliticaDeBuildEnLaImagenTests
         // los dos: el primero sobrevive a que no haya build al lado, y el segundo es el único
         // que se entera si el SDK deja de respetar el target — que es un cambio que no ocurre
         // en este repo y sí en la máquina de quien lo compile.
-        var deps = Path.Combine(
-            AppContext.BaseDirectory, $"{CompilaVistasEnCaliente}.deps.json");
+        //
+        // Se barre TODO `bin/` y no sólo el deps.json que la suite tiene al lado, que es como
+        // estaba: con una sola configuración mirada, un `Release` con el bit puesto pasaba en
+        // verde mientras `Debug` estaba bien — y la imagen se publica en Release. Viene del gate
+        // gemelo de la rama de la fábrica, que ya lo hacía así.
+        var bin = Path.Combine(Proyectos.Dir(CompilaVistasEnCaliente), "bin");
+
+        var deps = Directory.Exists(bin)
+            ? Directory.EnumerateFiles(
+                bin, $"{CompilaVistasEnCaliente}.deps.json", SearchOption.AllDirectories).ToList()
+            : [];
 
         Assert.True(
-            File.Exists(deps),
-            $"No se encontró {Path.GetFileName(deps)} junto a la suite. Este ensamblado " +
-            $"referencia a «{CompilaVistasEnCaliente}», así que su deps.json se copia — si no " +
-            "está, este gate estaría pasando sin mirar el artefacto.");
+            deps.Count > 0,
+            $"No se encontró ningún `{CompilaVistasEnCaliente}.deps.json` bajo «{bin}», así que " +
+            "este gate no puede mirar el artefacto y lo dice en vez de pasar. Compilá el " +
+            "proyecto Web antes de correrlo.");
 
-        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(deps));
+        foreach (var fichero in deps)
+        {
+            var corta = Path.GetRelativePath(Raiz(), fichero);
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(fichero));
 
-        var hayOpciones = doc.RootElement.TryGetProperty("compilationOptions", out var opciones);
-        Assert.True(
-            hayOpciones,
-            $"{Path.GetFileName(deps)} no trae `compilationOptions`. Sin ese bloque el " +
-            "compilador en caliente no resuelve referencias y las vistas no compilarían en " +
-            "absoluto: esto no es «el bit está bien», es que algo más grave cambió.");
+            if (!doc.RootElement.TryGetProperty("compilationOptions", out var opciones))
+            {
+                // Sin `compilationOptions` no hay contexto de compilación preservado, y sin él el
+                // compilador de Razor en ejecución no arranca siquiera: eso es otro defecto —más
+                // grande y bien visible— y no éste, así que no se afirma nada sobre este bit.
+                continue;
+            }
 
-        var bit = opciones.TryGetProperty("warningsAsErrors", out var v) && v.GetBoolean();
+            var bit = opciones.TryGetProperty("warningsAsErrors", out var v) && v.GetBoolean();
 
-        Assert.False(
-            bit,
-            $"{Path.GetFileName(deps)} declara `warningsAsErrors: true`, así que el " +
-            "compilador de vistas en caliente va a tratar como ERROR todo aviso del código " +
-            "que genera — sin el `NoWarn` ni el `Nullable` que lo acompañan en el build, " +
-            "porque ese canal no puede llevarlos. Resultado medido: 500 en toda página con " +
-            "un hero (#157). Lo corta el target del csproj; si se borró, el test de al lado " +
-            "dice cuál.");
+            Assert.False(
+                bit,
+                $"«{corta}» declara `warningsAsErrors: true`, así que el compilador de vistas en " +
+                "caliente va a tratar como ERROR todo aviso del código que genera — sin el " +
+                "`NoWarn` ni el `Nullable` que lo acompañan en el build, porque ese canal no " +
+                "puede llevarlos. Resultado medido: 500 en toda página con un hero (#157). Lo " +
+                "corta el target del csproj; si se borró, el test de al lado dice cuál.");
+        }
     }
 
     /// <summary>Glob de una sola estrella, que es todo lo que estos patrones necesitan.</summary>
