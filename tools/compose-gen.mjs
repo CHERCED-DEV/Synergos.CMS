@@ -529,6 +529,28 @@ services:
       Synergos__Viajes__BaseUrl: "http://bff-viajes:8080"
       Synergos__Viajes__ApiKey: \${SYNERGOS_API_KEY}
 
+      # Y contra quien se alquila un equipo (HU #147). Dice Bff por la MISMA razon
+      # que Eventos y por una mas: hay dos cobros con vidas distintas — el alquiler
+      # se captura al reservar y la GARANTIA se autoriza y se queda sin capturar
+      # mientras el equipo esta fuera. Si el segundo falla hay que soltar la ventana
+      # Y anular el primero. Encenderlo exige cargar el recurso en Api.Booking por
+      # cada unidad que se alquile — ver .env.example.
+      Synergos__Alquiler__Mode: \${SYNERGOS_ALQUILER_MODE:-Stub}
+      Synergos__Alquiler__BaseUrl: "http://bff-alquiler:8080"
+      Synergos__Alquiler__ApiKey: \${SYNERGOS_API_KEY}
+
+      # El tope de dias de un alquiler, y NO es prudencia: es la vida de una
+      # autorizacion de pago. Mas largo que eso y la retencion de la garantia llega
+      # vencida al dia de la devolucion — nada que anular, nada que capturar, la
+      # garantia perdida y nada fallando. Cero lo rechaza el composer al arrancar.
+      Synergos__Alquiler__MaxRentalDays: \${SYNERGOS_ALQUILER_MAX_DAYS:-30}
+
+      # Y el ARTEFACTO, que NO viaja: el secreto con que se sella el contrato. Mismo
+      # trato que el QR de la entrada y el id del diploma (#154) — vacio no es «no
+      # firmar», el host genera una llave y la guarda cifrada en cms-dpkeys, pero
+      # entonces NO se puede rotar ni llevar a otra instalacion.
+      Synergos__Alquiler__Agreement__SigningSecret: \${SYNERGOS_ALQUILER_AGREEMENT_SECRET:-}
+
       # Contra que avanza un expediente (HU #44). Dice Api y no Bff, igual que la
       # visita al inmueble: decidir es UN paso, sin plata en medio y sin nada que
       # deshacer si algo falla. Un orquestador seria una saga de un paso.

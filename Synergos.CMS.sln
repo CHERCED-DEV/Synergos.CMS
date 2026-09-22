@@ -65,6 +65,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Api.Workflow", "ba
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "4 · Orquestadores", "4 · Orquestadores", "{D7B491A9-3F8C-3590-8CA7-ED26D3346330}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Alquiler", "backend\orquestadores\Synergos.Bff.Alquiler\Synergos.Bff.Alquiler.csproj", "{0856E740-8B29-4E70-B85F-E2A95BAF6374}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Core", "backend\orquestadores\Synergos.Bff.Core\Synergos.Bff.Core.csproj", "{478FC33E-08BC-42CD-A9AE-7F4D6A563F1A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Eventos", "backend\orquestadores\Synergos.Bff.Eventos\Synergos.Bff.Eventos.csproj", "{11E5D512-F8C7-4A70-9CA7-478D1DFD4362}"
@@ -499,6 +501,18 @@ Global
 		{AB67850A-8957-4281-9FC7-B7FFCC09ACF6}.Release|x64.Build.0 = Release|Any CPU
 		{AB67850A-8957-4281-9FC7-B7FFCC09ACF6}.Release|x86.ActiveCfg = Release|Any CPU
 		{AB67850A-8957-4281-9FC7-B7FFCC09ACF6}.Release|x86.Build.0 = Release|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Debug|x64.Build.0 = Debug|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Debug|x86.Build.0 = Debug|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Release|x64.ActiveCfg = Release|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Release|x64.Build.0 = Release|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Release|x86.ActiveCfg = Release|Any CPU
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -538,5 +552,6 @@ Global
 		{1F470039-75F5-4CBC-9AD1-1242DBF9BC1A} = {D7B491A9-3F8C-3590-8CA7-ED26D3346330}
 		{5F6496A2-8DB6-4827-BEF3-01539EDC20C0} = {37744964-2113-1F90-16D9-34EECBF97F0A}
 		{AB67850A-8957-4281-9FC7-B7FFCC09ACF6} = {37744964-2113-1F90-16D9-34EECBF97F0A}
+		{0856E740-8B29-4E70-B85F-E2A95BAF6374} = {D7B491A9-3F8C-3590-8CA7-ED26D3346330}
 	EndGlobalSection
 EndGlobal

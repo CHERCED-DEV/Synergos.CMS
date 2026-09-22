@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3389 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3407 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2311 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 445 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Servicios.Tests` | 650 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
+   | `Synergos.Arquitectura.Tests` | 446 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -171,7 +171,7 @@ Synergos.CMS/
 │                                + claves de Umbraco en el compose (1, #159)
 │                                + elección de implementación (2, #131)
 │                                + eje 1 de Social (6, #146)
-│                                + vertical de Alquiler (11, #147)
+│                                + vertical de Alquiler (12, #147)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -216,7 +216,7 @@ Synergos.CMS/
 > **El árbol de servicios está construido y el producto ya lo consume**, aunque
 > con todos los interruptores apagados por defecto. El CMS habla hoy con **nueve**
 > capacidades —`Sessions`, `Booking`, `Workflow`, `Messaging`, `Signing`,
-> `Identity`, `Audit`, `Cart` y `Payments`— y con los cuatro orquestadores. Esta
+> `Identity`, `Audit`, `Cart` y `Payments`— y con los cinco orquestadores. Esta
 > línea decía «UNA» desde antes de las HU #24, #25, #33a, #35, #36, #40, #44,
 > #45, #46, #62 y #15: un agente que la leyera concluía que no había nada
 > cableado y proponía de cero lo que ya existe. Ver §11, que es donde está el
@@ -1917,7 +1917,7 @@ carpeta anidada con ese nombre).
 |---|---:|---|
 | `Synergos.Web.sln` | 5 | el producto web y sus tests. **No arrastra el backend.** |
 | `Synergos.Apis.sln` | 22 | `Core` + `Shared` + las veinte capacidades |
-| `Synergos.Bff.sln` | 7 | `Core` + `Shared` + `Bff.Core` + los cuatro orquestadores |
+| `Synergos.Bff.sln` | 8 | `Core` + `Shared` + `Bff.Core` + los cinco orquestadores |
 | `Synergos.CMS.sln` | 34 | **la integradora** — lo lanza todo junto, y es la que corre CI |
 
 **La integradora conserva el nombre `Synergos.CMS.sln` a propósito**: es el que nombran el
@@ -1950,13 +1950,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3389 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3407 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2311
-dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 445
+dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 650
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 446
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2322,7 +2322,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3389 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`, `Bff.Alquiler`. 3407 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

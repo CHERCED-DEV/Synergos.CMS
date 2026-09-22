@@ -66,6 +66,7 @@
     <ProjectReference Include="..\capacidades\Synergos.Api.Sessions\Synergos.Api.Sessions.csproj" />
     <ProjectReference Include="..\capacidades\Synergos.Api.Signing\Synergos.Api.Signing.csproj" />
     <ProjectReference Include="..\capacidades\Synergos.Api.Workflow\Synergos.Api.Workflow.csproj" />
+    <ProjectReference Include="..\orquestadores\Synergos.Bff.Alquiler\Synergos.Bff.Alquiler.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Eventos\Synergos.Bff.Eventos.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Salud\Synergos.Bff.Salud.csproj" />

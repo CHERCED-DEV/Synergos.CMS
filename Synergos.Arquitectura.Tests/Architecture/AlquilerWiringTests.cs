@@ -72,6 +72,82 @@ public sealed class AlquilerWiringTests
         Assert.Contains("damage_exceeds_deposit", motor, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// La saga se CIERRA al reservar: no sigue viva mientras el equipo está fuera.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es el segundo gate que el spec predijo</b>, y lo que vigila no es una convención:
+    /// una saga en <c>Running</c> la barre <c>CompensationSweeper</c> a los
+    /// <c>Sweep:AbandonAfterMinutes</c> —<b>60 por defecto</b>, y un alquiler dura días—, así que
+    /// dejarla abierta hasta la devolución soltaría la ventana y anularía la garantía de un
+    /// alquiler <b>vivo</b>, con el equipo ya en la obra y sin que nada fallara.</para>
+    ///
+    /// <para><b>Los dos números se DERIVAN, no se escriben</b>: el tope de días sale de
+    /// <c>AlquilerSettings</c> y el plazo de abandono de <c>SweepOptions</c>. Con las dos cifras a
+    /// mano, el día que alguien suba el plazo a un mes este diente seguiría exigiendo un cierre
+    /// que ya no haría falta — pediría un cambio que no arregla nada, y un gate así se desactiva
+    /// (<c>a_path_is_not_a_name_and_a_flat_tree_hides_it</c>).</para>
+    ///
+    /// <para><b>Y el segundo diente es el que no se puede satisfacer con un literal:</b> cerrar y
+    /// dejar compensaciones pendientes no sirve de nada, porque <c>WithPendingCompensations</c>
+    /// las recoge igual sin mirar el estado. Cerrar es las dos cosas a la vez.</para>
+    /// </remarks>
+    [Fact]
+    public void La_saga_de_un_alquiler_NO_sigue_viva_mientras_el_equipo_esta_fuera()
+    {
+        var topeDias = Numero(
+            FuenteDe("AlquilerSettings.cs", "Synergos.CMS.Application", "Configuration"),
+            @"MaxRentalDays\s*\{\s*get;\s*init;\s*\}\s*=\s*(\d+)");
+        var abandonoMinutos = Numero(
+            FuenteDe("CompensationSweeper.cs", "Synergos.Bff.Core"),
+            @"AbandonAfterMinutes\s*\{\s*get;\s*set;\s*\}\s*=\s*(\d+)");
+
+        // Si un día el plazo de abandono superara al alquiler más largo, este diente pediría un
+        // cambio que no arregla nada. Se para y se dice, en vez de exigir por costumbre.
+        Assert.True(topeDias * 24 * 60 > abandonoMinutos,
+            $"Un alquiler dura hasta {topeDias} días y el barrido abandona a los "
+            + $"{abandonoMinutos} minutos. Si eso dejó de ser cierto, este diente sobra: borralo "
+            + "en vez de relajarlo.");
+
+        var flujo = FuenteDe("RentalFlow.cs", "Synergos.Bff.Alquiler", "Domain");
+        var reserva = CuerpoDe(flujo, "public async Task<Result<RentalSaga>> ReserveAsync");
+
+        Assert.Contains("SagaStatus.Completed", reserva, StringComparison.Ordinal);
+        Assert.Contains("Compensations = Array.Empty<Compensation>()", reserva, StringComparison.Ordinal);
+
+        // Y cerrar el alquiler opera sobre una saga YA cerrada: no es un paso de la saga.
+        var cierre = CuerpoDe(flujo, "private async Task<Result<RentalSaga>> CerrarAsync");
+        Assert.Contains("saga.Status != SagaStatus.Completed", cierre, StringComparison.Ordinal);
+    }
+
+    /// <summary>El primer número que casa, o el test dice que el corte dejó de ver.</summary>
+    private static int Numero(string fuente, string patron)
+    {
+        var m = Regex.Match(fuente, patron);
+        Assert.True(m.Success, $"No se encontró «{patron}»: revisar este gate, no relajarlo.");
+        return int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// El cuerpo de un método, de su firma al siguiente miembro de la clase.
+    /// </summary>
+    /// <remarks>
+    /// Se corta por el siguiente <c>///</c> o <c>[Fact]</c>-menos firma y no por un MODIFICADOR:
+    /// seguir <c>"private "</c> deja el gate ciego el día que alguien cambia la visibilidad, que
+    /// es exactamente lo que le pasó al del #154 media hora después de escribirlo.
+    /// </remarks>
+    private static string CuerpoDe(string fuente, string firma)
+    {
+        var i = fuente.IndexOf(firma, StringComparison.Ordinal);
+        Assert.True(i >= 0, $"No se encontró «{firma}»: revisar este gate.");
+
+        // El siguiente miembro empieza en una línea con cuatro espacios de sangría y una firma;
+        // basta con el siguiente `\n    ///` o `\n    [` o `\n    public`/`private`/`internal`.
+        var resto = fuente[(i + firma.Length)..];
+        var corte = Regex.Match(resto, @"\n    (///|\[|public |private |internal |})");
+        return corte.Success ? resto[..corte.Index] : resto;
+    }
+
     [Fact]
     public void El_contrato_guarda_la_garantia_del_MOMENTO_y_no_la_relee()
     {

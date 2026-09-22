@@ -4,7 +4,7 @@
 # esté al día (ComposeStackTests). Editarlo a mano funciona hasta el siguiente
 # `compose-gen`, que lo pisa sin avisar.
 #
-# El producto entero: el CMS, las 20 capacidades, los 4 orquestadores y un proxy.
+# El producto entero: el CMS, las 20 capacidades, los 5 orquestadores y un proxy.
 #
 #   docker compose -f compose.prod.yml up -d
 #
@@ -19,7 +19,7 @@
 # ⚠️ PARADA ANTES DE ARRANQUE, Y CADA `deploy:` DICE SI ESE SERVICIO ESCALA.
 # Aca decia «UNA INSTANCIA POR CAPACIDAD ... dos instancias se pisan y NO dan
 # error: corrompen», que es la razon de ANTES del #112 — y se quedo puesta cuando
-# el #152 corrigio las 24 copias de esa misma frase que habia mas abajo, una por
+# el #152 corrigio las 25 copias de esa misma frase que habia mas abajo, una por
 # servicio. La cabecera es lo PRIMERO que alguien lee, asi que la copia que quedo
 # mintiendo fue la que mas se lee: la forma de `WiringMapTests` —«el gate solo
 # miraba la tabla y la gente lee el resumen»— cometida por quien acababa de
@@ -27,7 +27,7 @@
 #
 # Lo que es verdad hoy: las 20 capacidades ESCALAN —desde el #112 el almacen
 # es un fichero por documento y `StoreWriteGate` sube el turno de escritura a
-# proceso cruzado—; los 4 orquestadores NO, porque les falta el turno POR SAGA
+# proceso cruzado—; los 5 orquestadores NO, porque les falta el turno POR SAGA
 # (#34); y el CMS tampoco, que escribe SQLite. La razon de cada uno va en su
 # propio bloque `deploy:`, y hay gate (`EscaladoDeReplicasTests`).
 #
@@ -183,6 +183,28 @@ services:
       Synergos__Viajes__Mode: ${SYNERGOS_VIAJES_MODE:-Stub}
       Synergos__Viajes__BaseUrl: "http://bff-viajes:8080"
       Synergos__Viajes__ApiKey: ${SYNERGOS_API_KEY}
+
+      # Y contra quien se alquila un equipo (HU #147). Dice Bff por la MISMA razon
+      # que Eventos y por una mas: hay dos cobros con vidas distintas — el alquiler
+      # se captura al reservar y la GARANTIA se autoriza y se queda sin capturar
+      # mientras el equipo esta fuera. Si el segundo falla hay que soltar la ventana
+      # Y anular el primero. Encenderlo exige cargar el recurso en Api.Booking por
+      # cada unidad que se alquile — ver .env.example.
+      Synergos__Alquiler__Mode: ${SYNERGOS_ALQUILER_MODE:-Stub}
+      Synergos__Alquiler__BaseUrl: "http://bff-alquiler:8080"
+      Synergos__Alquiler__ApiKey: ${SYNERGOS_API_KEY}
+
+      # El tope de dias de un alquiler, y NO es prudencia: es la vida de una
+      # autorizacion de pago. Mas largo que eso y la retencion de la garantia llega
+      # vencida al dia de la devolucion — nada que anular, nada que capturar, la
+      # garantia perdida y nada fallando. Cero lo rechaza el composer al arrancar.
+      Synergos__Alquiler__MaxRentalDays: ${SYNERGOS_ALQUILER_MAX_DAYS:-30}
+
+      # Y el ARTEFACTO, que NO viaja: el secreto con que se sella el contrato. Mismo
+      # trato que el QR de la entrada y el id del diploma (#154) — vacio no es «no
+      # firmar», el host genera una llave y la guarda cifrada en cms-dpkeys, pero
+      # entonces NO se puede rotar ni llevar a otra instalacion.
+      Synergos__Alquiler__Agreement__SigningSecret: ${SYNERGOS_ALQUILER_AGREEMENT_SECRET:-}
 
       # Contra que avanza un expediente (HU #44). Dice Api y no Bff, igual que la
       # visita al inmueble: decidir es UN paso, sin plata en medio y sin nada que
@@ -868,6 +890,60 @@ services:
       # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
+  bff-alquiler:
+    image: ${SYNERGOS_REGISTRY}/synergos.bff.alquiler:${SYNERGOS_TAG}
+    restart: unless-stopped
+    networks: [interna]
+    # SIN `ports`: esta capacidad NO se expone a internet. La protege una llave
+    # compartida que CLAUDE.md §11 dice claramente que "no es identidad" —
+    # publicarla seria contradecir por configuracion lo que el codigo dice de si
+    # mismo. Se alcanza por nombre de servicio desde la red interna.
+    environment:
+      Alquiler__ApiKey: ${SYNERGOS_API_KEY:?falta SYNERGOS_API_KEY}
+      Alquiler__Storage__Root: /app/data/alquiler
+      # ── A QUE CAPACIDADES LLEGA ─────────────────────────────────────────
+      # Sin esto, AddSagaMachinery cae a http://localhost/{cap}/ — que dentro
+      # del contenedor es EL PROPIO BFF. Arrancaria sano, pasaria su /health y
+      # fallaria TODAS las sagas. Por nombre de servicio, nunca localhost.
+      Alquiler__Capabilities__booking__BaseUrl: "http://api-booking:8080"
+      Alquiler__Capabilities__booking__ApiKey: ${SYNERGOS_API_KEY}
+      Alquiler__Capabilities__notifications__BaseUrl: "http://api-notifications:8080"
+      Alquiler__Capabilities__notifications__ApiKey: ${SYNERGOS_API_KEY}
+      Alquiler__Capabilities__payments__BaseUrl: "http://api-payments:8080"
+      Alquiler__Capabilities__payments__ApiKey: ${SYNERGOS_API_KEY}
+
+      # El aviso cuando una compensacion se rinde tras ocho intentos. Sin esto
+      # queda visible en /v1/compensations con alertedAtUtc en nulo — degrada,
+      # no rompe, pero nadie se entera.
+      Alquiler__Sweep__IntervalSeconds: ${SYNERGOS_SWEEP_INTERVAL_SECONDS:-60}
+      Alquiler__Sweep__AbandonAfterMinutes: ${SYNERGOS_ABANDON_AFTER_MINUTES:-60}
+
+      # Cuantas veces se reintenta un AVISO colgado antes de rendirse (HU #29).
+      # Va en todos los orquestadores a proposito: elegir uno obligaria a decir
+      # cual, y el dia que ese host este caido nadie barreria. Que dos coincidan
+      # sobre el mismo envio no manda dos correos — la capacidad rechaza el
+      # reintento simultaneo con retry_in_flight.
+      Alquiler__Sweep__DeliveryRetryCeiling: ${SYNERGOS_DELIVERY_RETRY_CEILING:-8}
+
+      Alquiler__Alerts__ToKind: ${SYNERGOS_ALERTS_TO_KIND:-alquiler.guardia}
+      Alquiler__Alerts__ToId: ${SYNERGOS_ALERTS_TO_ID:-operaciones}
+      Alquiler__Alerts__Address: ${SYNERGOS_ALERTS_ADDRESS:-}
+    volumes:
+      # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
+      # contenedor nuevo arranca con el directorio vacio y la capacidad se
+      # comporta como recien instalada.
+      - bff-alquiler-data:/app/data
+    deploy:
+      # NO SUBIR DE 1, y esta es la prohibicion que SIGUE viva. Las sagas viven en
+      # JsonCollectionStore —asi que heredaron el fichero por documento del #112— pero
+      # los orquestadores NO tienen turno de escritura: dos replicas que avancen la
+      # MISMA saga todavia pueden perder una escritura. No se les cableo a proposito:
+      # dentro de un paso hay llamadas HTTP a las capacidades, asi que un turno de
+      # orquestador entero dejaria toda compra haciendo cola detras de la que espera a
+      # la pasarela. Lo que corresponde es un turno POR SAGA, del tamano de ISagaLease
+      # (#34), y es otro trabajo. Ver CLAUDE.md §11.
+      replicas: 1
+
   bff-eventos:
     image: ${SYNERGOS_REGISTRY}/synergos.bff.eventos:${SYNERGOS_TAG}
     restart: unless-stopped
@@ -1128,6 +1204,7 @@ volumes:
   api-sessions-data:
   api-signing-data:
   api-workflow-data:
+  bff-alquiler-data:
   bff-eventos-data:
   bff-salud-data:
   bff-tienda-data:

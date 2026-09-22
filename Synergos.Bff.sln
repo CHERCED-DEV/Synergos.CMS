@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Shared", "backend\
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "orquestadores", "orquestadores", "{C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Alquiler", "backend\orquestadores\Synergos.Bff.Alquiler\Synergos.Bff.Alquiler.csproj", "{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Core", "backend\orquestadores\Synergos.Bff.Core\Synergos.Bff.Core.csproj", "{2EE6FE32-255F-4FAA-8FC0-A7301A71D81E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Eventos", "backend\orquestadores\Synergos.Bff.Eventos\Synergos.Bff.Eventos.csproj", "{01551D4E-151C-41DB-8324-16E91C78FA07}"
@@ -117,6 +119,18 @@ Global
 		{CF766062-622A-44D3-827C-741BEC80A6B8}.Release|x64.Build.0 = Release|Any CPU
 		{CF766062-622A-44D3-827C-741BEC80A6B8}.Release|x86.ActiveCfg = Release|Any CPU
 		{CF766062-622A-44D3-827C-741BEC80A6B8}.Release|x86.Build.0 = Release|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Debug|x64.Build.0 = Debug|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Debug|x86.Build.0 = Debug|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Release|x64.ActiveCfg = Release|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Release|x64.Build.0 = Release|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Release|x86.ActiveCfg = Release|Any CPU
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -131,5 +145,6 @@ Global
 		{AC68D67A-1053-492A-A4F0-068208A6DDF3} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
 		{F6DDD778-9B4A-4CB3-8CE3-CA987681776A} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
 		{CF766062-622A-44D3-827C-741BEC80A6B8} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
+		{977D6BAE-1DF8-422A-9062-AA6B7B92FE8F} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
 	EndGlobalSection
 EndGlobal
