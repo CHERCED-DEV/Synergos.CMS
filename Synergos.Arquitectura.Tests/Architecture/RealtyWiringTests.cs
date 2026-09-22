@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 namespace Synergos.CMS.Tests.Architecture;
 
 /// <summary>
@@ -171,5 +172,56 @@ public sealed class RealtyWiringTests
             Assert.True(composer.Contains($"Configure<{seccion}>", StringComparison.Ordinal),
                 $"{fichero} no enlaza {seccion}: lo que se configure ahí se ignora en silencio.");
         }
+    }
+
+    /// <summary>
+    /// El registro del artefacto lo reciben LAS DOS implementaciones del eje 2, y se registra
+    /// FUERA del interruptor (#158).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Se mide el CABLEADO y no el tipo, porque el tipo no puede exigirlo.</b>
+    /// <c>RealtyVisitLedger</c> es opcional en los dos constructores —tiene que serlo, o los
+    /// tests que sólo miran disponibilidad no podrían construirlos— así que <b>olvidarlo
+    /// compila</b>. Eso es exactamente lo que el cliente cableado hacía antes de esta HU: la
+    /// visita se apartaba de verdad y de este lado no quedaba nada.</para>
+    ///
+    /// <para><b>Y el registro va FUERA del <c>if</c>, que es el diente que de verdad muerde.</b>
+    /// Dentro de una rama, cada modo tendría su propia instancia y su propio almacén: encender
+    /// el interruptor dejaría invisibles las visitas agendadas con el otro. El interruptor es de
+    /// despliegue, así que eso pasa un martes sin que nada falle — la invariante del doc 12 §3.2,
+    /// la misma por la que <c>EventTicketLedger</c> está fuera del motor de compra.</para>
+    /// </remarks>
+    [Fact]
+    public void El_registro_de_la_visita_lo_reciben_LOS_DOS_caminos_y_es_UNO()
+    {
+        var composer = Composer();
+
+        // 1. Se construye una sola vez.
+        var construcciones = Regex.Count(composer, @"new RealtyVisitLedger\(");
+        Assert.True(
+            construcciones == 1,
+            $"`RealtyVisitLedger` se construye {construcciones} veces en el composer y tiene que "
+            + "ser UNA. Dos instancias son dos almacenes: las visitas de un modo dejarían de "
+            + "verse en el otro, sin que nada falle (#158).");
+
+        // 2. Fuera del `if` del interruptor. Se compara la posición: el registro tiene que estar
+        //    ANTES de la línea que lee el modo, porque después ya se está dentro de una rama.
+        var elModo = composer.IndexOf("\"Synergos:Realty:Mode\"", StringComparison.Ordinal);
+        var elRegistro = composer.IndexOf("new RealtyVisitLedger(", StringComparison.Ordinal);
+        Assert.True(
+            elRegistro > 0 && elModo > 0 && elRegistro < elModo,
+            "`RealtyVisitLedger` se registra DENTRO del interruptor de modo. El artefacto lo "
+            + "comparten los dos caminos del eje 2 (doc 12 §3.2): dentro de una rama, cambiar el "
+            + "modo parte la bandeja en dos.");
+
+        // 3. Y lo reciben los dos. Se cuenta la RESOLUCIÓN y no la mención: el composer nombra la
+        //    clase en su comentario, y `Contains` sobre el fichero entero se leería como «lo
+        //    usa» — el addendum #14 de `feedback_an_exemption_needs_a_signature_behind_it`.
+        var entregas = Regex.Count(composer, @"GetRequiredService<RealtyVisitLedger>\(\)");
+        Assert.True(
+            entregas == 2,
+            $"El composer le entrega el registro a {entregas} implementación(es) del eje 2 y son "
+            + "DOS: el motor en proceso y el cliente cableado. La que se quede sin él agenda "
+            + "visitas que no quedan escritas en ningún sitio de este lado, y compila.");
     }
 }

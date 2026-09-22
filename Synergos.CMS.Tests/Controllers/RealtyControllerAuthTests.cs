@@ -1,3 +1,4 @@
+using Synergos.CMS.Application.Services.Impl;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Synergos.CMS.Interfaces;
@@ -37,8 +38,12 @@ public sealed class RealtyControllerAuthTests
     private readonly IPriceFormatter _priceFormatter = Substitute.For<IPriceFormatter>();
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
 
+    /// <summary>El registro del artefacto (#158). Es una clase concreta sobre almacén en
+    /// memoria, no un doble: lo que hay que poder comprobar es qué QUEDA anotado.</summary>
+    private readonly RealtyVisitLedger _visitLedger = new();
+
     private RealtyController BuildSut() => new(
-        _catalog, _visits, _mortgage, _leads, _collections, _savedSearches, _priceFormatter, _gate);
+        _catalog, _visits, _mortgage, _leads, _collections, _savedSearches, _priceFormatter, _gate, _visitLedger);
 
     private void Anonimo()
     {
@@ -186,5 +191,63 @@ public sealed class RealtyControllerAuthTests
             null, null, null, null, null, null, null, null, null, default);
 
         Assert.IsNotType<UnauthorizedObjectResult>(result);
+    }
+
+    // ── Mis visitas: el EJE 3 del vertical (#158) ───────────────────────
+
+    [Fact] // empty: un anónimo no tiene bandeja, y no se toca el registro
+    public async Task MyVisits_Anonimo_401()
+    {
+        Anonimo();
+
+        var result = await BuildSut().MyVisits(CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+    }
+
+    [Fact] // EL QUE MUERDE: la bandeja es la del gate, y SÓLO la suya
+    public async Task MyVisits_SoloDevuelve_LasVisitasDeQuienTieneLaSesion()
+    {
+        Usuario();
+        await _visitLedger.RecordAsync(
+            "visit_mia", "apto-90", "s1", new DateTimeOffset(2026, 10, 1, 15, 0, 0, TimeSpan.Zero),
+            new VisitContact("Yo", Yo), "Confirmed");
+        await _visitLedger.RecordAsync(
+            "visit_ajena", "casa-7", "s2", new DateTimeOffset(2026, 10, 2, 15, 0, 0, TimeSpan.Zero),
+            new VisitContact("Otro", "otro@correo.co"), "Confirmed");
+
+        var result = await BuildSut().MyVisits(CancellationToken.None);
+
+        // Si esto trajera la ajena, diría a qué hora va a estar otra persona en una dirección
+        // concreta. Es el IDOR que Eventos cerró quitando el `?holder=` — y acá no hay ni
+        // parámetro que quitar, porque el correo sale del gate y no de la petición.
+        var dto = Assert.IsType<RealtyController.MyVisitsResponse>(Assert.IsType<OkObjectResult>(result).Value);
+        Assert.Single(dto.Visits);
+        Assert.Equal("visit_mia", dto.Visits[0].VisitId);
+        Assert.Equal("apto-90", dto.Visits[0].ListingId);
+        Assert.Equal("2026-10-01", dto.Visits[0].Slot!.Date);
+    }
+
+    [Fact] // la bandeja de quien todavía no agendó: vacía y 200, no un error
+    public async Task MyVisits_SinVisitas_DevuelveListaVacia()
+    {
+        Usuario();
+
+        var result = await BuildSut().MyVisits(CancellationToken.None);
+
+        var dto = Assert.IsType<RealtyController.MyVisitsResponse>(Assert.IsType<OkObjectResult>(result).Value);
+        Assert.Empty(dto.Visits);
+    }
+
+    [Fact] // sin hora NO se inventa una: la agenda se deriva del reloj y meses después miente
+    public async Task MyVisits_SinHora_NoRellenaElSlot()
+    {
+        Usuario();
+        await _visitLedger.RecordAsync("visit_1", "apto-90", "s1", null, new VisitContact("Yo", Yo), "Confirmed");
+
+        var result = await BuildSut().MyVisits(CancellationToken.None);
+
+        var dto = Assert.IsType<RealtyController.MyVisitsResponse>(Assert.IsType<OkObjectResult>(result).Value);
+        Assert.Null(dto.Visits[0].Slot);
     }
 }

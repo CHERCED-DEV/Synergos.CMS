@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services.Catalog;
 
@@ -44,6 +45,9 @@ public sealed class RealtyController : ControllerBase
 
     private readonly IMemberAccessGate _gate;
 
+    /// <summary>El registro del artefacto del vertical: las visitas agendadas (#158).</summary>
+    private readonly RealtyVisitLedger _visitLedger;
+
     public RealtyController(
         IPropertyCatalogProvider catalog,
         IVisitSchedulingService visits,
@@ -52,7 +56,8 @@ public sealed class RealtyController : ControllerBase
         IUserCollection collections,
         ISavedSearchService savedSearches,
         IPriceFormatter priceFormatter,
-        IMemberAccessGate gate)
+        IMemberAccessGate gate,
+        RealtyVisitLedger visitLedger)
     {
         _catalog = catalog;
         _visits = visits;
@@ -62,6 +67,7 @@ public sealed class RealtyController : ControllerBase
         _savedSearches = savedSearches;
         _gate = gate;
         _priceFormatter = priceFormatter;
+        _visitLedger = visitLedger;
     }
 
 
@@ -284,6 +290,56 @@ public sealed class RealtyController : ControllerBase
             Slot: slot is null ? null : new VisitSlotDto(
                 slot.StartUtc.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
                 slot.StartUtc.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)))));
+    }
+
+    // ── Mis visitas (el EJE 3 del vertical) ─────────────────────────────
+    // GET /api/realty/visits → { visits:[...] }   🔒 sesión
+    //
+    // Hasta el #158 este vertical NO TENÍA eje 3: agendar dejaba una marca de disponibilidad
+    // indexada por `{listado}/{slot}` —que nadie leía— y con `Synergos:Realty:Mode=Api` ni
+    // eso. O sea que quien agendaba una visita no podía comprobar en ningún sitio que la
+    // tenía. El doc 12 §3 pide justo lo contrario del eje 3: que la constancia se pueda ver
+    // CON EL OTRO ÁRBOL CAÍDO, y por eso esta lectura no sale a la red — el registro es local.
+
+    /// <summary>
+    /// Las visitas agendadas por quien tiene la sesión, de la más próxima a la más lejana.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El correo sale de la sesión y NUNCA de la petición</b>, que es el IDOR que
+    /// Eventos ya cerró —«<c>?holder=&lt;email&gt;</c> listaba las entradas de cualquiera»—. Acá
+    /// sería peor que allá: una visita dice a qué hora va a estar una persona concreta en una
+    /// dirección concreta.</para>
+    ///
+    /// <para><b>Un invitado no ve nada, y es la verdad y no un hueco.</b> Agendar no exige
+    /// sesión —<c>VisitContact</c> pide nombre y correo y ya— así que quien agendó sin cuenta
+    /// no tiene forma de probar que ese correo es suyo. Si después se registra con el mismo
+    /// correo, lo recupera.</para>
+    ///
+    /// <para><b>La lista vacía es honesta</b> porque hay un camino de escritura que la llena
+    /// —agendar— y dice «todavía ninguna», no «esto no existe»
+    /// (<c>feedback_an_empty_list_is_honest_when_something_could_have_filled_it</c>).</para>
+    /// </remarks>
+    [HttpGet("visits")]
+    public async Task<IActionResult> MyVisits(CancellationToken cancellationToken)
+    {
+        var (denied, email) = RequireUser();
+        if (denied is not null) { return denied; }
+
+        var visitas = await _visitLedger.ForVisitorAsync(email, cancellationToken);
+
+        return Ok(new MyVisitsResponse(visitas.Select(v => new VisitDto(
+            VisitId: v.VisitId,
+            Status: v.Status,
+            Id: v.VisitId,
+            ListingId: v.ListingId,
+            // `null` cuando el camino que la agendó no supo la hora. No se rellena con la de
+            // hoy ni con la de la agenda de AHORA: la agenda se deriva del reloj, así que
+            // recalcularla meses después daría una hora plausible y distinta de la que esa
+            // persona tiene apuntada — `feedback_a_derived_fallback_must_never_overwrite_what_arrived`.
+            Slot: v.StartUtc is null ? null : new VisitSlotDto(
+                v.StartUtc.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                v.StartUtc.Value.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture))))
+            .ToList()));
     }
 
     /// <summary>
@@ -969,6 +1025,9 @@ public sealed class RealtyController : ControllerBase
         VisitSlotDto? Slot);
 
     public sealed record VisitResponse(VisitDto Visit);
+
+    /// <summary>La bandeja de «mis visitas» (#158). Misma forma de fila que la confirmación.</summary>
+    public sealed record MyVisitsResponse(IReadOnlyList<VisitDto> Visits);
 
     public sealed record MortgageScheduleDto(
         int Period,

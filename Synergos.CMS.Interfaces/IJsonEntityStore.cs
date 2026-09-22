@@ -22,8 +22,24 @@ namespace Synergos.CMS.Interfaces;
 /// </remarks>
 public interface IJsonEntityStore
 {
+    /// <summary>Guarda <paramref name="json"/> bajo <paramref name="key"/>. Sobrescribe.</summary>
     Task WriteAsync(string resourceType, string key, string json, CancellationToken cancellationToken = default);
+
+    /// <summary>El documento, o <c>null</c> si no existe.</summary>
     Task<string?> ReadAsync(string resourceType, string key, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Los <b>DOCUMENTOS</b> de la familia — no sus claves, aunque el nombre invite a leerlo así.
+    /// </summary>
+    /// <remarks>
+    /// Está escrito porque la equivocación no falla: quien lo lea como una lista de ids y pida
+    /// cada uno con <see cref="ReadAsync"/> recibe <c>null</c> en todos y se queda con una
+    /// colección <b>vacía</b>, que se lee como «no hay nada». Las dos implementaciones coinciden
+    /// —devuelven el JSON— y hasta el #158 ninguna lo decía.
+    /// <para><b>Y no hay orden</b>: un directorio no lo tiene. Quien necesite uno lo aplica.</para>
+    /// </remarks>
     Task<IReadOnlyList<string>> ListAsync(string resourceType, CancellationToken cancellationToken = default);
+
+    /// <summary><c>true</c> si había algo que borrar.</summary>
     Task<bool> DeleteAsync(string resourceType, string key, CancellationToken cancellationToken = default);
 }

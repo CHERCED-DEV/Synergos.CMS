@@ -86,18 +86,23 @@ ejemplos, o sea `feedback_a_named_list_beats_a_count` en el propio documento que
 |---|---|---|---|---|
 | **Tienda** | el RMA | `StubReturnService` | `IJsonEntityStore` · `returns` | no |
 | **Salud** | la historia clínica y su rastro de versiones | `FileSystemPatientRepository` | **`IPhiStore`** · `patients` + `patient-history` | no |
-| **Realty** | la agenda de visitas | `StubVisitSchedulingService` + `VisitAgenda` (derivada acá) | `IJsonEntityStore` · `realty-visits` — **sólo en modo `Stub`, #158** | no |
+| **Realty** | la visita agendada | `RealtyVisitLedger` (+ `VisitAgenda`, derivada acá) | `IJsonEntityStore` · `realty-visit-records` | no |
 | **Gobierno** (`Gob`) | el expediente con su radicado y su bandeja | `StubApplicationService` | `IJsonEntityStore` · `gov-cases` | no |
 | **Eventos** | la entrada con su QR, su portador y su check-in | `EventTicketIssuer` + `EventTicketLedger` | `IJsonEntityStore` · `event-orders` | **sí** — `ITicketSigner` |
 | **Viajes** | el expediente del viaje | `TravelCartService` | `IJsonEntityStore` · `travel-orders` | no |
 | **Educación** (`Academy`) | el diploma | `StubCertificateService` | `IJsonEntityStore` · `certificates` | **sí** — `ICertificateIdSigner` |
 
-> **La fila de Realty es la única con un ticket dentro, y por eso está ahí.** Su registro y el
-> seam de su eje 2 son **la misma clase**, así que lo durable existe sólo con
-> `Synergos:Realty:Mode=Stub`: `HttpVisitSchedulingService` no guarda nada de este lado. Con el
-> modo encendido y `Api.Booking` caída, la agenda se sigue pintando —es una función pura del id y
-> del reloj— y quien reservó **no ve su visita**: la pantalla se ve bien y está vacía de lo único
-> que fue a buscar. Lo destapó el gate de esta misma HU, al primer arranque (#158).
+> **La fila de Realty era la única con un ticket dentro, y cerrarlo enseñó algo del molde.** El
+> gate de esta misma HU la marcó al primer arranque (#158): su registro y el seam de su eje 2 eran
+> **la misma clase**, así que lo durable existía sólo con `Synergos:Realty:Mode=Stub`. Al ir a
+> arreglarlo apareció que era peor y más simple: lo que ese camino guarda está indexado por
+> `{listado}/{slot}` y sirve para marcar **disponibilidad**, no para dejar constancia — fuera de
+> sus propios tests **no lo leía nadie**. O sea que el vertical no tenía eje 3 en NINGÚN modo.
+>
+> Y así leído, el defecto cambia de sitio: **perder ese almacén en el modo cableado es correcto**
+> —la disponibilidad la sabe `Api.Booking`, que es la dueña del cuándo (§0.B.12)—. Lo que no podía
+> perderse era la constancia, y ésa no existía. Hoy es `RealtyVisitLedger`, fuera de los dos
+> caminos, y `GET /api/realty/visits` la sirve sin salir a la red.
 
 Dos razones para que se quede acá, y las dos son consecuencias y no gustos. Una: **el firmante
 vive de este lado**, así que partir el artefacto obligaría a mover la custodia de la llave con él.

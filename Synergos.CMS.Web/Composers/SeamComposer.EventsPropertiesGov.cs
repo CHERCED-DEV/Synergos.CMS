@@ -200,6 +200,15 @@ public sealed partial class SeamComposer
         // arrastraban el olvido desde las HU #24 y #25.
         services.Configure<RealtySettings>(builder.Config.GetSection("Synergos:Realty"));
 
+        // EL EJE 3 DE REALTY, y va FUERA del if a propósito (#158). El registro de las visitas
+        // agendadas lo comparten los DOS caminos: si viviera dentro de una rama, encender el
+        // interruptor dejaría invisibles las visitas de la otra — y el interruptor es de
+        // despliegue, así que eso pasa un martes sin que nada falle. Es la invariante del doc 12
+        // §3.2, la misma por la que `EventTicketLedger` está fuera del motor de compra.
+        services.AddSingleton(sp => new RealtyVisitLedger(
+            sp.GetRequiredService<IJsonEntityStore>(),
+            () => sp.GetRequiredService<TimeProvider>().GetUtcNow()));
+
         if (string.Equals(builder.Config["Synergos:Realty:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
         {
             var realtyBase = builder.Config["Synergos:Realty:BaseUrl"];
@@ -220,7 +229,13 @@ public sealed partial class SeamComposer
             // clientes NOMBRADOS y no sobre uno global: los webhooks salen a terceros, y a un
             // tercero conviene mandarle lo mínimo.
             .AddHttpMessageHandler<CorrelationForwardingHandler>();
-            services.AddSingleton<IVisitSchedulingService, HttpVisitSchedulingService>();
+            services.AddSingleton<IVisitSchedulingService>(sp =>
+                new HttpVisitSchedulingService(
+                    sp.GetRequiredService<IHttpClientFactory>(),
+                    sp.GetRequiredService<IOptionsMonitor<RealtySettings>>(),
+                    sp.GetRequiredService<TimeProvider>(),
+                    sp.GetRequiredService<ILogger<HttpVisitSchedulingService>>(),
+                    sp.GetRequiredService<RealtyVisitLedger>()));
         }
         else
         {
@@ -229,7 +244,8 @@ public sealed partial class SeamComposer
                     sp.GetRequiredService<IReservationService>(),
                     null,
                     sp.GetRequiredService<IJsonEntityStore>(),
-                    "realty-visits"));
+                    "realty-visits",
+                    sp.GetRequiredService<RealtyVisitLedger>()));
         }
         services.AddSingleton<IMortgageCalculator, StubMortgageCalculator>();
         // OLA 4 Propiedades (doc 21 §2.7) — cara completa: la captura de leads ahora

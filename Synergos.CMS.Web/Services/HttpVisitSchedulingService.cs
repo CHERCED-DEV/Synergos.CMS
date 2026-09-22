@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Services;
@@ -68,17 +69,29 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
     private readonly IOptionsMonitor<RealtySettings> _opciones;
     private readonly TimeProvider _reloj;
     private readonly ILogger<HttpVisitSchedulingService> _log;
+    private readonly RealtyVisitLedger? _registro;
 
+    /// <param name="clientes">Fábrica del cliente nombrado hacia la capacidad.</param>
+    /// <param name="opciones">La sección del vertical, enlazada por el composer.</param>
+    /// <param name="reloj">Reloj inyectable.</param>
+    /// <param name="log">Para decir por qué una franja no se pudo consultar.</param>
+    /// <param name="registro">El registro del artefacto (#158). Es el MISMO objeto que usa el
+    ///   motor en proceso, y ahí está el punto: el artefacto vive fuera de las dos
+    ///   implementaciones del eje 2, o las visitas agendadas en un modo serían invisibles en el
+    ///   otro (doc 12 §3.2). Null ≡ no anotar, que es lo que este cliente hacía antes — y por eso
+    ///   hay gate sobre el CABLEADO y no sobre el tipo.</param>
     public HttpVisitSchedulingService(
         IHttpClientFactory clientes,
         IOptionsMonitor<RealtySettings> opciones,
         TimeProvider reloj,
-        ILogger<HttpVisitSchedulingService> log)
+        ILogger<HttpVisitSchedulingService> log,
+        RealtyVisitLedger? registro = null)
     {
         _clientes = clientes;
         _opciones = opciones;
         _reloj = reloj;
         _log = log;
+        _registro = registro;
     }
 
     private RealtySettings Config => _opciones.CurrentValue;
@@ -173,7 +186,20 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
         var hold = await ApartarAsync(recurso, franja, contact, llave, cancellationToken).ConfigureAwait(false);
         var reserva = await ConfirmarAsync(hold, llave, cancellationToken).ConfigureAwait(false);
 
-        return new VisitResult($"visit_{reserva}", "Confirmed");
+        var resultado = new VisitResult($"visit_{reserva}", "Confirmed");
+
+        // El ARTEFACTO, en el mismo registro que usa el motor en proceso (#158). Va DESPUÉS de
+        // confirmar y no antes: lo que se anota es que la visita existe, y antes de la
+        // confirmación todavía puede no existir. Si esto falla, la visita YA está apartada —
+        // perder su constancia es menos malo que tirar un apartado bueno, así que no se aborta.
+        if (_registro is not null)
+        {
+            await _registro.RecordAsync(
+                resultado.VisitId, listado, slotId, franja.StartUtc, contact, resultado.Status, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return resultado;
     }
 
     // ── Contra la capacidad ─────────────────────────────────────────────────

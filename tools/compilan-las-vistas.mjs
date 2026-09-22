@@ -125,6 +125,17 @@ try {
 } catch (e) {
   // Un build que falla es lo NORMAL acá: los CS0234 de los modelos en memoria lo tumban.
   salida = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+
+  // Pero que no haya `dotnet` NO es normal, y sin distinguirlo el gate cae en su red de
+  // seguridad de más abajo y culpa a `RazorCompileOnBuild` — o sea manda a diagnosticar el
+  // fichero equivocado. Es la distinción del #137: el problema no era que no avisara, era QUÉ
+  // avisaba.
+  if (e.code === 'ENOENT') {
+    console.error(
+      '[vistas] ✗ no se encontró `dotnet`. Este gate COMPILA, así que necesita el SDK en el '
+      + 'PATH:\n        export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"');
+    process.exit(1);
+  }
 }
 
 // Una línea por diagnóstico, deduplicada: MSBuild repite el resumen al final.

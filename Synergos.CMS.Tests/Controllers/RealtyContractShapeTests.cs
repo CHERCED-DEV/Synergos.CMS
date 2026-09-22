@@ -1,3 +1,4 @@
+using Synergos.CMS.Application.Services.Impl;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
@@ -35,6 +36,10 @@ public sealed class RealtyContractShapeTests
     private readonly IPriceFormatter _priceFormatter = Substitute.For<IPriceFormatter>();
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
 
+    /// <summary>El registro del artefacto (#158). Es una clase concreta sobre almacén en
+    /// memoria, no un doble: lo que hay que poder comprobar es qué QUEDA anotado.</summary>
+    private readonly RealtyVisitLedger _visitLedger = new();
+
     public RealtyContractShapeTests()
     {
         _priceFormatter.Format(Arg.Any<decimal>(), Arg.Any<string?>()).Returns("$ 0");
@@ -44,7 +49,7 @@ public sealed class RealtyContractShapeTests
     }
 
     private RealtyController BuildSut() => new(
-        _catalog, _visits, _mortgage, _leads, _collections, _savedSearches, _priceFormatter, _gate);
+        _catalog, _visits, _mortgage, _leads, _collections, _savedSearches, _priceFormatter, _gate, _visitLedger);
 
     private static JsonElement Json(IActionResult result)
     {

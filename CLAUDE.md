@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3309 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3327 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2252 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2269 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 424 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 425 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3309**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3327**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -1772,6 +1772,33 @@ Las que salieron de construir el árbol de servicios (§0.B):
   #134 (un umbral absoluto sólo vale cuando ya se cumple) y el del #140 al revés. Hay gate
   (`ComandosDeClaudeMdTests`), con su red de seguridad por el vacío y mutado en los dos dientes.
 
+- `feedback_a_store_that_serves_the_flow_is_not_the_artifact` — **que un vertical GUARDE algo
+  no quiere decir que tenga eje 3: hay que preguntar QUÉ pregunta contesta lo guardado, y
+  «¿este slot sigue libre?» no es «¿yo agendé?»** (#158). El hallazgo llegó bien medido y con
+  la conclusión a medias: decía que `StubVisitSchedulingService` guarda en `realty-visits` y
+  que `HttpVisitSchedulingService` no guarda nada, o sea que con `Synergos:Realty:Mode=Api`
+  «quien reservó no ve su visita». Al ir a arreglarlo, **tampoco la veía en el otro modo**: lo
+  que ese almacén tiene está indexado por `{listado}/{slot}` y sirve para marcar
+  disponibilidad — medido, fuera de sus propios tests **no lo lee nadie**.
+  **Y con eso el defecto cambia de sitio, que es lo que lo hace regla:** perder ese almacén en
+  el modo cableado es **correcto**, porque la disponibilidad la sabe `Api.Booking`, que es la
+  dueña del cuándo (§0.B.12). Lo que no podía perderse era la constancia, y no existía en
+  ninguno de los dos caminos. Arreglar lo que el ticket pedía —hacer que el cliente `Http*`
+  guardara disponibilidad— habría **duplicado la verdad de la capacidad** y dejado el eje 3
+  igual de ausente.
+  **La pregunta que separa los dos, y se hace en una línea:** *¿qué pantalla enseña esto?* Si
+  la respuesta es «ninguna», no es un artefacto — es estado interno del flujo. Es el addendum
+  #116 de `feedback_no_read_without_a_write_path` aplicado a un almacén entero en vez de a un
+  campo.
+  **Dónde va el registro, y no es negociable:** FUERA de las dos implementaciones del eje 2
+  (doc 12 §3.2). Dentro de una, cambiar el interruptor —que es de **despliegue**— parte la
+  bandeja en dos un martes cualquiera, sin que nada falle. Es lo que `EventTicketLedger` ya
+  había pagado, y por eso el gate mide el CABLEADO: el registro es opcional en los dos
+  constructores —tiene que serlo— así que **olvidarlo compila**.
+  **Y el test que lo cierra es el que cruza los dos modos.** Ninguna de las dos suites podía
+  escribirlo sola: la del motor mira el motor, la del cliente mira el cliente, las dos en
+  verde y el hueco justo en medio.
+
 - `feedback_counting_mentions_of_a_type_measures_the_opposite_of_using_it` — **en un repo
   cuyos gates LEEN la fuente del disco, contar las menciones de un tipo de producción mide
   justo lo contrario de usarlo: los que más lo nombran son los que menos lo usan.** La frase
@@ -1878,13 +1905,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3309 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3327 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2252
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2269
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 424
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 425
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2276,7 +2303,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3309 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3327 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -2676,6 +2703,18 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > presentación del dominio (§12), así que añadir una etapa sigue
   > necesitando su rótulo de este lado; lo que deja de necesitar es tocar
   > la tabla de qué sigue a qué. Hay gate (`TrackingWiringTests`).
+
+  > **Y Realty ya tiene EJE 3, que no tenía en ningún modo** (#158). Agendar
+  > una visita dejaba una marca de disponibilidad indexada por
+  > `{listado}/{slot}` —que fuera de sus tests no leía nadie— y con
+  > `Synergos:Realty:Mode=Api` ni eso, así que nadie podía comprobar en
+  > ninguna parte que tenía una visita. Hoy `RealtyVisitLedger` guarda la
+  > constancia **fuera de las dos implementaciones del eje 2** —o cambiar el
+  > interruptor partiría la bandeja en dos— y `GET /api/realty/visits` la
+  > sirve **sin salir a la red**, que es lo que el doc 12 §3 pide del eje 3:
+  > la prueba se ve con el otro árbol caído. El correo sale de la sesión y
+  > nunca de la petición, que es el IDOR que Eventos ya había cerrado. Hay
+  > gates (`RealtyWiringTests`, `RealtyEje3CruzaLosDosModosTests`).
 
   > **El mapa se equivocó una segunda vez con el mismo filtro.**
   > `StubVisitSchedulingService` estaba en la familia C porque «no hay un

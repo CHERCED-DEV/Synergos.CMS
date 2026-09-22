@@ -54,6 +54,7 @@ public sealed class StubVisitSchedulingService : IVisitSchedulingService, IDispo
     private readonly Func<DateTimeOffset> _now;
     private readonly IJsonEntityStore _store;
     private readonly string _resourceType;
+    private readonly RealtyVisitLedger? _ledger;
 
     // Serializa el read-modify-write de apartar un slot. No se puede usar lock{}
     // porque el cuerpo hace await; SemaphoreSlim es el equivalente async — mismo
@@ -92,11 +93,35 @@ public sealed class StubVisitSchedulingService : IVisitSchedulingService, IDispo
         Func<DateTimeOffset>? now,
         IJsonEntityStore? store,
         string? storeNamespace)
+        : this(reservations, now, store, storeNamespace, null)
+    {
+    }
+
+    /// <summary>
+    /// Ctor con el REGISTRO DEL ARTEFACTO (#158). Lo que este servicio guarda en
+    /// <c>realty-visits</c> es estado de DISPONIBILIDAD —indexado por <c>{listado}/{slot}</c>—, no
+    /// la constancia de que alguien agendó; ésa vive en <see cref="RealtyVisitLedger"/>, fuera de
+    /// este seam, y la comparten sus dos implementaciones (doc 12 §3.2).
+    /// </summary>
+    /// <param name="reservations">El motor de reservas que aparta el slot.</param>
+    /// <param name="now">Reloj inyectable para los tests. Null usa el del sistema.</param>
+    /// <param name="store">Backing store durable. Null deja las visitas en memoria.</param>
+    /// <param name="storeNamespace">Familia de entidades de ESTA instancia.</param>
+    /// <param name="ledger">El registro del artefacto. Null ≡ no anotar — que es lo que hacía
+    ///   este servicio antes del #158, y por eso el default no lo exige: los tests que sólo
+    ///   miran disponibilidad siguen construyéndolo sin él.</param>
+    public StubVisitSchedulingService(
+        IReservationService reservations,
+        Func<DateTimeOffset>? now,
+        IJsonEntityStore? store,
+        string? storeNamespace,
+        RealtyVisitLedger? ledger)
     {
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _now = now ?? (() => DateTimeOffset.UtcNow);
         _store = store ?? new InMemoryJsonEntityStore();
         _resourceType = string.IsNullOrWhiteSpace(storeNamespace) ? DefaultResourceType : storeNamespace;
+        _ledger = ledger;
     }
 
     public async Task<IReadOnlyList<VisitSlot>> GetSlotsAsync(string listingId, CancellationToken cancellationToken = default)
@@ -178,6 +203,17 @@ public sealed class StubVisitSchedulingService : IVisitSchedulingService, IDispo
 
             await _store.WriteAsync(_resourceType, key, JsonSerializer.Serialize(result, _json), cancellationToken)
                 .ConfigureAwait(false);
+
+            // Y el ARTEFACTO, que es otra cosa que la disponibilidad de arriba (#158): lo de
+            // arriba dice «este slot ya no está libre» y esto dice «esta persona tiene una
+            // visita». Lo mismo hace el cliente cableado, porque el registro es UNO.
+            if (_ledger is not null)
+            {
+                await _ledger.RecordAsync(
+                    result.VisitId, listing, slotId, match.StartUtc, contact, result.Status, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             return result;
         }
         finally
