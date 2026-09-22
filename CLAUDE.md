@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3343 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3381 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2276 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2303 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 434 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 445 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **57 de los 68 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **58 de los 69 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -143,8 +143,8 @@ Synergos.CMS/
 │   │   ├── contracts/           los 5 contratos CMS↔UI + harness Vitest
 │   │   └── umbraco/             cdn-contract.md (DESBLOQUEADO, HU #20 · ADR 0132)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
-│       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (258 archivos)
-│       ├── DataTypes/           133 archivos (69 DTSelect*) + UrlPicker/MediaPicker/Tags/ContentPicker
+│       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (261 archivos)
+│       ├── DataTypes/           135 archivos (69 DTSelect*) + UrlPicker/MediaPicker/Tags/ContentPicker
 │       ├── Dictionary/          i18n es-CO + en-US (481 keys)
 │       ├── Languages/           es-CO (default) + en-US
 │       ├── MediaTypes/          synImage + synDocument + synIcon + los stock de Umbraco
@@ -171,6 +171,7 @@ Synergos.CMS/
 │                                + claves de Umbraco en el compose (1, #159)
 │                                + elección de implementación (2, #131)
 │                                + eje 1 de Social (6, #146)
+│                                + vertical de Alquiler (11, #147)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -247,7 +248,7 @@ Synergos.CMS/
 | "¿Qué API necesita cada dominio? ¿Cuál es el molde?" | `Synergos.CMS.Web/docs/product/08-despiece-apis.md` — la matriz 20×9 y §4 |
 | "¿Cómo se deshace lo que ya se hizo?" | `Synergos.CMS.Web/docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `Synergos.CMS.Web/docs/product/10-promocion-bff-core.md` |
-| "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
+| "¿Qué se hace con cada uno de los 51 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — **diez** pasos: los tres ejes con su tabla medida, las dos formas del eje transaccional, la CUARTA pregunta del eje 3 (§3.1) y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`, 14) |
 | "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los CATORCE sub-specs derivados del molde (y las DOS formas de S2, §5.bis), los dos MCPs y el gate del arnés. **Ya no es sólo diseño**: el arnés vive en `Synergos.Fabrica` con su `arnes.lock.json` (#141) y el spec tiene formato y validador (#140) |
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
@@ -1372,7 +1373,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **57 de los 68 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **58 de los 69 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -1949,13 +1950,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3343 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3381 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2276
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2303
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 434
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 445
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2321,7 +2322,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3343 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3381 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -2430,10 +2431,10 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 
 - **Poco está conectado al producto, pero la brecha es MENOR de lo que
   parecía.** El inventario del cableado (HU #23,
-  `docs/product/11-mapa-del-cableado.md`) contó los 49 `Stub*` y los
+  `docs/product/11-mapa-del-cableado.md`) contó los 51 `Stub*` y los
   clasificó: **13** son cableado pendiente, **5** ya salen del contenido
-  de Umbraco (cablearlos sería un retroceso) y **31** se quedan en stub a
-  propósito. Y 19 de los 49 **ya son durables** — «stub» en este repo
+  de Umbraco (cablearlos sería un retroceso) y **33** se quedan en stub a
+  propósito. Y 20 de los 51 **ya son durables** — «stub» en este repo
   dejó hace tiempo de querer decir «en memoria». Hay gate
   (`WiringMapTests`): un stub nuevo sin mapear rompe el build, y desde
   #50 **también cuadra las cifras de la prosa** contra el inventario y
