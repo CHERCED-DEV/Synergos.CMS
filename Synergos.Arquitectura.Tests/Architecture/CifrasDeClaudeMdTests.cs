@@ -436,4 +436,125 @@ public sealed class CifrasDeClaudeMdTests
             + Environment.NewLine
             + string.Join(Environment.NewLine, hallazgos));
     }
+
+    /// <summary>
+    /// Los namespaces raíz de lo que esta suite referencia en PRODUCCIÓN. Derivan de los cuatro
+    /// <c>ProjectReference</c> del csproj más lo que arrastran.
+    /// </summary>
+    /// <remarks>
+    /// Se escriben porque son namespaces y no rutas: el csproj nombra ficheros de proyecto y lo
+    /// que hace falta acá es el prefijo que aparece en un <c>using</c>. La lista se cruza contra
+    /// el csproj en el propio test, así que una referencia nueva sin su prefijo rompe el build en
+    /// vez de quedarse contando de menos.
+    /// </remarks>
+    private static readonly string[] NamespacesDeProduccion =
+    [
+        "Synergos.CMS.Web", "Synergos.CMS.Application", "Synergos.CMS.Interfaces",
+        "Synergos.Shared", "Synergos.Core", "Synergos.Bff.Core", "Synergos.Bff.Tienda",
+    ];
+
+    /// <summary>
+    /// La fuente sin comentarios NI literales de cadena, que es lo que distingue <b>usar</b> un
+    /// tipo de producción de <b>nombrarlo</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Sin quitar los literales, el corte da 55 de 67 y no significa nada.</b> Medido:
+    /// casi todo gate del repo nombra rutas y tipos de producción <i>dentro de cadenas</i>
+    /// —<c>"Synergos.CMS.Web"</c>, <c>"Synergos.Shared"</c>— porque eso es precisamente lo que
+    /// hace un gate que lee la FUENTE del disco. Contar esas menciones invierte la medida: los
+    /// que más claramente no usan un tipo son los que más lo nombran.</para>
+    ///
+    /// <para>Y los comentarios se quitan por lo de siempre: los <c>&lt;remarks&gt;</c> de este
+    /// repo citan lo que vigilan, así que un gate que no los quite se engaña con su propia
+    /// explicación (<c>feedback_a_gate_that_parses_source_needs_its_own_mutations</c>).</para>
+    /// </remarks>
+    private static string FuenteDesnuda(string ruta)
+    {
+        var s = File.ReadAllText(ruta);
+        s = Regex.Replace(s, @"/\*[\s\S]*?\*/", "", RegexOptions.None, TimeSpan.FromSeconds(5));
+        s = string.Join('\n', s.Split('\n').Where(l => !l.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+        s = Regex.Replace(s, @"@""(?:[^""]|"""")*""", @"""""", RegexOptions.None, TimeSpan.FromSeconds(5));
+        s = Regex.Replace(s, @"""(?:\\.|[^""\\])*""", @"""""", RegexOptions.None, TimeSpan.FromSeconds(5));
+        return s;
+    }
+
+    [Fact]
+    public void La_cuenta_de_gates_de_CLAUDE_md_se_cuenta_contra_el_disco()
+    {
+        var raiz = RepoRoot();
+        var dir = Path.Combine(raiz, "Synergos.Arquitectura.Tests");
+
+        var fuentes = Directory
+            .EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                     && !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToList();
+
+        // Un gate es un fichero que DECLARA al menos un test. El #148 avisó de la trampa: contar
+        // ficheros de la carpeta y contar los que traen tests daba el mismo número el día que se
+        // escribió, y ese empate haría pasar en verde un criterio flojo. Hoy ya se separaron —
+        // `Proyectos.cs` y `GlobalSuppressions.cs` no traen ninguno— así que el fixture es el
+        // propio árbol y los dos criterios no pueden dar lo mismo por casualidad.
+        var gates = fuentes
+            .Where(f => Regex.IsMatch(File.ReadAllText(f), @"\[(Fact|Theory)\b", RegexOptions.None, TimeSpan.FromSeconds(5)))
+            .ToList();
+
+        Assert.True(
+            gates.Count >= 40 && gates.Count < fuentes.Count,
+            $"El descubrimiento de gates devolvió {gates.Count} sobre {fuentes.Count} ficheros. " +
+            "Menos de 40 es que dejó de ver, e igual al total es que perdió el criterio de «trae " +
+            "tests» — las dos formas de que esta cifra se calcule sobre el vacío (#148).");
+
+        var sinProduccion = gates
+            .Where(f =>
+            {
+                var desnuda = FuenteDesnuda(f);
+                return !NamespacesDeProduccion.Any(n =>
+                    Regex.IsMatch(desnuda, @"\b" + Regex.Escape(n) + @"\b", RegexOptions.None, TimeSpan.FromSeconds(5)));
+            })
+            .ToList();
+
+        // Que la lista de namespaces siga cubriendo lo que el csproj referencia. Sin esto, añadir
+        // un `ProjectReference` dejaría a sus consumidores contados como «no usan producción» —
+        // el numerador subiría solo y en la dirección que hace más fuerte el argumento del #135,
+        // que es la peor de las dos.
+        var csproj = File.ReadAllText(Path.Combine(dir, "Synergos.Arquitectura.Tests.csproj"));
+        foreach (Match r in Regex.Matches(csproj, @"ProjectReference Include=""[^""]*[\\/](?<p>Synergos\.[\w.]+)\.csproj""",
+                                          RegexOptions.None, TimeSpan.FromSeconds(5)))
+        {
+            var proyecto = r.Groups["p"].Value;
+            Assert.Contains(
+                NamespacesDeProduccion,
+                n => proyecto.StartsWith(n, StringComparison.Ordinal) || n.StartsWith(proyecto, StringComparison.Ordinal));
+        }
+
+        var guia = File.ReadAllText(Path.Combine(raiz, "CLAUDE.md"));
+        var frase = $"**{sinProduccion.Count} de los {gates.Count} gates no usan un solo tipo de producción**";
+        var veces = Regex.Matches(guia, @"\*\*\d+ de los \d+ gates no usan un solo tipo de producción\*\*",
+                                  RegexOptions.None, TimeSpan.FromSeconds(5));
+
+        // En los DOS sentidos, como el censo del #137: la frase tiene que decir lo medido, y las
+        // dos copias —§0.A.9 y la memoria de §5— tienen que seguir estando. Si alguien reescribe
+        // una, esto se pone rojo en vez de vigilar la mitad.
+        Assert.True(
+            veces.Count == 2,
+            $"La frase de los gates aparece {veces.Count} veces en CLAUDE.md y son dos: §0.A.9 y " +
+            "la memoria `feedback_the_test_project_is_where_a_clean_graph_gets_dirty` de §5. Es " +
+            "el argumento con el que el #135 justifica que esta suite referencie cuatro " +
+            "proyectos y no veintiocho — si se reescribe, deja de vigilarse.");
+
+        Assert.True(
+            veces.All(m => string.Equals(m.Value, frase, StringComparison.Ordinal)),
+            $"CLAUDE.md dice «{veces[0].Value}» y medido contra el disco es «{frase}».\n\n" +
+            "Los dos números se cuentan, no se recuerdan. El denominador son los ficheros de " +
+            "`Synergos.Arquitectura.Tests` que declaran al menos un `[Fact]`/`[Theory]`; el " +
+            "numerador, los que no nombran un namespace de producción fuera de comentarios y " +
+            "literales. Decía «46 de los 57» con dos gates ya dentro que nadie contó (#148), y " +
+            "esa frase es justo la que sostiene que esta suite pueda referenciar cuatro " +
+            "proyectos en vez de veintiocho: si el denominador se desvía en silencio, el " +
+            "argumento del #135 envejece sin que nadie lo revise.\n\n" +
+            "Gates sin ningún tipo de producción (" + sinProduccion.Count + "):\n" +
+            string.Join('\n', sinProduccion.Select(f => "  " + Path.GetFileName(f))));
+    }
 }

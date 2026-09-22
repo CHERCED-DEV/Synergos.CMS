@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3308 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3309 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2252 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 423 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 424 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **46 de los 57 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **49 de los 67 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3308**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3309**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -1348,7 +1348,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **46 de los 57 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **49 de los 67 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -1772,6 +1772,27 @@ Las que salieron de construir el árbol de servicios (§0.B):
   #134 (un umbral absoluto sólo vale cuando ya se cumple) y el del #140 al revés. Hay gate
   (`ComandosDeClaudeMdTests`), con su red de seguridad por el vacío y mutado en los dos dientes.
 
+- `feedback_counting_mentions_of_a_type_measures_the_opposite_of_using_it` — **en un repo
+  cuyos gates LEEN la fuente del disco, contar las menciones de un tipo de producción mide
+  justo lo contrario de usarlo: los que más lo nombran son los que menos lo usan.** La frase
+  de §0.A.9 —«N de los M gates no usan un solo tipo de producción», que es el argumento con el
+  que el #135 justifica que esta suite referencie **cuatro** proyectos y no veintiocho— se
+  derivó con un primer corte que buscaba el namespace en la fuente sin comentarios. **Medido:
+  55 de 67 «usaban» producción**, y era falso casi entero: un gate que vigila un compose, un
+  Razor o un `appsettings` nombra `"Synergos.CMS.Web"` y `"Synergos.Shared"` *dentro de
+  cadenas* todo el rato, precisamente **porque** no los usa como tipos (#148).
+  **El corte correcto sale de la pregunta «¿compilaría sin el `ProjectReference`?»**, y en C#
+  eso tiene una respuesta exacta y barata: hace falta un `using` del namespace o una
+  referencia cualificada, y las dos viven **fuera** de los literales. Quitando cadenas y
+  comentarios da **49 de 67**. Comprobado mutándolo: sin quitar los literales el numerador cae
+  a **14**, o sea que el stripping no es higiene, es la medida.
+  **Y la cifra se había desviado en la dirección que no se nota**: decía «46 de los 57» con
+  diez gates ya dentro. Un número que sobra lo persigue alguien; uno que falta se lee como si
+  estuviera bien — y éste sostiene una decisión de arquitectura que nadie iba a revisar.
+  **El tell**: una métrica sobre código que se calcula buscando un nombre. Antes de creerle,
+  se pregunta qué hace el sujeto con ese nombre — si su trabajo es hablar de él, la métrica
+  está midiendo el tema y no la dependencia.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1831,13 +1852,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3308 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3309 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2252
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 423
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 424
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2229,7 +2250,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3308 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3309 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
