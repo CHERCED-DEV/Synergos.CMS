@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3407 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3412 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2311 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 650 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 446 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Servicios.Tests` | 652 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
+   | `Synergos.Arquitectura.Tests` | 449 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **58 de los 69 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **59 de los 70 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -172,6 +172,7 @@ Synergos.CMS/
 │                                + elección de implementación (2, #131)
 │                                + eje 1 de Social (6, #146)
 │                                + vertical de Alquiler (12, #147)
+│                                + afirmación del orquestador (3, #147)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1373,7 +1374,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **58 de los 69 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **59 de los 70 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -1891,6 +1892,77 @@ Las que salieron de construir el árbol de servicios (§0.B):
   mientras las dos listas coincidan. La pregunta general: *¿de qué lista salen los sujetos de este
   gate, y es la del eje que vigila?* (doc 12 §7.5).
 
+- `feedback_a_double_cannot_reject_for_a_rule_it_does_not_know` — **un doble de la capacidad
+  vecina no prueba el contrato: prueba el doble, y por eso una suite entera puede estar verde
+  sobre cinco servicios que no funcionan contra el original** (#147). Desde la HU #14
+  `POST /v1/payments` resuelve la afirmación de identidad **antes** de tocar su almacén y
+  rechaza con `access_requires_identity` a quien no declare ninguna. **Ninguno de los cinco
+  orquestadores la mandaba**: ni la tienda, ni la cita clínica, ni la entrada, ni el viaje, ni
+  el alquiler podían autorizar un cobro contra la capacidad viva — 400 en el primer paso que
+  mueve plata, y las tres suites en verde porque sus `CapacidadesFalsas` contestan 200 a lo que
+  sea. Es `feedback_verify_with_live_processes` con la causa nombrada: **el doble no rechaza por
+  una regla que no conoce**, así que la cobertura que da es sobre el flujo y nunca sobre el
+  contrato.
+  **Y lo que lo dejó vivo cinco HU es una distinción que la guía tenía mal escrita**: «un
+  orquestador no PRESENTA token» (correcto, y es
+  `an_orchestrator_cites_a_record_it_does_not_relay_a_credential`) se había leído como «un
+  orquestador no declara nada», que no se sostiene — declarar el suelo es decir «nos fiamos de
+  quien llama», o sea la *ausencia* de comprobación, que es exactamente lo que pasa y lo que el
+  asiento de bitácora del #15 ya hacía. **No mandar nada no es más honesto: es no poder hacer el
+  cobro.**
+  **El gate va por la FIRMA del endpoint y no por su `record`**: el primer criterio que probé
+  —«la petición declara `string? Assertion`»— marca `/v1/grants/check`, que es una LECTURA con
+  POST y reusa el `RevokeRequest` de al lado sin resolver nada; o sea marca al bueno, que es como
+  un gate enseña a ignorarse (#158). Lo que de verdad produce el 400 es que el endpoint reciba un
+  `IdentityTokenGate`. Medido: **9 rutas con puerta, 50 POST de orquestador, 5 cruces** — y el
+  cruce se hace **normalizando la ruta**, porque la capacidad escribe `{id}` y el orquestador
+  `{holdId}` sobre la misma, y cruzar el literal daría cero coincidencias y verde sobre el vacío.
+  **Se cruza en los dos sentidos**: declararla donde nadie la lee es su espejo y no es inocuo —
+  `System.Text.Json` la descarta en silencio, que es la forma exacta de G-7.
+  **Y la mutación enseñó su propia trampa**: quitar la rama que usa `SagaStatus` deja el `using`
+  sin usar y con `TreatWarningsAsErrors` eso es **IDE0005**, o sea el build falla y la corrida no
+  prueba nada — «una mutación cuyo build falló no es una mutación». Hay que mutar dejando el
+  `using` en uso.
+
+- `feedback_a_compensated_attempt_is_not_a_state_the_projection_can_omit` — **una saga que
+  compensó no tiene estado de negocio, así que la proyección cae a su default y AFIRMA el que
+  más daño hace: «reservado»** (#147). `Estado(s) => s.SettledAs ?? "reserved"` era correcto
+  para los tres casos que alguien tuvo delante —vivo, devuelto, cancelado— y `SettledAs` sólo lo
+  escriben devolver y cancelar, así que un intento **deshecho** salía como un alquiler vivo, con
+  su garantía «retenida». Medido con los procesos vivos: con `Api.Payments` caída, reservar
+  rechaza con 503, la ventana vuelve —`taken` de vuelta a 0— y `GET /v1/rentals/{id}` contesta
+  `"state":"reserved","depositHeld":400000` de algo que no existe. Es
+  `feedback_an_omitted_key_can_be_an_assertion` **dentro del emisor**: no falta la clave, falta
+  el caso, y el `??` la rellena con un valor del vocabulario.
+  **El `<remarks>` de esa misma línea citaba la memoria que lo prohíbe** —«mejor que decir
+  "reservado" de algo que ya se cerró»— lo cual es `a_fabrication_can_be_a_derivation` addendum
+  #123 otra vez: lo identificado la siguiente auditoría lo lee y pasa de largo.
+  **Los tests no lo vieron por REPARTO**: los diecisiete miraban el ALMACÉN —¿se soltó el
+  apartado?, ¿se anuló la garantía?, ¿en qué `SagaStatus` quedó?— y ninguno miraba la PROYECCIÓN,
+  que es lo único que el CMS lee. Las dos mitades en verde y el hueco justo en medio.
+  **Y hay un TERCER valor que no es ni el monto ni cero**: con la compensación colgada
+  (`CompensationFailed`) nadie sabe si la garantía sigue retenida, así que lo retenido es `null`.
+  Cero ahí dice «no te retienen nada» a quien puede tener cuatrocientos mil inmovilizados —la
+  afirmación del addendum #111 de `gethashcode_is_not_a_seed`, con el valor puesto a mano.
+  **El fixture tiene que llevar los DOS**: con sólo el nulo no se distingue «lo leí» de «lo
+  rellené».
+  **Y el arreglo cruza los dos árboles**: el borde emite `failed` y la app lo PARSEA. Sin la
+  segunda mitad, un valor que el parser no conoce devuelve `null` y **borra el alquiler de la
+  bandeja**, que es cambiar una mentira por un hueco.
+
+- `feedback_the_fifth_consumer_is_the_trigger_someone_wrote_down` — **cuando la guía deja escrito
+  el disparador de un gate que decidió no escribir, hay que releerlo AL AÑADIR el consumidor que
+  lo cumple, no cuando duela** (#147). §7 dice, sobre el cruce BFF↔capacidad: «el día que exista
+  el quinto orquestador, porque cruzar a mano deja de ser fiable mucho antes de volverse
+  imposible, y eso no se nota: se nota cuando alguien ya confió en el cruce que no hizo».
+  `Bff.Alquiler` ES el quinto, y el defecto que apareció al levantarlo es exactamente el que ese
+  párrafo anticipaba: diez cuerpos cruzados a mano una vez, y nadie volvió.
+  **Lo que enseña no es que el disparador estuviera mal escrito** —estaba perfecto— sino que un
+  disparador sin dueño lo tiene que leer quien cumple la condición, y quien cumple la condición
+  está ocupado construyendo otra cosa. La pregunta que lo caza se hace al empezar un vertical
+  nuevo y cuesta un `grep`: *¿qué dice la guía que pasa cuando exista lo que estoy a punto de
+  crear?*
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1950,13 +2022,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3407 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3412 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2311
-dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 650
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 446
+dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 652
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 449
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2322,7 +2394,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`, `Bff.Alquiler`. 3407 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`, `Bff.Alquiler`. 3412 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -3118,13 +3190,34 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > palabra — la nombra citando el registro de una capacidad que ya la
   > verificó.**
   >
-  > **Y eso decide que `Api.Orders` y `Api.Payments` hoy NO llevan puerta de
-  > identidad por ahí**: sería abrirles un campo que nadie puede llenar —el
-  > único que las llama por esa vía es un orquestador que, por esta decisión,
-  > no presenta— y un `PaidWith` que dijera siempre lo mismo es
-  > `feedback_no_read_without_a_write_path` por el lado de la escritura. La
+  > **Y eso decide que un orquestador no PRESENTA token por esa vía**: no puede
+  > probar más que el suelo, y un `PaidWith` que dijera siempre `IdentityToken`
+  > sería `feedback_no_read_without_a_write_path` por el lado de la escritura. La
   > excepción es el cobro que **no** pasa por orquestador —la tasa de un
-  > trámite (#27)—, y ése sí se cableó: ver más abajo.
+  > trámite (#27)—, y ése sí presenta: ver más abajo.
+  >
+  > ⚠️ **Y esta frase decía «`Api.Orders` y `Api.Payments` hoy NO llevan puerta de
+  > identidad por ahí», que el disco desmiente** (#147). La puerta de
+  > `POST /v1/payments` es **incondicional** desde la propia HU #14: sin
+  > `assertion` en el cuerpo rechaza con `payments.access_requires_identity`
+  > **antes de tocar su almacén**. Y **ninguno de los cinco orquestadores la
+  > mandaba**, así que ni la tienda, ni la cita clínica, ni la entrada, ni el
+  > viaje, ni el alquiler podían autorizar un cobro contra la capacidad viva:
+  > 400 en el primer paso que mueve plata, con las tres suites en verde.
+  >
+  > **No presentar un token y no declarar nada son dos cosas distintas, y
+  > confundirlas es lo que dejó esto cinco HU vivo.** Lo primero es correcto y es
+  > esta decisión; lo segundo no se sostiene, porque la capacidad **exige** saber
+  > con qué se afirmó — es la misma razón por la que el asiento de bitácora del
+  > CMS manda `CmsSession` en #15: «un asiento que no registra ninguna afirmación
+  > se vuelve un hueco». Hoy los cinco declaran el suelo desde **un** sitio
+  > (`OrchestratorAssertion`), y hay gate que lo cruza derivando del disco qué
+  > rutas resuelven afirmación (`AfirmacionDeOrquestadorTests`).
+  >
+  > **Lo escondía el REPARTO de los tests, no su ausencia**: los cinco hablan con
+  > una `CapacidadesFalsas` que no aplica las reglas de la capacidad, y un doble
+  > no puede rechazar por una regla que no conoce. Lo destapó levantar los
+  > procesos (§10.6), que es para lo que ese paso existe.
   >
   > **Lo que queda abierto, nombrado en vez de dado por hecho:** Tienda pudo
   > anclarse porque tiene una canasta —un registro con dueño verificado,
@@ -3690,6 +3783,59 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > **Lo que NO se hizo**: reponer el autor en `ISocialProfileProjection` —el perfil
   > de un autor autorado sigue saliendo del seed—, y cablear `Api.Moderation` o
   > `Api.Engagement`, que siguen esperando primer consumidor real.
+
+- **Y el ALQUILER DE EQUIPOS es el NOVENO vertical y el quinto orquestador**
+  (#147, `Synergos:Alquiler:Mode=Bff`, con el stub de default). Es el **piloto 2
+  de la fábrica** (épica #139): el primero *fuera de las nueve épicas de dominio*,
+  escrito entero por el camino del spec —`docs/specs/alquiler/spec.md`— y con el
+  criterio de salida puesto en el TIEMPO, medido antes de empezar.
+
+  > **Lo que estrena, y por eso hizo falta un orquestador nuevo en vez de reusar
+  > uno: DOS COBROS CON VIDAS DISTINTAS.** El alquiler se captura al reservar; la
+  > **garantía se autoriza y se queda sin capturar** mientras el equipo está
+  > fuera, para **anularse** al devolver —el caso normal— o **capturarse** por el
+  > daño, devolviendo el sobrante. Los cuatro flujos anteriores autorizan para
+  > capturar y ninguno tenía ese estado intermedio, que es justo el que obliga a
+  > distinguir anular de devolver en la compensación
+  > (`feedback_compensation_changes_character`, con el sujeto cambiado).
+  > Verificado con los tres procesos vivos: la garantía queda `Authorized` sin
+  > capturar (400 000) y el alquiler `Captured` (240 000), sobre dos reservas
+  > confirmadas.
+  >
+  > **Y la saga SE CIERRA AL RESERVAR**, que es la decisión que no se deduce. Un
+  > alquiler dura días; una saga que siguiera `Running` hasta la devolución la
+  > daría por muerta el barrido a los `Sweep:AbandonAfterMinutes` — soltando la
+  > ventana y anulando la garantía de un alquiler **vivo**, sin que nada fallara.
+  > Devolver y cancelar son operaciones sobre una saga ya liquidada, como la
+  > cancelación de un viaje ya confirmado.
+  >
+  > **No hay `Api.Inventory` y es una decisión medida**: un equipo que VUELVE es
+  > una ventana sobre un recurso, no existencia que se consume — `Resource`
+  > ya lleva `Capacity`, que es el mismo argumento con el que #36 mandó el hotel
+  > a `Api.Booking`. Dos capacidades colgando de un interruptor habría sido la
+  > huella de `feedback_the_switch_count_tells_the_form`.
+  >
+  > **Lo que el piloto midió, que es el entregable de #147:** el molde **no**
+  > predijo el eje 1 —`booking-wizard` tiene forma de hotel y no sirve para
+  > alquilar, así que el spec se equivocó al decir «0 elementos nuevos»— y la
+  > verificación con procesos vivos encontró **dos defectos que ningún test
+  > veía**: los cinco orquestadores sin `assertion` (arriba) y un intento
+  > compensado proyectándose como `reserved`. Los dos son de REPARTO: los tests
+  > miran el almacén y nadie miraba lo que el CMS lee.
+  >
+  > **Y ese segundo es alcanzable desde el producto**: con `Api.Payments` caída,
+  > reservar rechaza con 503, la ventana vuelve —medido, `taken` de vuelta a 0—
+  > y `GET /v1/rentals/{id}` contestaba `"state":"reserved"` con
+  > `"depositHeld":400000` de un alquiler que no existió. Se llega porque el
+  > cliente del CMS deriva la llave de idempotencia del propio alquiler, así que
+  > el id del intento muerto es el que vuelve a consultar quien reintenta. Hoy
+  > emite `failed`, y lo retenido es `null` cuando la compensación quedó colgada
+  > —el único caso en que nadie lo sabe—. El arreglo **cruza los dos árboles**:
+  > el borde emite el valor y la app lo parsea, porque un campo emitido con
+  > honestidad y leído con un default sigue mintiendo.
+  >
+  > Hay gates (`AlquilerWiringTests` 12, `AfirmacionDeOrquestadorTests` 3), y 19
+  > tests de compensación.
 
 - **Cuatro orquestadores sin construir**: Realty, Gob, Academy, Social.
   `Bff.Eventos` (HU #35) y `Bff.Viajes` (HU #36) ya están, y ninguno de los

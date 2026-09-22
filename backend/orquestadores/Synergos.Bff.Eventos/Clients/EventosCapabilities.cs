@@ -91,6 +91,10 @@ public sealed class EventosCapabilities : CapabilityClients
             payerKind = payer.Kind,
             payerId = payer.Id,
             amount = new { amount = amount.Amount, currency = amount.Currency },
+            // La capacidad EXIGE saber con qué se afirmó la identidad y rechaza sin ello
+            // (payments.access_requires_identity). Un orquestador no puede probar más que el
+            // suelo — ver OrchestratorAssertion, donde está la razón entera.
+            assertion = OrchestratorAssertion.Declared,
         }, key, ct);
 
     public Task<Result<PaymentDto>> CaptureAsync(string paymentId, IdempotencyKey key, CancellationToken ct)

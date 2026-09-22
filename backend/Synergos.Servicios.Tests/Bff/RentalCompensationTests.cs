@@ -359,6 +359,79 @@ public sealed class RentalCompensationTests
     }
 
     /// <summary>
+    /// Un intento DESHECHO no se proyecta como reservado, y no dice que retiene nada.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Este test existe porque los otros dieciséis no lo veían, y no por falta de
+    /// cobertura: por REPARTO.</b> Todos miran el ALMACÉN —¿se soltó el apartado?, ¿se anuló la
+    /// garantía?, ¿en qué <c>SagaStatus</c> quedó?— y ninguno miraba la PROYECCIÓN que es lo
+    /// único que el CMS lee. Las dos mitades en verde y el hueco justo en medio (addendum #116
+    /// de <c>no_read_without_a_write_path</c>).</para>
+    ///
+    /// <para><b>Lo destapó un proceso vivo</b> (#147): con <c>Api.Payments</c> caída, reservar
+    /// rechazó con 503, la ventana volvió —<c>taken</c> de vuelta a 0 sobre el recurso— y
+    /// <c>GET /v1/rentals/{id}</c> seguía contestando <c>"state":"reserved"</c> con
+    /// <c>"depositHeld":400000</c>. Nada fallaba: el alquiler no existía y la respuesta decía
+    /// que había un andamio fuera y cuatrocientos mil retenidos.</para>
+    ///
+    /// <para><b>Y se llega desde el producto</b>: el cliente del CMS deriva la llave de
+    /// idempotencia del propio alquiler, así que el id del intento muerto es exactamente el que
+    /// vuelve a consultar quien reintenta.</para>
+    ///
+    /// <para><b>El fixture tiene que afirmar las DOS cosas.</b> Con sólo el estado, rellenar
+    /// <c>depositHeld</c> con el monto seguiría pasando en verde — y «cuatrocientos mil
+    /// retenidos» dicho de una garantía anulada es la mitad cara del defecto, porque es la que
+    /// alguien reclama.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Un_intento_deshecho_NO_se_proyecta_como_reservado()
+    {
+        var caps = FelizEstricto();
+        caps.Falla("POST /v1/payments", HttpStatusCode.PaymentRequired, "payments.declined");
+        var ctx = Nuevo(caps);
+
+        Assert.False((await Reservar(ctx.Flow)).IsOk);
+
+        var muerta = ctx.Sagas.Find("alq-1")!;
+        Assert.Equal(SagaStatus.Compensated, muerta.Status);
+
+        var proyectada = RentalResponse.From(muerta);
+        Assert.Equal("failed", proyectada.State);
+
+        // Cero y no nulo: compensada ES que la anulación salió, así que de verdad no queda nada
+        // retenido. El nulo está reservado para cuando nadie lo sabe — ver el test de abajo.
+        Assert.Equal(0m, proyectada.DepositHeld);
+    }
+
+    /// <summary>
+    /// Con la compensación COLGADA nadie sabe si la garantía sigue retenida, y eso no se rellena.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el caso que separa «no queda nada» de «no se sabe». Cero ahí es una afirmación
+    /// —«no hay nada retenido»— hecha por el borde sin haberla comprobado, que es
+    /// <c>an_omitted_key_can_be_an_assertion</c> con el valor puesto a mano. Y el monto entero
+    /// sería la afirmación contraria, igual de inventada.</para>
+    ///
+    /// <para>Se prueba proyectando la saga en ese estado y no llegando a él por el flujo: para
+    /// que el compensador se rinda hace falta agotar sus ocho reintentos con retroceso
+    /// exponencial, que es tiempo de pared dentro de un test
+    /// (<c>a_clock_test_measures_a_property_it_cannot_own</c>).</para>
+    /// </remarks>
+    [Fact]
+    public async Task Con_la_compensacion_colgada_lo_retenido_es_NULO_y_no_cero()
+    {
+        var caps = FelizEstricto();
+        var ctx = Nuevo(caps);
+        Assert.True((await Reservar(ctx.Flow)).IsOk);
+
+        var colgada = ctx.Sagas.Find("alq-1")! with { Status = SagaStatus.CompensationFailed };
+
+        var proyectada = RentalResponse.From(colgada);
+        Assert.Equal("failed", proyectada.State);
+        Assert.Null(proyectada.DepositHeld);
+    }
+
+    /// <summary>
     /// Si el alquiler no se puede cobrar, la garantía se ANULA — no se devuelve.
     /// </summary>
     /// <remarks>
