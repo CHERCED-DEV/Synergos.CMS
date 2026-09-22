@@ -432,7 +432,8 @@
     "totalPaid",
     "type",
     "value",
-    "values"
+    "values",
+    "visitId"
   ],
   "booking-wizard": [
     "adults",
