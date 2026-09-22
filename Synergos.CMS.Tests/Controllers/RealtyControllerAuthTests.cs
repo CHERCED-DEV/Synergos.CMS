@@ -250,4 +250,80 @@ public sealed class RealtyControllerAuthTests
         var dto = Assert.IsType<RealtyController.MyVisitsResponse>(Assert.IsType<OkObjectResult>(result).Value);
         Assert.Null(dto.Visits[0].Slot);
     }
+
+    // ── Lo que la bandeja tiene que poder PINTAR (#160) ─────────────────
+
+    /// <summary>Una ficha de catálogo con el título que se pide, y nada más que importe acá.</summary>
+    private static PropertyDetail Ficha(string id, string titulo) => new(
+        new PropertyListing(id, id, titulo, "sale", "apartment", 850_000_000m, "COP",
+            "Bogotá", "Chicó", 3, 2, 120, 5, 4.67, -74.05, "/img.jpg"),
+        Description: "…",
+        Specs: Array.Empty<PropertySpec>(),
+        Amenities: Array.Empty<string>(),
+        Gallery: Array.Empty<string>(),
+        Location: new PropertyLocation(4.67, -74.05, "Calle 93 #11-20", "Chicó", "Bogotá"),
+        AgentName: "Laura",
+        AgentPhone: "3001112233");
+
+    [Fact] // el TÍTULO sale del catálogo local, que es el eje 1 — no de la red ni del consumidor
+    public async Task MyVisits_ResuelveElTituloDelInmueble_UnaVezPorListado()
+    {
+        Usuario();
+        _catalog.GetListingAsync("apto-90", Arg.Any<CancellationToken>())
+            .Returns(Ficha("apto-90", "Apartamento en el Chicó"));
+
+        // DOS visitas al MISMO inmueble: con una sola no se distingue «resuelve por listado» de
+        // «resuelve por fila», que es lo que este test existe para fijar.
+        await _visitLedger.RecordAsync(
+            "visit_1", "apto-90", "s1", new DateTimeOffset(2026, 10, 1, 15, 0, 0, TimeSpan.Zero),
+            new VisitContact("Yo", Yo), "Confirmed");
+        await _visitLedger.RecordAsync(
+            "visit_2", "apto-90", "s2", new DateTimeOffset(2026, 10, 3, 15, 0, 0, TimeSpan.Zero),
+            new VisitContact("Yo", Yo), "Confirmed");
+
+        var result = await BuildSut().MyVisits(CancellationToken.None);
+
+        var dto = Assert.IsType<RealtyController.MyVisitsResponse>(Assert.IsType<OkObjectResult>(result).Value);
+        Assert.Equal(2, dto.Visits.Count);
+        Assert.All(dto.Visits, v => Assert.Equal("Apartamento en el Chicó", v.ListingTitle));
+        await _catalog.Received(1).GetListingAsync("apto-90", Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // el inmueble que ya no está NO se nombra con su id: eso se leería como un título
+    public async Task MyVisits_ListadoRetirado_DejaElTituloEnNulo()
+    {
+        Usuario();
+        _catalog.GetListingAsync("apto-90", Arg.Any<CancellationToken>()).Returns((PropertyDetail?)null);
+        await _visitLedger.RecordAsync(
+            "visit_1", "apto-90", "s1", new DateTimeOffset(2026, 10, 1, 15, 0, 0, TimeSpan.Zero),
+            new VisitContact("Yo", Yo), "Confirmed");
+
+        var result = await BuildSut().MyVisits(CancellationToken.None);
+
+        var dto = Assert.IsType<RealtyController.MyVisitsResponse>(Assert.IsType<OkObjectResult>(result).Value);
+        // `null` y no «Inmueble apto-90»: quien decide qué pintar con el hueco es la pantalla,
+        // que sí sabe distinguir «se retiró del portal» de «se llama así».
+        Assert.Null(dto.Visits[0].ListingTitle);
+        Assert.Equal("apto-90", dto.Visits[0].ListingId);
+    }
+
+    [Fact] // la MODALIDAD sale del registro, y «no consta» sigue siendo null
+    public async Task MyVisits_EmiteLaModalidad_YNoLaRellena()
+    {
+        Usuario();
+        await _visitLedger.RecordAsync(
+            "visit_video", "apto-90", "s1", new DateTimeOffset(2026, 10, 1, 15, 0, 0, TimeSpan.Zero),
+            new VisitContact("Yo", Yo), "Confirmed", VisitModes.Video);
+        await _visitLedger.RecordAsync(
+            "visit_viejo", "apto-90", "s2", new DateTimeOffset(2026, 10, 2, 15, 0, 0, TimeSpan.Zero),
+            new VisitContact("Yo", Yo), "Confirmed");
+
+        var result = await BuildSut().MyVisits(CancellationToken.None);
+
+        // Las DOS filas hacen falta: con sólo la de video no se distingue «emite lo guardado»
+        // de «emite una constante», y con sólo la vieja, «no consta» de «presencial».
+        var dto = Assert.IsType<RealtyController.MyVisitsResponse>(Assert.IsType<OkObjectResult>(result).Value);
+        Assert.Equal(VisitModes.Video, dto.Visits.Single(v => v.VisitId == "visit_video").Mode);
+        Assert.Null(dto.Visits.Single(v => v.VisitId == "visit_viejo").Mode);
+    }
 }

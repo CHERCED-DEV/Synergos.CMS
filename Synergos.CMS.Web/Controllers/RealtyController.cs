@@ -259,6 +259,19 @@ public sealed class RealtyController : ControllerBase
             return BadRequest(new { error = slotError });
         }
 
+        // La MODALIDAD la enlazaba el binder desde siempre y NADIE la leía (#160): quien pedía
+        // videollamada quedaba agendado sin que nada lo dijera, ni en la constancia ni en la
+        // agenda del agente. Un valor que no se reconoce se RECHAZA y no se anota como «no
+        // consta»: el llamador sí la declaró, y guardar su ausencia afirmaría algo falso sobre
+        // lo que dijo (`feedback_a_failed_tryparse_is_not_a_value`). Ausente sí es «no consta».
+        if (!VisitModes.TryNormalize(request.Mode, out var mode))
+        {
+            return BadRequest(new
+            {
+                error = $"mode debe ser '{VisitModes.InPerson}' o '{VisitModes.Video}'.",
+            });
+        }
+
         VisitResult result;
         try
         {
@@ -266,6 +279,7 @@ public sealed class RealtyController : ControllerBase
                 listingId,
                 slotId,
                 new VisitContact(request.Contact.Name ?? string.Empty, request.Contact.Email ?? string.Empty, request.Contact.Phone),
+                mode,
                 cancellationToken);
         }
         catch (ArgumentException ex)
@@ -283,10 +297,15 @@ public sealed class RealtyController : ControllerBase
             Status: result.Status,
             // Contrato UI (Visit): la confirmación lee `id`, `listingId` y `slot:{date,time}`.
             // Sin `id` su normalizador devolvía null y daba la cita por caída aunque el slot
-            // hubiera quedado apartado de verdad. `mode` NO se emite: BookAsync no lo
-            // guarda (VisitContact no lo lleva), y devolverlo diría que quedó registrado.
+            // hubiera quedado apartado de verdad.
             Id: result.VisitId,
             ListingId: listingId,
+            // Desde el #160 `mode` SÍ se emite, porque desde el #160 sí queda registrado. La
+            // nota que había acá decía lo contrario con razón —«devolverlo diría que quedó
+            // registrado»— y ése fue el aviso que abrió el ticket: un defecto nombrado en un
+            // comentario no está arreglado, está blindado.
+            Mode: mode,
+            ListingTitle: await TituloDelListadoAsync(listingId, cancellationToken),
             Slot: slot is null ? null : new VisitSlotDto(
                 slot.StartUtc.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
                 slot.StartUtc.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)))));
@@ -327,11 +346,24 @@ public sealed class RealtyController : ControllerBase
 
         var visitas = await _visitLedger.ForVisitorAsync(email, cancellationToken);
 
+        // El título se resuelve UNA vez por inmueble y no una por visita: alguien puede tener
+        // tres visitas al mismo apartamento, y pedir su ficha tres veces sería trabajo de más
+        // por una fila repetida.
+        var titulos = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var listado in visitas.Select(v => v.ListingId).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            titulos[listado] = await TituloDelListadoAsync(listado, cancellationToken);
+        }
+
         return Ok(new MyVisitsResponse(visitas.Select(v => new VisitDto(
             VisitId: v.VisitId,
             Status: v.Status,
             Id: v.VisitId,
             ListingId: v.ListingId,
+            // `null` es «no consta» y NO «presencial»: las visitas anteriores al #160 se
+            // agendaron con el borde enlazando la modalidad y tirándola.
+            Mode: v.Mode,
+            ListingTitle: titulos.GetValueOrDefault(v.ListingId),
             // `null` cuando el camino que la agendó no supo la hora. No se rellena con la de
             // hoy ni con la de la agenda de AHORA: la agenda se deriva del reloj, así que
             // recalcularla meses después daría una hora plausible y distinta de la que esa
@@ -340,6 +372,35 @@ public sealed class RealtyController : ControllerBase
                 v.StartUtc.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
                 v.StartUtc.Value.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture))))
             .ToList()));
+    }
+
+    /// <summary>
+    /// El título del inmueble, o <c>null</c> si el listado ya no está en el catálogo.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Esto es un JOIN, no una derivación</b> (#160). El registro de visitas guarda el
+    /// <c>listingId</c> y nada más —lo correcto: el artefacto no duplica el catálogo— pero una
+    /// bandeja que enseñe «L-4 · martes 9:00» no le dice a nadie a qué inmueble va. El título
+    /// sale del eje 1, que es contenido de Umbraco y por tanto <b>local</b>: no sale a la red, y
+    /// eso es justo lo que el doc 12 §3 exige del eje 3 —la constancia tiene que poder verse con
+    /// el otro árbol caído—.</para>
+    ///
+    /// <para><b>Por eso lo resuelve ESTE lado y no el consumidor.</b> El módulo del repo hermano
+    /// tendría que pedir una ficha por visita, y su cliente de fichas <i>degrada a un mock</i>
+    /// cuando el borde no contesta: sería un título inventado sobre una visita verdadera, que es
+    /// la regla 15 de aquel repo —el nombre correcto sobre el cuerpo equivocado— y el defecto
+    /// más silencioso de todos, porque una fila plausible no la reporta nadie.</para>
+    ///
+    /// <para><b>Y cuando el listado ya no existe, <c>null</c>.</b> Un «Inmueble L-4» compuesto
+    /// con el id se leería como un nombre y sería una fabricación
+    /// (<c>feedback_a_fabrication_can_be_a_derivation</c>): quien decide qué pintar con el hueco
+    /// es la pantalla, que sí sabe distinguir «se retiró del portal» de «se llama así».</para>
+    /// </remarks>
+    private async Task<string?> TituloDelListadoAsync(string listingId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(listingId)) { return null; }
+        var ficha = await _catalog.GetListingAsync(listingId.Trim(), cancellationToken);
+        return string.IsNullOrWhiteSpace(ficha?.Summary.Title) ? null : ficha.Summary.Title;
     }
 
     /// <summary>
@@ -1015,13 +1076,32 @@ public sealed class RealtyController : ControllerBase
 
     public sealed record VisitSlotDto(string Date, string Time);
 
-    // Contrato UI (Visit): id | listingId | slot{date,time} | status. `visitId` se conserva
-    // para consumers previos y porta el mismo id.
+    /// <summary>
+    /// Contrato UI (<c>Visit</c>): <c>id | listingId | listingTitle | slot{date,time} | mode |
+    /// status</c>. <c>visitId</c> se conserva para consumers previos y porta el mismo id.
+    /// </summary>
+    /// <remarks>
+    /// <b>Las tres claves anulables lo son en el TIPO a propósito</b> (#160): <c>slot</c> cuando
+    /// el camino que agendó no supo la hora, <c>mode</c> cuando la visita es anterior a que se
+    /// registrara la modalidad, y <c>listingTitle</c> cuando el inmueble ya no está en el
+    /// catálogo. En las tres, el default que el consumidor pondría —hoy, mañana o de memoria— es
+    /// una AFIRMACIÓN sobre algo que no sabemos, y la única forma de que no la ponga es que la
+    /// ausencia sea parte de la forma (<c>feedback_an_omitted_key_can_be_an_assertion</c>).
+    /// </remarks>
+    /// <param name="VisitId">El id de la visita.</param>
+    /// <param name="Status">El estado que devolvió el seam.</param>
+    /// <param name="Id">El mismo id, con el nombre que lee el normalizador del otro árbol.</param>
+    /// <param name="ListingId">El inmueble.</param>
+    /// <param name="Mode">Presencial o videollamada; <c>null</c> es «no consta».</param>
+    /// <param name="ListingTitle">El título del inmueble; <c>null</c> si ya no está publicado.</param>
+    /// <param name="Slot">Cuándo; <c>null</c> si no consta.</param>
     public sealed record VisitDto(
         string VisitId,
         string Status,
         string Id,
         string ListingId,
+        string? Mode,
+        string? ListingTitle,
         VisitSlotDto? Slot);
 
     public sealed record VisitResponse(VisitDto Visit);

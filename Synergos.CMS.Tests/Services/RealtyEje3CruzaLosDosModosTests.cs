@@ -150,4 +150,55 @@ public sealed class RealtyEje3CruzaLosDosModosTests
         Assert.Equal(2, suyas.Count);
         Assert.Equal(new[] { "L1", "L2" }, suyas.Select(v => v.ListingId).OrderBy(x => x, StringComparer.Ordinal));
     }
+
+    // ── La modalidad (#160) ──────────────────────────────────────────────────────
+    //
+    // El mismo reparto de arriba: la modalidad tiene que llegar al registro por los DOS
+    // caminos. Cablearla en uno solo compila, pasa las dos suites de cada lado, y deja al
+    // vertical diciendo cosas distintas según una bandera de despliegue.
+
+    [Fact]
+    public async Task La_modalidad_llega_al_registro_por_los_DOS_caminos()
+    {
+        var registro = new RealtyVisitLedger(new InMemoryJsonEntityStore(), () => Ahora);
+
+        using var enProceso = new StubVisitSchedulingService(
+            new StubReservationService(), () => Ahora, new InMemoryJsonEntityStore(), null, registro);
+        var cableado = new HttpVisitSchedulingService(
+            new Fabrica(new CapacidadQueAcepta()), new OpcionesFalsas(), new Reloj(),
+            NullLogger<HttpVisitSchedulingService>.Instance, registro);
+
+        // VIDEO y no presencial, a propósito: es el valor que NINGÚN default produce. Con
+        // `in-person` el fixture no distingue «la modalidad viajó» de «alguien la rellenó», que
+        // es justo la fabricación que este ticket quita.
+        await enProceso.BookAsync("L1", PrimerSlot("L1").Id, Ana, VisitModes.Video);
+        await cableado.BookAsync("L2", PrimerSlot("L2").Id, Ana, VisitModes.Video);
+
+        var suyas = await registro.ForVisitorAsync("ana@correo.co");
+
+        Assert.Equal(2, suyas.Count);
+        Assert.All(suyas, v => Assert.Equal(VisitModes.Video, v.Mode));
+    }
+
+    [Fact]
+    public async Task Sin_modalidad_el_registro_dice_NO_CONSTA_y_no_presencial()
+    {
+        var registro = new RealtyVisitLedger(new InMemoryJsonEntityStore(), () => Ahora);
+
+        using var enProceso = new StubVisitSchedulingService(
+            new StubReservationService(), () => Ahora, new InMemoryJsonEntityStore(), null, registro);
+        var cableado = new HttpVisitSchedulingService(
+            new Fabrica(new CapacidadQueAcepta()), new OpcionesFalsas(), new Reloj(),
+            NullLogger<HttpVisitSchedulingService>.Instance, registro);
+
+        await enProceso.BookAsync("L1", PrimerSlot("L1").Id, Ana);
+        await cableado.BookAsync("L2", PrimerSlot("L2").Id, Ana);
+
+        var suyas = await registro.ForVisitorAsync("ana@correo.co");
+
+        // `null`, no `in-person`. Ésta es la mitad que protege a las visitas ANTERIORES al
+        // #160: rellenarlas afirmaría que esa gente pidió que la recibieran en el inmueble.
+        Assert.Equal(2, suyas.Count);
+        Assert.All(suyas, v => Assert.Null(v.Mode));
+    }
 }

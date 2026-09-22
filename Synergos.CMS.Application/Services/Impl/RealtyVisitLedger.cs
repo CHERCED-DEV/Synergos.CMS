@@ -73,6 +73,8 @@ public sealed class RealtyVisitLedger
     /// <param name="startUtc">Cuándo es la visita.</param>
     /// <param name="contact">Quién agendó.</param>
     /// <param name="status">El estado que devolvió el seam.</param>
+    /// <param name="mode">La modalidad ya normalizada (<see cref="VisitModes"/>), o <c>null</c>
+    ///   para «no consta» — que es lo que dicen, con razón, las visitas anteriores al #160.</param>
     /// <param name="cancellationToken">Token de cancelación.</param>
     public async Task<PersistedVisit?> RecordAsync(
         string? visitId,
@@ -81,6 +83,7 @@ public sealed class RealtyVisitLedger
         DateTimeOffset? startUtc,
         VisitContact? contact,
         string? status,
+        string? mode = null,
         CancellationToken cancellationToken = default)
     {
         // Sin id no hay documento que escribir, y fabricar uno sería inventar el acuse — el
@@ -95,6 +98,10 @@ public sealed class RealtyVisitLedger
             ListingId: (listingId ?? string.Empty).Trim(),
             SlotId: (slotId ?? string.Empty).Trim(),
             StartUtc: startUtc,
+            // Lo que no se reconoce NO se guarda: el borde ya rechazó eso con un 400, así que
+            // llegar acá con algo raro significa que un llamador nuevo se saltó la puerta, y
+            // anotarlo dejaría en el registro un valor que ninguna pantalla sabe pintar.
+            Mode: VisitModes.TryNormalize(mode, out var modalidad) ? modalidad : null,
             VisitorName: contact?.Name?.Trim() ?? string.Empty,
             VisitorEmail: NormalizarCorreo(contact?.Email),
             VisitorPhone: string.IsNullOrWhiteSpace(contact?.Phone) ? null : contact.Phone.Trim(),
@@ -196,6 +203,10 @@ public sealed class RealtyVisitLedger
 /// <param name="StartUtc">Cuándo es la visita. <c>null</c> si el camino que la agendó no lo
 ///   supo — pasa con el cliente cableado cuando la capacidad no devuelve la hora, y es «no
 ///   consta» y no una fecha inventada.</param>
+/// <param name="Mode">Presencial o videollamada (<see cref="VisitModes"/>). <c>null</c> es «no
+///   consta», y es lo que dicen las visitas anteriores al #160 — cuando el borde enlazaba la
+///   modalidad y nadie la leía. Rellenarlas con <c>in-person</c> afirmaría que esa gente pidió
+///   que la recibieran en el inmueble, que es justo lo que no sabemos.</param>
 /// <param name="VisitorName">El nombre que dio quien agendó.</param>
 /// <param name="VisitorEmail">Su correo, normalizado en minúsculas: es el índice.</param>
 /// <param name="VisitorPhone">Su teléfono, si lo dio. <c>null</c> es «no lo dio».</param>
@@ -206,6 +217,7 @@ public sealed record PersistedVisit(
     string ListingId,
     string SlotId,
     DateTimeOffset? StartUtc,
+    string? Mode,
     string VisitorName,
     string VisitorEmail,
     string? VisitorPhone,

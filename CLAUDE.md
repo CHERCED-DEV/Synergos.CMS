@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3327 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3339 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2269 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2280 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 425 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 426 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **49 de los 67 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **50 de los 68 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3327**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3339**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -167,6 +167,7 @@ Synergos.CMS/
 │                                + secciones de configuración (2, #154)
 │                                + credenciales fuera del árbol (5, #150)
 │                                + comandos de la guía (1, #152)
+│                                + campos de petición sin lector (1, #160)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1348,7 +1349,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **49 de los 67 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **50 de los 68 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -1820,6 +1821,42 @@ Las que salieron de construir el árbol de servicios (§0.B):
   se pregunta qué hace el sujeto con ese nombre — si su trabajo es hablar de él, la métrica
   está midiendo el tema y no la dependencia.
 
+- `feedback_a_declared_field_that_nobody_reads_passes_the_gate_that_looks_for_it` — **un
+  campo que el binder enlaza y que NADIE lee no deja hueco ni error: el dato viaja por el cable
+  y se tira al suelo, y los dos gates de contrato lo dan por bueno cada uno por su lado.**
+  `RealtyController.VisitRequest` declaraba `Mode` —presencial o videollamada— desde que existe
+  el endpoint, y el método no la leía ni una vez (#160): quien pedía videollamada quedaba
+  agendado sin que nada lo dijera, ni en la constancia ni en la agenda del agente, que **sí
+  tiene el campo** y lo sacaba del mock.
+  **Lo que lo escondía es el reparto de las dos preguntas.** G-7 cruza «lo que la app MANDA ↔ lo
+  que el borde DECLARA» y `mode` **estaba declarado**, así que cruzaba; G-6 cruza «lo que el
+  borde EMITE ↔ lo que la app LEE» y el borde no lo emitía — ni el consumidor lo leía de la
+  respuesta, porque se lo copiaba de su propia petición. **Declarar es lo que se mide y leer es
+  lo que importa**, y entre las dos cabe el campo entero. Es el espejo de
+  `feedback_no_read_without_a_write_path` —allá una lectura sin camino de escritura, acá una
+  ENTRADA sin camino de lectura— y el primo de `feedback_every_authored_field_needs_a_reader`
+  un escalón más arriba: allá el nombre lo escriben un DocType y una fuente, acá un `record` y
+  una app, y en los dos **ningún compilador comprueba el eslabón**.
+  **Y el aviso llevaba puesto dos HU, con la forma que este fichero ya tiene descrita**: el
+  comentario del controller decía, con todas las letras, «`mode` NO se emite: `BookAsync` no lo
+  guarda». Correcto y exacto, y por eso mismo `feedback_a_fabrication_can_be_a_derivation`
+  aplicado a un `<remarks>`: **lo identificado la auditoría siguiente lo lee y pasa de largo**.
+  **Hay gate** (`CamposDePeticionQueNadieLeeTests`), y **su primera versión pasó en VERDE con el
+  defecto puesto**: buscaba `.Mode` en el fichero entero, y la acción de al lado escribe
+  `Mode: v.Mode` sobre otro tipo con el mismo nombre de propiedad — o sea medía «alguien nombra
+  esto» en vez de «alguien lee ESTE campo», que es literalmente la distinción que existe para
+  hacer. **Se exige el RECEPTOR**: la variable a la que el fichero ata el record.
+  **Lo que las mutaciones enseñaron sobre el propio gate, y va escrito porque una de las dos
+  desmiente lo que yo iba a afirmar:** quitar los **comentarios** es lo que lo sostiene —con el
+  defecto puesto y una nota al lado que nombra `request.Mode`, sigue rojo—, y quitar los
+  **literales** no cambia nada hoy, porque exigir el receptor ya hace que un `"mode"` suelto no
+  se parezca a `request.Mode`. Al revés que en #148, donde sin el recorte el numerador caía de
+  49 a 14. Se conserva igual, y se dice cuál de las dos mitades es la medida.
+  **Y es trinquete absoluto porque el árbol ya lo cumplía**: 146 propiedades, **nueve** sin
+  lector y las nueve el mismo caso deliberado —un campo de identidad que el borde dejó de
+  creerle al llamador y conserva declarado para no romper a un cliente viejo—. Un censo de nueve
+  filas con una sola razón se lee de un vistazo; la décima que no encaje salta.
+
 - `feedback_when_a_step_has_no_derivable_name_its_deliverable_is_a_property` — **cuando un
   paso del molde produce algo cuyo NOMBRE no se deriva del vertical, hay dos salidas malas
   —inventar el nombre o borrar el paso— y una buena: cambiar el entregable de RUTA a
@@ -1905,13 +1942,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3327 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3339 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2269
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2280
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 425
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 426
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2303,7 +2340,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3327 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3339 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -2715,6 +2752,26 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > la prueba se ve con el otro árbol caído. El correo sale de la sesión y
   > nunca de la petición, que es el IDOR que Eventos ya había cerrado. Hay
   > gates (`RealtyWiringTests`, `RealtyEje3CruzaLosDosModosTests`).
+  >
+  > **Y la MODALIDAD de la visita se perdía en el borde** (#160). `VisitRequest`
+  > declaraba `Mode` —el binder la enlazaba sin quejarse— y **nadie la leía**:
+  > quien pedía videollamada quedaba agendado sin que nada lo dijera, ni en la
+  > constancia ni en la agenda del agente, que sí tiene el campo y lo sacaba del
+  > mock. Lo que abrió el ticket fue el comentario que lo nombraba —«`mode` NO se
+  > emite: `BookAsync` no lo guarda»—, que es un diagnóstico exacto sobre un
+  > defecto vivo, o sea `feedback_a_fabrication_can_be_a_derivation` otra vez: lo
+  > identificado la siguiente auditoría lo lee y pasa de largo. Hoy la modalidad
+  > cruza el seam, se guarda en el registro y sale por las dos lecturas; **lo que
+  > no se reconoce se RECHAZA con 400** en vez de anotarse como «no consta»
+  > —quien llamó sí la declaró—, y las visitas anteriores dicen `null`, que es la
+  > verdad sobre ellas.
+  >
+  > **Y la bandeja ya trae con qué pintarse**: `VisitDto` emite `listingTitle`,
+  > resuelto contra `IPropertyCatalogProvider` —el eje 1, **local**— y `null`
+  > cuando el inmueble ya no está publicado. Resolverlo del otro lado habría sido
+  > una ficha por visita contra un cliente que **degrada a mock**: un título
+  > inventado sobre una visita verdadera, que es la regla 15 del repo hermano y el
+  > defecto más silencioso que tiene escrito este fichero.
 
   > **El mapa se equivocó una segunda vez con el mismo filtro.**
   > `StubVisitSchedulingService` estaba en la familia C porque «no hay un

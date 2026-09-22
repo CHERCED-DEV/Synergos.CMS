@@ -141,7 +141,12 @@ public sealed class StubVisitSchedulingService : IVisitSchedulingService, IDispo
         return slots;
     }
 
-    public async Task<VisitResult> BookAsync(string listingId, string slot, VisitContact contact, CancellationToken cancellationToken = default)
+    public async Task<VisitResult> BookAsync(
+        string listingId,
+        string slot,
+        VisitContact contact,
+        string? mode = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(listingId))
         {
@@ -210,7 +215,7 @@ public sealed class StubVisitSchedulingService : IVisitSchedulingService, IDispo
             if (_ledger is not null)
             {
                 await _ledger.RecordAsync(
-                    result.VisitId, listing, slotId, match.StartUtc, contact, result.Status, cancellationToken)
+                    result.VisitId, listing, slotId, match.StartUtc, contact, result.Status, mode, cancellationToken)
                     .ConfigureAwait(false);
             }
 

@@ -159,7 +159,7 @@ public sealed class RealtyContractShapeTests
         var inicio = new DateTimeOffset(2026, 7, 10, 9, 0, 0, TimeSpan.Zero);
         _visits.GetSlotsAsync("L-1", Arg.Any<CancellationToken>())
             .Returns(new[] { new Synergos.CMS.Interfaces.VisitSlot("L-1-202607100900", inicio) });
-        _visits.BookAsync("L-1", "L-1-202607100900", Arg.Any<VisitContact>(), Arg.Any<CancellationToken>())
+        _visits.BookAsync("L-1", "L-1-202607100900", Arg.Any<VisitContact>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(new VisitResult("visit_1", "Confirmed"));
 
         // El cuerpo tal cual lo serializa `scheduleVisit()` del cliente Angular.
@@ -175,15 +175,71 @@ public sealed class RealtyContractShapeTests
 
         var body = Json(await BuildSut().Visit(request, default));
 
-        await _visits.Received(1).BookAsync("L-1", "L-1-202607100900", Arg.Any<VisitContact>(), Arg.Any<CancellationToken>());
+        // La MODALIDAD llega hasta el seam (#160). El binder la enlazaba desde siempre y nadie
+        // la leía, así que este `Received` con el valor DENTRO —y no un `Arg.Any`— es lo único
+        // que distingue «la pasa» de «la enlaza y la tira».
+        await _visits.Received(1).BookAsync(
+            "L-1", "L-1-202607100900", Arg.Any<VisitContact>(), VisitModes.InPerson, Arg.Any<CancellationToken>());
 
         // Sin `id` en la raíz del objeto `visit`, el normalizador del cliente devuelve null
         // y da la cita por caída — inventando una confirmada.
         var visita = body.GetProperty("visit");
         Assert.Equal("visit_1", visita.GetProperty("id").GetString());
         Assert.Equal("L-1", visita.GetProperty("listingId").GetString());
+        Assert.Equal(VisitModes.InPerson, visita.GetProperty("mode").GetString());
         Assert.Equal("2026-07-10", visita.GetProperty("slot").GetProperty("date").GetString());
         Assert.Equal("09:00", visita.GetProperty("slot").GetProperty("time").GetString());
+    }
+
+    [Fact] // filter: una modalidad que no se reconoce se RECHAZA y no se anota como «no consta»
+    public async Task Visit_ModalidadDesconocida_SeRechaza_YNoTocaElSeam()
+    {
+        var inicio = new DateTimeOffset(2026, 7, 10, 9, 0, 0, TimeSpan.Zero);
+        _visits.GetSlotsAsync("L-1", Arg.Any<CancellationToken>())
+            .Returns(new[] { new Synergos.CMS.Interfaces.VisitSlot("L-1-202607100900", inicio) });
+
+        // "presencial" es lo que teclearía alguien que traduce el vocabulario. Guardarlo como
+        // `null` diría «no consta» sobre una modalidad que la persona SÍ declaró.
+        var request = JsonSerializer.Deserialize<RealtyController.VisitRequest>(
+            """
+            {
+              "listingId": "L-1",
+              "slot": { "date": "2026-07-10", "time": "09:00" },
+              "contact": { "name": "Ana Ruiz", "email": "ana@correo.co" },
+              "mode": "presencial"
+            }
+            """, Web);
+
+        Assert.IsType<BadRequestObjectResult>(await BuildSut().Visit(request, default));
+        await _visits.DidNotReceive().BookAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<VisitContact>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // empty: SIN modalidad se agenda igual, y lo que viaja es `null` — no «presencial»
+    public async Task Visit_SinModalidad_PasaNull_YEmiteNull()
+    {
+        var inicio = new DateTimeOffset(2026, 7, 10, 9, 0, 0, TimeSpan.Zero);
+        _visits.GetSlotsAsync("L-1", Arg.Any<CancellationToken>())
+            .Returns(new[] { new Synergos.CMS.Interfaces.VisitSlot("L-1-202607100900", inicio) });
+        _visits.BookAsync("L-1", "L-1-202607100900", Arg.Any<VisitContact>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new VisitResult("visit_2", "Confirmed"));
+
+        var request = JsonSerializer.Deserialize<RealtyController.VisitRequest>(
+            """
+            {
+              "listingId": "L-1",
+              "slot": { "date": "2026-07-10", "time": "09:00" },
+              "contact": { "name": "Ana Ruiz", "email": "ana@correo.co" }
+            }
+            """, Web);
+
+        var body = Json(await BuildSut().Visit(request, default));
+
+        await _visits.Received(1).BookAsync(
+            "L-1", "L-1-202607100900", Arg.Any<VisitContact>(), null, Arg.Any<CancellationToken>());
+        // La clave se emite DECLARADA y en null: quitarla dejaría que el normalizador del otro
+        // árbol repusiera su default, que es exactamente la afirmación que este ticket quita.
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("visit").GetProperty("mode").ValueKind);
     }
 
     [Fact] // filter: una franja que el agente no atiende se RECHAZA, no se inventa un id
@@ -203,13 +259,13 @@ public sealed class RealtyContractShapeTests
 
         Assert.IsType<BadRequestObjectResult>(await BuildSut().Visit(request, default));
         await _visits.DidNotReceive().BookAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<VisitContact>(), Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<VisitContact>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact] // idempotent-ish: la forma anterior (slot como id) sigue entrando
     public async Task Visit_AceptaTambienElSlotComoCadena()
     {
-        _visits.BookAsync("L-1", "L-1-202607100900", Arg.Any<VisitContact>(), Arg.Any<CancellationToken>())
+        _visits.BookAsync("L-1", "L-1-202607100900", Arg.Any<VisitContact>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(new VisitResult("visit_1", "Confirmed"));
         _visits.GetSlotsAsync("L-1", Arg.Any<CancellationToken>())
             .Returns(Array.Empty<Synergos.CMS.Interfaces.VisitSlot>());
@@ -224,7 +280,7 @@ public sealed class RealtyContractShapeTests
             """, Web);
 
         Assert.IsType<OkObjectResult>(await BuildSut().Visit(request, default));
-        await _visits.Received(1).BookAsync("L-1", "L-1-202607100900", Arg.Any<VisitContact>(), Arg.Any<CancellationToken>());
+        await _visits.Received(1).BookAsync("L-1", "L-1-202607100900", Arg.Any<VisitContact>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     // ── Escritura: publicar un inmueble (wizard SH-6) ─────────────────────────────

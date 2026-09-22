@@ -173,11 +173,75 @@ public sealed class RealtyVisitLedgerTests
 
         foreach (var clave in new[]
                  {
-                     "VisitId", "ListingId", "SlotId", "StartUtc",
+                     "VisitId", "ListingId", "SlotId", "StartUtc", "Mode",
                      "VisitorName", "VisitorEmail", "VisitorPhone", "Status", "BookedAtUtc",
                  })
         {
             Assert.True(raiz.TryGetProperty(clave, out _), $"falta la clave `{clave}` en el documento");
         }
+    }
+
+    // ── La modalidad (#160) ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task La_modalidad_se_guarda_tal_como_la_declaro_quien_agendo()
+    {
+        var ledger = Nuevo();
+        await ledger.RecordAsync("visit_1", "apto-90", "s1", Manana, Ana, "Confirmed", VisitModes.Video);
+
+        // VIDEO: el valor que ningún default produce. Con `in-person` este test pasaría igual
+        // con la modalidad tirada y rellenada, que es el defecto que el #160 cierra.
+        Assert.Equal(VisitModes.Video, (await ledger.GetAsync("visit_1"))!.Mode);
+    }
+
+    [Fact]
+    public async Task Sin_modalidad_dice_NO_CONSTA_y_no_presencial()
+    {
+        var ledger = Nuevo();
+        await ledger.RecordAsync("visit_1", "apto-90", "s1", Manana, Ana, "Confirmed");
+
+        // `null` y no `in-person`: es lo que dicen las visitas anteriores al #160, cuando el
+        // borde enlazaba la modalidad y nadie la leía. Rellenarlas afirmaría que esa gente
+        // pidió que la recibieran en el inmueble — `feedback_an_omitted_key_can_be_an_assertion`.
+        Assert.Null((await ledger.GetAsync("visit_1"))!.Mode);
+    }
+
+    [Fact]
+    public async Task Una_modalidad_que_no_se_reconoce_NO_se_guarda()
+    {
+        var ledger = Nuevo();
+        await ledger.RecordAsync("visit_1", "apto-90", "s1", Manana, Ana, "Confirmed", "presencial");
+
+        // El borde ya la rechazó con un 400; llegar acá con algo raro significa que alguien se
+        // saltó la puerta, y anotarlo dejaría en el registro un valor que ninguna pantalla sabe
+        // pintar. La segunda guarda, no la primera.
+        Assert.Null((await ledger.GetAsync("visit_1"))!.Mode);
+    }
+
+    [Fact]
+    public async Task Un_documento_anterior_al_160_se_lee_sin_modalidad_y_no_revienta()
+    {
+        // El JSON que dejó el #158, tal cual: sin la clave `Mode`. Un registro que sólo supiera
+        // leer la forma nueva convertiría la bandeja entera de alguien en un hueco.
+        var store = new InMemoryJsonEntityStore();
+        await store.WriteAsync(RealtyVisitLedger.ResourceType, "visit_viejo", """
+            {
+              "VisitId": "visit_viejo",
+              "ListingId": "apto-90",
+              "SlotId": "s1",
+              "StartUtc": "2026-09-23T10:00:00+00:00",
+              "VisitorName": "Ana Ruiz",
+              "VisitorEmail": "ana.ruiz@correo.co",
+              "VisitorPhone": "3001234567",
+              "Status": "Confirmed",
+              "BookedAtUtc": "2026-09-22T10:00:00+00:00"
+            }
+            """);
+
+        var suyas = await Nuevo(store).ForVisitorAsync("ana.ruiz@correo.co");
+
+        Assert.Single(suyas);
+        Assert.Null(suyas[0].Mode);
+        Assert.Equal("apto-90", suyas[0].ListingId);
     }
 }

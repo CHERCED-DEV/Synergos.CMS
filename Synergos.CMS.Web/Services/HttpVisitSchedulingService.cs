@@ -153,7 +153,11 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
 
     /// <inheritdoc />
     public async Task<VisitResult> BookAsync(
-        string listingId, string slot, VisitContact contact, CancellationToken cancellationToken = default)
+        string listingId,
+        string slot,
+        VisitContact contact,
+        string? mode = null,
+        CancellationToken cancellationToken = default)
     {
         // Las mismas validaciones y las mismas excepciones que el motor en proceso: el controller
         // ya las traduce, y cambiarlas acá haría que el vertical se comportara distinto según una
@@ -195,7 +199,7 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
         if (_registro is not null)
         {
             await _registro.RecordAsync(
-                resultado.VisitId, listado, slotId, franja.StartUtc, contact, resultado.Status, cancellationToken)
+                resultado.VisitId, listado, slotId, franja.StartUtc, contact, resultado.Status, mode, cancellationToken)
                 .ConfigureAwait(false);
         }
 
