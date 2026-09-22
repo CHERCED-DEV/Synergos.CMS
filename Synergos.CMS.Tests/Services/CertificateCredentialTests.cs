@@ -422,7 +422,7 @@ public sealed class CertificateSigningKeyProviderTests : IDisposable
         var ticketKey = await new TicketSigningKeyProvider(
             store,
             _protection,
-            Options.Create(new EventsSettings()),
+            Options.Create(new TicketSettings()),
             NullLogger<TicketSigningKeyProvider>.Instance).GetKeyAsync();
 
         Assert.NotEqual(certKey, ticketKey);

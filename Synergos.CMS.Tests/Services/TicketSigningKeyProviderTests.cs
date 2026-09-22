@@ -43,7 +43,7 @@ public sealed class TicketSigningKeyProviderTests : IDisposable
     private TicketSigningKeyProvider Make(IJsonEntityStore store, string configured = "") =>
         new(store,
             _protection,
-            Options.Create(new EventsSettings { TicketSigningSecret = configured }),
+            Options.Create(new TicketSettings { SigningSecret = configured }),
             NullLogger<TicketSigningKeyProvider>.Instance);
 
     [Fact] // EL TEST QUE FALTABA: la llave sobrevive un "reinicio" (proveedor nuevo, mismo store)

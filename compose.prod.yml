@@ -124,6 +124,13 @@ services:
       Synergos__Eventos__BaseUrl: "http://bff-eventos:8080"
       Synergos__Eventos__ApiKey: ${SYNERGOS_API_KEY}
 
+      # Y el ARTEFACTO, que NO viaja: el secreto con el que se firma el QR de la entrada.
+      # Vacio no es "no firmar" — el host genera una llave y la guarda cifrada en
+      # cms-dpkeys — pero entonces NO se puede rotar, y ese es el unico camino para
+      # compartirla entre instalaciones. Hasta el #154 esta variable no existia, asi que
+      # ponerla en el .env del servidor no llegaba al contenedor: una clave que nadie lee.
+      Synergos__Eventos__Ticket__SigningSecret: ${SYNERGOS_EVENTOS_TICKET_SECRET:-}
+
       # Y contra quien se reserva un viaje (HU #36 + #40). Cruza las DOS vias: la
       # reserva de hotel y el carrito multi-producto, que pide confirmacion
       # PARCIAL y ordena la devolucion de lo que no se cumplio. Encenderlo exige
@@ -151,6 +158,12 @@ services:
       Synergos__Academy__BaseUrl: "http://api-signing:8080"
       Synergos__Academy__ApiKey: ${SYNERGOS_API_KEY}
       Synergos__Academy__SealPurpose: ${SYNERGOS_ACADEMY_SEAL_PURPOSE:-academy.certificate}
+
+      # Y su gemelo del eje 3, por la misma razon y con un precio mas alto: CLAUDE.md §11
+      # dice que este secreto es lo UNICO que el respaldo no puede regenerar —sin el, los
+      # diplomas ya emitidos dejan de verificar— y que "va donde va la identidad", o sea en
+      # el .env del servidor. No llegaba al contenedor (#154).
+      Synergos__Academy__CertificateSigningSecret: ${SYNERGOS_ACADEMY_CERT_SECRET:-}
 
       # Si el CMS presenta identidad verificable de quien actua (HU #14). Va acá
       # y no en el bloque de Gobierno porque quien actua no es asunto de un

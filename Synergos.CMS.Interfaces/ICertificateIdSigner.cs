@@ -34,7 +34,7 @@ public sealed record CertificateSubject(string CourseId, string Student);
 /// operador quiere leer de qué evento habla un QR—. Aquí el payload es
 /// <c>(curso, ALUMNO)</c>: publicar el identificador del titular dentro del id que se
 /// imprime en el diploma y viaja en cada verificación es exactamente lo que hay que
-/// evitar. Además su llave sale de <c>Synergos:Events:TicketSigningSecret</c>: rotar el
+/// evitar. Además su llave sale de <c>Synergos:Eventos:Ticket:SigningSecret</c>: rotar el
 /// secreto de Eventos invalidaría todos los diplomas de Educación, dos ciclos de vida
 /// que no tienen por qué ir atados. Se reusa su <b>forma</b> (HMAC-SHA256 del BCL, hex
 /// minúscula, comparación en tiempo constante, llave persistida y fail-closed sin

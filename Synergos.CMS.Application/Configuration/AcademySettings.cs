@@ -42,7 +42,7 @@ public sealed class AcademySettings
     /// así que los ids siguen siendo infalsificables y —esto es lo que importa para un
     /// diploma— <b>el mismo certificado sigue verificando tras un reinicio</b>. Poblarlo es
     /// lo correcto en producción: permite rotar la llave y compartirla entre instancias.</para>
-    /// <para><b>Por qué no reusa <c>Synergos:Events:TicketSigningSecret</c>:</b> son dos
+    /// <para><b>Por qué no reusa <c>Synergos:Eventos:Ticket:SigningSecret</c>:</b> son dos
     /// ciclos de vida distintos. Rotar el secreto con el que se firman los QR de las
     /// entradas —algo que se hace tras un incidente de puerta, o por temporada— invalidaría
     /// de paso todos los diplomas emitidos. Un diploma dura años; un QR de evento, una

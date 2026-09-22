@@ -90,7 +90,7 @@ no son de estilo:
   identificador del titular dentro del id que se imprime en el diploma y viaja en cada
   verificación pública es exactamente lo que este ADR existe para evitar. El id de un
   certificado tiene que ser **opaco**; el de una entrada, no.
-- **La llave del ticket sale de `Synergos:Events:TicketSigningSecret`.** Rotar el secreto de
+- **La llave del ticket sale de `Synergos:Eventos:Ticket:SigningSecret`** (era `Synergos:Events:TicketSigningSecret` hasta el #154)**.** Rotar el secreto de
   Eventos —algo que se hace tras un incidente de puerta, o por temporada— invalidaría de paso
   **todos los diplomas emitidos**. Una entrada vale una noche; un diploma se presenta años
   después. Atar los dos ciclos de vida sería un fallo esperando fecha.

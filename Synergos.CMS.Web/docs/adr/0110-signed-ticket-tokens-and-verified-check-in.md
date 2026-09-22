@@ -1,6 +1,21 @@
 # ADR 0110 — El QR de la entrada se FIRMA y la puerta lo VERIFICA (T9, Eventos)
 
 - **Status:** Accepted
+- **Enmienda (2026-09-21, #154):** la sección del secreto pasó de `Synergos:Events` a
+  `Synergos:Eventos:Ticket`, y la clave de `TicketSigningSecret` a `SigningSecret` —o sea
+  `Synergos:Eventos:Ticket:SigningSecret`, variable
+  `Synergos__Eventos__Ticket__SigningSecret`—. **La decisión de este ADR no cambia**: la llave
+  sigue saliendo de config o, si no hay, generándose una vez y guardándose cifrada. Lo que cambió
+  es dónde se escribe, y por dos razones medidas. Una: `Synergos:Events` era **hermana a una
+  letra** de `Synergos:Eventos`, la del eje transaccional del mismo vertical, y un dedazo entre
+  las dos **no falla** —el binder de .NET descarta en silencio lo que no mapea—; medido sobre las
+  43 secciones que el CMS enlaza, era el único par a esa distancia. Dos: anidarla es lo que
+  sobrevive al día que el sello cruce a `Api.Signing` como el de Educación (HU #45), porque ahí
+  hará falta su propio `Mode`/`BaseUrl`/`ApiKey` y `Synergos:Eventos:Mode` ya es del eje 2.
+  **Un despliegue que siga poblando la clave vieja NO arranca** y el mensaje dice el nombre nuevo;
+  descartarla en silencio habría generado otra llave y dejado sin validar todo QR ya impreso.
+  Y de paso: **esa variable no llegaba al contenedor** —el compose nunca la pasó— así que ponerla
+  en el `.env` del servidor no hacía nada. Hoy la pasa, y `.env.example` la documenta.
 - **Date:** 2026-07-18
 - **Deciders:** Arquitecto + agente, en modo autónomo (el arquitecto pidió olas completas sin consultar cada decisión). Investigación previa por agente explorador sobre el estado real de T9. Verificado en vivo contra el CMS corriendo, **reiniciándolo**, que es lo que destapó el bug del agente descrito abajo.
 - **Relacionados:** ADR 0104 (`WebhookSigner`/`PaymentWebhookVerifier` — la convención HMAC del proyecto, que este ADR reusa **sin** colapsarla), ADR 0109 (`IPrivateFileStore` — se intentó reusar para la llave y **no encajó**; la razón está en Consequences), ADR 0105 (`IJsonEntityStore` — donde sí vive la llave), ADR 0103 (identidad server-trusted: el molde de `RequireMember` que Eventos no había adoptado), ADR 0002 (Application sin AspNetCore — por eso el firmante es BCL puro), ADR 0013 (cero I/O en boot: la llave se resuelve perezosamente), ADR 0075 (tests por seam).
@@ -45,7 +60,7 @@ Se conserva intacto lo que ya funcionaba: `CheckedIn` persistido y el tri-estado
 
 ### 3. La llave: config, o generada UNA vez y persistida cifrada
 
-`Synergos:Events:TicketSigningSecret` si está poblado (vía de producción: permite rotar y compartir entre instancias). Si no, se genera una llave aleatoria de 256 bits **una sola vez**, se cifra con `IDataProtector` y se guarda en `IJsonEntityStore` bajo la clave `ticket-signing-v1`.
+`Synergos:Eventos:Ticket:SigningSecret` si está poblado (vía de producción: permite rotar y compartir entre instancias; ver la enmienda del #154 sobre por qué la sección se llama así). Si no, se genera una llave aleatoria de 256 bits **una sola vez**, se cifra con `IDataProtector` y se guarda en `IJsonEntityStore` bajo la clave `ticket-signing-v1`.
 
 **No se pone un default en el repo**: un secreto commiteado es un secreto conocido, y firmar con él daría tokens falsificables **con apariencia de seguros**. Y **no se genera en memoria**: eso repetiría exactamente el bug del `GetHashCode`.
 
