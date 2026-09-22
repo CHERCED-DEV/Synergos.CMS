@@ -1,6 +1,7 @@
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Catalog;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -48,13 +49,47 @@ public sealed partial class SeamComposer
             new StubSocialGraphService(
                 sp.GetRequiredService<IJsonEntityStore>(),
                 StubSocialGraphService.DefaultResourceType));
-        services.AddSingleton<IContentStream>(sp =>
+        // ── EJE 1 · el catálogo de Social: de dónde salen los posts (#146) ──────────
+        //
+        // Social tenia DOS lectores de «un post», y eso es lo que el ticket midio:
+        // DefaultBlogQuery lee postPage desde siempre y sirve las vistas Razor, pero la APP
+        // social entera —BlogsController: el feed, el detalle, explore, guardados— lee de
+        // IContentStream, cuyo default sirve SocialDemoSeed.Posts: CINCO posts cableados en C#.
+        // O sea que publicar un post que la app viera exigia un despliegue.
+        //
+        // Se SIEMBRA y no se reemplaza, que es la decision del ticket. Un adaptador que sirviera
+        // el feed leyendo el arbol de contenido tendria que contestar que pasa con lo que se
+        // publica DESDE la app (IContentStream.CreateAsync, que BlogsController llama), y esa
+        // pregunta es de producto. Sembrar deja las dos cosas conviviendo y reusa una mecanica
+        // ya probada: es lo mismo que Educacion hace con el cuerpo de sus lecciones (#100).
+        //
+        // Rollback de una linea y sin redespliegue: `Synergos:Catalog:Sources:Social = demo`.
+        //
+        // Singleton por lo mismo que las otras siete fuentes: UmbracoSocialContentSource solo
+        // sostiene IUmbracoContextAccessor (un ACCESSOR, que resuelve el contexto por llamada),
+        // IOptionsMonitor e ILogger. Ninguno es Scoped, asi que no hay dependencia cautiva.
+        services.AddSingleton<UmbracoSocialContentSource>(sp =>
+            ActivatorUtilities.CreateInstance<UmbracoSocialContentSource>(sp));
+        services.AddSingleton<ICatalogSource<AuthoredPost>>(sp =>
+            sp.GetRequiredService<UmbracoSocialContentSource>());
+
+        services.AddSingleton<StubContentStream>(sp =>
             new StubContentStream(
                 sp.GetRequiredService<ISocialGraphService>(),
                 sp.GetRequiredService<StubReactionService>(),
                 null,
                 sp.GetRequiredService<IJsonEntityStore>(),
                 StubContentStream.DefaultResourceType));
+
+        // El decorador envuelve al stub y NO lo sustituye: el stub sigue siendo el almacen del
+        // feed —lo que se publica desde la app vive ahi— y el decorador solo mete lo autorado.
+        services.AddSingleton<IContentStream>(sp =>
+            IsCmsSource(sp, UmbracoSocialContentSource.Vertical)
+                ? new CatalogContentStream(
+                    sp.GetRequiredService<ICatalogSource<AuthoredPost>>(),
+                    sp.GetRequiredService<IJsonEntityStore>(),
+                    sp.GetRequiredService<StubContentStream>())
+                : sp.GetRequiredService<StubContentStream>());
         services.AddSingleton<ISocialProfileProjection, StubSocialProfileProjection>();
 
         // OLA 6 Blogs (doc 21 §2.3) — app social completa sobre el motor social ya

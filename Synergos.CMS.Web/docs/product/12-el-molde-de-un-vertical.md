@@ -568,6 +568,22 @@ promueve aquí porque mover código y escribir un molde en el mismo commit es me
 refactor; queda anotado con su sitio: es fontanería del CMS, o sea `Synergos.CMS.Web/Services/`,
 no `Interfaces`.
 
+### 7.5 El gate del EJE 1 descubría verticales por su eje 2 — **cerrado** (#146)
+
+`Cada_vertical_tiene_su_EJE_1` recorre `DelMolde()`, que descubre verticales por su **interruptor
+de transacción**. Social contestó «¿hay algo que deshacer?» con NO, así que no tiene ninguno — y el
+gate del PRIMER eje **no lo miraba**. Un vertical que sólo tuviera catálogo podía quedarse sin
+fuente sin que nada se pusiera rojo.
+
+No es una lista que envejeció: es **un gate acoplado al descubrimiento del eje de al lado**, que no
+se ve leyéndolo porque durante siete verticales las dos listas coincidían. Se cierra con un
+segundo diente derivado del disco por los dos lados —las fuentes que existen y los composers que
+las nombran—, que además crece solo con el catálogo:
+`Toda_fuente_de_catalogo_esta_registrada_por_un_composer`.
+
+**La pregunta que lo caza, y sirve para cualquier gate del molde:** *¿de qué lista salen los
+sujetos de este gate, y esa lista es la del eje que vigila?*
+
 ## 8. Lo que este molde no contesta
 
 - **Si un vertical necesita orquestador.** Eso lo deciden las tres preguntas y ninguna se lee del

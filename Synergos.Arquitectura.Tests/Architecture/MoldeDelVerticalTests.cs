@@ -555,6 +555,52 @@ public sealed class MoldeDelVerticalTests
             + "central del vertical es un cambio de código y un despliegue.");
     }
 
+    /// <summary>
+    /// Toda fuente de catálogo que existe está REGISTRADA por algún composer.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Hace falta porque el diente de arriba no puede ver un vertical sin eje 2</b>, y
+    /// eso se descubrió construyendo el octavo (#146). <c>Cada_vertical_tiene_su_EJE_1</c>
+    /// recorre <c>DelMolde()</c>, que descubre verticales por su <b>interruptor de
+    /// transacción</b>; Social contestó «¿hay algo que deshacer?» con NO, así que no tiene
+    /// ninguno y el gate del eje 1 no lo mira. O sea que el gate del PRIMER eje estaba acoplado
+    /// al descubrimiento del SEGUNDO, y un vertical que sólo tuviera catálogo podía quedarse sin
+    /// fuente sin que nada se pusiera rojo.</para>
+    ///
+    /// <para>Se deriva del disco por los dos lados —las fuentes que hay y los composers que las
+    /// nombran— así que crece solo con el catálogo y no lleva lista que mantener.</para>
+    /// </remarks>
+    [Fact]
+    public void Toda_fuente_de_catalogo_esta_registrada_por_un_composer()
+    {
+        var fuentes = Directory
+            .EnumerateFiles(Dir("Synergos.CMS.Web", "Services", "Catalog"), "Umbraco*.cs")
+            .Select(Path.GetFileNameWithoutExtension)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Select(n => n!)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(fuentes.Count >= 8,
+            "El descubrimiento de fuentes de catálogo ve " + fuentes.Count + ": si se movieron de "
+            + "carpeta, este test pasa en verde sin mirar nada.");
+
+        var composers = string.Join(
+            '\n',
+            Directory.EnumerateFiles(Dir("Synergos.CMS.Web", "Composers"), "SeamComposer*.cs")
+                .Select(SinComentarios));
+
+        var huerfanas = fuentes
+            .Where(f => !Regex.IsMatch(composers, @"\b" + f + @"\b"))
+            .ToList();
+
+        Assert.True(huerfanas.Count == 0,
+            "Estas fuentes de catálogo no las registra ningún composer: "
+            + string.Join(", ", huerfanas)
+            + ". Una fuente que nadie enchufa no es el eje 1 de nadie: es código que no se "
+            + "ejecuta, y el editor sigue sin poder publicar (#146).");
+    }
+
     [Fact]
     public void El_catalogo_de_un_vertical_NO_sale_a_la_red()
     {

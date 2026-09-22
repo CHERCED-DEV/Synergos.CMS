@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3313 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3343 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2253 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2276 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 427 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 434 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **56 de los 67 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **57 de los 68 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3313**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3343**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -160,7 +160,7 @@ Synergos.CMS/
 ├── Synergos.Arquitectura.Tests/ LOS GATES: segregación (17) + molde (12)
 │   └── Architecture/            + capas (8) + imagen de contenedor (6)
 │                                + compose (12) + despliegue (18, ADR 0133)
-│                                + molde del vertical (13, doc 12)
+│                                + molde del vertical (14, doc 12)
 │                                + seudónimo único (3, #120)
 │                                + portada de arranque (5, #119)
 │                                + configuración del build (3, #151)
@@ -170,6 +170,7 @@ Synergos.CMS/
 │                                + perfil de producción (3, #150)
 │                                + claves de Umbraco en el compose (1, #159)
 │                                + elección de implementación (2, #131)
+│                                + eje 1 de Social (6, #146)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -247,8 +248,8 @@ Synergos.CMS/
 | "¿Cómo se deshace lo que ya se hizo?" | `Synergos.CMS.Web/docs/product/09-compensacion-cruzada.md` |
 | "¿Cuándo se promueve algo a una capa compartida?" | `Synergos.CMS.Web/docs/product/10-promocion-bff-core.md` |
 | "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
-| "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — **diez** pasos: los tres ejes con su tabla medida, las dos formas del eje transaccional, la CUARTA pregunta del eje 3 (§3.1) y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`, 13) |
-| "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los doce sub-specs derivados del molde, los dos MCPs y el gate del arnés. **Ya no es sólo diseño**: el arnés vive en `Synergos.Fabrica` con su `arnes.lock.json` (#141) y el spec tiene formato y validador (#140) |
+| "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — **diez** pasos: los tres ejes con su tabla medida, las dos formas del eje transaccional, la CUARTA pregunta del eje 3 (§3.1) y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`, 14) |
+| "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los CATORCE sub-specs derivados del molde (y las DOS formas de S2, §5.bis), los dos MCPs y el gate del arnés. **Ya no es sólo diseño**: el arnés vive en `Synergos.Fabrica` con su `arnes.lock.json` (#141) y el spec tiene formato y validador (#140) |
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
 | "¿El molde da para GENERAR un vertical?" | Sobre Eventos, **sí**: el piloto 0 midió **71,4 %** y hoy da **100 %** (22/22), sin inventar ni perder nada — los cuatro hallazgos cerrados (#153, #154, #155). Eso desbloquea el piloto 1 y **no dice que el molde valga para el octavo**: el spec de Eventos se escribió hacia atrás, contra el disco. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
@@ -1371,7 +1372,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **56 de los 67 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **57 de los 68 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -1861,6 +1862,34 @@ Las que salieron de construir el árbol de servicios (§0.B):
   no leyendo. Mismo sujeto y misma política es la misma cosa, así que se promueve y se cierra con
   gate que cuente los declarantes — el mismo movimiento del seudónimo (#120).
 
+- `feedback_an_axis_looks_done_when_only_half_its_readers_were_counted` — **un vertical puede
+  tener DOS lectores del mismo objeto, uno ya cableado al CMS y otro sembrado en código, y el que
+  parece hecho es el que nadie usa** (#146). Social tenía `DefaultBlogQuery` leyendo `postPage`
+  desde siempre —listados, RSS, sitemap, tag page— y `IContentStream` sirviendo **la app entera**
+  con **cinco posts cableados en C#**. Cualquier medición que preguntara «¿el objeto central de
+  este vertical se autora?» contestaba que sí, mirando la mitad editorial; publicar un post que el
+  producto viera seguía siendo un despliegue.
+  **La pregunta que lo caza no es «¿hay un `Umbraco*Source`?» sino «¿por dónde entra este objeto a
+  la PANTALLA que la gente usa?»** — y se contesta con un `grep` del controller del vertical, no
+  del DocType. Es el addendum #116 de `feedback_no_read_without_a_write_path` girado: allá una
+  escritura sin camino de lectura, acá una lectura ya resuelta que **tapa** a la que importa.
+  **Y lo que el eje 1 necesita cambia cuando su almacén NO es suyo.** El de Social lo comparte
+  Educación (el `Kind` de `IContentStream`) y el producto **escribe** en él (`CreateAsync`), así
+  que reemplazar la implementación obliga a contestar qué pasa con lo ya publicado — una pregunta
+  de producto, no de cableado. **Sembrar la esquiva**, y arrastra las dos mitades del #100
+  (huella del contenido en la clave, mapping durable) más una tercera que el #146 añadió:
+  **qué rellena ese almacén por su cuenta cuando no reconoce lo que le metiste**. Acá era el
+  autor: `SocialDemoSeed.AuthorById` devuelve el id como handle Y como nombre, así que un post
+  autorado salía firmado por «autor-camila-rios». Lo que el almacén fabrique **se repone al LEER**
+  y no sólo al sembrar — el mapping es durable y la caché no, así que un proceso nuevo serviría el
+  feed mintiendo hasta que alguien editara algo. El test que lo caza no es el de durabilidad: es
+  el que **reinicia y comprueba el nombre**, y el fixture tiene que llevar un `DisplayName` que la
+  fabricación no pueda producir — con uno igual al id, el defecto pasa en verde.
+  **Y el gate del eje 1 no lo habría visto**, porque descubría verticales por su interruptor de
+  TRANSACCIÓN y Social no tiene: un gate acoplado al descubrimiento del eje de al lado, invisible
+  mientras las dos listas coincidan. La pregunta general: *¿de qué lista salen los sujetos de este
+  gate, y es la del eje que vigila?* (doc 12 §7.5).
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1920,13 +1949,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3313 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3343 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2253
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2276
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 427
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 434
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2292,7 +2321,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3313 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3343 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -3617,6 +3646,49 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > `feedback_a_fabrication_can_be_a_derivation` avisa que **blinda** un defecto
   > si se queda escrito: se arregló en vez de dejarlo nombrado. `null` sigue
   > siendo «no consta» para el staff sembrado, que de verdad no lo sabe.
+
+- **Y el feed de Social también, que es el OCTAVO vertical** (#146,
+  `Synergos:Catalog:Sources:Social = cms`, con el seed de demo de default). Es el
+  **piloto 1 de la fábrica** (épica #139): el primer vertical cuyo spec se escribió
+  ANTES del código — `docs/specs/social/spec.md`.
+
+  > **La predicción del ticket falló, y ése era su resultado valioso.** Daba Social
+  > por «un sub-spec y tres ajustes» leyendo que faltaba el interruptor. Al medir
+  > aparecieron **DOS lectores de «un post»**: `DefaultBlogQuery`, que lee `postPage`
+  > desde siempre y sirve las vistas Razor —listados, RSS, sitemap, tag page—, y
+  > `IContentStream`, que sirve **la app social entera** (`BlogsController`: el feed,
+  > el detalle, explore, guardados) y traía **cinco posts cableados en C#**. O sea
+  > que la mitad editorial ya salía del CMS y la mitad que el producto usa exigía un
+  > despliegue.
+  >
+  > **Y el eje 1 de Social NO es «un `Umbraco*Source` más»**, que es el sub-spec que
+  > el molde ganó (doc 13 §5.bis): su almacén **lo comparte Educación** —el `Kind` de
+  > `IContentStream` existe para eso, y el #100 siembra ahí los cuerpos de las
+  > lecciones— y **el producto escribe en él** (`CreateAsync`). Las siete fuentes
+  > anteriores sirven una colección propia y de sólo lectura.
+  >
+  > **Por eso se SIEMBRA y no se reemplaza.** Las otras dos salidas —un adaptador que
+  > sirva el feed del árbol de contenido, o partir el `Kind`— obligan a contestar qué
+  > pasa con lo que alguien publicó desde la app, y ésa es una pregunta de producto.
+  > Sembrar la esquiva y reusa una mecánica probada: huella del contenido en la clave
+  > (o editar no se ve) y mapping durable (o cada arranque re-siembra el feed entero).
+  >
+  > **El AUTOR viaja con el post, y eso fue medio hallazgo.** `StubContentStream`
+  > resuelve el autor con `SocialDemoSeed.AuthorById`, que ante un id desconocido
+  > devuelve el id **como handle y como nombre**. Sembrar sin traerse el `authorPage`
+  > habría firmado cada tarjeta con «autor-camila-rios» — y eso no se lee como un
+  > defecto: se lee como un handle. El decorador lo repone **al leer** y no sólo al
+  > sembrar, porque el mapping sobrevive al reinicio y la caché de autores no.
+  >
+  > **Sin eje 2 y sin eje 3, y las dos son decisiones**: publicar un post es una
+  > escritura local —nada que deshacer— y nadie de fuera necesita comprobarlo sin
+  > creernos (la CUARTA pregunta, doc 12 §3.1). El paywall de la épica #11 sí tendría
+  > eje 2 y es otra HU. Hay gate (`SocialWiringTests`), y uno de sus dientes es que
+  > **no** aparezca un `Synergos:Social:Mode` por arrastre del copiar-pegar.
+  >
+  > **Lo que NO se hizo**: reponer el autor en `ISocialProfileProjection` —el perfil
+  > de un autor autorado sigue saliendo del seed—, y cablear `Api.Moderation` o
+  > `Api.Engagement`, que siguen esperando primer consumidor real.
 
 - **Cuatro orquestadores sin construir**: Realty, Gob, Academy, Social.
   `Bff.Eventos` (HU #35) y `Bff.Viajes` (HU #36) ya están, y ninguno de los

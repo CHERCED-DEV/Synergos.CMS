@@ -216,7 +216,7 @@ y tiene **un gate que ya existe**.
 | # | sub-spec | árbol | lo prueba |
 |---|---|---|---|
 | **S1** | DocType + compositions del objeto central | CMS · uSync | `usync-audit.mjs` (11 checks) |
-| **S2** | `Umbraco<X>CatalogSource` + `<X>ContentRules` + `Catalog:Sources:<X>` | CMS · Web | `Cada_vertical_tiene_su_EJE_1` · `El_catalogo_de_un_vertical_NO_sale_a_la_red` |
+| **S2** | `Umbraco<X>CatalogSource` + `<X>ContentRules` + `Catalog:Sources:<X>` — en **una de sus dos formas** (§5.bis) | CMS · Web | `Toda_fuente_de_catalogo_esta_registrada_por_un_composer` · `Cada_vertical_tiene_su_EJE_1` · `El_catalogo_de_un_vertical_NO_sale_a_la_red` |
 | **S3** | El seam `I<X>Service` + implementación **en proceso** por defecto | CMS · Interfaces | `LayerRuleTests` |
 | **S4** | `<X>Settings` con `Mode`/`BaseUrl`/`ApiKey`/`TimeoutSeconds` | CMS · Application | `DefaultsDeConfiguracionTests` |
 | **S5** | El interruptor **y el `Configure<>` enlazado** | CMS · Composers | `Cada_punto_de_cableado_ENLAZA_su_seccion` · `El_default_NUNCA_es_el_valor_cableado` |
@@ -238,12 +238,47 @@ pregunta del doc 12 §3.1: *¿alguien de fuera tiene que poder comprobar esto si
 contestan que sí **dos de los siete** (Eventos y Educación), y los otros cinco no la contestan mal:
 un sello para quien ya está dentro es custodiar una llave para nadie.
 
+### 5.bis Las DOS formas de S2, y la que el molde no tenía escrita
+
+Los siete primeros verticales hicieron S2 de la misma manera, y por eso parecía que sólo había
+una: una colección **propia** y de **sólo lectura** —productos, eventos, inmuebles, trámites,
+cursos, estancias, profesionales—, una fuente que la lee y un interruptor que elige entre ella y
+el seed. Social fue el primero que no encaja, y lo descubrió el piloto 1 (#146):
+
+| | **forma A · colección propia** | **forma B · almacén compartido y escrito** |
+|---|---|---|
+| quién más lee ese almacén | nadie | **otro vertical**, por polimorfismo |
+| quién escribe en él | sólo la fuente | **también el producto** |
+| lo que se cablea | la fuente **reemplaza** al seed | la fuente **siembra**, y un decorador delega el resto |
+| el interruptor | elige la implementación | elige si se envuelve |
+| quiénes son hoy | los siete primeros | Social (`IContentStream`, que Educación comparte por su `Kind`) |
+
+**Qué la distingue, en una pregunta:** *¿el almacén del que lee este vertical es suyo?* Si otro
+vertical lo comparte —o si el producto escribe en él— **reemplazar la implementación obliga a
+contestar qué pasa con lo que ya estaba**, y ésa es una pregunta de producto, no de cableado.
+Sembrar la esquiva: lo autorado entra, lo demás sigue igual.
+
+**Y la forma B arrastra dos cosas que la A no necesita**, las dos medidas en el #100 y repetidas
+en el #146:
+
+- **la HUELLA del contenido en la clave de siembra** — el seam sólo sabe CREAR, así que sin ella
+  el editor corrige, guarda, y el feed sigue sirviendo la versión vieja sin que nada falle;
+- **el mapping DURABLE** — en memoria, cada arranque re-siembra todo y el almacén crece para
+  siempre, también sin que nada falle.
+
+**Y una tercera que el #146 añadió**: lo que la forma B siembra **entra en un almacén que resuelve
+solo algunos campos**, y los que no sabe resolver los FABRICA. `StubContentStream` resuelve el
+autor de un item con `SocialDemoSeed.AuthorById`, que ante un id desconocido devuelve el id como
+handle y como nombre. Así que la forma B se pregunta, además: *¿qué rellena este almacén por su
+cuenta cuando no reconoce lo que le metí?* — y lo que rellene mal hay que **reponerlo al leer**, no
+sólo al sembrar, porque el mapping sobrevive al reinicio y la caché no.
+
 Y la otra mitad de la bajada es `reusa:`, que apaga por **existir**. Medido hoy para Social:
 
 | sub-spec | estado en el disco | queda |
 |---|---|---|
 | S1 DocTypes | `postpage`, `postcategorypage`, `authorpage` **existen** | nada, salvo que el spec pida campos |
-| S2 fuente + interruptor | hay **siete** `Catalog:Sources:*` y **`Social` no está** | **el delta de verdad** |
+| S2 fuente + interruptor | hay **siete** `Catalog:Sources:*` y **`Social` no está** | **el delta de verdad — y en la forma B, que esta tabla no predijo** |
 | S3–S6 cableado | apagados por la cabecera | — |
 | S7 artefacto | `StubContentStream` (`social-stream`), `StubReactionService`, `StubSocialGraphService` **existen** | ajuste, no autoría |
 | S8 sello | `sella: no` — un post no lo comprueba nadie de fuera | apagado |
