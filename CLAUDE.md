@@ -3760,10 +3760,10 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 
 - **Poco está conectado al producto, pero la brecha es MENOR de lo que
   parecía.** El inventario del cableado (HU #23,
-  `docs/product/11-mapa-del-cableado.md`) contó los 49 `Stub*` y los
+  `docs/product/11-mapa-del-cableado.md`) contó los 51 `Stub*` y los
   clasificó: **13** son cableado pendiente, **5** ya salen del contenido
-  de Umbraco (cablearlos sería un retroceso) y **31** se quedan en stub a
-  propósito. Y 19 de los 49 **ya son durables** — «stub» en este repo
+  de Umbraco (cablearlos sería un retroceso) y **33** se quedan en stub a
+  propósito. Y 20 de los 51 **ya son durables** — «stub» en este repo
   dejó hace tiempo de querer decir «en memoria». Hay gate
   (`WiringMapTests`): un stub nuevo sin mapear rompe el build, y desde
   #50 **también cuadra las cifras de la prosa** contra el inventario y

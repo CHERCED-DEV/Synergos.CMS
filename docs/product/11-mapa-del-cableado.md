@@ -1,6 +1,6 @@
 # 11 — El mapa del cableado
 
-> Los 49 `Stub*` de `Synergos.CMS.Application/Services/Impl/`, y qué se hace con cada uno.
+> Los 51 `Stub*` de `Synergos.CMS.Application/Services/Impl/`, y qué se hace con cada uno.
 >
 > **Esto es un inventario, no un rediseño.** Describe lo que hay y decide destino. El rediseño
 > de algo concreto es otro ticket.
@@ -9,13 +9,13 @@ Lo vigila `Synergos.CMS.Tests/Architecture/WiringMapTests.cs`. Un stub nuevo sin
 **rompe el build**, y una entrada que nombre una capacidad inexistente también. Un mapa que se
 mantiene a mano se desactualiza en la tercera ola.
 
-## Lo primero: son 49, no 45
+## Lo primero: son 51, no 45
 
 El ticket decía 45. La cuenta real al levantar el inventario fue **46**, y no porque alguien
 añadiera uno: la cuenta de 45 era de memoria. Es exactamente la razón por la que este documento
 lleva un gate detrás en vez de una lista escrita a mano.
 
-**Hoy son 49**, y cómo se enteró este documento vale más que la cifra. Durante tres olas el
+**Hoy son 51**, y cómo se enteró este documento vale más que la cifra. Durante tres olas el
 inventario de abajo se mantuvo al día —el gate lo exige— mientras las cifras de esta sección se
 quedaron en 46: quien cableaba movía su fila y nadie le pedía tocar el resumen. El gate estaba
 verde y tenía razón; lo que mentía era la prosa (#50).
@@ -32,10 +32,10 @@ forma conocida de que una cifra a mano sobreviva a la cuarta ola.
 |---|---:|---|
 | **A — cableado pendiente** | 13 | va a una capacidad o a un BFF |
 | **B — ya resuelto desde el contenido** | 5 | sale de DocTypes; cablearlo sería un retroceso |
-| **C — se queda en stub a propósito** | 31 | no hay capacidad detrás — o la hay y el stub es el camino por defecto |
+| **C — se queda en stub a propósito** | 33 | no hay capacidad detrás — o la hay y el stub es el camino por defecto |
 
 > **La brecha es menor de lo que «una capacidad de veinte conectada» sugiere**, y por una razón
-> que no se ve desde el conteo: **más de un tercio de los stubs ya son durables**. 19 de los 49
+> que no se ve desde el conteo: **más de un tercio de los stubs ya son durables**. 20 de los 51
 > escriben tras `IJsonEntityStore`, `IPrivateFileStore` o `IPhiStore` (ADR 0105, ADR 0116 fase 6, doc 25,
 > T6). «Stub» en este repo dejó hace tiempo de querer decir «en memoria», y leerlo así es lo que
 > hace que un ticket prometa arreglar algo que ya está arreglado — ver la nota sobre #26 al final.
@@ -156,7 +156,7 @@ Los cinco tienen la misma forma: un flag `Synergos:Catalog:Sources:{vertical}` q
 
 ---
 
-## Familia C — se queda en stub a propósito (31)
+## Familia C — se queda en stub a propósito (33)
 
 No hay capacidad detrás, o la hay y el stub es el camino por defecto a propósito. Cuatro razones
 distintas, y conviene no mezclarlas
@@ -216,6 +216,19 @@ nuestra: `Api.Documents` guarda documentos, no historias clínicas.
 Los cinco **ya son durables** (ADR 0105). `Api.Engagement` existe y guarda «engagements» con
 visibilidad, que no es lo mismo que un grafo dirigido de seguimiento ni una wishlist por Member.
 Forzarlos ahí sería meter un sustantivo de negocio dentro de una capacidad agnóstica.
+
+**Alquiler de equipos (2)** — `StubEquipmentCatalogProvider` · `StubEquipmentRentalService`
+(#147, el piloto 2 de la fábrica). Los dos se quedan en stub **a propósito y por razones
+distintas**, que es lo que hace que valga la pena nombrarlos aparte:
+
+- el del **catálogo** es el seed de demo del eje 1, y lo reemplaza `UmbracoEquipmentCatalogSource`
+  con `Synergos:Catalog:Sources:Alquiler = cms` — familia B en cuanto alguien autora, como
+  Educación (#100) y Salud (#118);
+- el del **motor** es el camino en proceso del eje 2, registrado por defecto para que el repo se
+  levante entero sin ningún servicio. Con `Synergos:Alquiler:Mode = Bff` lo reemplaza
+  `HttpEquipmentRentalService`. **Es durable desde el primer día**: un alquiler dura días, y un
+  almacén en memoria perdería en el primer reinicio la única constancia de cuánto se le retuvo a
+  quién.
 
 **Academia y eventos (3)** — `StubCourseCatalogProvider` · `StubEnrollmentService` ·
 `StubEventTicketingService`.
@@ -292,7 +305,7 @@ y sus holds necesitan quien los expire.
 > no queda nada que mover de una vez.
 
 
-## Los 49, en una lista
+## Los 51, en una lista
 
 Para el gate. La familia va entre corchetes; el destino, cuando lo hay, es un directorio que
 tiene que existir en la raíz del repo.
@@ -320,6 +333,8 @@ tiene que existir en la raíz del repo.
 | `StubDocumentUploadService` | C | — |
 | `StubEhrInBasketService` | C | — |
 | `StubEnrollmentService` | C | — |
+| `StubEquipmentCatalogProvider` | C | — |
+| `StubEquipmentRentalService` | C | — |
 | `StubEventCatalogProvider` | B | — |
 | `StubEventManagementService` | C | — |
 | `StubHotelBookingService` | A | `Synergos.Bff.Viajes` |
