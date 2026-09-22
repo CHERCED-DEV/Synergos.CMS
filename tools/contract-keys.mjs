@@ -78,6 +78,7 @@ const PARES = [
     { app: 'realty', controllers: ['RealtyController.cs'] },
     { app: 'booking-wizard', controllers: ['BookingController.cs'] },
     { app: 'blogs', controllers: ['BlogsController.cs'] },
+    { app: 'alquiler', controllers: ['AlquilerController.cs'] },
 ];
 
 /**
@@ -101,12 +102,18 @@ function clavesQueLeeLaUi(app) {
     const dir = path.join(UI, 'platforms', 'angular', 'apps', 'elements', 'modules', app, 'src');
     if (!fs.existsSync(dir)) return null;
 
+    // **Y también los `*.model.ts`, porque el normalizador no siempre vive en el cliente.**
+    // Medido antes de ampliarlo: en los OCHO verticales anteriores no cambia ni una clave —los
+    // ocho declaran sus `readString(value['x'])` dentro del propio cliente— y el noveno pasaba
+    // de 0 a 35. Un gate cuyo alcance depende del NOMBRE DE FICHERO que eligió cada app no está
+    // midiendo «lo que la app lee»: está midiendo dónde lo escribió
+    // (`a_path_is_not_a_name_and_a_flat_tree_hides_it`, aplicado a un gate).
     const clientes = [];
     const walk = (d) => {
         for (const e of fs.readdirSync(d, { withFileTypes: true })) {
             const p = path.join(d, e.name);
             if (e.isDirectory()) walk(p);
-            else if (e.name.endsWith('api.client.ts')) clientes.push(p);
+            else if (e.name.endsWith('api.client.ts') || e.name.endsWith('.model.ts')) clientes.push(p);
         }
     };
     walk(dir);
@@ -196,8 +203,21 @@ for (const { app, controllers } of PARES) {
     medido[app] = cruzan;
     huerfanas[app] = [...ui].filter((k) => !cms.has(k)).sort();
 
+    // **Cero claves leídas NO es «este vertical no lee nada»: es que no estamos mirando donde
+    // vive su normalizador.** El `ui.size === 0 ? 1` de antes lo convertía en un aprobado —la
+    // guarda se saltaba y el vertical entraba a la línea base con la lista vacía, congelando un
+    // verde sobre el vacío—. Lo destapó el noveno vertical, que puso sus normalizadores en un
+    // `*.model.ts` y cruzó 0 de 0 sin que nada chistara.
+    if (ui.size === 0) {
+        problemas.push(
+            `[${app}] su cliente no lee NI UNA clave de las respuestas.\n    → o el par apunta a `
+            + 'una app que no existe, o el normalizador vive en un fichero que este gate no mira. '
+            + 'Cero claves nunca es la respuesta correcta para un vertical con borde.');
+        continue;
+    }
+
     // La guarda: un par mal escrito cruza casi nada, y congelarlo así da verde para siempre.
-    const proporcion = ui.size === 0 ? 1 : cruzan.length / ui.size;
+    const proporcion = cruzan.length / ui.size;
     if (proporcion < PROPORCION_MINIMA) {
         problemas.push(
             `[${app}] sólo ${cruzan.length} de las ${ui.size} claves que su cliente lee salen de `

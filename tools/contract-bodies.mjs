@@ -55,6 +55,7 @@ const PARES = [
     { app: 'realty', controllers: ['RealtyController.cs'] },
     { app: 'booking-wizard', controllers: ['BookingController.cs'] },
     { app: 'blogs', controllers: ['BlogsController.cs', 'CommentsController.cs'] },
+    { app: 'alquiler', controllers: ['AlquilerController.cs'] },
 ];
 
 const sinComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
