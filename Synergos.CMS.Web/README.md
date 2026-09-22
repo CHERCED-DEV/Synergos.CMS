@@ -37,9 +37,14 @@ dotnet build   Synergos.CMS.sln
 dotnet run --project Synergos.CMS.Web
 ```
 
-Installer credentials (pre-seeded by the `dotnet new umbraco` template):
+Installer credentials:
 - **Email**: `admin@synergos.local`
-- **Password**: `Synergos2026!`
+- **Password**: whatever you set in `Umbraco__CMS__Unattended__UnattendedUserPassword`.
+
+It is **not** in the tree and it is not supposed to be: until #150 this repo
+published the password of the **production** admin in `appsettings.Docker.json`,
+which is the profile the deployment runs with. Boot fails naming the variable if
+it is missing.
 
 Full setup walkthrough: [`docs/onboarding/new-developer-setup.md`](docs/onboarding/new-developer-setup.md).
 

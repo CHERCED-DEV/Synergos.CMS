@@ -65,6 +65,14 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
     if (!string.IsNullOrWhiteSpace(buzon)) Directory.CreateDirectory(buzon);
 }
 
+// La contraseña del administrador sale del ENTORNO, nunca de un appsettings (#150). Se exige acá,
+// antes de construir el host: el instalador desatendido de Umbraco también falla sin ella, pero su
+// excepción no nombra la variable ni de dónde sale — la misma distinción del certificado de #137.
+CredencialDelAdministrador.Exigir(
+    builder.Configuration[CredencialDelAdministrador.ClaveDelInterruptor],
+    builder.Configuration[CredencialDelAdministrador.ClaveDeLaContrasena],
+    builder.Environment.EnvironmentName);
+
 builder.CreateUmbracoBuilder()
     .AddBackOffice()
     .AddWebsite()

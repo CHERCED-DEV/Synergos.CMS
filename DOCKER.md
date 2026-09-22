@@ -41,8 +41,9 @@ backoffice y de las notificaciones no llevan a ningún lado.
 Después, desde la tablet:
 
 - Sitio: `http://TU-IP:8080`
-- Backoffice: `http://TU-IP:8080/umbraco` (`admin@synergos.local` /
-  `Synergos2026!`, igual que en Development)
+- Backoffice: `http://TU-IP:8080/umbraco` (`admin@synergos.local` / la contraseña
+  que le hayas puesto a `SYNERGOS_ADMIN_PASSWORD`; sin ella el contenedor no
+  arranca y lo dice nombrándola — #150)
 
 Windows Firewall va a pedir permiso la primera vez que algo entre al 8080;
 hay que aceptarlo **para redes privadas**.

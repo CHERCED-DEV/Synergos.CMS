@@ -105,6 +105,11 @@ const child = spawn('dotnet', [DLL], {
     // Encendido a propósito, al revés que en usync-rebuild-check: lo que se prueba
     // acá es precisamente la herramienta que vive detrás del flag.
     Synergos__DevSeed__Enabled: 'true',
+    // La contraseña del administrador NO vive en ningún appsettings desde el #150 — publicaba
+    // la de PRODUCCIÓN en un repo público. Estos gates arrancan con el perfil `Docker`, que
+    // instala desatendido, así que ponen la suya: de usar y tirar, para una base que se borra al
+    // terminar, y nunca la de un entorno de verdad.
+    'Umbraco__CMS__Unattended__UnattendedUserPassword': 'humo-de-usar-y-tirar-Aa1!',
     Umbraco__CMS__Hosting__LocalTempStorageLocation: 'EnvironmentTemp',
     TMPDIR: tmp, TEMP: tmp, TMP: tmp,
   },

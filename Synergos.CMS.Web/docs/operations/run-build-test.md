@@ -35,9 +35,10 @@ dotnet run --project Synergos.CMS.Web
 ```
 
 First run triggers the Umbraco install flow at `https://localhost:XXXXX/`.
-Credentials seeded by the template:
+Credentials:
 - **Email**: `admin@synergos.local`
-- **Password**: `Synergos2026!`
+- **Password**: the one you put in `Umbraco__CMS__Unattended__UnattendedUserPassword`
+  — it is not in the tree (#150), and boot fails naming the variable if it is missing.
 
 The SQLite database is at `Synergos.CMS.Web/umbraco/Data/Umbraco.sqlite.db`.
 Delete it to reset to pristine state.

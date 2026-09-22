@@ -389,6 +389,25 @@ services:
       Synergos__Notifications__PublicBaseUrl: "https://\${SYNERGOS_DOMAIN}"
       Synergos__Cart__SecretKey: \${SYNERGOS_CART_SECRET:?falta SYNERGOS_CART_SECRET}
 
+      # LA CONTRASEÑA DEL ADMINISTRADOR, del entorno y con \`:?\` (#150).
+      #
+      # Es el gemelo exacto del bloque de arriba: \`appsettings.Docker.json\` traia
+      # \`"UnattendedUserPassword": "…"\` junto a \`InstallUnattended: true\`, y este
+      # perfil es el que corre PRODUCCION. O sea que el admin del backoffice del
+      # sitio desplegado se creaba con una clave publicada en un repo publico.
+      #
+      # El #113 encontro UNA clave que este perfil traia mal para produccion y la
+      # apago aca; la pregunta que faltaba hacerse es que MAS traia, y la
+      # respuesta era la credencial. Hoy no esta en ningun appsettings: si falta
+      # la variable, el arranque lanza nombrandola (CredencialDelAdministrador).
+      Umbraco__CMS__Unattended__UnattendedUserPassword: \${SYNERGOS_ADMIN_PASSWORD:?falta SYNERGOS_ADMIN_PASSWORD}
+
+      # El correo del admin SI tiene default y no se exige, y la diferencia es
+      # que no es un secreto: \`admin@synergos.local\` no recibe nada y saberlo no
+      # abre ninguna puerta. Exigirlo seria una variable mas en el .env a cambio
+      # de nada — se deja pisable para quien quiera un correo real.
+      Umbraco__CMS__Unattended__UnattendedUserEmail: \${SYNERGOS_ADMIN_EMAIL:-admin@synergos.local}
+
       # La UNICA capacidad que el CMS consume hoy (ADR 0130). Por nombre de
       # servicio, no por localhost: dentro de la red de Docker, localhost es el
       # propio contenedor del CMS.

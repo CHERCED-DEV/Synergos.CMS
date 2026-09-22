@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3301 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3306 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2252 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 416 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 421 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3301**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3306**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -165,6 +165,7 @@ Synergos.CMS/
 │                                + portada de arranque (5, #119)
 │                                + política de build en la imagen (7, #156)
 │                                + secciones de configuración (2, #154)
+│                                + credenciales fuera del árbol (5, #150)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1658,6 +1659,69 @@ Las que salieron de construir el árbol de servicios (§0.B):
   **sin commitear**, `git checkout --` es peor que no hacer nada: devuelve el fichero a HEAD, o
   sea se lleva el trabajo. Se salva con `cp` y se restaura con `cp` + `touch`.
 
+
+- `feedback_a_dev_profile_is_a_production_profile_when_the_deploy_says_so` — **el
+  perfil que un `appsettings.<Entorno>.json` parece describir NO es el que decide
+  quién lo lee: lo decide el despliegue, y acá `ASPNETCORE_ENVIRONMENT=Docker` es
+  PRODUCCIÓN.** `appsettings.Docker.json` traía la contraseña del administrador
+  junto a `InstallUnattended: true`, así que la cuenta del backoffice del sitio
+  desplegado se creaba con una credencial publicada en un repo público, con su
+  correo al lado y el mismo literal en **siete** ficheros versionados (#150).
+  **Y la regla ya estaba escrita**: `.env.example` abre con «NINGÚN SECRETO ENTRA
+  AL REPO. NI UNO». Una prohibición que nadie cruza se desvía igual que una cifra
+  —`feedback_a_named_list_beats_a_count` aplicado a una prosa—, y el fichero que la
+  enunciaba y el que la rompía estaban a dos carpetas de distancia.
+  **Es el gemelo del #113 y la pregunta que aquél no hizo es la que cierra la
+  familia**: allí se encontró UNA clave que este perfil traía mal para producción
+  —los catorce endpoints de `DevController` alcanzables desde internet— y se apagó
+  en el compose; lo que faltaba preguntarse era *¿qué MÁS trae?*, y la respuesta
+  era la credencial. **El disparador, entonces**: cada vez que se apague algo de un
+  perfil «de contenedor» porque no sirve para producción, se recorre el perfil
+  ENTERO, no la clave que llegó.
+  **Tres cortes que costaron su mutación.** Uno: **no se deja un valor de
+  desarrollo en el árbol** —era la salida corta, y una contraseña de desarrollo en
+  un repo público es la que alguien reusa en el primer servidor que levanta a
+  mano—; el precio es una variable más en el onboarding y los cuatro gates que
+  arrancan con ese perfil poniéndose la suya, de usar y tirar. Dos: **se falla al
+  CABLEAR y con mensaje propio**, no dejando fallar al instalador de Umbraco, cuya
+  excepción no nombra ni la variable ni el fichero — la misma distinción del
+  certificado de #137: el problema no era que no avisara, era *qué* avisaba.
+  Tres: **una credencial que llega VACÍA es peor que una que falta**, porque el
+  servidor arranca verde y rechaza al primero que intente entrar; por eso el gate
+  exige `:?`, o un `:-` que DECLARE la funcionalidad como apagable, o que la misma
+  variable ya se exija en otra fila del compose.
+  **Y el gate se afina por el nombre de la HOJA y no por la ruta entera**: un
+  `Contains` marcaría `IdentityTokens:ActiveKeyId` y `LifetimeMinutes`, y nacería
+  con un muro de excepciones. Medido con el corte por sufijo: **una sola** entrada
+  en el censo (`Synergos:Branding:Key`, que nombra una marca). Hay gate
+  (`CredencialesFueraDelArbolTests`, 5 dientes, mutado cuatro veces y cada
+  mutación en un diente distinto).
+  **Lo que ningún gate arregla, y es la mitad que importa: lo publicado está
+  quemado.** Sacarlo del árbol no lo saca del historial de git ni de las copias
+  que alguien haya hecho. Se ROTA. Y por eso el `<remarks>` de la guarda **no
+  repite el valor viejo**: escribirlo dentro de la explicación de por qué no se
+  escriben los valores lo publica una octava vez, con mejor prosa alrededor y el
+  mismo daño.
+
+- `feedback_look_at_the_open_branches_before_diagnosing_a_red_ci` — **antes de
+  diagnosticar un fallo de CI que lleva días, se miran las ramas abiertas y sus
+  corridas.** El #151 describía el síntoma con todas las letras desde el 17-sep, y
+  lo que no decía —porque un hallazgo describe lo que ve, no quién lo está
+  mirando— es que otra rama ya estaba dentro: `fc2ce9c` arregló los mismos dos
+  defectos horas antes, con su propio gate, y `203eaec` cerró además el
+  `exit null` que el diagnóstico de acá había atribuido a la memoria del runner.
+  Dos comandos —`git branch -r` y las corridas por rama— habrían ahorrado el
+  trabajo entero salvo lo que de verdad era nuevo.
+  **Y el coste no es sólo el tiempo duplicado: son DOS gates con el mismo
+  criterio**, que es `feedback_the_same_algorithm_is_not_the_same_thing` —el día
+  que uno se afine, el otro miente—. Al rebasar hay que quedarse con uno, y la
+  elección no es «el mío»: se leen los dos y se absorbe lo que cada uno hacía
+  mejor. Acá el que quedó ganó tres cosas del otro —la razón de cada fichero en el
+  mensaje del rojo, el `COPY` anclado a su destino, y barrer **todas** las
+  configuraciones de `bin/` en vez de una—, y esa última resultó no ser cosmética:
+  medido, Debug **y** Release salían los dos con el bit puesto, así que mirar una
+  sola dejaba pasar en verde justo la que se publica.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1717,13 +1781,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3301 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3306 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2252
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 416
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 421
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2115,7 +2179,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3301 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3306 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

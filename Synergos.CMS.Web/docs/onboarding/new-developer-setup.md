@@ -40,7 +40,15 @@ On first run, Umbraco shows its install wizard at `https://localhost:XXXXX/`
 by the template:
 
 - **Email**: `admin@synergos.local`
-- **Password**: `Synergos2026!`
+- **Password**: yours. Set it before the first run — the value is **not** in the
+  tree and boot fails naming the variable:
+
+  ```bash
+  export Umbraco__CMS__Unattended__UnattendedUserPassword='…Aa1!'   # o dotnet user-secrets
+  ```
+
+  Umbraco pide mayúscula, minúscula, dígito y símbolo. Hasta #150 acá había un
+  literal, y era **el mismo** con el que se creaba el administrador de producción.
 
 The backoffice is at `/umbraco`. The database is SQLite, stored under
 `Synergos.CMS.Web/umbraco/Data/Umbraco.sqlite.db` — safe to delete and start

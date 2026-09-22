@@ -110,7 +110,8 @@ arrancar** (ADR 0008: `ImportAtStartup` está en `None`, y hay gate que lo
 vigila). Se importa a mano, una vez, desde el backoffice:
 
 1. `dotnet run --project Synergos.CMS.Web`
-2. entrás a `/umbraco` (`admin@synergos.local` / `Synergos2026!`)
+2. entrás a `/umbraco` (`admin@synergos.local` / la contraseña que pusiste en
+   `Umbraco__CMS__Unattended__UnattendedUserPassword` — no está en el árbol, #150)
 3. sección **uSync** → **Import**
 
 > **Esperá a que el import TERMINE antes de sembrar nada.** El log dice
