@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3306 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3307 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2252 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 421 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 422 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3306**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3307**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -159,7 +159,7 @@ Synergos.CMS/
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
 ├── Synergos.Arquitectura.Tests/ LOS GATES: segregación (17) + molde (12)
 │   └── Architecture/            + capas (8) + imagen de contenedor (6)
-│                                + compose (12) + despliegue (18, ADR 0133)
+│                                + compose (13) + despliegue (18, ADR 0133)
 │                                + molde del vertical (13, doc 12)
 │                                + seudónimo único (3, #120)
 │                                + portada de arranque (5, #119)
@@ -1722,6 +1722,33 @@ Las que salieron de construir el árbol de servicios (§0.B):
   medido, Debug **y** Release salían los dos con el bit puesto, así que mirar una
   sola dejaba pasar en verde justo la que se publica.
 
+- `feedback_a_block_matcher_over_an_indented_format_needs_two_counts_that_agree` —
+  **un regex que parte un fichero con SANGRÍA significativa en bloques tiene puntos ciegos que
+  no dejan hueco: dejan al gate midiendo un subconjunto y reportando que miró todo.** El de
+  `ComposeStackTests` era
+  `^  (?<s>[a-z0-9-]+):$(?<cuerpo>(?:\n(?:    .*|\s*))*)`, y la alternativa `\s*` —puesta para
+  tragarse las líneas en blanco— falla **dos veces por la misma razón**, que `\s` incluye el
+  salto de línea (#152). Una: al llegar a una línea en blanco consume `"\n      "` —el blanco y
+  la sangría de la siguiente— y deja al bucle exterior sin su `\n`, así que **el cuerpo se corta
+  ahí**. Dos: ante la cabecera del servicio de al lado, `    .*` falla y `\s*` casa sus **dos
+  espacios**, o sea que el `^  ` de ese bloque ya está consumido y **no se busca nunca**.
+  **Medido sobre el fichero real, y ninguna de las dos cifras se ve leyendo**: 32 de **58**
+  claves de nivel 2 vistas, y de los servicios que declaran réplicas el gate llegaba al valor
+  de **diez de 25** — con los cuatro orquestadores, que son lo único que ese gate existe para
+  cazar, entre los quince invisibles. Por eso la mutación de manual pasaba en VERDE.
+  **La salida no es afinar el regex: es que no haya regex.** Un escáner de líneas no tiene
+  alternativas que ordenar ni codicia que medir, y cuesta veinte líneas.
+  **Y lo que de verdad cierra esto es la red de seguridad, que es de una forma concreta: DOS
+  cuentas independientes de lo mismo que tienen que coincidir** —los bloques que traen
+  `replicas:` contra las líneas `replicas:` del fichero—. Es el movimiento del
+  `IdentityGateTests` de #14 (derivar la lista del disco en vez de leérsela al generador)
+  aplicado a un parser: una sola derivación no puede detectar que se está perdiendo algo,
+  porque lo perdido no deja rastro. Comprobado reintroduciendo el corte en la línea en blanco:
+  19 contra 25, rojo.
+  **El tell, y se busca sin leer lógica**: un `\s*` o un `[\s\S]*?` dentro del patrón que
+  delimita un bloque de YAML, Markdown o Python. Si el formato usa la sangría para decir dónde
+  acaba algo, el motor de regex no lo sabe.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1781,13 +1808,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3306 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3307 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2252
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 421
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 422
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2179,7 +2206,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3306 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3307 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

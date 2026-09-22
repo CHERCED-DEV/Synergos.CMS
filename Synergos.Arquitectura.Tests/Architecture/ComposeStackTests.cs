@@ -18,8 +18,10 @@ namespace Synergos.CMS.Tests.Architecture;
 ///   compartida que <c>CLAUDE.md</c> §11 dice que <i>no es identidad</i>. Contradice por
 ///   configuración lo que el código dice de sí mismo.</item>
 ///
-///   <item><b>Dos réplicas</b> corrompen el almacén en silencio. <c>JsonCollectionStore</c> tiene
-///   un <c>lock</c> de <b>proceso</b>: dos instancias se pisan y no dan error.</item>
+///   <item><b>Dos réplicas de quien no tiene turno de escritura</b> pierden escrituras en
+///   silencio. Desde el #112 eso ya <b>no</b> vale para toda capacidad —almacén por documento más
+///   <c>StoreWriteGate</c>— así que lo que se vigila es quién lo <b>enchufa</b>, no una
+///   prohibición plana. Ver <c>Solo_corre_con_dos_replicas_quien_TIENE_turno_de_escritura</c>.</item>
 /// </list>
 ///
 /// <para><b>Y el cuarto, que es el más silencioso de todos:</b> que alguien añada una capacidad y
@@ -50,6 +52,97 @@ public sealed class ComposeStackTests
     private static string ComposeSinComentarios()
         => string.Join('\n', File.ReadAllLines(Path.Combine(RepoRoot(), "compose.prod.yml"))
             .Where(l => !l.TrimStart().StartsWith('#')));
+
+    /// <summary>
+    /// El compose partido en bloques de nivel 2 —<c>nombre:</c> con sus líneas— con un ESCÁNER de
+    /// líneas y no con un regex (#152).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La primera versión de esto era un regex y pasaba en verde con el defecto
+    /// puesto.</b> Era
+    /// <c>^  (?&lt;s&gt;[a-z0-9-]+):$(?&lt;cuerpo&gt;(?:\n(?:    .*|\s*))*)</c>, y la alternativa
+    /// <c>\s*</c> —que está ahí para tragarse las líneas en blanco— tiene <b>dos</b> puntos
+    /// ciegos, los dos medidos sobre el fichero real y ninguno visible leyendo:</para>
+    ///
+    /// <list type="number">
+    ///   <item><b>El cuerpo se corta en la primera línea en blanco.</b> <c>\s*</c> es codicioso y
+    ///   <c>\s</c> incluye el salto de línea, así que consume <c>"\n      "</c> —el blanco y la
+    ///   sangría de la línea siguiente— y deja al bucle exterior sin su <c>\n</c>. Medido:
+    ///   el cuerpo de <c>bff-tienda</c> terminaba <b>23 líneas antes</b> de su
+    ///   <c>replicas:</c>, y de los 26 servicios que declaran réplicas el gate sólo llegaba a
+    ///   ver las de <b>diez</b>. Los cuatro orquestadores —lo único que este gate existe para
+    ///   cazar— estaban entre los dieciséis invisibles.</item>
+    ///
+    ///   <item><b>Y se come la sangría de la cabecera siguiente</b>, por lo mismo: al fallar
+    ///   <c>    .*</c> sobre <c>"  api-cart:"</c>, <c>\s*</c> casa sus dos espacios, así que el
+    ///   <c>^  </c> del servicio de al lado ya está consumido y ese bloque <b>no se busca
+    ///   nunca</b>. Medido: 32 de 58 claves de nivel 2.</item>
+    /// </list>
+    ///
+    /// <para><b>Lo que enseña no es «ese regex estaba mal»</b> —es
+    /// <c>feedback_a_gate_that_parses_source_needs_its_own_mutations</c> tal cual: un regex sobre
+    /// un formato con sangría significativa sale con un número plausible y nadie lo cruza. Por eso
+    /// acá hay un escáner, que no tiene alternativas que ordenar, <b>y una red de seguridad</b>:
+    /// los bloques que traen <c>replicas:</c> tienen que ser tantos como líneas
+    /// <c>replicas:</c> hay en el fichero. Dos cuentas independientes de lo mismo es lo único que
+    /// distingue «los vi todos» de «creo que los vi todos».</para>
+    /// </remarks>
+    private static IReadOnlyDictionary<string, string> BloquesDeServicio()
+    {
+        var lineas = File.ReadAllLines(Path.Combine(RepoRoot(), "compose.prod.yml"))
+            .Where(l => !l.TrimStart().StartsWith('#'))
+            .ToList();
+
+        var bloques = new Dictionary<string, string>(StringComparer.Ordinal);
+        string? actual = null;
+        var cuerpo = new List<string>();
+
+        void Cerrar()
+        {
+            if (actual is not null) bloques[actual] = string.Join('\n', cuerpo);
+            cuerpo.Clear();
+        }
+
+        foreach (var linea in lineas)
+        {
+            var cabecera = Regex.Match(linea, @"^  (?<s>[a-z0-9-]+):\s*$");
+            if (cabecera.Success)
+            {
+                Cerrar();
+                actual = cabecera.Groups["s"].Value;
+                continue;
+            }
+
+            // Una línea que empieza en la columna 0 y no está en blanco cierra la sección entera
+            // (`services:`, `volumes:`, `networks:`) — sin esto, el último bloque de una sección
+            // se tragaría la siguiente.
+            if (linea.Length > 0 && !char.IsWhiteSpace(linea[0]))
+            {
+                Cerrar();
+                actual = null;
+                continue;
+            }
+
+            if (actual is not null) cuerpo.Add(linea);
+        }
+
+        Cerrar();
+
+        // La red de seguridad, y el motivo por el que esto no es un regex. Se cuentan las líneas
+        // `replicas:` del fichero y se exige que el escáner las haya repartido TODAS: si el corte
+        // vuelve a perder cuerpos, esto se pone rojo en vez de decir «ninguno pasa de una».
+        var enElFichero = lineas.Count(l => l.TrimStart().StartsWith("replicas:", StringComparison.Ordinal));
+        var enLosBloques = bloques.Values.Count(c =>
+            c.Split('\n').Any(l => l.TrimStart().StartsWith("replicas:", StringComparison.Ordinal)));
+
+        Assert.True(
+            enElFichero == enLosBloques,
+            $"El escáner repartió {enLosBloques} bloques con `replicas:` y el fichero tiene " +
+            $"{enElFichero} líneas `replicas:`. El corte por bloques está perdiendo cuerpos, que " +
+            "es cómo el regex anterior dejaba pasar a los cuatro orquestadores en verde (#152).");
+
+        return bloques;
+    }
 
     /// <summary>Los servicios desplegables, calculados como los calcula el generador.</summary>
     private static IReadOnlyList<string> Servicios()
@@ -200,20 +293,125 @@ public sealed class ComposeStackTests
             $"despliegue:{Environment.NewLine}{string.Join(Environment.NewLine, sinVolumen)}");
     }
 
-    [Fact]
-    public void Nadie_corre_con_mas_de_una_replica()
-    {
-        // JsonCollectionStore tiene un lock de PROCESO. Dos instancias se pisan y no dan error:
-        // corrompen. Y un rolling deploy son, por definición, dos instancias a la vez — el
-        // despliegue "normal" de cualquier plataforma moderna rompe esto.
-        var malas = Regex.Matches(Compose(), @"replicas:\s*(\d+)")
-            .Select(m => int.Parse(m.Groups[1].Value))
-            .Where(n => n != 1)
-            .ToList();
+    /// <summary>
+    /// Quién puede correr con MÁS de una réplica, derivado del disco y no de una lista (#152).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Este gate decía otra cosa hasta el #152, y lo que decía había caducado.</b> Su
+    /// razón era «<c>JsonCollectionStore</c> tiene un lock de PROCESO: dos instancias se pisan, y
+    /// no da error — corrompe», y el generador la repetía <b>veinticuatro veces</b> en el compose.
+    /// Era cierta, y el <b>#112 la desmontó</b>: el almacén pasó a un fichero por documento y
+    /// <c>StoreWriteGate</c> subió a proceso cruzado el <c>lock</c> de capacidad entera. Medido en
+    /// vivo allí: dos <c>Api.Inventory</c> sobre el mismo volumen, 400 ajustes relativos
+    /// disparados de a dos — <b>sin turno: 400 respuestas 200 y 268 unidades</b> (132 escrituras
+    /// perdidas, sin excepción y sin log); <b>con turno: 400 y 400</b>.</para>
+    ///
+    /// <para><b>Y un gate que afirma de más no se pone rojo: se cumple.</b> Nadie volvió al
+    /// compose, así que el fichero que un agente lee para saber qué puede levantar le dice
+    /// veinticuatro veces que no haga la única cosa que el #112 construyó — y le da una razón
+    /// falsa. Es <c>feedback_a_fixture_built_on_a_neighbouring_defect_expires_with_it</c> con el
+    /// sujeto cambiado: allá un test afirmaba el síntoma de un defecto de otra pieza, acá lo
+    /// afirma un gate.</para>
+    ///
+    /// <para><b>Lo que se quita no es el valor, es la PROHIBICIÓN.</b> <c>replicas: 1</c> se
+    /// queda donde nadie necesita dos: una cosa es «hoy no hace falta» y otra «no se puede».</para>
+    ///
+    /// <para><b>Se deriva del disco y no se enumera</b>, porque una lista se queda corta el día
+    /// que un orquestador gane su turno: lo que habilita dos réplicas es <b>enchufar</b>
+    /// <c>UseStoreWriteGate(</c> —la llamada, no la mención, que es la lección del #112 sobre
+    /// <c>Api.Inventory</c>—. Medido hoy: 19 de 20 capacidades lo enchufan, 0 de 4
+    /// orquestadores.</para>
+    /// </remarks>
+    private static readonly (string Servicio, string Razon)[] ActivoActivoSinTurno =
+    [
+        ("api-sessions",
+            "su almacén AÑADE líneas a un fichero por día y nunca lee-modifica-escribe, que es " +
+            "el único patrón que ya era seguro entre réplicas sin turno (CLAUDE.md §11)"),
+    ];
 
-        Assert.True(malas.Count == 0,
-            "Hay servicios con más de una réplica. Mientras el almacén siga siendo " +
-            "JsonCollectionStore, dos instancias corrompen en silencio (épica #16, CLAUDE.md §11).");
+    [Fact]
+    public void Solo_corre_con_dos_replicas_quien_TIENE_turno_de_escritura()
+    {
+        var sinTurno = ActivoActivoSinTurno.Select(e => e.Servicio).ToHashSet(StringComparer.Ordinal);
+
+        // Quién lo enchufa, leído del disco. Se cuenta la LLAMADA y no la mención: `Api.Inventory`
+        // llegó a tener el comentario sin la llamada —una mutación que se quedó puesta— y un grep
+        // de la explicación decía «19 de 19» (#112).
+        var conTurno = Proyectos.Directorios()
+            .Select(Path.GetFileName)
+            .Where(n => n!.StartsWith("Synergos.Api.", StringComparison.Ordinal)
+                     || n.StartsWith("Synergos.Bff.", StringComparison.Ordinal))
+            .Where(n => File.Exists(Proyectos.Dir(n!, "Program.cs")))
+            .Where(n => File.ReadAllText(Proyectos.Dir(n!, "Program.cs"))
+                            .Contains("UseStoreWriteGate(", StringComparison.Ordinal))
+            .Select(n => n!.Replace("Synergos.", "").Replace(".", "-").ToLowerInvariant())
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Red de seguridad: si el descubrimiento deja de ver, TODO servicio pareceria «sin turno»
+        // y el gate volveria a ser la prohibicion plana que este cambio vino a quitar — en verde
+        // y con la razon equivocada, que es como llego hasta acá.
+        Assert.True(
+            conTurno.Count >= 15,
+            $"Sólo se vieron {conTurno.Count} servicios con `UseStoreWriteGate(` y son 19. El " +
+            "descubrimiento está roto: sin esto el gate se convierte otra vez en «nadie pasa de " +
+            "una», que es exactamente lo que el #152 vino a corregir.");
+
+        // Cada bloque `nombre:` … `replicas: N` del compose. Va por el escáner y no por un regex:
+        // ver el `<remarks>` de `BloquesDeServicio`, donde está medido lo que el regex perdía.
+        var malas = new List<string>();
+
+        foreach (var (servicio, cuerpo) in BloquesDeServicio())
+        {
+            var replicas = Regex.Match(cuerpo, @"replicas:\s*(\d+)");
+            if (!replicas.Success) continue;
+            if (int.Parse(replicas.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) <= 1) continue;
+
+            if (conTurno.Contains(servicio) || sinTurno.Contains(servicio)) continue;
+
+            malas.Add(servicio);
+        }
+
+        Assert.True(
+            malas.Count == 0,
+            $"Estos servicios corren con más de una réplica y NO tienen turno de escritura: " +
+            $"{string.Join(", ", malas)}.\n\n" +
+            "Desde el #112 dos réplicas de una CAPACIDAD conviven —almacén por documento más " +
+            "`StoreWriteGate`— pero eso hay que ENCHUFARLO. Los cuatro orquestadores no lo " +
+            "tienen y no es olvido: dentro de un paso de saga hay llamadas HTTP, así que un " +
+            "turno de orquestador entero dejaría toda compra haciendo cola detrás de la que " +
+            "espera a la pasarela. Lo que ahí corresponde es un turno POR SAGA, del tamaño de " +
+            "`ISagaLease`, y es otro trabajo (CLAUDE.md §11). Mientras tanto, dos réplicas " +
+            "avanzando la MISMA saga pierden una escritura, sin excepción y sin log.");
+    }
+
+    [Fact]
+    public void El_censo_de_activo_activo_sin_turno_no_declara_lo_que_ya_no_corresponde()
+    {
+        // El diente de vuelta. Si `Api.Sessions` enchufa el turno algún día, su fila sobra — y una
+        // entrada que sobra deja de leerse y acaba eximiendo a quien no debe (#137).
+        var conTurno = Proyectos.Directorios()
+            .Select(Path.GetFileName)
+            .Where(n => n!.StartsWith("Synergos.Api.", StringComparison.Ordinal)
+                     || n.StartsWith("Synergos.Bff.", StringComparison.Ordinal))
+            .Where(n => File.Exists(Proyectos.Dir(n!, "Program.cs")))
+            .ToDictionary(
+                n => n!.Replace("Synergos.", "").Replace(".", "-").ToLowerInvariant(),
+                n => File.ReadAllText(Proyectos.Dir(n!, "Program.cs"))
+                         .Contains("UseStoreWriteGate(", StringComparison.Ordinal),
+                StringComparer.Ordinal);
+
+        foreach (var (servicio, razon) in ActivoActivoSinTurno)
+        {
+            Assert.True(
+                conTurno.ContainsKey(servicio),
+                $"El censo exime a «{servicio}» ({razon}) y ese servicio ya no existe.");
+
+            Assert.False(
+                conTurno[servicio],
+                $"El censo exime a «{servicio}» por no tener turno de escritura, y hoy SÍ " +
+                $"enchufa `UseStoreWriteGate(`. La fila sobra: {razon} — pero ya no hace falta " +
+                "decirlo acá, porque el cruce lo ve solo.");
+        }
     }
 
     [Fact]

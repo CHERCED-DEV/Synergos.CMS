@@ -67,6 +67,25 @@ function verificaIdentidad(proyecto) {
   return /AddIdentityTokens\(required:\s*false\)/.test(programa);
 }
 
+/**
+ * Si este servicio ENCHUFA el turno de escritura entre procesos (#112), leido de su
+ * `Program.cs`.
+ *
+ * Se cuenta la LLAMADA y no la mencion, y eso costo un defecto: `Api.Inventory` llego
+ * a tener el comentario que explica el turno SIN la llamada —una mutacion que una
+ * sesion anterior no restauro— asi que un grep de la explicacion decia «19 de 19».
+ * Ver `feedback_docs_written_ahead_of_the_code_are_a_defect_with_a_clean_face`.
+ *
+ * Es la misma derivacion que hace `ComposeStackTests`, a proposito y por separado:
+ * dos lecturas independientes del mismo hecho que tienen que coincidir es lo unico
+ * que distingue «el generador lo reparte» de «el generador cree que lo reparte»
+ * (#14). Un gate que leyera este fichero confirmaria el defecto en vez de cazarlo.
+ */
+function enchufaTurnoDeEscritura(proyecto) {
+  const programa = readFileSync(join(RAIZ, rutaDe(proyecto), 'Program.cs'), 'utf8');
+  return programa.includes('UseStoreWriteGate(');
+}
+
 /** `Synergos.Api.Booking` → `api-booking`. Docker no quiere mayúsculas ni puntos. */
 const nombreServicio = (proyecto) =>
   proyecto.replace(/^Synergos\./, '').replace(/\./g, '-').toLowerCase();
@@ -253,6 +272,71 @@ function entornoExtra(proyecto, disponibles) {
   return entornoIdentidad(proyecto);
 }
 
+/**
+ * El comentario del bloque `deploy:` — distinto para una capacidad y para un
+ * orquestador, porque desde el #112 no es verdad lo mismo de los dos.
+ *
+ * ESTA LINEA DECIA OTRA COSA, VEINTICUATRO VECES, Y HABIA CADUCADO (#152):
+ * «NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos instancias
+ * se pisan, y no da error — corrompe». Era cierto, y el #112 lo desmonto: el
+ * almacen paso a un fichero por documento y `StoreWriteGate` subio el turno de
+ * escritura a proceso cruzado. Medido en vivo alli con dos `Api.Inventory`
+ * sobre el mismo volumen y 400 ajustes relativos disparados de a dos — sin
+ * turno: 400 respuestas 200 y 268 unidades; con turno: 400 y 400.
+ *
+ * Nadie volvio a este fichero, asi que durante varias olas le dijo a quien lo
+ * leyera que no hiciera la unica cosa que aquella HU construyo, y con la razon
+ * equivocada. Un gate que afirma de mas no se pone rojo: SE CUMPLE.
+ *
+ * Lo que se quita no es el `1`: es la PROHIBICION. Una cosa es «hoy no hace
+ * falta» y otra «no se puede».
+ */
+function comentarioDeReplicas(proyecto) {
+  const comun = [
+    '      # UNA porque hoy no hace falta otra, NO porque no se pueda (#152).',
+    '      #',
+  ];
+
+  if (proyecto.startsWith('Synergos.Api.')) {
+    // Se LEE de su `Program.cs`, no se afirma de las veinte. Escribirlo plano habria
+    // sido el mismo defecto que este cambio viene a quitar, una capa mas abajo:
+    // `Api.Sessions` NO enchufa el turno, asi que el compose le estaria diciendo a
+    // quien lo lea que puede subirla — y es justamente la unica donde importa.
+    if (enchufaTurnoDeEscritura(proyecto)) {
+      return [
+        ...comun,
+        '      # Esta capacidad enchufa el turno de escritura (StoreWriteGate), asi que',
+        '      # dos replicas conviven: almacen por documento mas turno entre procesos.',
+        '      # Subirlo es legitimo el dia que el trafico lo pida.',
+      ].join('\n');
+    }
+
+    // Y aqui se dice el HECHO medido y no una razon: por que esta capacidad puede
+    // pasarse sin turno es una propiedad de su almacen que este generador no puede
+    // leer, asi que inventarla seria volver a afirmar de mas. La razon vive —una por
+    // servicio y con su nombre— en el censo de `ComposeStackTests`, que es lo que
+    // rompe el build si alguien sube a dos una que no deba.
+    return [
+      ...comun,
+      '      # Esta capacidad NO enchufa el turno de escritura (StoreWriteGate). Que eso',
+      '      # sea correcto o sea un cableado que falta lo decide el censo de',
+      '      # `ComposeStackTests`, donde esta escrita la razon de cada exencion; sin una',
+      '      # fila ahi, subirla de 1 rompe el build.',
+    ].join('\n');
+  }
+
+  return [
+    ...comun,
+    '      # Y aqui SI hay que dejarlo en 1: los orquestadores no tienen turno de',
+    '      # escritura, y no es olvido. Dentro de un paso de saga hay llamadas HTTP,',
+    '      # asi que un turno de orquestador entero dejaria toda compra haciendo cola',
+    '      # detras de la que espera a la pasarela — cambiar un defecto raro por uno',
+    '      # seguro. Lo que corresponde es un turno POR SAGA, del tamano de ISagaLease,',
+    '      # y es otro trabajo (CLAUDE.md §11). Con dos replicas hoy, dos que avancen',
+    '      # la MISMA saga pierden una escritura, sin excepcion y sin log.',
+  ].join('\n');
+}
+
 // ── El bloque de un servicio del árbol ───────────────────────────────────────
 //
 // Todos idénticos salvo el nombre. Que sean idénticos ES la propiedad: el día
@@ -279,9 +363,7 @@ function bloqueServicio(proyecto, disponibles) {
       # comporta como recien instalada.
       - ${nombre}-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+${comentarioDeReplicas(proyecto)}
       replicas: 1
 `;
 }
