@@ -114,6 +114,45 @@ public sealed class ClavesDeUmbracoTests
             && props.ValueKind == JsonValueKind.Object;
     }
 
+    /// <summary>
+    /// Cruza UNA ruta de configuración —<c>["Umbraco", "CMS", "Global", "UmbracoApplicationUrl"]</c>—
+    /// contra el schema del vendedor. Devuelve <c>null</c> si la declara (o si el schema no sabe
+    /// describir ese nivel, que no es lo mismo que sobrar), y si no, el texto que dice dónde sí vive.
+    /// </summary>
+    /// <remarks>
+    /// <para><c>internal</c> y usado por los DOS gates a propósito. Una clave
+    /// <c>Umbraco__CMS__…</c> del bloque <c>environment:</c> de un compose es la MISMA
+    /// configuración que una rama de un <c>appsettings</c>, sólo por otro transporte, así que el
+    /// criterio tiene que ser uno: con dos, el día que uno se afine el otro miente
+    /// (<c>feedback_the_same_algorithm_is_not_the_same_thing</c>). Es lo que costó el #159 — el
+    /// gate del #138 arregló las dos copias que sabía leer y dejó vivas las dos de los compose.</para>
+    /// <para>Se cruza por <b>RUTA</b> y no por nombre, que es el corte que el #138 midió: un cruce
+    /// que recolecte los nombres del schema y compruebe pertenencia <b>pierde</b>
+    /// <c>UmbracoApplicationUrl</c>, porque es una propiedad que el schema sí conoce, sólo que de
+    /// otro padre.</para>
+    /// </remarks>
+    internal static string? PorQueNoLaDeclara(IReadOnlyList<string> segmentos)
+    {
+        using var esquema = Abrir(Esquema());
+        var raiz = esquema.RootElement;
+
+        var nodo = raiz;
+        foreach (var segmento in segmentos)
+        {
+            // Si el schema no sabe describir este nivel, se PARA — no se declara que sobra.
+            if (!Hijos(nodo, raiz, out var props)) return null;
+
+            if (!props.TryGetProperty(segmento, out var hijo))
+            {
+                return $"{segmento}{Donde(segmento)}";
+            }
+
+            nodo = hijo;
+        }
+
+        return null;
+    }
+
     [Fact]
     public void Toda_clave_de_Umbraco_esta_donde_el_schema_la_declara()
     {
@@ -155,7 +194,7 @@ public sealed class ClavesDeUmbracoTests
                 {
                     // El dato que hace útil el mensaje NO es «no existe», es DÓNDE sí existe:
                     // sin eso, quien lo lea tiene que buscar la sección buena a mano.
-                    malas.Add($"{fichero} → {suya}{Donde(p.Name, nodoUmbraco, "Umbraco")}");
+                    malas.Add($"{fichero} → {suya}{Donde(p.Name)}");
                     continue;
                 }
 
@@ -188,7 +227,7 @@ public sealed class ClavesDeUmbracoTests
     /// «va en <c>WebRouting</c>» cuestan lo mismo de calcular y una de las dos ahorra la búsqueda —
     /// la misma razón por la que el mensaje del #132 nombra las dos salidas en vez de sólo lanzar.
     /// </remarks>
-    private static string Donde(string propiedad, JsonElement desde, string ruta)
+    private static string Donde(string propiedad)
     {
         // El schema viene una vez por proceso, pero esta búsqueda sólo corre al fallar.
         using var esquema = Abrir(Esquema());
@@ -207,7 +246,7 @@ public sealed class ClavesDeUmbracoTests
 
         if (Hijos(raiz, raiz, out var deLaRaiz) && deLaRaiz.TryGetProperty("Umbraco", out var u))
         {
-            Buscar(u, ruta, 0);
+            Buscar(u, "Umbraco", 0);
         }
 
         return encontradas.Count == 0

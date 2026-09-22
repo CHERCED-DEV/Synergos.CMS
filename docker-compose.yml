@@ -32,7 +32,12 @@ services:
       # la usa para construir URLs absolutas: sin esto, el backoffice y los
       # links de notificación apuntan a localhost, que desde la tablet es
       # la tablet misma y no resuelve nada.
-      Umbraco__CMS__Global__UmbracoApplicationUrl: "http://192.168.1.50:8080/"
+      #
+      # `WebRouting` y NO `Global`, que es donde estaba: la clave vive ahí y el
+      # binder de .NET descarta en silencio lo que no mapea, así que el síntoma
+      # que este comentario describe estaba VIVO — la línea existía, con el
+      # valor correcto, en la sección que nadie lee (#159).
+      Umbraco__CMS__WebRouting__UmbracoApplicationUrl: "http://192.168.1.50:8080/"
       Synergos__Notifications__PublicBaseUrl: "http://192.168.1.50:8080"
 
       # Firma de la cookie del carrito. El default de CartSettings dispara

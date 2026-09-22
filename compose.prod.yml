@@ -111,7 +111,14 @@ services:
       Umbraco__CMS__Unattended__UnattendedUserEmail: ${SYNERGOS_ADMIN_EMAIL:?falta SYNERGOS_ADMIN_EMAIL}
       Umbraco__CMS__Unattended__UnattendedUserPassword: ${SYNERGOS_ADMIN_PASSWORD:?falta SYNERGOS_ADMIN_PASSWORD}
 
-      Umbraco__CMS__Global__UmbracoApplicationUrl: "https://${SYNERGOS_DOMAIN}/"
+      # WebRouting y NO Global — la clave vive ahi y el binder de .NET descarta en
+      # SILENCIO lo que no mapea. Escrita en Global, la URL publica no llegaba nunca:
+      # quedaba la del perfil (http://localhost:8080/), asi que toda URL absoluta que
+      # Umbraco construye en produccion —los links del backoffice, los de las
+      # notificaciones— apuntaba a localhost, y el KeepAliveJob escribia «No
+      # umbracoApplicationUrl for service (yet), skip» cada sesenta segundos. Es el #138
+      # en el artefacto que su gate no leia; hoy hay gate (#159).
+      Umbraco__CMS__WebRouting__UmbracoApplicationUrl: "https://${SYNERGOS_DOMAIN}/"
       Synergos__Notifications__PublicBaseUrl: "https://${SYNERGOS_DOMAIN}"
       Synergos__Cart__SecretKey: ${SYNERGOS_CART_SECRET:?falta SYNERGOS_CART_SECRET}
 

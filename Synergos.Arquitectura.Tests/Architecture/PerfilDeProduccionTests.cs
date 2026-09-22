@@ -251,9 +251,17 @@ public sealed class PerfilDeProduccionTests
     /// Los pares <c>CLAVE: valor</c> de los bloques <c>environment:</c> de un compose.
     /// </summary>
     /// <remarks>
-    /// Se descartan los comentarios antes de parsear: los de este repo explican los defectos
-    /// citando las claves y los valores que hubo, así que un parseo del texto crudo se dispararía
-    /// con la explicación (<c>feedback_a_gate_that_parses_source_needs_its_own_mutations</c>).
+    /// <para>Los comentarios se descartan antes de parsear, y <b>hoy no cambia el resultado</b> —
+    /// medido quitando esa línea: el gate sigue verde—. No es la protección que parece: el regex
+    /// está <b>anclado</b> al principio de la línea recortada, y un comentario de YAML empieza por
+    /// <c>#</c>, así que no puede casar. Se queda como seguro barato para el día que alguien
+    /// afloje el ancla.</para>
+    /// <para>Donde ese descarte SÍ es load-bearing es en un gate que busque una <b>subcadena en
+    /// cualquier parte</b> del fichero —<c>TransitoriedadTests</c>, o el gate de cableado del
+    /// <c>.editorconfig</c> del #151—: ahí la explicación del defecto nombra lo prohibido y el gate
+    /// se dispara con su propia prosa
+    /// (<c>feedback_a_gate_that_parses_source_needs_its_own_mutations</c>). Decirlo al revés sería
+    /// documentación que afirma de más, que es peor que no decir nada.</para>
     /// </remarks>
     private static IEnumerable<(string Servicio, string Clave, string Valor)> ParesDeEntorno(string compose)
     {
