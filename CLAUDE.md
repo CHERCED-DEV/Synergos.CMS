@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3307 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3308 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2252 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 422 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 423 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3307**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3308**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -166,6 +166,7 @@ Synergos.CMS/
 │                                + política de build en la imagen (7, #156)
 │                                + secciones de configuración (2, #154)
 │                                + credenciales fuera del árbol (5, #150)
+│                                + comandos de la guía (1, #152)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1749,6 +1750,28 @@ Las que salieron de construir el árbol de servicios (§0.B):
   delimita un bloque de YAML, Markdown o Python. Si el formato usa la sangría para decir dónde
   acaba algo, el motor de regex no lo sabe.
 
+- `feedback_the_rule_a_ticket_invents_is_not_applied_to_the_file_that_states_it` —
+  **el commit que inventa una regla la aplica a todo menos al documento que la enuncia, porque
+  ese documento no es fuente de ningún gate.** El #136 midió 38 rutas equivocadas al mover el
+  backend, arregló el Dockerfile, el generador del compose, la matriz de imágenes y el ensayo de
+  restauración, y cerró la puerta con `RutasDeProyectoTests` — que vigila la FUENTE DE LOS
+  GATES. `CLAUDE.md` §7 se quedó con
+  `dotnet test Synergos.Servicios.Tests/…`, que desde ese mismo commit contesta
+  `MSBUILD : error MSB1009: Project file does not exist` (#152).
+  **Y el modo de fallo es el caro, porque no lo paga quien escribe**: quien llega nuevo teclea
+  lo que la guía dice, recibe un error que habla de un fichero y no de una reorganización, y
+  concluye lo que el error sugiere —que esa suite no existe—. Es la línea que decía «el CMS
+  habla con UNA capacidad» durante once HU, con la diferencia de que ésta no se queda corta:
+  **manda al sitio equivocado**.
+  **La pregunta que lo caza, y se hace al cerrar el ticket que inventa la regla:** *¿la guía
+  dice algo que esta regla acaba de volver falso?* Y la respuesta no se lee, se **ejecuta** —
+  que es lo mismo que enseñaron el `| jq length` del CDN y los dos `[E2]` de
+  `validate-cms-contracts.mjs`.
+  **Es trinquete absoluto y no línea base porque el árbol YA lo cumplía**: medido al escribirlo,
+  **15 de 16** rutas existían, así que exigirlas todas costó una línea. El criterio es el del
+  #134 (un umbral absoluto sólo vale cuando ya se cumple) y el del #140 al revés. Hay gate
+  (`ComandosDeClaudeMdTests`), con su red de seguridad por el vacío y mutado en los dos dientes.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1808,13 +1831,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3307 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3308 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2252
-dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 422
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 423
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2206,7 +2229,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3307 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3308 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
