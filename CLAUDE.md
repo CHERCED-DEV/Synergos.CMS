@@ -34,12 +34,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3381 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3389 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2303 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2311 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 445 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -1950,11 +1950,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3381 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3389 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2303
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2311
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 445
 
@@ -2322,7 +2322,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3381 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3389 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
