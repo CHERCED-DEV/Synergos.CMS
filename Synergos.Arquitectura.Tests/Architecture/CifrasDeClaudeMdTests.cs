@@ -433,4 +433,83 @@ public sealed class CifrasDeClaudeMdTests
             + Environment.NewLine
             + string.Join(Environment.NewLine, hallazgos));
     }
+    /// <summary>
+    /// La cifra de GATES de <c>CLAUDE.md</c> —«N de los M gates no usan un solo tipo de
+    /// producción»— contada contra el disco, en los dos sitios donde esa frase aparece (#148).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es la única cifra de <c>CLAUDE.md</c> cuyo sujeto es el propio mecanismo de
+    /// vigilancia, y era justo la que nadie miraba.</b> Decía «46 de los 57» y al medirla eran
+    /// <b>51 de 62</b>: los cinco gates que entraron después no los contó nadie. Y se desvió
+    /// <b>quedándose corta</b>, que es la dirección que no se nota — una cifra que sobra la
+    /// persigue alguien, una que falta se lee como si estuviera bien.</para>
+    ///
+    /// <para><b>Qué se rompe si se desvía.</b> Esa frase es el argumento que justifica que este
+    /// proyecto referencie <b>cuatro</b> cosas y no veintiocho (#135): la mayoría de los gates
+    /// leen la FUENTE del disco, así que no necesitan tipos de producción. Si el denominador
+    /// envejece en silencio, el argumento envejece con él y nadie vuelve a revisarlo.</para>
+    ///
+    /// <para><b>El criterio es «clases con <c>[Fact]</c> o <c>[Theory]</c>», y no «ficheros
+    /// <c>.cs</c>».</b> Hoy los dos dan 62 y ese empate es exactamente lo que haría pasar en
+    /// verde un criterio flojo; se separan el día que entre un helper sin tests, que es cuando
+    /// haría falta que no se separaran en silencio. Mutado: añadir un fichero sin <c>[Fact]</c> a
+    /// la carpeta NO mueve la cuenta.</para>
+    ///
+    /// <para><b>«Usa un tipo de producción» se mide por el <c>using</c> de un espacio de nombres
+    /// <c>Synergos.*</c></b>, sobre la fuente SIN comentarios: varios gates citan código de
+    /// producción dentro de sus <c>&lt;remarks&gt;</c> para explicar qué vigilan, y contar eso
+    /// sería medir la prosa.</para>
+    ///
+    /// <para>Se cuentan sólo los de <c>Architecture/</c>. Las dos clases de <c>Shared/</c>
+    /// —<c>QueryWindowTests</c>, <c>SharedKeyAuthTests</c>— son tests unitarios de
+    /// <c>Synergos.Shared</c>, no gates, y meterlas inflaría el denominador con lo que
+    /// precisamente SÍ necesita tipos de producción.</para>
+    /// </remarks>
+    [Fact]
+    public void La_cifra_de_GATES_se_cuenta_contra_el_disco()
+    {
+        var carpeta = Path.Combine(RepoRoot(), "Synergos.Arquitectura.Tests", "Architecture");
+        var gates = Directory.EnumerateFiles(carpeta, "*.cs")
+            .Select(f => (Fichero: f, Fuente: SinComentarios(f)))
+            .Where(x => Regex.IsMatch(x.Fuente, @"\[(Fact|Theory)\]"))
+            .ToList();
+
+        Assert.True(gates.Count >= 40,
+            "El descubrimiento de gates no ve nada (" + gates.Count + "): si la carpeta cambió de "
+            + "sitio, este gate pasaría en verde sobre una lista vacía.");
+
+        var sinProduccion = gates.Count(x => !Regex.IsMatch(x.Fuente, @"^using\s+Synergos\.", RegexOptions.Multiline));
+
+        var esperado = $"**{sinProduccion} de los {gates.Count} gates no usan un solo tipo de producción**";
+        var claude = File.ReadAllText(Path.Combine(RepoRoot(), "CLAUDE.md"));
+
+        // La frase vive en DOS sitios —§0.A.9 y la memoria de §5— y las dos tienen que decir lo
+        // mismo: tener la cifra en dos sitios y vigilar uno solo es cómo se acaba discutiendo
+        // cuál de los dos está mal, que es lo que ya pasó con los 242 códigos de rechazo.
+        var veces = Regex.Count(claude, Regex.Escape(esperado));
+
+        Assert.True(veces == 2,
+            $"`CLAUDE.md` tiene que decir «{esperado}» en los DOS sitios (§0.A.9 y §5) y lo dice "
+            + $"en {veces}. Contados contra el disco: {gates.Count} gates en Architecture/ con "
+            + $"[Fact] o [Theory], de los cuales {sinProduccion} no nombran ningún tipo de "
+            + "producción. Esa frase es el argumento de por qué este proyecto referencia cuatro "
+            + "cosas y no veintiocho (#135): si el denominador envejece, el argumento envejece "
+            + "con él (#148).");
+    }
+
+    /// <summary>El fichero SIN comentarios — ver el <c>remarks</c> de arriba.</summary>
+    private static string SinComentarios(string ruta)
+        => string.Join('\n', File.ReadAllLines(ruta).Select(l =>
+        {
+            var t = l.TrimStart();
+            if (t.StartsWith("//", StringComparison.Ordinal)
+                || t.StartsWith('*')
+                || t.StartsWith("/*", StringComparison.Ordinal))
+            {
+                return string.Empty;
+            }
+            var i = l.IndexOf("//", StringComparison.Ordinal);
+            return i >= 0 ? l[..i] : l;
+        }));
+
 }
