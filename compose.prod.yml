@@ -274,9 +274,11 @@ services:
       # comporta como recien instalada.
       - api-audit-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-booking:
@@ -296,9 +298,11 @@ services:
       # comporta como recien instalada.
       - api-booking-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-cart:
@@ -327,9 +331,11 @@ services:
       # comporta como recien instalada.
       - api-cart-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-catalog:
@@ -349,9 +355,11 @@ services:
       # comporta como recien instalada.
       - api-catalog-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-consent:
@@ -380,9 +388,11 @@ services:
       # comporta como recien instalada.
       - api-consent-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-documents:
@@ -402,9 +412,11 @@ services:
       # comporta como recien instalada.
       - api-documents-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-engagement:
@@ -424,9 +436,11 @@ services:
       # comporta como recien instalada.
       - api-engagement-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-fulfillment:
@@ -446,9 +460,11 @@ services:
       # comporta como recien instalada.
       - api-fulfillment-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-geo:
@@ -468,9 +484,11 @@ services:
       # comporta como recien instalada.
       - api-geo-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-identity:
@@ -501,9 +519,11 @@ services:
       # comporta como recien instalada.
       - api-identity-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-inventory:
@@ -523,9 +543,11 @@ services:
       # comporta como recien instalada.
       - api-inventory-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-messaging:
@@ -554,9 +576,11 @@ services:
       # comporta como recien instalada.
       - api-messaging-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-moderation:
@@ -576,9 +600,11 @@ services:
       # comporta como recien instalada.
       - api-moderation-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-notifications:
@@ -604,9 +630,11 @@ services:
       # comporta como recien instalada.
       - api-notifications-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-orders:
@@ -626,9 +654,11 @@ services:
       # comporta como recien instalada.
       - api-orders-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-payments:
@@ -672,9 +702,11 @@ services:
       # comporta como recien instalada.
       - api-payments-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-pricing:
@@ -694,9 +726,11 @@ services:
       # comporta como recien instalada.
       - api-pricing-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-sessions:
@@ -716,9 +750,11 @@ services:
       # comporta como recien instalada.
       - api-sessions-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-signing:
@@ -738,9 +774,11 @@ services:
       # comporta como recien instalada.
       - api-signing-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   api-workflow:
@@ -779,9 +817,11 @@ services:
       # comporta como recien instalada.
       - api-workflow-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112
+      # el almacen es un fichero por documento y StoreWriteGate sube el turno de
+      # escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.
+      # Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132
+      # escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.
       replicas: 1
 
   bff-eventos:
@@ -830,9 +870,14 @@ services:
       # comporta como recien instalada.
       - bff-eventos-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # NO SUBIR DE 1, y esta es la prohibicion que SIGUE viva. Las sagas viven en
+      # JsonCollectionStore —asi que heredaron el fichero por documento del #112— pero
+      # los orquestadores NO tienen turno de escritura: dos replicas que avancen la
+      # MISMA saga todavia pueden perder una escritura. No se les cableo a proposito:
+      # dentro de un paso hay llamadas HTTP a las capacidades, asi que un turno de
+      # orquestador entero dejaria toda compra haciendo cola detras de la que espera a
+      # la pasarela. Lo que corresponde es un turno POR SAGA, del tamano de ISagaLease
+      # (#34), y es otro trabajo. Ver CLAUDE.md §11.
       replicas: 1
 
   bff-salud:
@@ -883,9 +928,14 @@ services:
       # comporta como recien instalada.
       - bff-salud-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # NO SUBIR DE 1, y esta es la prohibicion que SIGUE viva. Las sagas viven en
+      # JsonCollectionStore —asi que heredaron el fichero por documento del #112— pero
+      # los orquestadores NO tienen turno de escritura: dos replicas que avancen la
+      # MISMA saga todavia pueden perder una escritura. No se les cableo a proposito:
+      # dentro de un paso hay llamadas HTTP a las capacidades, asi que un turno de
+      # orquestador entero dejaria toda compra haciendo cola detras de la que espera a
+      # la pasarela. Lo que corresponde es un turno POR SAGA, del tamano de ISagaLease
+      # (#34), y es otro trabajo. Ver CLAUDE.md §11.
       replicas: 1
 
   bff-tienda:
@@ -940,9 +990,14 @@ services:
       # comporta como recien instalada.
       - bff-tienda-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # NO SUBIR DE 1, y esta es la prohibicion que SIGUE viva. Las sagas viven en
+      # JsonCollectionStore —asi que heredaron el fichero por documento del #112— pero
+      # los orquestadores NO tienen turno de escritura: dos replicas que avancen la
+      # MISMA saga todavia pueden perder una escritura. No se les cableo a proposito:
+      # dentro de un paso hay llamadas HTTP a las capacidades, asi que un turno de
+      # orquestador entero dejaria toda compra haciendo cola detras de la que espera a
+      # la pasarela. Lo que corresponde es un turno POR SAGA, del tamano de ISagaLease
+      # (#34), y es otro trabajo. Ver CLAUDE.md §11.
       replicas: 1
 
   bff-viajes:
@@ -991,9 +1046,14 @@ services:
       # comporta como recien instalada.
       - bff-viajes-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
+      # NO SUBIR DE 1, y esta es la prohibicion que SIGUE viva. Las sagas viven en
+      # JsonCollectionStore —asi que heredaron el fichero por documento del #112— pero
+      # los orquestadores NO tienen turno de escritura: dos replicas que avancen la
+      # MISMA saga todavia pueden perder una escritura. No se les cableo a proposito:
+      # dentro de un paso hay llamadas HTTP a las capacidades, asi que un turno de
+      # orquestador entero dejaria toda compra haciendo cola detras de la que espera a
+      # la pasarela. Lo que corresponde es un turno POR SAGA, del tamano de ISagaLease
+      # (#34), y es otro trabajo. Ver CLAUDE.md §11.
       replicas: 1
 
 volumes:

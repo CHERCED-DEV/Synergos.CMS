@@ -258,6 +258,43 @@ function entornoExtra(proyecto, disponibles) {
 // Todos idénticos salvo el nombre. Que sean idénticos ES la propiedad: el día
 // que uno necesite algo distinto, se ve en el diff del generador y no escondido
 // en la línea 400 de un YAML.
+/**
+ * Por que este servicio corre con UNA replica, y si subirlo esta PERMITIDO o PROHIBIDO.
+ *
+ * Hasta el #152 esto decia lo mismo veinticuatro veces —«NO SUBIR DE 1, JsonCollectionStore
+ * tiene un lock de PROCESO»— y esa razon **caduco con la HU #112**: el almacen pasó a un fichero
+ * por documento y `StoreWriteGate` subio el turno de escritura a proceso cruzado. O sea que el
+ * fichero que un agente lee para saber que puede levantar le prohibia, veinticuatro veces, la
+ * unica cosa que el #112 construyo — y con la razon equivocada.
+ *
+ * Lo que se quita no es el VALOR: es la PROHIBICION. Una cosa es «hoy no hace falta» y otra «no
+ * se puede», y solo la segunda hay que corregir cuando deja de ser verdad.
+ */
+function razonDeLaReplica(proyecto) {
+  const c = (...lineas) => lineas.map((l) => `      # ${l}\n`).join('');
+
+  if (proyecto.startsWith('Synergos.Bff.')) {
+    return c(
+      'NO SUBIR DE 1, y esta es la prohibicion que SIGUE viva. Las sagas viven en',
+      'JsonCollectionStore —asi que heredaron el fichero por documento del #112— pero',
+      'los orquestadores NO tienen turno de escritura: dos replicas que avancen la',
+      'MISMA saga todavia pueden perder una escritura. No se les cableo a proposito:',
+      'dentro de un paso hay llamadas HTTP a las capacidades, asi que un turno de',
+      'orquestador entero dejaria toda compra haciendo cola detras de la que espera a',
+      'la pasarela. Lo que corresponde es un turno POR SAGA, del tamano de ISagaLease',
+      '(#34), y es otro trabajo. Ver CLAUDE.md §11.',
+    );
+  }
+
+  return c(
+    'Una replica porque hoy no hace falta mas, NO porque no se pueda: desde el #112',
+    'el almacen es un fichero por documento y StoreWriteGate sube el turno de',
+    'escritura a proceso cruzado, asi que dos replicas sirven y escriben a la vez.',
+    'Medido en vivo alli: sin turno, 400 ajustes dieron 200 y 268 unidades —132',
+    'escrituras perdidas, sin excepcion y sin log—; con turno, 400 y 400.',
+  );
+}
+
 function bloqueServicio(proyecto, disponibles) {
   const nombre = nombreServicio(proyecto);
   const seccion = seccionConfig(proyecto);
@@ -279,10 +316,7 @@ function bloqueServicio(proyecto, disponibles) {
       # comporta como recien instalada.
       - ${nombre}-data:/app/data
     deploy:
-      # NO SUBIR DE 1. JsonCollectionStore tiene un lock de PROCESO: dos
-      # instancias se pisan, y no da error — corrompe. Y un rolling deploy son,
-      # por definicion, dos instancias a la vez. Ver epica #16 y CLAUDE.md §11.
-      replicas: 1
+${razonDeLaReplica(proyecto)}      replicas: 1
 `;
 }
 

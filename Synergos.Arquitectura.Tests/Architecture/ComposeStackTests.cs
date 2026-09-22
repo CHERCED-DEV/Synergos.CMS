@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Synergos.CMS.Tests.Architecture;
@@ -200,21 +201,127 @@ public sealed class ComposeStackTests
             $"despliegue:{Environment.NewLine}{string.Join(Environment.NewLine, sinVolumen)}");
     }
 
-    [Fact]
-    public void Nadie_corre_con_mas_de_una_replica()
+    /// <summary>
+    /// Quién NO puede escalar, y por qué. Función pura para poder probar los casos que el compose
+    /// no tiene (#152).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Este gate mintió durante toda la HU #112 y no se puso rojo nunca</b>, porque un
+    /// gate que afirma de más no falla: se cumple. Exigía <c>replicas: 1</c> en TODO con la razón
+    /// «mientras el almacén siga siendo <c>JsonCollectionStore</c>, dos instancias corrompen en
+    /// silencio» — y el #112 quitó exactamente eso: un fichero por documento, sin caché de
+    /// colección, y <c>StoreWriteGate</c> subiendo el turno de escritura a proceso cruzado.</para>
+    ///
+    /// <para>Es <c>feedback_a_fixture_built_on_a_neighbouring_defect_expires_with_it</c> con el
+    /// sujeto cambiado: el defecto se arregló en <c>Synergos.Shared</c> y nadie volvió al compose.
+    /// Y el daño no era teórico — <c>compose.prod.yml</c> es lo que alguien lee para saber qué
+    /// puede levantar, y le decía veinticuatro veces que no hiciera la única cosa que el #112
+    /// construyó.</para>
+    ///
+    /// <para><b>Lo que NO se hizo es borrar el gate.</b> La prohibición sigue viva donde importa
+    /// —los orquestadores— y quitarla entera habría cambiado un gate que miente por ninguno.</para>
+    /// </remarks>
+    internal static IReadOnlyList<string> QuienNoPuedeEscalar(
+        IEnumerable<(string Servicio, int Replicas)> declarado,
+        IReadOnlySet<string> conTurnoDeEscritura,
+        IReadOnlySet<string> queUsanElAlmacenCompartido)
     {
-        // JsonCollectionStore tiene un lock de PROCESO. Dos instancias se pisan y no dan error:
-        // corrompen. Y un rolling deploy son, por definición, dos instancias a la vez — el
-        // despliegue "normal" de cualquier plataforma moderna rompe esto.
-        var malas = Regex.Matches(Compose(), @"replicas:\s*(\d+)")
-            .Select(m => int.Parse(m.Groups[1].Value))
-            .Where(n => n != 1)
-            .ToList();
+        var malas = new List<string>();
+
+        foreach (var (servicio, replicas) in declarado.Where(d => d.Replicas > 1))
+        {
+            if (servicio.StartsWith("bff-", StringComparison.Ordinal))
+            {
+                malas.Add($"{servicio}: los orquestadores NO tienen turno de escritura, así que "
+                    + "dos réplicas que avancen la MISMA saga pueden perder una escritura. Lo que "
+                    + "corresponde es un turno POR SAGA, del tamaño de ISagaLease (#34).");
+                continue;
+            }
+
+            if (!servicio.StartsWith("api-", StringComparison.Ordinal))
+            {
+                malas.Add($"{servicio}: no es una capacidad — el CMS escribe sobre SQLite y su "
+                    + "propio almacén, y si dos instancias pueden es otra pregunta.");
+                continue;
+            }
+
+            if (conTurnoDeEscritura.Contains(servicio))
+            {
+                continue;   // #112: fichero por documento + turno entre procesos.
+            }
+
+            if (!queUsanElAlmacenCompartido.Contains(servicio))
+            {
+                continue;   // No comparte documento con nadie — Api.Sessions AÑADE líneas.
+            }
+
+            malas.Add($"{servicio}: guarda por JsonCollectionStore y NO enchufa "
+                + "UseStoreWriteGate(, así que dos réplicas pueden perder una escritura sin "
+                + "excepción y sin log (#112).");
+        }
+
+        return malas;
+    }
+
+    [Fact]
+    public void Solo_escala_quien_tiene_turno_de_escritura()
+    {
+        var declarado = ReplicasDeclaradas();
+
+        Assert.True(declarado.Count >= 20,
+            "El parseo de réplicas no ve nada (" + declarado.Count + "): si el compose cambió de "
+            + "forma, este gate pasaría en verde sobre una lista vacía.");
+
+        var malas = QuienNoPuedeEscalar(
+            declarado,
+            ComoServicios(TurnoDeEscrituraWiringTests.ConTurno()),
+            ComoServicios(TurnoDeEscrituraWiringTests.UsanElAlmacenCompartido()));
 
         Assert.True(malas.Count == 0,
-            "Hay servicios con más de una réplica. Mientras el almacén siga siendo " +
-            "JsonCollectionStore, dos instancias corrompen en silencio (épica #16, CLAUDE.md §11).");
+            "Estos servicios no pueden correr con más de una réplica:"
+            + Environment.NewLine + string.Join(Environment.NewLine, malas));
     }
+
+    /// <summary>Los pares (servicio, réplicas) que el compose declara.</summary>
+    private static IReadOnlyList<(string Servicio, int Replicas)> ReplicasDeclaradas()
+    {
+        var pares = new List<(string, int)>();
+        string? actual = null;
+
+        foreach (var linea in File.ReadAllLines(Path.Combine(RepoRoot(), "compose.prod.yml")))
+        {
+            var servicio = Regex.Match(linea, @"^  ([a-z][a-z0-9-]*):\s*$");
+            if (servicio.Success)
+            {
+                actual = servicio.Groups[1].Value;
+            }
+
+            var replicas = Regex.Match(linea, @"replicas:\s*(\d+)");
+            if (replicas.Success && actual is not null)
+            {
+                pares.Add((actual, int.Parse(replicas.Groups[1].Value, CultureInfo.InvariantCulture)));
+            }
+        }
+
+        return pares;
+    }
+
+    /// <summary>
+    /// Quién tiene turno y quién comparte grano — <b>derivado UNA vez</b>, en
+    /// <c>TurnoDeEscrituraWiringTests</c>.
+    /// </summary>
+    /// <remarks>
+    /// La primera versión de este gate reimplementaba el criterio acá, y barría todo el C# de la
+    /// capacidad en vez de su <c>Program.cs</c>: habría dado por cableada a una que sólo lo
+    /// menciona. Dos gates con el mismo criterio es
+    /// <c>feedback_the_same_algorithm_is_not_the_same_thing</c> — el día que uno se afine, el otro
+    /// miente.
+    /// </remarks>
+    private static IReadOnlySet<string> ComoServicios(IReadOnlySet<string> proyectos)
+        => proyectos
+            .Select(n => n.Replace("Synergos.", "", StringComparison.Ordinal)
+                .Replace(".", "-", StringComparison.Ordinal).ToLowerInvariant())
+            .ToHashSet(StringComparer.Ordinal);
 
     [Fact]
     public void La_etiqueta_de_la_imagen_es_variable_y_nunca_latest()

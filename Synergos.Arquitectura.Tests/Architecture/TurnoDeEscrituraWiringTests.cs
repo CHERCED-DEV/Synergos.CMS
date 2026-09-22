@@ -49,14 +49,41 @@ public sealed class TurnoDeEscrituraWiringTests
     /// un fichero por día y nunca lee-modifica-escribe, que es el único patrón que ya era seguro
     /// entre réplicas. Darle turno serializaría un registro de búsquedas para no arreglar nada.
     /// </remarks>
+    /// <summary>
+    /// Las capacidades que ENCHUFAN el turno, por nombre de proyecto.
+    /// </summary>
+    /// <remarks>
+    /// <para>Vive acá y es <c>internal</c> porque <c>ComposeStackTests</c> necesita lo mismo para
+    /// decidir quién puede escalar (#152), y **dos gates con el mismo criterio es
+    /// <c>feedback_the_same_algorithm_is_not_the_same_thing</c>**: el día que uno se afine, el
+    /// otro miente. Ya casi pasa — la copia que escribí primero barría TODO el C# de la capacidad
+    /// en vez de su <c>Program.cs</c>, y habría dado por cableada a la que sólo lo menciona.</para>
+    ///
+    /// <para>Se mira la LLAMADA —<c>UseStoreWriteGate(</c> con paréntesis— y en el
+    /// <c>Program.cs</c>. Contar la mención daría «20 de 20»: <c>Api.Inventory</c> llegó a tener
+    /// el comentario que lo explica y no la llamada, porque una sesión anterior la quitó para ver
+    /// el gate en rojo y se cortó antes de restaurarla.</para>
+    /// </remarks>
+    internal static IReadOnlySet<string> ConTurno()
+        => Capacidades()
+            .Where(c => File.ReadAllText(c.Programa).Contains("UseStoreWriteGate(", StringComparison.Ordinal))
+            .Select(c => c.Nombre)
+            .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>Las que guardan por <c>JsonCollectionStore</c>, o sea las que comparten grano.</summary>
+    internal static IReadOnlySet<string> UsanElAlmacenCompartido()
+        => Capacidades()
+            .Where(c => c.Codigo.Contains("JsonCollectionStore<", StringComparison.Ordinal))
+            .Select(c => c.Nombre)
+            .ToHashSet(StringComparer.Ordinal);
+
     [Fact]
     public void Toda_capacidad_con_almacen_compartido_cablea_el_turno()
     {
-        var sinCablear = Capacidades()
-            .Where(c => c.Codigo.Contains("JsonCollectionStore<", StringComparison.Ordinal))
-            .Where(c => !File.ReadAllText(c.Programa)
-                .Contains("UseStoreWriteGate(", StringComparison.Ordinal))
-            .Select(c => c.Nombre)
+        var conTurno = ConTurno();
+        var sinCablear = UsanElAlmacenCompartido()
+            .Where(n => !conTurno.Contains(n))
+            .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
 
         Assert.True(sinCablear.Count == 0,

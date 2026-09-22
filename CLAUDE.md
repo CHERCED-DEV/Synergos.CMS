@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3298 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3304 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2252 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 413 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 419 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **51 de los 62 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **52 de los 63 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3298**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3304**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -165,6 +165,7 @@ Synergos.CMS/
 │                                + portada de arranque (5, #119)
 │                                + configuración del build (3, #151)
 │                                + secciones de configuración (2, #154)
+│                                + escalado de réplicas (6, #152)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1346,7 +1347,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **51 de los 62 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **52 de los 63 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -1529,6 +1530,36 @@ Las que salieron de construir el árbol de servicios (§0.B):
   `master`, y `images.yml` un mes. Este fichero ya tiene escrito que «un gate siempre
   rojo deja de leerse»; el precio esta vez fue el sitio entero caído mientras las tres
   suites pasaban.
+
+- `feedback_a_gate_that_asks_for_more_than_needed_never_goes_red` — **un gate que exige MÁS de lo
+  que hace falta no falla nunca: se cumple. Por eso su caducidad es invisible, mientras que la de
+  un gate que exige de menos la destapa el primer defecto que deja pasar** (#152). El compose
+  pedía `replicas: 1` en los veinticinco servicios con la razón «`JsonCollectionStore` tiene un
+  lock de PROCESO: dos instancias corrompen», y la HU #112 quitó exactamente eso —un fichero por
+  documento y `StoreWriteGate` subiendo el turno a proceso cruzado, con 400 ajustes medidos en
+  vivo dando 400—. El arreglo vivió en `Synergos.Shared` y **nadie volvió al compose**: cinco
+  tickets con el gate en verde afirmando lo contrario de lo que el repo acababa de construir.
+  Es `feedback_a_fixture_built_on_a_neighbouring_defect_expires_with_it` con el sujeto cambiado
+  —allá un test afirmaba el síntoma de un defecto ajeno, acá un gate afirma una limitación ajena—
+  y con un agravante: **el compose es lo que alguien lee para saber qué puede levantar**, así que
+  le decía veinticuatro veces que no hiciera la única cosa que el #112 construyó, y con la razón
+  equivocada.
+  **La pregunta que lo caza, y hay que hacerla desde el lado incómodo:** *¿qué gate se quedaría
+  en verde si esto que acabo de arreglar nunca hubiera hecho falta?* Un `grep` de la razón vieja
+  —acá «lock de PROCESO»— por el árbol entero, no sólo por el código.
+  **Y el arreglo NO es borrar el gate**, que fue el primer instinto: la prohibición sigue viva en
+  los cuatro orquestadores, que heredaron el fichero por documento pero **no** tienen turno por
+  saga (#34). Quitarla entera habría cambiado un gate que miente por ninguno. Se hace que **pida
+  lo correcto** y se deriva del disco quién enchufa el turno, nunca de una lista — una lista se
+  queda corta el día que un orquestador gane el suyo.
+  **Dos cortes del camino.** Uno: el criterio ya existía en `TurnoDeEscrituraWiringTests` y mi
+  primera versión lo **reescribió** —peor, barriendo todo el C# en vez del `Program.cs`, o sea
+  dando por cableada a la que sólo lo menciona—; es
+  `feedback_the_same_algorithm_is_not_the_same_thing` y se resolvió exponiendo la derivación una
+  vez. Dos: con los veinticinco servicios en `1`, **el gate no ejercita ni una decisión** — pasa
+  en verde sin mirar. Las tres ramas que deciden (capacidad con turno escala, orquestador no,
+  `Api.Sessions` escala por ser append-only) viven como tests de una función pura, porque una
+  mutación prueba un caso y se lo lleva.
 
 - `feedback_a_convention_stated_as_a_rule_is_measured_before_it_is_taught` — **una convención
   que un documento enseña como regla hay que CONTARLA antes de escribirla, porque la que uno
@@ -1739,13 +1770,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3298 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3304 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2252
 dotnet test Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 413
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 419
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2111,7 +2142,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3298 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3304 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -2761,6 +2792,14 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > Hoy lo que los protege es que `SagaEngine` resuelve la llave de
   > idempotencia antes de abrir y que compensar va bajo arriendo.
   >
+  > **Y el compose siguió PROHIBIÉNDOLO cinco tickets más** (#152). `compose.prod.yml`
+  > llevaba veinticuatro veces «NO SUBIR DE 1. `JsonCollectionStore` tiene un lock de
+  > PROCESO», que es exactamente la razón que esta HU quitó, y su gate lo exigía con la
+  > misma frase. El gate **nunca se puso rojo porque el compose lo cumplía**: un gate que
+  > afirma de más no falla, se satisface. Hoy distingue —una capacidad con turno escala,
+  > un orquestador no— y el comentario dice la verdad nueva. Lo que se quitó no es el
+  > valor `1`: es la prohibición.
+
   > **Verificado con procesos vivos, que es donde se vio** (§10.6): dos
   > `Api.Inventory` sobre el mismo volumen, 400 ajustes RELATIVOS disparados
   > de a dos contra las dos réplicas a la vez. **Sin turno: 400 respuestas
