@@ -32,10 +32,14 @@ public class FileSystemCatalogSocialProofTests
         public Task<string?> ReadAsync(string resourceType, string key, CancellationToken cancellationToken = default)
             => Task.FromResult(_data.TryGetValue(resourceType + "/" + key, out var json) ? json : null);
 
+        // DOCUMENTOS y no claves: FileSystemJsonEntityStore.ListAsync lee el contenido de cada
+        // fichero. Devolvía las claves, y el <summary> de arriba decía «la semántica del real»
+        // — inocuo aquí porque el sujeto no lista, y una trampa para quien copie este doble
+        // (#147).
         public Task<IReadOnlyList<string>> ListAsync(string resourceType, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<string>>(_data.Keys
-                .Where(k => k.StartsWith(resourceType + "/", StringComparison.Ordinal))
-                .Select(k => k[(resourceType.Length + 1)..])
+            => Task.FromResult<IReadOnlyList<string>>(_data
+                .Where(kv => kv.Key.StartsWith(resourceType + "/", StringComparison.Ordinal))
+                .Select(kv => kv.Value)
                 .ToList());
 
         public Task<bool> DeleteAsync(string resourceType, string key, CancellationToken cancellationToken = default)

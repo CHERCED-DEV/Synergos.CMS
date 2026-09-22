@@ -23,15 +23,19 @@ crea:
   composer:    SeamComposer.Alquiler
 ui:
   app: booking-wizard
-rechazos:                                 # el eje 2 los declara; los del borde van en AlquilerRules
-  - "alquiler.no_lines · alquilar sin equipos · Invalid · NO transitorio"
-  - "alquiler.bad_window · fin menor o igual que inicio · Invalid · NO transitorio"
-  - "alquiler.window_too_long · la ventana excede lo que una autorización de garantía aguanta · Invalid · NO transitorio"
-  - "alquiler.bad_quantity · cantidad fuera de rango · Invalid · NO transitorio"
-  - "alquiler.deposit_required · equipo con garantía alquilado sin autorizarla · Invalid · NO transitorio"
-  - "alquiler.not_returnable · devolver algo que no está entregado · Conflict · NO transitorio"
-  - "alquiler.damage_exceeds_deposit · el daño cobrado supera la garantía retenida · Invalid · NO transitorio"
-  - "alquiler.rental_not_found · el alquiler no existe · NO transitorio"
+rechazos:                                 # leidos de StubEquipmentRentalService, no inventados
+  - "alquiler.idempotency_key_required · reservar o cerrar sin llave · Invalid · NO transitorio"
+  - "alquiler.equipment_required · no se dijo qué equipo · Invalid · NO transitorio"
+  - "alquiler.equipment_not_found · el slug no existe · NotFound · NO transitorio"
+  - "alquiler.bad_window · la devolución no es posterior al retiro · Invalid · NO transitorio"
+  - "alquiler.window_too_long · el DESPLIEGUE no retiene una garantía tantos días · Invalid · NO transitorio"
+  - "alquiler.window_out_of_bounds · fuera del mínimo o el máximo de ESE equipo · Invalid · NO transitorio"
+  - "alquiler.bad_quantity · cantidad menor que 1, o más de las libres · Invalid · NO transitorio"
+  - "alquiler.no_units · ninguna unidad libre en esa ventana · Conflict · NO transitorio"
+  - "alquiler.not_returnable · devolver algo que ya se cerró · Conflict · NO transitorio"
+  - "alquiler.not_cancellable · cancelar algo que ya salió: eso se devuelve · Conflict · NO transitorio"
+  - "alquiler.bad_amount · monto negativo contra la garantía · Invalid · NO transitorio"
+  - "alquiler.damage_exceeds_deposit · el daño supera la garantía retenida · Invalid · NO transitorio"
 ---
 
 # Alquiler de equipos — el spec del PILOTO 2
@@ -142,6 +146,26 @@ gate nuevo, *eso es el resultado*. Se predicen **dos**, los dos por el eje 2:
 - `AlquilerWiringTests`, **mutado diente por diente**.
 - Verificación con **procesos vivos** (§10.6): matar `Api.Payments` a mitad de la reserva tiene que
   devolver la ventana a `Api.Booking` sola, y no dejar contrato emitido.
+
+## La lista de rechazos cambió al codificar, y eso es un dato
+
+La cabecera se escribió con **ocho** rechazos derivados por analogía con Eventos, y de ésos
+**dos no sobrevivieron al código**: `no_lines` —Eventos compra varias líneas y un alquiler es un
+equipo— y `deposit_required`, que resultó ser una invariante interna del motor y no una regla que
+alguien pueda violar desde fuera. Aparecieron **seis** que la analogía no daba, y las dos que
+valen la pena nombrar son:
+
+- **`window_too_long` contra `window_out_of_bounds`.** Los dos rechazan una ventana y **el remedio
+  es distinto**: el primero dice que este despliegue no puede retener una garantía tanto tiempo, y
+  el segundo que ese equipo no se alquila tan corto o tan largo. Fundirlos habría sido el defecto
+  `a_rejection_named_after_a_field_expires_at_the_second_field` al revés — un código que tapa dos
+  causas con remedios opuestos.
+- **`not_cancellable` aparte de `not_returnable`.** Cancelar es antes de que el equipo salga;
+  devolver es después. Un solo código habría dejado a quien llama sin saber cuál de las dos
+  puertas usar.
+
+**Que la analogía acierte el 75 % y falle en el 25 % es exactamente lo que el piloto mide**: la
+cabecera de un spec no puede derivar los rechazos, porque son el diseño y no la forma.
 
 ## Lo que este spec NO hace
 
