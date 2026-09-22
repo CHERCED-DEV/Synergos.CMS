@@ -284,7 +284,16 @@ export function derivarPlan(cab) {
     // S4 · doc 12 §5.4 — el POCO con los cuatro campos.
     paso('S4', `Synergos.CMS.Application/Configuration/${V}Settings.cs`, 'doc 12 §5.4');
     // S5 · doc 12 §5.5 — el interruptor, y ENLAZAR la sección.
-    paso('S5', `Synergos.CMS.Web/Composers/SeamComposer.${V}.cs`, 'doc 12 §5.5');
+    //
+    // La RUTA de este paso no se deriva, y eso es el hallazgo #155: el doc 12 §5.5 enseña el
+    // cableado como si cada vertical tuviera su fichero, y el árbol AGRUPA —`SeamComposer.
+    // EventsPropertiesGov.cs` cablea tres—. Derivar `SeamComposer.<V>.cs` inventaba un fichero
+    // que no existe ni debe existir; y quitar el paso sería peor, porque un vertical sin ningún
+    // cableado sacaría 100 %.
+    //
+    // Así que el entregable de este paso no es un NOMBRE, es una PROPIEDAD: que algún composer
+    // parcial enlace la sección del vertical. Se cruza por contenido — ver `composerQueEnlaza`.
+    paso('S5', composerParcial(V), 'doc 12 §5.5 — el nombre del fichero no es del vertical (#155)');
     // S6 · doc 12 §5.6 — el cliente Http*, que se nombra por el SEAM que cablea y no por el
     // sustantivo: es el mismo hallazgo que S3 visto del otro lado.
     const seam = (ejes.transaccion ?? {}).seam;
@@ -366,7 +375,10 @@ const CARPETAS = [
   ['S3', 'Synergos.CMS.Interfaces', (n) => n.endsWith('.cs')],
   ['S3', 'Synergos.CMS.Application/Services/Impl', (n) => n.endsWith('.cs')],
   ['S4', 'Synergos.CMS.Application/Configuration', (n) => n.endsWith('.cs')],
-  ['S5', 'Synergos.CMS.Web/Composers', (n) => n.endsWith('.cs')],
+  // S5 NO está acá, y no es un olvido: se cruza por CONTENIDO. Ver `composerQueEnlaza`. La
+  // entrada que había —`Composers/` filtrada por prefijo de alias— no encontraba nada NUNCA,
+  // porque todos los composers parciales se llaman `SeamComposer.*`: era un barrido muerto que
+  // además hacía parecer que el paso estaba cubierto por nombre.
   ['S6', 'Synergos.CMS.Web/Services', (n) => n.endsWith('.cs')],
   ['S9', 'Synergos.CMS.Web/Controllers', (n) => n.endsWith('.cs')],
   ['S10', 'Synergos.Arquitectura.Tests/Architecture', (n) => n.endsWith('.cs')],
@@ -379,6 +391,38 @@ const CARPETAS = [
  * PERDIDO, y eso es el entregable: un papel que el molde no nombró.
  */
 const ROLES = ['', 'I', 'Stub', 'Http', 'Umbraco', 'Hmac', 'Lazy'];
+
+/**
+ * El token canónico del paso S5. Lo emiten los DOS lados —el plan y el disco— porque lo que se
+ * compara es una propiedad y no una ruta: el nombre del fichero no es del vertical (#155).
+ */
+const composerParcial = (V) =>
+  `Synergos.CMS.Web/Composers/SeamComposer.*.cs (enlaza ${V}Settings)`;
+
+/**
+ * El composer parcial que ENLAZA la sección de este vertical, buscado por contenido.
+ *
+ * La señal es `services.Configure<{V}Settings>(…)`, que es literalmente lo que el doc 12 §5.5
+ * manda hacer en este paso —«el interruptor, y ENLAZAR la sección»— y lo único que distingue
+ * cablear un vertical de mencionarlo.
+ *
+ * SE QUITAN LOS COMENTARIOS, y es la mitad que importa: `SeamComposer.EventsPropertiesGov.cs`
+ * dice «Eventos» una docena de veces en su prosa. Un cruce que mirara el fichero entero daría
+ * por cableado a cualquier vertical que alguien haya nombrado de pasada, que es cómo un paso se
+ * cumple sin hacerse. La autoprueba lleva ese caso exacto.
+ */
+function composerQueEnlaza(V, raiz) {
+  const dir = join(raiz, 'Synergos.CMS.Web', 'Composers');
+  const senal = new RegExp(`Configure<\\s*${V}Settings\\s*>`);
+  for (const n of listar(dir, (f) => f.endsWith('.cs'))) {
+    const crudo = readFileSync(join(dir, n), 'utf8');
+    const desnudo = crudo
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
+    if (senal.test(desnudo)) return n;
+  }
+  return null;
+}
 
 /** ¿El basename es de este vertical? Prefijo tras un rol del molde, sin distinguir mayúsculas. */
 function esDelVertical(base, alias) {
@@ -400,6 +444,10 @@ export function ficherosReales(cab, raiz = RAIZ) {
       if (esDelVertical(n, alias)) reales.push({ s, ruta: `${carpeta}/${n}` });
     }
   }
+  // S5 por contenido: el nombre del composer parcial no es del vertical (#155).
+  const composer = composerQueEnlaza(V, raiz);
+  if (composer) reales.push({ s: 'S5', ruta: composerParcial(V), fichero: `Composers/${composer}` });
+
   const bff = join(raiz, 'backend', 'orquestadores', `Synergos.Bff.${V}`);
   if (existsSync(bff)) reales.push({ s: 'S14', ruta: `backend/orquestadores/Synergos.Bff.${V}/` });
   return { reales, alias };
@@ -546,7 +594,11 @@ export function medirContraElDisco(cab, raiz = RAIZ) {
     return ROLES.some((rol) => base.startsWith((rol + a).toLowerCase()));
   }));
 
-  return { plan, alias, muertos, cubiertos, perdidos, inventados, cobertura, reales: enDisco.size };
+  // Los pasos cuyo entregable es una PROPIEDAD y no una ruta dicen qué fichero los cumple: sin
+  // esto, la salida afirmaría «S5 cruza» sin decir dónde, que es pedirle al lector que confíe.
+  const notas = reales.filter((r) => r.fichero).map((r) => `${r.s} ← ${r.fichero}`).sort();
+
+  return { plan, alias, muertos, cubiertos, perdidos, inventados, cobertura, notas, reales: enDisco.size };
 }
 
 // ── Autoprueba ──────────────────────────────────────────────────────────────
@@ -673,6 +725,32 @@ function autoprueba() {
     console.log(`  ${ok ? '✓' : '✗'} el oráculo mide el vertical que el spec NOMBRA `
       + `(eventos ${Math.round(suyo.cobertura * 100)} % sobre ${suyo.reales}; `
       + `realty ${ajeno.reales} fichero(s))`);
+
+    // S5 se cruza por CONTENIDO (#155), así que hace falta el caso que el nombre no distingue:
+    // un composer que MENCIONA al vertical en un comentario y no lo cablea. Sin este fixture, el
+    // cruce pasaría en verde sobre un paso que nadie hizo — y `SeamComposer.EventsPropertiesGov.cs`
+    // nombra «Eventos» una docena de veces en su prosa, así que no es un caso inventado.
+    const comp = join(tmp, 'Synergos.CMS.Web/Composers');
+    mkdirSync(comp, { recursive: true });
+    const cab5 = { vertical: 'eventos', sustantivo: 'Event', ejes: { transaccion: { forma: 'Bff' } }, crea: {} };
+
+    writeFileSync(join(comp, 'SeamComposer.Varios.cs'),
+      '// OLA 6 Eventos — la app de eventos. Configure<EventosSettings> iría aquí.\n'
+      + 'public sealed class X { }\n');
+    const soloMencion = medirContraElDisco(cab5, tmp).plan
+      .some((p) => p.s === 'S5') && medirContraElDisco(cab5, tmp).cubiertos
+      .some((r) => r.includes('SeamComposer.*'));
+
+    writeFileSync(join(comp, 'SeamComposer.Varios.cs'),
+      '// OLA 6 Eventos\n'
+      + 'public sealed class X { void C() { services.Configure<EventosSettings>(s); } }\n');
+    const cablea = medirContraElDisco(cab5, tmp).cubiertos.some((r) => r.includes('SeamComposer.*'));
+
+    const okS5 = !soloMencion && cablea;
+    if (!okS5) malos++;
+    console.log(`  ${okS5 ? '✓' : '✗'} S5 se cumple CABLEANDO y no mencionando `
+      + `(sólo en comentario: ${soloMencion ? 'cuenta ✗' : 'no cuenta'}; `
+      + `con Configure<>: ${cablea ? 'cuenta' : 'no cuenta ✗'})`);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -764,6 +842,10 @@ if (conOraculo.length > 0) {
     console.log(`  cobertura: ${(m.cobertura * 100).toFixed(1)} %  · objetivo ${OBJETIVO * 100} %`
       + `  (${m.cubiertos.length}/${m.reales})`);
 
+    if (m.notas.length) {
+      console.log(`\n  pasos cuyo entregable es una PROPIEDAD y no una ruta — quién los cumple:`);
+      for (const n of m.notas) console.log(`      ${n}`);
+    }
     if (m.inventados.length) {
       console.log(`\n  el plan INVENTA ${m.inventados.length} (no existen en el disco):`);
       for (const i of m.inventados) console.log(`      ${i}`);

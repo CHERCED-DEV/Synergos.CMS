@@ -247,7 +247,7 @@ Synergos.CMS/
 | "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — **diez** pasos: los tres ejes con su tabla medida, las dos formas del eje transaccional, la CUARTA pregunta del eje 3 (§3.1) y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`, 13) |
 | "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los doce sub-specs derivados del molde, los dos MCPs y el gate del arnés. **Ya no es sólo diseño**: el arnés vive en `Synergos.Fabrica` con su `arnes.lock.json` (#141) y el spec tiene formato y validador (#140) |
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
-| "¿El molde da para GENERAR un vertical?" | Sobre Eventos, **sí**: el piloto 0 midió **71,4 %** y hoy da **100 %** (22/22) con el eje 3 escrito (#153) y su sección arreglada (#154). Lo único que el plan todavía INVENTA es `SeamComposer.<V>.cs`, que es #155. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
+| "¿El molde da para GENERAR un vertical?" | Sobre Eventos, **sí**: el piloto 0 midió **71,4 %** y hoy da **100 % sobre 23 ficheros y CERO inventados** — el eje 3 escrito (#153), su sección arreglada (#154) y el composer parcial cruzado por CONTENIDO y no por nombre (#155), porque de los siete verticales sólo Academy tiene un fichero que se llame como él. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
 
 > **La forma de `window.synergos` se declara en TRES sitios, y hay gate** (#88,
@@ -1792,6 +1792,32 @@ Las que salieron de construir el árbol de servicios (§0.B):
   **El tell**: una métrica sobre código que se calcula buscando un nombre. Antes de creerle,
   se pregunta qué hace el sujeto con ese nombre — si su trabajo es hablar de él, la métrica
   está midiendo el tema y no la dependencia.
+
+- `feedback_when_a_step_has_no_derivable_name_its_deliverable_is_a_property` — **cuando un
+  paso del molde produce algo cuyo NOMBRE no se deriva del vertical, hay dos salidas malas
+  —inventar el nombre o borrar el paso— y una buena: cambiar el entregable de RUTA a
+  PROPIEDAD** (#155). El doc 12 §5.5 enseña el cableado como si cada vertical tuviera su
+  `SeamComposer.<V>.cs`, y el árbol agrupa. Medido cruzando qué `Configure<<X>Settings>`
+  enlaza cada uno de los once composers parciales: **uno de siete** —sólo Academy— tiene un
+  fichero que se llame como su vertical; Eventos, Gob y Realty comparten
+  `EventsPropertiesGov`, y Tienda, Salud y Viajes viven en ficheros con **otro sustantivo**
+  (`Shop` enlaza `TiendaSettings`).
+  **Las dos salidas malas se reconocen por lo que le hacen a la medición**: derivar el nombre
+  lo cuenta como *inventado* para siempre —deuda permanente por una regla que el árbol nunca
+  va a cumplir—, y quitar el paso deja que un vertical **sin ningún cableado** saque 100 %,
+  que es el verde sobre el vacío de siempre.
+  **La buena es preguntarse qué se entrega de verdad.** Acá no es un fichero: es que la
+  sección del vertical quede enlazada. Eso se cruza por contenido —`Configure<<X>Settings>`—
+  y los dos lados, el plan y el disco, emiten el mismo token canónico para poder compararse.
+  **Y el cruce por contenido trae su propia trampa, que es la de siempre: hay que quitar los
+  comentarios.** `SeamComposer.EventsPropertiesGov.cs` dice «Eventos» una docena de veces en
+  su prosa, así que un cruce sobre el fichero entero daría por cableado a cualquier vertical
+  que alguien haya nombrado de pasada. El fixture de la autoprueba lleva **ese** caso —un
+  composer que sólo lo menciona— porque sin él la mutación pasa en verde.
+  **Y lo que se sabe y no se decide se escribe como tal**: cuándo conviene agrupar composers
+  y cuándo no **no tiene criterio**; los grupos de hoy son históricos. Decirlo es más honesto
+  que inventar la regla o que callarlo — partirlos en once sería un cambio grande sin defecto
+  detrás.
 
 ## 6. Prohibiciones explícitas
 

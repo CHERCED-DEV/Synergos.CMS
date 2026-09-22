@@ -296,6 +296,41 @@ cuatro veces es lo que lo convierte en esencial del molde y no en un descuido.
 Gates: `Cada_punto_de_cableado_ENLAZA_su_seccion` · `El_default_NUNCA_es_el_valor_cableado` ·
 `El_vocabulario_del_molde_es_Api_o_Bff`.
 
+> **Y el fichero NO es uno por vertical, aunque este apartado se lea así** (#155). Medido
+> sobre los once `SeamComposer.*.cs` parciales, cruzando qué `Configure<<X>Settings>` enlaza
+> cada uno:
+>
+> | vertical | dónde se enlaza su sección |
+> |---|---|
+> | Academy | `SeamComposer.Academy.cs` |
+> | Eventos · Gob · Realty | `SeamComposer.EventsPropertiesGov.cs` — **los tres** |
+> | Salud | `SeamComposer.PlatformAndHealthcare.cs` |
+> | Tienda | `SeamComposer.Shop.cs` |
+> | Viajes | `SeamComposer.TravelAndBooking.cs` |
+>
+> **Uno de siete.** Sólo Academy tiene un fichero que se llame como su vertical; los otros seis
+> fallan de dos formas distintas —tres por agruparse y tres porque el fichero lleva **otro
+> sustantivo** que el interruptor (`Shop` enlaza `TiendaSettings`, `PlatformAndHealthcare`
+> enlaza `SaludSettings`)—. Un `SeamComposer.<Vertical>.cs` es legítimo y **no es lo que hay
+> que buscar**.
+>
+> **Esto se midió dos veces por separado**, que es lo que lo convierte en regla y no en
+> anécdota: lo dejó escrito el `<remarks>` de `Cada_vertical_tiene_su_EJE_1` —«dentro de un
+> composer que cablea varios verticales el gate **cuenta, no empareja**»— y lo volvió a
+> encontrar el piloto 0 desde el otro lado, derivando un `SeamComposer.Eventos.cs` que no
+> existe ni debe.
+>
+> **La consecuencia para quien escriba el octavo vertical**: este paso no se entrega
+> creando un fichero, se entrega **enlazando la sección** — en el composer que le venga bien,
+> nuevo o existente. Y por eso el oráculo del doc 13 no cruza este paso por nombre sino por
+> contenido (`Configure<<X>Settings>` con los comentarios quitados): lo que hay que poder
+> comprobar es que el vertical está cableado, no cómo se llama el fichero donde lo está.
+>
+> **Lo que NO se decide acá, y va dicho para que nadie lo lea como que sí:** cuándo conviene
+> agrupar y cuándo no. Hoy los grupos son históricos —entraron juntos en su ola— y no hay
+> criterio escrito. Partirlos en doce ficheros de un vertical cada uno sería un cambio grande
+> sin defecto detrás; escribir el criterio es trabajo de verdad y no lo pide nadie todavía.
+
 ### 5.6 El cliente `Http*`, en `Synergos.CMS.Web/Services/`
 
 Lo que los siete comparten, medido:
