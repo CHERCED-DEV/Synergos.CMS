@@ -261,11 +261,32 @@ queda un proyecto vacío haciendo ruido en cada push. Si quedó uno, borralo en
 
 ---
 
-## 3. Los bundles del CDN — ✅ **ya está hecho** ([#20](../../../../issues/20))
+## 3. Los bundles del CDN — construido, y **falta una credencial** ([#20](../../../../issues/20) · [#165](../../../../issues/165))
 
-**https://synergos-ui.synergos-labs.workers.dev** — se despliega solo en cada push a `master` de
-`Synergos.UI`. No hay nada que montar acá. (Cuántos elementos sirve se mide, no se copia: el
-comando está en `CLAUDE.md` §11, que es el único sitio donde va esa cifra — ver #86.)
+**https://synergos-ui.synergos-labs.workers.dev** — existe y está sano. (Cuántos elementos sirve
+se mide, no se copia: el comando está en `CLAUDE.md` §11, que es el único sitio donde va esa
+cifra — ver #86.)
+
+> ### ⚠️ Esta fila decía ✅ «ya está hecho» y «no hay nada que montar acá», y era falso
+>
+> Medido el **2026-09-25**: el CDN servía el commit `b951c77`, un build del **12 de septiembre**
+> que **no está en ninguna rama** de `Synergos.UI` — ni en master, ni en el respaldo previo a la
+> refirma. Desde entonces `master` del hermano había avanzado **once veces** (78 commits contando
+> lo que entró por el merge del 17) sin que el CDN se moviera. Un commit que ninguna rama contiene
+> sólo pudo salir de un `wrangler deploy` desde una máquina.
+>
+> Quien publica es `despliegue-cdn.yml` (de `Synergos.UI`, [#74](https://github.com/CHERCED-DEV/Synergos.UI/issues/74)),
+> y **se salta solo** mientras falten `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`.
+>
+> **Lo que hay que montar, entonces, son esas dos credenciales**, y van en los secrets de
+> `Synergos.UI` —no de este repo—: el paso a paso está en
+> [`SynergosDocs/DESPLIEGUE_CDN.md`](https://github.com/CHERCED-DEV/Synergos.UI/blob/master/SynergosDocs/DESPLIEGUE_CDN.md).
+>
+> **Y por qué esta línea importaba más que una desactualizada corriente:** una guía que se queda
+> corta se lee como incompleta; ésta **afirmaba de más**, bajo un ✅, en el único documento cuyo
+> trabajo es enumerar lo que hay que hacer a mano. Mandaba a no hacer algo que hay que hacer.
+> Mientras no estén las credenciales, **lo que hay arriba puede no ser lo que dice el repo, y nada
+> se pone rojo**: el humo del CDN pasa igual, porque el CDN viejo está perfecto.
 
 Quedó en **Workers con assets estáticos**, no en Pages como decía este documento. Dos cosas
 salieron mejor de lo previsto:
