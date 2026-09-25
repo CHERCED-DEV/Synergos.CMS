@@ -2608,15 +2608,27 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > quien paga**, y eso vive en el otro árbol: ninguna pantalla lee todavía
   > esa redirección.
   >
-  > **Y un hallazgo de camino: la tasa pendiente no se puede LEER.** El
-  > expediente guarda `PaymentStatus` desde siempre y **ninguna superficie lo
-  > devuelve** —`CaseDetail` no lo declara, así que la bandeja del ciudadano y
-  > la cola del funcionario no lo ven—. Con el motor en proceso daba igual,
-  > porque siempre decía `Captured`; con la capacidad detrás, un
-  > `Unavailable` es exactamente el caso que alguien tendría que perseguir, y
-  > queda escrito donde nadie mira. Es una escritura sin camino de lectura, el
-  > espejo de `feedback_no_read_without_a_write_path`. No se arregla acá: sacarlo
-  > cruza el DTO del borde y la pantalla del otro árbol.
+  > **Y un hallazgo de camino: la tasa pendiente no se podía LEER — HECHO en la
+  > HU #116.** El expediente guardaba `PaymentStatus` desde siempre y **ninguna
+  > superficie lo devolvía** —`CaseDetail` no lo declaraba, así que la bandeja
+  > del ciudadano y la cola del funcionario no lo veían—. Con el motor en
+  > proceso daba igual, porque siempre decía `Captured`; con la capacidad
+  > detrás, un `Unavailable` es exactamente el caso que alguien tendría que
+  > perseguir, y quedaba escrito donde nadie mira. Era una escritura sin camino
+  > de lectura, el espejo de `feedback_no_read_without_a_write_path`.
+  >
+  > **Esta línea decía «No se arregla acá: cruza el DTO del borde y la pantalla
+  > del otro árbol», y llevaba dos olas siendo falsa** — comprobado de punta a
+  > punta el 2026-09-25: `CaseDetail.FeeStatus` y su gemelo de la forma compacta
+  > existen con su `<remarks>` (`null` es «no consta», y se lee junto a
+  > `FeeMinor` porque un trámite exento no abre cobro), `GovController` lo emite
+  > por las cuatro proyecciones vía `ToFeeStatusSlug`, y el otro árbol lo declara
+  > en `gov.model.ts` en cuatro sitios. Que cruzara dos árboles era cierto y no
+  > impidió nada.
+  >
+  > Que §11 diga «falta» sobre algo hecho es el defecto contra el que §11 se
+  > advierte a sí misma en su primera línea — el siguiente agente da por
+  > pendiente lo que ya existe y lo propone de cero.
   >
   > **Lo que esa guarda NO cubre, y va dicho**: la matrícula de Educación
   > (`StubEnrollmentService`) también compone y no tiene bandera que mirar,
