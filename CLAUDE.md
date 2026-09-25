@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3339 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3351 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2280 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 633 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 426 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Servicios.Tests` | 643 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
+   | `Synergos.Arquitectura.Tests` | 428 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **50 de los 68 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **51 de los 69 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3339**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3351**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -168,6 +168,7 @@ Synergos.CMS/
 │                                + credenciales fuera del árbol (5, #150)
 │                                + comandos de la guía (1, #152)
 │                                + campos de petición sin lector (1, #160)
+│                                + apertura de saga por `Abrir` (2, #166)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1349,7 +1350,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **50 de los 68 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **51 de los 69 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -1883,6 +1884,58 @@ Las que salieron de construir el árbol de servicios (§0.B):
   que inventar la regla o que callarlo — partirlos en once sería un cambio grande sin defecto
   detrás.
 
+- `feedback_a_centralised_rule_only_binds_the_callers_that_existed` — **mover una regla
+  sutil a una capa compartida la protege de los llamadores que YA estaban, y no hace nada por
+  los que se escriban después: la abstracción existe, nadie la usa, y ningún test de la regla
+  lo ve.** El defecto #41 —«encontrar una llave de idempotencia no significa que esto ya
+  pasó»— se centralizó en `SagaEngine.Abrir`, y el `<remarks>` de ese método dejó escrito por
+  qué: *«una regla sutil copiada dos veces se corrige una vez y se olvida la otra»*. Correcto,
+  y lo que pasó es peor que copiarla: se centralizó para los dos orquestadores de entonces
+  —`Tienda` y `Eventos`— y los dos que se escribieron después —`Salud` y `Viajes`— **nunca la
+  llamaron** (#166). Hacían `Find(sagaId)` y devolvían lo que hubiera, **incluida una saga
+  `Compensated`**: a quien se le caía el cobro le quedaba esa cita —o ese viaje— encerrada
+  para siempre, porque la llave se deriva de lo que se pide y nunca cambia, y el borde
+  contestaba **201** sobre algo que no ocurrió.
+  **Y la cobertura excelente del motor es justo lo que daba sensación de estar cubierto:**
+  `LlaveDeIdempotenciaTests` tiene **ocho** tests sobre `Abrir` —qué desbloquea y qué no, el
+  reintento del reintento, el lazo de las cien— y los ocho pasaban. Es la regla 5 del repo
+  hermano: **un test que llama al MÉTODO no ve que falte el llamador.** Y su propio
+  `<remarks>` llevaba la coartada escrita —*«la regla es del motor, y los dos flujos la
+  comparten justamente para que no haya dos»*—, cierta al escribirse y falsa desde el tercer
+  flujo, sin que nada la cruzara.
+  **El tell, y se busca con un grep sobre los hermanos:** una pieza compartida cuyo
+  `<remarks>` explica que existe *para no repetirse*, y un conjunto de consumidores que creció
+  después. Se cuenta cuántos la llaman y se compara con cuántos deberían — acá, dos de cuatro.
+  **Lo que cierra la clase no es el arreglo, es que el QUINTO no pueda nacer sin ella**:
+  gate estructural derivado del disco (`AperturaDeSagaTests`), más un test de comportamiento
+  **por flujo**, que es lo que faltaba. El discriminador del test no es «el id es `K#2`» —eso
+  ata el test a dónde cada flujo escribe su primer `Put`, que es distinto en los dos— sino
+  **que el resultado nunca sea una saga `Compensated`**: con el defecto lo es siempre, sin él
+  nunca, y no depende de cuán lejos llegue el flujo, así que se prueba con las capacidades
+  caídas en vez de con un guion feliz de veinte respuestas. **Y lleva espejo**: sobre una saga
+  VIVA la misma llave sigue devolviendo ÉSA — sin él, «no devuelve la muerta» lo pasaría
+  también un flujo que hubiera perdido la idempotencia entera. Medido: quitarla entera pone
+  rojos los cuatro casos del espejo y ninguno del otro.
+
+- **Addendum a `feedback_a_gate_that_parses_source_needs_its_own_mutations`: «quitar los
+  comentarios es lo que sostiene este gate» tiene una DIRECCIÓN, y hay que medir cuál —
+  lo afirmé dos veces el mismo día y las dos veces mal, en sentidos opuestos.** Son tres
+  casos distintos y se separan con un par de mutaciones, no leyendo:
+  **(a) no sostiene nada hoy** — ningún token aparece sólo en prosa, así que apagar el barrido
+  no cambia el cruce. Se conserva igual si el disco va a crecer hacia el caso, y se dice.
+  **(b) evita un FALSO POSITIVO** — el gate ACUSA al fichero que documenta el defecto. Le pasa
+  a `humo-tras-desplegar` del repo hermano: su cabecera explica #74 y nombra `git rev-parse`,
+  así que sin barrido se señala a sí mismo. Un gate que se pone rojo por su propia explicación
+  enseña a ignorarlo.
+  **(c) evita un FALSO NEGATIVO** — el gate se CREE la prosa. Le pasa a `AperturaDeSagaTests`:
+  con un comentario que dice «acá habría que llamar a `_sagas.Abrir(sagaId)` — pendiente» y el
+  `Find` viejo debajo, **sin barrido pasa en verde**. Y ése es el caso que el propio arreglo
+  invita a escribir, que es lo que lo vuelve probable y no teórico.
+  **La mutación que separa (a) de (b) y (c) no es apagar el barrido**: eso sólo mide (a). Es
+  **escribir la prosa del caso** y correr las dos versiones — con barrido y sin él. Si no se
+  hace, lo que queda escrito en el `<remarks>` es una plausibilidad, y este fichero ya tiene
+  dicho que una explicación que suena bien es exactamente donde nadie vuelve a mirar.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1942,13 +1995,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3339 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3351 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2280
-dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 633
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 426
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 643
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 428
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2340,7 +2393,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3339 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3351 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -3792,6 +3845,22 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > compensación fallida algo quedó colgado y necesita una persona. La regla
   > vive en `SagaEngine.Abrir` y no en cada flujo — estaba copiada en los dos
   > orquestadores, y el defecto también.
+  >
+  > **Y esa última frase se quedó a medias dos orquestadores** (#166).
+  > Centralizar la regla protegió a los dos que existían —`Tienda` y
+  > `Eventos`— y **`Salud` y `Viajes`, escritos después, nunca llamaron a
+  > `Abrir`**: hacían `Find(sagaId)` y devolvían lo que hubiera, incluida una
+  > saga `Compensated`. O sea el #41 vivo en la mitad del árbol, con el
+  > `sagaId` siendo la llave de idempotencia y la llave derivada de lo que se
+  > pide: a quien se le caía el cobro le quedaba esa cita —o ese viaje—
+  > **encerrada para siempre**, y el borde contestaba `201`.
+  >
+  > Lo que no lo vio no fue la falta de tests: `LlaveDeIdempotenciaTests` tiene
+  > **ocho** sobre `Abrir` y los ocho pasaban, porque prueban el MOTOR. Hoy hay
+  > un test de comportamiento **por flujo** (`ReintentoTrasDeshacerTests`) y un
+  > gate estructural derivado del disco (`AperturaDeSagaTests`), que es lo que
+  > hace que el QUINTO orquestador no pueda nacer sin ello. Ver
+  > `feedback_a_centralised_rule_only_binds_the_callers_that_existed` en §5.
 - **Dos barridos ya NO compensan dos veces lo mismo** (#34). `CompensateAsync`
   leía, ejecutaba y escribía **sin marca de en-curso**, y lo llaman el barrido
   y cada flujo en línea: la carrera no necesitaba dos réplicas — bastaba un

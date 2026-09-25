@@ -56,20 +56,27 @@ public sealed class AppointmentFlow
         // La saga existe ANTES de tocar nada. Si el proceso se cae después del primer paso, lo
         // que se hizo queda escrito con su identificador — y como las llaves derivan de él,
         // repetir la llamada con el mismo sagaId no duplica nada.
-        var saga = _sagas.Find(sagaId);
-        if (saga is not null)
-        {
-            // Reintento de la misma petición: se devuelve lo que hay. La alternativa —rehacer—
-            // tomaría un segundo cupo con una llave distinta.
-            return Result.Ok(saga);
-        }
+        //
+        // Pero encontrar la llave NO siempre significa «esto ya pasó»: si el intento anterior se
+        // deshizo entero, no queda nada que duplicar y el paciente tiene derecho a reintentar.
+        // Quién decide eso vive en el motor, no acá.
+        //
+        // Esto decía `Find(sagaId)` y devolvía lo que hubiera, incluida una saga `Compensated`
+        // (#166). El `sagaId` ES la llave de idempotencia —lo dice el endpoint— y la llave se
+        // deriva del paciente, el profesional y la hora, así que nunca cambia: a quien se le caía
+        // el cobro le quedaba la saga muerta y esa cita **encerrada para siempre**, con el borde
+        // contestando `201`. Es el defecto #41, que se centralizó en `Abrir` para no repetirlo y
+        // que este flujo —escrito después— nunca adoptó.
+        var slot = _sagas.Abrir(sagaId);
+        if (slot.Reusar is not null) return Result.Ok(slot.Reusar);
+        sagaId = slot.Id;
 
         // 1. Consentimiento. Va primero porque es lo único que puede prohibir el flujo entero, y
         //    comprobarlo después de apartar un cupo obligaría a soltarlo.
         var consent = await _caps.CheckConsentAsync(patient, ConsentPurpose, ct);
         if (!consent.IsOk) return Result.Rejected<AppointmentSaga>(consent.Rejection!);
 
-        saga = new AppointmentSaga(sagaId, patient, professional, window, SagaStatus.Running,
+        var saga = new AppointmentSaga(sagaId, patient, professional, window, SagaStatus.Running,
             null, null, null, Money.Zero(Money.Cop), Array.Empty<Compensation>(), null, _clock.GetUtcNow());
 
         // 1.bis. La agenda del profesional. Si el llamador no la nombró, se resuelve DESDE el

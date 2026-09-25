@@ -76,15 +76,21 @@ public sealed class TripFlow
         // La saga existe ANTES de tocar nada. Si el proceso se cae después del primer apartado,
         // lo que se hizo queda escrito con su identificador — y como las llaves derivan de él,
         // repetir la llamada con el mismo sagaId no duplica nada.
-        var saga = _sagas.Find(sagaId);
-        if (saga is not null)
-        {
-            // Reintento de la misma petición: se devuelve lo que hay. La alternativa —rehacer—
-            // tomaría un segundo apartado con una llave distinta.
-            return Result.Ok(saga);
-        }
+        //
+        // Pero encontrar la llave NO siempre significa «esto ya pasó»: si el intento anterior se
+        // deshizo entero, no queda nada que duplicar y el viajero tiene derecho a reintentar.
+        // Quién decide eso vive en el motor, no acá.
+        //
+        // Esto decía `Find(sagaId)` y devolvía lo que hubiera, incluida una saga `Compensated`
+        // (#166). El `sagaId` ES la llave de idempotencia, y se deriva de lo que se reserva, así
+        // que nunca cambia: a quien se le caía el cobro le quedaba ese viaje **encerrado para
+        // siempre**. Es el defecto #41, que se centralizó en `Abrir` para no repetirlo y que este
+        // flujo —escrito después— nunca adoptó.
+        var slot = _sagas.Abrir(sagaId);
+        if (slot.Reusar is not null) return Result.Ok(slot.Reusar);
+        sagaId = slot.Id;
 
-        saga = new TripSaga(sagaId, traveller, SagaStatus.Running, Array.Empty<ItemHold>(), null,
+        var saga = new TripSaga(sagaId, traveller, SagaStatus.Running, Array.Empty<ItemHold>(), null,
             Money.Zero(Money.Cop), Money.Zero(Money.Cop), Array.Empty<Compensation>(), null,
             _clock.GetUtcNow(), PartialConfirm: partialConfirm);
         _sagas.Put(saga);
