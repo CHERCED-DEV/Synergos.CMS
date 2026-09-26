@@ -463,8 +463,12 @@ public sealed class RealtyController : ControllerBase
             .FirstOrDefault(s => string.Equals(s.Id, slotId, StringComparison.OrdinalIgnoreCase));
 
     // ── 4. Calculadora de hipoteca (puro/determinista) ──────────────────
-    // POST /api/realty/mortgage { price, downPayment, termMonths, annualRate }
-    //   → { monthly, totalInterest, totalPaid, schedule? }
+    // POST /api/realty/mortgage { price, downPayment, termMonths, annualRatePercent }
+    //   → { monthly, principal, totalInterest, totalPaid, schedule }
+    //
+    // La conversión porcentaje→fracción vive ACÁ y en un solo sitio: el seam la documenta en
+    // fracción y sus seis tests la ejercitan así, y el cable la nombra en porcentaje porque es
+    // lo que alguien teclea («12,5 % E.A.»). Ver el <remarks> de MortgageRequest (#167).
     [HttpPost("mortgage")]
     public IActionResult Mortgage([FromBody] MortgageRequest? request)
     {
@@ -473,10 +477,19 @@ public sealed class RealtyController : ControllerBase
             return BadRequest(new { error = "El cuerpo de la solicitud es requerido." });
         }
 
+        // Ausente NO es cero. Cero es «sin interés» y es una respuesta legítima; la ausencia es
+        // «no me dijiste la tasa», y contestarla con la recta P/n es inventar un número
+        // plausible sobre una decisión de compra.
+        if (request.AnnualRatePercent is not { } annualRatePercent)
+        {
+            return BadRequest(new { error = "annualRatePercent es requerido (la tasa nominal anual en PORCENTAJE; 0 = sin interés)." });
+        }
+
         MortgageResult result;
         try
         {
-            result = _mortgage.Calculate(request.Price, request.DownPayment, request.TermMonths, request.AnnualRate);
+            result = _mortgage.Calculate(
+                request.Price, request.DownPayment, request.TermMonths, annualRatePercent / 100m);
         }
         catch (ArgumentException ex)
         {
@@ -486,6 +499,12 @@ public sealed class RealtyController : ControllerBase
         return Ok(new MortgageResponse(
             Monthly: result.Monthly,
             MonthlyFormatted: _priceFormatter.Format(result.Monthly, "COP"),
+            // `principal` lo LEE la app —`normalizeMortgage` lo tiene en su tipo— y esta
+            // respuesta no lo emitía, así que el otro lado lo rellenaba con su propia
+            // derivación: la cuota del servidor conviviendo con el capital de casa, o sea una
+            // tabla que no cuadra consigo misma (#167). Sale del cuadro, no de una resta
+            // repetida acá: la última cuota absorbe el redondeo.
+            Principal: result.Schedule.Sum(r => r.Principal),
             TotalInterest: result.TotalInterest,
             TotalInterestFormatted: _priceFormatter.Format(result.TotalInterest, "COP"),
             TotalPaid: result.TotalPaid,
@@ -880,7 +899,34 @@ public sealed class RealtyController : ControllerBase
         ContactRequest? Contact,
         string? Mode = null);
 
-    public sealed record MortgageRequest(decimal Price, decimal DownPayment, int TermMonths, decimal AnnualRate);
+    /// <summary>
+    /// El cuerpo de la calculadora de hipoteca.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La tasa nombra su UNIDAD, y eso es el arreglo del defecto #167.</b> Se llamaba
+    /// <c>annualRate</c>, que no dice nada: el borde la leía como FRACCIÓN
+    /// (<c>IMortgageCalculator</c> lo documenta, «0.12 = 12%») y la app la manda en PORCENTAJE
+    /// (su campo se documenta como «E.A. %», default 12). Medido con las dos implementaciones
+    /// reales sobre 300.000.000 / 60.000.000 / 240 meses: el borde contestaba
+    /// <b>240.000.000</b> al mes donde la app pinta <b>2.642.606,72</b> — factor 90,82, una cuota
+    /// igual al capital entero todos los meses durante veinte años. Y la diagonal
+    /// —borde-con-fracción y app-con-porcentaje dan el MISMO número— es lo que prueba que la
+    /// fórmula era idéntica y que lo único roto era la unidad.</para>
+    ///
+    /// <para><b>Es <c>decimal?</c> a propósito: ausente NO es cero.</b> Con el record posicional
+    /// anterior, un cuerpo sin la clave dejaba <c>0</c> y <see cref="IMortgageCalculator"/> sólo
+    /// rechaza <c>&lt; 0</c>, así que caía a la rama «sin interés» y devolvía la recta
+    /// <c>P/n</c>: un número plausible, sin un error, sobre una decisión de compra. Eso además
+    /// hacía SILENCIOSO cualquier arreglo hecho en un solo árbol —la clave renombrada se
+    /// descarta y sale un número igual de plausible—, que es
+    /// <c>feedback_an_omitted_key_can_be_an_assertion</c>. Cero sigue siendo legal y sigue
+    /// significando sin interés; lo que no es legal es no decirlo.</para>
+    /// </remarks>
+    public sealed record MortgageRequest(
+        decimal Price,
+        decimal DownPayment,
+        int TermMonths,
+        decimal? AnnualRatePercent);
 
     public sealed record LeadRequest(string? ListingId, ContactRequest? Contact, string? Message);
 
@@ -1119,6 +1165,7 @@ public sealed class RealtyController : ControllerBase
     public sealed record MortgageResponse(
         decimal Monthly,
         string MonthlyFormatted,
+        decimal Principal,
         decimal TotalInterest,
         string TotalInterestFormatted,
         decimal TotalPaid,

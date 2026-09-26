@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3351 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3375 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2280 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2303 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 643 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 428 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 429 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3351**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3375**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -169,6 +169,7 @@ Synergos.CMS/
 │                                + comandos de la guía (1, #152)
 │                                + campos de petición sin lector (1, #160)
 │                                + apertura de saga por `Abrir` (2, #166)
+│                                + fixtures del índice de contratos (1, #167)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -239,6 +240,7 @@ Synergos.CMS/
 | "¿Qué compositions y para qué?"  | `uSync/v9/ContentTypes/compdom*.config` + `compcontent*.config` |
 | "¿Hay compositions reservadas sin consumers?"  | Sí. Marker `[Bloqueado externamente - ...]` o `[Disponible — sin consumers actuales]` al inicio de `<Description>`. NO son orphans; son scaffolding tracked. Cap-260 audit (Cap-270 Batch C) las reconoce. |
 | "¿Cómo se acopla con el UI?"     | `Synergos.CMS.Web/docs/contracts/` — los 5 contratos. Es la ÚNICA superficie de acople. |
+| "¿Hay algo ahí que los dos árboles EJECUTEN, y no sólo lean?" | Sí: `docs/contracts/mortgage-vectors.json` (#167). Un documento lo lee una persona; un fixture lo corre un gate de cada lado —acá `HipotecaVectoresTests`, allá `npm run gate:hipoteca`—. Nació porque `IMortgageCalculator` afirmaba en su `<remarks>` que «el cálculo base es el mismo en cliente y servidor» y era **falso** por 100× en la unidad de la tasa. Hay gate sobre el índice: un fixture nuevo sin enlazar rompe el build |
 | "¿Qué elementos publica el CDN?" | Repo hermano `Synergos.UI`, `vitals/contracts/src/element-registry.json` |
 | "¿Por qué el backend está partido así?" | `Synergos.CMS.Web/docs/product/06-arquitectura-backend.md` |
 | "¿Dónde para la atomicidad? ¿Qué es una capacidad?" | `Synergos.CMS.Web/docs/product/07-diseno-atomico-capacidades.md` |
@@ -1936,6 +1938,72 @@ Las que salieron de construir el árbol de servicios (§0.B):
   hace, lo que queda escrito en el `<remarks>` es una plausibilidad, y este fichero ya tiene
   dicho que una explicación que suena bien es exactamente donde nadie vuelve a mirar.
 
+- `feedback_a_property_asserted_across_two_trees_needs_a_shared_fixture` — **una propiedad que
+  vale sobre los DOS árboles y que sólo está escrita en un `<remarks>` no es un contrato: es una
+  oración — y cuanto más autorizado el sitio donde se escribe, más aguanta siendo falsa.**
+  `IMortgageCalculator` decía de sí mismo «el cálculo base es el mismo en cliente y servidor»,
+  en la interfaz que es dueña del cálculo, y era falso desde que existe el endpoint: las dos
+  implementaciones son la MISMA fórmula con la tasa a **100×** de distancia —acá fracción
+  (`0.12 = 12%`), en `mortgage.calc.ts` porcentaje— así que `POST /api/realty/mortgage`
+  contestaba **240.000.000** al mes donde la pantalla pinta **2.642.606,72** (#167). Factor
+  90,82: una cuota igual al capital entero, todos los meses, durante veinte años.
+  **Es el escalón de arriba del addendum de `feedback_a_fabrication_can_be_a_derivation`**: allá
+  la nota nombraba un DEFECTO y lo blindaba; acá afirma una PROPIEDAD, que es mejor camuflaje
+  todavía, porque se lee como una decisión de diseño que alguien comprobó.
+  **La mitad barata del arreglo es peor que el defecto**, y por eso el ticket no se cierra
+  moviendo la coma: mandar `0.12` sin tocar la calculadora local da **1.012.098** — 2,6× BAJO y
+  *plausible*, con el respaldo de la propia página contradiciendo a su servidor en la misma
+  pantalla. Es `feedback_a_failed_tryparse_is_not_a_value` («hay un caso peor que el cero: el
+  que SÍ parsea») sobre una unidad en vez de un separador de miles. **La unidad va en el NOMBRE
+  del campo** (`annualRatePercent`) o no va: los dos gates de contrato cruzan por nombre de
+  clave y por controller, así que `annualRate ↔ AnnualRate` ligaba y la unidad no la miraba
+  nadie — G-7 además lo imprime como «cuerpo construido por un helper, FUERA del cruce».
+  **Lo que lo cierra es un VECTOR compartido que las dos EJECUTAN**
+  (`docs/contracts/mortgage-vectors.json`), no una frase mejor escrita: dos derivaciones
+  independientes de la misma verdad que tienen que coincidir, el movimiento de
+  `IdentityGateTests`. Tres cortes que costaron su mutación: **las expectativas no salen de
+  ninguna de las dos implementaciones** —se derivaron de la fórmula cerrada con decimales de 50
+  dígitos, porque un fixture sacado de una implementación es una FOTO que detecta que se
+  separan y no que las dos están mal a la vez—; **el vector de tasa cero NO cubre la unidad**,
+  porque ahí porcentaje y fracción dan el mismo número y ese caso pasa en verde con el defecto
+  puesto (medido: la mutación pone rojos 5 de 6); y **lo que NO se compara se dice** —los
+  totales, porque las dos totalizan con métodos distintos y los dos son correctos: 5 centavos
+  sobre 634 millones—, o la primera corrida roja por esa diferencia legítima enseña a aflojar el
+  gate.
+  **Y la ausencia tiene que poder distinguirse del cero**: con el record posicional, un cuerpo
+  sin la clave dejaba `0`, que es «sin interés», así que un renombrado hecho en UN solo árbol
+  habría salido callando con un número plausible. Por eso el campo es `decimal?` y la ausencia
+  se **rechaza** — `feedback_an_omitted_key_can_be_an_assertion` en el sitio donde vuelve
+  silencioso el propio arreglo.
+
+- `feedback_a_seam_with_no_caller_can_be_the_only_pointer_to_a_live_defect` — **un método sin
+  llamador no es código muerto que se borra: puede ser lo ÚNICO que apunta a un defecto vivo, y
+  su destino lo decide lo que hay DETRÁS, no si alguien lo llama.** El #167 no se encontró
+  auditando la hipoteca: se encontró yendo a resolver una nota del repo hermano (su regla 32)
+  que censaba **dos** métodos públicos sin llamador y aplazaba la decisión entre quitarlos y
+  cablearlos. **Las dos salidas que insinuaba se equivocan para uno de los dos**: quitar
+  `realty::mortgage` habría borrado lo único que en los dos árboles apunta a un endpoint
+  público que contestaba 90,8× alto. La ausencia de llamador no era el problema — **era el
+  escondite**.
+  **La pregunta que lo decide, y se contesta en dos minutos: ¿el endpoint EXISTE, y qué
+  contesta?** Los dos casos salieron distintos y por eso hay que preguntarlo por método:
+  `blogs::search` pedía una ruta que no existe ni existió —su propio TODO lo decía— y la
+  reemplazó `explore` con el mismo normalizador y el mismo mock, así que se quita y su spec se
+  re-apunta; `realty::mortgage` pide una que sí existe, y ahí lo que había que arreglar era el
+  borde.
+  **Y el que se queda necesita una razón que conteste «por qué NO se cablea»**, no «por qué no
+  se cableó todavía» — lo segundo es un ticket sin abrir disfrazado de excepción
+  (`feedback_a_census_entry_is_how_a_defect_survives_its_own_gate`). Acá la razón es del diseño:
+  el cálculo base es del cliente, es una función pura, y meterle una ida a la red es el
+  retroceso de `feedback_a_vertical_is_three_axes_and_only_one_crosses`. El sitio de aterrizaje
+  está ENTERO —precedencia servidor-gana y los cuatro setters invalidándolo— así que lo único
+  ausente es el disparador, y el disparador está escrito.
+  **El tell, y se busca con un cruce y no leyendo**: un método público de un cliente HTTP cuyo
+  único llamador es un `*.spec.*`. Un spec no cuenta como llamador — contarlos habría dado 128
+  de 128 y cero hallazgos, que es la regla 5 del repo hermano un piso más arriba: allá un test
+  que llama al método no ve que falte el llamador, acá el gate no se deja convencer por ese
+  test.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -1995,13 +2063,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3351 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3375 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2280
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2303
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 643
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 428
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 429
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2234,7 +2302,14 @@ con `--actualizar` y el diff va en el commit que lo causó.
 >
 > **Y cruza por CONTROLLER ENTERO, no por endpoint** — que es el límite que más
 > conviene saber. Si `title` ya sale de `/products`, que FALTE en `/wishlist` no se
-> ve: la clave sigue cruzando. Se midió contra el arreglo de #104, donde la wishlist
+> ve: la clave sigue cruzando.
+>
+> **Medido otra vez en el #167, y esta vez con el defecto delante.** `MortgageResponse` no
+> declaraba `principal` y `normalizeMortgage` lo LEE, así que lo rellenaba con su derivación
+> local —la cuota del servidor conviviendo con el capital de casa, una tabla que no cuadra
+> consigo misma—. Al emitirlo, la línea base salió **byte-idéntica**: la clave ya cruzaba, por
+> las filas de `MortgageScheduleDto` del MISMO controller. O sea que **G-6 no podía cazar este
+> defecto**, y no por deuda ni por una tabla mal escrita: por su granularidad. Se midió contra el arreglo de #104, donde la wishlist
 > emitía `itemRef`/`owner` mientras la UI leía `productId`/`title` —una lista vacía
 > con el servidor lleno— y **este gate no lo habría cazado**. Afinarlo exigiría seguir
 > el tipo de retorno de cada acción hasta su `record`; se puede hacer y es otro
@@ -2270,6 +2345,11 @@ git clone --depth 1 https://github.com/cherced-dev/synergos.ui /tmp/ui
 
 # los tokens del design system, contra el syn-tokens.css de este repo
 (cd /tmp/ui/platforms/angular && SYNERGOS_CMS_PATH=$CMS node tools/sync-tokens.mjs --check)
+
+# la calculadora de hipoteca del UI contra los vectores de oro de ESTE repo (#167).
+# Sin el CMS RECHAZA en vez de saltarse: un «no pude comprobar» se lee igual que un
+# «no aplica». Su gemelo de acá —`HipotecaVectoresTests`— corre en la suite normal.
+(cd /tmp/ui && node tools/vectores-hipoteca.mjs --cms-path=$CMS)
 ```
 
 Los dos pasan hoy. El primero sale con **avisos** `[W4]` —entradas del registry
@@ -2393,7 +2473,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3351 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3375 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

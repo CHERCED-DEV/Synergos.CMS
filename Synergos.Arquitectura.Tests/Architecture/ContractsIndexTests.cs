@@ -98,6 +98,63 @@ public sealed class ContractsIndexTests
     }
 
     /// <summary>
+    /// Los FIXTURES de la carpeta —lo que no es <c>.md</c>— también están en el índice (#167).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Se escribió junto con el primero de ellos, y por eso.</b> #167 dejó
+    /// <c>mortgage-vectors.json</c> acá: los vectores de oro que ejecutan las dos calculadoras de
+    /// hipoteca. No es un contrato-documento —los cinco de la tabla son prosa— es un fixture que
+    /// los dos árboles CORREN, y por eso vive en la única superficie de acople. Dejarlo sin
+    /// indexar habría sido el defecto exacto que los dos dientes de arriba existen para evitar,
+    /// un tipo de fichero más allá: canónico, en la carpeta, e invisible para quien viene a
+    /// integrarse (#74).</para>
+    ///
+    /// <para><b>La salida barata era no escribir el diente y enlazar mi propio fichero a mano.</b>
+    /// Eso deja al siguiente fixture fuera y encima con el precedente puesto — una excepción sin
+    /// declarar, que es cómo un censo empieza a mentir
+    /// (<c>feedback_a_census_entry_is_how_a_defect_survives_its_own_gate</c>).</para>
+    ///
+    /// <para>Va en los dos sentidos como los otros dos, y con su red de seguridad: si el
+    /// descubrimiento deja de ver, la lista sale vacía y esto pasaría en verde sin mirar nada.
+    /// <c>node_modules</c> y el harness Vitest quedan fuera porque no son de la carpeta: son de
+    /// <c>tests/</c>, que es un subdirectorio, y el barrido no es recursivo.</para>
+    /// </remarks>
+    [Fact]
+    public void Todo_fixture_del_disco_esta_en_el_indice()
+    {
+        var fixtures = Directory.EnumerateFiles(CarpetaContratos())
+            .Select(Path.GetFileName)
+            .Select(n => n!)
+            .Where(n => !n.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+        // Red de seguridad: hoy hay exactamente uno. Cero significa que se movió o se renombró, y
+        // entonces el cruce de abajo compararía dos listas vacías.
+        Assert.True(fixtures.Count >= 1,
+            "No se encontró ningún fixture en docs/contracts/: `mortgage-vectors.json` se movió, "
+            + "y con él el cruce de las dos calculadoras de hipoteca (#167).");
+
+        var indice = Indice();
+        var faltan = fixtures.Where(f => !indice.Contains($"]({f})", StringComparison.Ordinal)).ToList();
+
+        Assert.True(faltan.Count == 0,
+            $"Estos fixtures están en docs/contracts/ y el README no los enlaza: {string.Join(", ", faltan)}. "
+            + "La carpeta es «la ÚNICA superficie de acople» (CLAUDE.md §3): lo que vive acá sin "
+            + "estar en su índice es invisible justo para quien viene a integrarse.");
+
+        // Y al revés: un enlace a un fixture que ya no está parece que hay algo y no lo hay.
+        var fantasmas = Regex.Matches(indice, @"\]\((?!\.\./|https?:)([^)/#]+\.(?:json|csv|ya?ml))\)")
+            .Select(m => m.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .Where(e => !fixtures.Contains(e, StringComparer.Ordinal))
+            .ToList();
+
+        Assert.True(fantasmas.Count == 0,
+            $"El README de contratos enlaza fixtures que no están: {string.Join(", ", fantasmas)}.");
+    }
+
+    /// <summary>
     /// Si §9 dice que no hay bloqueos vigentes, la guía no declara nada bloqueado.
     /// </summary>
     /// <remarks>

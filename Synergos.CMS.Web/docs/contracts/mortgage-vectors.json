@@ -1,0 +1,114 @@
+{
+  "queEsEsto": [
+    "Vectores de oro de la calculadora de hipoteca del vertical Propiedades. Los ejecutan LAS DOS",
+    "implementaciones: `StubMortgageCalculator` (C#, detrás de POST /api/realty/mortgage) y",
+    "`mortgage.calc.ts` (TypeScript, en Synergos.UI). No es documentación: es el fixture que hace",
+    "que 'el cálculo base es el mismo en cliente y servidor' —frase que el <remarks> de",
+    "IMortgageCalculator ya afirmaba— sea un hecho comprobado en vez de una oración.",
+    "",
+    "POR QUÉ EXISTE (defecto #167). Esa frase era FALSA y nada la cruzaba: las dos",
+    "implementaciones eran la misma fórmula con la tasa a 100x de distancia, porque el borde leía",
+    "`annualRate` como fracción (0.12 = 12%) y la app la mandaba en porcentaje (12 = 12%).",
+    "Medido con las dos implementaciones reales sobre el primer vector de abajo: el borde",
+    "contestaba 240000000 al mes donde la app pinta 2642606.72 — factor 90.82, una cuota igual al",
+    "capital entero todos los meses durante veinte años. Hoy el cable nombra su unidad",
+    "(`annualRatePercent`) y esto lo vigila.",
+    "",
+    "LAS EXPECTATIVAS NO SALEN DE NINGUNA DE LAS DOS. Se derivaron de la fórmula cerrada del",
+    "sistema francés —M = p·i / (1 − (1+i)^−n), i = pct/100/12— con aritmética decimal de 50",
+    "dígitos y redondeo bancario a centavos. Si salieran de una implementación esto sería una",
+    "FOTO: detectaría que se separan y no que las dos están mal a la vez."
+  ],
+
+  "queSeCompara": {
+    "monthly": "EXACTO, al centavo. Es EL número: lo que la pantalla enseña y lo único que movía el defecto.",
+    "principal": "EXACTO. price − downPayment redondeado; las dos lo calculan igual y la app lo RELLENABA de su lado porque el borde no lo emitía.",
+    "totalInterest y totalPaid": [
+      "NO se comparan entre las dos implementaciones, y eso es deliberado: usan MÉTODOS distintos,",
+      "los dos correctos e internamente coherentes. El C# SUMA el cuadro completo redondeado a",
+      "centavos con la última cuota absorbiendo el redondeo (por eso su saldo cierra en cero",
+      "exacto); el TS multiplica la cuota SIN redondear por el plazo (porque construye sólo las",
+      "primeras filas del cuadro, no las 240, así que no tiene qué sumar). Medido sobre el primer",
+      "vector: 634225612.89 contra 634225612.94 — cinco centavos sobre 634 millones.",
+      "Cada test comprueba los totales contra SU implementación, y este fichero deja escrita la",
+      "diferencia para que nadie la lea como deriva."
+    ],
+    "schedule": "Tampoco: el C# emite las `termMonths` filas y el TS sólo las primeras (12 por defecto). Son dos recortes de la misma tabla."
+  },
+
+  "vectores": [
+    {
+      "nombre": "el caso de la app, tal cual",
+      "porQue": "price/down/term/rate como los siembra la PDP (cuota inicial 30%, 240 meses, 12% E.A. de default). Es el vector con el que se midió el 90.82x.",
+      "price": 300000000,
+      "downPayment": 60000000,
+      "termMonths": 240,
+      "annualRatePercent": 12,
+      "monthly": 2642606.72,
+      "principal": 240000000.00,
+      "conLaUnidadMal": 1012098.00
+    },
+    {
+      "nombre": "plazo corto, sin cuota inicial",
+      "porQue": "El cuadro entero cabe en el recorte de los dos lados, y `principal == price` — el único vector donde una resta equivocada no se vería.",
+      "price": 100000000,
+      "downPayment": 0,
+      "termMonths": 12,
+      "annualRatePercent": 12,
+      "monthly": 8884878.87,
+      "principal": 100000000.00,
+      "conLaUnidadMal": 8338750.99
+    },
+    {
+      "nombre": "plazo medio",
+      "porQue": "Mismos importes que el test canónico del desglose de StubMortgageCalculatorTests, con la tasa dicha en la unidad del cable.",
+      "price": 250000000,
+      "downPayment": 50000000,
+      "termMonths": 60,
+      "annualRatePercent": 10,
+      "monthly": 4249408.94,
+      "principal": 200000000.00,
+      "conLaUnidadMal": 3341812.50
+    },
+    {
+      "nombre": "tasa cero — el degenerado, y NO alcanza solo",
+      "porQue": "Sin interés la cuota es la recta P/n, así que porcentaje y fracción dan EL MISMO número: este vector pasa en verde con el defecto puesto. Está para cubrir la rama, y está anotado para que nadie lo tome por cobertura de la unidad.",
+      "price": 120000000,
+      "downPayment": 0,
+      "termMonths": 120,
+      "annualRatePercent": 0,
+      "monthly": 1000000.00,
+      "principal": 120000000.00,
+      "conLaUnidadMal": 1000000.00
+    },
+    {
+      "nombre": "plazo largo, tasa impar",
+      "porQue": "11% no es 10 ni 12: una tabla cableada por casualidad no lo acierta.",
+      "price": 300000000,
+      "downPayment": 60000000,
+      "termMonths": 180,
+      "annualRatePercent": 11,
+      "monthly": 2727832.64,
+      "principal": 240000000.00,
+      "conLaUnidadMal": 1344424.69
+    },
+    {
+      "nombre": "tasa con decimales",
+      "porQue": "12.5 y 0.125 son las dos formas que alguien escribiría al 'arreglar' la unidad moviendo la coma, y la segunda da 1218910.15 — un número PLAUSIBLE, 3.2x bajo. Un vector con tasa entera no distingue las dos maneras de equivocarse.",
+      "price": 450000000,
+      "downPayment": 90000000,
+      "termMonths": 300,
+      "annualRatePercent": 12.5,
+      "monthly": 3925274.89,
+      "principal": 360000000.00,
+      "conLaUnidadMal": 1218910.15
+    }
+  ],
+
+  "conLaUnidadMal": [
+    "El campo `conLaUnidadMal` de cada vector es lo que la implementación devolvería si alguien",
+    "volviera a confundir la unidad. NO es una expectativa: los tests lo usan para EXIGIR que el",
+    "resultado sea distinto de él, que es lo que impide que un vector de tasa cero —donde los dos",
+    "números coinciden— se cuente como cobertura."
+  ]
+}

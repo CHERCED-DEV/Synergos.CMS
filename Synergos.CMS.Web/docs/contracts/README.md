@@ -46,6 +46,29 @@ implementa contra estos contratos sin importar código del otro.
 > harness», y entonces alguien abre `tests/`, cuenta cuatro, y va a escribir un
 > spec que duplicaría lo que ya cubre la suite.
 
+## Los fixtures — lo que los dos árboles EJECUTAN
+
+Los cinco de arriba son documentos. Acá viven además los ficheros de datos que **las
+dos implementaciones corren**, que es otra cosa: un documento lo lee una persona, un
+fixture lo ejecuta un gate de cada lado.
+
+| Fichero | Qué cruza | Quién lo ejecuta |
+|---|---|---|
+| [`mortgage-vectors.json`](mortgage-vectors.json) | La calculadora de hipoteca del vertical Propiedades: las dos implementaciones tienen que dar **la misma cuota al centavo** para el mismo cuerpo. | CMS: `HipotecaVectoresTests` (por el borde, con su conversión) · UI: el spec de `mortgage.calc` |
+
+> **Por qué hay uno, y por qué no era un documento.** `IMortgageCalculator` afirmaba en
+> su `<remarks>` que «el cálculo base es el mismo en cliente y servidor» y era **falso**
+> desde que existe el endpoint (#167): las dos eran la misma fórmula con la tasa a
+> **100×** de distancia —el borde la leía como fracción y la app la mandaba en
+> porcentaje— así que `POST /api/realty/mortgage` contestaba **240.000.000** al mes
+> donde la pantalla pinta **2.642.606,72**. Una frase en prosa no lo habría cambiado:
+> la frase ya estaba escrita. Lo que hacía falta es que las dos lo **ejecuten**.
+>
+> Y sus expectativas **no salen de ninguna de las dos**: se derivaron de la fórmula
+> cerrada del sistema francés con aritmética decimal de 50 dígitos. Un fixture sacado
+> de una implementación es una FOTO — detecta que se separan, no que las dos están mal
+> a la vez.
+
 ## Naming conventions canónicas
 
 | Asset | Convention | Example |
