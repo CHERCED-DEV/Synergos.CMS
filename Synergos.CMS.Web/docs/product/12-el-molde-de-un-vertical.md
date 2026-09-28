@@ -357,6 +357,18 @@ Lo que los siete comparten, medido:
   destapó que el listado devolvía ese identificador como si fuera el correo.
 - **Degradar, no reventar.** Encender el modo sin el servicio arriba tiene que dejar el vertical
   sirviendo catálogo y fichas; lo que se para es la transacción, y se dice.
+- **El rechazo se LEE, no se deduce del código de estado** (#129). Si volver a intentarlo tiene
+  sentido lo sabe la capacidad y lo dice: `Rejection.IsTransient` viaja como extensión
+  `transient` del `ProblemDetails`, y acá se lee con `RechazoDelArbolDeServicios`. Escribir
+  `if (res.StatusCode is Conflict or ServiceUnavailable)` en el cliente es una copia privada de
+  una tabla que es de la capacidad — el día que una cambie con qué código sale un rechazo
+  transitorio, los clientes siguen compilando y deciden distinto, **sin que nada se ponga rojo**.
+  Y los tres estados importan: `true` «volvé a intentarlo», `false` «dice que no», `null` **«no
+  consta»**, que nunca es firme (un cuerpo ilegible tratado como rechazo firme convierte
+  cualquier proxy que devuelva HTML en «el banco dijo que no»).
+  Lo que el cliente SÍ decide por su cuenta es **cómo presentar** el fallo —un 404 es «no
+  existe», un 401 nombra la llave compartida— que es otra pregunta y es suya.
+  Gate: `TransitoriedadTests`, con su censo vacío y vigilado en los dos sentidos.
 
 ### 5.7 El ARTEFACTO: su emisor, su registro durable y su aviso — **fuera del seam**
 

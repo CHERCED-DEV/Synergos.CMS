@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3380 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3382 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2303 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 647 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 430 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 432 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **51 de los 69 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **52 de los 70 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3380**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3382**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -171,6 +171,7 @@ Synergos.CMS/
 │                                + apertura de saga por `Abrir` (2, #166)
 │                                + fixtures del índice de contratos (1, #167)
 │                                + claves de Umbraco en los compose (1, #159)
+│                                + transitoriedad leída y no deducida (2, #129)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1458,7 +1459,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **51 de los 69 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **52 de los 70 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -2113,6 +2114,43 @@ Las que salieron de construir el árbol de servicios (§0.B):
   se **rechaza** — `feedback_an_omitted_key_can_be_an_assertion` en el sitio donde vuelve
   silencioso el propio arreglo.
 
+- `feedback_a_rule_written_inside_its_only_obeyer_looks_spread` — **una regla escrita dentro del
+  único sitio que la cumple no se difunde: se entierra — y encima PARECE difundida, porque quien
+  la lee la está leyendo ya cumplida** (#129). El `<remarks>` de `HttpPaymentProvider` decía, con
+  todas las letras, «se mira esa bandera y no el código de estado: repetir aquí la tabla de
+  códigos sería una segunda verdad que se desincroniza». Correcto, completo, bien razonado — y
+  los otros catorce clientes `Http*` del CMS nunca la aplicaron. Es
+  `feedback_a_fabrication_can_be_a_derivation` addendum #123 **con el sujeto cambiado**: allá lo
+  blindado era un defecto, acá una regla buena, y la salida es la misma —lo que reemplaza a la
+  nota no es otra nota, es un TIPO más un gate—.
+  **Y lo primero fue corregir la PREMISA, porque decidía cuánto trabajo era esto.** El hallazgo
+  decía «14 de 15 clientes deciden si REINTENTAR mirando el código». Medido rama por rama:
+  **cero** tienen bucle de reintento, **cero** nombran un código de transitoriedad, **uno** lee
+  `transient`. O sea que los catorce no deciden si reintentar: deciden **cómo PRESENTAR el
+  fallo**, y casi siempre bien —un 404 es «no existe», un 401 nombra la llave compartida— y eso
+  es de cada seam y se queda donde está. Creerle al verbo del ticket habría metido una política
+  de reintentos que nadie decidió en catorce ficheros, con el agravante de que a un `store_busy`
+  (#112) hay que reintentarlo y a una pasarela caída no.
+  **Los tres estados viven en el TIPO** (`bool? Transitorio`): `true`, `false` y `null` = «no
+  consta», que **nunca es firme** — tratar un cuerpo ilegible como rechazo firme convierte
+  cualquier proxy que devuelva HTML en «el banco dijo que no», y tratarlo como transitorio
+  reintenta contra un error permanente. Es
+  `feedback_an_omitted_key_can_be_an_assertion`: la ausencia va a afirmar algo, y se elige que
+  afirme lo menos.
+  **Y la DIRECCIÓN del barrido de comentarios se midió en vez de suponerse** (el addendum de
+  `feedback_a_gate_that_parses_source_needs_its_own_mutations`): es **(b), falso positivo**, en
+  los dos dientes y con cifras distintas. Sin barrido, el diente de la bandera acusa a **cinco**
+  composers cuya prosa dice «Transient porque un `DelegatingHandler` lo es por contrato» —un
+  tiempo de vida de DI que no tiene nada que ver—, y el de los códigos acusa a
+  `HttpPaymentProvider`, que nombra `ServiceUnavailable` en su `<remarks>` **justamente para
+  explicar que no lo mira**. Un gate que se pone rojo por su propia documentación enseña a
+  ignorarlo.
+  **Los literales NO se recortan, y eso también es una decisión**: un `"503"` en un log es tener
+  el número a mano en el camino de rechazo, que es exactamente por donde se vuelve a escribir la
+  tabla. Al revés que en #148, donde el recorte ERA la medida.
+  **Y `\bTransient\b` no casa dentro de `AddTransient`** —la `d` anterior es carácter de
+  palabra, no hay frontera—, que es lo que deja fuera los treinta y tantos registros de DI sin
+  una sola excepción en el censo. Un `Contains("Transient")` habría nacido con el muro.
 - `feedback_a_seam_with_no_caller_can_be_the_only_pointer_to_a_live_defect` — **un método sin
   llamador no es código muerto que se borra: puede ser lo ÚNICO que apunta a un defecto vivo, y
   su destino lo decide lo que hay DETRÁS, no si alguien lo llama.** El #167 no se encontró
@@ -2200,13 +2238,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3380 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3382 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2303
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 647
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 430
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 432
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2625,7 +2663,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3380 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3382 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

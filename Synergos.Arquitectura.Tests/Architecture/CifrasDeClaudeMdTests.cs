@@ -544,9 +544,15 @@ public sealed class CifrasDeClaudeMdTests
             "el argumento con el que el #135 justifica que esta suite referencie cuatro " +
             "proyectos y no veintiocho — si se reescribe, deja de vigilarse.");
 
+        // El mensaje nombra la copia QUE NO CUADRA, no `veces[0]`. Con las dos copias y sólo una
+        // actualizada —que es el caso normal, porque quien las actualiza va de arriba abajo—, un
+        // mensaje anclado a la primera imprime «dice X y medido es X»: dos cadenas idénticas y
+        // media hora buscando dónde. Medido al actualizar la cifra en el #129.
+        var desviadas = veces.Where(m => !string.Equals(m.Value, frase, StringComparison.Ordinal)).ToList();
         Assert.True(
-            veces.All(m => string.Equals(m.Value, frase, StringComparison.Ordinal)),
-            $"CLAUDE.md dice «{veces[0].Value}» y medido contra el disco es «{frase}».\n\n" +
+            desviadas.Count == 0,
+            $"CLAUDE.md dice «{(desviadas.Count == 0 ? frase : desviadas[0].Value)}» y medido " +
+            $"contra el disco es «{frase}».\n\n" +
             "Los dos números se cuentan, no se recuerdan. El denominador son los ficheros de " +
             "`Synergos.Arquitectura.Tests` que declaran al menos un `[Fact]`/`[Theory]`; el " +
             "numerador, los que no nombran un namespace de producción fuera de comentarios y " +
