@@ -49,6 +49,22 @@
   </ItemGroup>
 
   <!--
+    Arnés de host en proceso (#162) — Microsoft.AspNetCore.Mvc.Testing.
+    Lo usa SÓLO `Synergos.Servicios.Tests`, para levantar las capacidades de
+    verdad (`WebApplicationFactory<Program>`) en vez de doblarlas con un
+    `HttpMessageHandler` que contesta 200 a lo que sea. Un doble no rechaza por
+    una regla que no conoce, y eso dejó vivo cinco HU que ningún orquestador
+    mandaba la afirmación de identidad que `Api.Payments` EXIGE desde la #14.
+    Las veinte capacidades ya declaran `public partial class Program`, así que la
+    costura estaba puesta y no la usaba nadie.
+    8.0.31 cuadra con el runtime que corre la suite (net8.0); verificado en
+    nuget.org — es el último 8.0.x publicado.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.31" />
+  </ItemGroup>
+
+  <!--
     HTTP resilience (Ola 113) — Microsoft.Extensions.Http.Resilience.
     Wraps los 15 named HttpClients (3 webhook + 3 Slack + 3 Discord +
     3 Teams + 3 cart abandonment scanner) con retry policy estándar

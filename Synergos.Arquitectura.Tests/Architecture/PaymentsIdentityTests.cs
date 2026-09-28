@@ -210,8 +210,16 @@ public sealed class PaymentsIdentityTests
         Assert.Contains("Afirmacion(identidad, http, payer", autoriza, StringComparison.Ordinal);
 
         // Y que lo resuelto DECIDA: sin esto se podría resolver y seguir igual.
-        Assert.Contains("if (assertion is null) return", autoriza, StringComparison.Ordinal);
-        Assert.Contains("assertion.Value", autoriza, StringComparison.Ordinal);
+        //
+        // El discriminador es el RECHAZO y no la afirmación, y eso cambió en el #168: ausente pasó
+        // a ser «no consta» —un resultado válido— así que `assertion is null` dejó de distinguir el
+        // caso bueno del malo. Este gate pedía ese literal y se puso rojo con el arreglo: **no era
+        // una regresión, era un gate siguiendo una GRAFÍA en vez de una propiedad**
+        // (`feedback_the_same_algorithm_is_not_the_same_thing`, el efecto secundario que ya costó
+        // dos gates en el #120). La propiedad que importa sigue siendo la misma —que lo resuelto
+        // decida y llegue al servicio— y es lo que se pide ahora.
+        Assert.Contains("if (motivo is not null) return", autoriza, StringComparison.Ordinal);
+        Assert.Contains("amount, assertion, key, ct)", autoriza, StringComparison.Ordinal);
 
         var dominio = Fuente("Synergos.Api.Payments", "Domain", "Payment.cs");
         Assert.Contains("PaidWith", dominio, StringComparison.Ordinal);

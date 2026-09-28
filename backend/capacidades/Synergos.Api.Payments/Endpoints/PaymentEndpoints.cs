@@ -24,10 +24,13 @@ public static class PaymentEndpoints
             if (!TryMoney(req.Amount, out var amount, out var badMoney)) return badMoney!;
 
             // La afirmacion se resuelve ANTES de tocar nada, y la decide la capacidad.
+            // El discriminador es el RECHAZO y no la afirmacion (#168): ausente es «no consta»,
+            // que es un resultado valido y no un fallo, asi que `assertion is null` ya no sirve
+            // para decidir — habria tratado el caso bueno como el malo.
             var (assertion, motivo) = Afirmacion(identidad, http, payer, req.Assertion, clock);
-            if (assertion is null) return motivo!.ToProblem();
+            if (motivo is not null) return motivo.ToProblem();
 
-            return (await svc.AuthorizeAsync(forWhat, payer, amount, assertion.Value, key, ct)).Match(
+            return (await svc.AuthorizeAsync(forWhat, payer, amount, assertion, key, ct)).Match(
                 p => Results.Created($"/v1/payments/{p.Id}", PaymentResponse.From(p)),
                 bad => bad.ToProblem());
         });
@@ -125,18 +128,55 @@ public static class PaymentEndpoints
     /// prohibida de plano y con gate (#49). Y la regla no se reimplementa acá — vive en
     /// <c>Synergos.Shared</c>, porque dos copias se desvían en silencio y las dos compilan.</para>
     /// </remarks>
+    /// <summary>
+    /// Qué significa —en ESTA capacidad— presentar o no presentar una afirmación de identidad.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Ausente es «no consta», y no un rechazo</b> (#168). Esto exigía una afirmación sin
+    /// condición, y **ningún orquestador puede mandarla**: propagar el token del CMS a través de
+    /// una saga está descartado por diseño —un token es una credencial CON RELOJ y una saga es
+    /// trabajo CON DURACIÓN; para que sobreviviera habría que guardar un bearer en el almacén de
+    /// sagas, que se respalda—. Medido levantando esta capacidad en proceso: el mismo cuerpo que
+    /// manda `Bff.Tienda` contestaba <c>400 payments.access_requires_identity</c>, así que con
+    /// <c>Payments:Mode=Api</c> **no se podía cobrar nada** por ninguno de los cuatro
+    /// orquestadores, y con <c>transient: false</c> la saga no reintentaba: compensaba.
+    /// `CLAUDE.md` §11 ya decía que esta puerta NO debía existir por esa vía; lo que estaba mal
+    /// era el código.</para>
+    ///
+    /// <para><b>La decisión vive ACÁ y no en <see cref="IdentityAssertions.Resolve"/>.</b> Aflojar
+    /// el helper compartido habría aflojado la bitácora, y ahí el criterio es el contrario y está
+    /// escrito: «un asiento que no registra ninguna se volvería un hueco». Cada capacidad decide
+    /// qué significa la ausencia; lo que NO se duplica es la verificación del token, que sigue
+    /// viviendo una sola vez en `Shared`. Meterlo como una bandera del helper habría escondido la
+    /// política donde nadie la lee.</para>
+    ///
+    /// <para><b>Y el corte que importa: AUSENTE no es lo mismo que PRESENTE E ILEGIBLE.</b> El
+    /// parseo devolvía <c>null</c> para las dos cosas, así que tratar «null» como «no consta»
+    /// habría hecho que un <c>assertion: "SuperFuerte"</c> pasara como no-consta en vez de
+    /// rechazarse — el campo existe justamente para impedir eso (defecto #42). Se mira la cadena
+    /// cruda: sólo su ausencia total es «no consta».</para>
+    /// </remarks>
     private static (IdentityAssertion? Assertion, Rejection? Rejection) Afirmacion(
         IdentityTokenGate identidad, HttpRequest http, Ref who, string? declarada, TimeProvider clock)
     {
+        var token = http.Headers[IdentityTokens.HeaderName].FirstOrDefault();
+
+        // Nadie presentó nada y nadie declaró nada: «no consta», que es la verdad y es lo que el
+        // `PaidWith` nulo de `Payment` y de `PaymentResponse` ya existían para decir.
+        if (string.IsNullOrWhiteSpace(token) && string.IsNullOrWhiteSpace(declarada))
+        {
+            return (null, null);
+        }
+
         // Se parsea acá y no en el servicio para distinguir «no vino» de «vino algo que no
-        // existe»: las dos van al mismo rechazo, con detalle distinto.
+        // existe»: la primera es «no consta» y la segunda se RECHAZA.
         IdentityAssertion? afirmada = Enum.TryParse<IdentityAssertion>(declarada, ignoreCase: true, out var a)
             ? a
             : null;
 
         return IdentityAssertions.Resolve(
             identidad,
-            http.Headers[IdentityTokens.HeaderName].FirstOrDefault(),
+            token,
             who,
             afirmada,
             clock.GetUtcNow(),

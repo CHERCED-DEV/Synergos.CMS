@@ -34,13 +34,13 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3376 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3380 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2303 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 643 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
+   | `Synergos.Servicios.Tests` | 647 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 430 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3376**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3380**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -523,6 +523,45 @@ Las que salieron de construir el árbol de servicios (§0.B):
   implementaciones detrás de la seam: la dependencia aterriza en la que no
   sirve, y los tests siguen verdes porque cablean la inyección ellos mismos.
   Se resuelve por la SEAM, que es lo que el flag decide.
+- `feedback_a_double_answers_the_choreography_a_real_host_answers_the_contract` — **un doble
+  no rechaza por una regla que no conoce, así que la cobertura que da es sobre el FLUJO y nunca
+  sobre el CONTRATO — y eso dejó vivo cinco HU un defecto que apagaba el cobro entero** (#168,
+  encontrado por el #162). Había **seis** `CapacidadesFalsas` —un `HttpMessageHandler` que
+  contesta 200 a lo que sea— y desde la HU #14 `POST /v1/payments` rechazaba a quien no declarara
+  afirmación de identidad. **Ningún orquestador la manda, y por diseño no puede**: propagar el
+  token del CMS a través de una saga está descartado con argumento escrito (un token es una
+  credencial CON RELOJ, una saga es trabajo CON DURACIÓN). Medido levantando la capacidad en
+  proceso: `400 payments.access_requires_identity`, `transient: false` — así que la saga no
+  reintentaba, **compensaba**. Con `Payments:Mode=Api` no se podía cobrar ni una compra, ni una
+  cita, ni una entrada, ni un viaje, con las tres suites en verde.
+  **La costura ya estaba puesta y no la usaba nadie**: las veinte capacidades y los cuatro
+  orquestadores declaran `public partial class Program`, y `Microsoft.AspNetCore.Mvc.Testing` no
+  estaba referenciado. O sea que el camino «fiel por construcción» costaba un paquete, no un
+  rediseño — y eso **se mide antes de elegir**, porque el ticket lo daba por el más caro de los
+  tres.
+  **Y `WebApplicationFactory<Program>` NO compila**: los veinte declaran `Program` en el namespace
+  GLOBAL, así que es un CS0433 ambiguo entre veinte ensamblados. El marcador es cualquier tipo
+  público del ensamblado —un `record` de sus `Contracts/`—, que es lo único que la fábrica necesita
+  para localizar el entry point.
+  **La decisión de qué significa la AUSENCIA vive en cada capacidad, no en el helper compartido.**
+  Aflojar `IdentityAssertions.Resolve` habría aflojado la bitácora, donde el criterio es el
+  contrario y está escrito («un asiento que no registra ninguna se volvería un hueco»). Lo que no
+  se duplica es la verificación del token. Y meterlo como una BANDERA del helper habría escondido
+  la política donde nadie la lee.
+  **El corte que costó su mutación: AUSENTE no es PRESENTE E ILEGIBLE.** El parseo devolvía `null`
+  para las dos, así que el arreglo obvio —tratar `null` como «no consta»— deja pasar un
+  `assertion: "SuperFuerte"` como no-consta, que es la mentira que el campo existe para impedir
+  (#42). Medido: esa versión del arreglo pone rojo el segundo test y ninguno más.
+  **Y lo que cierra el #162 no es convertir los seis dobles, que es lo que el ticket daba por
+  hecho.** Al ir a hacerlo se midió para qué existen: **38 inyecciones de fallo** en los seis.
+  Un host real no sabe contestar «sin existencias a la tercera línea», y eso es el sujeto entero
+  de los tests de compensación. El reparto, que es lo que faltaba: **un host real contesta "¿la
+  llamada satisface el contrato?" y un doble contesta "¿qué pasa cuando el tercer paso falla?"** —
+  ninguna de las tres salidas del ticket servía para las dos preguntas, porque son dos preguntas.
+  **Y el gate de identidad se puso rojo con el arreglo, y NO era una regresión**: pedía el literal
+  `if (assertion is null) return`, o sea seguía una GRAFÍA en vez de una propiedad. Se le hace
+  seguir la propiedad —que lo resuelto decida y llegue al servicio— con la razón escrita al lado,
+  que es lo mismo que costó dos gates en el #120.
 - `feedback_verify_with_live_processes` — los defectos caros salieron
   todos de levantar los procesos y matar uno, no de los tests: los
   tests codificaban la misma suposición equivocada que el código.
@@ -2130,12 +2169,12 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3376 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3380 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2303
-dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 643
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 647
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 430
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
@@ -2555,7 +2594,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3376 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3380 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

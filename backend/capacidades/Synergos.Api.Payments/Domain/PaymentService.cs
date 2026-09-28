@@ -48,7 +48,7 @@ public sealed class PaymentService : IDisposable
     /// plata eso es exactamente lo que no puede pasar.</para>
     /// </param>
     public async Task<Result<Payment>> AuthorizeAsync(
-        Ref forWhat, Ref payer, Money amount, IdentityAssertion assertion,
+        Ref forWhat, Ref payer, Money amount, IdentityAssertion? assertion,
         IdempotencyKey key, CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
@@ -80,6 +80,11 @@ public sealed class PaymentService : IDisposable
                 // Se guarda TAMBIÉN cuando el cobro falla. Un intento rechazado sin saber quién
                 // lo hizo es la mitad de un rastro: el registro existe justamente para poder
                 // contestar «quién intentó pagar esto», y eso no depende de que saliera bien.
+                //
+                // Y NULO es «no consta», no un default (#168): quien llega por un orquestador no
+                // puede declarar afirmación —propagar un token a través de una saga está descartado
+                // por diseño— así que el rastro dice la verdad sobre sí mismo en vez de afirmar un
+                // `CmsSession` que nadie comprobó.
                 PaidWith: assertion);
 
             _payments.Put(payment);
