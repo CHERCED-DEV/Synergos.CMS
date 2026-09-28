@@ -34,13 +34,13 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3382 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3391 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2303 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 647 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
+   | `Synergos.Servicios.Tests` | 656 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 432 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3382**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3391**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -2114,6 +2114,38 @@ Las que salieron de construir el árbol de servicios (§0.B):
   se **rechaza** — `feedback_an_omitted_key_can_be_an_assertion` en el sitio donde vuelve
   silencioso el propio arreglo.
 
+- `feedback_two_derivations_that_share_a_predicate_are_one` — **un espejo que compara el camino
+  rápido con el camino lento no prueba nada si los dos preguntan lo MISMO: se ponen de acuerdo y
+  se equivocan juntos** (#130). El test que cierra el índice de sagas comparaba
+  `WithPendingCompensations()` con índice contra la reconstrucción del disco — dos caminos
+  distintos, y los dos filtrando por el mismo `EstaViva`. Medido quitándole `CompensationFailed`
+  a ese predicado: **el espejo pasaba en VERDE** mientras el barrido dejaba de ver justo las
+  sagas que necesitan una persona. Es el movimiento de `IdentityGateTests` (#14) leído al revés:
+  allá dos derivaciones independientes de la misma verdad eran lo único que distinguía «el
+  generador lo reparte» de «el generador cree que lo reparte»; acá la independencia se había
+  perdido sin que se notara, porque el predicado compartido no se ve como una tercera copia.
+  **El corte que lo arregla es comparar contra el FIXTURE** —los estados que el test escribió,
+  a mano y en el test— y no contra otra lectura del almacén.
+  **El tell, y se busca sin leer lógica:** un `Assert.Equal(caminoA, caminoB)` donde las dos
+  ramas llaman a un mismo helper del código bajo prueba. La pregunta es *¿qué mutación deja a
+  los dos de acuerdo?*, y se contesta ejecutándola.
+  **Y se escribe cuál de los tests pina qué**, porque el espejo sigue haciendo falta para el
+  orden y el conjunto: sin decirlo, el siguiente lector cree que el espejo cubre el predicado.
+- `feedback_a_cheap_index_must_be_additive_or_it_reopens_the_rollback` — **un índice que
+  ARCHIVA es más barato en disco que uno que sólo MARCA, y paga esa diferencia con la vuelta
+  atrás** (#130). El barrido de sagas leía el directorio entero en cada vuelta y lo obvio era
+  sacar lo terminal de en medio —moverlo, archivarlo, podarlo—. Cualquiera de las tres deja a la
+  versión ANTERIOR, que la ADR 0133 puede devolver sola, sin encontrar las llaves de idempotencia
+  que están en ese almacén: **el cobro doble del #41, por la puerta de atrás y durante los
+  minutos en que nadie mira**. Un índice aditivo —un directorio de marcas al lado, que la versión
+  anterior ignora— cuesta lo mismo de escribir y no tiene ese modo.
+  **Y el orden de las dos escrituras es la garantía, no un detalle**: marcar antes de escribir lo
+  vivo y desmarcar después de escribir lo terminal hace que toda caída a mitad deje una marca de
+  MÁS —residuo, que se limpia sola al pasar— y nunca una de MENOS, que es una compensación que
+  nadie vuelve a mirar. Al revés compila igual y se lee igual de bien.
+  **La pregunta que lo decide, y se hace antes de elegir la forma:** *¿qué ve la versión anterior
+  si esto se despliega y se revierte?* Si la respuesta cambia una respuesta del producto, el
+  índice tiene que ser aditivo.
 - `feedback_a_rule_written_inside_its_only_obeyer_looks_spread` — **una regla escrita dentro del
   único sitio que la cumple no se difunde: se entierra — y encima PARECE difundida, porque quien
   la lee la está leyendo ya cumplida** (#129). El `<remarks>` de `HttpPaymentProvider` decía, con
@@ -2238,12 +2270,12 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3382 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3391 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2303
-dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 647
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 656
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 432
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
@@ -2663,7 +2695,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3382 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3391 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
@@ -3344,6 +3376,39 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > necesita orden de negocio ya lo dice (por fecha, por puntaje); se
   > recorrieron los veintitantos sitios que listan y **todos** lo decían.
   >
+  > **Y el barrido de sagas ya NO paga por la historia** (#130). Las dos consultas del
+  > barrido —`WithPendingCompensations` y `StartedBefore`— filtraban en memoria
+  > después de deserializar el directorio entero, así que **cada compra que
+  > terminaba bien hacía todas las vueltas futuras un poco más lentas, para
+  > siempre**, en los cuatro orquestadores y cada 60 s. Medido con las clases
+  > reales: **41 ms** con 100 sagas, **341 ms** con 10 000, **1 142 ms** con
+  > 50 000 —lineal a ≈23 µs por saga—. Hoy hay un índice de las VIVAS
+  > (`sagas-vivas/`, un fichero por saga no terminal) y el coste pasa a ser del
+  > tamaño de lo que hay abierto.
+  >
+  > **Lo que NO se hace, y es la mitad que importa: no se poda NADA.** Este
+  > almacén es también el libro de idempotencia —`SagaEngine.Abrir` resuelve la
+  > llave con `Find`— así que una saga terminada que dejara de encontrarse haría
+  > que el siguiente reintento abriera una nueva y **volviera a cobrar** (#41).
+  > **Y la salida que el ticket recomendaba —partir el libro de la saga y podar
+  > el cuerpo— tiene un modo de fallo que no estaba nombrado: la saga ES el
+  > recibo.** Los cuatro flujos contestan un reintento con
+  > `return Result.Ok(slot.Reusar)`, o sea con la saga entera; un libro de
+  > `llave → estado` sabría decir «esto ya pasó» y no QUÉ pasó, así que el
+  > duplicado se iría sin su acuse. El crecimiento en disco —≈0,6 KiB por saga—
+  > es lo que cuesta poder contestar un reintento, y se queda.
+  >
+  > **El índice es ADITIVO a propósito**: no mueve ni borra un documento, así que
+  > la vuelta atrás automática (ADR 0133) lo ignora y se comporta como antes.
+  > Uno que archivara lo terminal sería más barato y dejaría a la versión
+  > anterior sin encontrar las llaves — el cobro doble por la puerta de atrás.
+  > **Falla hacia el lado que no pierde trabajo**: se marca ANTES de escribir una
+  > saga viva y se desmarca DESPUÉS de escribir una terminal, así que una caída a
+  > mitad deja una marca de más —que el barrido limpia al pasar— y nunca una de
+  > menos, que sería una compensación que nadie vuelve a mirar. Sin índice se
+  > recorre todo y se reconstruye: el peor caso es el de antes. Hay tests
+  > (`IndiceDeSagasVivasTests`, 9).
+
   > **Lo que queda ABIERTO, y no se tapa: los cuatro orquestadores.** Sus
   > sagas también viven en un `JsonCollectionStore`, así que **heredan la
   > mitad del almacén** —dos réplicas que avanzan sagas distintas ya no se
