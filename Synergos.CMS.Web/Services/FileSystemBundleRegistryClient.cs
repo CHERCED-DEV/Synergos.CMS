@@ -334,13 +334,34 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
         return Task.FromResult<BundleDescriptor?>(descriptor);
     }
 
-    private static string? ChooseFramework(RegistryElement element, string defaultFramework)
+    /// <summary>
+    /// Qué implementación se sirve. <b>La política vive en un solo sitio</b>
+    /// (<see cref="EleccionDeImplementacion"/>, #131).
+    /// </summary>
+    /// <remarks>
+    /// Lo que había acá caía a <c>Keys.FirstOrDefault()</c> con un comentario que decía «orden
+    /// no garantizado pero determinista por StringComparer del dict construido» — y el
+    /// comparador decide cómo se BUSCA, no cómo se ENUMERA. El comentario prometía justamente la
+    /// propiedad que no se cumplía, que es el aviso de que nadie la comprobó
+    /// (<c>feedback_gethashcode_is_not_a_seed</c>).
+    /// </remarks>
+    private string? ChooseFramework(RegistryElement element, string defaultFramework)
     {
-        if (element.Implementations is null || element.Implementations.Count == 0) return null;
-        if (element.Implementations.ContainsKey(defaultFramework)) return defaultFramework;
-        // Fallback: primer framework disponible (orden no garantizado pero
-        // determinista por StringComparer del dict construido).
-        return element.Implementations.Keys.FirstOrDefault();
+        var elegido = EleccionDeImplementacion.Elegir(
+            element.Implementations?.Keys, defaultFramework, out var desempatado);
+
+        if (desempatado)
+        {
+            _logger.LogWarning(
+                "Bundle {Tag}: el registry no trae «{PorDefecto}» y declara {Cuantas} "
+                + "implementaciones ({Cuales}); se sirve «{Elegido}» por orden ordinal, que es "
+                + "arbitrario y no una preferencia.",
+                element.Tag, defaultFramework, element.Implementations!.Count,
+                string.Join(", ", element.Implementations.Keys.OrderBy(k => k, StringComparer.Ordinal)),
+                elegido);
+        }
+
+        return elegido;
     }
 
     /// <summary>

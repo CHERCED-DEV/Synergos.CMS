@@ -519,10 +519,30 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
         return uris;
     }
 
-    private static string? ElegirFramework(RegistryElement el, string porDefecto)
+    /// <summary>
+    /// Qué implementación se sirve. <b>La política vive en un solo sitio</b>
+    /// (<see cref="EleccionDeImplementacion"/>, #131): acá había una copia y en
+    /// <c>FileSystemBundleRegistryClient</c> la otra, las dos cayendo al orden del diccionario.
+    /// </summary>
+    private string? ElegirFramework(RegistryElement el, string porDefecto)
     {
-        if (el.Implementations is null || el.Implementations.Count == 0) return null;
-        return el.Implementations.ContainsKey(porDefecto) ? porDefecto : el.Implementations.Keys.FirstOrDefault();
+        var elegido = EleccionDeImplementacion.Elegir(el.Implementations?.Keys, porDefecto, out var desempatado);
+
+        // Un desempate es por definición excepcional: en producto un elemento tiene la
+        // implementación que el despliegue pidió. Que ocurra en silencio es lo que dejaba
+        // cambiar el bundle servido por un reordenamiento del JSON.
+        if (desempatado)
+        {
+            _logger.LogWarning(
+                "Bundle {Tag}: el registry no trae «{PorDefecto}» y declara {Cuantas} "
+                + "implementaciones ({Cuales}); se sirve «{Elegido}» por orden ordinal, que es "
+                + "arbitrario y no una preferencia.",
+                el.Tag, porDefecto, el.Implementations!.Count,
+                string.Join(", ", el.Implementations.Keys.OrderBy(k => k, StringComparer.Ordinal)),
+                elegido);
+        }
+
+        return elegido;
     }
 
     private static (string Slot, string? Version) ElegirSlot(RegistryElement el, string framework, string pedido)
