@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3399 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3402 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2309 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 656 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 434 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 437 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +51,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **53 de los 71 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **54 de los 72 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -89,6 +89,12 @@
     esperó a seis; `Synergos.Bff.Core` esperó a que existiera
     `Bff.Tienda`. Es CLAUDE.md §6 aplicado con fecha, no con
     corazonada. Ver doc 10.
+    **Y a las capacidades mismas nunca se les había aplicado** (#169):
+    tener la FORMA de una pieza reusable se lee, haberla **vuelto a
+    usar** se cuenta — hoy **cinco** de veinte. La lista se deriva del
+    disco y vive en §11, con gate (`SegundoConsumidorTests`). No es un
+    trinquete: las veinte se construyeron antes que sus consumidores a
+    propósito, así que lo que se vigila es que la guía no envejezca.
 18. **Una compensación es un DATO, no una función**, y se anota en el
     instante en que existe lo que hay que deshacer. **Armada no es
     pendiente**: solo es trabajo cuando algo YA falló. Ver doc 09.
@@ -121,7 +127,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3399**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3402**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -173,6 +179,7 @@ Synergos.CMS/
 │                                + claves de Umbraco en los compose (1, #159)
 │                                + transitoriedad leída y no deducida (2, #129)
 │                                + elección de implementación única (2, #131)
+│                                + segundo consumidor de cada capacidad (3, #169)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1467,7 +1474,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **53 de los 71 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **54 de los 72 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -2285,6 +2292,34 @@ Las que salieron de construir el árbol de servicios (§0.B):
   puede volver a comprobar mañana?* — si no, o se reescribe como propiedad, o se dice que es
   cronología no verificable, que es lo honesto cuando no hay propiedad equivalente.
 
+- `feedback_a_conservative_attribution_is_right_for_reach_and_wrong_for_count` — **el mismo
+  cruce sirve para «¿está conectada?» y MIENTE para «¿cuántos consumidores tiene?», y miente
+  acusando a un inocente** (#169). `CapacidadesConectadasTests` atribuye por **ruta exclusiva** y
+  declara, con razón, que prefiere quedarse corto a inventar una conexión: para «¿el CMS le
+  habla?» un falso negativo es prudencia. Reusando esa técnica para contar consumidores,
+  `Api.Inventory` salió con **CERO** teniendo a Tienda y Eventos encima — **todas** sus familias
+  de ruta están compartidas (`v1/items` con `Api.Catalog`, `v1/holds` con `Api.Booking`), así que
+  ninguna la identifica. Y un cero en esa columna no es prudencia: manda a alguien a **retirar**
+  una capacidad de la que cuelgan dos flujos.
+  **El arreglo no es aflojar la exclusividad** —eso devuelve el falso positivo que la regla
+  evita— sino **usar la evidencia que cada lado sí escribe**: un `Synergos.Bff.*` NOMBRA a la
+  capacidad (`const string Inventory = "inventory"`, usada en `Get<T>(Inventory, …)`) y un
+  cliente del CMS no la nombra nunca, porque su URL llega por configuración. Dos criterios no son
+  `feedback_the_same_algorithm_is_not_the_same_thing` cuando los dos lados escriben cosas
+  distintas: lo serían si midieran lo mismo dos veces.
+  **El segundo corte, y es el que no se ve:** `Bff.Core` se excluye bien como DECLARANTE —no
+  publica endpoints— y se excluía mal como CONSUMIDOR, así que `Api.Notifications` perdía su
+  único consumidor (`DeliverySweeper`). Un orquestador compartido consume igual que uno vertical.
+  **Y la prueba de que quedó bien es que DOS derivaciones independientes coinciden**: con los dos
+  cortes la derivación del disco da 5/10/5, el mismo reparto que el conteo hecho a mano en el
+  hallazgo. Sin esa coincidencia, lo único que se sabría es que el número cambió — el movimiento
+  de `IdentityGateTests`.
+  **Y esto NO lleva trinquete, que es la otra mitad de la decisión.** Las veinte capacidades se
+  construyeron a propósito antes que sus consumidores, así que un umbral se pondría rojo al nacer
+  la capacidad 21 con un consumidor, o sea sobre el caso NORMAL — la lección del #158: un gate
+  que marca al bueno enseña a ignorarlo. Lo que se vigila es que la **lista** de §11 no envejezca,
+  en los dos sentidos.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2344,13 +2379,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3399 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3402 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2309
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 656
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 434
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 437
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2769,8 +2804,34 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3399 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3402 tests, gates de
 segregación y molde en verde.
+
+> **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
+> algo se promueve *al segundo consumidor*, y ese criterio se le aplicó a `Synergos.Shared`
+> —esperó a seis— y a `Bff.Core` —esperó a dos—; **a las capacidades mismas no se le aplicó
+> nunca**. Que tengan la FORMA de una pieza reusable se comprueba leyendo, y la tienen: cero
+> sustantivos de negocio y cero ramas sobre `Ref.Kind`, las dos con gate. Que alguien las haya
+> **vuelto a usar** sólo se comprueba contando.
+>
+> Con SEGUNDO consumidor (o sea reutilización PROBADA): `Api.Booking`, `Api.Cart`,
+> `Api.Inventory`, `Api.Payments` y `Api.Pricing`.
+>
+> Con **uno**, diez: `Api.Audit`, `Api.Consent`, `Api.Fulfillment`, `Api.Identity`,
+> `Api.Messaging`, `Api.Notifications`, `Api.Orders`, `Api.Sessions`, `Api.Signing` y
+> `Api.Workflow`. Con **ninguno**, cinco: `Api.Catalog`, `Api.Documents`, `Api.Engagement`,
+> `Api.Geo` y `Api.Moderation`.
+>
+> **No es deuda y no hay trinquete**: las veinte se construyeron a propósito antes que sus
+> consumidores, así que un umbral se pondría rojo al nacer la capacidad 21 con un consumidor,
+> que es el caso NORMAL — y un gate que marca al bueno enseña a ignorarlo (#158). Lo que sí hay
+> es gate sobre esta lista (`SegundoConsumidorTests`), en los dos sentidos, para que no le pase
+> lo que a «el CMS habla con **UNA** capacidad», que estuvo once HU mintiendo.
+>
+> **Y el reparto es lo que importa antes de la fábrica**, no la cifra: su paso S11 pregunta
+> «¿existe algo publicado que haga esto?», y sobre un catálogo donde la mitad no la ha usado
+> nadie esa pregunta no distingue «reusable» de «escrito por si acaso». El #163 midió lo que
+> cuesta contestarla mal: **1,2 h de las 3,5 h** del piloto.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
 > y nadie la había vuelto a contar. Cuenta los códigos **literales distintos**
