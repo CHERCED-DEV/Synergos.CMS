@@ -195,8 +195,15 @@ Synergos.CMS/
     ├── orquestadores/
     │   ├── Synergos.Bff.Core/   la máquina de sagas: deshacer, reintentar,
     │   │                        rendirse, avisar. Promovida al segundo
-    │   │                        consumidor; el TERCERO (Eventos) y el CUARTO
-    │   │                        (Viajes) entraron sin tocarla.
+    │   │                        consumidor, y NO nombra ningún vertical —eso
+    │   │                        sí lo sostiene un gate
+    │   │                        (`BackendSegregationTests`), que es la
+    │   │                        propiedad de la que depende el tercero y el
+    │   │                        cuarto. Decía «el TERCERO (Eventos) y el
+    │   │                        CUARTO (Viajes) entraron sin tocarla» y eso
+    │   │                        es CRONOLOGÍA que este repo no puede
+    │   │                        comprobar: los cinco proyectos aparecen en
+    │   │                        el mismo merge (`c747948f`).
     │   └── Synergos.Bff.*/      Salud, Tienda, Eventos y Viajes construidos;
     │                            faltan Realty, Gob, Academy, Social.
     └── Synergos.Servicios.Tests/  xUnit — las veinte capacidades y los cuatro
@@ -2236,6 +2243,47 @@ Las que salieron de construir el árbol de servicios (§0.B):
   de 128 y cero hallazgos, que es la regla 5 del repo hermano un piso más arriba: allá un test
   que llama al método no ve que falte el llamador, acá el gate no se deja convencer por ese
   test.
+
+- `feedback_a_reason_that_expired_does_not_warn_it_passes_in_silence` — **una guarda escrita
+  con «aún no existe: nada que vigilar» es correcta el día que se escribe y se convierte en un
+  paso en silencio el día que la cosa existe — y nada lo señala, porque lo que hace es
+  PASAR.** `BackendSegregationTests` tenía **seis** `SingleOrDefault()` seguidos de
+  `if (x is null) return;`, dos de ellos con esa frase literal, sobre `Synergos.Shared` y
+  `Synergos.Bff.Core` — que se promovieron al segundo consumidor, o sea **después**, y llevan
+  meses existiendo. Son los seis dientes que sostienen §0.B.11 y §0.B.12: la frontera
+  `Core ⊥ Shared`, la de `Bff.Core ⊥ dominio` y los dos barridos de sustantivos, o sea lo que
+  impide que la capa compartida vuelva a ser el `Utils/` que §6 prohíbe.
+  Es `feedback_a_census_entry_is_how_a_defect_survives_its_own_gate` **con la razón caducada en
+  vez de sin abrir**, y por eso es peor de cazar: una excepción sin abrir por lo menos se lee
+  como pendiente; una caducada se lee como resuelta.
+  **El modo de fallo no es «el disco desapareció»** —`Projects()` sí tiene su `Assert.NotEmpty`—
+  sino el barato y el que ya pasó de verdad en este repo: alguien **renombra o mueve** el
+  proyecto y los seis pasan en verde sin mirar nada. El 12/12 sobre la lista vacía del #136.
+  Medido con la mutación —el descubrimiento deja de encontrarlos—: **7 de 17 en rojo**, uno más
+  de los seis que había contado.
+  **Y exigirlo es gratis, que es lo que decide trinquete absoluto en vez de línea base**: el
+  árbol YA lo cumple, el criterio del #134. La pregunta que lo caza, y se hace leyendo un gate
+  sin ejecutarlo: *¿bajo qué condición este test PASA sin comprobar nada, y esa condición sigue
+  siendo imposible?*
+
+- `feedback_a_chronological_claim_is_not_a_property_and_no_gate_holds_it` — **una frase de la
+  guía que afirma lo que PASÓ no la puede sostener ningún gate, y envejece hacia el lado que no
+  se nota: sigue sonando a evidencia.** §2 decía de `Bff.Core` que «el TERCERO (Eventos) y el
+  CUARTO (Viajes) entraron sin tocarla» — el argumento con el que se defiende que la máquina de
+  sagas es genérica de verdad y no genérica de aspecto. Medido: los cinco proyectos —Core y los
+  cuatro orquestadores— **aparecen en el mismo merge** (`c747948f`, 2026-08-06), así que la
+  historia de este repo no puede confirmarlo ni desmentirlo.
+  **Lo que hay que hacer no es borrar la frase: es cambiarla por la PROPIEDAD equivalente que sí
+  se puede sostener**, que acá ya existía y nadie citaba —`Bff.Core` no nombra ningún vertical,
+  con gate (`BackendSegregationTests`)—. Una propiedad se comprueba hoy; una cronología sólo se
+  puede creer. Es el mismo movimiento que
+  `feedback_a_property_asserted_across_two_trees_needs_a_shared_fixture`: allá una frase sobre
+  dos árboles se reemplazó por un vector que los dos EJECUTAN, acá una frase sobre el pasado por
+  un gate que corre.
+  **El tell, y se busca con un grep de verbos en pasado en la guía**: una afirmación que
+  justifica una decisión de arquitectura contando cómo se llegó a ella. La pregunta es *¿esto se
+  puede volver a comprobar mañana?* — si no, o se reescribe como propiedad, o se dice que es
+  cronología no verificable, que es lo honesto cuando no hay propiedad equivalente.
 
 ## 6. Prohibiciones explícitas
 

@@ -73,6 +73,43 @@ public sealed class BackendSegregationTests
         Projects().Where(p => p.Name.StartsWith(prefix, StringComparison.Ordinal)).ToList();
 
     /// <summary>
+    /// El proyecto con ese nombre exacto, y <b>rechaza</b> si no está.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Reemplaza a seis <c>SingleOrDefault()</c> seguidos de
+    /// <c>if (x is null) return;</c></b>, dos de ellos con el comentario «aún no existe: nada
+    /// que vigilar». Era cierto cuando se escribieron —<c>Synergos.Shared</c> y
+    /// <c>Synergos.Bff.Core</c> se promovieron al segundo consumidor, o sea después— y lleva
+    /// meses siendo falso: los dos existen. Una razón que fue correcta una vez y ya no lo es
+    /// no deja un aviso, deja un <b>paso en silencio</b>, que es
+    /// <c>feedback_a_census_entry_is_how_a_defect_survives_its_own_gate</c> con la razón
+    /// caducada en vez de sin abrir.</para>
+    ///
+    /// <para><b>Qué se perdía.</b> Estos seis dientes son los que sostienen §0.B.11 y §0.B.12
+    /// —la frontera <c>Core ⊥ Shared</c>, la de <c>Bff.Core ⊥ dominio</c> y los dos barridos de
+    /// sustantivos—, o sea justo lo que hace que la capa compartida no vuelva a ser el
+    /// <c>Utils/</c> que §6 prohíbe. <c>Projects()</c> sí tiene su <c>Assert.NotEmpty</c>, así
+    /// que el modo de fallo no es «el disco desapareció» sino el barato: alguien <b>renombra o
+    /// mueve</b> el proyecto y los seis pasan en verde sin mirar nada — el 12/12 sobre la lista
+    /// vacía del #136, que pasó de verdad en este repo.</para>
+    ///
+    /// <para><b>Y exigirlo es gratis, que es lo que decide que sea trinquete absoluto y no una
+    /// línea base</b>: el árbol YA lo cumple (el criterio del #134). Con deuda habría que
+    /// declararla; sin ella, la salida honesta es que falte y rompa.</para>
+    /// </remarks>
+    private static Csproj Exigir(string nombre)
+    {
+        var encontrado = Named(nombre).SingleOrDefault(p => p.Name == nombre);
+        Assert.True(
+            encontrado is not null,
+            $"no se encontró el proyecto `{nombre}`. Si lo renombraste o lo moviste, este gate "
+            + "—y los otros cinco de esta clase— estarían pasando en VERDE sin mirar nada, que es "
+            + "peor que un rojo: son los dientes que sostienen la frontera entre las capas "
+            + "compartidas y el dominio. Arreglá el nombre acá, en el mismo commit.");
+        return encontrado!;
+    }
+
+    /// <summary>
     /// Si el proyecto pertenece al árbol de servicios —capacidades y orquestadores— y no al
     /// del CMS. El prefijo dice la capa, y por eso el nombre importa: sin él, la regla habría
     /// que mantenerla a mano proyecto por proyecto.
@@ -95,8 +132,7 @@ public sealed class BackendSegregationTests
         // necesitan las dieciséis capacidades, y con la regla simétrica original había que
         // copiarlo dieciséis veces o meter dominio en Shared. Cualquier OTRA referencia —el
         // CMS, una API— sí convierte a Shared en el nudo que venía a deshacer.
-        var shared = Named("Synergos.Shared").SingleOrDefault();
-        if (shared is null) return;   // aún no existe: nada que vigilar
+        var shared = Exigir("Synergos.Shared");
 
         var extra = shared.ProjectRefs.Where(r => r != "Synergos.Core").ToList();
 
@@ -165,8 +201,7 @@ public sealed class BackendSegregationTests
         // La flecha va en un solo sentido. Si Core referenciara Shared, el vocabulario del
         // negocio pasaría a depender de ASP.NET por transitividad — y ahí se acabó la capa
         // pura sin que ningún csproj lo delate a simple vista.
-        var core = Named("Synergos.Core").SingleOrDefault();
-        if (core is null) return;
+        var core = Exigir("Synergos.Core");
 
         Assert.True(core.ProjectRefs.Count == 0,
             $"Synergos.Core no puede referenciar proyectos del repo. Encontrado: " +
@@ -176,8 +211,7 @@ public sealed class BackendSegregationTests
     [Fact]
     public void Core_no_conoce_AspNetCore_ni_Umbraco()
     {
-        var core = Named("Synergos.Core").SingleOrDefault();
-        if (core is null) return;
+        var core = Exigir("Synergos.Core");
 
         // Se miran las REFERENCIAS declaradas, no el texto del fichero. La primera versión
         // buscaba las cadenas sueltas y se disparó con un comentario que explicaba justamente
@@ -263,8 +297,7 @@ public sealed class BackendSegregationTests
     [Fact]
     public void Ningun_tipo_de_Shared_menciona_un_sustantivo_del_negocio()
     {
-        var shared = Named("Synergos.Shared").SingleOrDefault();
-        if (shared is null) return;
+        var shared = Exigir("Synergos.Shared");
 
         var leaks = NounLeaks(shared.Path, DomainNouns);
 
@@ -284,8 +317,7 @@ public sealed class BackendSegregationTests
         // Una referencia a una Synergos.Api.* metería una capacidad en la capa que usan los
         // ocho orquestadores; una al CMS haría de la capa media una carpeta del CMS. Las dos
         // son la misma pérdida: el acople deja de ser HTTP.
-        var core = Named("Synergos.Bff.Core").SingleOrDefault();
-        if (core is null) return;   // aún no existe: nada que vigilar
+        var core = Exigir("Synergos.Bff.Core");
 
         var permitidas = new[] { "Synergos.Core", "Synergos.Shared" };
         var extra = core.ProjectRefs.Where(r => !permitidas.Contains(r, StringComparer.Ordinal)).ToList();
@@ -305,8 +337,7 @@ public sealed class BackendSegregationTests
         // Es también lo que forzó que Compensation.Kind sea un string y no un enum: enumerar
         // ReleaseBookingHold y ReleaseStockHold acá habría hecho que la capa compartida tuviera
         // que tocarse cada vez que nace un dominio.
-        var core = Named("Synergos.Bff.Core").SingleOrDefault();
-        if (core is null) return;
+        var core = Exigir("Synergos.Bff.Core");
 
         var leaks = NounLeaks(core.Path, DomainNouns);
 
