@@ -279,6 +279,48 @@ registry, no creando.** Ciento treinta y dos elementos publicados; un vertical n
 propio acordeón es peso muerto en el CDN y una clase `syn-*` más que `css-parity` tendrá que
 perseguir.
 
+### 5.bis — S11 no se contesta por NOMBRE (#163)
+
+La pregunta de S11 era **«¿existe un elemento publicado que haga esto?»**, y se contestaba leyendo
+los nombres del registry. El spec del piloto 2 la aplicó al pie de la letra, predijo **«0 elementos
+nuevos»** nombrando `booking-wizard`, y al codificar resultó que **`booking-wizard` tiene forma de
+hotel** —noches, huéspedes, habitaciones— mientras un alquiler es **unidades de un equipo por días
+con una garantía retenida**. No es el mismo asistente con otras etiquetas: es otro dato. Hubo que
+escribir `<synergos-alquiler>` entero, y fueron **~1,2 h de las 3,5 h del piloto** — la predicción
+más cara de la tabla y la única que un lector del spec habría dado por buena sin mirar nada.
+
+**La pregunta que acierta es otra:**
+
+> **¿Qué DATO pide este elemento, y es el mío?**
+
+**Y se contesta A MANO, abriendo `vitals/contracts/src/element-inputs.json` del repo hermano.** Eso
+es un paso del molde, no una intuición — y que sea manual está **medido**, no supuesto:
+
+| | |
+|---|---:|
+| elementos con inputs declarados | **135** |
+| …que declaran al menos un campo de dominio | **134** |
+| …que declaran **la forma de su `config`** | **0** |
+
+El dato de verdad de un elemento complejo viaja **dentro de `config`**, que se declara como `json`
+sin forma. Medido sobre los tres que importan:
+
+```
+eventos            dominio = [scope, role, eventId, feePercent]   ← ni el título, ni las fechas, ni las localidades
+countdown-clock    dominio = []                                    ← y es una reutilización LEGÍTIMA
+booking-wizard     dominio = [destinationLabel]
+```
+
+Por eso **el cruce automático no se escribió**: marcaría `countdown-clock` —que Eventos reusa bien—
+exactamente igual que a `booking-wizard`. Un gate que marca al bueno enseña a ignorarlo (#158), y
+acá marcaría a la mayoría, porque casi ningún elemento declara su modelo como atributos.
+
+**Lo que sí hace la herramienta es poner el dato delante**: `spec-valida` imprime, por cada elemento
+que el spec dice reusar, sus campos de dominio declarados — y nombra los que **no tienen ninguno**,
+que son precisamente aquellos cuya idoneidad no se puede derivar y donde la comprobación a mano es
+obligatoria. Es el mismo trato que G-6 y G-7 se dan a sí mismos: decir el alcance al correr en vez
+de contarlo como cubierto.
+
 ## 6. El arnés — dónde vive, y por qué no es un submódulo
 
 La pregunta era: submódulo en el CMS, o repo aparte. Se contesta con tres medidas, no con gusto.

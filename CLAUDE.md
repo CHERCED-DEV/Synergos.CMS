@@ -1731,6 +1731,37 @@ Las que salieron de construir el árbol de servicios (§0.B):
   su ticket**, porque una razón que contesta «por qué esto no se arregló TODAVÍA» es un ticket sin
   abrir disfrazado de exención.
 
+- `feedback_a_reuse_question_answered_by_NAME_costs_a_third_of_the_pilot` — **«¿existe un
+  elemento publicado que haga esto?» se contesta por NOMBRE, y un nombre es lo menos estable que
+  tiene un elemento** (#163). El spec del piloto 2 aplicó el paso S11 al pie de la letra, predijo
+  **«0 elementos nuevos»** nombrando `booking-wizard`, y al codificar resultó que **ese asistente
+  tiene forma de hotel** —noches, huéspedes, habitaciones— mientras un alquiler es *unidades de un
+  equipo por días con una garantía retenida*. No es el mismo asistente con otras etiquetas: es otro
+  dato. **~1,2 h de las 3,5 h del piloto**, la predicción más cara y la única que un lector del
+  spec habría dado por buena sin mirar nada. La pregunta que acierta es **¿qué DATO pide este
+  elemento, y es el mío?**
+  **Y el cruce automático NO se escribió, porque medirlo antes dijo que sobre-acusa.** El ticket
+  proponía cruzar los `element-inputs` declarados contra el modelo del vertical, y sonaba bien.
+  Medido: de los **135** elementos con inputs declarados, **134** declaran algún campo de dominio y
+  **CERO** declaran la forma de su `config` — que es donde un elemento complejo guarda su modelo de
+  verdad. Los tres que deciden:
+  `eventos` → `[scope, role, eventId, feePercent]` (ni el título, ni las fechas, ni las
+  localidades); `booking-wizard` → `[destinationLabel]`; **`countdown-clock` → ninguno, y es una
+  reutilización LEGÍTIMA de Eventos**. O sea que el cruce habría marcado al bueno exactamente igual
+  que al malo — `feedback_an_axis_the_mould_does_not_write…` y el #158: un gate que marca al bueno
+  enseña a ignorarlo, y acá marcaría a la mayoría.
+  **Lo que sí se automatiza es poner el DATO delante**: `spec-valida` imprime, por cada elemento que
+  el spec dice reusar, sus campos de dominio, y **nombra los que no tienen ninguno** — que son
+  precisamente aquellos cuya idoneidad no se puede derivar y donde el paso a mano es obligatorio. Es
+  el trato que G-6 y G-7 ya se dan: decir el alcance al correr en vez de contarlo como cubierto.
+  **El corte que costó su mutación: el filtro de FONTANERÍA es la medida, no higiene.** Sin él,
+  `countdown-clock` sale enseñando `config` y **deja de decir «miralo a mano»** — o sea el aviso
+  que existe para que alguien pare, apagado. Y el fixture lleva los dos casos —con superficie y
+  sin ella— porque con uno solo las dos ramas dan la misma salida.
+  **Lo que NO se hace, y el ticket lo avisaba**: que el spec enumere sus ficheros. Si declarara qué
+  elemento usa campo por campo, el plan sería igual al spec y el porcentaje del oráculo dejaría de
+  medir nada (`feedback_measure_the_generator_at_its_best_or_the_finding_is_yours`). Se declaran
+  DECISIONES; se derivan rutas y reutilizaciones.
 - `feedback_measure_the_generator_at_its_best_or_the_finding_is_yours` — **cuando se mide si un
   MOLDE da para generar, la cifra depende de lo bien que se haya implementado el molde, no sólo
   del molde — así que hay que darle su MEJOR versión antes de contar, o la lista de hallazgos es

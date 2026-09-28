@@ -226,6 +226,57 @@ export function elementosPublicados(uiPath) {
   return (Array.isArray(d) ? d : (d.elements ?? [])).map((e) => e.name).filter(Boolean).sort();
 }
 
+/**
+ * Los campos de DOMINIO que declara cada elemento, para poner el dato delante en S11 (#163).
+ *
+ * <b>No es un cruce y no acusa</b>, y eso está medido: de los 135 elementos con inputs
+ * declarados, **134** declaran algún campo de dominio y **CERO** declaran la forma de su `config`
+ * — que es donde un elemento complejo guarda su modelo de verdad. Medido sobre los tres que
+ * importan: `eventos` declara `[scope, role, eventId, feePercent]` (ni el título ni las fechas),
+ * `booking-wizard` declara `[destinationLabel]`, y `countdown-clock` **no declara ninguno** siendo
+ * una reutilización legítima. Un cruce automático marcaría a los tres igual, o sea marcaría al
+ * bueno — y un gate que marca al bueno enseña a ignorarlo (#158).
+ *
+ * Así que lo que se automatiza es lo único honesto: **enseñar los campos** para que la
+ * comprobación a mano del molde (doc 13 §5.bis) se haga con el dato delante en vez de mandando a
+ * alguien a buscar el fichero, y NOMBRAR los que no tienen superficie de dominio, que son
+ * precisamente aquellos cuya idoneidad no se puede derivar.
+ */
+const FONTANERIA = new Set([
+  'config', 'apiBase', 'currency', 'integration', 'sessionKey', 'locale', 'theme', 'variant', 'size',
+]);
+
+export function camposDeDominio(uiPath) {
+  const f = join(uiPath ?? '', 'vitals', 'contracts', 'src', 'element-inputs.json');
+  if (!uiPath || !existsSync(f)) return null;
+  const d = JSON.parse(readFileSync(f, 'utf8'));
+  const out = {};
+  for (const [k, v] of Object.entries(d)) {
+    if (k.startsWith('_') || !Array.isArray(v)) continue;
+    out[k] = v
+      .map((i) => (i && typeof i === 'object' ? i.name : null))
+      .filter((n) => n && !FONTANERIA.has(n))
+      .sort();
+  }
+  return out;
+}
+
+/** Lo que S11 tiene que mirar a mano, dicho al correr. */
+export function informeDeElementos(reusados, porElemento) {
+  if (porElemento === null || reusados.length === 0) return [];
+  const lineas = [];
+  for (const e of reusados) {
+    const campos = porElemento[e];
+    if (campos === undefined) continue;
+    lineas.push(
+      campos.length === 0
+        ? `      ${e}: SIN campos de dominio declarados — su modelo vive dentro de \`config\`, `
+          + 'así que su idoneidad NO se puede derivar: abrí `element-inputs.json` y decidilo a mano'
+        : `      ${e}: ${campos.join(', ')}`);
+  }
+  return lineas;
+}
+
 // ── La bajada: el plan que el MOLDE predice ─────────────────────────────────
 
 const mayus = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -755,6 +806,44 @@ function autoprueba() {
     rmSync(tmp, { recursive: true, force: true });
   }
 
+  // ── S11 · el informe de elementos, con el caso del piloto 2 RECONSTRUIDO (#163) ──────────
+  //
+  // El spec de Alquiler no está en `master` —es del #147— así que esto es una RECONSTRUCCIÓN a
+  // partir de lo que el ticket describe, no el spec original, y va dicho. Lo que sí es medido del
+  // disco son los campos: `booking-wizard` declara `destinationLabel` y nada más de dominio.
+  //
+  // Y el fixture lleva los DOS casos a propósito: el que tiene superficie y el que no. Con sólo
+  // uno, «enseña los campos» y «nombra al que no tiene ninguno» dan la misma salida y el segundo
+  // comportamiento —que es el que manda a mirar a mano— pasaría en verde sin existir.
+  const DOMINIO_MEDIDO = {
+    'booking-wizard': ['destinationLabel'],
+    'countdown-clock': [],
+    eventos: ['eventId', 'feePercent', 'role', 'scope'],
+  };
+
+  const informeCasos = [
+    ['el elemento con superficie enseña sus campos',
+      informeDeElementos(['eventos'], DOMINIO_MEDIDO).join('|'),
+      (l) => l.includes('eventId') && !l.includes('a mano')],
+    ['el que NO tiene ninguno manda a mirarlo a mano',
+      informeDeElementos(['countdown-clock'], DOMINIO_MEDIDO).join('|'),
+      (l) => l.includes('a mano') && l.includes('config')],
+    // La predicción falsa del piloto 2: «0 elementos nuevos» nombrando booking-wizard para un
+    // alquiler (unidades x días + garantía). Su ÚNICO campo de dominio es el rótulo del destino —
+    // un hotel—, que es lo que un lector del spec tenía que haber visto antes de dar por bueno el
+    // reuso. El informe lo pone delante; decidirlo sigue siendo de una persona.
+    ['el caso del piloto 2: booking-wizard enseña que su dato es de hotel',
+      informeDeElementos(['booking-wizard'], DOMINIO_MEDIDO).join('|'),
+      (l) => l.includes('destinationLabel') && !l.includes('unidades')],
+    ['sin registry no se inventa nada',
+      JSON.stringify(informeDeElementos(['eventos'], null)), (l) => l === '[]'],
+  ];
+
+  for (const [nombre, real, ok] of informeCasos) {
+    if (ok(real)) { console.log(`  ✓ ${nombre}`); }
+    else { malos++; console.log(`  ✗ ${nombre}\n      dio: ${real}`); }
+  }
+
   console.log(malos === 0
     ? '\n[spec-valida] ✓ autoprueba: todos los rechazos se ven'
     : `\n[spec-valida] ✗ ${malos} caso(s) mal`);
@@ -767,6 +856,7 @@ if (flag('--autoprueba')) process.exit(autoprueba() === 0 ? 0 : 1);
 
 const uiPath = opt('--ui-path', process.env.SYNERGOS_UI_PATH ?? join(dirname(RAIZ), 'Synergos.UI'));
 const ctx = { capacidades: capacidadesEnDisco(), elementos: elementosPublicados(uiPath) };
+const dominioPorElemento = camposDeDominio(uiPath);
 
 const especesDir = dir('docs', 'specs');
 const specs = listar(especesDir, (n) => existsSync(join(especesDir, n, 'spec.md')));
@@ -794,6 +884,16 @@ for (const v of specs) {
   else {
     fallos += malos.length;
     for (const m of malos) console.error(`  ✗ ${v} · ${m.codigo}: ${m.detalle}`);
+  }
+
+  // S11 con el dato delante (#163). NO es un cruce y no acusa: el modelo de un elemento complejo
+  // vive dentro de `config`, que ninguno de los 135 declara, así que la idoneidad se decide a mano
+  // (doc 13 §5.bis). Esto ahorra ir a buscar el fichero y nombra los casos donde no hay NADA que
+  // derivar, que son justo en los que la comprobación a mano es obligatoria.
+  const informe = informeDeElementos(cabecera.reusa?.elementos ?? [], dominioPorElemento);
+  if (informe.length > 0) {
+    console.log(`    S11 · qué DATO pide cada elemento que ${v} dice reusar:`);
+    for (const l of informe) console.log(l);
   }
 }
 
