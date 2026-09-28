@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3375 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3376 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2303 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 643 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 429 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 430 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -121,7 +121,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3375**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3376**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -170,6 +170,7 @@ Synergos.CMS/
 │                                + campos de petición sin lector (1, #160)
 │                                + apertura de saga por `Abrir` (2, #166)
 │                                + fixtures del índice de contratos (1, #167)
+│                                + claves de Umbraco en los compose (1, #159)
 │                                Único que ve los DOS árboles — va en la raíz
 │                                justamente para que esa excepción se lea.
 │
@@ -1236,6 +1237,44 @@ Las que salieron de construir el árbol de servicios (§0.B):
   **Y el mensaje dice DÓNDE sí vive la clave**, que cuesta lo mismo de calcular y
   ahorra la búsqueda: un rojo que sólo dice «no existe» manda a alguien a leer un
   schema de 245 propiedades.
+  **Addendum #159 — el arreglo alcanzó exactamente hasta donde llegaba su propio gate, y
+  ahí se paró cuatro meses.** El #138 corrigió los dos `appsettings` y dejó vivas las
+  otras dos copias: `compose.prod.yml` y `docker-compose.yml` seguían pasando
+  `Umbraco__CMS__Global__UmbracoApplicationUrl`. **Una variable `Umbraco__A__B` es la clave
+  `Umbraco:A:B` por otro transporte** —el doble guión bajo es el escape de .NET para el
+  separador— y el binder la descarta igual de callado, así que en PRODUCCIÓN toda URL
+  absoluta que Umbraco construía apuntaba a `http://localhost:8080/`, el valor del perfil,
+  con el `KeepAliveJob` escribiendo su «skip» cada minuto: el mismo síntoma que el #138
+  documentó, sobreviviendo al commit que lo documentó.
+  **Y en `docker-compose.yml` el comentario de encima explicaba el daño que su propia línea
+  no evitaba** —«sin esto, el backoffice y los links de notificación apuntan a localhost,
+  que desde la tablet es la tablet misma»—, o sea la regla 34 del repo hermano: nombrar el
+  síntoma no lo arregla, lo blinda.
+  **El agravante, y es el reparto de siempre:** `ComposeStackTests` y `DeployPipelineTests`
+  **sí** leen esos ficheros, y ninguno cruzaba sus claves contra el schema. Cada gate
+  miraba lo suyo —topología, imágenes por SHA, orden de parada— y «qué sección lee cada
+  clave» no era de nadie.
+  **La pregunta que lo caza, y se hace al cerrar el ticket:** *¿por qué OTROS transportes
+  llega esta misma configuración?* Acá eran dos: el fichero y la variable de entorno.
+  **Tres cortes del arreglo que costaron su mutación.** Uno: **un solo caminante para los
+  dos sujetos** (`Ubicar`), porque dos criterios para la misma verdad es
+  `feedback_the_same_algorithm_is_not_the_same_thing` y el día que uno se afine el otro
+  miente. Dos: **las claves del compose NO se sacan con un matcher de bloques** —el
+  `environment:` es YAML con sangría significativa y un regex que lo delimite tiene el
+  punto ciego del #152, que deja al gate midiendo un subconjunto y diciendo que miró
+  todo—; se busca el TOKEN `Umbraco__…` donde sea, porque una variable se llama igual esté
+  en el bloque que esté. Tres: **el generador entra ADEMÁS del fichero que produce**, o
+  arreglar sólo `compose.prod.yml` deja la clave mala en quien lo reescribe y el defecto
+  vuelve en la siguiente regeneración, con el rojo pagado por otro.
+  **Y el barrido de comentarios acá SÍ sostiene el gate, medido en los dos sentidos** (el
+  addendum de `feedback_a_gate_that_parses_source_needs_its_own_mutations`): los tres
+  ficheros explican en prosa por qué la clave va en `WebRouting` **y nombran la mala**, así
+  que apagándolo el gate acusa a los tres — **3 acusaciones, las tres de prosa**, o sea un
+  falso positivo contra los ficheros que documentan el arreglo.
+  **Y el caso feo sigue siendo el del #138, re-medido acá:** el cruce por NOMBRE conoce
+  **245** propiedades, contesta que `UmbracoApplicationUrl` existe y **pasa en verde con el
+  defecto puesto**, mientras caza el inocuo (`RuntimeMode`, un nombre que no existe en
+  ninguna parte). El gate barato habría cazado el que no dolía.
 - `feedback_a_census_entry_is_how_a_defect_survives_its_own_gate` — **declarar una
   excepción con su razón es lo correcto cuando de verdad es una excepción, y es
   cómo un defecto sobrevive al gate que lo vio.** El #132 escribió
@@ -2063,13 +2102,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3375 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3376 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2303
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 643
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 429
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 430
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2473,7 +2512,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3375 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3376 tests, gates de
 segregación y molde en verde.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**

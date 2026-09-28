@@ -467,7 +467,12 @@ services:
       # esto es produccion; el perfil lo sigue trayendo encendido para que un
       # docker compose de desarrollo siga sirviendo la siembra.
       Synergos__DevSeed__Enabled: "false"
-      Umbraco__CMS__Global__UmbracoApplicationUrl: "https://\${SYNERGOS_DOMAIN}/"
+      # La URL publica va en WebRouting, NO en Global (#159). Esto decia
+      # Umbraco__CMS__Global__UmbracoApplicationUrl y el binder de .NET descarta en
+      # silencio lo que no mapea, asi que quedaba puesto el valor del perfil
+      # (http://localhost:8080/) y el KeepAliveJob escribia «No umbracoApplicationUrl
+      # for service (yet), skip» cada minuto. Lo cruza ClavesDeUmbracoTests.
+      Umbraco__CMS__WebRouting__UmbracoApplicationUrl: "https://\${SYNERGOS_DOMAIN}/"
       Synergos__Notifications__PublicBaseUrl: "https://\${SYNERGOS_DOMAIN}"
       Synergos__Cart__SecretKey: \${SYNERGOS_CART_SECRET:?falta SYNERGOS_CART_SECRET}
 
