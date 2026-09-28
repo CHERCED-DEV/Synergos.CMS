@@ -464,6 +464,34 @@ Las que salieron de construir el árbol de servicios (§0.B):
   contra un cambio ajeno y desconfiar del resultado**, no leerlo. Se parsea
   sobre la fuente SIN comentarios, y cada corte se prueba contra el caso raro
   del repo, no contra el bonito.
+- `feedback_a_gate_that_collapses_a_route_accuses_its_parent` — **un gate que identifica una
+  ruta por su ÚLTIMO SEGMENTO LITERAL no pierde la ruta con la acción interpolada: la atribuye
+  al recurso padre, y acusa a una ruta que nadie estaba llamando mal** (#164). G-7 leía
+  `POST /rentals/{id}/${accion}` como `rentals`, así que las claves de `return`/`cancel`
+  aparecían como mandadas al POST del recurso — con su record existiendo y no declarándolas.
+  **Y G-7 es error y no trinquete a propósito**, así que un falso positivo suyo es exactamente
+  cómo se aprende a ignorar el gate más caro que tiene el repo: la lección del #158, «un gate
+  que marca al bueno enseña a ignorarlo».
+  **El arreglo no es resolver el segmento** —eso es seguir una variable, que G-7 declara que no
+  hace— sino **dejar de colapsar**: se compara la FORMA entera (`rentals/{}/return`), y lo que no
+  liga se declara fuera del cruce en vez de atribuirse. Pierde cobertura y no miente, que es el
+  orden correcto de preferencias.
+  **Y medir antes de escribir cambió el diseño.** El instinto era «las rutas que acaban en
+  interpolado quedan fuera», y son **17** de 120: **15 son el patrón id-de-recurso**
+  (`post/{}` ↔ `[HttpPost("post/{id}")]`), donde el colapso acertaba y sacarlas habría bajado la
+  cobertura en silencio. Comparar la forma las conserva todas y sólo deja fuera las 2 con acción
+  interpolada.
+  **La lista de «fuera del cruce» sólo nombra a quien MANDA algo**, y ése fue el segundo ajuste:
+  la primera versión declaraba `blogs:/follow/{}`, que postea `{}` contra un endpoint sin
+  `[FromBody]` — las dos puntas de acuerdo, cero claves, nada que decir. Una lista que se lee en
+  cada corrida no puede llevar inocentes.
+  **El fixture tiene que llevar LAS DOS FORMAS sobre el mismo recurso**: con sólo la literal, el
+  colapso y el cruce por forma dan lo mismo y el defecto pasa en verde. Y al escribirlo afirmé que
+  el colapso «hacía indistinguibles» las dos, **y el propio fixture lo desmintió**: la literal
+  colapsaba a `return` —su clave, y el borde colapsa igual, así que cruzaba bien— y sólo la
+  interpolada caía en `rentals`. El defecto no era confundirlas: era mandar una al record del
+  padre. Una explicación que suena bien es exactamente donde nadie vuelve a mirar, así que se
+  ejecuta (`--autoprueba`).
 - `feedback_contract_shape_needs_its_own_test` — un test que construye el DTO
   del controller y comprueba sus campos es una TAUTOLOGÍA: afirma lo que el
   controller decidió poner, no lo que el consumidor lee. Lo que hay que
@@ -2251,6 +2279,7 @@ node tools/spec-valida.mjs --autoprueba   # G-8: el LECTOR del spec, ejecutado (
 ```bash
 node tools/contract-keys.mjs  --ui-path=/tmp/ui   # lo que el borde EMITE  ↔ lo que la app LEE
 node tools/contract-bodies.mjs --ui-path=/tmp/ui  # lo que la app MANDA   ↔ lo que el borde DECLARA
+node tools/contract-bodies.mjs --autoprueba       # …y sus fixtures, sin repos ni red (#164)
 ```
 
 **G-7 es el que mira donde de verdad dolió.** En los ocho verticales auditados (#102 a #105)
@@ -2272,6 +2301,20 @@ la declara no tiene lectura inocente. Hoy ligan 57 claves en 22 rutas.
 > **Lo que G-7 no ve, y lo dice al correr**: los cuerpos que construye una función
 > (`postJson(url, toCourseDraftWire(body))`) quedan fuera, porque seguirla exige resolver su
 > return. Los lista en cada corrida en vez de contarlos como cubiertos.
+>
+> **Y cruza por FORMA de ruta, no por último segmento** (#164). Antes se quedaba con el último
+> literal descartando los `{…}`, así que `POST /rentals/{id}/{accion}` **colapsaba sobre
+> `rentals`** cuando la acción viajaba interpolada, y las claves de `return`/`cancel` se leían
+> como mandadas al POST del recurso padre: **acusaba una ruta que nadie estaba llamando mal**. En
+> un gate que es error y no trinquete, eso es cómo se aprende a ignorarlo.
+>
+> Comparar la forma entera conserva lo que el colapso acertaba —medido: de **17** rutas del UI que
+> acaban en interpolado, **15** son el patrón id-de-recurso y siguen ligando contra su
+> `[HttpPost("x/{id}")]`— y deja fuera lo que no puede resolver. **Las que quedan fuera se
+> DICEN**, como los cuerpos de helper, pero sólo si el cliente manda algo: `blogs:/follow/{}`
+> postea `{}` contra un endpoint sin `[FromBody]`, así que nombrarla sería nombrar a un inocente.
+> El gate sigue sin resolver el VALOR de un segmento interpolado, así que no puede distinguir un
+> id de una acción — y por eso lo declara en vez de suponerlo.
 
 > **Y lo que G-6 y G-7 no miran NINGUNO de los dos: el salto BFF↔capacidad.** Los dos cruzan
 > el CMS con el UI. Un `Synergos.Bff.*/Clients/*Dtos.cs` que no declara lo que la capacidad

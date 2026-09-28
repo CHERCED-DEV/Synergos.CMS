@@ -34,6 +34,7 @@
  *
  * USO
  *   node tools/contract-bodies.mjs [--ui-path=/ruta]   # o SYNERGOS_UI_PATH
+ *   node tools/contract-bodies.mjs --autoprueba        # sus fixtures, sin repos ni red
  */
 
 import fs from 'node:fs';
@@ -59,7 +60,29 @@ const PARES = [
 
 const sinComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
 const camel = (s) => s.charAt(0).toLowerCase() + s.slice(1);
-const ultimoSegmento = (ruta) => ruta.split('/').filter((p) => p && !p.startsWith('{')).pop() ?? '';
+/**
+ * La FORMA de una ruta: sus segmentos, con todo parámetro normalizado a `{}` (#164).
+ *
+ * Antes esto era `ultimoSegmento`, que descartaba los `{…}` y se quedaba con el último literal —
+ * así que `POST /rentals/{id}/{accion}` **colapsaba sobre `rentals`** cuando la acción viajaba
+ * interpolada, y el gate leía las claves de `return`/`cancel` como si se mandaran al POST del
+ * recurso padre: acusaba una ruta que nadie estaba llamando mal. G-7 es **error y no trinquete**,
+ * así que un falso positivo suyo es cómo se aprende a ignorarlo — la lección del #158.
+ *
+ * Comparar la forma entera conserva lo que el colapso acertaba —`post/{}` sigue ligando con el
+ * `[HttpPost("post/{id}")]` del borde, que es el patrón de 15 de las 17 rutas medidas que acaban en
+ * interpolado— y deja fuera lo que no puede resolver, en vez de atribuirlo. Pierde cobertura y no
+ * miente, que es el orden correcto de preferencias.
+ *
+ * Lo que sigue sin hacer, y por eso las que no ligan se DICEN en vez de callarse: el gate no
+ * resuelve el VALOR de un segmento interpolado —eso es seguir una variable, que G-7 declara que no
+ * hace— así que no puede distinguir un id de una acción.
+ */
+const forma = (ruta) =>
+    ruta.split('/').filter(Boolean).map((s) => (s.startsWith('{') ? '{}' : s)).join('/');
+
+/** ¿El último segmento es un parámetro? Entonces la forma puede ser id O acción, y no se sabe. */
+const acabaInterpolada = (ruta) => forma(ruta).split('/').at(-1) === '{}';
 
 /** ruta → claves que el record de esa ruta DECLARA. */
 function declaradoPorElCms(controllers) {
@@ -92,7 +115,7 @@ for (const m of src.matchAll(/record\s+(\w+)\s*\(([\s\S]*?)\)\s*[;{]/g)) {
         // La ruta de cada POST y el tipo de su [FromBody].
         for (const m of src.matchAll(/\[HttpPost\("([^"]*)"\)\][\s\S]{0,400}?\[FromBody\]\s+(\w+)\??\s+\w+/g)) {
             const claves = records.get(m[2]);
-            if (claves) porRuta.set(ultimoSegmento(m[1]), claves);
+            if (claves) porRuta.set(forma(m[1]), claves);
         }
     }
 
@@ -154,7 +177,7 @@ function mandadoPorLaUi(app) {
             for (let j = desde; j >= Math.max(0, desde - 30); j--) {
                 const m = lineas[j].match(
                     new RegExp(`\\b${variable}\\s*=\\s*\`\\$\\{apiBase\\}/([^\`?]*)\``));
-                if (m) return ultimoSegmento(m[1].replace(/\$\{[^}]*\}/g, '{x}'));
+                if (m) return forma(m[1].replace(/\$\{[^}]*\}/g, '{x}'));
             }
             return null;
         };
@@ -291,8 +314,73 @@ function mandadoPorLaUi(app) {
     return { porRuta, noLiterales };
 }
 
+/**
+ * Los fixtures del cruce por forma (#164), ejecutados y no leídos.
+ *
+ * <b>Qué cubre:</b> la parte PURA, que es donde vivía el defecto — `forma`, `acabaInterpolada` y la
+ * decisión de atribuir o no. El fixture lleva **las dos formas sobre el mismo recurso**, que es lo
+ * único que lo prueba: con sólo la literal, el colapso por último segmento y el cruce por forma dan
+ * el mismo resultado y el defecto pasa en verde.
+ *
+ * <b>Qué NO cubre, dicho para no mentir sobre su alcance:</b> el descubrimiento de ficheros y los
+ * regex que sacan las rutas y las claves de la fuente. Eso necesita los dos repos, y lo ejercita la
+ * corrida de verdad.
+ */
+function autoprueba() {
+    const casos = [];
+    const caso = (nombre, real, esperado) => casos.push({ nombre, real, esperado });
+
+    // El borde declara las dos: el POST del recurso y el de la acción.
+    const cms = new Map([
+        ['rentals', new Set(['sku', 'days'])],
+        ['rentals/{}/return', new Set(['amount'])],
+        ['post/{}', new Set(['type'])],
+    ]);
+
+    caso('la forma conserva los parámetros en su sitio', forma('rentals/{id}/return'), 'rentals/{}/return');
+    caso('un parámetro con restricción también normaliza', forma('moderation/{nodeId:int}/ok'), 'moderation/{}/ok');
+    caso('el id de recurso SIGUE ligando (15 de las 17 rutas medidas)',
+        cms.get(forma('post/{x}')) !== undefined, true);
+
+    // El corazón del #164: la acción interpolada NO se atribuye al recurso padre.
+    caso('la acción LITERAL liga contra su propio record',
+        [...cms.get(forma('rentals/{id}/return'))].join(','), 'amount');
+    caso('la acción INTERPOLADA no liga con nada', cms.get(forma('rentals/{id}/{accion}')), undefined);
+    caso('…y sobre todo NO se atribuye al recurso padre',
+        cms.get(forma('rentals/{id}/{accion}')) === cms.get('rentals'), false);
+
+    // Y el colapso viejo, escrito acá para que se vea DÓNDE estaba el falso positivo. Al escribir
+    // estos dos fixtures afirmé que hacía «indistinguibles» las dos formas y el fixture lo
+    // desmintió: la literal colapsaba a `return` —su propia clave, y el borde colapsa igual, así
+    // que cruzaba bien— y la interpolada a `rentals`. El defecto no era confundirlas: era MANDAR
+    // UNA AL RECORD DEL PADRE, que es un record que existe y no declara sus claves.
+    const colapsoViejo = (r) => r.split('/').filter((p) => p && !p.startsWith('{')).pop() ?? '';
+    caso('el colapso viejo llevaba la acción literal a su propia clave',
+        colapsoViejo('rentals/{id}/return'), 'return');
+    caso('…y la interpolada al recurso PADRE, que es de donde salía la acusación',
+        colapsoViejo('rentals/{id}/{accion}'), 'rentals');
+    caso('…un record que existe y no declara sus claves',
+        cms.get(colapsoViejo('rentals/{id}/{accion}'))?.has('amount'), false);
+
+    caso('acabaInterpolada ve el parámetro final', acabaInterpolada('post/{id}'), true);
+    caso('acabaInterpolada NO marca una acción literal', acabaInterpolada('rentals/{id}/return'), false);
+
+    let fallos = 0;
+    for (const { nombre, real, esperado } of casos) {
+        const ok = real === esperado;
+        if (!ok) fallos++;
+        console.log(`  ${ok ? '✓' : '✗'} ${nombre}${ok ? '' : `\n      esperado ${JSON.stringify(esperado)}, dio ${JSON.stringify(real)}`}`);
+    }
+
+    console.log(`\n${fallos === 0 ? '✓' : '✗'} ${casos.length - fallos}/${casos.length} fixtures del cruce por forma.`);
+    process.exit(fallos === 0 ? 0 : 1);
+}
+
+if (process.argv.includes('--autoprueba')) autoprueba();
+
 const problemas = [];
 const fuera = [];
+const sinResolver = [];
 let cruzadas = 0;
 let rutas = 0;
 
@@ -305,7 +393,20 @@ for (const { app, controllers } of PARES) {
 
     for (const [ruta, mandadas] of ui.porRuta) {
         const declaradas = cms.get(ruta);
-        if (!declaradas) continue;   // ruta que este controller no sirve: no es asunto del gate
+        if (!declaradas) {
+            // Una ruta que este controller no sirve no es asunto del gate y se calla. Pero si su
+            // último segmento es un parámetro, puede que el borde SÍ la sirva y que lo que falle sea
+            // el cruce: el gate no resuelve el valor del segmento, así que no sabe si es un id o una
+            // acción (#164). Eso se DICE, como los cuerpos que construye un helper — callarlo la
+            // contaría como cubierta, y atribuirla al recurso padre era el falso positivo de antes.
+            // …y sólo si el cliente MANDA algo. Con el cuerpo vacío no hay nada que cruzar, así
+            // que declararla «fuera del cruce» nombra a un inocente — le pasa a
+            // `blogs:/follow/{}`, que postea `{}` contra un endpoint que no declara `[FromBody]`:
+            // las dos puntas de acuerdo, cero claves, nada que decir. Un gate que nombra al bueno
+            // enseña a ignorarlo (#158), y esta lista se lee en cada corrida.
+            if (acabaInterpolada(ruta) && mandadas.size > 0) sinResolver.push(`${app}:/${ruta}`);
+            continue;
+        }
         rutas++;
 
         const perdidas = [...mandadas].filter((k) => !declaradas.has(k));
@@ -325,6 +426,17 @@ console.log('G-7 · cuerpos de petición CMS ↔ UI');
 if (fuera.length > 0) {
     console.log(`  ! ${fuera.length} cuerpo(s) construido(s) por un helper — FUERA del cruce:`);
     for (const f of fuera) console.log(`      ${f}`);
+}
+
+if (sinResolver.length > 0) {
+    console.log(
+        `  ! ${sinResolver.length} ruta(s) cuyo último segmento es un parámetro y que ningún POST del `
+        + 'borde declara con esa forma — FUERA del cruce (#164):');
+    for (const r of sinResolver) console.log(`      ${r}`);
+    console.log(
+        '      El gate no resuelve el valor de un segmento interpolado, así que no puede distinguir '
+        + 'un id de una acción. Antes esto se atribuía al recurso padre y acusaba a la ruta '
+        + 'equivocada.');
 }
 
 if (problemas.length > 0) {

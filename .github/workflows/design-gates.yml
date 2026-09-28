@@ -152,6 +152,13 @@ jobs:
       #
       # Es ERROR y no trinquete: una clave que se manda a una ruta y su record no declara no
       # tiene lectura inocente.
+      # Sus fixtures van ANTES de la corrida de verdad, y no necesitan ninguno de los dos repos:
+      # si el cruce por forma se rompe, el rojo dice «el gate está mal» en vez de «el contrato
+      # está mal», que es una hora de diferencia para quien lo lea (#164).
+      - name: Fixtures del cruce por forma (G-7)
+        working-directory: Synergos.CMS
+        run: node tools/contract-bodies.mjs --autoprueba
+
       - name: Cuerpos de petición CMS ↔ UI (G-7)
         working-directory: Synergos.CMS
         run: node tools/contract-bodies.mjs --ui-path="$GITHUB_WORKSPACE/Synergos.UI"
