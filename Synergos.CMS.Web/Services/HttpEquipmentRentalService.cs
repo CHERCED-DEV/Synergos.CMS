@@ -67,9 +67,9 @@ public sealed class HttpEquipmentRentalService : IEquipmentRentalService
 
         if (!res.IsSuccessStatusCode)
         {
-            var rechazo = await RechazoDelArbolDeServicios.LeerAsync(res, cancellationToken).ConfigureAwait(false);
+            var rechazo = await RechazoDelArbolDeServicios.LeerAsync(res, Json, cancellationToken).ConfigureAwait(false);
             _log.LogWarning(
-                "Alquiler: el orquestador no cotizó ({Estado}): {Codigo}.", (int)res.StatusCode, rechazo.Codigo);
+                "Alquiler: el orquestador no cotizó ({Estado}): {Codigo}.", (int)res.StatusCode, rechazo?.Codigo);
             return null;
         }
 
@@ -137,7 +137,7 @@ public sealed class HttpEquipmentRentalService : IEquipmentRentalService
                     alquiler, null, null);
         }
 
-        var rechazo = await RechazoDelArbolDeServicios.LeerAsync(res, ct).ConfigureAwait(false);
+        var rechazo = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
         if (res.StatusCode == HttpStatusCode.Unauthorized)
         {
             // Se grita: un 401 acá es la llave compartida mal puesta, no una regla del negocio,
@@ -148,11 +148,13 @@ public sealed class HttpEquipmentRentalService : IEquipmentRentalService
         }
 
         _log.LogWarning("Alquiler: no se pudo {Que} ({Estado}): {Codigo}.",
-            quePasaba, (int)res.StatusCode, rechazo.Codigo);
+            quePasaba, (int)res.StatusCode, rechazo?.Codigo);
 
         return new RentalResult(
-            rechazo.EsTransitorio ? RentalOutcome.Unavailable : RentalOutcome.Rejected,
-            null, rechazo.Codigo, rechazo.Motivo);
+            // Sólo es una regla del negocio lo que la capacidad dice FIRME (#129): un cuerpo
+            // ilegible o sin «transient» es «no sé», y eso va por el camino de indisponible.
+            rechazo?.EsFirme == true ? RentalOutcome.Rejected : RentalOutcome.Unavailable,
+            null, rechazo?.Codigo, rechazo?.Detalle);
     }
 
     private object Cuerpo(RentalRequest r) => new
