@@ -157,6 +157,9 @@ public sealed class ContainerBuildTests
             WorkingDirectory = RepoRoot(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // Node escribe UTF-8; sin esto, en Windows se lee con la página de la consola (#170).
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         })!;
 
         var salida = p.StandardOutput.ReadToEnd();

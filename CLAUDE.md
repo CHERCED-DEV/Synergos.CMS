@@ -2439,7 +2439,12 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   dispara. **Cada uno llevaba escrita una suposición sobre el sistema operativo en vez de un dato
   del árbol**, y así se arregló cada uno:
   - `ComposeStackTests.El_compose_esta_al_dia…` suponía un checkout LF (compara byte a byte):
-    `.gitattributes` con `* text=auto eol=lf`, que arregla la clase entera en ESTE repo.
+    `.gitattributes` con `* text=auto eol=lf`, que arregla la clase entera en ESTE repo. **Y debajo
+    había un segundo rojo que el primero tapaba**: con `compose-gen --check` ya en verde, el test
+    seguía rojo, porque .NET en Windows lee la salida de `node` con la página de códigos de la
+    consola y «al día» llegaba «al d├¡a». Se lee en UTF-8 explícito, también en los otros dos tests
+    que lanzan un proceso. La lección: un arreglo se verifica con el TEST, no con el script que el
+    test lanza.
   - G-7 suponía lo mismo del repo HERMANO —sus regex acaban en `(.*)$`, y `.` no consume el
     `\r`—, y el `.gitattributes` de acá no decide cómo se clonó el otro: `contract-bodies.mjs`
     normaliza al leer, y su `--autoprueba` escribe un cliente en LF y en CRLF que tienen que dar la
