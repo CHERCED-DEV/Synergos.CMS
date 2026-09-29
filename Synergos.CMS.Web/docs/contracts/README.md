@@ -55,6 +55,7 @@ fixture lo ejecuta un gate de cada lado.
 | Fichero | Qué cruza | Quién lo ejecuta |
 |---|---|---|
 | [`mortgage-vectors.json`](mortgage-vectors.json) | La calculadora de hipoteca del vertical Propiedades: las dos implementaciones tienen que dar **la misma cuota al centavo** para el mismo cuerpo. | CMS: `HipotecaVectoresTests` (por el borde, con su conversión) · UI: el spec de `mortgage.calc` |
+| [`elementos-synhost.json`](elementos-synhost.json) | **Lo que viaja** en el `config` de cada elemento con resolver tipado (ADR 0135): sus campos con nombre del cable, tipo y si son contenido o decisión, sus secciones de diccionario, y el `config` EXACTO que emite su vista para una muestra autorada. **Generado** de los records `[ElementoSynHost]`: no se edita a mano. | CMS: `ContratoSynHostTests` (records ↔ fichero, y el ejemplo emitido por el resolver y el emitter reales) · UI: `tools/contrato-synhost.mjs --check` (fichero ↔ tipo TS generado) y el spec que **ejecuta** el sanitizador de cada elemento con el ejemplo |
 
 > **Por qué hay uno, y por qué no era un documento.** `IMortgageCalculator` afirmaba en
 > su `<remarks>` que «el cálculo base es el mismo en cliente y servidor» y era **falso**

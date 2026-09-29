@@ -1,0 +1,54 @@
+{
+  "comentario": "GENERADO desde los records [ElementoSynHost] de Synergos.CMS.Interfaces por Synergos.CMS.Tests/Services/SynHost/ContratoSynHostTests.cs — no se edita a mano (ADR 0135). `ejemplo` es el config EXACTO que emite la vista para una muestra autorada.",
+  "elementos": [
+    {
+      "nombre": "kpi-card",
+      "tipo": "pieza",
+      "record": "KpiCardProps",
+      "diccionario": [
+        "Synhost.Kpi"
+      ],
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "value",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "trend",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "deltaLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "period",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "label": "Ventas del mes",
+        "value": "1.234",
+        "trend": "up",
+        "deltaLabel": "+12 %",
+        "period": "vs. agosto"
+      }
+    }
+  ],
+  "tipos": []
+}

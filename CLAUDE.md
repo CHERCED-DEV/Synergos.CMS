@@ -34,12 +34,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3402 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3425 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2309 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2332 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 656 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 437 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -156,7 +156,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3402**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3425**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
 
@@ -297,7 +297,7 @@ Synergos.CMS/
 | "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — **diez** pasos: los tres ejes con su tabla medida, las dos formas del eje transaccional, la CUARTA pregunta del eje 3 (§3.1) y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`, 13) |
 | "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los catorce sub-specs derivados del molde, los dos MCPs y el gate del arnés. El spec **sí** tiene formato y validador (#140). **El arnés NO está publicado, y esta fila decía que sí**: el #141 sacó las skills de los dos repos hacia `Synergos.Fabrica`, ese repo **nunca se publicó** y `arnes.lock.json` fija un SHA que no existe — así que desde el #141 ninguno de los dos repos tiene skills. Se reconstruye en **#171**; mientras tanto las skills viven en la historia (`git ls-tree --name-only ac4778d1^ .claude/skills/`). Memoria `feedback_a_merge_order_warning_in_prose_is_not_a_gate` |
 | "¿Esto que voy a colocar es una FUNCIONALIDAD o una PIEZA?" | §0.C y ADR 0134. Una **funcionalidad** se nombra por lo que hace y recibe sólo cableado; una **pieza** recibe contenido y decisiones del editor, y monta su gemela del design system. El registry no lo declara todavía, así que se infiere de **qué necesita recibir**: si para funcionar le hace falta configuración de negocio o técnica, es una funcionalidad y esa configuración no la escribe el editor. El doc 12 §5.11 lo convierte en paso del molde |
-| "¿Qué DATO pide un elemento? ¿Puedo reusarlo?" | **Hoy, en dos sitios que se leen juntos**: lo que emite su vista `Views/Partials/SynHost/<X>.cshtml` y lo que **conserva** el sanitizador del elemento en el repo hermano (el `normalize*`/`sanitize*` de su `.ts`). Lo que uno emite y el otro no lee **se tira al hidratar**, sin error (`feedback_hydration_can_erase_what_ssr_painted`). `element-inputs.json` no alcanza: declara atributos, no la forma de `config` (doc 13 §5.bis). **Mañana**: el `record` por elemento de ADR 0135 (Propuesta), del que se genera el tipo TS. Nunca por el nombre (#163) |
+| "¿Qué DATO pide un elemento? ¿Puedo reusarlo?" | **Si tiene resolver tipado** (piloto de la ADR 0135, #173 —hoy los que lista `docs/contracts/elementos-synhost.json`—): su `record` en `Synergos.CMS.Interfaces/SynHost/`, que declara cada campo que viaja con su nombre del cable, su tipo y si es contenido o decisión; el mismo JSON trae el `config` EXACTO que emite su vista. **Para los demás, en dos sitios que se leen juntos**: lo que emite su vista `Views/Partials/SynHost/<X>.cshtml` y lo que **conserva** el sanitizador del elemento en el repo hermano (el `normalize*`/`sanitize*` de su `.ts`). Lo que uno emite y el otro no lee **se tira al hidratar**, sin error (`feedback_hydration_can_erase_what_ssr_painted`). `element-inputs.json` no alcanza: declara atributos, no la forma de `config` (doc 13 §5.bis). Nunca por el nombre (#163) |
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
 | "¿El molde da para GENERAR un vertical?" | Sobre Eventos, **sí**: el piloto 0 midió **71,4 %** y hoy da **100 % sobre 23 ficheros y CERO inventados** — el eje 3 escrito (#153), su sección arreglada (#154) y el composer parcial cruzado por CONTENIDO y no por nombre (#155), porque de los siete verticales sólo Academy tiene un fichero que se llame como él. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
@@ -2428,6 +2428,29 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   con el tipo TS generado del `record`, `optionsJson` contra `options` es un `TS2339` al compilar
   (medido en `dropdown`). Hasta entonces, un gate que **ejecute** el sanitizador con lo que emite
   la vista y exija que cada clave mueva la salida.
+  **Desde el piloto (#173) está cerrado por construcción en los elementos con resolver tipado**:
+  la vista ya no escribe claves —resuelve y emite—, así que no puede emitir una que el record no
+  declare; y del lado del UI el sanitizador se tipa con lo que viaja y un spec lo ejecuta con el
+  `config` que emite la vista. Ver `feedback_the_wire_contract_is_emitted_not_written`.
+
+- `feedback_the_wire_contract_is_emitted_not_written` — **el contrato de lo que viaja a un
+  elemento se DERIVA del código que lo emite, y su ejemplo se EMITE: nada de eso se escribe a
+  mano.** El record `[ElementoSynHost]` de `Synergos.CMS.Interfaces/SynHost/` declara los campos
+  del `config`; `ContratoSynHostTests` los proyecta a `docs/contracts/elementos-synhost.json` leyendo
+  los metadatos de System.Text.Json con las opciones del cable (`SolicitudSynHost.Cable`), no con una
+  regla de nombres escrita dos veces; y el `ejemplo` de cada elemento sale de una muestra autorada
+  pasada por el resolver registrado, `SolicitudSynHost` y `DefaultSynHostEmitter` REALES, leída del
+  `config='…'` del tag. Un ejemplo escrito a mano sería la tercera copia de las claves, y D1 nació de
+  dos copias que nadie cruzaba. Tres cosas del mismo piloto que no se deducen: (a) **el resolver se
+  registra por descubrimiento** (`AddResolutoresSynHost`): la vista lo pide con `@inject` y las
+  vistas se compilan en caliente, así que uno escrito y sin registrar sería un 500 que ningún build
+  ve —hay gate: exactamente uno por record—; (b) **se lee con la sobrecarga de `Value<T>` que recibe
+  el `IPublishedValueFallback`** (`LectorDelEditor`): la «amigable» de las vistas lo saca de
+  `StaticServiceProvider` y deja el resolver sin test; (c) **`configOverride` sólo puede pisar
+  campos que el record declara** (`SolicitudSynHost.SoloLoDeclarado`): sin eso, el JSON libre del
+  editor vuelve a meter claves que ningún contrato ve. Mutado: renombrar una clave del cable, quitar
+  el origen de un campo, declarar una sección de diccionario que no existe, quitarle la interfaz al
+  resolver y volver a la vista con diccionario libre ponen rojo un gate distinto cada uno.
 
 - `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
   no sale sólo en rojo: una sale en VERDE.** Los workflows corren en `ubuntu-latest` (checkout LF,
@@ -2509,11 +2532,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3402 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3425 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2309
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2332
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 656
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 437
 
@@ -2934,7 +2957,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3402 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3425 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

@@ -1,49 +1,23 @@
 @*
     SynHost renderer — <synergos-kpi-card>. KPI card with trend indicator.
 
-    SSR fallback (light DOM). SynHostFallbackBuilder renders label/value as a
-    real <dl> plus a readable trend line *inside* the custom element, so the
-    block stays visible and indexable before the bundle upgrades the tag — and
-    in every deploy without a CDN, where the registry never resolves
-    (ADR 0012). The trend wording is the only generated copy and comes from
-    the uSync Dictionary (Synhost.Kpi.Trend.*): a bare arrow says nothing to a
-    screen reader.
+    Host tonto (ADR 0135): el resolver arma el record que viaja (KpiCardProps) y el
+    respaldo SSR; la vista resuelve y emite. Las claves NO se escriben acá: salen del
+    record, que es lo que el elemento lee. Escribirlas a mano fue D1 — la vista mandaba
+    kpiLabel… y el elemento leía label…, así que el bundle borraba al hidratar lo que el
+    SSR había pintado bien.
 
-    Contract with the bundle: it removes or replaces [data-syn-ssr-fallback]
-    on upgrade. Until it does, syn-ssr-fallback.css hides the node once the
-    tag is :defined, so nothing double-renders.
+    El respaldo SSR (light DOM) sigue igual: label/value como <dl> y la línea de la
+    tendencia con su frase del diccionario (Synhost.Kpi.Trend.*). El bundle quita
+    [data-syn-ssr-fallback] al hidratar; hasta entonces syn-ssr-fallback.css lo oculta
+    en cuanto el tag está :defined.
 *@
-@using Synergos.CMS.Web.Services
-@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
+@using Synergos.CMS.Web.Services.SynHost
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.KpiCardProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-    var kpiLabel = Model.Value<string>("kpiLabel");
-    var kpiValue = Model.Value<string>("kpiValue");
-    var kpiTrend = Model.Value<string>("kpiTrend");
-    var kpiDelta = Model.Value<string>("kpiDelta");
-    var kpiPeriod = Model.Value<string>("kpiPeriod");
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["kpiLabel"] = kpiLabel,
-        ["kpiValue"] = kpiValue,
-        ["kpiTrend"] = kpiTrend,
-        ["kpiDelta"] = kpiDelta,
-        ["kpiPeriod"] = kpiPeriod,
-    };
-    var trendLabel = SynHostFallbackBuilder.TrendKey(kpiTrend) switch
-    {
-        "up" => Umbraco.GetDictionaryValue("Synhost.Kpi.Trend.Up", "Tendencia al alza"),
-        "down" => Umbraco.GetDictionaryValue("Synhost.Kpi.Trend.Down", "Tendencia a la baja"),
-        "flat" => Umbraco.GetDictionaryValue("Synhost.Kpi.Trend.Flat", "Tendencia estable"),
-        _ => null,
-    };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
-        BlockAlias: "kpi-card",
-        Props: props,
-        ConfigOverrideJson: Model.Value<string>("configOverride"),
-        Culture: System.Globalization.CultureInfo.CurrentUICulture,
-        FallbackHtml: SynHostFallbackBuilder.KpiCard(
-            kpiLabel, kpiValue, kpiTrend, kpiDelta, kpiPeriod, trendLabel));
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

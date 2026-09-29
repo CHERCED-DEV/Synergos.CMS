@@ -155,16 +155,15 @@ public sealed class SynHostFallbackContractTests
     [Fact]
     public void Ninguna_clave_de_Dictionary_queda_declarada_sin_consumidor()
     {
-        var partials = PartialsConFallback
-            .Select(name => File.ReadAllText(RepoFile(
-                "Synergos.CMS.Web", "Views", "Partials", "SynHost", name + ".cshtml")))
-            .ToList();
+        var fuentes = PartialsConFallback.Select(FuenteDelRespaldo).ToList();
 
         foreach (var alias in ClavesDeDictionary)
         {
             Assert.True(
-                partials.Any(p => p.Contains($"GetDictionaryValue(\"{alias}\"", StringComparison.Ordinal)),
-                $"La clave '{alias}' está en uSync pero ningún partial de SynHost la lee.");
+                fuentes.Any(p => p.Contains($"GetDictionaryValue(\"{alias}\"", StringComparison.Ordinal)
+                              || (p.Contains($"(\"{alias}\",", StringComparison.Ordinal)
+                                  && p.Contains("CreateDictionary(", StringComparison.Ordinal))),
+                $"La clave '{alias}' está en uSync pero ni un partial de SynHost ni su resolver la leen.");
         }
     }
 
@@ -174,14 +173,19 @@ public sealed class SynHostFallbackContractTests
     public void Los_ocho_partials_pasan_FallbackHtml_al_emitter()
     {
         // Este es EXACTAMENTE el defecto original: el parámetro existía y nadie
-        // lo pasaba.
+        // lo pasaba. Un elemento migrado al resolver tipado (ADR 0135) lo pasa por
+        // `ElementoResuelto.RespaldoHtml` → `SolicitudSynHost.Para`, que lo entrega
+        // como FallbackHtml (lo fija `SolicitudSynHostTests`).
         foreach (var name in PartialsConFallback)
         {
             var partial = File.ReadAllText(RepoFile(
                 "Synergos.CMS.Web", "Views", "Partials", "SynHost", name + ".cshtml"));
 
-            Assert.Contains("FallbackHtml:", partial, StringComparison.Ordinal);
-            Assert.Contains("SynHostFallbackBuilder.", partial, StringComparison.Ordinal);
+            Assert.True(
+                partial.Contains("FallbackHtml:", StringComparison.Ordinal)
+                || partial.Contains("SolicitudSynHost.Para(", StringComparison.Ordinal),
+                $"{name}.cshtml no entrega el respaldo SSR al emitter.");
+            Assert.Contains("SynHostFallbackBuilder.", FuenteDelRespaldo(name), StringComparison.Ordinal);
         }
     }
 
@@ -205,8 +209,7 @@ public sealed class SynHostFallbackContractTests
         // traducirse sin que nada se ponga rojo.
         foreach (var name in PartialsConFallback)
         {
-            var partial = File.ReadAllText(RepoFile(
-                "Synergos.CMS.Web", "Views", "Partials", "SynHost", name + ".cshtml"));
+            var partial = FuenteDelRespaldo(name);
 
             foreach (var literal in new[]
                      {
@@ -219,12 +222,15 @@ public sealed class SynHostFallbackContractTests
                 if (index < 0) continue;
 
                 // Único uso permitido: el altText de GetDictionaryValue, que es
-                // el default cuando la clave todavía no se importó al DB.
+                // el default cuando la clave todavía no se importó al DB — o, en un
+                // resolver (ADR 0135), el par («clave», «respaldo») de la misma línea.
                 var before = partial[..index];
                 var call = before.LastIndexOf("GetDictionaryValue(", StringComparison.Ordinal);
+                var linea = before[(before.LastIndexOf('\n') + 1)..];
                 Assert.True(
-                    call >= 0 && !before[call..].Contains(')'),
-                    $"{name}.cshtml usa el literal '{literal}' fuera de GetDictionaryValue.");
+                    (call >= 0 && !before[call..].Contains(')'))
+                    || Regex.IsMatch(linea, "\\(\"Synhost\\.[A-Za-z.]+\",\\s*\"$"),
+                    $"{name}.cshtml (o su resolver) usa el literal '{literal}' fuera de su clave de Dictionary.");
             }
         }
     }
@@ -252,6 +258,20 @@ public sealed class SynHostFallbackContractTests
         yield return SynHostFallbackBuilder.StatTicker("1", "L", "+", "%")!;
         foreach (var trend in new[] { "up", "down", "flat" })
             yield return SynHostFallbackBuilder.KpiCard("L", "V", trend, "D", "P", "Etiqueta")!;
+    }
+
+    /// <summary>
+    /// Donde se arma el respaldo SSR de <paramref name="name"/>: el partial y, si el elemento ya
+    /// tiene resolver tipado (ADR 0135), el resolver — que es donde pasó a vivir esa decisión.
+    /// </summary>
+    private static string FuenteDelRespaldo(string name)
+    {
+        var partial = File.ReadAllText(RepoFile(
+            "Synergos.CMS.Web", "Views", "Partials", "SynHost", name + ".cshtml"));
+        var resolutor = Path.Combine(
+            RepoDir("Synergos.CMS.Web", "Services", "SynHost"), name + "Resolutor.cs");
+
+        return File.Exists(resolutor) ? partial + "\n" + File.ReadAllText(resolutor) : partial;
     }
 
     private static string StripComments(string css) =>
