@@ -69,9 +69,16 @@ Synergos.CMS.Web/uSync/uSync.Logs/
 # vivían SOLO en la SQLite, que nunca se commitea.
 
 # Umbraco-generated appsettings schema references (regenerated on build)
-Synergos.CMS.Web/appsettings-schema.json
-Synergos.CMS.Web/appsettings-schema.Umbraco.Cms.json
-Synergos.CMS.Web/appsettings-schema.usync.json
+#
+# `Umbraco.Cms.Targets` los copia en CADA proyecto que lo referencia, antes de cada build y
+# en CRLF (así vienen en el paquete). Por eso van con glob y no por proyecto: la lista
+# nombraba sólo a Web, y los de Synergos.CMS.Tests y Synergos.Arquitectura.Tests acabaron
+# versionados: seis, y cuatro de ellos eran los únicos blobs CRLF del índice. Con `eol=lf`
+# (#170) cada build los dejaba «modificados» en `git status` con un `git diff` vacío: el
+# checkout los escribe en LF, la copia en CRLF, y git da por cambiado un fichero que cambió de
+# tamaño sin mirar su contenido.
+appsettings-schema.json
+appsettings-schema.*.json
 
 # ───────────────────────── Local secrets / env ───────────────────────
 *.local.json
