@@ -239,21 +239,60 @@ public sealed class SegundoConsumidorTests
             + "el gate se limitaría a exigir que la guía dijera eso.");
     }
 
+    /// <summary>
+    /// Las dos listas de §11 que NO tienen segundo consumidor —«Con **uno**» y «Con
+    /// **ninguno**»—, cada una cruzada contra SU frase y en los dos sentidos.
+    /// </summary>
+    /// <remarks>
+    /// Antes buscaba `Api.X` en la guía ENTERA, así que cualquier otra mención entre backticks
+    /// la daba por nombrada: con `Api.Catalog` quitada de la frase de «ninguno», el gate
+    /// seguía en verde porque la guía la nombra en otros dos sitios (medido, #172). Y la lista
+    /// de «uno» no la cruzaba nadie. Acotar a la frase es lo que ya hacía el diente de las
+    /// reutilizadas; las tres listas se leen igual.
+    /// </remarks>
     [Fact]
     public void CLAUDE_md_nombra_las_capacidades_SIN_un_segundo_consumidor()
     {
         var mapa = Consumidores(out _);
         var guia = Guia();
 
-        var sinNinguno = mapa.Where(kv => kv.Value.Count == 0).Select(kv => Corto(kv.Key)).ToList();
-        var faltan = sinNinguno.Where(c => !guia.Contains($"`Api.{Capitalizar(c)}`", StringComparison.OrdinalIgnoreCase)).ToList();
+        foreach (var (marca, consumidores) in new[] { ("Con **uno**,", 1), ("Con **ninguno**,", 0) })
+        {
+            var frase = Frase(guia, marca);
+            var delDisco = mapa.Where(kv => kv.Value.Count == consumidores).Select(kv => Corto(kv.Key)).ToList();
 
-        Assert.True(
-            faltan.Count == 0,
-            "CLAUDE.md no nombra estas capacidades, que el disco dice que NO tienen ni un "
-            + $"consumidor: {string.Join(", ", faltan)}. La lista es lo que alguien lee para "
-            + "decidir qué retirar y qué cablear, así que una cifra correcta con la lista "
-            + "incompleta es peor que una cifra equivocada (#169).");
+            var faltan = delDisco
+                .Where(c => !frase.Contains($"`Api.{Capitalizar(c)}`", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            Assert.True(
+                faltan.Count == 0,
+                $"la frase «{marca}» de §11 no nombra estas capacidades, que el disco dice que "
+                + $"tienen {consumidores} consumidor(es): {string.Join(", ", faltan)}. La lista es lo "
+                + "que alguien lee para decidir qué retirar y qué cablear, así que una cifra correcta "
+                + $"con la lista incompleta es peor que una cifra equivocada (#169). Frase medida: «{frase}».");
+
+            var deMas = Regex.Matches(frase, @"`Api\.(\w+)`")
+                .Select(m => m.Groups[1].Value.ToLowerInvariant())
+                .Where(c => !delDisco.Contains(c, StringComparer.Ordinal))
+                .ToList();
+            Assert.True(
+                deMas.Count == 0,
+                $"la frase «{marca}» de §11 nombra estas capacidades y el disco dice que no tienen "
+                + $"{consumidores} consumidor(es): {string.Join(", ", deMas)}. Moverlas de lista va en "
+                + "el mismo commit que cambió sus consumidores.");
+        }
+    }
+
+    /// <summary>La frase de la guía que empieza en <paramref name="marca"/>, hasta el punto seguido.</summary>
+    private static string Frase(string guia, string marca)
+    {
+        var i = guia.IndexOf(marca, StringComparison.Ordinal);
+        Assert.True(i >= 0, $"CLAUDE.md §11 tiene que llevar la frase «{marca}» — es lo que este gate cruza.");
+
+        // El corte es por PUNTO SEGUIDO DE ESPACIO, por lo mismo que en la de las reutilizadas:
+        // los nombres llevan punto dentro (`Api.Booking`).
+        var fin = guia.IndexOf(". ", i + marca.Length, StringComparison.Ordinal);
+        return guia[i..(fin > 0 ? fin + 1 : guia.Length)];
     }
 
     /// <summary>
