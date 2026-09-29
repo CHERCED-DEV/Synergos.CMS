@@ -2320,6 +2320,104 @@ Las que salieron de construir el árbol de servicios (§0.B):
   que marca al bueno enseña a ignorarlo. Lo que se vigila es que la **lista** de §11 no envejezca,
   en los dos sentidos.
 
+Las que salieron de la auditoría de reutilización «que todo sea Lego» (#169 · UI#78 · #172). Son
+de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en los dos árboles:
+
+- `feedback_a_grep_is_a_hypothesis` — **un conteo sacado de un grep es una HIPÓTESIS, no una
+  medición: la forma de la búsqueda decide la cifra antes que el disco.** En una sola sesión
+  salieron mal tres cifras que iban a decidir algo, las tres por el patrón y ninguna por el árbol.
+  (1) **El sujeto se contó a sí mismo**: «`card` monta su pieza del design system» porque se buscó
+  la clase `CardComponent` en la carpeta del elemento — y el elemento publicado **se llama**
+  `CardComponent` (importa `Badge`, `Button` y `Heading`; la tarjeta la rehace). (2) **El tag
+  partido en líneas**: «`syn-segmented` no lo usa nadie» buscando `<syn-segmented ` con espacio,
+  cuando el uso vivo es `<syn-segmented` y un salto de línea (`libs/shells/src/map/results-map.ts:145`
+  del repo hermano). (3) **La indirección**: «NewShore monta Angular desde 82 macros» contando el
+  atributo dentro de la macro, y eran **139** — 57 delegan en un controlador que pinta el host.
+  Las tres daban un número plausible, y un número plausible se relaya igual que uno medido.
+  **La regla: toda cifra que decide sale de DOS métodos distintos** —nombre y estructura, grep y
+  parser, conteo directo y ejecución— **y se dice cuál.** Cuando coinciden, la cifra deja de
+  depender del patrón: el 33/22 del design system lo dieron, cada uno por su lado, el cierre
+  transitivo del gate del #78 y un grafo que exige tag e import a la vez. Cuando no coinciden, **se
+  sospecha primero del patrón**. Es `feedback_counting_mentions_of_a_type_measures_the_opposite_of_using_it`
+  aplicado a quien mide. Tres atajos que salieron de acá: excluir del conteo el fichero del propio
+  sujeto, buscar un tag con `<x(\s|>|$)`, y seguir el salto por controlador antes de contar.
+
+- `feedback_a_merge_order_warning_in_prose_is_not_a_gate` — **un aviso de ORDEN DE MERGE escrito en
+  prosa no ordena nada: se mergea igual, y lo que avisaba pasa en silencio.** El commit que sacó
+  las skills de este repo (`ac4778d1`, #141) lo decía con todas las letras —«este PR deja el repo
+  SIN skills hasta que `Synergos.Fabrica` esté publicada […] No mergear antes»— y el cierre del
+  ticket lo repetía en su tabla: «3 commits locales, sin publicar», porque la sesión no tenía
+  permiso para crear repositorios. **Se mergeó en los dos repos.** `Synergos.Fabrica` no existe
+  (`gh repo view` no lo resuelve; el SHA del lock da 404), `arnes.lock.json` fija un commit que
+  sólo vivió en el clon de un contenedor, y **desde entonces ningún repo tiene skills** — con las
+  tres suites en verde, porque nada resuelve el lock: el diente que lo haría es del #142 y no se
+  construyó. Se reconstruye en #171.
+  Es §3.bis dicho del ticket y no aplicado al PR que lo necesitaba: *un proceso escrito como prosa
+  se olvida y uno que rompe el build se cumple*. **La pregunta que lo caza, antes de mergear algo
+  que depende de otra cosa: ¿qué se pone ROJO si lo de fuera no está?** Si la respuesta es «nada»,
+  el orden es una esperanza. Las salidas honestas son dos: que la dependencia exista antes de abrir
+  el PR, o que el PR traiga el gate que la exige —acá, que el lock resuelva contra el remoto—. Y
+  el daño viajó por el camino de `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`:
+  lo que se fue eran afirmaciones, y lo que se quedó no tenía cómo mirarlas.
+
+- `feedback_the_catalog_is_vocabulary_not_debt` — **una pieza del design system sin consumidor no
+  es deuda que se retira: es vocabulario de la fábrica, y la salida por defecto de un gate de
+  alcance no puede ser borrar.** El gate del #78 del repo hermano midió las piezas que no alcanza
+  ningún elemento y la auditoría proponía retirar doce. Medidas una por una: **ninguna tuvo nunca un
+  consumidor** —cero commits en la historia con su selector— y **la necesidad está en el disco en
+  80 sitios nombrados**, resuelta a mano cada vez. Dos pruebas escritas de que nadie buscó: el doc
+  22 del hermano pidió «crear» un resumen con enlace *Cambiar* que ya era `syn-detail-summary`, y
+  **se creó `syn-segmented` en vez de arreglar `syn-segmented-control`**, el mismo concepto dos
+  veces. Veredicto: fusionar 3, mejorar y usar 5, usar 2, declarar 2, **retirar 0**. El arquitecto
+  lo decidió así (§0.C.21, ADR 0134).
+  **Lo que enseña no es «no borres»: es que el gate mide ALCANCE y la pregunta es de PRODUCTO.**
+  Qué no usa nadie lo dice el gate; qué hacer se decide por pieza, con cuatro salidas —usar,
+  mejorar, fusionar un duplicado, declarar con disparador— y retirar sólo con evidencia de que el
+  concepto sobra. **El daño de un catálogo que no se consulta no son las piezas sin uso: son las
+  duplicadas**, que nacen justo porque nadie buscó por CONCEPTO antes de crear (doc 12 §5.11). Es
+  la decisión de producto yendo antes que el gate, que es el orden de §3.bis.
+
+- `feedback_hydration_can_erase_what_ssr_painted` — **la hidratación puede BORRAR lo que el SSR
+  pintó bien, y ningún test de SSR lo ve, porque el SSR está bien.** Es el defecto D1 de la
+  auditoría: 43 colocables tiran lo que escribió el editor al hidratar —medido por otra sesión
+  ejecutando el sanitizador de cada uno con lo que emite su vista, y tres en vivo con control—. El
+  caso comprobado en el disco: `Views/Partials/SynHost/KpiCard.cshtml` arma el `config` con
+  `kpiLabel`, `kpiValue`, `kpiTrend`… y el elemento lee `label`, `value`, `trend` (`kpi-card.ts:133`
+  del repo hermano). La vista pinta su respaldo con el texto del editor —sin JavaScript la página
+  se ve bien—, el bundle arranca, normaliza un `config` donde no encuentra ninguna de sus claves y
+  **se pinta vacío encima**. En `dropdown` el CMS manda `optionsJson` y el elemento lee `options`:
+  un botón gris sin opciones.
+  **Por qué no lo ve nadie:** el SSR se prueba contra su HTML (bien), el elemento con `setInput` de
+  sus propias claves (bien), y el cable entre los dos —las claves que la vista mete en `config`—
+  no lo prueba nadie; `element-inputs.json` declara atributos, no la forma de `config`. Las dos
+  mitades en verde y el hueco en medio. **La pregunta que lo caza** es la de S11 mirada desde el
+  otro lado: *¿qué claves emite esta vista, y cuáles conserva el sanitizador?* — se contesta
+  leyendo los dos. **Lo que lo cierra** es el contrato tipado por elemento (ADR 0135, Propuesta):
+  con el tipo TS generado del `record`, `optionsJson` contra `options` es un `TS2339` al compilar
+  (medido en `dropdown`). Hasta entonces, un gate que **ejecute** el sanitizador con lo que emite
+  la vista y exija que cada clave mueva la salida.
+
+- `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
+  no sale sólo en rojo: una sale en VERDE.** Los workflows corren en `ubuntu-latest` (checkout LF,
+  SDK en inglés, `python3` presente, clon y no worktree); la máquina del arquitecto es Windows 11
+  con `core.autocrlf=true`, **sin `.gitattributes`**, el SDK en español y worktrees. Medido sobre el
+  mismo commit (#170, gemelo UI#79): **cinco rojos** que fallan del lado seguro
+  —`ComposeStackTests.El_compose_esta_al_dia…` (compara byte a byte contra un checkout CRLF),
+  `ContainerBuildTests.El_script_de_la_matriz…` (`service-matrix.mjs` compara `import.meta.url` con
+  `file://${argv[1]}` y sale 0 sin imprimir), `ProvisionWiringTests.El_manifiesto_se_lee…`
+  (`python3` es el alias vacío de la Store), `PoliticaDeBuildEnLaImagenTests.Todo_fichero_de_la_raiz…`
+  (en un worktree `.git` es un FICHERO) y `compilan-las-vistas` (reconoce su recibo por el texto en
+  inglés del compilador)— **y G-7 en verde cruzando 2 claves en 1 ruta, contra 57 en 22 con el
+  mismo commit en LF.** G-7 es el gate que §7 describe como el que «mira donde de verdad dolió», y
+  no tiene suelo: 2 no es vacío, así que la red de seguridad del #136 no dispara.
+  **El rojo de entorno se diagnostica una vez y se anota**, y cualquier rojo que no sea uno de ésos
+  es real hasta demostrar lo contrario. **El verde de entorno es el caro**, porque nadie vuelve a
+  mirar un verde. Tres costumbres que salieron de acá: en Windows los tramos de `npm test` se
+  corren sueltos, porque la cadena `&&` corta lo de detrás del primer rojo; ninguna herramienta
+  reconoce una salida por texto localizado; y una cifra que depende de bytes —líneas, claves por
+  regex— se compara en LF. La salida de fondo —`.gitattributes` con `eol=lf` y un job
+  `windows-latest` con los gates de Node— está propuesta en el #170, pendiente de confirmar.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
