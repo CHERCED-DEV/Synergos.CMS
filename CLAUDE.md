@@ -2439,7 +2439,10 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   `ContainerBuildTests.El_script_de_la_matriz…` (`service-matrix.mjs` comparaba `import.meta.url`
   con `file://${argv[1]}` y salía 0 sin imprimir; **arreglado**: `pathToFileURL(argv[1]).href`),
   `ProvisionWiringTests.El_manifiesto_se_lee…`
-  (`python3` es el alias vacío de la Store), `PoliticaDeBuildEnLaImagenTests.Todo_fichero_de_la_raiz…`
+  (`python3` es el alias vacío de la Store; **arreglado**: se prueban `python3`, `python` y
+  `py -3` EJECUTÁNDOLOS, sin ninguno se dice antes de culpar al lector, y la salida se fuerza a
+  `\n` porque el Python de Windows escribe `\r\n` y `moneda` llegaba «COP\r»),
+  `PoliticaDeBuildEnLaImagenTests.Todo_fichero_de_la_raiz…`
   (en un worktree `.git` es un FICHERO) y `compilan-las-vistas` (reconoce su recibo por el texto en
   inglés del compilador)— **y G-7 en verde cruzando 2 claves en 1 ruta, contra 57 en 22 con el
   mismo commit en LF.** G-7 es el gate que §7 describe como el que «mira donde de verdad dolió», y
