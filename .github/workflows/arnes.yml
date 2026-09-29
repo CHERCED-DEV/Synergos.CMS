@@ -1,0 +1,73 @@
+# El arnés que fija `arnes.lock.json` EXISTE, y lo que afirma de este repo es cierto
+# (CHERCED-DEV/Synergos.CMS#142).
+#
+# ESTE FICHERO ES UNA COPIA. El original es `consumidor/arnes.yml` de CHERCED-DEV/Synergos.Fabrica,
+# y el segundo paso —`tools/lock.mjs`, traído del SHA del lock— compara esta copia con la de ese SHA
+# y se pone rojo si difieren. Se cambia allá, se publica, y se copia acá en el mismo commit que
+# re-fija el lock. Es la lección del #141: una copia que nadie cruza diverge el día que alguien
+# arregla una sola.
+#
+# Por qué existe (#171): el lock apuntó durante días a un SHA que no existía y nada lo vio, porque
+# ningún workflow lo resolvía. El primer paso lo resuelve: trae ESE commit del repo que el lock
+# nombra, y si no está, rojo con qué hacer.
+#
+# Por qué el primer paso vive en este YAML y no en el arnés: lo que comprueba que el SHA existe no
+# puede venir de ese SHA. Es lo único que no puede, y por eso es lo único que está acá; todo lo
+# demás lo trae el arnés, de una sola copia.
+#
+# Por qué sin filtro `paths:`: lo que rompe esto no lo cambia sólo el lock — lo rompe un pin de
+# Umbraco que se mueve en Directory.Packages.props, o una copia de este fichero que se edita, y un
+# filtro que intentara enumerarlo se equivocaría en silencio (#128). Y por qué el cron: un commit
+# que desaparece de Fabrica (un force-push, un repo que se renombra) no toca ningún commit de acá.
+
+name: Arnés
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: '41 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  arnes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Sin credenciales a propósito: el arnés es público y este CI lo trae sin secretos. Por eso se
+      # vacían el ayudante de credenciales y los askpass — en una máquina, un repo que no existe
+      # abre un diálogo pidiendo contraseña en vez de fallar.
+      - name: Traer el arnés que fija arnes.lock.json
+        shell: bash
+        env:
+          ARNES_DIR: ${{ runner.temp }}/arnes
+        run: |
+          set -uo pipefail
+          export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
+          unset GIT_ASKPASS SSH_ASKPASS
+          falla() { echo "::error file=arnes.lock.json::$1"; exit 1; }
+          [ -f arnes.lock.json ] || falla "no hay arnes.lock.json en la raíz: este repo no declara qué arnés usa."
+          repo=$(node -p "require('./arnes.lock.json').arnes.repo") || falla "arnes.lock.json no es JSON válido."
+          sha=$(node -p "require('./arnes.lock.json').arnes.sha")
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || falla "arnes.sha es «$sha»: tiene que ser un SHA completo (40 hexadecimales). Una rama o un tag se mueven, y el lock existe para que el arnés no se mueva solo."
+          git init -q "$ARNES_DIR"
+          g() { git -C "$ARNES_DIR" -c credential.helper= -c core.askPass= "$@"; }
+          g ls-remote "$repo" HEAD > /dev/null 2>&1 || falla "no puedo leer $repo: no existe, no es público o no hay red. El arnés tiene que ser público: este CI lo trae sin secretos."
+          g fetch -q --depth 1 "$repo" "$sha" || falla "$repo no tiene el commit $sha — es el #171. O ese commit nunca se publicó (git push en Synergos.Fabrica, y comprobá que el remoto lo devuelve: gh api repos/CHERCED-DEV/Synergos.Fabrica/commits/$sha), o el lock apunta mal: fijá un SHA que exista."
+          g checkout -q FETCH_HEAD || falla "se trajo $sha de $repo y no se pudo sacar."
+          echo "arnés: $repo @ $sha"
+
+      - name: Lo que el arnés afirma de este repo
+        shell: bash
+        run: |
+          [ -f "$RUNNER_TEMP/arnes/tools/lock.mjs" ] || { echo "::error file=arnes.lock.json::el arnés fijado no trae tools/lock.mjs: es anterior al gate del #142. Re-fijá el lock a un SHA que lo tenga."; exit 1; }
+          node "$RUNNER_TEMP/arnes/tools/lock.mjs" --consumidor=. --nombre="${GITHUB_REPOSITORY#*/}"

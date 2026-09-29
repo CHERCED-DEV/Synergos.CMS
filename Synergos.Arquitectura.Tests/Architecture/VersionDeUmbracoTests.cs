@@ -72,7 +72,7 @@ public sealed class VersionDeUmbracoTests
         },
     };
 
-    // LAS DOS ENTRADAS QUE SE FUERON, Y POR QUÉ ESTO ES UNA PÉRDIDA DE COBERTURA (#141).
+    // LAS DOS ENTRADAS QUE SE FUERON, Y QUIÉN LAS CRUZA HOY (#141 → #142).
     //
     // Hasta el #141 el censo llevaba dos filas más, las dos sobre
     // `.claude/skills/synergos-guardrails/SKILL.md`: su §7 («**{0}, NO upgrade a 14+**») y la
@@ -82,14 +82,18 @@ public sealed class VersionDeUmbracoTests
     // El #141 sacó el arnés de este repo: las skills viven ahora en `Synergos.Fabrica`, fijada
     // por SHA en `arnes.lock.json`. Este gate ya NO PUEDE VERLAS, y dejar las filas apuntando a
     // un fichero ausente sería un censo mintiendo — el segundo diente lo rompe a propósito, que
-    // es lo que obligó a tocar esto en el mismo commit que borró las copias.
+    // es lo que obligó a tocar esto en el mismo commit que borró las copias. Durante el #141 y
+    // el #171 el pin estuvo afirmado en un sitio que nadie cruzaba: el defecto que el #149 midió.
     //
-    // Lo que se pierde es real y no se disimula: el pin de Umbraco vuelve a estar afirmado en
-    // un sitio que nadie cruza, que es exactamente el defecto que el #149 midió. Quien lo
-    // recupera es el gate del arnés (HU #142, `gates/arnes-derivado.mjs`): tiene que clonar el
-    // SHA del lock y cruzar esas dos frases contra `Directory.Packages.props` de acá. Queda
-    // escrito con su número porque una pérdida sin ticket es cómo un defecto sobrevive a la
-    // auditoría que lo vio (#137).
+    // Lo recuperó el #142, y NO en esta suite: `.github/workflows/arnes.yml` trae el arnés del
+    // SHA del lock y corre su `tools/lock.mjs`, que cruza esas frases contra
+    // `Directory.Packages.props` de acá (y el CI de Fabrica hace lo mismo contra este repo, en el
+    // commit que reescriba una frase). Dos cosas cambiaron por el camino, y las dos a propósito:
+    // la skill ya NO escribe el parche —el rescate del #171 lo sacó: una skill dice dónde leer la
+    // versión, no la versión—, así que lo que se cruza es la RAMA (`La rama {rama} LTS, NO
+    // upgrade a {siguiente}+`); y el censo de allá lleva cuatro frases, no dos: el título y la
+    // aclaración de la §7 afirman el pin igual. `dotnet test` no lo corre; el workflow sí, en
+    // cada push, cada PR y cada día.
 
     private static readonly Regex Pin = new(
         @"<PackageVersion\s+Include=""Umbraco\.Cms""\s+Version=""(?<v>[^""]+)""",
