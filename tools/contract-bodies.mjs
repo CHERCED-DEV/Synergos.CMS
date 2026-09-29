@@ -74,6 +74,7 @@ const PARES = [
     { app: 'realty', controllers: ['RealtyController.cs'] },
     { app: 'booking-wizard', controllers: ['BookingController.cs'] },
     { app: 'blogs', controllers: ['BlogsController.cs', 'CommentsController.cs'] },
+    { app: 'alquiler', controllers: ['AlquilerController.cs'] },
 ];
 
 /** El ÚNICO lector de fuentes del gate: todo sale en LF, venga como venga del disco (#170). */

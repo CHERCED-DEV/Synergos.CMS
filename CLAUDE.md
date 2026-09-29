@@ -3507,7 +3507,7 @@ Después de las Olas 42 → 44 el Layout Composer es end-to-end:
   `Synergos:LayoutComposer:EnableStarterScaffold`.
 - **Reusable snippets** (Ola 42.10) via `elementLayoutSnippetRef` que
   referencia un `reusableBlock` de Ola 34.
-- **compDom* universal** (Ola 43.15/43.16): los 173 element types
+- **compDom* universal** (Ola 43.15/43.16): los 174 element types
   tienen compDomClass + compDomVariant + compDomVisibility +
   compDomAttributes. El wrapper `SynHost/_Wrapper.cshtml` (Ola 44.1)
   aplica estos props al HTML emitido por los SynHost partials.
