@@ -222,6 +222,11 @@ independientes y llevan **dos interruptores**, como Gobierno.
 
 Diez pasos. Cada uno toma **una** decisión, y cada decisión tiene quien la comprueba.
 
+Y uno más, **§5.11, que se da en el otro árbol** —los S11 y S12 de la fábrica (doc 13 §5)—. Se
+escribe acá porque la decisión que toma es del molde y porque fue la más cara del piloto 2; y va
+aparte porque es el único paso de este documento que **todavía no tiene gate**, y dicho así nadie
+lo lee como si lo tuviera.
+
 ### 5.1 El objeto central se puede autorar — o se dice por qué no
 
 Un DocType con su ficha, y si el objeto se *consume* además de mirarse, lo que haga falta para
@@ -463,6 +468,65 @@ llama `ShopWiringTests`, y uno que cruzara por nombre lo daría por ausente.
 
 **Y el gate se muta**: se reintroduce el defecto, se confirma el rojo, se restaura **tocando el
 fichero**. Un gate que no se vio fallar no está vigilando nada.
+
+### 5.11 *(en el otro árbol)* Lo que el vertical coloca: funcionalidad o pieza, y el DATO que pide
+
+Son los S11 y S12 del doc 13 §5, y el código vive en el repo hermano. El doc 13 §5.bis ya corrigió
+la mitad (#163): la reutilización **no se contesta por NOMBRE** —`booking-wizard` tiene forma de
+hotel y un alquiler es otro dato—, y contestarla así costó ~1,2 h de las 3,5 h del piloto 2. Lo
+que sigue es la otra mitad: **qué se pregunta antes**, con el modelo de ADR 0134 (`CLAUDE.md`
+§0.C). Cuatro preguntas, en este orden, y cada respuesta se escribe en el spec:
+
+**1. Cada cosa que el spec pone en pantalla, ¿es una FUNCIONALIDAD o una PIEZA?** Una
+**funcionalidad** se nombra por lo que hace —comprar una entrada, radicar un trámite, agendar una
+cita—: es grande por dentro y hacia el CMS es **un** tag. Una **pieza** es un colocable suelto —una
+valoración, un acordeón, una tarjeta de indicador— que el editor pone donde quiere. Lo que las
+separa no es el tamaño: es **qué necesita recibir para funcionar**. Si le hace falta configuración
+de negocio o técnica —moneda, comisión, alcance, un endpoint—, es una funcionalidad, y esa
+configuración **no la escribe el editor**. El registry todavía no lo declara (no hay `kind`), así
+que hoy se infiere y se deja escrito.
+
+**2. Para una funcionalidad: qué CABLEADO recibe, y nada más.** Cuatro cosas, por separado:
+
+- **las secciones de diccionario** que usa —por prefijo, no clave a clave— para sus labels, sus
+  errores y sus textos de accesibilidad. La funcionalidad traduce con `t()` y sus hojas reciben el
+  texto ya traducido (ADR 0136, Propuesta);
+- **la configuración de negocio**, que es del despliegue o del siteRoot y no del editor (ADR 0137,
+  Propuesta);
+- **las pocas decisiones del editor** —variante, mostrar u ocultar, página destino—, cada una
+  **como selector**, nunca como texto libre: un editor que teclea un enum lo teclea mal;
+- **la identidad**, por el canal de runtime (`window.synergos.member`), nunca por el JSON del
+  editor.
+
+Si el spec necesita darle al editor un `configOverride` para que la funcionalidad arranque, lo que
+falta es una de las cuatro de arriba, no un campo más en el backoffice.
+
+**3. Para reusar un elemento: comparar el DATO que pide.** Hoy ese dato vive en **dos** sitios que
+se leen juntos: lo que emite su vista `Views/Partials/SynHost/<X>.cshtml` y lo que **conserva** el
+sanitizador del elemento en el repo hermano (el `normalize*`/`sanitize*` de su `.ts`). Lo que la
+vista emite y el sanitizador no lee **se tira al hidratar**, sin error: `SynHost/KpiCard.cshtml`
+manda `kpiLabel` y `kpi-card` lee `label`, así que el SSR pinta bien y el bundle lo borra
+(`CLAUDE.md` §5, `feedback_hydration_can_erase_what_ssr_painted`). Reusar un elemento así **hereda
+el defecto** aunque el dato sea el tuyo. `element-inputs.json` no alcanza —declara atributos, no la
+forma de `config`— y por eso el doc 13 §5.bis manda mirar a mano. **Mañana** el dato será el
+`record` por elemento de ADR 0135 (Propuesta), con su tipo TS generado, y esta comparación la hará
+el compilador.
+
+**4. Antes de crear una pieza nueva: buscar en el catálogo por CONCEPTO.** Por nombre no aparece.
+Así nació `syn-segmented` al lado de `syn-segmented-control` —el mismo selector exclusivo, dos
+veces— y así se pidió «crear» un resumen con enlace *Cambiar* que ya era `syn-detail-summary`. Se
+busca **qué hace** —«elegir uno de varios», «repasar lo que se va a enviar»— entre las piezas del
+design system, **incluidas las que no usa nadie**: una pieza sin consumidor es vocabulario, no
+deuda (`CLAUDE.md` §0.C.21). Si existe y le falta algo, se mejora; si hay dos del mismo concepto,
+se fusionan. Y la pieza colocable que se cree **monta** su gemela del design system, nunca la
+reimplementa — la regla de los dos pisos.
+
+> **Lo que este paso NO tiene, y va dicho: un gate.** `spec-valida` pone delante los campos de
+> dominio declarados de cada elemento que el spec reusa (#163), y nada más: no sabe si algo es
+> funcionalidad o pieza, porque el registry no lo declara, ni qué claves conserva un sanitizador,
+> porque eso sólo se sabe ejecutándolo. Las dos cosas esperan a ADR 0135 y a un `kind` en el
+> registry. Mientras tanto se hace a mano y **queda escrito en el spec**, que es lo único que
+> permite a la siguiente persona comprobar que se hizo.
 
 ## 6. Lo que NO hay que hacer
 

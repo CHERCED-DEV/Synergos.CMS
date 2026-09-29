@@ -99,6 +99,35 @@
     instante en que existe lo que hay que deshacer. **Armada no es
     pendiente**: solo es trabajo cuando algo YA falló. Ver doc 09.
 
+### 0.C — Lo que el CMS coloca, y lo que le da
+
+> El modelo que decidió el arquitecto (ADR 0134, **Aceptada**). Es un **refinado**, no una
+> mudanza: se conserva lo agnóstico —registry, import map, SRI, SynHost, Layout Composer, tokens
+> por siteRoot— y se ordena lo que viaja por ahí. Las cifras que lo motivaron no van acá: están en
+> §5 y en el `CLAUDE.md` del repo hermano, cada una con su gate o con su medición.
+
+19. **Tres catálogos, y dos tipos de cosas que el editor coloca.** Los catálogos: las piezas
+    **Razor** del CMS (SSR puro, para contenido y SEO), las piezas **chicas de Angular** (el
+    design system del repo hermano: el vocabulario con el que se arman las features) y las
+    **funcionalidades** (apps de vertical y flujos: grandes por dentro, **un** tag hacia el CMS).
+    Lo que el editor pone en la página es una **funcionalidad** —se nombra por lo que hace— o una
+    **pieza** suelta. **Antes de crear, reusar o cablear algo se contesta cuál de las dos es**,
+    porque de eso depende qué le llega. El registry todavía no lo declara: hoy se infiere.
+20. **El CMS da CABLEADO, no la configuración completa de una funcionalidad.** A una
+    funcionalidad le llegan sus secciones de diccionario, su configuración de negocio —que el
+    editor no toca—, pocas decisiones del editor **como selector, nunca texto libre**, y la
+    identidad por el canal de runtime; cómo se arma por dentro es del código. A una **pieza** le
+    llegan su contenido y sus decisiones, y **monta su gemela del design system, nunca la
+    reimplementa** — la **regla de los dos pisos**. `configOverride`, el JSON libre del editor que
+    pisa todo, es hoy la puerta contraria. Hacia dónde, todo **Propuesto**: resolver tipado por
+    elemento (ADR 0135), diccionario por secciones declaradas (0136), configuración de negocio por
+    funcionalidad (0137), coordinación de página por eventos DOM (0138) y bundles con varias
+    entradas colocables frente a 0113 (0139). Describen el rumbo, no lo que ya está.
+21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
+    deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
+    declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por
+    defecto de un gate de alcance. Memoria `feedback_the_catalog_is_vocabulary_not_debt`.
+
 ## 1. Umbraco 13 LTS pinned
 
 Umbraco 13.16.2 — **no upgrade** a 14+ sin ADR nuevo. La razón:
@@ -267,6 +296,8 @@ Synergos.CMS/
 | "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — **diez** pasos: los tres ejes con su tabla medida, las dos formas del eje transaccional, la CUARTA pregunta del eje 3 (§3.1) y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`, 13) |
 | "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los doce sub-specs derivados del molde, los dos MCPs y el gate del arnés. **Ya no es sólo diseño**: el arnés vive en `Synergos.Fabrica` con su `arnes.lock.json` (#141) y el spec tiene formato y validador (#140) |
+| "¿Esto que voy a colocar es una FUNCIONALIDAD o una PIEZA?" | §0.C y ADR 0134. Una **funcionalidad** se nombra por lo que hace y recibe sólo cableado; una **pieza** recibe contenido y decisiones del editor, y monta su gemela del design system. El registry no lo declara todavía, así que se infiere de **qué necesita recibir**: si para funcionar le hace falta configuración de negocio o técnica, es una funcionalidad y esa configuración no la escribe el editor. El doc 12 §5.11 lo convierte en paso del molde |
+| "¿Qué DATO pide un elemento? ¿Puedo reusarlo?" | **Hoy, en dos sitios que se leen juntos**: lo que emite su vista `Views/Partials/SynHost/<X>.cshtml` y lo que **conserva** el sanitizador del elemento en el repo hermano (el `normalize*`/`sanitize*` de su `.ts`). Lo que uno emite y el otro no lee **se tira al hidratar**, sin error (`feedback_hydration_can_erase_what_ssr_painted`). `element-inputs.json` no alcanza: declara atributos, no la forma de `config` (doc 13 §5.bis). **Mañana**: el `record` por elemento de ADR 0135 (Propuesta), del que se genera el tipo TS. Nunca por el nombre (#163) |
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
 | "¿El molde da para GENERAR un vertical?" | Sobre Eventos, **sí**: el piloto 0 midió **71,4 %** y hoy da **100 % sobre 23 ficheros y CERO inventados** — el eje 3 escrito (#153), su sección arreglada (#154) y el composer parcial cruzado por CONTENIDO y no por nombre (#155), porque de los siete verticales sólo Academy tiene un fichero que se llame como él. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
