@@ -2,6 +2,55 @@
   "comentario": "GENERADO desde los records [ElementoSynHost] de Synergos.CMS.Interfaces por Synergos.CMS.Tests/Services/SynHost/ContratoSynHostTests.cs — no se edita a mano (ADR 0135). `ejemplo` es el config EXACTO que emite la vista para una muestra autorada.",
   "elementos": [
     {
+      "nombre": "dropdown",
+      "tipo": "pieza",
+      "record": "DropdownProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "triggerLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "options",
+          "tipo": "DropdownOption[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "selectedValue",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "searchable",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "triggerLabel": "País",
+        "options": [
+          {
+            "value": "co",
+            "label": "Colombia"
+          },
+          {
+            "value": "mx",
+            "label": "México",
+            "href": "/mx"
+          }
+        ],
+        "selectedValue": "co",
+        "searchable": true
+      }
+    },
+    {
       "nombre": "kpi-card",
       "tipo": "pieza",
       "record": "KpiCardProps",
@@ -107,5 +156,26 @@
       }
     }
   ],
-  "tipos": []
+  "tipos": [
+    {
+      "record": "DropdownOption",
+      "campos": [
+        {
+          "nombre": "value",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "href",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    }
+  ]
 }

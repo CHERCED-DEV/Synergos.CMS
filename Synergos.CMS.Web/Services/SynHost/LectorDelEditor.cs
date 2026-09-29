@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Umbraco.Cms.Core.Models.PublishedContent;
 
 namespace Synergos.CMS.Web.Services.SynHost;
@@ -47,6 +48,63 @@ public sealed class LectorDelEditor
     {
         var crudo = _elemento.Value<string>(_fallback, alias);
         return string.IsNullOrWhiteSpace(crudo) ? null : crudo.Trim();
+    }
+
+    /// <summary>El interruptor (TrueFalse) de <paramref name="alias"/>: <c>false</c> si el editor no lo tocó.</summary>
+    public bool Interruptor(string alias) => _elemento.Value<bool>(_fallback, alias);
+
+    /// <summary>
+    /// Las entradas de la lista JSON que el editor escribió en <paramref name="alias"/> (un
+    /// TextArea); <c>null</c> si no escribió nada, si no parsea o si no es una lista.
+    /// </summary>
+    /// <param name="alias">La propiedad, para el log.</param>
+    /// <param name="json">Lo que leyó <see cref="Texto"/> de esa propiedad.</param>
+    /// <remarks>
+    /// Parsear acá y no en el navegador es lo que deja al record declarar una LISTA tipada en vez de
+    /// un texto: el elemento lee una lista, y un texto con la forma de una lista es lo que dejaba a
+    /// <c>dropdown</c> y <c>carousel</c> vacíos (D1). Cada entrada sale clonada: sobrevive al
+    /// documento.
+    /// </remarks>
+    public IReadOnlyList<JsonElement>? ListaJson(string alias, string? json)
+    {
+        if (json is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var documento = JsonDocument.Parse(json);
+            if (documento.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                return documento.RootElement.EnumerateArray().Select(e => e.Clone()).ToList();
+            }
+        }
+        catch (JsonException)
+        {
+            NoEsValido(alias, json, "un JSON válido");
+            return null;
+        }
+
+        NoEsValido(alias, json, "una lista JSON");
+        return null;
+    }
+
+    /// <summary>El texto de <paramref name="clave"/> en una entrada de una lista JSON (un número vale como texto).</summary>
+    public static string? Cadena(JsonElement entrada, string clave)
+    {
+        if (entrada.ValueKind != JsonValueKind.Object || !entrada.TryGetProperty(clave, out var valor))
+        {
+            return null;
+        }
+
+        var texto = valor.ValueKind switch
+        {
+            JsonValueKind.String => valor.GetString(),
+            JsonValueKind.Number => valor.GetRawText(),
+            _ => null,
+        };
+        return string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
     }
 
     /// <summary>

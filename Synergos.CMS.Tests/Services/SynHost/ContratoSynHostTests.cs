@@ -53,6 +53,13 @@ public sealed class ContratoSynHostTests
     private static readonly IReadOnlyDictionary<string, (string Alias, object? Valor)[]> Muestras =
         new Dictionary<string, (string, object?)[]>(StringComparer.Ordinal)
         {
+            ["dropdown"] = new (string, object?)[]
+            {
+                ("triggerLabel", "País"),
+                ("optionsJson", """[{"value":"co","label":"Colombia"},{"value":"mx","label":"México","href":"/mx"}]"""),
+                ("selectedValue", "co"),
+                ("searchable", true),
+            },
             ["kpi-card"] = new (string, object?)[]
             {
                 ("kpiLabel", "Ventas del mes"),
