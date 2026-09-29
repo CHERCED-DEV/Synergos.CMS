@@ -1,9 +1,20 @@
 # 13 — La fábrica: de un spec a un vertical
 
-> **Estado: diseño. Nada de esto está construido**, y está escrito así a propósito — un documento
-> que describe lo que todavía no existe es el defecto
-> `docs_written_ahead_of_the_code_are_a_defect_with_a_clean_face`, y la única forma honesta de
-> escribirlo es decir en la primera línea que la prosa va por delante.
+> **Estado, medido el 2026-09-29: construido a medias, y la mitad que falta es la que sostiene al
+> resto.**
+>
+> - **Está en el disco**: el formato del spec y su validador (`tools/spec-valida.mjs`, #140), el
+>   piloto 0 contra Eventos (§9) y el paso S11 corregido para que no se conteste por nombre (#163).
+> - **NO está**: el arnés. El #141 sacó las skills de los dos repos hacia `Synergos.Fabrica` y **ese
+>   repo nunca se publicó** — `arnes.lock.json` fija un SHA que no existe y desde entonces ningún
+>   repo tiene skills. Lo reconstruye el **#171**; ver §6.2. El gate del arnés (#142), los dos MCPs
+>   de §7 (#143, #144) y los pilotos 1 y 2 (#146, #147) siguen abiertos.
+>
+> Esta línea decía «Estado: diseño. Nada de esto está construido», y fue verdad hasta el #140. Lo
+> que sigue en pie de ella es la razón: un documento que describe lo que todavía no existe es el
+> defecto `docs_written_ahead_of_the_code_are_a_defect_with_a_clean_face`, y la única forma honesta
+> de escribirlo es decir arriba qué de lo que sigue está en el disco y qué no. El #141 es el caso
+> que lo prueba: la prosa de §6.1 describía un arnés publicado, y no lo estaba.
 >
 > Continúa el [doc 12](12-el-molde-de-un-vertical.md), que escribió **el molde** de un vertical.
 > Éste escribe **quién lo ejecuta, con qué fuente, y qué impide que el ejecutor se pudra.**
@@ -374,6 +385,69 @@ Y en cada repo consumidor, **dos líneas**:
 > un runner de CI no lo tiene. El lock se versiona, CI clona el SHA que dice, y el gate cruza lo
 > clonado contra lo declarado. Sin eso, el gate del arnés sería un gate que sólo corre donde ya
 > estaba bien — `a_gate_that_runs_when_what_it_READS_changes` con otra cara.
+
+### 6.2 Lo que pasó de verdad: `Synergos.Fabrica` nunca se publicó (#171)
+
+La forma de §6.1 se implementó en el #141 **y se quedó a mitad de camino, en el peor punto**: las
+skills salieron de los dos repos (`ac4778d1` en éste, `6bd2592` en el hermano) y el repo que debía
+recibirlas **sólo existió en el clon de un contenedor**. La sesión no tenía permiso para crear
+repositorios —`403` al crearlo—, el cierre del ticket lo dejó escrito en su tabla («3 commits
+locales, sin publicar») y los dos PR de consumidor se mergearon igual, **con el aviso de orden de
+merge escrito en su propio mensaje de commit**: «No mergear antes».
+
+Medido el 2026-09-29: `gh repo view CHERCED-DEV/Synergos.Fabrica` no lo resuelve y el SHA del lock
+da `404`. Lo que eso deja:
+
+- **ningún repo tiene skills desde el #141**, y la única copia instalada en la máquina del
+  arquitecto es anterior a todo esto;
+- **se perdió la limpieza del #141** —los cuatro criterios de §8: rutas de una máquina,
+  herramientas muertas, cifras cableadas y `description` que contradice su cuerpo— junto con sus
+  tests de estructura, que vivían sólo en ese clon;
+- **no se perdieron las skills**: están en la historia (`git ls-tree --name-only ac4778d1^
+  .claude/skills/`), y la receta de la limpieza está en los comentarios del #141.
+
+**Y nada se puso rojo, que es la lección.** Ningún workflow clona el lock y ningún test lo resuelve:
+el diente que lo haría es el 5 de §8, que es del #142 y no se construyó. Un orden de merge escrito
+en prosa es una esperanza, no un gate (`CLAUDE.md` §5,
+`feedback_a_merge_order_warning_in_prose_is_not_a_gate`). **El #171 lo reconstruye**: el repo
+público, las skills desde la historia con las divergidas reconciliadas, la limpieza rehecha y
+medida con un script versionado, el lock re-fijado en los dos repos, y el diente del lock para que
+no vuelva a pasar.
+
+### 6.3 Qué carga el sub-arnés — lo que ninguna skill sabía hasta la auditoría de reutilización
+
+Las skills que se reconstruyen en el #171 son de julio o de antes del #141, y **no saben nada** de
+lo que la auditoría «que todo sea Lego» (#169, UI#78, #172) midió y el arquitecto decidió. Un
+arnés que las reinstale tal cual devuelve a cada sesión nueva a proponer lo que ya se descartó. Lo
+que el sub-arnés tiene que cargar —y lo que este repo ya escribe en sus guías, para que la skill
+**remita** en vez de copiar (§10.1)—:
+
+1. **El modelo de ADR 0134** (`CLAUDE.md` §0.C): tres catálogos —Razor, piezas chicas de Angular,
+   funcionalidades—, dos tipos de colocable —**funcionalidad** y **pieza**—, **el CMS da cableado y
+   no la configuración completa de una funcionalidad**, **no se retira por defecto**, y la regla de
+   los dos pisos. Y el paso que lo aplica al generar un vertical: el doc 12 §5.11. Las cinco ADRs
+   que dan el rumbo —0135 a 0139— están **Propuestas**, y una skill no puede enseñarlas como hechas.
+2. **La disciplina de medición**, que es de proceso y vale en los dos árboles: **un grep es una
+   hipótesis** —toda cifra que decide sale de dos métodos distintos, y se dice cuál—; **las cifras
+   las imprime el gate**, no las escribe una persona, y la guía cita al gate; y **nada de un agente
+   llega al arquitecto sin una comprobación en el disco de lo que decide** — la auditoría
+   verificó así seis informes, y el único que falló fue el del orquestador. Memoria
+   `feedback_a_grep_is_a_hypothesis`.
+3. **Los rojos de entorno**, con su causa, para que una sesión en Windows no los re-diagnostique ni
+   se acostumbre a ver rojo: cuatro en `Synergos.Arquitectura.Tests` y `compilan-las-vistas` de
+   este lado, `setup`, `build:cdn`, `gate:hipoteca` y cuatro specs de `tools/` del otro — y **G-7
+   en verde falso con CRLF**, que es el que no se nota (#170, UI#79). Memoria
+   `feedback_a_dev_machine_is_not_ci`.
+
+> **NewShore es el modelo del que se toma el funcionamiento interno, no la arquitectura.** Es el
+> proyecto en el que el arquitecto se basó para diseñar Synergos, y la auditoría lo estudió para
+> aprender **cómo se arma una funcionalidad desde el cableado del CMS**: macros nombradas por
+> funcionalidad, un resolver tipado por macro, diccionario por secciones, configuración de negocio
+> por feature, un host Razor tonto y un orquestador de página. **Vive en `C:\mcpl`, en la máquina
+> del arquitecto, y no está versionado ni se puede clonar**: un agente en un clon limpio no lo
+> tiene, y lo que sabe de él es lo que dicen ADR 0134-0139 y los informes locales de la auditoría.
+> Y es un **refinado**, no una mudanza: lo agnóstico de Synergos —registry, import map, SRI,
+> theming en runtime— ya es mejor que lo suyo, y lo que NewShore ata al framework no se copia.
 
 ## 7. Los MCPs — los dos que ganan su sitio, y los tres que no
 

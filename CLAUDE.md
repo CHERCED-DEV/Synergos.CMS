@@ -99,6 +99,35 @@
     instante en que existe lo que hay que deshacer. **Armada no es
     pendiente**: solo es trabajo cuando algo YA falló. Ver doc 09.
 
+### 0.C — Lo que el CMS coloca, y lo que le da
+
+> El modelo que decidió el arquitecto (ADR 0134, **Aceptada**). Es un **refinado**, no una
+> mudanza: se conserva lo agnóstico —registry, import map, SRI, SynHost, Layout Composer, tokens
+> por siteRoot— y se ordena lo que viaja por ahí. Las cifras que lo motivaron no van acá: están en
+> §5 y en el `CLAUDE.md` del repo hermano, cada una con su gate o con su medición.
+
+19. **Tres catálogos, y dos tipos de cosas que el editor coloca.** Los catálogos: las piezas
+    **Razor** del CMS (SSR puro, para contenido y SEO), las piezas **chicas de Angular** (el
+    design system del repo hermano: el vocabulario con el que se arman las features) y las
+    **funcionalidades** (apps de vertical y flujos: grandes por dentro, **un** tag hacia el CMS).
+    Lo que el editor pone en la página es una **funcionalidad** —se nombra por lo que hace— o una
+    **pieza** suelta. **Antes de crear, reusar o cablear algo se contesta cuál de las dos es**,
+    porque de eso depende qué le llega. El registry todavía no lo declara: hoy se infiere.
+20. **El CMS da CABLEADO, no la configuración completa de una funcionalidad.** A una
+    funcionalidad le llegan sus secciones de diccionario, su configuración de negocio —que el
+    editor no toca—, pocas decisiones del editor **como selector, nunca texto libre**, y la
+    identidad por el canal de runtime; cómo se arma por dentro es del código. A una **pieza** le
+    llegan su contenido y sus decisiones, y **monta su gemela del design system, nunca la
+    reimplementa** — la **regla de los dos pisos**. `configOverride`, el JSON libre del editor que
+    pisa todo, es hoy la puerta contraria. Hacia dónde, todo **Propuesto**: resolver tipado por
+    elemento (ADR 0135), diccionario por secciones declaradas (0136), configuración de negocio por
+    funcionalidad (0137), coordinación de página por eventos DOM (0138) y bundles con varias
+    entradas colocables frente a 0113 (0139). Describen el rumbo, no lo que ya está.
+21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
+    deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
+    declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por
+    defecto de un gate de alcance. Memoria `feedback_the_catalog_is_vocabulary_not_debt`.
+
 ## 1. Umbraco 13 LTS pinned
 
 Umbraco 13.16.2 — **no upgrade** a 14+ sin ADR nuevo. La razón:
@@ -266,7 +295,9 @@ Synergos.CMS/
 | "¿Cuándo se promueve algo a una capa compartida?" | `Synergos.CMS.Web/docs/product/10-promocion-bff-core.md` |
 | "¿Qué se hace con cada uno de los 49 `Stub*`?" | `docs/product/11-mapa-del-cableado.md` — hay gate (`WiringMapTests`) |
 | "¿Cómo se escribe el vertical OCTAVO?" | `Synergos.CMS.Web/docs/product/12-el-molde-de-un-vertical.md` — **diez** pasos: los tres ejes con su tabla medida, las dos formas del eje transaccional, la CUARTA pregunta del eje 3 (§3.1) y qué gate comprueba cada paso. Hay gate (`MoldeDelVerticalTests`, 13) |
-| "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los doce sub-specs derivados del molde, los dos MCPs y el gate del arnés. **Ya no es sólo diseño**: el arnés vive en `Synergos.Fabrica` con su `arnes.lock.json` (#141) y el spec tiene formato y validador (#140) |
+| "¿Cómo se pasa de un spec a un vertical? ¿Dónde vive el arnés?" | `Synergos.CMS.Web/docs/product/13-la-fabrica.md` — el spec como fuente, los catorce sub-specs derivados del molde, los dos MCPs y el gate del arnés. El spec **sí** tiene formato y validador (#140). **El arnés NO está publicado, y esta fila decía que sí**: el #141 sacó las skills de los dos repos hacia `Synergos.Fabrica`, ese repo **nunca se publicó** y `arnes.lock.json` fija un SHA que no existe — así que desde el #141 ninguno de los dos repos tiene skills. Se reconstruye en **#171**; mientras tanto las skills viven en la historia (`git ls-tree --name-only ac4778d1^ .claude/skills/`). Memoria `feedback_a_merge_order_warning_in_prose_is_not_a_gate` |
+| "¿Esto que voy a colocar es una FUNCIONALIDAD o una PIEZA?" | §0.C y ADR 0134. Una **funcionalidad** se nombra por lo que hace y recibe sólo cableado; una **pieza** recibe contenido y decisiones del editor, y monta su gemela del design system. El registry no lo declara todavía, así que se infiere de **qué necesita recibir**: si para funcionar le hace falta configuración de negocio o técnica, es una funcionalidad y esa configuración no la escribe el editor. El doc 12 §5.11 lo convierte en paso del molde |
+| "¿Qué DATO pide un elemento? ¿Puedo reusarlo?" | **Hoy, en dos sitios que se leen juntos**: lo que emite su vista `Views/Partials/SynHost/<X>.cshtml` y lo que **conserva** el sanitizador del elemento en el repo hermano (el `normalize*`/`sanitize*` de su `.ts`). Lo que uno emite y el otro no lee **se tira al hidratar**, sin error (`feedback_hydration_can_erase_what_ssr_painted`). `element-inputs.json` no alcanza: declara atributos, no la forma de `config` (doc 13 §5.bis). **Mañana**: el `record` por elemento de ADR 0135 (Propuesta), del que se genera el tipo TS. Nunca por el nombre (#163) |
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
 | "¿El molde da para GENERAR un vertical?" | Sobre Eventos, **sí**: el piloto 0 midió **71,4 %** y hoy da **100 % sobre 23 ficheros y CERO inventados** — el eje 3 escrito (#153), su sección arreglada (#154) y el composer parcial cruzado por CONTENIDO y no por nombre (#155), porque de los siete verticales sólo Academy tiene un fichero que se llame como él. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
@@ -2320,6 +2351,105 @@ Las que salieron de construir el árbol de servicios (§0.B):
   que marca al bueno enseña a ignorarlo. Lo que se vigila es que la **lista** de §11 no envejezca,
   en los dos sentidos.
 
+Las que salieron de la auditoría de reutilización «que todo sea Lego» (#169 · UI#78 · #172). Son
+de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en los dos árboles:
+
+- `feedback_a_grep_is_a_hypothesis` — **un conteo sacado de un grep es una HIPÓTESIS, no una
+  medición: la forma de la búsqueda decide la cifra antes que el disco.** En una sola sesión
+  salieron mal tres cifras que iban a decidir algo, las tres por el patrón y ninguna por el árbol.
+  (1) **El sujeto se contó a sí mismo**: «`card` monta su pieza del design system» porque se buscó
+  la clase `CardComponent` en la carpeta del elemento — y el elemento publicado **se llama**
+  `CardComponent` (importa `Badge`, `Button` y `Heading`; la tarjeta la rehace). (2) **El tag
+  partido en líneas**: «`syn-segmented` no lo usa nadie» buscando `<syn-segmented ` con espacio,
+  cuando el uso vivo es `<syn-segmented` y un salto de línea (`libs/shells/src/map/results-map.ts:145`
+  del repo hermano). (3) **La indirección**: «NewShore monta Angular desde 82 macros» contando el
+  atributo dentro de la macro, y eran **139** — 57 delegan en un controlador que pinta el host.
+  Las tres daban un número plausible, y un número plausible se relaya igual que uno medido.
+  **La regla: toda cifra que decide sale de DOS métodos distintos** —nombre y estructura, grep y
+  parser, conteo directo y ejecución— **y se dice cuál.** Cuando coinciden, la cifra deja de
+  depender del patrón: el 33/22 del design system lo dieron, cada uno por su lado, el cierre
+  transitivo del gate del #78 y un grafo que exige tag e import a la vez. Cuando no coinciden, **se
+  sospecha primero del patrón**. Es `feedback_counting_mentions_of_a_type_measures_the_opposite_of_using_it`
+  aplicado a quien mide. Tres atajos que salieron de acá: excluir del conteo el fichero del propio
+  sujeto, buscar un tag con `<x(\s|>|$)`, y seguir el salto por controlador antes de contar.
+
+- `feedback_a_merge_order_warning_in_prose_is_not_a_gate` — **un aviso de ORDEN DE MERGE escrito en
+  prosa no ordena nada: se mergea igual, y lo que avisaba pasa en silencio.** El commit que sacó
+  las skills de este repo (`ac4778d1`, #141) lo decía con todas las letras —«este PR deja el repo
+  SIN skills hasta que `Synergos.Fabrica` esté publicada […] No mergear antes»— y el cierre del
+  ticket lo repetía en su tabla: «3 commits locales, sin publicar», porque la sesión no tenía
+  permiso para crear repositorios. **Se mergeó en los dos repos.** `Synergos.Fabrica` no existe
+  (`gh repo view` no lo resuelve; el SHA del lock da 404), `arnes.lock.json` fija un commit que
+  sólo vivió en el clon de un contenedor, y **desde entonces ningún repo tiene skills** — con las
+  tres suites en verde, porque nada resuelve el lock: el diente que lo haría es del #142 y no se
+  construyó. Se reconstruye en #171.
+  Es §3.bis dicho del ticket y no aplicado al PR que lo necesitaba: *un proceso escrito como prosa
+  se olvida y uno que rompe el build se cumple*. **La pregunta que lo caza, antes de mergear algo
+  que depende de otra cosa: ¿qué se pone ROJO si lo de fuera no está?** Si la respuesta es «nada»,
+  el orden es una esperanza. Las salidas honestas son dos: que la dependencia exista antes de abrir
+  el PR, o que el PR traiga el gate que la exige —acá, que el lock resuelva contra el remoto—. Y
+  el daño viajó por el camino de `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`:
+  lo que se fue eran afirmaciones, y lo que se quedó no tenía cómo mirarlas.
+
+- `feedback_the_catalog_is_vocabulary_not_debt` — **una pieza del design system sin consumidor no
+  es deuda que se retira: es vocabulario de la fábrica, y la salida por defecto de un gate de
+  alcance no puede ser borrar.** El gate del #78 del repo hermano midió las piezas que no alcanza
+  ningún elemento y la auditoría proponía retirar doce. Medidas una por una: **ninguna tuvo nunca un
+  consumidor** —cero commits en la historia con su selector— y **la necesidad está en el disco en
+  80 sitios nombrados**, resuelta a mano cada vez. Dos pruebas escritas de que nadie buscó: el doc
+  22 de `refactor-docs/` (la auditoría de UX, local) pidió «crear» un resumen con enlace *Cambiar*
+  que ya era `syn-detail-summary`, y
+  **se creó `syn-segmented` en vez de arreglar `syn-segmented-control`**, el mismo concepto dos
+  veces. Veredicto: fusionar 3, mejorar y usar 5, usar 2, declarar 2, **retirar 0**. El arquitecto
+  lo decidió así (§0.C.21, ADR 0134).
+  **Lo que enseña no es «no borres»: es que el gate mide ALCANCE y la pregunta es de PRODUCTO.**
+  Qué no usa nadie lo dice el gate; qué hacer se decide por pieza, con cuatro salidas —usar,
+  mejorar, fusionar un duplicado, declarar con disparador— y retirar sólo con evidencia de que el
+  concepto sobra. **El daño de un catálogo que no se consulta no son las piezas sin uso: son las
+  duplicadas**, que nacen justo porque nadie buscó por CONCEPTO antes de crear (doc 12 §5.11). Es
+  la decisión de producto yendo antes que el gate, que es el orden de §3.bis.
+
+- `feedback_hydration_can_erase_what_ssr_painted` — **la hidratación puede BORRAR lo que el SSR
+  pintó bien, y ningún test de SSR lo ve, porque el SSR está bien.** Es el defecto D1 de la
+  auditoría: 43 colocables tiran lo que escribió el editor al hidratar —medido por otra sesión
+  ejecutando el sanitizador de cada uno con lo que emite su vista, y tres en vivo con control—. El
+  caso comprobado en el disco: `Views/Partials/SynHost/KpiCard.cshtml` arma el `config` con
+  `kpiLabel`, `kpiValue`, `kpiTrend`… y el elemento lee `label`, `value`, `trend` (`kpi-card.ts:133`
+  del repo hermano). La vista pinta su respaldo con el texto del editor —sin JavaScript la página
+  se ve bien—, el bundle arranca, normaliza un `config` donde no encuentra ninguna de sus claves y
+  **se pinta vacío encima**. En `dropdown` el CMS manda `optionsJson` y el elemento lee `options`:
+  un botón gris sin opciones.
+  **Por qué no lo ve nadie:** el SSR se prueba contra su HTML (bien), el elemento con `setInput` de
+  sus propias claves (bien), y el cable entre los dos —las claves que la vista mete en `config`—
+  no lo prueba nadie; `element-inputs.json` declara atributos, no la forma de `config`. Las dos
+  mitades en verde y el hueco en medio. **La pregunta que lo caza** es la de S11 mirada desde el
+  otro lado: *¿qué claves emite esta vista, y cuáles conserva el sanitizador?* — se contesta
+  leyendo los dos. **Lo que lo cierra** es el contrato tipado por elemento (ADR 0135, Propuesta):
+  con el tipo TS generado del `record`, `optionsJson` contra `options` es un `TS2339` al compilar
+  (medido en `dropdown`). Hasta entonces, un gate que **ejecute** el sanitizador con lo que emite
+  la vista y exija que cada clave mueva la salida.
+
+- `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
+  no sale sólo en rojo: una sale en VERDE.** Los workflows corren en `ubuntu-latest` (checkout LF,
+  SDK en inglés, `python3` presente, clon y no worktree); la máquina del arquitecto es Windows 11
+  con `core.autocrlf=true`, **sin `.gitattributes`**, el SDK en español y worktrees. Medido sobre el
+  mismo commit (#170, gemelo UI#79): **cinco rojos** que fallan del lado seguro
+  —`ComposeStackTests.El_compose_esta_al_dia…` (compara byte a byte contra un checkout CRLF),
+  `ContainerBuildTests.El_script_de_la_matriz…` (`service-matrix.mjs` compara `import.meta.url` con
+  `file://${argv[1]}` y sale 0 sin imprimir), `ProvisionWiringTests.El_manifiesto_se_lee…`
+  (`python3` es el alias vacío de la Store), `PoliticaDeBuildEnLaImagenTests.Todo_fichero_de_la_raiz…`
+  (en un worktree `.git` es un FICHERO) y `compilan-las-vistas` (reconoce su recibo por el texto en
+  inglés del compilador)— **y G-7 en verde cruzando 2 claves en 1 ruta, contra 57 en 22 con el
+  mismo commit en LF.** G-7 es el gate que §7 describe como el que «mira donde de verdad dolió», y
+  no tiene suelo: 2 no es vacío, así que la red de seguridad del #136 no dispara.
+  **El rojo de entorno se diagnostica una vez y se anota**, y cualquier rojo que no sea uno de ésos
+  es real hasta demostrar lo contrario. **El verde de entorno es el caro**, porque nadie vuelve a
+  mirar un verde. Tres costumbres que salieron de acá: en Windows los tramos de `npm test` se
+  corren sueltos, porque la cadena `&&` corta lo de detrás del primer rojo; ninguna herramienta
+  reconoce una salida por texto localizado; y una cifra que depende de bytes —líneas, claves por
+  regex— se compara en LF. La salida de fondo —`.gitattributes` con `eol=lf` y un job
+  `windows-latest` con los gates de Node— está propuesta en el #170, pendiente de confirmar.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2832,6 +2962,46 @@ segregación y molde en verde.
 > «¿existe algo publicado que haga esto?», y sobre un catálogo donde la mitad no la ha usado
 > nadie esa pregunta no distingue «reusable» de «escrito por si acaso». El #163 midió lo que
 > cuesta contestarla mal: **1,2 h de las 3,5 h** del piloto.
+
+> **Y construido tampoco es ÚNICO: de las quince con uno o ningún consumidor, doce tienen una
+> implementación LOCAL del mismo concepto en el CMS**, sin cliente `Http*` ni interruptor que las
+> una (informe 02 de la auditoría de reutilización, #169 — local, no versionado; lo midió un
+> agente y aquí no se re-derivó). Para S11 eso son **dos respuestas publicadas a la misma pregunta
+> y ninguna regla escrita que elija**. Los pares, del de más riesgo de elegir mal al de menos (a
+> la derecha, la capacidad):
+>
+> | concepto | lo local, sin `Http*` | capacidad |
+> |---|---|---|
+> | hilos entre personas | `IMessagingService` — y Gobierno usa los dos almacenes | Messaging |
+> | opinión sobre algo | comentarios, reacciones, reseñas y colecciones: cuatro seams | Engagement |
+> | catálogo buscable | `ICatalogIndex` + `CatalogText` — y **pliegan la ñ al revés**, los dos «a propósito» | Catalog |
+> | aviso del sistema a una persona | `ITransactionalNotifier` | Notifications |
+> | fichero privado | `IPrivateFileStore` (#26) | Documents |
+> | consentimiento | `IConsentLedger`, el de PHI | Consent |
+> | cola de moderación | `ICommentModeration` | Moderation |
+> | máquina de estados | el RMA y el embudo de leads | Workflow |
+> | «ya salió el pedido» | las etapas `shipped`/`delivered` — y no se escribe ninguna de las dos | Fulfillment |
+> | sello de un artefacto | `HmacTicketSigner` | Signing |
+> | señales de comportamiento | `IAnalyticsTracker` | Sessions |
+> | buscar por zona | `ApplyBounds`, un recuadro — la capacidad busca por radio: otra operación | Geo |
+>
+> **Los nombres de la columna derecha van sin formato de código a propósito**:
+> `SegundoConsumidorTests` busca en el fichero ENTERO las capacidades sin consumidor, y una
+> segunda mención entre backticks le tapa que alguien las quite de la lista de arriba. Medido al
+> escribir esta nota (#172): quitando Api.Geo de esa lista, el gate se pone rojo; con la misma
+> capacidad nombrada entre backticks en esta tabla, **pasa en verde sin ella**. Es la trampa que
+> `CapacidadesConectadasTests` ya evita buscando dentro de su frase y no en todo el fichero.
+>
+> **Lo que eso le corrige a la nota de arriba.** «Se construyeron a propósito antes que sus
+> consumidores» es verdad para Catalog y Geo —su dato lo autora el editor, es eje 1 y lo local es
+> lo correcto— y **no** para Engagement, Moderation ni Documents: su consumidor existe y
+> reimplementa, así que por el propio criterio del #169 son **huecos de cableado, no esperas**. Y
+> la unidad «el CMS cuenta como un consumidor» esconde que Workflow ya sirve **dos** casos de uso
+> por dos seams distintos (el expediente de Gobierno y el seguimiento de cuatro pipelines). **Para
+> la fábrica**: hasta que cada par tenga su regla, S11 no se contesta por la capacidad — lo que hoy
+> se reutiliza de verdad es **el seam del CMS con su interruptor** (`IAuditTrailWriter`,
+> `IOrderTrackingService`, `IIdentityTokenIssuer`). Qué gana en cada par es decisión de producto y
+> está abierta; ningún gate vigila los pares todavía.
 
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
 > y nadie la había vuelto a contar. Cuenta los códigos **literales distintos**
@@ -4373,6 +4543,36 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   reintentos sí (HU #29), pero la *forma* de reintentar —ocho intentos con
   retroceso exponencial— está cableada en `Compensator`. Nadie ha pedido
   otra todavía.
+- **Dos lecturas sin escritor, dormidas detrás de interruptores apagados**
+  (auditoría de reutilización, #169). Verificadas **leyendo y buscando
+  escritores en los tres árboles, no con procesos vivos** — un proceso vivo
+  podría encontrar un escritor que no pase por un literal `v1/…`. Es
+  `feedback_no_read_without_a_write_path` del lado del CONSUMIDOR, y las dos
+  se ven sólo mirando a quién no llama nadie:
+  - **`Bff.Salud` exige un consentimiento que nada otorga.** `AppointmentFlow`
+    comprueba `POST /v1/grants/check` con el propósito `salud.agenda` antes de
+    apartar el cupo, y **nadie escribe `POST /v1/grants`** fuera de los tests
+    de la capacidad: ni el CMS, ni `tools/`, ni la UI. `provisionar.sh` no lo
+    siembra, y no debe —es por persona—. `HttpClinicalSchedulingService` ya
+    traduce `consent.not_granted` a «hay que pedir el consentimiento», pero no
+    hay pantalla ni endpoint para pedirlo. **Con `Synergos:Salud:Mode=Bff` se
+    rechazaría toda cita**; lo tapa que el default es `Stub`. El
+    consentimiento que el paciente SÍ puede dar vive en otro almacén
+    (`IConsentLedger`, el de PHI): es el par «consentimiento» de la nota de
+    arriba, y decidir cuál de los dos lo sostiene es parte del arreglo.
+  - **La alerta de compensación colgada pide una plantilla que nada
+    aprovisiona.** `CompensationAlert` manda a `Api.Notifications` la clave
+    `bff.compensacion.colgada` (o la configurada), `POST /v1/templates` no
+    tiene llamador fuera de los tests, y `provisionar.sh` siembra definiciones,
+    recursos y precios, no plantillas. En un servidor limpio con la dirección
+    de la guardia puesta, **el aviso que cierra el lazo de una compensación
+    colgada sale `notifications.template_not_found`**, y
+    `provisionar.sh --verificar` no lo ve porque sólo mira lo que él mismo
+    siembra. **Y el doc 09 §5.2 la documenta con marcadores que el código ya no
+    manda** —`{cita} {desde} {pendientes}`, cuando `CompensationAlert` rellena
+    `saga`, `origen`, `desde` y `pendientes`—, así que quien la cree siguiendo el
+    doc recibe `notifications.missing_placeholder` al primer aviso — el mismo
+    400 que la última fila de esa tabla enseña para un marcador de más.
 - ~~`Api.Inventory` necesita ajuste relativo~~ — **hecho** (defecto #30).
   `POST /v1/items/{id}/adjust` acepta `delta` («devolvieron 2», relativo,
   **exige `Idempotency-Key`** porque un relativo reintentado suma dos
