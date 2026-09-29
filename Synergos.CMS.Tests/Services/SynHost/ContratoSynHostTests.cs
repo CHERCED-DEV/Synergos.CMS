@@ -53,6 +53,11 @@ public sealed class ContratoSynHostTests
     private static readonly IReadOnlyDictionary<string, (string Alias, object? Valor)[]> Muestras =
         new Dictionary<string, (string, object?)[]>(StringComparer.Ordinal)
         {
+            ["carousel"] = new (string, object?)[]
+            {
+                ("slidesJson", """[{"imageUrl":"/media/sala.jpg","alt":"Sala con ventanal","caption":"La sala"},{"imageUrl":"/media/cocina.jpg","alt":"Cocina integral","caption":"La cocina"}]"""),
+                ("autoplayInterval", "4000"),
+            },
             ["dropdown"] = new (string, object?)[]
             {
                 ("triggerLabel", "País"),
