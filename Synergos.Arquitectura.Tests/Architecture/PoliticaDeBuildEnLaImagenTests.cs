@@ -127,6 +127,8 @@ public sealed class PoliticaDeBuildEnLaImagenTests
             "prosa; ningún compilador la lee"),
         (".gitignore", true,
             "herramienta de repo, no del build"),
+        (".gitattributes", true,
+            "el fin de línea que git escribe al hacer checkout (#170); lo lee git, no MSBuild"),
         (".dockerignore", true,
             "decide qué ENTRA al contexto, y por eso no puede entrar él mismo"),
         ("compose*.yml", true,

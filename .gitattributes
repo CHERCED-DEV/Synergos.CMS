@@ -1,0 +1,34 @@
+# El fin de línea del checkout es LF en TODA máquina, y no depende de `core.autocrlf` (#170).
+#
+# Sin este fichero, cada clon decidía por su cuenta: en Windows con `core.autocrlf=true` el
+# índice guardaba LF y el árbol salía en CRLF. Los gates que comparan bytes o parten por líneas
+# veían otra cosa que en CI (`ubuntu-latest`, LF): `compose-gen --check` salía rojo contra un
+# compose byte-idéntico a HEAD, y G-7 (`contract-bodies.mjs`) salía VERDE cruzando 2 claves en
+# 1 ruta contra 57 en 22 — el verde falso es el caro, porque nadie vuelve a mirar un verde.
+# `.editorconfig` ya pedía `end_of_line = lf` para lo que se escribe; esto lo pide para lo que
+# git escribe al hacer checkout. Gemelo en Synergos.UI (UI#79).
+* text=auto eol=lf
+
+# Binarios: nunca se convierten. Medido con `git ls-files --eol` (2026-09-29): los versionados
+# son 30 .jpg, 2 .png y 1 .ico, todos en `wwwroot/`. El resto son tipos que el árbol produce o
+# puede recibir —fuentes, la base SQLite, ensamblados— y que `text=auto` acertaría a detectar
+# casi siempre; «casi» no alcanza para un fichero que un byte cambiado deja inservible.
+*.jpg     binary
+*.jpeg    binary
+*.png     binary
+*.gif     binary
+*.webp    binary
+*.ico     binary
+*.woff    binary
+*.woff2   binary
+*.ttf     binary
+*.otf     binary
+*.eot     binary
+*.pdf     binary
+*.zip     binary
+*.nupkg   binary
+*.dll     binary
+*.exe     binary
+*.pdb     binary
+*.sqlite  binary
+*.db      binary

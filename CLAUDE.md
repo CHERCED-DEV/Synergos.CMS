@@ -2432,9 +2432,10 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
 - `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
   no sale sólo en rojo: una sale en VERDE.** Los workflows corren en `ubuntu-latest` (checkout LF,
   SDK en inglés, `python3` presente, clon y no worktree); la máquina del arquitecto es Windows 11
-  con `core.autocrlf=true`, **sin `.gitattributes`**, el SDK en español y worktrees. Medido sobre el
-  mismo commit (#170, gemelo UI#79): **cinco rojos** que fallan del lado seguro
-  —`ComposeStackTests.El_compose_esta_al_dia…` (compara byte a byte contra un checkout CRLF),
+  con `core.autocrlf=true`, el SDK en español y worktrees, y el repo **no tenía `.gitattributes`**
+  hasta el #170. Medido sobre el mismo commit (#170, gemelo UI#79): **cinco rojos** que fallan del
+  lado seguro —`ComposeStackTests.El_compose_esta_al_dia…` (comparaba byte a byte contra un
+  checkout CRLF; **arreglado**: `.gitattributes` con `* text=auto eol=lf`),
   `ContainerBuildTests.El_script_de_la_matriz…` (`service-matrix.mjs` compara `import.meta.url` con
   `file://${argv[1]}` y sale 0 sin imprimir), `ProvisionWiringTests.El_manifiesto_se_lee…`
   (`python3` es el alias vacío de la Store), `PoliticaDeBuildEnLaImagenTests.Todo_fichero_de_la_raiz…`
@@ -2447,8 +2448,8 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   mirar un verde. Tres costumbres que salieron de acá: en Windows los tramos de `npm test` se
   corren sueltos, porque la cadena `&&` corta lo de detrás del primer rojo; ninguna herramienta
   reconoce una salida por texto localizado; y una cifra que depende de bytes —líneas, claves por
-  regex— se compara en LF. La salida de fondo —`.gitattributes` con `eol=lf` y un job
-  `windows-latest` con los gates de Node— está propuesta en el #170, pendiente de confirmar.
+  regex— se compara en LF. La salida de fondo la confirmó el arquitecto en el #170:
+  `.gitattributes` con `eol=lf` —**puesto**— y un job `windows-latest` con los gates de Node.
 
 ## 6. Prohibiciones explícitas
 

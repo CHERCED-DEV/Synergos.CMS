@@ -434,10 +434,10 @@ que el sub-arnés tiene que cargar —y lo que este repo ya escribe en sus guía
    verificó así seis informes, y el único que falló fue el del orquestador. Memoria
    `feedback_a_grep_is_a_hypothesis`.
 3. **Los rojos de entorno**, con su causa, para que una sesión en Windows no los re-diagnostique ni
-   se acostumbre a ver rojo: cuatro en `Synergos.Arquitectura.Tests` y `compilan-las-vistas` de
-   este lado, `setup`, `build:cdn`, `gate:hipoteca` y cuatro specs de `tools/` del otro — y **G-7
-   en verde falso con CRLF**, que es el que no se nota (#170, UI#79). Memoria
-   `feedback_a_dev_machine_is_not_ci`.
+   se acostumbre a ver rojo — y **G-7 en verde falso con CRLF**, que es el que no se nota (#170,
+   UI#79). Cuáles siguen vivos y cuáles se arreglaron lo dice, de este lado, la memoria
+   `feedback_a_dev_machine_is_not_ci` (§5 de `CLAUDE.md`), y del otro su ticket gemelo; no se
+   copia acá, porque una lista copiada es la que se queda atrás cuando se arregla el primero.
 
 > **NewShore es el modelo del que se toma el funcionamiento interno, no la arquitectura.** Es el
 > proyecto en el que el arquitecto se basó para diseñar Synergos, y la auditoría lo estudió para
