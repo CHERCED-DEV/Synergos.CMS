@@ -75,8 +75,17 @@ public sealed class ArnesDeCapacidades : IHttpClientFactory, IDisposable
             {
                 // Cada capacidad con su propio almacén, como en el compose: compartirlo haría que
                 // dos capacidades se vieran los ficheros y taparía justo lo que §0.B.11 vigila.
-                b.UseSetting("Storage:Root", raiz);
-                b.UseSetting("SharedKey", Llave);
+                //
+                // ⚠️ LA CLAVE LLEVA LA SECCIÓN DE LA CAPACIDAD, y sin ella no la lee nadie (#174).
+                // Esto ponía `Storage:Root` y `SharedKey`, y las veinte leen `<Cap>:Storage:Root`
+                // y `<Cap>:ApiKey`: una clave que ningún proceso lee no falla, se ignora. Cada host
+                // caía a su default —`bin/.../data/<cap>`, el MISMO en cada corrida— y la llave no
+                // se exigía. Medido: tras una corrida quedaba `data/payments` con el cobro
+                // `compra-1` dentro, así que la siguiente ya no lo creaba: lo recuperaba por su
+                // llave de idempotencia. `capacidad` es el nombre del cliente —«Payments»,
+                // «notifications»— y la configuración no distingue mayúsculas.
+                b.UseSetting($"{capacidad}:Storage:Root", raiz);
+                b.UseSetting($"{capacidad}:ApiKey", Llave);
             });
 
         // `CreateClient()` es lo que de verdad arranca el host; sin esto el fallo aparecería más
