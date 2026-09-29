@@ -144,6 +144,10 @@ public sealed class PoliticaDeBuildEnLaImagenTests
         (".env*", false,
             "secretos locales; .dockerignore los excluye. Opcional porque en un clon limpio " +
             "no existen y exigirlos pondría rojo el gate en la máquina de quien sí los tiene"),
+        (".git", false,
+            "en un `git worktree` `.git` es un FICHERO que apunta al repo principal; en un clon " +
+            "es carpeta y no se enumera acá. Opcional por eso, y el nombre EXACTO: el glob de " +
+            "una estrella no deja que `.git` explique a `.gitignore` ni a nada más (#170)"),
     ];
 
     private static string Raiz() => Proyectos.Raiz();

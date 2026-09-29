@@ -2443,7 +2443,8 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   `py -3` EJECUTÁNDOLOS, sin ninguno se dice antes de culpar al lector, y la salida se fuerza a
   `\n` porque el Python de Windows escribe `\r\n` y `moneda` llegaba «COP\r»),
   `PoliticaDeBuildEnLaImagenTests.Todo_fichero_de_la_raiz…`
-  (en un worktree `.git` es un FICHERO) y `compilan-las-vistas` (reconoce su recibo por el texto en
+  (en un worktree `.git` es un FICHERO; **arreglado**: `.git`, el nombre exacto, entra al censo
+  como opcional) y `compilan-las-vistas` (reconoce su recibo por el texto en
   inglés del compilador)— **y G-7 en verde cruzando 2 claves en 1 ruta, contra 57 en 22 con el
   mismo commit en LF.** G-7 es el gate que §7 describe como el que «mira donde de verdad dolió», y
   no tiene suelo: 2 no es vacío, así que la red de seguridad del #136 no dispara. **Arreglado en
