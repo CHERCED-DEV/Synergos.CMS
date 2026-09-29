@@ -2397,7 +2397,8 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   ningún elemento y la auditoría proponía retirar doce. Medidas una por una: **ninguna tuvo nunca un
   consumidor** —cero commits en la historia con su selector— y **la necesidad está en el disco en
   80 sitios nombrados**, resuelta a mano cada vez. Dos pruebas escritas de que nadie buscó: el doc
-  22 del hermano pidió «crear» un resumen con enlace *Cambiar* que ya era `syn-detail-summary`, y
+  22 de `refactor-docs/` (la auditoría de UX, local) pidió «crear» un resumen con enlace *Cambiar*
+  que ya era `syn-detail-summary`, y
   **se creó `syn-segmented` en vez de arreglar `syn-segmented-control`**, el mismo concepto dos
   veces. Veredicto: fusionar 3, mejorar y usar 5, usar 2, declarar 2, **retirar 0**. El arquitecto
   lo decidió así (§0.C.21, ADR 0134).
