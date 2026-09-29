@@ -2962,6 +2962,46 @@ segregación y molde en verde.
 > nadie esa pregunta no distingue «reusable» de «escrito por si acaso». El #163 midió lo que
 > cuesta contestarla mal: **1,2 h de las 3,5 h** del piloto.
 
+> **Y construido tampoco es ÚNICO: de las quince con uno o ningún consumidor, doce tienen una
+> implementación LOCAL del mismo concepto en el CMS**, sin cliente `Http*` ni interruptor que las
+> una (informe 02 de la auditoría de reutilización, #169 — local, no versionado; lo midió un
+> agente y aquí no se re-derivó). Para S11 eso son **dos respuestas publicadas a la misma pregunta
+> y ninguna regla escrita que elija**. Los pares, del de más riesgo de elegir mal al de menos (a
+> la derecha, la capacidad):
+>
+> | concepto | lo local, sin `Http*` | capacidad |
+> |---|---|---|
+> | hilos entre personas | `IMessagingService` — y Gobierno usa los dos almacenes | Messaging |
+> | opinión sobre algo | comentarios, reacciones, reseñas y colecciones: cuatro seams | Engagement |
+> | catálogo buscable | `ICatalogIndex` + `CatalogText` — y **pliegan la ñ al revés**, los dos «a propósito» | Catalog |
+> | aviso del sistema a una persona | `ITransactionalNotifier` | Notifications |
+> | fichero privado | `IPrivateFileStore` (#26) | Documents |
+> | consentimiento | `IConsentLedger`, el de PHI | Consent |
+> | cola de moderación | `ICommentModeration` | Moderation |
+> | máquina de estados | el RMA y el embudo de leads | Workflow |
+> | «ya salió el pedido» | las etapas `shipped`/`delivered` — y no se escribe ninguna de las dos | Fulfillment |
+> | sello de un artefacto | `HmacTicketSigner` | Signing |
+> | señales de comportamiento | `IAnalyticsTracker` | Sessions |
+> | buscar por zona | `ApplyBounds`, un recuadro — la capacidad busca por radio: otra operación | Geo |
+>
+> **Los nombres de la columna derecha van sin formato de código a propósito**:
+> `SegundoConsumidorTests` busca en el fichero ENTERO las capacidades sin consumidor, y una
+> segunda mención entre backticks le tapa que alguien las quite de la lista de arriba. Medido al
+> escribir esta nota (#172): quitando Api.Geo de esa lista, el gate se pone rojo; con la misma
+> capacidad nombrada entre backticks en esta tabla, **pasa en verde sin ella**. Es la trampa que
+> `CapacidadesConectadasTests` ya evita buscando dentro de su frase y no en todo el fichero.
+>
+> **Lo que eso le corrige a la nota de arriba.** «Se construyeron a propósito antes que sus
+> consumidores» es verdad para Catalog y Geo —su dato lo autora el editor, es eje 1 y lo local es
+> lo correcto— y **no** para Engagement, Moderation ni Documents: su consumidor existe y
+> reimplementa, así que por el propio criterio del #169 son **huecos de cableado, no esperas**. Y
+> la unidad «el CMS cuenta como un consumidor» esconde que Workflow ya sirve **dos** casos de uso
+> por dos seams distintos (el expediente de Gobierno y el seguimiento de cuatro pipelines). **Para
+> la fábrica**: hasta que cada par tenga su regla, S11 no se contesta por la capacidad — lo que hoy
+> se reutiliza de verdad es **el seam del CMS con su interruptor** (`IAuditTrailWriter`,
+> `IOrderTrackingService`, `IIdentityTokenIssuer`). Qué gana en cada par es decisión de producto y
+> está abierta; ningún gate vigila los pares todavía.
+
 > **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
 > y nadie la había vuelto a contar. Cuenta los códigos **literales distintos**
 > que las veinte construyen —el primer argumento de un `Rejection.*`, con
@@ -4502,6 +4542,36 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   reintentos sí (HU #29), pero la *forma* de reintentar —ocho intentos con
   retroceso exponencial— está cableada en `Compensator`. Nadie ha pedido
   otra todavía.
+- **Dos lecturas sin escritor, dormidas detrás de interruptores apagados**
+  (auditoría de reutilización, #169). Verificadas **leyendo y buscando
+  escritores en los tres árboles, no con procesos vivos** — un proceso vivo
+  podría encontrar un escritor que no pase por un literal `v1/…`. Es
+  `feedback_no_read_without_a_write_path` del lado del CONSUMIDOR, y las dos
+  se ven sólo mirando a quién no llama nadie:
+  - **`Bff.Salud` exige un consentimiento que nada otorga.** `AppointmentFlow`
+    comprueba `POST /v1/grants/check` con el propósito `salud.agenda` antes de
+    apartar el cupo, y **nadie escribe `POST /v1/grants`** fuera de los tests
+    de la capacidad: ni el CMS, ni `tools/`, ni la UI. `provisionar.sh` no lo
+    siembra, y no debe —es por persona—. `HttpClinicalSchedulingService` ya
+    traduce `consent.not_granted` a «hay que pedir el consentimiento», pero no
+    hay pantalla ni endpoint para pedirlo. **Con `Synergos:Salud:Mode=Bff` se
+    rechazaría toda cita**; lo tapa que el default es `Stub`. El
+    consentimiento que el paciente SÍ puede dar vive en otro almacén
+    (`IConsentLedger`, el de PHI): es el par «consentimiento» de la nota de
+    arriba, y decidir cuál de los dos lo sostiene es parte del arreglo.
+  - **La alerta de compensación colgada pide una plantilla que nada
+    aprovisiona.** `CompensationAlert` manda a `Api.Notifications` la clave
+    `bff.compensacion.colgada` (o la configurada), `POST /v1/templates` no
+    tiene llamador fuera de los tests, y `provisionar.sh` siembra definiciones,
+    recursos y precios, no plantillas. En un servidor limpio con la dirección
+    de la guardia puesta, **el aviso que cierra el lazo de una compensación
+    colgada sale `notifications.template_not_found`**, y
+    `provisionar.sh --verificar` no lo ve porque sólo mira lo que él mismo
+    siembra. **Y el doc 09 §5.2 la documenta con marcadores que el código ya no
+    manda** —`{cita} {desde} {pendientes}`, cuando `CompensationAlert` rellena
+    `saga`, `origen`, `desde` y `pendientes`—, así que quien la cree siguiendo el
+    doc recibe `notifications.missing_placeholder` al primer aviso — el mismo
+    400 que la última fila de esa tabla enseña para un marcador de más.
 - ~~`Api.Inventory` necesita ajuste relativo~~ — **hecho** (defecto #30).
   `POST /v1/items/{id}/adjust` acepta `delta` («devolvieron 2», relativo,
   **exige `Idempotency-Key`** porque un relativo reintentado suma dos
