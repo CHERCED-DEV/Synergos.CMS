@@ -116,21 +116,39 @@ sellado.
 Ésta es la mitad que el piloto 2 mide. La tabla se llena ahora y **no se toca**: al cerrar se
 escribe una columna «real» al lado.
 
-| sub-spec | predicho | por qué |
-|---|---|---|
-| **S1** DocTypes | **3 nuevos** — `equipmentpage` + dos element types | no existe un solo DocType de alquiler; medido |
-| **S2** fuente + reglas + interruptor | **2 ficheros**, forma A | es el noveno `Umbraco*Source`; los ocho anteriores son el molde |
-| **S3** seams | **2 × 2 ficheros** (catálogo y alquiler) + el del sello en S8 | uno por operación, no por sustantivo (#140) |
-| **S4** `AlquilerSettings` | **1** | `Mode`/`BaseUrl`/`ApiKey`/`TimeoutSeconds`, más `MaxRentalDays` |
-| **S5** composer | **1 nuevo** — `SeamComposer.Alquiler` | un vertical nuevo estrena el suyo (#155) |
-| **S6** cliente | **1** — `HttpEquipmentRentalService` | se nombra por el seam, no por el sustantivo |
-| **S7** artefacto | **2** + su gate de emisión | emisor y registro, FUERA del seam |
-| **S8** sello | **4** | seam, `Hmac*`, custodia de llave y POCO propio anidado (#154) |
-| **S9** controller | **1** + sus DTOs | `AlquilerController` |
-| **S10** gate | **1** — `AlquilerWiringTests` | |
-| **S11/S12** UI | **0 elementos nuevos** | `booking-wizard`, `calendar`, `lightbox-gallery` y `file-uploader` publicados |
-| **S13** capacidad | **0** | `Api.Booking` + `Api.Payments` + `Api.Signing` cubren todo |
-| **S14** orquestador | **1** — `Synergos.Bff.Alquiler`, el quinto | |
+| sub-spec | predicho | real | por qué (predicción) |
+|---|---|---|---|
+| **S1** DocTypes | **3 nuevos** — `equipmentpage` + dos element types | **3** ✓ **+ 2 DataTypes** que no predijo | no existe un solo DocType de alquiler; medido |
+| **S2** fuente + reglas + interruptor | **2 ficheros**, forma A | **2** ✓ | es el noveno `Umbraco*Source`; los ocho anteriores son el molde |
+| **S3** seams | **2 × 2 ficheros** (catálogo y alquiler) + el del sello en S8 | **8** — 2 interfaces, **4** implementaciones y 2 `record` | uno por operación, no por sustantivo (#140) |
+| **S4** `AlquilerSettings` | **1** | **2** — el sello se llevó el suyo | `Mode`/`BaseUrl`/`ApiKey`/`TimeoutSeconds`, más `MaxRentalDays` |
+| **S5** composer | **1 nuevo** — `SeamComposer.Alquiler` | **1** ✓ | un vertical nuevo estrena el suyo (#155) |
+| **S6** cliente | **1** — `HttpEquipmentRentalService` | **1** ✓ y con ese nombre | se nombra por el seam, no por el sustantivo |
+| **S7** artefacto | **2** + su gate de emisión | **2** ✓ | emisor y registro, FUERA del seam |
+| **S8** sello | **4** | **4** ✓ | seam, `Hmac*`, custodia de llave y POCO propio anidado (#154) |
+| **S9** controller | **1** + sus DTOs | **1** ✓ | `AlquilerController` |
+| **S10** gate | **1** — `AlquilerWiringTests` | **2** — y el segundo no es del vertical | |
+| **S11/S12** UI | **0 elementos nuevos** | **1 elemento nuevo**, 9 ficheros | `booking-wizard`, `calendar`, `lightbox-gallery` y `file-uploader` publicados |
+| **S13** capacidad | **0** | **0** ✓ — ni un endpoint nuevo | `Api.Booking` + `Api.Payments` + `Api.Signing` cubren todo |
+| **S14** orquestador | **1** — `Synergos.Bff.Alquiler`, el quinto | **1** ✓, 8 ficheros | |
+
+**Once de las trece aciertan y dos fallan. Las dos que fallan son el resultado del piloto**, y no
+se parecen entre sí:
+
+- **S11/S12 es una predicción que se hizo leyendo el registry y no el elemento.** `booking-wizard`
+  existe, está publicado y **tiene forma de hotel**: noches, huéspedes, habitaciones. Un alquiler
+  es unidades de un equipo por días con una garantía retenida, y eso no es el mismo asistente con
+  otras etiquetas. La pregunta que habría acertado no es «¿hay un elemento que haga esto?» sino
+  **«¿qué DATO pide este elemento, y es el mío?»** — y se contesta abriendo su `element-inputs`,
+  que cuesta un minuto. El coste de creerle: la mitad del tiempo del piloto.
+- **S4 falló por una regla que este mismo spec cita en S8.** El #154 dejó escrito que el sello
+  lleva POCO propio y sección anidada; S4 predijo un POCO y S8 cuatro ficheros —uno de los cuales
+  **es ese POCO**—, así que la tabla se contradecía consigo misma sin que nadie lo notara al
+  escribirla. Una predicción por sub-spec no cruza con la de al lado, y nada la obliga.
+
+**Y la predicción de RESULTADO —los dos gates del eje 2— acertó**: los dos están, mutados diente
+por diente, dentro de `AlquilerWiringTests`. Lo que no predijo nadie es el **tercero**
+(`AfirmacionDeOrquestadorTests`), que no salió del molde sino de levantar los procesos: ver abajo.
 
 **Y una predicción que no es de tamaño sino de resultado:** el ticket dice que si hace falta un
 gate nuevo, *eso es el resultado*. Se predicen **dos**, los dos por el eje 2:
@@ -174,3 +192,58 @@ cabecera de un spec no puede derivar los rechazos, porque son el diseño y no la
   `Api.Inventory`, y meterlos ahora sería una segunda línea de producto sin pedirlo nadie.
 - **No decide la política de daño.** El monto del daño llega **ya calculado** por quien recibe el
   equipo, igual que la penalidad de cancelación de Viajes y la devolución parcial de Tienda.
+
+## El cierre del piloto 2 — las cuatro cifras, medidas
+
+El ticket #147 puso el criterio de salida en el **tiempo** y pidió cuatro cifras. Van con cómo se
+midió cada una, porque una cifra sin su método es una opinión con decimales.
+
+### 1. Horas de pared, del spec al PR verde
+
+**3,5 h**, del commit del spec (15:18) al último (18:51), sobre doce commits.
+
+**Y la comparación que el ticket pedía —contra Social— NO se puede hacer desde el repo, así que
+no se hace.** El piloto 1 entró en **un** commit, de modo que su rango medido es cero: el sello de
+git mide cuándo se escribió el último byte, no cuánto se tardó. Fabricar el dato habría sido el
+defecto que esta misma épica documenta (`a_fabrication_can_be_a_derivation`): saldría de datos
+reales y mentiría igual. Si alguien quiere el número, la fuente es el historial de la sesión, que
+no vive acá.
+
+**Lo que el rango sí dice, y es lo útil:** las 3,5 h se repartieron aproximadamente en **1,3 h de
+eje 1 + eje 2 + eje 3** (lo que el molde sí describe), **1,2 h de UI** (el elemento que el spec
+predijo que no haría falta) y **1 h de los dos defectos que encontraron los procesos vivos**. O
+sea que **el molde costó poco más de un tercio**, y los otros dos tercios los pagaron una
+predicción equivocada y un paso de verificación que ningún test sustituye.
+
+### 2. Cuántas veces el molde se quedó corto — y CUÁLES, que es lo que importa
+
+**Cuatro**, y sólo dos merecen trabajo:
+
+1. **El eje 1 no predice si un elemento publicado SIRVE.** El molde manda mirar el registry;
+   mirar el registry dice que `booking-wizard` existe, no que pida los datos correctos. Es un
+   sub-spec que falta (S11 sólo cuenta elementos, no los cruza contra el dato que el vertical
+   necesita).
+2. **Nada cruza una predicción con la de al lado.** S4 y S8 se contradecían en la misma tabla.
+3. *(menor)* S3 cuenta «ficheros por seam» y no distingue interfaces de implementaciones, así que
+   un seam con dos implementaciones —que es lo normal, stub + cableado— sale al doble.
+4. *(menor)* S1 no cuenta los DataTypes que un element type nuevo arrastra si va en Block List.
+
+### 3. Gates nuevos: **3**
+
+`AlquilerWiringTests` (12) y `AfirmacionDeOrquestadorTests` (3). El ticket decía que un gate nuevo
+*es* el resultado; los dos del eje 2 los predijo el spec, y **el tercero no salió del molde: salió
+de levantar los procesos**, que es el dato más caro del piloto.
+
+### 4. Hallazgos abiertos: **2 defectos cerrados acá + 4 anotados**
+
+Los dos que se cerraron en esta HU porque el producto no funcionaba sin ellos están en
+`CLAUDE.md` §5 con su regla. Los otros cuatro quedan anotados en el ticket.
+
+### Y la conclusión que el piloto 2 deja escrita
+
+**El molde llega hasta el borde y se detiene justo donde empieza lo que cuesta.** Los once
+aciertos son todos de estructura —dónde va un fichero, cómo se llama, qué sección lee—; los dos
+fallos y los dos defectos son todos de **contrato con algo que ya existe**: un elemento publicado
+que no sirve, una capacidad que exige un campo que nadie manda, una proyección que no tiene caso
+para un estado que sí ocurre. Generar la estructura es lo que el molde ya sabe hacer; **cruzarla
+contra lo construido es lo que todavía hace una persona levantando los procesos.**
