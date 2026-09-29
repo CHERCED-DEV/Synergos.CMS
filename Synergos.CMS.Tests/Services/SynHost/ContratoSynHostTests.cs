@@ -61,6 +61,11 @@ public sealed class ContratoSynHostTests
                 ("kpiDelta", "+12 %"),
                 ("kpiPeriod", "vs. agosto"),
             },
+            ["tag"] = new (string, object?)[]
+            {
+                ("tagLabel", "Oferta"),
+                ("tagColor", "success"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

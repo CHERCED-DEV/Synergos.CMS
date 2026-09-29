@@ -48,6 +48,31 @@
         "deltaLabel": "+12 %",
         "period": "vs. agosto"
       }
+    },
+    {
+      "nombre": "tag",
+      "tipo": "pieza",
+      "record": "TagProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "color",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "label": "Oferta",
+        "color": "success"
+      }
     }
   ],
   "tipos": []
