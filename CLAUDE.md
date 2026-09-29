@@ -2442,7 +2442,10 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   (en un worktree `.git` es un FICHERO) y `compilan-las-vistas` (reconoce su recibo por el texto en
   inglés del compilador)— **y G-7 en verde cruzando 2 claves en 1 ruta, contra 57 en 22 con el
   mismo commit en LF.** G-7 es el gate que §7 describe como el que «mira donde de verdad dolió», y
-  no tiene suelo: 2 no es vacío, así que la red de seguridad del #136 no dispara.
+  no tiene suelo: 2 no es vacío, así que la red de seguridad del #136 no dispara. **Arreglado en
+  el LECTOR y no sólo en el checkout**: el `.gitattributes` de este repo no decide cómo se clonó el
+  otro, así que `contract-bodies.mjs` normaliza CRLF al leer y su `--autoprueba` escribe un cliente
+  en LF y en CRLF que tienen que dar la misma cifra escrita (sin normalizar: 1 clave en 1 ruta).
   **El rojo de entorno se diagnostica una vez y se anota**, y cualquier rojo que no sea uno de ésos
   es real hasta demostrar lo contrario. **El verde de entorno es el caro**, porque nadie vuelve a
   mirar un verde. Tres costumbres que salieron de acá: en Windows los tramos de `npm test` se
@@ -2659,7 +2662,7 @@ node tools/spec-valida.mjs --autoprueba   # G-8: el LECTOR del spec, ejecutado (
 ```bash
 node tools/contract-keys.mjs  --ui-path=/tmp/ui   # lo que el borde EMITE  ↔ lo que la app LEE
 node tools/contract-bodies.mjs --ui-path=/tmp/ui  # lo que la app MANDA   ↔ lo que el borde DECLARA
-node tools/contract-bodies.mjs --autoprueba       # …y sus fixtures, sin repos ni red (#164)
+node tools/contract-bodies.mjs --autoprueba       # …y sus fixtures, sin repos ni red (#164, #170)
 ```
 
 **G-7 es el que mira donde de verdad dolió.** En los ocho verticales auditados (#102 a #105)
@@ -2678,6 +2681,11 @@ cuadras. Un campo derivado que pisa uno recibido no se detecta mirando la pantal
 Por eso G-7 es **error y no trinquete**: una clave que se manda a una ruta y cuyo record no
 la declara no tiene lectura inocente. Hoy ligan 57 claves en 22 rutas.
 
+> **Y esa cifra no depende de cómo se clonó el hermano** (#170). Con el UI en CRLF el gate salía
+> verde cruzando **2 claves en 1 ruta**: sus regex acaban en `(.*)$`, y `.` no consume el `\r`.
+> Hoy todo fichero entra por un único lector que normaliza a LF, y la autoprueba lo exige con el
+> mismo cliente escrito en los dos fines de línea.
+>
 > **Lo que G-7 no ve, y lo dice al correr**: los cuerpos que construye una función
 > (`postJson(url, toCourseDraftWire(body))`) quedan fuera, porque seguirla exige resolver su
 > return. Los lista en cada corrida en vez de contarlos como cubiertos.

@@ -32,12 +32,22 @@
  * su return, y es otro trabajo. Los declara al final para que se vean, en vez de contarlos
  * como cubiertos.
  *
+ * TODO FICHERO SE LEE EN LF, Y NO ES UN DETALLE (#170)
+ * ----------------------------------------------------
+ * Los regex de abajo están escritos contra líneas LF: `(.*)$` no casa si la línea acaba en
+ * `\r`, porque `.` no consume un fin de línea. Con el UI en CRLF —Windows con
+ * `core.autocrlf=true`, o cualquier clon con otra configuración— el gate perdía toda llamada
+ * `postJson(url, …)` y salía VERDE cruzando **2 claves en 1 ruta** contra 57 en 22 del mismo
+ * commit en LF. 2 no es vacío, así que ninguna red de seguridad lo veía. El `.gitattributes`
+ * arregla el checkout de ESTE repo; el lector no puede depender de cómo se clonó el otro.
+ *
  * USO
  *   node tools/contract-bodies.mjs [--ui-path=/ruta]   # o SYNERGOS_UI_PATH
  *   node tools/contract-bodies.mjs --autoprueba        # sus fixtures, sin repos ni red
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,6 +67,9 @@ const PARES = [
     { app: 'booking-wizard', controllers: ['BookingController.cs'] },
     { app: 'blogs', controllers: ['BlogsController.cs', 'CommentsController.cs'] },
 ];
+
+/** El ÚNICO lector de fuentes del gate: todo sale en LF, venga como venga del disco (#170). */
+const leer = (f) => fs.readFileSync(f, 'utf8').replace(/\r\n?/g, '\n');
 
 const sinComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
 const camel = (s) => s.charAt(0).toLowerCase() + s.slice(1);
@@ -93,7 +106,7 @@ function declaradoPorElCms(controllers) {
         const f = path.join(CMS, 'Synergos.CMS.Web', 'Controllers', c);
         if (!fs.existsSync(f)) continue;
         alguno = true;
-        const src = sinComentarios(fs.readFileSync(f, 'utf8'));
+        const src = sinComentarios(leer(f));
 
         // Todos los records del fichero, por nombre, con sus claves.
         const records = new Map();
@@ -123,8 +136,8 @@ for (const m of src.matchAll(/record\s+(\w+)\s*\(([\s\S]*?)\)\s*[;{]/g)) {
 }
 
 /** ruta → claves que el cliente MANDA, de los cuerpos literales. */
-function mandadoPorLaUi(app) {
-    const dir = path.join(UI, 'platforms', 'angular', 'apps', 'elements', 'modules', app, 'src');
+function mandadoPorLaUi(app, ui = UI) {
+    const dir = path.join(ui, 'platforms', 'angular', 'apps', 'elements', 'modules', app, 'src');
     if (!fs.existsSync(dir)) return null;
 
     const ficheros = [];
@@ -152,7 +165,7 @@ function mandadoPorLaUi(app) {
             const q = path.join(d, e.name);
             if (e.isDirectory()) { indexar(q); continue; }
             if (!e.name.endsWith('.ts')) continue;
-            const src = fs.readFileSync(q, 'utf8');
+            const src = leer(q);
             for (const m of src.matchAll(/(?:interface|type)\s+(\w+)\s*(?:=\s*)?\{([\s\S]*?)\n\}/g)) {
                 tipos.set(m[1], m[2]);
             }
@@ -164,7 +177,7 @@ function mandadoPorLaUi(app) {
     const noLiterales = [];
 
     for (const f of ficheros) {
-        const src = fs.readFileSync(f, 'utf8');
+        const src = leer(f);
         const lineas = src.split('\n');
 
         /**
@@ -322,8 +335,12 @@ function mandadoPorLaUi(app) {
  * único que lo prueba: con sólo la literal, el colapso por último segmento y el cruce por forma dan
  * el mismo resultado y el defecto pasa en verde.
  *
- * <b>Qué NO cubre, dicho para no mentir sobre su alcance:</b> el descubrimiento de ficheros y los
- * regex que sacan las rutas y las claves de la fuente. Eso necesita los dos repos, y lo ejercita la
+ * <b>Y el fin de línea del lado UI (#170)</b>: un cliente de cuatro rutas escrito en LF y en CRLF,
+ * leído por `mandadoPorLaUi` —descubrimiento de ficheros y regex del lado UI incluidos—, tiene que
+ * dar la cifra escrita en los dos. Sin `leer()` normalizando, el CRLF da 1 clave en 1 ruta.
+ *
+ * <b>Qué NO cubre, dicho para no mentir sobre su alcance:</b> el lado CMS (records y `[HttpPost]`
+ * de los controllers) y los clientes reales del UI. Eso necesita los dos repos, y lo ejercita la
  * corrida de verdad.
  */
 function autoprueba() {
@@ -365,6 +382,74 @@ function autoprueba() {
     caso('acabaInterpolada ve el parámetro final', acabaInterpolada('post/{id}'), true);
     caso('acabaInterpolada NO marca una acción literal', acabaInterpolada('rentals/{id}/return'), false);
 
+    // ── El lado UI en CRLF da lo MISMO que en LF (#170) ──────────────────────────────────────
+    //
+    // Se escribe el mismo cliente dos veces en un directorio temporal —LF y CRLF— y se lee con
+    // `mandadoPorLaUi`, el código de verdad y no una copia. El fixture lleva las cuatro formas
+    // de cuerpo que el cruce sabe leer, y la de `JSON.stringify` es la que exige el caso: es la
+    // única que sobrevivía al CRLF, así que sin ella las dos corridas darían 0 y 0 —«iguales»—
+    // y sin la cifra esperada, 1 y 1 también lo serían. Por eso se compara contra la cifra
+    // escrita Y entre sí.
+    const cliente = [
+        'export interface NewNote {',
+        '  readonly title: string;',
+        '  body?: string;',
+        '}',
+        '',
+        'export class FixtureApiClient {',
+        '  async lead(apiBase: string, name: string): Promise<unknown> {',
+        '    const url = `${apiBase}/lead`;',
+        "    return this.postJson(url, { name, phone: '1' });",
+        '  }',
+        '',
+        '  async note(',
+        '    apiBase: string,',
+        '    draft: NewNote,',
+        '  ): Promise<unknown> {',
+        '    const url = `${apiBase}/notes/${draft.title}/draft`;',
+        '    return this.postJson(url, draft);',
+        '  }',
+        '',
+        '  async visit(',
+        '    apiBase: string,',
+        '    body: { listingId: string; slot: { date: string; time: string } },',
+        '  ): Promise<unknown> {',
+        '    const url = `${apiBase}/visit`;',
+        '    return this.postJson(url, body);',
+        '  }',
+        '',
+        '  async favorite(apiBase: string, listingId: string): Promise<unknown> {',
+        '    const url = `${apiBase}/favorite`;',
+        "    return fetch(url, { method: 'POST', body: JSON.stringify({ listingId }) });",
+        '  }',
+        '}',
+        '',
+    ];
+    const plano = (r) => (r === null ? 'null' : [...r.porRuta]
+        .map(([ruta, claves]) => `${ruta}:${[...claves].sort().join('+')}`).sort().join(' '));
+    const cifra = (r) => (r === null ? 'null'
+        : `${[...r.porRuta.values()].reduce((n, c) => n + c.size, 0)} claves en ${r.porRuta.size} rutas`);
+
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'g7-autoprueba-'));
+    try {
+        const escribir = (raiz, fin) => {
+            const dir = path.join(raiz, 'platforms', 'angular', 'apps', 'elements', 'modules', 'fixture', 'src');
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, 'fixture-api.client.ts'), cliente.join(fin));
+            return raiz;
+        };
+        const lf = mandadoPorLaUi('fixture', escribir(path.join(tmp, 'lf'), '\n'));
+        const crlf = mandadoPorLaUi('fixture', escribir(path.join(tmp, 'crlf'), '\r\n'));
+
+        caso('el fixture en LF cruza sus cuatro rutas', cifra(lf), '7 claves en 4 rutas');
+        caso('…con las claves de cada una',
+            plano(lf), 'favorite:listingId lead:name+phone notes/{}/draft:body+title visit:listingId+slot');
+        caso('el MISMO fixture en CRLF da la misma cifra (daba 1 clave en 1 ruta)', cifra(crlf), cifra(lf));
+        caso('…y las mismas claves por ruta', plano(crlf), plano(lf));
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+
     let fallos = 0;
     for (const { nombre, real, esperado } of casos) {
         const ok = real === esperado;
@@ -372,7 +457,7 @@ function autoprueba() {
         console.log(`  ${ok ? '✓' : '✗'} ${nombre}${ok ? '' : `\n      esperado ${JSON.stringify(esperado)}, dio ${JSON.stringify(real)}`}`);
     }
 
-    console.log(`\n${fallos === 0 ? '✓' : '✗'} ${casos.length - fallos}/${casos.length} fixtures del cruce por forma.`);
+    console.log(`\n${fallos === 0 ? '✓' : '✗'} ${casos.length - fallos}/${casos.length} fixtures del cruce por forma y del fin de línea.`);
     process.exit(fallos === 0 ? 0 : 1);
 }
 
