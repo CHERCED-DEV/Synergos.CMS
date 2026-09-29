@@ -118,10 +118,19 @@ if (encontradas.length < 100) {
 log('compilando las vistas (RazorCompileOnBuild=true)…');
 let salida = '';
 try {
+  // `DOTNET_CLI_UI_LANGUAGE=en` y no es cosmético (#170): el recibo de arriba se reconoce por
+  // el TEXTO del CS0234, y con el SDK en español el compilador dice «El tipo o el nombre del
+  // espacio de nombres 'PublishedModels' no existe…» (medido). Sin esto, en la máquina del arquitecto el gate caía en su red de
+  // seguridad y culpaba a `RazorCompileOnBuild` con Razor compilando perfectamente. Se fija
+  // acá, en el entorno del hijo, para que el gate no dependa de cómo está configurado quien
+  // lo corre: ninguna herramienta reconoce una salida por texto localizado.
   salida = execFileSync('dotnet', [
     'build', PROYECTO, '-t:Rebuild', '-p:RazorCompileOnBuild=true', '--nologo',
     '-c', arg('--configuration', 'Debug'),
-  ], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
+  ], {
+    cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024,
+    env: { ...process.env, DOTNET_CLI_UI_LANGUAGE: 'en' },
+  });
 } catch (e) {
   // Un build que falla es lo NORMAL acá: los CS0234 de los modelos en memoria lo tumban.
   salida = `${e.stdout ?? ''}${e.stderr ?? ''}`;

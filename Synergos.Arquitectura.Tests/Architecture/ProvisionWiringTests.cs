@@ -67,6 +67,9 @@ public sealed class ProvisionWiringTests
             WorkingDirectory = RepoRoot(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // El guion escribe UTF-8; sin esto, en Windows el mensaje de un rojo sale ilegible (#170).
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         psi.ArgumentList.Add(Path.Combine("tools", "provisionar.sh"));
         psi.ArgumentList.Add("--autoprueba");

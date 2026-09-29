@@ -2437,25 +2437,55 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   la vista y exija que cada clave mueva la salida.
 
 - `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
-  no sale sólo en rojo: una sale en VERDE.** Los workflows corren en `ubuntu-latest` (checkout LF,
-  SDK en inglés, `python3` presente, clon y no worktree); la máquina del arquitecto es Windows 11
-  con `core.autocrlf=true`, **sin `.gitattributes`**, el SDK en español y worktrees. Medido sobre el
-  mismo commit (#170, gemelo UI#79): **cinco rojos** que fallan del lado seguro
-  —`ComposeStackTests.El_compose_esta_al_dia…` (compara byte a byte contra un checkout CRLF),
-  `ContainerBuildTests.El_script_de_la_matriz…` (`service-matrix.mjs` compara `import.meta.url` con
-  `file://${argv[1]}` y sale 0 sin imprimir), `ProvisionWiringTests.El_manifiesto_se_lee…`
-  (`python3` es el alias vacío de la Store), `PoliticaDeBuildEnLaImagenTests.Todo_fichero_de_la_raiz…`
-  (en un worktree `.git` es un FICHERO) y `compilan-las-vistas` (reconoce su recibo por el texto en
-  inglés del compilador)— **y G-7 en verde cruzando 2 claves en 1 ruta, contra 57 en 22 con el
-  mismo commit en LF.** G-7 es el gate que §7 describe como el que «mira donde de verdad dolió», y
-  no tiene suelo: 2 no es vacío, así que la red de seguridad del #136 no dispara.
-  **El rojo de entorno se diagnostica una vez y se anota**, y cualquier rojo que no sea uno de ésos
+  no sale sólo en rojo: una sale en VERDE.** Hasta el #170 todos los workflows corrían en
+  `ubuntu-latest` (checkout LF, SDK en inglés, `python3` presente, clon y no worktree), y la máquina
+  del arquitecto es Windows 11 con `core.autocrlf=true`, el SDK en español y worktrees. Medido sobre
+  el mismo commit (#170, gemelo UI#79): cinco rojos que fallaban del lado seguro **y G-7 en verde
+  cruzando 2 claves en 1 ruta, contra 57 en 22 con el mismo commit en LF** — el gate que §7 describe
+  como el que «mira donde de verdad dolió», y sin suelo: 2 no es vacío, así que la red del #136 no
+  dispara. **Cada uno llevaba escrita una suposición sobre el sistema operativo en vez de un dato
+  del árbol**, y así se arregló cada uno:
+  - `ComposeStackTests.El_compose_esta_al_dia…` suponía un checkout LF (compara byte a byte):
+    `.gitattributes` con `* text=auto eol=lf`, que arregla la clase entera en ESTE repo. **Y debajo
+    había un segundo rojo que el primero tapaba**: con `compose-gen --check` ya en verde, el test
+    seguía rojo, porque .NET en Windows lee la salida de `node` con la página de códigos de la
+    consola y «al día» llegaba «al d├¡a». Se lee en UTF-8 explícito, también en los otros dos tests
+    que lanzan un proceso. La lección: un arreglo se verifica con el TEST, no con el script que el
+    test lanza.
+  - G-7 suponía lo mismo del repo HERMANO —sus regex acaban en `(.*)$`, y `.` no consume el
+    `\r`—, y el `.gitattributes` de acá no decide cómo se clonó el otro: `contract-bodies.mjs`
+    normaliza al leer, y su `--autoprueba` escribe un cliente en LF y en CRLF que tienen que dar la
+    misma cifra escrita (sin normalizar: 1 clave en 1 ruta).
+  - `ContainerBuildTests.El_script_de_la_matriz…` suponía que una ruta es una URL si se le pega
+    `file://`: `service-matrix.mjs` salía 0 sin imprimir nada. Ahora `pathToFileURL(argv[1]).href`.
+  - `ProvisionWiringTests.El_manifiesto_se_lee…` suponía que un `python3` en el PATH corre (es el
+    alias vacío de la Store): se prueban `python3`, `python` y `py -3` EJECUTÁNDOLOS, sin ninguno se
+    dice antes de culpar al lector, y la salida se fuerza a `\n` —el Python de Windows escribe
+    `\r\n` y `moneda` llegaba «COP\r»—.
+  - `PoliticaDeBuildEnLaImagenTests.Todo_fichero_de_la_raiz…` suponía que `.git` es carpeta; en un
+    worktree es un FICHERO. `.git`, el nombre exacto, entra al censo como opcional.
+  - `compilan-las-vistas` suponía un compilador en inglés (reconoce su recibo por el texto del
+    CS0234): fija `DOTNET_CLI_UI_LANGUAGE=en` en el entorno de su build.
+
+  **Y para que no vuelva, `windows.yml`** corre en `windows-latest` los gates de Node que no
+  necesitan SDK ni Docker, y su primer paso comprueba que el checkout salió en LF con el
+  `core.autocrlf=true` del runner. Lo del otro lado es del UI#79.
+  **Tres trampas al aplicarlo, medidas.** (1) El `.gitattributes` **no reescribe un checkout que ya
+  existe**: sus ficheros siguen en CRLF hasta que git vuelve a escribirlos, y hasta entonces
+  `compose-gen --check` sigue rojo; se arregla una vez, con el árbol limpio, borrando los ficheros
+  versionados y haciendo `git checkout -- .`. (2) **`git commit -- <rutas>` relee el ÁRBOL**, así
+  que no lleva lo que `git add --renormalize` o `git rm --cached` dejaron en el índice —un blob CRLF
+  del índice no se normaliza con `text=auto`, y un fichero sacado del índice que sigue en el disco
+  vuelve a entrar—: esos commits van sin rutas, tras mirar `git diff --cached --name-status`. (3) Un
+  fichero que el build reescribe en CRLF sale «modificado» en `git status` con un `git diff` vacío
+  —git ve el tamaño cambiado y no re-hashea—: eran los `appsettings-schema*.json` que copia
+  `Umbraco.Cms.Targets`, salida de build que se versionaba por error en los dos proyectos de tests.
+  **El rojo de entorno se diagnostica una vez y se anota**, y cualquier rojo que no sea uno conocido
   es real hasta demostrar lo contrario. **El verde de entorno es el caro**, porque nadie vuelve a
-  mirar un verde. Tres costumbres que salieron de acá: en Windows los tramos de `npm test` se
-  corren sueltos, porque la cadena `&&` corta lo de detrás del primer rojo; ninguna herramienta
-  reconoce una salida por texto localizado; y una cifra que depende de bytes —líneas, claves por
-  regex— se compara en LF. La salida de fondo —`.gitattributes` con `eol=lf` y un job
-  `windows-latest` con los gates de Node— está propuesta en el #170, pendiente de confirmar.
+  mirar un verde. Tres costumbres que salieron de acá: en Windows los tramos de `npm test` se corren
+  sueltos, porque la cadena `&&` corta lo de detrás del primer rojo; ninguna herramienta reconoce
+  una salida por texto localizado; y una cifra que depende de bytes —líneas, claves por regex— se
+  compara en LF, **normalizando en el lector** y no sólo en el checkout.
 
 - `feedback_the_verifier_cannot_come_from_what_it_verifies` — **lo que comprueba que una
   dependencia fijada existe no puede venir de esa dependencia; ese pedazo —y sólo ése— se queda en
@@ -2678,12 +2708,17 @@ node tools/spec-valida.mjs --autoprueba   # G-8: el LECTOR del spec, ejecutado (
 > `node tools/spec-valida.mjs --ui-path=/tmp/ui`. La línea base del oráculo se regenera con
 > `--actualizar` y el diff va en el commit que lo causó.
 
+> **Y corren también en Windows** (`windows.yml`, #170): los tres de arriba, la autoprueba de
+> G-7, `compose-gen --check` y `service-matrix.mjs`, en `windows-latest` y detrás de un paso que
+> exige el checkout en LF. Existe porque seis gates llegaron a llevar escrita una suposición de
+> Linux —ver `feedback_a_dev_machine_is_not_ci` en §5—, y uno salía VERDE por ella.
+
 **Y DOS más que sí necesitan al hermano, pero aceptan su ruta** (G-6 y G-7, #102):
 
 ```bash
 node tools/contract-keys.mjs  --ui-path=/tmp/ui   # lo que el borde EMITE  ↔ lo que la app LEE
 node tools/contract-bodies.mjs --ui-path=/tmp/ui  # lo que la app MANDA   ↔ lo que el borde DECLARA
-node tools/contract-bodies.mjs --autoprueba       # …y sus fixtures, sin repos ni red (#164)
+node tools/contract-bodies.mjs --autoprueba       # …y sus fixtures, sin repos ni red (#164, #170)
 ```
 
 **G-7 es el que mira donde de verdad dolió.** En los ocho verticales auditados (#102 a #105)
@@ -2702,6 +2737,11 @@ cuadras. Un campo derivado que pisa uno recibido no se detecta mirando la pantal
 Por eso G-7 es **error y no trinquete**: una clave que se manda a una ruta y cuyo record no
 la declara no tiene lectura inocente. Hoy ligan 57 claves en 22 rutas.
 
+> **Y esa cifra no depende de cómo se clonó el hermano** (#170). Con el UI en CRLF el gate salía
+> verde cruzando **2 claves en 1 ruta**: sus regex acaban en `(.*)$`, y `.` no consume el `\r`.
+> Hoy todo fichero entra por un único lector que normaliza a LF, y la autoprueba lo exige con el
+> mismo cliente escrito en los dos fines de línea.
+>
 > **Lo que G-7 no ve, y lo dice al correr**: los cuerpos que construye una función
 > (`postJson(url, toCourseDraftWire(body))`) quedan fuera, porque seguirla exige resolver su
 > return. Los lista en cada corrida en vez de contarlos como cubiertos.

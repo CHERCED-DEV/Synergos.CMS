@@ -561,6 +561,12 @@ public sealed class ComposeStackTests
             + "el contenido: encendida en producción es un borrado anónimo desde internet (#113).");
     }
 
+    /// <remarks>
+    /// La salida se decodifica en UTF-8 EXPLÍCITO (#170). Node escribe UTF-8 a una tubería en todo
+    /// sistema, pero .NET en Windows la lee con la página de códigos de la consola: «al día» llegaba
+    /// como «al d├¡a» y el <c>Assert.Contains</c> de abajo fallaba con <c>compose-gen</c> en verde.
+    /// Estaba tapado por el CRLF, que lo hacía salir 1 antes de imprimir nada.
+    /// </remarks>
     private static string CorrerNode(string script, params string[] args)
     {
         var psi = new System.Diagnostics.ProcessStartInfo
@@ -569,6 +575,8 @@ public sealed class ComposeStackTests
             WorkingDirectory = RepoRoot(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         psi.ArgumentList.Add(script);
         foreach (var a in args) psi.ArgumentList.Add(a);

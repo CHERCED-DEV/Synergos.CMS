@@ -64,14 +64,46 @@
 
 set -euo pipefail
 
+# ── El intérprete ────────────────────────────────────────────────────────────
+#
+# ⚠️ UN `python3` QUE EXISTE NO ES UN `python3` QUE CORRE (#170). En Windows,
+# `python3` es el alias de la Microsoft Store: está en el PATH, imprime «no se
+# encontró Python» y sale 49 — aunque `python` 3.11 esté instalado al lado. El
+# lector devolvía cero líneas y la autoprueba culpaba AL LECTOR, o sea mandaba a
+# diagnosticar el fichero equivocado. Por eso se prueba cada candidato
+# EJECUTÁNDOLO, en orden, y si ninguno corre se dice eso y no otra cosa.
+PYTHON=()
+elegir_python() {
+  local c
+  for c in python3 python "py -3"; do
+    # `$c` sin comillas a propósito: `py -3` son dos palabras.
+    # shellcheck disable=SC2086
+    if $c -c 'import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)' >/dev/null 2>&1; then
+      read -r -a PYTHON <<< "$c"
+      return 0
+    fi
+  done
+  return 1
+}
+sin_python() {
+  echo "✗ no hay un Python 3 que CORRA: se probaron python3, python y 'py -3'." >&2
+  echo "  (En Windows, 'python3' suele ser el alias vacío de la Microsoft Store.)" >&2
+  echo "  El lector del manifiesto no está roto: no se pudo ejecutar." >&2
+}
+
 # ── El manifiesto ────────────────────────────────────────────────────────────
 #
 # Una línea por entrada, con los siete campos SIEMPRE presentes —vacíos los que
 # no apliquen— y 0x1F entre ellos. Ver el aviso de más abajo sobre por qué no es
 # un tabulador.
+#
+# La salida se fuerza a UTF-8 y a `\n`: el Python de Windows escribe `\r\n` en
+# stdout, y `read` dejaba el `\r` pegado al último campo — `moneda` llegaba como
+# «COP\r» (medido, #170).
 leer_manifiesto() {
-  python3 - "$1" <<'PY'
+  "${PYTHON[@]}" - "$1" <<'PY'
 import json, sys
+sys.stdout.reconfigure(encoding='utf-8', newline='\n')
 for e in json.load(open(sys.argv[1], encoding='utf-8')):
     print('\x1f'.join(str(e.get(k, '')) for k in
                       ('tipo', 'subjectKind', 'subjectId', 'capacity',
@@ -91,6 +123,13 @@ PY
 # 0x1F dan el mismo resultado y la prueba pasaría en verde con el defecto puesto
 # — es la regla 7 del repo hermano: el dato de prueba tiene que EXIGIR la regla.
 if [ "${1:-}" = "--autoprueba" ]; then
+  # Sin intérprete, lo que sigue diría «el lector devolvió 0 líneas» y culparía al
+  # lector. Se dice ANTES, y sale rojo igual: no poder comprobarlo no es un verde.
+  if ! elegir_python; then
+    sin_python
+    echo "AUTOPRUEBA no se pudo ejecutar el lector: falta el intérprete, no el lector."
+    exit 1
+  fi
   TMP="$(mktemp)"
   cat > "$TMP" <<'JSON'
 [{"tipo":"precio","subjectKind":"k","subjectId":"s","amount":320000,"currency":"COP"}]
@@ -146,6 +185,13 @@ if [ ! -f "$MANIFIESTO" ]; then
   echo "✗ no existe el manifiesto $MANIFIESTO." >&2
   echo "  Ahí se declaran los recursos por médico / inmueble / oferta y sus precios." >&2
   echo "  Si de verdad no hay ninguno todavía, escribí un fichero con []." >&2
+  exit 1
+fi
+
+# Y el intérprete que lo lee, por la misma razón: sin él se publicaban las
+# definiciones y el paso 3 no leía nada.
+if ! elegir_python; then
+  sin_python
   exit 1
 fi
 
