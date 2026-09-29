@@ -2430,35 +2430,50 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   la vista y exija que cada clave mueva la salida.
 
 - `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
-  no sale sólo en rojo: una sale en VERDE.** Los workflows corren en `ubuntu-latest` (checkout LF,
-  SDK en inglés, `python3` presente, clon y no worktree); la máquina del arquitecto es Windows 11
-  con `core.autocrlf=true`, el SDK en español y worktrees, y el repo **no tenía `.gitattributes`**
-  hasta el #170. Medido sobre el mismo commit (#170, gemelo UI#79): **cinco rojos** que fallan del
-  lado seguro —`ComposeStackTests.El_compose_esta_al_dia…` (comparaba byte a byte contra un
-  checkout CRLF; **arreglado**: `.gitattributes` con `* text=auto eol=lf`),
-  `ContainerBuildTests.El_script_de_la_matriz…` (`service-matrix.mjs` comparaba `import.meta.url`
-  con `file://${argv[1]}` y salía 0 sin imprimir; **arreglado**: `pathToFileURL(argv[1]).href`),
-  `ProvisionWiringTests.El_manifiesto_se_lee…`
-  (`python3` es el alias vacío de la Store; **arreglado**: se prueban `python3`, `python` y
-  `py -3` EJECUTÁNDOLOS, sin ninguno se dice antes de culpar al lector, y la salida se fuerza a
-  `\n` porque el Python de Windows escribe `\r\n` y `moneda` llegaba «COP\r»),
-  `PoliticaDeBuildEnLaImagenTests.Todo_fichero_de_la_raiz…`
-  (en un worktree `.git` es un FICHERO; **arreglado**: `.git`, el nombre exacto, entra al censo
-  como opcional) y `compilan-las-vistas` (reconoce su recibo por el texto en
-  inglés del compilador; **arreglado**: fija `DOTNET_CLI_UI_LANGUAGE=en` en el entorno de su
-  build, así que pasa sin que quien lo corre la exporte)— **y G-7 en verde cruzando 2 claves en 1 ruta, contra 57 en 22 con el
-  mismo commit en LF.** G-7 es el gate que §7 describe como el que «mira donde de verdad dolió», y
-  no tiene suelo: 2 no es vacío, así que la red de seguridad del #136 no dispara. **Arreglado en
-  el LECTOR y no sólo en el checkout**: el `.gitattributes` de este repo no decide cómo se clonó el
-  otro, así que `contract-bodies.mjs` normaliza CRLF al leer y su `--autoprueba` escribe un cliente
-  en LF y en CRLF que tienen que dar la misma cifra escrita (sin normalizar: 1 clave en 1 ruta).
-  **El rojo de entorno se diagnostica una vez y se anota**, y cualquier rojo que no sea uno de ésos
+  no sale sólo en rojo: una sale en VERDE.** Hasta el #170 todos los workflows corrían en
+  `ubuntu-latest` (checkout LF, SDK en inglés, `python3` presente, clon y no worktree), y la máquina
+  del arquitecto es Windows 11 con `core.autocrlf=true`, el SDK en español y worktrees. Medido sobre
+  el mismo commit (#170, gemelo UI#79): cinco rojos que fallaban del lado seguro **y G-7 en verde
+  cruzando 2 claves en 1 ruta, contra 57 en 22 con el mismo commit en LF** — el gate que §7 describe
+  como el que «mira donde de verdad dolió», y sin suelo: 2 no es vacío, así que la red del #136 no
+  dispara. **Cada uno llevaba escrita una suposición sobre el sistema operativo en vez de un dato
+  del árbol**, y así se arregló cada uno:
+  - `ComposeStackTests.El_compose_esta_al_dia…` suponía un checkout LF (compara byte a byte):
+    `.gitattributes` con `* text=auto eol=lf`, que arregla la clase entera en ESTE repo.
+  - G-7 suponía lo mismo del repo HERMANO —sus regex acaban en `(.*)$`, y `.` no consume el
+    `\r`—, y el `.gitattributes` de acá no decide cómo se clonó el otro: `contract-bodies.mjs`
+    normaliza al leer, y su `--autoprueba` escribe un cliente en LF y en CRLF que tienen que dar la
+    misma cifra escrita (sin normalizar: 1 clave en 1 ruta).
+  - `ContainerBuildTests.El_script_de_la_matriz…` suponía que una ruta es una URL si se le pega
+    `file://`: `service-matrix.mjs` salía 0 sin imprimir nada. Ahora `pathToFileURL(argv[1]).href`.
+  - `ProvisionWiringTests.El_manifiesto_se_lee…` suponía que un `python3` en el PATH corre (es el
+    alias vacío de la Store): se prueban `python3`, `python` y `py -3` EJECUTÁNDOLOS, sin ninguno se
+    dice antes de culpar al lector, y la salida se fuerza a `\n` —el Python de Windows escribe
+    `\r\n` y `moneda` llegaba «COP\r»—.
+  - `PoliticaDeBuildEnLaImagenTests.Todo_fichero_de_la_raiz…` suponía que `.git` es carpeta; en un
+    worktree es un FICHERO. `.git`, el nombre exacto, entra al censo como opcional.
+  - `compilan-las-vistas` suponía un compilador en inglés (reconoce su recibo por el texto del
+    CS0234): fija `DOTNET_CLI_UI_LANGUAGE=en` en el entorno de su build.
+
+  **Y para que no vuelva, `windows.yml`** corre en `windows-latest` los gates de Node que no
+  necesitan SDK ni Docker, y su primer paso comprueba que el checkout salió en LF con el
+  `core.autocrlf=true` del runner. Lo del otro lado es del UI#79.
+  **Tres trampas al aplicarlo, medidas.** (1) El `.gitattributes` **no reescribe un checkout que ya
+  existe**: sus ficheros siguen en CRLF hasta que git vuelve a escribirlos, y hasta entonces
+  `compose-gen --check` sigue rojo; se arregla una vez, con el árbol limpio, borrando los ficheros
+  versionados y haciendo `git checkout -- .`. (2) **`git commit -- <rutas>` relee el ÁRBOL**, así
+  que no lleva lo que `git add --renormalize` o `git rm --cached` dejaron en el índice —un blob CRLF
+  del índice no se normaliza con `text=auto`, y un fichero sacado del índice que sigue en el disco
+  vuelve a entrar—: esos commits van sin rutas, tras mirar `git diff --cached --name-status`. (3) Un
+  fichero que el build reescribe en CRLF sale «modificado» en `git status` con un `git diff` vacío
+  —git ve el tamaño cambiado y no re-hashea—: eran los `appsettings-schema*.json` que copia
+  `Umbraco.Cms.Targets`, salida de build que se versionaba por error en los dos proyectos de tests.
+  **El rojo de entorno se diagnostica una vez y se anota**, y cualquier rojo que no sea uno conocido
   es real hasta demostrar lo contrario. **El verde de entorno es el caro**, porque nadie vuelve a
-  mirar un verde. Tres costumbres que salieron de acá: en Windows los tramos de `npm test` se
-  corren sueltos, porque la cadena `&&` corta lo de detrás del primer rojo; ninguna herramienta
-  reconoce una salida por texto localizado; y una cifra que depende de bytes —líneas, claves por
-  regex— se compara en LF. La salida de fondo la confirmó el arquitecto en el #170:
-  `.gitattributes` con `eol=lf` —**puesto**— y un job `windows-latest` con los gates de Node.
+  mirar un verde. Tres costumbres que salieron de acá: en Windows los tramos de `npm test` se corren
+  sueltos, porque la cadena `&&` corta lo de detrás del primer rojo; ninguna herramienta reconoce
+  una salida por texto localizado; y una cifra que depende de bytes —líneas, claves por regex— se
+  compara en LF, **normalizando en el lector** y no sólo en el checkout.
 
 ## 6. Prohibiciones explícitas
 
@@ -2662,6 +2677,11 @@ node tools/spec-valida.mjs --autoprueba   # G-8: el LECTOR del spec, ejecutado (
 > rechaza diciendo que no pudo comprobar los elementos del spec:
 > `node tools/spec-valida.mjs --ui-path=/tmp/ui`. La línea base del oráculo se regenera con
 > `--actualizar` y el diff va en el commit que lo causó.
+
+> **Y corren también en Windows** (`windows.yml`, #170): los tres de arriba, la autoprueba de
+> G-7, `compose-gen --check` y `service-matrix.mjs`, en `windows-latest` y detrás de un paso que
+> exige el checkout en LF. Existe porque seis gates llegaron a llevar escrita una suposición de
+> Linux —ver `feedback_a_dev_machine_is_not_ci` en §5—, y uno salía VERDE por ella.
 
 **Y DOS más que sí necesitan al hermano, pero aceptan su ruta** (G-6 y G-7, #102):
 

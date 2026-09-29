@@ -1,0 +1,96 @@
+name: Gates de Node en Windows
+
+# #170 · gemelo UI#79.
+#
+# Todos los demás workflows corren en `ubuntu-latest`: checkout en LF, SDK en inglés, `python3`
+# presente, clon y no worktree. La máquina de desarrollo del arquitecto es Windows 11, y medido
+# sobre el mismo commit cinco gates salían ROJOS por el entorno —del lado seguro— y uno salía
+# VERDE: G-7 (`contract-bodies.mjs`) cruzaba 2 claves en 1 ruta contra 57 en 22, porque sus regex
+# no veían una línea que acaba en `\r`. Cada uno llevaba escrita una suposición sobre el sistema
+# operativo en vez de un dato del árbol, y ningún job la ponía a prueba: por eso volvería.
+#
+# Este job repite en `windows-latest` los gates de Node que no necesitan el SDK ni Docker. No
+# reemplaza a los de Linux ni corre lo que ellos ya corren mejor; existe para que una suposición
+# de sistema operativo salga roja en el PR que la escribe y no en la máquina del arquitecto.
+#
+# El runner de Windows hace checkout con `core.autocrlf=true`, que es justo el caso: sin el
+# `.gitattributes` el árbol sale en CRLF y `compose-gen --check` se pone rojo contra un compose
+# byte-idéntico a HEAD. El primer paso lo comprueba directamente.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# POR QUÉ NO LLEVA FILTRO `paths:` (el #128): lo que rompe la portabilidad de un gate puede
+# estar en el gate, en lo que lee o en la configuración del repo (`.gitattributes`), y un filtro
+# que intentara enumerarlo se equivocaría en silencio. No compila nada: cuesta un minuto por PR.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-gates:
+    name: Gates de Node (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    # Git Bash, que es el de la máquina del arquitecto: `node` se lanza igual desde PowerShell,
+    # pero las guardas de abajo son de shell y así se leen igual que en los demás workflows.
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # El diente del `.gitattributes`: con `core.autocrlf=true` en el runner, un fichero que
+      # salga en CRLF es un fichero que la regla `eol=lf` no alcanzó.
+      - name: El checkout salió en LF
+        run: |
+          echo "core.autocrlf del runner: $(git config core.autocrlf || echo '(sin definir)')"
+          crlf="$(git ls-files --eol | awk -F'\t' '$1 ~ /w\/crlf/ {print $2}')"
+          if [ -n "$crlf" ]; then
+            echo "::error::Hay ficheros en CRLF en el checkout: el .gitattributes no los alcanza (#170)."
+            printf '%s\n' "$crlf"
+            exit 1
+          fi
+          echo "✓ $(git ls-files | wc -l) ficheros versionados, ninguno en CRLF"
+
+      - name: uSync schema audit
+        run: node tools/usync-audit.mjs
+
+      - name: G-3 paridad clase↔CSS
+        run: node tools/check-css-parity.mjs
+
+      - name: G-8 autoprueba del lector del spec
+        run: node tools/spec-valida.mjs --autoprueba
+
+      # Lleva el fixture del #170: el mismo cliente en LF y en CRLF tiene que dar la misma cifra.
+      - name: G-7 autoprueba (cruce por forma y fin de línea)
+        run: node tools/contract-bodies.mjs --autoprueba
+
+      - name: El compose está al día
+        run: node tools/compose-gen.mjs --check
+
+      # `service-matrix.mjs` con la guarda vieja salía 0 SIN IMPRIMIR NADA, así que el código de
+      # salida no basta: se exige que liste algo.
+      - name: La matriz de servicios no sale vacía
+        run: |
+          lista="$(node tools/service-matrix.mjs --list)"
+          if [ -z "$lista" ]; then
+            echo "::error::service-matrix.mjs salió sin listar ningún servicio: la guarda «¿me ejecutaron directamente?» no casa en Windows (#170)."
+            exit 1
+          fi
+          printf '%s\n' "$lista"
+          echo "✓ $(printf '%s\n' "$lista" | wc -l) servicios"
