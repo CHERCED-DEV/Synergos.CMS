@@ -4,11 +4,12 @@
 > resto.**
 >
 > - **Está en el disco**: el formato del spec y su validador (`tools/spec-valida.mjs`, #140), el
->   piloto 0 contra Eventos (§9) y el paso S11 corregido para que no se conteste por nombre (#163).
-> - **NO está**: el arnés. El #141 sacó las skills de los dos repos hacia `Synergos.Fabrica` y **ese
->   repo nunca se publicó** — `arnes.lock.json` fija un SHA que no existe y desde entonces ningún
->   repo tiene skills. Lo reconstruye el **#171**; ver §6.2. El gate del arnés (#142), los dos MCPs
->   de §7 (#143, #144) y los pilotos 1 y 2 (#146, #147) siguen abiertos.
+>   piloto 0 contra Eventos (§9), el paso S11 corregido para que no se conteste por nombre (#163) y
+>   **el arnés**: `CHERCED-DEV/Synergos.Fabrica`, público, reconstruido en el #171 y con el modelo
+>   de la auditoría cargado (#172); `arnes.yml` resuelve su lock en cada push (#142).
+> - **NO está**: el resto de los dientes del gate del arnés (#142), los dos MCPs de §7 (#143, #144)
+>   y los pilotos 1 y 2 (#146, #147). Durante días tampoco estuvo el arnés: el #141 lo sacó hacia
+>   un repo que nunca se publicó (ver §6.2).
 >
 > Esta línea decía «Estado: diseño. Nada de esto está construido», y fue verdad hasta el #140. Lo
 > que sigue en pie de ella es la razón: un documento que describe lo que todavía no existe es el
@@ -409,14 +410,14 @@ da `404`. Lo que eso deja:
 **Y nada se puso rojo, que es la lección.** Ningún workflow clona el lock y ningún test lo resuelve:
 el diente que lo haría es el 5 de §8, que es del #142 y no se construyó. Un orden de merge escrito
 en prosa es una esperanza, no un gate (`CLAUDE.md` §5,
-`feedback_a_merge_order_warning_in_prose_is_not_a_gate`). **El #171 lo reconstruye**: el repo
-público, las skills desde la historia con las divergidas reconciliadas, la limpieza rehecha y
-medida con un script versionado, el lock re-fijado en los dos repos, y el diente del lock para que
-no vuelva a pasar.
+`feedback_a_merge_order_warning_in_prose_is_not_a_gate`). **El #171 lo reconstruyó** (2026-09-29):
+el repo público, las 24 skills desde la historia con las divergidas reconciliadas, la limpieza
+rehecha y medida con un script versionado (`tools/criterios.mjs`: 286 → 0), el lock re-fijado en
+los dos repos, y el diente del lock (#142, `arnes.yml`) para que no vuelva a pasar.
 
 ### 6.3 Qué carga el sub-arnés — lo que ninguna skill sabía hasta la auditoría de reutilización
 
-Las skills que se reconstruyen en el #171 son de julio o de antes del #141, y **no saben nada** de
+Las skills que se reconstruyeron en el #171 eran de julio o de antes del #141, y **no sabían nada** de
 lo que la auditoría «que todo sea Lego» (#169, UI#78, #172) midió y el arquitecto decidió. Un
 arnés que las reinstale tal cual devuelve a cada sesión nueva a proponer lo que ya se descartó. Lo
 que el sub-arnés tiene que cargar —y lo que este repo ya escribe en sus guías, para que la skill
