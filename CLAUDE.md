@@ -2436,8 +2436,9 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   hasta el #170. Medido sobre el mismo commit (#170, gemelo UI#79): **cinco rojos** que fallan del
   lado seguro —`ComposeStackTests.El_compose_esta_al_dia…` (comparaba byte a byte contra un
   checkout CRLF; **arreglado**: `.gitattributes` con `* text=auto eol=lf`),
-  `ContainerBuildTests.El_script_de_la_matriz…` (`service-matrix.mjs` compara `import.meta.url` con
-  `file://${argv[1]}` y sale 0 sin imprimir), `ProvisionWiringTests.El_manifiesto_se_lee…`
+  `ContainerBuildTests.El_script_de_la_matriz…` (`service-matrix.mjs` comparaba `import.meta.url`
+  con `file://${argv[1]}` y salía 0 sin imprimir; **arreglado**: `pathToFileURL(argv[1]).href`),
+  `ProvisionWiringTests.El_manifiesto_se_lee…`
   (`python3` es el alias vacío de la Store), `PoliticaDeBuildEnLaImagenTests.Todo_fichero_de_la_raiz…`
   (en un worktree `.git` es un FICHERO) y `compilan-las-vistas` (reconoce su recibo por el texto en
   inglés del compilador)— **y G-7 en verde cruzando 2 claves en 1 ruta, contra 57 en 22 con el

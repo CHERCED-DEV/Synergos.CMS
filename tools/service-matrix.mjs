@@ -20,6 +20,7 @@
 //
 import { readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const raiz = process.cwd();
 
@@ -70,7 +71,13 @@ export function descubrir(dir = raiz, prefijo = '') {
   return salida.sort((a, b) => a.nombre.localeCompare(b.nombre, 'en'));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// «¿Me ejecutaron directamente?» se pregunta con la URL que Node construye, no pegando
+// `file://` delante de la ruta: en Windows `argv[1]` es `C:\…\service-matrix.mjs` y la URL es
+// `file:///C:/…/service-matrix.mjs`, así que la comparación a mano NUNCA casaba y el script
+// salía 0 sin imprimir nada: `ContainerBuildTests` rojo en Windows, y la red de más abajo —la
+// del descubrimiento vacío— ni se enteraba, porque no llegaba a correr (#170). En Linux fallaba
+// igual con un espacio en la ruta, que la URL escribe `%20`. `argv[1]` falta bajo `node -e`.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const lista = descubrir();
 
   if (lista.length === 0) {
