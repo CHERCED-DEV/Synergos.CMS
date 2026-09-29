@@ -50,6 +50,38 @@
       }
     },
     {
+      "nombre": "rating-stars",
+      "tipo": "pieza",
+      "record": "RatingStarsProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "value",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "max",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "value": 4,
+        "max": 5,
+        "label": "Valoración de los huéspedes"
+      }
+    },
+    {
       "nombre": "tag",
       "tipo": "pieza",
       "record": "TagProps",

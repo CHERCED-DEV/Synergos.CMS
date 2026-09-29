@@ -61,6 +61,12 @@ public sealed class ContratoSynHostTests
                 ("kpiDelta", "+12 %"),
                 ("kpiPeriod", "vs. agosto"),
             },
+            ["rating-stars"] = new (string, object?)[]
+            {
+                ("valueNow", "4"),
+                ("maxStars", "5"),
+                ("ariaLabel", "Valoración de los huéspedes"),
+            },
             ["tag"] = new (string, object?)[]
             {
                 ("tagLabel", "Oferta"),
