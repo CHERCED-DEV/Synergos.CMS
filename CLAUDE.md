@@ -158,7 +158,8 @@ versión de la rama 13 que lo cierre.
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
 > que añadió fueron el gate que esa misma HU escribió. (Hoy son **3402**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
-> `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`.)
+> `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
+> cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
 
 ## 2. Mapa del proyecto
 
@@ -1630,6 +1631,11 @@ Las que salieron de construir el árbol de servicios (§0.B):
   **Y el reparto es el mismo defecto de siempre visto de lado**: lo que se lleva el
   arnés son AFIRMACIONES (el pin, las cifras, las rutas), y lo que se queda es quien
   las cruzaba. Las dos mitades en verde y el hueco justo en medio.
+  **Cómo se cerró (#142), con la primera salida honesta**: el repo de destino heredó la
+  comprobación. `.github/workflows/arnes.yml` trae el arnés del SHA del lock y su
+  `tools/lock.mjs` cruza las frases del pin contra `Directory.Packages.props` de acá; el CI
+  del arnés hace lo mismo contra este repo, así que una frase reescrita sale roja en el
+  commit que la reescribe. Lo que se cruza es la RAMA: la skill ya no escribe el parche.
 
 - `feedback_a_policy_split_in_two_files_travels_as_one_or_not_at_all` — **cuando la
   política de build vive en DOS ficheros y el contexto de la imagen se escribe a
@@ -2382,7 +2388,8 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   (`gh repo view` no lo resuelve; el SHA del lock da 404), `arnes.lock.json` fija un commit que
   sólo vivió en el clon de un contenedor, y **desde entonces ningún repo tiene skills** — con las
   tres suites en verde, porque nada resuelve el lock: el diente que lo haría es del #142 y no se
-  construyó. Se reconstruye en #171.
+  construyó. Se reconstruye en #171. **Hoy lo resuelve `.github/workflows/arnes.yml` (#142)**:
+  trae el SHA del lock del remoto, y con `5190a95…` sale rojo diciendo qué hacer.
   Es §3.bis dicho del ticket y no aplicado al PR que lo necesitaba: *un proceso escrito como prosa
   se olvida y uno que rompe el build se cumple*. **La pregunta que lo caza, antes de mergear algo
   que depende de otra cosa: ¿qué se pone ROJO si lo de fuera no está?** Si la respuesta es «nada»,
@@ -2449,6 +2456,24 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   reconoce una salida por texto localizado; y una cifra que depende de bytes —líneas, claves por
   regex— se compara en LF. La salida de fondo —`.gitattributes` con `eol=lf` y un job
   `windows-latest` con los gates de Node— está propuesta en el #170, pendiente de confirmar.
+
+- `feedback_the_verifier_cannot_come_from_what_it_verifies` — **lo que comprueba que una
+  dependencia fijada existe no puede venir de esa dependencia; ese pedazo —y sólo ése— se queda en
+  el consumidor.** Es el diente del lock del #142: traer el SHA de `arnes.lock.json` no lo puede
+  hacer un script del arnés, porque para correrlo hay que haberlo traído. El reparto que salió: el
+  paso que trae el SHA vive en `.github/workflows/arnes.yml` (una docena de líneas de bash), y todo
+  lo demás lo corre `tools/lock.mjs` **desde el SHA que ese paso acaba de traer** — una sola copia,
+  en la versión que este repo fija. El YAML quedó copiado en los dos consumidores, y la salida no
+  fue aceptar la copia sino **vigilarla**: `lock.mjs` compara cada copia con `consumidor/arnes.yml`
+  del SHA fijado y sale rojo si difieren. Descartados, con su razón: un workflow reutilizable con
+  `@main` cambia el CI de acá sin un commit de acá —lo que el pin existe para impedir—, y fijarlo
+  por SHA en el `uses:` es un segundo pin que diverge del lock.
+  **Y la trampa de máquina que salió probándolo:** en Git for Windows, traer por HTTPS un repo que
+  **no existe** no falla — GitHub contesta 401 y git abre el diálogo de `SSH_ASKPASS`
+  (`git-askpass.exe`) pidiendo contraseña: medido, más de 60 s colgado sin una línea de salida.
+  `GIT_TERMINAL_PROMPT=0` no alcanza, porque el askpass no es la terminal. Un gate que consulta un
+  remoto vacía `credential.helper`, `core.askPass` y `SSH_ASKPASS`: así no se cuelga y además
+  reproduce el CI, que no tiene credenciales.
 
 ## 6. Prohibiciones explícitas
 
