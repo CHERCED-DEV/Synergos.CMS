@@ -191,6 +191,43 @@
       }
     },
     {
+      "nombre": "color-picker",
+      "tipo": "pieza",
+      "record": "ColorPickerProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "initialColor",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "palette",
+          "tipo": "string[]",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "label": "Color de acento de tu tienda",
+        "initialColor": "#0f766e",
+        "palette": [
+          "#0f766e",
+          "#b45309",
+          "#7c3aed",
+          "#be123c"
+        ]
+      }
+    },
+    {
       "nombre": "cookie-consent",
       "tipo": "pieza",
       "record": "CookieConsentProps",

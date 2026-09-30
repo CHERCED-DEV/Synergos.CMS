@@ -172,6 +172,12 @@ public sealed class ContratoSynHostTests
                 ("zoomLevel", "12"),
                 ("pinsJson", """[{"lat":4.6097,"lng":-74.0817,"title":"Oficina Bogotá","description":"Carrera 7 # 71-21, piso 12"},{"lat":"6,2518","lng":"-75.5636","title":"Oficina Medellín","description":"El Poblado"}]"""),
             },
+            ["color-picker"] = new (string, object?)[]
+            {
+                ("label", "Color de acento de tu tienda"),
+                ("initialColor", "#0f766e"),
+                ("paletteJson", """["#0f766e","#b45309","#7c3aed","#be123c"]"""),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
