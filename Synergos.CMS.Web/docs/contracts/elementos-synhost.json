@@ -456,6 +456,58 @@
         ],
         "autoStart": true
       }
+    },
+    {
+      "nombre": "tree-view",
+      "tipo": "pieza",
+      "record": "TreeViewProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "tree",
+          "tipo": "TreeViewNode[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "expandAll",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "tree": [
+          {
+            "label": "Productos",
+            "children": [
+              {
+                "label": "Hogar",
+                "children": [
+                  {
+                    "label": "Cocina"
+                  }
+                ]
+              },
+              {
+                "label": "Jardín"
+              }
+            ]
+          },
+          {
+            "label": "Servicios"
+          }
+        ],
+        "expandAll": true,
+        "label": "Catálogo de la tienda"
+      }
     }
   ],
   "tipos": [
@@ -580,6 +632,21 @@
         {
           "nombre": "body",
           "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "TreeViewNode",
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "children",
+          "tipo": "TreeViewNode[]",
           "opcional": true
         }
       ]

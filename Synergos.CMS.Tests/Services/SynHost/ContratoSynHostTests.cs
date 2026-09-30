@@ -124,6 +124,12 @@ public sealed class ContratoSynHostTests
                 ("stepsJson", """[{"selector":".site-header","title":"Bienvenido","content":"Este es el menú principal."},{"selector":"#buscar","title":"Buscá","content":"Encontrá cualquier cosa desde acá."}]"""),
                 ("autoStart", true),
             },
+            ["tree-view"] = new (string, object?)[]
+            {
+                ("treeJson", """[{"label":"Productos","children":[{"label":"Hogar","children":[{"label":"Cocina"}]},{"label":"Jardín"}]},{"label":"Servicios"}]"""),
+                ("expandAll", true),
+                ("ariaLabel", "Catálogo de la tienda"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
