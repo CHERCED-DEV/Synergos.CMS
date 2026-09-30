@@ -514,7 +514,7 @@ el compilador.
 
 **4. Antes de crear una pieza nueva: buscar en el catálogo por CONCEPTO.** Por nombre no aparece.
 Así nació `syn-segmented` al lado de `syn-segmented-control` —el mismo selector exclusivo, dos
-veces— y así se pidió «crear» un resumen con enlace *Cambiar* que ya era `syn-detail-summary`. Se
+veces, hoy fusionadas en la primera (CHERCED-DEV/Synergos.UI#83)— y así se pidió «crear» un resumen con enlace *Cambiar* que ya era `syn-detail-summary`. Se
 busca **qué hace** —«elegir uno de varios», «repasar lo que se va a enviar»— entre las piezas del
 design system, **incluidas las que no usa nadie**: una pieza sin consumidor es vocabulario, no
 deuda (`CLAUDE.md` §0.C.21). Si existe y le falta algo, se mejora; si hay dos del mismo concepto,

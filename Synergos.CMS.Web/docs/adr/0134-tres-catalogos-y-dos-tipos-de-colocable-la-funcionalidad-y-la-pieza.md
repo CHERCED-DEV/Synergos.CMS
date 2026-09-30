@@ -38,7 +38,8 @@ No son piezas que perdieron su uso: son una biblioteca escrita antes de tener ne
 buscó cuando la necesidad llegó**. Dos pruebas escritas (◐, informe 11 §0): el doc 22 pidió
 **crear** un resumen de revisión que ya existía como `syn-detail-summary`, y en vez de arreglar
 `segmented-control` se creó un gemelo nuevo, `syn-segmented` (vivo en
-`libs/shells/src/map/results-map.ts:145`, re-leído).
+`libs/shells/src/map/results-map.ts:145`, re-leído). La fusión ya está hecha: sobrevive
+`syn-segmented` y la montan cuatro pantallas más (CHERCED-DEV/Synergos.UI#83).
 
 Retirar por defecto habría borrado el vocabulario justo antes de que alguien lo pidiera.
 

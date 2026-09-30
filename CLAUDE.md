@@ -2409,7 +2409,7 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   22 de `refactor-docs/` (la auditoría de UX, local) pidió «crear» un resumen con enlace *Cambiar*
   que ya era `syn-detail-summary`, y
   **se creó `syn-segmented` en vez de arreglar `syn-segmented-control`**, el mismo concepto dos
-  veces. Veredicto: fusionar 3, mejorar y usar 5, usar 2, declarar 2, **retirar 0**. El arquitecto
+  veces (ya fusionadas: sobrevive `syn-segmented`, CHERCED-DEV/Synergos.UI#83). Veredicto: fusionar 3, mejorar y usar 5, usar 2, declarar 2, **retirar 0**. El arquitecto
   lo decidió así (§0.C.21, ADR 0134).
   **Lo que enseña no es «no borres»: es que el gate mide ALCANCE y la pregunta es de PRODUCTO.**
   Qué no usa nadie lo dice el gate; qué hacer se decide por pieza, con cuatro salidas —usar,
