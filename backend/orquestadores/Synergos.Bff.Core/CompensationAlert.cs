@@ -62,13 +62,36 @@ public sealed class CompensationAlert
     public const string Capability = "notifications";
 
     /// <summary>Clave de plantilla por defecto si el despliegue no configura otra.</summary>
+    /// <remarks>
+    /// Es la que piden los cuatro orquestadores —ninguno configura otra— y la que
+    /// <c>tools/provisionar.sh</c> publica desde <c>tools/provisionar.plantillas.json</c> (#174).
+    /// </remarks>
     public const string DefaultTemplateKey = "bff.compensacion.colgada";
+
+    /// <summary>
+    /// Cada marcador que este aviso rellena, con de dónde sale su valor. <b>Es la única
+    /// lista</b>: <see cref="Placeholders"/> y el cuerpo que se manda salen de acá.
+    /// </summary>
+    /// <remarks>
+    /// Eran dos —un array con los nombres y un diccionario con los valores— y nada obligaba a que
+    /// dijeran lo mismo: un valor nuevo en el diccionario no tocaba el array, y los tests que
+    /// recorren el array seguían en verde. La plantilla aprovisionada se cruza contra lo que esto
+    /// MANDA (<c>PlantillaDelAvisoTests</c>), en los dos sentidos: un marcador que la plantilla use y
+    /// no esté acá rechaza cada aviso; uno que esté acá y la plantilla no use no le llega a nadie.
+    /// </remarks>
+    private static readonly (string Marcador, Func<ISaga, SagaVocabulary, string> Valor)[] Relleno =
+    {
+        ("saga", (saga, _) => saga.Id),
+        ("origen", (_, vocabulario) => vocabulario.Origin),
+        ("desde", (saga, _) => saga.StartedAtUtc.ToString("u")),
+        ("pendientes", (saga, _) => Describir(saga.Stuck())),
+    };
 
     /// <summary>
     /// Los marcadores que este aviso rellena. La plantilla <b>no puede usar otros</b>:
     /// <c>Api.Notifications</c> rechaza un marcador sin valor en vez de mandar un hueco.
     /// </summary>
-    public static readonly IReadOnlyList<string> Placeholders = new[] { "saga", "origen", "desde", "pendientes" };
+    public static readonly IReadOnlyList<string> Placeholders = Relleno.Select(r => r.Marcador).ToArray();
 
     private readonly IHttpClientFactory _clients;
     private readonly SagaVocabulary _vocabulary;
@@ -102,13 +125,8 @@ public sealed class CompensationAlert
                 $"No hay a quién avisar: faltan Alerts:ToKind, :ToId y :Address de {_vocabulary.Origin}.");
         }
 
-        var valores = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["saga"] = saga.Id,
-            ["origen"] = _vocabulary.Origin,
-            ["desde"] = saga.StartedAtUtc.ToString("u"),
-            ["pendientes"] = Describir(saga.Stuck()),
-        };
+        var valores = Relleno.ToDictionary(
+            r => r.Marcador, r => r.Valor(saga, _vocabulary), StringComparer.Ordinal);
 
         var r = await CapabilityHttp.SendAsync<DeliveryDto>(
             _clients.CreateClient(Capability), HttpMethod.Post, "v1/deliveries",
