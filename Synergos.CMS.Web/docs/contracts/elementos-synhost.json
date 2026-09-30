@@ -252,6 +252,51 @@
       }
     },
     {
+      "nombre": "select-multi",
+      "tipo": "pieza",
+      "record": "SelectMultiProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "options",
+          "tipo": "SelectMultiItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "maxSelections",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "label": "Amenidades",
+        "options": [
+          {
+            "value": "piscina",
+            "label": "Piscina"
+          },
+          {
+            "value": "gym",
+            "label": "Gimnasio"
+          },
+          {
+            "value": "bbq",
+            "label": "Zona BBQ"
+          }
+        ],
+        "maxSelections": 2
+      }
+    },
+    {
       "nombre": "tag",
       "tipo": "pieza",
       "record": "TagProps",
@@ -315,6 +360,21 @@
           "nombre": "href",
           "tipo": "string",
           "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "SelectMultiItem",
+      "campos": [
+        {
+          "nombre": "value",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
         }
       ]
     }

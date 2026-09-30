@@ -98,6 +98,12 @@ public sealed class ContratoSynHostTests
                 ("step", "10000"),
                 ("initialValue", "250000"),
             },
+            ["select-multi"] = new (string, object?)[]
+            {
+                ("label", "Amenidades"),
+                ("optionsJson", """[{"value":"piscina","label":"Piscina"},{"value":"gym","label":"Gimnasio"},{"value":"bbq","label":"Zona BBQ"}]"""),
+                ("maxSelections", "2"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
