@@ -84,6 +84,52 @@ public sealed class ContratoSynHostTests
                 ("tagLabel", "Oferta"),
                 ("tagColor", "success"),
             },
+            ["scroll-top"] = new (string, object?)[]
+            {
+                ("scrollThreshold", "400"),
+                ("position", "bottom-left"),
+                ("ariaLabel", "Subir al inicio"),
+            },
+            ["range-slider"] = new (string, object?)[]
+            {
+                ("label", "Precio por noche"),
+                ("minValue", "50000"),
+                ("maxValue", "500000"),
+                ("step", "10000"),
+                ("initialValue", "250000"),
+            },
+            ["select-multi"] = new (string, object?)[]
+            {
+                ("label", "Amenidades"),
+                ("optionsJson", """[{"value":"piscina","label":"Piscina"},{"value":"gym","label":"Gimnasio"},{"value":"bbq","label":"Zona BBQ"}]"""),
+                ("maxSelections", "2"),
+            },
+            ["stepper"] = new (string, object?)[]
+            {
+                ("stepsJson", """[{"label":"Datos"},{"label":"Pago"},{"label":"Confirmación"}]"""),
+                ("currentStep", "1"),
+            },
+            ["tabs"] = new (string, object?)[]
+            {
+                ("tabsJson", """[{"id":"resumen","label":"Resumen","content":"Lo esencial de la estadía."},{"id":"precios","label":"Precios","content":"Desde $120.000 por noche."}]"""),
+                ("initialTab", "precios"),
+            },
+            ["timeline"] = new (string, object?)[]
+            {
+                ("eventsJson", """[{"date":"2019-03-01","title":"Fundación","description":"Abrimos la primera sede en Medellín."},{"date":"2024","title":"Segunda sede","description":"Llegamos a Bogotá."}]"""),
+                ("orientation", "vertical"),
+            },
+            ["tour-guide"] = new (string, object?)[]
+            {
+                ("stepsJson", """[{"selector":".site-header","title":"Bienvenido","content":"Este es el menú principal."},{"selector":"#buscar","title":"Buscá","content":"Encontrá cualquier cosa desde acá."}]"""),
+                ("autoStart", true),
+            },
+            ["tree-view"] = new (string, object?)[]
+            {
+                ("treeJson", """[{"label":"Productos","children":[{"label":"Hogar","children":[{"label":"Cocina"}]},{"label":"Jardín"}]},{"label":"Servicios"}]"""),
+                ("expandAll", true),
+                ("ariaLabel", "Catálogo de la tienda"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

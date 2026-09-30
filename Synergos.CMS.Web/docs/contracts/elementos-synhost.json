@@ -142,6 +142,52 @@
       }
     },
     {
+      "nombre": "range-slider",
+      "tipo": "pieza",
+      "record": "RangeSliderProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "min",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "max",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "step",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "high",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "label": "Precio por noche",
+        "min": 50000,
+        "max": 500000,
+        "step": 10000,
+        "high": 250000
+      }
+    },
+    {
       "nombre": "rating-stars",
       "tipo": "pieza",
       "record": "RatingStarsProps",
@@ -174,6 +220,154 @@
       }
     },
     {
+      "nombre": "scroll-top",
+      "tipo": "pieza",
+      "record": "ScrollTopProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "scrollThreshold",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "position",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "scrollThreshold": 400,
+        "position": "bottom-left",
+        "label": "Subir al inicio"
+      }
+    },
+    {
+      "nombre": "select-multi",
+      "tipo": "pieza",
+      "record": "SelectMultiProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "options",
+          "tipo": "SelectMultiItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "maxSelections",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "label": "Amenidades",
+        "options": [
+          {
+            "value": "piscina",
+            "label": "Piscina"
+          },
+          {
+            "value": "gym",
+            "label": "Gimnasio"
+          },
+          {
+            "value": "bbq",
+            "label": "Zona BBQ"
+          }
+        ],
+        "maxSelections": 2
+      }
+    },
+    {
+      "nombre": "stepper",
+      "tipo": "pieza",
+      "record": "StepperProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "steps",
+          "tipo": "StepperItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "currentStep",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "steps": [
+          {
+            "title": "Datos"
+          },
+          {
+            "title": "Pago"
+          },
+          {
+            "title": "Confirmación"
+          }
+        ],
+        "currentStep": 1
+      }
+    },
+    {
+      "nombre": "tabs",
+      "tipo": "pieza",
+      "record": "TabsProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "tabs",
+          "tipo": "TabsItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "initialTab",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "tabs": [
+          {
+            "label": "Resumen",
+            "id": "resumen",
+            "content": "Lo esencial de la estadía."
+          },
+          {
+            "label": "Precios",
+            "id": "precios",
+            "content": "Desde $120.000 por noche."
+          }
+        ],
+        "initialTab": "precios"
+      }
+    },
+    {
       "nombre": "tag",
       "tipo": "pieza",
       "record": "TagProps",
@@ -196,6 +390,123 @@
         "culture": "es-CO",
         "label": "Oferta",
         "color": "success"
+      }
+    },
+    {
+      "nombre": "timeline",
+      "tipo": "pieza",
+      "record": "TimelineProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "events",
+          "tipo": "TimelineEntry[]",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "events": [
+          {
+            "date": "2019-03-01",
+            "title": "Fundación",
+            "body": "Abrimos la primera sede en Medellín."
+          },
+          {
+            "date": "2024",
+            "title": "Segunda sede",
+            "body": "Llegamos a Bogotá."
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "tour-guide",
+      "tipo": "pieza",
+      "record": "TourGuideProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "steps",
+          "tipo": "TourGuideStep[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "autoStart",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "steps": [
+          {
+            "target": ".site-header",
+            "title": "Bienvenido",
+            "body": "Este es el menú principal."
+          },
+          {
+            "target": "#buscar",
+            "title": "Buscá",
+            "body": "Encontrá cualquier cosa desde acá."
+          }
+        ],
+        "autoStart": true
+      }
+    },
+    {
+      "nombre": "tree-view",
+      "tipo": "pieza",
+      "record": "TreeViewProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "tree",
+          "tipo": "TreeViewNode[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "expandAll",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "tree": [
+          {
+            "label": "Productos",
+            "children": [
+              {
+                "label": "Hogar",
+                "children": [
+                  {
+                    "label": "Cocina"
+                  }
+                ]
+              },
+              {
+                "label": "Jardín"
+              }
+            ]
+          },
+          {
+            "label": "Servicios"
+          }
+        ],
+        "expandAll": true,
+        "label": "Catálogo de la tienda"
       }
     }
   ],
@@ -236,6 +547,106 @@
         {
           "nombre": "href",
           "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "SelectMultiItem",
+      "campos": [
+        {
+          "nombre": "value",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        }
+      ]
+    },
+    {
+      "record": "StepperItem",
+      "campos": [
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": false
+        }
+      ]
+    },
+    {
+      "record": "TabsItem",
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "id",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "content",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "TimelineEntry",
+      "campos": [
+        {
+          "nombre": "date",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "body",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "TourGuideStep",
+      "campos": [
+        {
+          "nombre": "target",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "body",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "TreeViewNode",
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "children",
+          "tipo": "TreeViewNode[]",
           "opcional": true
         }
       ]

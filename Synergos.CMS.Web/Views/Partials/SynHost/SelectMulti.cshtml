@@ -1,13 +1,16 @@
-﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@*
+    SynHost renderer — <synergos-select-multi>. Multi-select with chips + search.
+
+    Host tonto (ADR 0135): el resolver arma el record que viaja (SelectMultiProps) —parsea
+    en el servidor el JSON de opciones— y la vista resuelve y emite. Antes mandaba el texto
+    optionsJson y el elemento lee la lista options: salía sin opciones (D1).
+*@
+@using Synergos.CMS.Web.Services.SynHost
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.SelectMultiProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["label"] = Model.Value<string>("label"),
-        ["optionsJson"] = Model.Value<string>("optionsJson"),
-        ["maxSelections"] = Model.Value<string>("maxSelections"),
-    };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("select-multi", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
