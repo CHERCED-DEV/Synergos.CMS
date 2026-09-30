@@ -179,4 +179,73 @@ public sealed class LectorDelEditorTests
 
         Assert.Equal(lector.Opciones("platforms"), lector.Opciones("platforms"));
     }
+
+    // ── Numero y Entero: lo que escribe un editor es-CO ────────────────────────────────────
+    //
+    // El punto es el separador de MILES del editor es-CO y la coma el decimal. Leer «500.000» con
+    // la regla invariante da 500 —mil veces menos, en silencio—: la trampa que el motor de
+    // catálogo ya pagó con «49.000». Lo inequívoco se lee; lo que admite dos lecturas no viaja y
+    // se anota, en vez de adivinar.
+
+    [Theory]
+    [InlineData("4", 4)]
+    [InlineData("-3", -3)]
+    [InlineData("1234", 1234)]
+    [InlineData("4,5", 4.5)]
+    [InlineData("12,50", 12.5)]
+    [InlineData("4.5", 4.5)]
+    [InlineData("3.1416", 3.1416)]
+    [InlineData("1.234.567", 1234567)]
+    [InlineData("1.234,5", 1234.5)]
+    [InlineData("1,234,567", 1234567)]
+    [InlineData("1,234.5", 1234.5)]
+    public void Numero_inequivoco_viaja_con_su_valor(string texto, double esperado)
+    {
+        Assert.Equal((decimal)esperado, Lector(ElementoFalso.Con(("valueNow", texto))).Numero("valueNow"));
+        Assert.Equal(0, Anotados());
+    }
+
+    [Theory]
+    [InlineData("500.000")]
+    [InlineData("1.234")]
+    [InlineData("1,234")]
+    public void Numero_con_dos_lecturas_no_viaja_y_se_anota_en_vez_de_adivinar(string texto)
+    {
+        Assert.Null(Lector(ElementoFalso.Con(("valueNow", texto))).Numero("valueNow"));
+        Assert.Equal(1, Anotados());
+    }
+
+    [Theory]
+    [InlineData("cuatro")]
+    [InlineData("4.5.6")]
+    [InlineData("1.23.456")]
+    [InlineData("4,")]
+    public void Numero_que_no_es_numero_no_viaja_y_se_anota(string texto)
+    {
+        Assert.Null(Lector(ElementoFalso.Con(("valueNow", texto))).Numero("valueNow"));
+        Assert.Equal(1, Anotados());
+    }
+
+    [Theory]
+    [InlineData("5", 5)]
+    [InlineData("4000", 4000)]
+    [InlineData("-2", -2)]
+    [InlineData("1.000.000", 1000000)]
+    public void Entero_inequivoco_viaja_con_su_valor(string texto, int esperado)
+    {
+        Assert.Equal(esperado, Lector(ElementoFalso.Con(("maxStars", texto))).Entero("maxStars"));
+        Assert.Equal(0, Anotados());
+    }
+
+    [Theory]
+    [InlineData("5.000")]
+    [InlineData("5.5")]
+    [InlineData("4,5")]
+    [InlineData("99999999999")]
+    [InlineData("cinco")]
+    public void Entero_ambiguo_decimal_o_fuera_de_rango_no_viaja_y_se_anota(string texto)
+    {
+        Assert.Null(Lector(ElementoFalso.Con(("maxStars", texto))).Entero("maxStars"));
+        Assert.Equal(1, Anotados());
+    }
 }

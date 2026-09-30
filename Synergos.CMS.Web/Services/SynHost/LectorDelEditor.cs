@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.PublishedContent;
@@ -125,12 +126,23 @@ public sealed class LectorDelEditor
     }
 
     /// <summary>
-    /// Un número que el editor escribió como texto (<c>"4.5"</c>, <c>"4,5"</c>); <c>null</c> si lo
-    /// dejó vacío o no es un número.
+    /// Un número que el editor escribió como texto; <c>null</c> si lo dejó vacío, si no es un número
+    /// o si admite dos lecturas.
     /// </summary>
     /// <remarks>
-    /// Se acepta la coma decimal porque es la del editor es-CO; lo que no sea un número se anota y
-    /// no viaja. No se acotan rangos: el rango es regla del elemento, que es quien lo pinta.
+    /// <para><b>El editor es es-CO: el punto separa MILES y la coma, decimales.</b> Leerlo con la
+    /// regla invariante —como se hizo en el piloto, cambiando la coma por punto— convertía
+    /// «500.000» en 500, mil veces menos y en silencio: la trampa que el motor de catálogo ya pagó
+    /// con «49.000». Se lee lo inequívoco: «4», «4,5», «4.5» (un punto seguido de menos o más de
+    /// tres cifras no puede separar miles), «1.234.567», «1.234,5», y sus gemelos con coma de
+    /// miles («1,234,567», «1,234.5»).</para>
+    ///
+    /// <para><b>Lo que admite dos lecturas no viaja y se anota</b>: «1.234» y «500.000» son mil
+    /// doscientos treinta y cuatro y quinientos mil para el editor es-CO, y uno coma dos y
+    /// quinientos para quien escribe a la inglesa; «1,234», al revés. Adivinar es exactamente el
+    /// defecto. El editor lo ve en el log y lo escribe sin separador.</para>
+    ///
+    /// <para>No se acotan rangos: el rango es regla del elemento, que es quien lo pinta.</para>
     /// </remarks>
     public decimal? Numero(string alias)
     {
@@ -140,16 +152,30 @@ public sealed class LectorDelEditor
             return null;
         }
 
-        if (decimal.TryParse(texto.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var numero))
+        var lectura = LeerNumero(texto);
+        if (lectura.Ambiguo)
         {
-            return numero;
+            NoEsValido(alias, texto, EsperadoSinAmbiguedad);
+            return null;
         }
 
-        NoEsValido(alias, texto, "un número");
-        return null;
+        if (lectura.Valor is null)
+        {
+            NoEsValido(alias, texto, "un número");
+        }
+
+        return lectura.Valor;
     }
 
-    /// <summary>Un entero que el editor escribió como texto; <c>null</c> si vacío o no entero.</summary>
+    /// <summary>
+    /// Un entero que el editor escribió como texto; <c>null</c> si vacío, si no es un entero, si
+    /// tiene decimales o si admite dos lecturas.
+    /// </summary>
+    /// <remarks>
+    /// La misma lectura es-CO que <see cref="Numero"/>: «1.000.000» es un millón y «5.000» no
+    /// viaja (cinco mil o cinco). Un número con decimales («5,5», «4.5») no es un entero y se
+    /// anota; no se redondea.
+    /// </remarks>
     public int? Entero(string alias)
     {
         var texto = Texto(alias);
@@ -158,13 +184,59 @@ public sealed class LectorDelEditor
             return null;
         }
 
-        if (int.TryParse(texto, NumberStyles.Integer, CultureInfo.InvariantCulture, out var entero))
+        var lectura = LeerNumero(texto);
+        if (lectura.Ambiguo)
         {
-            return entero;
+            NoEsValido(alias, texto, EsperadoSinAmbiguedad);
+            return null;
+        }
+
+        if (lectura.Valor is { } valor && !lectura.ConDecimales && valor is >= int.MinValue and <= int.MaxValue)
+        {
+            return (int)valor;
         }
 
         NoEsValido(alias, texto, "un entero");
         return null;
+    }
+
+    private const string EsperadoSinAmbiguedad =
+        "un número con una sola lectura («1.234» es mil doscientos treinta y cuatro en es-CO y uno coma dos a la inglesa: escribilo sin separador de miles)";
+
+    private static readonly Regex SoloCifras = new(@"^\d+$", RegexOptions.CultureInvariant);
+    private static readonly Regex MilesConPunto = new(@"^\d{1,3}(\.\d{3}){2,}$", RegexOptions.CultureInvariant);
+    private static readonly Regex MilesConComa = new(@"^\d{1,3}(,\d{3}){2,}$", RegexOptions.CultureInvariant);
+    private static readonly Regex MilesConPuntoYDecimales = new(@"^\d{1,3}(\.\d{3})+,\d+$", RegexOptions.CultureInvariant);
+    private static readonly Regex MilesConComaYDecimales = new(@"^\d{1,3}(,\d{3})+\.\d+$", RegexOptions.CultureInvariant);
+    private static readonly Regex DosLecturas = new(@"^\d{1,3}[.,]\d{3}$", RegexOptions.CultureInvariant);
+    private static readonly Regex ConDecimales = new(@"^\d+[.,]\d+$", RegexOptions.CultureInvariant);
+
+    /// <summary>Cómo se lee un número escrito por un editor es-CO (ver <see cref="Numero"/>).</summary>
+    private static (decimal? Valor, bool ConDecimales, bool Ambiguo) LeerNumero(string texto)
+    {
+        var negativo = texto.StartsWith('-');
+        var cifras = negativo ? texto[1..] : texto;
+
+        var (normalizado, conDecimales) = cifras switch
+        {
+            _ when SoloCifras.IsMatch(cifras) => (cifras, false),
+            _ when MilesConPunto.IsMatch(cifras) => (cifras.Replace(".", string.Empty, StringComparison.Ordinal), false),
+            _ when MilesConComa.IsMatch(cifras) => (cifras.Replace(",", string.Empty, StringComparison.Ordinal), false),
+            _ when MilesConPuntoYDecimales.IsMatch(cifras) => (cifras.Replace(".", string.Empty, StringComparison.Ordinal).Replace(',', '.'), true),
+            _ when MilesConComaYDecimales.IsMatch(cifras) => (cifras.Replace(",", string.Empty, StringComparison.Ordinal), true),
+            _ when DosLecturas.IsMatch(cifras) => ((string?)null, false),
+            _ when ConDecimales.IsMatch(cifras) => (cifras.Replace(',', '.'), true),
+            _ => (null, false),
+        };
+
+        if (normalizado is null)
+        {
+            return (null, false, DosLecturas.IsMatch(cifras));
+        }
+
+        return decimal.TryParse(normalizado, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var valor)
+            ? (negativo ? -valor : valor, conDecimales, false)
+            : (null, false, false);
     }
 
     /// <summary>
