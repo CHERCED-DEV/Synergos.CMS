@@ -102,6 +102,59 @@
       }
     },
     {
+      "nombre": "cookie-consent",
+      "tipo": "pieza",
+      "record": "CookieConsentProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "bannerText",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "acceptLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "rejectLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "settingsLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "policyLink",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "policyLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "bannerText": "Usamos cookies propias y de terceros para medir el uso del sitio.",
+        "acceptLabel": "Acepto todas",
+        "rejectLabel": "Sólo las necesarias",
+        "settingsLabel": "Elegir cuáles",
+        "policyLink": "/privacidad",
+        "policyLabel": "Política de privacidad"
+      }
+    },
+    {
       "nombre": "dropdown",
       "tipo": "pieza",
       "record": "DropdownProps",
@@ -148,6 +201,52 @@
         ],
         "selectedValue": "co",
         "searchable": true
+      }
+    },
+    {
+      "nombre": "fab",
+      "tipo": "pieza",
+      "record": "FabProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "iconKey",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "actionLink",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "target",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "position",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "iconKey": "whatsapp",
+        "actionLink": "https://wa.me/573001234567",
+        "target": "_blank",
+        "position": "bottom-left",
+        "label": "Escribinos por WhatsApp"
       }
     },
     {

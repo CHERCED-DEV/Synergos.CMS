@@ -109,6 +109,21 @@ public sealed class ContratoSynHostTests
                 ("ctaLabel", "Reservar ahora"),
                 ("ctaLink", ElementoFalso.Enlace("/reservas", "Reservas")),
             },
+            ["fab"] = new (string, object?)[]
+            {
+                ("iconKey", "whatsapp"),
+                ("actionLink", ElementoFalso.Enlace("https://wa.me/573001234567", "WhatsApp", "_blank")),
+                ("position", "bottom-left"),
+                ("ariaLabel", "Escribinos por WhatsApp"),
+            },
+            ["cookie-consent"] = new (string, object?)[]
+            {
+                ("bannerText", "Usamos cookies propias y de terceros para medir el uso del sitio."),
+                ("acceptLabel", "Acepto todas"),
+                ("rejectLabel", "Sólo las necesarias"),
+                ("settingsLabel", "Elegir cuáles"),
+                ("policyLink", ElementoFalso.Enlace("/privacidad", "Política de privacidad")),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
