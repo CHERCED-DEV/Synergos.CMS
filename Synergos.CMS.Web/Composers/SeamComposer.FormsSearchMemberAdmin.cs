@@ -59,24 +59,15 @@ public sealed partial class SeamComposer
         var searchAnalyticsMode = builder.Config["Synergos:SearchAnalytics:Mode"] ?? "FileSystem";
         if (string.Equals(searchAnalyticsMode, "Sessions", StringComparison.OrdinalIgnoreCase))
         {
-            var baseUrl = builder.Config["Synergos:SearchAnalytics:BaseUrl"];
-            var apiKey = builder.Config["Synergos:SearchAnalytics:ApiKey"];
-            services.AddHttpClient(HttpSearchAnalyticsStore.HttpClientName, http =>
-            {
-                http.BaseAddress = new Uri(string.IsNullOrWhiteSpace(baseUrl)
-                    ? "http://127.0.0.1:5200/"
-                    : baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
-                // Timeout corto: este servicio es auxiliar. Si tarda, el dashboard prefiere
-                // salir vacío antes que dejar la petición colgada.
-                http.Timeout = TimeSpan.FromSeconds(5);
-                if (!string.IsNullOrWhiteSpace(apiKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpSearchAnalyticsStore.ApiKeyHeader, apiKey);
-                }
-            })
-            // El hilo de la correlación (HU #28). Es el consumidor MÁS VIEJO del árbol de
-            // servicios y llevaba desde entonces sin rastro compartido.
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera —llave, correlación (HU #28), telemetría, reintento— la arma la
+            // pieza (#178). Techo corto: este servicio es auxiliar, y si tarda el dashboard
+            // prefiere salir vacío antes que dejar la petición colgada. Ahora se puede afinar con
+            // Synergos:SearchAnalytics:TimeoutSeconds, como las demás; sin ella sigue en 5 s.
+            // Enviar un evento (POST sin llave) NO se repite: reintentar analítica contra un
+            // servicio caído convierte una degradación en una tormenta.
+            services.AddClienteDelArbolDeServicios(
+                HttpSearchAnalyticsStore.HttpClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:SearchAnalytics"), "http://127.0.0.1:5200/", 5));
             // La MISMA instancia sirve la seam y el hosted service: el lazo de envío vive en
             // ella. Dos registros independientes darían dos colas y una sin drenar.
             services.AddSingleton<HttpSearchAnalyticsStore>();

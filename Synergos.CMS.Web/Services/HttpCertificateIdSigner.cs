@@ -42,9 +42,6 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class HttpCertificateIdSigner : ICertificateIdSigner
 {
-    /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Cliente nombrado que registra el composer.</summary>
     public const string ClientName = "synergos-api-signing";
 
@@ -155,7 +152,7 @@ public sealed class HttpCertificateIdSigner : ICertificateIdSigner
 
     private async Task<string> SellarAsync(string contenido)
     {
-        using var http = Client();
+        using var http = _factory.CreateClient(ClientName);
         using var respuesta = await http.PostAsJsonAsync(
             "v1/seals", new SealRequest(_settings.SealPurpose, contenido), Json);
 
@@ -169,7 +166,7 @@ public sealed class HttpCertificateIdSigner : ICertificateIdSigner
 
     private async Task<bool> ComprobarAsync(string contenido, string sello)
     {
-        using var http = Client();
+        using var http = _factory.CreateClient(ClientName);
         using var respuesta = await http.PostAsJsonAsync(
             "v1/seals/verify", new VerifySealRequest(_settings.SealPurpose, contenido, sello), Json);
 
@@ -183,35 +180,14 @@ public sealed class HttpCertificateIdSigner : ICertificateIdSigner
         return true;
     }
 
-    private HttpClient Client()
-    {
-        var http = _factory.CreateClient(ClientName);
-        if (http.BaseAddress is null)
-        {
-            http.BaseAddress = new Uri(_settings.BaseUrl.TrimEnd('/') + "/");
-        }
-        if (!http.DefaultRequestHeaders.Contains(ApiKeyHeader) && !string.IsNullOrWhiteSpace(_settings.ApiKey))
-        {
-            http.DefaultRequestHeaders.TryAddWithoutValidation(ApiKeyHeader, _settings.ApiKey);
-        }
-        http.Timeout = TimeSpan.FromSeconds(Math.Max(1, _settings.TimeoutSeconds));
-        return http;
-    }
-
     private static async Task GritarSiFalla(HttpResponseMessage respuesta)
     {
         if (respuesta.IsSuccessStatusCode) return;
 
-        var motivo = "sin motivo legible";
-        try
-        {
-            var problema = await respuesta.Content.ReadFromJsonAsync<ProblemDto>(Json);
-            if (!string.IsNullOrWhiteSpace(problema?.Detail)) motivo = problema!.Detail!;
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException or HttpRequestException)
-        {
-            // Un cuerpo que no es un problema tampoco es un motivo.
-        }
+        // Un cuerpo que no es un problema tampoco es un motivo. Lo lee el lector compartido
+        // (#129), no una copia privada (#178). Sin token: el seam es síncrono (ver Bloquear).
+        var problema = await RechazoDelArbolDeServicios.LeerAsync(respuesta, Json, CancellationToken.None);
+        var motivo = !string.IsNullOrWhiteSpace(problema?.Detalle) ? problema!.Detalle! : "sin motivo legible";
 
         throw new InvalidOperationException(
             $"Api.Signing no pudo atender la credencial ({(int)respuesta.StatusCode}): {motivo}");
@@ -252,6 +228,4 @@ public sealed class HttpCertificateIdSigner : ICertificateIdSigner
     private sealed record VerifySealRequest(string? Purpose, string? Payload, string? Seal);
 
     private sealed record SealResponse(string Seal, string KeyId);
-
-    private sealed record ProblemDto(string? Title, string? Detail, string? Code);
 }

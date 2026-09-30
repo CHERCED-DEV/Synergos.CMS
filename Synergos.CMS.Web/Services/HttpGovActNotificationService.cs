@@ -36,9 +36,6 @@ public sealed class HttpGovActNotificationService : IGovActNotificationService
     /// <summary>Cliente nombrado que registra el composer.</summary>
     public const string ClientName = "synergos-api-messaging";
 
-    /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Cabecera con la que viaja la identidad verificable de quien accede.</summary>
     public const string IdentityHeader = "X-Synergos-Identity";
 
@@ -338,7 +335,7 @@ public sealed class HttpGovActNotificationService : IGovActNotificationService
                 return cuerpo ?? throw new InvalidOperationException($"No pudimos {queHacia}: la respuesta vino vacía.");
             }
 
-            var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
+            var problema = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
 
             if (res.StatusCode == HttpStatusCode.Unauthorized)
             {
@@ -347,22 +344,10 @@ public sealed class HttpGovActNotificationService : IGovActNotificationService
             }
 
             _log.LogWarning("Api.Messaging rechazó {Que} con {Status} ({Code}): {Detalle}",
-                queHacia, (int)res.StatusCode, problema.Code ?? "-", problema.Detail ?? "-");
+                queHacia, (int)res.StatusCode, problema?.Codigo ?? "-", problema?.Detalle ?? "-");
 
             throw new InvalidOperationException(
-                string.IsNullOrWhiteSpace(problema.Detail) ? $"No pudimos {queHacia}." : problema.Detail!);
-        }
-    }
-
-    private static async Task<ProblemDto> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
-    {
-        try
-        {
-            return await res.Content.ReadFromJsonAsync<ProblemDto>(Json, ct).ConfigureAwait(false) ?? new ProblemDto();
-        }
-        catch (Exception ex) when (ex is JsonException or HttpRequestException or NotSupportedException)
-        {
-            return new ProblemDto();
+                string.IsNullOrWhiteSpace(problema?.Detalle) ? $"No pudimos {queHacia}." : problema!.Detalle!);
         }
     }
 
@@ -420,11 +405,4 @@ public sealed class HttpGovActNotificationService : IGovActNotificationService
     internal sealed record MessageDto(
         string Id, string ThreadId, string Body, DateTimeOffset AtUtc,
         DateTimeOffset? AcknowledgeBeforeUtc, IReadOnlyList<AcknowledgmentDto>? Acknowledgments);
-
-    private sealed record ProblemDto
-    {
-        public string? Title { get; init; }
-        public string? Detail { get; init; }
-        public string? Code { get; init; }
-    }
 }

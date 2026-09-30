@@ -200,24 +200,11 @@ public sealed partial class SeamComposer
 
         if (string.Equals(builder.Config["Synergos:Realty:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
         {
-            var realtyBase = builder.Config["Synergos:Realty:BaseUrl"];
-            var realtyKey = builder.Config["Synergos:Realty:ApiKey"];
-            var realtyTimeout = int.TryParse(builder.Config["Synergos:Realty:TimeoutSeconds"], out var rt) && rt > 0 ? rt : 15;
-
-            services.AddHttpClient(HttpVisitSchedulingService.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(realtyBase) ? "http://127.0.0.1:5202/" : realtyBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(realtyTimeout);
-                if (!string.IsNullOrWhiteSpace(realtyKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpVisitSchedulingService.ApiKeyHeader, realtyKey);
-                }
-            })
-            // El hilo de la correlación cruza al árbol de servicios (HU #28). Va sobre los
-            // clientes NOMBRADOS y no sobre uno global: los webhooks salen a terceros, y a un
-            // tercero conviene mandarle lo mínimo.
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera —llave, correlación (HU #28), telemetría, reintento— la arma la
+            // pieza (#178).
+            services.AddClienteDelArbolDeServicios(
+                HttpVisitSchedulingService.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Realty"), "http://127.0.0.1:5202/", 15));
             services.AddSingleton<IVisitSchedulingService>(sp =>
                 new HttpVisitSchedulingService(
                     sp.GetRequiredService<IHttpClientFactory>(),
@@ -396,22 +383,10 @@ public sealed partial class SeamComposer
         if (string.Equals(builder.Config["Synergos:Gob:Notifications:Mode"], "Api",
                 StringComparison.OrdinalIgnoreCase))
         {
-            var notiBase = builder.Config["Synergos:Gob:Notifications:BaseUrl"];
-            var notiKey = builder.Config["Synergos:Gob:Notifications:ApiKey"];
-            var notiTimeout = int.TryParse(
-                builder.Config["Synergos:Gob:Notifications:TimeoutSeconds"], out var nt) && nt > 0 ? nt : 20;
-
-            services.AddHttpClient(HttpGovActNotificationService.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(notiBase) ? "http://127.0.0.1:5221/" : notiBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(notiTimeout);
-                if (!string.IsNullOrWhiteSpace(notiKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpGovActNotificationService.ApiKeyHeader, notiKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178).
+            services.AddClienteDelArbolDeServicios(
+                HttpGovActNotificationService.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Gob:Notifications"), "http://127.0.0.1:5221/", 20));
 
             services.AddSingleton<IGovActNotificationService>(sp => new HttpGovActNotificationService(
                 sp.GetRequiredService<IHttpClientFactory>(),

@@ -53,9 +53,6 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class HttpVisitSchedulingService : IVisitSchedulingService
 {
-    /// <summary>Cabecera de la llave compartida.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Cliente nombrado que registra el composer.</summary>
     public const string ClientName = "synergos-api-booking";
 
@@ -116,7 +113,7 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
         {
             recurso = await ResolverRecursoAsync(listado, cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (NoContesto(ex, cancellationToken))
         {
             _log.LogWarning(ex, "Api.Booking no contestó al listar la agenda de {Listado}.", listado);
             return agenda;
@@ -242,7 +239,7 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
             var disp = await res.Content.ReadFromJsonAsync<DisponibilidadDto>(Json, ct).ConfigureAwait(false);
             return disp?.Available ?? true;
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (NoContesto(ex, ct))
         {
             return true;
         }
@@ -268,13 +265,13 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
 
         if (!res.IsSuccessStatusCode)
         {
-            var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
+            var problema = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
             await GritarSiEsLaLlaveAsync(res, "apartar la visita", ct).ConfigureAwait(false);
 
             // El motivo de la capacidad se traduce a algo que el visitante pueda accionar. Un
             // «no disponible» genérico para los tres casos sería una regresión frente a lo que
             // hoy dice el motor en proceso (HU #33 §3).
-            throw new InvalidOperationException(problema?.Code switch
+            throw new InvalidOperationException(problema?.Codigo switch
             {
                 "booking.insufficient_capacity" => "Ese horario ya lo tomaron. Elegí otro de la agenda.",
                 "booking.outside_opening_hours" => "Ese horario está fuera de la agenda de visitas.",
@@ -297,8 +294,8 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
 
         if (!res.IsSuccessStatusCode)
         {
-            var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
-            _log.LogWarning("Api.Booking no confirmó el hold {Hold}: {Code}", hold, problema?.Code ?? "-");
+            var problema = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
+            _log.LogWarning("Api.Booking no confirmó el hold {Hold}: {Code}", hold, problema?.Codigo ?? "-");
 
             // No se suelta el hold acá a propósito: vence solo a los 10 min por su propio TTL, y
             // un release que también falle dejaría al visitante esperando dos veces por lo mismo.
@@ -311,6 +308,19 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
     }
 
     // ── Lo pequeño ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Si la capacidad no contestó: no abrió la conexión, o se agotó el techo.
+    /// </summary>
+    /// <remarks>
+    /// <b>El techo también es «no contestó»</b> (#178). La agenda capturaba sólo la
+    /// <see cref="HttpRequestException"/>, así que con <c>Api.Booking</c> colgada el
+    /// <c>TaskCanceledException</c> del techo subía sin traducir hasta <c>RealtyController</c>,
+    /// que no lo captura, justo en el caso que el contrato de <see cref="GetSlotsAsync"/> promete
+    /// degradar. La cancelación de QUIEN LLAMA no entra: ésa no es la capacidad, y se re-lanza.
+    /// </remarks>
+    private static bool NoContesto(Exception ex, CancellationToken ct)
+        => ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested);
 
     private static string Instante(DateTimeOffset t)
         => Uri.EscapeDataString(t.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
@@ -328,12 +338,6 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
     /// anonimato: es no esparcir lo que no hace falta esparcir.
     /// </remarks>
     private static string Seudonimo(string email) => SeudonimoDePersona.De(email);
-
-    private static async Task<ProblemaDto?> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
-    {
-        try { return await res.Content.ReadFromJsonAsync<ProblemaDto>(Json, ct).ConfigureAwait(false); }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException) { return null; }
-    }
 
     /// <summary>
     /// Un 401 es la llave, y solo un 401.
@@ -361,5 +365,4 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
     private sealed record DisponibilidadDto(bool Available, string? ReasonCode);
     private sealed record HoldDto(string? Id);
     private sealed record ReservaDto(string? Id);
-    private sealed record ProblemaDto(string? Code, string? Detail);
 }

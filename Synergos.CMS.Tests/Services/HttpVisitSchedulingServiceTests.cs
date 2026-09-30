@@ -143,6 +143,50 @@ public sealed class HttpVisitSchedulingServiceTests
         Assert.All(slots, s => Assert.True(s.Available));
     }
 
+    /// <summary>La capacidad acepta la conexión y no contesta nunca.</summary>
+    private sealed class Colgada : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("inalcanzable");
+        }
+    }
+
+    private sealed class FabricaColgada : IHttpClientFactory
+    {
+        private readonly TimeSpan _techo;
+        public FabricaColgada(TimeSpan techo) => _techo = techo;
+        public HttpClient CreateClient(string name)
+            => new(new Colgada()) { BaseAddress = new Uri("http://booking.local/"), Timeout = _techo };
+    }
+
+    private static HttpVisitSchedulingService Colgado(TimeSpan techo)
+        => new(new FabricaColgada(techo), new OptionsMonitorFalso(new RealtySettings()), new Reloj(),
+            NullLogger<HttpVisitSchedulingService>.Instance);
+
+    [Fact]
+    public async Task Con_la_capacidad_COLGADA_la_ficha_se_sigue_viendo()
+    {
+        // #178: la agenda capturaba sólo la caída de la conexión, así que el techo agotado —la
+        // capacidad acepta y no contesta— subía crudo al borde en vez de degradar como la caída.
+        var slots = await Colgado(TimeSpan.FromMilliseconds(100)).GetSlotsAsync("L1");
+
+        Assert.NotEmpty(slots);
+        Assert.All(slots, s => Assert.True(s.Available));
+    }
+
+    [Fact]
+    public async Task Si_el_visitante_se_va_la_agenda_no_finge_que_la_capacidad_tardo()
+    {
+        // El control del de arriba: la cancelación de QUIEN LLAMA no es la capacidad, y se
+        // re-lanza en vez de degradar.
+        using var seFue = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => Colgado(TimeSpan.FromSeconds(30)).GetSlotsAsync("L1", seFue.Token));
+    }
+
     [Fact]
     public async Task Sin_recurso_registrado_la_agenda_se_ve_pero_agendar_NO_pasa()
     {

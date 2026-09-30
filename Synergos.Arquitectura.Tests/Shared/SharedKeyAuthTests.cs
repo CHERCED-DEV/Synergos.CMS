@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Http;
-using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Composers;
 using Synergos.Shared;
 
 namespace Synergos.CMS.Tests.Shared;
@@ -60,9 +60,10 @@ public sealed class SharedKeyAuthTests
     [Fact]
     public void La_cabecera_es_una_sola_para_todos_los_servicios()
     {
-        // El adapter del CMS declara la suya por separado (no puede referenciar esto). Si
-        // las dos se separan, la ingesta responde 401 y parece un problema de red.
+        // El CMS declara la suya por separado (no puede referenciar esto), y desde el #178 la
+        // declara UNA vez: en la pieza por la que salen todos sus clientes hacia el árbol. Si
+        // las dos se separan, toda capacidad responde 401 y parece un problema de red.
         Assert.Equal("X-Synergos-Key", SharedKeyAuth.HeaderName);
-        Assert.Equal(SharedKeyAuth.HeaderName, HttpSearchAnalyticsStore.ApiKeyHeader);
+        Assert.Equal(SharedKeyAuth.HeaderName, ClienteDelArbolDeServicios.CabeceraDeLlave);
     }
 }
