@@ -101,6 +101,14 @@ public sealed class ContratoSynHostTests
                 ("chaptersJson", """[{"startSeconds":0,"title":"Llegada"},{"startSeconds":42,"title":"La sala"}]"""),
                 ("enableAnalytics", true),
             },
+            ["hero-banner"] = new (string, object?)[]
+            {
+                ("title", "Viví el Caribe colombiano"),
+                ("subtitle", "Temporada 2026: vuelos y hoteles con el 20 % de descuento"),
+                ("media", ElementoFalso.Medio("/media/hero/playa-palomino.jpg", "Playa de Palomino al atardecer")),
+                ("ctaLabel", "Reservar ahora"),
+                ("ctaLink", ElementoFalso.Enlace("/reservas", "Reservas")),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

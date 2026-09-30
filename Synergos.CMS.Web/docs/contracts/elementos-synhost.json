@@ -151,6 +151,61 @@
       }
     },
     {
+      "nombre": "hero-banner",
+      "tipo": "pieza",
+      "record": "HeroBannerProps",
+      "diccionario": [
+        "Synhost.Hero"
+      ],
+      "campos": [
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "subtitle",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "media",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "mediaAlt",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "ctaLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "ctaLink",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "title": "Viví el Caribe colombiano",
+        "subtitle": "Temporada 2026: vuelos y hoteles con el 20 % de descuento",
+        "media": "/media/hero/playa-palomino.jpg",
+        "mediaAlt": "Playa de Palomino al atardecer",
+        "ctaLabel": "Reservar ahora",
+        "ctaLink": "/reservas"
+      }
+    },
+    {
       "nombre": "kpi-card",
       "tipo": "pieza",
       "record": "KpiCardProps",
