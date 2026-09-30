@@ -89,11 +89,21 @@ public sealed record RechazoDelArbolDeServicios(
     /// Lee el rechazo del cuerpo de una respuesta que no fue exitosa.
     /// </summary>
     /// <remarks>
-    /// <b>Un cuerpo que no se puede leer devuelve <c>null</c>, no lanza.</b> Quien llama ya está
-    /// en su camino de fallo y lo que necesita es decidir qué contar, no una segunda excepción
-    /// con la causa equivocada. Un <c>null</c> aquí y un rechazo con <c>Transitorio = null</c>
-    /// significan lo mismo para las tres propiedades de arriba, que es lo que hace que el
-    /// llamador no tenga que distinguirlos.
+    /// <para><b>Un cuerpo que no se puede leer devuelve <c>null</c>, no lanza.</b> Quien llama ya
+    /// está en su camino de fallo y lo que necesita es decidir qué contar, no una segunda
+    /// excepción con la causa equivocada. Un <c>null</c> aquí y un rechazo con
+    /// <c>Transitorio = null</c> significan lo mismo para las tres propiedades de arriba, que es
+    /// lo que hace que el llamador no tenga que distinguirlos.</para>
+    ///
+    /// <para><b>Se lee por BYTES y no por <c>ReadFromJsonAsync</c>, y es lo que deja leerlo DOS
+    /// veces</b> (#178). La cadena de reintento de <c>ClienteDelArbolDeServicios</c> mira la
+    /// bandera antes que el cliente; <c>ReadFromJsonAsync</c> abre el flujo del contenido, lo
+    /// guarda dentro de él y lo CIERRA al terminar, así que la segunda lectura —la del cliente,
+    /// que es la que cuenta el motivo— lanza <see cref="ObjectDisposedException"/>, que el filtro
+    /// de abajo no captura — medido con la mutación: «Cannot access a closed Stream». Un «no»
+    /// firme del medio de pago habría subido como una excepción sin traducir.
+    /// <c>ReadAsByteArrayAsync</c> deja el cuerpo en el búfer del contenido y no guarda flujo,
+    /// así que cada lectura lo vuelve a encontrar entero.</para>
     /// </remarks>
     public static async Task<RechazoDelArbolDeServicios?> LeerAsync(
         HttpResponseMessage respuesta, JsonSerializerOptions json, CancellationToken ct)
@@ -102,8 +112,10 @@ public sealed record RechazoDelArbolDeServicios(
 
         try
         {
-            return await respuesta.Content
-                .ReadFromJsonAsync<RechazoDelArbolDeServicios>(json, ct).ConfigureAwait(false);
+            var cuerpo = await respuesta.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            return cuerpo.Length == 0
+                ? null
+                : JsonSerializer.Deserialize<RechazoDelArbolDeServicios>(cuerpo, json);
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException or HttpRequestException)
         {

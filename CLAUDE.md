@@ -34,12 +34,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3453 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3477 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2353 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2377 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 660 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 440 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -158,7 +158,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3453**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3477**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2553,6 +2553,17 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   Windows llega en cp1252** —«ó» como el byte 0xF3—, así que lo que `provisionar.sh` manda por
   argumento viaja escapado en ASCII.
 
+- `feedback_a_body_the_chain_reads_must_stay_readable` — **un cuerpo que la cadena de handlers
+  lee ANTES que el cliente tiene que quedar legible para el cliente, y `ReadFromJsonAsync` no lo
+  deja** (#178). La pieza de los clientes del árbol (`ClienteDelArbolDeServicios`) mira la bandera
+  `transient` del rechazo para decidir si repite, y después el cliente vuelve a leer el MISMO
+  cuerpo para contar el motivo. `ReadFromJsonAsync` abre el flujo del contenido, lo guarda dentro
+  de él y lo cierra: la segunda lectura lanza «Cannot access a closed Stream» —medido mutando
+  `RechazoDelArbolDeServicios.LeerAsync` de vuelta—, y esa excepción no la filtra ningún
+  cliente. Se lee con `ReadAsByteArrayAsync`, que deja el cuerpo en el búfer y no guarda flujo:
+  cada lectura lo encuentra entero. **La pregunta que lo caza:** *¿alguien más va a leer este
+  cuerpo después de mí?* En una cadena de handlers la respuesta es casi siempre sí.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2612,11 +2623,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3453 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3477 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2353
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2377
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 660
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 440
 
@@ -3047,7 +3058,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3453 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3477 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

@@ -25,6 +25,12 @@ public sealed partial class SeamComposer
         services.AddOptions<WebhookResilienceSettings>()
             .Bind(builder.Config.GetSection("Synergos:Admin:WebhookResilience"));
 
+        // #178 — cuántas veces repite la pieza de los clientes del árbol de servicios. Es OTRA
+        // perilla que la de arriba: aquélla espera segundos porque quien espera es un avisador de
+        // fondo; acá espera una persona. Se enlaza igual, para que un cambio se lea en caliente.
+        services.AddOptions<ReintentoSettings>()
+            .Bind(builder.Config.GetSection("Synergos:Reintento"));
+
         // ── Identidad verificable de quien actúa (HU #14) ───────────────────
         //
         // Va acá y no en el composer de Gobierno aunque hoy la use sólo el expediente: quien

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
@@ -187,7 +188,10 @@ public sealed partial class SeamComposer
         // Olas 165-166 — Webhook telemetry store (ADR 0071). Ring buffer
         // in-memory por canal con last 1000 outcomes. Singleton — thread-safe
         // via per-channel lock. Reset on restart (no persistencia).
-        services.AddSingleton<IWebhookTelemetryStore, InMemoryWebhookTelemetryStore>();
+        // TryAdd (#178): la pieza de los clientes del árbol de servicios también lo registra, para
+        // enchufarse sola, y compone antes que esto. Con Add quedarían dos registros del mismo
+        // almacén y uno de ellos sin usar.
+        services.TryAddSingleton<IWebhookTelemetryStore, InMemoryWebhookTelemetryStore>();
 
         // Olas 195-196 + 236-237 + 254-256 — Telemetry alerts
         // (ADRs 0080 + 0085 + 0087). Scanner extraído del hosted service
