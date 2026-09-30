@@ -29,10 +29,10 @@ No hacía falta inventar la costura: `ISearchAnalyticsStore` ya lo decía por es
 | Ubicación | proyecto propio en esta solución, **sin referencia a `Synergos.CMS.*`** |
 | Acople | el contrato **HTTP**, no un ensamblado compartido |
 | Almacén | JSONL append-only, un fichero por día, retención propia |
-| Selección | `Synergos:SearchAnalytics:Mode` = `FileSystem` (default) \| `Sessions` |
+| Selección | `Synergos:SearchAnalytics:Mode` = `FileSystem` (default) \| `Api` (decía `Sessions`: ver la enmienda del #177) |
 
 El default sigue siendo `FileSystem` a propósito: un clon recién bajado arranca sin depender de
-otro proceso. Encender `Sessions` sin el servicio arriba **degrada** —el dashboard sale vacío—
+otro proceso. Encender `Api` sin el servicio arriba **degrada** —el dashboard sale vacío—
 pero no tumba el CMS.
 
 Que no haya referencia de ensamblado es la decisión que hace real la separación: el día que este
@@ -108,3 +108,31 @@ punta a punta con superficie mínima, que era el objetivo de empezar por búsque
 - **Identidad de visitante.** Ver arriba.
 - **Repositorio propio.** El proyecto ya está listo para mudarse —no referencia el CMS—; se
   quedó aquí para no pagar CI y release nuevos antes de que el circuito estuviera probado.
+
+## Enmienda — el modo se llama `Api` (#177, 2026-09-29)
+
+**La palabra `Sessions` costó un defecto en producción.** El despliegue (`tools/compose-gen.mjs`)
+escribía `Synergos__SearchAnalytics__Mode: Http` —la palabra del CDN, ADR 0132— y el composer sólo
+reconocía `Sessions`; cualquier otra caía **en silencio** a `FileSystem`. La analítica se guardaba
+en el disco del contenedor del CMS y `Api.Sessions` no recibía ni un evento. Nada lo decía: el
+servicio arrancaba sano y el dashboard se veía lleno, porque lo leía del disco.
+
+**Lo que cambió:**
+
+- El modo se llama **`Api`**, como el de toda capacidad del molde (doc 12). `Sessions` era el
+  nombre del servicio, anterior al molde; y la separación que esta ADR buscaba ya se había hecho
+  —el servicio es `Synergos.Api.Sessions`, una de las veinte—.
+- **Un modo que no se reconoce no arranca**: el composer lanza al cablear nombrando `FileSystem` y
+  `Api`. El principio de «Cómo se comporta cuando el otro lado no está» sigue en pie —con la palabra
+  bien escrita y el servicio caído, el dashboard sale vacío y el CMS sirve—; lo que no se degrada
+  es un error de configuración, porque ése no lo ve nadie.
+- La sección tiene POCO (`SearchAnalyticsSettings`) con los cuatro campos del molde; el timeout
+  deja de ser un 5 fijo.
+- `ModosDelComposeTests` cruza cada modo que escribe el despliegue contra lo que su composer
+  reconoce, y el trinquete de `MoldeDelVerticalTests` bajó de dos puntos fuera del vocabulario a
+  uno.
+
+La verificación de dos procesos de arriba se hizo con `Mode=Sessions`, y se rehízo con `Mode=Api`
+(servicio y CMS en puertos propios, bases desechables): cuatro búsquedas contra `/api/search` del
+CMS → el servicio reporta `written: 4` y su fichero del día, y el disco del CMS no guarda ninguna.
+El control, con `Mode=Http`: el CMS no arranca, y el log nombra la clave y los dos modos válidos.

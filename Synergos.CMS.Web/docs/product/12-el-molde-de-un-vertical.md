@@ -45,8 +45,9 @@ Y los seis interruptores que **no** son de un vertical, porque los consumen vari
 `Synergos:Payments:Mode`, `Synergos:Identity:Mode`, `Synergos:Audit:Mode`,
 `Synergos:Tracking:Mode`, `Synergos:SearchAnalytics:Mode`, `Synergos:BundleRegistry:Mode`.
 
-**Trece de los quince puntos de cableado del repo siguen el mismo molde, y los dos que no son
-anteriores a él** (§7).
+**Catorce de los quince puntos de cableado del repo siguen el mismo molde, y el que no es
+anterior a él** (§7). Eran trece: el de la analítica de búsqueda entró en el #177, y no por
+prolijidad — por no hablar el vocabulario costó un defecto en producción.
 
 ## 3. Un vertical son TRES ejes, y se cablean por separado
 
@@ -611,17 +612,41 @@ El eje 1 de un vertical es su **objeto central**, y el de Salud es el profesiona
 > cablea varios verticales —hoy sólo `SeamComposer.EventsPropertiesGov.cs`— el gate cuenta, no
 > empareja.
 
-### 7.3 Dos puntos de cableado son anteriores al molde
+### 7.3 Un punto de cableado es anterior al molde
 
-`Synergos:SearchAnalytics:Mode` (ADR 0130 — el consumidor **más viejo** del árbol, escrito antes
-de que hubiera molde) no tiene POCO: `BaseUrl`, `ApiKey` y un timeout de 5 s fijo se leen a pelo
-del `IConfiguration`. `Synergos:BundleRegistry:Mode` (ADR 0132) tiene POCO pero sin `ApiKey` ni
-`TimeoutSeconds`, y eso **es correcto**: el CDN es público y no lleva llave compartida.
+`Synergos:BundleRegistry:Mode` (ADR 0132) tiene POCO pero sin `ApiKey` ni `TimeoutSeconds`, y eso
+**es correcto**: el CDN es público y no lleva llave compartida. No es un vertical ni una capacidad,
+y su palabra —`Http`— dice justo eso.
 
-Ninguno de los dos es un vertical. Se dejan como están —arreglarlos cambia comportamiento y eso
-es otro ticket— pero **no se escriben en una lista de excepciones**: el gate lleva un
-**trinquete** (`PuntosAnterioresAlMolde = 2`), la misma forma que `tools/contract-keys.baseline.json`.
-Un punto nuevo fuera del vocabulario del molde lo sube a tres y rompe el build.
+No se escribe en una lista de excepciones: el gate lleva un **trinquete**
+(`PuntosAnterioresAlMolde = 1`), la misma forma que `tools/contract-keys.baseline.json`. Un punto
+nuevo fuera del vocabulario del molde lo sube a dos y rompe el build.
+
+**Eran dos, y el otro enseña por qué el vocabulario no es estilo** (#177).
+`Synergos:SearchAnalytics:Mode` (ADR 0130 — el consumidor más viejo del árbol, escrito antes de que
+hubiera molde) reconocía `Sessions`, el nombre del servicio; el despliegue escribía `Http`, la
+palabra del CDN; y cualquier otra caía **en silencio** al disco. En producción la analítica se
+guardaba en el contenedor del CMS y `Api.Sessions` —cuyo único consumidor es éste— no recibía ni
+un evento. Esta sección decía «se dejan como están, arreglarlos cambia comportamiento y eso es otro
+ticket»: el comportamiento que no se cambiaba era el defecto.
+
+Hoy dice `Api`, como toda capacidad, y al entrar al molde cumple sus reglas: `SearchAnalyticsSettings`
+con los cuatro campos, enlazado, default en proceso (`FileSystem`), correlación y llave. Y trae dos
+dientes que el resto del molde todavía no tiene:
+
+- **un modo que no se reconoce no arranca** (`SeamComposer.ModoDeAnaliticaDeBusqueda`), nombrando
+  los válidos. Degradar sigue valiendo cuando el OTRO proceso está caído; no cuando lo que está mal
+  es la palabra, porque ahí no se entera nadie;
+- **`ModosDelComposeTests`** cruza cada `Synergos__<Seam>__Mode` que escribe `compose.prod.yml`
+  —el literal, o el default de `${VAR:-…}`— y lo que propone `.env.example` contra lo que SU
+  composer reconoce, derivado por dos caminos que tienen que coincidir: leyendo las comparaciones
+  del composer más el default del POCO, y **componiendo de verdad** con ese valor —una palabra que
+  cablea lo mismo que no configurar nada y no es la del default es una palabra que nadie lee—.
+
+**Lo que queda abierto, dicho con su tamaño:** los otros catorce interruptores siguen cayendo en
+silencio a su camino en proceso con una palabra desconocida —`SYNERGOS_TIENDA_MODE=Api` sirve la
+tienda local sin avisar—. El gate cubre lo que el compose TRAE escrito; lo que el operador ponga en
+el `.env` del servidor sólo lo para un modo que se valida al cablear, y hoy sólo lo valida uno.
 
 ### 7.4 El seudónimo está escrito siete veces con tres nombres
 

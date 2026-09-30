@@ -469,11 +469,10 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<IPrivateFileStore>(),
                 sp.GetRequiredService<IAuditTrailWriter>(),
                 null));
-        // OLA 8 Gobierno — correspondencia del expediente sobre el seam GENÉRICO
-        // IMessagingService (contexto 'gov', contextRef = radicado). Se siembra al boot
-        // desde un hosted service (no en el ctor de la mensajería, compartida por varios
-        // dominios), igual que BlogsDemoSeedHostedService. Idempotente.
-        services.AddHostedService<GovCorrespondenceSeedHostedService>();
+        // OLA 8 Gobierno — la correspondencia del expediente vive sobre el seam GENÉRICO y
+        // durable IMessagingService (contexto 'gov', contextRef = radicado). La de DEMO no se
+        // siembra al arrancar (ADR 0013): la siembra POST /dev/seed-gov-correspondence, detrás
+        // de Synergos:DevSeed:Enabled (#176).
 
     }
 

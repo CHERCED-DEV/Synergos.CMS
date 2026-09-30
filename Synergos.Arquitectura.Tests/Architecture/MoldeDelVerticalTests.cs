@@ -58,14 +58,16 @@ public sealed class MoldeDelVerticalTests
     /// </summary>
     /// <remarks>
     /// <b>Es un trinquete, no una lista de excepciones</b> — la misma forma que
-    /// <c>tools/contract-keys.baseline.json</c>. Hoy son dos y los dos son anteriores al molde:
-    /// <c>Synergos:SearchAnalytics:Mode</c> (<c>Sessions</c>, ADR 0130 — el consumidor más viejo
-    /// del árbol, escrito antes de que hubiera molde) y <c>Synergos:BundleRegistry:Mode</c>
-    /// (<c>Http</c>, ADR 0132 — el CDN, que es público y por eso no lleva llave compartida ni
-    /// puede tener los cuatro campos). No se arreglan aquí porque cambiarlos cambia
-    /// comportamiento y eso es otro ticket; lo que este número impide es que la deuda CREZCA.
+    /// <c>tools/contract-keys.baseline.json</c>. Hoy es uno, anterior al molde:
+    /// <c>Synergos:BundleRegistry:Mode</c> (<c>Http</c>, ADR 0132 — el CDN, que es público y por
+    /// eso no lleva llave compartida ni puede tener los cuatro campos).
+    /// <para>Eran dos. El otro, <c>Synergos:SearchAnalytics:Mode</c> (<c>Sessions</c>, ADR 0130 —
+    /// el consumidor más viejo del árbol), <b>costó un defecto en producción por no hablar el
+    /// vocabulario</b>: el despliegue escribía <c>Http</c>, el composer entendía <c>Sessions</c> y
+    /// lo demás caía en silencio al disco (#177). Hoy dice <c>Api</c> y cumple el molde, y el
+    /// trinquete bajó con él: dejarlo en dos habría guardado el hueco para el próximo.</para>
     /// </remarks>
-    private const int PuntosAnterioresAlMolde = 2;
+    private const int PuntosAnterioresAlMolde = 1;
 
     /// <summary>Los verticales que sabemos que existen. Solo para afirmar que el gate VE.</summary>
     private static readonly string[] VerticalesConocidos =
@@ -308,8 +310,8 @@ public sealed class MoldeDelVerticalTests
         // orden de los pasos no vive acá». Una tercera palabra deja el vertical fuera del molde
         // sin que nadie lo decida — y sin que este gate lo mire.
         //
-        // TRINQUETE, no lista de excepciones: los dos de hoy son anteriores al molde y están
-        // nombrados en PuntosAnterioresAlMolde con su razón.
+        // TRINQUETE, no lista de excepciones: el de hoy es anterior al molde y está nombrado en
+        // PuntosAnterioresAlMolde con su razón.
         var fuera = Puntos()
             .Where(p => !Vocabulario.Contains(p.ModoCableado, StringComparer.Ordinal))
             .ToList();

@@ -1,6 +1,5 @@
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
-using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -68,14 +67,15 @@ public sealed partial class SeamComposer
         //     IUserCollection (colección "saved"); explore/trending + long-form
         //     (Kind=article) reusan IContentStream + IReactionService; el studio
         //     compone grafo + reacciones. Todo vía BlogsController.
-        // La data de demo de DMs/guardados vive en seams GENÉRICOS compartidos con
-        // otros dominios, así que se siembra al boot desde un hosted service (no en
-        // el ctor de la mensajería genérica) — idempotente.
+        // La data de demo de DMs/guardados vive en seams GENÉRICOS y DURABLES que comparten
+        // otros dominios, así que NO se siembra acá: ni en el ctor de la mensajería ni desde
+        // un hosted service al arrancar (ADR 0013). La siembra POST /dev/seed-blogs-demo,
+        // detrás de Synergos:DevSeed:Enabled. Hasta el #176 la sembraba un hosted service en
+        // cada arranque y en todo entorno, producción incluida.
         services.AddSingleton<INotificationFeed>(sp =>
             new StubNotificationFeed(
                 sp.GetRequiredService<ISocialGraphService>(),
                 sp.GetRequiredService<StubReactionService>()));
-        services.AddHostedService<BlogsDemoSeedHostedService>();
 
     }
 }

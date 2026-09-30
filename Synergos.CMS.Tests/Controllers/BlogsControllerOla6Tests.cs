@@ -15,7 +15,7 @@ namespace Synergos.CMS.Tests.Controllers;
 /// </summary>
 public sealed class BlogsControllerOla6Tests
 {
-    // Construye el controller con stubs reales; siembra DMs + guardados como en boot.
+    // Construye el controller con stubs reales; siembra DMs + guardados como POST /dev/seed-blogs-demo.
     private static async Task<BlogsController> BuildAsync()
     {
         var graph = new StubSocialGraphService();

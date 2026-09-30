@@ -133,6 +133,17 @@ curl -X POST http://localhost:<puerto>/dev/seed-portada
 Contesta `{"outcome":"Created"}` la primera vez y `AlreadyAuthored` después —
 **no pisa lo que hayas ajustado**, que es el daño que importa, no duplicar.
 
+Los datos de DEMO de las apps que viven en la mensajería y las colecciones —los DM y
+guardados de Blogs, la correspondencia de los expedientes de Gobierno— tampoco se
+siembran solos (#176), ni con el flag encendido. Si los querés ver:
+
+```bash
+curl -X POST http://localhost:<puerto>/dev/seed-blogs-demo
+curl -X POST http://localhost:<puerto>/dev/seed-gov-correspondence
+```
+
+Los dos son idempotentes: la segunda vez contestan que crearon cero.
+
 ## 4. Enchufar el CMS al CDN
 
 **Si corrés en `Development` y clonaste los dos repos hermanos, esto ya está
