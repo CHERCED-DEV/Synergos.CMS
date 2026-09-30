@@ -130,6 +130,43 @@ public sealed class ContratoSynHostTests
                 ("expandAll", true),
                 ("ariaLabel", "Catálogo de la tienda"),
             },
+            ["accordion"] = new (string, object?)[]
+            {
+                ("itemsJson", """[{"title":"¿Cuánto tarda el envío?","content":"Entre 2 y 5 días hábiles en ciudades principales."},{"title":"¿Puedo devolver un producto?","content":"Sí, dentro de los 30 días siguientes a la entrega."}]"""),
+                ("allowMultiple", true),
+            },
+            ["badge-group"] = new (string, object?)[]
+            {
+                ("badgesJson", """[{"label":"Envío gratis","color":"success","iconKey":"truck"},{"label":"Nuevo","color":"brand","iconKey":"sparkles"}]"""),
+                ("layout", "stack"),
+            },
+            ["breadcrumb"] = new (string, object?)[]
+            {
+                ("itemsJson", """[{"label":"Inicio","url":"/"},{"label":"Tienda","url":"/tienda"},{"label":"Zapatos"}]"""),
+                ("includeStructuredData", true),
+            },
+            ["color-swatches"] = new (string, object?)[]
+            {
+                ("swatchesJson", """[{"hex":"#1e3a8a","name":"Azul noche"},{"hex":"#f97316","name":"Naranja"}]"""),
+                ("shape", "circle"),
+            },
+            ["icon-label"] = new (string, object?)[]
+            {
+                ("iconKey", "check"),
+                ("labelText", "Envío gratis a todo el país"),
+            },
+            ["notification-toast"] = new (string, object?)[]
+            {
+                ("message", "Tu pedido quedó confirmado."),
+                ("type", "success"),
+                ("durationMs", "8000"),
+            },
+            ["progress-bar"] = new (string, object?)[]
+            {
+                ("valueNow", "3"),
+                ("valueMax", "5"),
+                ("ariaLabel", "Pasos completados del registro"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

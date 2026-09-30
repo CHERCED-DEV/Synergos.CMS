@@ -1,20 +1,17 @@
-﻿@*
+@*
     SynHost renderer — <synergos-notification-toast>. Toast notification.
+
+    Host tonto (ADR 0135): el resolver arma el record que viaja (NotificationToastProps) —el
+    aviso del editor como la lista toasts, la duración como número— y la vista resuelve y
+    emite. Antes mandaba message/type en el config y el elemento sólo los lee como atributo:
+    el aviso colocado no mostraba nada (D1).
 *@
+@using Synergos.CMS.Web.Services.SynHost
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.NotificationToastProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["message"] = Model.Value<string>("message"),
-        ["type"] = Model.Value<string>("type"),
-        ["durationMs"] = Model.Value<string>("durationMs"),
-    };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
-        BlockAlias: "notification-toast",
-        Props: props,
-        ConfigOverrideJson: Model.Value<string>("configOverride"),
-        Culture: System.Globalization.CultureInfo.CurrentUICulture);
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

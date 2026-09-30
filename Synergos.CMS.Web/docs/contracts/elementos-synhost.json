@@ -2,6 +2,111 @@
   "comentario": "GENERADO desde los records [ElementoSynHost] de Synergos.CMS.Interfaces por Synergos.CMS.Tests/Services/SynHost/ContratoSynHostTests.cs — no se edita a mano (ADR 0135). `ejemplo` es el config EXACTO que emite la vista para una muestra autorada.",
   "elementos": [
     {
+      "nombre": "accordion",
+      "tipo": "pieza",
+      "record": "AccordionProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "items",
+          "tipo": "AccordionSection[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "allowMultiple",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "items": [
+          {
+            "title": "¿Cuánto tarda el envío?",
+            "body": "Entre 2 y 5 días hábiles en ciudades principales."
+          },
+          {
+            "title": "¿Puedo devolver un producto?",
+            "body": "Sí, dentro de los 30 días siguientes a la entrega."
+          }
+        ],
+        "allowMultiple": true
+      }
+    },
+    {
+      "nombre": "badge-group",
+      "tipo": "pieza",
+      "record": "BadgeGroupProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "badges",
+          "tipo": "BadgeGroupItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "layout",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "badges": [
+          {
+            "label": "Envío gratis",
+            "tone": "success"
+          },
+          {
+            "label": "Nuevo",
+            "tone": "brand"
+          }
+        ],
+        "layout": "stack"
+      }
+    },
+    {
+      "nombre": "breadcrumb",
+      "tipo": "pieza",
+      "record": "BreadcrumbProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "items",
+          "tipo": "BreadcrumbStep[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "includeStructuredData",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "items": [
+          {
+            "label": "Inicio",
+            "href": "/"
+          },
+          {
+            "label": "Tienda",
+            "href": "/tienda"
+          },
+          {
+            "label": "Zapatos"
+          }
+        ],
+        "includeStructuredData": true
+      }
+    },
+    {
       "nombre": "carousel",
       "tipo": "pieza",
       "record": "CarouselProps",
@@ -42,6 +147,40 @@
         ],
         "autoplay": true,
         "interval": 4000
+      }
+    },
+    {
+      "nombre": "color-swatches",
+      "tipo": "pieza",
+      "record": "ColorSwatchesProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "swatches",
+          "tipo": "ColorSwatchesItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "shape",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "swatches": [
+          {
+            "color": "#1e3a8a",
+            "label": "Azul noche"
+          },
+          {
+            "color": "#f97316",
+            "label": "Naranja"
+          }
+        ],
+        "shape": "circle"
       }
     },
     {
@@ -94,6 +233,31 @@
       }
     },
     {
+      "nombre": "icon-label",
+      "tipo": "pieza",
+      "record": "IconLabelProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "iconName",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "labelText",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "iconName": "check",
+        "labelText": "Envío gratis a todo el país"
+      }
+    },
+    {
       "nombre": "kpi-card",
       "tipo": "pieza",
       "record": "KpiCardProps",
@@ -139,6 +303,68 @@
         "trend": "up",
         "deltaLabel": "+12 %",
         "period": "vs. agosto"
+      }
+    },
+    {
+      "nombre": "notification-toast",
+      "tipo": "pieza",
+      "record": "NotificationToastProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "toasts",
+          "tipo": "NotificationToastSeed[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "durationMs",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "toasts": [
+          {
+            "message": "Tu pedido quedó confirmado.",
+            "variant": "success"
+          }
+        ],
+        "durationMs": 8000
+      }
+    },
+    {
+      "nombre": "progress-bar",
+      "tipo": "pieza",
+      "record": "ProgressBarProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "value",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "max",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "value": 3,
+        "max": 5,
+        "label": "Pasos completados del registro"
       }
     },
     {
@@ -512,6 +738,51 @@
   ],
   "tipos": [
     {
+      "record": "AccordionSection",
+      "campos": [
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "body",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "BadgeGroupItem",
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "tone",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "BreadcrumbStep",
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "href",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
       "record": "CarouselSlide",
       "campos": [
         {
@@ -523,6 +794,21 @@
           "nombre": "alt",
           "tipo": "string",
           "opcional": true
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "ColorSwatchesItem",
+      "campos": [
+        {
+          "nombre": "color",
+          "tipo": "string",
+          "opcional": false
         },
         {
           "nombre": "label",
@@ -546,6 +832,21 @@
         },
         {
           "nombre": "href",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "NotificationToastSeed",
+      "campos": [
+        {
+          "nombre": "message",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "variant",
           "tipo": "string",
           "opcional": true
         }
