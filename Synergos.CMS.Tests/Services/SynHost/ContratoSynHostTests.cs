@@ -84,6 +84,12 @@ public sealed class ContratoSynHostTests
                 ("tagLabel", "Oferta"),
                 ("tagColor", "success"),
             },
+            ["scroll-top"] = new (string, object?)[]
+            {
+                ("scrollThreshold", "400"),
+                ("position", "bottom-left"),
+                ("ariaLabel", "Subir al inicio"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
