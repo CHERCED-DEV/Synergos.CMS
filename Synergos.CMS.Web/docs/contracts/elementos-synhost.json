@@ -146,6 +146,51 @@
       }
     },
     {
+      "nombre": "chart-bar",
+      "tipo": "pieza",
+      "record": "ChartBarProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "orientation",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "data",
+          "tipo": "ChartBarEntry[]",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "title": "Afiliados nuevos por trimestre",
+        "orientation": "horizontal",
+        "data": [
+          {
+            "label": "T1",
+            "value": 1200
+          },
+          {
+            "label": "T2",
+            "value": 1845300
+          },
+          {
+            "label": "T3",
+            "value": 950.5
+          }
+        ]
+      }
+    },
+    {
       "nombre": "cookie-consent",
       "tipo": "pieza",
       "record": "CookieConsentProps",
@@ -485,6 +530,58 @@
       }
     },
     {
+      "nombre": "map-pin",
+      "tipo": "pieza",
+      "record": "MapPinProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "centerLat",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "centerLng",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "zoomLevel",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "pins",
+          "tipo": "MapPinItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "centerLat": 4.7110,
+        "centerLng": -74.0721,
+        "zoomLevel": 12,
+        "pins": [
+          {
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "label": "Oficina Bogotá",
+            "description": "Carrera 7 # 71-21, piso 12"
+          },
+          {
+            "lat": 6.2518,
+            "lng": -75.5636,
+            "label": "Oficina Medellín",
+            "description": "El Poblado"
+          }
+        ]
+      }
+    },
+    {
       "nombre": "rating-stars",
       "tipo": "pieza",
       "record": "RatingStarsProps",
@@ -672,6 +769,21 @@
       ]
     },
     {
+      "record": "ChartBarEntry",
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "value",
+          "tipo": "number",
+          "opcional": false
+        }
+      ]
+    },
+    {
       "record": "DropdownOption",
       "campos": [
         {
@@ -711,6 +823,31 @@
         },
         {
           "nombre": "caption",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "MapPinItem",
+      "campos": [
+        {
+          "nombre": "lat",
+          "tipo": "number",
+          "opcional": false
+        },
+        {
+          "nombre": "lng",
+          "tipo": "number",
+          "opcional": false
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "description",
           "tipo": "string",
           "opcional": true
         }

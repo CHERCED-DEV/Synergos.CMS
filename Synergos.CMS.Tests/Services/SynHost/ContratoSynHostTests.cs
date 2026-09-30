@@ -159,6 +159,19 @@ public sealed class ContratoSynHostTests
                 ("imagesJson", """[{"thumbUrl":"/media/casa/sala-t.jpg","fullUrl":"/media/casa/sala.jpg","alt":"Sala con ventanal","caption":"La sala"},{"thumbUrl":"/media/casa/cocina-t.jpg","fullUrl":"/media/casa/cocina.jpg","alt":"Cocina integral","caption":"La cocina"}]"""),
                 ("columns", "2"),
             },
+            ["chart-bar"] = new (string, object?)[]
+            {
+                ("chartTitle", "Afiliados nuevos por trimestre"),
+                ("dataJson", """[{"label":"T1","value":1200},{"label":"T2","value":"1.845.300"},{"label":"T3","value":"950,5"}]"""),
+                ("orientation", "horizontal"),
+            },
+            ["map-pin"] = new (string, object?)[]
+            {
+                ("centerLat", "4,7110"),
+                ("centerLng", "-74.0721"),
+                ("zoomLevel", "12"),
+                ("pinsJson", """[{"lat":4.6097,"lng":-74.0817,"title":"Oficina Bogotá","description":"Carrera 7 # 71-21, piso 12"},{"lat":"6,2518","lng":"-75.5636","title":"Oficina Medellín","description":"El Poblado"}]"""),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
