@@ -148,6 +148,17 @@ public sealed class ContratoSynHostTests
                 ("showLabels", true),
                 ("style", "digits"),
             },
+            ["avatar-group"] = new (string, object?)[]
+            {
+                ("avatarsJson", """[{"url":"/media/equipo/ana-gomez.jpg","name":"Ana Gómez","role":"Directora"},{"url":"/media/equipo/luis-pardo.jpg","name":"Luis Pardo","role":"CTO"},{"name":"Marta Ruiz"}]"""),
+                ("maxVisible", "2"),
+                ("ariaLabel", "Equipo directivo"),
+            },
+            ["lightbox-gallery"] = new (string, object?)[]
+            {
+                ("imagesJson", """[{"thumbUrl":"/media/casa/sala-t.jpg","fullUrl":"/media/casa/sala.jpg","alt":"Sala con ventanal","caption":"La sala"},{"thumbUrl":"/media/casa/cocina-t.jpg","fullUrl":"/media/casa/cocina.jpg","alt":"Cocina integral","caption":"La cocina"}]"""),
+                ("columns", "2"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

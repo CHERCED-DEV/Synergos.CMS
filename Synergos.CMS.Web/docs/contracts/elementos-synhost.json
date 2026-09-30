@@ -59,6 +59,50 @@
       }
     },
     {
+      "nombre": "avatar-group",
+      "tipo": "pieza",
+      "record": "AvatarGroupProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "avatars",
+          "tipo": "AvatarGroupMember[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "maxVisible",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "avatars": [
+          {
+            "name": "Ana Gómez",
+            "src": "/media/equipo/ana-gomez.jpg"
+          },
+          {
+            "name": "Luis Pardo",
+            "src": "/media/equipo/luis-pardo.jpg"
+          },
+          {
+            "name": "Marta Ruiz"
+          }
+        ],
+        "maxVisible": 2,
+        "label": "Equipo directivo"
+      }
+    },
+    {
       "nombre": "carousel",
       "tipo": "pieza",
       "record": "CarouselProps",
@@ -403,6 +447,44 @@
       }
     },
     {
+      "nombre": "lightbox-gallery",
+      "tipo": "pieza",
+      "record": "LightboxGalleryProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "images",
+          "tipo": "LightboxGalleryImage[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "columns",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "images": [
+          {
+            "src": "/media/casa/sala.jpg",
+            "thumb": "/media/casa/sala-t.jpg",
+            "alt": "Sala con ventanal",
+            "caption": "La sala"
+          },
+          {
+            "src": "/media/casa/cocina.jpg",
+            "thumb": "/media/casa/cocina-t.jpg",
+            "alt": "Cocina integral",
+            "caption": "La cocina"
+          }
+        ],
+        "columns": 2
+      }
+    },
+    {
       "nombre": "rating-stars",
       "tipo": "pieza",
       "record": "RatingStarsProps",
@@ -555,6 +637,21 @@
   ],
   "tipos": [
     {
+      "record": "AvatarGroupMember",
+      "campos": [
+        {
+          "nombre": "name",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "src",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
       "record": "CarouselSlide",
       "campos": [
         {
@@ -589,6 +686,31 @@
         },
         {
           "nombre": "href",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "LightboxGalleryImage",
+      "campos": [
+        {
+          "nombre": "src",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "thumb",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "alt",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "caption",
           "tipo": "string",
           "opcional": true
         }
