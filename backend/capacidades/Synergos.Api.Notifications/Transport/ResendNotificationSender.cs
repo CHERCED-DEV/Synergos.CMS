@@ -51,6 +51,8 @@ public sealed class ResendNotificationSender : INotificationSender
 
         // El cuerpo va como HTML porque es lo que un correo transaccional es en la práctica. La
         // plantilla la escribe el dominio (doc 07): acá no se decora ni se envuelve nada.
+        // Y no se codifica: llega ya rellenado con cada valor codificado por la regla
+        // (NotificationRules.Fill, #175). Codificarlo otra vez le mostraría «&lt;» a quien lo lee.
         var carga = JsonSerializer.Serialize(new
         {
             from = _options.From,

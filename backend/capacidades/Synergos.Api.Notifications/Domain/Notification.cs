@@ -16,8 +16,12 @@ public enum Channel
 /// <param name="Id">Identificador.</param>
 /// <param name="Key">Nombre estable con el que la pide un dominio — <c>cita.recordatorio</c>.</param>
 /// <param name="Channel">Por dónde sale.</param>
-/// <param name="Subject">Asunto, con marcadores <c>{nombre}</c>.</param>
-/// <param name="Body">Cuerpo, con marcadores <c>{nombre}</c>.</param>
+/// <param name="Subject">Asunto, con marcadores <c>{nombre}</c>. Texto plano en todos los canales.</param>
+/// <param name="Body">
+/// Cuerpo, con marcadores <c>{nombre}</c>. <b>HTML en correo</b>, texto en SMS y push
+/// (<see cref="NotificationRules.BodyIsHtml"/>): el marcado lo pone la plantilla, y los valores
+/// entran codificados (#175).
+/// </param>
 /// <remarks>
 /// <b>La plantilla vive acá y el texto lo escribe el dominio.</b> Es la línea que mantiene esta
 /// capacidad agnóstica: Notifications sabe rellenar marcadores y entregar, no sabe qué es una

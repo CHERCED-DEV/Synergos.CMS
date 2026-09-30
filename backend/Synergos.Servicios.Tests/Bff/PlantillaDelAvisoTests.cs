@@ -119,6 +119,18 @@ public sealed class PlantillaDelAvisoTests
     }
 
     /// <summary>
+    /// La plantilla del fichero como la guarda la capacidad: el canal se lee igual que
+    /// <c>POST /v1/templates</c>, sin distinguir mayúsculas. Es el canal lo que decide si el cuerpo
+    /// es HTML (#175), así que no es un dato que el test pueda inventar.
+    /// </summary>
+    private static Template ComoLaGuardaLaCapacidad(Plantilla p)
+    {
+        Assert.True(Enum.TryParse<Channel>(p.Channel, ignoreCase: true, out var canal),
+            $"La plantilla «{p.Key}» declara el canal «{p.Channel}», que Api.Notifications no conoce.");
+        return new Template("provisionada", p.Key, canal, p.Subject, p.Body);
+    }
+
+    /// <summary>
     /// Cada orquestador pide una plantilla que el despliegue aprovisiona.
     /// </summary>
     /// <remarks>
@@ -185,16 +197,43 @@ public sealed class PlantillaDelAvisoTests
     public async Task Cada_marcador_de_la_plantilla_lo_manda_el_aviso()
     {
         var (clave, valores) = await LoQueElAvisoManda();
-        var plantilla = LaQuePide(clave);
+        var plantilla = ComoLaGuardaLaCapacidad(LaQuePide(clave));
 
-        foreach (var (campo, texto) in new[] { ("subject", plantilla.Subject), ("body", plantilla.Body) })
-        {
-            var relleno = NotificationRules.Fill(texto, valores);
-            Assert.True(relleno.IsOk,
-                $"El {campo} de la plantilla «{clave}» no se puede rellenar con lo que el aviso manda "
-                + $"({string.Join(", ", valores.Keys.Select(k => "{" + k + "}"))}): "
-                + $"{relleno.Rejection?.Message} Cada aviso saldría notifications.missing_placeholder.");
-        }
+        var relleno = NotificationRules.Fill(plantilla, valores);
+        Assert.True(relleno.IsOk,
+            $"La plantilla «{clave}» no se puede rellenar con lo que el aviso manda "
+            + $"({string.Join(", ", valores.Keys.Select(k => "{" + k + "}"))}): "
+            + $"{relleno.Rejection?.Message} Cada aviso saldría notifications.missing_placeholder.");
+    }
+
+    /// <summary>
+    /// Codificar los valores (#175) no cambia el correo de la guardia: con lo que el aviso manda,
+    /// sale el mismo cuerpo que antes, con el marcado de la plantilla intacto.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Lo que se compara es contra el relleno CRUDO</b> —cada marcador por su valor, tal
+    /// cual—, que es lo que la capacidad hacía antes del #175. Con valores sin marcado los dos
+    /// tienen que coincidir byte a byte: si no, codificar habría tocado algo que no era de un
+    /// valor —el <c>&lt;p&gt;</c> de la plantilla, o las tildes de un valor normal—, y la guardia
+    /// recibiría un correo roto o un rastro ilegible.</para>
+    ///
+    /// <para>Es una afirmación sobre lo que el aviso manda HOY con esta saga. El
+    /// <c>{pendientes}</c> real lleva el <c>LastError</c> de una capacidad, que puede traer
+    /// comillas o un <c>&lt;</c> de un tercero: ése sí sale codificado, y es a propósito.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Con_lo_que_el_aviso_manda_el_cuerpo_sale_igual_que_el_relleno_crudo()
+    {
+        var (clave, valores) = await LoQueElAvisoManda();
+        var plantilla = ComoLaGuardaLaCapacidad(LaQuePide(clave));
+        Assert.True(NotificationRules.BodyIsHtml(plantilla.Channel),
+            $"La plantilla «{clave}» ya no es de correo: este test comparaba un cuerpo HTML.");
+
+        var crudo = Regex.Replace(plantilla.Body, @"\{(\w+)\}", m => valores[m.Groups[1].Value]);
+        var relleno = NotificationRules.Fill(plantilla, valores);
+
+        Assert.True(relleno.IsOk, relleno.Rejection?.Message);
+        Assert.Equal(crudo, relleno.Value.Body);
     }
 
     /// <summary>
@@ -210,11 +249,10 @@ public sealed class PlantillaDelAvisoTests
     public async Task Cada_marcador_que_el_aviso_manda_lo_usa_la_plantilla()
     {
         var (clave, valores) = await LoQueElAvisoManda();
-        var plantilla = LaQuePide(clave);
-        var texto = plantilla.Subject + "\n" + plantilla.Body;
+        var plantilla = ComoLaGuardaLaCapacidad(LaQuePide(clave));
 
         var sinUsar = valores.Keys
-            .Where(marcador => NotificationRules.Fill(texto,
+            .Where(marcador => NotificationRules.Fill(plantilla,
                 valores.Where(v => v.Key != marcador).ToDictionary(v => v.Key, v => v.Value, StringComparer.Ordinal)).IsOk)
             .ToList();
 
