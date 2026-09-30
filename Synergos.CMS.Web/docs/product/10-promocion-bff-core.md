@@ -158,6 +158,7 @@ Tres, todos mutados para comprobar que se disparan:
   salió y el envío existe: el estado del pedido es contabilidad, y deshacer un despacho no existe
   como operación. Queda un log en rojo y una fila para conciliar.
 - **Siguen abiertos los tres del doc 09 §6**: no hay política de abandono, el retroceso no es
-  configurable, y el arranque no comprueba que la plantilla del aviso exista.
+  configurable, y el arranque no comprueba que la plantilla del aviso exista. *(La tercera ya la
+  comprueba el despliegue —`provisionar.sh --verificar`, #174—, que es donde hacía falta.)*
 - **Seis orquestadores más** — Viajes, Eventos, Realty, Gob, Academy, Social. El tercero ya no
   debería mover nada de `Bff.Core`; si lo mueve, es la señal de que la línea quedó mal cortada.

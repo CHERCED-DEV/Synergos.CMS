@@ -20,9 +20,11 @@ using Synergos.Shared;
 // ANTES DE DESPLEGAR: el aviso de compensación colgada necesita DOS cosas que no
 // se pueden inventar desde acá —
 //   1. Tienda:Alerts:{ToKind,ToId,Address} — a quién se le avisa.
-//   2. La plantilla configurada en Tienda:Alerts:TemplateKey autorada en
-//      Api.Notifications, usando SOLO los marcadores {saga}, {origen}, {desde}
-//      y {pendientes}.
+//   2. La plantilla que pide —Tienda:Alerts:TemplateKey, o bff.compensacion.colgada
+//      si no se configura, que es lo que hacen los cuatro— publicada en
+//      Api.Notifications. NO se autora a mano: la publica tools/provisionar.sh
+//      desde tools/provisionar.plantillas.json, y --verificar sale rojo si
+//      falta (#174). Una clave propia hay que declararla en ese fichero.
 // Sin las dos, una compensación rendida queda visible en /v1/compensations con
 // alertedAtUtc en nulo y un error en el log que nombra lo que falta.
 // ─────────────────────────────────────────────────────────────────────────────

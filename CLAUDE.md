@@ -2505,6 +2505,29 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   remoto vacía `credential.helper`, `core.askPass` y `SSH_ASKPASS`: así no se cuelga y además
   reproduce el CI, que no tiene credenciales.
 
+- `feedback_what_the_code_asks_for_by_key_is_deploy_state` — **lo que el código le pide a otra
+  pieza POR CLAVE —una plantilla, una definición— es estado de despliegue: si nada lo siembra, en
+  un servidor limpio no existe. Y un test que configura SU PROPIA clave contra un doble no prueba
+  la de por defecto** (#174). Los seis ficheros de tests de compensación ponían
+  `TemplateKey = "salud.compensacion.colgada"` y un doble contestaba 200; ninguno pedía
+  `bff.compensacion.colgada`, que es la que piden los cuatro orquestadores desplegados —ninguno
+  configura otra, medido en el compose generado— y que nada sembraba. El aviso que cierra el lazo
+  de una compensación colgada salía `template_not_found` el día que hacía falta, con
+  `provisionar.sh --verificar` en verde: sólo miraba lo que él mismo sembraba. Es
+  `feedback_no_read_without_a_write_path` con la escritura como paso de DESPLIEGUE.
+  **La pregunta que lo caza:** *¿quién pone lo que esta clave nombra en un servidor recién
+  montado?* Y el gate cruza la clave que el código RESUELVE —configurada o por defecto, leyendo lo
+  que el compose le pasa— contra lo que el despliegue declara, y el contenido con la regla de la
+  propia capacidad (`NotificationRules.Fill`), con lo que el código MANDA capturado en el cable y
+  no con una lista copiada.
+  **Dos trampas que salieron arreglándolo, las dos medidas:** (1) **una clave de configuración
+  que ningún proceso lee no falla, se ignora** — `ArnesDeCapacidades` ponía `Storage:Root` y
+  `SharedKey`, las veinte leen `<Cap>:Storage:Root` y `<Cap>:ApiKey`, y el almacén de cada host
+  caía en `bin/` y sobrevivía entre corridas: el test contra la capacidad real salía verde en la
+  primera corrida y rojo en la segunda. (2) **un argumento no ASCII a `curl` desde Git Bash de
+  Windows llega en cp1252** —«ó» como el byte 0xF3—, así que lo que `provisionar.sh` manda por
+  argumento viaja escapado en ASCII.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
