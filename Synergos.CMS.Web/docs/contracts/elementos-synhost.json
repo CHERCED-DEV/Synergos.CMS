@@ -150,6 +150,40 @@
       }
     },
     {
+      "nombre": "color-swatches",
+      "tipo": "pieza",
+      "record": "ColorSwatchesProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "swatches",
+          "tipo": "ColorSwatchesItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "shape",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "swatches": [
+          {
+            "color": "#1e3a8a",
+            "label": "Azul noche"
+          },
+          {
+            "color": "#f97316",
+            "label": "Naranja"
+          }
+        ],
+        "shape": "circle"
+      }
+    },
+    {
       "nombre": "dropdown",
       "tipo": "pieza",
       "record": "DropdownProps",
@@ -362,6 +396,21 @@
           "nombre": "alt",
           "tipo": "string",
           "opcional": true
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "ColorSwatchesItem",
+      "campos": [
+        {
+          "nombre": "color",
+          "tipo": "string",
+          "opcional": false
         },
         {
           "nombre": "label",

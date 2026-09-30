@@ -99,6 +99,11 @@ public sealed class ContratoSynHostTests
                 ("itemsJson", """[{"label":"Inicio","url":"/"},{"label":"Tienda","url":"/tienda"},{"label":"Zapatos"}]"""),
                 ("includeStructuredData", true),
             },
+            ["color-swatches"] = new (string, object?)[]
+            {
+                ("swatchesJson", """[{"hex":"#1e3a8a","name":"Azul noche"},{"hex":"#f97316","name":"Naranja"}]"""),
+                ("shape", "circle"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
