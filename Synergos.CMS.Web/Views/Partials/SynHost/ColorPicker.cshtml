@@ -1,20 +1,16 @@
-﻿@*
+@*
     SynHost renderer — <synergos-color-picker>. Color picker with palette.
+
+    Host tonto (ADR 0135): el resolver arma el record que viaja (ColorPickerProps) —la paleta
+    como lista de colores hex— y la vista resuelve y emite. Antes mandaba el texto paletteJson y
+    el elemento lee la lista palette: el selector pintaba la paleta de fábrica (D1).
 *@
+@using Synergos.CMS.Web.Services.SynHost
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.ColorPickerProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["label"] = Model.Value<string>("label"),
-        ["initialColor"] = Model.Value<string>("initialColor"),
-        ["paletteJson"] = Model.Value<string>("paletteJson"),
-    };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
-        BlockAlias: "color-picker",
-        Props: props,
-        ConfigOverrideJson: Model.Value<string>("configOverride"),
-        Culture: System.Globalization.CultureInfo.CurrentUICulture);
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

@@ -167,6 +167,100 @@ public sealed class ContratoSynHostTests
                 ("valueMax", "5"),
                 ("ariaLabel", "Pasos completados del registro"),
             },
+            ["audio-player"] = new (string, object?)[]
+            {
+                ("audioFile", ElementoFalso.Medio("/media/podcast/episodio-12.mp3")),
+                ("trackTitle", "Episodio 12: la ciudad que camina"),
+                ("artistName", "Radio Synergos"),
+            },
+            ["avatar"] = new (string, object?)[]
+            {
+                ("avatarImage", ElementoFalso.Medio("/media/equipo/ana-gomez.jpg", "Ana Gómez, directora de producto")),
+            },
+            ["video-player"] = new (string, object?)[]
+            {
+                ("videoFile", ElementoFalso.Medio("/media/propiedades/recorrido-casa-lago.mp4")),
+                ("posterImage", ElementoFalso.Medio("/media/propiedades/casa-lago-fachada.jpg", "Fachada de la casa del lago")),
+                ("chaptersJson", """[{"startSeconds":0,"title":"Llegada"},{"startSeconds":42,"title":"La sala"}]"""),
+                ("enableAnalytics", true),
+            },
+            ["hero-banner"] = new (string, object?)[]
+            {
+                ("title", "Viví el Caribe colombiano"),
+                ("subtitle", "Temporada 2026: vuelos y hoteles con el 20 % de descuento"),
+                ("media", ElementoFalso.Medio("/media/hero/playa-palomino.jpg", "Playa de Palomino al atardecer")),
+                ("ctaLabel", "Reservar ahora"),
+                ("ctaLink", ElementoFalso.Enlace("/reservas", "Reservas")),
+            },
+            ["fab"] = new (string, object?)[]
+            {
+                ("iconKey", "whatsapp"),
+                ("actionLink", ElementoFalso.Enlace("https://wa.me/573001234567", "WhatsApp", "_blank")),
+                ("position", "bottom-left"),
+                ("ariaLabel", "Escribinos por WhatsApp"),
+            },
+            ["cookie-consent"] = new (string, object?)[]
+            {
+                ("bannerText", "Usamos cookies propias y de terceros para medir el uso del sitio."),
+                ("acceptLabel", "Acepto todas"),
+                ("rejectLabel", "Sólo las necesarias"),
+                ("settingsLabel", "Elegir cuáles"),
+                ("policyLink", ElementoFalso.Enlace("/privacidad", "Política de privacidad")),
+            },
+            ["share-bar"] = new (string, object?)[]
+            {
+                ("platforms", new[] { "whatsapp", "twitter", "linkedin" }),
+                ("shareLink", ElementoFalso.Enlace("https://synergos.local/eventos/feria-del-libro-2026")),
+                ("shareTitle", "Feria del libro 2026: programa completo"),
+            },
+            ["rich-tooltip"] = new (string, object?)[]
+            {
+                ("triggerText", "Cuota de manejo"),
+                ("tooltipContent", new Umbraco.Cms.Core.Strings.HtmlEncodedString(
+                    "<p>Cobro <strong>mensual</strong> por administrar la tarjeta.</p><p>Se exonera con compras desde $&nbsp;300.000.</p>")),
+                ("placement", "bottom-start"),
+            },
+            ["countdown-clock"] = new (string, object?)[]
+            {
+                ("endDateTime", "2030-12-31T23:59:59-05:00"),
+                ("labelFormat", "Quedan {days} días y {hours} horas"),
+            },
+            ["countdown-digital"] = new (string, object?)[]
+            {
+                ("endDateTime", "2030-12-31T23:59:59-05:00"),
+                ("showLabels", true),
+                ("style", "digits"),
+            },
+            ["avatar-group"] = new (string, object?)[]
+            {
+                ("avatarsJson", """[{"url":"/media/equipo/ana-gomez.jpg","name":"Ana Gómez","role":"Directora"},{"url":"/media/equipo/luis-pardo.jpg","name":"Luis Pardo","role":"CTO"},{"name":"Marta Ruiz"}]"""),
+                ("maxVisible", "2"),
+                ("ariaLabel", "Equipo directivo"),
+            },
+            ["lightbox-gallery"] = new (string, object?)[]
+            {
+                ("imagesJson", """[{"thumbUrl":"/media/casa/sala-t.jpg","fullUrl":"/media/casa/sala.jpg","alt":"Sala con ventanal","caption":"La sala"},{"thumbUrl":"/media/casa/cocina-t.jpg","fullUrl":"/media/casa/cocina.jpg","alt":"Cocina integral","caption":"La cocina"}]"""),
+                ("columns", "2"),
+            },
+            ["chart-bar"] = new (string, object?)[]
+            {
+                ("chartTitle", "Afiliados nuevos por trimestre"),
+                ("dataJson", """[{"label":"T1","value":1200},{"label":"T2","value":"1.845.300"},{"label":"T3","value":"950,5"}]"""),
+                ("orientation", "horizontal"),
+            },
+            ["map-pin"] = new (string, object?)[]
+            {
+                ("centerLat", "4,7110"),
+                ("centerLng", "-74.0721"),
+                ("zoomLevel", "12"),
+                ("pinsJson", """[{"lat":4.6097,"lng":-74.0817,"title":"Oficina Bogotá","description":"Carrera 7 # 71-21, piso 12"},{"lat":"6,2518","lng":"-75.5636","title":"Oficina Medellín","description":"El Poblado"}]"""),
+            },
+            ["color-picker"] = new (string, object?)[]
+            {
+                ("label", "Color de acento de tu tienda"),
+                ("initialColor", "#0f766e"),
+                ("paletteJson", """["#0f766e","#b45309","#7c3aed","#be123c"]"""),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
@@ -341,8 +435,13 @@ public sealed class ContratoSynHostTests
             var conResolver = vistas
                 .Where(v => Regex.IsMatch(v.Texto, @"@inject\s+[\w.]*IResolutorSynHost<[\w.]*\b" + record.Name + ">"))
                 .ToList();
+            // Las dos formas de armar la solicitud a mano: con el nombre del parámetro
+            // (`BlockAlias: "x"`) y POSICIONAL (`new SynHostEmitRequest("x", …)`). Sólo se miraba
+            // la primera, y así estaban escritas countdown-digital y rich-tooltip: una segunda
+            // vista que emitiera a mano un elemento migrado pasaba en verde (#180).
             var libres = vistas
-                .Where(v => Regex.IsMatch(v.Texto, "BlockAlias:\\s*\"" + Regex.Escape(nombre) + "\""))
+                .Where(v => Regex.IsMatch(v.Texto, "BlockAlias:\\s*\"" + Regex.Escape(nombre) + "\"")
+                         || Regex.IsMatch(v.Texto, "SynHostEmitRequest\\(\\s*\"" + Regex.Escape(nombre) + "\""))
                 .ToList();
 
             if (conResolver.Count != 1)
@@ -350,7 +449,7 @@ public sealed class ContratoSynHostTests
                 malas.Add($"{nombre}: {conResolver.Count} vista(s) inyectan IResolutorSynHost<{record.Name}> (debe ser 1).");
             }
 
-            malas.AddRange(libres.Select(v => $"{nombre}: {v.Ruta} arma a mano un SynHostEmitRequest con su BlockAlias."));
+            malas.AddRange(libres.Select(v => $"{nombre}: {v.Ruta} arma a mano un SynHostEmitRequest con su nombre."));
         }
 
         Assert.True(malas.Count == 0, string.Join(Environment.NewLine, malas));
@@ -502,6 +601,7 @@ public sealed class ContratoSynHostTests
         using var proveedor = new ServiceCollection()
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
+            .AddSingleton(ElementoFalso.Urls())
             .AddLogging()
             .AddResolutoresSynHost()
             .BuildServiceProvider();

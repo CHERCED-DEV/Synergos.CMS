@@ -36,6 +36,107 @@
       }
     },
     {
+      "nombre": "audio-player",
+      "tipo": "pieza",
+      "record": "AudioPlayerProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "audioFile",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "trackTitle",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "artistName",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "audioFile": "/media/podcast/episodio-12.mp3",
+        "trackTitle": "Episodio 12: la ciudad que camina",
+        "artistName": "Radio Synergos"
+      }
+    },
+    {
+      "nombre": "avatar",
+      "tipo": "pieza",
+      "record": "AvatarProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "src",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "alt",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "src": "/media/equipo/ana-gomez.jpg",
+        "alt": "Ana Gómez, directora de producto"
+      }
+    },
+    {
+      "nombre": "avatar-group",
+      "tipo": "pieza",
+      "record": "AvatarGroupProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "avatars",
+          "tipo": "AvatarGroupMember[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "maxVisible",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "avatars": [
+          {
+            "name": "Ana Gómez",
+            "src": "/media/equipo/ana-gomez.jpg"
+          },
+          {
+            "name": "Luis Pardo",
+            "src": "/media/equipo/luis-pardo.jpg"
+          },
+          {
+            "name": "Marta Ruiz"
+          }
+        ],
+        "maxVisible": 2,
+        "label": "Equipo directivo"
+      }
+    },
+    {
       "nombre": "badge-group",
       "tipo": "pieza",
       "record": "BadgeGroupProps",
@@ -150,6 +251,88 @@
       }
     },
     {
+      "nombre": "chart-bar",
+      "tipo": "pieza",
+      "record": "ChartBarProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "orientation",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "data",
+          "tipo": "ChartBarEntry[]",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "title": "Afiliados nuevos por trimestre",
+        "orientation": "horizontal",
+        "data": [
+          {
+            "label": "T1",
+            "value": 1200
+          },
+          {
+            "label": "T2",
+            "value": 1845300
+          },
+          {
+            "label": "T3",
+            "value": 950.5
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "color-picker",
+      "tipo": "pieza",
+      "record": "ColorPickerProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "initialColor",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "palette",
+          "tipo": "string[]",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "label": "Color de acento de tu tienda",
+        "initialColor": "#0f766e",
+        "palette": [
+          "#0f766e",
+          "#b45309",
+          "#7c3aed",
+          "#be123c"
+        ]
+      }
+    },
+    {
       "nombre": "color-swatches",
       "tipo": "pieza",
       "record": "ColorSwatchesProps",
@@ -181,6 +364,109 @@
           }
         ],
         "shape": "circle"
+      }
+    },
+    {
+      "nombre": "cookie-consent",
+      "tipo": "pieza",
+      "record": "CookieConsentProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "bannerText",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "acceptLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "rejectLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "settingsLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "policyLink",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "policyLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "bannerText": "Usamos cookies propias y de terceros para medir el uso del sitio.",
+        "acceptLabel": "Acepto todas",
+        "rejectLabel": "Sólo las necesarias",
+        "settingsLabel": "Elegir cuáles",
+        "policyLink": "/privacidad",
+        "policyLabel": "Política de privacidad"
+      }
+    },
+    {
+      "nombre": "countdown-clock",
+      "tipo": "pieza",
+      "record": "CountdownClockProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "targetDate",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "targetDate": "2030-12-31T23:59:59-05:00"
+      }
+    },
+    {
+      "nombre": "countdown-digital",
+      "tipo": "pieza",
+      "record": "CountdownDigitalProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "targetDate",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "showLabels",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "style",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "targetDate": "2030-12-31T23:59:59-05:00",
+        "showLabels": true,
+        "style": "plain"
       }
     },
     {
@@ -230,6 +516,107 @@
         ],
         "selectedValue": "co",
         "searchable": true
+      }
+    },
+    {
+      "nombre": "fab",
+      "tipo": "pieza",
+      "record": "FabProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "iconKey",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "actionLink",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "target",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "position",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "iconKey": "whatsapp",
+        "actionLink": "https://wa.me/573001234567",
+        "target": "_blank",
+        "position": "bottom-left",
+        "label": "Escribinos por WhatsApp"
+      }
+    },
+    {
+      "nombre": "hero-banner",
+      "tipo": "pieza",
+      "record": "HeroBannerProps",
+      "diccionario": [
+        "Synhost.Hero"
+      ],
+      "campos": [
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "subtitle",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "media",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "mediaAlt",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "ctaLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "ctaLink",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "title": "Viví el Caribe colombiano",
+        "subtitle": "Temporada 2026: vuelos y hoteles con el 20 % de descuento",
+        "media": "/media/hero/playa-palomino.jpg",
+        "mediaAlt": "Playa de Palomino al atardecer",
+        "ctaLabel": "Reservar ahora",
+        "ctaLink": "/reservas"
       }
     },
     {
@@ -303,6 +690,96 @@
         "trend": "up",
         "deltaLabel": "+12 %",
         "period": "vs. agosto"
+      }
+    },
+    {
+      "nombre": "lightbox-gallery",
+      "tipo": "pieza",
+      "record": "LightboxGalleryProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "images",
+          "tipo": "LightboxGalleryImage[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "columns",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "images": [
+          {
+            "src": "/media/casa/sala.jpg",
+            "thumb": "/media/casa/sala-t.jpg",
+            "alt": "Sala con ventanal",
+            "caption": "La sala"
+          },
+          {
+            "src": "/media/casa/cocina.jpg",
+            "thumb": "/media/casa/cocina-t.jpg",
+            "alt": "Cocina integral",
+            "caption": "La cocina"
+          }
+        ],
+        "columns": 2
+      }
+    },
+    {
+      "nombre": "map-pin",
+      "tipo": "pieza",
+      "record": "MapPinProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "centerLat",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "centerLng",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "zoomLevel",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "pins",
+          "tipo": "MapPinItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "centerLat": 4.7110,
+        "centerLng": -74.0721,
+        "zoomLevel": 12,
+        "pins": [
+          {
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "label": "Oficina Bogotá",
+            "description": "Carrera 7 # 71-21, piso 12"
+          },
+          {
+            "lat": 6.2518,
+            "lng": -75.5636,
+            "label": "Oficina Medellín",
+            "description": "El Poblado"
+          }
+        ]
       }
     },
     {
@@ -446,6 +923,38 @@
       }
     },
     {
+      "nombre": "rich-tooltip",
+      "tipo": "pieza",
+      "record": "RichTooltipProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "triggerText",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "body",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "placement",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "triggerText": "Cuota de manejo",
+        "body": "Cobro mensual por administrar la tarjeta. Se exonera con compras desde $ 300.000.",
+        "placement": "bottom"
+      }
+    },
+    {
       "nombre": "scroll-top",
       "tipo": "pieza",
       "record": "ScrollTopProps",
@@ -520,6 +1029,42 @@
           }
         ],
         "maxSelections": 2
+      }
+    },
+    {
+      "nombre": "share-bar",
+      "tipo": "pieza",
+      "record": "ShareBarProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "platforms",
+          "tipo": "string[]",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "shareLink",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "shareTitle",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "platforms": [
+          "whatsapp",
+          "x",
+          "linkedin"
+        ],
+        "shareLink": "https://synergos.local/eventos/feria-del-libro-2026",
+        "shareTitle": "Feria del libro 2026: programa completo"
       }
     },
     {
@@ -734,6 +1279,31 @@
         "expandAll": true,
         "label": "Catálogo de la tienda"
       }
+    },
+    {
+      "nombre": "video-player",
+      "tipo": "pieza",
+      "record": "VideoPlayerProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "videoFile",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "posterImage",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "videoFile": "/media/propiedades/recorrido-casa-lago.mp4",
+        "posterImage": "/media/propiedades/casa-lago-fachada.jpg"
+      }
     }
   ],
   "tipos": [
@@ -747,6 +1317,21 @@
         },
         {
           "nombre": "body",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "AvatarGroupMember",
+      "campos": [
+        {
+          "nombre": "name",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "src",
           "tipo": "string",
           "opcional": true
         }
@@ -803,6 +1388,21 @@
       ]
     },
     {
+      "record": "ChartBarEntry",
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "value",
+          "tipo": "number",
+          "opcional": false
+        }
+      ]
+    },
+    {
       "record": "ColorSwatchesItem",
       "campos": [
         {
@@ -832,6 +1432,56 @@
         },
         {
           "nombre": "href",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "LightboxGalleryImage",
+      "campos": [
+        {
+          "nombre": "src",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "thumb",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "alt",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "caption",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "MapPinItem",
+      "campos": [
+        {
+          "nombre": "lat",
+          "tipo": "number",
+          "opcional": false
+        },
+        {
+          "nombre": "lng",
+          "tipo": "number",
+          "opcional": false
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "description",
           "tipo": "string",
           "opcional": true
         }

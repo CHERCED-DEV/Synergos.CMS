@@ -1,23 +1,16 @@
-﻿@*
-    SynHost pilot renderer (Ola 8.5). Framework-agnostic Razor partial
-    that consumes ISynHostEmitter to emit the module script tags +
-    <synergos-avatar> custom element. Called from any composer
-    (Block Grid convention wrapper, LayoutComposer in Ola 14+).
-    Props projected from the composed elementSynAvatar ElementType.
+@*
+    SynHost renderer — <synergos-avatar>.
+
+    Host tonto (ADR 0135): el resolver arma el record que viaja (AvatarProps) —la URL del
+    medio como src y su nombre accesible como alt— y la vista resuelve y emite. Antes mandaba
+    avatarSrc y el elemento lee src: el avatar colocado pintaba el icono genérico (D1).
 *@
+@using Synergos.CMS.Web.Services.SynHost
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.AvatarProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-    var avatarImage = Model.Value<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>("avatarImage");
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["avatarSrc"] = avatarImage?.Url(mode: Umbraco.Cms.Core.Models.UrlMode.Absolute),
-    };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
-        BlockAlias: "avatar",
-        Props: props,
-        ConfigOverrideJson: Model.Value<string>("configOverride"),
-        Culture: System.Globalization.CultureInfo.CurrentUICulture);
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

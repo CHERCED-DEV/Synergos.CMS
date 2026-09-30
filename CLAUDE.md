@@ -34,12 +34,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3526 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3697 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2419 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2590 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 667 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 440 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -158,7 +158,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3526**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3697**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -708,6 +708,13 @@ Las que salieron de construir el árbol de servicios (§0.B):
   —uno con símbolo (`"$89000"`, que caía a cero) y uno con separador de miles (`"49.000"`,
   que daba 49)—. Con `"89000"` a secas el parser viejo y el nuevo dan el mismo número y el
   defecto pasa en VERDE.
+  **Y volvió a entrar por la pieza GENÉRICA** (#180): `LectorDelEditor.Numero`, el que leen
+  todos los resolvers de la ADR 0135, cambiaba la coma por punto y leía invariante —«500.000»
+  daba 500, «1.234.567» no viajaba—, con los tests del piloto en verde porque sus muestras eran
+  «4» y «4,5». Una regla escrita para UN parser no protege al siguiente que se escribe: hoy el
+  lector lee lo inequívoco del editor es-CO («1.234.567», «1.234,5», «4,5», «4.5») y lo que
+  admite dos lecturas («1.234», «500.000», «1,234») no viaja y se anota; `Entero` igual, y sin
+  redondear decimales.
 - `feedback_an_omitted_key_can_be_an_assertion` — **una clave que no se emite no
   siempre deja un hueco: cuando el otro lado la resuelve con un valor por DEFECTO, la
   omisión pasa a AFIRMAR ese valor, y lo afirma el borde sin haberlo decidido.** Educación
@@ -2460,6 +2467,10 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   editor vuelve a meter claves que ningún contrato ve. Mutado: renombrar una clave del cable, quitar
   el origen de un campo, declarar una sección de diccionario que no existe, quitarle la interfaz al
   resolver y volver a la vista con diccionario libre ponen rojo un gate distinto cada uno.
+  (Y «volver a la vista con diccionario libre» tiene DOS formas: `BlockAlias: "x"` y la
+  posicional `new SynHostEmitRequest("x", …)`. El gate miraba sólo la primera y así estaban
+  escritas `countdown-digital` y `rich-tooltip`; desde #180 mira las dos, medido con una vista
+  mutante que pasaba en verde.)
 
 - `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
   no sale sólo en rojo: una sale en VERDE.** Hasta el #170 todos los workflows corrían en
@@ -2633,11 +2644,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3526 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3697 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2419
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2590
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 667
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 440
 
@@ -3068,7 +3079,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3526 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3697 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
