@@ -1,0 +1,12 @@
+[
+  {
+    "_": "Las plantillas de aviso que el código pide POR CLAVE a Api.Notifications, y que ningún arranque crea. A diferencia de provisionar.recursos.json esto NO es un ejemplo: es el texto de verdad. La capacidad sabe rellenar marcadores y entregar; el texto lo escribe el dominio y vive acá. Los MARCADORES no los elige quien edita esto: los fija el código que manda el aviso, y PlantillaDelAvisoTests los cruza en los dos sentidos. Api.Notifications no reescribe una plantilla viva, así que cambiar este texto no cambia la publicada: provisionar.sh --verificar lo dice."
+  },
+  {
+    "_": "La alerta de compensación colgada (Bff.Core, CompensationAlert). La piden los cuatro orquestadores con esta clave, que es la de por defecto: ninguno configura <Vertical>:Alerts:TemplateKey. Sale por correo a la guardia (SYNERGOS_ALERTS_ADDRESS) y no lleva datos de la persona atendida: el id de la saga basta para entrar a mirar.",
+    "key": "bff.compensacion.colgada",
+    "channel": "Email",
+    "subject": "[{origen}] Compensación colgada: {saga}",
+    "body": "<p>Una compensación de <b>{origen}</b> se rindió tras agotar sus reintentos y <b>necesita a una persona</b>: hasta que alguien la atienda, lo que quedó a medias —un cobro sin devolver, un cupo o unas existencias sin soltar— sigue así.</p><ul><li>Saga: <code>{saga}</code></li><li>Iniciada: {desde}</li><li>Quedó pendiente: {pendientes}</li></ul><p>El detalle está en <code>GET /v1/compensations</code> del orquestador de {origen}. Arreglada la causa, el reintento manual de la saga rearma los intentos; si vuelve a colgarse, llega otro aviso.</p>"
+  }
+]

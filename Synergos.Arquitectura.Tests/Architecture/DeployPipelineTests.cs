@@ -425,11 +425,31 @@ public sealed class DeployPipelineTests
         // mandó. La columna lo dice; esto lo hace cumplir.
         Assert.DoesNotContain("tools/prueba-restauracion.sh", deploy, StringComparison.Ordinal);
 
-        // El manifiesto no es un script y sin él `provisionar.sh` no tiene entidades que
-        // reconciliar, así que va explícito: es el dato del que vive el script que sí se copia.
-        Assert.True(deploy.Contains("tools/provisionar.recursos.json", StringComparison.Ordinal),
-            "El despliegue copia `provisionar.sh` y no su manifiesto. Sin él el script no tiene "
-            + "recursos ni precios que publicar, y lo que hace falta sembrar no se siembra.");
+        // Los datos de los que vive `provisionar.sh` no son scripts, y sin ellos no tiene qué
+        // publicar. Se derivan del PROPIO guion —lo que lee junto a sí mismo con `dirname "$0"`—
+        // y no de una lista acá: esto nombraba a mano el manifiesto de entidades, y el de
+        // plantillas (#174) habría llegado al servidor sólo si alguien se acordaba de añadirlo.
+        // El guion se planta si falta cualquiera de los dos, pero eso se descubre en el servidor.
+        var datos = Regex.Matches(Leer("tools", "provisionar.sh"),
+                @"\$\(dirname ""\$0""\)/(provisionar\.[\w.]+\.json)")
+            .Select(m => m.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        // Red de seguridad: si el descubrimiento se rompe, esto vigilaría el vacío.
+        Assert.True(datos.Contains("provisionar.recursos.json", StringComparer.Ordinal),
+            "No se encontró que provisionar.sh lea su manifiesto junto a sí mismo "
+            + "(`$(dirname \"$0\")/provisionar.recursos.json`). Si se reescribió esa línea, mové "
+            + "este gate con ella: sin esto no vigila nada.");
+
+        var sinCopiar = datos
+            .Where(d => !deploy.Contains($"tools/{d}", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(sinCopiar.Count == 0,
+            "El despliegue copia `provisionar.sh` y no los datos que lee: "
+            + string.Join(", ", sinCopiar) + ". Sin ellos el script se planta en el servidor y "
+            + "lo que hace falta sembrar —recursos, precios, la plantilla del aviso— no se siembra.");
     }
 
     [Fact]

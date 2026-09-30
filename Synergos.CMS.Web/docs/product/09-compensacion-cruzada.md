@@ -118,11 +118,23 @@ Es lo que cierra el lazo. Un log en rojo solo sirve si alguien está mirando ese
 el aviso. Sin ella, «se rinde» sería «se abandona», y arreglar una devolución colgada exigiría
 tocarla a mano en la capacidad, por fuera del rastro de la saga.
 
-> **Antes de desplegar** hay que autorar en `Api.Notifications` la plantilla configurada en
-> `Salud:Alerts:TemplateKey` usando **solo** los marcadores `{saga}`, `{origen}`, `{desde}` y
-> `{pendientes}`. Un quinto hace que el envío se rechace con
-> `notifications.missing_placeholder` — está verificado abajo. No hay seeder que la cree:
-> CLAUDE.md §0.4 los prohíbe.
+> **La plantilla la siembra el despliegue, no una persona** (#174). Su clave es
+> `bff.compensacion.colgada` —la de por defecto de `CompensationAlert`, y la que piden los cuatro
+> orquestadores: ninguno configura `<Vertical>:Alerts:TemplateKey`—, su texto vive en
+> `tools/provisionar.plantillas.json` y la publica `tools/provisionar.sh`, que con `--verificar`
+> sale **rojo** si falta ([montar el entorno §5.bis.3](../../../docs/despliegue/00-montar-el-entorno.md)).
+> Sale por correo.
+>
+> **Los marcadores no se eligen: son los que el aviso manda** —`{saga}`, `{origen}`, `{desde}` y
+> `{pendientes}`— y `PlantillaDelAvisoTests` los cruza con la plantilla en los dos sentidos. Uno
+> que el aviso no mande hace que **cada** envío se rechace con `notifications.missing_placeholder`
+> (§5.3); uno que el aviso mande y la plantilla no pinte no rompe nada y el dato no le llega a
+> nadie.
+>
+> **Hasta el #174 esta nota decía «hay que autorarla a mano»**, con la clave de Salud, y nada la
+> creaba: en un servidor limpio el aviso salía `template_not_found` el día que hacía falta. No
+> faltaba un seeder —CLAUDE.md §0.4 los prohíbe al arrancar, y con razón—: faltaba el paso de
+> despliegue, que es donde ya vivían las definiciones y los recursos.
 >
 > *(Al promover la máquina a `Bff.Core` —[doc 10](10-promocion-bff-core.md)— `{cita}` pasó a
 > `{saga}` y se sumó `{origen}`: una misma guardia puede atender Salud y Tienda con la misma
@@ -191,6 +203,13 @@ el cobro y la confirmación:
 
 Es lo que un handler guionado **no** puede comprobar, porque no corre `NotificationRules.Fill`:
 
+> ⚠️ **Esto es el REGISTRO de una corrida de antes del [doc 10](10-promocion-bff-core.md), no una
+> receta.** La plantilla de abajo —`salud.compensacion.colgada` con `{cita}`— es la de cuando la
+> máquina vivía en `Bff.Salud`. Hoy la clave es `bff.compensacion.colgada`, los marcadores son
+> cuatro (§4.1) y la plantilla la siembra el despliegue. Quien la creaba copiando esta tabla
+> recibía `missing_placeholder` en **cada** aviso (#174). Se deja como se midió; lo vigente, medido
+> otra vez, está en §5.3.
+
 ```
 plantilla salud.compensacion.colgada con {cita} {desde} {pendientes}   201
 el cuerpo exacto que arma CompensationAlert                           201  Sent
@@ -201,7 +220,37 @@ entregas totales a la guardia: 2                                           ← n
 ```
 
 La última fila es la que le da sentido al test que fija los tres marcadores: un cuarto **rompe el
-aviso**, y rompería justo el día que hay que avisar.
+aviso**, y rompería justo el día que hay que avisar. *(Hoy son cuatro, y el que rompe es el
+quinto.)*
+
+### 5.3 La plantilla sembrada, contra procesos vivos (#174)
+
+`Api.Workflow` y `Api.Notifications` levantados de verdad, un proveedor de correo de mentira
+detrás de `Notifications:Resend:BaseUrl`, y el `CompensationAlert` real mandando el aviso de una
+saga rendida:
+
+```
+el aviso, antes de sembrar            RECHAZO notifications.template_not_found
+provisionar.sh --verificar            · FALTA  plantilla bff.compensacion.colgada      exit 1
+provisionar.sh                        + puesto plantilla bff.compensacion.colgada      exit 0
+provisionar.sh --verificar            ✓ plantilla bff.compensacion.colgada             exit 0
+provisionar.sh, otra vez              ✓ plantilla bff.compensacion.colgada   ← no la vuelve a publicar
+el MISMO aviso, reintentado           Accepted | «[salud] Compensación colgada: saga-viva-1»
+el mismo aviso otra vez (misma llave) la misma entrega   ← el proveedor recibió UN correo
+── otra instancia, con la plantilla de §5.2 publicada a mano ──
+el aviso                              RECHAZO notifications.missing_placeholder   ({cita})
+provisionar.sh --verificar            ✗ plantilla … usa {cita} y el aviso no lo manda   exit 1
+```
+
+`Accepted` es el nombre de hoy de lo que §5.2 llamaba `Sent`: el proveedor se hizo cargo y dio un
+id. Y el reintento de la sexta fila es el que importa en la práctica: el rechazo por plantilla
+ausente **no consume la llave** del aviso (`{sagaId}:alert:0`). Como es un fallo no transitorio,
+el motor lo grita una vez y no vuelve a avisar solo; sembrada la plantilla, el reintento manual de
+la saga rearma el aviso con esa misma llave, y sale.
+
+La última fila es la que no se puede arreglar desde el script: `Api.Notifications` no reescribe
+ni borra una plantilla viva, así que una mal publicada se retira de su almacén a mano. Lo que el
+script sí hace es decirlo en rojo, que es lo que faltaba.
 
 ## 6. Lo que queda abierto
 
@@ -223,6 +272,9 @@ aviso**, y rompería justo el día que hay que avisar.
   reales, no antes — y añadirla solo para que un test tarde menos sería la razón equivocada. Es
   también por lo que el camino de rendirse está verificado por tests y mutación, **no en vivo**:
   esperarlo con procesos reales cuesta tres horas de reloj.
-- **El aviso confía en que alguien autoró la plantilla.** Si falta, el fallo se grita una vez y la
-  guardia no se entera. Un arranque que compruebe la plantilla contra `Api.Notifications` lo
-  convertiría en un error de despliegue en vez de uno de madrugada.
+- ~~**El aviso confía en que alguien autoró la plantilla.**~~ **Cerrado por el despliegue, no por
+  el arranque (#174).** Lo que pedía esta línea —que faltar la plantilla fuera un error de
+  despliegue y no uno de madrugada— lo da `provisionar.sh --verificar`, que sale rojo si falta. El
+  arranque de los orquestadores sigue sin comprobarla, y no hace falta que lo haga: la
+  comprobación ya está en el paso de despliegue, y hacerla al arrancar ataría el arranque de cada
+  orquestador a que `Api.Notifications` esté arriba en ese instante.
