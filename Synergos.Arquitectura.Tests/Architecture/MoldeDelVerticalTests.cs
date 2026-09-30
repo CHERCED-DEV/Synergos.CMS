@@ -426,10 +426,7 @@ public sealed class MoldeDelVerticalTests
         Assert.Contains("AddHttpMessageHandler<CorrelationForwardingHandler>()", Pieza(), StringComparison.Ordinal);
 
         var mal = DelMolde()
-            .Where(p => !EnchufaLaPieza(p)
-                     // TRANSITORIO (#178): la cadena a mano, mientras se migran las familias.
-                     && !(Regex.IsMatch(p.Rama, @"AddHttpClient\s*\(")
-                          && p.Rama.Contains("AddHttpMessageHandler<CorrelationForwardingHandler>()", StringComparison.Ordinal)))
+            .Where(p => !EnchufaLaPieza(p))
             .Select(p => $"{p.Clave} ({p.Composer})")
             .ToList();
 
@@ -451,9 +448,7 @@ public sealed class MoldeDelVerticalTests
         Assert.Matches(@"DefaultRequestHeaders\.Add\(\s*CabeceraDeLlave\b", Pieza());
 
         var mal = DelMolde()
-            .Where(p => !EnchufaLaPieza(p)
-                     // TRANSITORIO (#178): la cadena a mano, mientras se migran las familias.
-                     && !Regex.IsMatch(p.Rama, @"ApiKeyHeader|X-Synergos-Key"))
+            .Where(p => !EnchufaLaPieza(p))
             .Select(p => $"{p.Clave} ({p.Composer})")
             .ToList();
 

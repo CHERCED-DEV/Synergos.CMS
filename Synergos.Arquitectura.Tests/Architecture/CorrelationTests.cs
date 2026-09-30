@@ -128,9 +128,7 @@ public sealed class CorrelationTests
             .Where(e =>
             {
                 var composer = File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Composers", e.Item1));
-                return !composer.Contains("AddClienteDelArbolDeServicios(", StringComparison.Ordinal)
-                    // TRANSITORIO (#178): la cadena a mano, mientras se migran las familias.
-                    && !composer.Contains("AddHttpMessageHandler<CorrelationForwardingHandler>()", StringComparison.Ordinal);
+                return !composer.Contains("AddClienteDelArbolDeServicios(", StringComparison.Ordinal);
             })
             .Select(e => $"{e.Item2} ({e.Item1})")
             .ToList();
