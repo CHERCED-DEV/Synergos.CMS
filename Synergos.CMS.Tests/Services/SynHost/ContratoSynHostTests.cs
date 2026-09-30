@@ -109,6 +109,12 @@ public sealed class ContratoSynHostTests
                 ("iconKey", "check"),
                 ("labelText", "Envío gratis a todo el país"),
             },
+            ["notification-toast"] = new (string, object?)[]
+            {
+                ("message", "Tu pedido quedó confirmado."),
+                ("type", "success"),
+                ("durationMs", "8000"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

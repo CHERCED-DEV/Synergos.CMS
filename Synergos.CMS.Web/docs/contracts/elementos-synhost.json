@@ -306,6 +306,36 @@
       }
     },
     {
+      "nombre": "notification-toast",
+      "tipo": "pieza",
+      "record": "NotificationToastProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "toasts",
+          "tipo": "NotificationToastSeed[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "durationMs",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "toasts": [
+          {
+            "message": "Tu pedido quedó confirmado.",
+            "variant": "success"
+          }
+        ],
+        "durationMs": 8000
+      }
+    },
+    {
       "nombre": "rating-stars",
       "tipo": "pieza",
       "record": "RatingStarsProps",
@@ -459,6 +489,21 @@
         },
         {
           "nombre": "href",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "NotificationToastSeed",
+      "campos": [
+        {
+          "nombre": "message",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "variant",
           "tipo": "string",
           "opcional": true
         }
