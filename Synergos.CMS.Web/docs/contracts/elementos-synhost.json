@@ -1,0 +1,244 @@
+{
+  "comentario": "GENERADO desde los records [ElementoSynHost] de Synergos.CMS.Interfaces por Synergos.CMS.Tests/Services/SynHost/ContratoSynHostTests.cs — no se edita a mano (ADR 0135). `ejemplo` es el config EXACTO que emite la vista para una muestra autorada.",
+  "elementos": [
+    {
+      "nombre": "carousel",
+      "tipo": "pieza",
+      "record": "CarouselProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "slides",
+          "tipo": "CarouselSlide[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "autoplay",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "interval",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "slides": [
+          {
+            "src": "/media/sala.jpg",
+            "alt": "Sala con ventanal",
+            "label": "La sala"
+          },
+          {
+            "src": "/media/cocina.jpg",
+            "alt": "Cocina integral",
+            "label": "La cocina"
+          }
+        ],
+        "autoplay": true,
+        "interval": 4000
+      }
+    },
+    {
+      "nombre": "dropdown",
+      "tipo": "pieza",
+      "record": "DropdownProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "triggerLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "options",
+          "tipo": "DropdownOption[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "selectedValue",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "searchable",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "triggerLabel": "País",
+        "options": [
+          {
+            "value": "co",
+            "label": "Colombia"
+          },
+          {
+            "value": "mx",
+            "label": "México",
+            "href": "/mx"
+          }
+        ],
+        "selectedValue": "co",
+        "searchable": true
+      }
+    },
+    {
+      "nombre": "kpi-card",
+      "tipo": "pieza",
+      "record": "KpiCardProps",
+      "diccionario": [
+        "Synhost.Kpi"
+      ],
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "value",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "trend",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "deltaLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "period",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "label": "Ventas del mes",
+        "value": "1.234",
+        "trend": "up",
+        "deltaLabel": "+12 %",
+        "period": "vs. agosto"
+      }
+    },
+    {
+      "nombre": "rating-stars",
+      "tipo": "pieza",
+      "record": "RatingStarsProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "value",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "max",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "value": 4,
+        "max": 5,
+        "label": "Valoración de los huéspedes"
+      }
+    },
+    {
+      "nombre": "tag",
+      "tipo": "pieza",
+      "record": "TagProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "color",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "label": "Oferta",
+        "color": "success"
+      }
+    }
+  ],
+  "tipos": [
+    {
+      "record": "CarouselSlide",
+      "campos": [
+        {
+          "nombre": "src",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "alt",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "DropdownOption",
+      "campos": [
+        {
+          "nombre": "value",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "href",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    }
+  ]
+}

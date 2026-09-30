@@ -5,6 +5,7 @@ using Synergos.CMS.Application.Proxies.Impl;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.SynHost;
 using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Composers;
@@ -145,6 +146,11 @@ public sealed partial class SeamComposer
             services.AddSingleton<IBundleRegistryClient, StubBundleRegistryClient>();
         }
         services.AddSingleton<ISynHostEmitter, DefaultSynHostEmitter>();
+
+        // ADR 0135 — el resolver tipado de cada elemento migrado: arma el record que viaja en el
+        // `config` en vez de un diccionario libre en la vista. Se descubren, no se listan: la
+        // vista los pide con @inject y un resolver sin registrar sería un 500 que ningún build ve.
+        services.AddResolutoresSynHost();
 
         // Warmup hosted service fuerza la construcción del IBundleRegistryClient
         // singleton al boot — sin esto el adapter queda lazy hasta el primer
