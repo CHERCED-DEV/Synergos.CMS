@@ -2467,6 +2467,10 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   editor vuelve a meter claves que ningún contrato ve. Mutado: renombrar una clave del cable, quitar
   el origen de un campo, declarar una sección de diccionario que no existe, quitarle la interfaz al
   resolver y volver a la vista con diccionario libre ponen rojo un gate distinto cada uno.
+  (Y «volver a la vista con diccionario libre» tiene DOS formas: `BlockAlias: "x"` y la
+  posicional `new SynHostEmitRequest("x", …)`. El gate miraba sólo la primera y así estaban
+  escritas `countdown-digital` y `rich-tooltip`; desde #180 mira las dos, medido con una vista
+  mutante que pasaba en verde.)
 
 - `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
   no sale sólo en rojo: una sale en VERDE.** Hasta el #170 todos los workflows corrían en

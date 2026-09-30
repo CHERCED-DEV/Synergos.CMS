@@ -311,8 +311,13 @@ public sealed class ContratoSynHostTests
             var conResolver = vistas
                 .Where(v => Regex.IsMatch(v.Texto, @"@inject\s+[\w.]*IResolutorSynHost<[\w.]*\b" + record.Name + ">"))
                 .ToList();
+            // Las dos formas de armar la solicitud a mano: con el nombre del parámetro
+            // (`BlockAlias: "x"`) y POSICIONAL (`new SynHostEmitRequest("x", …)`). Sólo se miraba
+            // la primera, y así estaban escritas countdown-digital y rich-tooltip: una segunda
+            // vista que emitiera a mano un elemento migrado pasaba en verde (#180).
             var libres = vistas
-                .Where(v => Regex.IsMatch(v.Texto, "BlockAlias:\\s*\"" + Regex.Escape(nombre) + "\""))
+                .Where(v => Regex.IsMatch(v.Texto, "BlockAlias:\\s*\"" + Regex.Escape(nombre) + "\"")
+                         || Regex.IsMatch(v.Texto, "SynHostEmitRequest\\(\\s*\"" + Regex.Escape(nombre) + "\""))
                 .ToList();
 
             if (conResolver.Count != 1)
@@ -320,7 +325,7 @@ public sealed class ContratoSynHostTests
                 malas.Add($"{nombre}: {conResolver.Count} vista(s) inyectan IResolutorSynHost<{record.Name}> (debe ser 1).");
             }
 
-            malas.AddRange(libres.Select(v => $"{nombre}: {v.Ruta} arma a mano un SynHostEmitRequest con su BlockAlias."));
+            malas.AddRange(libres.Select(v => $"{nombre}: {v.Ruta} arma a mano un SynHostEmitRequest con su nombre."));
         }
 
         Assert.True(malas.Count == 0, string.Join(Environment.NewLine, malas));
