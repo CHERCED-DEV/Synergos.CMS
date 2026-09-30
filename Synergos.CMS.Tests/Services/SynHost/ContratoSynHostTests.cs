@@ -130,6 +130,13 @@ public sealed class ContratoSynHostTests
                 ("shareLink", ElementoFalso.Enlace("https://synergos.local/eventos/feria-del-libro-2026")),
                 ("shareTitle", "Feria del libro 2026: programa completo"),
             },
+            ["rich-tooltip"] = new (string, object?)[]
+            {
+                ("triggerText", "Cuota de manejo"),
+                ("tooltipContent", new Umbraco.Cms.Core.Strings.HtmlEncodedString(
+                    "<p>Cobro <strong>mensual</strong> por administrar la tarjeta.</p><p>Se exonera con compras desde $&nbsp;300.000.</p>")),
+                ("placement", "bottom-start"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

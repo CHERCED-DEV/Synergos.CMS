@@ -385,6 +385,38 @@
       }
     },
     {
+      "nombre": "rich-tooltip",
+      "tipo": "pieza",
+      "record": "RichTooltipProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "triggerText",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "body",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "placement",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "triggerText": "Cuota de manejo",
+        "body": "Cobro mensual por administrar la tarjeta. Se exonera con compras desde $ 300.000.",
+        "placement": "bottom"
+      }
+    },
+    {
       "nombre": "share-bar",
       "tipo": "pieza",
       "record": "ShareBarProps",
