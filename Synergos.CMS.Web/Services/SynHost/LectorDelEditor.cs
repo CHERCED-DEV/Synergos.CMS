@@ -355,6 +355,56 @@ public sealed class LectorDelEditor
     }
 
     /// <summary>
+    /// Una fecha, o fecha y hora, que el editor escribió en ISO 8601 en <paramref name="alias"/>
+    /// (un TextBox: «2026-12-31T23:59:59Z»), tal como la escribió; <c>null</c> si la dejó vacía o no
+    /// es una fecha ISO válida (se anota).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Los DataTypes de hoy son TEXTO, no un DatePicker</b> (medido en uSync: los
+    /// <c>endDateTime</c> de las cuentas regresivas y los <c>minDate</c>/<c>maxDate</c> del date
+    /// picker son <c>Umbraco.TextBox</c>). Por eso esta lectura VALIDA y no convierte: se aceptan
+    /// las formas de la especificación de fechas de JavaScript —la que usa <c>Date.parse</c> en el
+    /// elemento—: <c>AAAA-MM-DD</c>, y con hora <c>THH:mm</c>, <c>THH:mm:ss</c> o
+    /// <c>THH:mm:ss.fff</c>, con zona (<c>Z</c>, <c>-05:00</c>) o sin ella. «31/12/2026», un 30 de
+    /// febrero o «2026-12-31 23:59» no viajan y se anotan: el elemento los tomaría por «fecha no
+    /// disponible» sin decir por qué.</para>
+    ///
+    /// <para><b>Viaja el texto del editor, no uno reescrito.</b> Una fecha sin zona la interpreta el
+    /// navegador en la hora local del visitante (y una de sólo día, en UTC): reescribirla con la
+    /// zona del servidor cambiaría el instante que el editor quiso decir. La descripción del
+    /// ElementType pide UTC; decidir la zona es del editor, no de esta lectura.</para>
+    /// </remarks>
+    public string? FechaIso(string alias)
+    {
+        var texto = Texto(alias);
+        if (texto is null)
+        {
+            return null;
+        }
+
+        if (DateTimeOffset.TryParseExact(
+                texto, FormatosIso, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out _))
+        {
+            return texto;
+        }
+
+        NoEsValido(alias, texto, "una fecha ISO 8601 (2026-12-31, o 2026-12-31T23:59:59Z)");
+        return null;
+    }
+
+    /// <summary>Las formas ISO 8601 que acepta <c>Date.parse</c> de JavaScript sin depender del navegador.</summary>
+    private static readonly string[] FormatosIso =
+    [
+        "yyyy-MM-dd",
+        "yyyy-MM-dd'T'HH:mm",
+        "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd'T'HH:mm:ss.fff",
+        "yyyy-MM-dd'T'HH:mmK",
+        "yyyy-MM-dd'T'HH:mm:ssK",
+        "yyyy-MM-dd'T'HH:mm:ss.fffK",
+    ];
+
+    /// <summary>
     /// El medio que el editor eligió en <paramref name="alias"/> (un <c>Umbraco.MediaPicker3</c>):
     /// su URL absoluta y su texto alternativo; <c>null</c> si no eligió ninguno o si el medio no
     /// tiene fichero.

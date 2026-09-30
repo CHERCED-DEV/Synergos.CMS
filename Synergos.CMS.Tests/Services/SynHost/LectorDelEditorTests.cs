@@ -382,4 +382,47 @@ public sealed class LectorDelEditorTests
 
         Assert.Equal(LectorDelEditor.Cadena(item), LectorDelEditor.Cadena(item));
     }
+
+    // ── FechaIso (un TextBox con ISO 8601) ──────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("2026-12-31")]
+    [InlineData("2026-12-31T23:59")]
+    [InlineData("2026-12-31T23:59:59")]
+    [InlineData("2026-12-31T23:59:59Z")]
+    [InlineData("2026-12-31T23:59:59-05:00")]
+    [InlineData("2026-12-31T23:59:59.500Z")]
+    public void Una_fecha_ISO_viaja_tal_como_la_escribio_el_editor(string texto)
+    {
+        Assert.Equal(texto, Lector(ElementoFalso.Con(("endDateTime", "  " + texto + " "))).FechaIso("endDateTime"));
+        Assert.Equal(0, Anotados());
+    }
+
+    [Theory]
+    [InlineData("31/12/2026")]
+    [InlineData("2026-02-30")]
+    [InlineData("2026-13-01")]
+    [InlineData("2026-12-31 23:59")]
+    [InlineData("2026-12-31T25:00:00Z")]
+    [InlineData("mañana a las 8")]
+    public void Lo_que_no_es_una_fecha_ISO_no_viaja_y_se_anota(string texto)
+    {
+        Assert.Null(Lector(ElementoFalso.Con(("endDateTime", texto))).FechaIso("endDateTime"));
+        Assert.Contains("ISO 8601", Assert.Single(Anotaciones()), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Una_fecha_vacia_no_viaja_y_no_se_anota()
+    {
+        Assert.Null(Lector(ElementoFalso.Con(("endDateTime", "   "))).FechaIso("endDateTime"));
+        Assert.Equal(0, Anotados());
+    }
+
+    [Fact]
+    public void Una_fecha_leida_dos_veces_da_lo_mismo()
+    {
+        var lector = Lector(ElementoFalso.Con(("endDateTime", "2026-12-31T23:59:59Z")));
+
+        Assert.Equal(lector.FechaIso("endDateTime"), lector.FechaIso("endDateTime"));
+    }
 }
