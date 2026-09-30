@@ -84,6 +84,12 @@ public sealed class ContratoSynHostTests
                 ("tagLabel", "Oferta"),
                 ("tagColor", "success"),
             },
+            ["audio-player"] = new (string, object?)[]
+            {
+                ("audioFile", ElementoFalso.Medio("/media/podcast/episodio-12.mp3")),
+                ("trackTitle", "Episodio 12: la ciudad que camina"),
+                ("artistName", "Radio Synergos"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

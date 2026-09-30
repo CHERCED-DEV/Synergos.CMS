@@ -2,6 +2,38 @@
   "comentario": "GENERADO desde los records [ElementoSynHost] de Synergos.CMS.Interfaces por Synergos.CMS.Tests/Services/SynHost/ContratoSynHostTests.cs — no se edita a mano (ADR 0135). `ejemplo` es el config EXACTO que emite la vista para una muestra autorada.",
   "elementos": [
     {
+      "nombre": "audio-player",
+      "tipo": "pieza",
+      "record": "AudioPlayerProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "audioFile",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "trackTitle",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "artistName",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "audioFile": "/media/podcast/episodio-12.mp3",
+        "trackTitle": "Episodio 12: la ciudad que camina",
+        "artistName": "Radio Synergos"
+      }
+    },
+    {
       "nombre": "carousel",
       "tipo": "pieza",
       "record": "CarouselProps",
