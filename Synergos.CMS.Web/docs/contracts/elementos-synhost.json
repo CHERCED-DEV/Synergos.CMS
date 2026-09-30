@@ -70,6 +70,43 @@
       }
     },
     {
+      "nombre": "breadcrumb",
+      "tipo": "pieza",
+      "record": "BreadcrumbProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "items",
+          "tipo": "BreadcrumbStep[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "includeStructuredData",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "items": [
+          {
+            "label": "Inicio",
+            "href": "/"
+          },
+          {
+            "label": "Tienda",
+            "href": "/tienda"
+          },
+          {
+            "label": "Zapatos"
+          }
+        ],
+        "includeStructuredData": true
+      }
+    },
+    {
       "nombre": "carousel",
       "tipo": "pieza",
       "record": "CarouselProps",
@@ -293,6 +330,21 @@
         },
         {
           "nombre": "tone",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "BreadcrumbStep",
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "href",
           "tipo": "string",
           "opcional": true
         }
