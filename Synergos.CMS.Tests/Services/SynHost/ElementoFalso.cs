@@ -1,6 +1,7 @@
 using System.Globalization;
 using NSubstitute;
 using Umbraco.Cms.Core.Dictionary;
+using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Routing;
 
@@ -59,6 +60,13 @@ internal static class ElementoFalso
             .Returns(llamada => llamada.ArgAt<IPublishedContent>(0).GetProperty("umbracoFile")?.GetValue() as string ?? string.Empty);
         return urls;
     }
+
+    /// <summary>
+    /// Un enlace de un <c>Umbraco.MultiUrlPicker</c> como lo entrega Umbraco al convertirlo: el
+    /// destino ya resuelto, el texto que escribió el editor y dónde abre.
+    /// </summary>
+    public static Link Enlace(string url, string? nombre = null, string? destino = null)
+        => new() { Url = url, Name = nombre, Target = destino, Type = LinkType.External };
 
     private static IPublishedProperty Propiedad(string alias, object? valor)
     {

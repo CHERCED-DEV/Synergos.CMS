@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Umbraco.Cms.Core;
+using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Routing;
 
@@ -219,6 +220,50 @@ public sealed class LectorDelEditor
         return new MedioDelEditor(url.Trim(), string.IsNullOrWhiteSpace(alt) ? null : alt.Trim());
     }
 
+    /// <summary>
+    /// El enlace que el editor puso en <paramref name="alias"/> (un <c>Umbraco.MultiUrlPicker</c>):
+    /// su destino, su texto y dónde abre; <c>null</c> si no puso ninguno o si no tiene destino.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Viaja el destino ya resuelto</b> (<c>Link.Url</c>): para un enlace a una página o a
+    /// un medio, Umbraco lo calcula al convertir el valor, así que el elemento recibe una URL y no
+    /// un identificador que no sabe resolver. Es lo que las vistas hacían con <c>link?.Url</c>.</para>
+    ///
+    /// <para><b>El texto y el destino de apertura son del editor</b>: <c>Link.Name</c> es el título
+    /// que escribe en el selector y <c>Link.Target</c> la casilla «abrir en una ventana nueva»
+    /// (<c>_blank</c>). Cuál de los dos viaja, y con qué nombre, lo decide cada resolver según lo
+    /// que su elemento pinte.</para>
+    ///
+    /// <para>Un enlace sin destino (vacío, o <c>#</c>, que es lo que da Umbraco para una página que
+    /// no tiene ruta) no viaja y se anota. Los DataTypes de hoy son de un solo enlace
+    /// (<c>MaxNumber: 1</c>); si uno pasara a varios, se toma el primero.</para>
+    /// </remarks>
+    public EnlaceDelEditor? Enlace(string alias)
+    {
+        var enlace = _elemento.Value<object>(_fallback, alias) switch
+        {
+            Link uno => uno,
+            IEnumerable<Link> varios => varios.FirstOrDefault(),
+            _ => null,
+        };
+
+        if (enlace is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(enlace.Url) || enlace.Url.Trim() == "#")
+        {
+            NoEsValido(alias, enlace.Name ?? enlace.Udi?.ToString() ?? "(enlace sin nombre)", "un enlace con destino");
+            return null;
+        }
+
+        return new EnlaceDelEditor(
+            enlace.Url.Trim(),
+            string.IsNullOrWhiteSpace(enlace.Name) ? null : enlace.Name.Trim(),
+            string.IsNullOrWhiteSpace(enlace.Target) ? null : enlace.Target.Trim());
+    }
+
     /// <summary>Anota lo que el editor escribió y no se pudo usar: no viaja, pero no se pierde callado.</summary>
     public void NoEsValido(string alias, string valor, string esperado)
         => _log?.LogWarning(
@@ -234,3 +279,9 @@ public sealed class LectorDelEditor
 /// <param name="Url">La URL absoluta del fichero.</param>
 /// <param name="Alt">El texto alternativo del medio (<c>altDefault</c>), o <c>null</c> si no tiene.</param>
 public sealed record MedioDelEditor(string Url, string? Alt);
+
+/// <summary>Un enlace que el editor puso, como lo necesita un elemento.</summary>
+/// <param name="Url">El destino ya resuelto por Umbraco (página, medio o URL externa).</param>
+/// <param name="Nombre">El texto que el editor escribió para el enlace, o <c>null</c>.</param>
+/// <param name="Destino">Dónde abre (<c>_blank</c> si marcó «ventana nueva»), o <c>null</c>.</param>
+public sealed record EnlaceDelEditor(string Url, string? Nombre, string? Destino);

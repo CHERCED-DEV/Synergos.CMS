@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Synergos.CMS.Web.Services.SynHost;
+using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Routing;
 
@@ -85,5 +86,57 @@ public sealed class LectorDelEditorTests
         var lector = new LectorDelEditor(ElementoFalso.Con(("audioFile", ElementoFalso.Medio("/a.mp3"))), ElementoFalso.Fallback);
 
         Assert.Throws<InvalidOperationException>(() => lector.Medio("audioFile"));
+    }
+
+    // ── Enlace (Umbraco.MultiUrlPicker) ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void Enlace_sin_poner_no_viaja()
+    {
+        Assert.Null(Lector(ElementoFalso.Con()).Enlace("ctaLink"));
+        Assert.Equal(0, Anotados());
+    }
+
+    [Fact]
+    public void Enlace_puesto_viaja_con_su_destino_su_texto_y_donde_abre()
+    {
+        var leido = Lector(ElementoFalso.Con(("policyLink", ElementoFalso.Enlace(" /privacidad ", " Política de privacidad ", "_blank"))))
+            .Enlace("policyLink");
+
+        Assert.Equal(new EnlaceDelEditor("/privacidad", "Política de privacidad", "_blank"), leido);
+    }
+
+    [Fact]
+    public void Enlace_sin_texto_ni_ventana_nueva_viaja_solo_con_su_destino()
+    {
+        var leido = Lector(ElementoFalso.Con(("actionLink", ElementoFalso.Enlace("https://wa.me/573001234567", "", null))))
+            .Enlace("actionLink");
+
+        Assert.Equal(new EnlaceDelEditor("https://wa.me/573001234567", null, null), leido);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" # ")]
+    public void Enlace_sin_destino_no_viaja_y_se_anota(string url)
+    {
+        Assert.Null(Lector(ElementoFalso.Con(("shareLink", ElementoFalso.Enlace(url, "Compartir")))).Enlace("shareLink"));
+        Assert.Equal(1, Anotados());
+    }
+
+    [Fact]
+    public void Enlace_que_llega_como_lista_toma_el_primero()
+    {
+        IEnumerable<Link> varios = [ElementoFalso.Enlace("/uno"), ElementoFalso.Enlace("/dos")];
+
+        Assert.Equal("/uno", Lector(ElementoFalso.Con(("ctaLink", varios))).Enlace("ctaLink")?.Url);
+    }
+
+    [Fact]
+    public void Enlace_leido_dos_veces_da_lo_mismo()
+    {
+        var lector = Lector(ElementoFalso.Con(("ctaLink", ElementoFalso.Enlace("/reservas", "Reservar"))));
+
+        Assert.Equal(lector.Enlace("ctaLink"), lector.Enlace("ctaLink"));
     }
 }
