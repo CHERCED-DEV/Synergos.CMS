@@ -1,19 +1,16 @@
-﻿@*
+@*
     SynHost renderer — <synergos-icon-label>. iconKey + labelText.
+
+    Host tonto (ADR 0135): el resolver arma el record que viaja (IconLabelProps) y la vista
+    resuelve y emite. Antes mandaba iconKey y el elemento lee iconName: el icono que eligió
+    el editor se perdía al hidratar (D1).
 *@
+@using Synergos.CMS.Web.Services.SynHost
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.IconLabelProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["iconKey"] = Model.Value<string>("iconKey"),
-        ["labelText"] = Model.Value<string>("labelText"),
-    };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
-        BlockAlias: "icon-label",
-        Props: props,
-        ConfigOverrideJson: Model.Value<string>("configOverride"),
-        Culture: System.Globalization.CultureInfo.CurrentUICulture);
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

@@ -233,6 +233,31 @@
       }
     },
     {
+      "nombre": "icon-label",
+      "tipo": "pieza",
+      "record": "IconLabelProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "iconName",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "labelText",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "iconName": "check",
+        "labelText": "Envío gratis a todo el país"
+      }
+    },
+    {
       "nombre": "kpi-card",
       "tipo": "pieza",
       "record": "KpiCardProps",
