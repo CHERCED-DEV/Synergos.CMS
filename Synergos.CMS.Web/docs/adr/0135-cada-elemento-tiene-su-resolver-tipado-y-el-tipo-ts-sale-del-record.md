@@ -237,6 +237,23 @@ interactivo por defecto y nadie escucha su evento; `carousel` promete un autopla
 tiene; `tagColor` es texto libre donde debería ser un selector; `kpiTrend` describe «neutral» y el
 DataType dice `flat`; el emitter escribe los nulos de un diccionario pese a `WhenWritingNull`.
 
+## Escala (#180, 2026-09-30)
+
+Tras la aceptación, tres tandas en paralelo migraron **30 de las 31 piezas** con D1 que faltaban: con
+el piloto, **35 elementos** tienen resolver tipado (los lista `docs/contracts/elementos-synhost.json`).
+Cada pieza re-midió D1 en la cabeza de entonces, se mutó (renombrar en el record; el sanitizador tira
+un campo; un campo de un ítem) y se probó en vivo con control.
+
+- **Lo genérico, una sola vez** (una tanda dueña): lecturas de medios, enlaces, opciones múltiples,
+  RichText a texto plano, número dentro de un ítem, cadena como ítem y fecha ISO.
+- **`Numero`/`Entero` dividían por mil**: `"500.000"` daba 500 (el editor es es-CO). Arreglado: lo
+  ambiguo no viaja y se anota.
+- **El gate que ejecuta miraba un solo nivel de ítems** (un árbol que perdía los nietos pasaba en
+  verde): ahora recorre cualquier profundidad.
+- **`separator` no se migra**: su único campo (`style`) el elemento no lo pinta, y no hay record
+  vacío. Es una de las promesas del ElementType que el elemento no cumple, que junta el #181.
+- Las **7 funcionalidades** con D1 siguen esperando la ADR 0137.
+
 ## Relación con otras ADRs
 
 - **0015** — se conserva el patrón SynHost y el atributo `config`; cambia quién arma su contenido.
