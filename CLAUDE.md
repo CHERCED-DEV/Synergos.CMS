@@ -2433,7 +2433,7 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   no lo prueba nadie; `element-inputs.json` declara atributos, no la forma de `config`. Las dos
   mitades en verde y el hueco en medio. **La pregunta que lo caza** es la de S11 mirada desde el
   otro lado: *¿qué claves emite esta vista, y cuáles conserva el sanitizador?* — se contesta
-  leyendo los dos. **Lo que lo cierra** es el contrato tipado por elemento (ADR 0135, Propuesta):
+  leyendo los dos. **Lo que lo cierra** es el contrato tipado por elemento (ADR 0135, Aceptada):
   con el tipo TS generado del `record`, `optionsJson` contra `options` es un `TS2339` al compilar
   (medido en `dropdown`). Hasta entonces, un gate que **ejecute** el sanitizador con lo que emite
   la vista y exija que cada clave mueva la salida.

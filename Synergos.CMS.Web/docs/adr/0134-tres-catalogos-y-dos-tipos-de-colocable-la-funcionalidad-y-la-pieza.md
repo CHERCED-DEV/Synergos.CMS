@@ -7,7 +7,7 @@
 - **Parte de:** [#172](../../../../../issues/172) · épica [#139](../../../../../issues/139)
 - **Conserva:** ADR 0012 y 0132 (registry por CDN), ADR 0015 (SynHost), ADR 0094 (tokens por
   siteRoot), ADR 0099 (import map + SRI), ADR 0113 (un elemento publicado es una app y no se importa)
-- **Abre:** ADR 0135 a 0139 (propuestas), que traen de NewShore cómo funciona por dentro
+- **Abre:** ADR 0135 a 0139 (propuestas; la 0135, aceptada el 2026-09-30), que traen de NewShore cómo funciona por dentro
 
 ## Contexto
 

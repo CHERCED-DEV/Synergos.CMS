@@ -426,8 +426,9 @@ que el sub-arnés tiene que cargar —y lo que este repo ya escribe en sus guía
 1. **El modelo de ADR 0134** (`CLAUDE.md` §0.C): tres catálogos —Razor, piezas chicas de Angular,
    funcionalidades—, dos tipos de colocable —**funcionalidad** y **pieza**—, **el CMS da cableado y
    no la configuración completa de una funcionalidad**, **no se retira por defecto**, y la regla de
-   los dos pisos. Y el paso que lo aplica al generar un vertical: el doc 12 §5.11. Las cinco ADRs
-   que dan el rumbo —0135 a 0139— están **Propuestas**, y una skill no puede enseñarlas como hechas.
+   los dos pisos. Y el paso que lo aplica al generar un vertical: el doc 12 §5.11. De las cinco ADRs
+   que dan el rumbo, la 0135 está **Aceptada** (2026-09-30) y la 0136 a la 0139 siguen **Propuestas**:
+   una skill no puede enseñar éstas como hechas.
 2. **La disciplina de medición**, que es de proceso y vale en los dos árboles: **un grep es una
    hipótesis** —toda cifra que decide sale de dos métodos distintos, y se dice cuál—; **las cifras
    las imprime el gate**, no las escribe una persona, y la guía cita al gate; y **nada de un agente

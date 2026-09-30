@@ -509,7 +509,7 @@ manda `kpiLabel` y `kpi-card` lee `label`, así que el SSR pinta bien y el bundl
 (`CLAUDE.md` §5, `feedback_hydration_can_erase_what_ssr_painted`). Reusar un elemento así **hereda
 el defecto** aunque el dato sea el tuyo. `element-inputs.json` no alcanza —declara atributos, no la
 forma de `config`— y por eso el doc 13 §5.bis manda mirar a mano. **Mañana** el dato será el
-`record` por elemento de ADR 0135 (Propuesta), con su tipo TS generado, y esta comparación la hará
+`record` por elemento de ADR 0135 (Aceptada), con su tipo TS generado, y esta comparación la hará
 el compilador.
 
 **4. Antes de crear una pieza nueva: buscar en el catálogo por CONCEPTO.** Por nombre no aparece.

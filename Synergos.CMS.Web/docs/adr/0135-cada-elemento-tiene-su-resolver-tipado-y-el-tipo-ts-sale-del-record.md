@@ -1,12 +1,12 @@
 # ADR 0135 — Cada elemento tiene su resolver tipado: un record C# declara lo que viaja y el tipo TS sale de él
 
-- **Estado:** Propuesto — el piloto de cinco elementos (#173) cumplió los cinco criterios y
-  recomienda **Aceptar con cambios** (ver «Resultado del piloto»); falta la ratificación del arquitecto
+- **Estado:** Aceptado (2026-09-30) — el arquitecto la ratificó con los seis cambios que pidió el piloto
+  de cinco elementos (#173), que pasan a ser parte de la decisión (ver «Resultado del piloto»)
 - **Fecha:** 2026-09-29
 - **Propone:** la síntesis de la auditoría de reutilización (informe 20 §5.C.1, «el corazón del
   refinado»). El arquitecto fijó número y estado el 2026-09-29.
 - **Parte de:** [#172](../../../../../issues/172) · épica [#139](../../../../../issues/139)
-- **Enmendaría:** ADR 0015 §1 (todo `elementSyn*` compone `compIntegration` → `configOverride`) y
+- **Enmienda:** ADR 0015 §1 (todo `elementSyn*` compone `compIntegration` → `configOverride`) y
   ADR 0096 §1 (module-mount hereda `configOverride`), sólo para las funcionalidades
 - **Depende de:** ADR 0134 (funcionalidad / pieza). **La usan:** ADR 0136 y 0137
 
@@ -77,7 +77,7 @@ parámetros del editor ✔ y el orden de envío ✔; la vista Razor es un **host
 (informe 20 §3). Su punto flaco: si el resolver falla, la vista emite `data-initial-value=''`, el
 `JSON.parse` lanza y **el widget desaparece en silencio** (informe 15 D5).
 
-## Decisión (propuesta)
+## Decisión
 
 ### 1. Un `record` por elemento, que declara lo que viaja
 
@@ -199,17 +199,25 @@ homónimas de CMS y UI.
    las claves corregidas y en que los campos vacíos ya no viajan como `null`.
 4. **Coste medido**: el primero ≈ 57 min de agente (≈ 40 en lo genérico, que se hace una vez); los otros
    cuatro, **5-9 min** y **20-70 líneas de código** cada uno (record 3-6, resolver 10-35, vista 6; el
-   resto son sus 4 tests por seam). El patrón no cambió entre el 2º y el 5º. Para las 33 piezas con D1
-   que faltan: ≈ 4-5,5 h de agente. Las 7 funcionalidades con D1 dependen antes de la ADR 0137.
+   resto son sus 4 tests por seam). El patrón no cambió entre el 2º y el 5º. Para las **31** piezas con D1
+   que faltan (36 piezas con D1 menos las 5 del piloto; el informe del piloto decía 33, una resta mal
+   hecha): ≈ 4-5 h de agente. Las 7 funcionalidades con D1 dependen antes de la ADR 0137.
 5. **Dirección C# → TS**: `Synergos.CMS.Interfaces/SynHost/*Props.cs` →
    `docs/contracts/elementos-synhost.json` (derivado por el CMS) → `elementos-synhost.contract.ts`
    (generado por el UI con `npm run contratos:synhost`).
 
-**Los cambios que el piloto pide a esta ADR** (a ratificar):
+**Los cambios que el piloto pidió a esta ADR** (ratificados por el arquitecto el 2026-09-30; son parte
+de la decisión):
 
 1. **§6 — en las piezas, `configOverride` sólo pisa campos que el record declara**
    (`SolicitudSynHost.SoloLoDeclarado`). Antes de migrar las demás hay que **medir en la base** qué
    contenido usa `configOverride` con claves no declaradas: el piloto no tocó la SQLite.
+   **Medido el 2026-09-30**, sobre una copia de la base local (la única que existe: el despliegue no
+   está creado, #21), por dos caminos y con control: **ningún bloque, en ninguna versión, lleva
+   `configOverride` ni `config`** (0 de 1.755 bloques recorridos en el JSON de 165 BlockGrid/BlockList
+   actuales o publicados; 0 filas que lo mencionen en texto crudo, todas las versiones). El mismo
+   recorrido sí encuentra `itemsJson` en 717 bloques y `heading` en 143. La regla no borra nada que un
+   editor haya puesto.
 2. **§4 — el `ejemplo` es parte del contrato**, y lo emite el CMS con su resolver y su emitter reales
    (`ContratoSynHostTests`); el gate del UI lo ejecuta. Tipar sólo caza la clave que se lee de más, no
    la que se tira.
