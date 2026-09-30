@@ -111,13 +111,17 @@ public sealed partial class SeamComposer
 
         if (string.Equals(builder.Config["Synergos:Tienda:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
         {
-            var tiendaBase = builder.Config["Synergos:Tienda:BaseUrl"];
-            var cartBase = builder.Config["Synergos:Tienda:CartBaseUrl"];
-            var tiendaKey = builder.Config["Synergos:Tienda:ApiKey"];
-            var timeout = int.TryParse(builder.Config["Synergos:Tienda:TimeoutSeconds"], out var t) && t > 0 ? t : 30;
-
-            ConfigurarClienteTienda(services, HttpShopOrderService.BffClientName, tiendaBase, "http://127.0.0.1:5300/", tiendaKey, timeout);
-            ConfigurarClienteTienda(services, HttpShopOrderService.CartClientName, cartBase, "http://127.0.0.1:5210/", tiendaKey, timeout);
+            // Dos clientes —el orquestador y la canasta— bajo la MISMA llave y el mismo techo, y
+            // cada uno con su cadena entera (#178). El techo es generoso a propósito: comprar
+            // cruza seis servicios y NO es auxiliar. Cortarlo pronto no evita el problema —un
+            // timeout no dice «no se cobró», dice «no sé»—, sólo lo hace más probable.
+            var tienda = builder.Config.GetSection("Synergos:Tienda");
+            services.AddClienteDelArbolDeServicios(
+                HttpShopOrderService.BffClientName,
+                DestinoDelArbol.De(tienda, "http://127.0.0.1:5300/", 30));
+            services.AddClienteDelArbolDeServicios(
+                HttpShopOrderService.CartClientName,
+                DestinoDelArbol.De(tienda, "http://127.0.0.1:5210/", 30, claveDeLaUrl: "CartBaseUrl"));
 
             services.AddSingleton<IShopOrderService, HttpShopOrderService>();
         }
@@ -157,29 +161,5 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<IJsonEntityStore>(),
                 StubMessagingService.DefaultResourceType));
 
-    }
-
-    /// <summary>Un cliente nombrado hacia el árbol de servicios, con su llave compartida.</summary>
-    /// <remarks>
-    /// El timeout es generoso a propósito: comprar cruza seis servicios y NO es auxiliar.
-    /// Cortarlo pronto no evita el problema —un timeout no dice «no se cobró», dice «no sé»—,
-    /// solo lo hace más probable.
-    /// </remarks>
-    private static void ConfigurarClienteTienda(
-        IServiceCollection services, string nombre, string? baseUrl, string porDefecto, string? apiKey, int timeoutSegundos)
-    {
-        services.AddHttpClient(nombre, http =>
-        {
-            var url = string.IsNullOrWhiteSpace(baseUrl) ? porDefecto : baseUrl;
-            http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-            http.Timeout = TimeSpan.FromSeconds(timeoutSegundos);
-            if (!string.IsNullOrWhiteSpace(apiKey))
-            {
-                http.DefaultRequestHeaders.Add(HttpShopOrderService.ApiKeyHeader, apiKey);
-            }
-        })
-        // El hilo de la correlación cruza al árbol de servicios (HU #28): sin esto, la compra
-        // deja un rastro en el CMS y otro distinto en el orquestador, y son la misma compra.
-        .AddHttpMessageHandler<CorrelationForwardingHandler>();
     }
 }

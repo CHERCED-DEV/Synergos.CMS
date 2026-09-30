@@ -40,9 +40,6 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class HttpShopOrderService : IShopOrderService
 {
-    /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Clientes nombrados que registra el composer.</summary>
     public const string BffClientName = "synergos-bff-tienda";
 
@@ -344,7 +341,7 @@ public sealed class HttpShopOrderService : IShopOrderService
                 return cuerpo ?? throw new InvalidOperationException($"No pudimos {queHacia}: la respuesta vino vacía.");
             }
 
-            var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
+            var problema = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
 
             // SOLO 401, y la distinción importa. Es un defecto de DESPLIEGUE, no del visitante:
             // la llave compartida está mal o no está. Se grita en el log y afuera sale un error
@@ -373,24 +370,24 @@ public sealed class HttpShopOrderService : IShopOrderService
             // Y es un defecto de DESPLIEGUE, no del comprador: igual que el 401, se grita en el
             // log con el nombre de lo que falta y afuera sale un mensaje que no le echa encima un
             // problema que no puede resolver.
-            if (problema.Code?.StartsWith(IdentityCodePrefix, StringComparison.Ordinal) == true)
+            if (problema?.Codigo?.StartsWith(IdentityCodePrefix, StringComparison.Ordinal) == true)
             {
                 _log.LogError(
                     "Tienda rechazó {Que} por identidad ({Code}): {Detalle}. Si es "
                     + "identity.token_not_verifiable, a Api.Cart le falta IdentityTokens:Keys — la "
                     + "MISMA llave con la que firma Api.Identity.",
-                    queHacia, problema.Code, problema.Detail ?? "-");
+                    queHacia, problema?.Codigo, problema?.Detalle ?? "-");
                 throw new InvalidOperationException("No pudimos procesar tu compra. No se te cobró.");
             }
 
             _log.LogWarning("Tienda rechazó {Que} con {Status} ({Code}): {Detalle}",
-                queHacia, (int)res.StatusCode, problema.Code ?? "-", problema.Detail ?? "-");
+                queHacia, (int)res.StatusCode, problema?.Codigo ?? "-", problema?.Detalle ?? "-");
 
             // El motivo del rechazo SÍ es del comprador: «se agotó mientras comprabas» es
             // accionable y «error» no lo es. Va como ArgumentException porque es lo que el
             // controller traduce a 400 con el mensaje visible.
             throw new ArgumentException(
-                string.IsNullOrWhiteSpace(problema.Detail) ? $"No pudimos {queHacia}." : problema.Detail!);
+                string.IsNullOrWhiteSpace(problema?.Detalle) ? $"No pudimos {queHacia}." : problema!.Detalle!);
         }
     }
 
@@ -419,18 +416,6 @@ public sealed class HttpShopOrderService : IShopOrderService
         {
             _log.LogWarning(ex, "Tienda no respondió a {Url}; se sirve sin ese dato.", req.RequestUri);
             return null;
-        }
-    }
-
-    private static async Task<ProblemDto> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
-    {
-        try
-        {
-            return await res.Content.ReadFromJsonAsync<ProblemDto>(Json, ct).ConfigureAwait(false) ?? new ProblemDto();
-        }
-        catch (Exception ex) when (ex is JsonException or HttpRequestException or NotSupportedException)
-        {
-            return new ProblemDto();
         }
     }
 
@@ -598,11 +583,4 @@ public sealed class HttpShopOrderService : IShopOrderService
         string Id, string? BuyerKind, string? BuyerId, string? CartId, string? Status,
         MoneyDto Total, string? OrderId, string? ShipmentId, int HeldLines,
         int PendingCompensations, string? LastError, MoneyDto? Refunded = null);
-
-    private sealed record ProblemDto
-    {
-        public string? Title { get; init; }
-        public string? Detail { get; init; }
-        public string? Code { get; init; }
-    }
 }

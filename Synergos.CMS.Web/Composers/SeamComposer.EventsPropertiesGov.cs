@@ -109,21 +109,10 @@ public sealed partial class SeamComposer
 
         if (string.Equals(builder.Config["Synergos:Eventos:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
         {
-            var evBase = builder.Config["Synergos:Eventos:BaseUrl"];
-            var evKey = builder.Config["Synergos:Eventos:ApiKey"];
-            var evTimeout = int.TryParse(builder.Config["Synergos:Eventos:TimeoutSeconds"], out var et) && et > 0 ? et : 30;
-
-            services.AddHttpClient(HttpEventTicketingService.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(evBase) ? "http://127.0.0.1:5303/" : evBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(evTimeout);
-                if (!string.IsNullOrWhiteSpace(evKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpEventTicketingService.ApiKeyHeader, evKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178).
+            services.AddClienteDelArbolDeServicios(
+                HttpEventTicketingService.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Eventos"), "http://127.0.0.1:5303/", 30));
 
             // El MISMO registro que lee la cara de organizador. Es lo que hace que cambiar por
             // dónde se compra no deje la puerta ciega.

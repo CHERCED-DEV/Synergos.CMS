@@ -46,9 +46,6 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class HttpClinicalSchedulingService : IClinicalSchedulingService
 {
-    /// <summary>Cabecera de la llave compartida.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Cliente nombrado que registra el composer.</summary>
     public const string BffClientName = "synergos-bff-salud";
 
@@ -215,7 +212,7 @@ public sealed class HttpClinicalSchedulingService : IClinicalSchedulingService
                        ?? throw new InvalidOperationException("No pudimos agendar la cita: la respuesta vino vacía.");
             }
 
-            var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
+            var problema = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
 
             // SOLO 401. El 403 NO es un fallo de llave: `SharedKeyAuth` responde 401 cuando la
             // llave falta o no cuadra, y nunca 403. Un 403 acá es un rechazo de negocio con todas
@@ -236,7 +233,7 @@ public sealed class HttpClinicalSchedulingService : IClinicalSchedulingService
             }
 
             _log.LogWarning("Salud rechazó agendar con {Status} ({Code}): {Detalle}",
-                (int)res.StatusCode, problema.Code ?? "-", problema.Detail ?? "-");
+                (int)res.StatusCode, problema?.Codigo ?? "-", problema?.Detalle ?? "-");
 
             // El cupo tomado es el rechazo que el paciente TIENE que ver con su motivo: «ese
             // horario ya no está» lleva a elegir otro, y «error» no lleva a nada.
@@ -245,7 +242,7 @@ public sealed class HttpClinicalSchedulingService : IClinicalSchedulingService
             // en proceso lanza para el mismo caso, y el controller ya lo traduce. Cambiar el tipo
             // según el origen haría que encender el modo Bff cambiara los códigos HTTP.
             throw new InvalidOperationException(
-                string.IsNullOrWhiteSpace(problema.Detail) ? "No pudimos agendar la cita." : problema.Detail!);
+                string.IsNullOrWhiteSpace(problema?.Detalle) ? "No pudimos agendar la cita." : problema!.Detalle!);
         }
     }
 
@@ -267,18 +264,6 @@ public sealed class HttpClinicalSchedulingService : IClinicalSchedulingService
         {
             _log.LogDebug(ex, "No se pudo consultar la cita {Key}.", sagaId);
             return null;
-        }
-    }
-
-    private static async Task<ProblemDto> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
-    {
-        try
-        {
-            return await res.Content.ReadFromJsonAsync<ProblemDto>(Json, ct).ConfigureAwait(false) ?? new ProblemDto();
-        }
-        catch (Exception ex) when (ex is JsonException or HttpRequestException or NotSupportedException)
-        {
-            return new ProblemDto();
         }
     }
 
@@ -313,11 +298,4 @@ public sealed class HttpClinicalSchedulingService : IClinicalSchedulingService
         string Id, string? PatientKind, string? PatientId, string? ProfessionalKind, string? ProfessionalId,
         DateTimeOffset Start, DateTimeOffset End, string? Status, MoneyDto? Total,
         string? ReservationId, int PendingCompensations, string? LastError);
-
-    private sealed record ProblemDto
-    {
-        public string? Title { get; init; }
-        public string? Detail { get; init; }
-        public string? Code { get; init; }
-    }
 }

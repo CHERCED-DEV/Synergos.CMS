@@ -30,9 +30,6 @@ internal sealed class ViajesRejectedException : Exception
 /// </remarks>
 internal sealed class ViajesWire
 {
-    /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Cliente nombrado que registra el composer. <b>Uno solo para los dos consumidores</b>:
     /// misma URL, misma llave, mismo timeout — dos registros idénticos serían dos sitios donde
     /// cambiar el timeout y uno donde olvidarlo.</summary>
@@ -93,7 +90,7 @@ internal sealed class ViajesWire
                 return cuerpo ?? throw new InvalidOperationException($"No pudimos {queHacia}: la respuesta vino vacía.");
             }
 
-            var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
+            var problema = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
 
             // SOLO 401. Es un defecto de DESPLIEGUE, no de quien reserva: la llave compartida está
             // mal o no está. El 403 NO entra acá — `SharedKeyAuth` responde 401 cuando la llave
@@ -108,22 +105,10 @@ internal sealed class ViajesWire
             }
 
             _log.LogWarning("Viajes rechazó {Que} con {Status} ({Code}): {Detalle}",
-                queHacia, (int)res.StatusCode, problema.Code ?? "-", problema.Detail ?? "-");
+                queHacia, (int)res.StatusCode, problema?.Codigo ?? "-", problema?.Detalle ?? "-");
 
-            var mensaje = string.IsNullOrWhiteSpace(problema.Detail) ? $"No pudimos {queHacia}." : problema.Detail!;
-            throw new ViajesRejectedException(problema.Code, mensaje);
-        }
-    }
-
-    private static async Task<ProblemDto> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
-    {
-        try
-        {
-            return await res.Content.ReadFromJsonAsync<ProblemDto>(Json, ct).ConfigureAwait(false) ?? new ProblemDto();
-        }
-        catch (Exception ex) when (ex is JsonException or HttpRequestException or NotSupportedException)
-        {
-            return new ProblemDto();
+            var mensaje = string.IsNullOrWhiteSpace(problema?.Detalle) ? $"No pudimos {queHacia}." : problema!.Detalle!;
+            throw new ViajesRejectedException(problema?.Codigo, mensaje);
         }
     }
 
@@ -134,13 +119,6 @@ internal sealed class ViajesWire
     /// HU #35 tras verlo con los procesos vivos, y lo que costó el defecto #47 en la tienda.
     /// </remarks>
     public static string TravellerId(string? guestEmail) => SeudonimoDePersona.De(guestEmail);
-
-    private sealed record ProblemDto
-    {
-        public string? Title { get; init; }
-        public string? Detail { get; init; }
-        public string? Code { get; init; }
-    }
 }
 
 // Las formas que los dos consumidores leen del orquestador. Viven acá y NO en
