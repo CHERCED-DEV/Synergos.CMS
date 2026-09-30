@@ -4,6 +4,7 @@ using Synergos.CMS.Web.Services.SynHost;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Routing;
+using Umbraco.Cms.Core.Strings;
 
 namespace Synergos.CMS.Tests.Services.SynHost;
 
@@ -247,5 +248,46 @@ public sealed class LectorDelEditorTests
     {
         Assert.Null(Lector(ElementoFalso.Con(("maxStars", texto))).Entero("maxStars"));
         Assert.Equal(1, Anotados());
+    }
+
+    // ── TextoPlano (Umbraco.TinyMCE) ────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("<p></p>")]
+    [InlineData("<p>&nbsp;</p>")]
+    public void TextoPlano_sin_texto_no_viaja(string? html)
+    {
+        Assert.Null(Lector(ElementoFalso.Con(("tooltipContent", html))).TextoPlano("tooltipContent"));
+    }
+
+    [Fact]
+    public void TextoPlano_quita_el_marcado_y_no_pega_los_parrafos()
+    {
+        var leido = Lector(ElementoFalso.Con(("tooltipContent",
+            new HtmlEncodedString("<p>El IVA se calcula <strong>sobre el total</strong>.</p><p>Aplica desde<br/>enero.</p>"))))
+            .TextoPlano("tooltipContent");
+
+        Assert.Equal("El IVA se calcula sobre el total. Aplica desde enero.", leido);
+    }
+
+    [Fact]
+    public void TextoPlano_decodifica_las_entidades_y_descarta_scripts_y_estilos()
+    {
+        var leido = Lector(ElementoFalso.Con(("tooltipContent",
+            "<p>Tama&ntilde;o &lt;b&gt; &amp; m&aacute;s</p><script>alert(1)</script><style>p{color:red}</style>")))
+            .TextoPlano("tooltipContent");
+
+        Assert.Equal("Tamaño <b> & más", leido);
+    }
+
+    [Fact]
+    public void TextoPlano_leido_dos_veces_da_lo_mismo()
+    {
+        var lector = Lector(ElementoFalso.Con(("tooltipContent", "<ul><li>Uno</li><li>Dos</li></ul>")));
+
+        Assert.Equal("Uno Dos", lector.TextoPlano("tooltipContent"));
+        Assert.Equal(lector.TextoPlano("tooltipContent"), lector.TextoPlano("tooltipContent"));
     }
 }

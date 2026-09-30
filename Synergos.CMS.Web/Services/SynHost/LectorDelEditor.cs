@@ -1,10 +1,12 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Routing;
+using Umbraco.Cms.Core.Strings;
 
 namespace Synergos.CMS.Web.Services.SynHost;
 
@@ -67,6 +69,50 @@ public sealed class LectorDelEditor
         var crudo = _elemento.Value<string>(_fallback, alias);
         return string.IsNullOrWhiteSpace(crudo) ? null : crudo.Trim();
     }
+
+    /// <summary>
+    /// El texto de un editor enriquecido (<c>Umbraco.TinyMCE</c>) en <paramref name="alias"/>, SIN
+    /// marcado: etiquetas fuera, entidades decodificadas y los espacios juntos; <c>null</c> si no
+    /// queda texto.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Para el elemento que pinta el texto como texto</b> (con <c>{{ }}</c>, no con
+    /// <c>innerHTML</c>). Mandarle el HTML del editor lo pinta con sus etiquetas a la vista —o, si un
+    /// día alguien lo pasa a <c>innerHTML</c> para arreglarlo, abre la puerta al marcado de
+    /// cualquiera—. El elemento que sí quiera marcado necesita otra lectura, que sanee, no ésta.</para>
+    ///
+    /// <para>El fin de un bloque (<c>&lt;/p&gt;</c>, <c>&lt;br&gt;</c>, <c>&lt;/li&gt;</c>…) cuenta
+    /// como un espacio, para que dos párrafos no se peguen («UnoDos»); lo que va dentro de
+    /// <c>&lt;script&gt;</c> y <c>&lt;style&gt;</c> no es texto y se descarta entero.</para>
+    /// </remarks>
+    public string? TextoPlano(string alias)
+    {
+        var html = _elemento.Value<object>(_fallback, alias) switch
+        {
+            IHtmlEncodedString rte => rte.ToHtmlString(),
+            string crudo => crudo,
+            _ => null,
+        };
+
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return null;
+        }
+
+        var sinCodigo = BloqueDeCodigo.Replace(html, " ");
+        var conCortes = FinDeBloque.Replace(sinCodigo, " ");
+        var sinEtiquetas = Etiqueta.Replace(conCortes, string.Empty);
+        var texto = Espacios.Replace(WebUtility.HtmlDecode(sinEtiquetas), " ").Trim();
+        return texto.Length == 0 ? null : texto;
+    }
+
+    private static readonly Regex BloqueDeCodigo = new(
+        @"<(script|style)\b[^>]*>[\s\S]*?</\1\s*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex FinDeBloque = new(
+        @"<br\s*/?>|</(p|div|li|ul|ol|h[1-6]|blockquote|tr|td|th|section|article)\s*>",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex Etiqueta = new(@"<[^>]*>", RegexOptions.CultureInvariant);
+    private static readonly Regex Espacios = new(@"[\s ]+", RegexOptions.CultureInvariant);
 
     /// <summary>El interruptor (TrueFalse) de <paramref name="alias"/>: <c>false</c> si el editor no lo tocó.</summary>
     public bool Interruptor(string alias) => _elemento.Value<bool>(_fallback, alias);
