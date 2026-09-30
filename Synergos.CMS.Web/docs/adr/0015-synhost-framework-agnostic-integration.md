@@ -1,6 +1,9 @@
 # ADR 0015 — SynHost: contrato de integración framework-agnóstica CDN↔CMS
 
-- **Status:** Accepted
+- **Status:** Accepted — **enmendado por el [ADR 0135](0135-cada-elemento-tiene-su-resolver-tipado-y-el-tipo-ts-sale-del-record.md)** (2026-09-30) en §1: en las
+  piezas con resolver tipado, `configOverride` sólo pisa los campos que su `record` declara, y en las
+  funcionalidades deja de ser el canal de su configuración (sale con la ADR 0137). Lee la 0135 antes de
+  aplicar §1.
 - **Date:** 2026-04-22
 - **Deciders:** Project owner
 - **Source:** promoted from `refactor-docs/adr-drafts/0015-synhost-framework-agnostic-integration.md` (Draft 2026-04-20)

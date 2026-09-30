@@ -4,6 +4,8 @@
 - **Date:** 2026-06-25
 - **Deciders:** Arquitecto + agente, fase SynergosLabs. Diseño verificado por workflow multi-agente (4 exploradores + diseño + auditoría adversaria + síntesis contra código vivo).
 - **Prerequisito de:** ADR 0097 (Dashboard) y ADR 0098 (Healthcare).
+- **Enmendado por:** [ADR 0135](0135-cada-elemento-tiene-su-resolver-tipado-y-el-tipo-ts-sale-del-record.md) (Aceptada 2026-09-30) en §1: module-mount es una
+  funcionalidad, y su configuración no le llega por `configOverride` (sale con la ADR 0137).
 
 ## Context
 

@@ -79,6 +79,9 @@ parámetros del editor ✔ y el orden de envío ✔; la vista Razor es un **host
 
 ## Decisión
 
+> **Aceptada con los seis cambios del piloto** (ver «Resultado del piloto»). Donde un apartado de abajo
+> y uno de esos cambios digan cosas distintas, manda el cambio.
+
 ### 1. Un `record` por elemento, que declara lo que viaja
 
 En `Synergos.CMS.Interfaces`, atado por un atributo al **`name` del registry** (la identidad de un
@@ -122,8 +125,9 @@ al compilar.
 ### 6. `configOverride` fuera de las funcionalidades
 
 Es la puerta por la que la configuración técnica entra desde el editor y pisa al record. En las
-funcionalidades sale (o queda detrás de `DevSeed`, ADR 0013). En las piezas, qué hacer con él lo
-decide el piloto.
+funcionalidades sale (o queda detrás de `DevSeed`, ADR 0013). En las piezas **sólo pisa los campos que
+el record declara** (`SolicitudSynHost.SoloLoDeclarado`): lo decidió el piloto y lo ratificó el
+arquitecto; medido antes de escalar, ningún contenido lo usa (ver «Resultado del piloto»).
 
 ### 7. El formato del cable no cambia
 
