@@ -18,7 +18,7 @@
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CartSettings> CartSettingsOpt
 @{
     Layout = "_Layout";
-    var product = UmbracoContext.PublishedRequest?.PublishedContent;
+    var product = UmbracoContext?.PublishedRequest?.PublishedContent;
     if (product is null) { return; }
 
     var sku = product.Value<string>("productSku") ?? string.Empty;

@@ -81,7 +81,7 @@
                                 data-thumb
                                 data-thumb-src="@img.Url()"
                                 aria-pressed="@(i == 0 ? "true" : "false")"
-                                aria-label="@string.Format(Umbraco.GetDictionaryValue("Shop.Product.ViewImage"), i + 1)">
+                                aria-label="@string.Format(Umbraco.GetDictionaryValue("Shop.Product.ViewImage") ?? string.Empty, i + 1)">
                             <img class="syn-product__thumb-image" src="@img.Url()" alt="" loading="lazy" />
                         </button>
                     </li>

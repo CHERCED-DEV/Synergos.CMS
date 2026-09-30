@@ -1720,6 +1720,32 @@ Las que salieron de construir el árbol de servicios (§0.B):
   renderiza**. Compilándolas las 401 aparecieron **tres más**, rotas desde hacía olas — un
   `@inject` de un tipo borrado y dos de un namespace que no lo tiene.
 
+- `feedback_a_gate_receipt_can_mask_what_the_gate_exists_to_see` — **el recibo de un gate —la
+  señal que exige para saber que corrió de verdad— puede ser justo lo que le tapa el defecto, y
+  entonces dice «✓» con más convicción que nunca** (#184). `compilan-las-vistas` exigía ver el
+  `CS0234` de `PublishedModels` como prueba de que Razor había compilado. Ese `CS0234` es un
+  error de DECLARACIÓN, y con uno así el compilador no informa los del CUERPO de NINGUNA vista:
+  las 401 son una sola compilación. Medido sobre `89fe9340`: **10** diagnósticos, todos exentos,
+  «✓ 401/401»; compilando sin las ocho vistas atadas, **25** errores en 17 vistas, **siete** rotas
+  en caliente — `BlogTag.cshtml` con las 8 `/blog/tag/*` en 500 en vivo, y los tres parciales de
+  avisos globales esperando a que un editor activara uno para tumbar toda página con `_Layout`.
+  **El tell**: un recibo que es un ERROR, o cualquier cosa que CORTA el proceso que el gate
+  observa. Un recibo sano prueba que el proceso LLEGÓ —«esta vista está en el ensamblado»—, no
+  que empezó. **La pregunta que lo caza**: *¿qué deja de producir el sistema observado cuando
+  aparece mi recibo?* Si no es «nada», recibo y cobertura se excluyen, y van en dos pasadas: una
+  que exige el recibo y otra que no puede tenerlo y exige uno de llegada.
+  **Y el gate nunca se vio fallar por lo que tapaba porque su mutación era la del RECIBO**
+  (apagar Razor), nunca la del SUJETO (romper el cuerpo de una vista): `feedback_mutate_every_gate`
+  vale por cada CLASE de defecto que el gate dice ver, no por el gate en bloque. La segunda
+  pasada se mutó ocho veces, y al escribirla su propia exclusión falló en silencio —`Remove` con
+  rutas absolutas dentro de un target no sacó NINGUNA vista—, que es por qué hay un suelo que
+  cuenta lo que entró.
+  **Y había una segunda tapa encima, del lado del producto**: verificando en vivo, un aviso
+  global SIN fecha de fin no se pinta nunca —`Value<DateTime?>` de una fecha vacía devuelve
+  `0001-01-01`, no `null`, y el resolver lo toma por vencido—. O sea que el 500 de
+  `_GlobalAlert` sólo aparecía con un aviso con fecha de fin. Es la forma del #92 otra vez: el
+  hueco de abajo tapaba el de arriba, y cerrar uno es cómo se ve el otro.
+
 - `feedback_a_key_the_app_reads_needs_a_path_from_whoever_sets_it` — **una clave de
   configuración que el código lee, los ADRs documentan y la guía manda poblar puede no tener
   NINGÚN camino desde el operador hasta el proceso, y eso no falla: el default se queda puesto
@@ -2857,14 +2883,32 @@ que el import ensucia en vez de restaurarlos.
 > renderiza**. De las 401 del árbol, la portada toca un puñado.
 >
 > ```bash
-> node tools/compilan-las-vistas.mjs   # las 401, con RazorCompileOnBuild=true (~6 s)
+> node tools/compilan-las-vistas.mjs   # las 401 en dos pasadas, con RazorCompileOnBuild=true (~20 s)
 > ```
 >
-> Le pide al build lo que en el día a día tiene apagado. La **única** exención son los
-> `CS0234` de `Synergos.CMS.Web.PublishedModels`, que no existe en tiempo de build porque
-> lo genera Umbraco en memoria al arrancar — y esa exención es además **el recibo** de que
+> Le pide al build lo que en el día a día tiene apagado. En la **primera pasada** la única
+> exención son los `CS0234` de `Synergos.CMS.Web.PublishedModels`, que no existe en tiempo de
+> build porque lo genera Umbraco al arrancar — y esa exención es además **el recibo** de que
 > Razor compiló: si no aparece ninguno, el gate falla en vez de decir «las 401 compilan»
 > sin haber compilado ninguna.
+>
+> **Y ese recibo tapaba lo que el gate existe para ver** (#184). Los `CS0234` son errores de
+> DECLARACIÓN, y con uno así el compilador no informa los del CUERPO de ninguna vista: el gate
+> decía «✓ 401/401» con **siete** vistas rotas en caliente —`BlogTag.cshtml` con las 8
+> `/blog/tag/*` en 500 en vivo, y `_GlobalAlert`/`_GlobalBanner`/`_GlobalModal` esperando a
+> que un editor activara un aviso para tumbar toda página con `_Layout`—. Por eso hay una
+> **segunda pasada**: compila sin las vistas atadas a `PublishedModels` (derivadas del disco
+> y cruzadas con lo que acusó la primera: el mismo conjunto o rojo) y **todo error que sale es
+> real**, CS86xx incluidos — en caliente no rompen, pero son los cuatro que
+> `Directory.Build.props` declara que no se negocian. Compila en su propia configuración
+> (`CompilanLasVistas`) para que su ensamblado —con las vistas precompiladas, que ningún build
+> normal produce— no caiga en `bin/Debug`; y si sale verde, exige que cada vista que le pasó
+> esté DENTRO del ensamblado. Mutado ocho veces: cuatro defectos del ticket reintroducidos, y
+> cada suelo nuevo roto a propósito.
+>
+> **Corre en un árbol SIN modelos generados**, como CI. En `Development` el modo es
+> `SourceCodeAuto`, y con `umbraco/models/*.generated.cs` presentes `PublishedModels` sí existe
+> en build: el recibo no puede aparecer, y el gate lo dice con esas palabras.
 >
 > Al escribirlo encontró **tres vistas en 500 permanente** que ningún humo tocaba:
 > `CommentThread.cshtml` inyectaba `ICommentRepository` —un tipo **borrado** al partirlo en
@@ -2875,8 +2919,11 @@ que el import ensucia en vez de restaurarlos.
 > puede estar en otra capa o en un `.props`, y enumerar eso en un filtro es el #128.
 >
 > **Lo que NO prueba, dicho para no mentir sobre su alcance**: que la vista se RENDERICE.
-> Un `Model.Value<T>("aliasQueNoExiste")` compila y devuelve el default (#118). Para eso
-> siguen estando los dos de arriba.
+> Un `Model.Value<T>("aliasQueNoExiste")` compila y devuelve el default (#118). Tampoco el
+> cuerpo de las ocho atadas, ni lo que sólo falla en caliente: el build tiene los implicit
+> usings del proyecto y el compilador en caliente no, así que **el #92 le pasa en verde**
+> —medido: quitar el `@using Microsoft.Extensions.Logging` de `_ViewImports.cshtml` da
+> «✓»—. Para eso siguen estando los dos de arriba.
 
 ### Los gates de Node — corren sin SDK .NET
 

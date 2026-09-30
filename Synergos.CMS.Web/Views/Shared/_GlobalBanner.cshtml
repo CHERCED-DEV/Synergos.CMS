@@ -4,7 +4,8 @@
     decisiones de visibilidad. Si Placement="bottom" la envoltura
     aplica clase modificadora; el orden real lo decide _Layout.
 *@
-@model Synergos.CMS.Interfaces.CfgBanner
+@* `@inherits`, NO `@model` (ADR 0059): el mismo 500 latente que `_GlobalAlert` (#184). *@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Interfaces.CfgBanner>
 @{
     if (Model is null) { return; }
     var hasCta = !string.IsNullOrWhiteSpace(Model.CtaLabel) && !string.IsNullOrWhiteSpace(Model.CtaUrl);
