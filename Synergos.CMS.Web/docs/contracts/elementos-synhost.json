@@ -336,6 +336,38 @@
       }
     },
     {
+      "nombre": "progress-bar",
+      "tipo": "pieza",
+      "record": "ProgressBarProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "value",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "max",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "value": 3,
+        "max": 5,
+        "label": "Pasos completados del registro"
+      }
+    },
+    {
       "nombre": "rating-stars",
       "tipo": "pieza",
       "record": "RatingStarsProps",

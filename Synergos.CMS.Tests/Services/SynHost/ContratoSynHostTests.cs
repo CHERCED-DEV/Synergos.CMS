@@ -115,6 +115,12 @@ public sealed class ContratoSynHostTests
                 ("type", "success"),
                 ("durationMs", "8000"),
             },
+            ["progress-bar"] = new (string, object?)[]
+            {
+                ("valueNow", "3"),
+                ("valueMax", "5"),
+                ("ariaLabel", "Pasos completados del registro"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
