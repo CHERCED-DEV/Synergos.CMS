@@ -155,6 +155,56 @@
       }
     },
     {
+      "nombre": "countdown-clock",
+      "tipo": "pieza",
+      "record": "CountdownClockProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "targetDate",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "targetDate": "2030-12-31T23:59:59-05:00"
+      }
+    },
+    {
+      "nombre": "countdown-digital",
+      "tipo": "pieza",
+      "record": "CountdownDigitalProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "targetDate",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "showLabels",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "style",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "targetDate": "2030-12-31T23:59:59-05:00",
+        "showLabels": true,
+        "style": "plain"
+      }
+    },
+    {
       "nombre": "dropdown",
       "tipo": "pieza",
       "record": "DropdownProps",

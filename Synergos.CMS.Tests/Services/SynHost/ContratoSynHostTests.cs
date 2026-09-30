@@ -137,6 +137,17 @@ public sealed class ContratoSynHostTests
                     "<p>Cobro <strong>mensual</strong> por administrar la tarjeta.</p><p>Se exonera con compras desde $&nbsp;300.000.</p>")),
                 ("placement", "bottom-start"),
             },
+            ["countdown-clock"] = new (string, object?)[]
+            {
+                ("endDateTime", "2030-12-31T23:59:59-05:00"),
+                ("labelFormat", "Quedan {days} días y {hours} horas"),
+            },
+            ["countdown-digital"] = new (string, object?)[]
+            {
+                ("endDateTime", "2030-12-31T23:59:59-05:00"),
+                ("showLabels", true),
+                ("style", "digits"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

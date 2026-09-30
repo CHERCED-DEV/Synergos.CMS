@@ -1,13 +1,14 @@
-﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@*
+    SynHost renderer — <synergos-countdown-digital>. Live countdown.
+
+    Host tonto (ADR 0135): el resolver arma el record que viaja (CountdownDigitalProps) —la fecha validada como targetDate, el interruptor y el estilo con el nombre del elemento. Antes mandaba endDateTime y el elemento lee targetDate: el reloj decía «Fecha del evento no disponible» (D1).
+*@
+@using Synergos.CMS.Web.Services.SynHost
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.CountdownDigitalProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["endDateTime"] = Model.Value<string>("endDateTime"),
-        ["showLabels"] = Model.Value<bool>("showLabels"),
-        ["style"] = Model.Value<string>("style"),
-    };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("countdown-digital", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
