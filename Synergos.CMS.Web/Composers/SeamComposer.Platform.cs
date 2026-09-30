@@ -45,22 +45,11 @@ public sealed partial class SeamComposer
 
         if (string.Equals(builder.Config["Synergos:Identity:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
         {
-            var idBase = builder.Config["Synergos:Identity:BaseUrl"];
-            var idKey = builder.Config["Synergos:Identity:ApiKey"];
-            var idTimeout = int.TryParse(builder.Config["Synergos:Identity:TimeoutSeconds"], out var it) && it > 0
-                ? it : 5;
-
-            services.AddHttpClient(HttpIdentityTokenIssuer.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(idBase) ? "http://127.0.0.1:5220/" : idBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(idTimeout);
-                if (!string.IsNullOrWhiteSpace(idKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpIdentityTokenIssuer.ApiKeyHeader, idKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178). El techo es corto a propósito: emitir se
+            // pide antes de cada escritura firmada, y el emisor degrada a «declarar» si no llega.
+            services.AddClienteDelArbolDeServicios(
+                HttpIdentityTokenIssuer.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Identity"), "http://127.0.0.1:5220/", 5));
 
             services.AddSingleton<IIdentityTokenIssuer>(sp => new HttpIdentityTokenIssuer(
                 sp.GetRequiredService<IHttpClientFactory>(),

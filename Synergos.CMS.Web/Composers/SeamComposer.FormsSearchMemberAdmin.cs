@@ -131,22 +131,10 @@ public sealed partial class SeamComposer
         // que se para es que el asiento salga de acá. Es la forma del timeline de pedidos (#46).
         if (string.Equals(builder.Config["Synergos:Audit:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
         {
-            var auditBase = builder.Config["Synergos:Audit:BaseUrl"];
-            var auditKey = builder.Config["Synergos:Audit:ApiKey"];
-            var auditTimeout = int.TryParse(
-                builder.Config["Synergos:Audit:TimeoutSeconds"], out var at) && at > 0 ? at : 5;
-
-            services.AddHttpClient(HttpAuditTrailWriter.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(auditBase) ? "http://127.0.0.1:5222/" : auditBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(auditTimeout);
-                if (!string.IsNullOrWhiteSpace(auditKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpAuditTrailWriter.ApiKeyHeader, auditKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178).
+            services.AddClienteDelArbolDeServicios(
+                HttpAuditTrailWriter.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Audit"), "http://127.0.0.1:5222/", 5));
 
             services.AddSingleton<IAuditTrailWriter>(sp => new HttpAuditTrailWriter(
                 sp.GetRequiredService<FileSystemAuditTrailWriter>(),

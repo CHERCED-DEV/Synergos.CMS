@@ -46,9 +46,6 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
     /// <summary>Cliente nombrado que registra el composer.</summary>
     public const string ClientName = "synergos-api-audit";
 
-    /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Cabecera con la que viaja la identidad verificable de quien actuó.</summary>
     public const string IdentityHeader = "X-Synergos-Identity";
 
@@ -212,8 +209,8 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
                 return "401 — revisar Synergos:Audit:ApiKey";
             }
 
-            var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
-            return $"{(int)res.StatusCode} {problema.Code ?? "-"}: {problema.Detail ?? "-"}";
+            var problema = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
+            return $"{(int)res.StatusCode} {problema?.Codigo ?? "-"}: {problema?.Detalle ?? "-"}";
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -261,18 +258,6 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
         return SeudonimoDePersona.De(actorEmail);
     }
 
-    private static async Task<ProblemDto> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
-    {
-        try
-        {
-            return await res.Content.ReadFromJsonAsync<ProblemDto>(Json, ct).ConfigureAwait(false) ?? new ProblemDto();
-        }
-        catch (Exception ex) when (ex is JsonException or HttpRequestException or NotSupportedException)
-        {
-            return new ProblemDto();
-        }
-    }
-
     // ── Lo que se LEE sale del JSONL, siempre ───────────────────────────────
     //
     // No es una simplificación: el seam lee de forma síncrona y la capacidad habla HTTP. Bloquear
@@ -288,11 +273,4 @@ public sealed class HttpAuditTrailWriter : IAuditTrailWriter
         => _local.GetByDateRange(fromUtc, toUtc, maxItems, actorEmailFilter, actionFilter);
 
     public AuditEvent? GetById(string id) => _local.GetById(id);
-
-    private sealed record ProblemDto
-    {
-        public string? Title { get; init; }
-        public string? Detail { get; init; }
-        public string? Code { get; init; }
-    }
 }
