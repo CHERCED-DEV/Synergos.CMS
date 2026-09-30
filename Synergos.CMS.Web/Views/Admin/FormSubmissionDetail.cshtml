@@ -5,7 +5,7 @@
 @using Synergos.CMS.Interfaces
 @{
     Layout = null;
-    var detail = ViewData["Detail"] as FormSubmissionDetail!;
+    var detail = (ViewData["Detail"] as FormSubmissionDetail)!;
     var moderatorName = ViewData["ModeratorName"] as string ?? "—";
 }
 <!DOCTYPE html>

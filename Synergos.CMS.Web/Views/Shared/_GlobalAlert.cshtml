@@ -5,7 +5,10 @@
     Las decisiones (activo, schedule, suppress por página) viven en el
     resolver para mantener una sola fuente de verdad.
 *@
-@model Synergos.CMS.Interfaces.CfgAlert
+@* `@inherits`, NO `@model` (ADR 0059): con `@model` la vista no hereda de UmbracoViewPage y
+   `Umbraco.GetDictionaryValueOrDefault` es CS0234 en caliente — el día que un editor
+   activara un aviso, toda página que lo pintara contestaba 500 (#184). *@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Interfaces.CfgAlert>
 @{
     if (Model is null) { return; }
     var variant = string.IsNullOrWhiteSpace(Model.Variant) ? "neutral" : Model.Variant;

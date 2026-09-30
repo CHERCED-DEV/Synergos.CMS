@@ -31,7 +31,8 @@
     var encUrl = Uri.EscapeDataString(pageUrl);
     var encTitle = Uri.EscapeDataString(pageTitle);
 
-    string BuildShareUrl(string platform) => platform switch
+#nullable enable
+    string? BuildShareUrl(string platform) => platform switch
     {
         "facebook" => $"https://www.facebook.com/sharer/sharer.php?u={encUrl}",
         "twitter"  => $"https://twitter.com/intent/tweet?url={encUrl}&text={encTitle}",

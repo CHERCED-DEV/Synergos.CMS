@@ -4,7 +4,8 @@
     decida cuándo abrirlo. El resolver server-side solo decide si
     el modal aplica al request — la presentación temporal es cliente.
 *@
-@model Synergos.CMS.Interfaces.CfgModal
+@* `@inherits`, NO `@model` (ADR 0059): el mismo 500 latente que `_GlobalAlert` (#184). *@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Interfaces.CfgModal>
 @{
     if (Model is null) { return; }
     var hasCta = !string.IsNullOrWhiteSpace(Model.CtaLabel) && !string.IsNullOrWhiteSpace(Model.CtaUrl);

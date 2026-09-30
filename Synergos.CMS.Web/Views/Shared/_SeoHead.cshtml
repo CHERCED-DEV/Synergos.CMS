@@ -40,7 +40,7 @@
     var brand = Branding.GetCurrent();
 #nullable enable
     IPublishedContent? siteConfig = null;
-    if (UmbracoContext.Content is not null)
+    if (UmbracoContext?.Content is not null)
     {
         foreach (var root in UmbracoContext.Content.GetAtRoot())
         {

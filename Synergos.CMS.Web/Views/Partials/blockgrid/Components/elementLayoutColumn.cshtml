@@ -10,7 +10,7 @@
     var element = Model.Content;
     var variant = element.Value<string>("variantKey");
     var cssClass = element.Value<string>("cssClass");
-    var span = Model.ColumnSpan ?? 12;
+    var span = Model.ColumnSpan > 0 ? Model.ColumnSpan : 12;
     var classes = string.Join(" ", new[]
     {
         "syn-layout",

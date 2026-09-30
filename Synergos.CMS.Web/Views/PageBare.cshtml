@@ -16,7 +16,7 @@
 @{
     Layout = null;
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var currentContent = UmbracoContext?.PublishedRequest?.PublishedContent;
     var sections = currentContent?.Value<BlockGridModel>("sections");
     var renderCtx = PageRenderContextResolver.Resolve();
     var brand = Branding.GetCurrent();

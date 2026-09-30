@@ -9,7 +9,7 @@
 @using Umbraco.Cms.Core.Models.Blocks
 @{
     Layout = "_Layout";
-    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var currentContent = UmbracoContext?.PublishedRequest?.PublishedContent;
     var sections = currentContent?.Value<BlockGridModel>("sections");
     var hasSections = sections != null && sections.Any();
 }

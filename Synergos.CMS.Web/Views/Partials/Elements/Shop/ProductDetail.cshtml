@@ -16,7 +16,9 @@
     (variant / cssClass) y los placeholders de reviews / related para
     hidratación JS (sin entidades review/related en el schema todavía).
 *@
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@* `@inherits`, NO `@model` (ADR 0059): con `@model`, `Umbraco.GetDictionaryValue` es
+   CS0234 en caliente (#184). Como `CartSummary.cshtml`. *@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @using System.Globalization
 @using Umbraco.Cms.Core.Models.PublishedContent
 @using Umbraco.Cms.Core.Web

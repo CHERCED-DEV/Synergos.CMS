@@ -4,7 +4,10 @@
     la categoría (.syn-post-category*) para paridad visual con
     PostCategoryPage.cshtml.
 *@
-@model Synergos.CMS.Web.Controllers.BlogTagViewModel
+@* `@inherits`, NO `@model` (ADR 0059): el controller es MVC puro, así que la vista no
+   hereda de UmbracoViewPage por su cuenta, y sin eso `Umbraco.` es el NAMESPACE, no el
+   helper — CS0234 en caliente y las 8 `/blog/tag/*` en 500 (#184). *@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Synergos.CMS.Web.Controllers.BlogTagViewModel>
 @using Umbraco.Extensions
 @{
     Layout = "_Layout";

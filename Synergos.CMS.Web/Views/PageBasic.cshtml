@@ -11,7 +11,7 @@
 @using Umbraco.Cms.Core.Models.Blocks
 @{
     Layout = "_Layout";
-    var currentContent = UmbracoContext.PublishedRequest?.PublishedContent;
+    var currentContent = UmbracoContext?.PublishedRequest?.PublishedContent;
     var sections = currentContent?.Value<BlockGridModel>("sections");
 }
 <article class="syn-page syn-page-canvas">
