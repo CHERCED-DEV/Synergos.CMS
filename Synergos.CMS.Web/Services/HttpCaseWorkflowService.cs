@@ -48,9 +48,6 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
 {
-    /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Cliente nombrado que registra el composer.</summary>
     public const string ClientName = "synergos-api-workflow";
 
@@ -125,7 +122,7 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
             ?? throw new ArgumentException($"Expediente '{caseId.Trim()}' no encontrado.", nameof(caseId));
 
         var limpio = outcome.Trim();
-        var definicion = await EnRed(() => DefinitionAsync(cancellationToken));
+        var definicion = await EnRed(() => DefinitionAsync(cancellationToken), cancellationToken);
 
         // A dónde lleva este outcome, según la DEFINICIÓN. Si la definición no lo nombra, el
         // outcome no existe en este proceso — y eso es un error de quien llama, no del expediente.
@@ -151,8 +148,8 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
             return current;
         }
 
-        var instancia = await EnRed(() => InstanceAsync(current, cancellationToken));
-        var resultado = await EnRed(() => FireAsync(instancia, limpio, note, cancellationToken));
+        var instancia = await EnRed(() => InstanceAsync(current, cancellationToken), cancellationToken);
+        var resultado = await EnRed(() => FireAsync(instancia, limpio, note, cancellationToken), cancellationToken);
 
         // El estado lo dice la capacidad, no lo suponemos: si la definición llevara a otro sitio
         // del que creíamos, mandar lo nuestro dejaría al expediente y a la instancia diciendo
@@ -177,7 +174,7 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
         {
             if (_definition is not null) return _definition;
 
-            using var http = Client();
+            using var http = _factory.CreateClient(ClientName);
             using var respuesta = await http.GetAsync($"v1/definitions/{Uri.EscapeDataString(_settings.DefinitionKey)}", ct);
 
             if (respuesta.StatusCode == HttpStatusCode.NotFound)
@@ -220,7 +217,7 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
     /// </remarks>
     private async Task<InstanceDto> InstanceAsync(CaseDetail @case, CancellationToken ct)
     {
-        using var http = Client();
+        using var http = _factory.CreateClient(ClientName);
 
         var url = $"v1/instances?subjectKind={Uri.EscapeDataString(_settings.CaseKind)}"
                   + $"&subjectId={Uri.EscapeDataString(@case.CaseId)}";
@@ -263,7 +260,7 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
     private async Task<InstanceDto> FireAsync(
         InstanceDto instancia, string transicion, string note, CancellationToken ct)
     {
-        using var http = Client();
+        using var http = _factory.CreateClient(ClientName);
 
         var cuerpo = new FireDto(
             transicion,
@@ -313,21 +310,6 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
             ?? throw new InvalidOperationException("Api.Workflow no devolvió la instancia tras la transición.");
     }
 
-    private HttpClient Client()
-    {
-        var http = _factory.CreateClient(ClientName);
-        if (http.BaseAddress is null)
-        {
-            http.BaseAddress = new Uri(_settings.BaseUrl.TrimEnd('/') + "/");
-        }
-        if (!http.DefaultRequestHeaders.Contains(ApiKeyHeader) && !string.IsNullOrWhiteSpace(_settings.ApiKey))
-        {
-            http.DefaultRequestHeaders.TryAddWithoutValidation(ApiKeyHeader, _settings.ApiKey);
-        }
-        http.Timeout = TimeSpan.FromSeconds(Math.Max(1, _settings.TimeoutSeconds));
-        return http;
-    }
-
     /// <summary>
     /// Convierte «no se pudo hablar con la capacidad» en el mismo idioma que el resto.
     /// </summary>
@@ -342,7 +324,7 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
     /// <para>El expediente <b>no</b> se mueve en ese camino, que era lo importante y ya se cumplía.
     /// Esto es que además se note.</para>
     /// </remarks>
-    private static async Task<T> EnRed<T>(Func<Task<T>> llamada)
+    private static async Task<T> EnRed<T>(Func<Task<T>> llamada, CancellationToken ct)
     {
         try
         {
@@ -354,7 +336,7 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
                 "No se pudo consultar el proceso del expediente: Api.Workflow no responde. "
                 + "La decisión NO se aplicó; se puede reintentar.");
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
             // Un timeout no dice «no se decidió» — dice «no sé». Pero acá sí se sabe: la decisión
             // se aplica de este lado DESPUÉS de que la capacidad la acepta, así que si no llegó
@@ -376,17 +358,13 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
     /// <summary>El motivo que puso la capacidad, o el código si no vino ninguno.</summary>
     private static async Task<string> MotivoAsync(HttpResponseMessage respuesta, CancellationToken ct)
     {
-        try
-        {
-            var problema = await respuesta.Content.ReadFromJsonAsync<ProblemDto>(Json, ct);
-            if (!string.IsNullOrWhiteSpace(problema?.Detail)) return problema!.Detail!;
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException or HttpRequestException)
-        {
-            // Un cuerpo que no es un problema tampoco es un motivo: cae al código de abajo.
-        }
+        // Un cuerpo que no es un problema tampoco es un motivo: cae al código de abajo. Lo lee el
+        // lector compartido (#129), no una copia privada (#178).
+        var problema = await RechazoDelArbolDeServicios.LeerAsync(respuesta, Json, ct).ConfigureAwait(false);
 
-        return $"la capacidad respondió {(int)respuesta.StatusCode} sin motivo legible.";
+        return !string.IsNullOrWhiteSpace(problema?.Detalle)
+            ? problema!.Detalle!
+            : $"la capacidad respondió {(int)respuesta.StatusCode} sin motivo legible.";
     }
 
     // ── Lo que viaja ────────────────────────────────────────────────────────
@@ -404,6 +382,4 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
 
     private sealed record FireDto(
         string Transition, string ActorKind, string ActorId, IReadOnlyList<string> ActorRoles, string? Note);
-
-    private sealed record ProblemDto(string? Title, string? Detail, string? Code);
 }

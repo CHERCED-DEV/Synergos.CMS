@@ -27,21 +27,10 @@ public sealed partial class SeamComposer
 
         if (!EsModoApi(builder.Config["Synergos:Tracking:Mode"])) return;
 
-        var url = builder.Config["Synergos:Tracking:BaseUrl"];
-        var key = builder.Config["Synergos:Tracking:ApiKey"];
-        var timeout = int.TryParse(builder.Config["Synergos:Tracking:TimeoutSeconds"], out var t) && t > 0 ? t : 10;
-
-        builder.Services.AddHttpClient(HttpOrderTrackingService.ClientName, http =>
-        {
-            var destino = string.IsNullOrWhiteSpace(url) ? "http://127.0.0.1:5215/" : url;
-            http.BaseAddress = new Uri(destino.EndsWith('/') ? destino : destino + "/");
-            http.Timeout = TimeSpan.FromSeconds(timeout);
-            if (!string.IsNullOrWhiteSpace(key))
-            {
-                http.DefaultRequestHeaders.Add(HttpOrderTrackingService.ApiKeyHeader, key);
-            }
-        })
-        .AddHttpMessageHandler<CorrelationForwardingHandler>();
+        // La cadena entera la arma la pieza (#178).
+        builder.Services.AddClienteDelArbolDeServicios(
+            HttpOrderTrackingService.ClientName,
+            DestinoDelArbol.De(builder.Config.GetSection("Synergos:Tracking"), "http://127.0.0.1:5215/", 10));
     }
 
     private static bool EsModoApi(string? modo)

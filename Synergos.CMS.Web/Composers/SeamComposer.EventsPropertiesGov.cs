@@ -349,21 +349,11 @@ public sealed partial class SeamComposer
 
         if (string.Equals(builder.Config["Synergos:Gob:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
         {
-            var govBase = builder.Config["Synergos:Gob:BaseUrl"];
-            var govKey = builder.Config["Synergos:Gob:ApiKey"];
-            var govTimeout = int.TryParse(builder.Config["Synergos:Gob:TimeoutSeconds"], out var gt) && gt > 0 ? gt : 10;
-
-            services.AddHttpClient(HttpCaseWorkflowService.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(govBase) ? "http://127.0.0.1:5215/" : govBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(govTimeout);
-                if (!string.IsNullOrWhiteSpace(govKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpCaseWorkflowService.ApiKeyHeader, govKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178). El cliente ya no re-aplica URL, llave ni
+            // techo por su cuenta: había dos fuentes para el mismo dato.
+            services.AddClienteDelArbolDeServicios(
+                HttpCaseWorkflowService.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Gob"), "http://127.0.0.1:5215/", 10));
 
             // Dice `Api` y no `Bff`: decidir es UN paso, sin plata en medio y sin nada que
             // deshacer si algo falla. Un orquestador acá sería una saga de un paso.

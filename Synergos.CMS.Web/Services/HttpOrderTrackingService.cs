@@ -37,9 +37,6 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class HttpOrderTrackingService : IOrderTrackingService
 {
-    /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Cliente nombrado que registra el composer.</summary>
     public const string ClientName = "synergos-api-workflow-tracking";
 
@@ -206,7 +203,7 @@ public sealed class HttpOrderTrackingService : IOrderTrackingService
         string? note,
         CancellationToken ct)
     {
-        var instancia = await EnRed(() => InstanciaAsync(orderRef, actual, ct));
+        var instancia = await EnRed(() => InstanciaAsync(orderRef, actual, ct), ct);
 
         foreach (var etapa in faltantes)
         {
@@ -218,7 +215,7 @@ public sealed class HttpOrderTrackingService : IOrderTrackingService
             // verificación en vivo: sellándola en cada paso, la historia de la capacidad decía
             // «Entregado» también en «Enviado» — una nota que nadie escribió sobre ese paso.
             var esDestino = ReferenceEquals(etapa, faltantes[^1]) || etapa == faltantes[^1];
-            instancia = await EnRed(() => DispararAsync(instancia, etapa, esDestino ? note : null, ct));
+            instancia = await EnRed(() => DispararAsync(instancia, etapa, esDestino ? note : null, ct), ct);
         }
     }
 
@@ -237,7 +234,7 @@ public sealed class HttpOrderTrackingService : IOrderTrackingService
     /// </remarks>
     private async Task<InstanceDto> InstanciaAsync(string orderRef, OrderTimeline? actual, CancellationToken ct)
     {
-        using var http = Client();
+        using var http = _factory.CreateClient(ClientName);
 
         var url = $"v1/instances?subjectKind={Uri.EscapeDataString(SubjectKind)}"
                   + $"&subjectId={Uri.EscapeDataString(orderRef.Trim())}";
@@ -279,7 +276,7 @@ public sealed class HttpOrderTrackingService : IOrderTrackingService
     private async Task<InstanceDto> DispararAsync(
         InstanceDto instancia, string etapa, string? note, CancellationToken ct)
     {
-        using var http = Client();
+        using var http = _factory.CreateClient(ClientName);
 
         // La transición se llama como la etapa destino. Un nombre propio («despachar») obligaría a
         // una segunda tabla de este lado para traducirlo, que es lo que este cableado quita.
@@ -314,27 +311,12 @@ public sealed class HttpOrderTrackingService : IOrderTrackingService
             ?? throw new InvalidOperationException("Api.Workflow no devolvió la instancia tras la transición.");
     }
 
-    private HttpClient Client()
-    {
-        var http = _factory.CreateClient(ClientName);
-        if (http.BaseAddress is null)
-        {
-            http.BaseAddress = new Uri(_settings.BaseUrl.TrimEnd('/') + "/");
-        }
-        if (!http.DefaultRequestHeaders.Contains(ApiKeyHeader) && !string.IsNullOrWhiteSpace(_settings.ApiKey))
-        {
-            http.DefaultRequestHeaders.TryAddWithoutValidation(ApiKeyHeader, _settings.ApiKey);
-        }
-        http.Timeout = TimeSpan.FromSeconds(Math.Max(1, _settings.TimeoutSeconds));
-        return http;
-    }
-
     /// <summary>Convierte «no se pudo hablar con la capacidad» en el idioma del seam.</summary>
     /// <remarks>
     /// La lección de la HU #44, aplicada de entrada: una <see cref="HttpRequestException"/> cruda
     /// no dice nada al borde y arrastra la dirección interna al mensaje.
     /// </remarks>
-    private static async Task<T> EnRed<T>(Func<Task<T>> llamada)
+    private static async Task<T> EnRed<T>(Func<Task<T>> llamada, CancellationToken ct)
     {
         try
         {
@@ -346,7 +328,7 @@ public sealed class HttpOrderTrackingService : IOrderTrackingService
                 "No se pudo validar el avance del pedido: Api.Workflow no responde. "
                 + "El pedido NO avanzó; se puede reintentar. Consultar el estado sigue funcionando.");
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
             throw new InvalidOperationException(
                 "Api.Workflow tardó demasiado en contestar. El pedido NO avanzó; se puede reintentar.");
@@ -364,17 +346,13 @@ public sealed class HttpOrderTrackingService : IOrderTrackingService
 
     private static async Task<string> MotivoAsync(HttpResponseMessage respuesta, CancellationToken ct)
     {
-        try
-        {
-            var problema = await respuesta.Content.ReadFromJsonAsync<ProblemDto>(Json, ct);
-            if (!string.IsNullOrWhiteSpace(problema?.Detail)) return problema!.Detail!;
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException or HttpRequestException)
-        {
-            // Un cuerpo que no es un problema tampoco es un motivo.
-        }
+        // Un cuerpo que no es un problema tampoco es un motivo: cae al código de abajo. Lo lee el
+        // lector compartido (#129), no una copia privada (#178).
+        var problema = await RechazoDelArbolDeServicios.LeerAsync(respuesta, Json, ct).ConfigureAwait(false);
 
-        return $"la capacidad respondió {(int)respuesta.StatusCode} sin motivo legible.";
+        return !string.IsNullOrWhiteSpace(problema?.Detalle)
+            ? problema!.Detalle!
+            : $"la capacidad respondió {(int)respuesta.StatusCode} sin motivo legible.";
     }
 
     // ── Lo que viaja ────────────────────────────────────────────────────────
@@ -387,6 +365,4 @@ public sealed class HttpOrderTrackingService : IOrderTrackingService
 
     private sealed record FireDto(
         string Transition, string ActorKind, string ActorId, IReadOnlyList<string> ActorRoles, string? Note);
-
-    private sealed record ProblemDto(string? Title, string? Detail, string? Code);
 }

@@ -307,6 +307,68 @@ public sealed class HttpCaseWorkflowServiceTests
             => throw new HttpRequestException("Connection refused (127.0.0.1:5215)");
     }
 
+    /// <summary>La capacidad acepta la conexión y no contesta nunca.</summary>
+    private sealed class Colgada : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("inalcanzable");
+        }
+    }
+
+    private sealed class FabricaDe : IHttpClientFactory
+    {
+        private readonly HttpMessageHandler _h;
+        private readonly TimeSpan _techo;
+        public FabricaDe(HttpMessageHandler h, TimeSpan techo) { _h = h; _techo = techo; }
+        public HttpClient CreateClient(string name)
+            => new(_h, disposeHandler: false) { BaseAddress = new Uri("http://workflow.local/"), Timeout = _techo };
+    }
+
+    private static (HttpCaseWorkflowService Svc, StubApplicationService Casos, string CaseId) Colgado(TimeSpan techo)
+    {
+        var casos = new StubApplicationService(
+            new StubTramiteCatalogProvider(), new StubGovFeeCalculator(), new StubPaymentProvider());
+        var abierto = casos.ListCases().First(c => c.Status == CaseStatus.Radicado);
+
+        return (new HttpCaseWorkflowService(
+            new FabricaDe(new Colgada(), techo), casos, Options.Create(new GobSettings { Mode = "Api" })),
+            casos, abierto.CaseId);
+    }
+
+    /// <summary>
+    /// Si quien decide se va, eso NO se cuenta como que la capacidad tardó (#178).
+    /// </summary>
+    /// <remarks>
+    /// <c>EnRed</c> traducía TODA <see cref="TaskCanceledException"/> a «Api.Workflow tardó
+    /// demasiado», también la del llamador que cerró la pestaña: un fallo de la capacidad que no
+    /// ocurrió, anotado a su nombre. La cancelación de quien llama se re-lanza tal cual.
+    /// </remarks>
+    [Fact]
+    public async Task Si_quien_decide_se_va_no_se_cuenta_como_que_la_capacidad_tardo()
+    {
+        var (svc, casos, caseId) = Colgado(TimeSpan.FromSeconds(30));
+        using var seFue = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => svc.DecideAsync(caseId, "approve", "", seFue.Token));
+
+        Assert.Equal(CaseStatus.Radicado, casos.FindCase(caseId)!.Status);
+    }
+
+    [Fact] // el control del de arriba: el techo SÍ se sigue contando como que la capacidad tardó.
+    public async Task Si_la_capacidad_agota_el_techo_se_dice_que_tardo()
+    {
+        var (svc, casos, caseId) = Colgado(TimeSpan.FromMilliseconds(100));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DecideAsync(caseId, "approve", ""));
+
+        Assert.Contains("tardó demasiado", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(CaseStatus.Radicado, casos.FindCase(caseId)!.Status);
+    }
+
     private sealed class FabricaCaida : IHttpClientFactory
     {
         private readonly CaidaTotal _h;

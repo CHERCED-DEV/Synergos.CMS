@@ -323,6 +323,59 @@ public sealed class HttpOrderTrackingServiceTests
             => throw new HttpRequestException("Connection refused (127.0.0.1:5215)");
     }
 
+    /// <summary>La capacidad acepta la conexión y no contesta nunca.</summary>
+    private sealed class Colgada : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("inalcanzable");
+        }
+    }
+
+    private sealed class FabricaDe : IHttpClientFactory
+    {
+        private readonly HttpMessageHandler _h;
+        private readonly TimeSpan _techo;
+        public FabricaDe(HttpMessageHandler h, TimeSpan techo) { _h = h; _techo = techo; }
+        public HttpClient CreateClient(string name)
+            => new(_h, disposeHandler: false) { BaseAddress = new Uri("http://workflow.local/"), Timeout = _techo };
+    }
+
+    private static HttpOrderTrackingService Colgado(TimeSpan techo)
+        => new(
+            new FabricaDe(new Colgada(), techo),
+            new StubOrderTrackingService(StubOrderTrackingService.ShopPipeline, null, new InMemoryJsonEntityStore(), "t"),
+            Options.Create(new TrackingSettings { Mode = "Api" }),
+            StubOrderTrackingService.ShopPipeline, "shop");
+
+    /// <summary>
+    /// Si quien avanza el pedido se va, eso NO se cuenta como que la capacidad tardó (#178).
+    /// </summary>
+    /// <remarks>
+    /// El mismo <c>EnRed</c> que el expediente: traducía TODA
+    /// <see cref="TaskCanceledException"/> a «tardó demasiado», también la del llamador.
+    /// </remarks>
+    [Fact]
+    public async Task Si_quien_avanza_se_va_no_se_cuenta_como_que_la_capacidad_tardo()
+    {
+        var svc = Colgado(TimeSpan.FromSeconds(30));
+        using var seFue = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => svc.AdvanceAsync("ord-1", "paid", cancellationToken: seFue.Token));
+    }
+
+    [Fact] // el control del de arriba: el techo SÍ se sigue contando como que la capacidad tardó.
+    public async Task Si_la_capacidad_agota_el_techo_se_dice_que_tardo()
+    {
+        var svc = Colgado(TimeSpan.FromMilliseconds(100));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => svc.AdvanceAsync("ord-1", "paid"));
+
+        Assert.Contains("tardó demasiado", ex.Message, StringComparison.Ordinal);
+    }
+
     // ── La puesta al día de un pedido en vuelo ──────────────────────────────
 
     /// <summary>
