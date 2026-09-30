@@ -73,7 +73,10 @@ public sealed record DestinoDelArbol(Uri BaseUrl, string? Llave, TimeSpan Timeou
 /// (la conexión no se abrió o se cortó), o la capacidad contestó <c>transient: true</c>. Esa
 /// bandera se LEE, no se deduce del código de estado (#129): un 503 sin bandera —un proxy, una
 /// versión anterior— es «no consta» y no se repite. Un POST sin llave no se repite NUNCA, porque
-/// es justo el que puede crear dos veces lo mismo: agregar una línea a la canasta, sellar.</para>
+/// es justo el que puede crear dos veces lo mismo: agregar una línea a la canasta, sellar. Y un
+/// cliente puede VETAR el reintento de una petición (<see cref="PeticionAlArbol.NoSeRepite"/>)
+/// cuando sabe que la capacidad cierra la llave aunque diga pasajero — hoy, autorizar un cobro
+/// en <c>Api.Payments</c>, medido con la capacidad viva.</para>
 ///
 /// <para><b>El techo es el de siempre.</b> El <c>TimeoutSeconds</c> de cada capacidad es el
 /// <c>HttpClient.Timeout</c>, que envuelve la cadena entera: reintentar nunca hace esperar más
@@ -227,6 +230,9 @@ public static class ClienteDelArbolDeServicios
     /// </remarks>
     internal static bool EsRepetible(HttpRequestMessage? peticion)
         => peticion is not null
+           // El cliente puede vetarlo cuando sabe que la capacidad cierra la llave con un rechazo
+           // pasajero (PeticionAlArbol). Medido con Api.Payments viva al autorizar.
+           && !PeticionAlArbol.EstaVetada(peticion)
            && (peticion.Method == HttpMethod.Get
                || peticion.Method == HttpMethod.Head
                || peticion.Method == HttpMethod.Options

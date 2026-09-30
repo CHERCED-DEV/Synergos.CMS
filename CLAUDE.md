@@ -34,12 +34,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3492 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3494 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2387 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2389 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 660 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 445 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -158,7 +158,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3492**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3494**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -305,7 +305,7 @@ Synergos.CMS/
 | "¿Qué DATO pide un elemento? ¿Puedo reusarlo?" | **Si tiene resolver tipado** (piloto de la ADR 0135, #173 —hoy los que lista `docs/contracts/elementos-synhost.json`—): su `record` en `Synergos.CMS.Interfaces/SynHost/`, que declara cada campo que viaja con su nombre del cable, su tipo y si es contenido o decisión; el mismo JSON trae el `config` EXACTO que emite su vista. **Para los demás, en dos sitios que se leen juntos**: lo que emite su vista `Views/Partials/SynHost/<X>.cshtml` y lo que **conserva** el sanitizador del elemento en el repo hermano (el `normalize*`/`sanitize*` de su `.ts`). Lo que uno emite y el otro no lee **se tira al hidratar**, sin error (`feedback_hydration_can_erase_what_ssr_painted`). `element-inputs.json` no alcanza: declara atributos, no la forma de `config` (doc 13 §5.bis). Nunca por el nombre (#163) |
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
 | "¿El molde da para GENERAR un vertical?" | Sobre Eventos, **sí**: el piloto 0 midió **71,4 %** y hoy da **100 % sobre 23 ficheros y CERO inventados** — el eje 3 escrito (#153), su sección arreglada (#154) y el composer parcial cruzado por CONTENIDO y no por nombre (#155), porque de los siete verticales sólo Academy tiene un fichero que se llame como él. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
-| "¿Cómo le habla el CMS a una capacidad (o a un orquestador)? ¿Cómo enchufo un cliente nuevo?" | **Por UNA pieza** (#178): `Synergos.CMS.Web/Composers/ClienteDelArbolDeServicios.cs`. En el composer del vertical, dentro de su interruptor: `services.AddClienteDelArbolDeServicios(HttpX.ClientName, DestinoDelArbol.De(builder.Config.GetSection("Synergos:X"), "http://127.0.0.1:52NN/", 10))` — lee `BaseUrl`, `ApiKey` y `TimeoutSeconds` de la sección y arma la cadena entera: llave compartida, correlación, telemetría (en `/admin/health`) ANTES del reintento (ADR 0072), y un reintento que sólo abre si la petición es **repetible** (método seguro o `Idempotency-Key`) **y** el fallo es **pasajero** (no hubo respuesta, o la capacidad dijo `transient: true` — se LEE, #129). Un POST sin llave no se repite nunca. El techo sigue siendo `TimeoutSeconds`, que envuelve los reintentos: sin timeout por intento ni cortacircuitos, porque los dos lanzan excepciones de Polly que ningún cliente traduce. La perilla es `Synergos:Reintento` (2 × 200 ms, en caliente). El cliente `Http*` recibe el `HttpClient` de la fábrica **tal cual** —nada de re-aplicar URL ni llave— y lee el rechazo con `RechazoDelArbolDeServicios.LeerAsync`; lo único suyo es cómo PRESENTA el fallo. Un TERCERO (la pasarela) usa `AddResilienciaDeTercero()`: sin llave ni correlación, con la tabla de códigos de la librería. Hay gate (`ClienteDelArbolTests`): la llave se escribe en un solo fichero, nadie lee un problem+json por su cuenta y ningún composer arma un cliente a mano |
+| "¿Cómo le habla el CMS a una capacidad (o a un orquestador)? ¿Cómo enchufo un cliente nuevo?" | **Por UNA pieza** (#178): `Synergos.CMS.Web/Composers/ClienteDelArbolDeServicios.cs`. En el composer del vertical, dentro de su interruptor: `services.AddClienteDelArbolDeServicios(HttpX.ClientName, DestinoDelArbol.De(builder.Config.GetSection("Synergos:X"), "http://127.0.0.1:52NN/", 10))` — lee `BaseUrl`, `ApiKey` y `TimeoutSeconds` de la sección y arma la cadena entera: llave compartida, correlación, telemetría (en `/admin/health`) ANTES del reintento (ADR 0072), y un reintento que sólo abre si la petición es **repetible** (método seguro o `Idempotency-Key`) **y** el fallo es **pasajero** (no hubo respuesta, o la capacidad dijo `transient: true` — se LEE, #129). Un POST sin llave no se repite nunca, y un cliente puede **vetar** el reintento de una petición con `PeticionAlArbol.NoSeRepite()` cuando sabe que la capacidad cierra la llave aunque diga pasajero — hoy, autorizar en `Api.Payments` (medido vivo, ver §5). El techo sigue siendo `TimeoutSeconds`, que envuelve los reintentos: sin timeout por intento ni cortacircuitos, porque los dos lanzan excepciones de Polly que ningún cliente traduce. La perilla es `Synergos:Reintento` (2 × 200 ms, en caliente). El cliente `Http*` recibe el `HttpClient` de la fábrica **tal cual** —nada de re-aplicar URL ni llave— y lee el rechazo con `RechazoDelArbolDeServicios.LeerAsync`; lo único suyo es cómo PRESENTA el fallo. Un TERCERO (la pasarela) usa `AddResilienciaDeTercero()`: sin llave ni correlación, con la tabla de códigos de la librería. Hay gate (`ClienteDelArbolTests`): la llave se escribe en un solo fichero, nadie lee un problem+json por su cuenta y ningún composer arma un cliente a mano |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
 
 > **La forma de `window.synergos` se declara en TRES sitios, y hay gate** (#88,
@@ -2567,6 +2567,22 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   cada lectura lo encuentra entero. **La pregunta que lo caza:** *¿alguien más va a leer este
   cuerpo después de mí?* En una cadena de handlers la respuesta es casi siempre sí.
 
+- `feedback_a_transient_flag_promises_an_open_key` — **`transient: true` sobre una escritura con
+  llave sólo promete un reintento si la capacidad dejó la llave ABIERTA; si la cerró con el
+  intento fallido, el reintento devuelve el fallo guardado como si fuera la respuesta** (#178).
+  Lo destapó levantar `Api.Payments` en un puerto propio con la pasarela sin configurar, no un
+  test: autorizar guarda el intento `Failed`, hace `Remember` de la llave y contesta 503
+  `transient: true`. La pieza repitió —la bandera lo pedía— y recibió 201 `Failed`, así que
+  `HttpPaymentProvider` devolvió «el banco dijo que no» donde antes lanzaba «no sé»: la mentira
+  cara. Los tests de la pieza estaban en verde porque su doble contestaba lo que la bandera
+  prometía, no lo que la capacidad hace. Capturar y devolver NO tienen el defecto (no recuerdan
+  la llave cuando fallan). Salida en este lado: el cliente VETA el reintento de esa petición
+  (`PeticionAlArbol.NoSeRepite()`); el arreglo de fondo es de la capacidad y es una decisión de
+  plata —con la llave abierta, una pasarela que tardó podría autorizar dos veces—, así que va a
+  ticket y no se tomó acá. **La pregunta que lo caza:** *¿qué devuelve la capacidad al SEGUNDO
+  intento con la misma llave?* — y se contesta con el proceso vivo, porque un doble contesta lo
+  que uno cree.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2626,11 +2642,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3492 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3494 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2387
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2389
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 660
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 445
 
@@ -3061,7 +3077,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3492 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3494 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

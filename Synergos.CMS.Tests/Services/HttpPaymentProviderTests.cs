@@ -375,22 +375,45 @@ public sealed class HttpPaymentProviderTests
     }
 
     [Fact]
-    public async Task Por_la_pieza_un_cobro_que_la_capacidad_dice_pasajero_se_repite_con_la_MISMA_llave()
+    public async Task Por_la_pieza_autorizar_NO_se_repite_aunque_la_capacidad_diga_pasajero()
     {
-        // La pasarela parpadeó: la capacidad lo dice con `transient: true` y el segundo intento
-        // sale. Sobre la misma llave, así que si el primero SÍ hubiera cobrado, el segundo
-        // devolvería ese cobro en vez de cobrar otra vez.
+        // Lo que hace Api.Payments DE VERDAD, medido con la capacidad viva (#178): ante la
+        // pasarela caída guarda el intento fallido, cierra la llave con él y contesta 503
+        // `transient: true`. Un reintento con la misma llave recibe ese intento como 201 Failed.
+        // Si la pieza repitiera, este proveedor diría «el banco dijo que no» donde tiene que
+        // decir «no sé» — por eso autorizar va vetado (PeticionAlArbol.NoSeRepite).
         var red = new Secuencia()
             .Luego("POST /v1/payments", HttpStatusCode.ServiceUnavailable,
+                Problema("payments.transport_not_configured", transient: true))
+            .Luego("POST /v1/payments", HttpStatusCode.Created, """
+                {"id":"pay_1","status":"Failed","amount":{"amount":95000,"currency":"COP"},
+                 "refunded":{"amount":0,"currency":"COP"},"refundable":{"amount":0,"currency":"COP"}}
+                """);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => PorLaPieza(red).CreateSessionAsync(Peticion()));
+
+        Assert.Contains("transport_not_configured", ex.Message, StringComparison.Ordinal);
+        Assert.Single(red.Llamadas);
+    }
+
+    [Fact]
+    public async Task Por_la_pieza_capturar_pasajero_se_repite_con_la_MISMA_llave()
+    {
+        // Capturar SÍ se repite: la capacidad no cierra la llave cuando la captura falla, así que
+        // el segundo intento captura de verdad — y si el primero hubiera capturado, la llave
+        // devolvería esa captura en vez de capturar otra vez.
+        var red = new Secuencia()
+            .Luego("POST /v1/payments/pay_1/capture", HttpStatusCode.ServiceUnavailable,
                 Problema("payments.payment_provider_unavailable", transient: true))
-            .Luego("POST /v1/payments", HttpStatusCode.Created, Autorizado);
+            .Luego("POST /v1/payments/pay_1/capture", HttpStatusCode.OK, Capturado);
 
-        var sesion = await PorLaPieza(red).CreateSessionAsync(Peticion());
+        var salida = await PorLaPieza(red).CaptureAsync("pay_1");
 
-        Assert.Equal(PaymentStatus.Authorized, sesion.Status);
+        Assert.Equal(PaymentStatus.Captured, salida.Status);
         Assert.Equal(2, red.Llamadas.Count);
         Assert.Single(red.Llamadas.Select(l => l.Key).Distinct());
-        Assert.Equal("cms:sg-2026-000042", red.Llamadas[0].Key);
+        Assert.Equal("cms:pay_1:capture", red.Llamadas[0].Key);
     }
 
     [Fact]

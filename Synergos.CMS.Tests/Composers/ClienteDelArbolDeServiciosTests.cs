@@ -247,6 +247,21 @@ public sealed class ClienteDelArbolDeServiciosTests
     }
 
     [Fact]
+    public async Task Una_peticion_VETADA_no_se_repite_aunque_lleve_llave_y_sea_pasajero()
+    {
+        // El cliente sabe algo que la pieza no: que la capacidad cierra la llave aunque diga
+        // pasajero (Api.Payments al autorizar, medido vivo). El veto manda sobre las dos llaves.
+        var guion = new Guion()
+            .Responde(HttpStatusCode.ServiceUnavailable, Rechazo("payments.transport_not_configured", transient: true));
+        var m = Montar(guion);
+
+        using var res = await m.Cliente.SendAsync(Escritura("llave-1").NoSeRepite());
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, res.StatusCode);
+        Assert.Single(guion.Recibidas);
+    }
+
+    [Fact]
     public async Task Sin_respuesta_una_lectura_se_repite_hasta_que_contesta()
     {
         var guion = new Guion().NoContesta().NoContesta().Responde(HttpStatusCode.OK, "{}");

@@ -147,6 +147,13 @@ public sealed class HttpPaymentProvider : IPaymentProvider
         };
         req.Headers.TryAddWithoutValidation("Idempotency-Key", Llave(nombres, request.OrderReference));
 
+        // Autorizar NO se repite en la cadena, aunque lleve llave (#178). Medido con Api.Payments
+        // viva: ante una pasarela caída guarda el intento fallido, CIERRA la llave con él y contesta
+        // 503 `transient: true`; el reintento recibía ese intento como 201 `Failed`, y este
+        // proveedor devolvía «el banco dijo que no» donde antes lanzaba «no sé». Capturar y
+        // devolver sí se repiten: ésos no cierran la llave cuando fallan. Ver PeticionAlArbol.
+        req.NoSeRepite();
+
         await PresentarIdentidadAsync(req, request, pagador, cancellationToken).ConfigureAwait(false);
 
         using var res = await Enviar(req, cancellationToken).ConfigureAwait(false);
