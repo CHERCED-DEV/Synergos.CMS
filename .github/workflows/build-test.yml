@@ -62,9 +62,10 @@ jobs:
 
       # Un `dotnet build` verde NO dice que las vistas compilen: `ModelsMode=InMemoryAuto`
       # fuerza `RazorCompileOnBuild=false`, asi que las 401 se compilan en caliente, al
-      # servirlas. Este paso las compila a proposito, y tarda ~6 s. Lo que caza —una vista
-      # en 500 permanente— no lo ve ninguno de los 3288 tests. Costo dos veces: #92 (diez
-      # dias con toda pagina de contenido en 500) y #157.
+      # servirlas. Este paso las compila a proposito, en dos pasadas (~20 s): la segunda mira
+      # el CUERPO, que la primera no puede ver (#184). Lo que caza —una vista en 500
+      # permanente— no lo ve ninguno de los 3288 tests. Costo tres veces: #92 (diez dias con
+      # toda pagina de contenido en 500), #157 y #184.
       #
       # Va DESPUES de los tests, y no por prioridad: hace `-t:Rebuild`, asi que puesto
       # arriba dejaria los binarios rehechos bajo los pies del `dotnet test --no-build`.
