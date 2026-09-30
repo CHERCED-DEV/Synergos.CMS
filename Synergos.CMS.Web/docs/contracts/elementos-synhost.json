@@ -391,6 +391,35 @@
         "label": "Oferta",
         "color": "success"
       }
+    },
+    {
+      "nombre": "timeline",
+      "tipo": "pieza",
+      "record": "TimelineProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "events",
+          "tipo": "TimelineEntry[]",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "events": [
+          {
+            "date": "2019-03-01",
+            "title": "Fundación",
+            "body": "Abrimos la primera sede en Medellín."
+          },
+          {
+            "date": "2024",
+            "title": "Segunda sede",
+            "body": "Llegamos a Bogotá."
+          }
+        ]
+      }
     }
   ],
   "tipos": [
@@ -474,6 +503,26 @@
         },
         {
           "nombre": "content",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "TimelineEntry",
+      "campos": [
+        {
+          "nombre": "date",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "body",
           "tipo": "string",
           "opcional": true
         }

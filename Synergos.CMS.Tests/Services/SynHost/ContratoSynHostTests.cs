@@ -114,6 +114,11 @@ public sealed class ContratoSynHostTests
                 ("tabsJson", """[{"id":"resumen","label":"Resumen","content":"Lo esencial de la estadía."},{"id":"precios","label":"Precios","content":"Desde $120.000 por noche."}]"""),
                 ("initialTab", "precios"),
             },
+            ["timeline"] = new (string, object?)[]
+            {
+                ("eventsJson", """[{"date":"2019-03-01","title":"Fundación","description":"Abrimos la primera sede en Medellín."},{"date":"2024","title":"Segunda sede","description":"Llegamos a Bogotá."}]"""),
+                ("orientation", "vertical"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
