@@ -126,6 +126,59 @@ public sealed class ContratoSynHostTests
         Assert.Equal(Muestras.Keys.OrderBy(k => k, StringComparer.Ordinal), records);
     }
 
+    /// <summary>
+    /// La muestra de cada elemento hace viajar TODOS los campos del record, los de sus listas
+    /// incluidos.
+    /// </summary>
+    /// <remarks>
+    /// El UI ejecuta el sanitizador con el ejemplo y exige que cada clave mueva la salida; una
+    /// clave que la muestra no hace viajar no la mira nadie, y un sanitizador podría tirarla en
+    /// verde. Por eso la cobertura se exige acá, que es donde la muestra se escribe.
+    /// </remarks>
+    [Fact]
+    public async Task La_muestra_de_cada_elemento_hace_viajar_todos_los_campos_del_record()
+    {
+        var sinViajar = new List<string>();
+
+        foreach (var record in Records())
+        {
+            var elemento = SolicitudSynHost.Elemento(record);
+            var ejemplo = await Ejemplo(record, Muestras[elemento.Nombre]);
+
+            foreach (var propiedad in SolicitudSynHost.Cable.GetTypeInfo(record).Properties)
+            {
+                if (!ejemplo.TryGetProperty(propiedad.Name, out var valor))
+                {
+                    sinViajar.Add($"{elemento.Nombre}.{propiedad.Name}");
+                    continue;
+                }
+
+                var item = ElementoDeLista(propiedad.PropertyType);
+                if (item is null || valor.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                sinViajar.AddRange(SolicitudSynHost.Cable.GetTypeInfo(item).Properties
+                    .Where(p => !valor.EnumerateArray().Any(e => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(p.Name, out _)))
+                    .Select(p => $"{elemento.Nombre}.{propiedad.Name}[].{p.Name}"));
+            }
+        }
+
+        Assert.True(sinViajar.Count == 0,
+            "La muestra no hace viajar estos campos, así que ningún gate mira si el elemento los lee: "
+            + string.Join(", ", sinViajar));
+    }
+
+    /// <summary>El record de los ítems de una lista del record, o <c>null</c> si no es una lista de records.</summary>
+    private static Type? ElementoDeLista(Type tipo)
+    {
+        var item = tipo.IsGenericType && tipo.GetGenericTypeDefinition() == typeof(IReadOnlyList<>)
+            ? tipo.GenericTypeArguments[0]
+            : null;
+        return item is { IsClass: true } && item != typeof(string) ? item : null;
+    }
+
     [Fact]
     public void Cada_record_tiene_exactamente_un_resolver_registrado()
     {
