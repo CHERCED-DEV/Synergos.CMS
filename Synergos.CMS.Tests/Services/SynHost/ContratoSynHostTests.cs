@@ -109,6 +109,11 @@ public sealed class ContratoSynHostTests
                 ("stepsJson", """[{"label":"Datos"},{"label":"Pago"},{"label":"Confirmación"}]"""),
                 ("currentStep", "1"),
             },
+            ["tabs"] = new (string, object?)[]
+            {
+                ("tabsJson", """[{"id":"resumen","label":"Resumen","content":"Lo esencial de la estadía."},{"id":"precios","label":"Precios","content":"Desde $120.000 por noche."}]"""),
+                ("initialTab", "precios"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

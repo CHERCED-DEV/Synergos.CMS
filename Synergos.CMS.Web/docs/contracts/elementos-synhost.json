@@ -332,6 +332,42 @@
       }
     },
     {
+      "nombre": "tabs",
+      "tipo": "pieza",
+      "record": "TabsProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "tabs",
+          "tipo": "TabsItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "initialTab",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "tabs": [
+          {
+            "label": "Resumen",
+            "id": "resumen",
+            "content": "Lo esencial de la estadía."
+          },
+          {
+            "label": "Precios",
+            "id": "precios",
+            "content": "Desde $120.000 por noche."
+          }
+        ],
+        "initialTab": "precios"
+      }
+    },
+    {
       "nombre": "tag",
       "tipo": "pieza",
       "record": "TagProps",
@@ -420,6 +456,26 @@
           "nombre": "title",
           "tipo": "string",
           "opcional": false
+        }
+      ]
+    },
+    {
+      "record": "TabsItem",
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "id",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "content",
+          "tipo": "string",
+          "opcional": true
         }
       ]
     }
