@@ -1,6 +1,7 @@
 # ADR 0135 — Cada elemento tiene su resolver tipado: un record C# declara lo que viaja y el tipo TS sale de él
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto de cinco elementos (ver al final)
+- **Estado:** Propuesto — el piloto de cinco elementos (#173) cumplió los cinco criterios y
+  recomienda **Aceptar con cambios** (ver «Resultado del piloto»); falta la ratificación del arquitecto
 - **Fecha:** 2026-09-29
 - **Propone:** la síntesis de la auditoría de reutilización (informe 20 §5.C.1, «el corazón del
   refinado»). El arquitecto fijó número y estado el 2026-09-29.
@@ -179,6 +180,50 @@ Cinco elementos, los de la ola 1 del plan de la auditoría: `kpi-card`, `dropdow
 
 Si el piloto sale bien, la ADR pasa a Aceptado y enmienda las ADR 0015 §1 y 0096 §1 en lo que toca a
 `configOverride` en las funcionalidades.
+
+## Resultado del piloto (#173, 2026-09-29)
+
+Piloto en `kpi-card`, `tag`, `rating-stars`, `dropdown` y `carousel` (los cinco con D1), en ramas
+homónimas de CMS y UI.
+
+**Los cinco criterios, cumplidos:**
+
+1. **D1 cerrado en los cinco**, con la misma prueba que lo encontró —el sanitizador ejecutado con el
+   `config` que emite la vista— **y en vivo con control**: con el `config` viejo de cada vista sale el
+   defecto («— Sin dato», el tag sin chip, «0 de 5», el dropdown gris sin opciones, el carrusel oculto);
+   con el nuevo, lo que escribió el editor.
+2. **Los gates, mutados en los dos lados**: renombrar en el record, en el JSON o en el TS → rojo; una
+   clave que viaja y ningún sanitizador lee → rojo; una clave que se lee y no viaja → `TS2339`. 21
+   mutaciones, todas en rojo.
+3. **El cable no cambió**: mismo tag, mismos scripts, mismo respaldo SSR. El HTML emitido cambia sólo en
+   las claves corregidas y en que los campos vacíos ya no viajan como `null`.
+4. **Coste medido**: el primero ≈ 57 min de agente (≈ 40 en lo genérico, que se hace una vez); los otros
+   cuatro, **5-9 min** y **20-70 líneas de código** cada uno (record 3-6, resolver 10-35, vista 6; el
+   resto son sus 4 tests por seam). El patrón no cambió entre el 2º y el 5º. Para las 33 piezas con D1
+   que faltan: ≈ 4-5,5 h de agente. Las 7 funcionalidades con D1 dependen antes de la ADR 0137.
+5. **Dirección C# → TS**: `Synergos.CMS.Interfaces/SynHost/*Props.cs` →
+   `docs/contracts/elementos-synhost.json` (derivado por el CMS) → `elementos-synhost.contract.ts`
+   (generado por el UI con `npm run contratos:synhost`).
+
+**Los cambios que el piloto pide a esta ADR** (a ratificar):
+
+1. **§6 — en las piezas, `configOverride` sólo pisa campos que el record declara**
+   (`SolicitudSynHost.SoloLoDeclarado`). Antes de migrar las demás hay que **medir en la base** qué
+   contenido usa `configOverride` con claves no declaradas: el piloto no tocó la SQLite.
+2. **§4 — el `ejemplo` es parte del contrato**, y lo emite el CMS con su resolver y su emitter reales
+   (`ContratoSynHostTests`); el gate del UI lo ejecuta. Tipar sólo caza la clave que se lee de más, no
+   la que se tira.
+3. **§5 — son dos gates**: records ↔ JSON en el CMS (en cada build) y JSON ↔ TS en el UI (G-11, con el
+   CMS al lado, como la hipoteca). No va en el `npm test` del UI, que corre sin el hermano.
+4. **§2 — registro por descubrimiento**, con gate de «exactamente un resolver por record» (un resolver
+   sin registrar es un 500 que el build no ve).
+5. **No hace falta un resolver genérico** para las piezas triviales: 20 líneas y su test.
+6. **§7 — `culture`**: decidir aparte; hoy el gate la exime como envoltura.
+
+Hallazgos del piloto que van a ticket aparte (H1-H9 del informe del piloto): `rating-stars` colocado es
+interactivo por defecto y nadie escucha su evento; `carousel` promete un autoplay y enlaces que no
+tiene; `tagColor` es texto libre donde debería ser un selector; `kpiTrend` describe «neutral» y el
+DataType dice `flat`; el emitter escribe los nulos de un diccionario pese a `WhenWritingNull`.
 
 ## Relación con otras ADRs
 
