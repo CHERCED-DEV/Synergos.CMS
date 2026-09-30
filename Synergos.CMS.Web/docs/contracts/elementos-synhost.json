@@ -142,6 +142,52 @@
       }
     },
     {
+      "nombre": "range-slider",
+      "tipo": "pieza",
+      "record": "RangeSliderProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "min",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "max",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "step",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "high",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "label": "Precio por noche",
+        "min": 50000,
+        "max": 500000,
+        "step": 10000,
+        "high": 250000
+      }
+    },
+    {
       "nombre": "rating-stars",
       "tipo": "pieza",
       "record": "RatingStarsProps",

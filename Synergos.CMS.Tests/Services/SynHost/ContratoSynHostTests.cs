@@ -90,6 +90,14 @@ public sealed class ContratoSynHostTests
                 ("position", "bottom-left"),
                 ("ariaLabel", "Subir al inicio"),
             },
+            ["range-slider"] = new (string, object?)[]
+            {
+                ("label", "Precio por noche"),
+                ("minValue", "50000"),
+                ("maxValue", "500000"),
+                ("step", "10000"),
+                ("initialValue", "250000"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
