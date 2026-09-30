@@ -264,6 +264,42 @@ public sealed class LectorDelEditor
             string.IsNullOrWhiteSpace(enlace.Target) ? null : enlace.Target.Trim());
     }
 
+    /// <summary>
+    /// Las opciones que el editor marcó en <paramref name="alias"/> (un
+    /// <c>Umbraco.DropDown.Flexible</c> con <c>multiple: true</c>), en el orden en que Umbraco las
+    /// guarda; <c>null</c> si no marcó ninguna.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Viaja una LISTA, no un texto con comas.</b> La vista unía las opciones en
+    /// <c>platformsCsv</c> para que el elemento las volviera a partir: dos copias de la misma
+    /// regla —el separador— en dos lenguajes, y un nombre de clave que el elemento no leía.</para>
+    ///
+    /// <para>Umbraco entrega un desplegable múltiple como lista de cadenas y uno simple como una
+    /// cadena: las dos formas se leen igual, así que un DataType que cambie de simple a múltiple
+    /// no deja al elemento sin valor. Una opción vacía no viaja; una repetida viaja una vez.</para>
+    ///
+    /// <para><b>Los VALORES no se traducen acá.</b> Si el vocabulario del DataType y el del
+    /// elemento llaman distinto a lo mismo, lo traduce el resolver, que es quien sabe a qué
+    /// elemento va.</para>
+    /// </remarks>
+    public IReadOnlyList<string>? Opciones(string alias)
+    {
+        IEnumerable<string>? marcadas = _elemento.Value<object>(_fallback, alias) switch
+        {
+            string una => [una],
+            IEnumerable<string> varias => varias,
+            _ => null,
+        };
+
+        var limpias = marcadas?
+            .Where(o => !string.IsNullOrWhiteSpace(o))
+            .Select(o => o.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return limpias is { Count: > 0 } ? limpias : null;
+    }
+
     /// <summary>Anota lo que el editor escribió y no se pudo usar: no viaja, pero no se pierde callado.</summary>
     public void NoEsValido(string alias, string valor, string esperado)
         => _log?.LogWarning(

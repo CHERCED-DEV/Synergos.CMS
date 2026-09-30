@@ -139,4 +139,44 @@ public sealed class LectorDelEditorTests
 
         Assert.Equal(lector.Enlace("ctaLink"), lector.Enlace("ctaLink"));
     }
+
+    // ── Opciones (Umbraco.DropDown.Flexible múltiple) ───────────────────────────────────────
+
+    [Fact]
+    public void Opciones_sin_marcar_no_viajan()
+    {
+        Assert.Null(Lector(ElementoFalso.Con()).Opciones("platforms"));
+        Assert.Null(Lector(ElementoFalso.Con(("platforms", Array.Empty<string>()))).Opciones("platforms"));
+    }
+
+    [Fact]
+    public void Opciones_marcadas_viajan_como_lista_en_su_orden()
+    {
+        var leidas = Lector(ElementoFalso.Con(("platforms", new[] { "whatsapp", "twitter", "email" }))).Opciones("platforms");
+
+        Assert.Equal(new[] { "whatsapp", "twitter", "email" }, leidas);
+    }
+
+    [Fact]
+    public void Opciones_vacias_o_repetidas_no_viajan_dos_veces()
+    {
+        var leidas = Lector(ElementoFalso.Con(("platforms", new[] { " whatsapp ", "", "  ", "whatsapp", "email" }))).Opciones("platforms");
+
+        Assert.Equal(new[] { "whatsapp", "email" }, leidas);
+    }
+
+    [Fact]
+    public void Un_desplegable_simple_se_lee_como_una_lista_de_una()
+    {
+        Assert.Equal(new[] { "bottom-left" }, Lector(ElementoFalso.Con(("position", "bottom-left"))).Opciones("position"));
+        Assert.Null(Lector(ElementoFalso.Con(("position", ""))).Opciones("position"));
+    }
+
+    [Fact]
+    public void Opciones_leidas_dos_veces_dan_lo_mismo()
+    {
+        var lector = Lector(ElementoFalso.Con(("platforms", new[] { "facebook", "linkedin" })));
+
+        Assert.Equal(lector.Opciones("platforms"), lector.Opciones("platforms"));
+    }
 }
