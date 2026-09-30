@@ -425,4 +425,18 @@ public sealed class LectorDelEditorTests
 
         Assert.Equal(lector.FechaIso("endDateTime"), lector.FechaIso("endDateTime"));
     }
+
+    // ── Tiene: si un ítem trae un campo ─────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("""{"lat": 4.6}""", true)]
+    [InlineData("""{"lat": "4,6"}""", true)]
+    [InlineData("""{"lat": ""}""", true)]
+    [InlineData("""{"lat": null}""", false)]
+    [InlineData("""{"lng": 1}""", false)]
+    [InlineData("""["lat"]""", false)]
+    public void Tiene_dice_si_el_item_trae_el_campo_con_algun_valor(string json, bool esperado)
+    {
+        Assert.Equal(esperado, LectorDelEditor.Tiene(Item(json), "lat"));
+    }
 }

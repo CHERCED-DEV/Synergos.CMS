@@ -227,6 +227,18 @@ public sealed class LectorDelEditor
     }
 
     /// <summary>
+    /// Si la entrada de una lista JSON trae <paramref name="clave"/> con algún valor (no nulo).
+    /// </summary>
+    /// <remarks>
+    /// Para que un resolver anote lo que FALTA sin volver a anotar lo que ya anotó
+    /// <see cref="NumeroDe"/> (un valor presente pero ilegible).
+    /// </remarks>
+    public static bool Tiene(JsonElement entrada, string clave)
+        => entrada.ValueKind == JsonValueKind.Object
+           && entrada.TryGetProperty(clave, out var valor)
+           && valor.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined);
+
+    /// <summary>
     /// Una entrada de una lista JSON que ES una cadena (<c>["#ff6600", "#0066ff"]</c>), recortada;
     /// <c>null</c> si la entrada no es una cadena o está vacía.
     /// </summary>
