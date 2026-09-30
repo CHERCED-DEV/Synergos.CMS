@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Services.Impl;
+using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -39,6 +41,8 @@ public sealed class DevController : ControllerBase
     private readonly DevProductReviewSeeder _reviewSeeder;
     private readonly DevPaidOrderSeeder _paidOrderSeeder;
     private readonly StarterPortadaSeeder _portadaSeeder;
+    private readonly IMessagingService _messaging;
+    private readonly IUserCollection _collections;
     private readonly ILogger<DevController> _logger;
 
     public DevController(
@@ -50,6 +54,8 @@ public sealed class DevController : ControllerBase
         DevProductReviewSeeder reviewSeeder,
         DevPaidOrderSeeder paidOrderSeeder,
         StarterPortadaSeeder portadaSeeder,
+        IMessagingService messaging,
+        IUserCollection collections,
         ILogger<DevController> logger)
     {
         _settings = settings.Value;
@@ -60,6 +66,8 @@ public sealed class DevController : ControllerBase
         _reviewSeeder = reviewSeeder;
         _paidOrderSeeder = paidOrderSeeder;
         _portadaSeeder = portadaSeeder;
+        _messaging = messaging;
+        _collections = collections;
         _logger = logger;
     }
 
@@ -121,6 +129,52 @@ public sealed class DevController : ControllerBase
         return result.Success
             ? Ok(new { result.SiteRootId, outcome = result.Outcome.ToString(), result.Detail })
             : Conflict(new { outcome = result.Outcome.ToString(), error = result.Detail });
+    }
+
+    /// <summary>
+    /// Siembra los DM y los guardados de la demo de Blogs. <c>POST /dev/seed-blogs-demo</c>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Hasta el #176 esto lo hacía un hosted service en CADA arranque</b>, en todo
+    /// entorno y sin mirar el flag, sobre la mensajería y las colecciones GENÉRICAS y durables
+    /// que comparten otros verticales. Es justo lo que la ADR 0013 prohíbe —y la alternativa
+    /// «flag + se siembra solo si está encendido» también: la ADR la rechazó por escrito—, así
+    /// que la siembra es una herramienta que se invoca, como las demás de este controller.</para>
+    /// <para><b>Idempotente</b>: contesta cuántos hilos creó; la segunda vez, cero.</para>
+    /// </remarks>
+    [HttpPost("seed-blogs-demo")]
+    public async Task<IActionResult> SeedBlogsDemo(CancellationToken cancellationToken)
+    {
+        if (!_settings.Enabled) return NotFound();
+
+        _logger.LogInformation("DevSeed endpoint invocado (seed-blogs-demo).");
+        var creados = await BlogsDemoSeeder
+            .SeedAsync(_messaging, _collections, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(new { dmThreadsCreated = creados, dmThreads = BlogsDemoSeeder.DmThreadCount });
+    }
+
+    /// <summary>
+    /// Siembra la correspondencia de demo de Gobierno. <c>POST /dev/seed-gov-correspondence</c>
+    /// </summary>
+    /// <remarks>
+    /// Mismo caso que <c>seed-blogs-demo</c> (#176), con un agravante que la siembra en el
+    /// arranque escondía: NO era idempotente sobre el almacén durable, y cada reinicio le
+    /// sumaba tres mensajes a la carpeta de los dos ciudadanos de la demo. Hoy un expediente
+    /// que ya tiene conversación no se toca.
+    /// </remarks>
+    [HttpPost("seed-gov-correspondence")]
+    public async Task<IActionResult> SeedGovCorrespondence(CancellationToken cancellationToken)
+    {
+        if (!_settings.Enabled) return NotFound();
+
+        _logger.LogInformation("DevSeed endpoint invocado (seed-gov-correspondence).");
+        var creados = await GovCorrespondenceSeeder
+            .SeedAsync(_messaging, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(new { threadsCreated = creados, threads = GovCorrespondenceSeeder.ThreadCount });
     }
 
     [HttpPost("seed-test-site")]

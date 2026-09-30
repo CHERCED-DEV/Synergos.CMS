@@ -21,7 +21,9 @@
 3. **Composers centralizados** en `Synergos.CMS.Web/Composers/`.
    Ningún `IComposer` vive en Application. Ver ADR 0005.
 4. **Seeders prohibidos**. Cero seeding automático en boot. Tooling
-   dev tras flag `Synergos:DevSeed:Enabled`. Ver ADR 0013.
+   dev tras flag `Synergos:DevSeed:Enabled`, **invocado** —un endpoint de
+   `DevController`—: con el flag encendido tampoco se siembra solo, y ningún
+   hosted service siembra (`NadaSiembraAlArrancarTests`, #176). Ver ADR 0013.
 5. **Branding via provider**, no `if (brand.Key == "X")` en core.
    Usar `IBrandingProvider` / `IBrandThemeProvider`. Ver ADR 0010 + 0020.
 6. **Framework-agnóstico para CDN** — todos los blocks CDN-hosted se
@@ -34,14 +36,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3453 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3462 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2353 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2358 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 660 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 440 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 444 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -51,7 +53,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **54 de los 72 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **54 de los 73 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -158,7 +160,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3453**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3462**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -1508,7 +1510,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **54 de los 72 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **54 de los 73 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -2553,6 +2555,25 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   Windows llega en cp1252** —«ó» como el byte 0xF3—, así que lo que `provisionar.sh` manda por
   argumento viaja escapado en ASCII.
 
+- `feedback_a_justification_written_about_the_store_expires_with_the_store` — **un `<remarks>`
+  que se justifica por cómo guarda el almacén caduca el día que el almacén cambia, y nadie lo
+  relee** (#176). `BlogsDemoSeedHostedService` y `GovCorrespondenceSeedHostedService` sembraban
+  demo en CADA arranque y en todo entorno, sin mirar el flag, sobre la mensajería y las colecciones
+  GENÉRICAS; su `<remarks>` decía que «sólo hidratan stubs en memoria», y lo dejó de ser con la
+  ADR 0105 sin que nadie volviera. El de Gobierno llevaba la misma forma más grave: «re-ejecutar
+  agrega al mismo hilo — por eso solo se siembra una vez». Agregar al mismo hilo ES duplicar, y
+  «una vez» sólo valía en memoria: medido con el almacén compartido entre dos procesos, la carpeta
+  de la ciudadana pasa de **2 mensajes a 4** en el primer reinicio. **La pregunta que lo caza, al
+  volver durable un almacén: ¿quién le escribe AL ARRANCAR, y qué decía para justificarlo?**
+  **Y la segunda lección, que es de método:** el ticket pedía «registrarlos sólo con
+  `Synergos:DevSeed:Enabled`», y la ADR 0013 **rechaza esa alternativa por escrito** —«nunca
+  auto-ejecuta aunque el flag esté en `true`»—. El arreglo del ticket se contrasta con la ADR
+  ENTERA, no con su título. Hoy la siembra se invoca (`POST /dev/seed-blogs-demo`,
+  `/dev/seed-gov-correspondence`), las dos son idempotentes a través de un reinicio, y
+  `NadaSiembraAlArrancarTests` cruza por fuente, reflexión y composición de verdad un censo de los
+  hosted services legítimos, vigilado en los dos sentidos y sin eximir a nadie de la huella de
+  sembrar.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2612,13 +2633,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3453 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3462 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2353
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2358
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 660
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 440
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 444
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -3047,7 +3068,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3453 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3462 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

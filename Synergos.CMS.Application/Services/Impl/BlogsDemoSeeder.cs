@@ -7,8 +7,9 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// compartidos con otros dominios: los hilos de DM (<see cref="IMessagingService"/>
 /// contexto <c>dm</c>) y los ítems guardados (<see cref="IUserCollection"/>
 /// colección <c>saved</c>). Vive en Application (lógica pura, ADR 0002) para que
-/// pueda leer la semilla interna <see cref="SocialDemoSeed"/>; el host (Web) la
-/// invoca desde un hosted service al boot.
+/// pueda leer la semilla interna <see cref="SocialDemoSeed"/>. La invoca
+/// <c>POST /dev/seed-blogs-demo</c>, detrás de <c>Synergos:DevSeed:Enabled</c>, y NADA
+/// más: ni un hosted service ni el arranque (ADR 0013, #176).
 /// </summary>
 /// <remarks>
 /// <para>Idempotente. <see cref="IUserCollection.AddAsync"/> lo es por (owner +
@@ -19,8 +20,12 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// de cero—, pero con el store durable (ADR 0105) re-sembrar volvería a
 /// APPENDear los mismos mensajes en cada reinicio, creciendo sin límite. Por eso
 /// la siembra de DMs verifica antes si el hilo ya existe con mensajes.</para>
-/// <para>No siembra schema/DB de Umbraco — solo hidrata la data de demo de los
-/// seams genéricos.</para>
+/// <para><b>Escribe en el almacén durable, y por eso no corre al arrancar.</b> Hasta el
+/// #176 lo llamaba un hosted service en CADA arranque y en todo entorno, con un
+/// <c>remarks</c> que decía que «solo hidrataba stubs en memoria»: era verdad antes de la
+/// ADR 0105 y dejó de serlo sin que nadie lo releyera. La mensajería y las colecciones
+/// son seams GENÉRICOS que comparten varios verticales, así que sembrar en producción es
+/// meter conversaciones y guardados inventados en los almacenes reales.</para>
 /// </remarks>
 public static class BlogsDemoSeeder
 {
@@ -33,13 +38,16 @@ public static class BlogsDemoSeeder
     /// <summary>
     /// Siembra los hilos de DM y los guardados sobre los seams provistos.
     /// </summary>
-    public static async Task SeedAsync(
+    /// <returns>Cuántos hilos de DM se crearon en ESTA llamada: 0 si ya estaban.</returns>
+    public static async Task<int> SeedAsync(
         IMessagingService messaging,
         IUserCollection collections,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messaging);
         ArgumentNullException.ThrowIfNull(collections);
+
+        var creados = 0;
 
         // DMs: cada hilo sembrado → StartThread (primer mensaje) + Reply (resto).
         foreach (var thread in SocialDemoSeed.DmThreads)
@@ -81,6 +89,8 @@ public static class BlogsDemoSeeder
                 var msg = thread.Messages[i];
                 await messaging.ReplyAsync(state.ThreadId, msg.From, msg.Body, cancellationToken);
             }
+
+            creados++;
         }
 
         // Guardados: owner → [postId] en la colección "saved".
@@ -92,5 +102,7 @@ public static class BlogsDemoSeeder
                     owner, SocialDemoSeed.SavedCollection, postId, cancellationToken);
             }
         }
+
+        return creados;
     }
 }

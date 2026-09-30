@@ -12,7 +12,7 @@ tipos de bloque instalables en `sections` sin tocar código — la afirmación d
 "el más maduro" se sostiene. Hay, sin embargo, una capa paralela llamada
 "Blogs — red social" (`IContentStream`/`IReactionService`/`BlogsController`,
 988 líneas) que es pura **DEMO**: feed, reacciones y grafo social viven en
-memoria de proceso sembrados por `SocialDemoSeed`/`BlogsDemoSeedHostedService`
+memoria de proceso sembrados por `SocialDemoSeed` (los DM y guardados, por `POST /dev/seed-blogs-demo` desde el #176)
 y se pierden en cada reinicio — no debe confundirse con el blog editorial
 (`postPage`/`IBlogQuery`), que sí es real. La búsqueda de contenido usa
 **Examine** (`ExamineSearchProvider`), confirmando que el ADR 0107 (motor en
@@ -68,7 +68,7 @@ al ADR 0009). Las 233 lecturas de diccionario en Views siguen usando
 - **Madurez**: DEMO
 - **Seams**: `IContentStream`, `ISocialGraphService`, `ISocialProfileProjection`, `INotificationFeed` (fuera del scope estricto del barrido pero acoplados) — `Synergos.CMS.Interfaces/IContentStream.cs`.
 - **Implementación**: `StubContentStream` — `Synergos.CMS.Application/Services/Impl/StubContentStream.cs`. Feed paginado por cursor sobre `SocialDemoSeed.Posts` (hardcodeado) + items creados en runtime (`ConcurrentDictionary`, se pierden al reiniciar).
-- **Persistencia**: memoria de proceso; sembrado al boot por `BlogsDemoSeedHostedService` — `Synergos.CMS.Web/Services/BlogsDemoSeedHostedService.cs:36` (DMs + guardados, vía seams genéricos `IMessagingService`/`IUserCollection`).
+- **Persistencia**: memoria de proceso; los DM y guardados de demo (vía seams genéricos `IMessagingService`/`IUserCollection`) los siembra `POST /dev/seed-blogs-demo`, detrás de `Synergos:DevSeed:Enabled`. Hasta el #176 los sembraba al arrancar `BlogsDemoSeedHostedService`, en todo entorno — borrado por la ADR 0013.
 - **Superficie HTTP**: `GET /api/blogs/feed`, y ~15 endpoints más (perfil, DMs, notificaciones, estudio) — `Synergos.CMS.Web/Controllers/BlogsController.cs` (988 líneas), sin auth-gate en lectura, escritura gateada por `IMemberAccessGate` desde ADR 0103 (`RequireActor()` línea 79).
 - **Schema CMS**: ninguno (no es contenido Umbraco, es una app social hardcodeada).
 - **UI/CDN**: `elementSynBlogs` → `<synergos-blogs>` (bloqueado por CDN, ver abajo).
