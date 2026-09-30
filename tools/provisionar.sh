@@ -35,9 +35,21 @@
 # ALTA —quien publica un inmueble registra su recurso— y este script se queda
 # sólo con las definiciones. Mientras el catálogo sea de demo, un manifiesto es
 # más honesto que un seam que nadie dispara.
+#
+# ⚠️ Y UNA SEXTA QUE NO ESTABA EN NINGUNA LISTA: LA PLANTILLA DEL AVISO (#174).
+#
+# Cuando una compensación se rinde, el orquestador le pide a Api.Notifications
+# la plantilla `bff.compensacion.colgada` POR CLAVE. Nada la creaba: los cuatro
+# `Program.cs` decían «autorala a mano» y el doc 09 la documentaba con unos
+# marcadores que el código ya no manda. En un servidor limpio el aviso que
+# cierra el lazo salía `template_not_found` — justo el día que hay que avisar—
+# y `--verificar` no lo veía, porque sólo miraba lo que él mismo sembraba. Hoy
+# el texto vive en `provisionar.plantillas.json`, y sus marcadores los fija el
+# CÓDIGO: `PlantillaDelAvisoTests` los cruza con lo que el aviso manda.
 # ─────────────────────────────────────────────────────────────────────────────
 #
 #   ./provisionar.sh [--verificar] [--base <url>] [--manifiesto <fichero>]
+#                    [--plantillas <fichero>]
 #
 #   --verificar   no escribe nada: dice qué falta y sale 1 si falta algo.
 #
@@ -61,6 +73,12 @@
 #     precio queda congelado en el primero que se publicó: la capacidad mira el
 #     libro antes que nada y devuelve el anterior, contestando 200. Republicar
 #     lo mismo sigue sin cambiar nada; cambiarlo, ahora sí se ve.
+#   · Las plantillas se BUSCAN por clave antes de publicarse, y la que ya está
+#     NO se pisa: Api.Notifications no tiene cómo reescribir una plantilla viva
+#     (ni PUT ni DELETE; un segundo POST contesta `key_taken`). Si la publicada
+#     coincide con la declarada, no se hace nada. Si difiere sólo en el texto,
+#     se DICE y se respeta. Si usa un marcador que el aviso no manda, es ROJO:
+#     cada aviso saldría `missing_placeholder`, y eso no lo arregla esperar.
 
 set -euo pipefail
 
@@ -111,6 +129,93 @@ for e in json.load(open(sys.argv[1], encoding='utf-8')):
 PY
 }
 
+# ── Las plantillas ───────────────────────────────────────────────────────────
+#
+# Dos modos del MISMO programa, para que leer y comparar entiendan igual qué es
+# una entrada:
+#
+#   leer <fichero>                         una línea por plantilla declarada:
+#                                          clave 0x1F cuerpo-del-POST 0x1F huella
+#                                          (o `!` 0x1F clave 0x1F qué-falta)
+#   comparar <fichero> <clave> <página>    contra una página de GET /v1/templates:
+#                                          IGUAL · DIFIERE 0x1F campos ·
+#                                          CHOCA 0x1F marcadores · SIGUE 0x1F offset ·
+#                                          AUSENTE · ROTA
+#
+# ⚠️ EL CUERPO SALE EN ASCII (`\u00f3` en vez de «ó») Y EN UNA SOLA LÍNEA. Viaja
+# como argumento de `curl`, y un argumento no ASCII depende de la página de
+# códigos de quien lo pasa — medido en Git Bash de Windows con `LANG` en UTF-8:
+# «ó» le llegaba al servidor como el byte 0xF3 de cp1252, no como UTF-8. Y
+# viaja por un `read` de líneas, así que un salto de línea crudo en el cuerpo
+# partiría la entrada en dos. JSON escapa las dos cosas si se le pide, y la
+# capacidad recibe exactamente el mismo texto.
+#
+# Lo que decide el veredicto son los MARCADORES, con el mismo patrón que
+# `NotificationRules.Marcador` de Api.Notifications: `{nombre}`. Los declarados
+# son los que el aviso manda —eso lo garantiza `PlantillaDelAvisoTests`—, así
+# que una publicada que use otro es una plantilla que rechaza cada aviso.
+plantillas_py() {
+  "${PYTHON[@]}" - "$@" <<'PY'
+import hashlib, json, re, sys
+sys.stdout.reconfigure(encoding='utf-8', newline='\n')
+
+CAMPOS = ('key', 'channel', 'subject', 'body')
+MARCADOR = re.compile(r'\{(\w+)\}')
+
+def declaradas(ruta):
+    for e in json.load(open(ruta, encoding='utf-8')):
+        if set(e) <= {'_'}:
+            continue
+        yield e
+
+def marcadores(p):
+    return set(MARCADOR.findall(p.get('subject') or '')) | set(MARCADOR.findall(p.get('body') or ''))
+
+modo, ruta = sys.argv[1], sys.argv[2]
+
+if modo == 'leer':
+    vistas = set()
+    for e in declaradas(ruta):
+        clave = e.get('key') if isinstance(e.get('key'), str) else ''
+        falta = [c for c in CAMPOS if not isinstance(e.get(c), str) or not e[c].strip()]
+        if not falta and not re.fullmatch(r'[A-Za-z0-9._-]+', clave):
+            falta = ['key']
+        if not falta and clave in vistas:
+            falta = ['duplicada']
+        if falta:
+            print('!\x1f%s\x1f%s' % (clave or '?', ','.join(falta)))
+            continue
+        vistas.add(clave)
+        cuerpo = json.dumps({c: e[c] for c in CAMPOS}, ensure_ascii=True, sort_keys=True, separators=(',', ':'))
+        print('\x1f'.join((clave, cuerpo, hashlib.sha256(cuerpo.encode('ascii')).hexdigest()[:16])))
+
+elif modo == 'comparar':
+    clave = sys.argv[3]
+    deseada = next(e for e in declaradas(ruta) if e.get('key') == clave)
+    pagina = json.load(open(sys.argv[4], encoding='utf-8'))
+    items = pagina.get('items') or []
+    for p in items:
+        if p.get('key') != clave:
+            continue
+        ajenos = sorted(marcadores(p) - marcadores(deseada))
+        if ajenos:
+            print('CHOCA\x1f' + ' '.join('{%s}' % m for m in ajenos))
+        else:
+            distintos = [c for c in ('channel', 'subject', 'body')
+                         if (p.get(c) or '') != deseada[c]
+                         and not (c == 'channel' and (p.get(c) or '').lower() == deseada[c].lower())]
+            print('DIFIERE\x1f' + ' '.join(distintos) if distintos else 'IGUAL')
+        break
+    else:
+        if pagina.get('hasMore') and items:
+            print('SIGUE\x1f%d' % (int(pagina.get('offset') or 0) + len(items)))
+        elif pagina.get('hasMore'):
+            print('ROTA')
+        else:
+            print('AUSENTE')
+PY
+}
+
 # ── La autoprueba ────────────────────────────────────────────────────────────
 #
 # `--autoprueba` corre el lector sobre un manifiesto de mentira y comprueba que
@@ -148,16 +253,58 @@ JSON
   # Sin esto la prueba pasaria en verde leyendo CERO lineas, que es justo lo que
   # deja un lector roto.
   [ "$vistas" = "1" ] || { echo "AUTOPRUEBA el lector devolvio $vistas lineas, se esperaba 1"; fallos_prueba=1; }
+
+  # ── Las plantillas: el lector y el comparador, sin red ──────────────────────
+  #
+  # El fixture EXIGE las dos reglas del lector: un cuerpo con salto de línea (si
+  # viajara crudo, la entrada se partiría en dos líneas) y con «í» (si no viajara
+  # en ASCII, el argumento de curl dependería de la página de códigos). Y una
+  # entrada que es sólo comentario, que no cuenta.
+  TMPP="$(mktemp)"
+  PAG="$(mktemp)"
+  cat > "$TMPP" <<'JSON'
+[{"_":"un comentario"},
+ {"_":"nota","key":"k.x","channel":"Email","subject":"S {a}","body":"línea 1\nlínea 2 con \"comillas\" y {a} {b}"}]
+JSON
+  vistas=0
+  while IFS=$'\x1f' read -r clave cuerpo huella; do
+    vistas=$((vistas + 1))
+    [ "$clave" = "k.x" ] || { echo "AUTOPRUEBA plantilla clave=[$clave]"; fallos_prueba=1; }
+    [ "$cuerpo" = '{"body":"l\u00ednea 1\nl\u00ednea 2 con \"comillas\" y {a} {b}","channel":"Email","key":"k.x","subject":"S {a}"}' ] \
+      || { echo "AUTOPRUEBA plantilla cuerpo=[$cuerpo] — tiene que salir en ASCII y en una línea"; fallos_prueba=1; }
+    [ "${#huella}" = "16" ] || { echo "AUTOPRUEBA plantilla huella=[$huella]"; fallos_prueba=1; }
+  done < <(plantillas_py leer "$TMPP")
+  [ "$vistas" = "1" ] || { echo "AUTOPRUEBA el lector de plantillas devolvio $vistas lineas, se esperaba 1: un salto de linea en el cuerpo tiene que viajar escapado"; fallos_prueba=1; }
+
+  # El comparador, con cada veredicto. El de CHOCA es la plantilla que el doc 09
+  # enseñaba a crear: `{cita}` ya no lo manda nadie.
+  veredicto() {  # veredicto <página-json> <esperado>
+    local v
+    printf '%s' "$1" > "$PAG"
+    v="$(plantillas_py comparar "$TMPP" k.x "$PAG" | tr '\037' ' ')"
+    [ "$v" = "$2" ] || { echo "AUTOPRUEBA comparar dio [$v], se esperaba [$2] para $1"; fallos_prueba=1; }
+  }
+  veredicto '{"items":[{"key":"k.x","channel":"email","subject":"S {a}","body":"línea 1\nlínea 2 con \"comillas\" y {a} {b}"}],"offset":0,"hasMore":false}' "IGUAL"
+  veredicto '{"items":[{"key":"k.x","channel":"Email","subject":"Otro {a}","body":"{b}"}],"offset":0,"hasMore":false}' "DIFIERE subject body"
+  veredicto '{"items":[{"key":"k.x","channel":"Email","subject":"S {cita}","body":"{a} {b}"}],"offset":0,"hasMore":false}' "CHOCA {cita}"
+  veredicto '{"items":[{"key":"otra","channel":"Email","subject":"s","body":"b"}],"offset":3,"hasMore":true}' "SIGUE 4"
+  veredicto '{"items":[],"offset":0,"hasMore":true}' "ROTA"
+  veredicto '{"items":[],"offset":0,"hasMore":false}' "AUSENTE"
+  rm -f "$TMPP" "$PAG"
+
   [ "$fallos_prueba" = "0" ] || exit 1
   echo "OK: el manifiesto se lee con los campos alineados, tambien sin capacity ni timeZoneId."
+  echo "OK: las plantillas se leen en ASCII y en una linea, y el comparador da cada veredicto."
   exit 0
 fi
 
 VERIFICAR=0
 MANIFIESTO="$(dirname "$0")/provisionar.recursos.json"
+PLANTILLAS="$(dirname "$0")/provisionar.plantillas.json"
 WORKFLOW_URL="${SYNERGOS_WORKFLOW_URL:-http://api-workflow:8080}"
 BOOKING_URL="${SYNERGOS_BOOKING_URL:-http://api-booking:8080}"
 PRICING_URL="${SYNERGOS_PRICING_URL:-http://api-pricing:8080}"
+NOTIFICATIONS_URL="${SYNERGOS_NOTIFICATIONS_URL:-http://api-notifications:8080}"
 GOB_DEFINITION="${SYNERGOS_GOB_DEFINITION:-gov.tramite}"
 TRACKING_PREFIX="${SYNERGOS_TRACKING_PREFIX:-tracking}"
 
@@ -165,7 +312,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --verificar) VERIFICAR=1; shift ;;
     --manifiesto) MANIFIESTO="$2"; shift 2 ;;
-    --base) WORKFLOW_URL="$2"; BOOKING_URL="$2"; PRICING_URL="$2"; shift 2 ;;
+    --plantillas) PLANTILLAS="$2"; shift 2 ;;
+    --base) WORKFLOW_URL="$2"; BOOKING_URL="$2"; PRICING_URL="$2"; NOTIFICATIONS_URL="$2"; shift 2 ;;
     *) echo "argumento desconocido: $1" >&2; exit 2 ;;
   esac
 done
@@ -185,6 +333,17 @@ if [ ! -f "$MANIFIESTO" ]; then
   echo "✗ no existe el manifiesto $MANIFIESTO." >&2
   echo "  Ahí se declaran los recursos por médico / inmueble / oferta y sus precios." >&2
   echo "  Si de verdad no hay ninguno todavía, escribí un fichero con []." >&2
+  exit 1
+fi
+
+# Y las plantillas, por la misma razón y con una diferencia: acá `[]` NO es un
+# estado legítimo del repo —el aviso de compensación colgada la pide siempre—,
+# pero sí lo es de quien corra esto con su propio fichero, así que se admite.
+if [ ! -f "$PLANTILLAS" ]; then
+  echo "✗ no existe el fichero de plantillas $PLANTILLAS." >&2
+  echo "  Ahí se declara el texto de los avisos que el código pide por clave a" >&2
+  echo "  Api.Notifications. Sin él, el aviso de una compensación colgada sale" >&2
+  echo "  notifications.template_not_found el día que hace falta." >&2
   exit 1
 fi
 
@@ -280,7 +439,74 @@ definicion "$TRACKING_PREFIX.travel"  "$(pipeline_json "$TRACKING_PREFIX.travel"
 definicion "$TRACKING_PREFIX.events"  "$(pipeline_json "$TRACKING_PREFIX.events"  paid confirmed attended)"
 definicion "$TRACKING_PREFIX.academy" "$(pipeline_json "$TRACKING_PREFIX.academy" enrolled in-progress completed)"
 
-# ── 3. Los recursos y precios POR ENTIDAD ────────────────────────────────────
+# ── 3. Las plantillas de aviso ───────────────────────────────────────────────
+#
+# Se busca POR CLAVE recorriendo `GET /v1/templates` página a página: la
+# capacidad no tiene «búscame por clave» y sólo sirve por id, que genera ella.
+# Una búsqueda que mirara sólo la primera página diría «falta» con la plantilla
+# puesta en la segunda, y el POST de después contestaría `key_taken`.
+PAGINA="$(mktemp)"
+trap 'rm -f "$PAGINA"' EXIT
+
+plantilla() {  # plantilla <clave> <cuerpo-del-POST> <huella>
+  local clave="$1" cuerpo="$2" huella="$3" desde=0 r veredicto="" detalle=""
+  while :; do
+    r="$(pedir GET "$NOTIFICATIONS_URL/v1/templates?offset=$desde&limit=500")"
+    if [ "$(codigo "$r")" != "200" ]; then
+      falla "plantilla $clave → no se pudo consultar Api.Notifications ($(codigo "$r"))"
+      return
+    fi
+    printf '%s' "$r" | head -n-1 > "$PAGINA"
+    IFS=$'\x1f' read -r veredicto detalle < <(plantillas_py comparar "$PLANTILLAS" "$clave" "$PAGINA") || true
+    [ "$veredicto" = "SIGUE" ] || break
+    desde="$detalle"
+  done
+
+  case "$veredicto" in
+    IGUAL) ok "plantilla $clave" ;;
+    # Se respeta, y se DICE. Sus marcadores son de los que el aviso manda, así
+    # que el aviso sale — con otro texto. Pisarla no se puede, y aunque se
+    # pudiera, sería borrar lo que alguien ajustó a mano en el servidor.
+    DIFIERE)
+      echo "≠ plantilla $clave — la publicada difiere de la declarada en: $detalle."
+      echo "    Se respeta: Api.Notifications no reescribe una plantilla viva. Sus marcadores"
+      echo "    son de los que el aviso manda, así que el aviso sale, con el texto publicado."
+      ;;
+    CHOCA)
+      falla "plantilla $clave — la publicada usa $detalle y el aviso no lo manda: cada aviso saldría notifications.missing_placeholder. Api.Notifications no reescribe ni borra una plantilla viva (no hay PUT ni DELETE): hay que retirarla de su almacén y volver a correr esto."
+      ;;
+    AUSENTE)
+      if [ "$VERIFICAR" = "1" ]; then falta "plantilla $clave"; return; fi
+      # La llave lleva la HUELLA del contenido, por lo mismo que la de un precio:
+      # `SaveTemplate` mira el libro de idempotencia antes que nada.
+      r="$(pedir POST "$NOTIFICATIONS_URL/v1/templates" "$cuerpo" "provisionar:plantilla:$clave:$huella")"
+      case "$(codigo "$r")" in
+        200|201) puesto "plantilla $clave" ;;
+        # La publicó otro entre la búsqueda y el POST: «ya está», como una definición.
+        409) if printf '%s' "$r" | grep --quiet 'key_taken'; then
+               ok "plantilla $clave (ya estaba)"
+             else
+               falla "plantilla $clave → 409: $(printf '%s' "$r" | head -n-1)"
+             fi ;;
+        *)   falla "plantilla $clave → $(codigo "$r"): $(printf '%s' "$r" | head -n-1)" ;;
+      esac
+      ;;
+    ROTA) falla "plantilla $clave → Api.Notifications dijo que hay más páginas y no devolvió filas" ;;
+    *)    falla "plantilla $clave → no se pudo comparar la publicada con la declarada" ;;
+  esac
+}
+
+echo "── plantillas de aviso"
+while IFS=$'\x1f' read -r clave cuerpo huella; do
+  [ -z "${clave:-}" ] && continue
+  if [ "$clave" = "!" ]; then
+    falla "una plantilla de $PLANTILLAS no se puede publicar: $cuerpo (le falta: $huella)"
+    continue
+  fi
+  plantilla "$clave" "$cuerpo" "$huella"
+done < <(plantillas_py leer "$PLANTILLAS")
+
+# ── 4. Los recursos y precios POR ENTIDAD ────────────────────────────────────
 echo "── recursos y precios por entidad"
 
   # Se lee con `python3` y no con `jq`: el servidor lo trae de fábrica y `jq` no,

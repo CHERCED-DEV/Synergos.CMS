@@ -443,14 +443,17 @@ hacer una vez, en orden. Nada de esto lo hace el arranque, y ninguno estaba escr
 | Fichero | Dónde corre | Qué hace |
 |---|---|---|
 | `tools/importar-schema.sh` | **el servidor** | importa el árbol de uSync en un contenedor efímero |
-| `tools/provisionar.sh` | **el servidor** | publica definiciones, recursos y precios; reconcilia |
+| `tools/provisionar.sh` | **el servidor** | publica definiciones, la plantilla del aviso, recursos y precios; reconcilia |
 
-> **Los dos los COPIA el despliegue**, junto con `tools/provisionar.recursos.json`. No es un
+> **Los dos los COPIA el despliegue**, junto con los dos ficheros de datos de `provisionar.sh`:
+> `tools/provisionar.recursos.json` y `tools/provisionar.plantillas.json`. No es un
 > detalle: los tres del respaldo vivían sólo en el repo y la máquina que había que proteger era la
 > única sin con qué (HU #31), y al escribir estos dos volvió a pasar igual — este documento decía
 > «corré esto en el servidor» y el servidor no los tenía (#114). Hoy hay gate, y lo que decide qué
 > se copia es **la columna «Dónde corre» de las tablas de este documento**: lo que aquí diga «el
-> servidor» tiene que llegar al servidor.
+> servidor» tiene que llegar al servidor. **Y los datos de `provisionar.sh` los saca el gate del
+> propio script** —lo que lee junto a sí mismo—, no de una lista: nombraba a mano el manifiesto de
+> entidades, y el de plantillas habría llegado sólo si alguien se acordaba (#174).
 
 ### 5.bis.1 El schema de uSync
 
@@ -612,17 +615,37 @@ tools/provisionar.sh --verificar   # qué falta, sin escribir nada
 tools/provisionar.sh               # lo publica
 ```
 
-Cuatro cosas, y las cuatro se rechazan con su motivo si faltan —`definition_not_found`,
-`resource_not_found`, `price_not_found`— así que **no fallan al arrancar: fallan la primera vez
-que alguien intenta usar la función**. El script está en `tools/provisionar.sh` y su cabecera
-explica cada una.
+Cinco cosas, y las cinco se rechazan con su motivo si faltan —`definition_not_found`,
+`template_not_found`, `resource_not_found`, `price_not_found`— así que **no fallan al arrancar:
+fallan la primera vez que alguien intenta usar la función**. El script está en
+`tools/provisionar.sh` y su cabecera explica cada una.
 
 | | qué publica | de qué sirve |
 |---|---|---|
 | Gobierno | la definición del trámite en `Api.Workflow` | sin ella no se decide ningún expediente |
 | Seguimiento | las **cuatro** definiciones de pipeline | sin ellas no avanza ningún pedido |
+| Los cuatro orquestadores | la plantilla `bff.compensacion.colgada` en `Api.Notifications` | sin ella la guardia no se entera de una compensación que se rindió |
 | Salud · Propiedades · Viajes | los recursos de `Api.Booking` | sin ellos no se agenda ni se aparta |
 | Viajes | los precios de `Api.Pricing` | sin ellos no se cotiza una oferta |
+
+**La plantilla del aviso es la que peor falla**, porque falla el día que ya hay un problema: una
+compensación que se rindió —plata cobrada sin servicio, un cupo sin soltar— y el aviso a la guardia
+sale `template_not_found`. Faltó hasta el #174: nada la creaba, los cuatro `Program.cs` decían
+«autorala a mano» y el doc 09 enseñaba a hacerlo con marcadores que el código ya no manda. Tres
+cosas que hay que saber:
+
+- **El texto vive en `tools/provisionar.plantillas.json`; los marcadores, no.** Los fija el código
+  que manda el aviso —`{saga}`, `{origen}`, `{desde}`, `{pendientes}`—, y
+  `PlantillaDelAvisoTests` los cruza en los dos sentidos: uno que la plantilla use y el aviso no
+  mande rechaza cada aviso; uno que el aviso mande y la plantilla no use es información que no le
+  llega a nadie.
+- **Una plantilla publicada NO se pisa**: `Api.Notifications` no tiene cómo reescribirla ni
+  borrarla. Si difiere sólo en el texto, el script lo dice (`≠`) y la respeta. Si usa un marcador
+  que el aviso no manda —la que enseñaba el doc 09, con `{cita}`— es **rojo**, en `--verificar` y
+  al publicar, porque esa plantilla rechaza cada aviso y ninguna corrida la puede arreglar: hay que
+  retirarla del almacén de la capacidad a mano.
+- **Sale por correo**: `SYNERGOS_ALERTS_ADDRESS` tiene que ser una dirección de correo. La
+  capacidad valida la dirección contra el canal de la plantilla.
 
 > **Ojo con las tres de la última fila: son por ENTIDAD, no por producto.** Un recurso por médico,
 > uno por inmueble que acepte visitas, uno por oferta de viaje. Eso **no es bootstrap**: es una
@@ -646,6 +669,15 @@ contra las capacidades vivas y **ninguna de las dos falla a la vista**:
 > pasadas —`--verificar` en seco, publicar, y publicar otra vez— dejan **un** recurso por sujeto y
 > **un** precio, y la segunda no toca nada. Lo que NO se pudo ejecutar acá es
 > `importar-schema.sh`, que necesita el demonio de Docker.
+>
+> **Y la plantilla, contra `Api.Workflow` y `Api.Notifications` levantados de verdad** (#174), con
+> un Resend de mentira detrás y el `CompensationAlert` real mandando el aviso: antes de sembrar, el
+> aviso sale `template_not_found` y `--verificar` sale rojo con
+> `· FALTA  plantilla bff.compensacion.colgada`; publicar la pone; `--verificar` y una segunda
+> publicación la dan por buena sin tocarla; y el MISMO aviso, reintentado, sale `Accepted` con el
+> asunto `[salud] Compensación colgada: …` —la tilde llega entera— y llega **un** correo aunque se
+> mande dos veces. Con la plantilla del doc 09 publicada a mano en otra instancia, el aviso sale
+> `missing_placeholder` y el script sale rojo nombrando `{cita}`.
 
 ---
 

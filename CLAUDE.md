@@ -34,14 +34,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3402 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3405 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2309 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 656 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 437 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 440 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -156,7 +156,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3402**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3405**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2564,13 +2564,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3402 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3405 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2309
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 656
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 437
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 440
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2999,7 +2999,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3402 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3405 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
@@ -4609,7 +4609,8 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   retroceso exponencial— está cableada en `Compensator`. Nadie ha pedido
   otra todavía.
 - **Dos lecturas sin escritor, dormidas detrás de interruptores apagados**
-  (auditoría de reutilización, #169). Verificadas **leyendo y buscando
+  (auditoría de reutilización, #169) — **queda una**, la segunda se cerró con
+  el #174. Verificadas **leyendo y buscando
   escritores en los tres árboles, no con procesos vivos** — un proceso vivo
   podría encontrar un escritor que no pase por un literal `v1/…`. Es
   `feedback_no_read_without_a_write_path` del lado del CONSUMIDOR, y las dos
@@ -4625,19 +4626,26 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
     consentimiento que el paciente SÍ puede dar vive en otro almacén
     (`IConsentLedger`, el de PHI): es el par «consentimiento» de la nota de
     arriba, y decidir cuál de los dos lo sostiene es parte del arreglo.
-  - **La alerta de compensación colgada pide una plantilla que nada
-    aprovisiona.** `CompensationAlert` manda a `Api.Notifications` la clave
-    `bff.compensacion.colgada` (o la configurada), `POST /v1/templates` no
-    tiene llamador fuera de los tests, y `provisionar.sh` siembra definiciones,
-    recursos y precios, no plantillas. En un servidor limpio con la dirección
-    de la guardia puesta, **el aviso que cierra el lazo de una compensación
-    colgada sale `notifications.template_not_found`**, y
-    `provisionar.sh --verificar` no lo ve porque sólo mira lo que él mismo
-    siembra. **Y el doc 09 §5.2 la documenta con marcadores que el código ya no
-    manda** —`{cita} {desde} {pendientes}`, cuando `CompensationAlert` rellena
-    `saga`, `origen`, `desde` y `pendientes`—, así que quien la cree siguiendo el
-    doc recibe `notifications.missing_placeholder` al primer aviso — el mismo
-    400 que la última fila de esa tabla enseña para un marcador de más.
+  - ~~**La alerta de compensación colgada pide una plantilla que nada
+    aprovisiona.**~~ **Hecho (#174).** Era así: `CompensationAlert` pedía
+    `bff.compensacion.colgada` —los cuatro orquestadores, porque ninguno
+    configura otra clave, medido en el `compose.prod.yml` generado—, nada la
+    creaba, y en un servidor limpio **el aviso que cierra el lazo salía
+    `template_not_found`** con `--verificar` en verde. Y el doc 09 enseñaba a
+    crearla con `{cita}`, que el código ya no manda: `missing_placeholder`.
+    Hoy `tools/provisionar.sh` la publica desde
+    `tools/provisionar.plantillas.json` —idempotente: la busca por clave,
+    paginando, y no pisa la publicada—, `--verificar` sale **rojo** si falta o
+    si la publicada usa un marcador que el aviso no manda, y
+    `PlantillaDelAvisoTests` cruza lo que el aviso MANDA con lo que la plantilla
+    declara, en los dos sentidos y con la regla de la propia capacidad
+    (`NotificationRules.Fill`). Verificado con `Api.Notifications` vivo y el
+    `CompensationAlert` real: sin plantilla, `template_not_found`; aprovisionada,
+    `Accepted` y un solo correo aunque el aviso se repita.
+    **Lo que queda, y está dicho**: `Api.Notifications` no tiene cómo reescribir
+    ni borrar una plantilla viva (ni `PUT` ni `DELETE`), así que una mal
+    publicada sólo se arregla en su volumen. El script lo dice en rojo; no lo
+    arregla.
 - ~~`Api.Inventory` necesita ajuste relativo~~ — **hecho** (defecto #30).
   `POST /v1/items/{id}/adjust` acepta `delta` («devolvieron 2», relativo,
   **exige `Idempotency-Key`** porque un relativo reintentado suma dos
