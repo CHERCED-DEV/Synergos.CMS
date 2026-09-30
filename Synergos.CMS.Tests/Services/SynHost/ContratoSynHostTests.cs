@@ -104,6 +104,11 @@ public sealed class ContratoSynHostTests
                 ("optionsJson", """[{"value":"piscina","label":"Piscina"},{"value":"gym","label":"Gimnasio"},{"value":"bbq","label":"Zona BBQ"}]"""),
                 ("maxSelections", "2"),
             },
+            ["stepper"] = new (string, object?)[]
+            {
+                ("stepsJson", """[{"label":"Datos"},{"label":"Pago"},{"label":"Confirmación"}]"""),
+                ("currentStep", "1"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

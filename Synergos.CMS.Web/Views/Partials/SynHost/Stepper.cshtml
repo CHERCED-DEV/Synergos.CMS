@@ -1,12 +1,17 @@
-﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@*
+    SynHost renderer — <synergos-stepper>. Numbered progress indicator.
+
+    Host tonto (ADR 0135): el resolver arma el record que viaja (StepperProps) —parsea en
+    el servidor el JSON de pasos— y la vista resuelve y emite. Antes mandaba el texto
+    stepsJson y currentStep como texto; el elemento lee la lista steps y currentStep como
+    número: el indicador salía vacío (D1).
+*@
+@using Synergos.CMS.Web.Services.SynHost
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.StepperProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["stepsJson"] = Model.Value<string>("stepsJson"),
-        ["currentStep"] = Model.Value<string>("currentStep"),
-    };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("stepper", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

@@ -297,6 +297,41 @@
       }
     },
     {
+      "nombre": "stepper",
+      "tipo": "pieza",
+      "record": "StepperProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "steps",
+          "tipo": "StepperItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "currentStep",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "steps": [
+          {
+            "title": "Datos"
+          },
+          {
+            "title": "Pago"
+          },
+          {
+            "title": "Confirmación"
+          }
+        ],
+        "currentStep": 1
+      }
+    },
+    {
       "nombre": "tag",
       "tipo": "pieza",
       "record": "TagProps",
@@ -373,6 +408,16 @@
         },
         {
           "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        }
+      ]
+    },
+    {
+      "record": "StepperItem",
+      "campos": [
+        {
+          "nombre": "title",
           "tipo": "string",
           "opcional": false
         }
