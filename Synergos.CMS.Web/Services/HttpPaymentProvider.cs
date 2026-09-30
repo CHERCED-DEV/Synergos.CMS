@@ -58,9 +58,6 @@ public sealed record PaymentWireKinds(string SubjectKind, string PayerKind, stri
 /// </remarks>
 public sealed class HttpPaymentProvider : IPaymentProvider
 {
-    /// <summary>Cabecera de la llave compartida.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Cabecera con la que viaja la identidad verificable de quien paga (HU #14).</summary>
     public const string IdentityHeader = "X-Synergos-Identity";
 

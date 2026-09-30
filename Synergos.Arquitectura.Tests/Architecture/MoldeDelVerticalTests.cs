@@ -113,6 +113,14 @@ public sealed class MoldeDelVerticalTests
             .Select(f => (Path.GetFileName(f), SinComentarios(f)))
             .ToList();
 
+    /// <summary>La pieza que arma la cadena de todo cliente hacia el árbol (#178), sin comentarios.</summary>
+    private static string Pieza()
+        => SinComentarios(Dir("Synergos.CMS.Web", "Composers", "ClienteDelArbolDeServicios.cs"));
+
+    /// <summary>Si la rama del punto enchufa la pieza en vez de armar la cadena a mano.</summary>
+    private static bool EnchufaLaPieza(Punto p)
+        => Regex.IsMatch(p.Rama, @"\bAddClienteDelArbolDeServicios\s*\(");
+
     private static IReadOnlyList<string> ClientesHttp()
         => Directory.EnumerateFiles(Dir("Synergos.CMS.Web", "Services"), "Http*.cs")
             .Select(Path.GetFileNameWithoutExtension)
@@ -411,9 +419,17 @@ public sealed class MoldeDelVerticalTests
         // Los webhooks hacia TERCEROS quedan fuera solos, sin lista: no cuelgan de un
         // `Synergos:…:Mode`, así que el descubrimiento no los ve. A un tercero conviene mandarle
         // lo mínimo.
+        //
+        // Desde el #178 la correlación la pone LA PIEZA (`ClienteDelArbolDeServicios`), así que
+        // lo que se mira es que cada punto la enchufe y que la pieza la traiga. Que la pieza la
+        // MANDE de verdad por el cable lo prueba ClienteDelArbolDeServiciosTests.
+        Assert.Contains("AddHttpMessageHandler<CorrelationForwardingHandler>()", Pieza(), StringComparison.Ordinal);
+
         var mal = DelMolde()
-            .Where(p => Regex.IsMatch(p.Rama, @"AddHttpClient\s*\(")
-                     && !p.Rama.Contains("AddHttpMessageHandler<CorrelationForwardingHandler>()", StringComparison.Ordinal))
+            .Where(p => !EnchufaLaPieza(p)
+                     // TRANSITORIO (#178): la cadena a mano, mientras se migran las familias.
+                     && !(Regex.IsMatch(p.Rama, @"AddHttpClient\s*\(")
+                          && p.Rama.Contains("AddHttpMessageHandler<CorrelationForwardingHandler>()", StringComparison.Ordinal)))
             .Select(p => $"{p.Clave} ({p.Composer})")
             .ToList();
 
@@ -430,8 +446,14 @@ public sealed class MoldeDelVerticalTests
         // cliente sin llave no falla al arrancar: sirve, y la capacidad le contesta 401 a la
         // primera persona que intente comprar. Es la forma del #56 y la de la llave de firma de
         // Api.Identity — arrancar verde y reventar delante de alguien es el peor de los tres.
+        //
+        // Desde el #178 la llave la pone LA PIEZA: cada punto la enchufa y la pieza la manda.
+        Assert.Matches(@"DefaultRequestHeaders\.Add\(\s*CabeceraDeLlave\b", Pieza());
+
         var mal = DelMolde()
-            .Where(p => !Regex.IsMatch(p.Rama, @"ApiKeyHeader|X-Synergos-Key"))
+            .Where(p => !EnchufaLaPieza(p)
+                     // TRANSITORIO (#178): la cadena a mano, mientras se migran las familias.
+                     && !Regex.IsMatch(p.Rama, @"ApiKeyHeader|X-Synergos-Key"))
             .Select(p => $"{p.Clave} ({p.Composer})")
             .ToList();
 

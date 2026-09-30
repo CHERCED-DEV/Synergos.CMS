@@ -337,22 +337,10 @@ public sealed partial class SeamComposer
         if (string.Equals(builder.Config["Synergos:Gob:Payments:Mode"], "Api",
                 StringComparison.OrdinalIgnoreCase))
         {
-            var feeBase = builder.Config["Synergos:Gob:Payments:BaseUrl"];
-            var feeKey = builder.Config["Synergos:Gob:Payments:ApiKey"];
-            var feeTimeout = int.TryParse(
-                builder.Config["Synergos:Gob:Payments:TimeoutSeconds"], out var ft) && ft > 0 ? ft : 30;
-
-            services.AddHttpClient(HttpPaymentProvider.GovFeeClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(feeBase) ? "http://127.0.0.1:5204/" : feeBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(feeTimeout);
-                if (!string.IsNullOrWhiteSpace(feeKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpPaymentProvider.ApiKeyHeader, feeKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178) — la misma que la del seam completo.
+            services.AddClienteDelArbolDeServicios(
+                HttpPaymentProvider.GovFeeClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Gob:Payments"), "http://127.0.0.1:5204/", 30));
         }
 
         services.AddSingleton<StubApplicationService>(sp =>

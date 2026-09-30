@@ -1,7 +1,11 @@
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Composers;
 using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Tests.Services;
@@ -314,5 +318,106 @@ public sealed class HttpPaymentProviderTests
         Assert.Equal(PaymentStatus.Captured, salida.Status);
         Assert.Equal(95_000m, salida.AmountCaptured);
         Assert.Contains("ya se capturó", salida.FailureReason!, StringComparison.Ordinal);
+    }
+
+    // ── Por la pieza: el camino del dinero con su cadena real (#178) ─────────
+
+    /// <summary>Contesta por ruta, en orden, lo que diga el guion — y anota lo que llega.</summary>
+    private sealed class Secuencia : HttpMessageHandler
+    {
+        private readonly Dictionary<string, Queue<Func<HttpResponseMessage>>> _rutas = new(StringComparer.OrdinalIgnoreCase);
+
+        public List<(string Ruta, string? Key)> Llamadas { get; } = new();
+
+        public Secuencia Luego(string ruta, HttpStatusCode codigo, string json)
+        {
+            if (!_rutas.TryGetValue(ruta, out var cola)) _rutas[ruta] = cola = new Queue<Func<HttpResponseMessage>>();
+            cola.Enqueue(() => new HttpResponseMessage(codigo)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            });
+            return this;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct)
+        {
+            var ruta = $"{req.Method.Method} {req.RequestUri!.AbsolutePath}";
+            Llamadas.Add((ruta, req.Headers.TryGetValues("Idempotency-Key", out var k) ? k.FirstOrDefault() : null));
+            return Task.FromResult(_rutas.TryGetValue(ruta, out var cola) && cola.Count > 0
+                ? cola.Dequeue()()
+                : new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
+    private static string Problema(string code, bool transient)
+        => $$"""{"title":"x","detail":"motivo de {{code}}","code":"{{code}}","transient":{{(transient ? "true" : "false")}}}""";
+
+    /// <summary>El proveedor sobre la cadena REAL que arma la pieza; sólo la red es un doble.</summary>
+    private static HttpPaymentProvider PorLaPieza(Secuencia red)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<ReintentoSettings>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["RetryBaseDelayMs"] = "1" })
+            .Build());
+
+        services
+            .AddClienteDelArbolDeServicios(
+                HttpPaymentProvider.SeamClientName,
+                new DestinoDelArbol(new Uri("http://payments.local/"), "llave", TimeSpan.FromSeconds(10)))
+            .ConfigurePrimaryHttpMessageHandler(() => red);
+
+        return new HttpPaymentProvider(
+            services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>(),
+            HttpPaymentProvider.SeamClientName,
+            () => new PaymentWireKinds("tienda.pedido", "tienda.comprador", "cms"),
+            NullLogger<HttpPaymentProvider>.Instance);
+    }
+
+    [Fact]
+    public async Task Por_la_pieza_un_cobro_que_la_capacidad_dice_pasajero_se_repite_con_la_MISMA_llave()
+    {
+        // La pasarela parpadeó: la capacidad lo dice con `transient: true` y el segundo intento
+        // sale. Sobre la misma llave, así que si el primero SÍ hubiera cobrado, el segundo
+        // devolvería ese cobro en vez de cobrar otra vez.
+        var red = new Secuencia()
+            .Luego("POST /v1/payments", HttpStatusCode.ServiceUnavailable,
+                Problema("payments.payment_provider_unavailable", transient: true))
+            .Luego("POST /v1/payments", HttpStatusCode.Created, Autorizado);
+
+        var sesion = await PorLaPieza(red).CreateSessionAsync(Peticion());
+
+        Assert.Equal(PaymentStatus.Authorized, sesion.Status);
+        Assert.Equal(2, red.Llamadas.Count);
+        Assert.Single(red.Llamadas.Select(l => l.Key).Distinct());
+        Assert.Equal("cms:sg-2026-000042", red.Llamadas[0].Key);
+    }
+
+    [Fact]
+    public async Task Por_la_pieza_un_NO_firme_del_medio_de_pago_no_se_repite_y_sale_Failed()
+    {
+        // La cadena lee la bandera antes que el proveedor. Si esa lectura se comiera el cuerpo,
+        // el «no» del banco se leería como una caída y el cobro LANZARÍA en vez de salir Failed.
+        var red = new Secuencia()
+            .Luego("POST /v1/payments", HttpStatusCode.Conflict, Problema("payments.payment_declined", transient: false));
+
+        var sesion = await PorLaPieza(red).CreateSessionAsync(Peticion());
+
+        Assert.Equal(PaymentStatus.Failed, sesion.Status);
+        Assert.Single(red.Llamadas);
+    }
+
+    [Fact]
+    public async Task Por_la_pieza_liberar_NO_se_repite_porque_no_lleva_llave()
+    {
+        // Liberar no lleva Idempotency-Key —ver Liberar_NO_lleva_llave—, así que la pieza no lo
+        // repite aunque la capacidad diga que es pasajero: la cadena no adivina qué operaciones
+        // son idempotentes por diseño; sólo se fía de la llave.
+        var red = new Secuencia()
+            .Luego("POST /v1/payments/pay_1/void", HttpStatusCode.ServiceUnavailable,
+                Problema("payments.payment_provider_unavailable", transient: true));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => PorLaPieza(red).VoidAsync("pay_1"));
+        Assert.Single(red.Llamadas);
     }
 }
