@@ -385,6 +385,42 @@
       }
     },
     {
+      "nombre": "share-bar",
+      "tipo": "pieza",
+      "record": "ShareBarProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "platforms",
+          "tipo": "string[]",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "shareLink",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "shareTitle",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "platforms": [
+          "whatsapp",
+          "x",
+          "linkedin"
+        ],
+        "shareLink": "https://synergos.local/eventos/feria-del-libro-2026",
+        "shareTitle": "Feria del libro 2026: programa completo"
+      }
+    },
+    {
       "nombre": "tag",
       "tipo": "pieza",
       "record": "TagProps",

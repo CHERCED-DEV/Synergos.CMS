@@ -124,6 +124,12 @@ public sealed class ContratoSynHostTests
                 ("settingsLabel", "Elegir cuáles"),
                 ("policyLink", ElementoFalso.Enlace("/privacidad", "Política de privacidad")),
             },
+            ["share-bar"] = new (string, object?)[]
+            {
+                ("platforms", new[] { "whatsapp", "twitter", "linkedin" }),
+                ("shareLink", ElementoFalso.Enlace("https://synergos.local/eventos/feria-del-libro-2026")),
+                ("shareTitle", "Feria del libro 2026: programa completo"),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
