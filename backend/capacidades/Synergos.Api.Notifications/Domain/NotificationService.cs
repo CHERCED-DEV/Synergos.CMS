@@ -208,14 +208,12 @@ public sealed class NotificationService
         if (motivo is not null) return Result.Rejected<Delivery>(motivo);
 
         var datos = values ?? new Dictionary<string, string>(StringComparer.Ordinal);
-        var asunto = NotificationRules.Fill(template.Subject, datos);
-        if (!asunto.IsOk) return Result.Rejected<Delivery>(asunto.Rejection!);
-        var cuerpo = NotificationRules.Fill(template.Body, datos);
-        if (!cuerpo.IsOk) return Result.Rejected<Delivery>(cuerpo.Rejection!);
+        var relleno = NotificationRules.Fill(template, datos);
+        if (!relleno.IsOk) return Result.Rejected<Delivery>(relleno.Rejection!);
 
         var id = Guid.NewGuid().ToString("n");
         var delivery = new Delivery(id, to, address!, template.Channel, template.Key,
-            asunto.Value, cuerpo.Value, DeliveryStatus.Queued, Now, ProviderMessageId: null, StatusAtUtc: Now);
+            relleno.Value.Subject, relleno.Value.Body, DeliveryStatus.Queued, Now, ProviderMessageId: null, StatusAtUtc: Now);
 
         _deliveries.Put(delivery);
         _idempotency.Remember("delivery", idem, id);

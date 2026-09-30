@@ -1,11 +1,14 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Synergos.Api.Notifications.Domain;
+using Synergos.Api.Notifications.Storage;
 using Synergos.Api.Notifications.Transport;
 using Synergos.Core;
+using Synergos.Shared;
 
 namespace Synergos.CMS.Tests.Api;
 
@@ -159,6 +162,40 @@ public sealed class NotificationTransportTests
 
         Assert.Equal("notifications.transport_unavailable", r.Rejection!.Code);
         Assert.True(r.Rejection.IsTransient);
+    }
+
+    [Fact]
+    public async Task Un_valor_con_marcado_llega_a_Resend_CODIFICADO_en_el_html_y_tal_cual_en_el_asunto()
+    {
+        // El camino entero de un envío —plantilla publicada, relleno, reserva, transporte— hasta
+        // el cable del proveedor, que es donde el defecto se vuelve un correo (#175). Resend
+        // documenta `html` como «la versión HTML del mensaje» y `subject` como el asunto: lo que
+        // vaya en `html` lo interpreta el cliente de correo del destinatario.
+        var (sender, espia) = Nuevo(_ => Responde(HttpStatusCode.OK, """{"id":"a1"}"""));
+        var raiz = Path.Combine(Path.GetTempPath(), "notif-html-" + Guid.NewGuid().ToString("n"));
+        try
+        {
+            var almacen = Options.Create(new NotificationStorageOptions { Root = raiz });
+            var svc = new NotificationService(
+                new FileSystemTemplateStore(almacen), new FileSystemDeliveryStore(almacen),
+                sender, new FileIdempotencyLedger(raiz), new RelojFalso(Ahora));
+
+            Assert.True(svc.SaveTemplate("prueba.aviso", Channel.Email, "Aviso para {nombre}", "<p>Hola {nombre}</p>",
+                IdempotencyKey.Of("t-1")).IsOk);
+
+            var r = await svc.SendAsync(Ref.Create("prueba.persona", "p-1"), "ana@ejemplo.co", "prueba.aviso",
+                new Dictionary<string, string> { ["nombre"] = "<b>x</b> & \"y\"" }, IdempotencyKey.Of("d-1"));
+
+            Assert.True(r.IsOk, r.Rejection?.Message);
+            using var carga = JsonDocument.Parse(espia.UltimoCuerpo!);
+            Assert.Equal("<p>Hola &lt;b&gt;x&lt;/b&gt; &amp; &quot;y&quot;</p>", carga.RootElement.GetProperty("html").GetString());
+            Assert.Equal("Aviso para <b>x</b> & \"y\"", carga.RootElement.GetProperty("subject").GetString());
+        }
+        finally
+        {
+            try { if (Directory.Exists(raiz)) Directory.Delete(raiz, recursive: true); }
+            catch (IOException) { /* un temporal */ }
+        }
     }
 
     [Fact]

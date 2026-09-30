@@ -34,13 +34,13 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3453 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3460 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2353 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 660 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
+   | `Synergos.Servicios.Tests` | 667 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 440 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
@@ -158,7 +158,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3453**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3460**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2553,6 +2553,27 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   Windows llega en cp1252** —«ó» como el byte 0xF3—, así que lo que `provisionar.sh` manda por
   argumento viaja escapado en ASCII.
 
+- `feedback_the_template_is_markup_the_value_is_text` — **en una plantilla, el marcado lo pone
+  quien la escribe y lo que llega en un valor es TEXTO: se codifica donde se rellena, según qué es
+  el destino, y lo decide la pieza que rellena — no el llamador** (#175). `NotificationRules.Fill`
+  metía cada valor crudo y el cuerpo salía como `html` hacia Resend: un `<` o un `&` en un valor
+  era marcado en un correo con el remitente del producto. Dormido porque el único consumidor manda
+  datos internos, y los tests no lo veían porque sus valores eran alfanuméricos. Hoy `Fill` recibe
+  la **plantilla**, no un texto suelto, y el canal decide: el asunto es texto en todos (una
+  cabecera; codificarlo le muestra `&lt;` a quien lo lee), el cuerpo es HTML en correo y texto
+  en SMS y push (codificarlo manda `&amp;` a un teléfono). **Codificar el destino equivocado
+  es el mismo defecto al revés**, y los dos lados tienen test.
+  **El codificador se elige midiendo el rastro, no sólo el correo:** `HtmlEncoder.Default` y
+  `WebUtility.HtmlEncode` se ven igual en el cliente, pero vuelven entidad cada tilde y cada eñe
+  —el primero todo lo que no es ASCII, el segundo todo el Latin-1—, así que un rastro en español
+  se lee `rechaz&#xF3;`. `HtmlEncoder.Create(UnicodeRanges.All)` deja pasar las tildes y
+  codifica `< > & " ' +`.
+  **Y una trampa de la mutación:** cambiar el codificador por `HtmlEncoder.Default` deja sin uso el
+  `using System.Text.Unicode`, y con `IDE0005` como error **la mutación no compila**; un filtro de
+  salida que buscaba `error CS` no mostró nada —ni rojo ni verde—. Es
+  `feedback_unapplied_mutation_looks_verified` con otra cara: la mutación tiene que COMPILAR, y se
+  lee el resumen de la corrida, no la ausencia de fallos.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2612,12 +2633,12 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3453 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3460 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2353
-dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 660
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 667
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 440
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
@@ -3047,7 +3068,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3453 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3460 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
