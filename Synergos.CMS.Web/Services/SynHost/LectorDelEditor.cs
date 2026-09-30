@@ -172,6 +172,61 @@ public sealed class LectorDelEditor
     }
 
     /// <summary>
+    /// El número de <paramref name="clave"/> en una entrada de la lista JSON de
+    /// <paramref name="alias"/>; <c>null</c> si falta, si no es un número o si admite dos lecturas
+    /// (lo que no se puede leer se anota).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Un número JSON se lee tal cual</b> (<c>{"lat": 4.6097}</c>): ahí el punto es decimal
+    /// por la gramática de JSON y no hay nada que adivinar. <b>Una cadena</b> (<c>{"value": "1.234,5"}</c>)
+    /// es lo que escribió el editor, y pasa por la MISMA lectura es-CO que <see cref="Numero"/> —no
+    /// una copia—: «4,6097» y «-74.0817» se leen, «500.000» no viaja.</para>
+    ///
+    /// <para>Es de instancia, y no estática como <see cref="Cadena(JsonElement, string)"/>, porque lo
+    /// que no se puede leer se anota con el bloque y la propiedad.</para>
+    /// </remarks>
+    public decimal? NumeroDe(string alias, JsonElement entrada, string clave)
+    {
+        if (entrada.ValueKind != JsonValueKind.Object
+            || !entrada.TryGetProperty(clave, out var valor)
+            || valor.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        if (valor.ValueKind == JsonValueKind.Number)
+        {
+            if (valor.TryGetDecimal(out var numero))
+            {
+                return numero;
+            }
+
+            NoEsValido(alias, $"{clave}: {valor.GetRawText()}", "un número que quepa en un decimal");
+            return null;
+        }
+
+        var texto = valor.ValueKind == JsonValueKind.String ? valor.GetString()?.Trim() : null;
+        if (valor.ValueKind == JsonValueKind.String && string.IsNullOrEmpty(texto))
+        {
+            return null;
+        }
+
+        var lectura = texto is null ? (Valor: null, ConDecimales: false, Ambiguo: false) : LeerNumero(texto);
+        if (lectura.Ambiguo)
+        {
+            NoEsValido(alias, $"{clave}: {valor.GetRawText()}", EsperadoSinAmbiguedad);
+            return null;
+        }
+
+        if (lectura.Valor is null)
+        {
+            NoEsValido(alias, $"{clave}: {valor.GetRawText()}", "un número");
+        }
+
+        return lectura.Valor;
+    }
+
+    /// <summary>
     /// Un número que el editor escribió como texto; <c>null</c> si lo dejó vacío, si no es un número
     /// o si admite dos lecturas.
     /// </summary>

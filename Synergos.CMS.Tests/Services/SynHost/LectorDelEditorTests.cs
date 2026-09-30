@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Synergos.CMS.Web.Services.SynHost;
@@ -18,6 +19,12 @@ public sealed class LectorDelEditorTests
     private readonly ILogger _log = Substitute.For<ILogger>();
 
     private int Anotados() => _log.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(ILogger.Log));
+
+    /// <summary>Lo que quedó anotado, ya formateado: el editor lo lee para saber qué corregir.</summary>
+    private IReadOnlyList<string> Anotaciones() => _log.ReceivedCalls()
+        .Where(c => c.GetMethodInfo().Name == nameof(ILogger.Log))
+        .Select(c => c.GetArguments()[2]?.ToString() ?? string.Empty)
+        .ToList();
 
     private LectorDelEditor Lector(IPublishedElement elemento, IPublishedUrlProvider? urls = null)
         => new(elemento, ElementoFalso.Fallback, _log, urls ?? ElementoFalso.Urls());
@@ -213,7 +220,7 @@ public sealed class LectorDelEditorTests
     public void Numero_con_dos_lecturas_no_viaja_y_se_anota_en_vez_de_adivinar(string texto)
     {
         Assert.Null(Lector(ElementoFalso.Con(("valueNow", texto))).Numero("valueNow"));
-        Assert.Equal(1, Anotados());
+        Assert.Contains("una sola lectura", Assert.Single(Anotaciones()), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -289,5 +296,61 @@ public sealed class LectorDelEditorTests
 
         Assert.Equal("Uno Dos", lector.TextoPlano("tooltipContent"));
         Assert.Equal(lector.TextoPlano("tooltipContent"), lector.TextoPlano("tooltipContent"));
+    }
+
+    // ── NumeroDe: un número dentro de un ítem de una lista JSON ─────────────────────────────
+
+    private static JsonElement Item(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+    [Theory]
+    [InlineData("""{"lat": 4.6097}""", "lat", 4.6097)]
+    [InlineData("""{"lng": -74.0817}""", "lng", -74.0817)]
+    [InlineData("""{"value": 120}""", "value", 120)]
+    [InlineData("""{"lat": "4,6097"}""", "lat", 4.6097)]
+    [InlineData("""{"lng": "-74.0817"}""", "lng", -74.0817)]
+    [InlineData("""{"value": "1.234.567"}""", "value", 1234567)]
+    [InlineData("""{"value": " 12,5 "}""", "value", 12.5)]
+    public void NumeroDe_un_item_se_lee_como_numero_json_o_con_la_lectura_es_CO(string json, string clave, double esperado)
+    {
+        Assert.Equal((decimal)esperado, Lector(ElementoFalso.Con()).NumeroDe("pinsJson", Item(json), clave));
+        Assert.Equal(0, Anotados());
+    }
+
+    [Theory]
+    [InlineData("""{"title": "Sin coordenadas"}""")]
+    [InlineData("""{"lat": null}""")]
+    [InlineData("""{"lat": ""}""")]
+    [InlineData("""["no es un objeto"]""")]
+    public void NumeroDe_un_item_sin_el_campo_no_viaja_y_no_se_anota(string json)
+    {
+        Assert.Null(Lector(ElementoFalso.Con()).NumeroDe("pinsJson", Item(json), "lat"));
+        Assert.Equal(0, Anotados());
+    }
+
+    [Theory]
+    [InlineData("""{"value": "500.000"}""")]
+    [InlineData("""{"value": "ciento veinte"}""")]
+    [InlineData("""{"value": true}""")]
+    [InlineData("""{"value": {"n": 1}}""")]
+    public void NumeroDe_un_item_ambiguo_o_que_no_es_numero_no_viaja_y_se_anota(string json)
+    {
+        Assert.Null(Lector(ElementoFalso.Con()).NumeroDe("dataJson", Item(json), "value"));
+        Assert.Equal(1, Anotados());
+    }
+
+    [Fact]
+    public void NumeroDe_un_item_ambiguo_dice_como_escribirlo()
+    {
+        Assert.Null(Lector(ElementoFalso.Con()).NumeroDe("dataJson", Item("""{"value": "1.234"}"""), "value"));
+        Assert.Contains("una sola lectura", Assert.Single(Anotaciones()), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NumeroDe_un_item_leido_dos_veces_da_lo_mismo()
+    {
+        var lector = Lector(ElementoFalso.Con());
+        var item = Item("""{"lat": "4,6097"}""");
+
+        Assert.Equal(lector.NumeroDe("pinsJson", item, "lat"), lector.NumeroDe("pinsJson", item, "lat"));
     }
 }
