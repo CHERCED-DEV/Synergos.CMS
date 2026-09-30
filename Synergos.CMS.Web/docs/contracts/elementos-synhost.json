@@ -2,6 +2,40 @@
   "comentario": "GENERADO desde los records [ElementoSynHost] de Synergos.CMS.Interfaces por Synergos.CMS.Tests/Services/SynHost/ContratoSynHostTests.cs — no se edita a mano (ADR 0135). `ejemplo` es el config EXACTO que emite la vista para una muestra autorada.",
   "elementos": [
     {
+      "nombre": "accordion",
+      "tipo": "pieza",
+      "record": "AccordionProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "items",
+          "tipo": "AccordionSection[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "allowMultiple",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "items": [
+          {
+            "title": "¿Cuánto tarda el envío?",
+            "body": "Entre 2 y 5 días hábiles en ciudades principales."
+          },
+          {
+            "title": "¿Puedo devolver un producto?",
+            "body": "Sí, dentro de los 30 días siguientes a la entrega."
+          }
+        ],
+        "allowMultiple": true
+      }
+    },
+    {
       "nombre": "carousel",
       "tipo": "pieza",
       "record": "CarouselProps",
@@ -200,6 +234,21 @@
     }
   ],
   "tipos": [
+    {
+      "record": "AccordionSection",
+      "campos": [
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "body",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
     {
       "record": "CarouselSlide",
       "campos": [

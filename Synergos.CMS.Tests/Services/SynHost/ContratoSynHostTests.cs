@@ -84,6 +84,11 @@ public sealed class ContratoSynHostTests
                 ("tagLabel", "Oferta"),
                 ("tagColor", "success"),
             },
+            ["accordion"] = new (string, object?)[]
+            {
+                ("itemsJson", """[{"title":"¿Cuánto tarda el envío?","content":"Entre 2 y 5 días hábiles en ciudades principales."},{"title":"¿Puedo devolver un producto?","content":"Sí, dentro de los 30 días siguientes a la entrega."}]"""),
+                ("allowMultiple", true),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
