@@ -63,8 +63,16 @@ public sealed partial class SeamComposer
         // Named client de Wompi. Sandbox y producción se distinguen SÓLO por la
         // base: las llaves ya vienen con su prefijo (pub_test_ / pub_prod_), así
         // que apuntar a producción con llaves de prueba falla en Wompi y no en
-        // silencio. Hereda la resiliencia que el repo ya aplica a sus 12
-        // clientes (ADR 0064/0069).
+        // silencio.
+        //
+        // Esto decía «hereda la resiliencia que el repo ya aplica a sus 12 clientes
+        // (ADR 0064/0069)» y era FALSO (#178): esos doce son los webhooks de avisos, cada
+        // uno con su AddWebhookResilience() escrito a mano, y este registro no tenía
+        // ninguna — el camino del dinero sin un solo reintento. Ahora la trae, y es la de
+        // un TERCERO: sin llave compartida ni correlación, con la tabla de códigos de la
+        // librería porque Wompi no emite la bandera `transient`, y sólo sobre lo que es
+        // repetible — consultar una transacción sí; POST /refunds no se repite jamás,
+        // porque repetirlo es devolver dos veces.
         services.AddHttpClient("wompi", (sp, http) =>
         {
             var settings = sp.GetRequiredService<IOptions<PaymentsSettings>>().Value;
@@ -78,7 +86,8 @@ public sealed partial class SeamComposer
                     new System.Net.Http.Headers.AuthenticationHeaderValue(
                         "Bearer", settings.WompiPrivateKey);
             }
-        });
+        })
+        .AddResilienciaDeTercero();
 
         // #27, la parte que quedó viva — el seam entero contra la capacidad.
         //
@@ -95,21 +104,13 @@ public sealed partial class SeamComposer
             // ExigirUnaSolaPlomeria y por lo mismo.
             ExigirQueNadieOrqueste(builder.Config);
 
-            var payBase = builder.Config["Synergos:Payments:BaseUrl"];
-            var payKey = builder.Config["Synergos:Payments:ApiKey"];
-            var payTimeout = int.TryParse(builder.Config["Synergos:Payments:TimeoutSeconds"], out var pt) && pt > 0 ? pt : 30;
-
-            services.AddHttpClient(HttpPaymentProvider.SeamClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(payBase) ? "http://127.0.0.1:5204/" : payBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(payTimeout);
-                if (!string.IsNullOrWhiteSpace(payKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpPaymentProvider.ApiKeyHeader, payKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera —llave, correlación, telemetría, reintento— la arma la pieza
+            // (#178). El cobro lleva Idempotency-Key, así que una caída de la red o un
+            // `transient: true` de la capacidad se repiten sobre la MISMA llave: el segundo
+            // intento encuentra el cobro que el primero creó en vez de cobrar dos veces.
+            services.AddClienteDelArbolDeServicios(
+                HttpPaymentProvider.SeamClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Payments"), "http://127.0.0.1:5204/", 30));
 
             services.AddSingleton<IPaymentProvider>(sp =>
             {

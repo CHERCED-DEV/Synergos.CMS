@@ -29,9 +29,6 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class HttpSearchAnalyticsStore : ISearchAnalyticsStore, IHostedService, IDisposable
 {
-    /// <summary>Cabecera con la llave compartida. Debe coincidir con la del servicio.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Tope de la cola de salida. Ver el porqué en las notas de la clase.</summary>
     internal const int QueueCapacity = 2_000;
 

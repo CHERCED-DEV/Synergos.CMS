@@ -288,8 +288,11 @@ services.Configure<XSettings>(builder.Config.GetSection("Synergos:X"));
 
 if (string.Equals(builder.Config["Synergos:X:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
 {
-    // cliente nombrado: BaseAddress, Timeout, llave compartida
-    //   .AddHttpMessageHandler<CorrelationForwardingHandler>()
+    // El cliente nombrado se ENCHUFA, no se arma (#178): la pieza lee BaseUrl/ApiKey/
+    // TimeoutSeconds de la sección y trae llave, correlación, telemetría y reintento.
+    services.AddClienteDelArbolDeServicios(
+        HttpXService.ClientName,
+        DestinoDelArbol.De(builder.Config.GetSection("Synergos:X"), "http://127.0.0.1:53NN/", 30));
     services.AddSingleton<IXService, HttpXService>();
 }
 else
@@ -346,13 +349,24 @@ Gates: `Cada_punto_de_cableado_ENLAZA_su_seccion` · `El_default_NUNCA_es_el_val
 
 Lo que los siete comparten, medido:
 
-- **La llave compartida.** Un cliente sin llave no falla al arrancar: sirve, y la capacidad le
-  contesta 401 a la primera persona que intente comprar. Es la forma del #56 y la de la llave de
-  firma de `Api.Identity` — arrancar verde y reventar delante de alguien es el peor de los tres
-  modos de fallar. Gate: `Cada_punto_de_cableado_manda_la_llave_compartida`.
-- **La correlación** (`AddHttpMessageHandler<CorrelationForwardingHandler>()`). Con que un solo
-  salto la corte, el rastro se parte en dos historias y «mostrame todo lo de esta compra» vuelve a
-  no tener respuesta. Gate: `Cada_punto_de_cableado_propaga_la_correlacion`.
+- **La fontanería NO se escribe: se enchufa** (#178). Hasta el #178 cada uno de los quince
+  clientes armaba a mano su cadena —URL, techo, llave, correlación—, diez leían el rechazo con un
+  `ProblemDto` privado, tres re-aplicaban la configuración en cada llamada y ninguno tenía
+  telemetría ni resiliencia. Hoy es una pieza, `ClienteDelArbolDeServicios` (§5.5), y el cliente
+  recibe el `HttpClient` de la fábrica tal cual. Copiar la cadena de otro cliente compila y
+  funciona —sin telemetría, sin reintento—, y por eso hay gate (`ClienteDelArbolTests`).
+- **La llave compartida**, que pone la pieza. Un cliente sin llave no falla al arrancar: sirve, y
+  la capacidad le contesta 401 a la primera persona que intente comprar. Es la forma del #56 y la
+  de la llave de firma de `Api.Identity` — arrancar verde y reventar delante de alguien es el
+  peor de los tres modos de fallar. Gate: `Cada_punto_de_cableado_manda_la_llave_compartida`.
+- **La correlación**, que también pone la pieza. Con que un solo salto la corte, el rastro se
+  parte en dos historias y «mostrame todo lo de esta compra» vuelve a no tener respuesta. Gate:
+  `Cada_punto_de_cableado_propaga_la_correlacion`.
+- **El reintento es de la pieza, y lo abren DOS llaves**: la petición es repetible (método
+  seguro o `Idempotency-Key`) **y** el fallo es pasajero (no hubo respuesta, o `transient: true`).
+  La consecuencia para quien escribe el cliente: **una escritura sin llave no se repite nunca**,
+  así que la llave de idempotencia de abajo no es sólo para el reintento de quien llama — es lo
+  que deja a la pieza reintentar por él.
 - **La llave de idempotencia, determinista sobre QUÉ y no sobre CUÁNDO.**
   `IdempotencyKeyFor(comprador, líneas ordenadas)` es lo que hace que un reintento tras un timeout
   no compre dos veces. Ordenar las líneas no es detalle: sin eso, reordenar la canasta en pantalla

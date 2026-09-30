@@ -273,7 +273,7 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
 
                 leidos.Add((framework, FileSystemBundleRegistryClient.LeerImports(imports, s.PublicBaseUrl)));
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+            catch (Exception ex) when (NoContesto(ex, ct))
             {
                 // Uno caído no tumba a los demás, por la misma razón que en el gemelo de disco.
                 _logger.LogWarning(ex, "No se pudo leer el import map de {Url}.", url);
@@ -374,7 +374,7 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
 
             return new Snapshot(porTag, porAlias, porNombre);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        catch (Exception ex) when (NoContesto(ex, ct))
         {
             // Se grita, y se sigue con lo que había. Un CDN caído no puede vaciar una página que
             // se venía sirviendo bien.
@@ -404,7 +404,7 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
             if (manifiesto is not null) _manifiestos[url] = manifiesto;
             return manifiesto;
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        catch (Exception ex) when (NoContesto(ex, ct))
         {
             // Sin manifiesto se cae al nombre de entrada por defecto en vez de no emitir nada:
             // `main.js` es lo que publica el 100% de los elementos hoy, así que perder el
@@ -468,7 +468,7 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
             if (meta is not null) _metas[url] = meta;
             return meta;
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        catch (Exception ex) when (NoContesto(ex, ct))
         {
             // Un CDN que no publica meta.json deja el sitio como estaba antes de este arreglo:
             // sin verificación, pero sirviendo. Perder el SRI no puede costar el elemento.
@@ -558,6 +558,21 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
         if (!string.IsNullOrWhiteSpace(name)) return name;
         return quitarPrefijo && tag.StartsWith("synergos-", StringComparison.OrdinalIgnoreCase) ? tag[9..] : tag;
     }
+
+    /// <summary>
+    /// Si el CDN no contestó o contestó algo inservible — lo único que degrada al último bueno.
+    /// </summary>
+    /// <remarks>
+    /// <b>La cancelación de QUIEN PIDE LA PÁGINA no entra</b> (#178). El filtro tomaba cualquier
+    /// <see cref="TaskCanceledException"/> por «el CDN no contestó», también la del visitante que
+    /// cerró la pestaña a mitad de un refresco (la vista pasa <c>Context.RequestAborted</c>): la
+    /// anotaba en el log como una caída que no ocurrió y marcaba el intento, así que el snapshot
+    /// vencido se seguía sirviendo un <c>RefreshSeconds</c> más. El techo del <c>HttpClient</c>
+    /// sí entra: ése es el CDN que no contesta.
+    /// </remarks>
+    private static bool NoContesto(Exception ex, CancellationToken ct)
+        => ex is HttpRequestException or JsonException
+           || (ex is TaskCanceledException && !ct.IsCancellationRequested);
 
     private static string Url(BundleRegistrySettings s, string carpeta, string framework, string slot, string archivo)
         => $"{s.PublicBaseUrl.TrimEnd('/')}/{s.BundlesNamespace}/{carpeta}/{framework}/{slot}/{archivo}";

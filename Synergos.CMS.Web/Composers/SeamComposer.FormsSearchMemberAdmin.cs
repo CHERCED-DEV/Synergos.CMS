@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
@@ -62,26 +63,15 @@ public sealed partial class SeamComposer
         services.Configure<SearchAnalyticsSettings>(builder.Config.GetSection("Synergos:SearchAnalytics"));
         if (string.Equals(ModoDeAnaliticaDeBusqueda(builder.Config["Synergos:SearchAnalytics:Mode"]), "Api", StringComparison.Ordinal))
         {
-            var baseUrl = builder.Config["Synergos:SearchAnalytics:BaseUrl"];
-            var apiKey = builder.Config["Synergos:SearchAnalytics:ApiKey"];
-            // Timeout corto: este servicio es auxiliar. Si tarda, el dashboard prefiere
-            // salir vacío antes que dejar la petición colgada.
-            var timeout = int.TryParse(
-                builder.Config["Synergos:SearchAnalytics:TimeoutSeconds"], out var st) && st > 0 ? st : 5;
-            services.AddHttpClient(HttpSearchAnalyticsStore.HttpClientName, http =>
-            {
-                http.BaseAddress = new Uri(string.IsNullOrWhiteSpace(baseUrl)
-                    ? "http://127.0.0.1:5200/"
-                    : baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
-                http.Timeout = TimeSpan.FromSeconds(timeout);
-                if (!string.IsNullOrWhiteSpace(apiKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpSearchAnalyticsStore.ApiKeyHeader, apiKey);
-                }
-            })
-            // El hilo de la correlación (HU #28). Es el consumidor MÁS VIEJO del árbol de
-            // servicios y llevaba desde entonces sin rastro compartido.
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera —llave, correlación (HU #28), telemetría, reintento— la arma la
+            // pieza (#178). Techo corto: este servicio es auxiliar, y si tarda el dashboard
+            // prefiere salir vacío antes que dejar la petición colgada. Ahora se puede afinar con
+            // Synergos:SearchAnalytics:TimeoutSeconds, como las demás; sin ella sigue en 5 s.
+            // Enviar un evento (POST sin llave) NO se repite: reintentar analítica contra un
+            // servicio caído convierte una degradación en una tormenta.
+            services.AddClienteDelArbolDeServicios(
+                HttpSearchAnalyticsStore.HttpClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:SearchAnalytics"), "http://127.0.0.1:5200/", 5));
             // La MISMA instancia sirve la seam y el hosted service: el lazo de envío vive en
             // ella. Dos registros independientes darían dos colas y una sin drenar.
             services.AddSingleton<HttpSearchAnalyticsStore>();
@@ -136,22 +126,10 @@ public sealed partial class SeamComposer
         // que se para es que el asiento salga de acá. Es la forma del timeline de pedidos (#46).
         if (string.Equals(builder.Config["Synergos:Audit:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
         {
-            var auditBase = builder.Config["Synergos:Audit:BaseUrl"];
-            var auditKey = builder.Config["Synergos:Audit:ApiKey"];
-            var auditTimeout = int.TryParse(
-                builder.Config["Synergos:Audit:TimeoutSeconds"], out var at) && at > 0 ? at : 5;
-
-            services.AddHttpClient(HttpAuditTrailWriter.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(auditBase) ? "http://127.0.0.1:5222/" : auditBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(auditTimeout);
-                if (!string.IsNullOrWhiteSpace(auditKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpAuditTrailWriter.ApiKeyHeader, auditKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178).
+            services.AddClienteDelArbolDeServicios(
+                HttpAuditTrailWriter.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Audit"), "http://127.0.0.1:5222/", 5));
 
             services.AddSingleton<IAuditTrailWriter>(sp => new HttpAuditTrailWriter(
                 sp.GetRequiredService<FileSystemAuditTrailWriter>(),
@@ -193,7 +171,10 @@ public sealed partial class SeamComposer
         // Olas 165-166 — Webhook telemetry store (ADR 0071). Ring buffer
         // in-memory por canal con last 1000 outcomes. Singleton — thread-safe
         // via per-channel lock. Reset on restart (no persistencia).
-        services.AddSingleton<IWebhookTelemetryStore, InMemoryWebhookTelemetryStore>();
+        // TryAdd (#178): la pieza de los clientes del árbol de servicios también lo registra, para
+        // enchufarse sola, y compone antes que esto. Con Add quedarían dos registros del mismo
+        // almacén y uno de ellos sin usar.
+        services.TryAddSingleton<IWebhookTelemetryStore, InMemoryWebhookTelemetryStore>();
 
         // Olas 195-196 + 236-237 + 254-256 — Telemetry alerts
         // (ADRs 0080 + 0085 + 0087). Scanner extraído del hosted service

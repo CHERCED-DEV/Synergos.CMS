@@ -109,21 +109,10 @@ public sealed partial class SeamComposer
 
         if (string.Equals(builder.Config["Synergos:Eventos:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
         {
-            var evBase = builder.Config["Synergos:Eventos:BaseUrl"];
-            var evKey = builder.Config["Synergos:Eventos:ApiKey"];
-            var evTimeout = int.TryParse(builder.Config["Synergos:Eventos:TimeoutSeconds"], out var et) && et > 0 ? et : 30;
-
-            services.AddHttpClient(HttpEventTicketingService.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(evBase) ? "http://127.0.0.1:5303/" : evBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(evTimeout);
-                if (!string.IsNullOrWhiteSpace(evKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpEventTicketingService.ApiKeyHeader, evKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178).
+            services.AddClienteDelArbolDeServicios(
+                HttpEventTicketingService.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Eventos"), "http://127.0.0.1:5303/", 30));
 
             // El MISMO registro que lee la cara de organizador. Es lo que hace que cambiar por
             // dónde se compra no deje la puerta ciega.
@@ -211,24 +200,11 @@ public sealed partial class SeamComposer
 
         if (string.Equals(builder.Config["Synergos:Realty:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
         {
-            var realtyBase = builder.Config["Synergos:Realty:BaseUrl"];
-            var realtyKey = builder.Config["Synergos:Realty:ApiKey"];
-            var realtyTimeout = int.TryParse(builder.Config["Synergos:Realty:TimeoutSeconds"], out var rt) && rt > 0 ? rt : 15;
-
-            services.AddHttpClient(HttpVisitSchedulingService.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(realtyBase) ? "http://127.0.0.1:5202/" : realtyBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(realtyTimeout);
-                if (!string.IsNullOrWhiteSpace(realtyKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpVisitSchedulingService.ApiKeyHeader, realtyKey);
-                }
-            })
-            // El hilo de la correlación cruza al árbol de servicios (HU #28). Va sobre los
-            // clientes NOMBRADOS y no sobre uno global: los webhooks salen a terceros, y a un
-            // tercero conviene mandarle lo mínimo.
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera —llave, correlación (HU #28), telemetría, reintento— la arma la
+            // pieza (#178).
+            services.AddClienteDelArbolDeServicios(
+                HttpVisitSchedulingService.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Realty"), "http://127.0.0.1:5202/", 15));
             services.AddSingleton<IVisitSchedulingService>(sp =>
                 new HttpVisitSchedulingService(
                     sp.GetRequiredService<IHttpClientFactory>(),
@@ -337,22 +313,10 @@ public sealed partial class SeamComposer
         if (string.Equals(builder.Config["Synergos:Gob:Payments:Mode"], "Api",
                 StringComparison.OrdinalIgnoreCase))
         {
-            var feeBase = builder.Config["Synergos:Gob:Payments:BaseUrl"];
-            var feeKey = builder.Config["Synergos:Gob:Payments:ApiKey"];
-            var feeTimeout = int.TryParse(
-                builder.Config["Synergos:Gob:Payments:TimeoutSeconds"], out var ft) && ft > 0 ? ft : 30;
-
-            services.AddHttpClient(HttpPaymentProvider.GovFeeClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(feeBase) ? "http://127.0.0.1:5204/" : feeBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(feeTimeout);
-                if (!string.IsNullOrWhiteSpace(feeKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpPaymentProvider.ApiKeyHeader, feeKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178) — la misma que la del seam completo.
+            services.AddClienteDelArbolDeServicios(
+                HttpPaymentProvider.GovFeeClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Gob:Payments"), "http://127.0.0.1:5204/", 30));
         }
 
         services.AddSingleton<StubApplicationService>(sp =>
@@ -372,21 +336,11 @@ public sealed partial class SeamComposer
 
         if (string.Equals(builder.Config["Synergos:Gob:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
         {
-            var govBase = builder.Config["Synergos:Gob:BaseUrl"];
-            var govKey = builder.Config["Synergos:Gob:ApiKey"];
-            var govTimeout = int.TryParse(builder.Config["Synergos:Gob:TimeoutSeconds"], out var gt) && gt > 0 ? gt : 10;
-
-            services.AddHttpClient(HttpCaseWorkflowService.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(govBase) ? "http://127.0.0.1:5215/" : govBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(govTimeout);
-                if (!string.IsNullOrWhiteSpace(govKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpCaseWorkflowService.ApiKeyHeader, govKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178). El cliente ya no re-aplica URL, llave ni
+            // techo por su cuenta: había dos fuentes para el mismo dato.
+            services.AddClienteDelArbolDeServicios(
+                HttpCaseWorkflowService.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Gob"), "http://127.0.0.1:5215/", 10));
 
             // Dice `Api` y no `Bff`: decidir es UN paso, sin plata en medio y sin nada que
             // deshacer si algo falla. Un orquestador acá sería una saga de un paso.
@@ -429,22 +383,10 @@ public sealed partial class SeamComposer
         if (string.Equals(builder.Config["Synergos:Gob:Notifications:Mode"], "Api",
                 StringComparison.OrdinalIgnoreCase))
         {
-            var notiBase = builder.Config["Synergos:Gob:Notifications:BaseUrl"];
-            var notiKey = builder.Config["Synergos:Gob:Notifications:ApiKey"];
-            var notiTimeout = int.TryParse(
-                builder.Config["Synergos:Gob:Notifications:TimeoutSeconds"], out var nt) && nt > 0 ? nt : 20;
-
-            services.AddHttpClient(HttpGovActNotificationService.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(notiBase) ? "http://127.0.0.1:5221/" : notiBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(notiTimeout);
-                if (!string.IsNullOrWhiteSpace(notiKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpGovActNotificationService.ApiKeyHeader, notiKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178).
+            services.AddClienteDelArbolDeServicios(
+                HttpGovActNotificationService.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Gob:Notifications"), "http://127.0.0.1:5221/", 20));
 
             services.AddSingleton<IGovActNotificationService>(sp => new HttpGovActNotificationService(
                 sp.GetRequiredService<IHttpClientFactory>(),

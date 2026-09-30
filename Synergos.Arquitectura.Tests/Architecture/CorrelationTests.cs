@@ -117,9 +117,19 @@ public sealed class CorrelationTests
             ("SeamComposer.FormsSearchMemberAdmin.cs", "el buscador"),
         };
 
+        // Desde el #178 el handler lo pone LA PIEZA de los clientes del árbol, y los composers la
+        // enchufan: se mira que la pieza lo traiga y que cada consumidor la use. Que el hilo salga
+        // de verdad por el cable lo prueba ClienteDelArbolDeServiciosTests.
+        var pieza = File.ReadAllText(
+            Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Composers", "ClienteDelArbolDeServicios.cs"));
+        Assert.Contains("AddHttpMessageHandler<CorrelationForwardingHandler>()", pieza, StringComparison.Ordinal);
+
         var sinPropagar = esperados
-            .Where(e => !File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Composers", e.Item1))
-                .Contains("AddHttpMessageHandler<CorrelationForwardingHandler>()", StringComparison.Ordinal))
+            .Where(e =>
+            {
+                var composer = File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Composers", e.Item1));
+                return !composer.Contains("AddClienteDelArbolDeServicios(", StringComparison.Ordinal);
+            })
             .Select(e => $"{e.Item2} ({e.Item1})")
             .ToList();
 

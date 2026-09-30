@@ -48,21 +48,11 @@ public sealed partial class SeamComposer
 
         if (string.Equals(builder.Config["Synergos:Viajes:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
         {
-            var vBase = builder.Config["Synergos:Viajes:BaseUrl"];
-            var vKey = builder.Config["Synergos:Viajes:ApiKey"];
-            var vTimeout = int.TryParse(builder.Config["Synergos:Viajes:TimeoutSeconds"], out var vt) && vt > 0 ? vt : 30;
-
-            services.AddHttpClient(HttpHotelBookingService.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(vBase) ? "http://127.0.0.1:5304/" : vBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(vTimeout);
-                if (!string.IsNullOrWhiteSpace(vKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpHotelBookingService.ApiKeyHeader, vKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // UN cliente para los dos consumidores —la vía hotel y el carrito—, con su cadena
+            // entera armada por la pieza (#178).
+            services.AddClienteDelArbolDeServicios(
+                HttpHotelBookingService.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Viajes"), "http://127.0.0.1:5304/", 30));
 
             services.AddSingleton<IHotelBookingService>(sp => new HttpHotelBookingService(
                 sp.GetRequiredService<IHttpClientFactory>(),

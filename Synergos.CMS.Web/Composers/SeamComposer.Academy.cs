@@ -125,21 +125,11 @@ public sealed partial class SeamComposer
 
         if (string.Equals(builder.Config["Synergos:Academy:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
         {
-            var acBase = builder.Config["Synergos:Academy:BaseUrl"];
-            var acKey = builder.Config["Synergos:Academy:ApiKey"];
-            var acTimeout = int.TryParse(builder.Config["Synergos:Academy:TimeoutSeconds"], out var at) && at > 0 ? at : 10;
-
-            services.AddHttpClient(HttpCertificateIdSigner.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(acBase) ? "http://127.0.0.1:5218/" : acBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(acTimeout);
-                if (!string.IsNullOrWhiteSpace(acKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpCertificateIdSigner.ApiKeyHeader, acKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La cadena entera la arma la pieza (#178). El firmante ya no re-aplica URL, llave ni
+            // techo por su cuenta: había dos fuentes para el mismo dato.
+            services.AddClienteDelArbolDeServicios(
+                HttpCertificateIdSigner.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Academy"), "http://127.0.0.1:5218/", 10));
 
             // El firmante local NO se descarta: se le pasa como VERIFICADOR de los ids
             // anteriores al cableado. El sello y el HMAC local no dan el mismo valor, así que

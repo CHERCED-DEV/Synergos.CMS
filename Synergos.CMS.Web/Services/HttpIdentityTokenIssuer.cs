@@ -39,9 +39,6 @@ public sealed class HttpIdentityTokenIssuer : IIdentityTokenIssuer
     /// <summary>Cliente nombrado que registra el composer.</summary>
     public const string ClientName = "synergos-api-identity";
 
-    /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     private readonly IHttpClientFactory _clients;

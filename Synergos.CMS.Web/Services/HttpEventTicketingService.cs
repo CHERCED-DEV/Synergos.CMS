@@ -49,9 +49,6 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class HttpEventTicketingService : IEventTicketingService
 {
-    /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     /// <summary>Cliente nombrado que registra el composer.</summary>
     public const string ClientName = "synergos-bff-eventos";
 
@@ -340,7 +337,7 @@ public sealed class HttpEventTicketingService : IEventTicketingService
                 return cuerpo ?? throw new InvalidOperationException($"No pudimos {queHacia}: la respuesta vino vacía.");
             }
 
-            var problema = await LeerProblemaAsync(res, ct).ConfigureAwait(false);
+            var problema = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
 
             // SOLO 401, y la distinción importa. Es un defecto de DESPLIEGUE, no del visitante:
             // la llave compartida está mal o no está. Se grita en el log y afuera sale un error
@@ -358,13 +355,13 @@ public sealed class HttpEventTicketingService : IEventTicketingService
             }
 
             _log.LogWarning("Eventos rechazó {Que} con {Status} ({Code}): {Detalle}",
-                queHacia, (int)res.StatusCode, problema.Code ?? "-", problema.Detail ?? "-");
+                queHacia, (int)res.StatusCode, problema?.Codigo ?? "-", problema?.Detalle ?? "-");
 
             // El motivo del rechazo SÍ es del comprador: «esa butaca ya no está» es accionable y
             // «error» no lo es. Va como ArgumentException porque es lo que el controller traduce
             // a 400 con el mensaje visible.
             throw new ArgumentException(
-                string.IsNullOrWhiteSpace(problema.Detail) ? $"No pudimos {queHacia}." : problema.Detail!);
+                string.IsNullOrWhiteSpace(problema?.Detalle) ? $"No pudimos {queHacia}." : problema!.Detalle!);
         }
     }
 
@@ -394,18 +391,6 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         {
             _log.LogWarning(ex, "Eventos no respondió al consultar la compra {Saga}.", sagaId);
             return null;
-        }
-    }
-
-    private static async Task<ProblemDto> LeerProblemaAsync(HttpResponseMessage res, CancellationToken ct)
-    {
-        try
-        {
-            return await res.Content.ReadFromJsonAsync<ProblemDto>(Json, ct).ConfigureAwait(false) ?? new ProblemDto();
-        }
-        catch (Exception ex) when (ex is JsonException or HttpRequestException or NotSupportedException)
-        {
-            return new ProblemDto();
         }
     }
 
@@ -481,11 +466,4 @@ public sealed class HttpEventTicketingService : IEventTicketingService
     internal sealed record PurchaseDto(
         string Id, string? BuyerKind, string? BuyerId, string? EventId, string? Status,
         MoneyDto Total, IReadOnlyList<HeldDto>? Held, int PendingCompensations, string? LastError);
-
-    private sealed record ProblemDto
-    {
-        public string? Title { get; init; }
-        public string? Detail { get; init; }
-        public string? Code { get; init; }
-    }
 }

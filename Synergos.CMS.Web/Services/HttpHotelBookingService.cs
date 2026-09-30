@@ -41,9 +41,6 @@ namespace Synergos.CMS.Web.Services;
 /// </remarks>
 public sealed class HttpHotelBookingService : IHotelBookingService
 {
-    /// <summary>Cabecera de la llave compartida. La misma que exige toda capacidad.</summary>
-    public const string ApiKeyHeader = ViajesWire.ApiKeyHeader;
-
     /// <summary>Cliente nombrado que registra el composer.</summary>
     public const string ClientName = ViajesWire.ClientName;
 
