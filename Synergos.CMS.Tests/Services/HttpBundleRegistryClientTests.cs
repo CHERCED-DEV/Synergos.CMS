@@ -37,10 +37,19 @@ public sealed class HttpBundleRegistryClientTests
         private readonly Dictionary<string, string> _cuerpos = new(StringComparer.Ordinal);
 
         public bool Caido { get; set; }
+
+        /// <summary>Acepta la conexión y no contesta nunca.</summary>
+        public bool Colgado { get; set; }
         public int Peticiones { get; private set; }
         public List<string> Pedidas { get; } = new();
 
         public CdnFalso Con(string ruta, string json) { _cuerpos[ruta] = json; return this; }
+
+        private static async Task<HttpResponseMessage> Colgarse(CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("inalcanzable");
+        }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct)
         {
@@ -48,6 +57,7 @@ public sealed class HttpBundleRegistryClientTests
             Pedidas.Add(req.RequestUri!.AbsolutePath);
 
             if (Caido) throw new HttpRequestException("connection refused");
+            if (Colgado) return Colgarse(ct);
 
             return Task.FromResult(_cuerpos.TryGetValue(req.RequestUri!.AbsolutePath, out var cuerpo)
                 ? new HttpResponseMessage(HttpStatusCode.OK)
@@ -189,6 +199,38 @@ public sealed class HttpBundleRegistryClientTests
 
         Assert.NotNull(d);
         Assert.Equal("0.1.0", d!.Version);
+    }
+
+    [Fact]
+    public async Task Si_el_visitante_se_va_a_mitad_del_refresco_el_siguiente_refresca_igual()
+    {
+        // #178: el filtro tomaba la cancelación de quien pidió la página por «el CDN no
+        // contestó»: la anotaba como caída y marcaba el intento, así que el snapshot VENCIDO se
+        // seguía sirviendo un RefreshSeconds más aunque el CDN estuviera bien.
+        var (cliente, cdn, reloj) = Nuevo();
+        Assert.NotNull(await cliente.TryResolveAsync("synergos-badge"));
+
+        reloj.Avanzar(TimeSpan.FromHours(1));   // vencido: el próximo pedido refresca
+        cdn.Colgado = true;
+        using (var seFue = new CancellationTokenSource(TimeSpan.FromMilliseconds(100)))
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => cliente.TryResolveAsync("synergos-badge", seFue.Token));
+        }
+
+        // El CDN publica algo nuevo y vuelve a contestar. En el MISMO instante: si el intento
+        // cancelado hubiera quedado marcado, esto serviría el snapshot viejo y no vería el chip.
+        cdn.Colgado = false;
+        cdn.Con("/synergos/registry.json", Registry.Replace(
+            "\"elements\": [",
+            """
+            "elements": [
+                { "name": "chip", "alias": "elementSynChip", "tag": "synergos-chip", "tier": "primitive",
+                  "implementations": { "angular": { "latest": "0.1.0" } } },
+            """,
+            StringComparison.Ordinal));
+
+        Assert.NotNull(await cliente.TryResolveAsync("synergos-chip"));
     }
 
     [Fact]
