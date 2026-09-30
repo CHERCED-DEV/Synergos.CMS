@@ -227,6 +227,20 @@ public sealed class LectorDelEditor
     }
 
     /// <summary>
+    /// Una entrada de una lista JSON que ES una cadena (<c>["#ff6600", "#0066ff"]</c>), recortada;
+    /// <c>null</c> si la entrada no es una cadena o está vacía.
+    /// </summary>
+    /// <remarks>
+    /// Qué forma tiene que tener la cadena (un color, un código) lo decide el resolver de cada
+    /// elemento, que es quien sabe qué pinta: acá sólo se lee.
+    /// </remarks>
+    public static string? Cadena(JsonElement entrada)
+    {
+        var texto = entrada.ValueKind == JsonValueKind.String ? entrada.GetString() : null;
+        return string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
+    }
+
+    /// <summary>
     /// Un número que el editor escribió como texto; <c>null</c> si lo dejó vacío, si no es un número
     /// o si admite dos lecturas.
     /// </summary>

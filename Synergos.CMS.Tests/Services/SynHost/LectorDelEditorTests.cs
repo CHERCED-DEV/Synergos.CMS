@@ -353,4 +353,33 @@ public sealed class LectorDelEditorTests
 
         Assert.Equal(lector.NumeroDe("pinsJson", item, "lat"), lector.NumeroDe("pinsJson", item, "lat"));
     }
+
+    // ── Cadena: un ítem de una lista JSON que ES una cadena ─────────────────────────────────
+
+    [Theory]
+    [InlineData("\"#ff6600\"", "#ff6600")]
+    [InlineData("\"  #0066FF \"", "#0066FF")]
+    public void Un_item_que_es_una_cadena_se_lee_recortado(string json, string esperado)
+    {
+        Assert.Equal(esperado, LectorDelEditor.Cadena(Item(json)));
+    }
+
+    [Theory]
+    [InlineData("\"\"")]
+    [InlineData("\"   \"")]
+    [InlineData("42")]
+    [InlineData("null")]
+    [InlineData("""{"hex": "#fff"}""")]
+    public void Un_item_que_no_es_una_cadena_con_texto_no_viaja(string json)
+    {
+        Assert.Null(LectorDelEditor.Cadena(Item(json)));
+    }
+
+    [Fact]
+    public void Un_item_cadena_leido_dos_veces_da_lo_mismo()
+    {
+        var item = Item("\"#123abc\"");
+
+        Assert.Equal(LectorDelEditor.Cadena(item), LectorDelEditor.Cadena(item));
+    }
 }
