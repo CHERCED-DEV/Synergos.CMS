@@ -495,10 +495,16 @@ services:
       # de nada — se deja pisable para quien quiera un correo real.
       Umbraco__CMS__Unattended__UnattendedUserEmail: \${SYNERGOS_ADMIN_EMAIL:-admin@synergos.local}
 
-      # La UNICA capacidad que el CMS consume hoy (ADR 0130). Por nombre de
-      # servicio, no por localhost: dentro de la red de Docker, localhost es el
-      # propio contenedor del CMS.
-      Synergos__SearchAnalytics__Mode: Http
+      # La analitica de busqueda, contra Api.Sessions (ADR 0130) — su unico
+      # consumidor es este. Por nombre de servicio, no por localhost: dentro de la
+      # red de Docker, localhost es el propio contenedor del CMS.
+      #
+      # El modo se llama Api, como el de toda capacidad (#177). Esto decia Http y
+      # el composer solo entendia Sessions: cualquier otra palabra caia EN SILENCIO
+      # al disco del contenedor, y Api.Sessions no recibia ni un evento. Hoy un
+      # modo desconocido no arranca, y ModosDelComposeTests cruza cada Mode de
+      # este fichero contra lo que su composer reconoce.
+      Synergos__SearchAnalytics__Mode: Api
       Synergos__SearchAnalytics__BaseUrl: "http://${nombreServicio(sesiones)}:8080"
       Synergos__SearchAnalytics__ApiKey: \${SYNERGOS_API_KEY}
 

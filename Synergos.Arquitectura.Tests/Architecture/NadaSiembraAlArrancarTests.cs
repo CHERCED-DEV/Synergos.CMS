@@ -1,10 +1,6 @@
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using NSubstitute;
 using Synergos.CMS.Web.Composers;
-using Umbraco.Cms.Core.Composing;
 
 namespace Synergos.CMS.Tests.Architecture;
 
@@ -146,33 +142,12 @@ public sealed class NadaSiembraAlArrancarTests
     /// Método 3 — la COMPOSICIÓN: corre de verdad TODOS los composers del producto web contra
     /// <paramref name="configuracion"/> y devuelve los hosted services que quedaron registrados.
     /// </summary>
-    /// <remarks>
-    /// Un registro por fábrica (<c>AddHostedService(sp =&gt; sp.GetRequiredService&lt;T&gt;())</c>)
-    /// no trae <c>ImplementationType</c>: se lee el tipo que devuelve la fábrica.
-    /// </remarks>
     private static IReadOnlyList<string> HostedServicesCompuestos(IReadOnlyDictionary<string, string?> configuracion)
-    {
-        var services = new ServiceCollection();
-        var builder = Substitute.For<IUmbracoBuilder>();
-        builder.Services.Returns(services);
-        builder.Config.Returns(new ConfigurationBuilder().AddInMemoryCollection(configuracion).Build());
-
-        foreach (var composer in typeof(SeamComposer).Assembly.GetTypes()
-                     .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(IComposer).IsAssignableFrom(t))
-                     .OrderBy(t => t.Name, StringComparer.Ordinal))
-        {
-            ((IComposer)Activator.CreateInstance(composer)!).Compose(builder);
-        }
-
-        return services
-            .Where(d => !d.IsKeyedService && d.ServiceType == typeof(IHostedService))
-            .Select(d => d.ImplementationType?.Name
-                         ?? d.ImplementationFactory?.Method.ReturnType.Name
-                         ?? d.ImplementationInstance?.GetType().Name
-                         ?? "¿?")
+        => ComposicionDelCms.Componer(configuracion)
+            .Where(d => d.ServiceType == typeof(IHostedService))
+            .Select(ComposicionDelCms.Entrega)
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
-    }
 
     /// <summary>El fichero donde se declara <paramref name="tipo"/>, sin comentarios.</summary>
     private static string? FuenteDe(string tipo)

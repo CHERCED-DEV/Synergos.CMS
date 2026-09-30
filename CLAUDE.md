@@ -36,14 +36,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3462 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3479 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2358 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2371 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 660 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 444 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 448 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -53,7 +53,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **54 de los 73 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **54 de los 74 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -160,7 +160,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3462**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3479**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -1510,7 +1510,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **54 de los 73 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **54 de los 74 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -2574,6 +2574,25 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   hosted services legítimos, vigilado en los dos sentidos y sin eximir a nadie de la huella de
   sembrar.
 
+- `feedback_an_unrecognized_mode_cannot_fall_silently_to_another_store` — **un modo que no se
+  reconoce no puede caer en silencio a otro almacén: tiene que no arrancar, nombrando los válidos**
+  (#177). `compose.prod.yml` escribía `Synergos__SearchAnalytics__Mode: Http` —la palabra del CDN—,
+  el composer entendía `Sessions` —el nombre del servicio— y todo lo demás caía a `FileSystem`: la
+  analítica se habría quedado en el contenedor del CMS con `Api.Sessions` arriba, sana y vacía, y
+  el dashboard lleno porque leía del disco. Tres palabras para una decisión, ninguna la del molde
+  (`Api`), y **ningún gate cruzaba lo que el despliegue escribe con lo que el código lee**:
+  `compose-gen --check` mira que el fichero esté al día con su generador, y
+  `CapacidadesConectadasTests` cuenta la conexión por código. **Degradar vale cuando el OTRO
+  proceso está caído; no cuando lo que está mal es la palabra**, porque ahí no se entera nadie.
+  **La pregunta que lo caza:** *¿qué hace este composer con una palabra que no conoce?* — si la
+  respuesta es «lo mismo que sin configurar», hay un hueco. `ModosDelComposeTests` lo mide así,
+  COMPONIENDO: una palabra que cablea lo mismo que no configurar nada y no es la del default es
+  una palabra que nadie lee. **Y componer de verdad es barato**: `PaymentProviderSelectionTests`
+  dice que «componer exige un `IUmbracoBuilder` entero», y no — con un doble que devuelve
+  `Services` y `Config`, los composers del producto corren enteros;
+  `ComposicionDelCms` lo hace para los gates. Queda abierto: los otros catorce interruptores
+  todavía caen en silencio con una palabra desconocida en el `.env` del servidor.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2633,13 +2652,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3462 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3479 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2358
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2371
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 660
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 444
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 448
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2781,6 +2800,16 @@ node tools/spec-valida.mjs --autoprueba   # G-8: el LECTOR del spec, ejecutado (
 > G-7, `compose-gen --check` y `service-matrix.mjs`, en `windows-latest` y detrás de un paso que
 > exige el checkout en LF. Existe porque seis gates llegaron a llevar escrita una suposición de
 > Linux —ver `feedback_a_dev_machine_is_not_ci` en §5—, y uno salía VERDE por ella.
+
+> **Y `compose-gen --check` dice que el compose está AL DÍA con su generador — no que lo que el
+> generador escribe lo entienda alguien** (#177). `compose.prod.yml` decía
+> `Synergos__SearchAnalytics__Mode: Http`, el composer sólo entendía `Sessions`, y cualquier otra
+> palabra caía en silencio al disco: en producción `Api.Sessions` no habría recibido ni un evento,
+> con `--check` en verde. Ese cruce lo hace `ModosDelComposeTests`, dentro de la suite: cada
+> `Synergos__<Seam>__Mode` que el compose escribe —el literal, o el default de `${VAR:-…}`— y lo que
+> propone `.env.example`, contra lo que SU composer reconoce, por dos caminos que tienen que
+> coincidir (leyendo sus comparaciones y el default del POCO, y **componiendo de verdad** con ese
+> valor), y en los dos sentidos: un modo que un composer lee y el compose no escribe tampoco pasa.
 
 **Y DOS más que sí necesitan al hermano, pero aceptan su ruta** (G-6 y G-7, #102):
 
@@ -3068,7 +3097,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3462 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3479 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
@@ -3182,6 +3211,19 @@ imágenes por SHA a GHCR, `compose.prod.yml`, `tools/bootstrap-servidor.sh`,
 (contra la URL pública, no contra el runner) y vuelta atrás automática. El
 workflow **se salta solo** mientras falten `DEPLOY_HOST` / `SYNERGOS_DOMAIN`.
 Lo que falta es que el arquitecto cree el VPS — decisión de compra, no código.
+
+> **Y el despliegue llevaba escrito un modo que nadie leía** (#177): la analítica de búsqueda iba
+> a quedarse en el disco del contenedor del CMS con `Api.Sessions` levantada y sin recibir nada. Se
+> encontró antes de la primera máquina. Hoy el modo se llama `Api` —como el de toda capacidad—,
+> uno que no se reconoce **no arranca**, y `ModosDelComposeTests` cruza los quince. Verificado con
+> procesos: CMS con `Mode=Api` en un puerto propio, cuatro búsquedas, `Api.Sessions` reporta
+> `written=4` y su fichero del día, y el disco del CMS ninguna; con `Mode=Http` el CMS no arranca y
+> el log nombra la clave y los dos válidos.
+>
+> **Lo que queda abierto, con su tamaño:** los otros catorce interruptores siguen cayendo en
+> silencio a su camino en proceso con una palabra desconocida —`SYNERGOS_TIENDA_MODE=Api` sirve la
+> tienda local sin avisar—. El gate cubre lo que el compose TRAE escrito; lo que el operador ponga
+> en el `.env` del servidor sólo lo para validar el modo al cablear, y hoy lo valida uno solo.
 
 > **Arrancar no es estar listo, y eso faltaba escrito** (#114). Un servidor con
 > los 26 contenedores sanos no sirve todavía: hay que sembrar **el schema** y
