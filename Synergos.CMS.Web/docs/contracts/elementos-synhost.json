@@ -34,6 +34,31 @@
       }
     },
     {
+      "nombre": "avatar",
+      "tipo": "pieza",
+      "record": "AvatarProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "src",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "alt",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "src": "/media/equipo/ana-gomez.jpg",
+        "alt": "Ana Gómez, directora de producto"
+      }
+    },
+    {
       "nombre": "carousel",
       "tipo": "pieza",
       "record": "CarouselProps",
@@ -228,6 +253,31 @@
         "culture": "es-CO",
         "label": "Oferta",
         "color": "success"
+      }
+    },
+    {
+      "nombre": "video-player",
+      "tipo": "pieza",
+      "record": "VideoPlayerProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "videoFile",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "posterImage",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "videoFile": "/media/propiedades/recorrido-casa-lago.mp4",
+        "posterImage": "/media/propiedades/casa-lago-fachada.jpg"
       }
     }
   ],

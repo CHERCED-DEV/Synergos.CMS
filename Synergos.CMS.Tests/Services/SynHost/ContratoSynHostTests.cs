@@ -90,6 +90,17 @@ public sealed class ContratoSynHostTests
                 ("trackTitle", "Episodio 12: la ciudad que camina"),
                 ("artistName", "Radio Synergos"),
             },
+            ["avatar"] = new (string, object?)[]
+            {
+                ("avatarImage", ElementoFalso.Medio("/media/equipo/ana-gomez.jpg", "Ana Gómez, directora de producto")),
+            },
+            ["video-player"] = new (string, object?)[]
+            {
+                ("videoFile", ElementoFalso.Medio("/media/propiedades/recorrido-casa-lago.mp4")),
+                ("posterImage", ElementoFalso.Medio("/media/propiedades/casa-lago-fachada.jpg", "Fachada de la casa del lago")),
+                ("chaptersJson", """[{"startSeconds":0,"title":"Llegada"},{"startSeconds":42,"title":"La sala"}]"""),
+                ("enableAnalytics", true),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
