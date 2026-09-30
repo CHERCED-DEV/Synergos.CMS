@@ -119,6 +119,11 @@ public sealed class ContratoSynHostTests
                 ("eventsJson", """[{"date":"2019-03-01","title":"Fundación","description":"Abrimos la primera sede en Medellín."},{"date":"2024","title":"Segunda sede","description":"Llegamos a Bogotá."}]"""),
                 ("orientation", "vertical"),
             },
+            ["tour-guide"] = new (string, object?)[]
+            {
+                ("stepsJson", """[{"selector":".site-header","title":"Bienvenido","content":"Este es el menú principal."},{"selector":"#buscar","title":"Buscá","content":"Encontrá cualquier cosa desde acá."}]"""),
+                ("autoStart", true),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()

@@ -420,6 +420,42 @@
           }
         ]
       }
+    },
+    {
+      "nombre": "tour-guide",
+      "tipo": "pieza",
+      "record": "TourGuideProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "steps",
+          "tipo": "TourGuideStep[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "autoStart",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "steps": [
+          {
+            "target": ".site-header",
+            "title": "Bienvenido",
+            "body": "Este es el menú principal."
+          },
+          {
+            "target": "#buscar",
+            "title": "Buscá",
+            "body": "Encontrá cualquier cosa desde acá."
+          }
+        ],
+        "autoStart": true
+      }
     }
   ],
   "tipos": [
@@ -513,6 +549,26 @@
       "campos": [
         {
           "nombre": "date",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "body",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "TourGuideStep",
+      "campos": [
+        {
+          "nombre": "target",
           "tipo": "string",
           "opcional": true
         },
