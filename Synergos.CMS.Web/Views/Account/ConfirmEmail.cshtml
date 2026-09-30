@@ -7,7 +7,7 @@
 @{
     Layout = null;
     var errorCode = ViewData["ErrorCode"] as string;
-    var title = Umbraco.GetDictionaryValue("Account.ConfirmEmail.Title", "Confirmación de email");
+    var title = Umbraco.GetDictionaryValueOrDefault("Account.ConfirmEmail.Title", "Confirmación de email");
 }
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">
@@ -24,11 +24,11 @@
                 @{
                     var msg = errorCode switch
                     {
-                        "invalid-link" => Umbraco.GetDictionaryValue("Account.ConfirmEmail.InvalidLink",
+                        "invalid-link" => Umbraco.GetDictionaryValueOrDefault("Account.ConfirmEmail.InvalidLink",
                             "El link de confirmación está incompleto. Verifica que el URL no se haya cortado al copiarlo."),
-                        "invalid-token" => Umbraco.GetDictionaryValue("Account.ConfirmEmail.InvalidToken",
+                        "invalid-token" => Umbraco.GetDictionaryValueOrDefault("Account.ConfirmEmail.InvalidToken",
                             "El link de confirmación no es válido o ya expiró."),
-                        _ => Umbraco.GetDictionaryValue("Account.ConfirmEmail.Error.Unknown",
+                        _ => Umbraco.GetDictionaryValueOrDefault("Account.ConfirmEmail.Error.Unknown",
                             "Ocurrió un error confirmando tu email. Inténtalo de nuevo."),
                     };
                 }
@@ -36,7 +36,7 @@
             </p>
             <p class="syn-account__alt">
                 <a href="/account/login">
-                    @Umbraco.GetDictionaryValue("Account.BackToLogin", "Volver al login")
+                    @Umbraco.GetDictionaryValueOrDefault("Account.BackToLogin", "Volver al login")
                 </a>
             </p>
         </div>

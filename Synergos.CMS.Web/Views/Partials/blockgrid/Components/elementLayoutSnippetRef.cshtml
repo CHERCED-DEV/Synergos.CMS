@@ -22,12 +22,15 @@
 @using Umbraco.Extensions
 @inject ILoggerFactory LoggerFactory
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     const string ReusableBlockAlias = "reusableBlock";
     var element = Model.Content;
     var snippet = element.Value<IPublishedContent>("snippet");
     var variant = element.Value<string>("variantKey");
     var cssClass = element.Value<string>("cssClass");
 
+#nullable enable
     string? skipReason = null;
     BlockGridModel? inner = null;
 

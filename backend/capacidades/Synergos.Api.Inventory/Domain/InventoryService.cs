@@ -21,7 +21,25 @@ public sealed class InventoryService
 
     private DateTimeOffset Now => _clock.GetUtcNow();
 
-    public Result<StockItem> Declare(Ref subject, int onHand, IReadOnlyList<StockUnit> units, IdempotencyKey key)
+    /// <param name="onHand">
+    /// Cuántas existencias hay. <b><c>null</c> es «no lo dije», y se rechaza.</b>
+    /// </param>
+    /// <remarks>
+    /// <para><b>Nulo no es cero, y tratarlo como cero costó un defecto.</b> El borde hacía
+    /// <c>req.OnHand ?? 0</c> y esta regla sólo miraba el negativo, así que un <c>POST</c> sin
+    /// <c>onHand</c> creaba el ítem afirmando que se contó y no había nada, y contestaba 201. No
+    /// se podía rehacer: <c>subject_taken</c> bloquea volver a declarar el mismo <c>Ref</c>.</para>
+    ///
+    /// <para>El contrato dice que <c>onHand</c> es ABSOLUTO —«conté y hay 47»—, así que omitirlo
+    /// es exactamente no haber contado. Y la misma capacidad ya trataba esta ausencia al revés en
+    /// <c>/adjust</c>, que rechaza con <c>adjust_required</c>: tener dos semánticas para el mismo
+    /// campo era el defecto, no el <c>?? 0</c> en sí.</para>
+    ///
+    /// <para><b>La regla vive acá y no en el borde a propósito.</b> Ahí arriba no llega ningún
+    /// test de esta suite —ninguna capacidad tiene tests de endpoint— y fue justo ese reparto el
+    /// que dejó el hueco: las dos mitades en verde y el defecto en la costura.</para>
+    /// </remarks>
+    public Result<StockItem> Declare(Ref subject, int? onHand, IReadOnlyList<StockUnit> units, IdempotencyKey key)
     {
         lock (_gate)
         {
@@ -32,16 +50,21 @@ public sealed class InventoryService
                     : Rejection.Conflict($"{InventoryRules.CodePrefix}.idempotency_orphan", "La llave ya se usó pero el ítem no está.");
             }
 
-            if (onHand < 0)
+            if (onHand is not { } contadas)
+            {
+                return Rejection.Invalid($"{InventoryRules.CodePrefix}.onhand_required",
+                    "Hace falta onHand: cuántas existencias hay. No mandarlo no es declarar cero.");
+            }
+            if (contadas < 0)
             {
                 return Rejection.Invalid($"{InventoryRules.CodePrefix}.negative_stock", "Las existencias no pueden ser negativas.");
             }
-            if (units.Count > 0 && units.Count != onHand)
+            if (units.Count > 0 && units.Count != contadas)
             {
                 // Si hay unidades nombradas, TIENE que haber tantas como existencias: si no, no
                 // hay manera de saber cuáles son las que faltan cuando se agoten.
                 return Rejection.Invalid($"{InventoryRules.CodePrefix}.units_mismatch",
-                    $"Se declararon {units.Count} unidades nombradas y {onHand} existencias. Tienen que coincidir.");
+                    $"Se declararon {units.Count} unidades nombradas y {contadas} existencias. Tienen que coincidir.");
             }
             if (units.Select(u => u.Code).Distinct(StringComparer.OrdinalIgnoreCase).Count() != units.Count)
             {
@@ -54,7 +77,7 @@ public sealed class InventoryService
             }
 
             var id = Guid.NewGuid().ToString("n");
-            var item = new StockItem(id, subject, onHand, units, Array.Empty<StockHold>());
+            var item = new StockItem(id, subject, contadas, units, Array.Empty<StockHold>());
             _stock.Put(item);
             _idempotency.Remember("stock", key, id);
             return Result.Ok(item);

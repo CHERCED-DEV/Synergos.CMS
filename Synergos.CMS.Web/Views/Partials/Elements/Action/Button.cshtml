@@ -17,6 +17,8 @@
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var label = Model.Value<string>("ctaLabel");
     if (string.IsNullOrWhiteSpace(label)) { return; }
 
@@ -46,6 +48,7 @@
           + $">{fallbackLabel}</a>"
         : $"<button type=\"button\" class=\"{fallbackClasses}\">{fallbackLabel}</button>";
 
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["label"] = label,

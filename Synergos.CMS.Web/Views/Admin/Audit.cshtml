@@ -4,12 +4,16 @@
 *@
 @using Synergos.CMS.Interfaces
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     Layout = null;
     var events = ViewData["Events"] as IReadOnlyList<AuditEvent> ?? Array.Empty<AuditEvent>();
     var actorFilter = ViewData["ActorFilter"] as string;
     var actionFilter = ViewData["ActionFilter"] as string;
     var limit = (int)(ViewData["Limit"] ?? 100);
+#nullable enable
     var fromUtc = ViewData["FromUtc"] as DateTime?;
+#nullable enable
     var toUtc = ViewData["ToUtc"] as DateTime?;
     var hasFilters = !string.IsNullOrWhiteSpace(actorFilter) ||
                      !string.IsNullOrWhiteSpace(actionFilter) ||
@@ -30,7 +34,7 @@
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
 <head>
     @await Html.PartialAsync("_AdminHead")
-    <title>@Umbraco.GetDictionaryValue("admin.nav.audit", "Auditoría") · Synergos</title>
+    <title>@Umbraco.GetDictionaryValueOrDefault("admin.nav.audit", "Auditoría") · Synergos</title>
 </head>
 <body class="syn-admin">
     @await Html.PartialAsync("_AdminTopbar")
@@ -39,7 +43,7 @@
         <div class="syn-admin__container">
             <header class="syn-admin__page-header">
                 <h1 class="syn-admin__page-title">
-                    @Umbraco.GetDictionaryValue("admin.nav.audit", "Auditoría")
+                    @Umbraco.GetDictionaryValueOrDefault("admin.nav.audit", "Auditoría")
                     <small class="syn-admin__page-count">· @events.Count</small>
                 </h1>
                 <p class="syn-admin__page-subtitle">
@@ -77,12 +81,12 @@
                     <input type="number" name="limit" value="@limit" min="1" max="500"
                            class="syn-admin__filter-input syn-admin__filter-input--num" />
                 </label>
-                <button type="submit" class="syn-admin__filter-submit">@Umbraco.GetDictionaryValue("admin.action.applyfilters", "Aplicar filtros")</button>
+                <button type="submit" class="syn-admin__filter-submit">@Umbraco.GetDictionaryValueOrDefault("admin.action.applyfilters", "Aplicar filtros")</button>
                 @if (hasFilters)
                 {
-                    <a href="/admin/audit" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar")</a>
+                    <a href="/admin/audit" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValueOrDefault("admin.action.clear", "Limpiar")</a>
                 }
-                <a href="@ExportHref()" class="syn-admin__filter-export" download>⬇ @Umbraco.GetDictionaryValue("admin.action.export", "Exportar CSV")</a>
+                <a href="@ExportHref()" class="syn-admin__filter-export" download>⬇ @Umbraco.GetDictionaryValueOrDefault("admin.action.export", "Exportar CSV")</a>
             </form>
 
             @if (events.Count == 0)
@@ -96,11 +100,11 @@
                 <table class="syn-admin__table">
                     <thead>
                         <tr>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.when", "Cuándo") (UTC)</th>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.actor", "Actor")</th>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.action", "Acción")</th>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.resource", "Recurso")</th>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.outcome", "Resultado")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.when", "Cuándo") (UTC)</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.actor", "Actor")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.action", "Acción")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.resource", "Recurso")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.outcome", "Resultado")</th>
                             <th>Detail</th>
                             <th></th>
                         </tr>
@@ -117,9 +121,9 @@
                             };
                             var outcomeLabel = e.Outcome switch
                             {
-                                "success" => Umbraco.GetDictionaryValue("admin.status.success", "OK"),
-                                "failure" => Umbraco.GetDictionaryValue("admin.status.failure", "Fallo"),
-                                "partial" => Umbraco.GetDictionaryValue("admin.status.partial", "Parcial"),
+                                "success" => Umbraco.GetDictionaryValueOrDefault("admin.status.success", "OK"),
+                                "failure" => Umbraco.GetDictionaryValueOrDefault("admin.status.failure", "Fallo"),
+                                "partial" => Umbraco.GetDictionaryValueOrDefault("admin.status.partial", "Parcial"),
                                 _ => e.Outcome,
                             };
                             <tr>

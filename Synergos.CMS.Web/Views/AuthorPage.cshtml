@@ -38,10 +38,10 @@
     }
 
     <section class="syn-author-page__posts">
-        <h2 class="syn-author-page__posts-title">@Umbraco.GetDictionaryValue("blog.authorposts", "Artículos del autor")</h2>
+        <h2 class="syn-author-page__posts-title">@Umbraco.GetDictionaryValueOrDefault("blog.authorposts", "Artículos del autor")</h2>
         @if (posts.Count == 0)
         {
-            <p class="syn-author-page__empty">@Umbraco.GetDictionaryValue("blog.empty", "Aún no hay artículos.")</p>
+            <p class="syn-author-page__empty">@Umbraco.GetDictionaryValueOrDefault("blog.empty", "Aún no hay artículos.")</p>
         }
         else
         {

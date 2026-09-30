@@ -40,6 +40,37 @@ When the next LTS (14 LTS, 15 LTS, or later — Umbraco has not announced
 which) becomes available and stable for ≥3 months, a successor ADR may
 supersede this one.
 
+## Actualización — 2026-09-17: 13.13.1 → 13.15.1
+
+La decisión de arriba NO cambia: el pin sigue siendo el branch 13 LTS, y 14+ sigue
+necesitando un ADR sucesor. Lo que cambia es el parche dentro del branch, y queda
+anotado acá porque la versión exacta está escrita en la sección Decision.
+
+**Qué lo forzó.** `GHSA-wr57-hqmp-fgvh`, severidad **alta**, publicada el 2026-09-17:
+la Delivery API filtra contenido protegido por Public Access al expandir un Content
+Picker o un Multi-Node Tree Picker. Afecta `>= 12.0.0, < 13.15.1`. La auditoría de
+NuGet la convirtió en `NU1903` y **dejó el build de las cuatro soluciones en rojo**,
+que es como se descubrió — no por mirar avisos de seguridad, sino porque el build paró.
+
+**Exposición real: ninguna.** La Delivery API no está habilitada en este sitio; el
+propio Umbraco lo registra al arrancar («The Delivery API is not enabled»). Se sube
+igual, por dos razones: un build rojo bloquea el CI, y silenciar una advisory **alta**
+con una razón al lado es exactamente el error que documenta el párrafo siguiente.
+
+**De paso cerró otra, y ahí está la lección.** `GHSA-2qjj-h6wp-c7h7` (open redirect en
+Surface Controllers) estaba parcheada en **13.14.0 desde mayo de 2026**, y nadie la
+había recogido porque el `NoWarn` del repo afirmaba que NU1902 entero era «sin patch en
+branch 13.x». Esa frase era falsa para una de las dos advisories y la blindó cuatro
+meses. La que sí sigue sin patch en ninguna versión es `GHSA-54mj-vcvj-q3v5`, la que
+esta ADR ya nombraba — y ahora el `NoWarn` la nombra a ella y no a la familia.
+
+**Por qué 13.15.1 y no 13.16.2**, que es la última 13.x: es el **mínimo** que cierra las
+dos parcheables. Misma seguridad con menos superficie de cambio.
+
+**Verificado**: las cuatro soluciones en 0 avisos y 0 errores, las tres suites en verde
+(3274 tests) y el sitio servido — portada en 200 con su import map y su custom element
+montado.
+
 ## Consequences
 
 **Positive**

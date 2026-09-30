@@ -8,7 +8,7 @@
     Layout = null;
     var token = ViewData["Token"] as string ?? string.Empty;
     var errorCode = ViewData["ErrorCode"] as string;
-    var title = Umbraco.GetDictionaryValue("Account.TwoFactor.ChallengeTitle", "Verificación en 2 pasos");
+    var title = Umbraco.GetDictionaryValueOrDefault("Account.TwoFactor.ChallengeTitle", "Verificación en 2 pasos");
 }
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">

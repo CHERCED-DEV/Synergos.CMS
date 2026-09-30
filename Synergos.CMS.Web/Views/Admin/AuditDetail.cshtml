@@ -37,11 +37,11 @@
                 <table class="syn-admin__table">
                     <tbody>
                         <tr>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.when", "Cuándo") (UTC)</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.when", "Cuándo") (UTC)</th>
                             <td><time datetime="@evt.OccurredAtUtc.ToString("O")">@evt.OccurredAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</time></td>
                         </tr>
                         <tr>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.actor", "Actor")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.actor", "Actor")</th>
                             <td>
                                 <div>@evt.ActorName</div>
                                 @if (!string.IsNullOrWhiteSpace(evt.ActorEmail))
@@ -51,15 +51,15 @@
                             </td>
                         </tr>
                         <tr>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.action", "Acción")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.action", "Acción")</th>
                             <td><code>@evt.Action</code></td>
                         </tr>
                         <tr>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.resource", "Recurso")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.resource", "Recurso")</th>
                             <td><code>@evt.Resource</code></td>
                         </tr>
                         <tr>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.outcome", "Resultado")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.outcome", "Resultado")</th>
                             <td>
                                 @{
                                     var oclass = evt.Outcome switch {
@@ -98,10 +98,10 @@
                     <table class="syn-admin__table">
                         <thead>
                             <tr>
-                                <th>@Umbraco.GetDictionaryValue("admin.col.when", "Cuándo") (UTC)</th>
-                                <th>@Umbraco.GetDictionaryValue("admin.col.action", "Acción")</th>
-                                <th>@Umbraco.GetDictionaryValue("admin.col.resource", "Recurso")</th>
-                                <th>@Umbraco.GetDictionaryValue("admin.col.outcome", "Resultado")</th>
+                                <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.when", "Cuándo") (UTC)</th>
+                                <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.action", "Acción")</th>
+                                <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.resource", "Recurso")</th>
+                                <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.outcome", "Resultado")</th>
                                 <th></th>
                             </tr>
                         </thead>

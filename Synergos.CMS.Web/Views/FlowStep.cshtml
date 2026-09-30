@@ -58,8 +58,8 @@
              aria-valuemin="0"
              aria-valuemax="100">
             <span class="syn-flow-step__progress-label">
-                @Umbraco.GetDictionaryValue("flow.progress.step", "Paso") @displayStep
-                @Umbraco.GetDictionaryValue("flow.progress.of", "de") @totalSteps
+                @Umbraco.GetDictionaryValueOrDefault("flow.progress.step", "Paso") @displayStep
+                @Umbraco.GetDictionaryValueOrDefault("flow.progress.of", "de") @totalSteps
             </span>
         </div>
     }
@@ -84,11 +84,11 @@
                         data-action="flow-next">
                     @if (isTerminal || (totalSteps > 0 && currentIndex >= totalSteps - 1))
                     {
-                        @Umbraco.GetDictionaryValue("flow.finish", "Finalizar")
+                        @Umbraco.GetDictionaryValueOrDefault("flow.finish", "Finalizar")
                     }
                     else
                     {
-                        @Umbraco.GetDictionaryValue("flow.next", "Siguiente")
+                        @Umbraco.GetDictionaryValueOrDefault("flow.next", "Siguiente")
                     }
                 </button>
             </form>
@@ -100,7 +100,7 @@
                 <button type="submit"
                         class="syn-flow-step__cancel"
                         data-action="flow-cancel">
-                    @Umbraco.GetDictionaryValue("flow.cancel", "Cancelar")
+                    @Umbraco.GetDictionaryValueOrDefault("flow.cancel", "Cancelar")
                 </button>
             </form>
         }

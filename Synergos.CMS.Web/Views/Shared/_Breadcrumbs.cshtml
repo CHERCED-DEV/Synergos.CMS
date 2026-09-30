@@ -11,6 +11,8 @@
 @using Umbraco.Cms.Core.Models.PublishedContent
 @using Umbraco.Extensions
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     if (Model is null) { return; }
     var trail = Model.AncestorsOrSelf()
         .Reverse()
@@ -21,9 +23,10 @@
     var siteRoot = Model.AncestorOrSelf("siteRoot") ?? Model.Root();
     var canonicalHost = siteRoot?.Value<string>("canonicalHostname");
     var siteUrl = !string.IsNullOrWhiteSpace(canonicalHost) ? $"https://{canonicalHost}" : null;
+#nullable enable
     string Json(object? value) => System.Text.Json.JsonSerializer.Serialize(value);
 }
-<nav class="syn-breadcrumbs" aria-label="@Umbraco.GetDictionaryValue("breadcrumbs.aria.label", "Breadcrumb")">
+<nav class="syn-breadcrumbs" aria-label="@Umbraco.GetDictionaryValueOrDefault("breadcrumbs.aria.label", "Breadcrumb")">
     <ol class="syn-breadcrumbs__list">
         @for (var i = 0; i < trail.Count; i++)
         {

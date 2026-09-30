@@ -129,7 +129,7 @@
     }
 </head>
 <body class="syn-page syn-page--chrome-@renderCtx.ChromeMode syn-page--header-@renderCtx.HeaderMode syn-page--footer-@renderCtx.FooterMode">
-    <a class="syn-skip-link" href="#main-content">@Umbraco.GetDictionaryValue("common.aria.skiptocontent", "Skip to main content")</a>
+    <a class="syn-skip-link" href="#main-content">@Umbraco.GetDictionaryValueOrDefault("common.aria.skiptocontent", "Skip to main content")</a>
     @if (globalAlert is not null)
     {
         @await Html.PartialAsync("_GlobalAlert", globalAlert)
@@ -218,7 +218,7 @@
         </main>
         @if (showAside)
         {
-            <aside class="syn-site-aside" aria-label="@Umbraco.GetDictionaryValue("common.aria.sidebar", "Sidebar")">
+            <aside class="syn-site-aside" aria-label="@Umbraco.GetDictionaryValueOrDefault("common.aria.sidebar", "Sidebar")">
                 @await Html.GetBlockGridHtmlAsync(customAsideBlocks!)
             </aside>
         }

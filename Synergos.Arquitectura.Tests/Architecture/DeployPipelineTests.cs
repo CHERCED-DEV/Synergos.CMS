@@ -28,6 +28,7 @@ namespace Synergos.CMS.Tests.Architecture;
 ///   nadie se entera de que lo que se quiso desplegar no está.</item>
 /// </list>
 /// </remarks>
+[Collection(ComposeExclusivo.Nombre)]
 public sealed class DeployPipelineTests
 {
     private static string RepoRoot()

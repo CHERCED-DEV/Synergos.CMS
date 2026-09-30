@@ -19,12 +19,15 @@
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.FormsSettings> FormsOptions
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     var endpoint = Model.Value<string>("formEndpoint");
     var internalKey = Model.Value<string>("formInternalKey");
     var fields = Model.Value<BlockListModel>("fields");
     if (fields == null || !fields.Any()) { return; }
 
     var settings = FormsOptions.Value;
+#nullable enable
     string? action = null;
     var isInternal = false;
     if (!string.IsNullOrWhiteSpace(internalKey))
@@ -53,7 +56,9 @@
         string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
+#nullable enable
     string? feedbackKind = null;
+#nullable enable
     string? feedbackMessage = null;
     if (isInternal)
     {
@@ -63,13 +68,13 @@
             if (!string.IsNullOrWhiteSpace(query[settings.SuccessQueryParam]))
             {
                 feedbackKind = "success";
-                feedbackMessage = Umbraco.GetDictionaryValue("Form.Messages.Success",
+                feedbackMessage = Umbraco.GetDictionaryValueOrDefault("Form.Messages.Success",
                     "¡Gracias! Tu mensaje ha sido enviado.");
             }
             else if (!string.IsNullOrWhiteSpace(query[settings.ErrorQueryParam]))
             {
                 feedbackKind = "error";
-                feedbackMessage = Umbraco.GetDictionaryValue("Form.Messages.Error",
+                feedbackMessage = Umbraco.GetDictionaryValueOrDefault("Form.Messages.Error",
                     "Ocurrió un error. Por favor inténtalo de nuevo.");
             }
         }

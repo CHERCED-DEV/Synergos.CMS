@@ -39,16 +39,16 @@
            href="@startHref"
            data-action="flow-start"
            data-flow-key="@flowKey">
-            @Umbraco.GetDictionaryValue("flow.start", "Comenzar")
+            @Umbraco.GetDictionaryValueOrDefault("flow.start", "Comenzar")
         </a>
         <p class="syn-flow-definition__meta">
-            @Umbraco.GetDictionaryValue("flow.steps", "Pasos"): @stepCount
+            @Umbraco.GetDictionaryValueOrDefault("flow.steps", "Pasos"): @stepCount
         </p>
     }
     else
     {
         <p class="syn-flow-definition__empty">
-            @Umbraco.GetDictionaryValue("flow.empty", "Este flow aún no tiene pasos publicados.")
+            @Umbraco.GetDictionaryValueOrDefault("flow.empty", "Este flow aún no tiene pasos publicados.")
         </p>
     }
 </section>

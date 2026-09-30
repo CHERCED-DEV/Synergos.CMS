@@ -36,14 +36,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3764 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3771 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2644 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 667 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 453 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
+   | `Synergos.Arquitectura.Tests` | 458 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -53,7 +53,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **54 de los 75 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **56 de los 77 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -150,6 +150,12 @@ del branch 13.x. Aceptado. Es `GHSA-54mj-vcvj-q3v5`, y su rango
 vulnerable —`(, 16.3.3]`— es lo que hace verdad ese «sin patch»: no hay
 versión de la rama 13 que lo cierre.
 
+> **Y la razón escrita al lado de un censo blinda lo que nombra** (17-sep). La frase de antes decía
+> que TODO el NU1902 era «sin patch en 13.x», y tapó cuatro meses el open redirect
+> `GHSA-2qjj-h6wp-c7h7` en Surface Controllers, parcheado desde 13.14.0. Si cae otra moderate bajo
+> esa línea, se COMPRUEBA si tiene parche antes de aceptarla.
+
+
 > **Y NU1903 NO se aceptó, que es la mitad que importa** (#149). Apareció
 > `GHSA-wr57-hqmp-fgvh` —**high**, rango `[12.0.0, 13.15.1)`— y con
 > `TreatWarningsAsErrors` puesto desde el #134 **el build se puso rojo sin
@@ -160,7 +166,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3764**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3771**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -199,8 +205,8 @@ Synergos.CMS/
 │   └── Dto/ Filters/ Proxies/   …y su fontanería
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
 ├── Synergos.Arquitectura.Tests/ LOS GATES: segregación (17) + molde (12)
-│   └── Architecture/            + capas (8) + imagen de contenedor (6)
-│                                + compose (13) + despliegue (18, ADR 0133)
+│   └── Architecture/            + capas (8) + imagen de contenedor (7)
+│                                + compose (14) + despliegue (18, ADR 0133)
 │                                + molde del vertical (13, doc 12)
 │                                + seudónimo único (3, #120)
 │                                + portada de arranque (5, #119)
@@ -423,7 +429,7 @@ Dos escrituras obligatorias **en el mismo commit** que las enseñó:
 ### 4.2 Cambio de runtime C# / Razor
 
 1. Seguir el grafo de dependencias estricto.
-2. `dotnet build Synergos.CMS/Synergos.CMS.Web/Synergos.CMS.Web.csproj
+2. `dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj
     -v quiet --no-dependencies` — esperar 0 CS errors. Los
    warnings MSB3021 de file-locks son esperados mientras el Web
    corre (PID locking DLLs).
@@ -1520,7 +1526,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **54 de los 75 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **56 de los 77 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -2653,6 +2659,39 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   ticket y no se tomó acá. **La pregunta que lo caza:** *¿qué devuelve la capacidad al SEGUNDO
   intento con la misma llave?* — y se contesta con el proceso vivo, porque un doble contesta lo
   que uno cree.
+- `feedback_a_coalesced_absence_asserts_when_the_rule_only_guards_the_sign` —
+  **un `?? 0` en el borde no es inofensivo por sí solo ni dañino por sí solo: lo
+  decide la regla que hay debajo. Si la regla mira sólo el signo, la ausencia
+  entra por el hueco convertida en una afirmación.** Medido en `Api.Inventory`:
+  el borde hacía `req.OnHand ?? 0` y `Declare` rechazaba los negativos y aceptaba
+  el cero, así que un `POST /v1/items` **sin** `onHand` creaba el ítem afirmando
+  «conté y no hay ninguna» y contestaba **201**. El contrato dice en su propio
+  XML-doc que `onHand` es absoluto —«conté y hay 47»—, o sea que omitirlo es
+  exactamente no haber contado. Y era irreversible por la puerta que lo creó:
+  `subject_taken` bloquea volver a declarar el mismo `Ref`.
+  **El `?? 0` NO es el defecto, y por eso no se barre con un grep.** De los 21 del
+  árbol, **19** son `Math.Max(0, offset ?? 0)` de paginación —no mandar offset sí
+  significa primera página— y otro es `req.Quantity ?? 0` en el carrito, donde
+  `CheckQuantity` rechaza `<= 0` con el comentario que nombra este mismo riesgo.
+  Lo que separa a los inofensivos del defecto es **si la regla de abajo rechaza el
+  valor inventado**. Un gate que prohibiera el patrón marcaría veinte falsos.
+  **La contradicción interna es el olor que sí se puede buscar**: la misma
+  capacidad, en el mismo fichero y sesenta líneas más abajo, ya trataba esta
+  ausencia al revés — `/adjust` rechaza con `adjust_required` y con
+  `ambiguous_adjust`. Dos semánticas para el mismo nombre de campo dentro de un
+  servicio es la señal, y se ve leyendo el fichero entero en vez de la línea.
+  **Y el reparto es la razón de que nadie lo viera.** `InventoryServiceTests` tiene
+  cuarenta y pico de casos y todos entran por `svc.Declare(subject, onHand, …)` con
+  el valor explícito; el `?? 0` vivía una capa más arriba, donde esta suite **no
+  llega**: ninguna capacidad tiene tests de endpoint. Las dos mitades en verde y el
+  hueco justo en la costura.
+  **Por eso el arreglo baja la regla al servicio en vez de ponerla en el borde**,
+  aunque su hermano `/adjust` decida arriba: ahí es donde §0.B dice que la
+  capacidad dice NO, y es el único lado donde el gate puede vivir sin meter
+  infraestructura de test HTTP que hoy no existe. Y el gate va en **las dos
+  direcciones** —nulo se rechaza, cero explícito se sigue aceptando—, porque
+  declarar «no me queda ninguna» es legítimo y prohibirlo habría cambiado un
+  defecto que miente por uno que estorba.
 
 ## 6. Prohibiciones explícitas
 
@@ -2713,13 +2752,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3764 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3771 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2644
-dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 667
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 453
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 458
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -3157,8 +3196,8 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (137 endpoints, 242 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3764 tests, gates de
+**Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3771 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
@@ -3227,7 +3266,7 @@ segregación y molde en verde.
 > `IOrderTrackingService`, `IIdentityTokenIssuer`). Qué gana en cada par es decisión de producto y
 > está abierta; ningún gate vigila los pares todavía.
 
-> **Los 242 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
+> **Los 243 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
 > y nadie la había vuelto a contar. Cuenta los códigos **literales distintos**
 > que las veinte construyen —el primer argumento de un `Rejection.*`, con
 > `{CodePrefix}` resuelto—, y por eso **excluye dos cosas que sí existen**: los

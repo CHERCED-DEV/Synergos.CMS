@@ -27,7 +27,7 @@
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
 <head>
     @await Html.PartialAsync("_AdminHead")
-    <title>@Umbraco.GetDictionaryValue("admin.nav.members", "Miembros") · Synergos</title>
+    <title>@Umbraco.GetDictionaryValueOrDefault("admin.nav.members", "Miembros") · Synergos</title>
 </head>
 <body class="syn-admin">
     @await Html.PartialAsync("_AdminTopbar")
@@ -36,7 +36,7 @@
         <div class="syn-admin__container">
             <header class="syn-admin__page-header">
                 <h1 class="syn-admin__page-title">
-                    @Umbraco.GetDictionaryValue("admin.nav.members", "Miembros")
+                    @Umbraco.GetDictionaryValueOrDefault("admin.nav.members", "Miembros")
                     <small class="syn-admin__page-count">· @roster.TotalCount</small>
                 </h1>
                 <p class="syn-admin__page-subtitle">
@@ -51,7 +51,7 @@
                     <label class="syn-admin__filter">
                         <span class="syn-admin__filter-label">Role</span>
                         <select name="role" class="syn-admin__filter-select">
-                            <option value="">— @Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar") —</option>
+                            <option value="">— @Umbraco.GetDictionaryValueOrDefault("admin.action.clear", "Limpiar") —</option>
                             @foreach (var role in allRoles)
                             {
                                 var sel = string.Equals(role, roleFilter, StringComparison.OrdinalIgnoreCase);
@@ -59,10 +59,10 @@
                             }
                         </select>
                     </label>
-                    <button type="submit" class="syn-admin__filter-submit">@Umbraco.GetDictionaryValue("admin.action.applyfilters", "Aplicar filtros")</button>
+                    <button type="submit" class="syn-admin__filter-submit">@Umbraco.GetDictionaryValueOrDefault("admin.action.applyfilters", "Aplicar filtros")</button>
                     @if (!string.IsNullOrWhiteSpace(roleFilter))
                     {
-                        <a href="/admin/members" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar")</a>
+                        <a href="/admin/members" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValueOrDefault("admin.action.clear", "Limpiar")</a>
                     }
                 </form>
             }
@@ -78,13 +78,13 @@
                 <table class="syn-admin__table">
                     <thead>
                         <tr>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.email", "Email")</th>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.name", "Nombre")</th>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.roles", "Roles")</th>
-                            <th class="syn-admin__col-num">@Umbraco.GetDictionaryValue("admin.col.lastlogin", "Último login")</th>
-                            <th class="syn-admin__col-num">@Umbraco.GetDictionaryValue("admin.col.created", "Creado")</th>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.state", "Estado")</th>
-                            <th>@Umbraco.GetDictionaryValue("admin.col.actions", "Acciones")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.email", "Email")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.name", "Nombre")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.roles", "Roles")</th>
+                            <th class="syn-admin__col-num">@Umbraco.GetDictionaryValueOrDefault("admin.col.lastlogin", "Último login")</th>
+                            <th class="syn-admin__col-num">@Umbraco.GetDictionaryValueOrDefault("admin.col.created", "Creado")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.state", "Estado")</th>
+                            <th>@Umbraco.GetDictionaryValueOrDefault("admin.col.actions", "Acciones")</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -115,21 +115,21 @@
                                 <td>
                                     @if (m.IsLockedOut)
                                     {
-                                        <span class="syn-admin__status syn-admin__status--danger">@Umbraco.GetDictionaryValue("admin.status.locked", "Bloqueado")</span>
+                                        <span class="syn-admin__status syn-admin__status--danger">@Umbraco.GetDictionaryValueOrDefault("admin.status.locked", "Bloqueado")</span>
                                     }
                                     else if (!m.IsApproved)
                                     {
-                                        <span class="syn-admin__status syn-admin__status--warn">@Umbraco.GetDictionaryValue("admin.status.unconfirmed", "Sin confirmar")</span>
+                                        <span class="syn-admin__status syn-admin__status--warn">@Umbraco.GetDictionaryValueOrDefault("admin.status.unconfirmed", "Sin confirmar")</span>
                                     }
                                     else
                                     {
-                                        <span class="syn-admin__status syn-admin__status--ok">@Umbraco.GetDictionaryValue("admin.status.ok", "OK")</span>
+                                        <span class="syn-admin__status syn-admin__status--ok">@Umbraco.GetDictionaryValueOrDefault("admin.status.ok", "OK")</span>
                                     }
                                 </td>
                                 <td>
                                     @{
-                                        var lockLabel = Umbraco.GetDictionaryValue("admin.action.lock", "Bloquear");
-                                        var unlockLabel = Umbraco.GetDictionaryValue("admin.action.unlock", "Desbloquear");
+                                        var lockLabel = Umbraco.GetDictionaryValueOrDefault("admin.action.lock", "Bloquear");
+                                        var unlockLabel = Umbraco.GetDictionaryValueOrDefault("admin.action.unlock", "Desbloquear");
                                     }
                                     @if (m.IsLockedOut)
                                     {
@@ -194,8 +194,8 @@
 
                 @if (roster.TotalPages > 1)
                 {
-                    var prevLabel = "← " + Umbraco.GetDictionaryValue("admin.page.previous", "Anterior");
-                    var nextLabel = Umbraco.GetDictionaryValue("admin.page.next", "Siguiente") + " →";
+                    var prevLabel = "← " + Umbraco.GetDictionaryValueOrDefault("admin.page.previous", "Anterior");
+                    var nextLabel = Umbraco.GetDictionaryValueOrDefault("admin.page.next", "Siguiente") + " →";
                     <nav class="syn-admin__pagination" aria-label="Paginación">
                         @if (roster.HasPrev)
                         {
@@ -233,8 +233,8 @@
                 El Member 2FA secret + recovery codes se borran.
             </p>
             <div class="syn-admin__dialog-actions">
-                <button type="button" data-dialog-cancel class="syn-admin__action syn-admin__action--ghost">@Umbraco.GetDictionaryValue("admin.action.cancel", "Cancelar")</button>
-                <button type="submit" class="syn-admin__action syn-admin__action--reject">🗑 @Umbraco.GetDictionaryValue("admin.action.delete", "Eliminar")</button>
+                <button type="button" data-dialog-cancel class="syn-admin__action syn-admin__action--ghost">@Umbraco.GetDictionaryValueOrDefault("admin.action.cancel", "Cancelar")</button>
+                <button type="submit" class="syn-admin__action syn-admin__action--reject">🗑 @Umbraco.GetDictionaryValueOrDefault("admin.action.delete", "Eliminar")</button>
             </div>
         </form>
     </dialog>
@@ -260,7 +260,7 @@
                 Confirma solo si tienes una solicitud documentada del data subject.
             </p>
             <div class="syn-admin__dialog-actions">
-                <button type="button" data-dialog-cancel class="syn-admin__action syn-admin__action--ghost">@Umbraco.GetDictionaryValue("admin.action.cancel", "Cancelar")</button>
+                <button type="button" data-dialog-cancel class="syn-admin__action syn-admin__action--ghost">@Umbraco.GetDictionaryValueOrDefault("admin.action.cancel", "Cancelar")</button>
                 <button type="submit" class="syn-admin__action syn-admin__action--reject">🛡 Procesar RTBF</button>
             </div>
         </form>

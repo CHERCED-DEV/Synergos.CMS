@@ -21,7 +21,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     @* Denegar no es contenido indexable. *@
     <meta name="robots" content="noindex, nofollow" />
-    <title>@Umbraco.GetDictionaryValue("Admin.AccessDenied.Title", "Sin permiso") · Synergos</title>
+    <title>@Umbraco.GetDictionaryValueOrDefault("Admin.AccessDenied.Title", "Sin permiso") · Synergos</title>
     <style>
         :root { color-scheme: light dark; }
         body {
@@ -88,21 +88,21 @@
 <body>
     <main class="denied">
         <p class="denied__badge">403</p>
-        <h1 class="denied__title">@Umbraco.GetDictionaryValue("Admin.AccessDenied.Title", "Sin permiso")</h1>
+        <h1 class="denied__title">@Umbraco.GetDictionaryValueOrDefault("Admin.AccessDenied.Title", "Sin permiso")</h1>
         <p class="denied__body">
-            @Umbraco.GetDictionaryValue(
+            @Umbraco.GetDictionaryValueOrDefault(
                 "Admin.AccessDenied.Body",
                 "Tu sesión está iniciada, pero esta cuenta no tiene permiso para esta sección. Si crees que debería tenerlo, pídelo a quien administre los roles.")
         </p>
         <div class="denied__actions">
             <a class="denied__link denied__link--primary" href="/">
-                @Umbraco.GetDictionaryValue("Admin.AccessDenied.Home", "Volver al inicio")
+                @Umbraco.GetDictionaryValueOrDefault("Admin.AccessDenied.Home", "Volver al inicio")
             </a>
             @* La salida real del callejón: entrar con OTRA cuenta. Sin esto, a quien llegó aquí
                solo le queda borrar cookies a mano. *@
             <form class="denied__logout" method="post" action="/account/logout">
                 <button type="submit">
-                    @Umbraco.GetDictionaryValue("Admin.AccessDenied.SwitchAccount", "Entrar con otra cuenta")
+                    @Umbraco.GetDictionaryValueOrDefault("Admin.AccessDenied.SwitchAccount", "Entrar con otra cuenta")
                 </button>
             </form>
         </div>

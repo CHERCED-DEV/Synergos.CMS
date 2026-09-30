@@ -15,6 +15,7 @@ namespace Synergos.CMS.Tests.Architecture;
 /// sigue registrando, solo que otra vez con la fuerza que el llamador diga. El archivo volvería a
 /// mentir en silencio, que es exactamente lo que #42 acaba de arreglar.</para>
 /// </remarks>
+[Collection(ComposeExclusivo.Nombre)]
 public sealed class IdentityGateTests
 {
     private static string RepoRoot()

@@ -1,6 +1,8 @@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     // apiBase: default /api/ehr si el editor no lo setea (NO mandatory).
     var apiBase = Model.Value<string>("apiBase");
     if (string.IsNullOrWhiteSpace(apiBase)) { apiBase = "/api/ehr"; }
@@ -17,6 +19,7 @@
     var patient = Model.Value<string>("patient");
     if (string.IsNullOrWhiteSpace(patient)) { patient = "pat-jorge-medina"; }
 
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["apiBase"] = apiBase,

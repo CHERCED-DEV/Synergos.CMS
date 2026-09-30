@@ -14,7 +14,7 @@
     Layout = null;
     var returnUrl = ViewData["ReturnUrl"] as string ?? "/";
     var errorCode = ViewData["ErrorCode"] as string;
-    var title = Umbraco.GetDictionaryValue("Account.Login.Title", "Iniciar sesión");
+    var title = Umbraco.GetDictionaryValueOrDefault("Account.Login.Title", "Iniciar sesión");
 }
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName" data-theme="dark">
@@ -31,9 +31,9 @@
             {
                 var msg = errorCode switch
                 {
-                    "invalid-credentials" => Umbraco.GetDictionaryValue("Account.Login.Error.InvalidCredentials", "Email o contraseña incorrectos."),
-                    "locked-out" => Umbraco.GetDictionaryValue("Account.Login.Error.LockedOut", "Cuenta bloqueada temporalmente."),
-                    _ => Umbraco.GetDictionaryValue("Account.Login.Error.Unknown", "Ocurrió un error. Inténtalo de nuevo."),
+                    "invalid-credentials" => Umbraco.GetDictionaryValueOrDefault("Account.Login.Error.InvalidCredentials", "Email o contraseña incorrectos."),
+                    "locked-out" => Umbraco.GetDictionaryValueOrDefault("Account.Login.Error.LockedOut", "Cuenta bloqueada temporalmente."),
+                    _ => Umbraco.GetDictionaryValueOrDefault("Account.Login.Error.Unknown", "Ocurrió un error. Inténtalo de nuevo."),
                 };
                 <p class="syn-account__error" role="alert" aria-live="polite">@msg</p>
             }
@@ -42,7 +42,7 @@
                 <input type="hidden" name="returnUrl" value="@returnUrl" />
 
                 <div class="syn-account__field">
-                    <label for="syn-login-email">@Umbraco.GetDictionaryValue("Account.Login.EmailLabel", "Email")</label>
+                    <label for="syn-login-email">@Umbraco.GetDictionaryValueOrDefault("Account.Login.EmailLabel", "Email")</label>
                     <input id="syn-login-email"
                            type="email"
                            name="emailOrUsername"
@@ -53,7 +53,7 @@
                 </div>
 
                 <div class="syn-account__field">
-                    <label for="syn-login-password">@Umbraco.GetDictionaryValue("Account.Login.PasswordLabel", "Contraseña")</label>
+                    <label for="syn-login-password">@Umbraco.GetDictionaryValueOrDefault("Account.Login.PasswordLabel", "Contraseña")</label>
                     <input id="syn-login-password"
                            type="password"
                            name="password"
@@ -64,24 +64,24 @@
                 </div>
 
                 <p class="syn-account__forgot-link">
-                    <a href="/account/forgot-password">@Umbraco.GetDictionaryValue("Account.Login.ForgotPassword", "¿Olvidaste tu contraseña?")</a>
+                    <a href="/account/forgot-password">@Umbraco.GetDictionaryValueOrDefault("Account.Login.ForgotPassword", "¿Olvidaste tu contraseña?")</a>
                 </p>
 
                 <div class="syn-account__field syn-account__field--checkbox">
                     <label>
                         <input type="checkbox" name="rememberMe" value="true" />
-                        @Umbraco.GetDictionaryValue("Account.Login.RememberMe", "Recordar mi sesión")
+                        @Umbraco.GetDictionaryValueOrDefault("Account.Login.RememberMe", "Recordar mi sesión")
                     </label>
                 </div>
 
                 <button type="submit" class="syn-account__submit">
-                    @Umbraco.GetDictionaryValue("Account.Login.Submit", "Iniciar sesión")
+                    @Umbraco.GetDictionaryValueOrDefault("Account.Login.Submit", "Iniciar sesión")
                 </button>
             </form>
 
             <p class="syn-account__alt">
                 <a href="/account/register">
-                    @Umbraco.GetDictionaryValue("Account.Login.NeedAccount", "¿No tienes cuenta? Registrarse")
+                    @Umbraco.GetDictionaryValueOrDefault("Account.Login.NeedAccount", "¿No tienes cuenta? Registrarse")
                 </a>
             </p>
         </div>

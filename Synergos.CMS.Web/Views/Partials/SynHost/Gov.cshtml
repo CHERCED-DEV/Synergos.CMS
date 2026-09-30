@@ -1,6 +1,8 @@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     // apiBase: default /api/gov si el editor no lo setea (NO mandatory).
     var apiBase = Model.Value<string>("apiBase");
     if (string.IsNullOrWhiteSpace(apiBase)) { apiBase = "/api/gov"; }
@@ -17,6 +19,7 @@
     // porque la app se monta en esta misma página. Si no hay sesión, el API responde 401
     // y la app ofrece iniciar sesión.
 
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["apiBase"] = apiBase,

@@ -14,14 +14,14 @@
 }
 <section class="syn-post-category syn-blog-tag">
     <header class="syn-post-category__header">
-        <p class="syn-post__category">@Umbraco.GetDictionaryValue("blog.tag", "Tag")</p>
+        <p class="syn-post__category">@Umbraco.GetDictionaryValueOrDefault("blog.tag", "Tag")</p>
         <h1 class="syn-post-category__title">#@tag</h1>
         <p class="syn-post-category__description">
             @{
                 var count = posts.Count;
                 var label = count == 1
-                    ? Umbraco.GetDictionaryValue("blog.article", "artículo")
-                    : Umbraco.GetDictionaryValue("blog.articles", "artículos");
+                    ? Umbraco.GetDictionaryValueOrDefault("blog.article", "artículo")
+                    : Umbraco.GetDictionaryValueOrDefault("blog.articles", "artículos");
             }
             @count @label
         </p>
@@ -29,7 +29,7 @@
 
     @if (posts.Count == 0)
     {
-        <p class="syn-post-category__empty">@Umbraco.GetDictionaryValue("blog.empty", "Aún no hay artículos.")</p>
+        <p class="syn-post-category__empty">@Umbraco.GetDictionaryValueOrDefault("blog.empty", "Aún no hay artículos.")</p>
     }
     else
     {

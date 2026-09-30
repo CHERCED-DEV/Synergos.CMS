@@ -5,9 +5,12 @@
 *@
 @using Synergos.CMS.Interfaces
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     Layout = null;
     var pageData = ViewData["Page"] as PendingCommentsPage
         ?? new PendingCommentsPage(Array.Empty<Comment>(), 1, 25, 0);
+#nullable enable
     var nodeIdFilter = ViewData["NodeIdFilter"] as int?;
     var messageCode = ViewData["MessageCode"] as string;
     var moderatorName = ViewData["ModeratorName"] as string ?? "—";
@@ -39,6 +42,7 @@
                 @* Format: "{verb}-{count}" o "rejected-{count}-undo:{token}".
                    El token se extrae con substring; el resto se splitea normal. *@
                 var verbCountPart = messageCode;
+#nullable enable
                 string? undoToken = null;
                 var undoIdx = messageCode.IndexOf("-undo:", StringComparison.Ordinal);
                 if (undoIdx > 0)
@@ -63,7 +67,7 @@
                                   action="/admin/moderation/comments/bulk-undo-reject/@undoToken"
                                   class="syn-admin__flash-action">
                                 @Html.AntiForgeryToken()
-                                <button type="submit" class="syn-admin__flash-button">@Umbraco.GetDictionaryValue("admin.action.undo", "↶ Deshacer")</button>
+                                <button type="submit" class="syn-admin__flash-button">@Umbraco.GetDictionaryValueOrDefault("admin.action.undo", "↶ Deshacer")</button>
                             </form>
                         }
                     }
@@ -94,7 +98,7 @@
                 <button type="submit" class="syn-admin__filter-submit">Aplicar</button>
                 @if (nodeIdFilter.HasValue)
                 {
-                    <a href="/admin/moderation/comments" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValue("admin.action.clear", "Limpiar")</a>
+                    <a href="/admin/moderation/comments" class="syn-admin__filter-clear">@Umbraco.GetDictionaryValueOrDefault("admin.action.clear", "Limpiar")</a>
                 }
             </form>
 
@@ -137,12 +141,12 @@
                             <button type="button"
                                     data-bulk-action="approve"
                                     class="syn-admin__action syn-admin__action--approve">
-                                ✓ @Umbraco.GetDictionaryValue("admin.action.bulkapprove", "Aprobar seleccionados")
+                                ✓ @Umbraco.GetDictionaryValueOrDefault("admin.action.bulkapprove", "Aprobar seleccionados")
                             </button>
                             <button type="button"
                                     data-bulk-action="reject"
                                     class="syn-admin__action syn-admin__action--reject">
-                                ✗ @Umbraco.GetDictionaryValue("admin.action.bulkreject", "Rechazar seleccionados")
+                                ✗ @Umbraco.GetDictionaryValueOrDefault("admin.action.bulkreject", "Rechazar seleccionados")
                             </button>
                         </div>
                     </div>
@@ -174,7 +178,7 @@
                                       class="syn-admin__item-form">
                                     @Html.AntiForgeryToken()
                                     <button type="submit" class="syn-admin__action syn-admin__action--approve">
-                                        ✓ @Umbraco.GetDictionaryValue("admin.action.approve", "Aprobar")
+                                        ✓ @Umbraco.GetDictionaryValueOrDefault("admin.action.approve", "Aprobar")
                                     </button>
                                 </form>
                                 <form method="post"
@@ -182,7 +186,7 @@
                                       class="syn-admin__item-form">
                                     @Html.AntiForgeryToken()
                                     <button type="submit" class="syn-admin__action syn-admin__action--reject">
-                                        ✗ @Umbraco.GetDictionaryValue("admin.action.reject", "Rechazar")
+                                        ✗ @Umbraco.GetDictionaryValueOrDefault("admin.action.reject", "Rechazar")
                                     </button>
                                 </form>
                                 <form method="post"
@@ -191,7 +195,7 @@
                                     @Html.AntiForgeryToken()
                                     <button type="submit" class="syn-admin__action syn-admin__action--spam"
                                             title="Marcar como spam — elimina + entrena futuro filtro">
-                                        🚫 @Umbraco.GetDictionaryValue("admin.action.spam", "Spam")
+                                        🚫 @Umbraco.GetDictionaryValueOrDefault("admin.action.spam", "Spam")
                                     </button>
                                 </form>
                             </footer>

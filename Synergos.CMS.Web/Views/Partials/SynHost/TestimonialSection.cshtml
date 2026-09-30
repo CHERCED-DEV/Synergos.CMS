@@ -16,6 +16,8 @@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     // El componente Angular lee config.items como ARRAY (m(config.items) exige
     // Array.isArray), así que parseamos el JSON del editor a un JsonElement
     // (array real) antes de meterlo en Props; el emitter lo serializa como array.
@@ -28,6 +30,7 @@
     }
     var theme = Model.Value<string>("theme");
     var headingText = Model.Value<string>("headingText");
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["headingText"] = headingText,
@@ -38,7 +41,7 @@
         heading: headingText,
         itemsJson: itemsJson,
         theme: theme,
-        ariaLabel: Umbraco.GetDictionaryValue("Synhost.Testimonials.Aria", "Testimonios"));
+        ariaLabel: Umbraco.GetDictionaryValueOrDefault("Synhost.Testimonials.Aria", "Testimonios"));
     var request = new Synergos.CMS.Interfaces.SynHostEmitRequest(
         BlockAlias: "testimonial-section",   // = registry name → ByName → bundle + <synergos-testimonial-section>
         Props: props,

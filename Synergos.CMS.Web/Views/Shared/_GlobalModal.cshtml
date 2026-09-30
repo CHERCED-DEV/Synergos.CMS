@@ -18,7 +18,7 @@
     <div class="syn-global-modal__inner">
         <button type="button"
                 class="syn-global-modal__close"
-                aria-label="@Umbraco.GetDictionaryValue("modal.aria.close", "Cerrar")">&times;</button>
+                aria-label="@Umbraco.GetDictionaryValueOrDefault("modal.aria.close", "Cerrar")">&times;</button>
         @if (hasImage)
         {
             <figure class="syn-global-modal__media">

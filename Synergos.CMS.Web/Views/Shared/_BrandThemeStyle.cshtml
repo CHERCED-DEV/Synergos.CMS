@@ -34,11 +34,14 @@
 @using Synergos.CMS.Application.Dto.Responses
 @model BrandThemeStyleModel
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     if (Model is null) { return; }
     var theme = Model.Theme;
     var variant = Model.PageThemeVariant ?? "light";
 
     var rootVars = new List<string>();
+#nullable enable
     void Add(string name, string? value)
     {
         if (!string.IsNullOrWhiteSpace(value))
@@ -48,6 +51,7 @@
     }
     // Parsea un hex (#RRGGBB / #RGB) a triplete "R G B" para los channels
     // theme-aware. Devuelve null si no es hex válido (mantiene el default).
+#nullable enable
     string? RgbTriplet(string? hex)
     {
         if (string.IsNullOrWhiteSpace(hex)) { return null; }

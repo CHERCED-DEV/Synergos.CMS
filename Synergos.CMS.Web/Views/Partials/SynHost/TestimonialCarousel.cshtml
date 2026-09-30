@@ -1,6 +1,8 @@
 ﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
+#nullable enable
     // El componente Angular (sg-testimonial-carousel) lee config.testimonials como
     // ARRAY (normalizeTestimonials exige Array.isArray) con claves quote/author/role/
     // avatar/rating — el contrato de la UI es la fuente de verdad. Parseamos el JSON
@@ -18,6 +20,7 @@
     // el default del componente. El componente pausa en hover/focus y respeta reduced-motion.
     var intervalStr = Model.Value<string>("autoplayInterval");
     var autoplayOff = int.TryParse(intervalStr, out var iv) && iv == 0;
+#nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
         ["testimonials"] = testimonials,
