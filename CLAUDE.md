@@ -119,12 +119,12 @@
     identidad por el canal de runtime; cómo se arma por dentro es del código. A una **pieza** le
     llegan su contenido y sus decisiones, y **monta su gemela del design system, nunca la
     reimplementa** — la **regla de los dos pisos**. `configOverride`, el JSON libre del editor que
-    pisa todo, es hoy la puerta contraria. Hacia dónde, todo **Propuesto**: resolver tipado por
-    elemento (ADR 0135), diccionario por secciones declaradas (0136), configuración de negocio por
-    funcionalidad (0137), coordinación de página por eventos DOM (0138) y bundles con varias
-    entradas colocables frente a 0113 (0139). Describen el rumbo, no lo que ya está — salvo el
-    piloto de la 0135 (#173): cinco piezas con resolver tipado, cuyo contrato vive en
-    `docs/contracts/elementos-synhost.json`.
+    pisa todo, es hoy la puerta contraria. El **resolver tipado por elemento** (ADR 0135) está
+    **Aceptado** (2026-09-30) y se escala a todas las piezas (#180): qué elementos lo tienen no se
+    escribe acá, lo lista `docs/contracts/elementos-synhost.json`. **Propuestos**, y describen el
+    rumbo, no lo que ya está: diccionario por secciones declaradas (0136), configuración de negocio
+    por funcionalidad (0137), coordinación de página por eventos DOM (0138) y bundles con varias
+    entradas colocables frente a 0113 (0139).
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
     deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
     declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por
