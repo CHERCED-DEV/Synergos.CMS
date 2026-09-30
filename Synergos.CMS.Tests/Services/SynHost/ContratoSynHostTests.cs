@@ -419,6 +419,7 @@ public sealed class ContratoSynHostTests
         using var proveedor = new ServiceCollection()
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
+            .AddSingleton(ElementoFalso.Urls())
             .AddLogging()
             .AddResolutoresSynHost()
             .BuildServiceProvider();

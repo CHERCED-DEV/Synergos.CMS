@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
+using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.Models.PublishedContent;
+using Umbraco.Cms.Core.Routing;
 
 namespace Synergos.CMS.Web.Services.SynHost;
 
@@ -27,14 +29,28 @@ public sealed class LectorDelEditor
     private readonly IPublishedElement _elemento;
     private readonly IPublishedValueFallback _fallback;
     private readonly ILogger? _log;
+    private readonly IPublishedUrlProvider? _urls;
 
-    public LectorDelEditor(IPublishedElement elemento, IPublishedValueFallback fallback, ILogger? log = null)
+    /// <param name="elemento">El bloque autorado.</param>
+    /// <param name="fallback">El fallback de valores de Umbraco (inyectado: ver arriba).</param>
+    /// <param name="log">Donde se anota lo que el editor escribió y no se pudo usar.</param>
+    /// <param name="urls">
+    /// Sólo lo necesita quien lee medios (<see cref="Medio"/>): la URL de un medio la calcula
+    /// Umbraco con el proveedor de URLs, y la forma «amigable» <c>media.Url()</c> lo saca del
+    /// proveedor estático — el mismo motivo por el que el fallback se inyecta.
+    /// </param>
+    public LectorDelEditor(
+        IPublishedElement elemento,
+        IPublishedValueFallback fallback,
+        ILogger? log = null,
+        IPublishedUrlProvider? urls = null)
     {
         ArgumentNullException.ThrowIfNull(elemento);
         ArgumentNullException.ThrowIfNull(fallback);
         _elemento = elemento;
         _fallback = fallback;
         _log = log;
+        _urls = urls;
     }
 
     /// <summary>
@@ -150,6 +166,59 @@ public sealed class LectorDelEditor
         return null;
     }
 
+    /// <summary>
+    /// El medio que el editor eligió en <paramref name="alias"/> (un <c>Umbraco.MediaPicker3</c>):
+    /// su URL absoluta y su texto alternativo; <c>null</c> si no eligió ninguno o si el medio no
+    /// tiene fichero.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Viaja la URL, no el medio.</b> El elemento lee una cadena (<c>audioFile</c>,
+    /// <c>src</c>, <c>media</c>…); lo que las vistas hacían con <c>media?.Url(mode: Absolute)</c> se
+    /// hace acá con el proveedor inyectado y el mismo modo, así que el valor que viaja es el de
+    /// siempre y el resolver se prueba sin arrancar Umbraco.</para>
+    ///
+    /// <para><b>El texto alternativo es el del medio</b> (<c>altDefault</c> de <c>synImage</c> y
+    /// <c>synIcon</c>): lo escribe el editor una vez en la biblioteca. Un medio de otro tipo no lo
+    /// tiene y sale <c>null</c>. Si el ElementType ofrece además un texto por instancia, gana ése:
+    /// lo decide el resolver, que es quien sabe de dónde sale cada campo.</para>
+    ///
+    /// <para>Los DataTypes de hoy son de un solo medio (<c>Multiple: false</c>). Si uno pasara a
+    /// varios, el valor llega como lista y se toma el primero en vez de perderlo en silencio.</para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">El lector se construyó sin
+    /// <see cref="IPublishedUrlProvider"/>: es un defecto del resolver, no del editor.</exception>
+    public MedioDelEditor? Medio(string alias)
+    {
+        if (_urls is null)
+        {
+            throw new InvalidOperationException(
+                $"Se pidió el medio «{alias}» a un LectorDelEditor construido sin IPublishedUrlProvider: "
+                + "el resolver que lee medios tiene que inyectarlo y pasárselo.");
+        }
+
+        var medio = _elemento.Value<object>(_fallback, alias) switch
+        {
+            IPublishedContent uno => uno,
+            IEnumerable<IPublishedContent> varios => varios.FirstOrDefault(),
+            _ => null,
+        };
+
+        if (medio is null)
+        {
+            return null;
+        }
+
+        var url = _urls.GetMediaUrl(medio, UrlMode.Absolute, culture: null, propertyAlias: Constants.Conventions.Media.File);
+        if (string.IsNullOrWhiteSpace(url) || url == "#")
+        {
+            NoEsValido(alias, medio.Key.ToString(), "un medio con fichero");
+            return null;
+        }
+
+        var alt = medio.Value<string>(_fallback, "altDefault");
+        return new MedioDelEditor(url.Trim(), string.IsNullOrWhiteSpace(alt) ? null : alt.Trim());
+    }
+
     /// <summary>Anota lo que el editor escribió y no se pudo usar: no viaja, pero no se pierde callado.</summary>
     public void NoEsValido(string alias, string valor, string esperado)
         => _log?.LogWarning(
@@ -160,3 +229,8 @@ public sealed class LectorDelEditor
             esperado,
             valor);
 }
+
+/// <summary>Un medio que el editor eligió, como lo necesita un elemento: dónde está y cómo se describe.</summary>
+/// <param name="Url">La URL absoluta del fichero.</param>
+/// <param name="Alt">El texto alternativo del medio (<c>altDefault</c>), o <c>null</c> si no tiene.</param>
+public sealed record MedioDelEditor(string Url, string? Alt);
