@@ -823,7 +823,21 @@
       "nombre": "lightbox-gallery",
       "tipo": "pieza",
       "record": "LightboxGalleryProps",
-      "diccionario": [],
+      "diccionario": [
+        "Gallery"
+      ],
+      "claves": [
+        "Gallery.Aria",
+        "Gallery.Close",
+        "Gallery.Download",
+        "Gallery.Empty",
+        "Gallery.Enlarge",
+        "Gallery.Enlarged",
+        "Gallery.ImageOf",
+        "Gallery.Next",
+        "Gallery.Previous",
+        "Gallery.Zoom"
+      ],
       "campos": [
         {
           "nombre": "images",

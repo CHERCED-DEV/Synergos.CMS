@@ -16,8 +16,12 @@ namespace Synergos.CMS.Interfaces.SynHost;
 ///
 /// <para><c>closeLabel</c> y <c>emptyLabel</c> los acepta el elemento y no los autora el
 /// ElementType: quedan como atributos.</para>
+///
+/// <para><b>Su microcopia sale del diccionario, sección <c>Gallery</c></b> (ADR 0136): la sección ya
+/// tenía cerrar, anterior y siguiente, y suma el nombre de la rejilla, «Ampliar imagen {n}», el del
+/// diálogo y la galería vacía.</para>
 /// </remarks>
-[ElementoSynHost("lightbox-gallery", TipoDeColocable.Pieza)]
+[ElementoSynHost("lightbox-gallery", TipoDeColocable.Pieza, Diccionario = ["Gallery"])]
 public sealed record LightboxGalleryProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<LightboxGalleryImage>? Images,
     [property: CampoSynHost(OrigenDelCampo.Decision)] int? Columns);
