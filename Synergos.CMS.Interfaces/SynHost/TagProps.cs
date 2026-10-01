@@ -13,7 +13,7 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// schema—; el elemento descarta lo que no conoce y cae a <c>neutral</c>. La lista vive en el UI:
 /// copiarla acá sería otra copia sin cruzar.</para>
 /// </remarks>
-[ElementoSynHost("tag", TipoDeColocable.Pieza)]
+[ElementoSynHost("tag", TipoDeColocable.Pieza, Diccionario = ["Tag"])]
 public sealed record TagProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Label,
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Color);

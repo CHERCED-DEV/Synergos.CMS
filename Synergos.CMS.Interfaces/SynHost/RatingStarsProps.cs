@@ -15,7 +15,7 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><c>label</c> sale de <c>compDomAttributes.ariaLabel</c>, que es lo que la vista ya mandaba:
 /// el nombre accesible del indicador («Valoración: 4 de 5 estrellas»).</para>
 /// </remarks>
-[ElementoSynHost("rating-stars", TipoDeColocable.Pieza)]
+[ElementoSynHost("rating-stars", TipoDeColocable.Pieza, Diccionario = ["Rating"])]
 public sealed record RatingStarsProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] decimal? Value,
     [property: CampoSynHost(OrigenDelCampo.Decision)] int? Max,

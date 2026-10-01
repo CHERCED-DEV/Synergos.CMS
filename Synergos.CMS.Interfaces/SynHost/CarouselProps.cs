@@ -17,8 +17,13 @@ namespace Synergos.CMS.Interfaces.SynHost;
 ///
 /// <para><c>linkUrl</c> lo promete la descripción del ElementType y el elemento no lo pinta: no
 /// viaja.</para>
+///
+/// <para><b>Sección <c>Slider</c></b> (ADR 0136): los rótulos de los controles —que la pieza del
+/// DS pintaba en inglés, «Previous»/«Next», en un sitio en español— los traduce el elemento con
+/// <c>t()</c> y se los pasa a <c>syn-carousel</c> como texto: la hoja no sabe que hay
+/// diccionario.</para>
 /// </remarks>
-[ElementoSynHost("carousel", TipoDeColocable.Pieza)]
+[ElementoSynHost("carousel", TipoDeColocable.Pieza, Diccionario = ["Slider"])]
 public sealed record CarouselProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<CarouselSlide>? Slides,
     [property: CampoSynHost(OrigenDelCampo.Decision)] bool? Autoplay,
