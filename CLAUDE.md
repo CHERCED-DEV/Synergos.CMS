@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3860 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3866 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2728 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2734 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 463 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -169,7 +169,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3860**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3866**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2867,6 +2867,20 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   pasan las APIs, y en es-CO el punto es de miles. Hay gate sobre los controladores que pintan, con
   línea base (`AccountController` y `AdminController` siguen saliendo `lang="en"`).
 
+- `feedback_a_deadline_the_work_ignores_only_erases_the_answer` — **un plazo de petición que el
+  trabajo no mira no lo para: termina igual, y lo que se pierde es la RESPUESTA** (#188).
+  `POST /dev/fill-synergos-pages` tarda unos dos minutos en síncrono contra los treinta segundos de
+  `TimeoutMiddleware`; terminaba bien y contestaba `200` con `Content-Length: 0`. El formateador JSON
+  ve `RequestAborted` cancelado, cree que el cliente se fue y no escribe nada **sin lanzar**, así que
+  el `catch` del middleware no se enteraba. Probado con el formateador real en el doble —con uno
+  que lanza, el defecto no se reproduce—. Hoy el middleware mira también al VOLVER (plazo vencido y
+  respuesta sin empezar → 504), publica el rasgo estándar `IHttpRequestTimeoutFeature`, y lo que de
+  verdad tarda lo declara (`[SinPlazoDePeticion]` en `DevController`): ahora contesta qué sembró.
+  **Y verificar en vivo sobre una copia de la base no aísla el árbol**: con `ExportOnSave` uSync
+  reescribe `uSync/v9/Content` al guardar, y el sembrador pisa los PNG de `wwwroot/media` aunque
+  uSync esté apagado. Se arranca con `uSync__Settings__ExportOnSave=None` y, si se siembra, se
+  restaura `wwwroot/media` antes de comitear.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2926,11 +2940,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3860 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3866 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2728
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2734
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 463
 
@@ -3404,7 +3418,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3860 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3866 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
