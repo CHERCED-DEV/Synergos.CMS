@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Filters;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -19,8 +20,12 @@ namespace Synergos.CMS.Web.Controllers;
 /// clicables de PostPage; ASP.NET lo decodifica. Layout = "_Layout" para
 /// heredar el chrome del sitio. Sin caché (la query es O(N posts) sobre
 /// el published cache en memoria).
+/// <para><b>Se pinta en la cultura de su sitio</b> (<see cref="CulturaDelSitioAttribute"/>, #190):
+/// Umbraco no rutea esta ruta, así que sin el atributo la página salía en <c>en-US</c> —el bridge,
+/// el <c>lang</c> y las fechas— en un sitio <c>es-CO</c>.</para>
 /// </remarks>
 [AllowAnonymous]
+[CulturaDelSitio]
 public sealed class BlogTagController : Controller
 {
     private readonly IBlogQuery _blogQuery;

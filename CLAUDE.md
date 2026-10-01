@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3849 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3856 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2717 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2724 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 463 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -169,7 +169,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3849**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3856**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2850,6 +2850,17 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   Linux `Uri.TryCreate("/x", UriKind.Absolute, …)` es `true` (esquema `file`) y en Windows `false`,
   así que la ruta relativa a la raíz se reconoce por el texto ANTES de parsear, o sólo CI la pierde.
 
+- `feedback_a_page_umbraco_does_not_route_has_no_culture` — **una página que pinta un controlador
+  MVC propio no tiene cultura: Umbraco la fija al rutear contenido, y por ahí no pasa** (#190).
+  `/blog/tag/*` y `/error/404` salían con el bridge en `en-US`, `<html lang="en">` y «12 Jun 2026»
+  en un sitio `es-CO`, y la página de error de un sitio con dominio propio era la del primer sitio
+  (#188). La cultura y el sitio se resuelven como el router —dominios del caché,
+  `DomainUtilities.SelectDomain`, y sin dominio la cultura por defecto de Umbraco—
+  (`SitioDeLaPeticion`), y la página los declara (`[CulturaDelSitio]`, filtro de RECURSO: fijada en
+  la acción no llega a la vista). **No se cambia la cultura de toda petición no ruteada**: por ahí
+  pasan las APIs, y en es-CO el punto es de miles. Hay gate sobre los controladores que pintan, con
+  línea base (`AccountController` y `AdminController` siguen saliendo `lang="en"`).
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2909,11 +2920,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3849 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3856 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2717
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2724
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 463
 
@@ -3387,7 +3398,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3849 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3856 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
