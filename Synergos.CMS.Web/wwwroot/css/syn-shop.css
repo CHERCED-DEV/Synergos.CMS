@@ -1447,7 +1447,8 @@
   }
 }
 
-.syn-cart-button:hover {
+/* Sólo el ENLACE reacciona: sin página del carrito el botón es un indicador (#187). */
+a.syn-cart-button:hover {
   color: var(--syn-color-text-accent);
   background: var(--syn-color-surface-secondary);
   transform: translateY(-1px);
@@ -1533,7 +1534,7 @@
   .syn-toast--visible {
     transform: none;
   }
-  .syn-cart-button:hover {
+  a.syn-cart-button:hover {
     transform: none;
   }
 }

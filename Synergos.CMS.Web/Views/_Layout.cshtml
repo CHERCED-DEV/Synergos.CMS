@@ -44,6 +44,12 @@
     var isShop = siteRoot?.Children
         .Any(c => c.ContentType.Alias == "productCategoryPage") ?? false;
     var cartCount = isShop ? CartService.GetCart().ItemCount : 0;
+    // El botón enlaza la página que el EDITOR compuso con el resumen del carrito, no una ruta
+    // escrita acá: `/tienda/carrito` no existió nunca y daba 404 desde cada página de la Tienda,
+    // Booking y Propiedades (#187). Sin esa página, el contador se muestra y no se enlaza.
+    var cartPageUrl = isShop && siteRoot is not null
+        ? Synergos.CMS.Web.Services.PaginaQueColoca.Primera(siteRoot.DescendantsOrSelf(), "elementShopCartSummary")?.Url()
+        : null;
     // Logo: el del theme por marca si está configurado; si no, el isotipo de marca (brand asset).
     var logoUrl = !string.IsNullOrWhiteSpace(theme?.LogoLightUrl) ? theme!.LogoLightUrl : Url.Content("~/img/synergoslabs-isotipo.png");
     // El logo lleva al platformRoot (launcher/entry point), no al home del siteRoot.
@@ -193,15 +199,27 @@
                     {
                         @* Fase 0 — botón de carrito: ícono + badge con ItemCount (SSR).
                            El aria-label ya anuncia la cantidad → el badge es decorativo
-                           (aria-hidden). JS (syn-shop.js) actualiza data-cart-count en vivo. *@
-                        <a class="syn-cart-button" href="/tienda/carrito" data-cart-button aria-label="Carrito (@cartCount)">
-                            <svg class="syn-cart-button__icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                                <circle cx="9" cy="21" r="1"></circle>
-                                <circle cx="20" cy="21" r="1"></circle>
-                                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-                            </svg>
-                            <span class="syn-cart-badge@(cartCount == 0 ? " syn-cart-badge--empty" : "")" data-cart-count aria-hidden="true">@cartCount</span>
-                        </a>
+                           (aria-hidden). JS (syn-shop.js) actualiza data-cart-count en vivo.
+                           Sin página del carrito no hay a dónde ir: es un indicador con nombre
+                           (role="img"), no un enlace a un 404 (#187). *@
+                        var cartIcon = new Microsoft.AspNetCore.Html.HtmlString(
+                            "<svg class=\"syn-cart-button__icon\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\">"
+                            + "<circle cx=\"9\" cy=\"21\" r=\"1\"></circle><circle cx=\"20\" cy=\"21\" r=\"1\"></circle>"
+                            + "<path d=\"M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6\"></path></svg>");
+                        if (cartPageUrl is not null)
+                        {
+                            <a class="syn-cart-button" href="@cartPageUrl" data-cart-button aria-label="Carrito (@cartCount)">
+                                @cartIcon
+                                <span class="syn-cart-badge@(cartCount == 0 ? " syn-cart-badge--empty" : "")" data-cart-count aria-hidden="true">@cartCount</span>
+                            </a>
+                        }
+                        else
+                        {
+                            <span class="syn-cart-button" role="img" data-cart-button aria-label="Carrito (@cartCount)">
+                                @cartIcon
+                                <span class="syn-cart-badge@(cartCount == 0 ? " syn-cart-badge--empty" : "")" data-cart-count aria-hidden="true">@cartCount</span>
+                            </span>
+                        }
                     }
                 </div>
             </header>

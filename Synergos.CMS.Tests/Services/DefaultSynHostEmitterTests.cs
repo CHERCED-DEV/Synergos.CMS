@@ -16,8 +16,9 @@ public class DefaultSynHostEmitterTests
         IReadOnlyDictionary<string, object?>? props = null,
         string? configOverride = null,
         CultureInfo? culture = null,
-        string? fallbackHtml = null) =>
-        new(alias, props, configOverride, culture ?? CultureInfo.GetCultureInfo("es-CO"), fallbackHtml);
+        string? fallbackHtml = null,
+        string? structuredData = null) =>
+        new(alias, props, configOverride, culture ?? CultureInfo.GetCultureInfo("es-CO"), fallbackHtml, structuredData);
 
     private static BundleDescriptor ResolvedDescriptor() =>
         new(MainEntryUri: new Uri("https://cdn.example.com/synergos/avatar/latest/main.js"),
@@ -82,6 +83,50 @@ public class DefaultSynHostEmitterTests
 
         Assert.Contains("<synergos-avatar", result.ElementHtml);
         Assert.EndsWith("></synergos-avatar>", result.ElementHtml);
+    }
+
+    [Fact]
+    public async Task EmitAsync_WithStructuredData_PutsTheJsonLdNextToTheElementNeverInside()
+    {
+        // Inside the tag it would be the fallback, and hydration clears the host before
+        // rendering: the JSON-LD would be in the served HTML and gone from the rendered DOM
+        // (Synergos.UI#90). Next to the tag nothing touches it.
+        var sut = BuildSut(new FakeBundleRegistryClient(ResolvedDescriptor()));
+
+        var result = await sut.EmitAsync(Request(
+            fallbackHtml: "<p>ssr</p>",
+            structuredData: """{"@type":"BreadcrumbList"}"""));
+
+        Assert.EndsWith(
+            "<p>ssr</p></synergos-avatar><script type=\"application/ld+json\">{\"@type\":\"BreadcrumbList\"}</script>",
+            result.ElementHtml);
+    }
+
+    [Fact]
+    public async Task EmitAsync_WithStructuredData_EscapesWhatWouldCloseTheScript()
+    {
+        var sut = BuildSut(new FakeBundleRegistryClient(ResolvedDescriptor()));
+
+        var result = await sut.EmitAsync(Request(structuredData: """{"name":"</script><b>x<!--"}"""));
+
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(result.ElementHtml, "</script>"));
+        Assert.DoesNotContain("<b>", result.ElementHtml);
+        Assert.DoesNotContain("<!--", result.ElementHtml);
+        var json = result.ElementHtml[(result.ElementHtml.IndexOf("ld+json\">", StringComparison.Ordinal) + 9)..^"</script>".Length];
+        Assert.Equal("</script><b>x<!--", JsonDocument.Parse(json).RootElement.GetProperty("name").GetString());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    public async Task EmitAsync_WithoutStructuredData_EmitsNoScriptAfterTheElement(string? structuredData)
+    {
+        var sut = BuildSut(new FakeBundleRegistryClient(ResolvedDescriptor()));
+
+        var result = await sut.EmitAsync(Request(structuredData: structuredData));
+
+        Assert.EndsWith("></synergos-avatar>", result.ElementHtml);
+        Assert.DoesNotContain("ld+json", result.ElementHtml);
     }
 
     [Fact]

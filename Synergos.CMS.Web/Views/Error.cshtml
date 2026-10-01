@@ -49,7 +49,7 @@
 
         @if (Model.ShowSearchBox)
         {
-            <form class="syn-error__search" action="/search" method="get" role="search">
+            <form class="syn-error__search" action="@Model.SearchUrl" method="get" role="search">
                 <label for="syn-error-search-input" class="syn-error__search-label">
                     @Umbraco.GetDictionaryValueOrDefault("Error.SearchLabel", "¿Buscabas algo?")
                 </label>

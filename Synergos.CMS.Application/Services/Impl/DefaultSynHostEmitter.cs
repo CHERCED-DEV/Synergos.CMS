@@ -89,10 +89,25 @@ public sealed class DefaultSynHostEmitter : ISynHostEmitter
             : descriptor is null
                 ? BuildOfflineFallback(request.BlockAlias, customTag)
                 : string.Empty;
-        var elementHtml = $"<{customTag}{offlineAttr} config='{EncodeAttributeSingleQuoted(configJson)}'>{fallbackContent}</{customTag}>";
+        var elementHtml = $"<{customTag}{offlineAttr} config='{EncodeAttributeSingleQuoted(configJson)}'>{fallbackContent}</{customTag}>"
+            + BuildStructuredData(request.StructuredDataJson);
 
         return new SynHostEmitResult(scriptHtml, elementHtml, descriptor is not null);
     }
+
+    /// <summary>
+    /// The block's JSON-LD, NEXT to the tag: inside it, hydration would take it away (see
+    /// <see cref="SynHostEmitRequest.StructuredDataJson"/>).
+    /// </summary>
+    /// <remarks>
+    /// <c>&lt;</c> only appears inside JSON strings, where <c>\u003c</c> is the same character:
+    /// escaping it keeps <c>&lt;/script&gt;</c> and <c>&lt;!--</c> from ending the element early,
+    /// whoever serialised the JSON.
+    /// </remarks>
+    private static string BuildStructuredData(string? json) =>
+        string.IsNullOrWhiteSpace(json)
+            ? string.Empty
+            : $"<script type=\"application/ld+json\">{json.Replace("<", "\\u003c", StringComparison.Ordinal)}</script>";
 
     private static Dictionary<string, object?> BuildMergedConfig(
         IReadOnlyDictionary<string, object?>? props,

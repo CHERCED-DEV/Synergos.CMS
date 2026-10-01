@@ -22,7 +22,8 @@ namespace Synergos.CMS.Web.Controllers;
 ///    correspondiente al hostname.
 /// 4. Si encuentra → renderiza Views/Error.cshtml con el modelo.
 /// 5. Si no encuentra → renderiza Views/Error.cshtml con un fallback
-///    inline (título genérico + mensaje + botón home + buscador).
+///    inline (título genérico + mensaje + botón home + buscador, si hay
+///    una searchPage publicada a la que mandarlo).
 ///
 /// Respeta el modelo Lego: cero schema editorial nuevo además del ya
 /// commiteado en Ola 76.1. Cero seam nuevo — usa
@@ -34,6 +35,7 @@ public sealed class ErrorController : ControllerBase
 {
     private const string TransversalErrorPageAlias = "transversalErrorPage";
     private const string SiteRootAlias = "siteRoot";
+    private const string SearchPageAlias = "searchPage";
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
 
@@ -48,14 +50,16 @@ public sealed class ErrorController : ControllerBase
         Response.StatusCode = statusCode;
 
         var page = ResolveErrorPage(statusCode);
+        var searchUrl = ResolveSearchUrl();
         var viewModel = new ErrorPageViewModel(
             StatusCode: statusCode,
             Title: page?.Value<string>("errorTitle") ?? FallbackTitleFor(statusCode),
             BodyHtml: page?.Value<Microsoft.AspNetCore.Html.IHtmlContent>("errorBody"),
             BodyBlocks: page?.Value<BlockGridModel>("errorBlocks"),
-            ShowSearchBox: page?.Value<bool>("showSearchBox") ?? statusCode == 404,
+            ShowSearchBox: searchUrl is not null && (page?.Value<bool>("showSearchBox") ?? statusCode == 404),
             ShowHomeLink: page?.Value<bool>("showHomeLink") ?? true,
-            HomeUrl: ResolveHomeUrl());
+            HomeUrl: ResolveHomeUrl(),
+            SearchUrl: searchUrl);
 
         return new ViewResult
         {
@@ -98,6 +102,27 @@ public sealed class ErrorController : ControllerBase
         return siteRoot?.Url() ?? "/";
     }
 
+    /// <summary>
+    /// La página de búsqueda que el editor publicó (<c>searchPage</c>); <c>null</c> si no hay.
+    /// </summary>
+    /// <remarks>
+    /// El buscador de la página de error mandaba a <c>/search</c> escrito a mano, y esa ruta no
+    /// existe: ni hay controlador ahí ni contenido de tipo <c>searchPage</c> en la base, así que
+    /// quien buscaba desde un 404 caía en otro 404 (Synergos.CMS#187, la misma clase que el
+    /// carrito). Sin página de búsqueda el buscador no se pinta.
+    /// </remarks>
+    private string? ResolveSearchUrl()
+    {
+        if (!_umbracoContextAccessor.TryGetUmbracoContext(out var ctx) || ctx.Content is null)
+        {
+            return null;
+        }
+
+        return ctx.Content.GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelfOfType(SearchPageAlias))
+            .FirstOrDefault()?.Url();
+    }
+
     private static string FallbackTitleFor(int statusCode) => statusCode switch
     {
         404 => "Página no encontrada",
@@ -118,4 +143,5 @@ public sealed record ErrorPageViewModel(
     BlockGridModel? BodyBlocks,
     bool ShowSearchBox,
     bool ShowHomeLink,
-    string HomeUrl);
+    string HomeUrl,
+    string? SearchUrl = null);
