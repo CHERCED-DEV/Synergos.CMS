@@ -196,7 +196,7 @@ Synergos.CMS/
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
 │       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (258 archivos)
 │       ├── DataTypes/           133 archivos (69 DTSelect*) + UrlPicker/MediaPicker/Tags/ContentPicker
-│       ├── Dictionary/          i18n es-CO + en-US (563 keys)
+│       ├── Dictionary/          i18n es-CO + en-US (565 keys)
 │       ├── Languages/           es-CO (default) + en-US
 │       ├── MediaTypes/          synImage + synDocument + synIcon + los stock de Umbraco
 │       ├── MemberTypes/         member
@@ -299,7 +299,7 @@ Synergos.CMS/
 |---------------------------------|------------------------------------------------------------|
 | "¿Por qué se tomó esta decisión?" | `Synergos.CMS.Web/docs/adr/NNNN-*.md` — índice en `docs/adr/README.md` |
 | "¿Qué DocTypes existen?"         | `uSync/v9/ContentTypes/`                                   |
-| "¿Qué Dictionary keys hay?"      | `uSync/v9/Dictionary/` (563 archivos .config — alias PascalCase, filename lowercase por convención uSync) |
+| "¿Qué Dictionary keys hay?"      | `uSync/v9/Dictionary/` (565 archivos .config — alias PascalCase, filename lowercase por convención uSync) |
 | "¿Qué compositions y para qué?"  | `uSync/v9/ContentTypes/compdom*.config` + `compcontent*.config` |
 | "¿Hay compositions reservadas sin consumers?"  | Sí. Marker `[Bloqueado externamente - ...]` o `[Disponible — sin consumers actuales]` al inicio de `<Description>`. NO son orphans; son scaffolding tracked. Cap-260 audit (Cap-270 Batch C) las reconoce. |
 | "¿Cómo se acopla con el UI?"     | `Synergos.CMS.Web/docs/contracts/` — los 5 contratos. Es la ÚNICA superficie de acople. |
@@ -2545,6 +2545,15 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   (prefijo vacío, sin fallback, sin secciones en la solicitud, sin anotar, funcionalidad con
   `configOverride`, sección sin el límite del punto, CSP sin secciones) y 2 en el check 12, todos
   rojos.
+  **Al escalar (#191, tanda E1) quedaron tres criterios de CLAVE que el piloto no tuvo que
+  decidir**: (a) un concepto que comparten dos elementos vive en UNA sección que los dos
+  declaran —`Media` para los dos reproductores, `Countdown` para los dos relojes—, no en dos
+  copias de «Pausar»; (b) se reusa una clave que ya existe cuando la INTENCIÓN es la misma y vive
+  en el espacio del concepto (`Cookie.RejectAll`, `Nav.Breadcrumb`), y su valor es-CO pasa a ser
+  el respaldo aunque cambie el texto visible; no se reusa la de OTRO componente porque el texto
+  coincida (`Footer.BackToTop` no es la de `scroll-top`); y una sección puede ser una clave hoja
+  —el sub-prefijo más estrecho, `Nav.Breadcrumb` y no `Nav` entero—; (c) una frase con datos va
+  ENTERA en una clave con marcadores con nombre, no concatenada en el elemento.
 
 - `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
   no sale sólo en rojo: una sale en VERDE.** Hasta el #170 todos los workflows corrían en

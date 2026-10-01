@@ -1190,7 +1190,12 @@
       "nombre": "scroll-top",
       "tipo": "pieza",
       "record": "ScrollTopProps",
-      "diccionario": [],
+      "diccionario": [
+        "ScrollTop"
+      ],
+      "claves": [
+        "ScrollTop.Aria"
+      ],
       "campos": [
         {
           "nombre": "scrollThreshold",
