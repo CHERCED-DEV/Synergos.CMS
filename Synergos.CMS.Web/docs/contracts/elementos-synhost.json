@@ -378,7 +378,17 @@
       "nombre": "chart-bar",
       "tipo": "pieza",
       "record": "ChartBarProps",
-      "diccionario": [],
+      "diccionario": [
+        "ChartBar"
+      ],
+      "claves": [
+        "ChartBar.Aria",
+        "ChartBar.Category",
+        "ChartBar.Empty",
+        "ChartBar.Summary.One",
+        "ChartBar.Summary.Other",
+        "ChartBar.Value"
+      ],
       "campos": [
         {
           "nombre": "title",
