@@ -1157,7 +1157,30 @@
       "nombre": "select-multi",
       "tipo": "pieza",
       "record": "SelectMultiProps",
-      "diccionario": [],
+      "diccionario": [
+        "SelectMulti",
+        "Common.States"
+      ],
+      "claves": [
+        "Common.States.ComingSoon",
+        "Common.States.Error",
+        "Common.States.Loading",
+        "Common.States.New",
+        "Common.States.NoResults",
+        "Common.States.NotAvailable",
+        "Common.States.Optional",
+        "Common.States.Required",
+        "Common.States.Success",
+        "SelectMulti.Capacity",
+        "SelectMulti.Clear",
+        "SelectMulti.Options",
+        "SelectMulti.Placeholder",
+        "SelectMulti.Remove",
+        "SelectMulti.Search",
+        "SelectMulti.Selected.One",
+        "SelectMulti.Selected.Other",
+        "SelectMulti.Selection"
+      ],
       "campos": [
         {
           "nombre": "label",

@@ -13,8 +13,12 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para>Cada opción lleva lo que documenta el ElementType, <c>value</c> y <c>label</c>. El elemento
 /// sabe además deshabilitar una (<c>disabled</c>), pero el ElementType no lo ofrece: no viaja. El
 /// marcador y el texto de «sin coincidencias» no los autora el editor: son atributos.</para>
+///
+/// <para><b>Su microcopia sale del diccionario</b> (ADR 0136): sección <c>SelectMulti</c> y, para la lista
+/// sin coincidencias, <c>Common.States.NoResults</c>, la misma clave que el dropdown del piloto (la
+/// sección se publica entera: 9 claves para una).</para>
 /// </remarks>
-[ElementoSynHost("select-multi", TipoDeColocable.Pieza)]
+[ElementoSynHost("select-multi", TipoDeColocable.Pieza, Diccionario = ["SelectMulti", "Common.States"])]
 public sealed record SelectMultiProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Label,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<SelectMultiItem>? Options,
