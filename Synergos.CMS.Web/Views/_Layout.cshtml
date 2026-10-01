@@ -21,6 +21,7 @@
 @inject Synergos.CMS.Interfaces.IGlobalComponentResolver GlobalComponentResolver
 @inject Synergos.CMS.Interfaces.ICartService CartService
 @inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+@inject Umbraco.Cms.Core.Models.PublishedContent.IPublishedValueFallback ValueFallback
 @{
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
     var currentPage = UmbracoContext?.PublishedRequest?.PublishedContent;
@@ -30,10 +31,8 @@
     var siteName = siteRoot?.Value<string>("siteDisplayName");
     if (string.IsNullOrWhiteSpace(siteName)) { siteName = "Synergos"; }
     var yearNow = DateTime.UtcNow.Year;
-    var navItems = siteRoot?.Children
-        .Where(c => c.IsVisible() && !c.Value<bool>("hideFromMainMenu"))
-        .ToList()
-        ?? new List<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>();
+    // Sólo PÁGINAS (#185): la carpeta de configuración cuelga del siteRoot y no se pinta.
+    var navItems = Synergos.CMS.Web.Services.NavegacionDelSitio.Enlaces(siteRoot, "hideFromMainMenu", ValueFallback);
 
     var brand = Branding.GetCurrent();
     var theme = ThemeProvider.GetThemeForBrand(brand.Key);
@@ -244,10 +243,8 @@
             <footer class="syn-site-footer syn-site-footer--@renderCtx.FooterMode">
                 <div class="syn-site-footer__inner">
                     @{
-                        var footerNav = siteRoot?.Children
-                            .Where(c => c.IsVisible() && !c.Value<bool>("hideFromFooter"))
-                            .ToList();
-                        var showFooterNav = footerNav is { Count: > 0 }
+                        var footerNav = Synergos.CMS.Web.Services.NavegacionDelSitio.Enlaces(siteRoot, "hideFromFooter", ValueFallback);
+                        var showFooterNav = footerNav.Count > 0
                             && !string.Equals(renderCtx.FooterMode, "minimal", StringComparison.OrdinalIgnoreCase);
                     }
                     @if (showFooterNav)
@@ -263,7 +260,7 @@
                             <nav class="syn-site-footer__nav" aria-label="Footer navigation">
                                 <p class="syn-site-footer__nav-title">Plataforma</p>
                                 <ul class="syn-site-footer__nav-list">
-                                    @foreach (var item in footerNav!)
+                                    @foreach (var item in footerNav)
                                     {
                                         var navTitle = item.Value<string>("navigationTitle");
                                         var label = string.IsNullOrWhiteSpace(navTitle) ? item.Name : navTitle;

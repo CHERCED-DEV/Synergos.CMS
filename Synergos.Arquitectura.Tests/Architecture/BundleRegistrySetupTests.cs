@@ -90,7 +90,9 @@ public sealed class BundleRegistrySetupTests
     {
         var codigo = Composer();
 
-        var http = codigo.IndexOf("\"Http\", StringComparison.OrdinalIgnoreCase", StringComparison.Ordinal);
+        // El modo ya llega validado y en su forma canónica (Interruptor.Modo, #182): se compara
+        // con Ordinal.
+        var http = codigo.IndexOf("string.Equals(bundleRegistryMode, \"Http\"", StringComparison.Ordinal);
         Assert.True(http > 0, "Cambió la forma del composer: revisar este gate.");
 
         var cierre = codigo.IndexOf("StubBundleRegistryClient", http, StringComparison.Ordinal);

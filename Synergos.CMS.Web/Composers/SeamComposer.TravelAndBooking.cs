@@ -46,7 +46,7 @@ public sealed partial class SeamComposer
         // defecto en silencio. Es el olvido que arrastraban Tienda (#24) y Salud (#25).
         services.Configure<ViajesSettings>(builder.Config.GetSection("Synergos:Viajes"));
 
-        if (string.Equals(builder.Config["Synergos:Viajes:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Viajes:Mode", "Bff", new ViajesSettings().Mode))
         {
             // UN cliente para los dos consumidores —la vía hotel y el carrito—, con su cadena
             // entera armada por la pieza (#178).

@@ -286,7 +286,9 @@ más probable. Por eso Tienda espera 30 s y el buscador 5.
 ```csharp
 services.Configure<XSettings>(builder.Config.GetSection("Synergos:X"));
 
-if (string.Equals(builder.Config["Synergos:X:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
+// El modo se LEE con la pieza (#182): una palabra que no reconoce no arranca, nombrando las
+// válidas. El default sale del POCO, no de un literal al lado.
+if (Interruptor.Encendido(builder.Config, "Synergos:X:Mode", "Bff", new XSettings().Mode))
 {
     // El cliente nombrado se ENCHUFA, no se arma (#178): la pieza lee BaseUrl/ApiKey/
     // TimeoutSeconds de la sección y trae llave, correlación, telemetría y reintento.
@@ -307,8 +309,16 @@ recibe un `<X>Settings` recién construido y **todo lo que no viaja por el `Http
 su default en silencio**: configurarlo no hace nada y nadie sabe por qué. Que se haya olvidado
 cuatro veces es lo que lo convierte en esencial del molde y no en un descuido.
 
+**Y el modo no se compara a mano** (#182). Un `string.Equals(builder.Config["Synergos:X:Mode"],
+"Bff", …)` compila, arranca y se ve bien, y con una errata en el `.env` —`Htpp`, `Api` donde
+va `Bff`, `Stub` donde va `Local`— cablea EXACTAMENTE lo mismo que no configurar nada: el
+vertical se queda en su motor en proceso sin avisar. Así estaban catorce de los quince
+interruptores, medido componiendo. `Interruptor.Encendido` (o `Interruptor.Modo`, si son más
+de dos palabras) lanza al cablear con la clave, lo que trajo y las válidas.
+
 Gates: `Cada_punto_de_cableado_ENLAZA_su_seccion` · `El_default_NUNCA_es_el_valor_cableado` ·
-`El_vocabulario_del_molde_es_Api_o_Bff`.
+`El_vocabulario_del_molde_es_Api_o_Bff` · `Ningun_interruptor_cae_en_silencio_con_una_palabra_que_no_conoce`
+· `Ningun_composer_lee_un_modo_a_mano` (`ModosDelComposeTests`).
 
 > **Y el fichero NO es uno por vertical, aunque este apartado se lea así** (#155). Medido
 > sobre los once `SeamComposer.*.cs` parciales, cruzando qué `Configure<<X>Settings>` enlaza
@@ -648,8 +658,8 @@ Hoy dice `Api`, como toda capacidad, y al entrar al molde cumple sus reglas: `Se
 con los cuatro campos, enlazado, default en proceso (`FileSystem`), correlación y llave. Y trae dos
 dientes que el resto del molde todavía no tiene:
 
-- **un modo que no se reconoce no arranca** (`SeamComposer.ModoDeAnaliticaDeBusqueda`), nombrando
-  los válidos. Degradar sigue valiendo cuando el OTRO proceso está caído; no cuando lo que está mal
+- **un modo que no se reconoce no arranca**, nombrando los válidos. Nació como un método de este
+  interruptor y hoy es la pieza de los quince (`Interruptor`, #182). Degradar sigue valiendo cuando el OTRO proceso está caído; no cuando lo que está mal
   es la palabra, porque ahí no se entera nadie;
 - **`ModosDelComposeTests`** cruza cada `Synergos__<Seam>__Mode` que escribe `compose.prod.yml`
   —el literal, o el default de `${VAR:-…}`— y lo que propone `.env.example` contra lo que SU
@@ -657,10 +667,13 @@ dientes que el resto del molde todavía no tiene:
   del composer más el default del POCO, y **componiendo de verdad** con ese valor —una palabra que
   cablea lo mismo que no configurar nada y no es la del default es una palabra que nadie lee—.
 
-**Lo que queda abierto, dicho con su tamaño:** los otros catorce interruptores siguen cayendo en
-silencio a su camino en proceso con una palabra desconocida —`SYNERGOS_TIENDA_MODE=Api` sirve la
-tienda local sin avisar—. El gate cubre lo que el compose TRAE escrito; lo que el operador ponga en
-el `.env` del servidor sólo lo para un modo que se valida al cablear, y hoy sólo lo valida uno.
+**Y lo que quedó abierto se cerró en el #182.** Los otros catorce caían en silencio a su camino en
+proceso con una palabra desconocida —`SYNERGOS_TIENDA_MODE=Api` servía la tienda local sin
+avisar—, y el gate sólo cubría lo que el compose TRAE escrito. Hoy los quince leen su modo por la
+pieza `Interruptor`, así que lo que el operador ponga en el `.env` del servidor también lo para el
+arranque; y `ModosDelComposeTests` descubre los interruptores por tres caminos (la fuente, lo que
+los composers piden a la configuración al componer y los POCO con `Mode`), compone cada uno con
+una palabra inventada y exige el rechazo nombrando exactamente las válidas.
 
 ### 7.4 El seudónimo está escrito siete veces con tres nombres
 

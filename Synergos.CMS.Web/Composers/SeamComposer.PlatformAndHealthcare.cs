@@ -172,7 +172,7 @@ public sealed partial class SeamComposer
         // SaludWiringTests.
         services.Configure<SaludSettings>(builder.Config.GetSection("Synergos:Salud"));
 
-        if (string.Equals(builder.Config["Synergos:Salud:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Salud:Mode", "Bff", new SaludSettings().Mode))
         {
             // La cadena entera —llave, correlación (HU #28), telemetría, reintento— la arma la
             // pieza (#178).

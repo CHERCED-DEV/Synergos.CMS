@@ -249,7 +249,7 @@ public sealed class GovNotificationWiringTests
             "IGovActNotificationService>(sp => new HttpGovActNotificationService", StringComparison.Ordinal);
         Assert.True(notificacion > 0, "Ya no se registra el cliente HTTP de notificación: revisar este gate.");
 
-        var desde = composer.LastIndexOf("if (string.Equals(builder.Config[", notificacion, StringComparison.Ordinal);
+        var desde = composer.LastIndexOf("if (Interruptor.Encendido(builder.Config,", notificacion, StringComparison.Ordinal);
         Assert.True(desde > 0);
         var guardia = composer[desde..notificacion];
 

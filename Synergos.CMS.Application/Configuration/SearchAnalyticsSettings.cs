@@ -8,8 +8,9 @@ namespace Synergos.CMS.Application.Configuration;
 /// <c>Sessions</c> —el nombre del servicio, anterior al molde del doc 12— y el despliegue escribía
 /// <c>Http</c>: ninguna de las dos palabras era la del otro, y el composer caía EN SILENCIO al
 /// disco. En producción <c>Api.Sessions</c> —cuyo único consumidor es este— no recibía ni un
-/// evento. Hoy un modo que no se reconoce no arranca: lo rechaza
-/// <c>SeamComposer.ModoDeAnaliticaDeBusqueda</c> nombrando los válidos.</para>
+/// evento. Hoy un modo que no se reconoce no arranca: lo rechaza la pieza
+/// <c>Interruptor</c> del composer nombrando los válidos, la misma que valida los otros catorce
+/// (#182).</para>
 ///
 /// <para><b>Nació sin POCO</b> —era el consumidor más viejo del árbol, escrito antes de que hubiera
 /// molde— y la URL, la llave y un timeout fijo se leían a pelo del <c>IConfiguration</c>. Al

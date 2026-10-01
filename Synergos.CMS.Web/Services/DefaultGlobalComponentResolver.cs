@@ -68,9 +68,26 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
     private const string ActiveModalNodeAlias = "activeModalNode";
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
+    private readonly IVariationContextAccessor _variacion;
+    private readonly IPublishedValueFallback _fallback;
+    private readonly TimeProvider _reloj;
 
-    public DefaultGlobalComponentResolver(IUmbracoContextAccessor umbracoContextAccessor) =>
+    /// <remarks>
+    /// Los servicios de Umbraco llegan INYECTADOS y no por el localizador estático que usan las
+    /// extensiones «amigables» (<c>Value&lt;T&gt;(alias)</c>, <c>DescendantsOrSelfOfType(alias)</c>):
+    /// es lo mismo en ejecución, y es lo que deja probar el resolver sin arrancar Umbraco (#185).
+    /// </remarks>
+    public DefaultGlobalComponentResolver(
+        IUmbracoContextAccessor umbracoContextAccessor,
+        IVariationContextAccessor variacion,
+        IPublishedValueFallback fallback,
+        TimeProvider reloj)
+    {
         _umbracoContextAccessor = umbracoContextAccessor;
+        _variacion = variacion;
+        _fallback = fallback;
+        _reloj = reloj;
+    }
 
     public CfgAlert? GetActiveAlert()
     {
@@ -93,22 +110,22 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             return null;
         }
 
-        var message = element.Value<string>("alertMessage");
+        var message = element.Value<string>(_fallback, "alertMessage");
         if (string.IsNullOrWhiteSpace(message))
         {
             return null;
         }
 
-        var ctaLink = element.Value<Link>("alertCtaLink");
+        var ctaLink = element.Value<Link>(_fallback, "alertCtaLink");
         return new CfgAlert(
             Message: message,
-            Variant: element.Value<string>("alertVariant"),
-            Tone: element.Value<string>("alertTone"),
-            Icon: element.Value<string>("alertIcon"),
-            CtaLabel: element.Value<string>("alertCtaLabel"),
+            Variant: element.Value<string>(_fallback, "alertVariant"),
+            Tone: element.Value<string>(_fallback, "alertTone"),
+            Icon: element.Value<string>(_fallback, "alertIcon"),
+            CtaLabel: element.Value<string>(_fallback, "alertCtaLabel"),
             CtaUrl: ctaLink?.Url,
             CtaOpenInNewTab: ctaLink is { Target: "_blank" },
-            Dismissible: element.Value<bool>("alertDismissible"));
+            Dismissible: element.Value<bool>(_fallback, "alertDismissible"));
     }
 
     public CfgBanner? GetActiveBanner()
@@ -129,19 +146,19 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             return null;
         }
 
-        var message = element.Value<string>("bannerMessage");
+        var message = element.Value<string>(_fallback, "bannerMessage");
         if (string.IsNullOrWhiteSpace(message))
         {
             return null;
         }
 
-        var ctaLink = element.Value<Link>("bannerCtaLink");
-        var image = element.Value<MediaWithCrops>("bannerImage");
-        var placement = element.Value<string>("bannerPlacement");
+        var ctaLink = element.Value<Link>(_fallback, "bannerCtaLink");
+        var image = element.Value<MediaWithCrops>(_fallback, "bannerImage");
+        var placement = element.Value<string>(_fallback, "bannerPlacement");
         return new CfgBanner(
             Message: message,
             ImageUrl: image?.Url(),
-            CtaLabel: element.Value<string>("bannerCtaLabel"),
+            CtaLabel: element.Value<string>(_fallback, "bannerCtaLabel"),
             CtaUrl: ctaLink?.Url,
             CtaOpenInNewTab: ctaLink is { Target: "_blank" },
             Placement: string.IsNullOrWhiteSpace(placement) ? "top" : placement);
@@ -165,16 +182,16 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             return null;
         }
 
-        var text = element.Value<string>("footerNoteText");
+        var text = element.Value<string>(_fallback, "footerNoteText");
         if (string.IsNullOrWhiteSpace(text))
         {
             return null;
         }
 
-        var ctaLink = element.Value<Link>("footerNoteCtaLink");
+        var ctaLink = element.Value<Link>(_fallback, "footerNoteCtaLink");
         return new CfgFooterNote(
             Text: text,
-            CtaLabel: element.Value<string>("footerNoteCtaLabel"),
+            CtaLabel: element.Value<string>(_fallback, "footerNoteCtaLabel"),
             CtaUrl: ctaLink?.Url,
             CtaOpenInNewTab: ctaLink is { Target: "_blank" });
     }
@@ -197,21 +214,21 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             return null;
         }
 
-        var title = element.Value<string>("modalTitle");
+        var title = element.Value<string>(_fallback, "modalTitle");
         if (string.IsNullOrWhiteSpace(title))
         {
             return null;
         }
 
-        var ctaLink = element.Value<Link>("modalCtaLink");
-        var image = element.Value<MediaWithCrops>("modalImage");
-        var trigger = element.Value<string>("modalTrigger");
-        var frequency = element.Value<string>("modalFrequency");
+        var ctaLink = element.Value<Link>(_fallback, "modalCtaLink");
+        var image = element.Value<MediaWithCrops>(_fallback, "modalImage");
+        var trigger = element.Value<string>(_fallback, "modalTrigger");
+        var frequency = element.Value<string>(_fallback, "modalFrequency");
         return new CfgModal(
             Title: title,
-            Body: element.Value<string>("modalBody"),
+            Body: element.Value<string>(_fallback, "modalBody"),
             ImageUrl: image?.Url(),
-            CtaLabel: element.Value<string>("modalCtaLabel"),
+            CtaLabel: element.Value<string>(_fallback, "modalCtaLabel"),
             CtaUrl: ctaLink?.Url,
             CtaOpenInNewTab: ctaLink is { Target: "_blank" },
             Trigger: string.IsNullOrWhiteSpace(trigger) ? "immediate" : trigger,
@@ -230,7 +247,7 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             return true;
         }
         var page = umbracoContext.PublishedRequest?.PublishedContent;
-        return page is not null && page.Value<bool>(suppressAlias);
+        return page is not null && page.Value<bool>(_fallback, suppressAlias);
     }
 
     /// <summary>
@@ -259,7 +276,7 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             // primer siteRoot publicado para que el platform root también
             // pueda heredar selectores explícitos.
             siteRoot = umbracoContext.Content.GetAtRoot()
-                .SelectMany(r => r.DescendantsOrSelfOfType(SiteRootAlias))
+                .SelectMany(r => r.DescendantsOrSelfOfType(_variacion, SiteRootAlias))
                 .FirstOrDefault();
             if (siteRoot is null)
             {
@@ -267,30 +284,18 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             }
         }
 
-        var picked = siteRoot.Value<IPublishedContent>(selectorAlias);
+        var picked = siteRoot.Value<IPublishedContent>(_fallback, selectorAlias);
         if (picked is null)
         {
             return null;
         }
 
-        if (!picked.Value<bool>(activeAlias))
+        if (!picked.Value<bool>(_fallback, activeAlias))
         {
             return null;
         }
 
-        var nowUtc = DateTime.UtcNow;
-        var start = picked.Value<DateTime?>(scheduleStartAlias);
-        if (start.HasValue && nowUtc < start.Value.ToUniversalTime())
-        {
-            return null;
-        }
-        var end = picked.Value<DateTime?>(scheduleEndAlias);
-        if (end.HasValue && nowUtc > end.Value.ToUniversalTime())
-        {
-            return null;
-        }
-
-        return picked;
+        return EnVentana(picked, scheduleStartAlias, scheduleEndAlias) ? picked : null;
     }
 
     /// <summary>
@@ -310,29 +315,15 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
             return null;
         }
 
-        var nowUtc = DateTime.UtcNow;
         foreach (var root in umbracoContext.Content.GetAtRoot())
         {
-            foreach (var node in root.DescendantsOrSelfOfType(contentTypeAlias))
+            foreach (var node in root.DescendantsOrSelfOfType(_variacion, contentTypeAlias))
             {
-                if (!node.Value<bool>(activeAlias))
+                if (node.Value<bool>(_fallback, activeAlias)
+                    && EnVentana(node, scheduleStartAlias, scheduleEndAlias))
                 {
-                    continue;
+                    return node;
                 }
-
-                var start = node.Value<DateTime?>(scheduleStartAlias);
-                if (start.HasValue && nowUtc < start.Value.ToUniversalTime())
-                {
-                    continue;
-                }
-
-                var end = node.Value<DateTime?>(scheduleEndAlias);
-                if (end.HasValue && nowUtc > end.Value.ToUniversalTime())
-                {
-                    continue;
-                }
-
-                return node;
             }
         }
         return null;
@@ -353,14 +344,14 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
 
         var siteConfig = umbracoContext.Content?
             .GetAtRoot()
-            .SelectMany(root => root.DescendantsOrSelfOfType(SiteConfigSettingsAlias))
+            .SelectMany(root => root.DescendantsOrSelfOfType(_variacion, SiteConfigSettingsAlias))
             .FirstOrDefault();
         if (siteConfig is null)
         {
             return false;
         }
 
-        var resolved = siteConfig.Value<BlockListModel>(GlobalComponentsAlias);
+        var resolved = siteConfig.Value<BlockListModel>(_fallback, GlobalComponentsAlias);
         if (resolved is null || resolved.Count == 0)
         {
             return false;
@@ -374,14 +365,13 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
     /// Prioridad 2 helper: busca el primer Element del tipo cfg* en el
     /// BlockList que esté activo + dentro de su ventana programada.
     /// </summary>
-    private static IPublishedElement? FindActiveInBlockList(
+    private IPublishedElement? FindActiveInBlockList(
         BlockListModel blocks,
         string contentTypeAlias,
         string activeAlias,
         string scheduleStartAlias,
         string scheduleEndAlias)
     {
-        var nowUtc = DateTime.UtcNow;
         foreach (var item in blocks)
         {
             var element = item.Content;
@@ -390,25 +380,48 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
                 continue;
             }
 
-            if (!element.Value<bool>(activeAlias))
+            if (element.Value<bool>(_fallback, activeAlias)
+                && EnVentana(element, scheduleStartAlias, scheduleEndAlias))
             {
-                continue;
+                return element;
             }
-
-            var start = element.Value<DateTime?>(scheduleStartAlias);
-            if (start.HasValue && nowUtc < start.Value.ToUniversalTime())
-            {
-                continue;
-            }
-
-            var end = element.Value<DateTime?>(scheduleEndAlias);
-            if (end.HasValue && nowUtc > end.Value.ToUniversalTime())
-            {
-                continue;
-            }
-
-            return element;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Si el aviso está dentro de su ventana programada. Las dos puntas son OPCIONALES: sin
+    /// inicio rige desde ya, y sin fin no vence (#185).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es UNA regla para las tres fuentes</b> —selector explícito, repositorio y
+    /// BlockList legacy—, que antes la copiaban tres veces con el mismo defecto.</para>
+    ///
+    /// <para><b>El defecto.</b> Un aviso «hasta nuevo aviso» —lo más común que publica un
+    /// editor— no se pintaba NUNCA: el fin vacío se comparaba como si fuera una fecha real, la
+    /// del año 1, y el aviso salía vencido desde entonces. Sin error que lo dijera. Y tapaba el
+    /// 500 latente de <c>_GlobalAlert</c>/<c>_GlobalBanner</c>/<c>_GlobalModal</c> (#184): como
+    /// ningún aviso llegaba a pintarse, nadie compilaba esas vistas en caliente.</para>
+    /// </remarks>
+    private bool EnVentana(IPublishedElement aviso, string inicioAlias, string finAlias)
+    {
+        var ahora = _reloj.GetUtcNow().UtcDateTime;
+        var inicio = Fecha(aviso, inicioAlias);
+        var fin = Fecha(aviso, finAlias);
+        return (inicio is null || ahora >= inicio.Value.ToUniversalTime())
+            && (fin is null || ahora <= fin.Value.ToUniversalTime());
+    }
+
+    /// <summary>La fecha que el editor puso, o <c>null</c> si dejó el campo vacío.</summary>
+    /// <remarks>
+    /// <b>Un campo de fecha vacío NO llega como <c>null</c>.</b> El conversor del date picker de
+    /// Umbraco devuelve <see cref="DateTime.MinValue"/> cuando no hay valor, así que
+    /// <c>Value&lt;DateTime?&gt;</c> da <c>0001-01-01</c> con <c>HasValue</c> en <c>true</c>
+    /// (medido en vivo, #184 y #185). Esa fecha no la escribe ningún editor: es la ausencia.
+    /// </remarks>
+    private DateTime? Fecha(IPublishedElement aviso, string alias)
+    {
+        var valor = aviso.Value<DateTime?>(_fallback, alias);
+        return valor is null || valor.Value == DateTime.MinValue ? null : valor;
     }
 }

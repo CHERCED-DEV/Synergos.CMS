@@ -107,7 +107,7 @@ public sealed partial class SeamComposer
         // Kind del comprador— se queda en su valor por defecto en silencio.
         services.Configure<EventosSettings>(builder.Config.GetSection("Synergos:Eventos"));
 
-        if (string.Equals(builder.Config["Synergos:Eventos:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Eventos:Mode", "Bff", new EventosSettings().Mode))
         {
             // La cadena entera la arma la pieza (#178).
             services.AddClienteDelArbolDeServicios(
@@ -198,7 +198,7 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<IJsonEntityStore>(),
             () => sp.GetRequiredService<TimeProvider>().GetUtcNow()));
 
-        if (string.Equals(builder.Config["Synergos:Realty:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Realty:Mode", "Api", new RealtySettings().Mode))
         {
             // La cadena entera —llave, correlación (HU #28), telemetría, reintento— la arma la
             // pieza (#178).
@@ -310,8 +310,7 @@ public sealed partial class SeamComposer
         // capacidad hoy. La sección se ENLAZA, como las otras cuatro.
         services.Configure<GovFeeSettings>(builder.Config.GetSection("Synergos:Gob:Payments"));
 
-        if (string.Equals(builder.Config["Synergos:Gob:Payments:Mode"], "Api",
-                StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Gob:Payments:Mode", "Api", new GovFeeSettings().Mode))
         {
             // La cadena entera la arma la pieza (#178) — la misma que la del seam completo.
             services.AddClienteDelArbolDeServicios(
@@ -334,7 +333,7 @@ public sealed partial class SeamComposer
         // de la definición y el Kind del expediente— se queda en su default en silencio.
         services.Configure<GobSettings>(builder.Config.GetSection("Synergos:Gob"));
 
-        if (string.Equals(builder.Config["Synergos:Gob:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Gob:Mode", "Api", new GobSettings().Mode))
         {
             // La cadena entera la arma la pieza (#178). El cliente ya no re-aplica URL, llave ni
             // techo por su cuenta: había dos fuentes para el mismo dato.
@@ -380,8 +379,7 @@ public sealed partial class SeamComposer
         // Va por SU PROPIO interruptor y no por Synergos:Gob:Mode, que decide contra qué avanza
         // el expediente (Api.Workflow, #44). Son dos capacidades distintas y un despliegue puede
         // querer una y no la otra; juntarlas obligaría a encender las dos para probar una.
-        if (string.Equals(builder.Config["Synergos:Gob:Notifications:Mode"], "Api",
-                StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Gob:Notifications:Mode", "Api", new GovNotificationSettings().Mode))
         {
             // La cadena entera la arma la pieza (#178).
             services.AddClienteDelArbolDeServicios(
@@ -435,7 +433,7 @@ public sealed partial class SeamComposer
     {
         var opciones = sp.GetRequiredService<IOptionsMonitor<GovFeeSettings>>();
 
-        if (!string.Equals(opciones.CurrentValue.Mode, "Api", StringComparison.OrdinalIgnoreCase))
+        if (!Interruptor.Encendido(opciones.CurrentValue.Mode, "Synergos:Gob:Payments:Mode", "Api", new GovFeeSettings().Mode))
         {
             return sp.GetRequiredService<IPaymentProvider>();
         }

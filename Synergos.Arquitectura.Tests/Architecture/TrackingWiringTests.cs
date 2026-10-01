@@ -116,7 +116,7 @@ public sealed class TrackingWiringTests
     {
         var fabrica = Fabrica();
 
-        var decision = fabrica.IndexOf("EsModoApi(ajustes.Value.Mode)", StringComparison.Ordinal);
+        var decision = fabrica.IndexOf("Interruptor.Encendido(ajustes.Value.Mode", StringComparison.Ordinal);
         Assert.True(decision > 0, "La fábrica ya no decide el modo: revisar este gate.");
 
         // Sin modo Api se devuelve el motor local, antes de construir ningún cliente.

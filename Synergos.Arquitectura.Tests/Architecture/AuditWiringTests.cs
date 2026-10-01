@@ -324,8 +324,10 @@ public sealed class AuditWiringTests
         var i = c.IndexOf("Synergos:Audit:Mode", StringComparison.Ordinal);
         Assert.True(i > 0, "Desapareció el interruptor de la bitácora: revisar este gate.");
 
-        Assert.Contains("\"Api\", StringComparison.OrdinalIgnoreCase", c[i..Math.Min(c.Length, i + 200)],
-            StringComparison.Ordinal);
+        // Se enciende con "Api" y por la pieza que valida la palabra (#182): una errata no cae al
+        // JSONL en silencio, no arranca.
+        Assert.Contains("\"Api\"", c[i..Math.Min(c.Length, i + 200)], StringComparison.Ordinal);
+        Assert.Contains("Interruptor.Encendido(builder.Config, \"Synergos:Audit:Mode\"", c, StringComparison.Ordinal);
 
         var otro = c.IndexOf("else", i, StringComparison.Ordinal);
         Assert.True(otro > i, "El modo Api dejó de tener alternativa: el clon limpio no arrancaría.");
