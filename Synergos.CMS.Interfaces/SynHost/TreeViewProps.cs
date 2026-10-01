@@ -17,8 +17,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <c>compDomAttributes.ariaLabel</c>: un texto que el editor escribe por instancia y el elemento
 /// pinta (regla 3 del contexto de la escala; precedente <c>rating-stars</c>). Sin él, el elemento
 /// dice «Árbol de navegación». <c>expandAll</c> sólo viaja ENCENDIDO: apagado es el default.</para>
+///
+/// <para><b>Sección <c>TreeView</c></b> (ADR 0136): el nombre por defecto, el estado vacío y
+/// «Expandir/Contraer {label}» de cada rama; el nombre del nodo viaja como marcador.</para>
 /// </remarks>
-[ElementoSynHost("tree-view", TipoDeColocable.Pieza)]
+[ElementoSynHost("tree-view", TipoDeColocable.Pieza, Diccionario = ["TreeView"])]
 public sealed record TreeViewProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<TreeViewNode>? Tree,
     [property: CampoSynHost(OrigenDelCampo.Decision)] bool? ExpandAll,

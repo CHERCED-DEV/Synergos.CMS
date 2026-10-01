@@ -1454,7 +1454,15 @@
       "nombre": "tree-view",
       "tipo": "pieza",
       "record": "TreeViewProps",
-      "diccionario": [],
+      "diccionario": [
+        "TreeView"
+      ],
+      "claves": [
+        "TreeView.Aria",
+        "TreeView.Collapse",
+        "TreeView.Empty",
+        "TreeView.Expand"
+      ],
       "campos": [
         {
           "nombre": "tree",
