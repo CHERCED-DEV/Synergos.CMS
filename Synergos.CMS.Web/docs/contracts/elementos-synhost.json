@@ -164,7 +164,16 @@
       "nombre": "avatar",
       "tipo": "pieza",
       "record": "AvatarProps",
-      "diccionario": [],
+      "diccionario": [
+        "Avatar"
+      ],
+      "claves": [
+        "Avatar.Fallback",
+        "Avatar.Status.Away",
+        "Avatar.Status.Busy",
+        "Avatar.Status.Offline",
+        "Avatar.Status.Online"
+      ],
       "campos": [
         {
           "nombre": "src",
@@ -189,7 +198,23 @@
       "nombre": "avatar-group",
       "tipo": "pieza",
       "record": "AvatarGroupProps",
-      "diccionario": [],
+      "diccionario": [
+        "AvatarGroup",
+        "Avatar"
+      ],
+      "claves": [
+        "Avatar.Fallback",
+        "Avatar.Status.Away",
+        "Avatar.Status.Busy",
+        "Avatar.Status.Offline",
+        "Avatar.Status.Online",
+        "AvatarGroup.Count.One",
+        "AvatarGroup.Count.Other",
+        "AvatarGroup.Empty",
+        "AvatarGroup.Label",
+        "AvatarGroup.More",
+        "AvatarGroup.Rest"
+      ],
       "campos": [
         {
           "nombre": "avatars",

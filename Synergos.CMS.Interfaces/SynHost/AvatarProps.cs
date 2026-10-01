@@ -15,8 +15,12 @@ namespace Synergos.CMS.Interfaces.SynHost;
 ///
 /// <para><c>name</c>, <c>size</c>, <c>shape</c> y <c>status</c> los acepta el elemento y no los
 /// autora el ElementType: quedan como atributos, no viajan en el <c>config</c>.</para>
+///
+/// <para><b>Su microcopia sale del diccionario, sección <c>Avatar</c></b> (ADR 0136): los cuatro estados
+/// de presencia y <c>Avatar.Fallback</c>, el nombre de un avatar sin nombre, que <c>avatar-group</c>
+/// usa también: una clave, no dos copias.</para>
 /// </remarks>
-[ElementoSynHost("avatar", TipoDeColocable.Pieza)]
+[ElementoSynHost("avatar", TipoDeColocable.Pieza, Diccionario = ["Avatar"])]
 public sealed record AvatarProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Src,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Alt);
