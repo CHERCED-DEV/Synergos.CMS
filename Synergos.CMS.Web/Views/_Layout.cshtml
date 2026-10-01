@@ -81,7 +81,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     @await Html.PartialAsync("_SeoHead", currentPage)
     @await Html.PartialAsync("_SeoStructuredData", currentPage)
-    @await Html.PartialAsync("_SynergosBridge")
     @await Html.PartialAsync("_SynHostRuntime")
     @if (!string.IsNullOrWhiteSpace(theme?.FaviconUrl))
     {
@@ -304,5 +303,8 @@
            /api/shop/cart/*, actualiza el badge y muestra un toast. *@
         <script src="~/js/syn-shop.js" asp-append-version="true" defer></script>
     }
+    @* ADR 0136: el bridge va al FINAL — publica las secciones de diccionario que pidieron los
+       elementos emitidos arriba (cuerpo, chrome, globales). Ver _SynergosBridge.cshtml. *@
+    @await Html.PartialAsync("_SynergosBridge")
 </body>
 </html>

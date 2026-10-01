@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Diccionario;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -33,20 +34,28 @@ public sealed class SynergosBridgeController : Controller
     };
 
     private readonly IHostBridgeContextBuilder _bridge;
+    private readonly SeccionesDeLaPagina _secciones;
     private readonly ILogger<SynergosBridgeController> _logger;
 
     public SynergosBridgeController(
         IHostBridgeContextBuilder bridge,
+        SeccionesDeLaPagina secciones,
         ILogger<SynergosBridgeController> logger)
     {
         _bridge = bridge;
+        _secciones = secciones;
         _logger = logger;
     }
 
+    /// <param name="secciones">Las secciones de diccionario que piden los elementos de la página
+    /// que pide este script (ADR 0136): las escribe <c>_SynergosBridge.cshtml</c> en la URL, porque
+    /// esta petición no ve qué emitió aquélla. La cultura viaja igual, en <c>culture</c>/<c>ui-culture</c>.</param>
     [HttpGet("/synergos-bridge.js")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-    public IActionResult Get()
+    public IActionResult Get([FromQuery] string? secciones = null)
     {
+        _secciones.Anotar(SeccionesDeLaPagina.DeLaConsulta(secciones));
+
         string json;
         try
         {

@@ -60,5 +60,8 @@
         }
     </div>
     <script src="~/js/platform-root.js" asp-append-version="true" defer></script>
+    @* ADR 0136: sin bridge, los elementos de esta plantilla no tenían diccionario (t() caía
+       siempre a su respaldo). Al final, como en _Layout. *@
+    @await Html.PartialAsync("_SynergosBridge")
 </body>
 </html>

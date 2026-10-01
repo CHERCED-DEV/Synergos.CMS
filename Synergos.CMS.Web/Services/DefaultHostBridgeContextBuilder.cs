@@ -3,7 +3,7 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Constants;
 using Synergos.CMS.Interfaces;
-using Umbraco.Cms.Core.Services;
+using Synergos.CMS.Web.Services.Diccionario;
 using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Services;
@@ -23,7 +23,8 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
     private readonly IPageRenderContextResolver _renderCtx;
     private readonly IMemberAccessGate _gate;
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
-    private readonly ILocalizationService _localizationService;
+    private readonly DiccionarioDelBridge _diccionario;
+    private readonly SeccionesDeLaPagina _secciones;
     private readonly IOptionsMonitor<HostBridgeSettings> _settings;
     private readonly ILogger<DefaultHostBridgeContextBuilder> _logger;
 
@@ -32,7 +33,8 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
         IPageRenderContextResolver renderCtx,
         IMemberAccessGate gate,
         IUmbracoContextAccessor umbracoContextAccessor,
-        ILocalizationService localizationService,
+        DiccionarioDelBridge diccionario,
+        SeccionesDeLaPagina secciones,
         IOptionsMonitor<HostBridgeSettings> settings,
         ILogger<DefaultHostBridgeContextBuilder> logger)
     {
@@ -40,7 +42,8 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
         _renderCtx = renderCtx;
         _gate = gate;
         _umbracoContextAccessor = umbracoContextAccessor;
-        _localizationService = localizationService;
+        _diccionario = diccionario;
+        _secciones = secciones;
         _settings = settings;
         _logger = logger;
     }
@@ -52,26 +55,28 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
 
         return new HostBridgeContext(
             Version: s.ContractVersion,
-            I18n: BuildI18n(culture, s),
+            I18n: BuildI18n(culture),
             Theme: BuildTheme(),
             Brand: BuildBrand(),
             Member: s.IncludeMemberContext ? BuildMember() : null,
             Page: s.IncludePageMetadata ? BuildPage() : EmptyPage());
     }
 
-    private HostBridgeI18n BuildI18n(string culture, HostBridgeSettings s)
+    private HostBridgeI18n BuildI18n(string culture)
     {
-        var keys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // La cultura por defecto la dice Umbraco (Idiomas → default), no un literal: es la del
+        // fallback por clave. Decía "es-CO" escrito acá, que coincide hoy y deja de coincidir el
+        // día que un despliegue cambie de idioma por defecto.
+        var defaultCulture = "es-CO";
+        IReadOnlyDictionary<string, string> keys = new Dictionary<string, string>();
 
         try
         {
-            // Enumerate root + descendants once. Filter by prefix subset.
-            // ILocalizationService is scoped + cached internally por Umbraco.
-            var roots = _localizationService.GetRootDictionaryItems();
-            foreach (var root in roots)
-            {
-                CollectMatchingKeys(root.Key, root.ItemKey, culture, s.I18nKeyPrefixes, keys);
-            }
+            defaultCulture = _diccionario.CulturaPorDefecto();
+            // ADR 0136: se publican las secciones que declaran los elementos de ESTA página —su
+            // record— y nada más. Antes eran once prefijos fijos en todas las páginas: 176 claves
+            // (≈7 KB) que ningún elemento leía.
+            keys = _diccionario.Claves(_secciones.Declaradas, culture, defaultCulture);
         }
         catch (Exception ex)
         {
@@ -89,56 +94,8 @@ public sealed class DefaultHostBridgeContextBuilder : IHostBridgeContextBuilder
 
         return new HostBridgeI18n(
             Culture: culture,
-            DefaultCulture: "es-CO",
+            DefaultCulture: defaultCulture,
             Keys: keys);
-    }
-
-    private void CollectMatchingKeys(
-        Guid id,
-        string itemKey,
-        string culture,
-        string[] prefixes,
-        Dictionary<string, string> output)
-    {
-        if (MatchesAnyPrefix(itemKey, prefixes))
-        {
-            var item = _localizationService.GetDictionaryItemByKey(itemKey);
-            if (item is not null)
-            {
-                var translation = item.Translations.FirstOrDefault(t =>
-                    string.Equals(t.LanguageIsoCode, culture, StringComparison.OrdinalIgnoreCase));
-                if (translation is not null && !string.IsNullOrWhiteSpace(translation.Value))
-                {
-                    output[itemKey] = translation.Value;
-                }
-            }
-        }
-
-        foreach (var child in _localizationService.GetDictionaryItemDescendants(id))
-        {
-            // Solo level inmediato — el descendants ya itera el subtree.
-            if (MatchesAnyPrefix(child.ItemKey, prefixes))
-            {
-                var translation = child.Translations.FirstOrDefault(t =>
-                    string.Equals(t.LanguageIsoCode, culture, StringComparison.OrdinalIgnoreCase));
-                if (translation is not null && !string.IsNullOrWhiteSpace(translation.Value))
-                {
-                    output[child.ItemKey] = translation.Value;
-                }
-            }
-        }
-    }
-
-    private static bool MatchesAnyPrefix(string itemKey, string[] prefixes)
-    {
-        foreach (var prefix in prefixes)
-        {
-            if (itemKey.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     private HostBridgeTheme BuildTheme()

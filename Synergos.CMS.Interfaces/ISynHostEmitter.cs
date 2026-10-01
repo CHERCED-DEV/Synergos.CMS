@@ -54,12 +54,17 @@ public interface ISynHostEmitter
 /// empty styleable placeholder as before.
 /// <para><b>Not encoded.</b> This is injected verbatim, so the caller
 /// owns escaping every editor-supplied value it interpolates.</para></param>
+/// <param name="Diccionario">Las secciones del diccionario que el elemento usa (ADR 0136): las
+/// declara su record (<c>[ElementoSynHost(..., Diccionario = [...])]</c>) y las pone acá
+/// <c>SolicitudSynHost.Para</c>. El emitter no las escribe en el tag: la página las junta y el
+/// bridge publica UNA vez su unión. <c>null</c> en los elementos sin record.</param>
 public sealed record SynHostEmitRequest(
     string BlockAlias,
     IReadOnlyDictionary<string, object?>? Props,
     string? ConfigOverrideJson,
     CultureInfo Culture,
-    string? FallbackHtml = null);
+    string? FallbackHtml = null,
+    IReadOnlyList<string>? Diccionario = null);
 
 /// <summary>
 /// Output of an emit call. Razor partials render both fragments with

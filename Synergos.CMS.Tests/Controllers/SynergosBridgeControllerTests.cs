@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
+using Synergos.CMS.Web.Services.Diccionario;
 
 namespace Synergos.CMS.Tests.Controllers;
 
@@ -15,17 +16,41 @@ namespace Synergos.CMS.Tests.Controllers;
 public sealed class SynergosBridgeControllerTests
 {
     private readonly IHostBridgeContextBuilder _builder = Substitute.For<IHostBridgeContextBuilder>();
+    private readonly DefaultHttpContext _http = new();
+
+    private SeccionesDeLaPagina Secciones() => new(new HttpContextAccessor { HttpContext = _http });
 
     private SynergosBridgeController BuildSut()
     {
         var sut = new SynergosBridgeController(
             _builder,
+            Secciones(),
             NullLogger<SynergosBridgeController>.Instance);
         sut.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext(),
+            HttpContext = _http,
         };
         return sut;
+    }
+
+    /// <summary>
+    /// En CSP estricto el bridge lo sirve OTRA petición, que no ve qué emitió la página: la página
+    /// le pasa sus secciones en la URL y el builder las publica igual que en el camino inline
+    /// (ADR 0136, piloto #186). Lo que no tiene forma de sección se descarta.
+    /// </summary>
+    [Fact]
+    public void Get_publica_las_secciones_que_la_pagina_pasa_en_la_consulta()
+    {
+        IReadOnlyList<string>? anotadas = null;
+        _builder.Build().Returns(_ =>
+        {
+            anotadas = Secciones().Declaradas;
+            return SampleContext();
+        });
+
+        BuildSut().Get("Slider,Rating, Common.States ,<script>,Slider");
+
+        Assert.Equal(new[] { "Common.States", "Rating", "Slider" }, anotadas);
     }
 
     private static HostBridgeContext SampleContext() =>
