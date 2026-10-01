@@ -17,8 +17,13 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// los <c>&lt;script&gt;</c> de las plantillas: 0 <c>ld+json</c> en el bundle—. Lo lee el resolver y,
 /// encendido, el CMS emite el JSON-LD en el SSR, con estos mismos pasos y junto al tag
 /// (<c>ElementoResuelto.DatosEstructurados</c>).</para>
+///
+/// <para><b>Sección <c>Nav.Breadcrumb</c></b> (ADR 0136): el nombre de la navegación —«Ruta de
+/// navegación»— ya era una clave del diccionario, hecha para esto; el elemento decía «Migas de
+/// pan» a mano. Se declara ese sub-prefijo y no <c>Nav</c>: la sección se publica entera, y
+/// <c>Nav</c> son diecisiete claves que la miga no usa.</para>
 /// </remarks>
-[ElementoSynHost("breadcrumb", TipoDeColocable.Pieza)]
+[ElementoSynHost("breadcrumb", TipoDeColocable.Pieza, Diccionario = ["Nav.Breadcrumb"])]
 public sealed record BreadcrumbProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<BreadcrumbStep>? Items);
 

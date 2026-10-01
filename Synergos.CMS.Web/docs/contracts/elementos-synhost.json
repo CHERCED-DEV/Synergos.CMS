@@ -281,7 +281,12 @@
       "nombre": "breadcrumb",
       "tipo": "pieza",
       "record": "BreadcrumbProps",
-      "diccionario": [],
+      "diccionario": [
+        "Nav.Breadcrumb"
+      ],
+      "claves": [
+        "Nav.Breadcrumb"
+      ],
       "campos": [
         {
           "nombre": "items",
