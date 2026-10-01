@@ -21,8 +21,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Qué NO decide este record</b>: si el deslizador sigue siendo colocable. Su evento
 /// <c>rangechange</c> no lo escucha nadie en el CMS (ADR 0134 §3, pendiente de producto); mientras
 /// lo sea, lo que el editor autora tiene que llegar.</para>
+///
+/// <para><b>Sección <c>RangeSlider</c></b> (ADR 0136): el nombre de cada pulgar, «{label} —
+/// mínimo/máximo», con el rótulo del editor como marcador (o «Rango» si no escribió ninguno).</para>
 /// </remarks>
-[ElementoSynHost("range-slider", TipoDeColocable.Pieza)]
+[ElementoSynHost("range-slider", TipoDeColocable.Pieza, Diccionario = ["RangeSlider"])]
 public sealed record RangeSliderProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Label,
     [property: CampoSynHost(OrigenDelCampo.Decision)] int? Min,

@@ -1048,7 +1048,14 @@
       "nombre": "range-slider",
       "tipo": "pieza",
       "record": "RangeSliderProps",
-      "diccionario": [],
+      "diccionario": [
+        "RangeSlider"
+      ],
+      "claves": [
+        "RangeSlider.Aria",
+        "RangeSlider.Max",
+        "RangeSlider.Min"
+      ],
       "campos": [
         {
           "nombre": "label",
