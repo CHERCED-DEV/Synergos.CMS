@@ -433,7 +433,14 @@
       "nombre": "color-picker",
       "tipo": "pieza",
       "record": "ColorPickerProps",
-      "diccionario": [],
+      "diccionario": [
+        "ColorPicker"
+      ],
+      "claves": [
+        "ColorPicker.Hex",
+        "ColorPicker.Invalid",
+        "ColorPicker.Label"
+      ],
       "campos": [
         {
           "nombre": "label",
@@ -470,7 +477,15 @@
       "nombre": "color-swatches",
       "tipo": "pieza",
       "record": "ColorSwatchesProps",
-      "diccionario": [],
+      "diccionario": [
+        "ColorSwatches"
+      ],
+      "claves": [
+        "ColorSwatches.Aria",
+        "ColorSwatches.Empty",
+        "ColorSwatches.None",
+        "ColorSwatches.Selected"
+      ],
       "campos": [
         {
           "nombre": "swatches",
