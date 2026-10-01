@@ -1293,7 +1293,17 @@
       "nombre": "stepper",
       "tipo": "pieza",
       "record": "StepperProps",
-      "diccionario": [],
+      "diccionario": [
+        "Stepper"
+      ],
+      "claves": [
+        "Stepper.Aria",
+        "Stepper.Status.Active",
+        "Stepper.Status.Done",
+        "Stepper.Status.Pending",
+        "Stepper.Step",
+        "Stepper.Summary"
+      ],
       "campos": [
         {
           "nombre": "steps",
