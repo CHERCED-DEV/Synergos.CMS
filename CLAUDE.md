@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3778 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3783 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2651 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2656 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 458 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -166,7 +166,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3778**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3783**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2736,6 +2736,23 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   viaja. **La pregunta que lo caza:** *¿esto que emito tiene que seguir en la página cuando el
   bundle monte?* Si sí, no va dentro del tag.
 
+- `feedback_a_link_to_a_composed_page_is_resolved_not_written` — **un enlace del chrome a una
+  página que compone el editor no se escribe a mano: se resuelve por lo que la página coloca, y
+  sin página no se enlaza** (#187). El botón del carrito de `_Layout.cshtml` decía
+  `/tienda/carrito` desde la Fase 0 (`3b10fd96`) y esa página no existió nunca —0 bloques del
+  resumen del carrito en la base, ningún commit la siembra—: un rastreo desde la portada la dio en
+  404 desde **54** páginas de Tienda, Booking y Propiedades. Hoy el botón enlaza la página del sitio
+  que coloca `elementShopCartSummary` (`PaginaQueColoca`) y sin ella es un indicador con nombre,
+  no un enlace (ADR 0112). Buscando la misma clase salió el buscador de la página de error:
+  `action="/search"`, otra ruta sin página; ahora apunta a la `searchPage` publicada o no se
+  pinta. **Y la forma hermana, en el sembrador**: la vitrina ENLAZABA `/synergos/apps/<slug>`
+  para los nueve verticales de `Verticals` y CREABA las páginas desde un `switch` aparte que no
+  tenía Hoteles, así que dos páginas del hub lo enlazaban a un 404. Una lista que enlaza y otra que
+  crea son la misma lista o tienen un gate que las cruce (`VitrinaDeAppsTests`). **Medido por dos
+  caminos**: el rastreo de lo que la página SIRVE (124 páginas, 2 rotos antes, 0 después) y los
+  literales de ruta de la FUENTE pedidos uno a uno al CMS vivo — el segundo es el que vio
+  `/search`, que ninguna página enlaza mientras no haya un 404 que la pinte.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2795,11 +2812,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3778 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3783 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2651
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2656
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 458
 
@@ -3261,7 +3278,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3778 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3783 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

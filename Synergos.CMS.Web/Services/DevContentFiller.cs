@@ -3998,23 +3998,52 @@ public sealed class DevContentFiller
         var order = 0;
         foreach (var d in domains)
         {
-            var sections = d.Slug switch
+            if (!Recorridos.TryGetValue(d.Slug, out var recorrido))
             {
-                "tienda" => BuildShowcaseTienda(),
-                "booking" => BuildShowcaseBooking(),
-                "eventos" => BuildShowcaseEventos(),
-                "propiedades" => BuildShowcasePropiedades(),
-                "educacion" => BuildShowcaseEducacion(),
-                "blogs" => BuildShowcaseBlogs(),
-                "healthcare" => BuildShowcaseHealthcare(),
-                "gobierno" => BuildShowcaseGobierno(d.AppUrl),
-                _ => null,
-            };
-            if (sections is null) { continue; }
-            SeedShowcasePage(appsId, d.Name, $"{d.Name} — la app por dentro", sections, details, sortOrder: ++order);
+                // No pasa mientras los dos conjuntos coincidan, y hay test que lo exige.
+                details.Add($"AppsShowcase:{d.Slug}:sin-recorrido");
+                continue;
+            }
+            SeedShowcasePage(appsId, d.Name, $"{d.Name} — la app por dentro", recorrido(this, d.AppUrl), details, sortOrder: ++order);
         }
         details.Add("AppsShowcase:ok");
     }
+
+    /// <summary>
+    /// El recorrido de la vitrina de cada vertical —la página <c>/synergos/apps/&lt;slug&gt;</c>—,
+    /// por slug. Recibe el deep-link a la app (vacío si su siteRoot no existe todavía).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Los ENLACES a estas páginas salen de <see cref="Verticals"/></b> —las tarjetas del
+    /// índice y el lanzador de Soluciones proyectan <c>/synergos/apps/{slug}</c> para los nueve—, y
+    /// las PÁGINAS salían de un <c>switch</c> que se escribía aparte. Hoteles entró en
+    /// <see cref="Verticals"/> y no en el <c>switch</c>: su caso caía en <c>_ =&gt; null</c>, la
+    /// página no se creaba y dos páginas del hub la enlazaban a un 404 (Synergos.CMS#187). La lista
+    /// paralela es la misma forma que la nota de <see cref="Verticals"/> cuenta de tres catálogos.</para>
+    ///
+    /// <para>Por eso hay test (<c>VitrinaDeAppsTests</c>): los slugs de los verticales y los de los
+    /// recorridos son el mismo conjunto, así que un vertical nuevo sin su recorrido pone la suite
+    /// en rojo en vez de publicar enlaces a una página que no existe.</para>
+    /// </remarks>
+    private static readonly IReadOnlyDictionary<string, Func<DevContentFiller, string, string>> Recorridos =
+        new Dictionary<string, Func<DevContentFiller, string, string>>(StringComparer.Ordinal)
+        {
+            ["tienda"] = (f, _) => f.BuildShowcaseTienda(),
+            ["booking"] = (f, _) => f.BuildShowcaseBooking(),
+            ["eventos"] = (f, _) => f.BuildShowcaseEventos(),
+            ["propiedades"] = (f, _) => f.BuildShowcasePropiedades(),
+            ["educacion"] = (f, _) => f.BuildShowcaseEducacion(),
+            ["blogs"] = (f, _) => f.BuildShowcaseBlogs(),
+            ["healthcare"] = (f, _) => f.BuildShowcaseHealthcare(),
+            ["hoteles"] = (f, _) => f.BuildShowcaseHoteles(),
+            ["gobierno"] = (f, appUrl) => f.BuildShowcaseGobierno(appUrl),
+        };
+
+    /// <summary>Los slugs que la vitrina ENLAZA: uno por vertical.</summary>
+    internal static IReadOnlyList<string> SlugsQueLaVitrinaEnlaza => Verticals.Select(v => v.Slug).ToList();
+
+    /// <summary>Los slugs cuya página la vitrina sabe ARMAR.</summary>
+    internal static IReadOnlyCollection<string> SlugsQueLaVitrinaRecorre => Recorridos.Keys.ToList();
 
     // Crea/actualiza una pageBase de la vitrina bajo un padre específico (idempotente por
     // nombre, mismo patrón que SeedSiteRootPage pero con SEO de la vitrina + sortOrder).
@@ -4323,6 +4352,35 @@ public sealed class DevContentFiller
         AddCta(b, "Recorre la app completa",
             "Agenda, historia clínica y recetas en la app real.",
             "Abrir la app", "/healthcare");
+        return b.Build();
+    }
+
+    // Origen del copy: BuildHotelesHome (hero + value props). Es el recorrido que faltaba: el
+    // índice y Soluciones ya enlazaban /synergos/apps/hoteles y la página no existía (#187).
+    private string BuildShowcaseHoteles()
+    {
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Hoteles — tu estadía, a un clic",
+            "Reservas de alojamiento sobre el mismo motor",
+            "<p>La app Hoteles demuestra el motor de reservas aplicado al alojamiento: fechas y huéspedes, habitaciones con disponibilidad en tiempo real y confirmación al instante. Para hoteles y hospedajes que quieren vender directo, sin intermediarios.</p>",
+            "Apps Hoteles Hero", "Preview de la app Hoteles", TerraHotelFrom, TerraHotelTo,
+            ("Abrir la app", "/hoteles"), ("Ver todas las apps", "/synergos/apps"));
+
+        FeatureGridAuto(b, "Qué demuestra del motor", "La habitación es un recurso reservable", new (string title, string subtitle, string body)[]
+        {
+            ("Disponibilidad en tiempo real", "Sin sobreventa", "El asistente consulta los cupos al motor; nadie reserva dos veces la misma habitación."),
+            ("Retención con timeout", "Tu cupo, apartado", "El motor aparta la habitación mientras completas tus datos y la libera si no confirmas."),
+            ("Confirmación inmediata", "Cero esperas", "Confirmas y recibes tu comprobante al instante, con precios en pesos colombianos."),
+        }, 3);
+
+        // DEMO — pieza viva: el mismo asistente de reserva multipaso de la app (/api/booking).
+        AddMission(b, "Demo en vivo — reserva tu estadía", "",
+            "<p>El asistente de abajo es el motor real: elige fechas y huéspedes, selecciona tu habitación y confirma. Pruébalo aquí mismo.</p>");
+        AddSynBookingWizard(b, "/api/booking", "Hoteles SynergosLabs");
+
+        AddCta(b, "Recorre la app completa",
+            "Fechas, habitaciones y reserva en la app real.",
+            "Abrir la app", "/hoteles");
         return b.Build();
     }
 
