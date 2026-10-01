@@ -711,7 +711,12 @@
       "nombre": "fab",
       "tipo": "pieza",
       "record": "FabProps",
-      "diccionario": [],
+      "diccionario": [
+        "Fab"
+      ],
+      "claves": [
+        "Fab.Aria"
+      ],
       "campos": [
         {
           "nombre": "iconKey",

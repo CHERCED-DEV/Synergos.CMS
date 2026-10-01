@@ -19,8 +19,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 ///
 /// <para><c>tooltip</c> lo acepta el elemento y no lo autora el ElementType: queda como
 /// atributo.</para>
+///
+/// <para><b>Sección <c>Fab</c></b> (ADR 0136): el último respaldo del nombre accesible, cuando no
+/// hay rótulo del editor ni tooltip.</para>
 /// </remarks>
-[ElementoSynHost("fab", TipoDeColocable.Pieza)]
+[ElementoSynHost("fab", TipoDeColocable.Pieza, Diccionario = ["Fab"])]
 public sealed record FabProps(
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? IconKey,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? ActionLink,
