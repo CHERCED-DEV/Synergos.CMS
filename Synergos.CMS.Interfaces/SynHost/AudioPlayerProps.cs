@@ -14,8 +14,13 @@ namespace Synergos.CMS.Interfaces.SynHost;
 ///
 /// <para><c>autoplay</c>, <c>loop</c> y <c>preload</c> los acepta el elemento y no los autora el
 /// ElementType: quedan como atributos del elemento, no viajan en el <c>config</c>.</para>
+///
+/// <para><b>Secciones <c>Media</c> y <c>Audio</c></b> (ADR 0136). <c>Media</c> es el transporte que
+/// comparte con <c>video-player</c> (una clave por control, no dos copias de «Pausar»);
+/// <c>Audio</c>, su nombre accesible y su estado vacío. El título y el artista son contenido del
+/// editor: no pasan por el diccionario.</para>
 /// </remarks>
-[ElementoSynHost("audio-player", TipoDeColocable.Pieza)]
+[ElementoSynHost("audio-player", TipoDeColocable.Pieza, Diccionario = ["Media", "Audio"])]
 public sealed record AudioPlayerProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? AudioFile,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? TrackTitle,

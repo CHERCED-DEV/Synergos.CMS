@@ -132,7 +132,21 @@
       "nombre": "audio-player",
       "tipo": "pieza",
       "record": "AudioPlayerProps",
-      "diccionario": [],
+      "diccionario": [
+        "Media",
+        "Audio"
+      ],
+      "claves": [
+        "Audio.Aria",
+        "Audio.Empty",
+        "Media.Mute",
+        "Media.Pause",
+        "Media.Play",
+        "Media.Seek",
+        "Media.Time",
+        "Media.Unmute",
+        "Media.Volume"
+      ],
       "campos": [
         {
           "nombre": "audioFile",
@@ -1447,7 +1461,29 @@
       "nombre": "video-player",
       "tipo": "pieza",
       "record": "VideoPlayerProps",
-      "diccionario": [],
+      "diccionario": [
+        "Media",
+        "Video"
+      ],
+      "claves": [
+        "Media.Mute",
+        "Media.Pause",
+        "Media.Play",
+        "Media.Seek",
+        "Media.Time",
+        "Media.Unmute",
+        "Media.Volume",
+        "Video.Aria",
+        "Video.Captions",
+        "Video.Empty",
+        "Video.ExitFullscreen",
+        "Video.Fullscreen",
+        "Video.Mute",
+        "Video.Pause",
+        "Video.Play",
+        "Video.Player",
+        "Video.Unmute"
+      ],
       "campos": [
         {
           "nombre": "videoFile",
