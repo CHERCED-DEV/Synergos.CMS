@@ -1,6 +1,7 @@
 using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
+using Umbraco.Cms.Core.Strings;
 
 namespace Synergos.CMS.Web.Services;
 
@@ -50,6 +51,7 @@ public sealed class DevContentFiller
     private readonly ICommentReader _commentReader;
     private readonly ICommentWriter _commentWriter;
     private readonly ILogger<DevContentFiller> _logger;
+    private readonly IShortStringHelper _urls;
 
     private Guid _sectionKey, _heroKey, _splitKey, _featureGridKey, _featureKey, _missionKey, _ctaKey, _buttonKey;
     private string? _blogAuthorUdi;   // UDI del autor sembrado; los posts lo referencian en authorRef
@@ -64,7 +66,8 @@ public sealed class DevContentFiller
         DevMediaFactory media,
         ICommentReader commentReader,
         ICommentWriter commentWriter,
-        ILogger<DevContentFiller> logger)
+        ILogger<DevContentFiller> logger,
+        IShortStringHelper urls)
     {
         _contentService = contentService;
         _contentTypeService = contentTypeService;
@@ -73,6 +76,7 @@ public sealed class DevContentFiller
         _commentReader = commentReader;
         _commentWriter = commentWriter;
         _logger = logger;
+        _urls = urls;
     }
 
     public FillResult FillSynergosPages()
@@ -3976,12 +3980,46 @@ public sealed class DevContentFiller
     /// idempotente activa el deep-link solo cuando el sitio aparece. Antes ese guard estaba
     /// escrito a mano sólo para Gobierno —que hace tiempo SÍ tiene siteRoot—; ahora aplica a
     /// los nueve por igual y ninguno depende de que alguien se acuerde de quitarle la nota.
+    ///
+    /// <para><b>El sitio se busca por la RUTA que se enlaza, no por su marca</b> (#188). Esto
+    /// preguntaba <c>FindVertical(slug)</c>, que casa por <c>brandKey</c>, y dos verticales tienen
+    /// marca distinta de su ruta: Tienda es <c>ecommerce</c> y Booking es <c>meridian</c>. Salían
+    /// con AppUrl vacío y Soluciones listaba 7 de 9 —medido en vivo, con <c>/tienda</c> y
+    /// <c>/booking</c> sirviendo 200—. Lo que hace válido <c>/{slug}</c> es que un siteRoot viva en
+    /// esa URL, así que se pregunta eso (<see cref="SitioEnLaRuta"/>).</para>
     /// </summary>
-    private (string Name, string Slug, string Blurb, string AppUrl)[] ShowcaseCatalog() =>
-        Verticals
+    private (string Name, string Slug, string Blurb, string AppUrl)[] ShowcaseCatalog()
+    {
+        var sitios = SitiosDeLaPlataforma();
+        return Verticals
             .Select(v => (v.Name, v.Slug, v.Blurb,
-                AppUrl: FindVertical(v.Slug) is not null ? $"/{v.Slug}" : string.Empty))
+                AppUrl: SitioEnLaRuta(sitios, v.Slug, _urls) is not null ? $"/{v.Slug}" : string.Empty))
             .ToArray();
+    }
+
+    private IReadOnlyList<IContent> SitiosDeLaPlataforma()
+    {
+        var pr = _contentService.GetRootContent().FirstOrDefault(c => c.ContentType.Alias == "platformRoot");
+        return pr is null
+            ? Array.Empty<IContent>()
+            : _contentService.GetPagedChildren(pr.Id, 0, 200, out _).ToList();
+    }
+
+    /// <summary>
+    /// El siteRoot que Umbraco sirve en <c>/{slug}</c>: el de ese segmento de URL, que sale de su
+    /// nombre como lo saca Umbraco (<see cref="IShortStringHelper"/>).
+    /// </summary>
+    /// <remarks>
+    /// Ni la marca ni el nombre de la tabla: <c>brandKey</c> difiere en Tienda y Booking, y el
+    /// nombre de <see cref="Verticals"/> lleva tilde donde el del sitio no («Educación» contra
+    /// «Educacion»). Las dos dan <c>educacion</c> como ruta.
+    /// </remarks>
+    internal static IContent? SitioEnLaRuta(IEnumerable<IContent> sitios, string slug, IShortStringHelper urls)
+        => sitios.FirstOrDefault(c => c.ContentType.Alias == "siteRoot"
+            && string.Equals(
+                (c.GetCultureName(Culture) ?? c.Name ?? string.Empty).ToUrlSegment(urls, Culture),
+                slug,
+                StringComparison.Ordinal));
 
     private void SeedAppsShowcase(List<string> details)
     {
