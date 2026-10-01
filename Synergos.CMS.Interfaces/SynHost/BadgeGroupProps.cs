@@ -12,8 +12,10 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><c>tone</c> es el tono del design system (<c>neutral</c>, <c>brand</c>, <c>success</c>…);
 /// el ElementType lo llama <c>color</c> y lo autora como texto libre. La lista de tonos vive en el
 /// UI: el elemento descarta lo que no conoce y cae a <c>neutral</c>. Lo mismo <c>layout</c>: el
-/// DataType ofrece <c>inline/stack/grid/cluster</c> y el elemento pinta <c>wrap/inline/stack</c>
-/// (<c>grid</c> y <c>cluster</c> caen a <c>wrap</c>; es schema, no se toca acá).</para>
+/// DataType ofrece <c>inline/stack/grid/cluster</c> y el elemento pinta <c>wrap/inline/stack</c>.
+/// <c>cluster</c> es la fila que salta de línea, así que el resolver lo manda como <c>wrap</c>;
+/// <c>grid</c> no tiene equivalente y cae a <c>wrap</c> (quitarlo o enseñárselo al elemento es una
+/// decisión de producto, #181).</para>
 ///
 /// <para><c>iconKey</c> lo promete la descripción del ElementType y el elemento no pinta iconos en
 /// las insignias: no viaja. <c>count</c>, <c>href</c> y la selección los sabe pintar el elemento

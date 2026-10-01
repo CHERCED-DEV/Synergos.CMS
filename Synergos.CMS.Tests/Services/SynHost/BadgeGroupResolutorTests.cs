@@ -43,6 +43,20 @@ public sealed class BadgeGroupResolutorTests
         Assert.Equal("stack", cable["layout"]?.ToString());
     }
 
+    /// <summary>
+    /// <c>cluster</c> —la fila que salta de línea— es lo que el elemento llama <c>wrap</c> (#181);
+    /// lo que no tiene equivalente viaja como está y el elemento decide.
+    /// </summary>
+    [Theory]
+    [InlineData("cluster", "wrap")]
+    [InlineData("Cluster", "wrap")]
+    [InlineData("stack", "stack")]
+    [InlineData("grid", "grid")]
+    public void La_disposicion_viaja_con_el_nombre_que_le_da_el_elemento(string delEditor, string viaja)
+    {
+        Assert.Equal(viaja, Resolutor().Resolver(ElementoFalso.Con(("layout", delEditor))).Props.Layout);
+    }
+
     [Fact]
     public void Una_insignia_sin_texto_no_viaja_y_se_anota()
     {
