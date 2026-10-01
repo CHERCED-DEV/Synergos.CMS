@@ -181,12 +181,6 @@
           "tipo": "BreadcrumbStep[]",
           "opcional": true,
           "origen": "contenido"
-        },
-        {
-          "nombre": "includeStructuredData",
-          "tipo": "boolean",
-          "opcional": true,
-          "origen": "decision"
         }
       ],
       "ejemplo": {
@@ -203,8 +197,7 @@
           {
             "label": "Zapatos"
           }
-        ],
-        "includeStructuredData": true
+        ]
       }
     },
     {

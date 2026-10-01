@@ -43,5 +43,13 @@ public interface IResolutorSynHost<TProps>
 /// mismos valores que el record, y por eso lo arma el mismo resolver: si se armara en la vista,
 /// el SSR y lo que hidrata podrían volver a leer claves distintas.
 /// </param>
-public sealed record ElementoResuelto<TProps>(TProps Props, string? RespaldoHtml = null)
+/// <param name="DatosEstructurados">
+/// El JSON-LD (schema.org) del bloque, que el emitter escribe JUNTO al tag y no dentro
+/// (<c>SynHostEmitRequest.StructuredDataJson</c>). <c>null</c> si el elemento no tiene. No va en
+/// <paramref name="RespaldoHtml"/> porque lo de dentro del tag lo borra la hidratación —Angular
+/// vacía el host antes de pintar—, y el elemento tampoco puede emitirlo: el compilador de Angular
+/// quita los <c>&lt;script&gt;</c> de las plantillas (Synergos.UI#90). Sale del mismo resolver por
+/// la misma razón que el respaldo: de los mismos valores que viajan.
+/// </param>
+public sealed record ElementoResuelto<TProps>(TProps Props, string? RespaldoHtml = null, string? DatosEstructurados = null)
     where TProps : class;

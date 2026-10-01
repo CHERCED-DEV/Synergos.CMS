@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3771 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3778 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2644 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2651 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 458 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -166,7 +166,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3771**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3778**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2719,6 +2719,23 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   declarar «no me queda ninguna» es legítimo y prohibirlo habría cambiado un
   defecto que miente por uno que estorba.
 
+- `feedback_what_hydration_erases_goes_next_to_the_tag` — **lo que el SSR pone DENTRO de un
+  `<synergos-*>` lo borra la hidratación, y lo que un elemento de Angular escribe como `<script>`
+  en su plantilla no llega nunca al DOM: los datos que tienen que sobrevivir —JSON-LD— los emite
+  el CMS JUNTO al tag** (Synergos.UI#90). `breadcrumb` calculaba su `BreadcrumbList` y lo ataba a
+  un `<script type="application/ld+json">` de su plantilla; el compilador de Angular quita los
+  `<script>` en silencio —0 `ld+json` en el bundle publicado—, así que con el interruptor
+  encendido no salía nunca. El arreglo NO podía ser el respaldo SSR (`RespaldoHtml`), que es lo
+  que el modelo ofrecía: **medido en el navegador** con el bundle real, un `ld+json` dentro del
+  tag desaparece al montar —Angular vacía el host antes de pintar (`PRESERVE_HOST_CONTENT` es
+  `false` sin Shadow DOM)— y uno junto al tag sigue ahí. Un buscador que ejecuta JavaScript lee
+  el DOM pintado. Por eso hay un segundo canal en el resolver: `ElementoResuelto.DatosEstructurados`
+  → `SynHostEmitRequest.StructuredDataJson`, que el emitter escribe después del cierre del tag
+  (escapando `<`, así ningún valor cierra el `<script>`). Sale de los MISMOS pasos que viajan en el
+  `config`, y el interruptor `includeStructuredData` del ElementType lo lee el resolver y ya no
+  viaja. **La pregunta que lo caza:** *¿esto que emito tiene que seguir en la página cuando el
+  bundle monte?* Si sí, no va dentro del tag.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2778,11 +2795,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3771 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3778 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2644
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2651
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 458
 
@@ -3244,7 +3261,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3771 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3778 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

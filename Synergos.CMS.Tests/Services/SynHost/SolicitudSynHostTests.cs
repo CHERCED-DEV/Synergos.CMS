@@ -54,6 +54,15 @@ public sealed class SolicitudSynHostTests
     }
 
     [Fact]
+    public void Los_datos_estructurados_pasan_tal_cual_al_emitter()
+    {
+        var conLd = new ElementoResuelto<KpiCardProps>(new KpiCardProps("Ventas", null, null, null, null), DatosEstructurados: "{}");
+
+        Assert.Equal("{}", SolicitudSynHost.Para(conLd, null, EsCo).StructuredDataJson);
+        Assert.Null(SolicitudSynHost.Para(Kpi(), null, EsCo).StructuredDataJson);
+    }
+
+    [Fact]
     public void El_override_del_editor_solo_puede_pisar_campos_que_el_record_declara()
     {
         var solicitud = SolicitudSynHost.Para(Kpi(), """{"label":"Pisado","sparkline":[1,2],"kpiLabel":"x"}""", EsCo);

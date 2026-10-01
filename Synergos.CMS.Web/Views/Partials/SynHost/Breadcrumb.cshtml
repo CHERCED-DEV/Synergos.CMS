@@ -1,9 +1,11 @@
 @*
-    SynHost renderer — <synergos-breadcrumb>. Breadcrumb with JSON-LD schema.org.
+    SynHost renderer — <synergos-breadcrumb>.
 
     Host tonto (ADR 0135): el resolver arma el record que viaja (BreadcrumbProps) —parsea
     en el servidor el JSON de pasos— y la vista resuelve y emite. Antes mandaba el texto
     itemsJson y el elemento lee la lista items: las migas hidrataban vacías (D1).
+    El JSON-LD BreadcrumbList (interruptor includeStructuredData) también sale del resolver
+    y el emitter lo escribe junto al tag: el elemento no puede (UI#90).
 *@
 @using Synergos.CMS.Web.Services.SynHost
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement

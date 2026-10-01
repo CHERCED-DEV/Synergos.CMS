@@ -62,7 +62,8 @@ public static class SolicitudSynHost
             Props: Props(resuelto.Props),
             ConfigOverrideJson: SoloLoDeclarado(configOverride, NombresDelCable(typeof(TProps))),
             Culture: culture,
-            FallbackHtml: resuelto.RespaldoHtml);
+            FallbackHtml: resuelto.RespaldoHtml,
+            StructuredDataJson: resuelto.DatosEstructurados);
     }
 
     /// <summary>El elemento al que está atado <paramref name="record"/>.</summary>

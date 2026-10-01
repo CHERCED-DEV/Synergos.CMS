@@ -54,12 +54,25 @@ public interface ISynHostEmitter
 /// empty styleable placeholder as before.
 /// <para><b>Not encoded.</b> This is injected verbatim, so the caller
 /// owns escaping every editor-supplied value it interpolates.</para></param>
+/// <param name="StructuredDataJson">Optional schema.org JSON-LD object
+/// for the block, emitted as <c>&lt;script type="application/ld+json"&gt;</c>
+/// right AFTER the custom element's closing tag — never inside it.
+/// <para><b>Why outside.</b> Hydration replaces what is inside the tag:
+/// Angular clears the host element before rendering (no Shadow DOM), so
+/// structured data placed in <paramref name="FallbackHtml"/> is in the
+/// served HTML and gone from the rendered DOM, which is what a crawler
+/// that runs JavaScript reads. And a bundle cannot emit it either: the
+/// Angular compiler drops every <c>&lt;script&gt;</c> from templates
+/// (Synergos.UI#90).</para>
+/// <para>Must be a JSON value; the emitter escapes <c>&lt;</c> so it
+/// cannot close the script element.</para></param>
 public sealed record SynHostEmitRequest(
     string BlockAlias,
     IReadOnlyDictionary<string, object?>? Props,
     string? ConfigOverrideJson,
     CultureInfo Culture,
-    string? FallbackHtml = null);
+    string? FallbackHtml = null,
+    string? StructuredDataJson = null);
 
 /// <summary>
 /// Output of an emit call. Razor partials render both fragments with
@@ -71,7 +84,9 @@ public sealed record SynHostEmitRequest(
 /// fallback.</param>
 /// <param name="ElementHtml">The custom element tag with the config
 /// JSON attribute, e.g.
-/// <c>&lt;synergos-avatar config='...'&gt;&lt;/synergos-avatar&gt;</c>.
+/// <c>&lt;synergos-avatar config='...'&gt;&lt;/synergos-avatar&gt;</c>,
+/// followed by the block's JSON-LD script when the request carried
+/// <see cref="SynHostEmitRequest.StructuredDataJson"/>.
 /// Always emitted even when the registry did not resolve — the tag
 /// will simply not hydrate until a bundle registers it, which is the
 /// expected graceful degradation.</param>
