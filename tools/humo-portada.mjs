@@ -100,8 +100,13 @@ const child = spawn('dotnet', [DLL], {
     // sembrar la portada escribiría uSync/v9/Content/ en el working tree — que es
     // justo el XML que un agente no autora (ADR 0129).
     uSync__Settings__ExportOnSave: 'None',
-    uSync__Sets__Default__Handlers__ContentHandler__Enabled: 'true',
-    uSync__Sets__Default__Handlers__MediaHandler__Enabled: 'true',
+    // SÓLO el esquema, a propósito. Desde que el contenido de demo está versionado (ADR 0129,
+    // `d6af5a1f`), importar con estos dos encendidos trae la demo entera: el sitio ya no sale en
+    // blanco, la comprobación de la ADR 0013 («nada siembra al arrancar») falla, y /dev/seed-portada
+    // contesta RootAlreadyTaken. Este humo prueba el camino SIN la demo —el que el onboarding ofrece
+    // con seed-portada—; que la demo se importe limpia lo prueba usync-rebuild-check.
+    uSync__Sets__Default__Handlers__ContentHandler__Enabled: 'false',
+    uSync__Sets__Default__Handlers__MediaHandler__Enabled: 'false',
     // Encendido a propósito, al revés que en usync-rebuild-check: lo que se prueba
     // acá es precisamente la herramienta que vive detrás del flag.
     Synergos__DevSeed__Enabled: 'true',

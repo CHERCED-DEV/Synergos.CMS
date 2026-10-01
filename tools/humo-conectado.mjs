@@ -168,8 +168,13 @@ const child = spawn('dotnet', [DLL], {
     ConnectionStrings__umbracoDbDSN_ProviderName: 'Microsoft.Data.Sqlite',
     uSync__Settings__ImportAtStartup: 'All',
     uSync__Settings__ExportOnSave: 'None',
-    uSync__Sets__Default__Handlers__ContentHandler__Enabled: 'true',
-    uSync__Sets__Default__Handlers__MediaHandler__Enabled: 'true',
+    // SÓLO el esquema, a propósito. Desde que el contenido de demo está versionado (ADR 0129,
+    // `d6af5a1f`), importar con estos dos encendidos trae la demo entera: el sitio ya no sale en
+    // blanco, la comprobación de la ADR 0013 («nada siembra al arrancar») falla, y /dev/seed-portada
+    // contesta RootAlreadyTaken. Este humo prueba el camino SIN la demo —el que el onboarding ofrece
+    // con seed-portada—; que la demo se importe limpia lo prueba usync-rebuild-check.
+    uSync__Sets__Default__Handlers__ContentHandler__Enabled: 'false',
+    uSync__Sets__Default__Handlers__MediaHandler__Enabled: 'false',
     Synergos__DevSeed__Enabled: 'true',
     // La contraseña del administrador NO vive en ningún appsettings desde el #150 — publicaba
     // la de PRODUCCIÓN en un repo público. Estos gates arrancan con el perfil `Docker`, que
@@ -271,6 +276,7 @@ try {
         const donde = new URL(url, `${BASE}/`).href;
         try {
           const r = await fetch(donde, { method: 'GET' });
+          await r.body?.cancel();
           if (!r.ok) rotas.push(`${specifier} → ${donde} → ${r.status}`);
         } catch (e) { rotas.push(`${specifier} → ${donde} → ${e.message}`); }
       }
@@ -324,6 +330,7 @@ try {
       const url = s.startsWith('http') ? s : `${cdnBase}${s}`;
       try {
         const r = await fetch(url, { method: 'GET' });
+        await r.body?.cancel();
         if (!r.ok) rotos.push(`${url} → ${r.status}`);
       } catch (e) { rotos.push(`${url} → ${e.message}`); }
     }
@@ -338,7 +345,12 @@ try {
   falla(e.message);
 } finally {
   child.kill('SIGKILL');
+  // Un cuerpo que nadie lee deja la conexión a medio escribir, y `close()` espera a que termine:
+  // en Windows, donde el búfer de loopback no se traga un bundle de Angular entero, el proceso
+  // pasaba todos los dientes y no salía nunca. Por eso arriba se cancela cada cuerpo, y acá se
+  // cortan las conexiones que queden.
   servidor?.close();
+  servidor?.closeAllConnections();
 }
 
 /**
