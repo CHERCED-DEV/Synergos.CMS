@@ -22,17 +22,40 @@ namespace Synergos.CMS.Tests.Architecture;
 /// Si alguno empieza a pedir otra cosa del builder, esto lanza acá en vez de mentir.</para>
 ///
 /// <para>Se promovió al SEGUNDO consumidor (§0.B.17): nació dentro de
-/// <c>NadaSiembraAlArrancarTests</c> (#176) y lo necesitó <c>ModosDelComposeTests</c> (#177).</para>
+/// <c>NadaSiembraAlArrancarTests</c> (#176) y lo necesitó <c>ModosDelComposeTests</c> (#177).
+/// Desde el #182 también contesta QUÉ claves leen los composers al componer
+/// (<see cref="ClavesQueLeen"/>).</para>
 /// </remarks>
 internal static class ComposicionDelCms
 {
     /// <summary>Todos los <see cref="IComposer"/> del producto web, compuestos contra <paramref name="configuracion"/>.</summary>
     internal static ServiceCollection Componer(IReadOnlyDictionary<string, string?> configuracion)
+        => Componer(configuracion, anotadas: null);
+
+    /// <summary>
+    /// Las claves que los composers le PIDEN a la configuración al componer —por indexador o por
+    /// sección—, preguntadas al composer y no leídas de su fuente (#182).
+    /// </summary>
+    /// <remarks>
+    /// Es el segundo camino para saber qué interruptores existen: el primero lee la fuente, y una
+    /// clave armada con una variable o leída por un ayudante no aparece ahí escrita. Lo que se
+    /// pide de una sección ya obtenida (<c>seccion["BaseUrl"]</c>) no se anota: sólo lo que pasa
+    /// por <c>builder.Config</c>.
+    /// </remarks>
+    internal static IReadOnlySet<string> ClavesQueLeen(IReadOnlyDictionary<string, string?> configuracion)
+    {
+        var anotadas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        Componer(configuracion, anotadas);
+        return anotadas;
+    }
+
+    private static ServiceCollection Componer(IReadOnlyDictionary<string, string?> configuracion, ISet<string>? anotadas)
     {
         var services = new ServiceCollection();
         var builder = Substitute.For<IUmbracoBuilder>();
         builder.Services.Returns(services);
-        builder.Config.Returns(new ConfigurationBuilder().AddInMemoryCollection(configuracion).Build());
+        IConfiguration config = new ConfigurationBuilder().AddInMemoryCollection(configuracion).Build();
+        builder.Config.Returns(anotadas is null ? config : new ConfiguracionQueAnota(config, anotadas));
 
         foreach (var composer in typeof(SeamComposer).Assembly.GetTypes()
                      .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(IComposer).IsAssignableFrom(t))
@@ -73,4 +96,28 @@ internal static class ComposicionDelCms
             .Select(d => $"{d.ServiceType.FullName}|{(d.IsKeyedService ? d.ServiceKey : null)}|{Entrega(d)}|{d.Lifetime}")
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToList();
+
+    /// <summary>Una configuración que anota cada clave que se le pide.</summary>
+    private sealed class ConfiguracionQueAnota(IConfiguration interior, ISet<string> anotadas) : IConfiguration
+    {
+        public string? this[string key]
+        {
+            get
+            {
+                anotadas.Add(key);
+                return interior[key];
+            }
+            set => interior[key] = value;
+        }
+
+        public IConfigurationSection GetSection(string key)
+        {
+            anotadas.Add(key);
+            return interior.GetSection(key);
+        }
+
+        public IEnumerable<IConfigurationSection> GetChildren() => interior.GetChildren();
+
+        public Microsoft.Extensions.Primitives.IChangeToken GetReloadToken() => interior.GetReloadToken();
+    }
 }

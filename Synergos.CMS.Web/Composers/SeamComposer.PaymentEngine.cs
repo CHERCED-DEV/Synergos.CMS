@@ -98,7 +98,7 @@ public sealed partial class SeamComposer
         //
         // El default es Engine y no es una transición: el motor en proceso es lo que permite
         // levantar el repo entero sin ningún servicio.
-        if (string.Equals(builder.Config["Synergos:Payments:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Payments:Mode", "Api", new PaymentsSettings().Mode))
         {
             // Y NO se enciende mientras alguien orqueste de este lado. Revienta al cablear, como
             // ExigirUnaSolaPlomeria y por lo mismo.
@@ -214,15 +214,13 @@ public sealed partial class SeamComposer
     /// </remarks>
     internal static void ExigirUnaSolaPlomeria(IConfiguration config)
     {
-        var tiendaCableada = string.Equals(
-            config["Synergos:Tienda:Mode"], "Bff", StringComparison.OrdinalIgnoreCase);
+        var tiendaCableada = Interruptor.Encendido(config, "Synergos:Tienda:Mode", "Bff", new TiendaSettings().Mode);
 
         // Y el seam entero contra la capacidad cuenta igual (#27, la parte que quedó viva): con
         // Synergos:Payments:Mode=Api este lado no cobra, así que unas llaves de Wompi aquí no
         // cobrarían tampoco — se quedarían calladas. Una config que no hace nada y parece que sí
         // es el mismo defecto de `Provider=Wompi` sirviendo el stub, sólo que al revés.
-        var seamCableado = string.Equals(
-            config["Synergos:Payments:Mode"], "Api", StringComparison.OrdinalIgnoreCase);
+        var seamCableado = Interruptor.Encendido(config, "Synergos:Payments:Mode", "Api", new PaymentsSettings().Mode);
 
         if (!tiendaCableada && !seamCableado) return;
 
@@ -255,12 +253,12 @@ public sealed partial class SeamComposer
     /// el CMS no tiene dónde anotar una compensación pendiente. Es lo que
     /// <c>ShopWiringTests</c> defiende en compilación.
     /// </remarks>
-    private static readonly (string Flag, string Cableado, string Que)[] Orquestadores =
+    private static readonly (string Flag, string Cableado, string PorDefecto, string Que)[] Orquestadores =
     {
-        ("Synergos:Tienda:Mode", "Bff", "la tienda"),
-        ("Synergos:Salud:Mode", "Bff", "la cita clínica"),
-        ("Synergos:Eventos:Mode", "Bff", "la compra de entradas"),
-        ("Synergos:Viajes:Mode", "Bff", "la reserva de viaje"),
+        ("Synergos:Tienda:Mode", "Bff", new TiendaSettings().Mode, "la tienda"),
+        ("Synergos:Salud:Mode", "Bff", new SaludSettings().Mode, "la cita clínica"),
+        ("Synergos:Eventos:Mode", "Bff", new EventosSettings().Mode, "la compra de entradas"),
+        ("Synergos:Viajes:Mode", "Bff", new ViajesSettings().Mode, "la reserva de viaje"),
     };
 
     /// <summary>
@@ -291,7 +289,7 @@ public sealed partial class SeamComposer
     internal static void ExigirQueNadieOrqueste(IConfiguration config)
     {
         var enProceso = Orquestadores
-            .Where(o => !string.Equals(config[o.Flag], o.Cableado, StringComparison.OrdinalIgnoreCase))
+            .Where(o => !Interruptor.Encendido(config, o.Flag, o.Cableado, o.PorDefecto))
             .Select(o => $"{o.Que} ({o.Flag}={o.Cableado})")
             .ToList();
 

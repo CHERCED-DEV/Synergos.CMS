@@ -14,7 +14,8 @@ namespace Synergos.CMS.Tests.Architecture;
 /// mitad ejecutable de <c>docs/product/12-el-molde-de-un-vertical.md</c>.</para>
 ///
 /// <para><b>El descubrimiento se DERIVA, no se enumera</b>, y el criterio elegido es el
-/// interruptor: todo <c>Config["Synergos:…:Mode"]</c> que un composer lee para cambiar una
+/// interruptor: todo <c>Synergos:…:Mode</c> que un composer lee —con la pieza <c>Interruptor</c>
+/// (#182) o a mano con <c>Config["…"]</c>— para cambiar una
 /// implementación en proceso por un cliente <c>Http*</c> del otro árbol. Se eligió ése y no los
 /// <c>*WiringTests</c> —que también se podían recorrer— porque un gate que se descubre a sí mismo
 /// por el nombre de sus ficheros deja invisible justo el fallo que más importa: el vertical que se
@@ -161,7 +162,7 @@ public sealed class MoldeDelVerticalTests
 
     /// <summary>
     /// El texto de la rama cableada: el bloque del <c>if</c> si lo tiene, y si es una guarda de
-    /// salida temprana (<c>if (!EsModoApi(…)) return;</c>) lo que queda del método.
+    /// salida temprana (<c>if (!Interruptor.Encendido(…)) return;</c>) lo que queda del método.
     /// </summary>
     /// <remarks>
     /// Las dos formas están en el árbol —<c>SeamComposer.Shop.cs</c> usa bloque,
@@ -215,9 +216,13 @@ public sealed class MoldeDelVerticalTests
         {
             var ifs = Regex.Matches(src, @"\bif\s*\(").Select(m => m.Index).ToList();
 
-            foreach (Match marca in Regex.Matches(src, @"Config\[""(Synergos:[A-Za-z:]+:Mode)""\]"))
+            // El interruptor se lee con la pieza (#182) —`Interruptor.Encendido(builder.Config,
+            // "K", …)`— y se sigue viendo leído a mano (`Config["K"]`): uno nuevo escrito a mano
+            // tiene que entrar igual a este gate, y lo para ModosDelComposeTests.
+            foreach (Match marca in Regex.Matches(src,
+                         @"Interruptor\s*\.\s*(?:Encendido|Modo)\s*\(\s*(?:builder\.)?Config\s*,\s*""(Synergos:[A-Za-z:]+:Mode)""|Config\[""(Synergos:[A-Za-z:]+:Mode)""\]"))
             {
-                var clave = marca.Groups[1].Value;
+                var clave = marca.Groups[1].Success ? marca.Groups[1].Value : marca.Groups[2].Value;
                 if (encontrados.Any(p => p.Clave == clave)) continue;
 
                 var previo = ifs.LastOrDefault(i => i < marca.Index, -1);
@@ -240,7 +245,7 @@ public sealed class MoldeDelVerticalTests
                 var seccion = clave[..^":Mode".Length];
 
                 // El modo cableado sale de la COMPARACIÓN, esté en la condición o en el ayudante
-                // que la condición llama (`EsModoApi`, SeamComposer.Tracking.cs).
+                // que la condición llama (un ayudante propio que compare a mano).
                 var finCond = src.IndexOf('\n', src.IndexOf(')', marca.Index) is var p and >= 0 ? p : marca.Index);
                 var cond = src[inicio..(finCond > inicio ? finCond : Math.Min(src.Length, inicio + 300))];
                 var modo = Regex.Match(cond, @"""(Api|Bff|Sessions|Http|FileSystem)""").Groups[1].Value;

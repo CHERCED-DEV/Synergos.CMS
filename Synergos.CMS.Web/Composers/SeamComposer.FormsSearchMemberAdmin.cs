@@ -57,11 +57,11 @@ public sealed partial class SeamComposer
         // depender de otro proceso. Encender "Api" sin el servicio arriba degrada
         // —el dashboard sale vacío— pero no tumba el CMS.
         //
-        // Y un modo que no se reconoce NO arranca (#177). Esto decía "Sessions" y el
-        // despliegue escribía "Http"; cualquier otra palabra caía en silencio al disco, así
-        // que en producción Api.Sessions no recibía nada y nada lo decía.
+        // Y un modo que no se reconoce NO arranca (#177): lo valida la pieza Interruptor (#182).
+        // Esto decía "Sessions" y el despliegue escribía "Http"; cualquier otra palabra caía en
+        // silencio al disco, así que en producción Api.Sessions no recibía nada y nada lo decía.
         services.Configure<SearchAnalyticsSettings>(builder.Config.GetSection("Synergos:SearchAnalytics"));
-        if (string.Equals(ModoDeAnaliticaDeBusqueda(builder.Config["Synergos:SearchAnalytics:Mode"]), "Api", StringComparison.Ordinal))
+        if (Interruptor.Encendido(builder.Config, "Synergos:SearchAnalytics:Mode", "Api", new SearchAnalyticsSettings().Mode))
         {
             // La cadena entera —llave, correlación (HU #28), telemetría, reintento— la arma la
             // pieza (#178). Techo corto: este servicio es auxiliar, y si tarda el dashboard
@@ -124,7 +124,7 @@ public sealed partial class SeamComposer
         // del backoffice se pinta en cada carga, así que sigue siendo el modelo de lectura con la
         // capacidad encendida — con Api.Audit caída el administrador SIGUE viendo qué pasó, y lo
         // que se para es que el asiento salga de acá. Es la forma del timeline de pedidos (#46).
-        if (string.Equals(builder.Config["Synergos:Audit:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Audit:Mode", "Api", new AuditSettings().Mode))
         {
             // La cadena entera la arma la pieza (#178).
             services.AddClienteDelArbolDeServicios(
@@ -196,41 +196,5 @@ public sealed partial class SeamComposer
         services.AddSingleton<WebhookTelemetryAlertScanner>();
         services.AddHostedService<WebhookTelemetryAlertHostedService>();
 
-    }
-
-    /// <summary>Los modos que la analítica de búsqueda reconoce; el default lo dice <see cref="SearchAnalyticsSettings"/>.</summary>
-    internal static readonly string[] ModosDeAnaliticaDeBusqueda = ["FileSystem", "Api"];
-
-    /// <summary>
-    /// El modo de la analítica de búsqueda, validado: sin configurar es el default, y uno que no
-    /// se reconoce LANZA al cablear (#177).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>Es un método con nombre y no una comparación en el <c>if</c></b>, como
-    /// <c>CobradorDeLaTasa</c> y por lo mismo: qué palabras abren qué camino es la decisión que hay
-    /// que poder verificar sin arrancar el CMS.</para>
-    ///
-    /// <para><b>Por qué lanza en vez de caer al default.</b> Caer era lo que hacía, y fue el
-    /// defecto: el despliegue escribía <c>Http</c>, esto reconocía <c>Sessions</c>, y la analítica
-    /// se quedaba en el disco del contenedor mientras <c>Api.Sessions</c> esperaba eventos que no
-    /// llegaban. Degradar vale cuando el OTRO proceso está caído —y así sigue: con el modo bien
-    /// escrito y el servicio abajo, el dashboard sale vacío y el CMS sirve—; no vale cuando lo que
-    /// está mal es la configuración, porque ahí nadie se entera nunca. Es el trato que ya reciben
-    /// la carpeta del CDN (#132) y la URL del registry (#56).</para>
-    /// </remarks>
-    internal static string ModoDeAnaliticaDeBusqueda(string? configurado)
-    {
-        if (string.IsNullOrWhiteSpace(configurado))
-        {
-            return new SearchAnalyticsSettings().Mode;
-        }
-
-        return ModosDeAnaliticaDeBusqueda.FirstOrDefault(
-                   m => string.Equals(m, configurado.Trim(), StringComparison.OrdinalIgnoreCase))
-               ?? throw new InvalidOperationException(
-                   $"Synergos:SearchAnalytics:Mode='{configurado}' no es un modo que este CMS reconozca. "
-                   + "Valores válidos: FileSystem (el default: JSONL en App_Data) o Api (contra Api.Sessions, "
-                   + "con Synergos:SearchAnalytics:BaseUrl y ApiKey). Un modo desconocido no cae en "
-                   + "silencio al disco: así fue como Api.Sessions se quedó sin recibir nada (#177).");
     }
 }

@@ -123,7 +123,7 @@ public sealed partial class SeamComposer
         // default en silencio — sellaría bajo una etiqueta que el despliegue no configuró.
         services.Configure<AcademySettings>(builder.Config.GetSection("Synergos:Academy"));
 
-        if (string.Equals(builder.Config["Synergos:Academy:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Academy:Mode", "Api", new AcademySettings().Mode))
         {
             // La cadena entera la arma la pieza (#178). El firmante ya no re-aplica URL, llave ni
             // techo por su cuenta: había dos fuentes para el mismo dato.

@@ -43,7 +43,7 @@ public sealed partial class SeamComposer
         // silencio. Es el olvido que arrastraban Tienda (#24), Salud (#25) y Viajes (#36).
         services.Configure<IdentitySettings>(builder.Config.GetSection("Synergos:Identity"));
 
-        if (string.Equals(builder.Config["Synergos:Identity:Mode"], "Api", StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Identity:Mode", "Api", new IdentitySettings().Mode))
         {
             // La cadena entera la arma la pieza (#178). El techo es corto a propósito: emitir se
             // pide antes de cada escritura firmada, y el emisor degrada a «declarar» si no llega.
@@ -98,8 +98,12 @@ public sealed partial class SeamComposer
 
         services.TryAddSingleton(TimeProvider.System);
 
-        var bundleRegistryMode = builder.Config["Synergos:BundleRegistry:Mode"] ?? "Stub";
-        if (string.Equals(bundleRegistryMode, "FileSystem", StringComparison.OrdinalIgnoreCase))
+        // El único interruptor de TRES palabras, y el único que no habla el vocabulario del molde
+        // (Http y no Api: el CDN es público, sin llave). Una palabra que no reconoce no cae al
+        // Stub: no arranca (#182).
+        var bundleRegistryMode = Interruptor.Modo(
+            builder.Config, "Synergos:BundleRegistry:Mode", new BundleRegistrySettings().Mode, "FileSystem", "Http");
+        if (string.Equals(bundleRegistryMode, "FileSystem", StringComparison.Ordinal))
         {
             // Antes de registrar nada: sin una carpeta que exista este modo no carga NADA y no
             // lo vuelve a intentar —InitialLoad escribe un warning, vuelve, y el
@@ -118,7 +122,7 @@ public sealed partial class SeamComposer
 
             services.AddSingleton<IBundleRegistryClient, FileSystemBundleRegistryClient>();
         }
-        else if (string.Equals(bundleRegistryMode, "Http", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(bundleRegistryMode, "Http", StringComparison.Ordinal))
         {
             // Antes de registrar nada: sin URL base absoluta este modo no puede funcionar, y
             // fallaría en el primer render con el arranque ya dado por bueno (#56). Mismo trato

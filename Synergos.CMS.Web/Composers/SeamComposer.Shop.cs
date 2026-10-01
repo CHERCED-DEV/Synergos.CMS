@@ -109,7 +109,7 @@ public sealed partial class SeamComposer
         // sigue sirviendo catálogo y fichas.
         services.Configure<TiendaSettings>(builder.Config.GetSection("Synergos:Tienda"));
 
-        if (string.Equals(builder.Config["Synergos:Tienda:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Tienda:Mode", "Bff", new TiendaSettings().Mode))
         {
             // Dos clientes —el orquestador y la canasta— bajo la MISMA llave y el mismo techo, y
             // cada uno con su cadena entera (#178). El techo es generoso a propósito: comprar

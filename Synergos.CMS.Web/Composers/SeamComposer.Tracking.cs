@@ -25,16 +25,13 @@ public sealed partial class SeamComposer
         // publicó `tracking2.shop` seguiría validando contra el pipeline viejo sin avisar.
         builder.Services.Configure<TrackingSettings>(builder.Config.GetSection("Synergos:Tracking"));
 
-        if (!EsModoApi(builder.Config["Synergos:Tracking:Mode"])) return;
+        if (!Interruptor.Encendido(builder.Config, "Synergos:Tracking:Mode", "Api", new TrackingSettings().Mode)) return;
 
         // La cadena entera la arma la pieza (#178).
         builder.Services.AddClienteDelArbolDeServicios(
             HttpOrderTrackingService.ClientName,
             DestinoDelArbol.De(builder.Config.GetSection("Synergos:Tracking"), "http://127.0.0.1:5215/", 10));
     }
-
-    private static bool EsModoApi(string? modo)
-        => string.Equals(modo, "Api", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// El seguimiento de UN dominio: su pipeline, su espacio de almacén y su definición.
@@ -68,7 +65,7 @@ public sealed partial class SeamComposer
             pipeline, null, sp.GetRequiredService<IJsonEntityStore>(), storeNamespace);
 
         var ajustes = sp.GetRequiredService<IOptions<TrackingSettings>>();
-        if (!EsModoApi(ajustes.Value.Mode)) return local;
+        if (!Interruptor.Encendido(ajustes.Value.Mode, "Synergos:Tracking:Mode", "Api", new TrackingSettings().Mode)) return local;
 
         return new HttpOrderTrackingService(
             sp.GetRequiredService<IHttpClientFactory>(), local, ajustes, pipeline, domain);

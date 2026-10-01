@@ -36,14 +36,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3786 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3794 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2659 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2664 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 458 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 461 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -166,7 +166,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3786**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3794**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -180,7 +180,8 @@ Synergos.CMS/
 ├── Synergos.CMS.Web/            host Umbraco + ASP.NET + views + composers
 │   ├── App_Plugins/             plugins backoffice (LayoutComposer AngularJS)
 │   ├── Composers/               wiring de arranque — y ClienteDelArbolDeServicios.cs, la
-│   │                            pieza por la que sale TODO cliente hacia el árbol (#178)
+│   │                            pieza por la que sale TODO cliente hacia el árbol (#178),
+│   │                            e Interruptor.cs, la que lee el modo de todo interruptor (#182)
 │   ├── Controllers/             RenderControllers + ApiControllers
 │   ├── Notifications/           notification handlers
 │   ├── Services/                Umbraco-dependent services (LayoutCssBuilder, FlowResolver, etc.)
@@ -314,6 +315,7 @@ Synergos.CMS/
 | "¿Cómo se escribe el spec de un vertical?" | `docs/specs/<vertical>/spec.md` — cabecera `---` con lo que un gate cruza contra el disco, prosa debajo. Formato en doc 13 §4; hay gate (`tools/spec-valida.mjs`, con `--autoprueba`) |
 | "¿El molde da para GENERAR un vertical?" | Sobre Eventos, **sí**: el piloto 0 midió **71,4 %** y hoy da **100 % sobre 23 ficheros y CERO inventados** — el eje 3 escrito (#153), su sección arreglada (#154) y el composer parcial cruzado por CONTENIDO y no por nombre (#155), porque de los siete verticales sólo Academy tiene un fichero que se llame como él. Doc 13 §9 · `node tools/spec-valida.mjs --oraculo=eventos` |
 | "¿Cómo le habla el CMS a una capacidad (o a un orquestador)? ¿Cómo enchufo un cliente nuevo?" | **Por UNA pieza** (#178): `Synergos.CMS.Web/Composers/ClienteDelArbolDeServicios.cs`. En el composer del vertical, dentro de su interruptor: `services.AddClienteDelArbolDeServicios(HttpX.ClientName, DestinoDelArbol.De(builder.Config.GetSection("Synergos:X"), "http://127.0.0.1:52NN/", 10))` — lee `BaseUrl`, `ApiKey` y `TimeoutSeconds` de la sección y arma la cadena entera: llave compartida, correlación, telemetría (en `/admin/health`) ANTES del reintento (ADR 0072), y un reintento que sólo abre si la petición es **repetible** (método seguro o `Idempotency-Key`) **y** el fallo es **pasajero** (no hubo respuesta, o la capacidad dijo `transient: true` — se LEE, #129). Un POST sin llave no se repite nunca, y un cliente puede **vetar** el reintento de una petición con `PeticionAlArbol.NoSeRepite()` cuando sabe que la capacidad cierra la llave aunque diga pasajero — hoy, autorizar en `Api.Payments` (medido vivo, ver §5). El techo sigue siendo `TimeoutSeconds`, que envuelve los reintentos: sin timeout por intento ni cortacircuitos, porque los dos lanzan excepciones de Polly que ningún cliente traduce. La perilla es `Synergos:Reintento` (2 × 200 ms, en caliente). El cliente `Http*` recibe el `HttpClient` de la fábrica **tal cual** —nada de re-aplicar URL ni llave— y lee el rechazo con `RechazoDelArbolDeServicios.LeerAsync`; lo único suyo es cómo PRESENTA el fallo. Un TERCERO (la pasarela) usa `AddResilienciaDeTercero()`: sin llave ni correlación, con la tabla de códigos de la librería. Hay gate (`ClienteDelArbolTests`): la llave se escribe en un solo fichero, nadie lee un problem+json por su cuenta y ningún composer arma un cliente a mano |
+| "¿Cómo lee el composer el MODO de un interruptor (`Synergos:X:Mode`)?" | **Por UNA pieza** (#182): `Synergos.CMS.Web/Composers/Interruptor.cs`. `if (Interruptor.Encendido(builder.Config, "Synergos:X:Mode", "Bff", new XSettings().Mode))` —la palabra que enciende y el default **del POCO**—, o `Interruptor.Modo(…)` si son más de dos palabras (hoy sólo el CDN: `Stub`/`FileSystem`/`Http`). Mayúsculas y espacios no cuentan y vuelve la palabra canónica; **una que no reconoce no arranca** (`ModoDesconocidoException`, con la clave como se escribe en el entorno y las válidas). Nada de `string.Equals(builder.Config["…:Mode"], …)`: así estaban catorce de los quince, y con una errata en el `.env` cableaban lo mismo que sin configurar. Hay gate (`ModosDelComposeTests`): descubre los interruptores por tres caminos, compone cada uno con una palabra inventada y exige el rechazo, y lee la fuente para que nadie compare un modo a mano |
 | "¿Qué rechaza esta capacidad?" | `Synergos.Api.X/Domain/XRules.cs` — las veinte lo tienen y hay gate (#58). Los códigos se componen de su `CodePrefix`; las excepciones son los cinco de `Api.Notifications/Transport/` y los cinco gemelos de `Api.Payments/Transport/`, que son fallos de la firma de un webhook y no reglas de negocio |
 
 > **La forma de `window.synergos` se declara en TRES sitios, y hay gate** (#88,
@@ -2657,8 +2659,8 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   una palabra que nadie lee. **Y componer de verdad es barato**: `PaymentProviderSelectionTests`
   dice que «componer exige un `IUmbracoBuilder` entero», y no — con un doble que devuelve
   `Services` y `Config`, los composers del producto corren enteros;
-  `ComposicionDelCms` lo hace para los gates. Queda abierto: los otros catorce interruptores
-  todavía caen en silencio con una palabra desconocida en el `.env` del servidor.
+  `ComposicionDelCms` lo hace para los gates. **Quedaban abiertos los otros catorce, y se
+  cerraron en el #182** — ver `feedback_an_if_on_a_mode_has_no_default_it_has_everything_else`.
 
 - `feedback_a_body_the_chain_reads_must_stay_readable` — **un cuerpo que la cadena de handlers
   lee ANTES que el cliente tiene que quedar legible para el cliente, y `ReadFromJsonAsync` no lo
@@ -2744,6 +2746,26 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   pintar, un nodo con plantilla (`NavegacionDelSitio`); una lista de alias de carpeta se queda
   corta con el próximo tipo de dato que el schema cuelgue del `siteRoot` (`eventPage` ya puede).
 
+- `feedback_an_if_on_a_mode_has_no_default_it_has_everything_else` — **un `if (modo == "Api")`
+  no tiene un default: tiene «todo lo demás», y ahí cae la errata. Arreglar el interruptor que
+  falló deja las copias: se arregla la FORMA, en una pieza, y el gate descubre las instancias por
+  lo que HACEN** (#182). El #177 validó UN modo con un método propio y dejó escrito «quedan
+  catorce». Medido componiendo los quince: en los catorce, toda palabra que no fuera la que
+  encendía —`Htpp`, `Api` donde va `Bff`, `Stub` donde va `Local`, `" Api "` con espacios—
+  cableaba exactamente lo mismo que no configurar nada. Ni el default se leía: `Audit:Mode=Stub`
+  era `Local` sin que nadie lo supiera. Hoy los quince leen por `Interruptor` y el default sale
+  del POCO.
+  **El dieciséis nace bien porque el gate no tiene la lista**: descubre los interruptores por tres
+  caminos —las claves escritas en los composers, las que los composers PIDEN a la configuración al
+  componer (una `IConfiguration` que anota) y los POCO con `Mode`— y compone cada uno con una
+  palabra inventada. Uno escrito a mano con `string.Equals` compila, arranca, y sale rojo ahí con
+  el nombre de la pieza en el mensaje.
+  **Antes de convertir un silencio en un rechazo se mira quién vivía del silencio**: un despliegue
+  que escribía una palabra que caía bien por casualidad pasa a no arrancar. Se barrieron el
+  compose, `.env.example`, el bootstrap, los `appsettings` y los docs de despliegue y de arranque
+  de los dos repos: ninguno escribía una palabra que ahora rompa — y se dice, porque la próxima
+  vez puede que sí.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2803,13 +2825,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3786 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3794 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2659
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2664
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 458
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 461
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -2980,8 +3002,19 @@ node tools/spec-valida.mjs --autoprueba   # G-8: el LECTOR del spec, ejecutado (
 > con `--check` en verde. Ese cruce lo hace `ModosDelComposeTests`, dentro de la suite: cada
 > `Synergos__<Seam>__Mode` que el compose escribe —el literal, o el default de `${VAR:-…}`— y lo que
 > propone `.env.example`, contra lo que SU composer reconoce, por dos caminos que tienen que
-> coincidir (leyendo sus comparaciones y el default del POCO, y **componiendo de verdad** con ese
-> valor), y en los dos sentidos: un modo que un composer lee y el compose no escribe tampoco pasa.
+> coincidir (leyendo las palabras que declara cada llamada a la pieza `Interruptor` con el default
+> del POCO, y **componiendo de verdad** con ese valor), y en los dos sentidos: un modo que un
+> composer lee y el compose no escribe tampoco pasa.
+>
+> **Y desde el #182 mira también lo que el compose NO trae**: lo que el operador ponga en el
+> `.env`. Descubre los interruptores por tres caminos que tienen que coincidir —las claves
+> `Synergos:…:Mode` escritas en los composers, las que los composers PIDEN a la configuración al
+> componer (`ComposicionDelCms.ClavesQueLeen`) y los POCO con `Mode`—, compone cada uno con una
+> palabra inventada y exige que el arranque se niegue nombrando EXACTAMENTE las palabras que la
+> fuente declara, con el default del POCO primero; compone con cada palabra reconocida —también
+> en minúsculas y con espacios— y exige que arranque y, si no es el default, que cablee algo
+> distinto; y lee la fuente para que ningún composer compare un modo a mano, que es lo que una
+> lectura en una fábrica (al resolver, no al componer) le escondería al resto.
 
 **Y DOS más que sí necesitan al hermano, pero aceptan su ruta** (G-6 y G-7, #102):
 
@@ -3269,7 +3302,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3786 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3794 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
@@ -3392,10 +3425,16 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 > `written=4` y su fichero del día, y el disco del CMS ninguna; con `Mode=Http` el CMS no arranca y
 > el log nombra la clave y los dos válidos.
 >
-> **Lo que queda abierto, con su tamaño:** los otros catorce interruptores siguen cayendo en
-> silencio a su camino en proceso con una palabra desconocida —`SYNERGOS_TIENDA_MODE=Api` sirve la
-> tienda local sin avisar—. El gate cubre lo que el compose TRAE escrito; lo que el operador ponga
-> en el `.env` del servidor sólo lo para validar el modo al cablear, y hoy lo valida uno solo.
+> **Y los otros catorce, en el #182.** Caían en silencio a su camino en proceso con una palabra
+> desconocida —`SYNERGOS_TIENDA_MODE=Api` servía la tienda local sin avisar, y `Stub` en la
+> bitácora la dejaba en `Local`—. Hoy los quince leen su modo por la pieza `Interruptor`, así que
+> lo que el operador ponga en el `.env` del servidor también lo para el arranque. Ningún
+> despliegue escribía una palabra que ahora rompa: `compose.prod.yml`, `.env.example`,
+> `tools/bootstrap-servidor.sh`, los `appsettings` y los docs de despliegue y de arranque
+> —de los dos repos— traen sólo palabras que su interruptor reconoce. Verificado con procesos:
+> CMS en un puerto propio con `Synergos__Audit__Mode=Stub` o `Synergos__Tienda__Mode=Api` no arranca y
+> el log nombra la clave, la palabra y las válidas; con las palabras del compose —`engine` en
+> minúsculas y `" Stub "` con espacios incluidas— arranca y sirve.
 
 > **Arrancar no es estar listo, y eso faltaba escrito** (#114). Un servidor con
 > los 26 contenedores sanos no sirve todavía: hay que sembrar **el schema** y
