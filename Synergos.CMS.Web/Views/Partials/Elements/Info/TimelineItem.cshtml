@@ -1,6 +1,9 @@
 @*
     elementInfoTimelineItem renderer (Ola 15). Milestone with semantic <time>.
+    La fecha vacía de un date picker llega como el año 1, no como null: se lee con
+    FechaDelEditor, o el hito sin fecha pinta «1/01/0001» (#188, medido en vivo).
 *@
+@using Synergos.CMS.Web.Services
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
 // El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
@@ -10,7 +13,7 @@
     var subtitle = Model.Value<string>("headingSubtitle");
     var body = Model.Value<string>("textBody");
 #nullable enable
-    var date = Model.Value<DateTime?>("contentDate");
+    var date = Model.FechaDelEditor("contentDate");
     var dateLabel = Model.Value<string>("contentDateLabel");
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");

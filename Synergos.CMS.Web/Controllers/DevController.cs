@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Filters;
 using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -17,8 +18,10 @@ namespace Synergos.CMS.Web.Controllers;
 /// condicionalmente —con el flag off no pasa nada— y describía un perfil de
 /// producción que <b>no existía</b>: <c>appsettings.Docker.json</c> trae el flag
 /// encendido y <c>ASPNETCORE_ENVIRONMENT: Docker</c> es justo con lo que corre el
-/// despliegue. Como estos catorce endpoints son <c>[AllowAnonymous]</c>, eso dejaba
-/// <c>POST /dev/clear-all-content</c> alcanzable desde internet, sin autenticar.
+/// despliegue. Como todos sus endpoints son <c>[AllowAnonymous]</c> —el atributo va en la
+/// clase—, eso dejaba <c>POST /dev/clear-all-content</c> alcanzable desde internet, sin
+/// autenticar. (Decía «estos catorce», y eran quince: una cifra escrita a mano en la prosa
+/// envejece con el primer endpoint nuevo, así que no se escribe.)
 /// <para>Hoy lo apaga el despliegue —<c>compose.prod.yml</c>, generado— y hay gate
 /// (<c>ComposeStackTests.El_perfil_de_produccion_NO_trae_la_siembra_encendida</c>).
 /// El perfil sigue trayéndolo encendido a propósito, para que un
@@ -27,10 +30,15 @@ namespace Synergos.CMS.Web.Controllers;
 /// <para><b>Y la salvaguarda NO es la autenticación</b>: es el flag. Un arreglo que
 /// dejara el flag encendido y tapara los endpoints con auth deja la siembra viva en
 /// producción, que es la otra mitad del problema.</para>
+/// <para><b>Y van sin plazo de petición</b> (<see cref="SinPlazoDePeticionAttribute"/>, #188):
+/// son herramientas que se invocan, y la siembra tarda minutos. Con el plazo de treinta
+/// segundos el trabajo terminaba igual y lo que se perdía era la respuesta —<c>200</c> con el
+/// cuerpo vacío—, o sea justo lo que dice qué se sembró.</para>
 /// </remarks>
 [ApiController]
 [Route("dev")]
 [AllowAnonymous]
+[SinPlazoDePeticion]
 public sealed class DevController : ControllerBase
 {
     private readonly DevSeedSettings _settings;

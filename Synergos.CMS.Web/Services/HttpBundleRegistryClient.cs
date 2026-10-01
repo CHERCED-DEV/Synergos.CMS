@@ -257,7 +257,8 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
 
         foreach (var framework in frameworks)
         {
-            var url = $"{s.PublicBaseUrl.TrimEnd('/')}/{s.BundlesNamespace}/runtime/{framework}/{s.DefaultSlot}/import-map.json";
+            var rutaDelMapa = ReubicacionDelImportMap.RutaDelMapa(s.BundlesNamespace, framework, s.DefaultSlot);
+            var url = s.PublicBaseUrl.TrimEnd('/') + rutaDelMapa;
 
             try
             {
@@ -271,7 +272,7 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
                     continue;
                 }
 
-                leidos.Add((framework, FileSystemBundleRegistryClient.LeerImports(imports, s.PublicBaseUrl)));
+                leidos.Add((framework, ReubicacionDelImportMap.Reubicar(imports, s.PublicBaseUrl, rutaDelMapa)));
             }
             catch (Exception ex) when (NoContesto(ex, ct))
             {

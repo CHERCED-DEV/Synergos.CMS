@@ -211,8 +211,7 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, IC
             return null;
         }
 
-        var start = node.Value<DateTime>("eventStart");
-        if (start == default)
+        if (node.FechaDelEditor("eventStart") is not { } start)
         {
             // La fecha es el ORDEN de la agenda ("lo próximo va primero"). Un default(DateTime)
             // es el año 1 y se colaría a la cabeza de la lista para siempre.

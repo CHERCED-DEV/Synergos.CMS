@@ -104,9 +104,10 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
     /// </summary>
     /// <remarks>
     /// <para><b>Esto vivía en <c>_SynHostRuntime.cshtml</c></b> (#126) — una vista leyendo del
-    /// disco con <c>File.ReadAllText</c> y reescribiendo hosts con una regex. Se mudó tal cual:
-    /// misma ruta, misma reescritura. Lo único que cambia es <b>quién</b> lo hace, y eso es lo
-    /// que permite que el gemelo HTTP exista: una vista no puede salir a la red.</para>
+    /// disco con <c>File.ReadAllText</c> y reescribiendo hosts con una regex. Se mudó tal cual,
+    /// y eso es lo que permite que el gemelo HTTP exista: una vista no puede salir a la red. La
+    /// reescritura es <see cref="ReubicacionDelImportMap"/>, la misma pieza para los dos gemelos:
+    /// sólo cambiaba los hosts y dejaba sin reubicar lo que publica <c>build:cdn</c> (#189).</para>
     ///
     /// <para><b>Se COMPONEN todos los frameworks que el registry declara</b> (#127). Esto leía
     /// sólo el de <c>DefaultFramework</c>, y con dos frameworks publicando eso deja a uno de los
@@ -132,6 +133,7 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
 
         foreach (var framework in frameworks)
         {
+            var rutaDelMapa = ReubicacionDelImportMap.RutaDelMapa(s.BundlesNamespace, framework, s.DefaultSlot);
             var ruta = Path.Combine(
                 s.LocalPath, s.BundlesNamespace, "runtime", framework, s.DefaultSlot, "import-map.json");
 
@@ -156,7 +158,7 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
                     continue;
                 }
 
-                leidos.Add((framework, LeerImports(imports, s.PublicBaseUrl)));
+                leidos.Add((framework, ReubicacionDelImportMap.Reubicar(imports, s.PublicBaseUrl, rutaDelMapa)));
             }
             catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
             {
@@ -200,34 +202,6 @@ public sealed class FileSystemBundleRegistryClient : IBundleRegistryClient, IDis
             snap.ByTag.Values.Select(e => e.Implementations?.Keys ?? Enumerable.Empty<string>()));
 
         return declarados.Count > 0 ? declarados : new[] { porDefecto };
-    }
-
-    /// <summary>
-    /// Pasa los <c>imports</c> publicados a URLs servibles, cambiando el host de publicación por
-    /// la base pública.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>La reescritura es la de la vista, con una diferencia</b> (#126): sólo se toca lo
-    /// que tiene host. El <c>^https?://[^/]+</c> original no distinguía —daba igual porque todo
-    /// lo publicado lo lleva— pero aplicado a una entrada ya relativa la habría dejado intacta
-    /// por casualidad, no por decisión. Acá una entrada relativa se conserva tal cual, que es lo
-    /// correcto: ya está servida desde donde toca.</para>
-    /// </remarks>
-    internal static IReadOnlyDictionary<string, string> LeerImports(JsonElement imports, string publicBaseUrl)
-    {
-        var baseLimpia = (publicBaseUrl ?? string.Empty).TrimEnd('/');
-        var mapa = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        foreach (var prop in imports.EnumerateObject())
-        {
-            var url = prop.Value.GetString() ?? string.Empty;
-            mapa[prop.Name] = Uri.TryCreate(url, UriKind.Absolute, out var abs)
-                && (abs.Scheme == Uri.UriSchemeHttp || abs.Scheme == Uri.UriSchemeHttps)
-                    ? baseLimpia + abs.PathAndQuery
-                    : url;
-        }
-
-        return mapa;
     }
 
     public Task<BundleDescriptor?> TryResolveAsync(string elementKey, CancellationToken ct = default)

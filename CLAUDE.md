@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3839 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3874 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2706 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2741 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 464 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -169,7 +169,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3839**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3874**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2772,8 +2772,14 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   de pedirle los servicios al localizador estático (`Value<T>(alias)`) y los recibe inyectados:
   es lo mismo en ejecución y es lo que deja probarlo sin arrancar Umbraco.
   **El tell, buscable**: `Value<DateTime?>` —o cualquier `Value<T?>` de un tipo valor— seguido
-  de `.HasValue` o de `??`. Quedan dos con esa forma, leídos y NO medidos en vivo: el «sin fecha
-  al final» de `DefaultBlogQuery` y el `<time>` de `TimelineItem.cshtml`.
+  de `.HasValue` o de `??`. **Los dos que quedaban se midieron en vivo antes de tocarlos (#188), y
+  dieron distinto**: el `<time>` de `TimelineItem.cshtml` era real —un hito sin fecha pintaba
+  `datetime="0001-01-01"` y «1/01/0001», con su control con fecha bien—; el «sin fecha al final»
+  de `DefaultBlogQuery` **no**: `publishDate` es un `Umbraco.TextBox` obligatorio con
+  `^\d{4}-\d{2}-\d{2}$`, publicarlo vacío lo rechaza Umbraco (`FailedPublishContentInvalid`) y un
+  texto que no es fecha llega como `null`. Leído, los dos tenían la misma forma; el TIPO del editor
+  es lo que decide, y eso no está en la línea. Hoy hay **una** pieza (`FechasDelEditor`) y un gate
+  que no deja leer `Value<DateTime` fuera de ella —estaba escrita cuatro veces, de dos formas—.
   **Y la navegación tenía el hueco hermano**: «Configuración» —la carpeta `siteConfigFolder`,
   único padre que el schema permite para los avisos— salía en el header y el footer como enlace
   a un 404 en cuanto un editor creaba su primer aviso. Lo que se enlaza es lo que Umbraco sabe
@@ -2833,6 +2839,51 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   caminos**: el rastreo de lo que la página SIRVE (124 páginas, 2 rotos antes, 0 después) y los
   literales de ruta de la FUENTE pedidos uno a uno al CMS vivo — el segundo es el que vio
   `/search`, que ninguna página enlaza mientras no haya un 404 que la pinte.
+  **Y la tercera forma, también en la vitrina** (#188): Soluciones decidía si un vertical tenía
+  sitio buscando su slug entre las MARCAS (`brandKey`), y Tienda es `ecommerce` y Booking
+  `meridian`: 7 de 9, con `/tienda` y `/booking` en 200. Lo que hace válido `/{slug}` es la RUTA
+  del sitio, así que se busca por ella (`SitioEnLaRuta`, el segmento que saca Umbraco del nombre).
+
+- `feedback_a_url_the_cms_inlines_is_resolved_by_the_page` — **una URL que el CMS copia DENTRO de
+  la página la resuelve la página, no el fichero del que salió** (#189). El import map viaja en un
+  `<script type="importmap">` en línea, y `LeerImports` sólo reubicaba las absolutas: el artefacto
+  de `build:cdn` —runtime con `--base=/synergos`, a propósito portátil— salía con
+  `/synergos/runtime/…`, que el navegador pedía al origen del CMS. Medido en vivo con un CDN propio,
+  bajo `/cdn-bundles` y en otro origen: 0 de 3 elementos hidratados, 404 en el runtime; con la
+  forma absoluta, 3 de 3. **Y la nota del código decía lo contrario** —«una entrada relativa se
+  conserva tal cual, ya está servida desde donde toca»—, y el test del cliente HTTP AFIRMABA el
+  defecto: su fixture usaba la forma de `build:cdn` y esperaba la ruta sin reubicar. Hoy es UNA
+  pieza para los dos clientes (`ReubicacionDelImportMap`), las tres formas del mismo fichero dan la
+  misma URL, y `humo-conectado` tiene un quinto diente: cada entrada, resuelta contra la página,
+  contesta 200. **No se veía porque el camino que se probaba no era el que se despliega**: la CDN
+  del arquitecto se publica con el origen absoluto. **Y una trampa de plataforma al escribirlo**: en
+  Linux `Uri.TryCreate("/x", UriKind.Absolute, …)` es `true` (esquema `file`) y en Windows `false`,
+  así que la ruta relativa a la raíz se reconoce por el texto ANTES de parsear, o sólo CI la pierde.
+
+- `feedback_a_page_umbraco_does_not_route_has_no_culture` — **una página que pinta un controlador
+  MVC propio no tiene cultura: Umbraco la fija al rutear contenido, y por ahí no pasa** (#190).
+  `/blog/tag/*` y `/error/404` salían con el bridge en `en-US`, `<html lang="en">` y «12 Jun 2026»
+  en un sitio `es-CO`, y la página de error de un sitio con dominio propio era la del primer sitio
+  (#188). La cultura y el sitio se resuelven como el router —dominios del caché,
+  `DomainUtilities.SelectDomain`, y sin dominio la cultura por defecto de Umbraco—
+  (`SitioDeLaPeticion`), y la página los declara (`[CulturaDelSitio]`, filtro de RECURSO: fijada en
+  la acción no llega a la vista). **No se cambia la cultura de toda petición no ruteada**: por ahí
+  pasan las APIs, y en es-CO el punto es de miles. Hay gate sobre los controladores que pintan, con
+  línea base (`AccountController` y `AdminController` siguen saliendo `lang="en"`).
+
+- `feedback_a_deadline_the_work_ignores_only_erases_the_answer` — **un plazo de petición que el
+  trabajo no mira no lo para: termina igual, y lo que se pierde es la RESPUESTA** (#188).
+  `POST /dev/fill-synergos-pages` tarda unos dos minutos en síncrono contra los treinta segundos de
+  `TimeoutMiddleware`; terminaba bien y contestaba `200` con `Content-Length: 0`. El formateador JSON
+  ve `RequestAborted` cancelado, cree que el cliente se fue y no escribe nada **sin lanzar**, así que
+  el `catch` del middleware no se enteraba. Probado con el formateador real en el doble —con uno
+  que lanza, el defecto no se reproduce—. Hoy el middleware mira también al VOLVER (plazo vencido y
+  respuesta sin empezar → 504), publica el rasgo estándar `IHttpRequestTimeoutFeature`, y lo que de
+  verdad tarda lo declara (`[SinPlazoDePeticion]` en `DevController`): ahora contesta qué sembró.
+  **Y verificar en vivo sobre una copia de la base no aísla el árbol**: con `ExportOnSave` uSync
+  reescribe `uSync/v9/Content` al guardar, y el sembrador pisa los PNG de `wwwroot/media` aunque
+  uSync esté apagado. Se arranca con `uSync__Settings__ExportOnSave=None` y, si se siembra, se
+  restaura `wwwroot/media` antes de comitear.
 
 - `feedback_a_selector_is_crossed_by_value_after_the_resolver` — **un selector del ElementType
   se cruza por VALOR contra lo que el elemento pinta, DESPUÉS del resolver, y quien cierra el
@@ -2915,11 +2966,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3839 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3874 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2706
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2741
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 464
 
@@ -2968,7 +3019,7 @@ enumerarlo se equivocaría **en silencio**, que es el defecto #128. El precio de
 otro lado ya está medido dos veces: diez días con toda página de contenido en 500
 (#92) y el sitio entero sin hidratar (#126), las dos con la suite en verde.
 
-Sus cuatro dientes, y qué caza cada uno:
+Sus cinco dientes, y qué caza cada uno:
 
 | | |
 |---|---|
@@ -2976,6 +3027,7 @@ Sus cuatro dientes, y qué caza cada uno:
 | resuelve hacia **cada** framework del registry | con el mapa de uno solo, medio sitio hidrata y la página se ve igual de bien |
 | cada `<synergos-*>` tiene su `<script type="module">` | un tag sin bundle es un hueco que el SSR disimula |
 | cada bundle contesta 200 | un `<script>` a un 404 se ve en el HTML igual que uno bueno |
+| cada entrada del import map contesta 200 **donde la resuelve el navegador** | el mapa viaja en línea, así que lo que no lleva host se resuelve contra la PÁGINA: con el artefacto de `build:cdn` (`--base=/synergos`) el runtime caía en el origen del CMS y nada hidrataba, con los cuatro de arriba en verde (#189) |
 
 > **Y la causa más fácil de cometer es una variable de entorno.**
 > `SYNERGOS_CDN_MODE` / `SYNERGOS_CDN_URL` **sólo existen dentro de
@@ -3392,7 +3444,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3839 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3874 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

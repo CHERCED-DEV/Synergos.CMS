@@ -200,6 +200,11 @@ public sealed partial class SeamComposer
         // IUmbracoContextAccessor per-request.
         services.AddTransient<IBlogQuery, DefaultBlogQuery>();
 
+        // #190, #188 — el sitio y la cultura de una petición que Umbraco no ruteó (las páginas
+        // de los controladores MVC: /blog/tag/*, /error/*), resueltos con los dominios del caché
+        // como los resuelve el router. Lo consumen [CulturaDelSitio] y ErrorController.
+        services.AddTransient<SitioDeLaPeticion>();
+
         // Ola 57.1 — Cart service. Persiste cart en cookie HMAC-firmada
         // del visitante (sin DB, sin login required). Hidrata items
         // cruzando SKUs con productPage publicados. Transient porque

@@ -137,6 +137,15 @@ de cualquier `<script type="module">`):
   Degradación graceful: si no hay runtime publicado, no emite nada y el
   fallback offline del SynHost emitter aplica.
 
+> **Enmienda (2026-10-01, #189): se reubican las TRES formas, no sólo el host.** El mapa viaja
+> en línea, así que lo que no lleva host lo resuelve la PÁGINA, no el CDN. `build:cdn` publica el
+> runtime con `--base=/synergos` (relativo a la raíz, a propósito portátil) y esa forma no se
+> reubicaba: con el CDN bajo `/cdn-bundles` o en otro origen, nada hidrataba (medido en vivo).
+> Hoy la regla es una pieza para los dos clientes del registry (`ReubicacionDelImportMap`):
+> absoluta → se cambia el host por `PublicBaseUrl`; relativa a la raíz → se antepone
+> `PublicBaseUrl`; relativa → se resuelve contra el sitio del propio mapa en el CDN y se antepone
+> `PublicBaseUrl`. Las tres formas del mismo fichero dan la misma URL.
+
 **Pendiente (prod):** el partial es FileSystem-only. Para CDN remota
 (Mode=Http) hay que leer el `import-map.json` por HTTP — va junto con el
 `HttpBundleRegistryClient` diferido. Refinamiento opcional: promover la

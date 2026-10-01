@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
+using Synergos.CMS.Web.Filters;
+using Synergos.CMS.Web.Services;
 using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -18,19 +20,24 @@ namespace Synergos.CMS.Web.Controllers;
 /// 2. Setea Response.StatusCode al original (sin esto, el navegador
 ///    recibe 200 OK por la re-execute — semántica HTTP rota).
 /// 3. Busca un transversalErrorPage publicado con el matching
-///    statusCode dentro del transversalsRepository del siteRoot
-///    correspondiente al hostname.
+///    statusCode dentro del siteRoot correspondiente al hostname
+///    (<see cref="SitioDeLaPeticion"/>). Esto lo prometía y no lo hacía:
+///    tomaba la primera del árbol entero, así que un sitio con dominio
+///    propio pintaba la página de error del primer sitio (#188). Sin
+///    dominio que case, sigue siendo la primera del árbol.
 /// 4. Si encuentra → renderiza Views/Error.cshtml con el modelo.
 /// 5. Si no encuentra → renderiza Views/Error.cshtml con un fallback
 ///    inline (título genérico + mensaje + botón home + buscador, si hay
 ///    una searchPage publicada a la que mandarlo).
 ///
 /// Respeta el modelo Lego: cero schema editorial nuevo además del ya
-/// commiteado en Ola 76.1. Cero seam nuevo — usa
-/// IUmbracoContextAccessor existente.
+/// commiteado en Ola 76.1. El sitio y la cultura los da la misma pieza que
+/// a <c>/blog/tag/*</c>; y se pinta en la cultura del sitio
+/// (<see cref="CulturaDelSitioAttribute"/>): salía en <c>en-US</c>.
 /// </remarks>
 [ApiController]
 [Route("error")]
+[CulturaDelSitio]
 public sealed class ErrorController : ControllerBase
 {
     private const string TransversalErrorPageAlias = "transversalErrorPage";
@@ -38,9 +45,13 @@ public sealed class ErrorController : ControllerBase
     private const string SearchPageAlias = "searchPage";
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
+    private readonly SitioDeLaPeticion _sitio;
 
-    public ErrorController(IUmbracoContextAccessor umbracoContextAccessor) =>
+    public ErrorController(IUmbracoContextAccessor umbracoContextAccessor, SitioDeLaPeticion sitio)
+    {
         _umbracoContextAccessor = umbracoContextAccessor;
+        _sitio = sitio;
+    }
 
     [HttpGet("{statusCode:int}")]
     [AllowAnonymous]
@@ -49,8 +60,9 @@ public sealed class ErrorController : ControllerBase
         // Preserve la semántica HTTP — sin esto la re-execute devuelve 200.
         Response.StatusCode = statusCode;
 
-        var page = ResolveErrorPage(statusCode);
-        var searchUrl = ResolveSearchUrl();
+        var raices = RaicesDelSitio();
+        var page = ResolveErrorPage(raices, statusCode);
+        var searchUrl = ResolveSearchUrl(raices);
         var viewModel = new ErrorPageViewModel(
             StatusCode: statusCode,
             Title: page?.Value<string>("errorTitle") ?? FallbackTitleFor(statusCode),
@@ -58,7 +70,7 @@ public sealed class ErrorController : ControllerBase
             BodyBlocks: page?.Value<BlockGridModel>("errorBlocks"),
             ShowSearchBox: searchUrl is not null && (page?.Value<bool>("showSearchBox") ?? statusCode == 404),
             ShowHomeLink: page?.Value<bool>("showHomeLink") ?? true,
-            HomeUrl: ResolveHomeUrl(),
+            HomeUrl: ResolveHomeUrl(raices),
             SearchUrl: searchUrl);
 
         return new ViewResult
@@ -73,15 +85,25 @@ public sealed class ErrorController : ControllerBase
         };
     }
 
-    private IPublishedContent? ResolveErrorPage(int statusCode)
+    /// <summary>
+    /// Dónde se busca: el siteRoot del hostname si hay dominio que case, o el árbol entero.
+    /// </summary>
+    private IReadOnlyList<IPublishedContent> RaicesDelSitio()
     {
-        if (!_umbracoContextAccessor.TryGetUmbracoContext(out var ctx) || ctx.Content is null)
+        if (_sitio.Resolver().SiteRoot is { } sitio)
         {
-            return null;
+            return new[] { sitio };
         }
 
+        return _umbracoContextAccessor.TryGetUmbracoContext(out var ctx) && ctx.Content is not null
+            ? ctx.Content.GetAtRoot().ToList()
+            : Array.Empty<IPublishedContent>();
+    }
+
+    private static IPublishedContent? ResolveErrorPage(IReadOnlyList<IPublishedContent> raices, int statusCode)
+    {
         var statusCodeStr = statusCode.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return ctx.Content.GetAtRoot()
+        return raices
             .SelectMany(root => root.DescendantsOrSelfOfType(TransversalErrorPageAlias))
             .FirstOrDefault(p => string.Equals(
                 p.Value<string>("statusCode"),
@@ -89,14 +111,9 @@ public sealed class ErrorController : ControllerBase
                 StringComparison.Ordinal));
     }
 
-    private string ResolveHomeUrl()
+    private static string ResolveHomeUrl(IReadOnlyList<IPublishedContent> raices)
     {
-        if (!_umbracoContextAccessor.TryGetUmbracoContext(out var ctx) || ctx.Content is null)
-        {
-            return "/";
-        }
-
-        var siteRoot = ctx.Content.GetAtRoot()
+        var siteRoot = raices
             .SelectMany(r => r.DescendantsOrSelfOfType(SiteRootAlias))
             .FirstOrDefault();
         return siteRoot?.Url() ?? "/";
@@ -111,14 +128,9 @@ public sealed class ErrorController : ControllerBase
     /// quien buscaba desde un 404 caía en otro 404 (Synergos.CMS#187, la misma clase que el
     /// carrito). Sin página de búsqueda el buscador no se pinta.
     /// </remarks>
-    private string? ResolveSearchUrl()
+    private static string? ResolveSearchUrl(IReadOnlyList<IPublishedContent> raices)
     {
-        if (!_umbracoContextAccessor.TryGetUmbracoContext(out var ctx) || ctx.Content is null)
-        {
-            return null;
-        }
-
-        return ctx.Content.GetAtRoot()
+        return raices
             .SelectMany(r => r.DescendantsOrSelfOfType(SearchPageAlias))
             .FirstOrDefault()?.Url();
     }

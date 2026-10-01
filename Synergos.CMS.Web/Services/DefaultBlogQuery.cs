@@ -76,7 +76,7 @@ public sealed class DefaultBlogQuery : IBlogQuery
 
         // Sort: publishDate desc; nodos sin fecha al final por nombre
         var ordered = allPosts
-            .Select(p => (Post: p, Date: p.Value<DateTime?>("publishDate")))
+            .Select(p => (Post: p, Date: p.FechaDelEditor("publishDate")))
             .OrderByDescending(x => x.Date.HasValue)
             .ThenByDescending(x => x.Date ?? DateTime.MinValue)
             .ThenBy(x => x.Post.Name, StringComparer.OrdinalIgnoreCase);
@@ -138,7 +138,7 @@ public sealed class DefaultBlogQuery : IBlogQuery
                 var tags = p.Value<IEnumerable<string>>("tags") ?? Array.Empty<string>();
                 var shared = tags.Count(t => currentTags.Contains(t));
                 var sameCategory = categoryId != 0 && p.Parent?.Id == categoryId ? 1 : 0;
-                var date = p.Value<DateTime?>("publishDate");
+                var date = p.FechaDelEditor("publishDate");
                 return (Post: p, Score: shared * 2 + sameCategory, Date: date);
             })
             .Where(x => x.Score > 0)                          // solo si comparte tag o categoría

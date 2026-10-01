@@ -50,6 +50,13 @@
  *      Un tag sin bundle es un hueco que el SSR disimula.
  *   5. Cada bundle referenciado contesta 200 en el CDN. Un `<script>` a un 404
  *      es lo mismo que no tenerlo, y el HTML se ve idéntico.
+ *   6. **Cada entrada del import map contesta 200 donde la resuelve el
+ *      navegador**: contra la PÁGINA, porque el mapa viaja en línea. Es el diente
+ *      del #189: el artefacto de `build:cdn` publica el runtime relativo a la raíz
+ *      (`--base=/synergos`), el CMS sólo reubicaba las absolutas, y
+ *      `/synergos/runtime/…` caía en el origen del CMS — 404, nada hidrata, con
+ *      los cuatro dientes de arriba en verde. En la máquina del arquitecto no se
+ *      veía: su CDN se publica con el origen absoluto, que sí se reubicaba.
  *
  * Uso:
  *   node tools/humo-conectado.mjs [--cdn-path ../Synergos.UI/public]
@@ -257,6 +264,26 @@ try {
       // solo, la mitad del sitio no hidrata y la página se ve igual de bien.
       const urls = Object.values(mapa.imports ?? {}).join(' ');
       const sinEntrada = frameworks.filter((f) => !urls.includes(`/runtime/${f}/`));
+      // EL DIENTE DEL #189: cada entrada, resuelta como la resuelve el navegador
+      // —contra la página, no contra el CDN—, tiene que existir.
+      const rotas = [];
+      for (const [specifier, url] of Object.entries(mapa.imports ?? {})) {
+        const donde = new URL(url, `${BASE}/`).href;
+        try {
+          const r = await fetch(donde, { method: 'GET' });
+          if (!r.ok) rotas.push(`${specifier} → ${donde} → ${r.status}`);
+        } catch (e) { rotas.push(`${specifier} → ${donde} → ${e.message}`); }
+      }
+      if (rotas.length > 0) {
+        falla(
+          `${rotas.length} entrada(s) del import map no contestan donde las resuelve el ` +
+          `navegador (el mapa viaja EN LÍNEA: lo que no lleva host se resuelve contra la ` +
+          `página). Ningún bare import resuelve y nada hidrata (#189):\n   ${rotas.slice(0, 5).join('\n   ')}`,
+        );
+      } else {
+        paso(`las ${Object.keys(mapa.imports ?? {}).length} entradas del mapa contestan 200 donde las resuelve el navegador`);
+      }
+
       if (sinEntrada.length > 0) {
         falla(
           `el import map no resuelve nada hacia ${sinEntrada.join(', ')}, y el registry ` +
