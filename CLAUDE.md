@@ -123,11 +123,13 @@
     reimplementa** — la **regla de los dos pisos**. `configOverride`, el JSON libre del editor que
     pisa todo, es hoy la puerta contraria. El **resolver tipado por elemento** (ADR 0135) está
     **Aceptado** (2026-09-30) y se escala a todas las piezas (#180): qué elementos lo tienen no se
-    escribe acá, lo lista `docs/contracts/elementos-synhost.json`. **Propuestos**, y describen el
-    rumbo, no lo que ya está: diccionario por secciones declaradas (0136, pilotada en #186 —ver
-    `feedback_the_dictionary_travels_by_declared_sections`—), configuración de negocio
-    por funcionalidad (0137), coordinación de página por eventos DOM (0138) y bundles con varias
-    entradas colocables frente a 0113 (0139).
+    escribe acá, lo lista `docs/contracts/elementos-synhost.json`. El **diccionario por secciones
+    declaradas** (ADR 0136) está **Aceptado** (2026-10-01; ver
+    `feedback_the_dictionary_travels_by_declared_sections`): cada página publica las secciones que
+    declaran los records de sus elementos, y se escala a todos los que tienen record. **Propuestos**,
+    y describen el rumbo, no lo que ya está: configuración de negocio por funcionalidad (0137),
+    coordinación de página por eventos DOM (0138) y bundles con varias entradas colocables frente a
+    0113 (0139).
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
     deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
     declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por

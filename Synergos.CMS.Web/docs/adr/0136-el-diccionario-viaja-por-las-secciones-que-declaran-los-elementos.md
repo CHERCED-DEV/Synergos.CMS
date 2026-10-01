@@ -1,13 +1,13 @@
 # ADR 0136 — El diccionario viaja por las secciones que declaran los elementos, y la funcionalidad traduce
 
-- **Estado:** Propuesto — pilotada en #186 (2026-10-01); el piloto recomienda **aceptarla con
-  seis cambios** (ver «Resultado del piloto»). La ratificación es del arquitecto.
+- **Estado:** Aceptado (2026-10-01) — el arquitecto la ratificó con los seis cambios que pidió el
+  piloto (#186), que pasan a ser parte de la decisión (ver «Resultado del piloto»)
 - **Fecha:** 2026-09-29
 - **Propone:** la síntesis de la auditoría de reutilización (informe 20 §5.C.2-3). El arquitecto
   fijó número y estado el 2026-09-29. Lo había pedido como diferido el 2026-06-28 —*«mirar cómo lo
   hace NewShore»*— y esa mirada es la auditoría.
 - **Parte de:** [#172](../../../../../issues/172) · épica [#139](../../../../../issues/139)
-- **Cambiaría:** la regla de publicación por subconjunto de `docs/contracts/i18n-bridge.md` (ADR 0083)
+- **Cambia:** la regla de publicación por subconjunto de `docs/contracts/i18n-bridge.md` (ADR 0083)
 - **Depende de:** ADR 0135 (el record declara las secciones) y ADR 0134 (funcionalidad / pieza)
 
 ## Contexto
@@ -59,7 +59,10 @@ código lo publica, y casa 0).
   clave cruda sale en pantalla; y usa el diccionario como **catálogo de datos maestros**
   (`'Station.' + code`) (informe 15 D1, D11, §4.1).
 
-## Decisión (propuesta)
+## Decisión
+
+> **Aceptada con los seis cambios del piloto** (ver «Resultado del piloto»). Donde un apartado de abajo
+> y uno de esos cambios digan cosas distintas, manda el cambio.
 
 ### 1. Las secciones las declara cada elemento
 
@@ -201,7 +204,8 @@ portada. Recibió su record (`AppLauncherProps`, tipo Funcionalidad: sin `config
    `tools/usync-audit.claves-razor.baseline.json`, vigilada en los dos sentidos; crearlas, con su
    copia en inglés revisada, es trabajo aparte.
 
-**Los cambios que el piloto pide a esta ADR:**
+**Los cambios que el piloto pidió a esta ADR** (ratificados por el arquitecto el 2026-10-01; son parte
+de la decisión):
 
 1. **§1 — el bridge se escribe al FINAL del `<body>`**, y la unión la junta el **emitter** (cada
    `SynHostEmitRequest` lleva las secciones del record; un decorador en Web las anota), no un
@@ -230,7 +234,7 @@ en-US; la sección se publica entera (38 de las 62 claves que publican los siete
 y la descripción de `elementSynAppLauncher` promete `slug`/`displayName` donde el contenido y el
 elemento usan `id`/`name`.
 
-**Recomendación: aceptar con los seis cambios.**
+**Recomendación: aceptar con los seis cambios.** Ratificada el 2026-10-01.
 
 ## Relación con otras ADRs
 

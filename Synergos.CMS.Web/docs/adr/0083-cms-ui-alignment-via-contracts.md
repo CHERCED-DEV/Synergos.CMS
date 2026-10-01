@@ -1,6 +1,8 @@
 # ADR 0083 — Synergos.CMS ↔ Synergos.UI alignment via contracts (Olas 211-220)
 
-- **Status:** Accepted
+- **Status:** Accepted — **enmendado por el [ADR 0136](0136-el-diccionario-viaja-por-las-secciones-que-declaran-los-elementos.md)** (2026-10-01) en la regla de
+  publicación por subconjunto del bridge: cada página publica la unión de las secciones que declaran
+  los records de sus elementos (`docs/contracts/i18n-bridge.md` v1.1).
 - **Date:** 2026-04-27
 - **Deciders:** Arquitecto + agente.
 

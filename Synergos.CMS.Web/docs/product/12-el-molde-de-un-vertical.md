@@ -515,7 +515,7 @@ que hoy se infiere y se deja escrito.
 
 - **las secciones de diccionario** que usa —por prefijo, no clave a clave— para sus labels, sus
   errores y sus textos de accesibilidad. La funcionalidad traduce con `t()` y sus hojas reciben el
-  texto ya traducido (ADR 0136, Propuesta);
+  texto ya traducido (ADR 0136, Aceptada);
 - **la configuración de negocio**, que es del despliegue o del siteRoot y no del editor (ADR 0137,
   Propuesta);
 - **las pocas decisiones del editor** —variante, mostrar u ocultar, página destino—, cada una
