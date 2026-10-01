@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3771 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3786 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2644 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2659 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 458 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -166,7 +166,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3771**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3786**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -1741,8 +1741,9 @@ Las que salieron de construir el árbol de servicios (§0.B):
   rutas absolutas dentro de un target no sacó NINGUNA vista—, que es por qué hay un suelo que
   cuenta lo que entró.
   **Y había una segunda tapa encima, del lado del producto**: verificando en vivo, un aviso
-  global SIN fecha de fin no se pinta nunca —`Value<DateTime?>` de una fecha vacía devuelve
-  `0001-01-01`, no `null`, y el resolver lo toma por vencido—. O sea que el 500 de
+  global SIN fecha de fin no se pintaba nunca —`Value<DateTime?>` de una fecha vacía devuelve
+  `0001-01-01`, no `null`, y el resolver lo tomaba por vencido; arreglado en el #185, ver
+  `feedback_an_empty_field_arrives_as_its_converters_no_value`—. O sea que el 500 de
   `_GlobalAlert` sólo aparecía con un aviso con fecha de fin. Es la forma del #92 otra vez: el
   hueco de abajo tapaba el de arriba, y cerrar uno es cómo se ve el otro.
 
@@ -2719,6 +2720,30 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   declarar «no me queda ninguna» es legítimo y prohibirlo habría cambiado un
   defecto que miente por uno que estorba.
 
+- `feedback_an_empty_field_arrives_as_its_converters_no_value` — **un campo que el editor dejó
+  vacío no llega como `null`: llega como el «sin valor» de su conversor, y el `?` del tipo que
+  se pide no lo convierte. Y un doble que fabrica la ausencia como `null` pasa en verde sobre el
+  código roto** (#185). `Value<DateTime?>` de un date picker vacío da `0001-01-01` —el
+  `DateTime.MinValue` que devuelve el conversor de Umbraco sin valor— con `HasValue` en `true`,
+  así que `DefaultGlobalComponentResolver` daba por VENCIDO desde el año 1 todo aviso «hasta
+  nuevo aviso», por sus tres fuentes, sin un error: medido en vivo, `alerta: null` con el fin
+  vacío y pintada con fin a 30 días. Hoy la ventana es UNA regla (`EnVentana`): fin vacío no
+  vence, inicio vacío rige desde ya.
+  **La mitad del test es la que enseña**: con el código viejo y el doble devolviendo `null` para
+  la fecha vacía, los once tests salen VERDES; con el doble devolviendo lo que devuelve Umbraco
+  —la propiedad sin valor y `GetValue` en `MinValue`—, cinco rojos. La ausencia se fabrica
+  como la ENTREGA el sistema, no como uno se la imagina. Para poder fabricarla, el resolver dejó
+  de pedirle los servicios al localizador estático (`Value<T>(alias)`) y los recibe inyectados:
+  es lo mismo en ejecución y es lo que deja probarlo sin arrancar Umbraco.
+  **El tell, buscable**: `Value<DateTime?>` —o cualquier `Value<T?>` de un tipo valor— seguido
+  de `.HasValue` o de `??`. Quedan dos con esa forma, leídos y NO medidos en vivo: el «sin fecha
+  al final» de `DefaultBlogQuery` y el `<time>` de `TimelineItem.cshtml`.
+  **Y la navegación tenía el hueco hermano**: «Configuración» —la carpeta `siteConfigFolder`,
+  único padre que el schema permite para los avisos— salía en el header y el footer como enlace
+  a un 404 en cuanto un editor creaba su primer aviso. Lo que se enlaza es lo que Umbraco sabe
+  pintar, un nodo con plantilla (`NavegacionDelSitio`); una lista de alias de carpeta se queda
+  corta con el próximo tipo de dato que el schema cuelgue del `siteRoot` (`eventPage` ya puede).
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2778,11 +2803,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3771 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3786 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2644
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2659
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 458
 
@@ -3244,7 +3269,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3771 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3786 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
