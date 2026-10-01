@@ -21,8 +21,12 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><c>startedLabel</c>, <c>invalidLabel</c> y <c>labels</c> los acepta el elemento y no los
 /// autora el ElementType: quedan como atributos. Comparado con <c>countdown-clock</c>, ver
 /// <see cref="CountdownClockProps"/>: comparten <c>targetDate</c> y nada más.</para>
+///
+/// <para><b>Sección <c>Countdown</c></b> (ADR 0136), la MISMA que declara
+/// <c>countdown-clock</c>: los dos relojes son el mismo concepto (UI#86) y sus rótulos, sus hitos
+/// en voz alta, «empezó» y «no disponible» son una clave cada uno.</para>
 /// </remarks>
-[ElementoSynHost("countdown-digital", TipoDeColocable.Pieza)]
+[ElementoSynHost("countdown-digital", TipoDeColocable.Pieza, Diccionario = ["Countdown"])]
 public sealed record CountdownDigitalProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? TargetDate,
     [property: CampoSynHost(OrigenDelCampo.Decision)] bool? ShowLabels,

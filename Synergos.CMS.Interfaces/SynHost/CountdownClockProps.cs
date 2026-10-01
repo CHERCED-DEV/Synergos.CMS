@@ -22,7 +22,12 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para>Comparado con <c>countdown-digital</c> (el mismo concepto al 83 %, UI#86): los dos viajan
 /// <c>targetDate</c> con la misma lectura; éste no tiene decisiones del editor y aquél sí
 /// (<c>showLabels</c>, <c>style</c>). Los records NO salen idénticos.</para>
+///
+/// <para><b>Sección <c>Countdown</c></b> (ADR 0136), la MISMA que declara
+/// <c>countdown-digital</c>: los dos relojes son el mismo concepto (UI#86) y sus rótulos, sus
+/// hitos en voz alta, «empezó» y «no disponible» son una clave cada uno. Lo único suyo son
+/// minutos y segundos abreviados (<c>Countdown.Short.*</c>), porque los anillos son chicos.</para>
 /// </remarks>
-[ElementoSynHost("countdown-clock", TipoDeColocable.Pieza)]
+[ElementoSynHost("countdown-clock", TipoDeColocable.Pieza, Diccionario = ["Countdown"])]
 public sealed record CountdownClockProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? TargetDate);

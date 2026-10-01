@@ -557,7 +557,26 @@
       "nombre": "countdown-clock",
       "tipo": "pieza",
       "record": "CountdownClockProps",
-      "diccionario": [],
+      "diccionario": [
+        "Countdown"
+      ],
+      "claves": [
+        "Countdown.Aria.Timer",
+        "Countdown.Days",
+        "Countdown.Expired",
+        "Countdown.Hours",
+        "Countdown.Label",
+        "Countdown.Milestone.Day",
+        "Countdown.Milestone.Hour",
+        "Countdown.Milestone.Minute",
+        "Countdown.Milestone.TenMinutes",
+        "Countdown.Minutes",
+        "Countdown.Seconds",
+        "Countdown.Short.Minutes",
+        "Countdown.Short.Seconds",
+        "Countdown.Started",
+        "Countdown.Unavailable"
+      ],
       "campos": [
         {
           "nombre": "targetDate",
@@ -575,7 +594,26 @@
       "nombre": "countdown-digital",
       "tipo": "pieza",
       "record": "CountdownDigitalProps",
-      "diccionario": [],
+      "diccionario": [
+        "Countdown"
+      ],
+      "claves": [
+        "Countdown.Aria.Timer",
+        "Countdown.Days",
+        "Countdown.Expired",
+        "Countdown.Hours",
+        "Countdown.Label",
+        "Countdown.Milestone.Day",
+        "Countdown.Milestone.Hour",
+        "Countdown.Milestone.Minute",
+        "Countdown.Milestone.TenMinutes",
+        "Countdown.Minutes",
+        "Countdown.Seconds",
+        "Countdown.Short.Minutes",
+        "Countdown.Short.Seconds",
+        "Countdown.Started",
+        "Countdown.Unavailable"
+      ],
       "campos": [
         {
           "nombre": "targetDate",
