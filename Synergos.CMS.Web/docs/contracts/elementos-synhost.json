@@ -132,7 +132,21 @@
       "nombre": "audio-player",
       "tipo": "pieza",
       "record": "AudioPlayerProps",
-      "diccionario": [],
+      "diccionario": [
+        "Media",
+        "Audio"
+      ],
+      "claves": [
+        "Audio.Aria",
+        "Audio.Empty",
+        "Media.Mute",
+        "Media.Pause",
+        "Media.Play",
+        "Media.Seek",
+        "Media.Time",
+        "Media.Unmute",
+        "Media.Volume"
+      ],
       "campos": [
         {
           "nombre": "audioFile",
@@ -293,7 +307,12 @@
       "nombre": "breadcrumb",
       "tipo": "pieza",
       "record": "BreadcrumbProps",
-      "diccionario": [],
+      "diccionario": [
+        "Nav.Breadcrumb"
+      ],
+      "claves": [
+        "Nav.Breadcrumb"
+      ],
       "campos": [
         {
           "nombre": "items",
@@ -539,7 +558,28 @@
       "nombre": "cookie-consent",
       "tipo": "pieza",
       "record": "CookieConsentProps",
-      "diccionario": [],
+      "diccionario": [
+        "Cookie"
+      ],
+      "claves": [
+        "Cookie.AcceptAll",
+        "Cookie.Accepted",
+        "Cookie.AlwaysOn",
+        "Cookie.Analytics.Description",
+        "Cookie.Analytics.Label",
+        "Cookie.BannerMessage",
+        "Cookie.Customize",
+        "Cookie.Marketing.Description",
+        "Cookie.Marketing.Label",
+        "Cookie.MoreInfo",
+        "Cookie.Necessary.Description",
+        "Cookie.Necessary.Label",
+        "Cookie.NecessaryOnly",
+        "Cookie.Options",
+        "Cookie.RejectAll",
+        "Cookie.SavePreferences",
+        "Cookie.Title"
+      ],
       "campos": [
         {
           "nombre": "bannerText",
@@ -592,7 +632,26 @@
       "nombre": "countdown-clock",
       "tipo": "pieza",
       "record": "CountdownClockProps",
-      "diccionario": [],
+      "diccionario": [
+        "Countdown"
+      ],
+      "claves": [
+        "Countdown.Aria.Timer",
+        "Countdown.Days",
+        "Countdown.Expired",
+        "Countdown.Hours",
+        "Countdown.Label",
+        "Countdown.Milestone.Day",
+        "Countdown.Milestone.Hour",
+        "Countdown.Milestone.Minute",
+        "Countdown.Milestone.TenMinutes",
+        "Countdown.Minutes",
+        "Countdown.Seconds",
+        "Countdown.Short.Minutes",
+        "Countdown.Short.Seconds",
+        "Countdown.Started",
+        "Countdown.Unavailable"
+      ],
       "campos": [
         {
           "nombre": "targetDate",
@@ -610,7 +669,26 @@
       "nombre": "countdown-digital",
       "tipo": "pieza",
       "record": "CountdownDigitalProps",
-      "diccionario": [],
+      "diccionario": [
+        "Countdown"
+      ],
+      "claves": [
+        "Countdown.Aria.Timer",
+        "Countdown.Days",
+        "Countdown.Expired",
+        "Countdown.Hours",
+        "Countdown.Label",
+        "Countdown.Milestone.Day",
+        "Countdown.Milestone.Hour",
+        "Countdown.Milestone.Minute",
+        "Countdown.Milestone.TenMinutes",
+        "Countdown.Minutes",
+        "Countdown.Seconds",
+        "Countdown.Short.Minutes",
+        "Countdown.Short.Seconds",
+        "Countdown.Started",
+        "Countdown.Unavailable"
+      ],
       "campos": [
         {
           "nombre": "targetDate",
@@ -730,7 +808,12 @@
       "nombre": "fab",
       "tipo": "pieza",
       "record": "FabProps",
-      "diccionario": [],
+      "diccionario": [
+        "Fab"
+      ],
+      "claves": [
+        "Fab.Aria"
+      ],
       "campos": [
         {
           "nombre": "iconKey",
@@ -1121,7 +1204,12 @@
       "nombre": "progress-bar",
       "tipo": "pieza",
       "record": "ProgressBarProps",
-      "diccionario": [],
+      "diccionario": [
+        "ProgressBar"
+      ],
+      "claves": [
+        "ProgressBar.Aria"
+      ],
       "campos": [
         {
           "nombre": "value",
@@ -1153,7 +1241,14 @@
       "nombre": "range-slider",
       "tipo": "pieza",
       "record": "RangeSliderProps",
-      "diccionario": [],
+      "diccionario": [
+        "RangeSlider"
+      ],
+      "claves": [
+        "RangeSlider.Aria",
+        "RangeSlider.Max",
+        "RangeSlider.Min"
+      ],
       "campos": [
         {
           "nombre": "label",
@@ -1315,7 +1410,12 @@
       "nombre": "scroll-top",
       "tipo": "pieza",
       "record": "ScrollTopProps",
-      "diccionario": [],
+      "diccionario": [
+        "ScrollTop"
+      ],
+      "claves": [
+        "ScrollTop.Aria"
+      ],
       "campos": [
         {
           "nombre": "scrollThreshold",
@@ -1508,7 +1608,17 @@
       "nombre": "stepper",
       "tipo": "pieza",
       "record": "StepperProps",
-      "diccionario": [],
+      "diccionario": [
+        "Stepper"
+      ],
+      "claves": [
+        "Stepper.Aria",
+        "Stepper.Status.Active",
+        "Stepper.Status.Done",
+        "Stepper.Status.Pending",
+        "Stepper.Step",
+        "Stepper.Summary"
+      ],
       "campos": [
         {
           "nombre": "steps",
@@ -1692,7 +1802,15 @@
       "nombre": "tree-view",
       "tipo": "pieza",
       "record": "TreeViewProps",
-      "diccionario": [],
+      "diccionario": [
+        "TreeView"
+      ],
+      "claves": [
+        "TreeView.Aria",
+        "TreeView.Collapse",
+        "TreeView.Empty",
+        "TreeView.Expand"
+      ],
       "campos": [
         {
           "nombre": "tree",
@@ -1744,7 +1862,29 @@
       "nombre": "video-player",
       "tipo": "pieza",
       "record": "VideoPlayerProps",
-      "diccionario": [],
+      "diccionario": [
+        "Media",
+        "Video"
+      ],
+      "claves": [
+        "Media.Mute",
+        "Media.Pause",
+        "Media.Play",
+        "Media.Seek",
+        "Media.Time",
+        "Media.Unmute",
+        "Media.Volume",
+        "Video.Aria",
+        "Video.Captions",
+        "Video.Empty",
+        "Video.ExitFullscreen",
+        "Video.Fullscreen",
+        "Video.Mute",
+        "Video.Pause",
+        "Video.Play",
+        "Video.Player",
+        "Video.Unmute"
+      ],
       "campos": [
         {
           "nombre": "videoFile",

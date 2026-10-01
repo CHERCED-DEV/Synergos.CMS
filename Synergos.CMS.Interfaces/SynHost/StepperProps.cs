@@ -20,8 +20,12 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// menos (ADR 0134 §4, pendiente). El record se ata al nombre del registry: si se renombra el
 /// elemento, cambia esta línea junto con el registry y la vista; si se renombra la pieza del
 /// design system, nada de acá.</para>
+///
+/// <para><b>Sección <c>Stepper</c></b> (ADR 0136): «Paso {n} de {total}», el nombre de cada paso
+/// con su estado y el del indicador, con marcadores con nombre —el orden de las palabras es del
+/// idioma—. El título de cada paso es contenido y viaja como marcador.</para>
 /// </remarks>
-[ElementoSynHost("stepper", TipoDeColocable.Pieza)]
+[ElementoSynHost("stepper", TipoDeColocable.Pieza, Diccionario = ["Stepper"])]
 public sealed record StepperProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<StepperItem>? Steps,
     [property: CampoSynHost(OrigenDelCampo.Decision)] int? CurrentStep);

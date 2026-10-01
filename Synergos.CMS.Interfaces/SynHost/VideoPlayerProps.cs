@@ -18,8 +18,14 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// para que el host no falle, y no hace nada con ellos. Mandarlos sería afirmar una función que
 /// no existe. <c>title</c>, <c>autoplay</c>, <c>loop</c> y <c>muted</c> los acepta el elemento y
 /// no los autora el ElementType: quedan como atributos.</para>
+///
+/// <para><b>Secciones <c>Media</c> y <c>Video</c></b> (ADR 0136). <c>Media</c> es el transporte que
+/// comparte con <c>audio-player</c> —reproducir, pausar, silenciar, volumen, posición, «x de y»—:
+/// el mismo concepto en los dos reproductores, así que una clave por control y no dos copias de
+/// «Pausar». <c>Video</c> (que ya existía) es lo que sólo tiene un video: pantalla completa, su
+/// nombre accesible y su estado vacío.</para>
 /// </remarks>
-[ElementoSynHost("video-player", TipoDeColocable.Pieza)]
+[ElementoSynHost("video-player", TipoDeColocable.Pieza, Diccionario = ["Media", "Video"])]
 public sealed record VideoPlayerProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? VideoFile,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? PosterImage);

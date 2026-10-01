@@ -9,7 +9,7 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// enlace a la política de privacidad, que es lo que lo hace un consentimiento informado.</para>
 ///
 /// <para><b><c>policyLink</c> es el destino del enlace</b> y <b><c>policyLabel</c></b> el texto
-/// que el editor escribió para él (sin texto, el elemento dice «Política de cookies»). Dónde abre
+/// que el editor escribió para él (sin texto, el de <c>Cookie.MoreInfo</c>). Dónde abre
 /// no viaja: el elemento abre la política siempre en una pestaña nueva, para no sacar al
 /// visitante de una decisión a medias.</para>
 ///
@@ -17,8 +17,14 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// elemento y no los autora el ElementType: quedan como atributos. <c>storageKey</c> es un ajuste
 /// técnico y <c>categories</c> la lista de categorías de cookies, que es del sitio y no de cada
 /// bloque.</para>
+///
+/// <para><b>Sección <c>Cookie</c></b> (ADR 0136): los textos por defecto del aviso —lo que se
+/// pinta si el editor deja un campo vacío— y los que el editor no autora (título, «Guardar
+/// preferencias», las tres categorías canónicas) los traduce el elemento con <c>t()</c>. La
+/// sección ya existía para este aviso: cinco de sus claves (<c>AcceptAll</c>, <c>RejectAll</c>,
+/// <c>Customize</c>, <c>BannerMessage</c>, <c>MoreInfo</c>) son las de los campos de arriba.</para>
 /// </remarks>
-[ElementoSynHost("cookie-consent", TipoDeColocable.Pieza)]
+[ElementoSynHost("cookie-consent", TipoDeColocable.Pieza, Diccionario = ["Cookie"])]
 public sealed record CookieConsentProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? BannerText,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? AcceptLabel,
