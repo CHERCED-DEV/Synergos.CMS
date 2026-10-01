@@ -124,7 +124,8 @@
     pisa todo, es hoy la puerta contraria. El **resolver tipado por elemento** (ADR 0135) está
     **Aceptado** (2026-09-30) y se escala a todas las piezas (#180): qué elementos lo tienen no se
     escribe acá, lo lista `docs/contracts/elementos-synhost.json`. **Propuestos**, y describen el
-    rumbo, no lo que ya está: diccionario por secciones declaradas (0136), configuración de negocio
+    rumbo, no lo que ya está: diccionario por secciones declaradas (0136, pilotada en #186 —ver
+    `feedback_the_dictionary_travels_by_declared_sections`—), configuración de negocio
     por funcionalidad (0137), coordinación de página por eventos DOM (0138) y bundles con varias
     entradas colocables frente a 0113 (0139).
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
@@ -2508,6 +2509,37 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   posicional `new SynHostEmitRequest("x", …)`. El gate miraba sólo la primera y así estaban
   escritas `countdown-digital` y `rich-tooltip`; desde #180 mira las dos, medido con una vista
   mutante que pasaba en verde.)
+
+- `feedback_the_dictionary_travels_by_declared_sections` — **el bridge publica las secciones de
+  diccionario que DECLARAN los records de los elementos emitidos en la página, con fallback por
+  clave a la cultura por defecto, y se escribe al FINAL del `<body>`** (piloto de la ADR 0136,
+  #186, Propuesta). Antes: once prefijos fijos en todas las páginas —176 claves, ≈7 KB, tres
+  prefijos que no casaban nada— y ningún lector. Cómo está armado y por qué, cada cosa medida:
+  (a) **quién sabe qué hay en la página es el emitter**, no un recorrido del contenido: la
+  solicitud lleva las secciones del record (`SynHostEmitRequest.Diccionario`, la pone
+  `SolicitudSynHost.Para`), `EmisorQueAnotaElDiccionario` las anota en `SeccionesDeLaPagina`
+  (en el `HttpContext`, porque el emitter es singleton) y `DiccionarioDelBridge` publica la unión;
+  (b) **por eso el bridge va al final del `<body>` de las cuatro plantillas que montan
+  elementos** —`_Layout`, `PageBare`, `PlatformRoot`, `Error`; las tres últimas no lo emitían, y
+  el lanzador de la portada no tenía diccionario—: en la cabecera todavía no se emitió el chrome ni
+  los globales. Sigue llegando a tiempo porque los `<script type="module">` son diferidos;
+  (c) **en CSP estricto el bridge lo sirve OTRA petición**, que no ve la página: la página le pasa
+  sus secciones y su cultura en la URL. Sin la cultura, `/synergos-bridge.js` servía **en-US a
+  una página es-CO** (medido: ese endpoint sale en en-US por defecto, igual que `/blog/tag/*`).
+  Y la URL se arma ENTERA en código: escrita en el marcado con `&amp;` junto a partes `@(…)`,
+  Razor la doble-codificó y el endpoint recibió `amp;culture` — compilaba, el test unitario del
+  controlador pasaba, y sólo la prueba viva lo vio; (d) **el fallback se resuelve en el servidor**
+  con la cultura por defecto que dice Umbraco (`GetDefaultLanguageIsoCode`), no con el literal
+  `"es-CO"` que tenía el builder; (e) **una sección es un prefijo ENTERO y sin mayúsculas**
+  —`Tag` no casa `Tagline.X`— y la regla vive en UN sitio (`DiccionarioDelBridge.EnAlgunaSeccion`),
+  que usan el bridge, el gate de secciones vacías y la proyección de `claves` al contrato
+  (`docs/contracts/elementos-synhost.json`), de donde el UI comprueba sin el CMS que cada
+  `t('Clave')` de un elemento está en ellas. Las claves de Razor CON respaldo que no existen en
+  uSync son 81 —no 145: Umbraco las busca sin mayúsculas, `cmsDictionary.key` es `COLLATE
+  NOCASE`— y quedan en la línea base del check 12 de `usync-audit.mjs`. Mutado: 7 en el CMS
+  (prefijo vacío, sin fallback, sin secciones en la solicitud, sin anotar, funcionalidad con
+  `configOverride`, sección sin el límite del punto, CSP sin secciones) y 2 en el check 12, todos
+  rojos.
 
 - `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
   no sale sólo en rojo: una sale en VERDE.** Hasta el #170 todos los workflows corrían en
