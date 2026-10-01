@@ -58,7 +58,7 @@
  * forma del XML y validar que Umbraco lo ACEPTA.
  */
 
-import { spawn, execSync } from 'node:child_process';
+import { spawn, execSync, execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, createWriteStream, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -86,9 +86,13 @@ const fail = (msg) => {
 };
 
 // ── 1. Cuántos ítems DEBE procesar el import ────────────────────────────────
-// Solo archivos trackeados: la máquina del arquitecto tiene Content/ y Media/
-// locales (gitignored) que no forman parte del contrato del repo.
-const tracked = execSync("git ls-files 'Synergos.CMS.Web/uSync/v9/**/*.config'", {
+// Solo archivos trackeados: lo que el repo PROMETE reproducir, no lo que haya suelto en el árbol.
+//
+// `git` se llama SIN consola, con el patrón como argumento. Con `execSync` pasaba por la shell, y
+// en Windows es `cmd.exe`, que no entiende comillas simples: el patrón llegaba con ellas, no casaba
+// nada, y el gate moría con «0 archivos trackeados» en la máquina del arquitecto (medido: 0 por cmd,
+// 1185 directo). En Linux, donde corre la CI, las comillas las quita bash: por eso nadie lo vio.
+const tracked = execFileSync('git', ['ls-files', '--', 'Synergos.CMS.Web/uSync/v9/**/*.config'], {
   cwd: ROOT, encoding: 'utf8',
 })
   .split('\n')
