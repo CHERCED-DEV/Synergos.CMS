@@ -62,6 +62,7 @@ namespace Synergos.CMS.Tests.Architecture;
 /// TOKEN <c>Umbraco__…</c> donde sea: una variable de configuración se llama igual esté en el bloque
 /// que esté, así que no hay bloque que delimitar.</para>
 /// </remarks>
+[Collection(ComposeExclusivo.Nombre)]
 public sealed class ClavesDeUmbracoTests
 {
     private static string Esquema()

@@ -42,6 +42,7 @@ namespace Synergos.CMS.Tests.Architecture;
 /// gate <b>falla</b> en vez de pasar sobre una lista vacía — el modo de fallo del #136, que se
 /// hereda porque un verde no se mira.</para>
 /// </remarks>
+[Collection(ComposeExclusivo.Nombre)]
 public sealed class CredencialesFueraDelArbolTests
 {
     /// <summary>

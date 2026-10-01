@@ -40,6 +40,7 @@ namespace Synergos.CMS.Tests.Architecture;
 /// default de <c>${VAR:-default}</c>— y lo que <c>.env.example</c> propone. Para lo demás está la
 /// pieza: un modo desconocido no arranca, en los quince.</para>
 /// </remarks>
+[Collection(ComposeExclusivo.Nombre)]
 public sealed class ModosDelComposeTests
 {
     private sealed record ModoEscrito(string Clave, string Valor, string Origen);

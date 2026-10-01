@@ -4,8 +4,8 @@ namespace Synergos.CMS.Tests.Architecture;
 /// Las clases que tocan <c>compose.prod.yml</c> corren en serie entre ellas.
 /// </summary>
 /// <remarks>
-/// <para>xUnit paraleliza <b>entre clases</b> por defecto, y cuatro clases de esta suite leen el
-/// mismo fichero del árbol de trabajo. Mientras todas leían, eso era gratis.</para>
+/// <para>xUnit paraleliza <b>entre clases</b> por defecto, y varias clases de esta suite leen el
+/// mismo fichero del árbol de trabajo (cuáles, lo vigila <see cref="ComposeExclusivoTests"/>). Mientras todas leían, eso era gratis.</para>
 ///
 /// <para><b>Dejó de serlo cuando una empezó a escribir.</b>
 /// <c>ComposeStackTests.El_check_ignora_el_fin_de_linea_pero_NO_el_contenido</c> tiene que mutar
@@ -18,9 +18,9 @@ namespace Synergos.CMS.Tests.Architecture;
 /// vecino enseña a correr la suite otra vez hasta que pase, que es exactamente cómo se deja de
 /// creer en ella.</para>
 ///
-/// <para>Se marcan las cuatro y no sólo la que escribe: la exclusión tiene que cubrir a quien lee,
-/// que es quien se ve afectado. Si mañana aparece una quinta clase que lea
-/// <c>compose.prod.yml</c>, va acá también.</para>
+/// <para>Se marcan todas y no sólo la que escribe: la exclusión tiene que cubrir a quien lee,
+/// que es quien se ve afectado. Una clase nueva que lea
+/// <c>compose.prod.yml</c> va acá también, y desde #181 no depende de acordarse: lo exige el build.</para>
 /// </remarks>
 [CollectionDefinition(Nombre)]
 public sealed class ComposeExclusivo
