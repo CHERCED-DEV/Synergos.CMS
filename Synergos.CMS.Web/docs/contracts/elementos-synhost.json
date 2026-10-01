@@ -1442,7 +1442,13 @@
       "nombre": "timeline",
       "tipo": "pieza",
       "record": "TimelineProps",
-      "diccionario": [],
+      "diccionario": [
+        "Timeline"
+      ],
+      "claves": [
+        "Timeline.Aria",
+        "Timeline.Empty"
+      ],
       "campos": [
         {
           "nombre": "events",
