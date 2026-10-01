@@ -258,7 +258,13 @@
       "nombre": "badge-group",
       "tipo": "pieza",
       "record": "BadgeGroupProps",
-      "diccionario": [],
+      "diccionario": [
+        "BadgeGroup"
+      ],
+      "claves": [
+        "BadgeGroup.Aria",
+        "BadgeGroup.Empty"
+      ],
       "campos": [
         {
           "nombre": "badges",

@@ -18,8 +18,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><c>iconKey</c> lo promete la descripción del ElementType y el elemento no pinta iconos en
 /// las insignias: no viaja. <c>count</c>, <c>href</c> y la selección los sabe pintar el elemento
 /// pero el ElementType no los autora: quedan como atributo.</para>
+///
+/// <para><b>Su microcopia sale del diccionario, sección <c>BadgeGroup</c></b> (ADR 0136): el nombre del
+/// grupo cuando no tiene rótulo y el grupo vacío.</para>
 /// </remarks>
-[ElementoSynHost("badge-group", TipoDeColocable.Pieza)]
+[ElementoSynHost("badge-group", TipoDeColocable.Pieza, Diccionario = ["BadgeGroup"])]
 public sealed record BadgeGroupProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<BadgeGroupItem>? Badges,
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Layout);
