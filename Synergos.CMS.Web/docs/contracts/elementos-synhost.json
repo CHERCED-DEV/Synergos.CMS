@@ -861,7 +861,37 @@
       "nombre": "map-pin",
       "tipo": "pieza",
       "record": "MapPinProps",
-      "diccionario": [],
+      "diccionario": [
+        "Map",
+        "Common.Actions"
+      ],
+      "claves": [
+        "Common.Actions.Back",
+        "Common.Actions.Close",
+        "Common.Actions.Collapse",
+        "Common.Actions.ContactUs",
+        "Common.Actions.Download",
+        "Common.Actions.Expand",
+        "Common.Actions.GetDirections",
+        "Common.Actions.GetStarted",
+        "Common.Actions.LearnMore",
+        "Common.Actions.Next",
+        "Common.Actions.Open",
+        "Common.Actions.Previous",
+        "Common.Actions.ReadMore",
+        "Common.Actions.SeeMore",
+        "Common.Actions.Share",
+        "Common.Actions.ViewAll",
+        "Map.Aria",
+        "Map.CenteredOn",
+        "Map.Error",
+        "Map.GetDirections",
+        "Map.Loading",
+        "Map.MoreAbout",
+        "Map.Pin",
+        "Map.Pins",
+        "Map.ViewLarger"
+      ],
       "campos": [
         {
           "nombre": "centerLat",
