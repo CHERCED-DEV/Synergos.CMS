@@ -20,6 +20,13 @@ próximo `git pull`, cada vez que guardes una página aparecerá su `.config` en
 
 ## El primer export
 
+> **Hecho el 2026-10-01**: las exportaciones de la máquina del arquitecto (de julio, y al día con la
+> base: los 95 nodos de contenido y los 191 de media tienen la suya, ninguno editado después) se
+> versionaron en un commit aparte, con `usync-audit` en verde y sin datos personales. Quedaron FUERA
+> 36 lápidas de uSync (`<Empty Change="Delete|Rename">`): de páginas borradas o renombradas, que
+> en una base nueva no tienen nada que borrar y, duplicando una clave, harían el resultado del
+> import depender del orden.
+
 La primera vez sí conviene forzarlo, porque el contenido que ya existe en tu DB nunca se
 exportó.
 

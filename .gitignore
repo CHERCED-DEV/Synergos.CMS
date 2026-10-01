@@ -58,6 +58,10 @@ Synergos.CMS.Web/umbraco/models/models.generated.hash
 Synergos.CMS.Web/uSync/uSync.History/
 Synergos.CMS.Web/uSync/uSync.Logs/
 
+# Perfiles de arranque que Visual Studio genera en cada capacidad y BFF: son de la máquina.
+# El del CMS web (Synergos.CMS.Web/Properties/launchSettings.json) SÍ se versiona: trae los perfiles.
+backend/**/Properties/launchSettings.json
+
 # uSync/v9/Content y Media SÍ se versionan (ADR 0129). Antes se ignoraban por
 # dos razones: que el agente no es dueño del contenido, y que el seeder de dev
 # ensuciaría el repo. La primera sigue en pie y no la cambia esto —el agente

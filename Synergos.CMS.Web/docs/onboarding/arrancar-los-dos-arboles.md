@@ -122,9 +122,18 @@ vigila). Se importa a mano, una vez, desde el backoffice:
 
 ## 3. La portada
 
-`uSync/v9/Content/` está vacía a propósito (ADR 0129: el agente no autora
-contenido) y nada siembra al arrancar (ADR 0013). La portada de arranque la
-crea una herramienta, detrás del flag de desarrollo:
+**El contenido de demo viene en el repo** (ADR 0129; versionado el 2026-10-01): `uSync/v9/Content/`
+y `Media/` más los binarios de `wwwroot/media/`. El **Import** del paso 2 trae esquema, páginas e
+imágenes de una vez: un clon nuevo queda con el sitio entero. Nada lo importa al arrancar, en
+ningún perfil (ADR 0013; lo vigila `ElContenidoVersionadoNoSeImportaSoloTests`).
+
+> **Después del import, los modelos.** En desarrollo `ModelsMode` es `SourceCodeAuto` y
+> `umbraco/models/*.generated.cs` no se versiona. Si esa carpeta queda vacía, generalos desde
+> **Settings → Models Builder → Generate models**: sin ellos, las vistas tipadas contra
+> `PublishedModels` (la portada de plataforma entre ellas) contestan 500.
+
+Si preferís arrancar SIN la demo, la portada de arranque la crea una herramienta, detrás del
+flag de desarrollo:
 
 ```bash
 curl -X POST http://localhost:<puerto>/dev/seed-portada
