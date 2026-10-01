@@ -17,8 +17,15 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b><c>label</c></b> es el <c>ariaLabel</c> del bloque: el elemento lo usa para nombrar el
 /// grupo («Equipo: 8 integrantes»). <c>size</c> y <c>overflowHref</c> los acepta el elemento y no
 /// los autora el ElementType: quedan como atributos.</para>
+///
+/// <para><b>Su microcopia sale del diccionario</b> (ADR 0136): sección <c>AvatarGroup</c> —el nombre por
+/// defecto, el recuento con su plural, el desborde y el grupo vacío— y <c>Avatar</c> por una sola clave,
+/// <c>Avatar.Fallback</c>: el nombre de un avatar sin nombre es el mismo concepto que en
+/// <c>avatar</c>, así que vive una vez, en la sección de la pieza base. No comparten la sección
+/// entera: los textos del grupo no los usa el avatar suelto, y en <c>Avatar</c> se publicarían en cada
+/// página con un avatar.</para>
 /// </remarks>
-[ElementoSynHost("avatar-group", TipoDeColocable.Pieza)]
+[ElementoSynHost("avatar-group", TipoDeColocable.Pieza, Diccionario = ["AvatarGroup", "Avatar"])]
 public sealed record AvatarGroupProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<AvatarGroupMember>? Avatars,
     [property: CampoSynHost(OrigenDelCampo.Decision)] int? MaxVisible,

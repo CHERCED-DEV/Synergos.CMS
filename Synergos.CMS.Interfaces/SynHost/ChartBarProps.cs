@@ -18,8 +18,12 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// elemento). Los ejes, prefijo/sufijo, <c>maxValue</c>, <c>locale</c>, <c>showValues</c> y
 /// <c>emptyLabel</c> los acepta el elemento y no los autora el ElementType: quedan como
 /// atributos.</para>
+///
+/// <para><b>Su microcopia sale del diccionario, sección <c>ChartBar</c></b> (ADR 0136): el nombre por
+/// defecto del gráfico, el resumen con su plural, las cabeceras de la tabla que leen los lectores de
+/// pantalla y el gráfico vacío.</para>
 /// </remarks>
-[ElementoSynHost("chart-bar", TipoDeColocable.Pieza)]
+[ElementoSynHost("chart-bar", TipoDeColocable.Pieza, Diccionario = ["ChartBar"])]
 public sealed record ChartBarProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Title,
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Orientation,

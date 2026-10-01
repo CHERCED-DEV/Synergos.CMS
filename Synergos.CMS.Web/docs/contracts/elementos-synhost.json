@@ -178,7 +178,16 @@
       "nombre": "avatar",
       "tipo": "pieza",
       "record": "AvatarProps",
-      "diccionario": [],
+      "diccionario": [
+        "Avatar"
+      ],
+      "claves": [
+        "Avatar.Fallback",
+        "Avatar.Status.Away",
+        "Avatar.Status.Busy",
+        "Avatar.Status.Offline",
+        "Avatar.Status.Online"
+      ],
       "campos": [
         {
           "nombre": "src",
@@ -203,7 +212,23 @@
       "nombre": "avatar-group",
       "tipo": "pieza",
       "record": "AvatarGroupProps",
-      "diccionario": [],
+      "diccionario": [
+        "AvatarGroup",
+        "Avatar"
+      ],
+      "claves": [
+        "Avatar.Fallback",
+        "Avatar.Status.Away",
+        "Avatar.Status.Busy",
+        "Avatar.Status.Offline",
+        "Avatar.Status.Online",
+        "AvatarGroup.Count.One",
+        "AvatarGroup.Count.Other",
+        "AvatarGroup.Empty",
+        "AvatarGroup.Label",
+        "AvatarGroup.More",
+        "AvatarGroup.Rest"
+      ],
       "campos": [
         {
           "nombre": "avatars",
@@ -247,7 +272,13 @@
       "nombre": "badge-group",
       "tipo": "pieza",
       "record": "BadgeGroupProps",
-      "diccionario": [],
+      "diccionario": [
+        "BadgeGroup"
+      ],
+      "claves": [
+        "BadgeGroup.Aria",
+        "BadgeGroup.Empty"
+      ],
       "campos": [
         {
           "nombre": "badges",
@@ -398,7 +429,17 @@
       "nombre": "chart-bar",
       "tipo": "pieza",
       "record": "ChartBarProps",
-      "diccionario": [],
+      "diccionario": [
+        "ChartBar"
+      ],
+      "claves": [
+        "ChartBar.Aria",
+        "ChartBar.Category",
+        "ChartBar.Empty",
+        "ChartBar.Summary.One",
+        "ChartBar.Summary.Other",
+        "ChartBar.Value"
+      ],
       "campos": [
         {
           "nombre": "title",
@@ -461,7 +502,14 @@
       "nombre": "color-picker",
       "tipo": "pieza",
       "record": "ColorPickerProps",
-      "diccionario": [],
+      "diccionario": [
+        "ColorPicker"
+      ],
+      "claves": [
+        "ColorPicker.Hex",
+        "ColorPicker.Invalid",
+        "ColorPicker.Label"
+      ],
       "campos": [
         {
           "nombre": "label",
@@ -498,7 +546,15 @@
       "nombre": "color-swatches",
       "tipo": "pieza",
       "record": "ColorSwatchesProps",
-      "diccionario": [],
+      "diccionario": [
+        "ColorSwatches"
+      ],
+      "claves": [
+        "ColorSwatches.Aria",
+        "ColorSwatches.Empty",
+        "ColorSwatches.None",
+        "ColorSwatches.Selected"
+      ],
       "campos": [
         {
           "nombre": "swatches",
@@ -1054,7 +1110,21 @@
       "nombre": "lightbox-gallery",
       "tipo": "pieza",
       "record": "LightboxGalleryProps",
-      "diccionario": [],
+      "diccionario": [
+        "Gallery"
+      ],
+      "claves": [
+        "Gallery.Aria",
+        "Gallery.Close",
+        "Gallery.Download",
+        "Gallery.Empty",
+        "Gallery.Enlarge",
+        "Gallery.Enlarged",
+        "Gallery.ImageOf",
+        "Gallery.Next",
+        "Gallery.Previous",
+        "Gallery.Zoom"
+      ],
       "campos": [
         {
           "nombre": "images",
@@ -1092,7 +1162,37 @@
       "nombre": "map-pin",
       "tipo": "pieza",
       "record": "MapPinProps",
-      "diccionario": [],
+      "diccionario": [
+        "Map",
+        "Common.Actions"
+      ],
+      "claves": [
+        "Common.Actions.Back",
+        "Common.Actions.Close",
+        "Common.Actions.Collapse",
+        "Common.Actions.ContactUs",
+        "Common.Actions.Download",
+        "Common.Actions.Expand",
+        "Common.Actions.GetDirections",
+        "Common.Actions.GetStarted",
+        "Common.Actions.LearnMore",
+        "Common.Actions.Next",
+        "Common.Actions.Open",
+        "Common.Actions.Previous",
+        "Common.Actions.ReadMore",
+        "Common.Actions.SeeMore",
+        "Common.Actions.Share",
+        "Common.Actions.ViewAll",
+        "Map.Aria",
+        "Map.CenteredOn",
+        "Map.Error",
+        "Map.GetDirections",
+        "Map.Loading",
+        "Map.MoreAbout",
+        "Map.Pin",
+        "Map.Pins",
+        "Map.ViewLarger"
+      ],
       "campos": [
         {
           "nombre": "centerLat",
@@ -1144,7 +1244,18 @@
       "nombre": "notification-toast",
       "tipo": "pieza",
       "record": "NotificationToastProps",
-      "diccionario": [],
+      "diccionario": [
+        "Notification"
+      ],
+      "claves": [
+        "Notification.Aria.List",
+        "Notification.Dismiss",
+        "Notification.DismissAll",
+        "Notification.Empty",
+        "Notification.MarkAllRead",
+        "Notification.MarkRead",
+        "Notification.New"
+      ],
       "campos": [
         {
           "nombre": "toasts",
@@ -1336,7 +1447,27 @@
       "nombre": "rich-tooltip",
       "tipo": "pieza",
       "record": "RichTooltipProps",
-      "diccionario": [],
+      "diccionario": [
+        "Common.Actions"
+      ],
+      "claves": [
+        "Common.Actions.Back",
+        "Common.Actions.Close",
+        "Common.Actions.Collapse",
+        "Common.Actions.ContactUs",
+        "Common.Actions.Download",
+        "Common.Actions.Expand",
+        "Common.Actions.GetDirections",
+        "Common.Actions.GetStarted",
+        "Common.Actions.LearnMore",
+        "Common.Actions.Next",
+        "Common.Actions.Open",
+        "Common.Actions.Previous",
+        "Common.Actions.ReadMore",
+        "Common.Actions.SeeMore",
+        "Common.Actions.Share",
+        "Common.Actions.ViewAll"
+      ],
       "campos": [
         {
           "nombre": "triggerText",
@@ -1481,7 +1612,30 @@
       "nombre": "select-multi",
       "tipo": "pieza",
       "record": "SelectMultiProps",
-      "diccionario": [],
+      "diccionario": [
+        "SelectMulti",
+        "Common.States"
+      ],
+      "claves": [
+        "Common.States.ComingSoon",
+        "Common.States.Error",
+        "Common.States.Loading",
+        "Common.States.New",
+        "Common.States.NoResults",
+        "Common.States.NotAvailable",
+        "Common.States.Optional",
+        "Common.States.Required",
+        "Common.States.Success",
+        "SelectMulti.Capacity",
+        "SelectMulti.Clear",
+        "SelectMulti.Options",
+        "SelectMulti.Placeholder",
+        "SelectMulti.Remove",
+        "SelectMulti.Search",
+        "SelectMulti.Selected.One",
+        "SelectMulti.Selected.Other",
+        "SelectMulti.Selection"
+      ],
       "campos": [
         {
           "nombre": "label",
@@ -1526,7 +1680,17 @@
       "nombre": "share-bar",
       "tipo": "pieza",
       "record": "ShareBarProps",
-      "diccionario": [],
+      "diccionario": [
+        "Share"
+      ],
+      "claves": [
+        "Share.Copied",
+        "Share.Copy",
+        "Share.CopyFailed",
+        "Share.Email",
+        "Share.Label",
+        "Share.On"
+      ],
       "campos": [
         {
           "nombre": "platforms",
@@ -1719,7 +1883,13 @@
       "nombre": "timeline",
       "tipo": "pieza",
       "record": "TimelineProps",
-      "diccionario": [],
+      "diccionario": [
+        "Timeline"
+      ],
+      "claves": [
+        "Timeline.Aria",
+        "Timeline.Empty"
+      ],
       "campos": [
         {
           "nombre": "events",
@@ -1766,7 +1936,30 @@
       "nombre": "tour-guide",
       "tipo": "pieza",
       "record": "TourGuideProps",
-      "diccionario": [],
+      "diccionario": [
+        "TourGuide",
+        "Common.Actions"
+      ],
+      "claves": [
+        "Common.Actions.Back",
+        "Common.Actions.Close",
+        "Common.Actions.Collapse",
+        "Common.Actions.ContactUs",
+        "Common.Actions.Download",
+        "Common.Actions.Expand",
+        "Common.Actions.GetDirections",
+        "Common.Actions.GetStarted",
+        "Common.Actions.LearnMore",
+        "Common.Actions.Next",
+        "Common.Actions.Open",
+        "Common.Actions.Previous",
+        "Common.Actions.ReadMore",
+        "Common.Actions.SeeMore",
+        "Common.Actions.Share",
+        "Common.Actions.ViewAll",
+        "TourGuide.Done",
+        "TourGuide.Skip"
+      ],
       "campos": [
         {
           "nombre": "steps",

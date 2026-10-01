@@ -15,8 +15,12 @@ namespace Synergos.CMS.Interfaces.SynHost;
 ///
 /// <para>El título, las columnas, la muestra seleccionada al inicio y si se puede deseleccionar los
 /// sabe pintar el elemento pero el ElementType no los autora: quedan como atributo.</para>
+///
+/// <para><b>Su microcopia sale del diccionario, sección <c>ColorSwatches</c></b> (ADR 0136): el nombre por
+/// defecto de la paleta, el anuncio del color elegido (o de ninguno) y la paleta vacía. <b>No comparte
+/// sección con <c>color-picker</c></b>: no tienen ni un texto con la misma intención.</para>
 /// </remarks>
-[ElementoSynHost("color-swatches", TipoDeColocable.Pieza)]
+[ElementoSynHost("color-swatches", TipoDeColocable.Pieza, Diccionario = ["ColorSwatches"])]
 public sealed record ColorSwatchesProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<ColorSwatchesItem>? Swatches,
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Shape);

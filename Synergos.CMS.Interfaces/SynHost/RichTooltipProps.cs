@@ -21,8 +21,12 @@ namespace Synergos.CMS.Interfaces.SynHost;
 ///
 /// <para><c>title</c>, <c>actionLabel</c> y <c>actionHref</c> los acepta el elemento y no los
 /// autora el ElementType: quedan como atributos.</para>
+///
+/// <para><b>Su única microcopia</b> —el nombre del disparador cuando no tiene texto ni título— sale del
+/// diccionario: <c>Common.Actions.LearnMore</c> (ADR 0136), la misma acción genérica del resto del
+/// sitio. La sección se publica entera: 16 claves para una, el precio de no copiarla.</para>
 /// </remarks>
-[ElementoSynHost("rich-tooltip", TipoDeColocable.Pieza)]
+[ElementoSynHost("rich-tooltip", TipoDeColocable.Pieza, Diccionario = ["Common.Actions"])]
 public sealed record RichTooltipProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? TriggerText,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Body,

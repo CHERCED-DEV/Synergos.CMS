@@ -19,8 +19,13 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// traduce el resolver. Un pin sin latitud o sin longitud legibles no viaja. <c>integration</c>
 /// (el proveedor de mapas) lo acepta el elemento y no lo autora el ElementType: queda como
 /// atributo.</para>
+///
+/// <para><b>Su microcopia sale del diccionario</b> (ADR 0136): sección <c>Map</c> —el nombre de la
+/// región y de la lista de pines, «Ubicación {n}» para un pin sin título, el título del mapa y «Ver mapa
+/// ampliado»— y <c>Common.Actions</c> para el «Ver más» de cada pin, la misma acción genérica del resto
+/// del sitio (la sección se publica entera: 16 claves para una).</para>
 /// </remarks>
-[ElementoSynHost("map-pin", TipoDeColocable.Pieza)]
+[ElementoSynHost("map-pin", TipoDeColocable.Pieza, Diccionario = ["Map", "Common.Actions"])]
 public sealed record MapPinProps(
     [property: CampoSynHost(OrigenDelCampo.Decision)] decimal? CenterLat,
     [property: CampoSynHost(OrigenDelCampo.Decision)] decimal? CenterLng,

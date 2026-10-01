@@ -18,8 +18,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// Lo que el ElementType promete y el elemento no pinta no viaja (la regla de <c>linkUrl</c> en
 /// <c>carousel</c>). El título de la sección y el texto de «sin hitos» no los autora el editor:
 /// son atributos.</para>
+///
+/// <para><b>Su microcopia sale del diccionario, sección <c>Timeline</c></b> (ADR 0136): el nombre de la
+/// región cuando no tiene título y la línea sin hitos.</para>
 /// </remarks>
-[ElementoSynHost("timeline", TipoDeColocable.Pieza)]
+[ElementoSynHost("timeline", TipoDeColocable.Pieza, Diccionario = ["Timeline"])]
 public sealed record TimelineProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<TimelineEntry>? Events);
 

@@ -16,8 +16,13 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// anterior, saltar, finalizar) no los autora el editor: son atributos.</para>
 ///
 /// <para><c>autoStart</c> sólo viaja ENCENDIDO: apagado es el default del elemento.</para>
+///
+/// <para><b>Sus rótulos por defecto salen del diccionario</b> (ADR 0136): «Siguiente» y «Anterior» son
+/// <c>Common.Actions.Next</c>/<c>Previous</c>, la misma acción genérica del resto del sitio (la
+/// sección se publica entera: 16 claves para dos), y «Saltar»/«Finalizar», la sección
+/// <c>TourGuide</c>.</para>
 /// </remarks>
-[ElementoSynHost("tour-guide", TipoDeColocable.Pieza)]
+[ElementoSynHost("tour-guide", TipoDeColocable.Pieza, Diccionario = ["TourGuide", "Common.Actions"])]
 public sealed record TourGuideProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<TourGuideStep>? Steps,
     [property: CampoSynHost(OrigenDelCampo.Decision)] bool? AutoStart);

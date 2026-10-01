@@ -18,8 +18,12 @@ namespace Synergos.CMS.Interfaces.SynHost;
 ///
 /// <para><b><c>shareLink</c> es el destino del enlace</b>; vacío, el elemento comparte la página
 /// actual. <c>shareTitle</c> vacío usa el título del documento.</para>
+///
+/// <para><b>Su microcopia sale del diccionario, sección <c>Share</c></b> (ADR 0136): «Compartir»,
+/// copiar el enlace y su confirmación, y «Compartir en {network}». El nombre de la red es MARCA: lo
+/// pone el elemento, no el diccionario.</para>
 /// </remarks>
-[ElementoSynHost("share-bar", TipoDeColocable.Pieza)]
+[ElementoSynHost("share-bar", TipoDeColocable.Pieza, Diccionario = ["Share"])]
 public sealed record ShareBarProps(
     [property: CampoSynHost(OrigenDelCampo.Decision)] IReadOnlyList<string>? Platforms,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? ShareLink,
