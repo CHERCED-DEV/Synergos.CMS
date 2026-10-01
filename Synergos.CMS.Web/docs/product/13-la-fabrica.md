@@ -227,7 +227,7 @@ y tiene **un gate que ya existe**.
 
 | # | sub-spec | árbol | lo prueba |
 |---|---|---|---|
-| **S1** | DocType + compositions del objeto central | CMS · uSync | `usync-audit.mjs` (11 checks) |
+| **S1** | DocType + compositions del objeto central | CMS · uSync | `usync-audit.mjs` (12 checks) |
 | **S2** | `Umbraco<X>CatalogSource` + `<X>ContentRules` + `Catalog:Sources:<X>` | CMS · Web | `Cada_vertical_tiene_su_EJE_1` · `El_catalogo_de_un_vertical_NO_sale_a_la_red` |
 | **S3** | El seam `I<X>Service` + implementación **en proceso** por defecto | CMS · Interfaces | `LayerRuleTests` |
 | **S4** | `<X>Settings` con `Mode`/`BaseUrl`/`ApiKey`/`TimeoutSeconds` | CMS · Application | `DefaultsDeConfiguracionTests` |
