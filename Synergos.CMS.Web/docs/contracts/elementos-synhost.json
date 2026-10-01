@@ -36,6 +36,99 @@
       }
     },
     {
+      "nombre": "app-launcher",
+      "tipo": "funcionalidad",
+      "record": "AppLauncherProps",
+      "diccionario": [
+        "AppLauncher",
+        "Common.States"
+      ],
+      "claves": [
+        "AppLauncher.Capabilities",
+        "AppLauncher.Count.Filtered",
+        "AppLauncher.Count.One",
+        "AppLauncher.Count.Other",
+        "AppLauncher.EmbedPreview",
+        "AppLauncher.Empty",
+        "AppLauncher.Filters.All",
+        "AppLauncher.Filters.Aria",
+        "AppLauncher.Filters.Capability",
+        "AppLauncher.Filters.Industry",
+        "AppLauncher.Filters.Persona",
+        "AppLauncher.Open",
+        "AppLauncher.Search.Label",
+        "AppLauncher.Search.Placeholder",
+        "AppLauncher.Status.Aria",
+        "AppLauncher.Status.Beta",
+        "AppLauncher.Status.Live",
+        "AppLauncher.Title",
+        "Common.States.ComingSoon",
+        "Common.States.Error",
+        "Common.States.Loading",
+        "Common.States.New",
+        "Common.States.NoResults",
+        "Common.States.NotAvailable",
+        "Common.States.Optional",
+        "Common.States.Required",
+        "Common.States.Success"
+      ],
+      "campos": [
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "subtitle",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "apps",
+          "tipo": "AppDelLanzador[]",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "title": "Explora las apps",
+        "subtitle": "Un motor, muchos productos",
+        "apps": [
+          {
+            "name": "Tienda",
+            "id": "tienda",
+            "tagline": "Catálogo, carrito y checkout.",
+            "icon": "bag",
+            "status": "live",
+            "industry": "Retail",
+            "persona": "Comprador",
+            "capabilities": [
+              "Catálogo",
+              "Pagos"
+            ],
+            "url": "/tienda",
+            "demoMode": "deeplink"
+          },
+          {
+            "name": "Gobierno",
+            "id": "gobierno",
+            "status": "soon",
+            "industry": "Sector público",
+            "persona": "Ciudadano",
+            "capabilities": [
+              "Trámites",
+              "Citas"
+            ],
+            "url": "/gobierno",
+            "demoMode": "embed"
+          }
+        ]
+      }
+    },
+    {
       "nombre": "audio-player",
       "tipo": "pieza",
       "record": "AudioPlayerProps",
@@ -204,7 +297,20 @@
       "nombre": "carousel",
       "tipo": "pieza",
       "record": "CarouselProps",
-      "diccionario": [],
+      "diccionario": [
+        "Slider"
+      ],
+      "claves": [
+        "Slider.Aria",
+        "Slider.Current",
+        "Slider.GoToSlide",
+        "Slider.Next",
+        "Slider.Pager",
+        "Slider.Pause",
+        "Slider.Play",
+        "Slider.Previous",
+        "Slider.SlideOf"
+      ],
       "campos": [
         {
           "nombre": "slides",
@@ -466,7 +572,24 @@
       "nombre": "dropdown",
       "tipo": "pieza",
       "record": "DropdownProps",
-      "diccionario": [],
+      "diccionario": [
+        "Dropdown",
+        "Common.States"
+      ],
+      "claves": [
+        "Common.States.ComingSoon",
+        "Common.States.Error",
+        "Common.States.Loading",
+        "Common.States.New",
+        "Common.States.NoResults",
+        "Common.States.NotAvailable",
+        "Common.States.Optional",
+        "Common.States.Required",
+        "Common.States.Success",
+        "Dropdown.Filter",
+        "Dropdown.Search",
+        "Dropdown.Trigger"
+      ],
       "campos": [
         {
           "nombre": "triggerLabel",
@@ -564,6 +687,9 @@
       "diccionario": [
         "Synhost.Hero"
       ],
+      "claves": [
+        "Synhost.Hero.Aria"
+      ],
       "campos": [
         {
           "nombre": "title",
@@ -643,6 +769,14 @@
       "record": "KpiCardProps",
       "diccionario": [
         "Synhost.Kpi"
+      ],
+      "claves": [
+        "Synhost.Kpi.Aria",
+        "Synhost.Kpi.NoData",
+        "Synhost.Kpi.Sparkline",
+        "Synhost.Kpi.Trend.Down",
+        "Synhost.Kpi.Trend.Flat",
+        "Synhost.Kpi.Trend.Up"
       ],
       "campos": [
         {
@@ -887,7 +1021,17 @@
       "nombre": "rating-stars",
       "tipo": "pieza",
       "record": "RatingStarsProps",
-      "diccionario": [],
+      "diccionario": [
+        "Rating"
+      ],
+      "claves": [
+        "Rating.AlreadyRated",
+        "Rating.Average",
+        "Rating.SelectStars",
+        "Rating.Stars.Aria",
+        "Rating.Submit",
+        "Rating.Success"
+      ],
       "campos": [
         {
           "nombre": "value",
@@ -1135,7 +1279,12 @@
       "nombre": "tag",
       "tipo": "pieza",
       "record": "TagProps",
-      "diccionario": [],
+      "diccionario": [
+        "Tag"
+      ],
+      "claves": [
+        "Tag.Remove"
+      ],
       "campos": [
         {
           "nombre": "label",
@@ -1310,6 +1459,61 @@
         },
         {
           "nombre": "body",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "AppDelLanzador",
+      "campos": [
+        {
+          "nombre": "name",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "id",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "tagline",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "icon",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "status",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "industry",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "persona",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "capabilities",
+          "tipo": "string[]",
+          "opcional": true
+        },
+        {
+          "nombre": "url",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "demoMode",
           "tipo": "string",
           "opcional": true
         }

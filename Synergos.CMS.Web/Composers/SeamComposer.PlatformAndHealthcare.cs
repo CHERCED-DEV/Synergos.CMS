@@ -3,6 +3,7 @@ using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
+using Synergos.CMS.Web.Services.Diccionario;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -17,6 +18,9 @@ public sealed partial class SeamComposer
         // via _SynergosBridge.cshtml partial. Transient — depende de scoped
         // services Umbraco.
         services.AddTransient<IHostBridgeContextBuilder, DefaultHostBridgeContextBuilder>();
+        // ADR 0136 — las claves del bridge: las secciones que piden los elementos de la página,
+        // con fallback por clave a la cultura por defecto. Transient como el builder.
+        services.AddTransient<DiccionarioDelBridge>();
 
         // Olas 178-180 + 221-224 — Member 2FA TOTP (ADRs 0074 + 0084).
         // FileSystemMemberTwoFactorStore persiste secrets en App_Data/syn-2fa/

@@ -261,6 +261,12 @@ public sealed class ContratoSynHostTests
                 ("initialColor", "#0f766e"),
                 ("paletteJson", """["#0f766e","#b45309","#7c3aed","#be123c"]"""),
             },
+            ["app-launcher"] = new (string, object?)[]
+            {
+                ("heading", "Explora las apps"),
+                ("subheading", "Un motor, muchos productos"),
+                ("apps", """[{"id":"tienda","name":"Tienda","tagline":"Catálogo, carrito y checkout.","icon":"bag","status":"live","industry":"Retail","persona":"Comprador","capabilities":["Catálogo","Pagos"],"url":"/tienda","demoMode":"deeplink"},{"id":"gobierno","name":"Gobierno","status":"soon","industry":"Sector público","persona":"Ciudadano","capabilities":"Trámites, Citas","url":"/gobierno","demoMode":"embed"}]"""),
+            },
         };
 
     private static readonly JsonSerializerOptions Fichero = new()
@@ -386,20 +392,24 @@ public sealed class ContratoSynHostTests
             + ". Es la clasificación que la fábrica lee para saber qué dato pide un elemento.");
     }
 
+    /// <remarks>
+    /// <para>Es el gate «un prefijo declarado que no casa ninguna clave → rojo» de la ADR 0136 §4.
+    /// Casa con la MISMA regla con la que el bridge publica
+    /// (<see cref="Synergos.CMS.Web.Services.Diccionario.DiccionarioDelBridge.EnAlgunaSeccion"/>) y
+    /// sólo contra claves CON texto: una sección cuyos únicos ítems son contenedores no publicaría
+    /// nada. Antes del piloto #186 la lista fija del bridge tenía tres así —<c>Comments.</c>,
+    /// <c>Cart.</c>, <c>Account.</c>— y nada lo veía.</para>
+    /// </remarks>
     [Fact]
     public void Las_secciones_de_diccionario_que_declara_un_record_existen_en_uSync()
     {
-        var alias = Directory.EnumerateFiles(
-                Path.Combine(RepoRoot(), "Synergos.CMS.Web", "uSync", "v9", "Dictionary"), "*.config")
-            .Select(f => Regex.Match(File.ReadAllText(f), "<Dictionary [^>]*Alias=\"([^\"]+)\"").Groups[1].Value)
-            .Where(a => a.Length > 0)
-            .ToList();
+        var alias = ClavesDeUSync();
 
         Assert.True(alias.Count > 100, $"Se leyeron {alias.Count} claves de diccionario: el descubrimiento está roto.");
 
         var huerfanas = Records()
             .SelectMany(r => SolicitudSynHost.Elemento(r).Diccionario.Select(s => (Record: r.Name, Seccion: s)))
-            .Where(x => !alias.Any(a => a.StartsWith(x.Seccion + ".", StringComparison.Ordinal)))
+            .Where(x => !alias.Any(a => Synergos.CMS.Web.Services.Diccionario.DiccionarioDelBridge.EnAlgunaSeccion(a, [x.Seccion])))
             .Select(x => $"{x.Record} → {x.Seccion}")
             .ToList();
 
@@ -512,6 +522,7 @@ public sealed class ContratoSynHostTests
                 Tipo: elemento.Tipo == TipoDeColocable.Pieza ? "pieza" : "funcionalidad",
                 Record: record.Name,
                 Diccionario: elemento.Diccionario,
+                Claves: ClavesDe(elemento.Diccionario),
                 Campos: Campos(record, tipos, conOrigen: true),
                 Ejemplo: await Ejemplo(record, Muestras[elemento.Nombre])));
         }
@@ -525,6 +536,34 @@ public sealed class ContratoSynHostTests
 
         return JsonSerializer.Serialize(contrato, Fichero) + "\n";
     }
+
+    /// <summary>
+    /// Las claves de uSync que caen en <paramref name="secciones"/> —con la misma regla con la que
+    /// el bridge las publica (<see cref="Synergos.CMS.Web.Services.Diccionario.DiccionarioDelBridge.EnAlgunaSeccion"/>)—,
+    /// sin los contenedores, ordenadas; <c>null</c> si el elemento no declara secciones.
+    /// </summary>
+    /// <remarks>
+    /// Van en el contrato para que el UI compruebe, sin el CMS al lado, que cada <c>t('clave')</c>
+    /// de un elemento existe y cae en una sección que el elemento declara (ADR 0136 §4): una clave
+    /// fuera de ellas no se publica en la página, y el elemento pintaría siempre su respaldo con
+    /// cara de traducido.
+    /// </remarks>
+    private static IReadOnlyList<string>? ClavesDe(IReadOnlyList<string> secciones)
+        => secciones.Count == 0
+            ? null
+            : ClavesDeUSync()
+                .Where(a => Synergos.CMS.Web.Services.Diccionario.DiccionarioDelBridge.EnAlgunaSeccion(a, secciones))
+                .Order(StringComparer.Ordinal)
+                .ToList();
+
+    /// <summary>Los alias de uSync/v9/Dictionary que tienen al menos una traducción (no los contenedores).</summary>
+    private static IReadOnlyList<string> ClavesDeUSync()
+        => Directory.EnumerateFiles(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "uSync", "v9", "Dictionary"), "*.config")
+            .Select(File.ReadAllText)
+            .Where(x => x.Contains("<Translation ", StringComparison.Ordinal))
+            .Select(x => Regex.Match(x, "<Dictionary [^>]*Alias=\"([^\"]+)\"").Groups[1].Value)
+            .Where(a => a.Length > 0)
+            .ToList();
 
     private static IReadOnlyList<CampoDelContrato> Campos(
         Type record,
@@ -628,6 +667,7 @@ public sealed class ContratoSynHostTests
         string Tipo,
         string Record,
         IReadOnlyList<string> Diccionario,
+        IReadOnlyList<string>? Claves,
         IReadOnlyList<CampoDelContrato> Campos,
         JsonElement Ejemplo);
 

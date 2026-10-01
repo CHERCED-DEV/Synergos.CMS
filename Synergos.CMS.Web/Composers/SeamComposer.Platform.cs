@@ -5,6 +5,7 @@ using Synergos.CMS.Application.Proxies.Impl;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Diccionario;
 using Synergos.CMS.Web.Services.SynHost;
 using Umbraco.Cms.Core.Web;
 
@@ -144,7 +145,15 @@ public sealed partial class SeamComposer
         {
             services.AddSingleton<IBundleRegistryClient, StubBundleRegistryClient>();
         }
-        services.AddSingleton<ISynHostEmitter, DefaultSynHostEmitter>();
+        // ADR 0136 — el emitter de la página ANOTA las secciones de diccionario que pide cada
+        // elemento emitido (las declara su record) y el bridge publica su unión al final del
+        // <body>. Decorador en Web porque DefaultSynHostEmitter vive en Application y no conoce la
+        // petición (ADR 0002).
+        services.AddSingleton<SeccionesDeLaPagina>();
+        services.AddSingleton<DefaultSynHostEmitter>();
+        services.AddSingleton<ISynHostEmitter>(sp => new EmisorQueAnotaElDiccionario(
+            sp.GetRequiredService<DefaultSynHostEmitter>(),
+            sp.GetRequiredService<SeccionesDeLaPagina>()));
 
         // ADR 0135 — el resolver tipado de cada elemento migrado: arma el record que viaja en el
         // `config` en vez de un diccionario libre en la vista. Se descubren, no se listan: la

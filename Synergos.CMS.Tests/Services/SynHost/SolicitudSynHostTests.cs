@@ -53,6 +53,19 @@ public sealed class SolicitudSynHostTests
         Assert.Null(SolicitudSynHost.Para(Kpi(), null, EsCo).FallbackHtml);
     }
 
+    /// <summary>
+    /// Las secciones de diccionario que declara el record viajan en la solicitud —para que la
+    /// página las junte y el bridge las publique (ADR 0136)— y no en el <c>config</c> del tag.
+    /// </summary>
+    [Fact]
+    public void Las_secciones_que_declara_el_record_viajan_en_la_solicitud_y_no_en_el_tag()
+    {
+        var solicitud = SolicitudSynHost.Para(Kpi(), null, EsCo);
+
+        Assert.Equal(new[] { "Synhost.Kpi" }, solicitud.Diccionario);
+        Assert.DoesNotContain(solicitud.Props!.Keys, k => k.Contains("iccionario", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void Los_datos_estructurados_pasan_tal_cual_al_emitter()
     {

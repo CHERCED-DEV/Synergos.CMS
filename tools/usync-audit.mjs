@@ -44,6 +44,13 @@
  *      SIN segundo argumento tiene que existir como <Dictionary Alias="X">.
  *      Sin respaldo y sin definir, Umbraco devuelve la CLAVE y el visitante
  *      ve una cadena técnica en la página — sin error y sin log.
+ *  12. Claves de Dictionary CON respaldo que no existen en uSync: la LISTA
+ *      de hoy vive en tools/usync-audit.claves-razor.baseline.json y se
+ *      vigila en los dos sentidos —una clave nueva que no existe rompe; una
+ *      de la lista que ya existe, o que ninguna vista pide, también—. Es la
+ *      ADR 0136 §4 («clave referenciada que no existe: error») aplicada a
+ *      Razor con línea base (piloto #186). Reescribir la lista:
+ *      `node tools/usync-audit.mjs --actualizar-claves-razor`.
  *   8. Mojibake hygiene: detecta byte sequences típicas de UTF-8 mal
  *      decodificado como Latin-1 y re-encodeado (PowerShell 5.1 trap).
  *      Patrones: Ã¡/Ã©/Ã­/Ã³/Ãº/Ã±/Â¿/Â¡. Error level — los XMLs uSync
@@ -76,6 +83,8 @@ const RESERVED_MARKERS = [
 const PASCAL_CASE_DICT = /^[A-Z][a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$/;
 
 const GUIA_PATH = path.resolve(process.cwd(), 'CLAUDE.md');
+const CLAVES_RAZOR_BASE = path.resolve(process.cwd(), 'tools/usync-audit.claves-razor.baseline.json');
+const ACTUALIZAR_CLAVES_RAZOR = process.argv.includes('--actualizar-claves-razor');
 
 const findings = {
     errors: [],
@@ -390,10 +399,13 @@ async function audit() {
     //   GetDictionaryValue("X")           → si X falta, sale "X". Al visitante.
     //
     // Lo segundo no da error ni log: pone una cadena técnica en medio de una
-    // página. Este check mira SOLO las llamadas sin respaldo, y eso importa:
-    // hay 145 claves con respaldo que a propósito no están en uSync —son
-    // textos por defecto que el editor puede sobrescribir— y meterlas aquí
-    // haría nacer el chequeo con 145 falsos positivos.
+    // página. Este check mira SOLO las llamadas sin respaldo; las que llevan
+    // respaldo y no existen las mira el 12, contra su línea base. (Este
+    // comentario decía «145 claves con respaldo que a propósito no están en
+    // uSync»: contadas con mayúsculas exactas. Umbraco las busca SIN mayúsculas
+    // —la columna cmsDictionary.key es COLLATE NOCASE, medido en la base— y así
+    // son 81, 61 de `Account.*`, y ninguna existe tampoco en la base: piloto
+    // #186.)
     //
     // Una clave que no sea un literal se IGNORA en silencio. Hoy las 234
     // llamadas lo son, pero un chequeo que se pone rojo con lo que no
@@ -415,6 +427,53 @@ async function audit() {
                 `${path.relative(process.cwd(), file)} pide "${m[1]}" sin valor por defecto y esa `
                 + 'clave no está en uSync/v9/Dictionary/. Umbraco devuelve la clave, así que el '
                 + 'visitante vería esa cadena en la página. Añadí la clave, o un respaldo en la vista.');
+        }
+    }
+
+    // ─── 12. Claves CON respaldo que no existen en uSync (#186) ─────
+    //
+    // `GetDictionaryValue("X", "texto")` con X inexistente pinta «texto»: la
+    // página se ve bien en es-CO, y en otra cultura sale en español igual. La
+    // vista PARECE cableada al diccionario y no lo está. Hoy son 81 (91
+    // llamadas, 23 vistas), así que no se exige cero: se exige que no crezca y
+    // que la lista no mienta —una clave que ya existe o que nadie pide sale de
+    // ella—. Se compara SIN mayúsculas, como resuelve Umbraco.
+    const definidasSinMayus = new Set([...aliasDefinidos].map((a) => a.toLowerCase()));
+    const pedidas = new Map(); // minúsculas → primera forma vista
+    for (const file of vistas) {
+        const text = await fs.readFile(file, 'utf-8');
+        for (const m of matchAll(text, /GetDictionaryValue(?:OrDefault)?\(\s*"([^"]+)"/g)) {
+            const k = m[1].toLowerCase();
+            if (!pedidas.has(k)) pedidas.set(k, m[1]);
+        }
+    }
+    const faltan = [...pedidas.entries()]
+        .filter(([k]) => !definidasSinMayus.has(k))
+        .map(([, forma]) => forma)
+        .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    if (ACTUALIZAR_CLAVES_RAZOR) {
+        await fs.writeFile(CLAVES_RAZOR_BASE, JSON.stringify(faltan, null, 2) + '\n');
+        console.log(`claves de Razor sin uSync: línea base reescrita (${faltan.length})`);
+    } else if (pedidas.size < 50) {
+        err('claves-razor', `Se leyeron ${pedidas.size} claves pedidas por las vistas: el recorrido está roto.`);
+    } else {
+        let base = [];
+        try {
+            base = JSON.parse(await fs.readFile(CLAVES_RAZOR_BASE, 'utf-8'));
+        } catch {
+            err('claves-razor', `No se pudo leer ${path.relative(process.cwd(), CLAVES_RAZOR_BASE)}. Generala con --actualizar-claves-razor.`);
+        }
+        const enBase = new Set(base.map((k) => k.toLowerCase()));
+        const enFaltan = new Set(faltan.map((k) => k.toLowerCase()));
+        for (const k of faltan) {
+            if (!enBase.has(k.toLowerCase())) {
+                err('claves-razor', `una vista pide "${k}" y esa clave no existe en uSync/v9/Dictionary/: sale siempre el respaldo escrito en la vista, también en otra cultura. Proponela en uSync (ADR 0008) o usá una que exista.`);
+            }
+        }
+        for (const k of base) {
+            if (!enFaltan.has(k.toLowerCase())) {
+                err('claves-razor', `"${k}" está en la línea base y ya no falta (existe en uSync, o ninguna vista la pide): reescribí la línea base con --actualizar-claves-razor.`);
+            }
         }
     }
 

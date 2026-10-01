@@ -57,13 +57,21 @@ public static class SolicitudSynHost
         ArgumentNullException.ThrowIfNull(resuelto);
         ArgumentNullException.ThrowIfNull(culture);
 
+        var elemento = Elemento(typeof(TProps));
+
         return new SynHostEmitRequest(
-            BlockAlias: Elemento(typeof(TProps)).Nombre,
+            BlockAlias: elemento.Nombre,
             Props: Props(resuelto.Props),
-            ConfigOverrideJson: SoloLoDeclarado(configOverride, NombresDelCable(typeof(TProps))),
+            // ADR 0135 §6: en una FUNCIONALIDAD el JSON libre del editor no entra — su
+            // configuración de negocio no la escribe el editor (ADR 0137) y su microcopia sale del
+            // diccionario (ADR 0136). En una pieza sólo pisa lo que el record declara.
+            ConfigOverrideJson: elemento.Tipo == TipoDeColocable.Funcionalidad
+                ? null
+                : SoloLoDeclarado(configOverride, NombresDelCable(typeof(TProps))),
             Culture: culture,
             FallbackHtml: resuelto.RespaldoHtml,
-            StructuredDataJson: resuelto.DatosEstructurados);
+            StructuredDataJson: resuelto.DatosEstructurados,
+            Diccionario: elemento.Diccionario);
     }
 
     /// <summary>El elemento al que está atado <paramref name="record"/>.</summary>

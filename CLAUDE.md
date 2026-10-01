@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3808 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3833 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2676 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2701 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 463 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -124,7 +124,8 @@
     pisa todo, es hoy la puerta contraria. El **resolver tipado por elemento** (ADR 0135) está
     **Aceptado** (2026-09-30) y se escala a todas las piezas (#180): qué elementos lo tienen no se
     escribe acá, lo lista `docs/contracts/elementos-synhost.json`. **Propuestos**, y describen el
-    rumbo, no lo que ya está: diccionario por secciones declaradas (0136), configuración de negocio
+    rumbo, no lo que ya está: diccionario por secciones declaradas (0136, pilotada en #186 —ver
+    `feedback_the_dictionary_travels_by_declared_sections`—), configuración de negocio
     por funcionalidad (0137), coordinación de página por eventos DOM (0138) y bundles con varias
     entradas colocables frente a 0113 (0139).
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
@@ -166,7 +167,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3808**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3833**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -193,7 +194,7 @@ Synergos.CMS/
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
 │       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (258 archivos)
 │       ├── DataTypes/           133 archivos (69 DTSelect*) + UrlPicker/MediaPicker/Tags/ContentPicker
-│       ├── Dictionary/          i18n es-CO + en-US (481 keys)
+│       ├── Dictionary/          i18n es-CO + en-US (511 keys)
 │       ├── Languages/           es-CO (default) + en-US
 │       ├── MediaTypes/          synImage + synDocument + synIcon + los stock de Umbraco
 │       ├── MemberTypes/         member
@@ -296,7 +297,7 @@ Synergos.CMS/
 |---------------------------------|------------------------------------------------------------|
 | "¿Por qué se tomó esta decisión?" | `Synergos.CMS.Web/docs/adr/NNNN-*.md` — índice en `docs/adr/README.md` |
 | "¿Qué DocTypes existen?"         | `uSync/v9/ContentTypes/`                                   |
-| "¿Qué Dictionary keys hay?"      | `uSync/v9/Dictionary/` (481 archivos .config — alias PascalCase, filename lowercase por convención uSync) |
+| "¿Qué Dictionary keys hay?"      | `uSync/v9/Dictionary/` (511 archivos .config — alias PascalCase, filename lowercase por convención uSync) |
 | "¿Qué compositions y para qué?"  | `uSync/v9/ContentTypes/compdom*.config` + `compcontent*.config` |
 | "¿Hay compositions reservadas sin consumers?"  | Sí. Marker `[Bloqueado externamente - ...]` o `[Disponible — sin consumers actuales]` al inicio de `<Description>`. NO son orphans; son scaffolding tracked. Cap-260 audit (Cap-270 Batch C) las reconoce. |
 | "¿Cómo se acopla con el UI?"     | `Synergos.CMS.Web/docs/contracts/` — los 5 contratos. Es la ÚNICA superficie de acople. |
@@ -419,12 +420,12 @@ Dos escrituras obligatorias **en el mismo commit** que las enseñó:
 2. Escribir el XML uSync directo en `Synergos.CMS.Web/uSync/v9/{tipo}/`.
 3. Si es icono: verificar que existe en `tools/umbraco13-icons-stock.txt`
    (627 iconos, versionado en el repo) — no inventar.
-4. Correr `node tools/usync-audit.mjs` — 11 checks: colisión de GUID,
+4. Correr `node tools/usync-audit.mjs` — 12 checks: colisión de GUID,
    compositions huérfanas, refs rotas, iconos, alias de Dictionary,
    cross-check `<Definition>`↔`<DataType Key>`, DataTypes huérfanos,
    mojibake, contenido del seeder (ADR 0129), bloqueos externos declarados
-   (#53) y claves de Dictionary sin respaldo (#60). Es el mismo gate que
-   corre en CI.
+   (#53), claves de Dictionary sin respaldo (#60) y claves CON respaldo que
+   no existen, contra su línea base (#186). Es el mismo gate que corre en CI.
 5. El arquitecto corre uSync Import desde backoffice manualmente para
    aplicar al DB.
 
@@ -2512,6 +2513,37 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   escritas `countdown-digital` y `rich-tooltip`; desde #180 mira las dos, medido con una vista
   mutante que pasaba en verde.)
 
+- `feedback_the_dictionary_travels_by_declared_sections` — **el bridge publica las secciones de
+  diccionario que DECLARAN los records de los elementos emitidos en la página, con fallback por
+  clave a la cultura por defecto, y se escribe al FINAL del `<body>`** (piloto de la ADR 0136,
+  #186, Propuesta). Antes: once prefijos fijos en todas las páginas —176 claves, ≈7 KB, tres
+  prefijos que no casaban nada— y ningún lector. Cómo está armado y por qué, cada cosa medida:
+  (a) **quién sabe qué hay en la página es el emitter**, no un recorrido del contenido: la
+  solicitud lleva las secciones del record (`SynHostEmitRequest.Diccionario`, la pone
+  `SolicitudSynHost.Para`), `EmisorQueAnotaElDiccionario` las anota en `SeccionesDeLaPagina`
+  (en el `HttpContext`, porque el emitter es singleton) y `DiccionarioDelBridge` publica la unión;
+  (b) **por eso el bridge va al final del `<body>` de las cuatro plantillas que montan
+  elementos** —`_Layout`, `PageBare`, `PlatformRoot`, `Error`; las tres últimas no lo emitían, y
+  el lanzador de la portada no tenía diccionario—: en la cabecera todavía no se emitió el chrome ni
+  los globales. Sigue llegando a tiempo porque los `<script type="module">` son diferidos;
+  (c) **en CSP estricto el bridge lo sirve OTRA petición**, que no ve la página: la página le pasa
+  sus secciones y su cultura en la URL. Sin la cultura, `/synergos-bridge.js` servía **en-US a
+  una página es-CO** (medido: ese endpoint sale en en-US por defecto, igual que `/blog/tag/*`).
+  Y la URL se arma ENTERA en código: escrita en el marcado con `&amp;` junto a partes `@(…)`,
+  Razor la doble-codificó y el endpoint recibió `amp;culture` — compilaba, el test unitario del
+  controlador pasaba, y sólo la prueba viva lo vio; (d) **el fallback se resuelve en el servidor**
+  con la cultura por defecto que dice Umbraco (`GetDefaultLanguageIsoCode`), no con el literal
+  `"es-CO"` que tenía el builder; (e) **una sección es un prefijo ENTERO y sin mayúsculas**
+  —`Tag` no casa `Tagline.X`— y la regla vive en UN sitio (`DiccionarioDelBridge.EnAlgunaSeccion`),
+  que usan el bridge, el gate de secciones vacías y la proyección de `claves` al contrato
+  (`docs/contracts/elementos-synhost.json`), de donde el UI comprueba sin el CMS que cada
+  `t('Clave')` de un elemento está en ellas. Las claves de Razor CON respaldo que no existen en
+  uSync son 81 —no 145: Umbraco las busca sin mayúsculas, `cmsDictionary.key` es `COLLATE
+  NOCASE`— y quedan en la línea base del check 12 de `usync-audit.mjs`. Mutado: 7 en el CMS
+  (prefijo vacío, sin fallback, sin secciones en la solicitud, sin anotar, funcionalidad con
+  `configOverride`, sección sin el límite del punto, CSP sin secciones) y 2 en el check 12, todos
+  rojos.
+
 - `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
   no sale sólo en rojo: una sale en VERDE.** Hasta el #170 todos los workflows corrían en
   `ubuntu-latest` (checkout LF, SDK en inglés, `python3` presente, clon y no worktree), y la máquina
@@ -2859,11 +2891,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3808 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3833 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2676
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2701
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 463
 
@@ -3012,7 +3044,7 @@ Los cuatro son los mismos que gatean los PRs. No necesitan `dotnet`, así que
 un agente en un contenedor sin SDK **sí puede** verificarlos:
 
 ```bash
-node tools/usync-audit.mjs        # 11 checks de schema uSync
+node tools/usync-audit.mjs        # 12 checks de schema uSync
 node tools/check-css-parity.mjs   # G-3: toda clase syn-* emitida tiene CSS
 node tools/spec-valida.mjs --autoprueba   # G-8: el LECTOR del spec, ejecutado (#140)
 (cd Synergos.CMS.Web/docs/contracts/tests && npm ci && npm test)  # contratos
@@ -3336,7 +3368,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3808 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3833 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

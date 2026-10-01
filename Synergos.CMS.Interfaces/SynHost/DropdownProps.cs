@@ -13,7 +13,7 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// delgado de <c>syn-dropdown</c> (ADR 0134 §4, pendiente). Los GRUPOS que promete la descripción
 /// del ElementType no los pinta el elemento: una entrada de grupo no viaja y se anota.</para>
 /// </remarks>
-[ElementoSynHost("dropdown", TipoDeColocable.Pieza)]
+[ElementoSynHost("dropdown", TipoDeColocable.Pieza, Diccionario = ["Dropdown", "Common.States"])]
 public sealed record DropdownProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? TriggerLabel,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<DropdownOption>? Options,

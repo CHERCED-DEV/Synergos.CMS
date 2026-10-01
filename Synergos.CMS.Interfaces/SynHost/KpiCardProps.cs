@@ -14,8 +14,10 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// para DERIVAR la tendencia y el rótulo cuando no se los dan. Parsear «+$120K» a número sería
 /// inventar; el rótulo se muestra tal cual y la tendencia la decide el editor.</para>
 ///
-/// <para>La sección <c>Synhost.Kpi</c> la usa hoy sólo el respaldo SSR (la frase de la
-/// tendencia para un lector de pantalla). El elemento escribe las suyas a mano —ADR 0136—.</para>
+/// <para><b>La sección <c>Synhost.Kpi</c> la usan los dos lados</b> (ADR 0136, piloto #186): el
+/// respaldo SSR (la frase de la tendencia para un lector de pantalla) y el elemento al hidratar,
+/// con <c>t()</c>. Antes el elemento escribía «al alza» a mano y reemplazaba la frase del
+/// diccionario que el SSR había pintado.</para>
 /// </remarks>
 [ElementoSynHost("kpi-card", TipoDeColocable.Pieza, Diccionario = ["Synhost.Kpi"])]
 public sealed record KpiCardProps(

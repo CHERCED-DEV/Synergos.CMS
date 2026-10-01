@@ -110,10 +110,14 @@ window.synergos = @Html.Raw(json);
 - `IBrandThemeProvider` — theme.
 - `IMemberAccessGate` — member context.
 - `IUmbracoContextAccessor` — page context.
-- `IDictionaryService` o equivalente — i18n keys filtered.
+- `DiccionarioDelBridge` + `SeccionesDeLaPagina` — las claves de las secciones que pidieron los
+  elementos emitidos en la página, con fallback por clave (ADR 0136, ver `i18n-bridge.md`).
 
-`_Layout.cshtml` invoca el partial **antes** de cualquier `<link>` de
-bundles UI. Pattern: tokens primero, scripts después.
+Las cuatro plantillas que montan elementos (`_Layout`, `PageBare`, `PlatformRoot`, `Error`)
+invocan el partial **al final del `<body>`**: sólo ahí se sabe qué secciones pidieron. En modo CSP
+estricto el partial emite `<script src="/synergos-bridge.js?secciones=…&culture=…&ui-culture=…">`:
+el endpoint es otra petición y la página le dice qué secciones y qué cultura (sin la cultura servía
+en-US a páginas es-CO).
 
 ## UI-side implementation
 
@@ -165,7 +169,8 @@ T+180ms   syn:component:ready event fires per element     (8)
 ```
 
 Critical ordering:
-- (1) tokens BEFORE (2) bridge BEFORE (4)+(5) bundles.
+- (1) tokens en el `<head>`; (2) el bridge, al final del `<body>` (v1.1 del i18n): un `<script>`
+  clásico corre al parsearse, y (4)+(5) son módulos diferidos que corren al terminar el parseo.
 - (2) bridge debe existir cuando (6) define + (7) hydrate corren.
 - Si (4) falla (CDN down), (7) nunca corre — los `<synergos-X>`
   permanecen inert pero el HTML no rompe (degradación graceful).
@@ -228,7 +233,8 @@ UI side (cap-220 Olas 217-218):
 - [ ] `vitals/runtime/synergos-bridge.ts` helper module.
 - [ ] `_tokens-bridge.scss` con fallbacks declarados.
 - [ ] Update `form.contract.ts` outcome a tri-state.
-- [ ] At-least-one custom element using `t()` from bridge as smoke test.
+- [x] At-least-one custom element using `t()` from bridge — siete desde el piloto de la ADR 0136
+  (#186), vigilados por `gate:diccionario`.
 
 ## References
 

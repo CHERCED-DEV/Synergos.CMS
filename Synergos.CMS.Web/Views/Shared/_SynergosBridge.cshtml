@@ -4,9 +4,13 @@
     CSP-strict mode (Olas 251-253, ADR 0087): si activado, emite
     <script src="/synergos-bridge.js"> en lugar del bloque inline.
 
-    Invocado desde _Layout.cshtml ANTES de los bundle scripts UI para
-    garantizar que window.synergos exista cuando los Web Components
-    hidraten.
+    Va al FINAL del <body> (ADR 0136, piloto #186), no en el <head>: publica las
+    secciones de diccionario que piden los elementos de ESTA página, y eso sólo se
+    sabe cuando ya se emitieron todos —el cuerpo, el chrome del sitio, los
+    componentes globales—. Sigue llegando antes de que hidrate nadie: los
+    <script type="module"> de los elementos son diferidos y corren al terminar el
+    parseo, y este <script> clásico corre al parsearse. Lo emiten las cuatro
+    plantillas que montan elementos (_Layout, PageBare, PlatformRoot, Error).
 
     Cero side effects en HTML — solo emite el <script>. Si el builder lanza,
     degrada al fallback (UI cae a strings inline + tokens locales) Y LO
@@ -25,7 +29,9 @@
 @using Microsoft.Extensions.Options
 @using Synergos.CMS.Application.Configuration
 @using Synergos.CMS.Web.Services
+@using Synergos.CMS.Web.Services.Diccionario
 @inject Synergos.CMS.Interfaces.IHostBridgeContextBuilder Bridge
+@inject SeccionesDeLaPagina Secciones
 @inject IOptionsMonitor<HostBridgeSettings> BridgeSettings
 @inject Microsoft.Extensions.Logging.ILogger<Synergos.CMS.Web.Services.DefaultHostBridgeContextBuilder> BridgeLogger
 @{
@@ -33,7 +39,15 @@
 }
 @if (cspStrict)
 {
-    <script src="/synergos-bridge.js"></script>
+    @* El endpoint es OTRA petición: no sabe qué elementos emitió esta página ni en qué cultura
+       se pintó (sin esto servía en-US a una página es-CO). La página se lo dice. *@
+    var cultura = Uri.EscapeDataString(System.Globalization.CultureInfo.CurrentUICulture.Name);
+    var consulta = Uri.EscapeDataString(SeccionesDeLaPagina.ALaConsulta(Secciones.Declaradas));
+    @* La URL se arma ENTERA en código: Razor codifica el `&` al escribir el atributo. Escrito como
+       `&amp;` en el marcado, junto a las partes `@(…)`, salía `&amp;amp;` y el endpoint recibía
+       `amp;culture` — en vivo, una página es-CO con el bridge en en-US. *@
+    var src = $"/synergos-bridge.js?secciones={consulta}&culture={cultura}&ui-culture={cultura}";
+    <script src="@src"></script>
 }
 else
 {

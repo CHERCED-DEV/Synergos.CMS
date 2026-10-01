@@ -6,26 +6,11 @@ namespace Synergos.CMS.Application.Configuration;
 /// </summary>
 public sealed class HostBridgeSettings
 {
-    /// <summary>
-    /// Prefixes de Dictionary keys a publicar en el bridge i18n.
-    /// El subset evita serializar las 369+ keys del CMS — solo las
-    /// consumed por components UI client-side. Default cubre los
-    /// dominios que tienen UI hidratable.
-    /// </summary>
-    public string[] I18nKeyPrefixes { get; init; } = new[]
-    {
-        "Form.",
-        "Search.",
-        "Common.",
-        "Comments.",
-        "Cart.",
-        "Shop.",
-        "Pagination.",
-        "Modal.",
-        "Share.",
-        "Nav.",
-        "Account.",
-    };
+    // Ya NO hay lista de prefijos del diccionario (ADR 0136, piloto #186). Decía once fijos para
+    // todas las páginas —176 claves, ≈7 KB, que ningún elemento leía; tres de ellos (`Comments.`,
+    // `Cart.`, `Account.`) no casaban ni una—. Hoy cada página publica la unión de las secciones
+    // que declaran los records de sus elementos (`SeccionesDeLaPagina`), y una sección nueva se
+    // declara en el record, no en la configuración: una lista a mano no dice quién necesita qué.
 
     /// <summary>
     /// Si true (default true), incluye Member context (key + email + roles) en el bridge.
