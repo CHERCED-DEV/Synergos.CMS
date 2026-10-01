@@ -14,6 +14,18 @@ namespace Synergos.CMS.Web.Services.SynHost;
 /// </remarks>
 public sealed class BadgeGroupResolutor : IResolutorSynHost<BadgeGroupProps>
 {
+    /// <summary>
+    /// Las disposiciones que el DataType (<c>DTSelectDisplayLayout</c>) y el elemento llaman
+    /// distinto. Sólo los renombres con equivalente obvio: <c>cluster</c> es la fila que salta de
+    /// línea, que el elemento llama <c>wrap</c> (y que ya pintaba, por ser su valor por defecto).
+    /// <c>grid</c> no tiene equivalente y viaja como está (#181).
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> NombreEnElElemento =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["cluster"] = "wrap",
+        };
+
     private readonly IPublishedValueFallback _fallback;
     private readonly ILogger<BadgeGroupResolutor> _log;
 
@@ -26,9 +38,10 @@ public sealed class BadgeGroupResolutor : IResolutorSynHost<BadgeGroupProps>
     public ElementoResuelto<BadgeGroupProps> Resolver(IPublishedElement elemento)
     {
         var editor = new LectorDelEditor(elemento, _fallback, _log);
+        var disposicion = editor.Texto("layout");
         return new ElementoResuelto<BadgeGroupProps>(new BadgeGroupProps(
             Badges: Insignias(editor, editor.Texto("badgesJson")),
-            Layout: editor.Texto("layout")?.ToLowerInvariant()));
+            Layout: disposicion is not null && NombreEnElElemento.TryGetValue(disposicion, out var nombre) ? nombre : disposicion?.ToLowerInvariant()));
     }
 
     private static IReadOnlyList<BadgeGroupItem>? Insignias(LectorDelEditor editor, string? json)

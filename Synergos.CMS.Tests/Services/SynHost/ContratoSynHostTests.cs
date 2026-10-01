@@ -34,7 +34,13 @@ namespace Synergos.CMS.Tests.Services.SynHost;
 /// el navegador recibe, <c>culture</c> incluida — la prueba que encontró D1 era exactamente
 /// ejecutar el sanitizador con eso.</para>
 ///
-/// <para><b>Para regenerar</b> tras cambiar un record o una muestra:
+/// <para><b>Y trae lo que el editor puede ELEGIR</b> (#181): por cada selector del ElementType
+/// (desplegable, radios, casillas), dónde cae en el <c>config</c> y qué viaja de cada prevalor de
+/// uSync después del resolver REAL. El UI lo cruza contra lo que su sanitizador acepta, en las dos
+/// direcciones (<c>contrato-synhost.spec.ts</c>, el gate de vocabulario). Por eso agregar un
+/// prevalor a un DataType también deja este fichero desactualizado.</para>
+///
+/// <para><b>Para regenerar</b> tras cambiar un record, una muestra o un selector:
 /// <c>SYNERGOS_ACTUALIZAR_CONTRATOS=1 dotnet test Synergos.CMS.Tests --filter ContratoSynHost</c>,
 /// y el diff va en el commit que lo causó; después, en el UI,
 /// <c>node tools/contrato-synhost.mjs</c>.</para>
@@ -392,6 +398,38 @@ public sealed class ContratoSynHostTests
             + ". Es la clasificación que la fábrica lee para saber qué dato pide un elemento.");
     }
 
+    /// <summary>
+    /// La mitad CMS del gate de vocabulario (#181) encuentra lo que tiene que cruzar: el
+    /// ElementType de cada record, y selectores en ellos.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es la red de seguridad por el vacío. Los selectores del contrato se DERIVAN —de la vista
+    /// que inyecta el resolver, de los componentes del Block Grid que la llaman y de los DataTypes
+    /// de uSync—, y si cualquiera de esos pasos deja de encontrar algo el contrato se regeneraría
+    /// sin selectores y el gate del UI cruzaría nada contra nada, en verde.</para>
+    ///
+    /// <para>El piso es «ninguno sin ElementType» y «más de cero selectores», no la cifra de hoy:
+    /// una cifra exacta acá se pondría roja al quitar una opción del schema, que es justo lo que el
+    /// gate pide que se pueda hacer. Lo que se pierde a medias lo ve el JSON versionado (deja de ser
+    /// el que sale de los records) y, del otro lado, la línea base del UI.</para>
+    /// </remarks>
+    [Fact]
+    public void Cada_record_encuentra_su_ElementType_y_sus_selectores_no_son_cero()
+    {
+        var repo = RepoRoot();
+        var porRecord = Records().ToDictionary(r => r.Name, r => SelectoresDeUSync.ElementTypesDe(repo, r));
+
+        var sinElementType = porRecord.Where(p => p.Value.Count == 0).Select(p => p.Key).ToList();
+        Assert.True(sinElementType.Count == 0,
+            "Ningún componente de blockgrid/Components llama a la vista SynHost de: " + string.Join(", ", sinElementType)
+            + ". Sin ElementType no se sabe qué selectores ve el editor, y el gate de vocabulario no cruzaría nada.");
+
+        var propios = porRecord.Values.SelectMany(ets => ets).SelectMany(et => SelectoresDeUSync.De(repo, et)).Count(s => s.Propia);
+        Assert.True(propios > 0,
+            "Los ElementTypes de los elementos migrados no tienen ningún selector propio: la lectura de uSync está rota "
+            + $"(se buscan los editores {string.Join(", ", SelectoresDeUSync.EditoresDeSeleccion)}).");
+    }
+
     /// <remarks>
     /// <para>Es el gate «un prefijo declarado que no casa ninguna clave → rojo» de la ADR 0136 §4.
     /// Casa con la MISMA regla con la que el bridge publica
@@ -517,6 +555,7 @@ public sealed class ContratoSynHostTests
         foreach (var record in Records())
         {
             var elemento = SolicitudSynHost.Elemento(record);
+            var selectores = await Selectores(record, Muestras[elemento.Nombre]);
             elementos.Add(new ElementoDelContrato(
                 Nombre: elemento.Nombre,
                 Tipo: elemento.Tipo == TipoDeColocable.Pieza ? "pieza" : "funcionalidad",
@@ -524,6 +563,7 @@ public sealed class ContratoSynHostTests
                 Diccionario: elemento.Diccionario,
                 Claves: ClavesDe(elemento.Diccionario),
                 Campos: Campos(record, tipos, conOrigen: true),
+                Selectores: selectores.Count > 0 ? selectores : null,
                 Ejemplo: await Ejemplo(record, Muestras[elemento.Nombre])));
         }
 
@@ -637,7 +677,12 @@ public sealed class ContratoSynHostTests
     /// </summary>
     private static async Task<JsonElement> Ejemplo(Type record, (string Alias, object? Valor)[] muestra)
     {
-        using var proveedor = new ServiceCollection()
+        using var proveedor = Proveedor();
+        return await Emitido(proveedor, record, muestra);
+    }
+
+    private static ServiceProvider Proveedor()
+        => new ServiceCollection()
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
             .AddSingleton(ElementoFalso.Urls())
@@ -645,6 +690,8 @@ public sealed class ContratoSynHostTests
             .AddResolutoresSynHost()
             .BuildServiceProvider();
 
+    private static async Task<JsonElement> Emitido(IServiceProvider proveedor, Type record, (string Alias, object? Valor)[] muestra)
+    {
         var resolutor = proveedor.GetRequiredService(typeof(IResolutorSynHost<>).MakeGenericType(record));
         var resuelto = resolutor.GetType().GetMethod(nameof(IResolutorSynHost<object>.Resolver))!
             .Invoke(resolutor, new object[] { ElementoFalso.Con(muestra) })!;
@@ -655,6 +702,176 @@ public sealed class ContratoSynHostTests
 
         var emitido = await new DefaultSynHostEmitter(Substitute.For<IBundleRegistryClient>()).EmitAsync(solicitud);
         return SolicitudSynHostTests.ConfigEmitido(emitido.ElementHtml);
+    }
+
+    // ── Los selectores: lo que el editor elige, pasado por el resolver (#181) ──────────────────
+
+    /// <summary>
+    /// Por cada selector del ElementType de <paramref name="record"/>, dónde cae en el <c>config</c>
+    /// y qué viaja de cada prevalor — con el resolver y el emitter REALES, no con una tabla.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Por qué se ejecuta el resolver y no se lee.</b> El resolver traduce
+    /// (<c>twitter</c> → <c>x</c>, <c>bottom-start</c> → <c>bottom</c>, <c>digits</c> →
+    /// <c>plain</c>), filtra (<c>kpiTrend</c> sólo deja pasar tres) y a veces mete el valor DENTRO
+    /// de una lista (el tipo del aviso cae en <c>toasts[].variant</c>). Lo que el elemento tiene que
+    /// saber pintar es lo que sale de ahí, no lo que dice uSync: cruzar los prevalores crudos
+    /// acusaría a <c>share-bar</c> de no pintar <c>twitter</c>.</para>
+    ///
+    /// <para><b>Cómo.</b> Sobre la muestra del elemento, la propiedad sin valor y después con cada
+    /// prevalor, solo (como lista de uno si el selector es múltiple). La ruta del <c>config</c> que
+    /// cambia es el <c>campo</c>; lo que hay ahí con cada prevalor, lo que <c>viaja</c>. Un selector
+    /// que no mueve nada es uno que el editor ve y el elemento nunca recibe: se escribe con
+    /// <c>campo: null</c> si es del ElementType, y se omite si es de una composición
+    /// (<c>compDomVariant</c>, <c>compDomSpacing</c>… los lee el envoltorio, no el elemento).</para>
+    ///
+    /// <para>Un selector que mueve DOS rutas no tiene una lectura única, y el gate del UI no sabría
+    /// qué cruzar: lanza en vez de escoger una.</para>
+    /// </remarks>
+    private static async Task<IReadOnlyList<SelectorDelContrato>> Selectores(Type record, (string Alias, object? Valor)[] muestra)
+    {
+        var repo = RepoRoot();
+        using var proveedor = Proveedor();
+        var resultado = new List<SelectorDelContrato>();
+        var leidas = PropiedadesQueLee(proveedor, record, muestra);
+
+        foreach (var elementType in SelectoresDeUSync.ElementTypesDe(repo, record))
+        {
+            foreach (var selector in SelectoresDeUSync.De(repo, elementType))
+            {
+                // Lo que el resolver ni siquiera pide no puede viajar: no hace falta sondearlo. Es
+                // también lo que hace barata la derivación —las composiciones traen cinco
+                // selectores a cada elemento y ningún resolver los lee—.
+                if (!leidas.Contains(selector.Propiedad))
+                {
+                    if (selector.Propia)
+                    {
+                        resultado.Add(new SelectorDelContrato(
+                            selector.Propiedad, selector.DataType, selector.Multiple, null,
+                            selector.Prevalores.Select(p => new ValorDelSelector(p, null)).ToList()));
+                    }
+
+                    continue;
+                }
+
+                var sinValor = Hojas(await Emitido(proveedor, record, Con(muestra, selector.Propiedad, null)));
+                var sondas = new List<(string Editor, ILookup<string, string> Hojas)>();
+                foreach (var prevalor in selector.Prevalores)
+                {
+                    object valor = selector.Multiple ? new[] { prevalor } : prevalor;
+                    sondas.Add((prevalor, Hojas(await Emitido(proveedor, record, Con(muestra, selector.Propiedad, valor)))));
+                }
+
+                var rutas = sondas.SelectMany(s => Cambios(sinValor, s.Hojas)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+                if (rutas.Count > 1)
+                {
+                    throw new InvalidOperationException(
+                        $"{record.Name}: el selector «{selector.Propiedad}» de {elementType} mueve {rutas.Count} rutas del config "
+                        + $"({string.Join(", ", rutas)}). El gate de vocabulario (#181) cruza UNA; partilo o extendé el gate.");
+                }
+
+                if (rutas.Count == 0 && !selector.Propia)
+                {
+                    continue;
+                }
+
+                var campo = rutas.SingleOrDefault();
+                resultado.Add(new SelectorDelContrato(
+                    selector.Propiedad,
+                    selector.DataType,
+                    selector.Multiple,
+                    campo,
+                    sondas.Select(s => new ValorDelSelector(s.Editor, campo is null ? null : UnoSolo(s.Hojas[campo], record, selector.Propiedad))).ToList()));
+            }
+        }
+
+        return resultado;
+    }
+
+    /// <summary>
+    /// Los alias que el resolver de <paramref name="record"/> le pide al bloque al resolver la
+    /// muestra: las únicas propiedades que pueden llegar al elemento.
+    /// </summary>
+    private static IReadOnlySet<string> PropiedadesQueLee(IServiceProvider proveedor, Type record, (string Alias, object? Valor)[] muestra)
+    {
+        var elemento = ElementoFalso.Con(muestra);
+        elemento.ClearReceivedCalls();
+
+        var resolutor = proveedor.GetRequiredService(typeof(IResolutorSynHost<>).MakeGenericType(record));
+        resolutor.GetType().GetMethod(nameof(IResolutorSynHost<object>.Resolver))!.Invoke(resolutor, new object[] { elemento });
+
+        var leidas = elemento.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement.GetProperty))
+            .Select(c => c.GetArguments()[0] as string)
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Red de seguridad: un resolver que no pide NADA es uno que no se está observando (o un
+        // NSubstitute que dejó de registrar llamadas), y todos sus selectores saldrían «no viaja».
+        Assert.True(leidas.Count > 0, $"El resolver de {record.Name} no le pidió ninguna propiedad al bloque de muestra.");
+        return leidas;
+    }
+
+    /// <summary>La muestra con <paramref name="alias"/> puesto a <paramref name="valor"/> (<c>null</c>: sin valor).</summary>
+    private static (string Alias, object? Valor)[] Con((string Alias, object? Valor)[] muestra, string alias, object? valor)
+        => muestra.Where(m => !string.Equals(m.Alias, alias, StringComparison.Ordinal)).Append((alias, valor)).ToArray();
+
+    /// <summary>
+    /// Las hojas de un <c>config</c>: ruta → valores. Un objeto suma <c>.clave</c>, una lista
+    /// <c>[]</c>; los nulos no son hojas (el emitter no los escribe).
+    /// </summary>
+    private static ILookup<string, string> Hojas(JsonElement config)
+    {
+        var hojas = new List<(string Ruta, string Valor)>();
+
+        void Recorrer(JsonElement nodo, string ruta)
+        {
+            switch (nodo.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    foreach (var propiedad in nodo.EnumerateObject())
+                    {
+                        Recorrer(propiedad.Value, ruta.Length == 0 ? propiedad.Name : $"{ruta}.{propiedad.Name}");
+                    }
+                    break;
+                case JsonValueKind.Array:
+                    foreach (var item in nodo.EnumerateArray())
+                    {
+                        Recorrer(item, $"{ruta}[]");
+                    }
+                    break;
+                case JsonValueKind.Null:
+                case JsonValueKind.Undefined:
+                    break;
+                case JsonValueKind.String:
+                    hojas.Add((ruta, nodo.GetString()!));
+                    break;
+                default:
+                    hojas.Add((ruta, nodo.GetRawText()));
+                    break;
+            }
+        }
+
+        Recorrer(config, string.Empty);
+        return hojas.ToLookup(h => h.Ruta, h => h.Valor, StringComparer.Ordinal);
+    }
+
+    /// <summary>Las rutas cuyos valores no son los mismos en <paramref name="antes"/> y <paramref name="despues"/>.</summary>
+    private static IEnumerable<string> Cambios(ILookup<string, string> antes, ILookup<string, string> despues)
+        => antes.Select(g => g.Key).Union(despues.Select(g => g.Key), StringComparer.Ordinal)
+            .Where(ruta => !antes[ruta].Order(StringComparer.Ordinal).SequenceEqual(despues[ruta].Order(StringComparer.Ordinal), StringComparer.Ordinal));
+
+    /// <summary>Lo que viaja de UN prevalor: un valor o ninguno; dos distintos son un resolver que el gate no sabe leer.</summary>
+    private static string? UnoSolo(IEnumerable<string> valores, Type record, string propiedad)
+    {
+        var distintos = valores.Distinct(StringComparer.Ordinal).ToList();
+        return distintos.Count switch
+        {
+            0 => null,
+            1 => distintos[0],
+            _ => throw new InvalidOperationException(
+                $"{record.Name}: un solo prevalor de «{propiedad}» viaja como {distintos.Count} valores ({string.Join(", ", distintos)})."),
+        };
     }
 
     private sealed record ContratoDelFichero(
@@ -669,9 +886,27 @@ public sealed class ContratoSynHostTests
         IReadOnlyList<string> Diccionario,
         IReadOnlyList<string>? Claves,
         IReadOnlyList<CampoDelContrato> Campos,
+        IReadOnlyList<SelectorDelContrato>? Selectores,
         JsonElement Ejemplo);
 
     private sealed record CampoDelContrato(string Nombre, string Tipo, bool Opcional, string? Origen);
+
+    /// <summary>
+    /// Un selector del ElementType y lo que viaja de cada prevalor. <c>campo</c> es la ruta del
+    /// <c>config</c> donde cae (<c>position</c>, <c>platforms[]</c>, <c>toasts[].variant</c>);
+    /// <c>null</c> si ningún prevalor llega al elemento.
+    /// </summary>
+    private sealed record SelectorDelContrato(
+        string Propiedad,
+        string DataType,
+        bool Multiple,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Campo,
+        IReadOnlyList<ValorDelSelector> Valores);
+
+    /// <summary>Lo que el editor elige y lo que de eso llega al elemento (<c>null</c>: nada).</summary>
+    private sealed record ValorDelSelector(
+        string Editor,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Viaja);
 
     private sealed record TipoDelContrato(string Record, IReadOnlyList<CampoDelContrato> Campos);
 }

@@ -248,6 +248,32 @@
           "origen": "decision"
         }
       ],
+      "selectores": [
+        {
+          "propiedad": "layout",
+          "dataType": "DTSelectDisplayLayout",
+          "multiple": false,
+          "campo": "layout",
+          "valores": [
+            {
+              "editor": "inline",
+              "viaja": "inline"
+            },
+            {
+              "editor": "stack",
+              "viaja": "stack"
+            },
+            {
+              "editor": "grid",
+              "viaja": "grid"
+            },
+            {
+              "editor": "cluster",
+              "viaja": "wrap"
+            }
+          ]
+        }
+      ],
       "ejemplo": {
         "culture": "es-CO",
         "badges": [
@@ -374,6 +400,24 @@
           "origen": "contenido"
         }
       ],
+      "selectores": [
+        {
+          "propiedad": "orientation",
+          "dataType": "DTSelectOrientation",
+          "multiple": false,
+          "campo": "orientation",
+          "valores": [
+            {
+              "editor": "horizontal",
+              "viaja": "horizontal"
+            },
+            {
+              "editor": "vertical",
+              "viaja": "vertical"
+            }
+          ]
+        }
+      ],
       "ejemplo": {
         "culture": "es-CO",
         "title": "Afiliados nuevos por trimestre",
@@ -448,6 +492,32 @@
           "tipo": "string",
           "opcional": true,
           "origen": "decision"
+        }
+      ],
+      "selectores": [
+        {
+          "propiedad": "shape",
+          "dataType": "DTSelectSwatchShape",
+          "multiple": false,
+          "campo": "shape",
+          "valores": [
+            {
+              "editor": "swatch",
+              "viaja": "swatch"
+            },
+            {
+              "editor": "chip",
+              "viaja": "chip"
+            },
+            {
+              "editor": "dot",
+              "viaja": "dot"
+            },
+            {
+              "editor": "circle",
+              "viaja": "circle"
+            }
+          ]
         }
       ],
       "ejemplo": {
@@ -561,6 +631,28 @@
           "origen": "decision"
         }
       ],
+      "selectores": [
+        {
+          "propiedad": "style",
+          "dataType": "DTSelectCountdownStyle",
+          "multiple": false,
+          "campo": "style",
+          "valores": [
+            {
+              "editor": "digits",
+              "viaja": "plain"
+            },
+            {
+              "editor": "flip",
+              "viaja": "flip"
+            },
+            {
+              "editor": "circular",
+              "viaja": "circular"
+            }
+          ]
+        }
+      ],
       "ejemplo": {
         "culture": "es-CO",
         "targetDate": "2030-12-31T23:59:59-05:00",
@@ -669,6 +761,40 @@
           "tipo": "string",
           "opcional": true,
           "origen": "contenido"
+        }
+      ],
+      "selectores": [
+        {
+          "propiedad": "position",
+          "dataType": "DTSelectScreenPosition",
+          "multiple": false,
+          "campo": "position",
+          "valores": [
+            {
+              "editor": "top-left",
+              "viaja": "top-left"
+            },
+            {
+              "editor": "top-center",
+              "viaja": "top-center"
+            },
+            {
+              "editor": "top-right",
+              "viaja": "top-right"
+            },
+            {
+              "editor": "bottom-left",
+              "viaja": "bottom-left"
+            },
+            {
+              "editor": "bottom-center",
+              "viaja": "bottom-center"
+            },
+            {
+              "editor": "bottom-right",
+              "viaja": "bottom-right"
+            }
+          ]
         }
       ],
       "ejemplo": {
@@ -810,6 +936,28 @@
           "origen": "contenido"
         }
       ],
+      "selectores": [
+        {
+          "propiedad": "kpiTrend",
+          "dataType": "DTSelectKpiTrend",
+          "multiple": false,
+          "campo": "trend",
+          "valores": [
+            {
+              "editor": "up",
+              "viaja": "up"
+            },
+            {
+              "editor": "down",
+              "viaja": "down"
+            },
+            {
+              "editor": "flat",
+              "viaja": "flat"
+            }
+          ]
+        }
+      ],
       "ejemplo": {
         "culture": "es-CO",
         "label": "Ventas del mes",
@@ -926,6 +1074,36 @@
           "tipo": "number",
           "opcional": true,
           "origen": "decision"
+        }
+      ],
+      "selectores": [
+        {
+          "propiedad": "type",
+          "dataType": "DTSelectToastType",
+          "multiple": false,
+          "campo": "toasts[].variant",
+          "valores": [
+            {
+              "editor": "info",
+              "viaja": "info"
+            },
+            {
+              "editor": "success",
+              "viaja": "success"
+            },
+            {
+              "editor": "warning",
+              "viaja": "warning"
+            },
+            {
+              "editor": "error",
+              "viaja": "error"
+            },
+            {
+              "editor": "neutral",
+              "viaja": "neutral"
+            }
+          ]
         }
       ],
       "ejemplo": {
@@ -1084,6 +1262,48 @@
           "origen": "decision"
         }
       ],
+      "selectores": [
+        {
+          "propiedad": "placement",
+          "dataType": "DTSelectPlacement",
+          "multiple": false,
+          "campo": "placement",
+          "valores": [
+            {
+              "editor": "top",
+              "viaja": "top"
+            },
+            {
+              "editor": "top-start",
+              "viaja": "top"
+            },
+            {
+              "editor": "top-end",
+              "viaja": "top"
+            },
+            {
+              "editor": "bottom",
+              "viaja": "bottom"
+            },
+            {
+              "editor": "bottom-start",
+              "viaja": "bottom"
+            },
+            {
+              "editor": "bottom-end",
+              "viaja": "bottom"
+            },
+            {
+              "editor": "left",
+              "viaja": "left"
+            },
+            {
+              "editor": "right",
+              "viaja": "right"
+            }
+          ]
+        }
+      ],
       "ejemplo": {
         "culture": "es-CO",
         "triggerText": "Cuota de manejo",
@@ -1114,6 +1334,40 @@
           "tipo": "string",
           "opcional": true,
           "origen": "contenido"
+        }
+      ],
+      "selectores": [
+        {
+          "propiedad": "position",
+          "dataType": "DTSelectScreenPosition",
+          "multiple": false,
+          "campo": "position",
+          "valores": [
+            {
+              "editor": "top-left",
+              "viaja": "top-left"
+            },
+            {
+              "editor": "top-center",
+              "viaja": "top-center"
+            },
+            {
+              "editor": "top-right",
+              "viaja": "top-right"
+            },
+            {
+              "editor": "bottom-left",
+              "viaja": "bottom-left"
+            },
+            {
+              "editor": "bottom-center",
+              "viaja": "bottom-center"
+            },
+            {
+              "editor": "bottom-right",
+              "viaja": "bottom-right"
+            }
+          ]
         }
       ],
       "ejemplo": {
@@ -1191,6 +1445,52 @@
           "tipo": "string",
           "opcional": true,
           "origen": "contenido"
+        }
+      ],
+      "selectores": [
+        {
+          "propiedad": "platforms",
+          "dataType": "DTSelectSharePlatform",
+          "multiple": true,
+          "campo": "platforms[]",
+          "valores": [
+            {
+              "editor": "facebook",
+              "viaja": "facebook"
+            },
+            {
+              "editor": "twitter",
+              "viaja": "x"
+            },
+            {
+              "editor": "linkedin",
+              "viaja": "linkedin"
+            },
+            {
+              "editor": "whatsapp",
+              "viaja": "whatsapp"
+            },
+            {
+              "editor": "telegram",
+              "viaja": "telegram"
+            },
+            {
+              "editor": "email",
+              "viaja": "email"
+            },
+            {
+              "editor": "copy",
+              "viaja": "copy"
+            },
+            {
+              "editor": "reddit",
+              "viaja": "reddit"
+            },
+            {
+              "editor": "pinterest",
+              "viaja": "pinterest"
+            }
+          ]
         }
       ],
       "ejemplo": {
@@ -1316,6 +1616,24 @@
           "tipo": "TimelineEntry[]",
           "opcional": true,
           "origen": "contenido"
+        }
+      ],
+      "selectores": [
+        {
+          "propiedad": "orientation",
+          "dataType": "DTSelectOrientation",
+          "multiple": false,
+          "campo": null,
+          "valores": [
+            {
+              "editor": "horizontal",
+              "viaja": null
+            },
+            {
+              "editor": "vertical",
+              "viaja": null
+            }
+          ]
         }
       ],
       "ejemplo": {
