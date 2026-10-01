@@ -268,8 +268,7 @@ public sealed class UmbracoStayContentSource : ICatalogSource<StayDetail>
     /// </remarks>
     private static TimeOnly? ReadTime(IPublishedContent node, string alias)
     {
-        var value = node.Value<DateTime>(alias);
-        return value == default ? null : TimeOnly.FromDateTime(value);
+        return node.FechaDelEditor(alias) is { } valor ? TimeOnly.FromDateTime(valor) : null;
     }
 
     /// <summary>

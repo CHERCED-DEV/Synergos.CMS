@@ -414,14 +414,8 @@ public sealed class DefaultGlobalComponentResolver : IGlobalComponentResolver
 
     /// <summary>La fecha que el editor puso, o <c>null</c> si dejó el campo vacío.</summary>
     /// <remarks>
-    /// <b>Un campo de fecha vacío NO llega como <c>null</c>.</b> El conversor del date picker de
-    /// Umbraco devuelve <see cref="DateTime.MinValue"/> cuando no hay valor, así que
-    /// <c>Value&lt;DateTime?&gt;</c> da <c>0001-01-01</c> con <c>HasValue</c> en <c>true</c>
-    /// (medido en vivo, #184 y #185). Esa fecha no la escribe ningún editor: es la ausencia.
+    /// Un campo de fecha vacío llega como el año 1, no como <c>null</c> (#184, #185); la regla es
+    /// <see cref="FechasDelEditor"/>, una para todo el CMS (#188).
     /// </remarks>
-    private DateTime? Fecha(IPublishedElement aviso, string alias)
-    {
-        var valor = aviso.Value<DateTime?>(_fallback, alias);
-        return valor is null || valor.Value == DateTime.MinValue ? null : valor;
-    }
+    private DateTime? Fecha(IPublishedElement aviso, string alias) => aviso.FechaDelEditor(_fallback, alias);
 }
