@@ -2545,6 +2545,15 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   (prefijo vacío, sin fallback, sin secciones en la solicitud, sin anotar, funcionalidad con
   `configOverride`, sección sin el límite del punto, CSP sin secciones) y 2 en el check 12, todos
   rojos.
+  **La escala (#191, tanda E2: 14 records, 60 claves nuevas) dejó tres criterios de autoría**:
+  (f) **una marca no va al diccionario** —«Compartir en {network}», y el nombre de la red lo pone el
+  elemento—; (g) **se reusa por INTENCIÓN, no por texto**: secciones que ya existían sin lector
+  (`Share`, `Map`, `Gallery`, `Notification`) se adoptan y crecen, «Ver mapa completo» es
+  `Map.ViewLarger` aunque diga «ampliado», y la acción genérica sale de `Common.Actions` pese a
+  publicar 16 claves para una o dos (medido: 594 B es-CO); (h) **dos records comparten una sección
+  sólo si comparten una clave**, y la común vive en la sección de la pieza base: `AvatarGroupProps`
+  declara `["AvatarGroup", "Avatar"]` por `Avatar.Fallback`; `ColorPicker` y `ColorSwatches` no
+  comparten nada. El criterio va escrito en el `<remarks>` de cada record del par.
 
 - `feedback_a_dev_machine_is_not_ci` — **la máquina de desarrollo no es la de CI, y la diferencia
   no sale sólo en rojo: una sale en VERDE.** Hasta el #170 todos los workflows corrían en
