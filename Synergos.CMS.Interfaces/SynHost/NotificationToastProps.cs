@@ -17,8 +17,13 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <c>0</c> es persistente, así que el cero viaja (no es «vacío»). Lo que no es un entero no viaja
 /// y se anota; el elemento aplica sus 5000 ms. <c>position</c> y el título de cada aviso los sabe
 /// pintar el elemento pero el ElementType no los autora: quedan como atributo.</para>
+///
+/// <para><b>Su microcopia sale del diccionario, sección <c>Notification</c></b> (ADR 0136), que ya tenía
+/// las dos claves con esa intención y no las leía nadie: el nombre de la región
+/// (<c>Notification.Aria.List</c>) y el botón de descartar (<c>Notification.Dismiss</c>). Se publican
+/// 7 claves para dos.</para>
 /// </remarks>
-[ElementoSynHost("notification-toast", TipoDeColocable.Pieza)]
+[ElementoSynHost("notification-toast", TipoDeColocable.Pieza, Diccionario = ["Notification"])]
 public sealed record NotificationToastProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<NotificationToastSeed>? Toasts,
     [property: CampoSynHost(OrigenDelCampo.Decision)] int? DurationMs);

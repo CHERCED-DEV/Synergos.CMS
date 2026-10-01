@@ -1013,7 +1013,18 @@
       "nombre": "notification-toast",
       "tipo": "pieza",
       "record": "NotificationToastProps",
-      "diccionario": [],
+      "diccionario": [
+        "Notification"
+      ],
+      "claves": [
+        "Notification.Aria.List",
+        "Notification.Dismiss",
+        "Notification.DismissAll",
+        "Notification.Empty",
+        "Notification.MarkAllRead",
+        "Notification.MarkRead",
+        "Notification.New"
+      ],
       "campos": [
         {
           "nombre": "toasts",
