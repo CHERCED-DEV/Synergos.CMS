@@ -1026,7 +1026,12 @@
       "nombre": "progress-bar",
       "tipo": "pieza",
       "record": "ProgressBarProps",
-      "diccionario": [],
+      "diccionario": [
+        "ProgressBar"
+      ],
+      "claves": [
+        "ProgressBar.Aria"
+      ],
       "campos": [
         {
           "nombre": "value",

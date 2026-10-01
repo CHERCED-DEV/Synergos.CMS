@@ -17,8 +17,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// editor escribe por instancia, así que es contenido (como el <c>label</c> de
 /// <c>rating-stars</c>). Indeterminado, mostrar el porcentaje, tamaño y tono los sabe pintar el
 /// elemento pero el ElementType no los autora: quedan como atributo.</para>
+///
+/// <para><b>Sección <c>ProgressBar</c></b> (ADR 0136): el nombre accesible cuando el editor no
+/// escribió rótulo.</para>
 /// </remarks>
-[ElementoSynHost("progress-bar", TipoDeColocable.Pieza)]
+[ElementoSynHost("progress-bar", TipoDeColocable.Pieza, Diccionario = ["ProgressBar"])]
 public sealed record ProgressBarProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] decimal? Value,
     [property: CampoSynHost(OrigenDelCampo.Decision)] decimal? Max,
